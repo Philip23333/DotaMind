@@ -1,0 +1,17 @@
+{
+  "name": "metamind",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/web"
+  ],
+  "scripts": {
+    "dev": "npm run dev:web",
+    "dev:web": "npm run dev --workspace apps/web",
+    "dev:api": "cd apps/api && python -m uvicorn app.main:app --reload --port 8000",
+    "build": "npm run build --workspace apps/web",
+    "typecheck": "npm run typecheck --workspace apps/web",
+    "test:api": "cd apps/api && python -m pytest",
+    "lint:api": "cd apps/api && python -m ruff check app tests"
+  }
+}
