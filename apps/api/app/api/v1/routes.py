@@ -35,8 +35,8 @@ def get_services() -> ServiceCatalogResponse:
 
 
 @router.post("/meta-report", response_model=MetaReportResponse)
-def get_meta_report(request: MetaReportRequest) -> MetaReportResponse:
-    return meta_report_service.get_report(request)
+async def get_meta_report(request: MetaReportRequest) -> MetaReportResponse:
+    return await meta_report_service.get_report(request)
 
 
 @router.post("/patch-impact", response_model=PatchImpactResponse)
@@ -45,8 +45,8 @@ def get_patch_impact(request: PatchImpactRequest) -> PatchImpactResponse:
 
 
 @router.post("/team-report", response_model=TeamReportResponse)
-def get_team_report(request: TeamReportRequest) -> TeamReportResponse:
-    return team_report_service.get_report(request)
+async def get_team_report(request: TeamReportRequest) -> TeamReportResponse:
+    return await team_report_service.get_report(request)
 
 
 @router.post("/verify-claim", response_model=ClaimVerificationResponse)
@@ -55,7 +55,7 @@ def verify_meta_claim(request: ClaimVerificationRequest) -> ClaimVerificationRes
 
 
 @router.post("/query", response_model=NaturalLanguageQueryResponse)
-def query(request: NaturalLanguageQueryRequest) -> NaturalLanguageQueryResponse:
+async def query(request: NaturalLanguageQueryRequest) -> NaturalLanguageQueryResponse:
     routed_service, tasks = planner_agent.plan(request.query)
 
     if routed_service == "patch_impact":
@@ -63,7 +63,7 @@ def query(request: NaturalLanguageQueryRequest) -> NaturalLanguageQueryResponse:
             PatchImpactRequest(game=request.game, patch="latest")
         )
     elif routed_service == "team_report":
-        result = team_report_service.get_report(
+        result = await team_report_service.get_report(
             TeamReportRequest(game=request.game, team_name="Team Spirit")
         )
     elif routed_service == "claim_verification":
@@ -71,7 +71,7 @@ def query(request: NaturalLanguageQueryRequest) -> NaturalLanguageQueryResponse:
             ClaimVerificationRequest(game=request.game, claim=request.query)
         )
     else:
-        result = meta_report_service.get_report(
+        result = await meta_report_service.get_report(
             MetaReportRequest(game=request.game, patch="latest", role="offlane")
         )
 

@@ -1,3 +1,5 @@
+import pytest
+
 from app.api.v1.schemas import (
     ClaimVerificationRequest,
     MetaReportRequest,
@@ -10,8 +12,9 @@ from app.services.patch_impact_service import PatchImpactService
 from app.services.team_report_service import TeamReportService
 
 
-def test_meta_report_ranks_offlane_heroes() -> None:
-    report = MetaReportService().get_report(MetaReportRequest(role="offlane"))
+@pytest.mark.asyncio
+async def test_meta_report_ranks_offlane_heroes() -> None:
+    report = await MetaReportService().get_report(MetaReportRequest(role="offlane"))
 
     assert report.report_type == "meta_report"
     assert report.top_heroes
@@ -27,8 +30,9 @@ def test_patch_impact_returns_winners_and_losers() -> None:
     assert report.confidence > 0
 
 
-def test_team_report_contains_patch_adaptation_score() -> None:
-    report = TeamReportService().get_report(TeamReportRequest(team_name="Team Spirit"))
+@pytest.mark.asyncio
+async def test_team_report_contains_patch_adaptation_score() -> None:
+    report = await TeamReportService().get_report(TeamReportRequest(team_name="Team Spirit"))
 
     assert report.patch_adaptation_score > 0
     assert report.signature_heroes
