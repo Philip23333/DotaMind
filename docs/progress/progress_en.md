@@ -1,10 +1,12 @@
 # MetaMind Implementation Progress
 
-> Last updated: 2026-06-12
+> Last updated: 2026-06-12 (v2.1 architecture finalized)
 
 ## Project Overview
 
 MetaMind is a composable esports intelligence agent that turns Dota2 patch notes, match data, and pro team statistics into verifiable, paid meta analysis reports for humans and other agents.
+
+**Current architecture: v2.1** (3 Agents + 2 Tools + adversarial Critic loop). See `docs/design/MetaMind_MVP_v2.1.md`.
 
 ---
 
@@ -83,16 +85,20 @@ MetaMind is a composable esports intelligence agent that turns Dota2 patch notes
 
 | Task | Description | Estimated Time |
 |------|-------------|----------------|
-| 3-Agent refactor | Collapse 6 agents → Retriever/Analyzer/Formatter | 3-4h |
-| signals.yaml | Boolean signal extraction per v2 design (thresholds in config) | 2-3h |
-| Claim Verification | Wire to patch JSON + OpenDota for evidence aggregation | 2h |
+| **v2.1 skeleton refactor** | `agents/` → orchestrator/analyzer/critic; `tools/` → retriever/formatter | 1 day |
+| Orchestrator Agent | LLM function calling, intent parsing + tool planning + retry control | 4-5h |
+| Analyzer Agent | Singleton LLM shared by 4 task types, enforces evidence binding | 3-4h |
+| Critic Agent | Two-layer review (yaml rules + LLM), pass/reject + reasons | 3-4h |
+| signals.yaml | Signal threshold config (defined in v2 §3.2) | 1-2h |
+| critic_rules.yaml | Critic Layer 1 rules (evidence_binding / freshness / sample_size, etc.) | 1-2h |
 | Backtest script | `eval/backtest.py`, top-10 overlap across 3 historical patches | 2h |
+| Claim Verification | Wire to patch JSON + OpenDota for evidence aggregation | 2h |
 
 ### Medium Priority
 
 | Task | Description | Estimated Time |
 |------|-------------|----------------|
-| LLM integration (Analyzer) | GPT-4 for reasoning + verification, generate reasons/practice_advice | 3h |
+| LLM provider abstraction | Unified OpenAI / Anthropic interface, model tier per Agent | 2h |
 | CAP integration | Expose paid services, wire to CROO Agent Store | 4-6h |
 | STRATZ GraphQL | Time-filtered team draft data in single query | 4h |
 
@@ -109,10 +115,14 @@ MetaMind is a composable esports intelligence agent that turns Dota2 patch notes
 
 ## Architecture
 
+> v2.1 is the design target. The directory tree below is the **current** state (v2 partially migrated, `agents/` still uses the legacy 6-layer layout).
+
 ```
 apps/api/
 ├── app/
-│   ├── agents/          # data_agent / patch_agent / reasoning / verification / report / planner
+│   ├── agents/          # [current] data/patch/reasoning/verification/report/planner
+│   │                    # [v2.1 target] orchestrator/analyzer/critic
+│   ├── tools/           # [v2.1 target] retriever/formatter (to build)
 │   ├── api/v1/          # routes + schemas (Pydantic models)
 │   ├── core/            # config (pydantic-settings)
 │   ├── data/
@@ -123,6 +133,7 @@ apps/api/
 │   │   ├── opendota.py  # REST client + in-memory cache + role mapping
 │   │   ├── patch_notes.py  # Local JSON reader + patch score computation
 │   │   └── stratz.py    # Placeholder
+│   ├── config/          # [v2.1 target] signals.yaml / critic_rules.yaml
 │   └── services/        # meta_report / patch_impact / team_report / claim_verification / pricing
 └── tests/
 ```
@@ -140,6 +151,8 @@ apps/web/                # Next.js 15 + Tailwind + ECharts
 
 ## Data Flow
 
+> Current implementation (partial v2 migration):
+
 ```
 User request
   → FastAPI route (async)
@@ -152,6 +165,19 @@ User request
     → ReasoningAgent.meta_score() (weighted formula)
     → VerificationAgent.hero_evidence() (rule-based)
   → Return MetaReportResponse JSON
+```
+
+> v2.1 target flow (to implement):
+
+```
+User request
+  → FastAPI route → Orchestrator Agent (LLM intent parsing)
+    → tool: retrieve_meta()  → EvidenceBundle
+    → Analyzer Agent (LLM)   → claims + evidence_ids
+    → Critic Agent (rules + LLM) → pass / reject
+        ├─ reject → Orchestrator decides: fetch more / re-analyze / fallback
+        └─ pass   → tool: format_report()
+  → Return MetaReportResponse JSON (with trace metadata)
 ```
 
 ---
@@ -171,11 +197,12 @@ User request
 ```
 docs/
 ├── design/              # Product design docs
-│   ├── MetaMind_MVP_v1.md    # Original MVP design (full version)
-│   └── MetaMind_MVP_v2.md    # Engineering revision (architecture + algorithm + data source)
+│   ├── MetaMind_MVP_v1.md      # Original MVP design (full version, 6 Agents)
+│   ├── MetaMind_MVP_v2.md      # Engineering revision (6→3, signal-based scoring)
+│   └── MetaMind_MVP_v2.1.md    # ★ Current: 3 Agents + 2 Tools + Critic loop
 ├── technical/           # Technical docs
 │   ├── api.md                # API reference
-│   ├── architecture.md       # System architecture
+│   ├── architecture.md       # System architecture (aligned with v2.1)
 │   └── cap-integration.md    # CAP integration plan
 └── progress/            # Implementation progress
     ├── progress_zh.md        # 中文版

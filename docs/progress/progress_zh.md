@@ -1,10 +1,12 @@
 # MetaMind 施工进度文档
 
-> 最后更新：2026-06-12
+> 最后更新：2026-06-12（v2.1 架构定稿）
 
 ## 项目概览
 
 MetaMind 是一个可组合的电竞情报 Agent，将 Dota2 版本更新、比赛数据和职业战队表现转化为可验证、可付费调用的 Meta 分析报告。
+
+**当前架构版本：v2.1**（3 Agent + 2 Tool + 对抗式 Critic 闭环）。详见 `docs/design/MetaMind_MVP_v2.1.md`。
 
 ---
 
@@ -83,16 +85,20 @@ MetaMind 是一个可组合的电竞情报 Agent，将 Dota2 版本更新、比�
 
 | 任务 | 说明 | 预计工时 |
 |------|------|----------|
-| 3-Agent 重构 | 从 6 Agent 精简为 Retriever/Analyzer/Formatter | 3-4h |
-| signals.yaml | v2 架构的信号抽取逻辑（布尔信号 + 阈值配置） | 2-3h |
-| Claim Verification 真实化 | 接 patch JSON + OpenDota 数据做证据聚合 | 2h |
+| **v2.1 骨架重构** | `agents/` → orchestrator/analyzer/critic；`tools/` → retriever/formatter | 1 天 |
+| Orchestrator Agent | LLM function calling，意图解析 + 工具编排 + 重试控制 | 4-5h |
+| Analyzer Agent | 单例 LLM，4 种 task_type 共用，强制 evidence 绑定 | 3-4h |
+| Critic Agent | 双层审核（规则 yaml + LLM），pass/reject + reasons | 3-4h |
+| signals.yaml | 信号阈值配置（v2 第 3.2 节定义） | 1-2h |
+| critic_rules.yaml | Critic Layer 1 规则（evidence_binding / freshness / sample_size 等） | 1-2h |
 | 回测脚本 | `eval/backtest.py`，3 个历史版本 top-10 重合度 | 2h |
+| Claim Verification 真实化 | 接 patch JSON + OpenDota 数据做证据聚合 | 2h |
 
 ### 中优先级
 
 | 任务 | 说明 | 预计工时 |
 |------|------|----------|
-| LLM 接入（Analyzer） | GPT-4 做推理 + 验证，生成 reasons/practice_advice | 3h |
+| LLM provider 抽象 | 统一 OpenAI / Anthropic 接口，按 Agent 分配模型档位 | 2h |
 | CAP 集成 | 暴露付费服务、接 CROO Agent Store | 4-6h |
 | STRATZ GraphQL | 精确时间过滤 + 单次查询战队 draft 数据 | 半天 |
 
@@ -109,10 +115,14 @@ MetaMind 是一个可组合的电竞情报 Agent，将 Dota2 版本更新、比�
 
 ## 架构现状
 
+> v2.1 是设计目标，下面的目录结构是**当前**的（v2 部分迁移完成，agents/ 仍是旧 6 层布局）。
+
 ```
 apps/api/
 ├── app/
-│   ├── agents/          # data_agent / patch_agent / reasoning / verification / report / planner
+│   ├── agents/          # [当前] data/patch/reasoning/verification/report/planner
+│   │                    # [v2.1 目标] orchestrator/analyzer/critic
+│   ├── tools/           # [v2.1 目标] retriever/formatter (待建)
 │   ├── api/v1/          # routes + schemas (Pydantic models)
 │   ├── core/            # config (pydantic-settings)
 │   ├── data/
@@ -123,6 +133,7 @@ apps/api/
 │   │   ├── opendota.py  # REST client + 内存缓存 + role mapping
 │   │   ├── patch_notes.py  # 本地 JSON 读取 + patch score 计算
 │   │   └── stratz.py    # placeholder
+│   ├── config/          # [v2.1 目标] signals.yaml / critic_rules.yaml
 │   └── services/        # meta_report / patch_impact / team_report / claim_verification / pricing
 └── tests/
 ```
@@ -140,6 +151,8 @@ apps/web/                # Next.js 15 + Tailwind + ECharts
 
 ## 数据流
 
+> 当前实现（v2 部分迁移）：
+
 ```
 用户请求
   → FastAPI route (async)
@@ -152,6 +165,19 @@ apps/web/                # Next.js 15 + Tailwind + ECharts
     → ReasoningAgent.meta_score() (加权公式)
     → VerificationAgent.hero_evidence() (规则判断)
   → 返回 MetaReportResponse JSON
+```
+
+> v2.1 目标流（待实现）：
+
+```
+用户请求
+  → FastAPI route → Orchestrator Agent (LLM 意图解析)
+    → tool: retrieve_meta()  → EvidenceBundle
+    → Analyzer Agent (LLM)   → claims + evidence_ids
+    → Critic Agent (规则+LLM) → pass / reject
+        ├─ reject → Orchestrator 决策：补数据 / 重推 / 降级
+        └─ pass   → tool: format_report()
+  → 返回 MetaReportResponse JSON (含 trace 元数据)
 ```
 
 ---
@@ -171,11 +197,12 @@ apps/web/                # Next.js 15 + Tailwind + ECharts
 ```
 docs/
 ├── design/              # 产品设计文档
-│   ├── MetaMind_MVP_v1.md    # 原始 MVP 设计（完整版）
-│   └── MetaMind_MVP_v2.md    # 工程实施版（架构+算法+数据源修订）
+│   ├── MetaMind_MVP_v1.md      # 原始 MVP 设计（完整版，6 Agent）
+│   ├── MetaMind_MVP_v2.md      # 工程实施版（6→3，信号制评分）
+│   └── MetaMind_MVP_v2.1.md    # ★ 当前版：3 Agent + 2 Tool + Critic 闭环
 ├── technical/           # 技术文档
 │   ├── api.md                # API 接口说明
-│   ├── architecture.md       # 系统架构
+│   ├── architecture.md       # 系统架构（已对齐 v2.1）
 │   └── cap-integration.md    # CAP 集成计划
 └── progress/            # 施工进度
     ├── progress_zh.md        # 本文件
