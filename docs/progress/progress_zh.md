@@ -1,6 +1,6 @@
 # MetaMind 施工进度文档
 
-> 最后更新：2026-06-12（v2.1 架构定稿）
+> 最后更新：2026-06-16（v2.1 架构迁移中 - Milestone 1 完成 ✅）
 
 ## 项目概览
 
@@ -79,18 +79,66 @@ MetaMind 是一个可组合的电竞情报 Agent，将 Dota2 版本更新、比�
 
 ---
 
-## 未完成工作
+## v2.1 架构迁移进度
+
+### ✅ Milestone 1：数据流通（已完成）
+
+**目标**：打通 Orchestrator → Retriever → Analyzer → Critic 的完整数据流，暂不用 LLM。
+
+| 子任务 | 状态 | 说明 |
+|------|------|------|
+| 骨架文件创建 | ✅ 完成 | orchestrator/analyzer/critic/retriever/formatter 已创建 |
+| 配置文件 | ✅ 完成 | signals.yaml / critic_rules.yaml 已建立 |
+| Retriever 连接数据源 | ✅ 完成 | 已连接 OpenDota + patch_notes，支持 4 种检索 |
+| 新增 /query/experimental 端点 | ✅ 完成 | 新路由已创建并测试通过 |
+| ExperimentalService | ✅ 完成 | 实现完整 v2.1 数据流 |
+| Analyzer 规则推理 | ✅ 完成 | 复用加权公式 + 生成 evidence |
+| Formatter 格式化 | ✅ 完成 | 构建标准 MetaReportResponse |
+| 端到端测试 | ✅ 完成 | 6 个集成测试全部通过 |
+
+**已实现功能**：
+- ✅ `/api/v1/query/experimental` 端点
+- ✅ meta_report 完整流程（offlane/carry/mid/support 角色）
+- ✅ 规则推理：加权公式计算 meta_score
+- ✅ 证据生成：基于阈值生成 supported/partial/weak verdict
+- ✅ Critic 审核：Layer 1 规则验证（无证据/不支持信号 → reject）
+- ✅ 真实数据：OpenDota API + patch JSON
+- ✅ 降级处理：OpenDota 失败时返回空报告
+
+**测试覆盖**：
+- `test_experimental_meta_report_flow` - 端到端 meta report
+- `test_retriever_fetches_real_data` - Retriever 真实数据获取
+- `test_analyzer_generates_evidence` - Analyzer 证据生成逻辑
+- `test_critic_validates_evidence` - Critic 审核逻辑
+- `test_experimental_team_query_routes_correctly` - 意图路由验证
+- `test_experimental_patch_query_routes_correctly` - 意图路由验证
+
+### 📋 Milestone 2：LLM 增强（未开始）
+
+| 任务 | 说明 | 预计工时 |
+|------|------|----------|
+| LLM provider 抽象 | 统一 OpenAI / Anthropic 接口，按 Agent 分配模型档位 | 2h |
+| Orchestrator function calling | LLM 意图解析 + 工具编排 + 重试控制 | 4-5h |
+| Analyzer LLM 推理 | claim 生成 + evidence 绑定 + 自然语言 reasons | 3-4h |
+| Critic Layer 2 LLM 审核 | 加载 yaml 配置 + LLM 深度审核 | 3-4h |
+
+### 📋 Milestone 3：生产切换（未开始）
+
+| 任务 | 说明 | 预计工时 |
+|------|------|----------|
+| A/B 测试机制 | 环境变量/header 控制新旧架构切换 | 1h |
+| 逐服务迁移 | patch_impact → team_report → meta_report → claim_verification | 2-3h |
+| 性能对比 | 延迟、准确度、LLM 成本对比 | 1h |
+| 清理旧代码 | 移除旧 6 层 Agent | 1h |
+
+---
+
+## 未完成工作（其他）
 
 ### 高优先级
 
 | 任务 | 说明 | 预计工时 |
 |------|------|----------|
-| **v2.1 骨架重构** | `agents/` → orchestrator/analyzer/critic；`tools/` → retriever/formatter | 1 天 |
-| Orchestrator Agent | LLM function calling，意图解析 + 工具编排 + 重试控制 | 4-5h |
-| Analyzer Agent | 单例 LLM，4 种 task_type 共用，强制 evidence 绑定 | 3-4h |
-| Critic Agent | 双层审核（规则 yaml + LLM），pass/reject + reasons | 3-4h |
-| signals.yaml | 信号阈值配置（v2 第 3.2 节定义） | 1-2h |
-| critic_rules.yaml | Critic Layer 1 规则（evidence_binding / freshness / sample_size 等） | 1-2h |
 | 回测脚本 | `eval/backtest.py`，3 个历史版本 top-10 重合度 | 2h |
 | Claim Verification 真实化 | 接 patch JSON + OpenDota 数据做证据聚合 | 2h |
 
@@ -115,14 +163,22 @@ MetaMind 是一个可组合的电竞情报 Agent，将 Dota2 版本更新、比�
 
 ## 架构现状
 
-> v2.1 是设计目标，下面的目录结构是**当前**的（v2 部分迁移完成，agents/ 仍是旧 6 层布局）。
+> **当前状态**：v2.1 骨架已建立，新旧架构并存（agents/ 包含新 3 层 + 旧 6 层）。
 
 ```
 apps/api/
 ├── app/
-│   ├── agents/          # [当前] data/patch/reasoning/verification/report/planner
-│   │                    # [v2.1 目标] orchestrator/analyzer/critic
-│   ├── tools/           # [v2.1 目标] retriever/formatter (待建)
+│   ├── agents/          # [新 v2.1] orchestrator/analyzer/critic ✅ 骨架完成
+│   │   ├── orchestrator.py  # 意图识别完成，LLM 未接入
+│   │   ├── analyzer.py      # 工具方法完成，LLM 未接入
+│   │   ├── critic.py        # Layer 1 规则完成，Layer 2 未接入
+│   │                    # [旧 v2] data/patch/reasoning/verification/report/planner ⚠️ 仍在使用
+│   ├── tools/           # [新 v2.1] retriever/formatter ✅ 已建立
+│   │   ├── retriever.py     # 类型定义完成，数据连接进行中
+│   │   └── formatter.py     # 占位完成
+│   ├── config/          # [新 v2.1] ✅ 已建立
+│   │   ├── signals.yaml     # 信号阈值配置
+│   │   └── critic_rules.yaml # Critic Layer 1 规则
 │   ├── api/v1/          # routes + schemas (Pydantic models)
 │   ├── core/            # config (pydantic-settings)
 │   ├── data/
@@ -133,7 +189,6 @@ apps/api/
 │   │   ├── opendota.py  # REST client + 内存缓存 + role mapping
 │   │   ├── patch_notes.py  # 本地 JSON 读取 + patch score 计算
 │   │   └── stratz.py    # placeholder
-│   ├── config/          # [v2.1 目标] signals.yaml / critic_rules.yaml
 │   └── services/        # meta_report / patch_impact / team_report / claim_verification / pricing
 └── tests/
 ```
@@ -151,7 +206,7 @@ apps/web/                # Next.js 15 + Tailwind + ECharts
 
 ## 数据流
 
-> 当前实现（v2 部分迁移）：
+> 当前实现（v2 旧架构，仍在使用）：
 
 ```
 用户请求
@@ -167,16 +222,31 @@ apps/web/                # Next.js 15 + Tailwind + ECharts
   → 返回 MetaReportResponse JSON
 ```
 
-> v2.1 目标流（待实现）：
+> v2.1 新架构（Milestone 1 目标，规则推理）：
 
 ```
 用户请求
-  → FastAPI route → Orchestrator Agent (LLM 意图解析)
-    → tool: retrieve_meta()  → EvidenceBundle
-    → Analyzer Agent (LLM)   → claims + evidence_ids
-    → Critic Agent (规则+LLM) → pass / reject
-        ├─ reject → Orchestrator 决策：补数据 / 重推 / 降级
-        └─ pass   → tool: format_report()
+  → /api/v1/query/experimental
+    → Orchestrator.plan(query) → OrchestrationPlan (意图识别)
+    → Orchestrator.run(plan, handlers)
+      → retrieve_meta/patch/team/claim() → EvidenceBundle
+      → Analyzer.analyze() → 规则推理 + evidence 打分
+      → Critic.review_evidence() → Layer 1 规则审核
+      → format_report() → 标准 Response
+  → 返回 MetaReportResponse JSON (含 plan trace)
+```
+
+> v2.1 终态（Milestone 2 目标，LLM 推理）：
+
+```
+用户请求
+  → /api/v1/query
+    → Orchestrator Agent (LLM function calling)
+      → tool: retrieve_*() → EvidenceBundle
+      → Analyzer Agent (LLM) → claims + evidence_ids + reasons
+      → Critic Agent (Layer 1 规则 + Layer 2 LLM) → pass / reject
+          ├─ reject → Orchestrator 决策：补数据 / 重推 / 降级
+          └─ pass   → tool: format_report()
   → 返回 MetaReportResponse JSON (含 trace 元数据)
 ```
 

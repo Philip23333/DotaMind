@@ -17,6 +17,7 @@ from app.api.v1.schemas import (
     TeamReportResponse,
 )
 from app.services.claim_verification_service import ClaimVerificationService
+from app.services.experimental_service import ExperimentalService
 from app.services.meta_report_service import MetaReportService
 from app.services.patch_impact_service import PatchImpactService
 from app.services.pricing import service_catalog
@@ -29,6 +30,7 @@ patch_impact_service = PatchImpactService()
 team_report_service = TeamReportService()
 claim_verification_service = ClaimVerificationService()
 orchestrator_agent = OrchestratorAgent()
+experimental_service = ExperimentalService()
 
 
 @router.get("/services", response_model=ServiceCatalogResponse)
@@ -82,5 +84,40 @@ async def query(request: NaturalLanguageQueryRequest) -> NaturalLanguageQueryRes
         query=request.query,
         routed_service=plan.service,
         tasks=plan.tasks,
+        result=result,
+    )
+
+
+@router.post("/query/experimental", response_model=NaturalLanguageQueryResponse)
+async def query_experimental(
+    request: NaturalLanguageQueryRequest,
+) -> NaturalLanguageQueryResponse:
+    """
+    Experimental v2.1 architecture endpoint.
+    
+    Uses: Orchestrator → Retriever → Analyzer → Critic → Formatter
+    
+    Currently supports:
+    - meta_report (hero recommendations)
+    
+    Not yet implemented:
+    - patch_impact
+    - team_report
+    - claim_verification
+    """
+    service, analysis_steps, result = await experimental_service.handle_query(request)
+    
+    # Convert analysis_steps to PlannedTask format for compatibility
+    from app.api.v1.schemas import PlannedTask
+    
+    tasks = [
+        PlannedTask(agent="experimental", action=step, status="completed")
+        for step in analysis_steps
+    ]
+    
+    return NaturalLanguageQueryResponse(
+        query=request.query,
+        routed_service=service,
+        tasks=tasks,
         result=result,
     )

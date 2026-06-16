@@ -9,6 +9,7 @@
     "dev": "npm run dev:web",
     "dev:web": "npm run dev --workspace apps/web",
     "dev:api": "cd apps/api && python -m uvicorn app.main:app --reload --port 8000",
+    "dev:v21": "python -m http.server 3013",
     "build": "npm run build --workspace apps/web",
     "typecheck": "npm run typecheck --workspace apps/web",
     "test:api": "cd apps/api && python -m pytest",
