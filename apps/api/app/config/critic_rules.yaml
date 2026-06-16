@@ -1,0 +1,7 @@
+# Initial rule layer for CriticAgent. The Python critic keeps these defaults
+# hard-coded for now; this file defines the target external configuration shape.
+rules:
+  require_evidence:
+    enabled: true
+  reject_unsupported_signals:
+    enabled: true

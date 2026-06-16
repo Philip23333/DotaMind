@@ -1,0 +1,9 @@
+# Initial v2.1 signal thresholds. Services still use their current formulas until
+# the Analyzer migration is complete.
+meta_report:
+  high_win_rate: 0.525
+  partial_win_rate: 0.51
+  high_pro_presence: 0.4
+  partial_pro_presence: 0.25
+claim_verification:
+  min_evidence_items: 2

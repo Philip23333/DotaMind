@@ -1,6 +1,8 @@
+from typing import Any
+
 from fastapi import APIRouter
 
-from app.agents.planner import PlannerAgent
+from app.agents.orchestrator import OrchestratorAgent
 from app.api.v1.schemas import (
     ClaimVerificationRequest,
     ClaimVerificationResponse,
@@ -26,7 +28,7 @@ meta_report_service = MetaReportService()
 patch_impact_service = PatchImpactService()
 team_report_service = TeamReportService()
 claim_verification_service = ClaimVerificationService()
-planner_agent = PlannerAgent()
+orchestrator_agent = OrchestratorAgent()
 
 
 @router.get("/services", response_model=ServiceCatalogResponse)
@@ -56,28 +58,29 @@ def verify_meta_claim(request: ClaimVerificationRequest) -> ClaimVerificationRes
 
 @router.post("/query", response_model=NaturalLanguageQueryResponse)
 async def query(request: NaturalLanguageQueryRequest) -> NaturalLanguageQueryResponse:
-    routed_service, tasks = planner_agent.plan(request.query)
+    async def run_meta_report(service_request: Any) -> Any:
+        return await meta_report_service.get_report(service_request)
 
-    if routed_service == "patch_impact":
-        result = patch_impact_service.get_report(
-            PatchImpactRequest(game=request.game, patch="latest")
-        )
-    elif routed_service == "team_report":
-        result = await team_report_service.get_report(
-            TeamReportRequest(game=request.game, team_name="Team Spirit")
-        )
-    elif routed_service == "claim_verification":
-        result = claim_verification_service.verify(
-            ClaimVerificationRequest(game=request.game, claim=request.query)
-        )
-    else:
-        result = await meta_report_service.get_report(
-            MetaReportRequest(game=request.game, patch="latest", role="offlane")
-        )
+    async def run_patch_impact(service_request: Any) -> Any:
+        return patch_impact_service.get_report(service_request)
+
+    async def run_team_report(service_request: Any) -> Any:
+        return await team_report_service.get_report(service_request)
+
+    async def run_claim_verification(service_request: Any) -> Any:
+        return claim_verification_service.verify(service_request)
+
+    handlers = {
+        "meta_report": run_meta_report,
+        "patch_impact": run_patch_impact,
+        "team_report": run_team_report,
+        "claim_verification": run_claim_verification,
+    }
+    plan, result = await orchestrator_agent.run(request, handlers)
 
     return NaturalLanguageQueryResponse(
         query=request.query,
-        routed_service=routed_service,
-        tasks=tasks,
+        routed_service=plan.service,
+        tasks=plan.tasks,
         result=result,
     )
