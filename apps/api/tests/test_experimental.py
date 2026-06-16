@@ -6,8 +6,6 @@ Milestone 1: rule-based flow without LLM.
 
 import asyncio
 
-import pytest
-
 from app.api.v1.schemas import EvidenceItem, NaturalLanguageQueryRequest
 from app.services.experimental_service import ExperimentalService
 
@@ -63,9 +61,11 @@ def test_experimental_team_query_routes_correctly():
         game="dota2"
     )
     
-    # Should route to team_report but not implemented yet
-    with pytest.raises(NotImplementedError):
-        asyncio.run(service.handle_query(request))
+    routed_service, analysis_steps, result = asyncio.run(service.handle_query(request))
+
+    assert routed_service == "team_report"
+    assert result.report_type == "team_report"
+    assert any("TeamReportService" in step for step in analysis_steps)
 
 
 def test_experimental_patch_query_routes_correctly():
@@ -77,9 +77,12 @@ def test_experimental_patch_query_routes_correctly():
         game="dota2"
     )
     
-    # Should route to patch_impact but not implemented yet
-    with pytest.raises(NotImplementedError):
-        asyncio.run(service.handle_query(request))
+    routed_service, analysis_steps, result = asyncio.run(service.handle_query(request))
+
+    assert routed_service == "patch_impact"
+    assert result.report_type == "patch_impact"
+    assert result.winners
+    assert any("PatchImpactService" in step for step in analysis_steps)
 
 
 def test_retriever_fetches_real_data():
@@ -134,7 +137,7 @@ def test_analyzer_generates_evidence():
         }
     ]
     
-    recommendations = analyzer.analyze_meta_report(mock_heroes, "offlane")
+    recommendations = asyncio.run(analyzer.analyze_meta_report(mock_heroes, "offlane"))
     
     assert len(recommendations) == 2
     

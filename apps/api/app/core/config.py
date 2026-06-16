@@ -15,6 +15,12 @@ class Settings(BaseSettings):
     openai_api_key: str | None = None
     database_url: str = "postgresql://metamind:metamind@localhost:5432/metamind"
     redis_url: str = "redis://localhost:6379/0"
+    
+    # LLM Configuration
+    llm_api_key: str = ""
+    llm_base_url: str = "https://api.deepseek.com"
+    llm_model: str = "deepseek-chat"
+    llm_enabled: bool = False
 
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -4,7 +4,13 @@ import {
   serviceCatalogMock,
   teamReportMock,
 } from "@/lib/mock";
-import type { MetaReport, PatchImpactReport, ServiceCatalog, TeamReport } from "@/types/report";
+import type {
+  MetaReport,
+  NaturalLanguageQueryResponse,
+  PatchImpactReport,
+  ServiceCatalog,
+  TeamReport,
+} from "@/types/report";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
@@ -63,4 +69,22 @@ export function getTeamReport(): Promise<TeamReport> {
 
 export function getServiceCatalog(): Promise<ServiceCatalog> {
   return getJson("/api/v1/services", serviceCatalogMock);
+}
+
+export async function runExperimentalQuery(query: string): Promise<NaturalLanguageQueryResponse> {
+  const browserApiBaseUrl = API_BASE_URL.replace("localhost", "127.0.0.1");
+  const response = await fetch(`${browserApiBaseUrl}/api/v1/query/experimental`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ query, game: "dota2" }),
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`MetaMind API returned ${response.status}${detail ? `: ${detail}` : ""}`);
+  }
+
+  return response.json() as Promise<NaturalLanguageQueryResponse>;
 }

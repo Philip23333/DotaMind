@@ -1,3 +1,4 @@
+import logging
 from typing import Any
 
 from app.api.v1.schemas import (
@@ -5,6 +6,8 @@ from app.api.v1.schemas import (
     MetaReportResponse,
     Source,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class FormatterTool:
@@ -46,6 +49,16 @@ class FormatterTool:
             )
         
         summary = f"Analysis of {len(heroes)} {role} heroes for patch {patch}."
+        logger.info(
+            "Formatter meta_report start game=%s patch=%s role=%s heroes=%s "
+            "sources=%s confidence=%.3f",
+            game,
+            patch,
+            role,
+            len(heroes),
+            sources,
+            confidence,
+        )
         
         return MetaReportResponse(
             game=game,  # type: ignore

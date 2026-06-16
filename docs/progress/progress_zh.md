@@ -1,280 +1,426 @@
 # MetaMind 施工进度文档
 
-> 最后更新：2026-06-16（v2.1 架构迁移中 - Milestone 1 完成 ✅）
+> 最后更新：2026-06-16  
+> 面向对象：人类开发者 + 后续接手本项目的 Agent  
+> 当前重点：v2.1 实验链路已可跑通，LLM 仅接在 Analyzer 的 meta_report 英雄洞察阶段。
 
 ## 项目概览
 
-MetaMind 是一个可组合的电竞情报 Agent，将 Dota2 版本更新、比赛数据和职业战队表现转化为可验证、可付费调用的 Meta 分析报告。
+MetaMind 是一个可组合的 Dota2 电竞情报 Agent，将版本更新、比赛数据和职业战队表现转化为可验证、可调用、未来可付费的 Meta 分析报告。
 
-**当前架构版本：v2.1**（3 Agent + 2 Tool + 对抗式 Critic 闭环）。详见 `docs/design/MetaMind_MVP_v2.1.md`。
+当前设计目标仍是 `v2.1`：3 Agent + 2 Tool + Critic 闭环。
 
----
+设计文档：`docs/design/MetaMind_MVP_v2.1.md`
+
+## 给接手 Agent 的当前事实
+
+请优先相信本节，而不是 README 或旧 milestone 文档中的零散描述。
+
+1. 后端已有两套链路并存。
+2. 旧稳定服务仍存在：`MetaReportService`、`PatchImpactService`、`TeamReportService`、`ClaimVerificationService`。
+3. 新 v2.1 实验入口是：`POST /api/v1/query/experimental`。
+4. v2.1 实验入口目前不是完整 LLM Agent 系统。
+5. 当前真正调用 LLM 的模块只有：`AnalyzerAgent` 的 `meta_report` 英雄洞察生成。
+6. `OrchestratorAgent` 目前是关键词规则路由，不是 LLM function calling。
+7. `CriticAgent` 目前只有规则审核，不是 LLM critic。
+8. `RetrieverTool` 和 `FormatterTool` 是 deterministic tools，不调用 LLM。
+9. `/api/v1/query/experimental` 对四类 service 都能返回 200。
+10. `meta_report` 走 v2.1 实验链路；`patch_impact`、`team_report`、`claim_verification` 目前 fallback 到旧稳定服务。
+11. 自然语言 query 里的 role 尚未解析。`Strongest midlane heroes` 仍会被硬编码成 `offlane`。
+12. 前端 `AskConsole` 已接入 v2.1 实验查询，但为了避开 Next 代理问题，浏览器直接请求 `http://127.0.0.1:8000/api/v1/query/experimental`。
 
 ## 当前状态总览
 
-| 模块 | 状态 | 数据来源 |
-|------|------|----------|
-| Meta Report（英雄推荐） | ✅ 真实数据 | OpenDota /heroStats + patch JSON |
-| Patch Impact（版本影响） | ✅ 真实数据 | 本地 patch JSON（189 条改动） |
-| Team Report（战队分析） | ✅ 真实数据 | OpenDota /teams + /matches + /heroes |
-| Claim Verification（断言校验） | ⚠️ Mock | 规则硬编码 |
-| Service Catalog（服务目录） | ✅ 静态配置 | 不需要外部数据 |
-| CAP 付费集成 | ❌ 未实现 | — |
-| 前端 Dashboard | ✅ 可运行 | 依赖后端启动 |
+| 模块 | 当前状态 | 真实说明 |
+|------|----------|----------|
+| Meta Report 旧服务 | ✅ 可用 | OpenDota `/heroStats` + 本地 patch JSON，纯规则/公式，无 LLM |
+| Meta Report v2.1 实验链路 | ✅ 可用 | Retriever + Analyzer + Critic + Formatter；Analyzer 会为 top 10 英雄逐个调用 LLM 生成 `reasons` 和 `practice_advice` |
+| Patch Impact | ✅ 可用 | 旧稳定服务，读取 `7_41d.json` 的 189 条改动；experimental endpoint 中 fallback 到该服务 |
+| Team Report | ✅ 可用 | 旧稳定服务，OpenDota 可用时接真实数据，失败时 fallback 到 mock；experimental endpoint 中 fallback 到该服务 |
+| Claim Verification | ⚠️ Mock/规则 | 旧稳定服务，硬编码规则；experimental endpoint 中 fallback 到该服务并经过规则 Critic |
+| Orchestrator | ⚠️ 规则路由 | 关键词判断 service 类型；未解析 role；未接 LLM function calling |
+| Analyzer | ✅ 部分 LLM | 仅 meta_report 英雄洞察阶段调用 LLM；评分/evidence 仍是规则 |
+| Critic | ⚠️ 规则审核 | Layer 1 规则：无证据或 unsupported signal 会 reject；Layer 2 LLM 未实现 |
+| RetrieverTool | ✅ meta 可用 | `retrieve_meta()` 接 OpenDota + patch JSON；其他 retrieve 方法存在但主 experimental fallback 未使用 |
+| FormatterTool | ✅ meta 可用 | 当前主要格式化 `MetaReportResponse` |
+| 前端 Dashboard | ✅ 可运行 | `AskConsole` 可调用 experimental endpoint；其他 SSR 面板仍调用旧 API，有 mock fallback |
+| CAP 付费集成 | ❌ 未实现 | 只有 service catalog 静态价格形态 |
 
----
+## 当前主要入口
+
+### 后端启动
+
+```bash
+npm run dev:api
+```
+
+实际命令：
+
+```bash
+cd apps/api && python -m uvicorn app.main:app --reload --port 8000
+```
+
+### 前端启动
+
+```bash
+npm run dev:web
+```
+
+前端地址：
+
+```text
+http://localhost:3012
+```
+
+### v2.1 实验接口
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/query/experimental \
+  -H "Content-Type: application/json" \
+  -d "{\"query\":\"Strongest offlane heroes\",\"game\":\"dota2\"}"
+```
+
+### 稳定旧接口
+
+```text
+POST /api/v1/meta-report
+POST /api/v1/patch-impact
+POST /api/v1/team-report
+POST /api/v1/verify-claim
+GET  /api/v1/services
+```
+
+## 当前 v2.1 experimental 数据流
+
+### meta_report 查询
+
+```text
+POST /api/v1/query/experimental
+  -> ExperimentalService.handle_query()
+  -> OrchestratorAgent.plan()
+       当前只判断 service 类型，meta role 写死为 offlane
+  -> RetrieverTool.retrieve_meta(role="offlane", patch="latest")
+       OpenDota hero stats + 本地 patch JSON
+  -> AnalyzerAgent.analyze_meta_report()
+       规则公式计算 meta_score/confidence/evidence
+       若 llm_enabled=True，为每个 hero 调用 LLM 生成 reasons/practice_advice
+  -> CriticAgent.review_evidence()
+       Layer 1 规则审核
+  -> FormatterTool.format_meta_report()
+  -> NaturalLanguageQueryResponse
+```
+
+### patch/team/claim 查询
+
+```text
+POST /api/v1/query/experimental
+  -> ExperimentalService.handle_query()
+  -> OrchestratorAgent.plan()
+  -> fallback 到旧稳定 service
+       patch_impact        -> PatchImpactService
+       team_report         -> TeamReportService
+       claim_verification  -> ClaimVerificationService + CriticAgent.review_evidence()
+  -> NaturalLanguageQueryResponse
+```
+
+## LLM 当前实现范围
+
+### 已实现
+
+LLM provider：
+
+```text
+apps/api/app/llm/provider.py
+```
+
+Analyzer 调用：
+
+```text
+apps/api/app/agents/analyzer.py
+```
+
+调用链：
+
+```text
+ExperimentalService._handle_meta_report()
+  -> AnalyzerAgent.analyze_meta_report()
+  -> AnalyzerAgent._generate_hero_insights()
+  -> self.llm.complete_json(...)
+  -> OpenAICompatibleProvider.complete_json()
+  -> DeepSeek/OpenAI-compatible API
+```
+
+LLM 生成字段：
+
+```text
+HeroRecommendation.reasons
+HeroRecommendation.practice_advice
+```
+
+### 未实现
+
+```text
+Orchestrator LLM function calling
+Analyzer 对 patch/team/claim 的统一 LLM task_type 分析
+Critic Layer 2 LLM 审核
+LLM retry / budget / cache / batching
+```
+
+## LLM 日志
+
+已在关键流程点打 `INFO/WARNING/ERROR` 日志，方便调用时观察控制台。
+
+日志覆盖：
+
+```text
+Experimental query start/complete
+Orchestrator planned service
+Retriever start/complete
+Analyzer start/complete
+每个 hero 的 score/evidence
+每个 hero 的 LLM insight request start/success/failure
+LLM provider complete_json start/success/failure
+Critic review result
+Formatter complete
+fallback service start/complete
+```
+
+日志不会打印：
+
+```text
+API key
+完整 prompt
+完整 LLM response
+完整用户 query
+```
+
+注意：`httpx` 也会打印请求状态，例如：
+
+```text
+INFO:httpx:HTTP Request: POST https://api.deepseek.com/chat/completions "HTTP/1.1 200 OK"
+```
+
+## 前端当前实现
+
+关键文件：
+
+```text
+apps/web/src/components/AskConsole.tsx
+apps/web/src/lib/api.ts
+apps/web/src/types/report.ts
+```
+
+`AskConsole` 行为：
+
+```text
+用户输入 query
+  -> runExperimentalQuery(query)
+  -> fetch http://127.0.0.1:8000/api/v1/query/experimental
+  -> 页面内展示 routed_service、trace、top 3 hero sample 或 summary
+```
+
+为什么使用 `127.0.0.1`：
+
+1. 之前尝试过 Next route handler 和 rewrites 代理。
+2. 浏览器路径里出现过 `Remote Address: [::1]:3012` 且 Next 返回 500。
+3. 后端没有日志，说明请求停在 Next dev server。
+4. 最终改成浏览器直连 FastAPI IPv4 地址，避开 Next 代理问题。
+
+当前 CORS 允许：
+
+```text
+http://localhost:3000
+http://localhost:3012
+http://localhost:3013
+```
 
 ## 已完成工作
 
-### 第一阶段：数据源接入
+### 数据源与旧稳定服务
 
-1. **OpenDota REST API 接入**
-   - `/heroStats`：英雄胜率、登场率、Ban 率、职业比赛数据
-   - `/teams`：战队搜索（支持名称和 tag 模糊匹配）
-   - `/teams/{id}/matches`：最近 N 场比赛记录
-   - `/teams/{id}/heroes`：战队英雄池统计
-   - 内存缓存 TTL 1h，避免重复请求
+1. OpenDota REST API 已接入。
+2. 本地 patch JSON 已结构化：`apps/api/app/data/patches/7_41d.json`。
+3. Hero role mapping 已有 override 表。
+4. 旧 `meta_report`、`patch_impact`、`team_report`、`claim_verification` 服务可用。
+5. 前端 Dashboard 可运行并带 mock fallback。
 
-2. **Patch Notes 结构化**
-   - 手工录入 7.41d 版本完整 patch notes → `data/patches/7_41d.json`
-   - 189 条改动（116 buffs / 71 nerfs / 2 neutral）
-   - 覆盖英雄、物品、中立物品、附魔四类
+### v2.1 骨架和实验链路
 
-3. **英雄 Role 映射**
-   - OpenDota role tags → 标准位置（carry/mid/offlane/support）
-   - 40+ 英雄 override 表修正分类偏差（如 Mars/Tidehunter 归入 offlane）
+1. 新增 `agents/orchestrator.py`、`agents/analyzer.py`、`agents/critic.py`。
+2. 新增 `tools/retriever.py`、`tools/formatter.py`。
+3. 新增 `config/signals.yaml`、`config/critic_rules.yaml`。
+4. 新增 `services/experimental_service.py`。
+5. 新增 `/api/v1/query/experimental`。
+6. experimental endpoint 对四类 service 都能返回结果。
+7. `patch/team/claim` 未完成 v2.1 原生链路时 fallback 到旧稳定服务，避免 500。
 
-### 第二阶段：服务逻辑实现
+### LLM 增强
 
-4. **Meta Report Service**（async）
-   - OpenDota 高分段胜率（Ancient+）作为核心排序依据
-   - Patch JSON 注入 `patch_impact_score`（buff +0.15, nerf -0.15）
-   - 加权公式计算 meta_score（胜率 30% + 登场率 25% + 职业存在感 20% + 版本影响 15% + 趋势 10%）
-   - 返回 top 10 英雄，OpenDota 失败时降级到 mock
+1. 新增 LLM provider 抽象，当前支持 DeepSeek/OpenAI-compatible API。
+2. `AnalyzerAgent` 可调用 LLM 生成英雄推荐理由和练习建议。
+3. LLM 失败时不会阻断基础报告，会返回空 `reasons/practice_advice`。
+4. 已加关键流程日志。
 
-5. **Patch Impact Service**
-   - 从 JSON 统计 winners（buff 最多的英雄）和 losers（nerf 最多的英雄）
-   - 自动生成 summary、item impacts、lineup trends
-   - Confidence 根据数据完整度动态计算（0.6~0.9）
+## 当前测试状态
 
-6. **Team Report Service**（async）
-   - 支持任意战队查询（名称/tag 模糊匹配）
-   - 最近 30 场胜负记录
-   - 签名英雄 top 5（按历史 games_played 排序）
-   - Hero pool depth（≥30 场的英雄数）
-   - Draft flexibility、Patch adaptation score
-   - 胜/负场均时长分析
-   - 失败时降级到 mock
+最近验证：
 
-### 第三阶段：工程基础
+```bash
+cd apps/api
+python -m pytest
+```
 
-7. **测试**
-   - 4 个服务测试全部通过（pytest + pytest-asyncio）
-   - meta_report / patch_impact / team_report / claim_verification
+结果：
 
-8. **环境配置**
-   - `.env` 文件配置 CORS（支持 3000/3012/3013 端口）
-   - docker-compose 预留 Postgres + Redis（未接入代码）
-   - pydantic-settings 管理配置
+```text
+17 passed
+```
 
----
+前端类型检查：
 
-## v2.1 架构迁移进度
+```bash
+npm run typecheck
+```
 
-### ✅ Milestone 1：数据流通（已完成）
+结果：
 
-**目标**：打通 Orchestrator → Retriever → Analyzer → Critic 的完整数据流，暂不用 LLM。
+```text
+tsc --noEmit passed
+```
 
-| 子任务 | 状态 | 说明 |
-|------|------|------|
-| 骨架文件创建 | ✅ 完成 | orchestrator/analyzer/critic/retriever/formatter 已创建 |
-| 配置文件 | ✅ 完成 | signals.yaml / critic_rules.yaml 已建立 |
-| Retriever 连接数据源 | ✅ 完成 | 已连接 OpenDota + patch_notes，支持 4 种检索 |
-| 新增 /query/experimental 端点 | ✅ 完成 | 新路由已创建并测试通过 |
-| ExperimentalService | ✅ 完成 | 实现完整 v2.1 数据流 |
-| Analyzer 规则推理 | ✅ 完成 | 复用加权公式 + 生成 evidence |
-| Formatter 格式化 | ✅ 完成 | 构建标准 MetaReportResponse |
-| 端到端测试 | ✅ 完成 | 6 个集成测试全部通过 |
+触及文件 Ruff：
 
-**已实现功能**：
-- ✅ `/api/v1/query/experimental` 端点
-- ✅ meta_report 完整流程（offlane/carry/mid/support 角色）
-- ✅ 规则推理：加权公式计算 meta_score
-- ✅ 证据生成：基于阈值生成 supported/partial/weak verdict
-- ✅ Critic 审核：Layer 1 规则验证（无证据/不支持信号 → reject）
-- ✅ 真实数据：OpenDota API + patch JSON
-- ✅ 降级处理：OpenDota 失败时返回空报告
+```bash
+cd apps/api
+python -m ruff check app\main.py app\llm\provider.py app\agents\analyzer.py app\services\experimental_service.py app\tools\formatter.py
+```
 
-**测试覆盖**：
-- `test_experimental_meta_report_flow` - 端到端 meta report
-- `test_retriever_fetches_real_data` - Retriever 真实数据获取
-- `test_analyzer_generates_evidence` - Analyzer 证据生成逻辑
-- `test_critic_validates_evidence` - Critic 审核逻辑
-- `test_experimental_team_query_routes_correctly` - 意图路由验证
-- `test_experimental_patch_query_routes_correctly` - 意图路由验证
+结果：
 
-### 📋 Milestone 2：LLM 增强（未开始）
+```text
+All checks passed
+```
 
-| 任务 | 说明 | 预计工时 |
-|------|------|----------|
-| LLM provider 抽象 | 统一 OpenAI / Anthropic 接口，按 Agent 分配模型档位 | 2h |
-| Orchestrator function calling | LLM 意图解析 + 工具编排 + 重试控制 | 4-5h |
-| Analyzer LLM 推理 | claim 生成 + evidence 绑定 + 自然语言 reasons | 3-4h |
-| Critic Layer 2 LLM 审核 | 加载 yaml 配置 + LLM 深度审核 | 3-4h |
+注意：全量 `python -m ruff check .` 可能仍会命中旧文件中的既有 lint 问题，接手 Agent 不要误以为全是本轮改动导致。
 
-### 📋 Milestone 3：生产切换（未开始）
+## 已知限制和坑
 
-| 任务 | 说明 | 预计工时 |
-|------|------|----------|
-| A/B 测试机制 | 环境变量/header 控制新旧架构切换 | 1h |
-| 逐服务迁移 | patch_impact → team_report → meta_report → claim_verification | 2-3h |
-| 性能对比 | 延迟、准确度、LLM 成本对比 | 1h |
-| 清理旧代码 | 移除旧 6 层 Agent | 1h |
+1. Orchestrator 不解析 role。
 
----
+   `Strongest midlane heroes`、`carry recommendations`、`support heroes` 目前仍可能进入 `MetaReportRequest(role="offlane")`。
 
-## 未完成工作（其他）
+   位置：`apps/api/app/agents/orchestrator.py`
+
+2. LLM 调用是逐英雄串行。
+
+   top 10 英雄会产生 10 次 LLM 请求，当前单次 experimental meta 查询约 20-30 秒。
+
+3. LLM API key 当前通过 settings 读取，但仓库中曾出现硬编码默认值。
+
+   接手 Agent 应优先改为只从 `.env` 读取，避免把真实 key 写进代码或日志。
+
+4. Critic 不是 LLM critic。
+
+   当前只检查 evidence 是否为空、是否存在 unsupported signal。
+
+5. Claim Verification 仍是规则/mock。
+
+   未真正聚合 patch JSON + OpenDota 证据。
+
+6. Patch impact score 仍是简单 buff/nerf 计数。
+
+   不区分改动强度。
+
+7. Team report 的 hero pool depth 使用历史数据，不是近期窗口。
+
+8. 前端 SSR 面板仍依赖后端运行，否则 fallback 到 mock。
+
+9. `README.md` 和部分 milestone 文档可能过时。
+
+   当前交接请以本文件和代码为准。
+
+## 建议下一步
 
 ### 高优先级
 
-| 任务 | 说明 | 预计工时 |
-|------|------|----------|
-| 回测脚本 | `eval/backtest.py`，3 个历史版本 top-10 重合度 | 2h |
-| Claim Verification 真实化 | 接 patch JSON + OpenDota 数据做证据聚合 | 2h |
+1. 给 `OrchestratorAgent` 增加 role 解析。
+
+   支持：`midlane/mid/position 2`、`carry/pos 1`、`offlane/pos 3`、`support/pos 4/pos 5`。
+
+2. 移除代码中的 LLM API key 默认值。
+
+   只允许从 `.env` 或安全 secret 注入。
+
+3. 降低 LLM 延迟。
+
+   可选方案：只给 top 3 调 LLM、并发调用、缓存、或增加 `llm_enabled` 前端/请求开关。
+
+4. 为 experimental endpoint 增加 role 相关测试。
+
+5. 更新 API 文档，明确 `/api/v1/query/experimental` 的 fallback 行为。
 
 ### 中优先级
 
-| 任务 | 说明 | 预计工时 |
-|------|------|----------|
-| LLM provider 抽象 | 统一 OpenAI / Anthropic 接口，按 Agent 分配模型档位 | 2h |
-| CAP 集成 | 暴露付费服务、接 CROO Agent Store | 4-6h |
-| STRATZ GraphQL | 精确时间过滤 + 单次查询战队 draft 数据 | 半天 |
+1. 实现 Critic Layer 2 LLM 审核。
+2. 实现 Claim Verification 真实证据聚合。
+3. 将 patch/team/claim 从 fallback 迁移到 v2.1 原生链路。
+4. 给 Orchestrator 增加 LLM function calling 或更强的 deterministic parser。
+5. 增加 LLM budget、timeout、retry、cache。
 
 ### 低优先级
 
-| 任务 | 说明 | 预计工时 |
-|------|------|----------|
-| 前端动态查询 | AskConsole 输入框接入后端路由 | 2h |
-| 多角色支持 | 前端支持切换 carry/mid/support 查询 | 1h |
-| 数据库持久化 | 报告存档 + 历史查询 | 3h |
-| Demo 视频 | 5 分钟录屏 | 2h |
+1. CAP 集成。
+2. 数据库持久化报告历史。
+3. STRATZ GraphQL 精细化 draft 数据。
+4. Demo 视频。
 
----
+## 当前目录结构重点
 
-## 架构现状
-
-> **当前状态**：v2.1 骨架已建立，新旧架构并存（agents/ 包含新 3 层 + 旧 6 层）。
-
-```
-apps/api/
-├── app/
-│   ├── agents/          # [新 v2.1] orchestrator/analyzer/critic ✅ 骨架完成
-│   │   ├── orchestrator.py  # 意图识别完成，LLM 未接入
-│   │   ├── analyzer.py      # 工具方法完成，LLM 未接入
-│   │   ├── critic.py        # Layer 1 规则完成，Layer 2 未接入
-│   │                    # [旧 v2] data/patch/reasoning/verification/report/planner ⚠️ 仍在使用
-│   ├── tools/           # [新 v2.1] retriever/formatter ✅ 已建立
-│   │   ├── retriever.py     # 类型定义完成，数据连接进行中
-│   │   └── formatter.py     # 占位完成
-│   ├── config/          # [新 v2.1] ✅ 已建立
-│   │   ├── signals.yaml     # 信号阈值配置
-│   │   └── critic_rules.yaml # Critic Layer 1 规则
-│   ├── api/v1/          # routes + schemas (Pydantic models)
-│   ├── core/            # config (pydantic-settings)
-│   ├── data/
-│   │   ├── mock_data.py # 降级用的静态数据
-│   │   └── patches/     # 结构化 patch JSON
-│   │       └── 7_41d.json
-│   ├── integrations/
-│   │   ├── opendota.py  # REST client + 内存缓存 + role mapping
-│   │   ├── patch_notes.py  # 本地 JSON 读取 + patch score 计算
-│   │   └── stratz.py    # placeholder
-│   └── services/        # meta_report / patch_impact / team_report / claim_verification / pricing
-└── tests/
+```text
+apps/api/app/
+├── agents/
+│   ├── orchestrator.py       # v2.1 规则 Orchestrator，当前不解析 role
+│   ├── analyzer.py           # v2.1 Analyzer，meta_report 中调用 LLM
+│   ├── critic.py             # v2.1 规则 Critic
+│   ├── data_agent.py         # 旧稳定链路仍使用
+│   ├── patch_agent.py        # 旧稳定链路仍使用
+│   ├── reasoning_agent.py    # 旧稳定链路仍使用
+│   ├── verification_agent.py # 旧稳定链路仍使用
+│   └── report_agent.py       # 旧稳定链路仍使用
+├── llm/
+│   └── provider.py           # DeepSeek/OpenAI-compatible provider
+├── tools/
+│   ├── retriever.py          # v2.1 deterministic retriever
+│   └── formatter.py          # v2.1 deterministic formatter
+├── services/
+│   ├── experimental_service.py       # v2.1 experimental orchestration service
+│   ├── meta_report_service.py        # 旧稳定 meta report
+│   ├── patch_impact_service.py       # 旧稳定 patch impact
+│   ├── team_report_service.py        # 旧稳定 team report
+│   └── claim_verification_service.py # 旧稳定 claim verification
+└── api/v1/routes.py          # HTTP routes，包括 /query/experimental
 ```
 
+```text
+apps/web/src/
+├── components/AskConsole.tsx # v2.1 experimental UI 入口
+├── lib/api.ts                # runExperimentalQuery 直连 127.0.0.1:8000
+└── types/report.ts           # NaturalLanguageQueryResponse 等类型
 ```
-apps/web/                # Next.js 15 + Tailwind + ECharts
-├── src/
-│   ├── app/page.tsx     # SSR 主页，调后端 4 个 API
-│   ├── components/      # 5 个面板组件 + AppShell + AskConsole
-│   ├── lib/api.ts       # fetch 封装，失败 fallback 到 mock.ts
-│   └── types/report.ts  # TypeScript 类型定义
-```
-
----
-
-## 数据流
-
-> 当前实现（v2 旧架构，仍在使用）：
-
-```
-用户请求
-  → FastAPI route (async)
-    → DataAgent.hero_stats_for_role_async()
-      → OpenDotaClient.get_hero_stats_for_role()
-        → GET https://api.opendota.com/api/heroStats (1h 缓存)
-      → _inject_patch_scores()
-        → patch_notes.compute_hero_patch_score("latest")
-          → 读取 data/patches/7_41d.json
-    → ReasoningAgent.meta_score() (加权公式)
-    → VerificationAgent.hero_evidence() (规则判断)
-  → 返回 MetaReportResponse JSON
-```
-
-> v2.1 新架构（Milestone 1 目标，规则推理）：
-
-```
-用户请求
-  → /api/v1/query/experimental
-    → Orchestrator.plan(query) → OrchestrationPlan (意图识别)
-    → Orchestrator.run(plan, handlers)
-      → retrieve_meta/patch/team/claim() → EvidenceBundle
-      → Analyzer.analyze() → 规则推理 + evidence 打分
-      → Critic.review_evidence() → Layer 1 规则审核
-      → format_report() → 标准 Response
-  → 返回 MetaReportResponse JSON (含 plan trace)
-```
-
-> v2.1 终态（Milestone 2 目标，LLM 推理）：
-
-```
-用户请求
-  → /api/v1/query
-    → Orchestrator Agent (LLM function calling)
-      → tool: retrieve_*() → EvidenceBundle
-      → Analyzer Agent (LLM) → claims + evidence_ids + reasons
-      → Critic Agent (Layer 1 规则 + Layer 2 LLM) → pass / reject
-          ├─ reject → Orchestrator 决策：补数据 / 重推 / 降级
-          └─ pass   → tool: format_report()
-  → 返回 MetaReportResponse JSON (含 trace 元数据)
-```
-
----
-
-## 已知限制
-
-1. **Hero pool depth** 使用历史全量数据（≥30 场），非近期真实池；需 STRATZ 或付费 OpenDota key 解决
-2. **patch_impact_score** 按 buff/nerf 计数简单加减，不区分改动强度
-3. **Role 映射** 依赖 override 表，新英雄需手动添加
-4. **前端 SSR** 依赖后端先启动，否则 fallback 到 mock
-5. **无 LLM 推理** — reasons / practice_advice 字段为空，meta_score 是纯公式
-
----
 
 ## 文档目录
 
-```
+```text
 docs/
-├── design/              # 产品设计文档
-│   ├── MetaMind_MVP_v1.md      # 原始 MVP 设计（完整版，6 Agent）
-│   ├── MetaMind_MVP_v2.md      # 工程实施版（6→3，信号制评分）
-│   └── MetaMind_MVP_v2.1.md    # ★ 当前版：3 Agent + 2 Tool + Critic 闭环
-├── technical/           # 技术文档
-│   ├── api.md                # API 接口说明
-│   ├── architecture.md       # 系统架构（已对齐 v2.1）
-│   └── cap-integration.md    # CAP 集成计划
-└── progress/            # 施工进度
-    ├── progress_zh.md        # 本文件
-    └── progress_en.md        # English version
+├── design/
+│   ├── MetaMind_MVP_v1.md
+│   ├── MetaMind_MVP_v2.md
+│   └── MetaMind_MVP_v2.1.md
+├── technical/
+│   ├── api.md
+│   ├── architecture.md
+│   └── cap-integration.md
+└── progress/
+    ├── progress_zh.md
+    └── progress_en.md
 ```

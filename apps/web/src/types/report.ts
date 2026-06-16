@@ -89,3 +89,18 @@ export interface ServiceCatalog {
   commerce_status: string;
   notes: string[];
 }
+
+export interface PlannedTask {
+  agent: string;
+  action: string;
+  status: string;
+}
+
+export type QueryReport = MetaReport | PatchImpactReport | TeamReport;
+
+export interface NaturalLanguageQueryResponse {
+  query: string;
+  routed_service: string;
+  tasks: PlannedTask[];
+  result: QueryReport;
+}
