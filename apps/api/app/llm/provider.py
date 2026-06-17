@@ -67,6 +67,7 @@ class OpenAICompatibleProvider(LLMProvider):
     ) -> str:
         """Generate a completion."""
         started_at = time.perf_counter()
+        finish_reason = "unknown"
         logger.info(
             "LLM complete start provider=openai_compatible model=%s base_url=%s "
             "messages=%s max_tokens=%s temperature=%s",
@@ -93,19 +94,24 @@ class OpenAICompatibleProvider(LLMProvider):
                 )
                 response.raise_for_status()
                 data = response.json()
-                content = data["choices"][0]["message"]["content"]
+                choice = data["choices"][0]
+                content = choice["message"]["content"]
+                finish_reason = choice.get("finish_reason", "unknown")
                 logger.info(
-                    "LLM complete success model=%s elapsed_ms=%s output_chars=%s",
+                    "LLM complete success model=%s elapsed_ms=%s output_chars=%s "
+                    "finish_reason=%s",
                     self.model,
                     round((time.perf_counter() - started_at) * 1000),
                     len(content),
+                    finish_reason,
                 )
                 return content
         except Exception as e:
             logger.error(
-                "LLM complete failed model=%s elapsed_ms=%s error=%s",
+                "LLM complete failed model=%s elapsed_ms=%s finish_reason=%s error=%s",
                 self.model,
                 round((time.perf_counter() - started_at) * 1000),
+                finish_reason,
                 e,
             )
             raise
@@ -118,6 +124,7 @@ class OpenAICompatibleProvider(LLMProvider):
     ) -> dict[str, Any]:
         """Generate a JSON response."""
         started_at = time.perf_counter()
+        finish_reason = "unknown"
         logger.info(
             "LLM complete_json start provider=openai_compatible model=%s base_url=%s "
             "messages=%s max_tokens=%s temperature=%s",
@@ -145,24 +152,29 @@ class OpenAICompatibleProvider(LLMProvider):
                 )
                 response.raise_for_status()
                 data = response.json()
-                content = data["choices"][0]["message"]["content"]
+                choice = data["choices"][0]
+                content = choice["message"]["content"]
+                finish_reason = choice.get("finish_reason", "unknown")
                 
                 # Parse JSON from content
                 import json
                 parsed = json.loads(content)
                 logger.info(
-                    "LLM complete_json success model=%s elapsed_ms=%s output_chars=%s keys=%s",
+                    "LLM complete_json success model=%s elapsed_ms=%s output_chars=%s "
+                    "finish_reason=%s keys=%s",
                     self.model,
                     round((time.perf_counter() - started_at) * 1000),
                     len(content),
+                    finish_reason,
                     list(parsed.keys()) if isinstance(parsed, dict) else [],
                 )
                 return parsed
         except Exception as e:
             logger.error(
-                "LLM complete_json failed model=%s elapsed_ms=%s error=%s",
+                "LLM complete_json failed model=%s elapsed_ms=%s finish_reason=%s error=%s",
                 self.model,
                 round((time.perf_counter() - started_at) * 1000),
+                finish_reason,
                 e,
             )
             raise

@@ -257,7 +257,7 @@ class AnalyzerAgent:
             role,
             tier,
             meta_score,
-            300,
+            800,
         )
         prompt = f"""You are analyzing Dota 2 hero recommendations for the {role} position.
 
@@ -295,7 +295,7 @@ Example format:
         ]
         
         try:
-            response = await self.llm.complete_json(messages, temperature=0.7, max_tokens=300)
+            response = await self.llm.complete_json(messages, temperature=0.2, max_tokens=800)
             result = {
                 "reasons": response.get("reasons", [])[:3],
                 "practice_advice": response.get("practice_advice", [])[:3],

@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,10 +9,21 @@ from app.core.config import get_settings
 
 settings = get_settings()
 
+
+class PipeFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        timestamp = datetime.fromtimestamp(record.created).strftime("%Y-%m-%d %H:%M:%S")
+        millis = int(record.msecs)
+        module_name = record.name.rsplit(".", 1)[-1]
+        message = record.getMessage()
+        return f"{timestamp}.{millis:03d} | {record.levelname:<8} | [{module_name}] {message}"
+
 logging.basicConfig(
     level=logging.INFO,
-    format="%(levelname)s:%(name)s:%(message)s",
+    format="%(message)s",
 )
+for handler in logging.getLogger().handlers:
+    handler.setFormatter(PipeFormatter())
 
 app = FastAPI(
     title=settings.app_name,
