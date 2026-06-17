@@ -259,46 +259,60 @@ class AnalyzerAgent:
             meta_score,
             300,
         )
-        prompt = f"""You are analyzing Dota 2 hero recommendations for the {role} position.
+        prompt = f"""Return exactly one JSON object.
 
-Hero: {hero_name}
-Meta Score: {meta_score}/100 (Tier {tier})
-Win Rate: {win_rate:.1%}
-Pick Rate: {pick_rate:.1%}
-Pro Presence: {pro_presence:.1%}
-Patch Impact: {patch_impact_score:+.2f}
+Hard requirements:
+- The first character of your response must be '{{'.
+- The last character of your response must be '}}'.
+- Do not output markdown.
+- Do not output code fences.
+- Do not output explanations.
+- Do not output any text before or after the JSON object.
+- Output valid RFC8259 JSON.
 
-Generate a JSON response with:
-1. "reasons": 2-3 short reasons WHY this hero is good/bad for {role} (each reason 10-15 words max)
-2. "practice_advice": 2-3 actionable tips for playing this hero (each tip 10-15 words max)
-
-Keep language concise and tactical. Focus on the current meta and patch.
-
-Example format:
+Required schema:
 {{
-  "reasons": [
-    "High win rate shows strong performance in current patch",
-    "Popular in pro scene with proven strategies"
-  ],
-  "practice_advice": [
-    "Focus on farming efficiency in early game",
-    "Coordinate with team for power spike timing"
-  ]
-}}"""
+  "reasons": ["string", "string"],
+  "practice_advice": ["string", "string"]
+}}
+
+Field rules:
+- "reasons" must contain exactly 2 strings.
+- "practice_advice" must contain exactly 2 strings.
+- Each string must be plain English.
+- Each string must be between 8 and 16 words.
+- Strings must not contain numbering, bullet markers, or newline characters.
+- Reasons must explain why the hero is strong or weak in the current meta.
+- Practice advice must be tactical and directly actionable in-game.
+
+Hero analysis input:
+- Role: {role}
+- Hero: {hero_name}
+- Meta score: {meta_score}/100
+- Tier: {tier}
+- Win rate: {win_rate:.1%}
+- Pick rate: {pick_rate:.1%}
+- Pro presence: {pro_presence:.1%}
+- Patch impact score: {patch_impact_score:+.2f}
+
+Return only the JSON object."""
 
         messages = [
             {
                 "role": "system",
-                "content": "You are a Dota 2 expert analyst providing concise, tactical insights.",
+                "content": (
+                    "You are a Dota 2 expert analyst. "
+                    "You must obey the output schema exactly and return valid JSON only."
+                ),
             },
             {"role": "user", "content": prompt}
         ]
         
         try:
-            response = await self.llm.complete_json(messages, temperature=0.7, max_tokens=300)
+            response = await self.llm.complete_json(messages, temperature=0.1, max_tokens=220)
             result = {
-                "reasons": response.get("reasons", [])[:3],
-                "practice_advice": response.get("practice_advice", [])[:3],
+                "reasons": response.get("reasons", [])[:2],
+                "practice_advice": response.get("practice_advice", [])[:2],
             }
             logger.info(
                 "Analyzer LLM insight request success hero=%s elapsed_ms=%s "
@@ -316,7 +330,7 @@ Example format:
                 round((time.perf_counter() - started_at) * 1000),
                 e,
             )
-            return {"reasons": [], "practice_advice": []}
+            raise
 
     def _tier_label(self, meta_score: int) -> str:
         """Convert meta_score to tier label."""

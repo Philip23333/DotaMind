@@ -4,6 +4,7 @@ LLM Provider abstraction for v2.1 architecture.
 Supports OpenAI-compatible APIs (OpenAI, DeepSeek, etc.) and Anthropic.
 """
 
+import json
 import logging
 import time
 from abc import ABC, abstractmethod
@@ -145,19 +146,27 @@ class OpenAICompatibleProvider(LLMProvider):
                 )
                 response.raise_for_status()
                 data = response.json()
-                content = data["choices"][0]["message"]["content"]
-                
-                # Parse JSON from content
-                import json
+                message = data["choices"][0]["message"]
+                content = (message.get("content") or "").strip()
+                if not content:
+                    raise ValueError(
+                        "Empty LLM JSON response "
+                        f"finish_reason={data['choices'][0].get('finish_reason')} "
+                        f"message_keys={list(message.keys())}"
+                    )
+
                 parsed = json.loads(content)
-                logger.info(
-                    "LLM complete_json success model=%s elapsed_ms=%s output_chars=%s keys=%s",
-                    self.model,
-                    round((time.perf_counter() - started_at) * 1000),
-                    len(content),
-                    list(parsed.keys()) if isinstance(parsed, dict) else [],
-                )
-                return parsed
+                if not isinstance(parsed, dict):
+                    raise ValueError("LLM JSON response was not an object")
+
+            logger.info(
+                "LLM complete_json success model=%s elapsed_ms=%s output_chars=%s keys=%s",
+                self.model,
+                round((time.perf_counter() - started_at) * 1000),
+                len(content),
+                list(parsed.keys()) if isinstance(parsed, dict) else [],
+            )
+            return parsed
         except Exception as e:
             logger.error(
                 "LLM complete_json failed model=%s elapsed_ms=%s error=%s",
@@ -175,8 +184,8 @@ class LLMConfig:
         self,
         provider: Literal["openai", "deepseek", "anthropic"] = "deepseek",
         api_key: str = "",
-        base_url: str = "https://api.deepseek.com",
-        model: str = "deepseek-chat",
+        base_url: str = "",
+        model: str = "",
     ):
         self.provider = provider
         self.api_key = api_key
@@ -221,10 +230,10 @@ def get_llm_provider() -> LLMProvider:
         settings = get_settings()
         
         config = LLMConfig(
-            provider="deepseek",
-            api_key=getattr(settings, "llm_api_key", ""),
-            base_url=getattr(settings, "llm_base_url", "https://api.deepseek.com"),
-            model=getattr(settings, "llm_model", "deepseek-chat"),
+            provider=getattr(settings, "llm_provider", "deepseek"),
+            api_key=settings.llm_api_key,
+            base_url=settings.llm_base_url,
+            model=settings.llm_model,
         )
         
         _default_provider = LLMFactory.create(config)

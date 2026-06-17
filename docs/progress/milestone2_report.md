@@ -24,11 +24,12 @@
 **文件**: `apps/api/app/core/config.py`
 
 新增配置项：
-```python
-llm_api_key: str = ""  # set via METAMIND_LLM_API_KEY
-llm_base_url: str = "https://api.deepseek.com"
-llm_model: str = "deepseek-chat"
-llm_enabled: bool = True
+```env
+METAMIND_LLM_ENABLED=false
+METAMIND_LLM_PROVIDER=deepseek
+METAMIND_LLM_API_KEY=
+METAMIND_LLM_BASE_URL=https://api.deepseek.com
+METAMIND_LLM_MODEL=deepseek-chat
 ```
 
 ### 3. Analyzer Agent LLM 增强

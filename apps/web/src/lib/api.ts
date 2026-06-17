@@ -12,11 +12,21 @@ import type {
   TeamReport,
 } from "@/types/report";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
+const EXPERIMENTAL_API_BASE_URL = process.env.NEXT_PUBLIC_EXPERIMENTAL_API_BASE_URL;
+
+function requireEnv(name: string, value: string | undefined): string {
+  if (!value) {
+    throw new Error(`${name} must be configured in .env`);
+  }
+
+  return value;
+}
 
 async function postJson<TResponse>(path: string, body: object, fallback: TResponse): Promise<TResponse> {
   try {
-    const response = await fetch(`${API_BASE_URL}${path}`, {
+    const apiBaseUrl = requireEnv("NEXT_PUBLIC_API_BASE_URL", API_BASE_URL);
+    const response = await fetch(`${apiBaseUrl}${path}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -37,7 +47,8 @@ async function postJson<TResponse>(path: string, body: object, fallback: TRespon
 
 async function getJson<TResponse>(path: string, fallback: TResponse): Promise<TResponse> {
   try {
-    const response = await fetch(`${API_BASE_URL}${path}`, {
+    const apiBaseUrl = requireEnv("NEXT_PUBLIC_API_BASE_URL", API_BASE_URL);
+    const response = await fetch(`${apiBaseUrl}${path}`, {
       cache: "no-store",
     });
 
@@ -72,7 +83,10 @@ export function getServiceCatalog(): Promise<ServiceCatalog> {
 }
 
 export async function runExperimentalQuery(query: string): Promise<NaturalLanguageQueryResponse> {
-  const browserApiBaseUrl = API_BASE_URL.replace("localhost", "127.0.0.1");
+  const browserApiBaseUrl = requireEnv(
+    "NEXT_PUBLIC_EXPERIMENTAL_API_BASE_URL",
+    EXPERIMENTAL_API_BASE_URL,
+  );
   const response = await fetch(`${browserApiBaseUrl}/api/v1/query/experimental`, {
     method: "POST",
     headers: {
