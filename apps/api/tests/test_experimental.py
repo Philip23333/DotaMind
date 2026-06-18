@@ -3,6 +3,7 @@ Tests for the canonical report pipeline architecture.
 """
 
 import asyncio
+from unittest.mock import AsyncMock
 
 from app.application.query_service import QueryService
 from app.domain.evidence import EvidenceBundle, EvidenceItem
@@ -51,7 +52,26 @@ def test_experimental_meta_report_flow():
 
 def test_experimental_team_query_routes_correctly():
     """Test that team-related queries route to team_report."""
-    response = asyncio.run(QueryService().run("How is Team Spirit performing?", "dota2"))
+    service = QueryService()
+    service.pipeline.retriever.retrieve_team = AsyncMock(
+        return_value=EvidenceBundle(
+            task_type="team_report",
+            query={"team_name": "Team Spirit"},
+            records=[
+                {
+                    "team_name": "Team Spirit",
+                    "recent_record": "3-2 in last 5 matches",
+                    "signature_heroes": ["Puck", "Mars"],
+                    "patch_adaptation_score": 70,
+                    "recent_win_rate": 0.6,
+                }
+            ],
+            sources=["opendota"],
+            data_source="opendota",
+        )
+    )
+
+    response = asyncio.run(service.run("How is Team Spirit performing?", "dota2"))
     result = response.result
 
     assert response.routed_service == "team_report"

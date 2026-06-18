@@ -1,0 +1,653 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MetaMind Query Lab</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: oklch(1 0 0);
+        --surface: oklch(0.982 0.004 170);
+        --surface-raised: oklch(0.955 0.012 170);
+        --ink: oklch(0.18 0.025 170);
+        --muted: oklch(0.43 0.025 170);
+        --primary: oklch(0.42 0.11 170);
+        --primary-strong: oklch(0.34 0.105 170);
+        --accent: oklch(0.58 0.14 35);
+        --border: oklch(0.88 0.012 170);
+        --success: oklch(0.48 0.12 150);
+        --warning: oklch(0.55 0.15 65);
+        --danger: oklch(0.52 0.16 25);
+        --focus: color-mix(in oklch, var(--primary) 26%, transparent);
+      }
+
+      * { box-sizing: border-box; }
+
+      html, body { min-height: 100%; }
+
+      body {
+        margin: 0;
+        background: var(--surface);
+        color: var(--ink);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        text-rendering: optimizeLegibility;
+      }
+
+      button, textarea { font: inherit; }
+
+      button:focus-visible, textarea:focus-visible, summary:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 3px var(--focus);
+      }
+
+      .app {
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr) auto;
+        min-height: 100svh;
+      }
+
+      .topbar {
+        position: sticky;
+        z-index: 10;
+        top: 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        min-height: 3.75rem;
+        padding: 0.75rem max(1rem, calc((100vw - 920px) / 2));
+        border-bottom: 1px solid var(--border);
+        background: color-mix(in oklch, var(--bg) 94%, transparent);
+        backdrop-filter: blur(10px);
+      }
+
+      .identity { display: flex; align-items: center; gap: 0.75rem; min-width: 0; }
+
+      .mark {
+        display: grid;
+        width: 2rem;
+        height: 2rem;
+        flex: 0 0 auto;
+        place-items: center;
+        border-radius: 7px;
+        background: var(--primary);
+        color: white;
+        font-size: 0.7rem;
+        font-weight: 750;
+        letter-spacing: -0.02em;
+      }
+
+      .identity h1 { margin: 0; font-size: 1rem; line-height: 1.2; }
+      .identity p { margin: 0.15rem 0 0; color: var(--muted); font-size: 0.75rem; }
+
+      .connection {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        flex: 0 0 auto;
+        color: var(--muted);
+        font-size: 0.75rem;
+      }
+
+      .connection::before {
+        width: 0.5rem;
+        height: 0.5rem;
+        border-radius: 50%;
+        background: var(--success);
+        content: "";
+      }
+
+      .conversation {
+        width: min(100%, 920px);
+        margin: 0 auto;
+        padding: 2rem 1.25rem 9rem;
+      }
+
+      .message { display: flex; margin-bottom: 1.5rem; }
+      .message.user { justify-content: flex-end; }
+
+      .bubble {
+        max-width: min(100%, 760px);
+        border-radius: 10px;
+        background: var(--bg);
+      }
+
+      .message.user .bubble {
+        max-width: min(82%, 600px);
+        padding: 0.8rem 1rem;
+        background: var(--primary);
+        color: white;
+        line-height: 1.55;
+        white-space: pre-wrap;
+      }
+
+      .assistant-bubble { width: min(100%, 760px); }
+
+      .assistant-label {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 0.5rem;
+        color: var(--muted);
+        font-size: 0.75rem;
+        font-weight: 650;
+      }
+
+      .assistant-label::before {
+        width: 0.42rem;
+        height: 0.42rem;
+        border-radius: 50%;
+        background: var(--primary);
+        content: "";
+      }
+
+      .report {
+        overflow: hidden;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: var(--bg);
+      }
+
+      .report-head { padding: 1rem 1.1rem 0.9rem; }
+
+      .report-meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-bottom: 0.6rem;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        min-height: 1.5rem;
+        padding: 0.2rem 0.55rem;
+        border-radius: 999px;
+        background: color-mix(in oklch, var(--primary) 11%, var(--bg));
+        color: var(--primary-strong);
+        font-size: 0.7rem;
+        font-weight: 700;
+      }
+
+      .confidence { color: var(--muted); font-size: 0.75rem; font-variant-numeric: tabular-nums; }
+
+      .report h2 {
+        margin: 0;
+        font-size: 1.1rem;
+        line-height: 1.35;
+        text-wrap: balance;
+      }
+
+      .summary { max-width: 68ch; margin: 0.5rem 0 0; color: var(--muted); font-size: 0.875rem; line-height: 1.6; }
+
+      .facts {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        border-top: 1px solid var(--border);
+        background: var(--surface);
+      }
+
+      .fact { min-width: 0; padding: 0.85rem 1.1rem; border-right: 1px solid var(--border); }
+      .fact:last-child { border-right: 0; }
+      .fact dt { margin: 0 0 0.25rem; color: var(--muted); font-size: 0.7rem; }
+      .fact dd { margin: 0; font-size: 0.875rem; font-weight: 700; overflow-wrap: anywhere; }
+
+      .sections { display: grid; gap: 1rem; padding: 1rem 1.1rem 1.1rem; border-top: 1px solid var(--border); }
+      .section h3 { margin: 0 0 0.45rem; font-size: 0.8rem; }
+      .section ul { display: grid; gap: 0.35rem; margin: 0; padding-left: 1.1rem; }
+      .section li { color: var(--muted); font-size: 0.8rem; line-height: 1.5; }
+
+      .trace { border-top: 1px solid var(--border); }
+      .trace details + details { border-top: 1px solid var(--border); }
+      .trace summary { padding: 0.75rem 1.1rem; cursor: pointer; color: var(--muted); font-size: 0.75rem; font-weight: 650; }
+      .trace ol { display: grid; gap: 0.45rem; margin: 0; padding: 0 1.1rem 1rem 2.5rem; }
+      .trace li { color: var(--muted); font-size: 0.75rem; line-height: 1.45; }
+      pre { overflow: auto; max-height: 24rem; margin: 0; padding: 0 1.1rem 1rem; color: var(--ink); font: 0.72rem/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; }
+
+      .welcome { padding: 1.15rem; }
+      .welcome h2 { margin: 0; font-size: 1.05rem; }
+      .welcome p { max-width: 64ch; margin: 0.5rem 0 1rem; color: var(--muted); font-size: 0.85rem; line-height: 1.6; }
+
+      .suggestions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+      .suggestion {
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 0.5rem 0.75rem;
+        background: var(--bg);
+        color: var(--ink);
+        cursor: pointer;
+        font-size: 0.75rem;
+        transition: border-color 160ms ease, background 160ms ease;
+      }
+      .suggestion:hover { border-color: var(--primary); background: var(--surface); }
+
+      .error-report { border-color: color-mix(in oklch, var(--danger) 40%, var(--border)); }
+      .error-report .badge { background: color-mix(in oklch, var(--danger) 10%, var(--bg)); color: var(--danger); }
+
+      .candidates { display: grid; gap: 0.55rem; margin-top: 0.9rem; }
+      .candidate {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 0.25rem 1rem;
+        padding: 0.7rem 0.8rem;
+        border: 1px solid var(--border);
+        border-radius: 7px;
+        background: var(--surface);
+      }
+      .candidate strong { font-size: 0.8rem; }
+      .candidate span { color: var(--muted); font-size: 0.7rem; }
+      .candidate .candidate-score { grid-row: 1 / 3; grid-column: 2; align-self: center; font-variant-numeric: tabular-nums; }
+
+      .loading {
+        display: grid;
+        gap: 0.5rem;
+        padding: 1rem 1.1rem;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: var(--bg);
+      }
+      .loading span { display: block; height: 0.65rem; border-radius: 4px; background: var(--surface-raised); animation: pulse 1.2s ease-in-out infinite alternate; }
+      .loading span:nth-child(1) { width: 35%; }
+      .loading span:nth-child(2) { width: 88%; }
+      .loading span:nth-child(3) { width: 62%; }
+
+      .composer-wrap {
+        position: fixed;
+        z-index: 20;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        padding: 1rem max(1rem, calc((100vw - 920px) / 2));
+        background: linear-gradient(to bottom, transparent, var(--surface) 24%);
+      }
+
+      .composer {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: end;
+        gap: 0.65rem;
+        padding: 0.55rem;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--bg);
+      }
+
+      textarea {
+        width: 100%;
+        min-height: 2.75rem;
+        max-height: 9rem;
+        resize: none;
+        border: 0;
+        padding: 0.7rem 0.75rem;
+        background: transparent;
+        color: var(--ink);
+        line-height: 1.45;
+      }
+      textarea::placeholder { color: var(--muted); opacity: 1; }
+
+      .send {
+        min-width: 5.5rem;
+        min-height: 2.75rem;
+        border: 0;
+        border-radius: 8px;
+        padding: 0.65rem 0.95rem;
+        background: var(--primary);
+        color: white;
+        cursor: pointer;
+        font-weight: 700;
+        transition: background 160ms ease, transform 160ms ease;
+      }
+      .send:hover { background: var(--primary-strong); }
+      .send:active { transform: translateY(1px); }
+      .send:disabled { cursor: not-allowed; opacity: 0.55; }
+
+      .composer-help { margin: 0.45rem 0 0; color: var(--muted); text-align: center; font-size: 0.68rem; }
+
+      @keyframes pulse { to { opacity: 0.45; } }
+
+      @media (max-width: 620px) {
+        .topbar { padding-inline: 1rem; }
+        .connection span { display: none; }
+        .conversation { padding: 1.25rem 0.85rem 8.5rem; }
+        .message.user .bubble { max-width: 92%; }
+        .fact { border-right: 0; border-bottom: 1px solid var(--border); }
+        .fact:last-child { border-bottom: 0; }
+        .composer-wrap { padding: 0.75rem; }
+        .composer { grid-template-columns: 1fr; }
+        .send { width: 100%; }
+        .composer-help { display: none; }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div class="identity">
+          <div class="mark" aria-hidden="true">MM</div>
+          <div>
+            <h1>MetaMind Query Lab</h1>
+            <p>自然语言查询与解析结果</p>
+          </div>
+        </div>
+        <div class="connection"><span>API /api/v1/query</span></div>
+      </header>
+
+      <main class="conversation" id="conversation" aria-live="polite">
+        <article class="message assistant">
+          <div class="assistant-bubble">
+            <div class="assistant-label">MetaMind</div>
+            <div class="report welcome">
+              <h2>输入一个 Dota 2 问题</h2>
+              <p>页面会展示 Orchestrator 路由、解析后的报告、执行步骤，以及战队查询中的歧义候选。</p>
+              <div class="suggestions" aria-label="示例问题">
+                <button class="suggestion" type="button">How Team BB play lately?</button>
+                <button class="suggestion" type="button">What changed in patch 7.41d?</button>
+                <button class="suggestion" type="button">Strongest offlane heroes</button>
+              </div>
+            </div>
+          </div>
+        </article>
+      </main>
+
+      <div class="composer-wrap">
+        <form class="composer" id="query-form">
+          <label>
+            <span hidden>输入问题</span>
+            <textarea id="query" rows="1" placeholder="例如：How Team BB play lately?" required></textarea>
+          </label>
+          <button class="send" id="send" type="submit">发送查询</button>
+        </form>
+        <p class="composer-help">Enter 发送，Shift + Enter 换行</p>
+      </div>
+    </div>
+
+    <script>
+      const form = document.querySelector("#query-form");
+      const input = document.querySelector("#query");
+      const send = document.querySelector("#send");
+      const conversation = document.querySelector("#conversation");
+
+      document.querySelectorAll(".suggestion").forEach((button) => {
+        button.addEventListener("click", () => {
+          input.value = button.textContent.trim();
+          resizeInput();
+          input.focus();
+        });
+      });
+
+      input.addEventListener("input", resizeInput);
+      input.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && !event.shiftKey) {
+          event.preventDefault();
+          form.requestSubmit();
+        }
+      });
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const query = input.value.trim();
+        if (!query || send.disabled) return;
+
+        appendUserMessage(query);
+        input.value = "";
+        resizeInput();
+        setLoading(true);
+        const loading = appendLoading();
+
+        try {
+          const response = await fetch("/api/v1/query", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query, game: "dota2" }),
+          });
+          const payload = await response.json().catch(() => ({
+            error: "invalid_response",
+            message: `API returned HTTP ${response.status} without JSON.`,
+          }));
+          loading.remove();
+          if (response.ok) appendReport(payload);
+          else appendError(payload, response.status);
+        } catch (error) {
+          loading.remove();
+          appendError({
+            error: "network_error",
+            message: "无法连接 MetaMind API，请确认 Uvicorn 正在运行。",
+            detail: String(error),
+          }, 0);
+        } finally {
+          setLoading(false);
+          input.focus();
+          scrollToLatest();
+        }
+      });
+
+      function resizeInput() {
+        input.style.height = "auto";
+        input.style.height = `${Math.min(input.scrollHeight, 144)}px`;
+      }
+
+      function setLoading(value) {
+        send.disabled = value;
+        send.textContent = value ? "查询中" : "发送查询";
+      }
+
+      function appendUserMessage(text) {
+        const article = element("article", "message user");
+        const bubble = element("div", "bubble");
+        bubble.textContent = text;
+        article.append(bubble);
+        conversation.append(article);
+        scrollToLatest();
+      }
+
+      function appendLoading() {
+        const article = assistantMessage();
+        const loading = element("div", "loading");
+        loading.setAttribute("aria-label", "正在查询");
+        loading.append(element("span"), element("span"), element("span"));
+        article.querySelector(".assistant-bubble").append(loading);
+        conversation.append(article);
+        scrollToLatest();
+        return article;
+      }
+
+      function appendReport(payload) {
+        const article = assistantMessage();
+        const report = element("div", "report");
+        const result = payload.result || {};
+        const head = element("div", "report-head");
+        const meta = element("div", "report-meta");
+        meta.append(textElement("span", "badge", readableType(payload.routed_service)));
+        if (typeof result.confidence === "number") {
+          meta.append(textElement("span", "confidence", `置信度 ${Math.round(result.confidence * 100)}%`));
+        }
+        head.append(meta);
+        head.append(textElement("h2", "", reportTitle(result)));
+        if (result.summary) head.append(textElement("p", "summary", result.summary));
+        report.append(head);
+
+        const facts = reportFacts(result);
+        if (facts.length) report.append(renderFacts(facts));
+
+        const sections = reportSections(result);
+        if (sections.length) report.append(renderSections(sections));
+
+        report.append(renderTrace(payload.tasks || [], payload));
+        article.querySelector(".assistant-bubble").append(report);
+        conversation.append(article);
+      }
+
+      function appendError(payload, status) {
+        const article = assistantMessage();
+        const report = element("div", "report error-report");
+        const head = element("div", "report-head");
+        const meta = element("div", "report-meta");
+        meta.append(textElement("span", "badge", status ? `HTTP ${status}` : "连接失败"));
+        head.append(meta);
+        head.append(textElement("h2", "", errorTitle(payload.error)));
+        head.append(textElement("p", "summary", payload.message || "查询未完成。"));
+
+        if (Array.isArray(payload.candidates) && payload.candidates.length) {
+          const candidates = element("div", "candidates");
+          payload.candidates.forEach((candidate) => candidates.append(renderCandidate(candidate)));
+          head.append(candidates);
+        }
+        report.append(head, renderTrace([], payload));
+        article.querySelector(".assistant-bubble").append(report);
+        conversation.append(article);
+      }
+
+      function renderCandidate(candidate) {
+        const row = element("div", "candidate");
+        const name = candidate.name || "Unnamed team";
+        row.append(textElement("strong", "", `${name} (${candidate.tag || "no tag"})`));
+        row.append(textElement("span", "", `team_id ${candidate.team_id} · rating ${candidate.rating ?? "n/a"}`));
+        row.append(textElement("span", "candidate-score", `${candidate.match_score ?? "?"} 分`));
+        return row;
+      }
+
+      function renderFacts(facts) {
+        const dl = element("dl", "facts");
+        facts.forEach(([label, value]) => {
+          const item = element("div", "fact");
+          item.append(textElement("dt", "", label), textElement("dd", "", String(value)));
+          dl.append(item);
+        });
+        return dl;
+      }
+
+      function renderSections(sections) {
+        const wrapper = element("div", "sections");
+        sections.forEach(([title, values]) => {
+          if (!Array.isArray(values) || !values.length) return;
+          const section = element("section", "section");
+          section.append(textElement("h3", "", title));
+          const list = element("ul");
+          values.forEach((value) => {
+            const item = element("li");
+            item.textContent = typeof value === "string" ? value : summarizeObject(value);
+            list.append(item);
+          });
+          section.append(list);
+          wrapper.append(section);
+        });
+        return wrapper;
+      }
+
+      function renderTrace(tasks, payload) {
+        const wrapper = element("div", "trace");
+        if (tasks.length) {
+          const details = element("details");
+          details.append(textElement("summary", "", `执行步骤 (${tasks.length})`));
+          const list = element("ol");
+          tasks.forEach((task) => {
+            list.append(textElement("li", "", `${task.agent}: ${task.action}`));
+          });
+          details.append(list);
+          wrapper.append(details);
+        }
+        const raw = element("details");
+        raw.append(textElement("summary", "", "查看原始 JSON"));
+        raw.append(textElement("pre", "", JSON.stringify(payload, null, 2)));
+        wrapper.append(raw);
+        return wrapper;
+      }
+
+      function reportFacts(result) {
+        if (result.report_type === "team_report") {
+          return [
+            ["战队", result.team_name],
+            ["时间范围", result.time_range],
+            ["近期战绩", result.recent_record],
+            ["版本适应", `${result.patch_adaptation_score}/100`],
+          ];
+        }
+        if (result.report_type === "meta_report") {
+          return [["位置", result.role], ["版本", result.patch], ["推荐数量", result.top_heroes?.length || 0]];
+        }
+        if (result.report_type === "patch_impact") return [["版本", result.patch]];
+        if (result.report_type === "claim_verification") return [["结论", result.verdict]];
+        return [];
+      }
+
+      function reportSections(result) {
+        if (result.report_type === "team_report") {
+          return [
+            ["招牌英雄", result.signature_heroes],
+            ["关键选手", result.key_players],
+            ["获胜模式", result.win_patterns],
+            ["失利模式", result.loss_patterns],
+          ];
+        }
+        if (result.report_type === "meta_report") return [["英雄推荐", result.top_heroes]];
+        if (result.report_type === "patch_impact") {
+          return [["受益英雄", result.winners], ["受影响英雄", result.losers], ["物品影响", result.item_impacts]];
+        }
+        if (result.report_type === "claim_verification") return [["证据", result.evidence]];
+        return [];
+      }
+
+      function reportTitle(result) {
+        if (result.report_type === "team_report") return `${result.team_name} 战队报告`;
+        if (result.report_type === "meta_report") return `${result.role} 英雄推荐`;
+        if (result.report_type === "patch_impact") return `${result.patch} 版本影响`;
+        if (result.report_type === "claim_verification") return "观点验证结果";
+        return "查询结果";
+      }
+
+      function readableType(value) {
+        return ({
+          team_report: "战队报告",
+          meta_report: "英雄推荐",
+          patch_impact: "版本影响",
+          claim_verification: "观点验证",
+        })[value] || value || "查询结果";
+      }
+
+      function errorTitle(code) {
+        return ({
+          ambiguous_team: "找到多个候选战队",
+          team_not_found: "没有找到战队",
+          team_data_unavailable: "战队数据暂不可用",
+          network_error: "API 连接失败",
+        })[code] || "查询失败";
+      }
+
+      function summarizeObject(value) {
+        if (value.hero) return `${value.hero}: ${value.recommendation || `meta score ${value.meta_score}`}`;
+        if (value.signal) return `${value.signal}: ${value.detail || value.verdict}`;
+        return JSON.stringify(value);
+      }
+
+      function assistantMessage() {
+        const article = element("article", "message assistant");
+        const bubble = element("div", "assistant-bubble");
+        bubble.append(textElement("div", "assistant-label", "MetaMind"));
+        article.append(bubble);
+        return article;
+      }
+
+      function element(tag, className = "") {
+        const node = document.createElement(tag);
+        if (className) node.className = className;
+        return node;
+      }
+
+      function textElement(tag, className, text) {
+        const node = element(tag, className);
+        node.textContent = text ?? "";
+        return node;
+      }
+
+      function scrollToLatest() {
+        requestAnimationFrame(() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" }));
+      }
+    </script>
+  </body>
+</html>

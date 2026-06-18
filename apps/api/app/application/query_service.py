@@ -30,3 +30,6 @@ class QueryService:
             tasks=tasks,
             result=report,
         )
+
+    async def aclose(self) -> None:
+        await self.pipeline.aclose()

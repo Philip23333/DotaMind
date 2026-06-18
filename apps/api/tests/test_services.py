@@ -1,4 +1,5 @@
 import asyncio
+from unittest.mock import AsyncMock
 
 from app.api.v1 import mappers
 from app.api.v1.schemas import (
@@ -11,6 +12,7 @@ from app.api.v1.schemas import (
 )
 from app.application.query_service import QueryService
 from app.application.report_service import ReportService
+from app.domain.evidence import EvidenceBundle
 from app.pipeline.critic import CriticAgent
 from app.pipeline.orchestrator import OrchestratorAgent
 
@@ -37,8 +39,27 @@ def test_patch_impact_returns_winners_and_losers() -> None:
 
 
 def test_team_report_contains_patch_adaptation_score() -> None:
+    service = ReportService()
+    service.pipeline.retriever.retrieve_team = AsyncMock(
+        return_value=EvidenceBundle(
+            task_type="team_report",
+            query={"team_name": "Team Spirit"},
+            records=[
+                {
+                    "team_name": "Team Spirit",
+                    "recent_record": "3-2 in last 5 matches",
+                    "signature_heroes": ["Puck", "Mars"],
+                    "patch_adaptation_score": 70,
+                    "recent_win_rate": 0.6,
+                }
+            ],
+            sources=["opendota"],
+            data_source="opendota",
+        )
+    )
+
     report = asyncio.run(
-        ReportService().run(mappers.team_request(TeamReportRequest(team_name="Team Spirit")))
+        service.run(mappers.team_request(TeamReportRequest(team_name="Team Spirit")))
     )
 
     assert report.patch_adaptation_score > 0

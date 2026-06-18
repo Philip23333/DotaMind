@@ -12,3 +12,6 @@ class ReportService:
     async def run(self, request: ReportRequest) -> ReportResult:
         _, report = await self.pipeline.run(request)
         return report
+
+    async def aclose(self) -> None:
+        await self.pipeline.aclose()

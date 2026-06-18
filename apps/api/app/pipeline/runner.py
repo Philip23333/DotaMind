@@ -15,6 +15,9 @@ class ReportPipeline:
         self.critic = CriticAgent()
         self.formatter = FormatterTool()
 
+    async def aclose(self) -> None:
+        await self.retriever.aclose()
+
     async def run(self, request: ReportRequest) -> tuple[list[PlannedTask], ReportResult]:
         trace = list(request.trace)
 
