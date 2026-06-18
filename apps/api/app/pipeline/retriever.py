@@ -1,4 +1,5 @@
 import logging
+import re
 from typing import Any
 
 from app.core.config import get_settings
@@ -10,13 +11,19 @@ from app.integrations.patch_notes import compute_hero_patch_score, get_item_chan
 logger = logging.getLogger(__name__)
 
 
+def _parse_days(time_range: str) -> int:
+    """Extract number of days from a string like 'last_30_days'. Defaults to 30."""
+    match = re.search(r"(\d+)", time_range)
+    return int(match.group(1)) if match else 30
+
+
 class RetrieverTool:
     """Deterministic evidence assembly. No LLM decisions live here."""
 
     def __init__(self) -> None:
         settings = get_settings()
         self._live_data_enabled = settings.live_data_enabled
-        self._opendota = OpenDotaClient(settings.opendota_base_url)
+        self._opendota = OpenDotaClient(settings.opendota_base_url, settings.opendota_api_key)
 
     async def retrieve_meta(self, role: str, patch: str = "latest") -> EvidenceBundle:
         if self._live_data_enabled:
@@ -63,8 +70,11 @@ class RetrieverTool:
 
     async def retrieve_team(self, team_name: str, time_range: str) -> EvidenceBundle:
         if self._live_data_enabled:
+            days = _parse_days(time_range)
             try:
-                data = await self._opendota.get_team_report_data(team_name, match_limit=30)
+                data = await self._opendota.get_team_report_data(
+                    team_name, match_limit=30, days=days
+                )
                 if data:
                     return EvidenceBundle(
                         task_type="team_report",

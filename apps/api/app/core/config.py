@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api/v1"
     cors_origins: list[str] = ["http://localhost:3000"]
     opendota_base_url: str = "https://api.opendota.com/api"
+    opendota_api_key: str | None = None
     stratz_graphql_url: str = "https://api.stratz.com/graphql"
     stratz_token: str | None = None
     openai_api_key: str | None = None

@@ -9,6 +9,7 @@ Rate limit: 60 req/min without API key, 1200/min with key.
 All data is fetched once and cached in memory for CACHE_TTL seconds.
 """
 
+import asyncio
 import time
 from typing import Any
 
@@ -91,8 +92,9 @@ CACHE_TTL = 3600  # seconds (1 hour)
 
 
 class OpenDotaClient:
-    def __init__(self, base_url: str) -> None:
+    def __init__(self, base_url: str, api_key: str | None = None) -> None:
         self.base_url = base_url.rstrip("/")
+        self.api_key = api_key
         self._cache: dict[str, tuple[float, Any]] = {}  # key -> (expires_at, data)
 
     # ------------------------------------------------------------------
@@ -175,22 +177,90 @@ class OpenDotaClient:
                 return t
         return None
 
-    async def get_team_matches(self, team_id: int, *, limit: int = 30) -> list[dict[str, Any]]:
-        """Fetch recent matches for a team."""
-        return await self._cached(
-            f"team_matches_{team_id}_{limit}",
-            f"/teams/{team_id}/matches?limit={limit}",
-        )
+    async def get_team_matches(self, team_id: int) -> list[dict[str, Any]]:
+        """Fetch all matches for a team. Sorted newest-first by match_id.
+
+        NOTE: OpenDota's ?limit= query param is unreliable and ignored.
+        Do client-side slicing after fetching.
+        """
+        return await self._cached(f"team_matches_{team_id}", f"/teams/{team_id}/matches")
 
     async def get_team_heroes(self, team_id: int) -> list[dict[str, Any]]:
-        """Fetch hero stats for a team (all time)."""
+        """Fetch hero stats for a team (all time). Kept for backward compat."""
         return await self._cached(f"team_heroes_{team_id}", f"/teams/{team_id}/heroes")
 
+    async def get_team_players(self, team_id: int) -> list[dict[str, Any]]:
+        """Fetch roster / players for a team."""
+        return await self._cached(f"team_players_{team_id}", f"/teams/{team_id}/players")
+
+    async def _get_match_detail(self, match_id: int) -> dict[str, Any]:
+        """Fetch full match detail (includes per-player hero picks)."""
+        return await self._cached(f"match_{match_id}", f"/matches/{match_id}")
+
+    async def _aggregate_team_heroes(
+        self, matches: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Aggregate hero pick/win stats from match details for the given match list."""
+        match_ids = [m["match_id"] for m in matches if "match_id" in m]
+        if not match_ids:
+            return []
+
+        details = await asyncio.gather(
+            *(self._get_match_detail(mid) for mid in match_ids),
+            return_exceptions=True,
+        )
+
+        hero_stats: dict[int, dict[str, int]] = {}
+
+        for match, match_meta in zip(details, matches, strict=False):
+            if isinstance(match, Exception) or not match:
+                continue
+            team_is_radiant = match_meta.get("radiant", False)
+            radiant_win = match.get("radiant_win", False)
+            team_won = (team_is_radiant and radiant_win) or (
+                not team_is_radiant and not radiant_win
+            )
+            for player in match.get("players", []):
+                player_radiant = player.get("isRadiant")
+                if player_radiant != team_is_radiant:
+                    continue
+                hero_id = player.get("hero_id")
+                if hero_id is None:
+                    continue
+                if hero_id not in hero_stats:
+                    hero_stats[hero_id] = {"games": 0, "wins": 0}
+                hero_stats[hero_id]["games"] += 1
+                if team_won:
+                    hero_stats[hero_id]["wins"] += 1
+
+        hero_map = await self._hero_name_map()
+        result = []
+        for hero_id, stats in hero_stats.items():
+            result.append(
+                {
+                    "hero_id": hero_id,
+                    "localized_name": hero_map.get(hero_id, f"Hero {hero_id}"),
+                    "games_played": stats["games"],
+                    "wins": stats["wins"],
+                }
+            )
+        result.sort(key=lambda h: h["games_played"], reverse=True)
+        return result
+
+    async def _hero_name_map(self) -> dict[int, str]:
+        """Build hero_id -> localized_name mapping from cached heroStats."""
+        heroes = await self.get_hero_stats()
+        return {
+            h["id"]: h["localized_name"]
+            for h in heroes
+            if "id" in h and "localized_name" in h
+        }
+
     async def get_team_report_data(
-        self, team_name: str, *, match_limit: int = 30
+        self, team_name: str, *, match_limit: int = 30, days: int = 30
     ) -> dict[str, Any] | None:
         """
-        High-level: fetch team info + recent matches + heroes.
+        High-level: fetch team info + time-windowed matches + roster + heroes.
         Returns structured data for TeamReportService, or None if team not found.
         """
         team = await self.search_team(team_name)
@@ -198,10 +268,47 @@ class OpenDotaClient:
             return None
 
         team_id = team["team_id"]
-        matches = await self.get_team_matches(team_id, limit=match_limit)
-        heroes = await self.get_team_heroes(team_id)
 
-        # Compute recent record
+        # --- Fetch all matches, then filter client-side (server ?limit is broken) ---
+        all_matches = await self.get_team_matches(team_id)
+
+        # Time-window filter via start_time
+        if days > 0:
+            cutoff = time.time() - days * 86400
+            matches = [m for m in all_matches if m.get("start_time", 0) >= cutoff]
+        else:
+            matches = list(all_matches)
+
+        # Cap to most recent N (already sorted newest-first by match_id)
+        matches = matches[:match_limit]
+
+        if not matches:
+            return {
+                "team_name": team.get("name", team_name),
+                "team_id": team_id,
+                "rating": team.get("rating"),
+                "recent_record": "0-0 in last 0 matches",
+                "wins": 0,
+                "losses": 0,
+                "signature_heroes": [],
+                "hero_pool_depth": 0,
+                "draft_flexibility": 0.0,
+                "patch_adaptation_score": 0,
+                "win_patterns": [],
+                "loss_patterns": [],
+                "key_players": [],
+                "opponents_faced": [],
+                "recent_win_rate": 0.0,
+            }
+
+        # --- Roster ---
+        players = await self.get_team_players(team_id)
+        key_players = [p["name"] for p in players[:5] if p.get("name")]
+
+        # --- Heroes aggregated from the time-windowed match details ---
+        heroes = await self._aggregate_team_heroes(matches)
+
+        # --- Recent record ---
         wins = sum(
             1
             for m in matches
@@ -211,38 +318,29 @@ class OpenDotaClient:
         losses = len(matches) - wins
         recent_record = f"{wins}-{losses} in last {len(matches)} matches"
 
-        # Signature heroes (top 5 by games played)
-        heroes_sorted = sorted(heroes, key=lambda h: h.get("games_played", 0), reverse=True)
-        signature_heroes = [h["localized_name"] for h in heroes_sorted[:5] if "localized_name" in h]
+        # --- Signature heroes (top 5 by games played within window) ---
+        signature_heroes = [
+            h["localized_name"] for h in heroes[:5] if "localized_name" in h
+        ]
 
-        # Hero pool depth: only count heroes with significant usage (>=30 games)
-        # to represent "active, practiced" hero pool rather than historical noise
-        heroes_with_games = [h for h in heroes if h.get("games_played", 0) >= 30]
-        hero_pool_depth = len(heroes_with_games)
+        # --- Hero pool depth (heroes played >= 2 games in the window) ---
+        hero_pool_depth = len([h for h in heroes if h.get("games_played", 0) >= 2])
 
-        # Win rate of top heroes
-        top_hero_wr = []
-        for h in heroes_sorted[:10]:
-            gp = h.get("games_played", 0)
-            w = h.get("wins", 0)
-            if gp > 0:
-                top_hero_wr.append(w / gp)
+        # --- Draft flexibility (scaled for ~30-match window) ---
+        draft_flex = min(hero_pool_depth / 25, 1.0)
 
-        # Draft flexibility: unique heroes in recent matches (approx by pool)
-        draft_flex = min(hero_pool_depth / 60, 1.0)  # 60+ comfort heroes = fully flexible
-
-        # Patch adaptation: simplified from recent win rate + flex
+        # --- Patch adaptation ---
         recent_wr = wins / max(len(matches), 1)
         patch_adaptation = int(
             min(100, (recent_wr * 50 + draft_flex * 30 + min(len(matches) / 30, 1) * 20))
         )
 
-        # Opposing teams faced
+        # --- Opposing teams faced ---
         opponents = list(
             {m.get("opposing_team_name", "") for m in matches if m.get("opposing_team_name")}
         )
 
-        # Win/loss patterns (simple heuristic from game durations)
+        # --- Win/loss patterns (duration-based heuristic) ---
         win_durations = []
         loss_durations = []
         for m in matches:
@@ -269,9 +367,6 @@ class OpenDotaClient:
             loss_patterns.append(
                 "Below 50% win rate in recent matches suggests meta adaptation issues."
             )
-
-        # Key players (not available from these endpoints, use team name as proxy)
-        key_players: list[str] = []
 
         return {
             "team_name": team.get("name", team_name),
@@ -302,8 +397,9 @@ class OpenDotaClient:
             if now < expires_at:
                 return data
 
+        params = {"api_key": self.api_key} if self.api_key else None
         async with httpx.AsyncClient(base_url=self.base_url, timeout=10) as client:
-            response = await client.get(path)
+            response = await client.get(path, params=params)
             response.raise_for_status()
             data = response.json()
 
