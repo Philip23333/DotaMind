@@ -7,13 +7,18 @@ Supports OpenAI-compatible APIs (OpenAI, DeepSeek, etc.) and Anthropic.
 import logging
 import time
 from abc import ABC, abstractmethod
-from typing import Any, Literal
+from typing import Any, Literal, TypedDict
 
 import httpx
 
 logger = logging.getLogger(__name__)
 
 ModelTier = Literal["fast", "balanced", "advanced"]
+
+
+class ToolCallResult(TypedDict):
+    name: str
+    arguments: dict[str, Any]
 
 
 class LLMProvider(ABC):
@@ -27,7 +32,6 @@ class LLMProvider(ABC):
         max_tokens: int = 1000,
     ) -> str:
         """Generate a completion from messages."""
-        pass
 
     @abstractmethod
     async def complete_json(
@@ -37,13 +41,22 @@ class LLMProvider(ABC):
         max_tokens: int = 1000,
     ) -> dict[str, Any]:
         """Generate a JSON response from messages."""
-        pass
+
+    @abstractmethod
+    async def complete_with_tools(
+        self,
+        messages: list[dict[str, str]],
+        tools: list[dict[str, Any]],
+        temperature: float = 0.2,
+        max_tokens: int = 1000,
+    ) -> ToolCallResult | None:
+        """Send a function-calling request; return the first tool call or None."""
 
 
 class OpenAICompatibleProvider(LLMProvider):
     """
     Provider for OpenAI-compatible APIs (OpenAI, DeepSeek, etc.).
-    
+
     Uses OpenAI's chat completions format.
     """
 
@@ -98,8 +111,7 @@ class OpenAICompatibleProvider(LLMProvider):
                 content = choice["message"]["content"]
                 finish_reason = choice.get("finish_reason", "unknown")
                 logger.info(
-                    "LLM complete success model=%s elapsed_ms=%s output_chars=%s "
-                    "finish_reason=%s",
+                    "LLM complete success model=%s elapsed_ms=%s output_chars=%s finish_reason=%s",
                     self.model,
                     round((time.perf_counter() - started_at) * 1000),
                     len(content),
@@ -155,9 +167,10 @@ class OpenAICompatibleProvider(LLMProvider):
                 choice = data["choices"][0]
                 content = choice["message"]["content"]
                 finish_reason = choice.get("finish_reason", "unknown")
-                
+
                 # Parse JSON from content
                 import json
+
                 parsed = json.loads(content)
                 logger.info(
                     "LLM complete_json success model=%s elapsed_ms=%s output_chars=%s "
@@ -175,6 +188,76 @@ class OpenAICompatibleProvider(LLMProvider):
                 self.model,
                 round((time.perf_counter() - started_at) * 1000),
                 finish_reason,
+                e,
+            )
+            raise
+
+    async def complete_with_tools(
+        self,
+        messages: list[dict[str, str]],
+        tools: list[dict[str, Any]],
+        temperature: float = 0.2,
+        max_tokens: int = 1000,
+    ) -> ToolCallResult | None:
+        """Send a function-calling request using the tools payload.
+
+        Returns the first parsed tool call or None when the model
+        declines to call any tool.
+        """
+        import json
+
+        started_at = time.perf_counter()
+        logger.info(
+            "LLM complete_with_tools start model=%s tools=%s messages=%s",
+            self.model,
+            [t["function"]["name"] for t in tools],
+            len(messages),
+        )
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.post(
+                    f"{self.base_url}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": self.model,
+                        "messages": messages,
+                        "temperature": temperature,
+                        "max_tokens": max_tokens,
+                        "tools": tools,
+                        "tool_choice": "auto",
+                    },
+                )
+                response.raise_for_status()
+                data = response.json()
+                choice = data["choices"][0]
+                message = choice["message"]
+
+                tool_calls = message.get("tool_calls")
+                if not tool_calls:
+                    logger.info(
+                        "LLM complete_with_tools no_tool_call model=%s elapsed_ms=%s",
+                        self.model,
+                        round((time.perf_counter() - started_at) * 1000),
+                    )
+                    return None
+
+                call = tool_calls[0]
+                name = call["function"]["name"]
+                arguments = json.loads(call["function"]["arguments"])
+                logger.info(
+                    "LLM complete_with_tools success model=%s elapsed_ms=%s tool=%s",
+                    self.model,
+                    round((time.perf_counter() - started_at) * 1000),
+                    name,
+                )
+                return {"name": name, "arguments": arguments}
+        except Exception as e:
+            logger.error(
+                "LLM complete_with_tools failed model=%s error=%s",
+                self.model,
                 e,
             )
             raise
@@ -226,19 +309,20 @@ _default_provider: LLMProvider | None = None
 def get_llm_provider() -> LLMProvider:
     """Get the default LLM provider."""
     global _default_provider
-    
+
     if _default_provider is None:
         # Initialize from environment or default config
         from app.core.config import get_settings
+
         settings = get_settings()
-        
+
         config = LLMConfig(
             provider="deepseek",
             api_key=getattr(settings, "llm_api_key", ""),
             base_url=getattr(settings, "llm_base_url", "https://api.deepseek.com"),
             model=getattr(settings, "llm_model", "deepseek-chat"),
         )
-        
+
         _default_provider = LLMFactory.create(config)
         logger.info(
             "LLM provider initialized provider=%s model=%s enabled_api_key=%s",
@@ -246,7 +330,7 @@ def get_llm_provider() -> LLMProvider:
             config.model,
             bool(config.api_key),
         )
-    
+
     return _default_provider
 
 

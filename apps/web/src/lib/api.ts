@@ -73,7 +73,7 @@ export function getServiceCatalog(): Promise<ServiceCatalog> {
 
 export async function runExperimentalQuery(query: string): Promise<NaturalLanguageQueryResponse> {
   const browserApiBaseUrl = API_BASE_URL.replace("localhost", "127.0.0.1");
-  const response = await fetch(`${browserApiBaseUrl}/api/v1/query/experimental`, {
+  const response = await fetch(`${browserApiBaseUrl}/api/v1/query`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

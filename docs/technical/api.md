@@ -131,4 +131,4 @@ Request:
 }
 ```
 
-The planner routes to one of the report services and returns planned agent tasks plus the selected result.
+The Orchestrator routes to one report task and the canonical pipeline returns executed steps plus the selected result. There is no separate experimental query endpoint.

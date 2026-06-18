@@ -18,6 +18,7 @@ class PipeFormatter(logging.Formatter):
         message = record.getMessage()
         return f"{timestamp}.{millis:03d} | {record.levelname:<8} | [{module_name}] {message}"
 
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(message)s",

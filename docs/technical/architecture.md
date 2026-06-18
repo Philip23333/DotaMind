@@ -1,6 +1,6 @@
 # Architecture
 
-> Architecture is defined by the design docs at `docs/design/`. The latest is **MetaMind_MVP_v2.1.md** (3 Agents + 2 Tools, with adversarial Critic loop). v2 introduced the 6→3 collapse; v2.1 refined the Agent/Tool boundary and added the Critic Agent.
+> Architecture is now implemented as the canonical v2.1 pipeline: domain models, application use cases, and one Orchestrator -> Retriever -> Analyzer -> Critic -> Formatter path.
 
 MetaMind is organized around three product surfaces:
 
@@ -14,16 +14,16 @@ Web Dashboard
 
 ```text
 app/
-  api/v1/          HTTP schemas and routes
-  agents/          orchestrator, analyzer, critic   (LLM-driven)
-  tools/           retriever, formatter             (deterministic, no LLM)
+  api/v1/          HTTP schemas, routes, and mappers only
+  application/     query/report use cases and service catalog
+  domain/          evidence, task, and report dataclasses
+  pipeline/        orchestrator, retriever, analyzer, critic, formatter
   data/            patch JSON + mock fixtures
   integrations/    OpenDota, STRATZ, patch-note clients
-  services/        callable service contracts (4 tasks)
   config/          signals.yaml, critic_rules.yaml
 ```
 
-The service layer is deliberately decoupled from routes so future adapters can call the same code from:
+The application layer is deliberately decoupled from routes so future adapters can call the same code from:
 
 - HTTP endpoints
 - A2A agent handlers
@@ -34,35 +34,30 @@ The service layer is deliberately decoupled from routes so future adapters can c
 
 | Component | Type | LLM | Responsibility |
 |---|---|---|---|
-| **Orchestrator** | Agent | yes | Intent parsing, tool planning, retry control, fallback |
-| **Analyzer** | Agent | yes | Claim generation, evidence binding, verdict labeling |
-| **Critic** | Agent | yes (+ rules) | Independent review, reject on missing/weak evidence |
+| **Orchestrator** | Agent | planned | Intent parsing and task selection |
+| **Analyzer** | Agent | optional | Scoring, claim generation, evidence binding, report sections |
+| **Critic** | Agent | planned + rules | Independent review, reject on missing/weak evidence |
 | Retriever | Tool fn | no | OpenDota / patch JSON fetching, EvidenceBundle assembly |
-| Formatter | Tool fn | no | Render claims to markdown / JSON / A2A response |
+| Formatter | Tool fn | no | Render domain reports to public response shape |
 
 The classification rule: **a component is an Agent only if it requires an LLM decision**. Wrapping deterministic code as an "Agent" is rejected as noise.
 
 ## Workflow
 
 ```text
-External caller
-  │
-  ▼
-Orchestrator Agent       (LLM)  parse intent, choose tools
-  │
-  ├─► retrieve_*()       (fn)   fetch evidence bundle
-  │
-  ├─► Analyzer Agent     (LLM)  generate claims with evidence_ids
-  │
-  ├─► Critic Agent       (LLM + rules)  pass / reject + reasons
-  │       │
-  │       └─ reject ──► back to Orchestrator
-  │                     decide: fetch more / re-analyze / give up
-  │
-  └─► format_report()    (fn)   render output
+HTTP / CAP / A2A caller
+  -> api/v1/routes.py
+  -> api/v1/mappers.py
+  -> application/query_service.py or application/report_service.py
+  -> pipeline/orchestrator.py
+  -> pipeline/retriever.py
+  -> pipeline/analyzer.py
+  -> pipeline/critic.py
+  -> pipeline/formatter.py
+  -> api/v1/mappers.py
 ```
 
-**Retry budget**: Orchestrator allows max 2 Critic rejections before returning `verdict: insufficient_data` with the accumulated reasons.
+Structured endpoints and natural-language `/api/v1/query` both use the same pipeline. `/api/v1/query/experimental` has been removed.
 
 ## Independent Failure Modes
 
@@ -76,18 +71,18 @@ Three Agents, three independent failure surfaces, all observable in trace logs. 
 
 ## Scoring (v2.1)
 
-The v1 weighted Meta Score formula has been **deprecated**. v2 replaced it with **signal aggregation + LLM judgment** (see `docs/design/MetaMind_MVP_v2.md` §3); v2.1 keeps that approach.
+The current implementation keeps deterministic weighted scoring for reproducibility and uses the Analyzer LLM only for optional hero insight text when enabled.
 
 Pipeline:
 
 ```text
 1. Signal extraction       (deterministic, thresholds in config/signals.yaml)
-2. LLM judgment            (Analyzer)
-3. Critic review           (rules + LLM)
-4. Confidence bucketing    (high / medium / low / none)
+2. Deterministic scoring    (Analyzer)
+3. Optional LLM insight     (Analyzer)
+4. Critic review            (rules)
 ```
 
-Confidence is a discrete bucket, not a float. The bucketing rules are publishable so any reviewer can reproduce them.
+Confidence remains a bounded float in the public API for frontend compatibility.
 
 ## Frontend
 
@@ -107,5 +102,6 @@ The dashboard uses backend responses when `NEXT_PUBLIC_API_BASE_URL` is reachabl
 
 ## Migration Status
 
-- v2 migration (3 Agents) — **partially done**: services are async, OpenDota / patch JSON wired, but `agents/` still holds the legacy 6-Agent layout
-- v2.1 migration (3 Agents + 2 Tools + Critic) — **planned**, see `docs/progress/progress_*.md`
+- Legacy `agents/`, `services/`, and `tools/` source files have been removed.
+- `application/`, `domain/`, and `pipeline/` are the only backend business architecture.
+- `/api/v1/query` is the canonical natural-language endpoint.

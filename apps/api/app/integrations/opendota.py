@@ -175,9 +175,7 @@ class OpenDotaClient:
                 return t
         return None
 
-    async def get_team_matches(
-        self, team_id: int, *, limit: int = 30
-    ) -> list[dict[str, Any]]:
+    async def get_team_matches(self, team_id: int, *, limit: int = 30) -> list[dict[str, Any]]:
         """Fetch recent matches for a team."""
         return await self._cached(
             f"team_matches_{team_id}_{limit}",
@@ -215,9 +213,7 @@ class OpenDotaClient:
 
         # Signature heroes (top 5 by games played)
         heroes_sorted = sorted(heroes, key=lambda h: h.get("games_played", 0), reverse=True)
-        signature_heroes = [
-            h["localized_name"] for h in heroes_sorted[:5] if "localized_name" in h
-        ]
+        signature_heroes = [h["localized_name"] for h in heroes_sorted[:5] if "localized_name" in h]
 
         # Hero pool depth: only count heroes with significant usage (>=30 games)
         # to represent "active, practiced" hero pool rather than historical noise
@@ -242,11 +238,11 @@ class OpenDotaClient:
         )
 
         # Opposing teams faced
-        opponents = list({m.get("opposing_team_name", "") for m in matches if m.get("opposing_team_name")})
+        opponents = list(
+            {m.get("opposing_team_name", "") for m in matches if m.get("opposing_team_name")}
+        )
 
         # Win/loss patterns (simple heuristic from game durations)
-        avg_win_duration = 0
-        avg_loss_duration = 0
         win_durations = []
         loss_durations = []
         for m in matches:
@@ -270,7 +266,9 @@ class OpenDotaClient:
         if recent_wr >= 0.6:
             win_patterns.append("Strong recent form with consistent execution.")
         if recent_wr < 0.5:
-            loss_patterns.append("Below 50% win rate in recent matches suggests meta adaptation issues.")
+            loss_patterns.append(
+                "Below 50% win rate in recent matches suggests meta adaptation issues."
+            )
 
         # Key players (not available from these endpoints, use team name as proxy)
         key_players: list[str] = []
@@ -304,7 +302,7 @@ class OpenDotaClient:
             if now < expires_at:
                 return data
 
-        async with httpx.AsyncClient(base_url=self.base_url, timeout=20) as client:
+        async with httpx.AsyncClient(base_url=self.base_url, timeout=10) as client:
             response = await client.get(path)
             response.raise_for_status()
             data = response.json()

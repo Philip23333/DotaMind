@@ -15,7 +15,8 @@ class Settings(BaseSettings):
     openai_api_key: str | None = None
     database_url: str = "postgresql://metamind:metamind@localhost:5432/metamind"
     redis_url: str = "redis://localhost:6379/0"
-    
+    live_data_enabled: bool = False
+
     # LLM Configuration
     llm_api_key: str = ""
     llm_base_url: str = "https://api.deepseek.com"

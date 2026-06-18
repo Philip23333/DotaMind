@@ -141,8 +141,5 @@ class NaturalLanguageQueryResponse(BaseModel):
     routed_service: str
     tasks: list[PlannedTask]
     result: (
-        MetaReportResponse
-        | PatchImpactResponse
-        | TeamReportResponse
-        | ClaimVerificationResponse
+        MetaReportResponse | PatchImpactResponse | TeamReportResponse | ClaimVerificationResponse
     )
