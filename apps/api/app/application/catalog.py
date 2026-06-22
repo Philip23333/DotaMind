@@ -1,3 +1,4 @@
+from app.core.config import default_patch, default_time_range
 from app.domain.reports import ServiceCatalog, ServiceDescriptor
 
 
@@ -15,14 +16,22 @@ def service_catalog() -> ServiceCatalog:
                 endpoint="/api/v1/meta-report",
                 price_usdc=0.1,
                 description="Returns ranked heroes for a game, patch, and role.",
-                input_schema={"game": "dota2", "patch": "latest | patch id", "role": "offlane"},
+                input_schema={
+                    "game": "dota2",
+                    "patch": f"{default_patch()} | patch id",
+                    "role": "offlane",
+                },
             ),
             ServiceDescriptor(
                 name="get_patch_impact",
                 endpoint="/api/v1/patch-impact",
                 price_usdc=0.5,
                 description="Returns winners, losers, item impacts, and lineup trends for a patch.",
-                input_schema={"game": "dota2", "patch": "latest", "role": "optional role filter"},
+                input_schema={
+                    "game": "dota2",
+                    "patch": default_patch(),
+                    "role": "optional role filter",
+                },
             ),
             ServiceDescriptor(
                 name="get_team_report",
@@ -32,7 +41,7 @@ def service_catalog() -> ServiceCatalog:
                 input_schema={
                     "game": "dota2",
                     "team_name": "Team Spirit",
-                    "time_range": "last_30_days",
+                    "time_range": default_time_range(),
                 },
             ),
             ServiceDescriptor(

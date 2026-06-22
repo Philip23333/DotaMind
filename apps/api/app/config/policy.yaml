@@ -1,0 +1,62 @@
+# MetaMind business policy. Secrets and environment-specific URLs stay in .env.
+version: 1
+
+opendota:
+  request_timeout_seconds: 20
+  default_cache_ttl_seconds: 3600
+
+team_report:
+  default_time_range_days: 30
+  resolution:
+    generic_words: [team, esports, gaming]
+    fuzzy_score_cutoff: 55.0
+    ambiguity_score_delta: 2.0
+    candidate_limit: 5
+  match_details:
+    default_sample_size: 50
+    max_sample_size: 100
+    concurrency: 10
+    cache_ttl_seconds: 2592000  # 30 days
+
+hero_report:
+  result_limit: 10
+  min_pub_pick: 100
+  evidence:
+    partial_win_rate: 0.51
+    supported_win_rate: 0.525
+    partial_pro_presence: 0.25
+    supported_pro_presence: 0.4
+  normalization:
+    win_rate_low: 0.45
+    win_rate_high: 0.56
+    pick_rate_low: 0.02
+    pick_rate_high: 0.18
+  score_weights:
+    win_rate: 0.30
+    pick_rate: 0.25
+    pro_presence: 0.20
+    patch_impact: 0.15
+    trend: 0.10
+  tiers:
+    s: 85
+    a: 72
+    b: 60
+
+patch_report:
+  default_patch: latest
+  result_limit: 6
+  neutral_score: 0.5
+  change_delta: 0.15
+
+critic:
+  require_evidence: true
+  reject_unsupported_signals: true
+  min_evidence_items: 1
+
+llm:
+  orchestrator:
+    temperature: 0.0
+    max_tokens: 500
+  hero_analyzer:
+    temperature: 0.2
+    max_tokens: 1000
