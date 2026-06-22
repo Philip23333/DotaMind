@@ -13,6 +13,7 @@ from app.api.v1.schemas import (
 from app.application.query_service import QueryService
 from app.application.report_service import ReportService
 from app.domain.evidence import EvidenceBundle
+from app.domain.teams import TeamSelection
 from app.pipeline.critic import CriticAgent
 from app.pipeline.orchestrator import OrchestratorAgent
 
@@ -97,6 +98,32 @@ def test_query_service_returns_trace_with_critic() -> None:
 
     assert result.routed_service == "patch_impact"
     assert any(task.agent == "critic" for task in result.tasks)
+
+
+def test_query_service_bypasses_llm_for_explicit_team_selection() -> None:
+    service = QueryService()
+    service.orchestrator.plan_query = AsyncMock(
+        side_effect=AssertionError("LLM planning must not run for an explicit selection")
+    )
+    service.pipeline.run = AsyncMock(return_value=([], object()))
+
+    result = asyncio.run(
+        service.run(
+            "How Team BB play lately?",
+            team_selection=TeamSelection(
+                team_id=8255888,
+                team_name="BB",
+                time_range="last_7_days",
+            ),
+        )
+    )
+
+    request = service.pipeline.run.await_args.args[0]
+    assert result.routed_service == "team_report"
+    assert request.team_id == 8255888
+    assert request.team_name == "BB"
+    assert request.time_range == "last_7_days"
+    service.orchestrator.plan_query.assert_not_awaited()
 
 
 def test_critic_rejects_missing_evidence() -> None:

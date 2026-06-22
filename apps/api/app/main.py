@@ -87,6 +87,7 @@ async def team_lookup_error_handler(
             "message": exc.message,
             "requested_team": exc.requested_team,
             "candidates": exc.candidates,
+            "time_range": exc.time_range,
         },
     )
 

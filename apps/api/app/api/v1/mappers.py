@@ -5,6 +5,7 @@ from app.api.v1 import schemas
 from app.application.query_service import QueryResult
 from app.domain.reports import ReportResult, ServiceCatalog
 from app.domain.tasks import ReportRequest
+from app.domain.teams import TeamSelection
 from app.pipeline.orchestrator import OrchestratorAgent
 
 _orchestrator = OrchestratorAgent()
@@ -33,6 +34,7 @@ def team_request(request: schemas.TeamReportRequest) -> ReportRequest:
         "team_report",
         game=request.game,
         team_name=request.team_name,
+        team_id=request.team_id,
         time_range=request.time_range,
     )
 
@@ -42,6 +44,16 @@ def claim_request(request: schemas.ClaimVerificationRequest) -> ReportRequest:
         "claim_verification",
         game=request.game,
         claim=request.claim,
+    )
+
+
+def team_selection(selection: schemas.TeamSelection | None) -> TeamSelection | None:
+    if selection is None:
+        return None
+    return TeamSelection(
+        team_id=selection.team_id,
+        team_name=selection.team_name,
+        time_range=selection.time_range,
     )
 
 

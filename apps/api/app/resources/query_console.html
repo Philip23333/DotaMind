@@ -238,7 +238,19 @@
       }
       .candidate strong { font-size: 0.8rem; }
       .candidate span { color: var(--muted); font-size: 0.7rem; }
-      .candidate .candidate-score { grid-row: 1 / 3; grid-column: 2; align-self: center; font-variant-numeric: tabular-nums; }
+      .candidate-select {
+        grid-row: 1 / 3;
+        grid-column: 2;
+        align-self: center;
+        border: 1px solid var(--primary);
+        border-radius: 6px;
+        padding: 0.45rem 0.65rem;
+        background: var(--primary);
+        color: white;
+        cursor: pointer;
+        font-size: 0.72rem;
+      }
+      .candidate-select:disabled { cursor: not-allowed; opacity: 0.5; }
 
       .loading {
         display: grid;
@@ -397,14 +409,21 @@
         appendUserMessage(query);
         input.value = "";
         resizeInput();
+        await submitQuery(query);
+      });
+
+      async function submitQuery(query, teamSelection = null) {
+        if (!query || send.disabled) return;
         setLoading(true);
         const loading = appendLoading();
 
         try {
+          const requestBody = { query, game: "dota2" };
+          if (teamSelection) requestBody.team_selection = teamSelection;
           const response = await fetch("/api/v1/query", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ query, game: "dota2" }),
+            body: JSON.stringify(requestBody),
           });
           const payload = await response.json().catch(() => ({
             error: "invalid_response",
@@ -412,7 +431,7 @@
           }));
           loading.remove();
           if (response.ok) appendReport(payload);
-          else appendError(payload, response.status);
+          else appendError(payload, response.status, query);
         } catch (error) {
           loading.remove();
           appendError({
@@ -425,7 +444,7 @@
           input.focus();
           scrollToLatest();
         }
-      });
+      }
 
       function resizeInput() {
         input.style.height = "auto";
@@ -483,7 +502,7 @@
         conversation.append(article);
       }
 
-      function appendError(payload, status) {
+      function appendError(payload, status, query = "") {
         const article = assistantMessage();
         const report = element("div", "report error-report");
         const head = element("div", "report-head");
@@ -495,7 +514,9 @@
 
         if (Array.isArray(payload.candidates) && payload.candidates.length) {
           const candidates = element("div", "candidates");
-          payload.candidates.forEach((candidate) => candidates.append(renderCandidate(candidate)));
+          payload.candidates.forEach((candidate) => {
+            candidates.append(renderCandidate(candidate, payload, query));
+          });
           head.append(candidates);
         }
         report.append(head, renderTrace([], payload));
@@ -503,12 +524,28 @@
         conversation.append(article);
       }
 
-      function renderCandidate(candidate) {
+      function renderCandidate(candidate, payload, query) {
         const row = element("div", "candidate");
         const name = candidate.name || "Unnamed team";
         row.append(textElement("strong", "", `${name} (${candidate.tag || "no tag"})`));
-        row.append(textElement("span", "", `team_id ${candidate.team_id} · rating ${candidate.rating ?? "n/a"}`));
-        row.append(textElement("span", "candidate-score", `${candidate.match_score ?? "?"} 分`));
+        row.append(textElement(
+          "span",
+          "",
+          `team_id ${candidate.team_id} · rating ${candidate.rating ?? "n/a"} · score ${candidate.match_score ?? "?"}`,
+        ));
+        const choose = textElement("button", "candidate-select", "查询这个战队");
+        choose.type = "button";
+        choose.disabled = !Number.isInteger(candidate.team_id);
+        choose.addEventListener("click", async () => {
+          if (send.disabled) return;
+          appendUserMessage(`选择战队：${name} (${candidate.tag || "no tag"})`);
+          await submitQuery(query, {
+            team_id: candidate.team_id,
+            team_name: name,
+            time_range: payload.time_range || "last_30_days",
+          });
+        });
+        row.append(choose);
         return row;
       }
 
@@ -565,6 +602,8 @@
             ["战队", result.team_name],
             ["时间范围", result.time_range],
             ["近期战绩", result.recent_record],
+            ["窗口比赛", result.matches_in_window],
+            ["详情样本", result.match_details_analyzed],
             ["版本适应", `${result.patch_adaptation_score}/100`],
           ];
         }
@@ -614,6 +653,7 @@
         return ({
           ambiguous_team: "找到多个候选战队",
           team_not_found: "没有找到战队",
+          team_selection_not_found: "所选战队已不可用",
           team_data_unavailable: "战队数据暂不可用",
           network_error: "API 连接失败",
         })[code] || "查询失败";

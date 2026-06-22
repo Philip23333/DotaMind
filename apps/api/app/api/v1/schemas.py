@@ -2,6 +2,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.core.config import default_patch, default_time_range
+
 SupportedGame = Literal["dota2"]
 Verdict = Literal["supported", "partially_supported", "weakly_supported", "unsupported"]
 
@@ -37,7 +39,7 @@ class HeroRecommendation(BaseModel):
 
 class MetaReportRequest(BaseModel):
     game: SupportedGame = "dota2"
-    patch: str = "latest"
+    patch: str = Field(default_factory=default_patch)
     role: str = "offlane"
 
 
@@ -55,7 +57,7 @@ class MetaReportResponse(BaseModel):
 
 class PatchImpactRequest(BaseModel):
     game: SupportedGame = "dota2"
-    patch: str = "latest"
+    patch: str = Field(default_factory=default_patch)
     role: str | None = None
 
 
@@ -76,7 +78,8 @@ class PatchImpactResponse(BaseModel):
 class TeamReportRequest(BaseModel):
     game: SupportedGame = "dota2"
     team_name: str = "Team Spirit"
-    time_range: str = "last_30_days"
+    team_id: int | None = Field(default=None, gt=0)
+    time_range: str = Field(default_factory=default_time_range)
 
 
 class TeamReportResponse(BaseModel):
@@ -86,6 +89,8 @@ class TeamReportResponse(BaseModel):
     time_range: str
     summary: str
     recent_record: str
+    matches_in_window: int = Field(ge=0)
+    match_details_analyzed: int = Field(ge=0)
     signature_heroes: list[str]
     draft_preferences: list[str]
     win_patterns: list[str]
@@ -125,9 +130,16 @@ class ServiceCatalogResponse(BaseModel):
     notes: list[str]
 
 
+class TeamSelection(BaseModel):
+    team_id: int = Field(gt=0)
+    team_name: str = Field(min_length=1)
+    time_range: str = Field(default_factory=default_time_range)
+
+
 class NaturalLanguageQueryRequest(BaseModel):
     query: str
     game: SupportedGame = "dota2"
+    team_selection: TeamSelection | None = None
 
 
 class PlannedTask(BaseModel):

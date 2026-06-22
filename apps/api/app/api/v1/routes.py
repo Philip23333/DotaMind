@@ -55,4 +55,10 @@ async def verify_meta_claim(request: ClaimVerificationRequest) -> ClaimVerificat
 
 @router.post("/query", response_model=NaturalLanguageQueryResponse)
 async def query(request: NaturalLanguageQueryRequest) -> NaturalLanguageQueryResponse:
-    return mappers.query_response(await query_service.run(request.query, request.game))
+    return mappers.query_response(
+        await query_service.run(
+            request.query,
+            request.game,
+            mappers.team_selection(request.team_selection),
+        )
+    )
