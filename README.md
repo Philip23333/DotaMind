@@ -2,7 +2,7 @@
 
 MetaMind is a composable esports intelligence agent that turns Dota2 patch notes, match data, and pro team statistics into verifiable, paid game meta reports for humans and other agents.
 
-This repository is the MVP skeleton based on `MetaMind_MVP.md`. It starts with mock data so the web dashboard, API contracts, agent workflow, and CAP/A2A service shape can be developed before live OpenDota, STRATZ, and patch-note ingestion are fully connected.
+This repository is the MetaMind MVP implementation based on the canonical v2.1 pipeline. It supports mock-backed local development and optional OpenDota live retrieval while keeping API contracts, agent boundaries, and the CAP/A2A service shape stable.
 
 ## What It Solves
 
@@ -19,9 +19,9 @@ Core MVP reports:
 
 ```text
 apps/
-  api/        FastAPI service, agent layers, services, integrations, tests
-  web/        Next.js dashboard with Tailwind and ECharts
-docs/         Architecture, API, and CAP integration notes
+  api/        FastAPI service, canonical pipeline, integrations, tests
+  web/        Deprecated Next.js dashboard; do not modify unless explicitly needed
+docs/         Architecture, API, configuration, and CAP integration notes
 PRODUCT.md   Product strategy context for design and agent work
 DESIGN.md    Visual system notes and CSS token source
 ```
@@ -48,6 +48,7 @@ npm run dev:web
 Open `http://localhost:3000`.
 
 The frontend falls back to local mock data if the API is not running.
+For internal query testing, prefer the FastAPI page at `http://localhost:8000/debug/chat`.
 
 ### Optional Services
 
@@ -57,20 +58,34 @@ docker compose up -d
 
 This starts PostgreSQL and Redis for later persistence, caching, and job orchestration work.
 
-## Agent Workflow
+## Pipeline Workflow
 
-The backend keeps the MVP workflow explicit:
+The backend keeps one canonical execution path:
 
 ```text
-Planner Agent
--> Data Agent
--> Patch Agent
--> Meta Reasoning Agent
--> Verification Agent
--> Report Agent
+HTTP / CAP / A2A caller
+  -> application use case
+  -> Orchestrator Agent
+  -> Retriever tool
+  -> Analyzer Agent
+  -> Critic Agent
+  -> Formatter tool
 ```
 
-The current services use fixtures behind this contract. Live integrations can replace the fixture layer without changing the HTTP response models or frontend components.
+Only LLM decision boundaries are treated as Agents. Deterministic fetching and rendering remain tools. Structured endpoints and natural-language `/api/v1/query` both use this same pipeline.
+
+## Configuration
+
+Runtime environment, secrets, URLs, and feature flags live in `.env`. Business policy lives in `apps/api/app/config/policy.yaml` and is validated on startup.
+
+```text
+METAMIND_LIVE_DATA_ENABLED=false
+METAMIND_LLM_ENABLED=false
+METAMIND_LLM_API_KEY=
+METAMIND_POLICY_PATH=
+```
+
+`policy.yaml` controls OpenDota transport settings, team resolution and sampling, hero scoring and evidence thresholds, patch scoring, Critic rules, and LLM call parameters. Policy is cached for the process lifetime, so restart the API after editing it.
 
 ## API Examples
 
@@ -110,23 +125,26 @@ The MVP exposes service descriptors with prices:
 - `get_patch_impact`: 0.5 USDC
 - `verify_meta_claim`: 0.05 USDC placeholder
 
-See `docs/cap-integration.md` for the planned order, payment, callback, and audit-log flow.
+See `docs/technical/cap-integration.md` for the planned order, payment, callback, and audit-log flow.
 
 ## Current Status
 
 Implemented:
 
 - FastAPI app and OpenAPI schema.
-- Agent and service modules for the MVP report workflow.
-- Mock-backed response contracts for all four core services.
-- Next.js dashboard wired to the API with mock fallback.
-- ECharts score visualization and CAP service catalog panel.
-- Unit tests for backend services.
+- Canonical `Orchestrator -> Retriever -> Analyzer -> Critic -> Formatter` pipeline.
+- Natural-language `/api/v1/query` and structured report endpoints.
+- Optional LLM function calling for orchestration and optional hero insight generation.
+- OpenDota live retrieval for hero and team reports when enabled.
+- Deterministic team resolution with ambiguous-candidate selection through `/debug/chat`.
+- Unified business policy in `apps/api/app/config/policy.yaml`.
+- Unit tests and Ruff checks for backend services.
 
 Next:
 
-- Replace fixtures with OpenDota live data.
-- Add patch-note ingestion and structured change extraction.
+- Move long-lived OpenDota match-detail cache to Redis or another persistent cache.
+- Add partial-data degradation for upstream OpenDota failures.
+- Add path-level OpenDota success-rate, P50/P95, and cache-hit metrics.
 - Add STRATZ GraphQL draft presence integration.
 - Persist report runs and verification evidence.
 - Implement CAP order verification and settlement callbacks.

@@ -20,7 +20,8 @@ app/
   pipeline/        orchestrator, retriever, analyzer, critic, formatter
   data/            patch JSON + mock fixtures
   integrations/    OpenDota, STRATZ, patch-note clients
-  config/          signals.yaml, critic_rules.yaml
+  config/          policy.yaml business policy
+  resources/       prompts and internal debug UI assets
 ```
 
 The application layer is deliberately decoupled from routes so future adapters can call the same code from:
@@ -34,9 +35,9 @@ The application layer is deliberately decoupled from routes so future adapters c
 
 | Component | Type | LLM | Responsibility |
 |---|---|---|---|
-| **Orchestrator** | Agent | planned | Intent parsing and task selection |
+| **Orchestrator** | Agent | optional + rules | Intent parsing and task selection |
 | **Analyzer** | Agent | optional | Scoring, claim generation, evidence binding, report sections |
-| **Critic** | Agent | planned + rules | Independent review, reject on missing/weak evidence |
+| **Critic** | Agent | rules | Independent review, reject on missing/weak evidence |
 | Retriever | Tool fn | no | OpenDota / patch JSON fetching, EvidenceBundle assembly |
 | Formatter | Tool fn | no | Render domain reports to public response shape |
 
@@ -71,12 +72,12 @@ Three Agents, three independent failure surfaces, all observable in trace logs. 
 
 ## Scoring (v2.1)
 
-The current implementation keeps deterministic weighted scoring for reproducibility and uses the Analyzer LLM only for optional hero insight text when enabled.
+The current implementation keeps deterministic weighted scoring for reproducibility and uses the Analyzer LLM only for optional hero insight text when enabled. Tunable business policy lives in `app/config/policy.yaml`; secrets, URLs, and environment switches stay in `.env`.
 
 Pipeline:
 
 ```text
-1. Signal extraction       (deterministic, thresholds in config/signals.yaml)
+1. Signal extraction       (deterministic, thresholds in config/policy.yaml)
 2. Deterministic scoring    (Analyzer)
 3. Optional LLM insight     (Analyzer)
 4. Critic review            (rules)
@@ -86,11 +87,11 @@ Confidence remains a bounded float in the public API for frontend compatibility.
 
 ## Frontend
 
-The Next.js app is an app-style dashboard, not a marketing page.
+The legacy Next.js app is deprecated for active development. Use FastAPI's `/debug/chat` page for internal query testing unless work on `apps/web` is explicitly requested.
 
 Main modules:
 
-- Query console (will route to Orchestrator)
+- Query console
 - KPI cards
 - Meta report ranking table
 - ECharts score chart
@@ -98,10 +99,12 @@ Main modules:
 - Team intelligence panel
 - Agent API / CAP service catalog
 
-The dashboard uses backend responses when `NEXT_PUBLIC_API_BASE_URL` is reachable and falls back to local mock data while the backend is offline.
+The deprecated dashboard uses backend responses when `NEXT_PUBLIC_API_BASE_URL` is reachable and falls back to local mock data while the backend is offline.
 
 ## Migration Status
 
 - Legacy `agents/`, `services/`, and `tools/` source files have been removed.
 - `application/`, `domain/`, and `pipeline/` are the only backend business architecture.
 - `/api/v1/query` is the canonical natural-language endpoint.
+- `app/config/policy.yaml` replaces the old `opendota.json`, `signals.yaml`, and `critic_rules.yaml` configuration sources.
+- OpenDota live hero and team retrieval are implemented behind `METAMIND_LIVE_DATA_ENABLED`.

@@ -3,7 +3,7 @@
 ## Sources of Truth
 
 ```text
-.env                          secrets and environment-specific values
+.env                            environment, secrets, URLs, and feature flags
 apps/api/app/config/policy.yaml  business policy and tunable thresholds
 apps/api/app/data/patches/       patch fact data
 apps/api/app/resources/prompts/  prompt content
@@ -32,6 +32,8 @@ METAMIND_POLICY_PATH=C:/absolute/path/policy.yaml
 
 Policy is cached for the process lifetime. Restart the API after editing the YAML file.
 
+The old `opendota.json`, `signals.yaml`, and `critic_rules.yaml` configuration sources have been removed. Do not reintroduce separate business-policy files unless the configuration boundary is deliberately redesigned.
+
 ## Policy Sections
 
 | Section | Responsibility |
@@ -47,6 +49,6 @@ Policy is cached for the process lifetime. Restart the API after editing the YAM
 
 - 修改密钥、URL 或环境开关：编辑 `.env`。
 - 修改战队采样、匹配阈值、英雄评分、版本评分、Critic 或 LLM 参数：编辑 `policy.yaml`。
-- 更新版本事实：增加或修改 `app/data/patches/*.json`。
-- 修改 Prompt 正文：编辑 `app/resources/prompts/*.md`。
+- 更新版本事实：增加或修改 `apps/api/app/data/patches/*.json`。
+- 修改 Prompt 正文：编辑 `apps/api/app/resources/prompts/*.md`。
 - YAML 修改后需要重启 API；配置错误会在服务初始化时直接失败。

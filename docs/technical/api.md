@@ -88,11 +88,15 @@ Request:
 Response highlights:
 
 - `recent_record`
+- `matches_in_window`
+- `match_details_analyzed`
 - `signature_heroes`
 - `draft_preferences`
 - `win_patterns`
 - `loss_patterns`
 - `patch_adaptation_score`
+
+Ambiguous natural-language team queries return `409 ambiguous_team` with candidate teams and the original `time_range`. `/api/v1/query` accepts `team_selection` to submit a selected `team_id` without another LLM planning call.
 
 ## Claim Verification
 
@@ -132,3 +136,17 @@ Request:
 ```
 
 The Orchestrator routes to one report task and the canonical pipeline returns executed steps plus the selected result. There is no separate experimental query endpoint.
+
+Optional team selection after an ambiguous response:
+
+```json
+{
+  "game": "dota2",
+  "query": "How Team BB play lately?",
+  "team_selection": {
+    "team_id": 8255888,
+    "team_name": "BB",
+    "time_range": "last_30_days"
+  }
+}
+```

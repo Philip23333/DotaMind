@@ -26,12 +26,17 @@ is loaded from `app/config/policy.yaml` and validated by Pydantic at startup.
 
 ```text
 METAMIND_OPENDOTA_API_KEY=...
-METAMIND_LLM_API_KEY=...
 METAMIND_LIVE_DATA_ENABLED=true
-METAMIND_POLICY_PATH=optional/absolute/path/to/policy.yaml
+METAMIND_LLM_ENABLED=true
+METAMIND_LLM_API_KEY=...
+METAMIND_LLM_BASE_URL=https://api.deepseek.com
+METAMIND_LLM_MODEL=deepseek-chat
+METAMIND_POLICY_PATH=C:/optional/absolute/path/to/policy.yaml
 ```
 
 `policy.yaml` is the single source for OpenDota transport settings, team resolution and sampling,
 hero scoring and evidence thresholds, patch scoring, Critic rules, and LLM call parameters.
 Patch facts remain under `app/data/patches/`, and prompt text remains under
 `app/resources/prompts/`.
+
+Policy is cached for the process lifetime. Restart the API after changing `policy.yaml` or an override file pointed to by `METAMIND_POLICY_PATH`.
