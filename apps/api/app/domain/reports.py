@@ -56,6 +56,8 @@ class TeamReport:
     time_range: str
     summary: str
     recent_record: str
+    matches_in_window: int
+    match_details_analyzed: int
     signature_heroes: list[str]
     draft_preferences: list[str]
     win_patterns: list[str]

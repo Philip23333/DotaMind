@@ -2,7 +2,7 @@ import asyncio
 import logging
 from typing import Any
 
-from app.core.config import get_settings
+from app.core.config import get_policy, get_settings
 from app.domain.evidence import EvidenceBundle, EvidenceItem, Verdict
 from app.domain.reports import (
     ClaimVerificationReport,
@@ -22,6 +22,7 @@ class AnalyzerAgent:
 
     def __init__(self, use_llm: bool = True) -> None:
         settings = get_settings()
+        self.policy = get_policy()
         self.llm_enabled = settings.llm_enabled and use_llm
         self.llm = None
         if self.llm_enabled:
@@ -32,7 +33,7 @@ class AnalyzerAgent:
                 self.llm_enabled = False
 
     async def analyze_meta(self, bundle: EvidenceBundle, role: str) -> list[HeroRecommendation]:
-        records = bundle.records[:10]
+        records = bundle.records[: self.policy.hero_report.result_limit]
         heroes = await asyncio.gather(
             *(self._hero_recommendation(record, role) for record in records)
         )
@@ -41,7 +42,14 @@ class AnalyzerAgent:
         return heroes
 
     def analyze_patch(self, bundle: EvidenceBundle, game: str, patch: str) -> PatchImpactReport:
-        summary = summarize_patch_records(bundle.records, patch)
+        patch_policy = self.policy.patch_report
+        summary = summarize_patch_records(
+            bundle.records,
+            patch,
+            neutral_score=patch_policy.neutral_score,
+            change_delta=patch_policy.change_delta,
+            result_limit=patch_policy.result_limit,
+        )
         confidence = (
             0.4 if bundle.data_source == "mock" else min(0.9, 0.6 + len(bundle.records) * 0.002)
         )
@@ -87,6 +95,8 @@ class AnalyzerAgent:
                 or f"{team_name} report is based on available team and draft signals."
             ),
             recent_record=recent_record,
+            matches_in_window=int(data.get("matches_in_window", 0)),
+            match_details_analyzed=int(data.get("match_details_analyzed", 0)),
             signature_heroes=signature_heroes,
             draft_preferences=[str(item) for item in data.get("draft_preferences", [])],
             win_patterns=[str(item) for item in data.get("win_patterns", [])]
@@ -214,23 +224,32 @@ class AnalyzerAgent:
                 {"role": "system", "content": "You are a concise Dota 2 tactical analyst."},
                 {"role": "user", "content": prompt},
             ],
-            temperature=0.2,
-            max_tokens=800,
+            temperature=self.policy.llm.hero_analyzer.temperature,
+            max_tokens=self.policy.llm.hero_analyzer.max_tokens,
         )
 
     def _hero_evidence(
         self, hero_name: str, win_rate: float, pro_presence: float
     ) -> list[EvidenceItem]:
+        evidence_policy = self.policy.hero_report.evidence
         return [
             EvidenceItem(
                 signal="win_rate",
-                verdict=self._threshold_verdict(win_rate, partial=0.51, supported=0.525),
+                verdict=self._threshold_verdict(
+                    win_rate,
+                    partial=evidence_policy.partial_win_rate,
+                    supported=evidence_policy.supported_win_rate,
+                ),
                 detail=f"{hero_name} sample win rate is {win_rate:.1%}.",
                 source="opendota",
             ),
             EvidenceItem(
                 signal="pro_presence",
-                verdict=self._threshold_verdict(pro_presence, partial=0.25, supported=0.40),
+                verdict=self._threshold_verdict(
+                    pro_presence,
+                    partial=evidence_policy.partial_pro_presence,
+                    supported=evidence_policy.supported_pro_presence,
+                ),
                 detail=f"{hero_name} sample pro presence is {pro_presence:.1%}.",
                 source="opendota",
             ),
@@ -244,22 +263,32 @@ class AnalyzerAgent:
             return "partially_supported"
         return "weakly_supported"
 
-    @staticmethod
     def _meta_score(
+        self,
         win_rate: float,
         pick_rate: float,
         pro_presence: float,
         patch_impact_score: float,
         trend_score: float,
     ) -> int:
-        win_score = _normalize(win_rate, low=0.45, high=0.56)
-        pick_score = _normalize(pick_rate, low=0.02, high=0.18)
+        normalization = self.policy.hero_report.normalization
+        weights = self.policy.hero_report.score_weights
+        win_score = _normalize(
+            win_rate,
+            low=normalization.win_rate_low,
+            high=normalization.win_rate_high,
+        )
+        pick_score = _normalize(
+            pick_rate,
+            low=normalization.pick_rate_low,
+            high=normalization.pick_rate_high,
+        )
         score = (
-            0.30 * win_score
-            + 0.25 * pick_score
-            + 0.20 * pro_presence
-            + 0.15 * patch_impact_score
-            + 0.10 * trend_score
+            weights.win_rate * win_score
+            + weights.pick_rate * pick_score
+            + weights.pro_presence * pro_presence
+            + weights.patch_impact * patch_impact_score
+            + weights.trend * trend_score
         )
         return round(score * 100)
 
@@ -267,13 +296,13 @@ class AnalyzerAgent:
     def _confidence(values: list[float]) -> float:
         return round(sum(values) / len(values), 2) if values else 0.0
 
-    @staticmethod
-    def _tier(score: int) -> str:
-        if score >= 85:
+    def _tier(self, score: int) -> str:
+        tiers = self.policy.hero_report.tiers
+        if score >= tiers.s:
             return "S"
-        if score >= 72:
+        if score >= tiers.a:
             return "A"
-        if score >= 60:
+        if score >= tiers.b:
             return "B"
         return "C"
 

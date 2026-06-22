@@ -5,11 +5,36 @@ from typing import Any
 from app.integrations.opendota.heroes import OpenDotaHeroes
 from app.integrations.opendota.transport import OpenDotaTransport
 
+HARD_MAX_DETAIL_SAMPLE_SIZE = 100
+HARD_MAX_DETAIL_CONCURRENCY = 15
+
 
 class OpenDotaTeams:
-    def __init__(self, transport: OpenDotaTransport, heroes: OpenDotaHeroes) -> None:
+    def __init__(
+        self,
+        transport: OpenDotaTransport,
+        heroes: OpenDotaHeroes,
+        *,
+        detail_sample_size: int = 50,
+        max_detail_sample_size: int = 100,
+        detail_concurrency: int = 10,
+        match_detail_cache_ttl_seconds: int = 30 * 24 * 60 * 60,
+    ) -> None:
         self.transport = transport
         self.heroes = heroes
+        self.max_detail_sample_size = min(
+            max(1, max_detail_sample_size),
+            HARD_MAX_DETAIL_SAMPLE_SIZE,
+        )
+        self.detail_sample_size = min(
+            max(1, detail_sample_size),
+            self.max_detail_sample_size,
+        )
+        self.detail_concurrency = min(
+            max(1, detail_concurrency),
+            HARD_MAX_DETAIL_CONCURRENCY,
+        )
+        self.match_detail_cache_ttl_seconds = max(1, match_detail_cache_ttl_seconds)
 
     async def get_all(self) -> list[dict[str, Any]]:
         return await self.transport.get("teams_list", "/teams")
@@ -46,7 +71,11 @@ class OpenDotaTeams:
         )
 
     async def get_match_detail(self, match_id: int) -> dict[str, Any]:
-        return await self.transport.get(f"match_{match_id}", f"/matches/{match_id}")
+        return await self.transport.get(
+            f"match_{match_id}",
+            f"/matches/{match_id}",
+            cache_ttl_seconds=self.match_detail_cache_ttl_seconds,
+        )
 
     async def aggregate_heroes(
         self, matches: list[dict[str, Any]]
@@ -55,8 +84,14 @@ class OpenDotaTeams:
         if not match_ids:
             return []
 
+        semaphore = asyncio.Semaphore(self.detail_concurrency)
+
+        async def get_detail(match_id: int) -> dict[str, Any]:
+            async with semaphore:
+                return await self.get_match_detail(match_id)
+
         details = await asyncio.gather(
-            *(self.get_match_detail(match_id) for match_id in match_ids),
+            *(get_detail(match_id) for match_id in match_ids),
             return_exceptions=True,
         )
         hero_stats: dict[int, dict[str, int]] = {}
@@ -96,8 +131,8 @@ class OpenDotaTeams:
         self,
         team_name: str,
         *,
-        match_limit: int = 30,
         days: int = 30,
+        detail_sample_size: int | None = None,
         resolved_team: dict[str, Any] | None = None,
     ) -> dict[str, Any] | None:
         team = resolved_team or await self.search(team_name)
@@ -111,14 +146,28 @@ class OpenDotaTeams:
             matches = [match for match in all_matches if match.get("start_time", 0) >= cutoff]
         else:
             matches = list(all_matches)
-        matches = matches[:match_limit]
+        matches.sort(key=lambda match: int(match.get("start_time") or 0), reverse=True)
 
         if not matches:
             return self._empty_report(team, team_name)
 
+        requested_sample_size = detail_sample_size or self.detail_sample_size
+        sample_size = min(
+            max(1, requested_sample_size),
+            self.max_detail_sample_size,
+        )
+        detail_matches = matches[:sample_size]
+
         players = await self.get_players(team_id)
-        key_players = [player["name"] for player in players[:5] if player.get("name")]
-        heroes = await self.aggregate_heroes(matches)
+        current_players = [
+            player
+            for player in players
+            if player.get("is_current_team_member") is True
+        ]
+        key_players = [
+            player["name"] for player in current_players[:5] if player.get("name")
+        ]
+        heroes = await self.aggregate_heroes(detail_matches)
 
         wins = sum(1 for match in matches if self._is_team_win(match))
         losses = len(matches) - wins
@@ -160,6 +209,8 @@ class OpenDotaTeams:
             "team_name": team.get("name", team_name),
             "team_id": team_id,
             "rating": team.get("rating"),
+            "matches_in_window": len(matches),
+            "match_details_analyzed": len(detail_matches),
             "recent_record": f"{wins}-{losses} in last {len(matches)} matches",
             "wins": wins,
             "losses": losses,
@@ -196,6 +247,8 @@ class OpenDotaTeams:
             "team_name": team.get("name", fallback_name),
             "team_id": team["team_id"],
             "rating": team.get("rating"),
+            "matches_in_window": 0,
+            "match_details_analyzed": 0,
             "recent_record": "0-0 in last 0 matches",
             "wins": 0,
             "losses": 0,

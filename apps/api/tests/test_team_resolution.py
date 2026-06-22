@@ -7,8 +7,9 @@ from app.domain.teams import (
     AmbiguousTeamError,
     TeamDataUnavailableError,
     TeamNotFoundError,
+    TeamSelectionNotFoundError,
 )
-from app.pipeline.retriever import RetrieverTool
+from app.pipeline.retriever import RetrieverTool, _parse_days
 
 
 def _team(
@@ -26,6 +27,21 @@ def _team(
         "rating": rating,
         "last_match_time": last_match_time,
     }
+
+
+@pytest.mark.parametrize(
+    ("time_range", "expected_days"),
+    [
+        ("last_10_days", 10),
+        ("last_3_weeks", 21),
+        ("last_2_months", 60),
+        ("last_1_year", 365),
+        ("last_month", 30),
+        ("unknown", 30),
+    ],
+)
+def test_parse_days_respects_time_units(time_range: str, expected_days: int) -> None:
+    assert _parse_days(time_range) == expected_days
 
 
 def test_resolve_team_normalizes_generic_team_prefix() -> None:
@@ -102,6 +118,46 @@ def test_retrieve_team_raises_ambiguity_with_candidates() -> None:
         asyncio.run(retriever.retrieve_team("BB", "last_30_days"))
 
     assert len(raised.value.candidates) == 2
+    assert raised.value.time_range == "last_30_days"
+
+
+def test_retrieve_team_uses_validated_selected_team_id() -> None:
+    retriever = RetrieverTool()
+    retriever._live_data_enabled = True
+    selected_team = _team(2, "Bright Blades", "BB")
+    retriever._opendota_teams.get_all = AsyncMock(
+        return_value=[
+            _team(1, "Big Bears", "BB"),
+            selected_team,
+        ]
+    )
+    retriever._opendota_teams.get_report_data = AsyncMock(
+        return_value={"team_id": 2, "team_name": "Bright Blades"}
+    )
+
+    bundle = asyncio.run(
+        retriever.retrieve_team("Bright Blades", "last_30_days", team_id=2)
+    )
+
+    assert bundle.query["team_id"] == 2
+    retriever._opendota_teams.get_report_data.assert_awaited_once_with(
+        "Bright Blades",
+        days=30,
+        resolved_team=selected_team,
+    )
+
+
+def test_retrieve_team_rejects_stale_selected_team_id() -> None:
+    retriever = RetrieverTool()
+    retriever._live_data_enabled = True
+    retriever._opendota_teams.get_all = AsyncMock(
+        return_value=[_team(1, "Big Bears", "BB")]
+    )
+
+    with pytest.raises(TeamSelectionNotFoundError):
+        asyncio.run(
+            retriever.retrieve_team("Bright Blades", "last_30_days", team_id=2)
+        )
 
 
 def test_retrieve_team_does_not_use_mock_when_live_data_is_disabled() -> None:

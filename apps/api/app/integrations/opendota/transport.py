@@ -6,16 +6,21 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-CACHE_TTL = 3600
-REQUEST_TIMEOUT_SECONDS = 20
-
-
 class OpenDotaTransport:
     """Shared HTTP transport, cache, and request diagnostics for OpenDota."""
 
-    def __init__(self, base_url: str, api_key: str | None = None) -> None:
+    def __init__(
+        self,
+        base_url: str,
+        api_key: str | None = None,
+        *,
+        request_timeout_seconds: float = 20,
+        default_cache_ttl_seconds: int = 3600,
+    ) -> None:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
+        self.request_timeout_seconds = request_timeout_seconds
+        self.default_cache_ttl_seconds = default_cache_ttl_seconds
         self._cache: dict[str, tuple[float, Any]] = {}
         self._client: httpx.AsyncClient | None = None
 
@@ -24,7 +29,13 @@ class OpenDotaTransport:
             await self._client.aclose()
             self._client = None
 
-    async def get(self, key: str, path: str) -> Any:
+    async def get(
+        self,
+        key: str,
+        path: str,
+        *,
+        cache_ttl_seconds: int | None = None,
+    ) -> Any:
         started = time.perf_counter()
         now = time.monotonic()
         if key in self._cache:
@@ -52,7 +63,8 @@ class OpenDotaTransport:
             )
             raise
 
-        self._cache[key] = (now + CACHE_TTL, data)
+        ttl_seconds = cache_ttl_seconds or self.default_cache_ttl_seconds
+        self._cache[key] = (now + ttl_seconds, data)
         logger.info(
             "OpenDota request completed path=%s status=%s elapsed_ms=%s",
             path,
@@ -65,6 +77,6 @@ class OpenDotaTransport:
         if self._client is None or self._client.is_closed:
             self._client = httpx.AsyncClient(
                 base_url=self.base_url,
-                timeout=REQUEST_TIMEOUT_SECONDS,
+                timeout=self.request_timeout_seconds,
             )
         return self._client

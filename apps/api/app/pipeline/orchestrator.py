@@ -2,7 +2,7 @@ import logging
 import re
 from typing import Any
 
-from app.core.config import get_settings
+from app.core.config import get_policy, get_settings
 from app.domain.tasks import PlannedTask, ReportRequest
 from app.llm.provider import get_llm_provider
 
@@ -147,6 +147,7 @@ class OrchestratorAgent:
 
     def __init__(self) -> None:
         settings = get_settings()
+        self.policy = get_policy()
         self.llm_enabled = settings.llm_enabled
         self.llm = None
         if self.llm_enabled:
@@ -176,8 +177,8 @@ class OrchestratorAgent:
         result = await self.llm.complete_with_tools(  # type: ignore[union-attr]
             messages,
             _TOOLS,
-            temperature=0.0,
-            max_tokens=300,
+            temperature=self.policy.llm.orchestrator.temperature,
+            max_tokens=self.policy.llm.orchestrator.max_tokens,
         )
         if result is None:
             logger.info("Orchestrator LLM returned no tool call, falling back to rules")
@@ -197,10 +198,10 @@ class OrchestratorAgent:
         self, task_type: str, game: str, query: str, args: dict[str, Any]
     ) -> ReportRequest:
         role = self._normalize_role(args.get("role")) if args.get("role") else None
-        patch = args.get("patch") or "latest"
+        patch = args.get("patch") or self.policy.patch_report.default_patch
         team_name = args.get("team_name")
         claim = args.get("claim") or query
-        time_range = args.get("time_range") or "last_30_days"
+        time_range = args.get("time_range") or self._default_time_range()
 
         if task_type == "meta_report" and not role:
             role = "offlane"
@@ -269,19 +270,21 @@ class OrchestratorAgent:
         task_type: str,
         *,
         game: str = "dota2",
-        patch: str = "latest",
+        patch: str | None = None,
         role: str | None = None,
         team_name: str | None = None,
-        time_range: str = "last_30_days",
+        team_id: int | None = None,
+        time_range: str | None = None,
         claim: str | None = None,
     ) -> ReportRequest:
         return ReportRequest(
             task_type=task_type,  # type: ignore[arg-type]
             game=game,
-            patch=patch,
+            patch=patch or self.policy.patch_report.default_patch,
             role=self._normalize_role(role) if role else None,
             team_name=team_name,
-            time_range=time_range,
+            team_id=team_id,
+            time_range=time_range or self._default_time_range(),
             claim=claim,
             trace=[
                 PlannedTask(agent="orchestrator", action=f"accept structured {task_type} request")
@@ -301,10 +304,12 @@ class OrchestratorAgent:
         normalized = role.lower().strip()
         return _ROLE_ALIASES.get(normalized, normalized)
 
-    @staticmethod
-    def _extract_patch(query: str) -> str:
+    def _extract_patch(self, query: str) -> str:
         match = re.search(r"\b\d+\.\d+[a-z]?\b", query.lower())
-        return match.group(0) if match else "latest"
+        return match.group(0) if match else self.policy.patch_report.default_patch
+
+    def _default_time_range(self) -> str:
+        return f"last_{self.policy.team_report.default_time_range_days}_days"
 
     @staticmethod
     def _extract_team_name(query: str) -> str:

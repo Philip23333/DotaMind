@@ -3,7 +3,7 @@ import re
 from difflib import SequenceMatcher
 from typing import Any
 
-from app.core.config import get_settings
+from app.core.config import get_policy, get_settings
 from app.data.mock_data import MOCK_HERO_STATS
 from app.domain.evidence import EvidenceBundle
 from app.domain.teams import (
@@ -12,6 +12,7 @@ from app.domain.teams import (
     TeamLookupError,
     TeamNotFoundError,
     TeamResolution,
+    TeamSelectionNotFoundError,
 )
 from app.integrations.opendota.heroes import OpenDotaHeroes
 from app.integrations.opendota.teams import OpenDotaTeams
@@ -20,15 +21,27 @@ from app.integrations.patch_notes import compute_hero_patch_score, get_item_chan
 
 logger = logging.getLogger(__name__)
 
-_GENERIC_TEAM_WORDS = {"team", "esports", "gaming"}
-_FUZZY_SCORE_CUTOFF = 55.0
-_AMBIGUITY_SCORE_DELTA = 2.0
+_TIME_UNIT_DAYS = {
+    "day": 1,
+    "week": 7,
+    "month": 30,
+    "year": 365,
+}
 
 
 def _parse_days(time_range: str) -> int:
-    """Extract number of days from a string like 'last_30_days'. Defaults to 30."""
-    match = re.search(r"(\d+)", time_range)
-    return int(match.group(1)) if match else 30
+    """Convert a canonical duration such as last_2_months into days."""
+    normalized = re.sub(r"[\s-]+", "_", time_range.casefold().strip())
+    match = re.search(r"(\d+)_*(days?|weeks?|months?|years?)", normalized)
+    if match:
+        value = int(match.group(1))
+        unit = match.group(2).rstrip("s")
+        return value * _TIME_UNIT_DAYS[unit]
+
+    for unit, days in _TIME_UNIT_DAYS.items():
+        if normalized in {unit, f"last_{unit}"}:
+            return days
+    return get_policy().team_report.default_time_range_days
 
 
 class RetrieverTool:
@@ -36,15 +49,25 @@ class RetrieverTool:
 
     def __init__(self) -> None:
         settings = get_settings()
+        policy = get_policy()
+        opendota_policy = policy.opendota
+        match_detail_policy = policy.team_report.match_details
+        self._policy = policy
         self._live_data_enabled = settings.live_data_enabled
         self._opendota_transport = OpenDotaTransport(
             settings.opendota_base_url,
             settings.opendota_api_key,
+            request_timeout_seconds=opendota_policy.request_timeout_seconds,
+            default_cache_ttl_seconds=opendota_policy.default_cache_ttl_seconds,
         )
         self._opendota_heroes = OpenDotaHeroes(self._opendota_transport)
         self._opendota_teams = OpenDotaTeams(
             self._opendota_transport,
             self._opendota_heroes,
+            detail_sample_size=match_detail_policy.default_sample_size,
+            max_detail_sample_size=match_detail_policy.max_sample_size,
+            detail_concurrency=match_detail_policy.concurrency,
+            match_detail_cache_ttl_seconds=match_detail_policy.cache_ttl_seconds,
         )
 
     async def aclose(self) -> None:
@@ -53,7 +76,10 @@ class RetrieverTool:
     async def retrieve_meta(self, role: str, patch: str = "latest") -> EvidenceBundle:
         if self._live_data_enabled:
             try:
-                records = await self._opendota_heroes.get_stats_for_role(role)
+                records = await self._opendota_heroes.get_stats_for_role(
+                    role,
+                    min_pub_pick=self._policy.hero_report.min_pub_pick,
+                )
                 if records:
                     records = self._inject_patch_scores(records, patch)
                     return EvidenceBundle(
@@ -97,7 +123,12 @@ class RetrieverTool:
             data_source="patch_json",
         )
 
-    async def retrieve_team(self, team_name: str, time_range: str) -> EvidenceBundle:
+    async def retrieve_team(
+        self,
+        team_name: str,
+        time_range: str,
+        team_id: int | None = None,
+    ) -> EvidenceBundle:
         if not self._live_data_enabled:
             raise TeamDataUnavailableError(
                 team_name,
@@ -107,15 +138,31 @@ class RetrieverTool:
         days = _parse_days(time_range)
         try:
             teams = await self._opendota_teams.get_all()
-            resolution = self.resolve_team(team_name, teams)
-            if resolution.status == "not_found":
-                raise TeamNotFoundError(team_name)
-            if resolution.status == "ambiguous":
-                raise AmbiguousTeamError(team_name, resolution.candidates)
+            if team_id is None:
+                resolution = self.resolve_team(team_name, teams)
+                if resolution.status == "not_found":
+                    raise TeamNotFoundError(team_name)
+                if resolution.status == "ambiguous":
+                    raise AmbiguousTeamError(
+                        team_name,
+                        resolution.candidates,
+                        time_range,
+                    )
+            else:
+                selected_team = next(
+                    (team for team in teams if team.get("team_id") == team_id),
+                    None,
+                )
+                if selected_team is None:
+                    raise TeamSelectionNotFoundError(team_name)
+                resolution = TeamResolution(
+                    "resolved",
+                    team_name,
+                    team=selected_team,
+                )
 
             data = await self._opendota_teams.get_report_data(
                 team_name,
-                match_limit=30,
                 days=days,
                 resolved_team=resolution.team,
             )
@@ -167,9 +214,10 @@ class RetrieverTool:
 
         fuzzy_matches = []
         primary_query = query_variants[0][0]
+        cutoff = get_policy().team_report.resolution.fuzzy_score_cutoff
         for team in teams:
             score, reason = cls._fuzzy_team_score(primary_query, team)
-            if score >= _FUZZY_SCORE_CUTOFF:
+            if score >= cutoff:
                 fuzzy_matches.append(cls._team_candidate(team, score, reason))
 
         if not fuzzy_matches:
@@ -192,16 +240,18 @@ class RetrieverTool:
             reverse=True,
         )
         best_score = float(matches[0]["match_score"])
+        resolution_policy = get_policy().team_report.resolution
         plausible = [
             item
             for item in matches
-            if best_score - float(item["match_score"]) <= _AMBIGUITY_SCORE_DELTA
+            if best_score - float(item["match_score"])
+            <= resolution_policy.ambiguity_score_delta
         ]
         if len(plausible) > 1:
             return TeamResolution(
                 "ambiguous",
                 requested_name,
-                candidates=plausible[:5],
+                candidates=plausible[: resolution_policy.candidate_limit],
             )
 
         team_id = plausible[0]["team_id"]
@@ -255,7 +305,8 @@ class RetrieverTool:
             return []
 
         tokens = normalized.split()
-        stripped_tokens = [token for token in tokens if token not in _GENERIC_TEAM_WORDS]
+        generic_words = set(get_policy().team_report.resolution.generic_words)
+        stripped_tokens = [token for token in tokens if token not in generic_words]
         stripped = " ".join(stripped_tokens) or normalized
         candidates = [
             (normalized, 100.0, "exact"),
@@ -283,7 +334,8 @@ class RetrieverTool:
         if not normalized:
             return set()
         tokens = normalized.split()
-        stripped = " ".join(token for token in tokens if token not in _GENERIC_TEAM_WORDS)
+        generic_words = set(get_policy().team_report.resolution.generic_words)
+        stripped = " ".join(token for token in tokens if token not in generic_words)
         return {variant for variant in (normalized, stripped, stripped.replace(" ", "")) if variant}
 
     @staticmethod
@@ -330,13 +382,21 @@ class RetrieverTool:
     def _inject_patch_scores(
         self, records: list[dict[str, Any]], patch: str
     ) -> list[dict[str, Any]]:
-        scores = compute_hero_patch_score(patch)
+        patch_policy = self._policy.patch_report
+        scores = compute_hero_patch_score(
+            patch,
+            neutral_score=patch_policy.neutral_score,
+            change_delta=patch_policy.change_delta,
+        )
         if not scores:
             return records
         lookup = {self._key(name): score for name, score in scores.items()}
         for record in records:
             hero_name = str(record.get("hero") or record.get("localized_name") or "")
-            record["patch_impact_score"] = lookup.get(self._key(hero_name), 0.5)
+            record["patch_impact_score"] = lookup.get(
+                self._key(hero_name),
+                patch_policy.neutral_score,
+            )
         return records
 
     @staticmethod
@@ -348,28 +408,35 @@ class RetrieverTool:
         return name.lower().replace("-", "_").replace(" ", "_").replace("'", "")
 
 
-def summarize_patch_records(records: list[dict[str, Any]], patch: str) -> dict[str, Any]:
+def summarize_patch_records(
+    records: list[dict[str, Any]],
+    patch: str,
+    *,
+    neutral_score: float,
+    change_delta: float,
+    result_limit: int,
+) -> dict[str, Any]:
     scores: dict[str, float] = {}
     for change in records:
         if change.get("target_type") != "hero":
             continue
         target = str(change.get("target", ""))
-        scores.setdefault(target, 0.5)
+        scores.setdefault(target, neutral_score)
         if change.get("polarity") == "buff":
-            scores[target] = min(1.0, scores[target] + 0.15)
+            scores[target] = min(1.0, scores[target] + change_delta)
         elif change.get("polarity") == "nerf":
-            scores[target] = max(0.0, scores[target] - 0.15)
+            scores[target] = max(0.0, scores[target] - change_delta)
 
     winners = [
         _title(name)
         for name, score in sorted(scores.items(), key=lambda item: item[1], reverse=True)
-        if score > 0.5
-    ][:6]
+        if score > neutral_score
+    ][:result_limit]
     losers = [
         _title(name)
         for name, score in sorted(scores.items(), key=lambda item: item[1])
-        if score < 0.5
-    ][:6]
+        if score < neutral_score
+    ][:result_limit]
     item_changes = get_item_changes(patch)
     item_buffs = [
         _title(str(c.get("target", ""))) for c in item_changes if c.get("polarity") == "buff"

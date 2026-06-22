@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+from app.core.config import get_policy
 from app.domain.evidence import EvidenceItem
 from app.domain.reports import ReportResult
 
@@ -13,6 +14,9 @@ class CriticReview:
 class CriticAgent:
     """Rule-first critic. This is the single review boundary before formatting."""
 
+    def __init__(self) -> None:
+        self.policy = get_policy().critic
+
     def review_report(self, report: ReportResult) -> CriticReview:
         evidence = self._extract_evidence(report)
         if evidence is None:
@@ -20,11 +24,23 @@ class CriticAgent:
         return self.review_evidence(evidence)
 
     def review_evidence(self, evidence: list[EvidenceItem]) -> CriticReview:
-        if not evidence:
+        if self.policy.require_evidence and not evidence:
             return CriticReview(False, ["No evidence items were attached."])
-        unsupported = [item.signal for item in evidence if item.verdict == "unsupported"]
-        if unsupported:
-            return CriticReview(False, [f"Unsupported evidence signals: {', '.join(unsupported)}."])
+        if self.policy.require_evidence and len(evidence) < self.policy.min_evidence_items:
+            return CriticReview(
+                False,
+                [
+                    "Insufficient evidence items: "
+                    f"expected {self.policy.min_evidence_items}, got {len(evidence)}."
+                ],
+            )
+        if self.policy.reject_unsupported_signals:
+            unsupported = [item.signal for item in evidence if item.verdict == "unsupported"]
+            if unsupported:
+                return CriticReview(
+                    False,
+                    [f"Unsupported evidence signals: {', '.join(unsupported)}."],
+                )
         return CriticReview(True, [])
 
     @staticmethod

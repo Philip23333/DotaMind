@@ -42,8 +42,17 @@ class ReportPipeline:
             report = self.formatter.attach_sources(report, bundle.sources)
         elif request.task_type == "team_report":
             team_name = request.team_name or "Team Spirit"
-            trace.append(PlannedTask("retriever", f"retrieve team evidence for {team_name}"))
-            bundle = await self.retriever.retrieve_team(team_name, request.time_range)
+            target = (
+                f"{team_name} (team_id={request.team_id})"
+                if request.team_id is not None
+                else team_name
+            )
+            trace.append(PlannedTask("retriever", f"retrieve team evidence for {target}"))
+            bundle = await self.retriever.retrieve_team(
+                team_name,
+                request.time_range,
+                request.team_id,
+            )
             trace.append(PlannedTask("analyzer", "derive team intelligence report"))
             report = self.analyzer.analyze_team(bundle, request.game, team_name, request.time_range)
             report = self.formatter.attach_sources(report, bundle.sources)

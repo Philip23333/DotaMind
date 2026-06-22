@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 
 import httpx
 import pytest
@@ -66,3 +67,29 @@ def test_transport_logs_failed_path_and_exception(caplog) -> None:
     assert "path=/teams/2163/players" in caplog.text
     assert "type=ReadTimeout" in caplog.text
     assert "upstream stalled" in caplog.text
+
+
+def test_match_details_use_long_lived_cache() -> None:
+    async def exercise() -> float:
+        transport = OpenDotaTransport("https://api.opendota.test")
+        transport._client = httpx.AsyncClient(
+            base_url=transport.base_url,
+            transport=httpx.MockTransport(
+                lambda _request: httpx.Response(200, json={"match_id": 123})
+            ),
+        )
+        teams = OpenDotaTeams(
+            transport,
+            OpenDotaHeroes(transport),
+            match_detail_cache_ttl_seconds=30 * 24 * 60 * 60,
+        )
+        try:
+            await teams.get_match_detail(123)
+            expires_at, _data = transport._cache["match_123"]
+            return expires_at - time.monotonic()
+        finally:
+            await transport.aclose()
+
+    remaining_ttl = asyncio.run(exercise())
+
+    assert remaining_ttl > 29 * 24 * 60 * 60
