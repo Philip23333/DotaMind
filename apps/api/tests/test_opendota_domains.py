@@ -1,5 +1,6 @@
 import asyncio
 import time
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock
 
 from app.integrations.opendota.heroes import OpenDotaHeroes
@@ -88,6 +89,17 @@ def test_team_domain_preserves_report_calculation() -> None:
     assert report["recent_record"] == "1-1 in last 2 matches"
     assert report["matches_in_window"] == 2
     assert report["match_details_analyzed"] == 2
+    assert report["data_freshness"] == {
+        "latest_match_time": now,
+        "latest_match_at": datetime.fromtimestamp(now, tz=timezone.utc)
+        .isoformat()
+        .replace("+00:00", "Z"),
+        "sample_window_days": 30,
+        "matches_in_window": 2,
+        "match_details_analyzed": 2,
+        "opendota_cache_hits": 0,
+        "opendota_cache_misses": 0,
+    }
     assert report["signature_heroes"] == ["Puck"]
     assert report["hero_pool_depth"] == 1
     assert report["draft_flexibility"] == 0.04
@@ -125,6 +137,9 @@ def test_team_domain_uses_full_window_and_default_detail_sample() -> None:
     assert report is not None
     assert report["matches_in_window"] == 75
     assert report["match_details_analyzed"] == 50
+    assert report["data_freshness"]["sample_window_days"] == 30
+    assert report["data_freshness"]["matches_in_window"] == 75
+    assert report["data_freshness"]["match_details_analyzed"] == 50
     assert report["recent_record"] == "38-37 in last 75 matches"
     detail_matches = teams.aggregate_heroes.await_args.args[0]
     assert len(detail_matches) == 50

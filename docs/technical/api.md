@@ -90,11 +90,20 @@ Response highlights:
 - `recent_record`
 - `matches_in_window`
 - `match_details_analyzed`
+- `data_freshness.latest_match_at`
+- `data_freshness.sample_window_days`
+- `data_freshness.opendota_cache_hits`
+- `data_freshness.opendota_cache_misses`
 - `signature_heroes`
 - `draft_preferences`
 - `win_patterns`
 - `loss_patterns`
 - `patch_adaptation_score`
+
+`data_freshness` is emitted for team reports so callers can judge whether the
+OpenDota evidence is recent enough for the requested decision. The root-level
+`matches_in_window` and `match_details_analyzed` fields are kept for backward
+compatibility and mirrored inside `data_freshness`.
 
 Ambiguous natural-language team queries return `409 ambiguous_team` with candidate teams and the original `time_range`. `/api/v1/query` accepts `team_selection` to submit a selected `team_id` without another LLM planning call.
 

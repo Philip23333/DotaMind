@@ -137,6 +137,7 @@ class RetrieverTool:
 
         days = _parse_days(time_range)
         try:
+            cache_before = self._opendota_transport.cache_stats()
             teams = await self._opendota_teams.get_all()
             if team_id is None:
                 resolution = self.resolve_team(team_name, teams)
@@ -165,6 +166,7 @@ class RetrieverTool:
                 team_name,
                 days=days,
                 resolved_team=resolution.team,
+                cache_before=cache_before,
             )
             if not data:
                 raise TeamNotFoundError(team_name)
@@ -274,9 +276,11 @@ class RetrieverTool:
         best = (0.0, "")
         for query, weight, query_reason in query_variants:
             if query in name_variants:
-                best = max(best, (weight + 5.0, f"{query_reason} matched team name"))
-            if query in tag_variants:
-                best = max(best, (weight, f"{query_reason} matched team tag"))
+                name_weight = weight + 5.0 if query_reason == "exact" else weight
+                if name_weight > best[0]:
+                    best = (name_weight, f"{query_reason} matched team name")
+            if query in tag_variants and weight > best[0]:
+                best = (weight, f"{query_reason} matched team tag")
         return best
 
     @classmethod

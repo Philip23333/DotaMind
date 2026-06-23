@@ -52,6 +52,15 @@ def test_team_report_contains_patch_adaptation_score() -> None:
                     "signature_heroes": ["Puck", "Mars"],
                     "patch_adaptation_score": 70,
                     "recent_win_rate": 0.6,
+                    "data_freshness": {
+                        "latest_match_time": 1_718_000_000,
+                        "latest_match_at": "2024-06-09T10:13:20Z",
+                        "sample_window_days": 30,
+                        "matches_in_window": 5,
+                        "match_details_analyzed": 5,
+                        "opendota_cache_hits": 2,
+                        "opendota_cache_misses": 4,
+                    },
                 }
             ],
             sources=["opendota"],
@@ -65,6 +74,8 @@ def test_team_report_contains_patch_adaptation_score() -> None:
 
     assert report.patch_adaptation_score > 0
     assert report.signature_heroes
+    assert report.data_freshness.latest_match_at == "2024-06-09T10:13:20Z"
+    assert report.data_freshness.opendota_cache_hits == 2
 
 
 def test_claim_verification_marks_beastmaster_claim_partial() -> None:

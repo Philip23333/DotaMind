@@ -82,6 +82,16 @@ class TeamReportRequest(BaseModel):
     time_range: str = Field(default_factory=default_time_range)
 
 
+class TeamDataFreshness(BaseModel):
+    latest_match_time: int | None = None
+    latest_match_at: str | None = None
+    sample_window_days: int = Field(ge=0)
+    matches_in_window: int = Field(ge=0)
+    match_details_analyzed: int = Field(ge=0)
+    opendota_cache_hits: int = Field(ge=0)
+    opendota_cache_misses: int = Field(ge=0)
+
+
 class TeamReportResponse(BaseModel):
     report_type: Literal["team_report"] = "team_report"
     game: SupportedGame
@@ -91,6 +101,7 @@ class TeamReportResponse(BaseModel):
     recent_record: str
     matches_in_window: int = Field(ge=0)
     match_details_analyzed: int = Field(ge=0)
+    data_freshness: TeamDataFreshness
     signature_heroes: list[str]
     draft_preferences: list[str]
     win_patterns: list[str]

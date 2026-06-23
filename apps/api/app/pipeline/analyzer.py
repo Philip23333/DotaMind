@@ -8,6 +8,7 @@ from app.domain.reports import (
     ClaimVerificationReport,
     HeroRecommendation,
     PatchImpactReport,
+    TeamDataFreshness,
     TeamReport,
 )
 from app.llm.prompts import render_prompt
@@ -97,6 +98,7 @@ class AnalyzerAgent:
             recent_record=recent_record,
             matches_in_window=int(data.get("matches_in_window", 0)),
             match_details_analyzed=int(data.get("match_details_analyzed", 0)),
+            data_freshness=self._team_data_freshness(data),
             signature_heroes=signature_heroes,
             draft_preferences=[str(item) for item in data.get("draft_preferences", [])],
             win_patterns=[str(item) for item in data.get("win_patterns", [])]
@@ -107,6 +109,26 @@ class AnalyzerAgent:
             key_players=[str(item) for item in data.get("key_players", [])] or signature_heroes[:3],
             sources=[],
             confidence=confidence,
+        )
+
+    @staticmethod
+    def _team_data_freshness(data: dict[str, Any]) -> TeamDataFreshness:
+        freshness = data.get("data_freshness") or {}
+        return TeamDataFreshness(
+            latest_match_time=freshness.get("latest_match_time"),
+            latest_match_at=freshness.get("latest_match_at"),
+            sample_window_days=int(freshness.get("sample_window_days", 0)),
+            matches_in_window=int(
+                freshness.get("matches_in_window", data.get("matches_in_window", 0))
+            ),
+            match_details_analyzed=int(
+                freshness.get(
+                    "match_details_analyzed",
+                    data.get("match_details_analyzed", 0),
+                )
+            ),
+            opendota_cache_hits=int(freshness.get("opendota_cache_hits", 0)),
+            opendota_cache_misses=int(freshness.get("opendota_cache_misses", 0)),
         )
 
     def analyze_claim(

@@ -1,5 +1,6 @@
 import asyncio
 import time
+from datetime import datetime, timezone
 from typing import Any
 
 from app.integrations.opendota.heroes import OpenDotaHeroes
@@ -134,11 +135,13 @@ class OpenDotaTeams:
         days: int = 30,
         detail_sample_size: int | None = None,
         resolved_team: dict[str, Any] | None = None,
+        cache_before: dict[str, int] | None = None,
     ) -> dict[str, Any] | None:
         team = resolved_team or await self.search(team_name)
         if team is None:
             return None
 
+        cache_before = cache_before or self.transport.cache_stats()
         team_id = team["team_id"]
         all_matches = await self.get_matches(team_id)
         if days > 0:
@@ -149,7 +152,15 @@ class OpenDotaTeams:
         matches.sort(key=lambda match: int(match.get("start_time") or 0), reverse=True)
 
         if not matches:
-            return self._empty_report(team, team_name)
+            report = self._empty_report(team, team_name, days)
+            report["data_freshness"] = self._data_freshness(
+                latest_match_time=None,
+                sample_window_days=days,
+                matches_in_window=0,
+                match_details_analyzed=0,
+                cache_before=cache_before,
+            )
+            return report
 
         requested_sample_size = detail_sample_size or self.detail_sample_size
         sample_size = min(
@@ -205,6 +216,14 @@ class OpenDotaTeams:
                 if match.get("opposing_team_name")
             }
         )
+        latest_match_time = self._latest_match_time(matches)
+        data_freshness = self._data_freshness(
+            latest_match_time=latest_match_time,
+            sample_window_days=days,
+            matches_in_window=len(matches),
+            match_details_analyzed=len(detail_matches),
+            cache_before=cache_before,
+        )
         return {
             "team_name": team.get("name", team_name),
             "team_id": team_id,
@@ -225,6 +244,7 @@ class OpenDotaTeams:
             "key_players": key_players,
             "opponents_faced": opponents[:5],
             "recent_win_rate": round(recent_win_rate, 3),
+            "data_freshness": data_freshness,
         }
 
     @staticmethod
@@ -242,7 +262,46 @@ class OpenDotaTeams:
         return [f"Average {result} game duration: {average_minutes:.0f} minutes."]
 
     @staticmethod
-    def _empty_report(team: dict[str, Any], fallback_name: str) -> dict[str, Any]:
+    def _latest_match_time(matches: list[dict[str, Any]]) -> int | None:
+        values = [
+            int(match["start_time"])
+            for match in matches
+            if match.get("start_time") is not None
+        ]
+        return max(values) if values else None
+
+    def _data_freshness(
+        self,
+        *,
+        latest_match_time: int | None,
+        sample_window_days: int,
+        matches_in_window: int,
+        match_details_analyzed: int,
+        cache_before: dict[str, int],
+    ) -> dict[str, Any]:
+        cache_after = self.transport.cache_stats()
+        cache_hits = max(0, cache_after["hits"] - cache_before["hits"])
+        cache_misses = max(0, cache_after["misses"] - cache_before["misses"])
+        return {
+            "latest_match_time": latest_match_time,
+            "latest_match_at": self._format_timestamp(latest_match_time),
+            "sample_window_days": sample_window_days,
+            "matches_in_window": matches_in_window,
+            "match_details_analyzed": match_details_analyzed,
+            "opendota_cache_hits": cache_hits,
+            "opendota_cache_misses": cache_misses,
+        }
+
+    @staticmethod
+    def _format_timestamp(value: int | None) -> str | None:
+        if value is None:
+            return None
+        return datetime.fromtimestamp(value, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+
+    @staticmethod
+    def _empty_report(
+        team: dict[str, Any], fallback_name: str, sample_window_days: int
+    ) -> dict[str, Any]:
         return {
             "team_name": team.get("name", fallback_name),
             "team_id": team["team_id"],
@@ -261,4 +320,13 @@ class OpenDotaTeams:
             "key_players": [],
             "opponents_faced": [],
             "recent_win_rate": 0.0,
+            "data_freshness": {
+                "latest_match_time": None,
+                "latest_match_at": None,
+                "sample_window_days": sample_window_days,
+                "matches_in_window": 0,
+                "match_details_analyzed": 0,
+                "opendota_cache_hits": 0,
+                "opendota_cache_misses": 0,
+            },
         }

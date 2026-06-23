@@ -1,5 +1,5 @@
 import asyncio
-from unittest.mock import AsyncMock
+from unittest.mock import ANY, AsyncMock
 
 import pytest
 
@@ -75,6 +75,21 @@ def test_resolve_team_returns_ambiguous_candidates() -> None:
     assert {candidate["team_id"] for candidate in resolution.candidates} == {1, 2}
 
 
+def test_resolve_team_does_not_let_generic_name_match_hide_tag_ambiguity() -> None:
+    teams = [
+        _team(8255888, "BoomBoys", "BB", rating=1440, last_match_time=1780832552),
+        _team(9131584, "BB Team", "BB", rating=1396, last_match_time=1754141860),
+    ]
+
+    resolution = RetrieverTool.resolve_team("Team BB", teams)
+
+    assert resolution.status == "ambiguous"
+    assert [candidate["team_id"] for candidate in resolution.candidates] == [
+        8255888,
+        9131584,
+    ]
+
+
 def test_resolve_team_returns_not_found() -> None:
     resolution = RetrieverTool.resolve_team(
         "No Such Team",
@@ -144,6 +159,7 @@ def test_retrieve_team_uses_validated_selected_team_id() -> None:
         "Bright Blades",
         days=30,
         resolved_team=selected_team,
+        cache_before=ANY,
     )
 
 

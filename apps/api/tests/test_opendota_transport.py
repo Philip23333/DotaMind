@@ -36,6 +36,7 @@ def test_transport_is_shared_across_team_endpoints_and_cache(caplog) -> None:
     http_client, transport = asyncio.run(exercise())
 
     assert requests == ["/teams", "/teams/2163/players"]
+    assert transport.cache_stats() == {"hits": 1, "misses": 2}
     assert "OpenDota request completed path=/teams" in caplog.text
     assert "OpenDota cache hit path=/teams" in caplog.text
 

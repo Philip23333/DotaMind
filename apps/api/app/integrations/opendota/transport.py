@@ -22,6 +22,8 @@ class OpenDotaTransport:
         self.request_timeout_seconds = request_timeout_seconds
         self.default_cache_ttl_seconds = default_cache_ttl_seconds
         self._cache: dict[str, tuple[float, Any]] = {}
+        self._cache_hits = 0
+        self._cache_misses = 0
         self._client: httpx.AsyncClient | None = None
 
     async def aclose(self) -> None:
@@ -41,6 +43,7 @@ class OpenDotaTransport:
         if key in self._cache:
             expires_at, data = self._cache[key]
             if now < expires_at:
+                self._cache_hits += 1
                 logger.info(
                     "OpenDota cache hit path=%s elapsed_ms=%s",
                     path,
@@ -48,6 +51,7 @@ class OpenDotaTransport:
                 )
                 return data
 
+        self._cache_misses += 1
         params = {"api_key": self.api_key} if self.api_key else None
         try:
             response = await self.http_client().get(path, params=params)
@@ -72,6 +76,12 @@ class OpenDotaTransport:
             round((time.perf_counter() - started) * 1000),
         )
         return data
+
+    def cache_stats(self) -> dict[str, int]:
+        return {
+            "hits": self._cache_hits,
+            "misses": self._cache_misses,
+        }
 
     def http_client(self) -> httpx.AsyncClient:
         if self._client is None or self._client.is_closed:

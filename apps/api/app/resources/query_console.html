@@ -598,12 +598,16 @@
 
       function reportFacts(result) {
         if (result.report_type === "team_report") {
+          const freshness = result.data_freshness || {};
           return [
             ["战队", result.team_name],
             ["时间范围", result.time_range],
+            ["最新比赛", formatDateTime(freshness.latest_match_at)],
+            ["样本窗口", formatDays(freshness.sample_window_days)],
             ["近期战绩", result.recent_record],
             ["窗口比赛", result.matches_in_window],
             ["详情样本", result.match_details_analyzed],
+            ["OpenDota 缓存", formatCache(freshness)],
             ["版本适应", `${result.patch_adaptation_score}/100`],
           ];
         }
@@ -663,6 +667,23 @@
         if (value.hero) return `${value.hero}: ${value.recommendation || `meta score ${value.meta_score}`}`;
         if (value.signal) return `${value.signal}: ${value.detail || value.verdict}`;
         return JSON.stringify(value);
+      }
+
+      function formatDateTime(value) {
+        if (!value) return "无";
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return value;
+        return date.toLocaleString("zh-CN", { hour12: false });
+      }
+
+      function formatDays(value) {
+        return Number.isFinite(value) ? `${value} 天` : "未知";
+      }
+
+      function formatCache(freshness) {
+        const hits = freshness.opendota_cache_hits ?? 0;
+        const misses = freshness.opendota_cache_misses ?? 0;
+        return `${hits} hit / ${misses} miss`;
       }
 
       function assistantMessage() {

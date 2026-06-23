@@ -49,6 +49,17 @@ class PatchImpactReport:
 
 
 @dataclass(frozen=True)
+class TeamDataFreshness:
+    latest_match_time: int | None
+    latest_match_at: str | None
+    sample_window_days: int
+    matches_in_window: int
+    match_details_analyzed: int
+    opendota_cache_hits: int
+    opendota_cache_misses: int
+
+
+@dataclass(frozen=True)
 class TeamReport:
     report_type: Literal["team_report"]
     game: str
@@ -58,6 +69,7 @@ class TeamReport:
     recent_record: str
     matches_in_window: int
     match_details_analyzed: int
+    data_freshness: TeamDataFreshness
     signature_heroes: list[str]
     draft_preferences: list[str]
     win_patterns: list[str]
