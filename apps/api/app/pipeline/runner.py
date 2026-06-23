@@ -63,15 +63,29 @@ class ReportPipeline:
             trace.append(PlannedTask("analyzer", "assign claim verdict"))
             report = self.analyzer.analyze_claim(bundle, request.game, claim)
 
-        review = self.critic.review_report(report)
+        review = self.critic.review_report(report, bundle)
         trace.append(
             PlannedTask(
                 "critic",
-                "approve report"
-                if review.passed
-                else f"reject report: {', '.join(review.reasons)}",
-                "completed" if review.passed else "warning",
+                self._critic_action(review),
+                self._critic_status(review),
             )
         )
         trace.append(PlannedTask("formatter", "format public response"))
         return trace, report
+
+    @staticmethod
+    def _critic_action(review) -> str:
+        if review.severity == "pass":
+            return "quality gate passed"
+        if review.severity == "warning":
+            return f"quality warning: {', '.join(review.reasons)}"
+        return f"quality gate failed: {', '.join(review.reasons)}"
+
+    @staticmethod
+    def _critic_status(review) -> str:
+        if review.severity == "pass":
+            return "completed"
+        if review.severity == "warning":
+            return "warning"
+        return "failed"

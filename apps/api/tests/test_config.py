@@ -28,6 +28,13 @@ def test_policy_yaml_loads_all_report_sections() -> None:
     assert policy.hero_report.result_limit == 10
     assert policy.patch_report.default_patch == "latest"
     assert policy.critic.require_evidence is True
+    assert policy.critic.mock_allowed is False
+    assert policy.critic.min_confidence == 0.5
+    assert policy.critic.hard_min_confidence == 0.35
+    assert policy.critic.team_report.max_latest_match_age_days == 30
+    assert policy.critic.team_report.hard_max_latest_match_age_days == 90
+    assert policy.critic.team_report.min_matches_in_window == 5
+    assert policy.critic.team_report.min_match_details_analyzed == 5
     assert policy.llm.orchestrator.max_tokens == 500
     assert policy.llm.hero_analyzer.max_tokens == 1000
 
@@ -54,6 +61,24 @@ def test_policy_rejects_hero_weights_that_do_not_sum_to_one(tmp_path: Path) -> N
     data["hero_report"]["score_weights"]["trend"] = 0.5
 
     with pytest.raises(ValidationError, match="weights must sum to 1.0"):
+        load_policy(_write_policy(tmp_path / "policy.yaml", data))
+
+
+def test_policy_rejects_invalid_critic_confidence_thresholds(tmp_path: Path) -> None:
+    data = deepcopy(_policy_data())
+    data["critic"]["hard_min_confidence"] = 0.6
+    data["critic"]["min_confidence"] = 0.5
+
+    with pytest.raises(ValidationError, match="hard_min_confidence"):
+        load_policy(_write_policy(tmp_path / "policy.yaml", data))
+
+
+def test_policy_rejects_invalid_critic_team_age_thresholds(tmp_path: Path) -> None:
+    data = deepcopy(_policy_data())
+    data["critic"]["team_report"]["max_latest_match_age_days"] = 120
+    data["critic"]["team_report"]["hard_max_latest_match_age_days"] = 90
+
+    with pytest.raises(ValidationError, match="max_latest_match_age_days"):
         load_policy(_write_policy(tmp_path / "policy.yaml", data))
 
 

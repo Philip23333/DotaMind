@@ -193,6 +193,8 @@ def test_critic_validates_evidence():
 
     review = critic.review_evidence(good_evidence)
     assert review.passed is True
+    assert review.severity == "pass"
+    assert review.metadata["evidence_count"] == 2
     assert len(review.reasons) == 0
 
     # Test with unsupported evidence
@@ -204,10 +206,14 @@ def test_critic_validates_evidence():
 
     review = critic.review_evidence(bad_evidence)
     assert review.passed is False
+    assert review.severity == "failed"
+    assert review.metadata["unsupported_signals"] == ["some_signal"]
     assert len(review.reasons) > 0
     assert "Unsupported" in review.reasons[0]
 
     # Test with empty evidence
     review = critic.review_evidence([])
     assert review.passed is False
+    assert review.severity == "failed"
+    assert review.metadata["evidence_count"] == 0
     assert "No evidence" in review.reasons[0]

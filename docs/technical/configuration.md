@@ -16,7 +16,8 @@ prompt bodies into policy configuration.
 
 `app/core/config.py` loads YAML with `yaml.safe_load()` and validates it through the immutable
 Pydantic `AppPolicy` model. Unknown fields, missing fields, invalid ranges, inconsistent sample
-sizes, and hero score weights that do not total 1.0 fail validation.
+sizes, inconsistent Critic quality thresholds, and hero score weights that do not total 1.0 fail
+validation.
 
 The default path is:
 
@@ -42,7 +43,7 @@ The old `opendota.json`, `signals.yaml`, and `critic_rules.yaml` configuration s
 | `team_report` | Time range, entity resolution, match sampling, concurrency, detail cache |
 | `hero_report` | Result count, minimum sample, evidence thresholds, scoring, tiers |
 | `patch_report` | Default patch, result count, neutral score, buff/nerf delta |
-| `critic` | Evidence requirements and unsupported-signal rejection |
+| `critic` | Evidence requirements, mock policy, confidence thresholds, team freshness, sample-size quality gates |
 | `llm` | Orchestrator and hero-analyzer temperature/token limits |
 
 ## 中文说明

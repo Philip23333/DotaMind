@@ -52,6 +52,14 @@ critic:
   require_evidence: true
   reject_unsupported_signals: true
   min_evidence_items: 1
+  mock_allowed: false
+  min_confidence: 0.5
+  hard_min_confidence: 0.35
+  team_report:
+    max_latest_match_age_days: 30
+    hard_max_latest_match_age_days: 90
+    min_matches_in_window: 5
+    min_match_details_analyzed: 5
 
 llm:
   orchestrator:

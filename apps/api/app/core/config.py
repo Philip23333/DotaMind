@@ -123,6 +123,31 @@ class CriticPolicy(StrictPolicyModel):
     require_evidence: bool
     reject_unsupported_signals: bool
     min_evidence_items: int = Field(ge=1)
+    mock_allowed: bool
+    min_confidence: float = Field(ge=0, le=1)
+    hard_min_confidence: float = Field(ge=0, le=1)
+    team_report: "CriticTeamReportPolicy"
+
+    @model_validator(mode="after")
+    def validate_confidence_thresholds(self) -> "CriticPolicy":
+        if self.hard_min_confidence > self.min_confidence:
+            raise ValueError("hard_min_confidence cannot exceed min_confidence")
+        return self
+
+
+class CriticTeamReportPolicy(StrictPolicyModel):
+    max_latest_match_age_days: int = Field(ge=0)
+    hard_max_latest_match_age_days: int = Field(ge=0)
+    min_matches_in_window: int = Field(ge=0)
+    min_match_details_analyzed: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def validate_age_thresholds(self) -> "CriticTeamReportPolicy":
+        if self.max_latest_match_age_days > self.hard_max_latest_match_age_days:
+            raise ValueError(
+                "max_latest_match_age_days cannot exceed hard_max_latest_match_age_days"
+            )
+        return self
 
 
 class LLMCallPolicy(StrictPolicyModel):
