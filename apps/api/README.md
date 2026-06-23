@@ -11,6 +11,18 @@ python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8001 --log-level
 
 From the repository root, `npm run dev:api` runs `dev-api.cmd`, which uses fixed port `8001` and exits with an error when the port is already occupied.
 
+## Query Smoke Runner
+
+With the API running on `127.0.0.1:8001`, run:
+
+```bash
+python scripts/query_smoke.py
+```
+
+The runner calls `/api/v1/query` with representative natural-language prompts and prints the
+HTTP status, route, Critic quality-gate status, key report fields, sources, and elapsed time.
+Use `--base-url` to target a different local API instance.
+
 ## Endpoints
 
 - `GET /health`
