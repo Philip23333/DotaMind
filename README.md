@@ -33,10 +33,12 @@ DESIGN.md    Visual system notes and CSS token source
 ```bash
 cd apps/api
 python -m pip install -e ".[dev]"
-python -m uvicorn app.main:app --reload --port 8000
+python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8001 --log-level info
 ```
 
-Open `http://localhost:8000/docs` for the FastAPI schema.
+Or run `npm run dev:api` from the repository root. The startup script uses fixed port `8001` and fails if the port is already occupied.
+
+Open `http://localhost:8001/docs` for the FastAPI schema.
 
 ### Frontend
 
@@ -48,7 +50,7 @@ npm run dev:web
 Open `http://localhost:3000`.
 
 The frontend falls back to local mock data if the API is not running.
-For internal query testing, prefer the FastAPI page at `http://localhost:8000/debug/chat`.
+For internal query testing, prefer the FastAPI page at `http://localhost:8001/debug/chat`.
 
 ### Optional Services
 
@@ -90,13 +92,13 @@ METAMIND_POLICY_PATH=
 ## API Examples
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/meta-report \
+curl -X POST http://localhost:8001/api/v1/meta-report \
   -H "Content-Type: application/json" \
   -d "{\"game\":\"dota2\",\"patch\":\"latest\",\"role\":\"offlane\"}"
 ```
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/verify-claim \
+curl -X POST http://localhost:8001/api/v1/verify-claim \
   -H "Content-Type: application/json" \
   -d "{\"game\":\"dota2\",\"claim\":\"Beastmaster is one of the strongest offlaners in current patch.\"}"
 ```
@@ -104,7 +106,7 @@ curl -X POST http://localhost:8000/api/v1/verify-claim \
 Callable services are listed at:
 
 ```bash
-curl http://localhost:8000/api/v1/services
+curl http://localhost:8001/api/v1/services
 ```
 
 ## Data Sources

@@ -6,8 +6,10 @@ FastAPI backend for the MetaMind MVP.
 
 ```bash
 python -m pip install -e ".[dev]"
-python -m uvicorn app.main:app --reload --port 8000
+python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8001 --log-level info
 ```
+
+From the repository root, `npm run dev:api` runs `dev-api.cmd`, which uses fixed port `8001` and exits with an error when the port is already occupied.
 
 ## Endpoints
 
