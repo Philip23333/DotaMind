@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -151,6 +151,22 @@ class NaturalLanguageQueryRequest(BaseModel):
     query: str
     game: SupportedGame = "dota2"
     team_selection: TeamSelection | None = None
+
+
+class PlanRequest(BaseModel):
+    query: str
+    game: SupportedGame = "dota2"
+
+
+class PlanResponse(BaseModel):
+    query: str
+    game: SupportedGame
+    status: Literal["ok", "insufficient_tools", "error"]
+    reason: str
+    plan: dict[str, Any] | None = None
+    tool_results: list[dict[str, Any]] = Field(default_factory=list)
+    evidence_graph: dict[str, Any] | None = None
+    errors: list[str] = Field(default_factory=list)
 
 
 class PlannedTask(BaseModel):

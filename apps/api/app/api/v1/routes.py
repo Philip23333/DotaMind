@@ -10,11 +10,14 @@ from app.api.v1.schemas import (
     NaturalLanguageQueryResponse,
     PatchImpactRequest,
     PatchImpactResponse,
+    PlanRequest,
+    PlanResponse,
     ServiceCatalogResponse,
     TeamReportRequest,
     TeamReportResponse,
 )
 from app.application.catalog import service_catalog
+from app.application.plan_service import PlanService
 from app.application.query_service import QueryService
 from app.application.report_service import ReportService
 
@@ -22,6 +25,7 @@ router = APIRouter(tags=["reports"])
 
 report_service = ReportService()
 query_service = QueryService()
+plan_service = PlanService()
 
 
 @router.get("/services", response_model=ServiceCatalogResponse)
@@ -62,3 +66,8 @@ async def query(request: NaturalLanguageQueryRequest) -> NaturalLanguageQueryRes
             mappers.team_selection(request.team_selection),
         )
     )
+
+
+@router.post("/plan", response_model=PlanResponse)
+async def plan(request: PlanRequest) -> PlanResponse:
+    return mappers.plan_response(await plan_service.run(request.query, request.game))
