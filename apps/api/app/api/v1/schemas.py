@@ -166,7 +166,10 @@ class PlanResponse(BaseModel):
     plan: dict[str, Any] | None = None
     tool_results: list[dict[str, Any]] = Field(default_factory=list)
     evidence_graph: dict[str, Any] | None = None
+    answer: dict[str, Any] | None = None
+    review: dict[str, Any] | None = None
     errors: list[str] = Field(default_factory=list)
+    trace: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class PlannedTask(BaseModel):

@@ -25,7 +25,10 @@ def main() -> int:
             if result.evidence_graph
             else None
         ),
+        "answer": result.answer.model_dump(mode="json") if result.answer else None,
+        "review": result.review.model_dump(mode="json") if result.review else None,
         "errors": result.errors,
+        "trace": [item.model_dump(mode="json") for item in result.trace],
     }
     import json
 

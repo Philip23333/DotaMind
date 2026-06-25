@@ -28,6 +28,9 @@ def test_plan_service_returns_insufficient_tools_without_execution() -> None:
     assert result.status == "insufficient_tools"
     assert result.tool_results == []
     assert result.evidence_graph is None
+    assert result.answer is None
+    assert result.review is None
+    assert result.trace[-1].status == "insufficient_tools"
 
 
 def test_plan_service_returns_error_when_planner_errors() -> None:
@@ -45,6 +48,8 @@ def test_plan_service_returns_error_when_planner_errors() -> None:
 
     assert result.status == "error"
     assert result.errors == ["METAMIND_LLM_ENABLED must be true"]
+    assert result.answer is None
+    assert result.review is None
 
 
 def test_plan_service_executes_planned_counter_pick(monkeypatch) -> None:
@@ -81,7 +86,7 @@ def test_plan_service_executes_planned_counter_pick(monkeypatch) -> None:
     plan = ExecutionPlan(
         intent="counter_pick",
         goal="Fetch Lina matchup evidence.",
-        output_contract="tool_results",
+        output_contract="draft_advice",
         tool_calls=[
             ToolCall(id="resolve_target", tool="resolve_hero", args={"query": "Lina"}),
             ToolCall(
@@ -111,3 +116,70 @@ def test_plan_service_executes_planned_counter_pick(monkeypatch) -> None:
     assert len(result.tool_results) == 2
     assert result.evidence_graph is not None
     assert result.evidence_graph.data_quality.completeness == 1.0
+    assert result.answer is not None
+    assert result.answer.status == "ok"
+    assert result.review is not None
+    assert result.review.severity == "pass"
+    assert result.trace[-1].node == "critic"
+
+
+def test_plan_service_returns_error_without_answer_when_runner_fails() -> None:
+    plan = ExecutionPlan(
+        intent="counter_pick",
+        goal="Bad plan.",
+        output_contract="draft_advice",
+        tool_calls=[
+            ToolCall(
+                id="get_matchups",
+                tool="stratz.hero_vs_hero_matchup",
+                args={"hero_id": "$missing.data.hero.hero_id"},
+            )
+        ],
+        required_evidence=["matchup_win_rate"],
+    )
+    service = PlanService(
+        planner=FakePlanner(
+            AgenticPlannerResult(
+                status="planned",
+                reason="bad plan",
+                plan=plan,
+            )
+        )
+    )
+
+    result = asyncio.run(service.run("enemy picked Lina"))
+
+    assert result.status == "error"
+    assert result.evidence_graph is not None
+    assert result.answer is None
+    assert result.review is None
+    assert result.errors
+
+
+def test_plan_service_keeps_ok_status_when_evidence_is_insufficient() -> None:
+    plan = ExecutionPlan(
+        intent="counter_pick",
+        goal="Only resolve Lina.",
+        output_contract="draft_advice",
+        tool_calls=[
+            ToolCall(id="resolve_target", tool="resolve_hero", args={"query": "Lina"})
+        ],
+        required_evidence=["hero_identity", "matchup_win_rate", "sample_size"],
+    )
+    service = PlanService(
+        planner=FakePlanner(
+            AgenticPlannerResult(
+                status="planned",
+                reason="partial plan",
+                plan=plan,
+            )
+        )
+    )
+
+    result = asyncio.run(service.run("enemy picked Lina"))
+
+    assert result.status == "ok"
+    assert result.answer is not None
+    assert result.answer.status == "insufficient_evidence"
+    assert result.review is not None
+    assert result.review.severity == "failed"

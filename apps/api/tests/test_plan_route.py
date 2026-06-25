@@ -1,35 +1,19 @@
-from dataclasses import dataclass
-
 from fastapi.testclient import TestClient
 
-from app.agentic.models import ExecutionPlan
+from app.agentic.state import AgentRunState
 from app.main import app
 
 
-@dataclass(frozen=True)
-class FakePlanServiceResult:
-    query: str
-    game: str
-    status: str
-    reason: str
-    plan: ExecutionPlan | None
-    tool_results: list
-    evidence_graph: object | None
-    errors: list[str]
-
-
 class FakePlanService:
-    async def run(self, query: str, game: str = "dota2") -> FakePlanServiceResult:
-        return FakePlanServiceResult(
+    async def run(self, query: str, game: str = "dota2") -> AgentRunState:
+        state = AgentRunState(
             query=query,
             game=game,
             status="insufficient_tools",
             reason="no registered team tool",
-            plan=None,
-            tool_results=[],
-            evidence_graph=None,
-            errors=[],
         )
+        state.add_trace("planner", "no registered team tool", "insufficient_tools")
+        return state
 
 
 def test_plan_route_returns_plan_response(monkeypatch) -> None:
@@ -47,3 +31,6 @@ def test_plan_route_returns_plan_response(monkeypatch) -> None:
     assert payload["status"] == "insufficient_tools"
     assert payload["tool_results"] == []
     assert payload["evidence_graph"] is None
+    assert payload["answer"] is None
+    assert payload["review"] is None
+    assert payload["trace"][0]["node"] == "planner"

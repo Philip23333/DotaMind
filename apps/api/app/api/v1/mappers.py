@@ -1,8 +1,9 @@
 from dataclasses import asdict, is_dataclass
 from typing import Any
 
+from app.agentic.formatter import PlanFormatter
+from app.agentic.state import AgentRunState
 from app.api.v1 import schemas
-from app.application.plan_service import PlanQueryResult
 from app.application.query_service import QueryResult
 from app.domain.reports import ReportResult, ServiceCatalog
 from app.domain.tasks import ReportRequest
@@ -72,8 +73,8 @@ def query_response(result: QueryResult) -> schemas.NaturalLanguageQueryResponse:
     return schemas.NaturalLanguageQueryResponse.model_validate(_to_dict(result))
 
 
-def plan_response(result: PlanQueryResult) -> schemas.PlanResponse:
-    return schemas.PlanResponse.model_validate(_to_dict(result))
+def plan_response(result: AgentRunState) -> schemas.PlanResponse:
+    return schemas.PlanResponse.model_validate(PlanFormatter().format(result))
 
 
 def service_catalog_response(catalog: ServiceCatalog) -> schemas.ServiceCatalogResponse:
