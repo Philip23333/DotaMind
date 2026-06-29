@@ -3,6 +3,11 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from app.agentic.contracts import (
+    CONTRACT_REGISTRY,
+    STRUCTURED_OUTPUT_CONTRACTS,
+    validate_contract_plan_with_evidence,
+)
 from app.agentic.models import ExecutionPlan
 from app.agentic.registry import ToolRegistry
 from app.core.config import get_policy, get_settings
@@ -11,33 +16,6 @@ from app.llm.provider import LLMProvider, get_llm_provider
 logger = logging.getLogger(__name__)
 
 PlannerStatus = Literal["planned", "insufficient_tools", "error"]
-STRUCTURED_OUTPUT_CONTRACTS = {
-    "patch_impact_report",
-    "role_meta_report",
-    "team_recent_report",
-    "hero_matchup_report",
-    "draft_advice",
-}
-ALLOWED_OUTPUT_CONTRACTS = STRUCTURED_OUTPUT_CONTRACTS | {"natural_language_answer"}
-KNOWN_EVIDENCE_KINDS = {
-    "hero_identity",
-    "matchup_win_rate",
-    "lane_outcome",
-    "team_identity",
-    "recent_matches",
-    "current_players",
-    "team_hero_usage",
-    "match_detail_sample",
-    "hero_stats",
-    "role_fit",
-    "sample_size",
-    "patch_records",
-    "hero_patch_changes",
-    "item_patch_changes",
-    "patch_buff_count",
-    "patch_nerf_count",
-}
-ROLE_META_EVIDENCE_KINDS = {"hero_stats", "role_fit", "sample_size"}
 
 _PLANNER_SYSTEM_PROMPT = """You are the MetaMind v2.5 Planner.
 
@@ -55,12 +33,7 @@ Supported in this development version:
 - patch impact evidence queries
 
 Allowed output_contract values:
-- patch_impact_report
-- role_meta_report
-- team_recent_report
-- hero_matchup_report
-- draft_advice
-- natural_language_answer
+{contracts}
 
 Do not output meta_list. meta_list is only the internal whitelist of structured
 contracts. If the user asks for an answer outside that whitelist but the
@@ -216,8 +189,9 @@ class AgenticPlanner:
             plan.output_contract,
             plan.output_contract in STRUCTURED_OUTPUT_CONTRACTS,
         )
-        if plan.output_contract not in ALLOWED_OUTPUT_CONTRACTS:
-            errors.append(f"unknown output_contract: {plan.output_contract}")
+        errors.extend(
+            validate_contract_plan_with_evidence(plan, self._known_evidence_kinds())
+        )
 
         registered = {definition.name for definition in self.registry.list()}
         for call in plan.tool_calls:
@@ -232,45 +206,8 @@ class AgenticPlanner:
                 f"({len(plan.tool_calls)} > {plan.constraints.max_tool_calls})"
             )
 
-        required = set(plan.required_evidence)
-        unknown_evidence = sorted(required - KNOWN_EVIDENCE_KINDS)
-        if unknown_evidence:
-            errors.append(
-                "unknown required_evidence: " + ", ".join(unknown_evidence)
-            )
-
-        missing_required = {
-            "hero_identity",
-            "matchup_win_rate",
-            "sample_size",
-        } - required
-        if plan.intent == "counter_pick" and missing_required:
-            errors.append(
-                "counter_pick plan missing required evidence: "
-                + ", ".join(sorted(missing_required))
-            )
         if plan.intent == "counter_pick" and plan.output_contract != "draft_advice":
             errors.append("counter_pick plan must use output_contract=draft_advice")
-
-        if plan.output_contract == "patch_impact_report":
-            tools = {call.tool for call in plan.tool_calls}
-            if "patch.get_records" not in tools:
-                errors.append("patch_impact_report plan must use patch.get_records")
-            if "patch_records" not in required:
-                errors.append(
-                    "patch_impact_report plan must require patch_records evidence"
-                )
-
-        if plan.output_contract == "role_meta_report":
-            invalid_role_meta_evidence = sorted(required - ROLE_META_EVIDENCE_KINDS)
-            if invalid_role_meta_evidence:
-                errors.append(
-                    "role_meta_report required_evidence must use only "
-                    "hero_stats, role_fit, sample_size; got "
-                    + ", ".join(invalid_role_meta_evidence)
-                )
-            if "hero_stats" not in required:
-                errors.append("role_meta_report plan must require hero_stats evidence")
 
         for call in plan.tool_calls:
             if call.tool in {"stratz.hero_vs_hero_matchup", "stratz.lane_outcome"}:
@@ -288,7 +225,18 @@ class AgenticPlanner:
             f"- {definition.name}: {definition.description}"
             for definition in self.registry.list()
         )
-        return _PLANNER_SYSTEM_PROMPT.replace("{tools}", tools)
+        contracts = "\n".join(f"- {name}" for name in CONTRACT_REGISTRY)
+        return _PLANNER_SYSTEM_PROMPT.replace("{tools}", tools).replace(
+            "{contracts}",
+            contracts,
+        )
+
+    def _known_evidence_kinds(self) -> set[str]:
+        return {
+            evidence_kind
+            for definition in self.registry.list()
+            for evidence_kind in definition.evidence_kinds
+        }
 
 
 def planner_payload(result: AgenticPlannerResult) -> dict[str, Any]:

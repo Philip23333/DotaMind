@@ -2,11 +2,12 @@ import logging
 from typing import Any
 
 from app.agentic.answer import AnswerSynthesizer
+from app.agentic.contracts import get_contract
 from app.agentic.critic import AgenticCritic
 from app.agentic.evidence import build_evidence_graph
 from app.agentic.models import ToolCall, ToolResult
-from app.agentic.planner import STRUCTURED_OUTPUT_CONTRACTS, AgenticPlanner
-from app.agentic.registry import ToolExecutor
+from app.agentic.planner import AgenticPlanner
+from app.agentic.registry import ToolExecutor, ToolRegistry
 from app.agentic.state import AgentRunState
 
 logger = logging.getLogger(__name__)
@@ -140,7 +141,7 @@ async def tool_executor_node(
     return state
 
 
-def evidence_node(state: AgentRunState) -> AgentRunState:
+def evidence_node(state: AgentRunState, registry: ToolRegistry) -> AgentRunState:
     state.add_trace("evidence", "build evidence graph", "planned")
     logger.info("node=evidence start tool_results=%s", len(state.tool_results))
     if state.plan is None:
@@ -148,7 +149,11 @@ def evidence_node(state: AgentRunState) -> AgentRunState:
         logger.info("node=evidence end status=failed missing_plan=true")
         return state
 
-    state.evidence_graph = build_evidence_graph(state.plan, state.tool_results)
+    state.evidence_graph = build_evidence_graph(
+        state.plan,
+        state.tool_results,
+        registry,
+    )
     state.add_trace("evidence", "evidence graph completed", "completed")
     logger.info(
         "node=evidence end evidence=%s missing=%s completeness=%.2f",
@@ -166,7 +171,8 @@ async def answer_node(
     state.add_trace("answer", "synthesize structured answer", "planned")
     structured_contract = (
         state.plan is not None
-        and state.plan.output_contract in STRUCTURED_OUTPUT_CONTRACTS
+        and (contract := get_contract(state.plan.output_contract)) is not None
+        and contract.structured
     )
     logger.info(
         "node=answer start has_graph=%s structured_contract=%s output_contract=%s",
@@ -259,17 +265,9 @@ def _response_type(state: AgentRunState) -> str:
         return "insufficient_evidence"
     if state.answer.status == "error":
         return "answer_error"
-    if state.answer.status == "ok" and state.answer.answer_type == "draft_advice":
-        return "draft_advice"
-    if state.answer.status == "ok" and state.answer.answer_type in {
-        "patch_impact_report",
-        "role_meta_report",
-        "team_recent_report",
-        "hero_matchup_report",
-    }:
+    contract = get_contract(state.answer.answer_type)
+    if state.answer.status == "ok" and contract is not None:
         return state.answer.answer_type
-    if state.answer.status == "ok" and state.answer.answer_type == "natural_language_answer":
-        return "natural_language_answer"
     if state.answer.status == "unsupported_output_contract":
         return "unsupported_answer"
     return "raw_tool_results"

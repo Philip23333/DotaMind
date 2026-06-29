@@ -2,8 +2,9 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from app.agentic.evidence import EvidenceItem
 from app.agentic.hero_resolver import load_default_hero_resolver
-from app.agentic.models import ToolSource
+from app.agentic.models import ToolResult, ToolSource
 from app.agentic.registry import ToolDefinition, ToolRegistry
 from app.core.config import Settings
 from app.integrations.stratz.heroes import StratzHeroes
@@ -43,6 +44,8 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
                 url=None,
                 status="live",
             ),
+            evidence_extractor=resolve_hero_evidence,
+            evidence_kinds=("hero_identity",),
             metadata={"game": "dota2", "domain": "hero_identity"},
         )
     )
@@ -58,6 +61,8 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
                 url=settings.stratz_graphql_url,
                 status="live",
             ),
+            evidence_extractor=hero_matchup_evidence,
+            evidence_kinds=("matchup_win_rate", "sample_size"),
             metadata={"game": "dota2", "domain": "hero_matchup"},
         )
     )
@@ -73,6 +78,8 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
                 url=settings.stratz_graphql_url,
                 status="live",
             ),
+            evidence_extractor=lane_outcome_evidence,
+            evidence_kinds=("lane_outcome", "sample_size"),
             metadata={"game": "dota2", "domain": "lane_outcome"},
         )
     )
@@ -91,6 +98,138 @@ def build_default_tool_registry(settings: Settings) -> ToolRegistry:
 
 def _resolve_hero_handler(args: ResolveHeroInput) -> dict[str, Any]:
     return load_default_hero_resolver().resolve(args.query)
+
+
+def resolve_hero_evidence(result: ToolResult) -> list[EvidenceItem]:
+    data = result.data if isinstance(result.data, dict) else {}
+    if data.get("status") != "resolved" or not isinstance(data.get("hero"), dict):
+        return []
+
+    hero = data["hero"]
+    return [
+        EvidenceItem(
+            id=f"{result.tool_call_id}:hero_identity:{hero.get('hero_id')}",
+            kind="hero_identity",
+            subject=str(hero.get("localized_name") or hero.get("hero_id")),
+            value={
+                "hero_id": hero.get("hero_id"),
+                "name": hero.get("name"),
+                "localized_name": hero.get("localized_name"),
+                "aliases": hero.get("aliases", []),
+                "method": data.get("method"),
+                "query": data.get("query"),
+            },
+            source=result.source,
+            tool_call_id=result.tool_call_id,
+            tool=result.tool,
+        )
+    ]
+
+
+def hero_matchup_evidence(result: ToolResult) -> list[EvidenceItem]:
+    data = result.data if isinstance(result.data, dict) else {}
+    target_hero_id = data.get("hero_id")
+    evidence = []
+    for side in ("advantage", "disadvantage"):
+        rows = data.get(side, [])
+        if not isinstance(rows, list):
+            continue
+        for index, row in enumerate(rows):
+            if not isinstance(row, dict):
+                continue
+            match_count = row.get("match_count")
+            evidence.append(
+                EvidenceItem(
+                    id=(
+                        f"{result.tool_call_id}:matchup_win_rate:"
+                        f"{side}:{row.get('hero_id')}:{index}"
+                    ),
+                    kind="matchup_win_rate",
+                    subject=f"{row.get('hero_id')} vs {target_hero_id}",
+                    value={
+                        "side": side,
+                        "hero_id": row.get("hero_id"),
+                        "target_hero_id": row.get("target_hero_id", target_hero_id),
+                        "win_rate": row.get("win_rate"),
+                        "match_count": match_count,
+                        "synergy": row.get("synergy"),
+                    },
+                    source=result.source,
+                    tool_call_id=result.tool_call_id,
+                    tool=result.tool,
+                )
+            )
+            if match_count is not None:
+                evidence.append(
+                    EvidenceItem(
+                        id=(
+                            f"{result.tool_call_id}:sample_size:"
+                            f"{side}:{row.get('hero_id')}:{index}"
+                        ),
+                        kind="sample_size",
+                        subject=f"{row.get('hero_id')} vs {target_hero_id}",
+                        value={
+                            "sample_size": match_count,
+                            "hero_id": row.get("hero_id"),
+                            "target_hero_id": row.get(
+                                "target_hero_id",
+                                target_hero_id,
+                            ),
+                        },
+                        source=result.source,
+                        tool_call_id=result.tool_call_id,
+                        tool=result.tool,
+                    )
+                )
+    return evidence
+
+
+def lane_outcome_evidence(result: ToolResult) -> list[EvidenceItem]:
+    data = result.data if isinstance(result.data, dict) else {}
+    target_hero_id = data.get("hero_id")
+    evidence = []
+    records = data.get("records", [])
+    if not isinstance(records, list):
+        return []
+    for index, row in enumerate(records):
+        if not isinstance(row, dict):
+            continue
+        match_count = row.get("match_count")
+        evidence.append(
+            EvidenceItem(
+                id=f"{result.tool_call_id}:lane_outcome:{row.get('hero_id')}:{index}",
+                kind="lane_outcome",
+                subject=f"{row.get('hero_id')} with/against {target_hero_id}",
+                value={
+                    "hero_id": row.get("hero_id"),
+                    "target_hero_id": row.get("target_hero_id", target_hero_id),
+                    "position": row.get("position"),
+                    "match_count": match_count,
+                    "match_win_rate": row.get("match_win_rate"),
+                    "is_with": data.get("is_with"),
+                },
+                source=result.source,
+                tool_call_id=result.tool_call_id,
+                tool=result.tool,
+            )
+        )
+        if match_count is not None:
+            evidence.append(
+                EvidenceItem(
+                    id=f"{result.tool_call_id}:sample_size:lane:{row.get('hero_id')}:{index}",
+                    kind="sample_size",
+                    subject=f"lane sample for {row.get('hero_id')}",
+                    value={
+                        "sample_size": match_count,
+                        "hero_id": row.get("hero_id"),
+                        "target_hero_id": row.get("target_hero_id", target_hero_id),
+                    },
+                    source=result.source,
+                    tool_call_id=result.tool_call_id,
+                    tool=result.tool,
+                )
+            )
+    return evidence
 
 
 def _hero_vs_hero_matchup_handler(settings: Settings):

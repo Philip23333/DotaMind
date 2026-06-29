@@ -17,6 +17,7 @@ from app.agentic.state import AgentRunState
 class AgentGraphRunner:
     def __init__(self, planner: AgenticPlanner, registry: ToolRegistry) -> None:
         self.planner = planner
+        self.registry = registry
         self.executor = ToolExecutor(registry)
         self.answer_synthesizer = AnswerSynthesizer()
         self.critic = AgenticCritic()
@@ -27,13 +28,13 @@ class AgentGraphRunner:
             state = validate_plan_node(state)
 
         if state.status == "error":
-            state = evidence_node(state)
+            state = evidence_node(state, self.registry)
             return response_node(state)
         if state.status == "insufficient_tools":
             return response_node(state)
 
         state = await tool_executor_node(state, self.executor)
-        state = evidence_node(state)
+        state = evidence_node(state, self.registry)
         if state.status == "error":
             return response_node(state)
 

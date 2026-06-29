@@ -1,5 +1,14 @@
-from app.agentic.evidence import build_evidence_graph
+from pydantic import BaseModel
+
+from app.agentic.evidence import EvidenceItem, build_evidence_graph
 from app.agentic.models import ExecutionPlan, ToolCall, ToolResult, ToolSource
+from app.agentic.registry import ToolDefinition, ToolRegistry
+from app.agentic.stratz_tools import build_default_tool_registry
+from app.core.config import Settings
+
+
+class DebugInput(BaseModel):
+    value: int = 1
 
 
 def test_evidence_graph_aggregates_resolve_hero_result() -> None:
@@ -31,7 +40,7 @@ def test_evidence_graph_aggregates_resolve_hero_result() -> None:
         },
     )
 
-    graph = build_evidence_graph(plan, [result])
+    graph = build_evidence_graph(plan, [result], _registry())
 
     assert graph.intent == "counter_pick"
     assert graph.missing == []
@@ -76,7 +85,7 @@ def test_evidence_graph_aggregates_matchup_and_sample_size() -> None:
         },
     )
 
-    graph = build_evidence_graph(plan, [result])
+    graph = build_evidence_graph(plan, [result], _registry())
 
     assert graph.missing == []
     assert graph.data_quality.min_sample_size == 247
@@ -97,11 +106,79 @@ def test_evidence_graph_reports_missing_required_evidence() -> None:
         required_evidence=["hero_identity", "matchup_win_rate"],
     )
 
-    graph = build_evidence_graph(plan, [])
+    graph = build_evidence_graph(plan, [], _registry())
 
     assert graph.evidence == []
     assert graph.missing == ["hero_identity", "matchup_win_rate"]
     assert graph.data_quality.completeness == 0
+
+
+def test_evidence_graph_keeps_utility_tool_result_without_evidence() -> None:
+    plan = ExecutionPlan(
+        intent="debug",
+        goal="Run utility tool.",
+        output_contract="tool_results",
+        required_evidence=[],
+    )
+    registry = ToolRegistry()
+    registry.register(
+        ToolDefinition(
+            name="debug.utility",
+            description="Does not produce evidence.",
+            input_model=DebugInput,
+            handler=lambda args: {"value": args.value},
+        )
+    )
+    result = ToolResult(
+        tool_call_id="utility",
+        tool="debug.utility",
+        status="ok",
+        latency_ms=1,
+        data={"value": 1},
+    )
+
+    graph = build_evidence_graph(plan, [result], registry)
+
+    assert graph.tool_results == [result]
+    assert graph.evidence == []
+    assert graph.missing == []
+    assert graph.data_quality.completeness == 1
+
+
+def test_evidence_graph_reports_extractor_failure() -> None:
+    def broken_extractor(_result: ToolResult) -> list[EvidenceItem]:
+        raise ValueError("bad evidence")
+
+    plan = ExecutionPlan(
+        intent="debug",
+        goal="Run broken extractor.",
+        output_contract="tool_results",
+        required_evidence=["debug_evidence"],
+    )
+    registry = ToolRegistry()
+    registry.register(
+        ToolDefinition(
+            name="debug.evidence",
+            description="Broken evidence tool.",
+            input_model=DebugInput,
+            handler=lambda args: {"value": args.value},
+            evidence_extractor=broken_extractor,
+            evidence_kinds=("debug_evidence",),
+        )
+    )
+    result = ToolResult(
+        tool_call_id="debug",
+        tool="debug.evidence",
+        status="ok",
+        latency_ms=1,
+        data={"value": 1},
+    )
+
+    graph = build_evidence_graph(plan, [result], registry)
+
+    assert graph.evidence == []
+    assert "debug: evidence_extractor_failed: ValueError: bad evidence" in graph.missing
+    assert "debug_evidence" in graph.missing
 
 
 def test_evidence_graph_marks_failed_tool_and_mock_source() -> None:
@@ -120,7 +197,7 @@ def test_evidence_graph_marks_failed_tool_and_mock_source() -> None:
         error="boom",
     )
 
-    graph = build_evidence_graph(plan, [result])
+    graph = build_evidence_graph(plan, [result], _registry())
 
     assert graph.data_quality.mock_used is True
     assert graph.missing == ["resolve_target: tool_failed", "hero_identity"]
@@ -155,7 +232,7 @@ def test_evidence_graph_aggregates_lane_outcome() -> None:
         },
     )
 
-    graph = build_evidence_graph(plan, [result])
+    graph = build_evidence_graph(plan, [result], _registry())
 
     assert graph.missing == []
     assert graph.data_quality.min_sample_size == 25
@@ -221,7 +298,7 @@ def test_evidence_graph_aggregates_opendota_team_evidence() -> None:
         ),
     ]
 
-    graph = build_evidence_graph(plan, results)
+    graph = build_evidence_graph(plan, results, _registry())
 
     assert graph.missing == []
     assert {
@@ -249,7 +326,7 @@ def test_evidence_graph_aggregates_opendota_hero_stats() -> None:
         data={"role": "offlane", "hero_count": 1, "heroes": [{"hero": "Mars"}]},
     )
 
-    graph = build_evidence_graph(plan, [result])
+    graph = build_evidence_graph(plan, [result], _registry())
 
     assert graph.missing == []
     assert [item.kind for item in graph.evidence] == [
@@ -258,3 +335,9 @@ def test_evidence_graph_aggregates_opendota_hero_stats() -> None:
         "sample_size",
     ]
     assert graph.data_quality.min_sample_size == 1
+
+
+def _registry():
+    return build_default_tool_registry(
+        Settings(stratz_graphql_url="https://api.stratz.test/graphql", stratz_token="token")
+    )

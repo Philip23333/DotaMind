@@ -39,3 +39,16 @@ At the start of every new session in this repository, before analyzing or editin
 - Prefer exposing capability boundaries clearly, such as `insufficient_tools`,
   validation errors, or tool execution errors, over producing a superficially
   successful response.
+
+- Prefer aggressive architectural simplification over low-risk but bloated
+  parallel paths. When a capability is migrated to the target agentic
+  architecture, remove or retire the old implementation path unless the user
+  explicitly asks to keep compatibility.
+
+- Favor deletion and consolidation. If code, routes, abstractions, mocks, or
+  compatibility shims no longer serve the target architecture, remove them
+  instead of preserving them "just in case."
+
+- Avoid conservative duplicate implementations. Do not keep both old and new
+  versions of the same capability merely for perceived stability during this
+  development phase; expose gaps directly and continue the migration.

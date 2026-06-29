@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from app.agentic.models import ToolCall, ToolResult, ToolSource
 
 ToolHandler = Callable[[BaseModel], Any | Awaitable[Any]]
+EvidenceExtractor = Callable[[ToolResult], list[Any]]
 
 
 @dataclass(frozen=True)
@@ -18,6 +19,8 @@ class ToolDefinition:
     input_model: type[BaseModel]
     handler: ToolHandler
     source: ToolSource | None = None
+    evidence_extractor: EvidenceExtractor | None = None
+    evidence_kinds: tuple[str, ...] = ()
     metadata: dict[str, Any] = field(default_factory=dict)
 
 

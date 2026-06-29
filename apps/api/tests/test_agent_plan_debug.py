@@ -1,10 +1,13 @@
 import argparse
+import asyncio
 import json
 
 import pytest
+from pydantic import BaseModel
 
 from app.agentic.models import ExecutionPlan
-from scripts.agent_plan_debug import load_plan, plan_from_raw
+from app.agentic.registry import ToolDefinition, ToolExecutor, ToolRegistry
+from scripts.agent_plan_debug import load_plan, plan_from_raw, run_plan
 
 
 def test_plan_from_raw_rejects_non_object_json() -> None:
@@ -44,3 +47,38 @@ def test_load_plan_from_file(tmp_path) -> None:
     plan = load_plan(argparse.Namespace(plan_json=None, plan_file=str(path)))
 
     assert plan.intent == "debug"
+
+
+def test_run_plan_builds_response_with_registry_evidence() -> None:
+    registry = ToolRegistry()
+    registry.register(
+        ToolDefinition(
+            name="debug.utility",
+            description="Utility tool without evidence.",
+            input_model=DebugInput,
+            handler=lambda args: {"value": args.value},
+        )
+    )
+    plan = ExecutionPlan(
+        intent="debug",
+        goal="Run a utility tool.",
+        output_contract="tool_results",
+        tool_calls=[
+            {
+                "id": "utility",
+                "tool": "debug.utility",
+                "args": {"value": 1},
+            }
+        ],
+    )
+
+    state = asyncio.run(run_plan(plan, ToolExecutor(registry)))
+
+    assert state.response
+    assert state.response["status"] == "ok"
+    assert state.evidence_graph
+    assert state.evidence_graph.tool_results[0].tool == "debug.utility"
+
+
+class DebugInput(BaseModel):
+    value: int

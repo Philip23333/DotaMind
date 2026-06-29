@@ -4,6 +4,8 @@ from typing import Any
 from app.agentic.answer import AnswerSynthesizer
 from app.agentic.evidence import build_evidence_graph
 from app.agentic.models import ExecutionPlan, ToolCall, ToolResult, ToolSource
+from app.agentic.stratz_tools import build_default_tool_registry
+from app.core.config import Settings
 from app.llm.provider import ToolCallResult
 
 
@@ -15,6 +17,7 @@ def test_answer_synthesizer_builds_counter_pick_answer() -> None:
             _resolved_lina_result(),
             _matchup_result(match_count=100),
         ],
+        _registry(),
     )
 
     answer = _synthesize(plan, graph)
@@ -30,7 +33,7 @@ def test_answer_synthesizer_builds_counter_pick_answer() -> None:
 
 def test_answer_synthesizer_reports_missing_matchup_evidence() -> None:
     plan = _counter_pick_plan()
-    graph = build_evidence_graph(plan, [_resolved_lina_result()])
+    graph = build_evidence_graph(plan, [_resolved_lina_result()], _registry())
 
     answer = _synthesize(plan, graph)
 
@@ -47,6 +50,7 @@ def test_answer_synthesizer_reports_missing_sample_size() -> None:
             _resolved_lina_result(),
             _matchup_result(match_count=None),
         ],
+        _registry(),
     )
 
     answer = _synthesize(plan, graph)
@@ -61,7 +65,7 @@ def test_answer_synthesizer_reports_unsupported_output_contract() -> None:
         goal="Explain a team.",
         output_contract="team_report_answer",
     )
-    graph = build_evidence_graph(plan, [])
+    graph = build_evidence_graph(plan, [], _registry())
 
     answer = _synthesize(plan, graph)
 
@@ -83,6 +87,7 @@ def test_answer_synthesizer_exposes_mock_data_note() -> None:
                 error="boom",
             )
         ],
+        _registry(),
     )
 
     answer = _synthesize(plan, graph)
@@ -116,6 +121,7 @@ def test_answer_synthesizer_builds_patch_impact_report() -> None:
                 },
             )
         ],
+        _registry(),
     )
 
     answer = _synthesize(plan, graph)
@@ -148,6 +154,7 @@ def test_answer_synthesizer_builds_role_meta_report() -> None:
                 },
             )
         ],
+        _registry(),
     )
 
     answer = _synthesize(plan, graph)
@@ -163,7 +170,7 @@ def test_answer_synthesizer_natural_language_answer_uses_llm() -> None:
         goal="Answer from evidence.",
         output_contract="natural_language_answer",
     )
-    graph = build_evidence_graph(plan, [])
+    graph = build_evidence_graph(plan, [], _registry())
 
     answer = asyncio.run(
         AnswerSynthesizer(llm=FakeLLM(), llm_enabled=True).synthesize(plan, graph)
@@ -179,7 +186,7 @@ def test_answer_synthesizer_natural_language_answer_errors_when_llm_disabled() -
         goal="Answer from evidence.",
         output_contract="natural_language_answer",
     )
-    graph = build_evidence_graph(plan, [])
+    graph = build_evidence_graph(plan, [], _registry())
 
     answer = asyncio.run(AnswerSynthesizer(llm_enabled=False).synthesize(plan, graph))
 
@@ -206,6 +213,12 @@ def _counter_pick_plan() -> ExecutionPlan:
 
 def _synthesize(plan: ExecutionPlan, graph):
     return asyncio.run(AnswerSynthesizer(llm_enabled=False).synthesize(plan, graph))
+
+
+def _registry():
+    return build_default_tool_registry(
+        Settings(stratz_graphql_url="https://api.stratz.test/graphql", stratz_token="token")
+    )
 
 
 class FakeLLM:

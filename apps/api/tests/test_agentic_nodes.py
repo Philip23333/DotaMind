@@ -140,7 +140,7 @@ def test_evidence_node_builds_graph_from_tool_results() -> None:
     state = AgentRunState(query="debug", game="dota2", plan=_debug_plan())
     state = asyncio.run(tool_executor_node(state, ToolExecutor(_registry())))
 
-    evidence_node(state)
+    evidence_node(state, _registry())
 
     assert state.evidence_graph
     assert state.evidence_graph.intent == "debug"

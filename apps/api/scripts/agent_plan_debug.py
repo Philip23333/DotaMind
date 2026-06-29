@@ -74,9 +74,9 @@ async def run_plan(
     state = validate_plan_node(state)
     if state.status != "error":
         state = await tool_executor_node(state, executor)
-    state = evidence_node(state)
+    state = evidence_node(state, executor.registry)
     if state.status != "error":
-        state = answer_node(state, AnswerSynthesizer())
+        state = await answer_node(state, AnswerSynthesizer())
     if state.status != "error":
         state = critic_node(state, AgenticCritic())
     return response_node(state)

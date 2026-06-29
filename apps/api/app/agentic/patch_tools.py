@@ -3,7 +3,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from app.agentic.models import ToolSource
+from app.agentic.evidence import EvidenceItem
+from app.agentic.models import ToolResult, ToolSource
 from app.agentic.registry import ToolDefinition, ToolRegistry
 from app.integrations.patch_notes import get_item_changes, load_patch
 
@@ -35,6 +36,8 @@ def register_patch_tools(registry: ToolRegistry) -> None:
             input_model=PatchRecordsInput,
             handler=_get_records,
             source=source,
+            evidence_extractor=patch_records_evidence,
+            evidence_kinds=("patch_records", "patch_buff_count", "patch_nerf_count"),
             metadata={"game": "dota2", "domain": "patch"},
         )
     )
@@ -48,6 +51,8 @@ def register_patch_tools(registry: ToolRegistry) -> None:
             input_model=PatchHeroChangesInput,
             handler=_hero_changes,
             source=source,
+            evidence_extractor=patch_hero_changes_evidence,
+            evidence_kinds=("hero_patch_changes",),
             metadata={"game": "dota2", "domain": "patch"},
         )
     )
@@ -61,9 +66,95 @@ def register_patch_tools(registry: ToolRegistry) -> None:
             input_model=PatchItemChangesInput,
             handler=_item_changes,
             source=source,
+            evidence_extractor=patch_item_changes_evidence,
+            evidence_kinds=("item_patch_changes",),
             metadata={"game": "dota2", "domain": "patch"},
         )
     )
+
+
+def patch_records_evidence(result: ToolResult) -> list[EvidenceItem]:
+    data = result.data if isinstance(result.data, dict) else {}
+    return [
+        EvidenceItem(
+            id=f"{result.tool_call_id}:patch_records:{data.get('patch')}",
+            kind="patch_records",
+            subject=str(data.get("patch") or "patch"),
+            value={
+                "patch": data.get("patch"),
+                "released_at": data.get("released_at"),
+                "change_count": data.get("change_count"),
+                "buff_count": data.get("buff_count"),
+                "nerf_count": data.get("nerf_count"),
+            },
+            source=result.source,
+            tool_call_id=result.tool_call_id,
+            tool=result.tool,
+        ),
+        EvidenceItem(
+            id=f"{result.tool_call_id}:patch_buff_count:{data.get('patch')}",
+            kind="patch_buff_count",
+            subject=str(data.get("patch") or "patch"),
+            value={"buff_count": data.get("buff_count")},
+            source=result.source,
+            tool_call_id=result.tool_call_id,
+            tool=result.tool,
+        ),
+        EvidenceItem(
+            id=f"{result.tool_call_id}:patch_nerf_count:{data.get('patch')}",
+            kind="patch_nerf_count",
+            subject=str(data.get("patch") or "patch"),
+            value={"nerf_count": data.get("nerf_count")},
+            source=result.source,
+            tool_call_id=result.tool_call_id,
+            tool=result.tool,
+        ),
+    ]
+
+
+def patch_hero_changes_evidence(result: ToolResult) -> list[EvidenceItem]:
+    data = result.data if isinstance(result.data, dict) else {}
+    return [
+        EvidenceItem(
+            id=f"{result.tool_call_id}:hero_patch_changes:{data.get('patch')}",
+            kind="hero_patch_changes",
+            subject=str(data.get("hero") or "all heroes"),
+            value={
+                "patch": data.get("patch"),
+                "hero": data.get("hero"),
+                "hero_count": data.get("hero_count"),
+                "change_count": data.get("change_count"),
+                "buff_count": data.get("buff_count"),
+                "nerf_count": data.get("nerf_count"),
+                "changes": data.get("changes", []),
+            },
+            source=result.source,
+            tool_call_id=result.tool_call_id,
+            tool=result.tool,
+        )
+    ]
+
+
+def patch_item_changes_evidence(result: ToolResult) -> list[EvidenceItem]:
+    data = result.data if isinstance(result.data, dict) else {}
+    return [
+        EvidenceItem(
+            id=f"{result.tool_call_id}:item_patch_changes:{data.get('patch')}",
+            kind="item_patch_changes",
+            subject="items",
+            value={
+                "patch": data.get("patch"),
+                "change_count": data.get("change_count"),
+                "buff_count": data.get("buff_count"),
+                "nerf_count": data.get("nerf_count"),
+                "target_type_counts": data.get("target_type_counts", {}),
+                "changes": data.get("changes", []),
+            },
+            source=result.source,
+            tool_call_id=result.tool_call_id,
+            tool=result.tool,
+        )
+    ]
 
 
 def _get_records(args: PatchRecordsInput) -> dict[str, Any]:

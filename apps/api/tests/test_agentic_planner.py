@@ -260,7 +260,7 @@ def test_agentic_planner_rejects_role_meta_without_hero_stats() -> None:
     result = asyncio.run(planner.plan("what mid heroes are strong?"))
 
     assert result.status == "error"
-    assert any("must require hero_stats" in item for item in result.errors)
+    assert any("missing required evidence: hero_stats" in item for item in result.errors)
 
 
 def test_agentic_planner_accepts_patch_impact_plan() -> None:

@@ -2,11 +2,13 @@ from app.agentic.answer import AnswerSynthesisResult
 from app.agentic.critic import AgenticCritic
 from app.agentic.evidence import build_evidence_graph
 from app.agentic.models import ExecutionPlan, ToolResult, ToolSource
+from app.agentic.stratz_tools import build_default_tool_registry
+from app.core.config import Settings
 
 
 def test_agentic_critic_fails_missing_evidence() -> None:
     plan = _plan()
-    graph = build_evidence_graph(plan, [])
+    graph = build_evidence_graph(plan, [], _registry())
     answer = _answer(status="insufficient_evidence", confidence=0.3)
 
     review = AgenticCritic().review(plan, graph, answer)
@@ -29,6 +31,7 @@ def test_agentic_critic_fails_mock_when_not_allowed() -> None:
                 error="boom",
             )
         ],
+        _registry(),
     )
     answer = _answer(status="insufficient_evidence", confidence=0.3)
 
@@ -55,6 +58,7 @@ def test_agentic_critic_fails_tool_failure() -> None:
                 error="upstream failed",
             )
         ],
+        _registry(),
     )
 
     review = AgenticCritic().review(plan, graph, _answer())
@@ -69,7 +73,7 @@ def test_agentic_critic_warns_low_answer_confidence() -> None:
         goal="Fetch evidence.",
         output_contract="draft_advice",
     )
-    graph = build_evidence_graph(plan, [])
+    graph = build_evidence_graph(plan, [], _registry())
 
     review = AgenticCritic().review(plan, graph, _answer(confidence=0.4))
 
@@ -83,7 +87,7 @@ def test_agentic_critic_passes_valid_answer() -> None:
         goal="Fetch evidence.",
         output_contract="draft_advice",
     )
-    graph = build_evidence_graph(plan, [])
+    graph = build_evidence_graph(plan, [], _registry())
 
     review = AgenticCritic().review(plan, graph, _answer(confidence=0.8))
 
@@ -110,4 +114,10 @@ def _answer(
         status=status,
         summary="summary",
         confidence=confidence,
+    )
+
+
+def _registry():
+    return build_default_tool_registry(
+        Settings(stratz_graphql_url="https://api.stratz.test/graphql", stratz_token="token")
     )

@@ -4,9 +4,15 @@ from pydantic import BaseModel
 
 from app.agentic.graph import AgentGraphRunner
 from app.agentic.models import ExecutionPlan, ToolCall
+from app.agentic.opendota_tools import resolve_team_evidence, team_recent_matches_evidence
 from app.agentic.planner import AgenticPlannerResult
 from app.agentic.registry import ToolDefinition, ToolRegistry
 from app.agentic.state import AgentRunState
+from app.agentic.stratz_tools import (
+    hero_matchup_evidence,
+    lane_outcome_evidence,
+    resolve_hero_evidence,
+)
 
 
 class HeroInput(BaseModel):
@@ -192,6 +198,8 @@ def _registry() -> ToolRegistry:
                     "aliases": [],
                 },
             },
+            evidence_extractor=resolve_hero_evidence,
+            evidence_kinds=("hero_identity",),
         )
     )
     registry.register(
@@ -211,6 +219,8 @@ def _registry() -> ToolRegistry:
                 ],
                 "disadvantage": [],
             },
+            evidence_extractor=hero_matchup_evidence,
+            evidence_kinds=("matchup_win_rate", "sample_size"),
         )
     )
     registry.register(
@@ -231,6 +241,8 @@ def _registry() -> ToolRegistry:
                     }
                 ],
             },
+            evidence_extractor=lane_outcome_evidence,
+            evidence_kinds=("lane_outcome", "sample_size"),
         )
     )
     registry.register(
@@ -243,6 +255,8 @@ def _registry() -> ToolRegistry:
                 "query": args.query,
                 "team": {"team_id": 1, "name": "BetBoom Team", "tag": "BB"},
             },
+            evidence_extractor=resolve_team_evidence,
+            evidence_kinds=("team_identity",),
         )
     )
     registry.register(
@@ -257,6 +271,8 @@ def _registry() -> ToolRegistry:
                 "losses": 2,
                 "recent_record": "3-2 in last 5 matches",
             },
+            evidence_extractor=team_recent_matches_evidence,
+            evidence_kinds=("recent_matches", "sample_size"),
         )
     )
     return registry

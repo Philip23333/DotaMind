@@ -3,7 +3,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from app.agentic.models import ToolSource
+from app.agentic.evidence import EvidenceItem
+from app.agentic.models import ToolResult, ToolSource
 from app.agentic.registry import ToolDefinition, ToolRegistry
 from app.core.config import Settings, get_policy
 from app.integrations.opendota.heroes import OpenDotaHeroes
@@ -50,6 +51,8 @@ def register_opendota_tools(registry: ToolRegistry, settings: Settings) -> None:
             input_model=OpenDotaResolveTeamInput,
             handler=_resolve_team_handler(settings),
             source=source,
+            evidence_extractor=resolve_team_evidence,
+            evidence_kinds=("team_identity",),
             metadata={"game": "dota2", "domain": "team_identity"},
         )
     )
@@ -60,6 +63,8 @@ def register_opendota_tools(registry: ToolRegistry, settings: Settings) -> None:
             input_model=OpenDotaTeamRecentMatchesInput,
             handler=_team_recent_matches_handler(settings),
             source=source,
+            evidence_extractor=team_recent_matches_evidence,
+            evidence_kinds=("recent_matches", "sample_size"),
             metadata={"game": "dota2", "domain": "team_matches"},
         )
     )
@@ -70,6 +75,8 @@ def register_opendota_tools(registry: ToolRegistry, settings: Settings) -> None:
             input_model=OpenDotaTeamPlayersInput,
             handler=_team_players_handler(settings),
             source=source,
+            evidence_extractor=team_players_evidence,
+            evidence_kinds=("current_players",),
             metadata={"game": "dota2", "domain": "team_players"},
         )
     )
@@ -80,6 +87,8 @@ def register_opendota_tools(registry: ToolRegistry, settings: Settings) -> None:
             input_model=OpenDotaTeamHeroesInput,
             handler=_team_heroes_handler(settings),
             source=source,
+            evidence_extractor=team_heroes_evidence,
+            evidence_kinds=("team_hero_usage", "match_detail_sample", "sample_size"),
             metadata={"game": "dota2", "domain": "team_heroes"},
         )
     )
@@ -90,9 +99,163 @@ def register_opendota_tools(registry: ToolRegistry, settings: Settings) -> None:
             input_model=OpenDotaHeroStatsByRoleInput,
             handler=_hero_stats_by_role_handler(settings),
             source=source,
+            evidence_extractor=hero_stats_by_role_evidence,
+            evidence_kinds=("hero_stats", "role_fit", "sample_size"),
             metadata={"game": "dota2", "domain": "hero_meta"},
         )
     )
+
+
+def resolve_team_evidence(result: ToolResult) -> list[EvidenceItem]:
+    data = result.data if isinstance(result.data, dict) else {}
+    if data.get("status") != "resolved" or not isinstance(data.get("team"), dict):
+        return []
+    team = data["team"]
+    return [
+        EvidenceItem(
+            id=f"{result.tool_call_id}:team_identity:{team.get('team_id')}",
+            kind="team_identity",
+            subject=str(team.get("name") or team.get("team_id")),
+            value={
+                "team_id": team.get("team_id"),
+                "name": team.get("name"),
+                "tag": team.get("tag"),
+                "rating": team.get("rating"),
+                "query": data.get("query"),
+            },
+            source=result.source,
+            tool_call_id=result.tool_call_id,
+            tool=result.tool,
+        )
+    ]
+
+
+def team_recent_matches_evidence(result: ToolResult) -> list[EvidenceItem]:
+    data = result.data if isinstance(result.data, dict) else {}
+    return [
+        EvidenceItem(
+            id=f"{result.tool_call_id}:recent_matches:{data.get('team_id')}",
+            kind="recent_matches",
+            subject=f"team_id={data.get('team_id')}",
+            value={
+                "team_id": data.get("team_id"),
+                "days": data.get("days"),
+                "matches_in_window": data.get("matches_in_window"),
+                "wins": data.get("wins"),
+                "losses": data.get("losses"),
+                "recent_record": data.get("recent_record"),
+                "latest_match_time": data.get("latest_match_time"),
+                "latest_match_at": data.get("latest_match_at"),
+            },
+            source=result.source,
+            tool_call_id=result.tool_call_id,
+            tool=result.tool,
+        ),
+        EvidenceItem(
+            id=f"{result.tool_call_id}:sample_size:matches:{data.get('team_id')}",
+            kind="sample_size",
+            subject=f"team match window for {data.get('team_id')}",
+            value={"sample_size": data.get("matches_in_window")},
+            source=result.source,
+            tool_call_id=result.tool_call_id,
+            tool=result.tool,
+        ),
+    ]
+
+
+def team_players_evidence(result: ToolResult) -> list[EvidenceItem]:
+    data = result.data if isinstance(result.data, dict) else {}
+    return [
+        EvidenceItem(
+            id=f"{result.tool_call_id}:current_players:{data.get('team_id')}",
+            kind="current_players",
+            subject=f"team_id={data.get('team_id')}",
+            value={
+                "team_id": data.get("team_id"),
+                "current_only": data.get("current_only"),
+                "player_count": data.get("player_count"),
+                "players": data.get("players", []),
+            },
+            source=result.source,
+            tool_call_id=result.tool_call_id,
+            tool=result.tool,
+        )
+    ]
+
+
+def team_heroes_evidence(result: ToolResult) -> list[EvidenceItem]:
+    data = result.data if isinstance(result.data, dict) else {}
+    return [
+        EvidenceItem(
+            id=f"{result.tool_call_id}:team_hero_usage",
+            kind="team_hero_usage",
+            subject="team hero usage",
+            value={"heroes": data.get("heroes", [])},
+            source=result.source,
+            tool_call_id=result.tool_call_id,
+            tool=result.tool,
+        ),
+        EvidenceItem(
+            id=f"{result.tool_call_id}:match_detail_sample",
+            kind="match_detail_sample",
+            subject="team match detail sample",
+            value={"match_details_analyzed": data.get("match_details_analyzed")},
+            source=result.source,
+            tool_call_id=result.tool_call_id,
+            tool=result.tool,
+        ),
+        EvidenceItem(
+            id=f"{result.tool_call_id}:sample_size:match_details",
+            kind="sample_size",
+            subject="team match detail sample size",
+            value={"sample_size": data.get("match_details_analyzed")},
+            source=result.source,
+            tool_call_id=result.tool_call_id,
+            tool=result.tool,
+        ),
+    ]
+
+
+def hero_stats_by_role_evidence(result: ToolResult) -> list[EvidenceItem]:
+    data = result.data if isinstance(result.data, dict) else {}
+    heroes = data.get("heroes", [])
+    hero_count = data.get("hero_count")
+    if hero_count is None and isinstance(heroes, list):
+        hero_count = len(heroes)
+    return [
+        EvidenceItem(
+            id=f"{result.tool_call_id}:hero_stats:{data.get('role')}",
+            kind="hero_stats",
+            subject=f"role={data.get('role')}",
+            value={
+                "role": data.get("role"),
+                "min_pub_pick": data.get("min_pub_pick"),
+                "hero_count": hero_count,
+                "heroes": heroes if isinstance(heroes, list) else [],
+            },
+            source=result.source,
+            tool_call_id=result.tool_call_id,
+            tool=result.tool,
+        ),
+        EvidenceItem(
+            id=f"{result.tool_call_id}:role_fit:{data.get('role')}",
+            kind="role_fit",
+            subject=f"role={data.get('role')}",
+            value={"role": data.get("role"), "hero_count": hero_count},
+            source=result.source,
+            tool_call_id=result.tool_call_id,
+            tool=result.tool,
+        ),
+        EvidenceItem(
+            id=f"{result.tool_call_id}:sample_size:hero_stats:{data.get('role')}",
+            kind="sample_size",
+            subject=f"role={data.get('role')} hero stats rows",
+            value={"sample_size": hero_count},
+            source=result.source,
+            tool_call_id=result.tool_call_id,
+            tool=result.tool,
+        ),
+    ]
 
 
 def _resolve_team_handler(settings: Settings):

@@ -3,9 +3,13 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from app.agentic.contracts import (
+    NATURAL_LANGUAGE_CONTRACT,
+    STRUCTURED_OUTPUT_CONTRACTS,
+    get_contract,
+)
 from app.agentic.evidence import EvidenceGraph, EvidenceItem
 from app.agentic.models import ExecutionPlan
-from app.agentic.planner import STRUCTURED_OUTPUT_CONTRACTS
 from app.core.config import get_policy, get_settings
 from app.llm.provider import LLMProvider, get_llm_provider
 
@@ -82,10 +86,11 @@ class AnswerSynthesizer:
             plan.output_contract,
             structured,
         )
+        contract = get_contract(plan.output_contract)
         if structured:
             logger.info("AnswerSynthesizer using StructuredReportSynthesizer")
             return self.structured.synthesize(plan, graph)
-        if plan.output_contract == "natural_language_answer":
+        if contract is not None and contract.name == NATURAL_LANGUAGE_CONTRACT:
             logger.info("AnswerSynthesizer using NaturalLanguageAnswerSynthesizer")
             return await self.natural.synthesize(plan, graph)
         return unsupported_contract(plan, graph)
