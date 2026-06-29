@@ -169,7 +169,172 @@ def test_agentic_planner_rejects_counter_pick_tool_results_contract() -> None:
     result = asyncio.run(planner.plan("enemy picked Lina, what should I pick?"))
 
     assert result.status == "error"
-    assert "output_contract=draft_advice" in result.errors[0]
+    assert "unknown output_contract: tool_results" in result.errors[0]
+
+
+def test_agentic_planner_rejects_meta_list_contract() -> None:
+    payload = _valid_plan_payload()
+    payload["plan"]["output_contract"] = "meta_list"
+    planner = AgenticPlanner(_registry(), llm=FakeLLM(payload), llm_enabled=True)
+
+    result = asyncio.run(planner.plan("这版本什么三号位厉害？"))
+
+    assert result.status == "error"
+    assert "unknown output_contract: meta_list" in result.errors[0]
+
+
+def test_agentic_planner_accepts_role_meta_report_evidence_contract() -> None:
+    payload = {
+        "status": "planned",
+        "reason": "role meta can use hero stats",
+        "plan": {
+            "intent": "role_meta",
+            "goal": "Find strong mid heroes.",
+            "output_contract": "role_meta_report",
+            "tool_calls": [
+                {
+                    "id": "mid_stats",
+                    "tool": "opendota.hero_stats_by_role",
+                    "args": {"role": "mid"},
+                }
+            ],
+            "required_evidence": ["hero_stats", "role_fit", "sample_size"],
+            "constraints": {"max_tool_calls": 6, "allow_mock": False},
+        },
+    }
+    planner = AgenticPlanner(_registry(), llm=FakeLLM(payload), llm_enabled=True)
+
+    result = asyncio.run(planner.plan("what mid heroes are strong?"))
+
+    assert result.status == "planned"
+
+
+def test_agentic_planner_rejects_unknown_required_evidence() -> None:
+    payload = {
+        "status": "planned",
+        "reason": "bad role meta evidence",
+        "plan": {
+            "intent": "role_meta",
+            "goal": "Find strong mid heroes.",
+            "output_contract": "role_meta_report",
+            "tool_calls": [
+                {
+                    "id": "mid_stats",
+                    "tool": "opendota.hero_stats_by_role",
+                    "args": {"role": "mid"},
+                }
+            ],
+            "required_evidence": ["hero_stats", "hero_name"],
+            "constraints": {"max_tool_calls": 6, "allow_mock": False},
+        },
+    }
+    planner = AgenticPlanner(_registry(), llm=FakeLLM(payload), llm_enabled=True)
+
+    result = asyncio.run(planner.plan("what mid heroes are strong?"))
+
+    assert result.status == "error"
+    assert any("unknown required_evidence: hero_name" in item for item in result.errors)
+
+
+def test_agentic_planner_rejects_role_meta_without_hero_stats() -> None:
+    payload = {
+        "status": "planned",
+        "reason": "bad role meta evidence",
+        "plan": {
+            "intent": "role_meta",
+            "goal": "Find strong mid heroes.",
+            "output_contract": "role_meta_report",
+            "tool_calls": [
+                {
+                    "id": "mid_stats",
+                    "tool": "opendota.hero_stats_by_role",
+                    "args": {"role": "mid"},
+                }
+            ],
+            "required_evidence": ["role_fit"],
+            "constraints": {"max_tool_calls": 6, "allow_mock": False},
+        },
+    }
+    planner = AgenticPlanner(_registry(), llm=FakeLLM(payload), llm_enabled=True)
+
+    result = asyncio.run(planner.plan("what mid heroes are strong?"))
+
+    assert result.status == "error"
+    assert any("must require hero_stats" in item for item in result.errors)
+
+
+def test_agentic_planner_accepts_patch_impact_plan() -> None:
+    payload = {
+        "status": "planned",
+        "reason": "patch impact can be answered with local patch tools",
+        "plan": {
+            "intent": "patch_impact",
+            "goal": "Summarize latest patch.",
+            "output_contract": "patch_impact_report",
+            "tool_calls": [
+                {
+                    "id": "patch",
+                    "tool": "patch.get_records",
+                    "args": {"patch": "latest"},
+                }
+            ],
+            "required_evidence": ["patch_records"],
+            "constraints": {"max_tool_calls": 6, "allow_mock": False},
+        },
+    }
+    planner = AgenticPlanner(_registry(), llm=FakeLLM(payload), llm_enabled=True)
+
+    result = asyncio.run(planner.plan("latest patch impact?"))
+
+    assert result.status == "planned"
+
+
+def test_agentic_planner_rejects_patch_impact_without_records_tool() -> None:
+    payload = {
+        "status": "planned",
+        "reason": "bad patch plan",
+        "plan": {
+            "intent": "patch_impact",
+            "goal": "Summarize latest patch.",
+            "output_contract": "patch_impact_report",
+            "tool_calls": [],
+            "required_evidence": ["patch_records"],
+            "constraints": {"max_tool_calls": 6, "allow_mock": False},
+        },
+    }
+    planner = AgenticPlanner(_registry(), llm=FakeLLM(payload), llm_enabled=True)
+
+    result = asyncio.run(planner.plan("latest patch impact?"))
+
+    assert result.status == "error"
+    assert "must use patch.get_records" in result.errors[0]
+
+
+def test_agentic_planner_rejects_patch_impact_without_patch_records_evidence() -> None:
+    payload = {
+        "status": "planned",
+        "reason": "bad patch plan",
+        "plan": {
+            "intent": "patch_impact",
+            "goal": "Summarize latest patch.",
+            "output_contract": "patch_impact_report",
+            "tool_calls": [
+                {
+                    "id": "patch",
+                    "tool": "patch.get_records",
+                    "args": {"patch": "latest"},
+                }
+            ],
+            "required_evidence": [],
+            "constraints": {"max_tool_calls": 6, "allow_mock": False},
+        },
+    }
+    planner = AgenticPlanner(_registry(), llm=FakeLLM(payload), llm_enabled=True)
+
+    result = asyncio.run(planner.plan("latest patch impact?"))
+
+    assert result.status == "error"
+    assert "patch_records" in result.errors[0]
 
 
 def test_agentic_planner_returns_error_when_disabled() -> None:

@@ -5,7 +5,7 @@ from app.agentic.answer import AnswerSynthesizer
 from app.agentic.critic import AgenticCritic
 from app.agentic.evidence import build_evidence_graph
 from app.agentic.models import ToolCall, ToolResult
-from app.agentic.planner import AgenticPlanner
+from app.agentic.planner import STRUCTURED_OUTPUT_CONTRACTS, AgenticPlanner
 from app.agentic.registry import ToolExecutor
 from app.agentic.state import AgentRunState
 
@@ -97,6 +97,7 @@ async def tool_executor_node(
 
     results_by_id: dict[str, ToolResult] = {}
     for call in state.plan.tool_calls:
+        logger.info("Node tools called %s id=%s", call.tool, call.id)
         logger.info("node=tools call_start id=%s tool=%s", call.id, call.tool)
         resolved_args, resolve_errors = _resolve_args(call.args, results_by_id)
         if resolve_errors:
@@ -158,12 +159,21 @@ def evidence_node(state: AgentRunState) -> AgentRunState:
     return state
 
 
-def answer_node(
+async def answer_node(
     state: AgentRunState,
     synthesizer: AnswerSynthesizer,
 ) -> AgentRunState:
     state.add_trace("answer", "synthesize structured answer", "planned")
-    logger.info("node=answer start has_graph=%s", state.evidence_graph is not None)
+    structured_contract = (
+        state.plan is not None
+        and state.plan.output_contract in STRUCTURED_OUTPUT_CONTRACTS
+    )
+    logger.info(
+        "node=answer start has_graph=%s structured_contract=%s output_contract=%s",
+        state.evidence_graph is not None,
+        structured_contract,
+        state.plan.output_contract if state.plan else None,
+    )
     if state.plan is None or state.evidence_graph is None:
         state.status = "error"
         state.errors.append("missing plan or evidence graph for answer synthesis")
@@ -171,7 +181,7 @@ def answer_node(
         logger.info("node=answer end status=error errors=%s", len(state.errors))
         return state
 
-    state.answer = synthesizer.synthesize(state.plan, state.evidence_graph)
+    state.answer = await synthesizer.synthesize(state.plan, state.evidence_graph)
     state.add_trace("answer", f"answer status: {state.answer.status}", "completed")
     logger.info(
         "node=answer end status=%s recommendations=%s confidence=%.2f",
@@ -245,8 +255,21 @@ def _response_type(state: AgentRunState) -> str:
         return "execution_error"
     if state.answer is None:
         return "raw_tool_results"
+    if state.answer.status == "insufficient_evidence":
+        return "insufficient_evidence"
+    if state.answer.status == "error":
+        return "answer_error"
     if state.answer.status == "ok" and state.answer.answer_type == "draft_advice":
         return "draft_advice"
+    if state.answer.status == "ok" and state.answer.answer_type in {
+        "patch_impact_report",
+        "role_meta_report",
+        "team_recent_report",
+        "hero_matchup_report",
+    }:
+        return state.answer.answer_type
+    if state.answer.status == "ok" and state.answer.answer_type == "natural_language_answer":
+        return "natural_language_answer"
     if state.answer.status == "unsupported_output_contract":
         return "unsupported_answer"
     return "raw_tool_results"

@@ -11,6 +11,33 @@ from app.llm.provider import LLMProvider, get_llm_provider
 logger = logging.getLogger(__name__)
 
 PlannerStatus = Literal["planned", "insufficient_tools", "error"]
+STRUCTURED_OUTPUT_CONTRACTS = {
+    "patch_impact_report",
+    "role_meta_report",
+    "team_recent_report",
+    "hero_matchup_report",
+    "draft_advice",
+}
+ALLOWED_OUTPUT_CONTRACTS = STRUCTURED_OUTPUT_CONTRACTS | {"natural_language_answer"}
+KNOWN_EVIDENCE_KINDS = {
+    "hero_identity",
+    "matchup_win_rate",
+    "lane_outcome",
+    "team_identity",
+    "recent_matches",
+    "current_players",
+    "team_hero_usage",
+    "match_detail_sample",
+    "hero_stats",
+    "role_fit",
+    "sample_size",
+    "patch_records",
+    "hero_patch_changes",
+    "item_patch_changes",
+    "patch_buff_count",
+    "patch_nerf_count",
+}
+ROLE_META_EVIDENCE_KINDS = {"hero_stats", "role_fit", "sample_size"}
 
 _PLANNER_SYSTEM_PROMPT = """You are the MetaMind v2.5 Planner.
 
@@ -25,14 +52,24 @@ Supported in this development version:
 - lane outcome evidence queries
 - team evidence collection queries
 - role-based hero meta evidence queries
+- patch impact evidence queries
+
+Allowed output_contract values:
+- patch_impact_report
+- role_meta_report
+- team_recent_report
+- hero_matchup_report
+- draft_advice
+- natural_language_answer
+
+Do not output meta_list. meta_list is only the internal whitelist of structured
+contracts. If the user asks for an answer outside that whitelist but the
+registered tools can provide relevant evidence, use output_contract
+"natural_language_answer".
 
 Unsupported for now:
-- final team report synthesis
-- final meta recommendation synthesis
-- patch impact
 - claim verification
 - hero synergy / teammate combo advice
-- final natural-language recommendations beyond supported structured answer contracts
 
 If unsupported, return:
 {"status":"insufficient_tools","reason":"...","plan":null}
@@ -65,6 +102,14 @@ hero ids.
 For OpenDota team evidence, resolve the team first, then use
 "$resolve_team.data.team.team_id" for team tools. If ambiguity cannot be
 resolved by tools, expose the candidates or return insufficient_tools.
+
+For patch impact evidence, use patch.get_records and include patch_records in
+required_evidence. Add patch.hero_changes and patch.item_changes when the user
+asks about hero or item changes.
+
+For role_meta_report, required_evidence may only use hero_stats, role_fit, and
+sample_size. Do not require field names like hero_id, hero_name, win_rate, or
+pick_rate as evidence kinds.
 """
 
 
@@ -142,6 +187,12 @@ class AgenticPlanner:
                 errors=["planned status requires plan"],
             )
 
+        logger.info(
+            "Agentic planner produced intent=%s output_contract=%s tools=%s",
+            envelope.plan.intent,
+            envelope.plan.output_contract,
+            len(envelope.plan.tool_calls),
+        )
         validation_errors = self.validate_plan(envelope.plan)
         if validation_errors:
             return AgenticPlannerResult(
@@ -159,6 +210,15 @@ class AgenticPlanner:
 
     def validate_plan(self, plan: ExecutionPlan) -> list[str]:
         errors = []
+        logger.info(
+            "Agentic planner validate intent=%s output_contract=%s in_meta_list=%s",
+            plan.intent,
+            plan.output_contract,
+            plan.output_contract in STRUCTURED_OUTPUT_CONTRACTS,
+        )
+        if plan.output_contract not in ALLOWED_OUTPUT_CONTRACTS:
+            errors.append(f"unknown output_contract: {plan.output_contract}")
+
         registered = {definition.name for definition in self.registry.list()}
         for call in plan.tool_calls:
             if call.tool not in registered:
@@ -173,6 +233,12 @@ class AgenticPlanner:
             )
 
         required = set(plan.required_evidence)
+        unknown_evidence = sorted(required - KNOWN_EVIDENCE_KINDS)
+        if unknown_evidence:
+            errors.append(
+                "unknown required_evidence: " + ", ".join(unknown_evidence)
+            )
+
         missing_required = {
             "hero_identity",
             "matchup_win_rate",
@@ -185,6 +251,26 @@ class AgenticPlanner:
             )
         if plan.intent == "counter_pick" and plan.output_contract != "draft_advice":
             errors.append("counter_pick plan must use output_contract=draft_advice")
+
+        if plan.output_contract == "patch_impact_report":
+            tools = {call.tool for call in plan.tool_calls}
+            if "patch.get_records" not in tools:
+                errors.append("patch_impact_report plan must use patch.get_records")
+            if "patch_records" not in required:
+                errors.append(
+                    "patch_impact_report plan must require patch_records evidence"
+                )
+
+        if plan.output_contract == "role_meta_report":
+            invalid_role_meta_evidence = sorted(required - ROLE_META_EVIDENCE_KINDS)
+            if invalid_role_meta_evidence:
+                errors.append(
+                    "role_meta_report required_evidence must use only "
+                    "hero_stats, role_fit, sample_size; got "
+                    + ", ".join(invalid_role_meta_evidence)
+                )
+            if "hero_stats" not in required:
+                errors.append("role_meta_report plan must require hero_stats evidence")
 
         for call in plan.tool_calls:
             if call.tool in {"stratz.hero_vs_hero_matchup", "stratz.lane_outcome"}:

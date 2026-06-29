@@ -80,6 +80,12 @@ def _evidence_from_tool_result(result: ToolResult) -> list[EvidenceItem]:
         return _team_heroes_evidence(result)
     if result.tool == "opendota.hero_stats_by_role":
         return _hero_stats_by_role_evidence(result)
+    if result.tool == "patch.get_records":
+        return _patch_records_evidence(result)
+    if result.tool == "patch.hero_changes":
+        return _patch_hero_changes_evidence(result)
+    if result.tool == "patch.item_changes":
+        return _patch_item_changes_evidence(result)
     return []
 
 
@@ -327,6 +333,10 @@ def _team_heroes_evidence(result: ToolResult) -> list[EvidenceItem]:
 
 def _hero_stats_by_role_evidence(result: ToolResult) -> list[EvidenceItem]:
     data = result.data if isinstance(result.data, dict) else {}
+    heroes = data.get("heroes", [])
+    hero_count = data.get("hero_count")
+    if hero_count is None and isinstance(heroes, list):
+        hero_count = len(heroes)
     return [
         EvidenceItem(
             id=f"{result.tool_call_id}:hero_stats:{data.get('role')}",
@@ -335,8 +345,8 @@ def _hero_stats_by_role_evidence(result: ToolResult) -> list[EvidenceItem]:
             value={
                 "role": data.get("role"),
                 "min_pub_pick": data.get("min_pub_pick"),
-                "hero_count": data.get("hero_count"),
-                "heroes": data.get("heroes", []),
+                "hero_count": hero_count,
+                "heroes": heroes if isinstance(heroes, list) else [],
             },
             source=result.source,
             tool_call_id=result.tool_call_id,
@@ -346,11 +356,104 @@ def _hero_stats_by_role_evidence(result: ToolResult) -> list[EvidenceItem]:
             id=f"{result.tool_call_id}:role_fit:{data.get('role')}",
             kind="role_fit",
             subject=f"role={data.get('role')}",
-            value={"role": data.get("role"), "hero_count": data.get("hero_count")},
+            value={"role": data.get("role"), "hero_count": hero_count},
             source=result.source,
             tool_call_id=result.tool_call_id,
             tool=result.tool,
         ),
+        EvidenceItem(
+            id=f"{result.tool_call_id}:sample_size:hero_stats:{data.get('role')}",
+            kind="sample_size",
+            subject=f"role={data.get('role')} hero stats rows",
+            value={"sample_size": hero_count},
+            source=result.source,
+            tool_call_id=result.tool_call_id,
+            tool=result.tool,
+        ),
+    ]
+
+
+def _patch_records_evidence(result: ToolResult) -> list[EvidenceItem]:
+    data = result.data if isinstance(result.data, dict) else {}
+    return [
+        EvidenceItem(
+            id=f"{result.tool_call_id}:patch_records:{data.get('patch')}",
+            kind="patch_records",
+            subject=str(data.get("patch") or "patch"),
+            value={
+                "patch": data.get("patch"),
+                "released_at": data.get("released_at"),
+                "change_count": data.get("change_count"),
+                "buff_count": data.get("buff_count"),
+                "nerf_count": data.get("nerf_count"),
+            },
+            source=result.source,
+            tool_call_id=result.tool_call_id,
+            tool=result.tool,
+        ),
+        EvidenceItem(
+            id=f"{result.tool_call_id}:patch_buff_count:{data.get('patch')}",
+            kind="patch_buff_count",
+            subject=str(data.get("patch") or "patch"),
+            value={"buff_count": data.get("buff_count")},
+            source=result.source,
+            tool_call_id=result.tool_call_id,
+            tool=result.tool,
+        ),
+        EvidenceItem(
+            id=f"{result.tool_call_id}:patch_nerf_count:{data.get('patch')}",
+            kind="patch_nerf_count",
+            subject=str(data.get("patch") or "patch"),
+            value={"nerf_count": data.get("nerf_count")},
+            source=result.source,
+            tool_call_id=result.tool_call_id,
+            tool=result.tool,
+        ),
+    ]
+
+
+def _patch_hero_changes_evidence(result: ToolResult) -> list[EvidenceItem]:
+    data = result.data if isinstance(result.data, dict) else {}
+    return [
+        EvidenceItem(
+            id=f"{result.tool_call_id}:hero_patch_changes:{data.get('patch')}",
+            kind="hero_patch_changes",
+            subject=str(data.get("hero") or "all heroes"),
+            value={
+                "patch": data.get("patch"),
+                "hero": data.get("hero"),
+                "hero_count": data.get("hero_count"),
+                "change_count": data.get("change_count"),
+                "buff_count": data.get("buff_count"),
+                "nerf_count": data.get("nerf_count"),
+                "changes": data.get("changes", []),
+            },
+            source=result.source,
+            tool_call_id=result.tool_call_id,
+            tool=result.tool,
+        )
+    ]
+
+
+def _patch_item_changes_evidence(result: ToolResult) -> list[EvidenceItem]:
+    data = result.data if isinstance(result.data, dict) else {}
+    return [
+        EvidenceItem(
+            id=f"{result.tool_call_id}:item_patch_changes:{data.get('patch')}",
+            kind="item_patch_changes",
+            subject="items",
+            value={
+                "patch": data.get("patch"),
+                "change_count": data.get("change_count"),
+                "buff_count": data.get("buff_count"),
+                "nerf_count": data.get("nerf_count"),
+                "target_type_counts": data.get("target_type_counts", {}),
+                "changes": data.get("changes", []),
+            },
+            source=result.source,
+            tool_call_id=result.tool_call_id,
+            tool=result.tool,
+        )
     ]
 
 

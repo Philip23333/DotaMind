@@ -113,4 +113,7 @@ def test_default_registry_includes_agentic_data_tools() -> None:
         "opendota.team_players",
         "opendota.team_heroes",
         "opendota.hero_stats_by_role",
+        "patch.get_records",
+        "patch.hero_changes",
+        "patch.item_changes",
     } <= names

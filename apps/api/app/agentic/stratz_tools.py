@@ -80,10 +80,12 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
 
 def build_default_tool_registry(settings: Settings) -> ToolRegistry:
     from app.agentic.opendota_tools import register_opendota_tools
+    from app.agentic.patch_tools import register_patch_tools
 
     registry = ToolRegistry()
     register_stratz_tools(registry, settings)
     register_opendota_tools(registry, settings)
+    register_patch_tools(registry)
     return registry
 
 

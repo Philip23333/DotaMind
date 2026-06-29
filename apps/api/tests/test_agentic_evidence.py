@@ -252,4 +252,9 @@ def test_evidence_graph_aggregates_opendota_hero_stats() -> None:
     graph = build_evidence_graph(plan, [result])
 
     assert graph.missing == []
-    assert [item.kind for item in graph.evidence] == ["hero_stats", "role_fit"]
+    assert [item.kind for item in graph.evidence] == [
+        "hero_stats",
+        "role_fit",
+        "sample_size",
+    ]
+    assert graph.data_quality.min_sample_size == 1

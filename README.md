@@ -1,8 +1,8 @@
 # MetaMind
 
-MetaMind is a composable esports intelligence agent that turns Dota2 patch notes, match data, and pro team statistics into verifiable, paid game meta reports for humans and other agents.
+MetaMind is a composable esports intelligence agent that turns Dota2 patch notes, match data, and pro team statistics into evidence-grounded answers and verifiable game meta reports.
 
-This repository is the MetaMind MVP implementation based on the canonical v2.1 pipeline. It supports mock-backed local development and optional OpenDota live retrieval while keeping API contracts, agent boundaries, and the CAP/A2A service shape stable.
+This repository is in active development. The legacy report pipeline still exists for `/api/v1/query` and report endpoints, while the new `/api/v1/plan` path is moving toward the v2.5/v3 agentic architecture: Planner -> Tools -> EvidenceGraph -> Answer -> Critic -> Response.
 
 ## What It Solves
 
@@ -39,6 +39,7 @@ python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8001 --log-level
 Or run `npm run dev:api` from the repository root. The startup script uses fixed port `8001` and fails if the port is already occupied.
 
 Open `http://localhost:8001/docs` for the FastAPI schema.
+Use `http://localhost:8001/debug/chat` for the legacy query console and `http://localhost:8001/debug/plan` for the agentic plan console.
 
 ### Frontend
 
@@ -49,8 +50,7 @@ npm run dev:web
 
 Open `http://localhost:3000`.
 
-The frontend falls back to local mock data if the API is not running.
-For internal query testing, prefer the FastAPI page at `http://localhost:8001/debug/chat`.
+The frontend is deprecated. For internal testing, prefer the FastAPI debug pages above.
 
 ### Optional Services
 
@@ -62,7 +62,9 @@ This starts PostgreSQL and Redis for later persistence, caching, and job orchest
 
 ## Pipeline Workflow
 
-The backend keeps one canonical execution path:
+The backend currently has two execution paths.
+
+Legacy report path:
 
 ```text
 HTTP / CAP / A2A caller
@@ -74,7 +76,33 @@ HTTP / CAP / A2A caller
   -> Formatter tool
 ```
 
-Only LLM decision boundaries are treated as Agents. Deterministic fetching and rendering remain tools. Structured endpoints and natural-language `/api/v1/query` both use this same pipeline.
+Agentic plan path:
+
+```text
+POST /api/v1/plan
+  -> AgenticPlanner
+  -> validate_plan_node
+  -> tool_executor_node
+  -> evidence_node
+  -> answer_node
+     -> StructuredReportSynthesizer
+     -> NaturalLanguageAnswerSynthesizer
+  -> critic_node
+  -> response_node
+```
+
+The agentic path does not fallback to the legacy pipeline. Missing tools, validation errors, and tool execution failures are surfaced directly.
+
+Allowed agentic `output_contract` values:
+
+- `patch_impact_report`
+- `role_meta_report`
+- `team_recent_report`
+- `hero_matchup_report`
+- `draft_advice`
+- `natural_language_answer`
+
+`meta_list` means the internal whitelist of structured output contracts. It is not a valid `output_contract`; free-form supported questions should use `natural_language_answer`.
 
 ## Configuration
 
@@ -103,6 +131,12 @@ curl -X POST http://localhost:8001/api/v1/verify-claim \
   -d "{\"game\":\"dota2\",\"claim\":\"Beastmaster is one of the strongest offlaners in current patch.\"}"
 ```
 
+```bash
+curl -X POST http://localhost:8001/api/v1/plan \
+  -H "Content-Type: application/json" \
+  -d "{\"game\":\"dota2\",\"query\":\"enemy picked Lina, what should I pick?\"}"
+```
+
 Callable services are listed at:
 
 ```bash
@@ -111,11 +145,11 @@ curl http://localhost:8001/api/v1/services
 
 ## Data Sources
 
-Planned production data sources:
+Current and planned data sources:
 
 - OpenDota API for public and pro match data.
 - STRATZ GraphQL API for higher-granularity hero, draft, and trend signals.
-- Official Dota2 Patch Notes for patch extraction.
+- Local curated Dota2 patch JSON under `apps/api/app/data/patches/`.
 - Liquipedia as an optional team and tournament context source.
 
 ## CAP / Commerce Shape
@@ -136,19 +170,22 @@ Implemented:
 - FastAPI app and OpenAPI schema.
 - Canonical `Orchestrator -> Retriever -> Analyzer -> Critic -> Formatter` pipeline.
 - Natural-language `/api/v1/query` and structured report endpoints.
+- Experimental `/api/v1/plan` agentic path with node-style execution.
+- Agentic tools for hero resolution, STRATZ matchup/lane outcome, OpenDota team/meta evidence, and local patch records.
+- EvidenceGraph, structured answer synthesis, natural-language answer synthesis, and agentic critic.
 - Optional LLM function calling for orchestration and optional hero insight generation.
 - OpenDota live retrieval for hero and team reports when enabled.
 - Deterministic team resolution with ambiguous-candidate selection through `/debug/chat`.
+- `/debug/plan` page for inspecting node flow, plan, tool results, evidence, answer, and review.
 - Unified business policy in `apps/api/app/config/policy.yaml`.
 - Unit tests and Ruff checks for backend services.
 
 Next:
 
-- Move long-lived OpenDota match-detail cache to Redis or another persistent cache.
-- Add partial-data degradation for upstream OpenDota failures.
-- Add path-level OpenDota success-rate, P50/P95, and cache-hit metrics.
-- Add STRATZ GraphQL draft presence integration.
-- Persist report runs and verification evidence.
+- Continue migrating legacy report capabilities into agentic tools and answer contracts.
+- Improve structured report quality for team, role meta, patch impact, and hero matchup outputs.
+- Add more draft evidence tools such as hero synergy, counters by role, and lane context.
+- Move the node-style implementation to LangGraph when graph boundaries stabilize.
 - Implement CAP order verification and settlement callbacks.
 
 ## License

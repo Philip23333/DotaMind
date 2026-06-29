@@ -37,7 +37,7 @@ class AgentGraphRunner:
         if state.status == "error":
             return response_node(state)
 
-        state = answer_node(state, self.answer_synthesizer)
+        state = await answer_node(state, self.answer_synthesizer)
         if state.status == "error":
             return response_node(state)
         state = critic_node(state, self.critic)

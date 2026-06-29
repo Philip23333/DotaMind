@@ -2,6 +2,7 @@ import asyncio
 
 from pydantic import BaseModel
 
+from app.agentic.answer import AnswerSynthesisResult
 from app.agentic.models import ExecutionConstraints, ExecutionPlan, ToolCall
 from app.agentic.nodes import (
     evidence_node,
@@ -154,6 +155,48 @@ def test_response_node_writes_response() -> None:
     assert state.response
     assert state.response["status"] == "ok"
     assert state.response["response_type"] == "raw_tool_results"
+
+
+def test_response_node_maps_insufficient_evidence() -> None:
+    state = AgentRunState(query="debug", game="dota2", status="ok", reason="done")
+    state.answer = AnswerSynthesisResult(
+        answer_type="role_meta_report",
+        status="insufficient_evidence",
+        summary="missing hero_stats",
+        confidence=0,
+    )
+
+    response_node(state)
+
+    assert state.response["response_type"] == "insufficient_evidence"
+
+
+def test_response_node_maps_answer_error() -> None:
+    state = AgentRunState(query="debug", game="dota2", status="ok", reason="done")
+    state.answer = AnswerSynthesisResult(
+        answer_type="natural_language_answer",
+        status="error",
+        summary="LLM failed",
+        confidence=0,
+    )
+
+    response_node(state)
+
+    assert state.response["response_type"] == "answer_error"
+
+
+def test_response_node_maps_structured_report() -> None:
+    state = AgentRunState(query="debug", game="dota2", status="ok", reason="done")
+    state.answer = AnswerSynthesisResult(
+        answer_type="role_meta_report",
+        status="ok",
+        summary="done",
+        confidence=1,
+    )
+
+    response_node(state)
+
+    assert state.response["response_type"] == "role_meta_report"
 
 
 def _debug_plan() -> ExecutionPlan:

@@ -1,6 +1,10 @@
+import asyncio
+from typing import Any
+
 from app.agentic.answer import AnswerSynthesizer
 from app.agentic.evidence import build_evidence_graph
 from app.agentic.models import ExecutionPlan, ToolCall, ToolResult, ToolSource
+from app.llm.provider import ToolCallResult
 
 
 def test_answer_synthesizer_builds_counter_pick_answer() -> None:
@@ -13,7 +17,7 @@ def test_answer_synthesizer_builds_counter_pick_answer() -> None:
         ],
     )
 
-    answer = AnswerSynthesizer().synthesize(plan, graph)
+    answer = _synthesize(plan, graph)
 
     assert answer.status == "ok"
     assert answer.answer_type == "draft_advice"
@@ -28,7 +32,7 @@ def test_answer_synthesizer_reports_missing_matchup_evidence() -> None:
     plan = _counter_pick_plan()
     graph = build_evidence_graph(plan, [_resolved_lina_result()])
 
-    answer = AnswerSynthesizer().synthesize(plan, graph)
+    answer = _synthesize(plan, graph)
 
     assert answer.status == "insufficient_evidence"
     assert answer.recommendations == []
@@ -45,7 +49,7 @@ def test_answer_synthesizer_reports_missing_sample_size() -> None:
         ],
     )
 
-    answer = AnswerSynthesizer().synthesize(plan, graph)
+    answer = _synthesize(plan, graph)
 
     assert answer.status == "insufficient_evidence"
     assert any("sample_size" in item.detail for item in answer.limitations)
@@ -59,7 +63,7 @@ def test_answer_synthesizer_reports_unsupported_output_contract() -> None:
     )
     graph = build_evidence_graph(plan, [])
 
-    answer = AnswerSynthesizer().synthesize(plan, graph)
+    answer = _synthesize(plan, graph)
 
     assert answer.status == "unsupported_output_contract"
     assert answer.confidence == 0
@@ -81,9 +85,106 @@ def test_answer_synthesizer_exposes_mock_data_note() -> None:
         ],
     )
 
-    answer = AnswerSynthesizer().synthesize(plan, graph)
+    answer = _synthesize(plan, graph)
 
     assert any(note.code == "mock_source_detected" for note in answer.data_notes)
+
+
+def test_answer_synthesizer_builds_patch_impact_report() -> None:
+    plan = ExecutionPlan(
+        intent="patch_impact",
+        goal="Summarize latest patch.",
+        output_contract="patch_impact_report",
+        required_evidence=["patch_records"],
+    )
+    graph = build_evidence_graph(
+        plan,
+        [
+            ToolResult(
+                tool_call_id="patch",
+                tool="patch.get_records",
+                status="ok",
+                latency_ms=1,
+                source=ToolSource(name="Local", kind="local_json"),
+                data={
+                    "patch": "7.41d",
+                    "released_at": "2026-06-05",
+                    "changes": [],
+                    "change_count": 3,
+                    "buff_count": 2,
+                    "nerf_count": 1,
+                },
+            )
+        ],
+    )
+
+    answer = _synthesize(plan, graph)
+
+    assert answer.status == "ok"
+    assert answer.answer_type == "patch_impact_report"
+    assert "7.41d" in answer.summary
+
+
+def test_answer_synthesizer_builds_role_meta_report() -> None:
+    plan = ExecutionPlan(
+        intent="role_meta",
+        goal="Find strong offlane heroes.",
+        output_contract="role_meta_report",
+        required_evidence=["hero_stats"],
+    )
+    graph = build_evidence_graph(
+        plan,
+        [
+            ToolResult(
+                tool_call_id="meta",
+                tool="opendota.hero_stats_by_role",
+                status="ok",
+                latency_ms=1,
+                source=ToolSource(name="OpenDota", kind="public_api"),
+                data={
+                    "role": "offlane",
+                    "hero_count": 1,
+                    "heroes": [{"localized_name": "Tidehunter", "win_rate": 0.55}],
+                },
+            )
+        ],
+    )
+
+    answer = _synthesize(plan, graph)
+
+    assert answer.status == "ok"
+    assert answer.recommendations[0].subject == "Tidehunter"
+    assert graph.data_quality.min_sample_size == 1
+
+
+def test_answer_synthesizer_natural_language_answer_uses_llm() -> None:
+    plan = ExecutionPlan(
+        intent="freeform",
+        goal="Answer from evidence.",
+        output_contract="natural_language_answer",
+    )
+    graph = build_evidence_graph(plan, [])
+
+    answer = asyncio.run(
+        AnswerSynthesizer(llm=FakeLLM(), llm_enabled=True).synthesize(plan, graph)
+    )
+
+    assert answer.status == "ok"
+    assert answer.summary == "Grounded answer."
+
+
+def test_answer_synthesizer_natural_language_answer_errors_when_llm_disabled() -> None:
+    plan = ExecutionPlan(
+        intent="freeform",
+        goal="Answer from evidence.",
+        output_contract="natural_language_answer",
+    )
+    graph = build_evidence_graph(plan, [])
+
+    answer = asyncio.run(AnswerSynthesizer(llm_enabled=False).synthesize(plan, graph))
+
+    assert answer.status == "error"
+    assert answer.confidence == 0
 
 
 def _counter_pick_plan() -> ExecutionPlan:
@@ -101,6 +202,43 @@ def _counter_pick_plan() -> ExecutionPlan:
         ],
         required_evidence=["hero_identity", "matchup_win_rate", "sample_size"],
     )
+
+
+def _synthesize(plan: ExecutionPlan, graph):
+    return asyncio.run(AnswerSynthesizer(llm_enabled=False).synthesize(plan, graph))
+
+
+class FakeLLM:
+    async def complete(
+        self,
+        messages: list[dict[str, str]],
+        temperature: float = 0.7,
+        max_tokens: int = 1000,
+    ) -> str:
+        return "Grounded answer."
+
+    async def complete_json(
+        self,
+        messages: list[dict[str, str]],
+        temperature: float = 0.7,
+        max_tokens: int = 1000,
+    ) -> dict[str, Any]:
+        return {
+            "summary": "Grounded answer.",
+            "claims": [],
+            "recommendations": [],
+            "limitations": [],
+            "confidence": 0.7,
+        }
+
+    async def complete_with_tools(
+        self,
+        messages: list[dict[str, str]],
+        tools: list[dict[str, Any]],
+        temperature: float = 0.2,
+        max_tokens: int = 1000,
+    ) -> ToolCallResult | None:
+        return None
 
 
 def _resolved_lina_result() -> ToolResult:
