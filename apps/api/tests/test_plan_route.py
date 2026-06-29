@@ -13,6 +13,7 @@ class FakePlanService:
             status="insufficient_tools",
             reason="no registered team tool",
         )
+        state.response = None
         state.add_trace("planner", "no registered team tool", "insufficient_tools")
         return response_node(state)
 
@@ -31,6 +32,12 @@ def test_plan_route_returns_plan_response(monkeypatch) -> None:
     payload = response.json()
     assert payload["status"] == "insufficient_tools"
     assert payload["response_type"] == "capability_boundary"
+    assert "planner_output" in payload
+    assert payload["planner_output"] is None
+    assert "planner_raw_content" in payload
+    assert payload["planner_raw_content"] is None
+    assert "planner_finish_reason" in payload
+    assert payload["planner_finish_reason"] is None
     assert payload["tool_results"] == []
     assert payload["evidence_graph"] is None
     assert payload["answer"] is None

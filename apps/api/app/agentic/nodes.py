@@ -250,6 +250,15 @@ def response_node(state: AgentRunState) -> AgentRunState:
             "trace",
         },
     )
+    state.response["planner_output"] = (
+        state.planning.raw_output if state.planning is not None else None
+    )
+    state.response["planner_raw_content"] = (
+        state.planning.raw_content if state.planning is not None else None
+    )
+    state.response["planner_finish_reason"] = (
+        state.planning.finish_reason if state.planning is not None else None
+    )
     logger.info("node=response end response_ready=true")
     return state
 

@@ -186,6 +186,14 @@
         white-space: pre-wrap;
       }
 
+      .final-output {
+        padding: 1rem;
+        border-bottom: 1px solid var(--line);
+        white-space: pre-wrap;
+        line-height: 1.55;
+        font-size: 0.9rem;
+      }
+
       .empty { padding: 1rem; color: var(--muted); font-size: 0.85rem; line-height: 1.6; }
       .error {
         margin-bottom: 1rem;
@@ -233,7 +241,11 @@
         </div>
 
         <div class="card">
-          <h2>Parsed Response</h2>
+          <h2>Readable Output</h2>
+          <details open><summary>Planner LLM JSON</summary><pre id="planner-output"></pre></details>
+          <details open><summary>Planner Raw Content</summary><pre id="planner-raw-content"></pre></details>
+          <details open><summary>Final User Output</summary><div id="final-output" class="final-output"></div></details>
+          <details open><summary>Parsed Final Data</summary><pre id="parsed-final"></pre></details>
           <details open><summary>Plan</summary><pre id="plan"></pre></details>
           <details open><summary>Tool Results</summary><pre id="tool-results"></pre></details>
           <details><summary>Evidence Graph</summary><pre id="evidence"></pre></details>
@@ -289,6 +301,11 @@
         result.hidden = false;
         renderSummary(payload);
         renderFlow(payload.trace || []);
+        setJson("planner-output", payload.planner_output);
+        document.getElementById("planner-raw-content").textContent =
+          payload.planner_raw_content ?? "null";
+        renderFinalOutput(payload);
+        setJson("parsed-final", parsedFinalData(payload));
         setJson("plan", payload.plan);
         setJson("tool-results", payload.tool_results || []);
         setJson("evidence", payload.evidence_graph);
@@ -305,6 +322,37 @@
           metric("Response Type", payload.response_type || "n/a"),
           metric("Reason", payload.reason || "n/a"),
         );
+      }
+
+      function renderFinalOutput(payload) {
+        const target = document.getElementById("final-output");
+        const answer = payload.answer || {};
+        if (answer.summary) {
+          target.textContent = answer.summary;
+          return;
+        }
+        if (payload.errors && payload.errors.length) {
+          target.textContent = `Unable to produce an answer.\n${payload.errors.join("\n")}`;
+          return;
+        }
+        target.textContent = payload.reason || "No final answer produced.";
+      }
+
+      function parsedFinalData(payload) {
+        const answer = payload.answer || null;
+        return {
+          status: payload.status,
+          response_type: payload.response_type,
+          reason: payload.reason,
+          answer_status: answer?.status ?? null,
+          answer_type: answer?.answer_type ?? null,
+          summary: answer?.summary ?? null,
+          recommendations: answer?.recommendations ?? [],
+          limitations: answer?.limitations ?? [],
+          data_notes: answer?.data_notes ?? [],
+          review: payload.review,
+          errors: payload.errors || [],
+        };
       }
 
       function renderFlow(trace) {

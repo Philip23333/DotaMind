@@ -7,6 +7,7 @@ Supports OpenAI-compatible APIs (OpenAI, DeepSeek, etc.) and Anthropic.
 import logging
 import time
 from abc import ABC, abstractmethod
+from json import JSONDecodeError
 from typing import Any, Literal, TypedDict
 
 import httpx
@@ -19,6 +20,19 @@ ModelTier = Literal["fast", "balanced", "advanced"]
 class ToolCallResult(TypedDict):
     name: str
     arguments: dict[str, Any]
+
+
+class LLMJSONDecodeError(ValueError):
+    def __init__(
+        self,
+        message: str,
+        *,
+        raw_content: str,
+        finish_reason: str,
+    ) -> None:
+        super().__init__(message)
+        self.raw_content = raw_content
+        self.finish_reason = finish_reason
 
 
 class LLMProvider(ABC):
@@ -171,7 +185,14 @@ class OpenAICompatibleProvider(LLMProvider):
                 # Parse JSON from content
                 import json
 
-                parsed = json.loads(content)
+                try:
+                    parsed = json.loads(content)
+                except JSONDecodeError as exc:
+                    raise LLMJSONDecodeError(
+                        str(exc),
+                        raw_content=content,
+                        finish_reason=finish_reason,
+                    ) from exc
                 logger.info(
                     "LLM complete_json success model=%s elapsed_ms=%s output_chars=%s "
                     "finish_reason=%s keys=%s",
@@ -183,13 +204,24 @@ class OpenAICompatibleProvider(LLMProvider):
                 )
                 return parsed
         except Exception as e:
-            logger.error(
-                "LLM complete_json failed model=%s elapsed_ms=%s finish_reason=%s error=%s",
-                self.model,
-                round((time.perf_counter() - started_at) * 1000),
-                finish_reason,
-                e,
-            )
+            if isinstance(e, LLMJSONDecodeError):
+                logger.error(
+                    "LLM complete_json failed model=%s elapsed_ms=%s finish_reason=%s "
+                    "raw_content_chars=%s error=%s",
+                    self.model,
+                    round((time.perf_counter() - started_at) * 1000),
+                    e.finish_reason,
+                    len(e.raw_content),
+                    e,
+                )
+            else:
+                logger.error(
+                    "LLM complete_json failed model=%s elapsed_ms=%s finish_reason=%s error=%s",
+                    self.model,
+                    round((time.perf_counter() - started_at) * 1000),
+                    finish_reason,
+                    e,
+                )
             raise
 
     async def complete_with_tools(

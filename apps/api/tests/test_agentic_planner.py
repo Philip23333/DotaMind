@@ -4,12 +4,17 @@ from typing import Any
 from app.agentic.planner import AgenticPlanner
 from app.agentic.stratz_tools import build_default_tool_registry
 from app.core.config import Settings
-from app.llm.provider import ToolCallResult
+from app.llm.provider import LLMJSONDecodeError, ToolCallResult
 
 
 class FakeLLM:
-    def __init__(self, payload: dict[str, Any]) -> None:
+    def __init__(
+        self,
+        payload: dict[str, Any] | None = None,
+        error: Exception | None = None,
+    ) -> None:
         self.payload = payload
+        self.error = error
 
     async def complete(
         self,
@@ -25,6 +30,9 @@ class FakeLLM:
         temperature: float = 0.7,
         max_tokens: int = 1000,
     ) -> dict[str, Any]:
+        if self.error:
+            raise self.error
+        assert self.payload is not None
         return self.payload
 
     async def complete_with_tools(
@@ -84,6 +92,7 @@ def test_agentic_planner_accepts_valid_counter_pick_plan() -> None:
     assert result.status == "planned"
     assert result.plan is not None
     assert result.plan.tool_calls[0].tool == "resolve_hero"
+    assert result.raw_output == _valid_plan_payload()
 
 
 def test_agentic_planner_returns_insufficient_tools() -> None:
@@ -103,6 +112,30 @@ def test_agentic_planner_returns_insufficient_tools() -> None:
 
     assert result.status == "insufficient_tools"
     assert result.plan is None
+    assert result.raw_output
+    assert result.raw_output["status"] == "insufficient_tools"
+
+
+def test_agentic_planner_exposes_raw_content_on_json_decode_error() -> None:
+    planner = AgenticPlanner(
+        _registry(),
+        llm=FakeLLM(
+            error=LLMJSONDecodeError(
+                "Unterminated string",
+                raw_content='{"status":"planned","reason":"cut',
+                finish_reason="length",
+            )
+        ),
+        llm_enabled=True,
+    )
+
+    result = asyncio.run(planner.plan("enemy picked Lina, what should I pick?"))
+
+    assert result.status == "error"
+    assert result.raw_output is None
+    assert result.raw_content == '{"status":"planned","reason":"cut'
+    assert result.finish_reason == "length"
+    assert "LLMJSONDecodeError" in result.errors[0]
 
 
 def test_agentic_planner_rejects_unknown_tool() -> None:
@@ -114,6 +147,7 @@ def test_agentic_planner_rejects_unknown_tool() -> None:
 
     assert result.status == "error"
     assert "unknown tool" in result.errors[0]
+    assert result.raw_output == payload
 
 
 def test_agentic_planner_rejects_hardcoded_hero_id() -> None:
@@ -207,6 +241,113 @@ def test_agentic_planner_accepts_role_meta_report_evidence_contract() -> None:
     result = asyncio.run(planner.plan("what mid heroes are strong?"))
 
     assert result.status == "planned"
+
+
+def test_agentic_planner_accepts_team_recent_report_catalog_contract() -> None:
+    payload = {
+        "status": "planned",
+        "reason": "team evidence can be answered with OpenDota tools",
+        "plan": {
+            "intent": "team_recent_performance",
+            "goal": "Summarize Team BB recent form.",
+            "output_contract": "team_recent_report",
+            "tool_calls": [
+                {
+                    "id": "resolve_team",
+                    "tool": "opendota.resolve_team",
+                    "args": {"query": "Team BB"},
+                },
+                {
+                    "id": "get_matches",
+                    "tool": "opendota.team_recent_matches",
+                    "args": {
+                        "team_id": "$resolve_team.data.team.team_id",
+                        "days": 30,
+                    },
+                },
+                {
+                    "id": "get_players",
+                    "tool": "opendota.team_players",
+                    "args": {
+                        "team_id": "$resolve_team.data.team.team_id",
+                        "current_only": True,
+                    },
+                },
+                {
+                    "id": "get_heroes",
+                    "tool": "opendota.team_heroes",
+                    "args": {"matches": "$get_matches.data.matches"},
+                },
+            ],
+            "required_evidence": [
+                "team_identity",
+                "recent_matches",
+                "current_players",
+                "team_hero_usage",
+            ],
+            "constraints": {"max_tool_calls": 6, "allow_mock": False},
+        },
+    }
+    planner = AgenticPlanner(_registry(), llm=FakeLLM(payload), llm_enabled=True)
+
+    result = asyncio.run(planner.plan("How Team BB play lately?"))
+
+    assert result.status == "planned"
+
+
+def test_agentic_planner_rejects_bad_team_recent_report_contract() -> None:
+    payload = {
+        "status": "planned",
+        "reason": "bad team evidence names",
+        "plan": {
+            "intent": "team_recent_performance",
+            "goal": "Summarize Team BB recent form.",
+            "output_contract": "team_recent_report",
+            "tool_calls": [
+                {
+                    "id": "get_players",
+                    "tool": "opendota.team_players",
+                    "args": {
+                        "team_id": "$resolve_team.data.team.team_id",
+                        "current_roster": True,
+                    },
+                },
+                {
+                    "id": "get_heroes",
+                    "tool": "opendota.team_heroes",
+                    "args": {"team_id": "$resolve_team.data.team.team_id"},
+                },
+            ],
+            "required_evidence": ["team_identity", "matches", "roster", "hero_usage"],
+            "constraints": {"max_tool_calls": 6, "allow_mock": False},
+        },
+    }
+    planner = AgenticPlanner(_registry(), llm=FakeLLM(payload), llm_enabled=True)
+
+    result = asyncio.run(planner.plan("How Team BB play lately?"))
+
+    assert result.status == "error"
+    assert any(
+        "unknown required_evidence: hero_usage, matches, roster" in item
+        for item in result.errors
+    )
+    assert any(
+        "opendota.team_players unknown args: current_roster" in item
+        for item in result.errors
+    )
+    assert any("opendota.team_heroes unknown args: team_id" in item for item in result.errors)
+
+
+def test_agentic_planner_prompt_contains_team_recent_catalog_example() -> None:
+    planner = AgenticPlanner(_registry(), llm=FakeLLM(_valid_plan_payload()), llm_enabled=True)
+
+    prompt = planner._system_prompt()
+
+    assert "team_recent_report" in prompt
+    assert "recent_matches" in prompt
+    assert "current_players" in prompt
+    assert "team_hero_usage" in prompt
+    assert '"matches": "$get_matches.data.matches"' in prompt
 
 
 def test_agentic_planner_rejects_unknown_required_evidence() -> None:

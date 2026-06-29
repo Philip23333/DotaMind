@@ -164,6 +164,9 @@ class PlanResponse(BaseModel):
     status: Literal["ok", "insufficient_tools", "error"]
     reason: str
     response_type: str | None = None
+    planner_output: dict[str, Any] | None = None
+    planner_raw_content: str | None = None
+    planner_finish_reason: str | None = None
     plan: dict[str, Any] | None = None
     tool_results: list[dict[str, Any]] = Field(default_factory=list)
     evidence_graph: dict[str, Any] | None = None

@@ -4,14 +4,14 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from app.agentic.contracts import (
-    CONTRACT_REGISTRY,
     STRUCTURED_OUTPUT_CONTRACTS,
-    validate_contract_plan_with_evidence,
+    render_planner_contracts,
+    validate_plan_against_catalog,
 )
 from app.agentic.models import ExecutionPlan
 from app.agentic.registry import ToolRegistry
 from app.core.config import get_policy, get_settings
-from app.llm.provider import LLMProvider, get_llm_provider
+from app.llm.provider import LLMJSONDecodeError, LLMProvider, get_llm_provider
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +32,7 @@ Supported in this development version:
 - role-based hero meta evidence queries
 - patch impact evidence queries
 
-Allowed output_contract values:
+Output contract catalog:
 {contracts}
 
 Do not output meta_list. meta_list is only the internal whitelist of structured
@@ -97,6 +97,9 @@ class AgenticPlannerResult(BaseModel):
     reason: str
     plan: ExecutionPlan | None = None
     errors: list[str] = Field(default_factory=list)
+    raw_output: dict[str, Any] | None = None
+    raw_content: str | None = None
+    finish_reason: str | None = None
 
 
 class AgenticPlanner:
@@ -133,6 +136,15 @@ class AgenticPlanner:
                 max_tokens=max(self.policy.llm.orchestrator.max_tokens, 1200),
             )
             envelope = PlannerEnvelope.model_validate(raw)
+        except LLMJSONDecodeError as exc:
+            logger.warning("Agentic planner failed: %r", exc)
+            return AgenticPlannerResult(
+                status="error",
+                reason="LLM planner failed to return a valid planning envelope",
+                errors=[f"{type(exc).__name__}: {exc}"],
+                raw_content=exc.raw_content,
+                finish_reason=exc.finish_reason,
+            )
         except Exception as exc:
             logger.warning("Agentic planner failed: %r", exc)
             return AgenticPlannerResult(
@@ -146,18 +158,21 @@ class AgenticPlanner:
                 status="insufficient_tools",
                 reason=envelope.reason,
                 plan=None,
+                raw_output=raw,
             )
         if envelope.status == "error":
             return AgenticPlannerResult(
                 status="error",
                 reason=envelope.reason or "LLM planner returned error",
                 errors=[envelope.reason or "LLM planner returned error"],
+                raw_output=raw,
             )
         if envelope.plan is None:
             return AgenticPlannerResult(
                 status="error",
                 reason="LLM planner returned planned status without a plan",
                 errors=["planned status requires plan"],
+                raw_output=raw,
             )
 
         logger.info(
@@ -173,70 +188,35 @@ class AgenticPlanner:
                 reason="LLM planner returned an invalid plan",
                 plan=envelope.plan,
                 errors=validation_errors,
+                raw_output=raw,
             )
 
         return AgenticPlannerResult(
             status="planned",
             reason=envelope.reason,
             plan=envelope.plan,
+            raw_output=raw,
         )
 
     def validate_plan(self, plan: ExecutionPlan) -> list[str]:
-        errors = []
         logger.info(
             "Agentic planner validate intent=%s output_contract=%s in_meta_list=%s",
             plan.intent,
             plan.output_contract,
             plan.output_contract in STRUCTURED_OUTPUT_CONTRACTS,
         )
-        errors.extend(
-            validate_contract_plan_with_evidence(plan, self._known_evidence_kinds())
-        )
-
-        registered = {definition.name for definition in self.registry.list()}
-        for call in plan.tool_calls:
-            if call.tool not in registered:
-                errors.append(f"unknown tool: {call.tool}")
-
-        if plan.constraints.allow_mock:
-            errors.append("constraints.allow_mock must be false")
-        if len(plan.tool_calls) > plan.constraints.max_tool_calls:
-            errors.append(
-                "plan exceeds max_tool_calls "
-                f"({len(plan.tool_calls)} > {plan.constraints.max_tool_calls})"
-            )
-
-        if plan.intent == "counter_pick" and plan.output_contract != "draft_advice":
-            errors.append("counter_pick plan must use output_contract=draft_advice")
-
-        for call in plan.tool_calls:
-            if call.tool in {"stratz.hero_vs_hero_matchup", "stratz.lane_outcome"}:
-                hero_id = call.args.get("hero_id")
-                if hero_id != "$resolve_target.data.hero.hero_id":
-                    errors.append(
-                        f"{call.tool}.hero_id must be "
-                        "$resolve_target.data.hero.hero_id"
-                    )
-
-        return errors
+        return validate_plan_against_catalog(plan, self.registry)
 
     def _system_prompt(self) -> str:
         tools = "\n".join(
             f"- {definition.name}: {definition.description}"
             for definition in self.registry.list()
         )
-        contracts = "\n".join(f"- {name}" for name in CONTRACT_REGISTRY)
+        contracts = render_planner_contracts(self.registry)
         return _PLANNER_SYSTEM_PROMPT.replace("{tools}", tools).replace(
             "{contracts}",
             contracts,
         )
-
-    def _known_evidence_kinds(self) -> set[str]:
-        return {
-            evidence_kind
-            for definition in self.registry.list()
-            for evidence_kind in definition.evidence_kinds
-        }
 
 
 def planner_payload(result: AgenticPlannerResult) -> dict[str, Any]:
