@@ -163,6 +163,7 @@ class PlanResponse(BaseModel):
     game: SupportedGame
     status: Literal["ok", "insufficient_tools", "error"]
     reason: str
+    response_type: str | None = None
     plan: dict[str, Any] | None = None
     tool_results: list[dict[str, Any]] = Field(default_factory=list)
     evidence_graph: dict[str, Any] | None = None

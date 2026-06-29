@@ -1,7 +1,6 @@
 from dataclasses import asdict, is_dataclass
 from typing import Any
 
-from app.agentic.formatter import PlanFormatter
 from app.agentic.state import AgentRunState
 from app.api.v1 import schemas
 from app.application.query_service import QueryResult
@@ -74,7 +73,7 @@ def query_response(result: QueryResult) -> schemas.NaturalLanguageQueryResponse:
 
 
 def plan_response(result: AgentRunState) -> schemas.PlanResponse:
-    return schemas.PlanResponse.model_validate(PlanFormatter().format(result))
+    return schemas.PlanResponse.model_validate(result.response or {})
 
 
 def service_catalog_response(catalog: ServiceCatalog) -> schemas.ServiceCatalogResponse:

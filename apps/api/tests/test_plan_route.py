@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
 
+from app.agentic.nodes import response_node
 from app.agentic.state import AgentRunState
 from app.main import app
 
@@ -13,7 +14,7 @@ class FakePlanService:
             reason="no registered team tool",
         )
         state.add_trace("planner", "no registered team tool", "insufficient_tools")
-        return state
+        return response_node(state)
 
 
 def test_plan_route_returns_plan_response(monkeypatch) -> None:
@@ -29,6 +30,7 @@ def test_plan_route_returns_plan_response(monkeypatch) -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["status"] == "insufficient_tools"
+    assert payload["response_type"] == "capability_boundary"
     assert payload["tool_results"] == []
     assert payload["evidence_graph"] is None
     assert payload["answer"] is None

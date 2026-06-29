@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from app.agentic.models import ExecutionPlan, ToolCall, ToolResult, ToolSource
+from app.agentic.models import ToolCall, ToolResult, ToolSource
 
 ToolHandler = Callable[[BaseModel], Any | Awaitable[Any]]
 
@@ -43,22 +43,6 @@ class ToolRegistry:
 class ToolExecutor:
     def __init__(self, registry: ToolRegistry) -> None:
         self.registry = registry
-
-    async def execute_plan(self, plan: ExecutionPlan) -> list[ToolResult]:
-        if len(plan.tool_calls) > plan.constraints.max_tool_calls:
-            return [
-                ToolResult(
-                    tool_call_id="plan",
-                    tool="plan",
-                    status="error",
-                    latency_ms=0,
-                    error=(
-                        "ValueError: plan exceeds max_tool_calls "
-                        f"({len(plan.tool_calls)} > {plan.constraints.max_tool_calls})"
-                    ),
-                )
-            ]
-        return [await self.execute(call) for call in plan.tool_calls]
 
     async def execute(self, call: ToolCall) -> ToolResult:
         started = time.perf_counter()

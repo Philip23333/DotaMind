@@ -3,8 +3,10 @@ import asyncio
 import pytest
 from pydantic import BaseModel, Field
 
-from app.agentic.models import ExecutionConstraints, ExecutionPlan, ToolCall, ToolSource
+from app.agentic.models import ToolCall, ToolSource
 from app.agentic.registry import ToolDefinition, ToolExecutor, ToolRegistry
+from app.agentic.stratz_tools import build_default_tool_registry
+from app.core.config import Settings
 
 
 class EchoInput(BaseModel):
@@ -91,48 +93,24 @@ def test_tool_executor_returns_error_for_invalid_args() -> None:
     assert "ValidationError" in result.error
 
 
-def test_tool_executor_executes_plan_calls() -> None:
-    registry = ToolRegistry()
-    registry.register(
-        ToolDefinition(
-            name="debug.echo",
-            description="Return the input value.",
-            input_model=EchoInput,
-            handler=lambda args: {"echo": args.value},
+def test_default_registry_includes_agentic_data_tools() -> None:
+    registry = build_default_tool_registry(
+        Settings(
+            opendota_base_url="https://api.opendota.test/api",
+            stratz_graphql_url="https://api.stratz.test/graphql",
+            stratz_token="token",
         )
     )
-    plan = ExecutionPlan(
-        intent="debug",
-        goal="Run debug tools.",
-        output_contract="tool_results",
-        tool_calls=[
-            ToolCall(id="t1", tool="debug.echo", args={"value": 1}),
-            ToolCall(id="t2", tool="debug.echo", args={"value": 2}),
-        ],
-        required_evidence=["debug_output"],
-    )
 
-    results = asyncio.run(ToolExecutor(registry).execute_plan(plan))
+    names = {definition.name for definition in registry.list()}
 
-    assert [result.status for result in results] == ["ok", "ok"]
-    assert [result.data for result in results] == [{"echo": 1}, {"echo": 2}]
-
-
-def test_tool_executor_rejects_plan_over_tool_call_limit() -> None:
-    plan = ExecutionPlan(
-        intent="debug",
-        goal="Run too many tools.",
-        output_contract="tool_results",
-        tool_calls=[
-            ToolCall(id="t1", tool="debug.echo", args={}),
-            ToolCall(id="t2", tool="debug.echo", args={}),
-        ],
-        constraints=ExecutionConstraints(max_tool_calls=1),
-    )
-
-    results = asyncio.run(ToolExecutor(ToolRegistry()).execute_plan(plan))
-
-    assert len(results) == 1
-    assert results[0].status == "error"
-    assert results[0].tool_call_id == "plan"
-    assert "max_tool_calls" in (results[0].error or "")
+    assert {
+        "resolve_hero",
+        "stratz.hero_vs_hero_matchup",
+        "stratz.lane_outcome",
+        "opendota.resolve_team",
+        "opendota.team_recent_matches",
+        "opendota.team_players",
+        "opendota.team_heroes",
+        "opendota.hero_stats_by_role",
+    } <= names

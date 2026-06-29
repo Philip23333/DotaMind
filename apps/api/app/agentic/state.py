@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -30,6 +30,8 @@ class AgentRunState(BaseModel):
     reason: str = ""
     errors: list[str] = Field(default_factory=list)
     trace: list[AgentTraceEvent] = Field(default_factory=list)
+    response_type: str | None = None
+    response: dict[str, Any] | None = None
 
     def add_trace(self, node: str, action: str, status: str) -> None:
         self.trace.append(AgentTraceEvent(node=node, action=action, status=status))

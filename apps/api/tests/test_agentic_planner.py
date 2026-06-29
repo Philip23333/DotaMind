@@ -50,7 +50,7 @@ def _valid_plan_payload() -> dict[str, Any]:
         "plan": {
             "intent": "counter_pick",
             "goal": "Fetch Lina matchup evidence.",
-            "output_contract": "tool_results",
+            "output_contract": "draft_advice",
             "tool_calls": [
                 {
                     "id": "resolve_target",
@@ -127,6 +127,18 @@ def test_agentic_planner_rejects_hardcoded_hero_id() -> None:
     assert "hero_id must be" in result.errors[0]
 
 
+def test_agentic_planner_rejects_hardcoded_lane_outcome_hero_id() -> None:
+    payload = _valid_plan_payload()
+    payload["plan"]["tool_calls"][1]["tool"] = "stratz.lane_outcome"
+    payload["plan"]["tool_calls"][1]["args"] = {"hero_id": 25, "is_with": False}
+    planner = AgenticPlanner(_registry(), llm=FakeLLM(payload), llm_enabled=True)
+
+    result = asyncio.run(planner.plan("how does Lina lane?"))
+
+    assert result.status == "error"
+    assert "stratz.lane_outcome.hero_id must be" in result.errors[0]
+
+
 def test_agentic_planner_rejects_mock_allowed() -> None:
     payload = _valid_plan_payload()
     payload["plan"]["constraints"]["allow_mock"] = True
@@ -147,6 +159,17 @@ def test_agentic_planner_rejects_missing_required_evidence() -> None:
 
     assert result.status == "error"
     assert "missing required evidence" in result.errors[0]
+
+
+def test_agentic_planner_rejects_counter_pick_tool_results_contract() -> None:
+    payload = _valid_plan_payload()
+    payload["plan"]["output_contract"] = "tool_results"
+    planner = AgenticPlanner(_registry(), llm=FakeLLM(payload), llm_enabled=True)
+
+    result = asyncio.run(planner.plan("enemy picked Lina, what should I pick?"))
+
+    assert result.status == "error"
+    assert "output_contract=draft_advice" in result.errors[0]
 
 
 def test_agentic_planner_returns_error_when_disabled() -> None:

@@ -31,6 +31,7 @@ def test_plan_service_returns_insufficient_tools_without_execution() -> None:
     assert result.answer is None
     assert result.review is None
     assert result.trace[-1].status == "insufficient_tools"
+    assert result.response
 
 
 def test_plan_service_returns_error_when_planner_errors() -> None:
@@ -50,6 +51,7 @@ def test_plan_service_returns_error_when_planner_errors() -> None:
     assert result.errors == ["METAMIND_LLM_ENABLED must be true"]
     assert result.answer is None
     assert result.review is None
+    assert result.response
 
 
 def test_plan_service_executes_planned_counter_pick(monkeypatch) -> None:
@@ -121,6 +123,7 @@ def test_plan_service_executes_planned_counter_pick(monkeypatch) -> None:
     assert result.review is not None
     assert result.review.severity == "pass"
     assert result.trace[-1].node == "critic"
+    assert result.response
 
 
 def test_plan_service_returns_error_without_answer_when_runner_fails() -> None:
@@ -154,6 +157,7 @@ def test_plan_service_returns_error_without_answer_when_runner_fails() -> None:
     assert result.answer is None
     assert result.review is None
     assert result.errors
+    assert result.response
 
 
 def test_plan_service_keeps_ok_status_when_evidence_is_insufficient() -> None:
@@ -183,3 +187,4 @@ def test_plan_service_keeps_ok_status_when_evidence_is_insufficient() -> None:
     assert result.answer.status == "insufficient_evidence"
     assert result.review is not None
     assert result.review.severity == "failed"
+    assert result.response

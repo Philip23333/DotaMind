@@ -15,6 +15,7 @@ from app.domain.teams import TeamLookupError
 
 settings = get_settings()
 QUERY_CONSOLE_PATH = Path(__file__).parent / "resources" / "query_console.html"
+PLAN_CONSOLE_PATH = Path(__file__).parent / "resources" / "plan_console.html"
 
 
 @asynccontextmanager
@@ -100,3 +101,8 @@ def health_check() -> dict[str, str]:
 @app.get("/debug/chat", include_in_schema=False, response_class=FileResponse)
 def query_console() -> FileResponse:
     return FileResponse(QUERY_CONSOLE_PATH)
+
+
+@app.get("/debug/plan", include_in_schema=False, response_class=FileResponse)
+def plan_console() -> FileResponse:
+    return FileResponse(PLAN_CONSOLE_PATH)

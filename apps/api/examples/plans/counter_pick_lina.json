@@ -1,7 +1,7 @@
 {
   "intent": "counter_pick",
   "goal": "Fetch hero matchup evidence for a target hero.",
-  "output_contract": "tool_results",
+  "output_contract": "draft_advice",
   "tool_calls": [
     {
       "id": "resolve_target",

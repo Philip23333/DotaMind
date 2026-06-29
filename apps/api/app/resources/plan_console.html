@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MetaMind Plan Lab</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f6f8fb;
+        --panel: #ffffff;
+        --ink: #17202a;
+        --muted: #667085;
+        --line: #d7dee8;
+        --blue: #2563eb;
+        --green: #16865a;
+        --red: #c2410c;
+        --amber: #b7791f;
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      header {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 1rem max(1rem, calc((100vw - 1180px) / 2));
+        border-bottom: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.92);
+        backdrop-filter: blur(10px);
+      }
+
+      h1 { margin: 0; font-size: 1.1rem; }
+      header p { margin: 0.25rem 0 0; color: var(--muted); font-size: 0.82rem; }
+      main { width: min(100%, 1180px); margin: 0 auto; padding: 1.25rem; }
+
+      form {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+        padding: 0.8rem;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--panel);
+      }
+
+      textarea {
+        width: 100%;
+        min-height: 3rem;
+        resize: vertical;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 0.75rem;
+        color: var(--ink);
+        font: inherit;
+      }
+
+      button {
+        border: 0;
+        border-radius: 8px;
+        padding: 0.75rem 1rem;
+        background: var(--blue);
+        color: white;
+        cursor: pointer;
+        font-weight: 700;
+      }
+
+      button:disabled { cursor: not-allowed; opacity: 0.55; }
+
+      .suggestions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+      }
+
+      .suggestions button {
+        border: 1px solid var(--line);
+        background: var(--panel);
+        color: var(--ink);
+        font-size: 0.78rem;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: minmax(280px, 0.9fr) minmax(360px, 1.4fr);
+        gap: 1rem;
+      }
+
+      .card {
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--panel);
+      }
+
+      .card h2 {
+        margin: 0;
+        padding: 0.85rem 1rem;
+        border-bottom: 1px solid var(--line);
+        font-size: 0.92rem;
+      }
+
+      .meta {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.7rem;
+        padding: 1rem;
+      }
+
+      .metric {
+        border: 1px solid var(--line);
+        border-radius: 9px;
+        padding: 0.7rem;
+        background: #fbfcfe;
+      }
+
+      .metric span { display: block; color: var(--muted); font-size: 0.72rem; }
+      .metric strong {
+        display: block;
+        margin-top: 0.2rem;
+        overflow-wrap: anywhere;
+        font-size: 0.88rem;
+      }
+
+      .flow { display: grid; gap: 0.65rem; padding: 1rem; }
+      .node {
+        border: 1px solid var(--line);
+        border-left: 5px solid var(--blue);
+        border-radius: 10px;
+        padding: 0.75rem;
+        background: #fbfcfe;
+      }
+
+      .node.completed, .node.pass { border-left-color: var(--green); }
+      .node.failed, .node.error { border-left-color: var(--red); }
+      .node.warning, .node.insufficient_tools { border-left-color: var(--amber); }
+
+      .node-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 0.75rem;
+        margin-bottom: 0.35rem;
+      }
+
+      .node-name { font-weight: 800; font-size: 0.82rem; }
+      .status {
+        border-radius: 999px;
+        padding: 0.12rem 0.45rem;
+        background: #eef2ff;
+        color: var(--blue);
+        font-size: 0.7rem;
+        font-weight: 700;
+      }
+
+      .node.failed .status, .node.error .status { background: #fff1ed; color: var(--red); }
+      .node.completed .status, .node.pass .status { background: #eaf8f1; color: var(--green); }
+      .node.warning .status, .node.insufficient_tools .status { background: #fff8e6; color: var(--amber); }
+      .node-action { color: var(--muted); font-size: 0.78rem; line-height: 1.45; }
+
+      details { border-top: 1px solid var(--line); }
+      summary {
+        cursor: pointer;
+        padding: 0.8rem 1rem;
+        color: var(--muted);
+        font-size: 0.8rem;
+        font-weight: 700;
+      }
+
+      pre {
+        overflow: auto;
+        max-height: 32rem;
+        margin: 0;
+        padding: 0 1rem 1rem;
+        font: 0.75rem/1.55 ui-monospace, SFMono-Regular, Consolas, monospace;
+        white-space: pre-wrap;
+      }
+
+      .empty { padding: 1rem; color: var(--muted); font-size: 0.85rem; line-height: 1.6; }
+      .error {
+        margin-bottom: 1rem;
+        border: 1px solid #fed7c7;
+        border-radius: 10px;
+        padding: 0.8rem 1rem;
+        background: #fff7f3;
+        color: var(--red);
+        font-size: 0.86rem;
+      }
+
+      @media (max-width: 860px) {
+        form, .grid { grid-template-columns: 1fr; }
+        .meta { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div>
+        <h1>MetaMind Plan Lab</h1>
+        <p>/api/v1/plan node flow debugger</p>
+      </div>
+      <p>Shows planner, validation, tools, evidence, answer, critic, response.</p>
+    </header>
+
+    <main>
+      <form id="form">
+        <textarea id="query" required>enemy picked Lina, what should I pick?</textarea>
+        <button id="submit" type="submit">Run plan</button>
+      </form>
+
+      <div class="suggestions">
+        <button type="button">enemy picked Lina, what should I pick?</button>
+        <button type="button">How Team BB play lately?</button>
+        <button type="button">show Lina lane outcome</button>
+      </div>
+
+      <div id="error"></div>
+      <section id="result" class="grid" hidden>
+        <div class="card">
+          <h2>Node Flow</h2>
+          <div id="summary" class="meta"></div>
+          <div id="flow" class="flow"></div>
+        </div>
+
+        <div class="card">
+          <h2>Parsed Response</h2>
+          <details open><summary>Plan</summary><pre id="plan"></pre></details>
+          <details open><summary>Tool Results</summary><pre id="tool-results"></pre></details>
+          <details><summary>Evidence Graph</summary><pre id="evidence"></pre></details>
+          <details><summary>Answer</summary><pre id="answer"></pre></details>
+          <details><summary>Review</summary><pre id="review"></pre></details>
+          <details><summary>Raw JSON</summary><pre id="raw"></pre></details>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const form = document.querySelector("#form");
+      const query = document.querySelector("#query");
+      const submit = document.querySelector("#submit");
+      const result = document.querySelector("#result");
+      const errorBox = document.querySelector("#error");
+
+      document.querySelectorAll(".suggestions button").forEach((button) => {
+        button.addEventListener("click", () => {
+          query.value = button.textContent.trim();
+          query.focus();
+        });
+      });
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        await runPlan(query.value.trim());
+      });
+
+      async function runPlan(text) {
+        if (!text) return;
+        submit.disabled = true;
+        submit.textContent = "Running...";
+        errorBox.innerHTML = "";
+
+        try {
+          const response = await fetch("/api/v1/plan", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query: text, game: "dota2" }),
+          });
+          render(await response.json());
+        } catch (error) {
+          result.hidden = true;
+          errorBox.append(textElement("div", "error", `Request failed: ${error}`));
+        } finally {
+          submit.disabled = false;
+          submit.textContent = "Run plan";
+        }
+      }
+
+      function render(payload) {
+        result.hidden = false;
+        renderSummary(payload);
+        renderFlow(payload.trace || []);
+        setJson("plan", payload.plan);
+        setJson("tool-results", payload.tool_results || []);
+        setJson("evidence", payload.evidence_graph);
+        setJson("answer", payload.answer);
+        setJson("review", payload.review);
+        setJson("raw", payload);
+      }
+
+      function renderSummary(payload) {
+        const summary = document.querySelector("#summary");
+        summary.innerHTML = "";
+        summary.append(
+          metric("Status", payload.status),
+          metric("Response Type", payload.response_type || "n/a"),
+          metric("Reason", payload.reason || "n/a"),
+        );
+      }
+
+      function renderFlow(trace) {
+        const flow = document.querySelector("#flow");
+        flow.innerHTML = "";
+        if (!trace.length) {
+          flow.append(textElement("div", "empty", "No trace events returned."));
+          return;
+        }
+        trace.forEach((event, index) => {
+          const node = element("article", `node ${event.status || ""}`);
+          const head = element("div", "node-head");
+          head.append(
+            textElement("div", "node-name", `${index + 1}. ${event.node}`),
+            textElement("div", "status", event.status || "unknown"),
+          );
+          node.append(head, textElement("div", "node-action", event.action || ""));
+          flow.append(node);
+        });
+      }
+
+      function setJson(id, value) {
+        document.getElementById(id).textContent = JSON.stringify(value ?? null, null, 2);
+      }
+
+      function metric(label, value) {
+        const item = element("div", "metric");
+        item.append(textElement("span", "", label), textElement("strong", "", value ?? "n/a"));
+        return item;
+      }
+
+      function element(tag, className = "") {
+        const node = document.createElement(tag);
+        if (className) node.className = className;
+        return node;
+      }
+
+      function textElement(tag, className, text) {
+        const node = element(tag, className);
+        node.textContent = text;
+        return node;
+      }
+    </script>
+  </body>
+</html>

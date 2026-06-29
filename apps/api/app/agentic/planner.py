@@ -18,21 +18,21 @@ You must decide whether the user query can be answered with the currently
 registered tools. Return JSON only.
 
 Current allowed tools:
-- resolve_hero: resolves a Dota 2 hero name or alias to a canonical hero id.
-- stratz.hero_vs_hero_matchup: returns hero-vs-hero matchup statistics. Its
-  hero_id argument MUST come from resolve_hero using the reference
-  "$resolve_target.data.hero.hero_id".
+{tools}
 
 Supported in this development version:
-- enemy hero counter / hero matchup evidence queries.
+- enemy hero counter / hero matchup evidence queries
+- lane outcome evidence queries
+- team evidence collection queries
+- role-based hero meta evidence queries
 
 Unsupported for now:
-- team reports
-- meta hero rankings
+- final team report synthesis
+- final meta recommendation synthesis
 - patch impact
 - claim verification
 - hero synergy / teammate combo advice
-- final natural-language recommendations
+- final natural-language recommendations beyond supported structured answer contracts
 
 If unsupported, return:
 {"status":"insufficient_tools","reason":"...","plan":null}
@@ -44,7 +44,7 @@ If supported, return:
   "plan": {
     "intent": "counter_pick",
     "goal": "...",
-    "output_contract": "tool_results",
+    "output_contract": "draft_advice",
     "tool_calls": [
       {"id":"resolve_target","tool":"resolve_hero","args":{"query":"<enemy hero>"}},
       {
@@ -57,6 +57,14 @@ If supported, return:
     "constraints": {"max_tool_calls": 6, "allow_mock": false}
   }
 }
+
+For stratz.hero_vs_hero_matchup and stratz.lane_outcome, hero_id MUST come
+from resolve_hero using "$resolve_target.data.hero.hero_id". Do not hardcode
+hero ids.
+
+For OpenDota team evidence, resolve the team first, then use
+"$resolve_team.data.team.team_id" for team tools. If ambiguity cannot be
+resolved by tools, expose the candidates or return insufficient_tools.
 """
 
 
@@ -100,7 +108,7 @@ class AgenticPlanner:
         try:
             raw = await self.llm.complete_json(
                 [
-                    {"role": "system", "content": _PLANNER_SYSTEM_PROMPT},
+                    {"role": "system", "content": self._system_prompt()},
                     {"role": "user", "content": f"game={game}\nquery={query}"},
                 ],
                 temperature=self.policy.llm.orchestrator.temperature,
@@ -175,17 +183,26 @@ class AgenticPlanner:
                 "counter_pick plan missing required evidence: "
                 + ", ".join(sorted(missing_required))
             )
+        if plan.intent == "counter_pick" and plan.output_contract != "draft_advice":
+            errors.append("counter_pick plan must use output_contract=draft_advice")
 
         for call in plan.tool_calls:
-            if call.tool == "stratz.hero_vs_hero_matchup":
+            if call.tool in {"stratz.hero_vs_hero_matchup", "stratz.lane_outcome"}:
                 hero_id = call.args.get("hero_id")
                 if hero_id != "$resolve_target.data.hero.hero_id":
                     errors.append(
-                        "stratz.hero_vs_hero_matchup.hero_id must be "
+                        f"{call.tool}.hero_id must be "
                         "$resolve_target.data.hero.hero_id"
                     )
 
         return errors
+
+    def _system_prompt(self) -> str:
+        tools = "\n".join(
+            f"- {definition.name}: {definition.description}"
+            for definition in self.registry.list()
+        )
+        return _PLANNER_SYSTEM_PROMPT.replace("{tools}", tools)
 
 
 def planner_payload(result: AgenticPlannerResult) -> dict[str, Any]:
