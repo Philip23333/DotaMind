@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 from app.agentic.evidence import EvidenceItem
 from app.agentic.models import ToolResult, ToolSource
-from app.agentic.tools import ToolDefinition, ToolRegistry
+from app.agentic.tools import ArgContract, ToolDefinition, ToolRegistry
 from app.integrations.patch_notes import get_item_changes, load_patch
 
 
@@ -38,6 +38,9 @@ def register_patch_tools(registry: ToolRegistry) -> None:
             source=source,
             evidence_extractor=patch_records_evidence,
             evidence_kinds=("patch_records", "patch_buff_count", "patch_nerf_count"),
+            arg_contracts={
+                "patch": ArgContract(description="Patch version, or latest."),
+            },
             metadata={"game": "dota2", "domain": "patch"},
         )
     )
@@ -53,6 +56,10 @@ def register_patch_tools(registry: ToolRegistry) -> None:
             source=source,
             evidence_extractor=patch_hero_changes_evidence,
             evidence_kinds=("hero_patch_changes",),
+            arg_contracts={
+                "patch": ArgContract(description="Patch version, or latest."),
+                "hero": ArgContract(description="Optional hero name filter."),
+            },
             metadata={"game": "dota2", "domain": "patch"},
         )
     )
@@ -68,6 +75,9 @@ def register_patch_tools(registry: ToolRegistry) -> None:
             source=source,
             evidence_extractor=patch_item_changes_evidence,
             evidence_kinds=("item_patch_changes",),
+            arg_contracts={
+                "patch": ArgContract(description="Patch version, or latest."),
+            },
             metadata={"game": "dota2", "domain": "patch"},
         )
     )

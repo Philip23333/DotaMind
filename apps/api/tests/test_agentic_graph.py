@@ -6,7 +6,13 @@ from app.agentic.graph import AgentGraphRunner
 from app.agentic.models import ExecutionPlan, ToolCall
 from app.agentic.planning.planner import AgenticPlannerResult
 from app.agentic.state import AgentRunState
-from app.agentic.tools import ToolDefinition, ToolRegistry
+from app.agentic.tools import (
+    AcceptedRef,
+    ArgContract,
+    OutputPathContract,
+    ToolDefinition,
+    ToolRegistry,
+)
 from app.agentic.tools.opendota_tools import resolve_team_evidence, team_recent_matches_evidence
 from app.agentic.tools.stratz_tools import (
     hero_matchup_evidence,
@@ -23,8 +29,14 @@ class MatchupInput(BaseModel):
     hero_id: int
 
 
+class LaneInput(BaseModel):
+    hero_id: int
+    is_with: bool
+
+
 class TeamIdInput(BaseModel):
     team_id: int
+    days: int = 30
 
 
 class FakePlanner:
@@ -61,9 +73,10 @@ def test_graph_validation_error_stops_before_tools() -> None:
         goal="Duplicate call ids.",
         output_contract="tool_results",
         tool_calls=[
-            ToolCall(id="t1", tool="debug.hero", args={"query": "Lina"}),
-            ToolCall(id="t1", tool="debug.hero", args={"query": "Lina"}),
+            ToolCall(id="t1", tool="resolve_hero", args={"query": "Lina"}),
+            ToolCall(id="t1", tool="resolve_hero", args={"query": "Lina"}),
         ],
+        required_evidence=["hero_identity"],
     )
 
     state = asyncio.run(_runner(plan).run(AgentRunState(query="debug", game="dota2")))
@@ -123,7 +136,7 @@ def test_graph_team_evidence_reaches_unsupported_answer_response() -> None:
     plan = ExecutionPlan(
         intent="team_analysis",
         goal="Collect team evidence.",
-        output_contract="team_report_answer",
+        output_contract="team_recent_report",
         tool_calls=[
             ToolCall(id="resolve_team", tool="opendota.resolve_team", args={"query": "BB"}),
             ToolCall(
@@ -141,15 +154,15 @@ def test_graph_team_evidence_reaches_unsupported_answer_response() -> None:
     assert state.evidence_graph
     assert state.evidence_graph.missing == []
     assert state.answer
-    assert state.answer.status == "unsupported_output_contract"
-    assert state.response_type == "unsupported_answer"
+    assert state.answer.status == "ok"
+    assert state.response_type == "team_recent_report"
 
 
 def test_graph_lane_outcome_plan_generates_lane_evidence() -> None:
     plan = ExecutionPlan(
         intent="lane_outcome",
         goal="Fetch lane outcome evidence.",
-        output_contract="draft_advice",
+        output_contract="natural_language_answer",
         tool_calls=[
             ToolCall(id="resolve_target", tool="resolve_hero", args={"query": "Lina"}),
             ToolCall(
@@ -170,7 +183,7 @@ def test_graph_lane_outcome_plan_generates_lane_evidence() -> None:
     assert state.evidence_graph
     assert "lane_outcome" in {item.kind for item in state.evidence_graph.evidence}
     assert state.answer
-    assert state.answer.status == "unsupported_output_contract"
+    assert state.answer.status == "ok"
 
 
 def _runner(plan: ExecutionPlan) -> AgentGraphRunner:
@@ -200,6 +213,12 @@ def _registry() -> ToolRegistry:
             },
             evidence_extractor=resolve_hero_evidence,
             evidence_kinds=("hero_identity",),
+            output_paths={
+                "hero_id": OutputPathContract(
+                    path="data.hero.hero_id",
+                    type="int",
+                )
+            },
         )
     )
     registry.register(
@@ -221,16 +240,27 @@ def _registry() -> ToolRegistry:
             },
             evidence_extractor=hero_matchup_evidence,
             evidence_kinds=("matchup_win_rate", "sample_size"),
+            arg_contracts={
+                "hero_id": ArgContract(
+                    accepts_refs=(
+                        AcceptedRef(
+                            from_tool="resolve_hero",
+                            path="data.hero.hero_id",
+                            type="int",
+                        ),
+                    )
+                )
+            },
         )
     )
     registry.register(
         ToolDefinition(
             name="stratz.lane_outcome",
             description="Return fake lane evidence.",
-            input_model=MatchupInput,
+            input_model=LaneInput,
             handler=lambda args: {
                 "hero_id": args.hero_id,
-                "is_with": False,
+                "is_with": args.is_with,
                 "records": [
                     {
                         "hero_id": 66,
@@ -243,6 +273,17 @@ def _registry() -> ToolRegistry:
             },
             evidence_extractor=lane_outcome_evidence,
             evidence_kinds=("lane_outcome", "sample_size"),
+            arg_contracts={
+                "hero_id": ArgContract(
+                    accepts_refs=(
+                        AcceptedRef(
+                            from_tool="resolve_hero",
+                            path="data.hero.hero_id",
+                            type="int",
+                        ),
+                    )
+                )
+            },
         )
     )
     registry.register(
@@ -257,6 +298,12 @@ def _registry() -> ToolRegistry:
             },
             evidence_extractor=resolve_team_evidence,
             evidence_kinds=("team_identity",),
+            output_paths={
+                "team_id": OutputPathContract(
+                    path="data.team.team_id",
+                    type="int",
+                )
+            },
         )
     )
     registry.register(
@@ -273,6 +320,17 @@ def _registry() -> ToolRegistry:
             },
             evidence_extractor=team_recent_matches_evidence,
             evidence_kinds=("recent_matches", "sample_size"),
+            arg_contracts={
+                "team_id": ArgContract(
+                    accepts_refs=(
+                        AcceptedRef(
+                            from_tool="opendota.resolve_team",
+                            path="data.team.team_id",
+                            type="int",
+                        ),
+                    )
+                )
+            },
         )
     )
     return registry

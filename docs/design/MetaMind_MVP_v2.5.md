@@ -311,9 +311,137 @@ v2.5 从单一 EvidenceBundle 演化为 EvidenceGraph：
 - 工具输出必须结构化，不能直接输出自然语言结论。
 - 工具必须暴露 `source`、`sample_size`、`freshness`、`missing`。
 
+### 5.3 Tool Contract Runtime
+
+`ToolDefinition` 是工具字段契约的唯一事实源：
+
+- `input_model` 负责参数类型和必填字段校验。
+- `arg_contracts` 负责字段语义和允许接收的引用来源。
+- `output_paths` 负责声明稳定可引用输出，路径必须匹配
+  `ToolResult.model_dump(mode="json")` 的 `$<call_id>.<output_path>`。
+- `evidence_kinds` 负责声明工具可以产出的 evidence kind。
+
+Planner prompt renderer 和 validator 必须消费同一份 `ToolDefinition`
+契约。`resolve_hero`、`stratz.lane_outcome`、`team_id`、`hero_id`
+这类业务名只能出现在工具注册 metadata、测试 fixture、prompt 输出断言或
+文档中，不能散落在 validator 的 `if call.tool == ...` 业务分支里。
+
+Reference validator 只做通用规则：
+
+```text
+$<call_id>.<output_path>
+```
+
+- `call_id` 必须指向前序 tool call。
+- `output_path` 必须等于源工具 `ToolDefinition.output_paths` 声明的 path。
+- 当前参数必须通过 `ArgContract.accepts_refs` 声明接受该
+  `from_tool + path + type`。
+- 路径拆分和查找语义必须与执行器 `_resolve_reference()` 一致。
+- 当前第一版只要求顶层参数引用的 placeholder 类型准确。validator 可以发现
+  list/dict 内部的 `$...` 引用，但 `_replace_references()` 对嵌套
+  `list[T]` / `dict[K,V]` 元素类型还不是完整类型感知。后续如果允许
+  `hero_ids: ["$a.data.hero.hero_id", "$b.data.hero.hero_id"]` 这类列表内引用，
+  需要补递归 annotation 传递。
+
 ---
 
 ## 6. Intent 与 Required Evidence
+
+### 6.0 Intent 语义边界
+
+`intent` 是用户目标的语义标签，不是路由键，也不能选择固定执行路径。
+执行路径只由经过校验的 `tool_calls` 决定；响应形态由
+`output_contract` 决定；证据义务由 `required_evidence` 和 contract rules
+决定。
+
+它不应该表示：
+
+```text
+intent=lane_outcome
+  -> 走 lane_outcome 专用 pipeline
+```
+
+也不应该成为旧时代 `task_type` 的替身：
+
+```text
+intent=team_report
+intent=meta_report
+intent=patch_impact
+```
+
+它应该表示更轻量的东西：用户目标/问题类别的语义标签，用来辅助
+contract 校验、Critic 解释、trace 可读性、质量策略和 analytics，而不是
+决定执行路径。
+
+例如：
+
+```json
+{
+  "intent": "lane_outcome",
+  "output_contract": "natural_language_answer",
+  "tool_calls": [
+    {"id": "resolve_lina", "tool": "resolve_hero", "args": {"query": "Lina"}},
+    {
+      "id": "get_lane_outcome",
+      "tool": "stratz.lane_outcome",
+      "args": {
+        "hero_id": "$resolve_lina.data.hero.hero_id",
+        "is_with": false
+      }
+    }
+  ],
+  "required_evidence": ["hero_identity", "lane_outcome", "sample_size"]
+}
+```
+
+执行时只看：
+
+```text
+resolve_hero -> stratz.lane_outcome -> evidence -> natural_language_answer
+```
+
+而不是因为 `intent=lane_outcome` 去找某个 lane outcome branch。
+
+合理用途：
+
+- Trace / observability：让 debug 页面和 logs 显示 planner 认为用户在问什么。
+- Contract-level guardrail：例如临时限制某些 output contract 的支持范围。
+- Quality policy hint：后续可以按 intent 增加质量阈值。
+- Answer framing：自然语言回答可以参考 intent 调整措辞，但不能改变执行路线。
+- Analytics：统计用户主要询问 counter、lane、team、patch 等问题。
+
+不允许用途：
+
+- 选择固定 service。
+- 决定硬编码 pipeline。
+- 替代 `tool_calls`。
+- 替代 `required_evidence`。
+- 限制 planner 只能从预设 intent 列表里挑一个固定流程。
+- 在代码里出现 `if intent == "lane_outcome": run_lane_outcome_flow()`。
+
+核心原则：
+
+```text
+intent describes why
+tool_calls describe how
+output_contract describes response shape
+required_evidence describes proof obligations
+```
+
+Planner 应从 tool schema 推导必填参数，而不是依赖 intent 专属 example。
+例如 `stratz.lane_outcome` 的 `input_model` 要求 `hero_id` 和 `is_with`，
+planner 就应该填：
+
+```json
+{
+  "hero_id": "$resolve_lina.data.hero.hero_id",
+  "is_with": false
+}
+```
+
+当前代码中 `draft_advice` 对 `counter_pick` 的绑定只能视为临时 guardrail。
+长期应优先通过 output contract、required evidence 和 evidence quality rules
+表达约束，避免把 `intent` 固化成旧链路路由键。
 
 ### 6.1 初始 Intent 集合
 

@@ -11,6 +11,26 @@ EvidenceExtractor = Callable[[ToolResult], list[Any]]
 
 
 @dataclass(frozen=True)
+class AcceptedRef:
+    from_tool: str
+    path: str
+    type: str
+
+
+@dataclass(frozen=True)
+class ArgContract:
+    description: str = ""
+    accepts_refs: tuple[AcceptedRef, ...] = ()
+
+
+@dataclass(frozen=True)
+class OutputPathContract:
+    path: str
+    type: str
+    description: str = ""
+
+
+@dataclass(frozen=True)
 class ToolDefinition:
     name: str
     description: str
@@ -19,6 +39,8 @@ class ToolDefinition:
     source: ToolSource | None = None
     evidence_extractor: EvidenceExtractor | None = None
     evidence_kinds: tuple[str, ...] = ()
+    arg_contracts: dict[str, ArgContract] = field(default_factory=dict)
+    output_paths: dict[str, OutputPathContract] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
 
 

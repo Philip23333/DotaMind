@@ -160,7 +160,7 @@ def test_plan_service_returns_error_without_answer_when_runner_fails() -> None:
     assert result.response
 
 
-def test_plan_service_keeps_ok_status_when_evidence_is_insufficient() -> None:
+def test_plan_service_rejects_unproducible_required_evidence() -> None:
     plan = ExecutionPlan(
         intent="counter_pick",
         goal="Only resolve Lina.",
@@ -182,9 +182,8 @@ def test_plan_service_keeps_ok_status_when_evidence_is_insufficient() -> None:
 
     result = asyncio.run(service.run("enemy picked Lina"))
 
-    assert result.status == "ok"
-    assert result.answer is not None
-    assert result.answer.status == "insufficient_evidence"
-    assert result.review is not None
-    assert result.review.severity == "failed"
+    assert result.status == "error"
+    assert result.answer is None
+    assert result.review is None
+    assert any("not producible by selected tools" in item for item in result.errors)
     assert result.response

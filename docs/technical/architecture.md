@@ -51,12 +51,31 @@ and serializes the final response.
 Missing tools, invalid plans, upstream tool errors, and insufficient evidence are
 surfaced directly. There is no fallback to deleted report endpoints.
 
+## Tool Contract Runtime
+
+`ToolDefinition` is the single source of truth for tool field contracts:
+
+- `input_model` defines argument type and required-field validation.
+- `arg_contracts` defines argument semantics and accepted references.
+- `output_paths` defines stable `$<call_id>.<output_path>` references against
+  `ToolResult.model_dump(mode="json")`.
+- `evidence_kinds` defines which required evidence a selected tool can produce.
+
+Planner prompt rendering and validator rules both consume these registry
+contracts. Tool-specific names such as hero or team fields must live in tool
+registration metadata, tests, docs, or prompt output, not in validator branches.
+
+Current limitation: top-level reference placeholders are type-compatible with
+their target input fields. Nested references inside `list[T]` or `dict[K,V]`
+are detected, but placeholder replacement is not yet fully element-type-aware.
+
 ## Component Roles
 
 | Component | Type | LLM | Responsibility |
 |---|---|---:|---|
 | `AgenticPlanner` | Agent | yes | Create constrained execution plans |
-| `ToolExecutor` | Runtime | no | Validate and execute registered tool calls |
+| `validate_plan_node` | Runtime | no | Validate tool calls, args, references, output contracts, and evidence producibility from ToolRegistry contracts |
+| `ToolExecutor` | Runtime | no | Resolve references and execute registered tool calls |
 | Agentic tools | Tools | no | Fetch structured evidence from OpenDota, STRATZ, patch data, and local constants |
 | `EvidenceGraph` builder | Runtime | no | Extract evidence from tool results |
 | `AnswerSynthesizer` | Agent/rules | optional | Produce structured or natural-language answers from evidence |

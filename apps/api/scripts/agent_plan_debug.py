@@ -71,7 +71,7 @@ async def run_plan(
     if executor is None:
         executor = ToolExecutor(build_default_tool_registry(get_settings()))
     state = AgentRunState(query="debug plan", game="dota2", plan=plan, reason="loaded plan")
-    state = validate_plan_node(state)
+    state = validate_plan_node(state, executor.registry)
     if state.status != "error":
         state = await tool_executor_node(state, executor)
     state = evidence_node(state, executor.registry)

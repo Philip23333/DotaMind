@@ -5,7 +5,13 @@ from pydantic import BaseModel, Field
 
 from app.agentic.evidence import EvidenceItem
 from app.agentic.models import ToolResult, ToolSource
-from app.agentic.tools import ToolDefinition, ToolRegistry
+from app.agentic.tools import (
+    AcceptedRef,
+    ArgContract,
+    OutputPathContract,
+    ToolDefinition,
+    ToolRegistry,
+)
 from app.core.config import Settings, get_policy
 from app.integrations.opendota.heroes import OpenDotaHeroes
 from app.integrations.opendota.team_resolution import resolve_team
@@ -53,6 +59,16 @@ def register_opendota_tools(registry: ToolRegistry, settings: Settings) -> None:
             source=source,
             evidence_extractor=resolve_team_evidence,
             evidence_kinds=("team_identity",),
+            arg_contracts={
+                "query": ArgContract(description="Team name, tag, or alias to resolve."),
+            },
+            output_paths={
+                "team_id": OutputPathContract(
+                    path="data.team.team_id",
+                    type="int",
+                    description="OpenDota team id.",
+                ),
+            },
             metadata={"game": "dota2", "domain": "team_identity"},
         )
     )
@@ -65,6 +81,26 @@ def register_opendota_tools(registry: ToolRegistry, settings: Settings) -> None:
             source=source,
             evidence_extractor=team_recent_matches_evidence,
             evidence_kinds=("recent_matches", "sample_size"),
+            arg_contracts={
+                "team_id": ArgContract(
+                    description="OpenDota team id.",
+                    accepts_refs=(
+                        AcceptedRef(
+                            from_tool="opendota.resolve_team",
+                            path="data.team.team_id",
+                            type="int",
+                        ),
+                    ),
+                ),
+                "days": ArgContract(description="Recent window in days."),
+            },
+            output_paths={
+                "matches": OutputPathContract(
+                    path="data.matches",
+                    type="list[dict]",
+                    description="OpenDota team match rows.",
+                ),
+            },
             metadata={"game": "dota2", "domain": "team_matches"},
         )
     )
@@ -77,6 +113,19 @@ def register_opendota_tools(registry: ToolRegistry, settings: Settings) -> None:
             source=source,
             evidence_extractor=team_players_evidence,
             evidence_kinds=("current_players",),
+            arg_contracts={
+                "team_id": ArgContract(
+                    description="OpenDota team id.",
+                    accepts_refs=(
+                        AcceptedRef(
+                            from_tool="opendota.resolve_team",
+                            path="data.team.team_id",
+                            type="int",
+                        ),
+                    ),
+                ),
+                "current_only": ArgContract(description="Only include current roster."),
+            },
             metadata={"game": "dota2", "domain": "team_players"},
         )
     )
@@ -89,6 +138,21 @@ def register_opendota_tools(registry: ToolRegistry, settings: Settings) -> None:
             source=source,
             evidence_extractor=team_heroes_evidence,
             evidence_kinds=("team_hero_usage", "match_detail_sample", "sample_size"),
+            arg_contracts={
+                "matches": ArgContract(
+                    description="OpenDota match rows to aggregate.",
+                    accepts_refs=(
+                        AcceptedRef(
+                            from_tool="opendota.team_recent_matches",
+                            path="data.matches",
+                            type="list[dict]",
+                        ),
+                    ),
+                ),
+                "detail_sample_size": ArgContract(
+                    description="Optional match detail sample size."
+                ),
+            },
             metadata={"game": "dota2", "domain": "team_heroes"},
         )
     )
@@ -101,6 +165,10 @@ def register_opendota_tools(registry: ToolRegistry, settings: Settings) -> None:
             source=source,
             evidence_extractor=hero_stats_by_role_evidence,
             evidence_kinds=("hero_stats", "role_fit", "sample_size"),
+            arg_contracts={
+                "role": ArgContract(description="Role name to filter."),
+                "min_pub_pick": ArgContract(description="Minimum public pick count."),
+            },
             metadata={"game": "dota2", "domain": "hero_meta"},
         )
     )

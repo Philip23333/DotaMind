@@ -4,7 +4,13 @@ from pydantic import BaseModel, Field
 
 from app.agentic.evidence import EvidenceItem
 from app.agentic.models import ToolResult, ToolSource
-from app.agentic.tools import ToolDefinition, ToolRegistry
+from app.agentic.tools import (
+    AcceptedRef,
+    ArgContract,
+    OutputPathContract,
+    ToolDefinition,
+    ToolRegistry,
+)
 from app.agentic.tools.hero_tools import load_default_hero_resolver
 from app.core.config import Settings
 from app.integrations.stratz.heroes import StratzHeroes
@@ -46,6 +52,16 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
             ),
             evidence_extractor=resolve_hero_evidence,
             evidence_kinds=("hero_identity",),
+            arg_contracts={
+                "query": ArgContract(description="Hero name or alias to resolve."),
+            },
+            output_paths={
+                "hero_id": OutputPathContract(
+                    path="data.hero.hero_id",
+                    type="int",
+                    description="Canonical Dota 2 hero id.",
+                ),
+            },
             metadata={"game": "dota2", "domain": "hero_identity"},
         )
     )
@@ -63,6 +79,22 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
             ),
             evidence_extractor=hero_matchup_evidence,
             evidence_kinds=("matchup_win_rate", "sample_size"),
+            arg_contracts={
+                "hero_id": ArgContract(
+                    description="Target hero id.",
+                    accepts_refs=(
+                        AcceptedRef(
+                            from_tool="resolve_hero",
+                            path="data.hero.hero_id",
+                            type="int",
+                        ),
+                    ),
+                ),
+                "take": ArgContract(description="Maximum matchup rows to return."),
+                "week": ArgContract(description="STRATZ week filter."),
+                "bracket_basic_ids": ArgContract(description="STRATZ bracket filters."),
+                "match_limit": ArgContract(description="Maximum source matches to scan."),
+            },
             metadata={"game": "dota2", "domain": "hero_matchup"},
         )
     )
@@ -80,6 +112,27 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
             ),
             evidence_extractor=lane_outcome_evidence,
             evidence_kinds=("lane_outcome", "sample_size"),
+            arg_contracts={
+                "hero_id": ArgContract(
+                    description="Target hero id.",
+                    accepts_refs=(
+                        AcceptedRef(
+                            from_tool="resolve_hero",
+                            path="data.hero.hero_id",
+                            type="int",
+                        ),
+                    ),
+                ),
+                "is_with": ArgContract(
+                    description=(
+                        "true for lane partners with this hero; false for lane "
+                        "opponents against this hero."
+                    ),
+                ),
+                "week": ArgContract(description="STRATZ week filter."),
+                "bracket_basic_ids": ArgContract(description="STRATZ bracket filters."),
+                "position_ids": ArgContract(description="Lane position filters."),
+            },
             metadata={"game": "dota2", "domain": "lane_outcome"},
         )
     )

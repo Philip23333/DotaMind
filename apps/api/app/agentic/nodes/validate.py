@@ -1,11 +1,13 @@
 import logging
 
+from app.agentic.planning.contracts import validate_plan_against_catalog
 from app.agentic.state import AgentRunState
+from app.agentic.tools import ToolRegistry
 
 logger = logging.getLogger(__name__)
 
 
-def validate_plan_node(state: AgentRunState) -> AgentRunState:
+def validate_plan_node(state: AgentRunState, registry: ToolRegistry) -> AgentRunState:
     state.add_trace("validate", "validate execution plan", "planned")
     logger.info("node=validate start has_plan=%s", state.plan is not None)
     plan = state.plan
@@ -16,18 +18,7 @@ def validate_plan_node(state: AgentRunState) -> AgentRunState:
         logger.info("node=validate end status=error errors=%s", len(state.errors))
         return state
 
-    errors = []
-    if len(plan.tool_calls) > plan.constraints.max_tool_calls:
-        errors.append(
-            "plan exceeds max_tool_calls "
-            f"({len(plan.tool_calls)} > {plan.constraints.max_tool_calls})"
-        )
-
-    seen = set()
-    for call in plan.tool_calls:
-        if call.id in seen:
-            errors.append(f"duplicate tool call id: {call.id}")
-        seen.add(call.id)
+    errors = validate_plan_against_catalog(plan, registry)
 
     if errors:
         state.status = "error"

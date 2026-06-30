@@ -150,27 +150,56 @@ def test_agentic_planner_rejects_unknown_tool() -> None:
     assert result.raw_output == payload
 
 
-def test_agentic_planner_rejects_hardcoded_hero_id() -> None:
+def test_agentic_planner_accepts_hardcoded_hero_id_when_schema_allows_int() -> None:
     payload = _valid_plan_payload()
     payload["plan"]["tool_calls"][1]["args"]["hero_id"] = 25
     planner = AgenticPlanner(_registry(), llm=FakeLLM(payload), llm_enabled=True)
 
     result = asyncio.run(planner.plan("enemy picked Lina, what should I pick?"))
 
-    assert result.status == "error"
-    assert "hero_id must be" in result.errors[0]
+    assert result.status == "planned"
 
 
-def test_agentic_planner_rejects_hardcoded_lane_outcome_hero_id() -> None:
+def test_agentic_planner_accepts_lane_outcome_reference_from_any_previous_call_id() -> None:
     payload = _valid_plan_payload()
+    payload["plan"]["tool_calls"][0]["id"] = "resolve_lina"
     payload["plan"]["tool_calls"][1]["tool"] = "stratz.lane_outcome"
-    payload["plan"]["tool_calls"][1]["args"] = {"hero_id": 25, "is_with": False}
+    payload["plan"]["tool_calls"][1]["args"] = {
+        "hero_id": "$resolve_lina.data.hero.hero_id",
+        "is_with": False,
+    }
+    payload["plan"]["output_contract"] = "natural_language_answer"
+    payload["plan"]["required_evidence"] = [
+        "hero_identity",
+        "lane_outcome",
+        "sample_size",
+    ]
+    planner = AgenticPlanner(_registry(), llm=FakeLLM(payload), llm_enabled=True)
+
+    result = asyncio.run(planner.plan("how does Lina lane?"))
+
+    assert result.status == "planned"
+
+
+def test_agentic_planner_rejects_lane_outcome_missing_is_with() -> None:
+    payload = _valid_plan_payload()
+    payload["plan"]["tool_calls"][0]["id"] = "resolve_lina"
+    payload["plan"]["tool_calls"][1]["tool"] = "stratz.lane_outcome"
+    payload["plan"]["tool_calls"][1]["args"] = {
+        "hero_id": "$resolve_lina.data.hero.hero_id",
+    }
+    payload["plan"]["output_contract"] = "natural_language_answer"
+    payload["plan"]["required_evidence"] = [
+        "hero_identity",
+        "lane_outcome",
+        "sample_size",
+    ]
     planner = AgenticPlanner(_registry(), llm=FakeLLM(payload), llm_enabled=True)
 
     result = asyncio.run(planner.plan("how does Lina lane?"))
 
     assert result.status == "error"
-    assert "stratz.lane_outcome.hero_id must be" in result.errors[0]
+    assert any("stratz.lane_outcome invalid args" in item for item in result.errors)
 
 
 def test_agentic_planner_rejects_mock_allowed() -> None:
@@ -348,6 +377,10 @@ def test_agentic_planner_prompt_contains_team_recent_catalog_example() -> None:
     assert "current_players" in prompt
     assert "team_hero_usage" in prompt
     assert '"matches": "$get_matches.data.matches"' in prompt
+    assert "evidence_produced" in prompt
+    assert "- is_with: bool, required" in prompt
+    assert "$<previous_call_id>.data.hero.hero_id" in prompt
+    assert "$resolve_target.data.hero.hero_id" not in prompt
 
 
 def test_agentic_planner_rejects_unknown_required_evidence() -> None:

@@ -14,7 +14,7 @@ At the start of every new session in this repository, before analyzing or editin
 - When the user has not explicitly requested code changes, only analyze and
   discuss the issue. Do not edit files proactively.
 - Treat `apps/web` as deprecated and do not modify it unless the user explicitly
-  requests changes there. Use `/debug/chat` as the internal query test UI.
+  requests changes there. Use `/debug/plan` as the internal query test UI.
 - After completing a meaningful phase of changes, update the progress
   documentation under `docs/progress/`. Keep the timestamp-prefixed Chinese and
   English progress snapshots aligned.
@@ -52,3 +52,13 @@ At the start of every new session in this repository, before analyzing or editin
 - Avoid conservative duplicate implementations. Do not keep both old and new
   versions of the same capability merely for perceived stability during this
   development phase; expose gaps directly and continue the migration.
+
+## Agentic Planning Semantics
+
+- `intent` is a semantic label for the user's goal.
+- It is not a routing key and must not select a fixed execution path.
+- Execution is determined only by validated `tool_calls`.
+- Response shape is determined by `output_contract`.
+- Evidence obligations are determined by `required_evidence` and contract rules.
+- Do not recreate old `task_type` behavior through `intent`. In particular,
+  never add branches such as `if intent == "lane_outcome": run_lane_outcome_flow()`.

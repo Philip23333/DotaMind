@@ -62,7 +62,7 @@ def test_run_plan_builds_response_with_registry_evidence() -> None:
     plan = ExecutionPlan(
         intent="debug",
         goal="Run a utility tool.",
-        output_contract="tool_results",
+        output_contract="natural_language_answer",
         tool_calls=[
             {
                 "id": "utility",

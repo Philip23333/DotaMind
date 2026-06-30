@@ -7,6 +7,7 @@ from app.agentic.models import ExecutionPlan
 from app.agentic.planning.contracts import (
     STRUCTURED_OUTPUT_CONTRACTS,
     render_planner_contracts,
+    render_planner_tools,
     validate_plan_against_catalog,
 )
 from app.agentic.tools import ToolRegistry
@@ -56,11 +57,11 @@ If supported, return:
     "goal": "...",
     "output_contract": "draft_advice",
     "tool_calls": [
-      {"id":"resolve_target","tool":"resolve_hero","args":{"query":"<enemy hero>"}},
+      {"id":"resolve_enemy","tool":"resolve_hero","args":{"query":"<enemy hero>"}},
       {
         "id":"get_matchups",
         "tool":"stratz.hero_vs_hero_matchup",
-        "args":{"hero_id":"$resolve_target.data.hero.hero_id","take":5}
+        "args":{"hero_id":"$resolve_enemy.data.hero.hero_id","take":5}
       }
     ],
     "required_evidence": ["hero_identity","matchup_win_rate","sample_size"],
@@ -68,13 +69,12 @@ If supported, return:
   }
 }
 
-For stratz.hero_vs_hero_matchup and stratz.lane_outcome, hero_id MUST come
-from resolve_hero using "$resolve_target.data.hero.hero_id". Do not hardcode
-hero ids.
+When an arg accepts a reference, use "$<previous_call_id>.<declared_output_path>".
+The call id may be any earlier tool call id you chose. The declared output path
+must match the tool contract shown above.
 
-For OpenDota team evidence, resolve the team first, then use
-"$resolve_team.data.team.team_id" for team tools. If ambiguity cannot be
-resolved by tools, expose the candidates or return insufficient_tools.
+If ambiguity cannot be resolved by tools, expose the candidates or return
+insufficient_tools.
 
 For patch impact evidence, use patch.get_records and include patch_records in
 required_evidence. Add patch.hero_changes and patch.item_changes when the user
@@ -208,10 +208,7 @@ class AgenticPlanner:
         return validate_plan_against_catalog(plan, self.registry)
 
     def _system_prompt(self) -> str:
-        tools = "\n".join(
-            f"- {definition.name}: {definition.description}"
-            for definition in self.registry.list()
-        )
+        tools = render_planner_tools(self.registry)
         contracts = render_planner_contracts(self.registry)
         return _PLANNER_SYSTEM_PROMPT.replace("{tools}", tools).replace(
             "{contracts}",

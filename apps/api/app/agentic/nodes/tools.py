@@ -2,6 +2,7 @@ import logging
 from typing import Any
 
 from app.agentic.models import ToolCall, ToolResult
+from app.agentic.references import lookup_path, parse_reference
 from app.agentic.state import AgentRunState
 from app.agentic.tools.executor import ToolExecutor
 
@@ -98,21 +99,17 @@ def _resolve_reference(
     reference: str,
     results_by_id: dict[str, ToolResult],
 ) -> tuple[Any, list[str]]:
-    parts = reference.removeprefix("$").split(".")
-    if len(parts) < 2:
+    parsed = parse_reference(reference)
+    if parsed is None:
         return None, [f"invalid reference: {reference}"]
 
-    call_id = parts[0]
-    result = results_by_id.get(call_id)
+    result = results_by_id.get(parsed.call_id)
     if result is None:
         return None, [f"reference target is unavailable: {reference}"]
     if result.status != "ok":
-        return None, [f"reference target failed: {call_id}"]
+        return None, [f"reference target failed: {parsed.call_id}"]
 
-    current: Any = result.model_dump(mode="json")
-    for part in parts[1:]:
-        if isinstance(current, dict) and part in current:
-            current = current[part]
-            continue
+    value, found = lookup_path(result.model_dump(mode="json"), parsed.parts[1:])
+    if not found:
         return None, [f"reference path not found: {reference}"]
-    return current, []
+    return value, []

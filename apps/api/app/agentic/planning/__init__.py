@@ -4,8 +4,15 @@ from app.agentic.planning.contracts import (
     ContractSpec,
     get_contract,
     render_planner_contracts,
+    render_planner_tools,
     validate_contract_plan_with_evidence,
+    validate_evidence_producibility,
+    validate_output_contract,
     validate_plan_against_catalog,
+    validate_references,
+    validate_registry_contracts,
+    validate_tool_args,
+    validate_tool_calls,
 )
 from app.agentic.planning.planner import AgenticPlanner, AgenticPlannerResult
 
@@ -18,6 +25,13 @@ __all__ = [
     "ContractSpec",
     "get_contract",
     "render_planner_contracts",
+    "render_planner_tools",
     "validate_contract_plan_with_evidence",
+    "validate_evidence_producibility",
+    "validate_output_contract",
     "validate_plan_against_catalog",
+    "validate_references",
+    "validate_registry_contracts",
+    "validate_tool_args",
+    "validate_tool_calls",
 ]

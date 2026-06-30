@@ -34,7 +34,7 @@ def test_policy_yaml_loads_all_report_sections() -> None:
     assert policy.critic.team_report.hard_max_latest_match_age_days == 90
     assert policy.critic.team_report.min_matches_in_window == 5
     assert policy.critic.team_report.min_match_details_analyzed == 5
-    assert policy.llm.orchestrator.max_tokens == 500
+    assert policy.llm.orchestrator.max_tokens == 4000
     assert policy.llm.hero_analyzer.max_tokens == 1000
 
 

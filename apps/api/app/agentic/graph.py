@@ -32,7 +32,7 @@ class AgentGraphRunner:
     def _compile_graph(self):
         graph = StateGraph(AgentRunState)
         graph.add_node("planner", self._planner)
-        graph.add_node("validate", validate_plan_node)
+        graph.add_node("validate", self._validate)
         graph.add_node("tools", self._tools)
         graph.add_node("evidence", self._evidence)
         graph.add_node("answer", self._answer)
@@ -82,6 +82,9 @@ class AgentGraphRunner:
 
     async def _tools(self, state: AgentRunState) -> AgentRunState:
         return await tool_executor_node(state, self.executor)
+
+    def _validate(self, state: AgentRunState) -> AgentRunState:
+        return validate_plan_node(state, self.registry)
 
     def _evidence(self, state: AgentRunState) -> AgentRunState:
         return evidence_node(state, self.registry)

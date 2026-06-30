@@ -1,4 +1,4 @@
-﻿import json
+import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from types import UnionType
@@ -6,8 +6,9 @@ from typing import Any, Union, get_args, get_origin
 
 from pydantic import ValidationError
 
-from app.agentic.models import ExecutionPlan
-from app.agentic.tools import ToolRegistry
+from app.agentic.models import ExecutionPlan, ToolCall
+from app.agentic.references import parse_reference
+from app.agentic.tools import ArgContract, ToolDefinition, ToolRegistry
 
 NATURAL_LANGUAGE_CONTRACT = "natural_language_answer"
 
@@ -20,7 +21,6 @@ class ContractSpec:
     allowed_required_evidence: frozenset[str] | None = None
     allowed_evidence: frozenset[str] | None = None
     required_tools: frozenset[str] = field(default_factory=frozenset)
-    required_intent: str | None = None
     prompt_example: Mapping[str, Any] | None = None
 
     @property
@@ -111,7 +111,6 @@ CONTRACT_REGISTRY = {
         required_evidence=frozenset(
             {"hero_identity", "matchup_win_rate", "sample_size"}
         ),
-        required_intent="counter_pick",
     ),
     NATURAL_LANGUAGE_CONTRACT: ContractSpec(
         name=NATURAL_LANGUAGE_CONTRACT,
@@ -163,18 +162,118 @@ def render_planner_contracts(registry: ToolRegistry) -> str:
     return "\n".join(sections)
 
 
+def render_planner_tools(registry: ToolRegistry) -> str:
+    sections = []
+    for definition in registry.list():
+        lines = [
+            f"- {definition.name}",
+            f"  description: {definition.description}",
+            "  evidence_produced: " + json.dumps(list(definition.evidence_kinds)),
+            "  args:",
+        ]
+        fields = definition.input_model.model_fields
+        if not fields:
+            lines.append("    []")
+        for name, field_info in fields.items():
+            contract = definition.arg_contracts.get(name, ArgContract())
+            required = _field_required(name, definition)
+            type_name = _type_name(field_info.annotation)
+            description = contract.description or (field_info.description or "")
+            line = f"    - {name}: {type_name}, "
+            line += "required" if required else "optional"
+            if description:
+                line += f". {description}"
+            lines.append(line)
+            for accepted in contract.accepts_refs:
+                lines.append(
+                    "      accepts reference from "
+                    f"{accepted.from_tool}: $<previous_call_id>.{accepted.path} "
+                    f"({accepted.type})"
+                )
+        sections.append("\n".join(lines))
+    return "\n".join(sections)
+
+
 def validate_plan_against_catalog(
     plan: ExecutionPlan,
     registry: ToolRegistry,
 ) -> list[str]:
-    errors = validate_contract_plan_with_evidence(plan, known_evidence_kinds(registry))
+    errors: list[str] = []
+    errors.extend(validate_registry_contracts(registry))
+    errors.extend(validate_tool_calls(plan, registry))
+    errors.extend(validate_references(plan, registry))
+    errors.extend(validate_tool_args(plan, registry))
+    errors.extend(validate_output_contract(plan, registry))
+    errors.extend(validate_evidence_producibility(plan, registry))
+    return errors
+
+
+def validate_registry_contracts(registry: ToolRegistry) -> list[str]:
+    errors: list[str] = []
+    definitions = {definition.name: definition for definition in registry.list()}
+
+    for definition in definitions.values():
+        fields = definition.input_model.model_fields
+        unknown_args = sorted(set(definition.arg_contracts) - set(fields))
+        if unknown_args:
+            errors.append(
+                f"{definition.name} arg_contracts reference unknown args: "
+                + ", ".join(unknown_args)
+            )
+
+        for arg_name, arg_contract in definition.arg_contracts.items():
+            field = fields.get(arg_name)
+            if field is None:
+                continue
+            for accepted in arg_contract.accepts_refs:
+                if not _contract_type_matches_annotation(
+                    accepted.type,
+                    field.annotation,
+                ):
+                    errors.append(
+                        f"{definition.name}.{arg_name} accepts_ref type "
+                        f"{accepted.type} is incompatible with input field "
+                        f"{_type_name(field.annotation)}"
+                    )
+
+                source_definition = definitions.get(accepted.from_tool)
+                if source_definition is None:
+                    errors.append(
+                        f"{definition.name}.{arg_name} accepts_ref unknown tool: "
+                        f"{accepted.from_tool}"
+                    )
+                    continue
+
+                output_contract = _output_contract_for_path(
+                    source_definition,
+                    accepted.path,
+                )
+                if output_contract is None:
+                    errors.append(
+                        f"{definition.name}.{arg_name} accepts_ref path is not "
+                        f"declared by {accepted.from_tool}: {accepted.path}"
+                    )
+                    continue
+                if output_contract.type != accepted.type:
+                    errors.append(
+                        f"{definition.name}.{arg_name} accepts_ref type "
+                        f"{accepted.type} does not match {accepted.from_tool} "
+                        f"output path {accepted.path} type {output_contract.type}"
+                    )
+    return errors
+
+
+def validate_tool_calls(plan: ExecutionPlan, registry: ToolRegistry) -> list[str]:
+    errors: list[str] = []
     registered = {definition.name for definition in registry.list()}
+    seen: set[str] = set()
 
     for call in plan.tool_calls:
+        if call.id in seen:
+            errors.append(f"duplicate tool call id: {call.id}")
+        seen.add(call.id)
         if call.tool not in registered:
             errors.append(f"unknown tool: {call.tool}")
-            continue
-        errors.extend(_validate_tool_args(call.tool, call.args, registry))
 
     if plan.constraints.allow_mock:
         errors.append("constraints.allow_mock must be false")
@@ -183,20 +282,98 @@ def validate_plan_against_catalog(
             "plan exceeds max_tool_calls "
             f"({len(plan.tool_calls)} > {plan.constraints.max_tool_calls})"
         )
+    return errors
 
-    if plan.intent == "counter_pick" and plan.output_contract != "draft_advice":
-        errors.append("counter_pick plan must use output_contract=draft_advice")
+
+def validate_references(plan: ExecutionPlan, registry: ToolRegistry) -> list[str]:
+    errors: list[str] = []
+    previous: dict[str, ToolCall] = {}
+    registered = {definition.name for definition in registry.list()}
 
     for call in plan.tool_calls:
-        if call.tool in {"stratz.hero_vs_hero_matchup", "stratz.lane_outcome"}:
-            hero_id = call.args.get("hero_id")
-            if hero_id != "$resolve_target.data.hero.hero_id":
-                errors.append(
-                    f"{call.tool}.hero_id must be "
-                    "$resolve_target.data.hero.hero_id"
-                )
+        if call.tool not in registered:
+            previous[call.id] = call
+            continue
 
+        target_definition = registry.get(call.tool)
+        for arg_name, value in call.args.items():
+            if arg_name not in target_definition.input_model.model_fields:
+                continue
+            arg_contract = target_definition.arg_contracts.get(arg_name, ArgContract())
+            for reference in _find_references(value):
+                parsed = parse_reference(reference)
+                if parsed is None:
+                    errors.append(f"{call.id}.{arg_name} invalid reference: {reference}")
+                    continue
+
+                source_call = previous.get(parsed.call_id)
+                if source_call is None:
+                    errors.append(
+                        f"{call.id}.{arg_name} reference target must be a previous "
+                        f"tool call: {reference}"
+                    )
+                    continue
+                if source_call.tool not in registered:
+                    continue
+
+                source_definition = registry.get(source_call.tool)
+                output_contract = _output_contract_for_path(
+                    source_definition,
+                    parsed.path,
+                )
+                if output_contract is None:
+                    errors.append(
+                        f"{call.id}.{arg_name} reference path is not declared by "
+                        f"{source_call.tool}: {parsed.path}"
+                    )
+                    continue
+
+                if not any(
+                    accepted.from_tool == source_definition.name
+                    and accepted.path == output_contract.path
+                    and accepted.type == output_contract.type
+                    for accepted in arg_contract.accepts_refs
+                ):
+                    errors.append(
+                        f"{call.id}.{arg_name} does not accept reference "
+                        f"from {source_definition.name}.{output_contract.path}"
+                    )
+        previous[call.id] = call
     return errors
+
+
+def validate_tool_args(plan: ExecutionPlan, registry: ToolRegistry) -> list[str]:
+    errors: list[str] = []
+    registered = {definition.name for definition in registry.list()}
+    for call in plan.tool_calls:
+        if call.tool not in registered:
+            continue
+        errors.extend(_validate_tool_args(call.tool, call.args, registry))
+    return errors
+
+
+def validate_output_contract(plan: ExecutionPlan, registry: ToolRegistry) -> list[str]:
+    return validate_contract_plan_with_evidence(plan, known_evidence_kinds(registry))
+
+
+def validate_evidence_producibility(
+    plan: ExecutionPlan,
+    registry: ToolRegistry,
+) -> list[str]:
+    registered = {definition.name for definition in registry.list()}
+    produced = {
+        evidence_kind
+        for call in plan.tool_calls
+        if call.tool in registered
+        for evidence_kind in registry.get(call.tool).evidence_kinds
+    }
+    missing = sorted(set(plan.required_evidence) - produced)
+    if missing:
+        return [
+            "required_evidence is not producible by selected tools: "
+            + ", ".join(missing)
+        ]
+    return []
 
 
 def validate_contract_plan_with_evidence(
@@ -212,11 +389,6 @@ def validate_contract_plan_with_evidence(
     unknown_evidence = sorted(required - evidence_kinds)
     if unknown_evidence:
         errors.append("unknown required_evidence: " + ", ".join(unknown_evidence))
-
-    if spec.required_intent is not None and plan.intent != spec.required_intent:
-        errors.append(
-            f"{plan.output_contract} plan must use intent={spec.required_intent}"
-        )
 
     missing = sorted(spec.required_evidence - required)
     if missing:
@@ -271,6 +443,27 @@ def _validate_tool_args(
     return errors
 
 
+def _find_references(value: Any) -> list[str]:
+    if isinstance(value, str) and value.startswith("$"):
+        return [value]
+    if isinstance(value, dict):
+        return [
+            reference
+            for item in value.values()
+            for reference in _find_references(item)
+        ]
+    if isinstance(value, list):
+        return [reference for item in value for reference in _find_references(item)]
+    return []
+
+
+def _output_contract_for_path(definition: ToolDefinition, path: str):
+    for contract in definition.output_paths.values():
+        if contract.path == path:
+            return contract
+    return None
+
+
 def _replace_references(value: Any, annotation: Any) -> Any:
     if isinstance(value, str) and value.startswith("$"):
         return _placeholder(annotation)
@@ -279,6 +472,51 @@ def _replace_references(value: Any, annotation: Any) -> Any:
     if isinstance(value, list):
         return [_replace_references(item, Any) for item in value]
     return value
+
+
+def _field_required(name: str, definition: ToolDefinition) -> bool:
+    return definition.input_model.model_fields[name].is_required()
+
+
+def _type_name(annotation: Any) -> str:
+    origin = get_origin(annotation)
+    if origin in {Union, UnionType}:
+        return " | ".join(_type_name(item) for item in get_args(annotation))
+    if origin is list:
+        args = get_args(annotation)
+        return f"list[{_type_name(args[0])}]" if args else "list"
+    if origin is dict:
+        args = get_args(annotation)
+        if len(args) == 2:
+            return f"dict[{_type_name(args[0])}, {_type_name(args[1])}]"
+        return "dict"
+    if annotation is type(None):
+        return "None"
+    if annotation is Any:
+        return "Any"
+    return getattr(annotation, "__name__", str(annotation))
+
+
+def _contract_type_matches_annotation(contract_type: str, annotation: Any) -> bool:
+    if annotation is Any:
+        return True
+    origin = get_origin(annotation)
+    if origin in {Union, UnionType}:
+        return any(
+            item is not type(None)
+            and _contract_type_matches_annotation(contract_type, item)
+            for item in get_args(annotation)
+        )
+    if contract_type == _type_name(annotation):
+        return True
+    if contract_type == "list[dict]" and origin is list:
+        args = get_args(annotation)
+        return bool(args and get_origin(args[0]) is dict)
+    if contract_type == "list" and origin is list:
+        return True
+    if contract_type == "dict" and origin is dict:
+        return True
+    return False
 
 
 def _placeholder(annotation: Any) -> Any:

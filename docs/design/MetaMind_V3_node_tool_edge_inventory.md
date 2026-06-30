@@ -48,6 +48,10 @@ Current core pieces:
 - `AgenticPlanner`: LLM creates a constrained `ExecutionPlan`.
 - `Contract Registry`: centralizes output contracts, required evidence, examples,
   and plan validation against registered tool evidence kinds.
+- `Tool Contract Runtime`: extends `ToolDefinition` with field contracts,
+  accepted references, declared output paths, and evidence producibility metadata.
+  Planner prompt rendering and validator rules consume these registry contracts
+  instead of duplicating tool-specific rules.
 - `ToolRegistry` / `ToolExecutor`: registers deterministic tools and executes
   planned calls.
 - `EvidenceGraph`: aggregates `ToolResult[]` through tool-level evidence
@@ -59,6 +63,17 @@ Current core pieces:
 - `response_node`: selects response type and serializes state.
 - `/debug/plan`: visual debug page for trace, plan, tool results, evidence,
   answer, review, and raw JSON.
+
+Intent semantics:
+
+- `intent` is a semantic label for the user's goal, not a routing key.
+- Execution is determined by validated `tool_calls`, not `intent`.
+- Response shape is determined by `output_contract`.
+- Evidence obligations are determined by `required_evidence` and contract rules.
+- Do not add fixed branches such as `if intent == "lane_outcome":
+  run_lane_outcome_flow()`. A lane outcome query should execute because the plan
+  calls `resolve_hero -> stratz.lane_outcome`, not because the graph has a
+  lane-outcome-specific path.
 
 Currently registered agentic tools:
 
@@ -133,7 +148,7 @@ unchanged, and `replan_node` remains out of scope.
 | Node | Expected implementation | Current status |
 |---|---|---|
 | `planner_node` | LLM creates constrained `ExecutionPlan` from query, game, tool registry, and Contract Registry. | Implemented. Uses registry-rendered contract prompt. |
-| `validate_plan_node` | Validate duplicate ids and basic graph shape. Catalog validation happens in Planner. | Implemented. Keep deterministic and narrow. |
+| `validate_plan_node` | Validate plan/tool/ref/evidence contracts from the same ToolRegistry contract runtime used by the Planner. | Implemented. Checks duplicate ids, unknown tools, args schema, declared references, output contract requirements, and evidence producibility. |
 | `tool_executor_node` | Execute registered tools, resolve `$tool_id.data.path`, expose tool errors in state. | Implemented. Generic; no business branching. |
 | `evidence_node` | Convert `ToolResult[]` into `EvidenceGraph` through tool-level evidence extractors. | Implemented. Uses registry `evidence_extractor` and `evidence_kinds`. |
 | `answer_node` / `analyzer_node` | Turn evidence into structured reports or evidence-grounded natural language. | Implemented first pass. Structured reports are still minimal. |

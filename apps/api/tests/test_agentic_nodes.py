@@ -11,7 +11,14 @@ from app.agentic.nodes import (
     validate_plan_node,
 )
 from app.agentic.state import AgentRunState
-from app.agentic.tools import ToolDefinition, ToolExecutor, ToolRegistry
+from app.agentic.tools import (
+    AcceptedRef,
+    ArgContract,
+    OutputPathContract,
+    ToolDefinition,
+    ToolExecutor,
+    ToolRegistry,
+)
 
 
 class HeroLookupInput(BaseModel):
@@ -32,14 +39,14 @@ def test_validate_plan_rejects_too_many_tool_calls() -> None:
             goal="Run too many tools.",
             output_contract="tool_results",
             tool_calls=[
-                ToolCall(id="t1", tool="debug.echo", args={}),
-                ToolCall(id="t2", tool="debug.echo", args={}),
+                ToolCall(id="t1", tool="debug.matchups", args={"hero_id": 1}),
+                ToolCall(id="t2", tool="debug.matchups", args={"hero_id": 1}),
             ],
             constraints=ExecutionConstraints(max_tool_calls=1),
         ),
     )
 
-    validate_plan_node(state)
+    validate_plan_node(state, _registry())
 
     assert state.status == "error"
     assert "max_tool_calls" in state.errors[0]
@@ -54,13 +61,13 @@ def test_validate_plan_rejects_duplicate_tool_call_ids() -> None:
             goal="Reject duplicate IDs.",
             output_contract="tool_results",
             tool_calls=[
-                ToolCall(id="t1", tool="debug.echo", args={}),
-                ToolCall(id="t1", tool="debug.echo", args={}),
+                ToolCall(id="t1", tool="debug.matchups", args={"hero_id": 1}),
+                ToolCall(id="t1", tool="debug.matchups", args={"hero_id": 1}),
             ],
         ),
     )
 
-    validate_plan_node(state)
+    validate_plan_node(state, _registry())
 
     assert state.status == "error"
     assert "duplicate tool call id" in state.errors[0]
@@ -223,6 +230,12 @@ def _registry() -> ToolRegistry:
             description="Resolve a fake hero.",
             input_model=HeroLookupInput,
             handler=lambda args: {"hero": {"hero_id": 25, "name": args.query}},
+            output_paths={
+                "hero_id": OutputPathContract(
+                    path="data.hero.hero_id",
+                    type="int",
+                )
+            },
         )
     )
     registry.register(
@@ -231,6 +244,17 @@ def _registry() -> ToolRegistry:
             description="Fetch fake matchup rows.",
             input_model=MatchupInput,
             handler=lambda args: {"hero_id": args.hero_id, "take": args.take},
+            arg_contracts={
+                "hero_id": ArgContract(
+                    accepts_refs=(
+                        AcceptedRef(
+                            from_tool="debug.resolve_hero",
+                            path="data.hero.hero_id",
+                            type="int",
+                        ),
+                    )
+                )
+            },
         )
     )
     return registry
