@@ -259,8 +259,8 @@ Priority order for the next implementation phase:
 
 ## Implementation Priority
 
-1. Keep `/api/v1/plan` as the experimental agentic route. Do not fallback to
-   `/api/v1/query`.
+1. Keep `/api/v1/plan` as the only active API workflow. Do not fallback to any
+   deleted report/query route.
 2. Keep deleting or retiring old paths as capabilities migrate to agentic tools.
 3. Add raw evidence tools before ranking helpers.
 4. Add hero identity enrichment before improving draft answer copy.
@@ -273,6 +273,7 @@ Priority order for the next implementation phase:
 ## Out of Scope
 
 - No automatic fallback to old report pipeline.
+- No compatibility shell for deleted `/api/v1/query` or fixed report endpoints.
 - No mock data to hide missing live integrations.
 - No replan loop until the tool inventory is broader.
 - No new fixed business pipeline for counter-pick, synergy, team, meta, or patch

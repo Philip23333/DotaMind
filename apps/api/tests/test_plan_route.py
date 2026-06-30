@@ -43,3 +43,15 @@ def test_plan_route_returns_plan_response(monkeypatch) -> None:
     assert payload["answer"] is None
     assert payload["review"] is None
     assert payload["trace"][0]["node"] == "planner"
+
+
+def test_removed_legacy_routes_return_404() -> None:
+    client = TestClient(app)
+
+    assert client.post("/api/v1/query", json={"query": "hello"}).status_code == 404
+    assert client.post("/api/v1/meta-report", json={}).status_code == 404
+    assert client.post("/api/v1/patch-impact", json={}).status_code == 404
+    assert client.post("/api/v1/team-report", json={}).status_code == 404
+    assert client.post("/api/v1/verify-claim", json={}).status_code == 404
+    assert client.get("/api/v1/services").status_code == 404
+    assert client.get("/debug/chat").status_code == 404

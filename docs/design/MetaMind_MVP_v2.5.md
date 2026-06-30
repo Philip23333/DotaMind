@@ -4,6 +4,10 @@
 
 本文目标不是新增某个单点功能，而是避免后续每增加一种能力都重新写一条固定 pipeline。后续实现应以本文为主线推进。
 
+> 当前实现注记（2026-06-30）：旧固定 report/query 链路已删除。当前 API 只保留
+> `POST /api/v1/plan`、`GET /debug/plan` 和 `GET /health`；后续能力应继续通过
+> agentic tools、EvidenceGraph、answer contracts 扩展，不恢复旧 endpoint 兼容层。
+
 ---
 
 ## 1. 问题定义：当前架构哪里不够 Agentic
@@ -512,18 +516,10 @@ review(plan, evidence_graph, analysis)
 
 ### 8.7 API Schema 修改
 
-旧 endpoint 可以保留：
+当前 agentic endpoint：
 
 ```text
-/api/v1/query
-/api/v1/team-report
-/api/v1/meta-report
-```
-
-新增 agentic endpoint：
-
-```text
-POST /api/v1/agent/run
+POST /api/v1/plan
 ```
 
 Request：
@@ -557,7 +553,7 @@ Response：
 
 - 新增本文档。
 - 保留现有 API 与测试。
-- query_smoke 继续作为回归入口。
+- `/api/v1/plan` route tests 和 `/debug/plan` 继续作为回归入口。
 
 ### Stage 1：Planning Domain + Tool Registry 骨架
 
@@ -611,9 +607,9 @@ task_type=team_report
 
 目标：对外暴露 v2.5 形态。
 
-- 新增 `/api/v1/agent/run`。
+- 保留并强化 `/api/v1/plan`。
 - 返回 plan、quality、result、trace。
-- 保持旧 endpoint 兼容。
+- 不恢复旧 endpoint 兼容。
 
 ---
 
@@ -621,17 +617,15 @@ task_type=team_report
 
 | 当前文件 | v2.5 目标 |
 |---|---|
-| `pipeline/orchestrator.py` | Planner：输出 ExecutionPlan |
-| `pipeline/retriever.py` | 拆成 tool implementations + legacy adapter |
-| `pipeline/runner.py` | 改为 PlanRunner / ToolExecutor 驱动 |
-| `pipeline/analyzer.py` | 从 report_type 方法迁到 `analyze(plan, graph)` |
-| `pipeline/critic.py` | 从 `review_report(report, bundle)` 迁到 `review(plan, graph, analysis)` |
-| `pipeline/formatter.py` | 支持 plan-aware response envelope |
+| `agentic/planner.py` | Planner：输出 ExecutionPlan |
+| `agentic/registry.py` | ToolRegistry / ToolExecutor |
+| `agentic/graph.py` | LangGraph StateGraph orchestration |
+| `agentic/answer.py` | 从 EvidenceGraph 生成 answer contract |
+| `agentic/critic.py` | `review(plan, evidence_graph, answer)` |
 | `integrations/opendota/*` | 继续作为底层 client，不暴露给 LLM |
-| `api/v1/routes.py` | 保留旧 endpoint，新增 `/agent/run` |
+| `api/v1/routes.py` | 只保留 `/plan` |
 | `config/policy.yaml` | 增加 planning/tool 限制配置 |
-| `resources/query_console.html` | 可选展示 plan/tool trace |
-| `scripts/query_smoke.py` | 增加 agent/run smoke 模式 |
+| `resources/plan_console.html` | 展示 plan/tool trace |
 
 ---
 
@@ -642,7 +636,7 @@ v2.5 第一阶段不做：
 - 不让 LLM 直接写 SQL。
 - 不让 LLM 直接拼外部 API URL。
 - 不做无限 replan。
-- 不一次性删除旧 endpoint。
+- 不恢复已删除的旧 endpoint。
 - 不把所有报告文本都交给 LLM 自由生成。
 - 不为了“看起来 Agentic”牺牲 evidence 与 schema 稳定性。
 

@@ -5,7 +5,6 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from app.api.v1.schemas import MetaReportRequest, TeamReportRequest
 from app.core.config import DEFAULT_POLICY_PATH, load_policy
 
 
@@ -82,6 +81,8 @@ def test_policy_rejects_invalid_critic_team_age_thresholds(tmp_path: Path) -> No
         load_policy(_write_policy(tmp_path / "policy.yaml", data))
 
 
-def test_api_defaults_come_from_policy_yaml() -> None:
-    assert MetaReportRequest().patch == "latest"
-    assert TeamReportRequest().time_range == "last_30_days"
+def test_policy_defaults_come_from_policy_yaml() -> None:
+    policy = load_policy(DEFAULT_POLICY_PATH)
+
+    assert policy.patch_report.default_patch == "latest"
+    assert policy.team_report.default_time_range_days == 30

@@ -8,9 +8,9 @@ from app.agentic.models import ToolResult, ToolSource
 from app.agentic.registry import ToolDefinition, ToolRegistry
 from app.core.config import Settings, get_policy
 from app.integrations.opendota.heroes import OpenDotaHeroes
+from app.integrations.opendota.team_resolution import resolve_team
 from app.integrations.opendota.teams import OpenDotaTeams
 from app.integrations.opendota.transport import OpenDotaTransport
-from app.pipeline.retriever import RetrieverTool
 
 
 class OpenDotaResolveTeamInput(BaseModel):
@@ -263,7 +263,7 @@ def _resolve_team_handler(settings: Settings):
         transport, _heroes, teams = _clients(settings)
         try:
             all_teams = await teams.get_all()
-            resolution = RetrieverTool.resolve_team(args.query, all_teams)
+            resolution = resolve_team(args.query, all_teams)
             return {
                 "status": resolution.status,
                 "query": args.query,

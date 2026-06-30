@@ -1,110 +1,76 @@
 # Architecture
 
-> Architecture is now implemented as the canonical v2.1 pipeline: domain models, application use cases, and one Orchestrator -> Retriever -> Analyzer -> Critic -> Formatter path.
-
-MetaMind is organized around three product surfaces:
-
-```text
-Web Dashboard
-+ Callable Agent Service
-+ CAP Paid Service
-```
+MetaMind now uses a single agentic backend path. The old canonical v2.1 fixed
+report pipeline has been deleted.
 
 ## Backend Layout
 
 ```text
 app/
-  api/v1/          HTTP schemas, routes, and mappers only
-  application/     query/report use cases and service catalog
-  domain/          evidence, task, and report dataclasses
-  pipeline/        orchestrator, retriever, analyzer, critic, formatter
-  data/            patch JSON + mock fixtures
-  integrations/    OpenDota, STRATZ, patch-note clients
+  api/v1/          /plan schemas, route, and mapper
+  application/     PlanService
+  agentic/         planner, LangGraph runner, tools, evidence, answer, critic
+  integrations/    OpenDota, STRATZ, patch-note clients and deterministic helpers
   config/          policy.yaml business policy
-  resources/       prompts and internal debug UI assets
+  resources/       prompts and /debug/plan asset
 ```
 
-The application layer is deliberately decoupled from routes so future adapters can call the same code from:
+There is no `app/pipeline/` or old report domain layer. New capabilities should
+be exposed as deterministic agentic tools and output contracts, not as fixed
+business pipelines.
 
-- HTTP endpoints
-- A2A agent handlers
-- CAP order callbacks
-- Scheduled report-generation jobs
+## Runtime Workflow
 
-## Component Roles (v2.1)
+```text
+POST /api/v1/plan
+  -> PlanService
+  -> AgentGraphRunner
+  -> LangGraph StateGraph(AgentRunState)
+      -> planner_node
+      -> validate_plan_node
+      -> tool_executor_node
+      -> evidence_node
+      -> answer_node
+      -> critic_node
+      -> response_node
+```
+
+The planner creates a constrained `ExecutionPlan`. Code validates and executes
+registered tools, builds an `EvidenceGraph`, synthesizes an answer, runs a critic,
+and serializes the final response.
+
+Missing tools, invalid plans, upstream tool errors, and insufficient evidence are
+surfaced directly. There is no fallback to deleted report endpoints.
+
+## Component Roles
 
 | Component | Type | LLM | Responsibility |
-|---|---|---|---|
-| **Orchestrator** | Agent | optional + rules | Intent parsing and task selection |
-| **Analyzer** | Agent | optional | Scoring, claim generation, evidence binding, report sections |
-| **Critic** | Agent | rules | Independent review, reject on missing/weak evidence |
-| Retriever | Tool fn | no | OpenDota / patch JSON fetching, EvidenceBundle assembly |
-| Formatter | Tool fn | no | Render domain reports to public response shape |
+|---|---|---:|---|
+| `AgenticPlanner` | Agent | yes | Create constrained execution plans |
+| `ToolExecutor` | Runtime | no | Validate and execute registered tool calls |
+| Agentic tools | Tools | no | Fetch structured evidence from OpenDota, STRATZ, patch data, and local constants |
+| `EvidenceGraph` builder | Runtime | no | Extract evidence from tool results |
+| `AnswerSynthesizer` | Agent/rules | optional | Produce structured or natural-language answers from evidence |
+| `AgenticCritic` | Rules | no | Review missing evidence, tool failures, mock usage, and confidence |
+| `response_node` | Runtime | no | Serialize public `/api/v1/plan` response shape |
 
-The classification rule: **a component is an Agent only if it requires an LLM decision**. Wrapping deterministic code as an "Agent" is rejected as noise.
+## Debugging
 
-## Workflow
-
-```text
-HTTP / CAP / A2A caller
-  -> api/v1/routes.py
-  -> api/v1/mappers.py
-  -> application/query_service.py or application/report_service.py
-  -> pipeline/orchestrator.py
-  -> pipeline/retriever.py
-  -> pipeline/analyzer.py
-  -> pipeline/critic.py
-  -> pipeline/formatter.py
-  -> api/v1/mappers.py
-```
-
-Structured endpoints and natural-language `/api/v1/query` both use the same pipeline. `/api/v1/query/experimental` has been removed.
-
-## Independent Failure Modes
-
-This is what makes the multi-Agent topology meaningful rather than decorative:
-
-- **Orchestrator** can mis-plan: wrong tool, missing tool, infinite loop
-- **Analyzer** can hallucinate: claims without evidence, over-confident verdicts
-- **Critic** can mis-judge: pass false claims or reject good ones
-
-Three Agents, three independent failure surfaces, all observable in trace logs. This is the textbook Reflexion / Self-Critique pattern.
-
-## Scoring (v2.1)
-
-The current implementation keeps deterministic weighted scoring for reproducibility and uses the Analyzer LLM only for optional hero insight text when enabled. Tunable business policy lives in `app/config/policy.yaml`; secrets, URLs, and environment switches stay in `.env`.
-
-Pipeline:
+Use:
 
 ```text
-1. Signal extraction       (deterministic, thresholds in config/policy.yaml)
-2. Deterministic scoring    (Analyzer)
-3. Optional LLM insight     (Analyzer)
-4. Critic review            (rules)
+http://localhost:8001/debug/plan
 ```
 
-Confidence remains a bounded float in the public API for frontend compatibility.
-
-## Frontend
-
-The legacy Next.js app is deprecated for active development. Use FastAPI's `/debug/chat` page for internal query testing unless work on `apps/web` is explicitly requested.
-
-Main modules:
-
-- Query console
-- KPI cards
-- Meta report ranking table
-- ECharts score chart
-- Patch impact panel
-- Team intelligence panel
-- Agent API / CAP service catalog
-
-The deprecated dashboard uses backend responses when `NEXT_PUBLIC_API_BASE_URL` is reachable and falls back to local mock data while the backend is offline.
+The deprecated Next.js app under `apps/web` should not be modified unless
+explicitly requested.
 
 ## Migration Status
 
-- Legacy `agents/`, `services/`, and `tools/` source files have been removed.
-- `application/`, `domain/`, and `pipeline/` are the only backend business architecture.
-- `/api/v1/query` is the canonical natural-language endpoint.
-- `app/config/policy.yaml` replaces the old `opendota.json`, `signals.yaml`, and `critic_rules.yaml` configuration sources.
-- OpenDota live hero and team retrieval are implemented behind `METAMIND_LIVE_DATA_ENABLED`.
+- Deleted `/api/v1/query` and structured report endpoints.
+- Deleted `/api/v1/services` and `/debug/chat`.
+- Deleted `application/query_service.py`, `application/report_service.py`,
+  `application/catalog.py`, `app/pipeline/`, and old report/task/evidence domain
+  models.
+- Kept `/api/v1/plan`, `/debug/plan`, and `/health`.
+- Moved team resolution into an OpenDota integration helper used by agentic tools.
