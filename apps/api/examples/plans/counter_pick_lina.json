@@ -1,0 +1,31 @@
+{
+  "intent": "counter_pick",
+  "goal": "Fetch hero matchup evidence for a target hero.",
+  "output_contract": "draft_advice",
+  "tool_calls": [
+    {
+      "id": "resolve_target",
+      "tool": "resolve_hero",
+      "args": {
+        "query": "Lina"
+      }
+    },
+    {
+      "id": "get_matchups",
+      "tool": "stratz.hero_vs_hero_matchup",
+      "args": {
+        "hero_id": "$resolve_target.data.hero.hero_id",
+        "take": 3
+      }
+    }
+  ],
+  "required_evidence": [
+    "hero_identity",
+    "matchup_win_rate",
+    "sample_size"
+  ],
+  "constraints": {
+    "max_tool_calls": 3,
+    "allow_mock": false
+  }
+}

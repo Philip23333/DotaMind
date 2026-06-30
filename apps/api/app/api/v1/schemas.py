@@ -1,6 +1,8 @@
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
+
+from app.core.config import default_patch, default_time_range
 
 SupportedGame = Literal["dota2"]
 Verdict = Literal["supported", "partially_supported", "weakly_supported", "unsupported"]
@@ -37,7 +39,7 @@ class HeroRecommendation(BaseModel):
 
 class MetaReportRequest(BaseModel):
     game: SupportedGame = "dota2"
-    patch: str = "latest"
+    patch: str = Field(default_factory=default_patch)
     role: str = "offlane"
 
 
@@ -55,7 +57,7 @@ class MetaReportResponse(BaseModel):
 
 class PatchImpactRequest(BaseModel):
     game: SupportedGame = "dota2"
-    patch: str = "latest"
+    patch: str = Field(default_factory=default_patch)
     role: str | None = None
 
 
@@ -76,7 +78,18 @@ class PatchImpactResponse(BaseModel):
 class TeamReportRequest(BaseModel):
     game: SupportedGame = "dota2"
     team_name: str = "Team Spirit"
-    time_range: str = "last_30_days"
+    team_id: int | None = Field(default=None, gt=0)
+    time_range: str = Field(default_factory=default_time_range)
+
+
+class TeamDataFreshness(BaseModel):
+    latest_match_time: int | None = None
+    latest_match_at: str | None = None
+    sample_window_days: int = Field(ge=0)
+    matches_in_window: int = Field(ge=0)
+    match_details_analyzed: int = Field(ge=0)
+    opendota_cache_hits: int = Field(ge=0)
+    opendota_cache_misses: int = Field(ge=0)
 
 
 class TeamReportResponse(BaseModel):
@@ -86,6 +99,9 @@ class TeamReportResponse(BaseModel):
     time_range: str
     summary: str
     recent_record: str
+    matches_in_window: int = Field(ge=0)
+    match_details_analyzed: int = Field(ge=0)
+    data_freshness: TeamDataFreshness
     signature_heroes: list[str]
     draft_preferences: list[str]
     win_patterns: list[str]
@@ -125,9 +141,39 @@ class ServiceCatalogResponse(BaseModel):
     notes: list[str]
 
 
+class TeamSelection(BaseModel):
+    team_id: int = Field(gt=0)
+    team_name: str = Field(min_length=1)
+    time_range: str = Field(default_factory=default_time_range)
+
+
 class NaturalLanguageQueryRequest(BaseModel):
     query: str
     game: SupportedGame = "dota2"
+    team_selection: TeamSelection | None = None
+
+
+class PlanRequest(BaseModel):
+    query: str
+    game: SupportedGame = "dota2"
+
+
+class PlanResponse(BaseModel):
+    query: str
+    game: SupportedGame
+    status: Literal["ok", "insufficient_tools", "error"]
+    reason: str
+    response_type: str | None = None
+    planner_output: dict[str, Any] | None = None
+    planner_raw_content: str | None = None
+    planner_finish_reason: str | None = None
+    plan: dict[str, Any] | None = None
+    tool_results: list[dict[str, Any]] = Field(default_factory=list)
+    evidence_graph: dict[str, Any] | None = None
+    answer: dict[str, Any] | None = None
+    review: dict[str, Any] | None = None
+    errors: list[str] = Field(default_factory=list)
+    trace: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class PlannedTask(BaseModel):
@@ -141,8 +187,5 @@ class NaturalLanguageQueryResponse(BaseModel):
     routed_service: str
     tasks: list[PlannedTask]
     result: (
-        MetaReportResponse
-        | PatchImpactResponse
-        | TeamReportResponse
-        | ClaimVerificationResponse
+        MetaReportResponse | PatchImpactResponse | TeamReportResponse | ClaimVerificationResponse
     )

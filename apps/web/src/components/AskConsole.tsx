@@ -105,13 +105,13 @@ export function AskConsole() {
       <div className="mt-4 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-sm font-semibold text-[var(--color-ink)]">v2.1 test output</h2>
+            <h2 className="text-sm font-semibold text-[var(--color-ink)]">Pipeline output</h2>
             <p className="mt-0.5 text-xs leading-5 text-[var(--color-muted)]">
-              Calls the experimental Orchestrator endpoint and shows the executed agent steps.
+              Calls the canonical Orchestrator endpoint and shows the executed pipeline steps.
             </p>
           </div>
           <span className="inline-flex w-fit items-center rounded-full border border-[var(--color-border)] bg-[var(--color-bg)] px-2.5 py-1 text-xs font-medium text-[var(--color-muted)]">
-            /api/v1/query/experimental
+            /api/v1/query
           </span>
         </div>
 

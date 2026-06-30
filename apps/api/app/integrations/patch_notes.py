@@ -91,14 +91,19 @@ def get_item_changes(patch: str = "latest") -> list[dict[str, Any]]:
     ]
 
 
-def compute_hero_patch_score(patch: str = "latest") -> dict[str, float]:
+def compute_hero_patch_score(
+    patch: str = "latest",
+    *,
+    neutral_score: float = 0.5,
+    change_delta: float = 0.15,
+) -> dict[str, float]:
     """
     Compute a patch impact score per hero based on buff/nerf count.
 
-    Score range: 0.0 (heavy nerf) to 1.0 (heavy buff), 0.5 = neutral.
+    Score range is clamped to 0.0-1.0 around the configured neutral score.
 
     Logic:
-      - Each buff adds +0.15, each nerf adds -0.15
+      - Each buff adds change_delta, each nerf subtracts change_delta
       - Clamped to [0.0, 1.0]
     """
     hero_changes = get_hero_changes(patch)
@@ -109,10 +114,9 @@ def compute_hero_patch_score(patch: str = "latest") -> dict[str, float]:
         for c in changes:
             polarity = c.get("polarity", "neutral")
             if polarity == "buff":
-                delta += 0.15
+                delta += change_delta
             elif polarity == "nerf":
-                delta -= 0.15
-        # Clamp to [0, 1], center at 0.5
-        scores[hero] = max(0.0, min(1.0, 0.5 + delta))
+                delta -= change_delta
+        scores[hero] = max(0.0, min(1.0, neutral_score + delta))
 
     return scores
