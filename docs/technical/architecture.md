@@ -9,7 +9,16 @@ report pipeline has been deleted.
 app/
   api/v1/          /plan schemas, route, and mapper
   application/     PlanService
-  agentic/         planner, LangGraph runner, tools, evidence, answer, critic
+  agentic/
+    graph.py       LangGraph StateGraph runner
+    state.py       shared AgentRunState
+    models.py      ExecutionPlan, ToolCall, ToolResult
+    nodes/         planner, validate, tools, evidence, answer, critic, response nodes
+    tools/         registry, executor, hero, patch, OpenDota, STRATZ, ranking tools
+    planning/      planner and output contract catalog
+    evidence/      EvidenceGraph and extraction helpers
+    answer/        answer synthesizer, structured and natural-language routing
+    critic/        rule-first reviewer and critic rules
   integrations/    OpenDota, STRATZ, patch-note clients and deterministic helpers
   config/          policy.yaml business policy
   resources/       prompts and /debug/plan asset

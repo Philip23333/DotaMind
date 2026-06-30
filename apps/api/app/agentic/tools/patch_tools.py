@@ -1,11 +1,11 @@
-from collections import Counter
+﻿from collections import Counter
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 from app.agentic.evidence import EvidenceItem
 from app.agentic.models import ToolResult, ToolSource
-from app.agentic.registry import ToolDefinition, ToolRegistry
+from app.agentic.tools import ToolDefinition, ToolRegistry
 from app.integrations.patch_notes import get_item_changes, load_patch
 
 

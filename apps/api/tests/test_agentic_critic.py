@@ -1,8 +1,8 @@
-from app.agentic.answer import AnswerSynthesisResult
+﻿from app.agentic.answer import AnswerSynthesisResult
 from app.agentic.critic import AgenticCritic
 from app.agentic.evidence import build_evidence_graph
 from app.agentic.models import ExecutionPlan, ToolResult, ToolSource
-from app.agentic.stratz_tools import build_default_tool_registry
+from app.agentic.tools.stratz_tools import build_default_tool_registry
 from app.core.config import Settings
 
 

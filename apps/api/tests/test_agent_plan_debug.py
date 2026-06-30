@@ -1,4 +1,4 @@
-import argparse
+﻿import argparse
 import asyncio
 import json
 
@@ -6,7 +6,7 @@ import pytest
 from pydantic import BaseModel
 
 from app.agentic.models import ExecutionPlan
-from app.agentic.registry import ToolDefinition, ToolExecutor, ToolRegistry
+from app.agentic.tools import ToolDefinition, ToolExecutor, ToolRegistry
 from scripts.agent_plan_debug import load_plan, plan_from_raw, run_plan
 
 

@@ -1,4 +1,4 @@
-from typing import Any, Literal
+﻿from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -6,7 +6,7 @@ from app.agentic.answer import AnswerSynthesisResult
 from app.agentic.critic import AgenticCriticReview
 from app.agentic.evidence import EvidenceGraph
 from app.agentic.models import ExecutionPlan, ToolResult
-from app.agentic.planner import AgenticPlannerResult
+from app.agentic.planning.planner import AgenticPlannerResult
 
 AgentRunStatus = Literal["ok", "insufficient_tools", "error"]
 

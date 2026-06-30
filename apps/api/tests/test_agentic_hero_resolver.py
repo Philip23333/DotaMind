@@ -1,4 +1,4 @@
-from app.agentic.hero_resolver import (
+﻿from app.agentic.tools.hero_tools import (
     HeroRecord,
     HeroResolver,
     load_default_hero_resolver,

@@ -1,8 +1,8 @@
-import asyncio
+﻿import asyncio
 
 from app.agentic.models import ToolCall
-from app.agentic.patch_tools import register_patch_tools
-from app.agentic.registry import ToolExecutor, ToolRegistry
+from app.agentic.tools import ToolExecutor, ToolRegistry
+from app.agentic.tools.patch_tools import register_patch_tools
 
 
 def test_patch_get_records_reads_latest_patch() -> None:

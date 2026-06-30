@@ -1,4 +1,4 @@
-import json
+﻿import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from types import UnionType
@@ -7,7 +7,7 @@ from typing import Any, Union, get_args, get_origin
 from pydantic import ValidationError
 
 from app.agentic.models import ExecutionPlan
-from app.agentic.registry import ToolRegistry
+from app.agentic.tools import ToolRegistry
 
 NATURAL_LANGUAGE_CONTRACT = "natural_language_answer"
 

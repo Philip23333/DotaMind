@@ -1,4 +1,4 @@
-"""Run one registered v2.5 tool call from the command line."""
+﻿"""Run one registered v2.5 tool call from the command line."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ import json
 from typing import Any
 
 from app.agentic.models import ToolCall
-from app.agentic.registry import ToolExecutor
-from app.agentic.stratz_tools import build_default_tool_registry
+from app.agentic.tools import ToolExecutor
+from app.agentic.tools.stratz_tools import build_default_tool_registry
 from app.core.config import get_settings
 
 

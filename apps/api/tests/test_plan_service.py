@@ -1,7 +1,7 @@
-import asyncio
+﻿import asyncio
 
 from app.agentic.models import ExecutionPlan, ToolCall
-from app.agentic.planner import AgenticPlannerResult
+from app.agentic.planning.planner import AgenticPlannerResult
 from app.application.plan_service import PlanService
 
 
@@ -82,8 +82,8 @@ def test_plan_service_executes_planned_counter_pick(monkeypatch) -> None:
                 "disadvantage": [],
             }
 
-    monkeypatch.setattr("app.agentic.stratz_tools.StratzTransport", FakeTransport)
-    monkeypatch.setattr("app.agentic.stratz_tools.StratzHeroes", FakeHeroes)
+    monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzTransport", FakeTransport)
+    monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzHeroes", FakeHeroes)
 
     plan = ExecutionPlan(
         intent="counter_pick",

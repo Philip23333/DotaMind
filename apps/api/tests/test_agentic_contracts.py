@@ -1,6 +1,7 @@
-from pydantic import BaseModel
+﻿from pydantic import BaseModel
 
-from app.agentic.contracts import (
+from app.agentic.models import ExecutionPlan, ToolCall
+from app.agentic.planning.contracts import (
     CONTRACT_REGISTRY,
     STRUCTURED_OUTPUT_CONTRACTS,
     known_evidence_kinds,
@@ -8,9 +9,8 @@ from app.agentic.contracts import (
     validate_contract_plan_with_evidence,
     validate_plan_against_catalog,
 )
-from app.agentic.models import ExecutionPlan, ToolCall
-from app.agentic.registry import ToolDefinition, ToolRegistry
-from app.agentic.stratz_tools import build_default_tool_registry
+from app.agentic.tools import ToolDefinition, ToolRegistry
+from app.agentic.tools.stratz_tools import build_default_tool_registry
 from app.core.config import Settings
 
 DEFAULT_EVIDENCE_KINDS = {

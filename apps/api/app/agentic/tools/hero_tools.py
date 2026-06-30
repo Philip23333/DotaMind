@@ -8,7 +8,7 @@ from typing import Any, Literal
 import yaml
 
 HERO_CONSTANTS_PATH = (
-    Path(__file__).resolve().parents[1] / "data" / "heroes" / "dota2_heroes.yaml"
+    Path(__file__).resolve().parents[2] / "data" / "heroes" / "dota2_heroes.yaml"
 )
 ResolutionStatus = Literal["resolved", "ambiguous", "not_found"]
 

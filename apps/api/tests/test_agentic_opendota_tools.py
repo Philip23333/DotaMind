@@ -1,9 +1,9 @@
-import asyncio
+﻿import asyncio
 import time
 
 from app.agentic.models import ToolCall
-from app.agentic.opendota_tools import register_opendota_tools
-from app.agentic.registry import ToolExecutor, ToolRegistry
+from app.agentic.tools import ToolExecutor, ToolRegistry
+from app.agentic.tools.opendota_tools import register_opendota_tools
 from app.core.config import Settings
 
 
@@ -61,7 +61,7 @@ class FakeTeams:
 
 
 def test_opendota_resolve_team_reports_resolution(monkeypatch) -> None:
-    monkeypatch.setattr("app.agentic.opendota_tools._clients", _fake_clients)
+    monkeypatch.setattr("app.agentic.tools.opendota_tools._clients", _fake_clients)
     result = asyncio.run(
         _execute("opendota.resolve_team", {"query": "BetBoom Team"})
     )
@@ -72,7 +72,7 @@ def test_opendota_resolve_team_reports_resolution(monkeypatch) -> None:
 
 
 def test_opendota_team_recent_matches_returns_window_summary(monkeypatch) -> None:
-    monkeypatch.setattr("app.agentic.opendota_tools._clients", _fake_clients)
+    monkeypatch.setattr("app.agentic.tools.opendota_tools._clients", _fake_clients)
     result = asyncio.run(
         _execute("opendota.team_recent_matches", {"team_id": 1, "days": 30})
     )
@@ -85,7 +85,7 @@ def test_opendota_team_recent_matches_returns_window_summary(monkeypatch) -> Non
 
 
 def test_opendota_team_players_supports_current_only(monkeypatch) -> None:
-    monkeypatch.setattr("app.agentic.opendota_tools._clients", _fake_clients)
+    monkeypatch.setattr("app.agentic.tools.opendota_tools._clients", _fake_clients)
     result = asyncio.run(
         _execute("opendota.team_players", {"team_id": 1, "current_only": True})
     )
@@ -96,7 +96,7 @@ def test_opendota_team_players_supports_current_only(monkeypatch) -> None:
 
 
 def test_opendota_team_heroes_returns_detail_sample_count(monkeypatch) -> None:
-    monkeypatch.setattr("app.agentic.opendota_tools._clients", _fake_clients)
+    monkeypatch.setattr("app.agentic.tools.opendota_tools._clients", _fake_clients)
     result = asyncio.run(
         _execute(
             "opendota.team_heroes",
@@ -113,7 +113,7 @@ def test_opendota_team_heroes_returns_detail_sample_count(monkeypatch) -> None:
 
 
 def test_opendota_hero_stats_by_role_returns_records(monkeypatch) -> None:
-    monkeypatch.setattr("app.agentic.opendota_tools._clients", _fake_clients)
+    monkeypatch.setattr("app.agentic.tools.opendota_tools._clients", _fake_clients)
     result = asyncio.run(
         _execute("opendota.hero_stats_by_role", {"role": "offlane", "min_pub_pick": 50})
     )
@@ -131,7 +131,7 @@ def test_opendota_tool_error_is_exposed_without_mock(monkeypatch) -> None:
     def broken_clients(_settings):
         return FakeTransport(), FakeHeroes(), BrokenTeams()
 
-    monkeypatch.setattr("app.agentic.opendota_tools._clients", broken_clients)
+    monkeypatch.setattr("app.agentic.tools.opendota_tools._clients", broken_clients)
     result = asyncio.run(
         _execute("opendota.team_recent_matches", {"team_id": 1, "days": 30})
     )

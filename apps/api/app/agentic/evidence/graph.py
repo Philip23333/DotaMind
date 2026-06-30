@@ -1,9 +1,9 @@
-from typing import Any
+﻿from typing import Any
 
 from pydantic import BaseModel, Field
 
 from app.agentic.models import ExecutionPlan, ToolResult, ToolSource
-from app.agentic.registry import ToolRegistry
+from app.agentic.tools import ToolRegistry
 
 
 class EvidenceItem(BaseModel):

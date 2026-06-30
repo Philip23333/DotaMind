@@ -1,11 +1,11 @@
-import time
+﻿import time
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 from app.agentic.evidence import EvidenceItem
 from app.agentic.models import ToolResult, ToolSource
-from app.agentic.registry import ToolDefinition, ToolRegistry
+from app.agentic.tools import ToolDefinition, ToolRegistry
 from app.core.config import Settings, get_policy
 from app.integrations.opendota.heroes import OpenDotaHeroes
 from app.integrations.opendota.team_resolution import resolve_team

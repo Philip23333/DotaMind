@@ -1,8 +1,8 @@
-import asyncio
+﻿import asyncio
 from typing import Any
 
-from app.agentic.planner import AgenticPlanner
-from app.agentic.stratz_tools import build_default_tool_registry
+from app.agentic.planning.planner import AgenticPlanner
+from app.agentic.tools.stratz_tools import build_default_tool_registry
 from app.core.config import Settings
 from app.llm.provider import LLMJSONDecodeError, ToolCallResult
 

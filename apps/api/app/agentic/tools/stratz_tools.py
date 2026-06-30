@@ -1,11 +1,11 @@
-from typing import Any
+﻿from typing import Any
 
 from pydantic import BaseModel, Field
 
 from app.agentic.evidence import EvidenceItem
-from app.agentic.hero_resolver import load_default_hero_resolver
 from app.agentic.models import ToolResult, ToolSource
-from app.agentic.registry import ToolDefinition, ToolRegistry
+from app.agentic.tools import ToolDefinition, ToolRegistry
+from app.agentic.tools.hero_tools import load_default_hero_resolver
 from app.core.config import Settings
 from app.integrations.stratz.heroes import StratzHeroes
 from app.integrations.stratz.transport import StratzTransport
@@ -86,8 +86,8 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
 
 
 def build_default_tool_registry(settings: Settings) -> ToolRegistry:
-    from app.agentic.opendota_tools import register_opendota_tools
-    from app.agentic.patch_tools import register_patch_tools
+    from app.agentic.tools.opendota_tools import register_opendota_tools
+    from app.agentic.tools.patch_tools import register_patch_tools
 
     registry = ToolRegistry()
     register_stratz_tools(registry, settings)

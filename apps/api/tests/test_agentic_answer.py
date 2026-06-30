@@ -1,10 +1,10 @@
-import asyncio
+﻿import asyncio
 from typing import Any
 
 from app.agentic.answer import AnswerSynthesizer
 from app.agentic.evidence import build_evidence_graph
 from app.agentic.models import ExecutionPlan, ToolCall, ToolResult, ToolSource
-from app.agentic.stratz_tools import build_default_tool_registry
+from app.agentic.tools.stratz_tools import build_default_tool_registry
 from app.core.config import Settings
 from app.llm.provider import ToolCallResult
 

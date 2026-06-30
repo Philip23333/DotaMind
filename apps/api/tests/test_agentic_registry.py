@@ -1,12 +1,12 @@
-import asyncio
+﻿import asyncio
 
 import pytest
 from pydantic import BaseModel, Field
 
 from app.agentic.evidence import EvidenceItem
 from app.agentic.models import ToolCall, ToolResult, ToolSource
-from app.agentic.registry import ToolDefinition, ToolExecutor, ToolRegistry
-from app.agentic.stratz_tools import build_default_tool_registry
+from app.agentic.tools import ToolDefinition, ToolExecutor, ToolRegistry
+from app.agentic.tools.stratz_tools import build_default_tool_registry
 from app.core.config import Settings
 
 

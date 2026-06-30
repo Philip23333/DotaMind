@@ -124,8 +124,8 @@ AgentRunState -> StateGraph(AgentRunState)
   compile()
 ```
 
-The LangGraph migration is runtime-only. Existing node business logic remains in
-`apps/api/app/agentic/nodes.py`, public `/api/v1/plan` response shape is
+The LangGraph migration is runtime-only. Node business logic lives under
+`apps/api/app/agentic/nodes/`, public `/api/v1/plan` response shape is
 unchanged, and `replan_node` remains out of scope.
 
 ## Node Inventory

@@ -1,8 +1,8 @@
-import asyncio
+﻿import asyncio
 
 from app.agentic.models import ToolCall
-from app.agentic.registry import ToolExecutor
-from app.agentic.stratz_tools import build_default_tool_registry
+from app.agentic.tools import ToolExecutor
+from app.agentic.tools.stratz_tools import build_default_tool_registry
 from app.core.config import Settings
 
 
@@ -32,8 +32,8 @@ class FakeHeroes:
 
 
 def test_stratz_lane_outcome_tool_returns_records(monkeypatch) -> None:
-    monkeypatch.setattr("app.agentic.stratz_tools.StratzTransport", FakeTransport)
-    monkeypatch.setattr("app.agentic.stratz_tools.StratzHeroes", FakeHeroes)
+    monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzTransport", FakeTransport)
+    monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzHeroes", FakeHeroes)
 
     result = asyncio.run(
         ToolExecutor(_registry(token="token")).execute(

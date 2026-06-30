@@ -1,4 +1,4 @@
-"""Run a v2.5 ExecutionPlan from JSON and print AgentRunState."""
+﻿"""Run a v2.5 ExecutionPlan from JSON and print AgentRunState."""
 
 from __future__ import annotations
 
@@ -22,9 +22,9 @@ from app.agentic.nodes import (
     tool_executor_node,
     validate_plan_node,
 )
-from app.agentic.registry import ToolExecutor
 from app.agentic.state import AgentRunState
-from app.agentic.stratz_tools import build_default_tool_registry
+from app.agentic.tools import ToolExecutor
+from app.agentic.tools.stratz_tools import build_default_tool_registry
 from app.core.config import get_settings
 
 
