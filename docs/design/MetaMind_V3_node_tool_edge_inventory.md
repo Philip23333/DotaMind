@@ -25,19 +25,22 @@ upstream failures are exposed directly. No fallback to the old report pipeline.
 
 ## Current Implemented Shape
 
-The current `/api/v1/plan` chain is implemented as node-like functions in a
-custom `AgentGraphRunner`. It is LangGraph-compatible in shape, but does not use
-LangGraph runtime yet.
+The current `/api/v1/plan` chain is implemented as node functions registered in
+a LangGraph `StateGraph`. `AgentGraphRunner` now owns the compiled graph and
+injects the planner, tool executor, evidence builder dependencies, answer
+synthesizer, and critic into thin node wrappers.
 
 ```text
 AgentGraphRunner
-  -> planner_node
-  -> validate_plan_node
-  -> tool_executor_node
-  -> evidence_node
-  -> answer_node
-  -> critic_node
-  -> response_node
+  -> StateGraph(AgentRunState)
+      START -> planner_node
+      planner_node -> validate_plan_node | response_node
+      validate_plan_node -> tool_executor_node | evidence_node
+      tool_executor_node -> evidence_node
+      evidence_node -> answer_node | response_node
+      answer_node -> critic_node | response_node
+      critic_node -> response_node
+      response_node -> END
 ```
 
 Current core pieces:
@@ -107,7 +110,7 @@ flowchart TD
     Replan -. later .-> Validate
 ```
 
-LangGraph migration target:
+LangGraph runtime shape:
 
 ```text
 AgentRunState -> StateGraph(AgentRunState)
@@ -118,10 +121,12 @@ AgentRunState -> StateGraph(AgentRunState)
   add_node(answer)
   add_node(critic)
   add_node(response)
+  compile()
 ```
 
-Do not add LangGraph until graph boundaries and tool contracts are stable enough
-that the migration mostly moves orchestration code, not business logic.
+The LangGraph migration is runtime-only. Existing node business logic remains in
+`apps/api/app/agentic/nodes.py`, public `/api/v1/plan` response shape is
+unchanged, and `replan_node` remains out of scope.
 
 ## Node Inventory
 
@@ -261,7 +266,9 @@ Priority order for the next implementation phase:
 4. Add hero identity enrichment before improving draft answer copy.
 5. Improve evidence quality rules per evidence kind before claiming product-grade
    recommendations.
-6. Migrate to LangGraph only after tool contracts and graph edges stabilize.
+6. Use the LangGraph runtime as the orchestration layer for `/api/v1/plan`;
+   keep future tool work inside deterministic tool contracts rather than graph
+   branches.
 
 ## Out of Scope
 
@@ -270,4 +277,4 @@ Priority order for the next implementation phase:
 - No replan loop until the tool inventory is broader.
 - No new fixed business pipeline for counter-pick, synergy, team, meta, or patch
   reports.
-- No LangGraph runtime dependency until migration is mostly mechanical.
+- No extra LangGraph business branches beyond the current node/edge inventory.
