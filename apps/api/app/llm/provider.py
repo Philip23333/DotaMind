@@ -80,7 +80,7 @@ class OpenAICompatibleProvider(LLMProvider):
         api_key: str,
         base_url: str,
         model: str,
-        timeout: float = 30.0,
+        timeout: float = 90.0,
     ):
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")

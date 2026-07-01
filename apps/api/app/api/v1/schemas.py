@@ -19,6 +19,7 @@ class PlanResponse(BaseModel):
     planner_output: dict[str, Any] | None = None
     planner_raw_content: str | None = None
     planner_finish_reason: str | None = None
+    planner_prompt_messages: list[dict[str, str]] = Field(default_factory=list)
     plan: dict[str, Any] | None = None
     tool_results: list[dict[str, Any]] = Field(default_factory=list)
     evidence_graph: dict[str, Any] | None = None

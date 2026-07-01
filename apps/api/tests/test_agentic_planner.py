@@ -93,6 +93,8 @@ def test_agentic_planner_accepts_valid_counter_pick_plan() -> None:
     assert result.plan is not None
     assert result.plan.tool_calls[0].tool == "resolve_hero"
     assert result.raw_output == _valid_plan_payload()
+    assert [message["role"] for message in result.prompt_messages] == ["system", "user"]
+    assert "Schema obedience rules" in result.prompt_messages[0]["content"]
 
 
 def test_agentic_planner_returns_insufficient_tools() -> None:
@@ -378,8 +380,14 @@ def test_agentic_planner_prompt_contains_team_recent_catalog_example() -> None:
     assert "team_hero_usage" in prompt
     assert '"matches": "$get_matches.data.matches"' in prompt
     assert "evidence_produced" in prompt
+    assert "allowed_arg_keys" in prompt
+    assert "Do not invent aliases or synonyms" in prompt
+    assert "required_evidence_names_must_be_exact" in prompt
+    assert "recent_matches, do not" in prompt
     assert "- is_with: bool, required" in prompt
     assert "$<previous_call_id>.data.hero.hero_id" in prompt
+    assert "DIVINE_IMMORTAL" in prompt
+    assert "do not use DIVINE or IMMORTAL separately" in prompt
     assert "$resolve_target.data.hero.hero_id" not in prompt
 
 

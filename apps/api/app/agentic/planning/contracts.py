@@ -142,6 +142,9 @@ def render_planner_contracts(registry: ToolRegistry) -> str:
     for spec in CONTRACT_REGISTRY.values():
         allowed = spec.evidence_allowlist
         visible_allowed = sorted(allowed & available_evidence) if allowed else None
+        allowed_required = sorted(
+            (spec.evidence_allowlist or available_evidence) & available_evidence
+        )
         sections.append(
             "\n".join(
                 [
@@ -150,6 +153,11 @@ def render_planner_contracts(registry: ToolRegistry) -> str:
                     "  required_evidence: "
                     + json.dumps(sorted(spec.required_evidence)),
                     "  allowed_evidence: " + json.dumps(visible_allowed),
+                    "  required_evidence_names_must_be_exact: "
+                    + json.dumps(allowed_required),
+                    "  rule: Copy required_evidence entries exactly from "
+                    "required_evidence/allowed_evidence/tool evidence_produced. "
+                    "Do not invent synonyms.",
                     "  example: "
                     + (
                         json.dumps(spec.prompt_example, ensure_ascii=False)
@@ -165,13 +173,19 @@ def render_planner_contracts(registry: ToolRegistry) -> str:
 def render_planner_tools(registry: ToolRegistry) -> str:
     sections = []
     for definition in registry.list():
+        fields = definition.input_model.model_fields
+        arg_names = list(fields)
         lines = [
             f"- {definition.name}",
             f"  description: {definition.description}",
             "  evidence_produced: " + json.dumps(list(definition.evidence_kinds)),
+            "  produced_evidence_names_must_be_exact: "
+            + json.dumps(list(definition.evidence_kinds)),
+            "  allowed_arg_keys: " + json.dumps(arg_names),
+            "  rule: Use only allowed_arg_keys for args. Do not invent aliases "
+            "or synonyms.",
             "  args:",
         ]
-        fields = definition.input_model.model_fields
         if not fields:
             lines.append("    []")
         for name, field_info in fields.items():
@@ -186,10 +200,21 @@ def render_planner_tools(registry: ToolRegistry) -> str:
             lines.append(line)
             for accepted in contract.accepts_refs:
                 lines.append(
+                    "      accepted_ref: "
+                    f"from_tool={accepted.from_tool}; "
+                    f"path={accepted.path}; type={accepted.type}; "
+                    f"syntax=$<previous_call_id>.{accepted.path}"
+                )
+                lines.append(
                     "      accepts reference from "
                     f"{accepted.from_tool}: $<previous_call_id>.{accepted.path} "
                     f"({accepted.type})"
                 )
+        if definition.output_paths:
+            lines.append("  declared_output_paths:")
+            for output in definition.output_paths.values():
+                description = f". {output.description}" if output.description else ""
+                lines.append(f"    - {output.path}: {output.type}{description}")
         sections.append("\n".join(lines))
     return "\n".join(sections)
 

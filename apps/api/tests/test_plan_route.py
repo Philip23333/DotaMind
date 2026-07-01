@@ -38,6 +38,8 @@ def test_plan_route_returns_plan_response(monkeypatch) -> None:
     assert payload["planner_raw_content"] is None
     assert "planner_finish_reason" in payload
     assert payload["planner_finish_reason"] is None
+    assert "planner_prompt_messages" in payload
+    assert payload["planner_prompt_messages"] == []
     assert payload["tool_results"] == []
     assert payload["evidence_graph"] is None
     assert payload["answer"] is None

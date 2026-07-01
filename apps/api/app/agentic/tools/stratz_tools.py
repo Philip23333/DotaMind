@@ -16,6 +16,13 @@ from app.core.config import Settings
 from app.integrations.stratz.heroes import StratzHeroes
 from app.integrations.stratz.transport import StratzTransport
 
+STRATZ_BRACKET_BASIC_DESCRIPTION = (
+    "STRATZ RankBracketBasicEnum filters. Use exact enum values only: "
+    "HERALD_GUARDIAN, CRUSADER_ARCHON, LEGEND_ANCIENT, DIVINE_IMMORTAL. "
+    "Map 冠绝/Immortal/Divine to DIVINE_IMMORTAL; do not use DIVINE or "
+    "IMMORTAL separately for bracket_basic_ids."
+)
+
 
 class StratzHeroVsHeroMatchupInput(BaseModel):
     hero_id: int = Field(gt=0)
@@ -92,7 +99,9 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
                 ),
                 "take": ArgContract(description="Maximum matchup rows to return."),
                 "week": ArgContract(description="STRATZ week filter."),
-                "bracket_basic_ids": ArgContract(description="STRATZ bracket filters."),
+                "bracket_basic_ids": ArgContract(
+                    description=STRATZ_BRACKET_BASIC_DESCRIPTION
+                ),
                 "match_limit": ArgContract(description="Maximum source matches to scan."),
             },
             metadata={"game": "dota2", "domain": "hero_matchup"},
@@ -130,7 +139,9 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
                     ),
                 ),
                 "week": ArgContract(description="STRATZ week filter."),
-                "bracket_basic_ids": ArgContract(description="STRATZ bracket filters."),
+                "bracket_basic_ids": ArgContract(
+                    description=STRATZ_BRACKET_BASIC_DESCRIPTION
+                ),
                 "position_ids": ArgContract(description="Lane position filters."),
             },
             metadata={"game": "dota2", "domain": "lane_outcome"},
@@ -182,6 +193,7 @@ def resolve_hero_evidence(result: ToolResult) -> list[EvidenceItem]:
 def hero_matchup_evidence(result: ToolResult) -> list[EvidenceItem]:
     data = result.data if isinstance(result.data, dict) else {}
     target_hero_id = data.get("hero_id")
+    filters = data.get("filters") if isinstance(data.get("filters"), dict) else {}
     evidence = []
     for side in ("advantage", "disadvantage"):
         rows = data.get(side, [])
@@ -206,6 +218,7 @@ def hero_matchup_evidence(result: ToolResult) -> list[EvidenceItem]:
                         "win_rate": row.get("win_rate"),
                         "match_count": match_count,
                         "synergy": row.get("synergy"),
+                        "filters": filters,
                     },
                     source=result.source,
                     tool_call_id=result.tool_call_id,
@@ -228,6 +241,7 @@ def hero_matchup_evidence(result: ToolResult) -> list[EvidenceItem]:
                                 "target_hero_id",
                                 target_hero_id,
                             ),
+                            "filters": filters,
                         },
                         source=result.source,
                         tool_call_id=result.tool_call_id,
@@ -240,6 +254,7 @@ def hero_matchup_evidence(result: ToolResult) -> list[EvidenceItem]:
 def lane_outcome_evidence(result: ToolResult) -> list[EvidenceItem]:
     data = result.data if isinstance(result.data, dict) else {}
     target_hero_id = data.get("hero_id")
+    filters = data.get("filters") if isinstance(data.get("filters"), dict) else {}
     evidence = []
     records = data.get("records", [])
     if not isinstance(records, list):
@@ -260,6 +275,7 @@ def lane_outcome_evidence(result: ToolResult) -> list[EvidenceItem]:
                     "match_count": match_count,
                     "match_win_rate": row.get("match_win_rate"),
                     "is_with": data.get("is_with"),
+                    "filters": filters,
                 },
                 source=result.source,
                 tool_call_id=result.tool_call_id,
@@ -276,6 +292,7 @@ def lane_outcome_evidence(result: ToolResult) -> list[EvidenceItem]:
                         "sample_size": match_count,
                         "hero_id": row.get("hero_id"),
                         "target_hero_id": row.get("target_hero_id", target_hero_id),
+                        "filters": filters,
                     },
                     source=result.source,
                     tool_call_id=result.tool_call_id,
@@ -293,13 +310,22 @@ def _hero_vs_hero_matchup_handler(settings: Settings):
         transport = StratzTransport(settings.stratz_graphql_url, settings.stratz_token)
         heroes = StratzHeroes(transport)
         try:
-            return await heroes.hero_vs_hero_matchup(
+            data = await heroes.hero_vs_hero_matchup(
                 args.hero_id,
                 take=args.take,
                 week=args.week,
                 bracket_basic_ids=args.bracket_basic_ids,
                 match_limit=args.match_limit,
             )
+            return {
+                **data,
+                "filters": {
+                    "take": args.take,
+                    "week": args.week,
+                    "bracket_basic_ids": args.bracket_basic_ids,
+                    "match_limit": args.match_limit,
+                },
+            }
         finally:
             await transport.aclose()
 
@@ -324,6 +350,12 @@ def _lane_outcome_handler(settings: Settings):
             return {
                 "hero_id": args.hero_id,
                 "is_with": args.is_with,
+                "filters": {
+                    "week": args.week,
+                    "bracket_basic_ids": args.bracket_basic_ids,
+                    "position_ids": args.position_ids,
+                    "is_with": args.is_with,
+                },
                 "records": records,
             }
         finally:

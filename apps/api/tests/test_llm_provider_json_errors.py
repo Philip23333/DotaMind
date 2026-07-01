@@ -6,6 +6,8 @@ from app.llm.provider import LLMJSONDecodeError, OpenAICompatibleProvider
 
 
 def test_complete_json_exposes_raw_content_on_decode_error(monkeypatch) -> None:
+    client_timeouts = []
+
     class FakeResponse:
         def raise_for_status(self) -> None:
             return None
@@ -23,6 +25,7 @@ def test_complete_json_exposes_raw_content_on_decode_error(monkeypatch) -> None:
     class FakeClient:
         def __init__(self, timeout: float) -> None:
             self.timeout = timeout
+            client_timeouts.append(timeout)
 
         async def __aenter__(self):
             return self
@@ -50,4 +53,5 @@ def test_complete_json_exposes_raw_content_on_decode_error(monkeypatch) -> None:
 
     assert exc_info.value.raw_content == '{"status":"planned","reason":"cut'
     assert exc_info.value.finish_reason == "length"
+    assert client_timeouts == [90.0]
 

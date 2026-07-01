@@ -242,6 +242,7 @@
 
         <div class="card">
           <h2>Readable Output</h2>
+          <details open><summary>Planner Prompt Messages</summary><pre id="planner-prompt-messages"></pre></details>
           <details open><summary>Planner LLM JSON</summary><pre id="planner-output"></pre></details>
           <details open><summary>Planner Raw Content</summary><pre id="planner-raw-content"></pre></details>
           <details open><summary>Final User Output</summary><div id="final-output" class="final-output"></div></details>
@@ -301,6 +302,7 @@
         result.hidden = false;
         renderSummary(payload);
         renderFlow(payload.trace || []);
+        setJson("planner-prompt-messages", payload.planner_prompt_messages || []);
         setJson("planner-output", payload.planner_output);
         document.getElementById("planner-raw-content").textContent =
           payload.planner_raw_content ?? "null";

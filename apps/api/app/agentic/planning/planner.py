@@ -23,6 +23,17 @@ _PLANNER_SYSTEM_PROMPT = """You are the MetaMind v2.5 Planner.
 You must decide whether the user query can be answered with the currently
 registered tools. Return JSON only.
 
+Schema obedience rules:
+- Use exact names only. Tool names, args keys, output_contract, and
+  required_evidence entries must be copied exactly from the catalogs below.
+- Do not invent synonyms for args or evidence. For example, if the catalog says
+  current_only, do not write current_roster; if it says recent_matches, do not
+  write matches.
+- For each tool call, args may contain only that tool's allowed_arg_keys.
+- required_evidence may contain only exact evidence names produced by selected
+  tools and allowed by the output contract.
+- If a tool arg accepts a reference, use exactly the declared reference path.
+
 Current allowed tools:
 {tools}
 
@@ -100,6 +111,7 @@ class AgenticPlannerResult(BaseModel):
     raw_output: dict[str, Any] | None = None
     raw_content: str | None = None
     finish_reason: str | None = None
+    prompt_messages: list[dict[str, str]] = Field(default_factory=list)
 
 
 class AgenticPlanner:
@@ -127,11 +139,12 @@ class AgenticPlanner:
             )
 
         try:
+            messages = [
+                {"role": "system", "content": self._system_prompt()},
+                {"role": "user", "content": f"game={game}\nquery={query}"},
+            ]
             raw = await self.llm.complete_json(
-                [
-                    {"role": "system", "content": self._system_prompt()},
-                    {"role": "user", "content": f"game={game}\nquery={query}"},
-                ],
+                messages,
                 temperature=self.policy.llm.orchestrator.temperature,
                 max_tokens=max(self.policy.llm.orchestrator.max_tokens, 1200),
             )
@@ -144,6 +157,7 @@ class AgenticPlanner:
                 errors=[f"{type(exc).__name__}: {exc}"],
                 raw_content=exc.raw_content,
                 finish_reason=exc.finish_reason,
+                prompt_messages=messages if "messages" in locals() else [],
             )
         except Exception as exc:
             logger.warning("Agentic planner failed: %r", exc)
@@ -151,6 +165,7 @@ class AgenticPlanner:
                 status="error",
                 reason="LLM planner failed to return a valid planning envelope",
                 errors=[f"{type(exc).__name__}: {exc}"],
+                prompt_messages=messages if "messages" in locals() else [],
             )
 
         if envelope.status == "insufficient_tools":
@@ -159,6 +174,7 @@ class AgenticPlanner:
                 reason=envelope.reason,
                 plan=None,
                 raw_output=raw,
+                prompt_messages=messages,
             )
         if envelope.status == "error":
             return AgenticPlannerResult(
@@ -166,6 +182,7 @@ class AgenticPlanner:
                 reason=envelope.reason or "LLM planner returned error",
                 errors=[envelope.reason or "LLM planner returned error"],
                 raw_output=raw,
+                prompt_messages=messages,
             )
         if envelope.plan is None:
             return AgenticPlannerResult(
@@ -173,6 +190,7 @@ class AgenticPlanner:
                 reason="LLM planner returned planned status without a plan",
                 errors=["planned status requires plan"],
                 raw_output=raw,
+                prompt_messages=messages,
             )
 
         logger.info(
@@ -189,6 +207,7 @@ class AgenticPlanner:
                 plan=envelope.plan,
                 errors=validation_errors,
                 raw_output=raw,
+                prompt_messages=messages,
             )
 
         return AgenticPlannerResult(
@@ -196,6 +215,7 @@ class AgenticPlanner:
             reason=envelope.reason,
             plan=envelope.plan,
             raw_output=raw,
+            prompt_messages=messages,
         )
 
     def validate_plan(self, plan: ExecutionPlan) -> list[str]:

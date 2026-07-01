@@ -72,6 +72,12 @@ def test_evidence_graph_aggregates_matchup_and_sample_size() -> None:
         source=ToolSource(name="STRATZ", kind="public_graphql_api"),
         data={
             "hero_id": 25,
+            "filters": {
+                "take": 10,
+                "week": 1782345600,
+                "bracket_basic_ids": ["DIVINE_IMMORTAL"],
+                "match_limit": None,
+            },
             "advantage": [
                 {
                     "hero_id": 66,
@@ -95,7 +101,11 @@ def test_evidence_graph_aggregates_matchup_and_sample_size() -> None:
         "sample_size",
     ]
     assert graph.evidence[0].value["win_rate"] == 0.57
+    assert graph.evidence[0].value["filters"]["bracket_basic_ids"] == [
+        "DIVINE_IMMORTAL"
+    ]
     assert graph.evidence[1].value["sample_size"] == 247
+    assert graph.evidence[1].value["filters"]["week"] == 1782345600
 
 
 def test_evidence_graph_reports_missing_required_evidence() -> None:
@@ -220,6 +230,12 @@ def test_evidence_graph_aggregates_lane_outcome() -> None:
         data={
             "hero_id": 104,
             "is_with": True,
+            "filters": {
+                "week": 1782345600,
+                "bracket_basic_ids": ["DIVINE_IMMORTAL"],
+                "position_ids": ["POSITION_4"],
+                "is_with": True,
+            },
             "records": [
                 {
                     "hero_id": 86,
@@ -237,6 +253,10 @@ def test_evidence_graph_aggregates_lane_outcome() -> None:
     assert graph.missing == []
     assert graph.data_quality.min_sample_size == 25
     assert [item.kind for item in graph.evidence] == ["lane_outcome", "sample_size"]
+    assert graph.evidence[0].value["filters"]["bracket_basic_ids"] == [
+        "DIVINE_IMMORTAL"
+    ]
+    assert graph.evidence[1].value["filters"]["position_ids"] == ["POSITION_4"]
 
 
 def test_evidence_graph_aggregates_opendota_team_evidence() -> None:

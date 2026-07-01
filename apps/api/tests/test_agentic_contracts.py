@@ -473,15 +473,15 @@ def test_render_planner_contracts_contains_team_recent_example() -> None:
 def test_render_planner_contracts_uses_null_for_unrestricted_allowed_evidence() -> None:
     rendered = render_planner_contracts(_registry())
 
-    assert _contract_section(rendered, "patch_impact_report").endswith(
-        'allowed_evidence: null\n  example: null'
+    assert "allowed_evidence: null" in _contract_section(
+        rendered,
+        "patch_impact_report",
     )
-    assert _contract_section(rendered, "hero_matchup_report").endswith(
-        'allowed_evidence: null\n  example: null'
+    assert "allowed_evidence: null" in _contract_section(
+        rendered,
+        "hero_matchup_report",
     )
-    assert _contract_section(rendered, "draft_advice").endswith(
-        'allowed_evidence: null\n  example: null'
-    )
+    assert "allowed_evidence: null" in _contract_section(rendered, "draft_advice")
     assert "allowed_evidence: []" not in rendered
 
 

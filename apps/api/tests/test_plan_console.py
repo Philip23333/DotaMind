@@ -12,6 +12,7 @@ def test_plan_console_is_served_by_api() -> None:
     assert 'fetch("/api/v1/plan"' in response.text
     assert "Node Flow" in response.text
     assert "Planner LLM JSON" in response.text
+    assert "Planner Prompt Messages" in response.text
     assert "Planner Raw Content" in response.text
     assert "Final User Output" in response.text
     assert "Parsed Final Data" in response.text
