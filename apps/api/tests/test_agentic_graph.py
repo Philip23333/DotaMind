@@ -15,8 +15,8 @@ from app.agentic.tools import (
 )
 from app.agentic.tools.opendota_tools import resolve_team_evidence, team_recent_matches_evidence
 from app.agentic.tools.stratz_tools import (
-    hero_matchup_evidence,
-    lane_outcome_evidence,
+    hero_matchup_ranking_evidence,
+    pair_lane_outcome_evidence,
     resolve_hero_evidence,
 )
 
@@ -27,10 +27,12 @@ class HeroInput(BaseModel):
 
 class MatchupInput(BaseModel):
     hero_id: int
+    side: str = "vs"
 
 
-class LaneInput(BaseModel):
+class PairLaneInput(BaseModel):
     hero_id: int
+    partner_hero_id: int
     is_with: bool
 
 
@@ -107,18 +109,21 @@ def test_graph_tool_error_still_builds_evidence_graph() -> None:
 
 def test_graph_success_reaches_answer_review_and_response() -> None:
     plan = ExecutionPlan(
-        intent="counter_pick",
-        goal="Fetch Lina matchup evidence.",
-        output_contract="draft_advice",
+        intent="hero_matchup_ranking",
+        goal="Fetch Lina matchup ranking evidence.",
+        output_contract="natural_language_answer",
         tool_calls=[
             ToolCall(id="resolve_target", tool="resolve_hero", args={"query": "Lina"}),
             ToolCall(
-                id="get_matchups",
-                tool="stratz.hero_vs_hero_matchup",
-                args={"hero_id": "$resolve_target.data.hero.hero_id"},
+                id="get_ranking",
+                tool="stratz.hero_matchup_ranking",
+                args={
+                    "hero_id": "$resolve_target.data.hero.hero_id",
+                    "side": "vs",
+                },
             ),
         ],
-        required_evidence=["hero_identity", "matchup_win_rate", "sample_size"],
+        required_evidence=["hero_identity", "matchup_ranking_row", "sample_size"],
     )
 
     state = asyncio.run(_runner(plan).run(AgentRunState(query="debug", game="dota2")))
@@ -129,7 +134,7 @@ def test_graph_success_reaches_answer_review_and_response() -> None:
     assert state.review
     assert state.review.severity == "pass"
     assert state.response
-    assert state.response_type == "draft_advice"
+    assert state.response_type == "natural_language_answer"
 
 
 def test_graph_team_evidence_reaches_unsupported_answer_response() -> None:
@@ -160,28 +165,30 @@ def test_graph_team_evidence_reaches_unsupported_answer_response() -> None:
 
 def test_graph_lane_outcome_plan_generates_lane_evidence() -> None:
     plan = ExecutionPlan(
-        intent="lane_outcome",
-        goal="Fetch lane outcome evidence.",
+        intent="pair_lane_outcome",
+        goal="Fetch pair lane outcome evidence.",
         output_contract="natural_language_answer",
         tool_calls=[
-            ToolCall(id="resolve_target", tool="resolve_hero", args={"query": "Lina"}),
+            ToolCall(id="resolve_sk", tool="resolve_hero", args={"query": "骷髅王"}),
+            ToolCall(id="resolve_aa", tool="resolve_hero", args={"query": "冰魂"}),
             ToolCall(
-                id="lane",
-                tool="stratz.lane_outcome",
+                id="pair_lane",
+                tool="stratz.pair_lane_outcome",
                 args={
-                    "hero_id": "$resolve_target.data.hero.hero_id",
-                    "is_with": False,
+                    "hero_id": "$resolve_sk.data.hero.hero_id",
+                    "partner_hero_id": "$resolve_aa.data.hero.hero_id",
+                    "is_with": True,
                 },
             ),
         ],
-        required_evidence=["hero_identity", "lane_outcome", "sample_size"],
+        required_evidence=["hero_identity", "pair_lane_winrate", "sample_size"],
     )
 
     state = asyncio.run(_runner(plan).run(AgentRunState(query="debug", game="dota2")))
 
     assert state.status == "ok"
     assert state.evidence_graph
-    assert "lane_outcome" in {item.kind for item in state.evidence_graph.evidence}
+    assert "pair_lane_winrate" in {item.kind for item in state.evidence_graph.evidence}
     assert state.answer
     assert state.answer.status == "ok"
 
@@ -223,11 +230,12 @@ def _registry() -> ToolRegistry:
     )
     registry.register(
         ToolDefinition(
-            name="stratz.hero_vs_hero_matchup",
-            description="Return fake matchup evidence.",
+            name="stratz.hero_matchup_ranking",
+            description="Return fake matchup ranking evidence.",
             input_model=MatchupInput,
             handler=lambda args, context: {
                 "hero_id": args.hero_id,
+                "side": "vs",
                 "advantage": [
                     {
                         "hero_id": 66,
@@ -237,9 +245,10 @@ def _registry() -> ToolRegistry:
                     }
                 ],
                 "disadvantage": [],
+                "filters": {"take": 10, "min_sample_size": 100},
             },
-            evidence_extractor=hero_matchup_evidence,
-            evidence_kinds=("matchup_win_rate", "sample_size"),
+            evidence_extractor=hero_matchup_ranking_evidence,
+            evidence_kinds=("matchup_ranking_row", "sample_size"),
             arg_contracts={
                 "hero_id": ArgContract(
                     accepts_refs=(
@@ -255,24 +264,24 @@ def _registry() -> ToolRegistry:
     )
     registry.register(
         ToolDefinition(
-            name="stratz.lane_outcome",
-            description="Return fake lane evidence.",
-            input_model=LaneInput,
+            name="stratz.pair_lane_outcome",
+            description="Return fake pair lane evidence.",
+            input_model=PairLaneInput,
             handler=lambda args, context: {
                 "hero_id": args.hero_id,
+                "partner_hero_id": args.partner_hero_id,
                 "is_with": args.is_with,
-                "records": [
-                    {
-                        "hero_id": 66,
-                        "target_hero_id": args.hero_id,
-                        "position": "POSITION_2",
-                        "match_count": 25,
-                        "match_win_rate": 0.52,
-                    }
-                ],
+                "pair_record": {
+                    "hero_id": args.partner_hero_id,
+                    "target_hero_id": args.hero_id,
+                    "position": "POSITION_2",
+                    "match_count": 25,
+                    "match_win_rate": 0.52,
+                },
+                "filters": {},
             },
-            evidence_extractor=lane_outcome_evidence,
-            evidence_kinds=("lane_outcome", "sample_size"),
+            evidence_extractor=pair_lane_outcome_evidence,
+            evidence_kinds=("pair_lane_winrate", "sample_size"),
             arg_contracts={
                 "hero_id": ArgContract(
                     accepts_refs=(
@@ -282,7 +291,16 @@ def _registry() -> ToolRegistry:
                             type="int",
                         ),
                     )
-                )
+                ),
+                "partner_hero_id": ArgContract(
+                    accepts_refs=(
+                        AcceptedRef(
+                            from_tool="resolve_hero",
+                            path="data.hero.hero_id",
+                            type="int",
+                        ),
+                    )
+                ),
             },
         )
     )

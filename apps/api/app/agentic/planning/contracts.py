@@ -100,18 +100,6 @@ CONTRACT_REGISTRY = {
             "constraints": {"max_tool_calls": 6, "allow_mock": False},
         },
     ),
-    "hero_matchup_report": ContractSpec(
-        name="hero_matchup_report",
-        route="structured",
-        required_evidence=frozenset({"matchup_win_rate"}),
-    ),
-    "draft_advice": ContractSpec(
-        name="draft_advice",
-        route="structured",
-        required_evidence=frozenset(
-            {"hero_identity", "matchup_win_rate", "sample_size"}
-        ),
-    ),
     NATURAL_LANGUAGE_CONTRACT: ContractSpec(
         name=NATURAL_LANGUAGE_CONTRACT,
         route="natural_language",

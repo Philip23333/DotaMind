@@ -54,11 +54,11 @@ def _registry():
 def _valid_plan_payload() -> dict[str, Any]:
     return {
         "status": "planned",
-        "reason": "counter matchup can be answered with registered tools",
+        "reason": "matchup ranking can be answered with registered tools",
         "plan": {
-            "intent": "counter_pick",
-            "goal": "Fetch Lina matchup evidence.",
-            "output_contract": "draft_advice",
+            "intent": "hero_matchup_ranking",
+            "goal": "Fetch Lina matchup ranking evidence.",
+            "output_contract": "natural_language_answer",
             "tool_calls": [
                 {
                     "id": "resolve_target",
@@ -66,17 +66,18 @@ def _valid_plan_payload() -> dict[str, Any]:
                     "args": {"query": "Lina"},
                 },
                 {
-                    "id": "get_matchups",
-                    "tool": "stratz.hero_vs_hero_matchup",
+                    "id": "get_ranking",
+                    "tool": "stratz.hero_matchup_ranking",
                     "args": {
                         "hero_id": "$resolve_target.data.hero.hero_id",
+                        "side": "vs",
                         "take": 5,
                     },
                 },
             ],
             "required_evidence": [
                 "hero_identity",
-                "matchup_win_rate",
+                "matchup_ranking_row",
                 "sample_size",
             ],
             "constraints": {"max_tool_calls": 6, "allow_mock": False},
@@ -162,46 +163,60 @@ def test_agentic_planner_accepts_hardcoded_hero_id_when_schema_allows_int() -> N
     assert result.status == "planned"
 
 
-def test_agentic_planner_accepts_lane_outcome_reference_from_any_previous_call_id() -> None:
+def test_agentic_planner_accepts_pair_lane_outcome_reference_from_any_previous_call_id() -> None:
     payload = _valid_plan_payload()
-    payload["plan"]["tool_calls"][0]["id"] = "resolve_lina"
-    payload["plan"]["tool_calls"][1]["tool"] = "stratz.lane_outcome"
-    payload["plan"]["tool_calls"][1]["args"] = {
-        "hero_id": "$resolve_lina.data.hero.hero_id",
-        "is_with": False,
-    }
+    payload["plan"]["tool_calls"] = [
+        {"id": "resolve_sk", "tool": "resolve_hero", "args": {"query": "骷髅王"}},
+        {"id": "resolve_aa", "tool": "resolve_hero", "args": {"query": "冰魂"}},
+        {
+            "id": "pair_lane",
+            "tool": "stratz.pair_lane_outcome",
+            "args": {
+                "hero_id": "$resolve_sk.data.hero.hero_id",
+                "partner_hero_id": "$resolve_aa.data.hero.hero_id",
+                "is_with": True,
+            },
+        },
+    ]
     payload["plan"]["output_contract"] = "natural_language_answer"
     payload["plan"]["required_evidence"] = [
         "hero_identity",
-        "lane_outcome",
+        "pair_lane_winrate",
         "sample_size",
     ]
     planner = AgenticPlanner(_registry(), llm=FakeLLM(payload), llm_enabled=True)
 
-    result = asyncio.run(planner.plan("how does Lina lane?"))
+    result = asyncio.run(planner.plan("how does SK + AA lane?"))
 
     assert result.status == "planned"
 
 
-def test_agentic_planner_rejects_lane_outcome_missing_is_with() -> None:
+def test_agentic_planner_rejects_pair_lane_outcome_missing_is_with() -> None:
     payload = _valid_plan_payload()
-    payload["plan"]["tool_calls"][0]["id"] = "resolve_lina"
-    payload["plan"]["tool_calls"][1]["tool"] = "stratz.lane_outcome"
-    payload["plan"]["tool_calls"][1]["args"] = {
-        "hero_id": "$resolve_lina.data.hero.hero_id",
-    }
+    payload["plan"]["tool_calls"] = [
+        {"id": "resolve_sk", "tool": "resolve_hero", "args": {"query": "骷髅王"}},
+        {"id": "resolve_aa", "tool": "resolve_hero", "args": {"query": "冰魂"}},
+        {
+            "id": "pair_lane",
+            "tool": "stratz.pair_lane_outcome",
+            "args": {
+                "hero_id": "$resolve_sk.data.hero.hero_id",
+                "partner_hero_id": "$resolve_aa.data.hero.hero_id",
+            },
+        },
+    ]
     payload["plan"]["output_contract"] = "natural_language_answer"
     payload["plan"]["required_evidence"] = [
         "hero_identity",
-        "lane_outcome",
+        "pair_lane_winrate",
         "sample_size",
     ]
     planner = AgenticPlanner(_registry(), llm=FakeLLM(payload), llm_enabled=True)
 
-    result = asyncio.run(planner.plan("how does Lina lane?"))
+    result = asyncio.run(planner.plan("how does SK + AA lane?"))
 
     assert result.status == "error"
-    assert any("stratz.lane_outcome invalid args" in item for item in result.errors)
+    assert any("stratz.pair_lane_outcome invalid args" in item for item in result.errors)
 
 
 def test_agentic_planner_rejects_mock_allowed() -> None:
@@ -216,17 +231,29 @@ def test_agentic_planner_rejects_mock_allowed() -> None:
 
 
 def test_agentic_planner_rejects_missing_required_evidence() -> None:
-    payload = _valid_plan_payload()
-    payload["plan"]["required_evidence"] = ["hero_identity"]
+    payload = {
+        "status": "planned",
+        "reason": "patch impact requires patch_records",
+        "plan": {
+            "intent": "patch_impact",
+            "goal": "Patch summary.",
+            "output_contract": "patch_impact_report",
+            "tool_calls": [
+                {"id": "patch", "tool": "patch.get_records", "args": {"patch": "latest"}},
+            ],
+            "required_evidence": ["hero_identity"],
+            "constraints": {"max_tool_calls": 6, "allow_mock": False},
+        },
+    }
     planner = AgenticPlanner(_registry(), llm=FakeLLM(payload), llm_enabled=True)
 
-    result = asyncio.run(planner.plan("enemy picked Lina, what should I pick?"))
+    result = asyncio.run(planner.plan("what changed in 7.41d?"))
 
     assert result.status == "error"
-    assert "missing required evidence" in result.errors[0]
+    assert "missing required evidence" in " ".join(result.errors)
 
 
-def test_agentic_planner_rejects_counter_pick_tool_results_contract() -> None:
+def test_agentic_planner_rejects_matchup_tool_results_contract() -> None:
     payload = _valid_plan_payload()
     payload["plan"]["output_contract"] = "tool_results"
     planner = AgenticPlanner(_registry(), llm=FakeLLM(payload), llm_enabled=True)
@@ -234,7 +261,7 @@ def test_agentic_planner_rejects_counter_pick_tool_results_contract() -> None:
     result = asyncio.run(planner.plan("enemy picked Lina, what should I pick?"))
 
     assert result.status == "error"
-    assert "unknown output_contract: tool_results" in result.errors[0]
+    assert "unknown output_contract: tool_results" in " ".join(result.errors)
 
 
 def test_agentic_planner_rejects_meta_list_contract() -> None:

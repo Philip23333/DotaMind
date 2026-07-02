@@ -1,7 +1,14 @@
 {
-  "intent": "counter_pick",
-  "goal": "Fetch hero matchup evidence for a target hero.",
-  "output_contract": "draft_advice",
+  "intent": "hero_matchup_ranking",
+  "goal": "Fetch counter-pick ranking for a target hero.",
+  "output_contract": "natural_language_answer",
+  "context": {
+    "bracket": ["LEGEND_ANCIENT"],
+    "week": null,
+    "position_ids": null,
+    "region_ids": null,
+    "game_mode_ids": null
+  },
   "tool_calls": [
     {
       "id": "resolve_target",
@@ -11,17 +18,19 @@
       }
     },
     {
-      "id": "get_matchups",
-      "tool": "stratz.hero_vs_hero_matchup",
+      "id": "get_ranking",
+      "tool": "stratz.hero_matchup_ranking",
       "args": {
         "hero_id": "$resolve_target.data.hero.hero_id",
-        "take": 3
+        "side": "vs",
+        "take": 5,
+        "min_sample_size": 100
       }
     }
   ],
   "required_evidence": [
     "hero_identity",
-    "matchup_win_rate",
+    "matchup_ranking_row",
     "sample_size"
   ],
   "constraints": {

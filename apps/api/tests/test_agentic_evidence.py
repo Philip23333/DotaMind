@@ -52,31 +52,32 @@ def test_evidence_graph_aggregates_resolve_hero_result() -> None:
 
 def test_evidence_graph_aggregates_matchup_and_sample_size() -> None:
     plan = ExecutionPlan(
-        intent="counter_pick",
+        intent="hero_matchup_ranking",
         goal="Collect matchup evidence.",
         output_contract="tool_results",
         tool_calls=[
             ToolCall(
                 id="get_matchups",
-                tool="stratz.hero_vs_hero_matchup",
-                args={"hero_id": 25},
+                tool="stratz.hero_matchup_ranking",
+                args={"hero_id": 25, "side": "vs"},
             )
         ],
-        required_evidence=["matchup_win_rate", "sample_size"],
+        required_evidence=["matchup_ranking_row", "sample_size"],
     )
     result = ToolResult(
         tool_call_id="get_matchups",
-        tool="stratz.hero_vs_hero_matchup",
+        tool="stratz.hero_matchup_ranking",
         status="ok",
         latency_ms=1,
         source=ToolSource(name="STRATZ", kind="public_graphql_api"),
         data={
             "hero_id": 25,
+            "side": "vs",
             "filters": {
                 "take": 10,
+                "min_sample_size": 100,
                 "week": 1782345600,
                 "bracket_basic_ids": ["DIVINE_IMMORTAL"],
-                "match_limit": None,
             },
             "advantage": [
                 {
@@ -97,7 +98,7 @@ def test_evidence_graph_aggregates_matchup_and_sample_size() -> None:
     assert graph.data_quality.min_sample_size == 247
     assert graph.data_quality.completeness == 1.0
     assert [item.kind for item in graph.evidence] == [
-        "matchup_win_rate",
+        "matchup_ranking_row",
         "sample_size",
     ]
     assert graph.evidence[0].value["win_rate"] == 0.57
@@ -110,16 +111,16 @@ def test_evidence_graph_aggregates_matchup_and_sample_size() -> None:
 
 def test_evidence_graph_reports_missing_required_evidence() -> None:
     plan = ExecutionPlan(
-        intent="counter_pick",
+        intent="hero_matchup_ranking",
         goal="Collect incomplete evidence.",
         output_contract="tool_results",
-        required_evidence=["hero_identity", "matchup_win_rate"],
+        required_evidence=["hero_identity", "matchup_ranking_row"],
     )
 
     graph = build_evidence_graph(plan, [], _registry())
 
     assert graph.evidence == []
-    assert graph.missing == ["hero_identity", "matchup_win_rate"]
+    assert graph.missing == ["hero_identity", "matchup_ranking_row"]
     assert graph.data_quality.completeness == 0
 
 
@@ -216,19 +217,20 @@ def test_evidence_graph_marks_failed_tool_and_mock_source() -> None:
 
 def test_evidence_graph_aggregates_lane_outcome() -> None:
     plan = ExecutionPlan(
-        intent="lane_outcome",
-        goal="Collect lane evidence.",
+        intent="pair_lane_outcome",
+        goal="Collect pair lane evidence.",
         output_contract="tool_results",
-        required_evidence=["lane_outcome", "sample_size"],
+        required_evidence=["pair_lane_winrate", "sample_size"],
     )
     result = ToolResult(
-        tool_call_id="lane",
-        tool="stratz.lane_outcome",
+        tool_call_id="pair",
+        tool="stratz.pair_lane_outcome",
         status="ok",
         latency_ms=1,
         source=ToolSource(name="STRATZ", kind="public_graphql_api"),
         data={
             "hero_id": 104,
+            "partner_hero_id": 86,
             "is_with": True,
             "filters": {
                 "week": 1782345600,
@@ -236,15 +238,14 @@ def test_evidence_graph_aggregates_lane_outcome() -> None:
                 "position_ids": ["POSITION_4"],
                 "is_with": True,
             },
-            "records": [
-                {
-                    "hero_id": 86,
-                    "target_hero_id": 104,
-                    "position": "POSITION_4",
-                    "match_count": 25,
-                    "match_win_rate": 0.6,
-                }
-            ],
+            "pair_record": {
+                "hero_id": 86,
+                "target_hero_id": 104,
+                "position": "POSITION_4",
+                "match_count": 25,
+                "match_win_rate": 0.6,
+            },
+            "total_partner_matches": 1,
         },
     )
 
@@ -252,7 +253,7 @@ def test_evidence_graph_aggregates_lane_outcome() -> None:
 
     assert graph.missing == []
     assert graph.data_quality.min_sample_size == 25
-    assert [item.kind for item in graph.evidence] == ["lane_outcome", "sample_size"]
+    assert [item.kind for item in graph.evidence] == ["pair_lane_winrate", "sample_size"]
     assert graph.evidence[0].value["filters"]["bracket_basic_ids"] == [
         "DIVINE_IMMORTAL"
     ]

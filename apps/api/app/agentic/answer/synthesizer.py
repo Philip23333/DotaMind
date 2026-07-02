@@ -102,33 +102,12 @@ class StructuredReportSynthesizer:
         plan: ExecutionPlan,
         graph: EvidenceGraph,
     ) -> AnswerSynthesisResult:
-        if plan.output_contract == "draft_advice":
-            if plan.intent != "counter_pick":
-                return AnswerSynthesisResult(
-                    answer_type=plan.output_contract,
-                    status="unsupported_output_contract",
-                    summary="Draft advice is currently only supported for counter_pick intent.",
-                    limitations=[
-                        AnswerLimitation(
-                            code="unsupported_intent",
-                            detail=(
-                                "Current draft_advice synthesis only supports "
-                                "intent='counter_pick'."
-                            ),
-                        )
-                    ],
-                    data_notes=data_notes(graph),
-                    confidence=0.0,
-                )
-            return self._counter_pick_answer(plan, graph)
         if plan.output_contract == "patch_impact_report":
             return self._patch_impact_report(plan, graph)
         if plan.output_contract == "role_meta_report":
             return self._role_meta_report(plan, graph)
         if plan.output_contract == "team_recent_report":
             return self._team_recent_report(plan, graph)
-        if plan.output_contract == "hero_matchup_report":
-            return self._hero_matchup_report(plan, graph)
         return unsupported_contract(plan, graph)
 
     def _patch_impact_report(
@@ -265,101 +244,6 @@ class StructuredReportSynthesizer:
             ],
             data_notes=data_notes(graph),
             confidence=confidence(graph, has_output=True),
-        )
-
-    def _hero_matchup_report(
-        self,
-        plan: ExecutionPlan,
-        graph: EvidenceGraph,
-    ) -> AnswerSynthesisResult:
-        matchups = items(graph, "matchup_win_rate")
-        if graph.missing or not matchups:
-            return insufficient(plan, graph, "Hero matchup report needs matchup_win_rate evidence.")
-        recommendations = [
-            AnswerRecommendation(
-                subject=f"hero_id={item.value.get('hero_id')}",
-                recommendation_type=str(item.value.get("side") or "matchup"),
-                score=item.value.get("win_rate"),
-                evidence_refs=[item.id],
-                rationale="Selected from STRATZ hero matchup evidence.",
-            )
-            for item in matchups
-        ]
-        return AnswerSynthesisResult(
-            answer_type=plan.output_contract,
-            status="ok",
-            summary=f"Found {len(recommendations)} hero matchup rows.",
-            recommendations=recommendations,
-            limitations=[
-                AnswerLimitation(
-                    code="hero_name_unresolved",
-                    detail="Matchup rows currently expose hero_id values.",
-                )
-            ],
-            data_notes=data_notes(graph),
-            confidence=confidence(graph, has_output=True),
-        )
-
-    def _counter_pick_answer(
-        self,
-        plan: ExecutionPlan,
-        graph: EvidenceGraph,
-    ) -> AnswerSynthesisResult:
-        if graph.missing:
-            return AnswerSynthesisResult(
-                answer_type=plan.output_contract,
-                status="insufficient_evidence",
-                summary=(
-                    "Counter-pick answer cannot be completed because required "
-                    "evidence is missing."
-                ),
-                claims=hero_identity_claims(graph),
-                limitations=missing_limitations(graph),
-                data_notes=data_notes(graph),
-                confidence=confidence(graph, has_output=False),
-            )
-        recommendations = [
-            AnswerRecommendation(
-                subject=f"hero_id={item.value.get('hero_id')}",
-                recommendation_type=str(item.value.get("side") or "matchup"),
-                score=item.value.get("win_rate"),
-                evidence_refs=[item.id],
-                rationale=(
-                    "This candidate comes from STRATZ hero-vs-hero matchup evidence. "
-                    "It is not a full draft recommendation."
-                ),
-            )
-            for item in items(graph, "matchup_win_rate")
-        ]
-        limitations = [
-            AnswerLimitation(
-                code="not_full_draft_recommendation",
-                detail=(
-                    "Current tools provide matchup rows only. The answer does not yet "
-                    "include role fit, team composition, synergy, or patch context."
-                ),
-            ),
-            AnswerLimitation(
-                code="hero_name_unresolved",
-                detail="Matchup rows currently expose hero_id values.",
-            ),
-        ]
-        if not recommendations:
-            limitations.append(
-                AnswerLimitation(
-                    code="no_matchup_candidates",
-                    detail="No matchup rows were available to produce candidate items.",
-                )
-            )
-        return AnswerSynthesisResult(
-            answer_type=plan.output_contract,
-            status="ok" if recommendations else "insufficient_evidence",
-            summary=counter_pick_summary(graph, recommendations),
-            claims=hero_identity_claims(graph),
-            recommendations=recommendations,
-            limitations=limitations,
-            data_notes=data_notes(graph),
-            confidence=confidence(graph, has_output=bool(recommendations)),
         )
 
 
@@ -529,24 +413,6 @@ def data_notes(graph: EvidenceGraph) -> list[AnswerDataNote]:
             )
         )
     return notes
-
-
-def counter_pick_summary(
-    graph: EvidenceGraph,
-    recommendations: list[AnswerRecommendation],
-) -> str:
-    hero_names = [
-        item.value.get("localized_name") or item.subject
-        for item in graph.evidence
-        if item.kind == "hero_identity"
-    ]
-    target = str(hero_names[0]) if hero_names else "the target hero"
-    if not recommendations:
-        return f"Insufficient evidence to produce matchup candidates for {target}."
-    return (
-        f"Found {len(recommendations)} matchup candidate rows for {target}. "
-        "These are evidence items, not a complete draft recommendation."
-    )
 
 
 def confidence(graph: EvidenceGraph, *, has_output: bool) -> float:

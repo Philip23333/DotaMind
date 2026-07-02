@@ -156,8 +156,10 @@ def test_default_registry_includes_agentic_data_tools() -> None:
 
     assert {
         "resolve_hero",
-        "stratz.hero_vs_hero_matchup",
-        "stratz.lane_outcome",
+        "stratz.pair_lane_outcome",
+        "stratz.hero_matchup_ranking",
+        "stratz.lane_meta_global",
+        "stratz.hero_position_stats",
         "opendota.resolve_team",
         "opendota.team_recent_matches",
         "opendota.team_players",

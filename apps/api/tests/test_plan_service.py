@@ -82,31 +82,38 @@ def test_plan_service_executes_planned_counter_pick(monkeypatch) -> None:
                 "disadvantage": [],
             }
 
+        async def lane_outcome(self, *args, **kwargs) -> list:
+            return []
+
+        async def hero_position_stats(self, *args, **kwargs) -> list:
+            return []
+
     monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzTransport", FakeTransport)
     monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzHeroes", FakeHeroes)
 
     plan = ExecutionPlan(
-        intent="counter_pick",
-        goal="Fetch Lina matchup evidence.",
-        output_contract="draft_advice",
+        intent="hero_matchup_ranking",
+        goal="Fetch Lina matchup ranking evidence.",
+        output_contract="natural_language_answer",
         tool_calls=[
             ToolCall(id="resolve_target", tool="resolve_hero", args={"query": "Lina"}),
             ToolCall(
-                id="get_matchups",
-                tool="stratz.hero_vs_hero_matchup",
+                id="get_ranking",
+                tool="stratz.hero_matchup_ranking",
                 args={
                     "hero_id": "$resolve_target.data.hero.hero_id",
+                    "side": "vs",
                     "take": 3,
                 },
             ),
         ],
-        required_evidence=["hero_identity", "matchup_win_rate", "sample_size"],
+        required_evidence=["hero_identity", "matchup_ranking_row", "sample_size"],
     )
     service = PlanService(
         planner=FakePlanner(
             AgenticPlannerResult(
                 status="planned",
-                reason="counter plan",
+                reason="matchup ranking plan",
                 plan=plan,
             )
         )
@@ -128,17 +135,17 @@ def test_plan_service_executes_planned_counter_pick(monkeypatch) -> None:
 
 def test_plan_service_returns_error_without_answer_when_runner_fails() -> None:
     plan = ExecutionPlan(
-        intent="counter_pick",
+        intent="hero_matchup_ranking",
         goal="Bad plan.",
-        output_contract="draft_advice",
+        output_contract="natural_language_answer",
         tool_calls=[
             ToolCall(
-                id="get_matchups",
-                tool="stratz.hero_vs_hero_matchup",
-                args={"hero_id": "$missing.data.hero.hero_id"},
+                id="get_ranking",
+                tool="stratz.hero_matchup_ranking",
+                args={"hero_id": "$missing.data.hero.hero_id", "side": "vs"},
             )
         ],
-        required_evidence=["matchup_win_rate"],
+        required_evidence=["matchup_ranking_row"],
     )
     service = PlanService(
         planner=FakePlanner(
@@ -162,13 +169,13 @@ def test_plan_service_returns_error_without_answer_when_runner_fails() -> None:
 
 def test_plan_service_rejects_unproducible_required_evidence() -> None:
     plan = ExecutionPlan(
-        intent="counter_pick",
+        intent="hero_matchup_ranking",
         goal="Only resolve Lina.",
-        output_contract="draft_advice",
+        output_contract="natural_language_answer",
         tool_calls=[
             ToolCall(id="resolve_target", tool="resolve_hero", args={"query": "Lina"})
         ],
-        required_evidence=["hero_identity", "matchup_win_rate", "sample_size"],
+        required_evidence=["hero_identity", "matchup_ranking_row", "sample_size"],
     )
     service = PlanService(
         planner=FakePlanner(

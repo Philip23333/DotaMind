@@ -23,7 +23,10 @@ from app.core.config import Settings
 
 DEFAULT_EVIDENCE_KINDS = {
     "hero_identity",
-    "matchup_win_rate",
+    "pair_lane_winrate",
+    "matchup_ranking_row",
+    "lane_meta_row",
+    "position_stat",
     "sample_size",
     "patch_records",
     "hero_stats",
@@ -41,8 +44,6 @@ def test_contract_registry_contains_allowed_output_contracts() -> None:
         "patch_impact_report",
         "role_meta_report",
         "team_recent_report",
-        "hero_matchup_report",
-        "draft_advice",
         "natural_language_answer",
     } == set(CONTRACT_REGISTRY)
 
@@ -85,19 +86,6 @@ def test_role_meta_contract_rejects_field_names_as_evidence() -> None:
     errors = validate_contract_plan_with_evidence(plan, DEFAULT_EVIDENCE_KINDS)
 
     assert "unknown required_evidence: hero_id, win_rate" in errors
-
-
-def test_draft_advice_contract_does_not_require_counter_pick_intent() -> None:
-    plan = ExecutionPlan(
-        intent="hero_matchup",
-        goal="Draft answer.",
-        output_contract="draft_advice",
-        required_evidence=["hero_identity", "matchup_win_rate", "sample_size"],
-    )
-
-    errors = validate_contract_plan_with_evidence(plan, DEFAULT_EVIDENCE_KINDS)
-
-    assert not any("intent=counter_pick" in item for item in errors)
 
 
 def test_contract_validation_uses_supplied_evidence_kinds() -> None:
@@ -153,25 +141,31 @@ def test_contract_catalog_accepts_team_recent_report_evidence() -> None:
 
 def test_contract_catalog_accepts_any_previous_declared_reference_call_id() -> None:
     plan = ExecutionPlan(
-        intent="lane_outcome",
-        goal="Show Lina lane outcomes.",
+        intent="pair_lane_outcome",
+        goal="Show SK + AA pair lane outcome.",
         output_contract="natural_language_answer",
         tool_calls=[
             ToolCall(
-                id="resolve_lina",
+                id="resolve_sk",
                 tool="resolve_hero",
-                args={"query": "Lina"},
+                args={"query": "骷髅王"},
             ),
             ToolCall(
-                id="get_lane_outcome",
-                tool="stratz.lane_outcome",
+                id="resolve_aa",
+                tool="resolve_hero",
+                args={"query": "冰魂"},
+            ),
+            ToolCall(
+                id="pair_lane",
+                tool="stratz.pair_lane_outcome",
                 args={
-                    "hero_id": "$resolve_lina.data.hero.hero_id",
-                    "is_with": False,
+                    "hero_id": "$resolve_sk.data.hero.hero_id",
+                    "partner_hero_id": "$resolve_aa.data.hero.hero_id",
+                    "is_with": True,
                 },
             ),
         ],
-        required_evidence=["hero_identity", "lane_outcome", "sample_size"],
+        required_evidence=["hero_identity", "pair_lane_winrate", "sample_size"],
     )
 
     assert validate_plan_against_catalog(plan, _registry()) == []
@@ -219,50 +213,59 @@ def test_contract_catalog_rejects_invalid_tool_args() -> None:
 
 def test_contract_catalog_rejects_missing_required_tool_arg() -> None:
     plan = ExecutionPlan(
-        intent="lane_outcome",
-        goal="Show lane outcomes.",
+        intent="pair_lane_outcome",
+        goal="Show pair lane outcome.",
         output_contract="natural_language_answer",
         tool_calls=[
             ToolCall(
-                id="resolve_lina",
+                id="resolve_sk",
                 tool="resolve_hero",
-                args={"query": "Lina"},
+                args={"query": "骷髅王"},
             ),
             ToolCall(
-                id="get_lane_outcome",
-                tool="stratz.lane_outcome",
-                args={"hero_id": "$resolve_lina.data.hero.hero_id"},
+                id="pair_lane",
+                tool="stratz.pair_lane_outcome",
+                args={
+                    "hero_id": "$resolve_sk.data.hero.hero_id",
+                    "is_with": True,
+                },
             ),
         ],
-        required_evidence=["hero_identity", "lane_outcome", "sample_size"],
+        required_evidence=["hero_identity", "pair_lane_winrate", "sample_size"],
     )
 
     errors = validate_plan_against_catalog(plan, _registry())
 
-    assert any("stratz.lane_outcome invalid args" in item for item in errors)
+    assert any("stratz.pair_lane_outcome invalid args" in item for item in errors)
 
 
 def test_contract_catalog_rejects_future_reference() -> None:
     plan = ExecutionPlan(
-        intent="lane_outcome",
-        goal="Show lane outcomes.",
+        intent="pair_lane_outcome",
+        goal="Show pair lane outcome.",
         output_contract="natural_language_answer",
         tool_calls=[
             ToolCall(
-                id="get_lane_outcome",
-                tool="stratz.lane_outcome",
+                id="pair_lane",
+                tool="stratz.pair_lane_outcome",
                 args={
-                    "hero_id": "$resolve_lina.data.hero.hero_id",
-                    "is_with": False,
+                    "hero_id": "$resolve_sk.data.hero.hero_id",
+                    "partner_hero_id": "$resolve_aa.data.hero.hero_id",
+                    "is_with": True,
                 },
             ),
             ToolCall(
-                id="resolve_lina",
+                id="resolve_sk",
                 tool="resolve_hero",
-                args={"query": "Lina"},
+                args={"query": "骷髅王"},
+            ),
+            ToolCall(
+                id="resolve_aa",
+                tool="resolve_hero",
+                args={"query": "冰魂"},
             ),
         ],
-        required_evidence=["hero_identity", "lane_outcome", "sample_size"],
+        required_evidence=["hero_identity", "pair_lane_winrate", "sample_size"],
     )
 
     errors = validate_plan_against_catalog(plan, _registry())
@@ -272,21 +275,23 @@ def test_contract_catalog_rejects_future_reference() -> None:
 
 def test_contract_catalog_rejects_undeclared_reference_path() -> None:
     plan = ExecutionPlan(
-        intent="lane_outcome",
-        goal="Show lane outcomes.",
+        intent="pair_lane_outcome",
+        goal="Show pair lane outcome.",
         output_contract="natural_language_answer",
         tool_calls=[
-            ToolCall(id="resolve_lina", tool="resolve_hero", args={"query": "Lina"}),
+            ToolCall(id="resolve_sk", tool="resolve_hero", args={"query": "骷髅王"}),
+            ToolCall(id="resolve_aa", tool="resolve_hero", args={"query": "冰魂"}),
             ToolCall(
-                id="get_lane_outcome",
-                tool="stratz.lane_outcome",
+                id="pair_lane",
+                tool="stratz.pair_lane_outcome",
                 args={
-                    "hero_id": "$resolve_lina.data.hero.missing",
-                    "is_with": False,
+                    "hero_id": "$resolve_sk.data.hero.missing",
+                    "partner_hero_id": "$resolve_aa.data.hero.hero_id",
+                    "is_with": True,
                 },
             ),
         ],
-        required_evidence=["hero_identity", "lane_outcome", "sample_size"],
+        required_evidence=["hero_identity", "pair_lane_winrate", "sample_size"],
     )
 
     errors = validate_plan_against_catalog(plan, _registry())
@@ -296,18 +301,18 @@ def test_contract_catalog_rejects_undeclared_reference_path() -> None:
 
 def test_contract_catalog_rejects_unproducible_required_evidence() -> None:
     plan = ExecutionPlan(
-        intent="lane_outcome",
-        goal="Show lane outcomes.",
+        intent="pair_lane_outcome",
+        goal="Show pair lane outcome.",
         output_contract="natural_language_answer",
         tool_calls=[
-            ToolCall(id="resolve_lina", tool="resolve_hero", args={"query": "Lina"}),
+            ToolCall(id="resolve_sk", tool="resolve_hero", args={"query": "骷髅王"}),
         ],
-        required_evidence=["hero_identity", "lane_outcome"],
+        required_evidence=["hero_identity", "pair_lane_winrate"],
     )
 
     errors = validate_plan_against_catalog(plan, _registry())
 
-    assert any("not producible by selected tools: lane_outcome" in item for item in errors)
+    assert any("not producible by selected tools: pair_lane_winrate" in item for item in errors)
 
 
 def test_contract_runtime_accepts_dummy_declared_reference() -> None:
@@ -337,7 +342,7 @@ def test_contract_runtime_rejects_dummy_type_mismatch_reference() -> None:
             name="dummy.source",
             description="Dummy source.",
             input_model=DummySourceInput,
-            handler=lambda args: {"value": "bad"},
+            handler=lambda args, context: {"value": "bad"},
             evidence_kinds=("dummy_value",),
             output_paths={
                 "value": OutputPathContract(path="data.value", type="str"),
@@ -349,7 +354,7 @@ def test_contract_runtime_rejects_dummy_type_mismatch_reference() -> None:
             name="dummy.consumer",
             description="Dummy consumer.",
             input_model=DummyConsumerInput,
-            handler=lambda args: {"value": args.value},
+            handler=lambda args, context: {"value": args.value},
             evidence_kinds=("dummy_value",),
             arg_contracts={
                 "value": ArgContract(
@@ -391,7 +396,7 @@ def test_registry_contracts_reject_unknown_arg_contract() -> None:
             name="dummy.source",
             description="Dummy source.",
             input_model=DummySourceInput,
-            handler=lambda args: {"value": 1},
+            handler=lambda args, context: {"value": 1},
             arg_contracts={"missing": ArgContract(description="Bad metadata.")},
         )
     )
@@ -408,7 +413,7 @@ def test_registry_contracts_reject_output_type_mismatch() -> None:
             name="dummy.source",
             description="Dummy source.",
             input_model=DummySourceInput,
-            handler=lambda args: {"value": "bad"},
+            handler=lambda args, context: {"value": "bad"},
             output_paths={
                 "value": OutputPathContract(path="data.value", type="str"),
             },
@@ -419,7 +424,7 @@ def test_registry_contracts_reject_output_type_mismatch() -> None:
             name="dummy.consumer",
             description="Dummy consumer.",
             input_model=DummyConsumerInput,
-            handler=lambda args: {"value": args.value},
+            handler=lambda args, context: {"value": args.value},
             arg_contracts={
                 "value": ArgContract(
                     accepts_refs=(
@@ -452,7 +457,7 @@ def test_contract_catalog_known_evidence_comes_from_registry() -> None:
             name="dummy.tool",
             description="Dummy tool.",
             input_model=DummyInput,
-            handler=lambda args: {},
+            handler=lambda args, context: {},
             evidence_kinds=("new_registry_evidence",),
         )
     )
@@ -477,11 +482,6 @@ def test_render_planner_contracts_uses_null_for_unrestricted_allowed_evidence() 
         rendered,
         "patch_impact_report",
     )
-    assert "allowed_evidence: null" in _contract_section(
-        rendered,
-        "hero_matchup_report",
-    )
-    assert "allowed_evidence: null" in _contract_section(rendered, "draft_advice")
     assert "allowed_evidence: []" not in rendered
 
 
@@ -528,7 +528,7 @@ def _dummy_registry() -> ToolRegistry:
             name="dummy.source",
             description="Dummy source.",
             input_model=DummySourceInput,
-            handler=lambda args: {"value": 1},
+            handler=lambda args, context: {"value": 1},
             evidence_kinds=("dummy_value",),
             output_paths={
                 "value": OutputPathContract(
@@ -544,7 +544,7 @@ def _dummy_registry() -> ToolRegistry:
             name="dummy.consumer",
             description="Dummy consumer.",
             input_model=DummyConsumerInput,
-            handler=lambda args: {"value": args.value},
+            handler=lambda args, context: {"value": args.value},
             evidence_kinds=("dummy_value",),
             arg_contracts={
                 "value": ArgContract(

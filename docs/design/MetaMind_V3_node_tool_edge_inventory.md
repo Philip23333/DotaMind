@@ -79,8 +79,10 @@ Currently registered agentic tools:
 
 ```text
 resolve_hero
-stratz.hero_vs_hero_matchup
-stratz.lane_outcome
+stratz.pair_lane_outcome
+stratz.hero_matchup_ranking
+stratz.lane_meta_global
+stratz.hero_position_stats
 opendota.resolve_team
 opendota.team_recent_matches
 opendota.team_players
@@ -97,8 +99,6 @@ Currently registered output contracts:
 patch_impact_report
 role_meta_report
 team_recent_report
-hero_matchup_report
-draft_advice
 natural_language_answer
 ```
 
@@ -171,10 +171,12 @@ unchanged, and `replan_node` remains out of scope.
 
 | Tool | Expected implementation | Current status |
 |---|---|---|
-| `stratz.hero_vs_hero_matchup` | Return hero matchup advantage/disadvantage, win rate, and sample size. | Implemented and registered. |
-| `stratz.lane_outcome` | Return lane outcome data for with/against hero context. | Implemented and registered. |
-| `stratz.hero_synergy` | Return teammate synergy stats for ally hero and optional role filters. | Next target. Required for teammate combo questions. |
-| `stratz.hero_meta` | Return patch/week/bracket hero meta stats. | Not implemented. Lower priority while OpenDota role stats exist. |
+| `stratz.pair_lane_outcome` | Lookup the lane win rate for a specific hero pair. Fetches target hero's lane outcome, client-side filters to partner. | Implemented and registered. Evidence: `pair_lane_winrate`, `sample_size`. |
+| `stratz.hero_matchup_ranking` | Top-N hero-vs-hero ranking per advantage/disadvantage group (kept separate). side="vs" only this version. | Implemented and registered. Evidence: `matchup_ranking_row`, `sample_size`. |
+| `stratz.lane_meta_global` | Global lane pair distribution (no hero filter). Handler-side truncates to top `highlight_top` after `min_sample_size` filter. | Implemented and registered. Evidence: `lane_meta_row`, `sample_size`. |
+| `stratz.hero_position_stats` | Position distribution for one hero (5 rows) or top-N for one position. Input XOR-validates hero_id vs position_id. | Implemented and registered. Evidence: `position_stat`, `sample_size`. |
+| `stratz.hero_synergy` | Ally synergy (side="with") ranking. | Deferred. Underlying GraphQL needs to select `with { ... }` blocks; see `hero_matchup_ranking.side` limitation. |
+| `stratz.hero_meta` | Hero-level meta stats by patch/week/bracket. | Not implemented. Lower priority while OpenDota role stats exist. |
 
 ### OpenDota
 
@@ -211,9 +213,10 @@ unchanged, and `replan_node` remains out of scope.
 | `patch_impact_report` | structured | Implemented minimal summary. | `patch_records` |
 | `role_meta_report` | structured | Implemented minimal recommendations from role stats. | `hero_stats` |
 | `team_recent_report` | structured | Implemented minimal team evidence summary. | `team_identity`, `recent_matches` |
-| `hero_matchup_report` | structured | Implemented minimal matchup rows. | `matchup_win_rate` |
-| `draft_advice` | structured | Implemented only counter-pick evidence rows, not full draft recommendation. | `hero_identity`, `matchup_win_rate`, `sample_size` |
-| `natural_language_answer` | natural language | Implemented first pass with EvidenceGraph grounding. | none by default |
+| `natural_language_answer` | natural language | Implemented first pass with EvidenceGraph grounding. | none by default (planner must declare explicitly) |
+
+Retired contracts (referenced dead evidence kinds after STRATZ capability
+redesign): `hero_matchup_report`, `draft_advice`.
 
 ## Edge Inventory
 
@@ -240,37 +243,34 @@ Priority order for the next implementation phase:
    - Input: `hero_ids` or evidence refs containing `hero_id`.
    - Output: id -> localized name, internal name, aliases.
    - Evidence kinds: `hero_identity`, optionally `hero_name_map`.
-   - Why: current matchup and draft answers still expose raw `hero_id` values.
+   - Why: matchup / pair / lane-meta evidence still exposes raw `hero_id` values.
 
-2. `filter_heroes_by_role`
+2. `stratz.hero_matchup_ranking.side=”with”`
+   - Currently the ranking tool only supports `side=”vs”` because the
+     underlying GraphQL query selects only `vs { ... }` blocks inside
+     advantage/disadvantage. Extending requires adding parallel
+     `with { ... }` blocks to `_HERO_VS_HERO_MATCHUP_QUERY` in
+     `apps/api/app/integrations/stratz/heroes.py` and a corresponding
+     branch in `_normalize_matchup_side`.
+   - Why: enables “teammate combo” queries via the existing ranking tool.
+
+3. `filter_heroes_by_role`
    - Input: hero candidate rows plus requested role/position.
    - Output: filtered candidates with role-fit metadata.
    - Evidence kinds: `role_fit`, `candidate_pool`.
-   - Why: counter-pick recommendations need role-aware candidate pools.
+   - Why: ranking recommendations need role-aware candidate pools.
 
-3. `patch.context_for_heroes`
-   - Input: `hero_ids` / hero names and `patch="latest"`.
+4. `patch.context_for_heroes`
+   - Input: `hero_ids` / hero names and `patch=”latest”`.
    - Output: patch buffs/nerfs/neutral changes attached to those heroes.
    - Evidence kinds: `hero_patch_changes`, `patch_context`.
-   - Why: draft and role reports need patch explanation, not just raw win rate.
-
-4. `stratz.hero_synergy`
-   - Input: ally `hero_id`, optional role/bracket/week filters.
-   - Output: teammate synergy rows with win rate and sample size.
-   - Evidence kinds: `synergy_win_rate`, `sample_size`.
-   - Why: required for “my teammate picked X, what should I pick?” questions.
+   - Why: pair / ranking answers need patch explanation, not just raw win rate.
 
 5. `rank_counter_pick_candidates`
-   - Input: matchup evidence, role filter evidence, patch context, sample thresholds.
+   - Input: ranking evidence, role filter evidence, patch context, sample thresholds.
    - Output: ranked candidate list with rationale components.
    - Evidence kinds: `ranked_candidate`, `sample_size`.
-   - Why: moves `draft_advice` from raw matchup rows to actual recommendations.
-
-6. `rank_synergy_candidates`
-   - Input: synergy evidence, role filter evidence, sample thresholds.
-   - Output: ranked ally-combo candidate list.
-   - Evidence kinds: `ranked_candidate`, `synergy_win_rate`, `sample_size`.
-   - Why: completes the teammate-combo use case.
+   - Why: moves from raw `matchup_ranking_row` evidence to actual recommendations.
 
 ## Implementation Priority
 

@@ -82,9 +82,9 @@ If supported, return:
   "status": "planned",
   "reason": "...",
   "plan": {
-    "intent": "counter_pick",
-    "goal": "...",
-    "output_contract": "draft_advice",
+    "intent": "pair_lane_outcome",
+    "goal": "Win rate of Wraith King laning with Ancient Apparition in Legend bracket.",
+    "output_contract": "natural_language_answer",
     "context": {
       "bracket": ["LEGEND_ANCIENT"],
       "week": null,
@@ -93,15 +93,20 @@ If supported, return:
       "game_mode_ids": null
     },
     "tool_calls": [
-      {"id":"resolve_enemy","tool":"resolve_hero","args":{"query":"<enemy hero>"}},
+      {"id":"resolve_sk","tool":"resolve_hero","args":{"query":"骷髅王"}},
+      {"id":"resolve_aa","tool":"resolve_hero","args":{"query":"冰魂"}},
       {
-        "id":"get_matchups",
-        "tool":"stratz.hero_vs_hero_matchup",
-        "args":{"hero_id":"$resolve_enemy.data.hero.hero_id","take":5}
+        "id":"pair_lane",
+        "tool":"stratz.pair_lane_outcome",
+        "args":{
+          "hero_id":"$resolve_sk.data.hero.hero_id",
+          "partner_hero_id":"$resolve_aa.data.hero.hero_id",
+          "is_with":true
+        }
       }
     ],
-    "required_evidence": ["hero_identity","matchup_win_rate","sample_size"],
-    "constraints": {"max_tool_calls": 6, "allow_mock": false}
+    "required_evidence":["hero_identity","pair_lane_winrate","sample_size"],
+    "constraints":{"max_tool_calls":6,"allow_mock":false}
   }
 }
 
@@ -119,6 +124,19 @@ asks about hero or item changes.
 For role_meta_report, required_evidence may only use hero_stats, role_fit, and
 sample_size. Do not require field names like hero_id, hero_name, win_rate, or
 pick_rate as evidence kinds.
+
+Tool-specific notes:
+- natural_language_answer has no contract-level required_evidence, so you must
+  fill required_evidence explicitly based on what the chosen tools produce.
+  Examples: pair_lane_outcome → ["hero_identity","pair_lane_winrate","sample_size"];
+  hero_matchup_ranking → ["hero_identity","matchup_ranking_row","sample_size"];
+  lane_meta_global → ["lane_meta_row","sample_size"];
+  hero_position_stats → ["position_stat","sample_size"].
+- stratz.hero_matchup_ranking.side only supports "vs" in this version. Ally
+  synergy ("with") is not yet wired through the underlying GraphQL.
+- stratz.lane_meta_global returns high-sample lane pair rows sorted by
+  match_count; this surfaces COMMON pairs, not necessarily the STRONGEST by
+  win rate. Frame any natural-language answer accordingly.
 """
 
 

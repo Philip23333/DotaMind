@@ -78,6 +78,29 @@ query HeroLaneOutcome(
 }
 """
 
+_HERO_POSITION_STATS_QUERY = """
+query HeroPositionStats(
+  $heroIds: [Short!],
+  $bracketBasicIds: [RankBracketBasicEnum!],
+  $positionIds: [MatchPlayerPositionType!],
+  $week: Long
+) {
+  heroStats {
+    stats(
+      groupByPosition: true,
+      heroIds: $heroIds,
+      bracketBasicIds: $bracketBasicIds,
+      positionIds: $positionIds,
+      week: $week
+    ) {
+      heroId
+      position
+      matchCount
+    }
+  }
+}
+"""
+
 
 class StratzHeroes:
     def __init__(self, transport: StratzTransport) -> None:
@@ -112,7 +135,7 @@ class StratzHeroes:
 
     async def lane_outcome(
         self,
-        hero_id: int,
+        hero_id: int | None,
         *,
         is_with: bool,
         week: int | None = None,
@@ -132,6 +155,34 @@ class StratzHeroes:
         )
         records = payload["data"]["heroStats"]["laneOutcome"]
         return [self._normalize_lane_outcome(record) for record in records]
+
+    async def hero_position_stats(
+        self,
+        *,
+        hero_ids: list[int] | None = None,
+        position_ids: list[str] | None = None,
+        bracket_basic_ids: list[str] | None = None,
+        week: int | None = None,
+    ) -> list[dict[str, Any]]:
+        payload = await self.transport.graphql(
+            "HeroPositionStats",
+            _HERO_POSITION_STATS_QUERY,
+            {
+                "heroIds": hero_ids,
+                "bracketBasicIds": bracket_basic_ids,
+                "positionIds": position_ids,
+                "week": week,
+            },
+        )
+        records = payload["data"]["heroStats"]["stats"]
+        return [
+            {
+                "hero_id": record.get("heroId"),
+                "position": record.get("position"),
+                "match_count": int(record.get("matchCount") or 0),
+            }
+            for record in records
+        ]
 
     @classmethod
     def _normalize_matchup_side(cls, side: list[dict[str, Any]]) -> list[dict[str, Any]]:

@@ -83,8 +83,7 @@ Allowed `output_contract` values:
 - `draft_advice`
 - `natural_language_answer`
 
-Registered agentic tools include hero resolution, STRATZ matchup/lane evidence,
-OpenDota team/meta evidence, and local patch records.
+Registered agentic tools include hero resolution, STRATZ pair-lane / matchup-ranking / lane-meta / position-stats tools, OpenDota team/meta evidence, and local patch records.
 
 ## Configuration
 
