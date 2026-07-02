@@ -200,6 +200,77 @@ def test_lane_meta_global_truncates_to_highlight_top(monkeypatch) -> None:
     assert result.data["filters"]["bracket_basic_ids"] == ["LEGEND_ANCIENT"]
 
 
+def test_lane_meta_global_dedupes_mirror_pairs(monkeypatch) -> None:
+    class MirrorHeroes:
+        def __init__(self, transport):
+            self.transport = transport
+
+        async def lane_outcome(self, hero_id, *, is_with, **kwargs):
+            return [
+                {
+                    "hero_id": 22,
+                    "target_hero_id": 2,
+                    "position": "POSITION_1",
+                    "match_count": 1774,
+                    "match_win_rate": 0.5767,
+                },
+                {
+                    "hero_id": 2,
+                    "target_hero_id": 22,
+                    "position": "POSITION_1",
+                    "match_count": 1685,
+                    "match_win_rate": 0.5697,
+                },
+                {
+                    "hero_id": 6,
+                    "target_hero_id": 14,
+                    "position": "POSITION_1",
+                    "match_count": 1699,
+                    "match_win_rate": 0.5491,
+                },
+                {
+                    "hero_id": 14,
+                    "target_hero_id": 6,
+                    "position": "POSITION_1",
+                    "match_count": 1809,
+                    "match_win_rate": 0.5384,
+                },
+            ]
+
+    monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzTransport", FakeTransport)
+    monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzHeroes", MirrorHeroes)
+
+    result = asyncio.run(
+        ToolExecutor(_registry(token="token")).execute(
+            ToolCall(
+                id="meta",
+                tool="stratz.lane_meta_global",
+                args={"is_with": True, "min_sample_size": 100, "highlight_top": 10},
+            ),
+            QueryContext(),
+        )
+    )
+
+    assert result.status == "ok"
+    pairs = {
+        (row["hero_id"], row["target_hero_id"])
+        for row in result.data["rows"]
+    }
+    # No mirror duplicates: each canonical pair appears once
+    canonical = {tuple(sorted(p)) for p in pairs}
+    assert len(canonical) == len(pairs)
+    # The larger-sample mirror is kept for each pair
+    pair_by_canonical = {
+        tuple(sorted((row["hero_id"], row["target_hero_id"]))): row
+        for row in result.data["rows"]
+    }
+    assert pair_by_canonical[(2, 22)]["match_count"] == 1774
+    assert pair_by_canonical[(6, 14)]["match_count"] == 1809
+    assert result.data["total_available"] == 2
+    assert result.data["returned_count"] == 2
+    assert "deduped" in result.data["selection_policy"]
+
+
 def test_lane_meta_global_evidence_maps_hero_names() -> None:
     from app.agentic.tools.stratz_tools import lane_meta_global_evidence
 

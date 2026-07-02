@@ -198,11 +198,13 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
             name="stratz.lane_meta_global",
             description=(
                 "Return high-sample lane pair rows from the global lane "
-                "outcome distribution (no hero filter). Returns top "
-                "`highlight_top` rows sorted by match_count desc, after "
-                "dropping rows below `min_sample_size`. Note: sorting by "
-                "match_count surfaces COMMON pairs, not necessarily the "
-                "STRONGEST by win rate."
+                "outcome distribution (no hero filter). STRATZ returns two "
+                "mirror rows per ally pair; this tool collapses them to one "
+                "row per pair, keeping the direction with the larger "
+                "match_count. Returns top `highlight_top` rows sorted by "
+                "match_count desc, after dropping rows below "
+                "`min_sample_size`. Note: sorting by match_count surfaces "
+                "COMMON pairs, not necessarily the STRONGEST by win rate."
             ),
             input_model=LaneMetaGlobalInput,
             handler=_lane_meta_global_handler(settings),
@@ -662,6 +664,32 @@ def _hero_matchup_ranking_handler(settings: Settings):
     return handle
 
 
+def _dedupe_pair_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Collapse mirror (a,b) / (b,a) rows into one entry per pair.
+
+    STRATZ `laneOutcome` returns two rows per ally pair (hero_id, target_hero_id
+    and its reverse). Under bracket filters these rows can have asymmetric
+    stats because each direction is sampled from a different match subset
+    (heroId1's lane-bucket perspective). Keep the row with the larger
+    match_count as the more statistically reliable view of the pair.
+    """
+    seen: dict[tuple[int, int], dict[str, Any]] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        a = row.get("hero_id")
+        b = row.get("target_hero_id")
+        if not isinstance(a, int) or not isinstance(b, int):
+            continue
+        key = (a, b) if a <= b else (b, a)
+        previous = seen.get(key)
+        if previous is None or (row.get("match_count") or 0) > (
+            previous.get("match_count") or 0
+        ):
+            seen[key] = row
+    return list(seen.values())
+
+
 def _lane_meta_global_handler(settings: Settings):
     async def handle(
         args: LaneMetaGlobalInput,
@@ -682,9 +710,10 @@ def _lane_meta_global_handler(settings: Settings):
         finally:
             await transport.aclose()
 
+        deduped = _dedupe_pair_rows(records)
         qualifying = [
             record
-            for record in records
+            for record in deduped
             if isinstance(record, dict)
             and (record.get("match_count") or 0) >= args.min_sample_size
         ]
@@ -703,6 +732,7 @@ def _lane_meta_global_handler(settings: Settings):
             "total_available": len(qualifying),
             "returned_count": len(top),
             "selection_policy": (
+                f"deduped=keep_larger_match_count_mirror, "
                 f"min_sample_size>={args.min_sample_size}, "
                 f"sorted_by=match_count desc, top={args.highlight_top}"
             ),
