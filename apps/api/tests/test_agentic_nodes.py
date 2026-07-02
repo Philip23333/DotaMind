@@ -106,7 +106,7 @@ def test_tool_executor_node_skips_failed_dependency() -> None:
             name="debug.fail",
             description="Always fail.",
             input_model=HeroLookupInput,
-            handler=lambda _args: (_ for _ in ()).throw(RuntimeError("boom")),
+            handler=lambda _args, context: (_ for _ in ()).throw(RuntimeError("boom")),
         )
     )
     registry.register(
@@ -114,7 +114,7 @@ def test_tool_executor_node_skips_failed_dependency() -> None:
             name="debug.matchups",
             description="Fetch fake matchup rows.",
             input_model=MatchupInput,
-            handler=lambda args: calls.append(args.hero_id),
+            handler=lambda args, context: calls.append(args.hero_id),
         )
     )
     state = AgentRunState(
@@ -229,7 +229,7 @@ def _registry() -> ToolRegistry:
             name="debug.resolve_hero",
             description="Resolve a fake hero.",
             input_model=HeroLookupInput,
-            handler=lambda args: {"hero": {"hero_id": 25, "name": args.query}},
+            handler=lambda args, context: {"hero": {"hero_id": 25, "name": args.query}},
             output_paths={
                 "hero_id": OutputPathContract(
                     path="data.hero.hero_id",
@@ -243,7 +243,7 @@ def _registry() -> ToolRegistry:
             name="debug.matchups",
             description="Fetch fake matchup rows.",
             input_model=MatchupInput,
-            handler=lambda args: {"hero_id": args.hero_id, "take": args.take},
+            handler=lambda args, context: {"hero_id": args.hero_id, "take": args.take},
             arg_contracts={
                 "hero_id": ArgContract(
                     accepts_refs=(

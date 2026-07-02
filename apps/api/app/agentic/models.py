@@ -1,6 +1,6 @@
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 ToolResultStatus = Literal["ok", "error"]
 
@@ -16,10 +16,27 @@ class ExecutionConstraints(BaseModel):
     allow_mock: bool = False
 
 
+class QueryContext(BaseModel):
+    """Cross-cutting scope filters shared across all tool calls in a plan.
+
+    Set once at plan level. Tool input_models do not carry these fields;
+    handlers receive context as a second argument and apply it internally.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    bracket: list[str] | None = None
+    week: int | None = Field(default=None, ge=0)
+    position_ids: list[str] | None = None
+    region_ids: list[str] | None = None
+    game_mode_ids: list[str] | None = None
+
+
 class ExecutionPlan(BaseModel):
     intent: str = Field(min_length=1)
     goal: str = Field(min_length=1)
     output_contract: str = Field(min_length=1)
+    context: QueryContext = Field(default_factory=QueryContext)
     tool_calls: list[ToolCall] = Field(default_factory=list)
     required_evidence: list[str] = Field(default_factory=list)
     constraints: ExecutionConstraints = Field(default_factory=ExecutionConstraints)

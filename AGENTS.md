@@ -2,12 +2,30 @@
 
 At the start of every new session in this repository, before analyzing or editing code:
 
-1. Read the latest timestamp-prefixed Chinese progress snapshot matching
-   `docs/progress/YYYY-MM-DD_HH-mm_progress_zh.md`.
-2. Use the matching `_progress_en.md` document when English terminology or
-   bilingual consistency matters.
-3. Treat the latest progress snapshot as the primary handoff context, then
-   verify its claims against the current working tree before making changes.
+1. **Read the latest timestamp-prefixed Chinese progress snapshot** matching
+   `docs/progress/YYYY-MM-DD_HH-mm_progress_zh.md` (sort by filename
+   timestamp, take the newest). Use the matching `_progress_en.md` document
+   when English terminology or bilingual consistency matters.
+2. **Read the canonical design docs** under `docs/design/` and
+   `docs/technical/` that are relevant to the task at hand. In particular:
+   - `docs/design/MetaMind_MVP_v2.5.md` — primary architecture direction
+     (v2.5 constrained tool calling). Treat this as the authority when
+     discussing plan/graph/contract structure.
+   - `docs/technical/stratz_hero_page_graphql_inventory.md` — empirical
+     inventory of STRATZ hero-page GraphQL operations; authoritative for
+     STRATZ tool design decisions.
+   - `docs/technical/architecture.md` — current implementation map.
+3. **Treat the latest progress snapshot as the primary handoff context**,
+   then verify its claims against the current working tree before making
+   changes. Snapshots record intent at a point in time; code may have
+   moved on.
+4. **Verify before recommending**. If a snapshot or design doc names a
+   file, function, tool, or evidence kind, confirm it still exists in the
+   current tree before relying on it. Memory of past sessions is not
+   authoritative; `git log`, file reads, and grep are.
+5. **Note known volatility**. STRATZ public GraphQL data drifts on an
+   hour scale; tests and assertions must not pin exact win rates or
+   match counts.
 
 ## Collaboration Rules
 

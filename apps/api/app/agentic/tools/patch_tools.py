@@ -4,7 +4,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from app.agentic.evidence import EvidenceItem
-from app.agentic.models import ToolResult, ToolSource
+from app.agentic.models import QueryContext, ToolResult, ToolSource
 from app.agentic.tools import ArgContract, ToolDefinition, ToolRegistry
 from app.integrations.patch_notes import get_item_changes, load_patch
 
@@ -167,7 +167,7 @@ def patch_item_changes_evidence(result: ToolResult) -> list[EvidenceItem]:
     ]
 
 
-def _get_records(args: PatchRecordsInput) -> dict[str, Any]:
+def _get_records(args: PatchRecordsInput, context: QueryContext) -> dict[str, Any]:
     data = _load_required_patch(args.patch)
     changes = data.get("changes", [])
     counts = _polarity_counts(changes)
@@ -181,7 +181,7 @@ def _get_records(args: PatchRecordsInput) -> dict[str, Any]:
     }
 
 
-def _hero_changes(args: PatchHeroChangesInput) -> dict[str, Any]:
+def _hero_changes(args: PatchHeroChangesInput, context: QueryContext) -> dict[str, Any]:
     data = _load_required_patch(args.patch)
     changes = [
         change
@@ -203,7 +203,7 @@ def _hero_changes(args: PatchHeroChangesInput) -> dict[str, Any]:
     }
 
 
-def _item_changes(args: PatchItemChangesInput) -> dict[str, Any]:
+def _item_changes(args: PatchItemChangesInput, context: QueryContext) -> dict[str, Any]:
     data = _load_required_patch(args.patch)
     changes = get_item_changes(args.patch)
     counts = _polarity_counts(changes)

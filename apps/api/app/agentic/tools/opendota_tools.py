@@ -4,7 +4,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from app.agentic.evidence import EvidenceItem
-from app.agentic.models import ToolResult, ToolSource
+from app.agentic.models import QueryContext, ToolResult, ToolSource
 from app.agentic.tools import (
     AcceptedRef,
     ArgContract,
@@ -327,7 +327,7 @@ def hero_stats_by_role_evidence(result: ToolResult) -> list[EvidenceItem]:
 
 
 def _resolve_team_handler(settings: Settings):
-    async def handle(args: OpenDotaResolveTeamInput) -> dict[str, Any]:
+    async def handle(args: OpenDotaResolveTeamInput, context: QueryContext) -> dict[str, Any]:
         transport, _heroes, teams = _clients(settings)
         try:
             all_teams = await teams.get_all()
@@ -345,7 +345,7 @@ def _resolve_team_handler(settings: Settings):
 
 
 def _team_recent_matches_handler(settings: Settings):
-    async def handle(args: OpenDotaTeamRecentMatchesInput) -> dict[str, Any]:
+    async def handle(args: OpenDotaTeamRecentMatchesInput, context: QueryContext) -> dict[str, Any]:
         transport, _heroes, teams = _clients(settings)
         try:
             cache_before = transport.cache_stats()
@@ -386,7 +386,7 @@ def _team_recent_matches_handler(settings: Settings):
 
 
 def _team_players_handler(settings: Settings):
-    async def handle(args: OpenDotaTeamPlayersInput) -> dict[str, Any]:
+    async def handle(args: OpenDotaTeamPlayersInput, context: QueryContext) -> dict[str, Any]:
         transport, _heroes, teams = _clients(settings)
         try:
             players = await teams.get_players(args.team_id)
@@ -409,7 +409,7 @@ def _team_players_handler(settings: Settings):
 
 
 def _team_heroes_handler(settings: Settings):
-    async def handle(args: OpenDotaTeamHeroesInput) -> dict[str, Any]:
+    async def handle(args: OpenDotaTeamHeroesInput, context: QueryContext) -> dict[str, Any]:
         transport, _heroes, teams = _clients(settings)
         try:
             sample_size = args.detail_sample_size or teams.detail_sample_size
@@ -426,7 +426,7 @@ def _team_heroes_handler(settings: Settings):
 
 
 def _hero_stats_by_role_handler(settings: Settings):
-    async def handle(args: OpenDotaHeroStatsByRoleInput) -> dict[str, Any]:
+    async def handle(args: OpenDotaHeroStatsByRoleInput, context: QueryContext) -> dict[str, Any]:
         transport, heroes, _teams = _clients(settings)
         try:
             records = await heroes.get_stats_for_role(

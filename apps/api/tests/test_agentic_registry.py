@@ -4,7 +4,7 @@ import pytest
 from pydantic import BaseModel, Field
 
 from app.agentic.evidence import EvidenceItem
-from app.agentic.models import ToolCall, ToolResult, ToolSource
+from app.agentic.models import QueryContext, ToolCall, ToolResult, ToolSource
 from app.agentic.tools import ToolDefinition, ToolExecutor, ToolRegistry
 from app.agentic.tools.stratz_tools import build_default_tool_registry
 from app.core.config import Settings
@@ -15,7 +15,7 @@ class EchoInput(BaseModel):
 
 
 def test_tool_registry_executes_registered_tool() -> None:
-    async def handler(args: EchoInput) -> dict:
+    async def handler(args: EchoInput, context: QueryContext) -> dict:
         return {"echo": args.value}
 
     registry = ToolRegistry()
@@ -32,7 +32,8 @@ def test_tool_registry_executes_registered_tool() -> None:
 
     result = asyncio.run(
         ToolExecutor(registry).execute(
-            ToolCall(id="t1", tool="debug.echo", args={"value": 7})
+            ToolCall(id="t1", tool="debug.echo", args={"value": 7}),
+            QueryContext(),
         )
     )
 
@@ -62,7 +63,7 @@ def test_tool_registry_accepts_optional_evidence_extractor() -> None:
         name="debug.echo",
         description="Return the input value.",
         input_model=EchoInput,
-        handler=lambda args: {"echo": args.value},
+        handler=lambda args, context: {"echo": args.value},
         evidence_extractor=extractor,
         evidence_kinds=("debug_evidence",),
     )
@@ -80,7 +81,7 @@ def test_tool_registry_accepts_utility_tool_without_evidence() -> None:
         name="debug.utility",
         description="Utility tool.",
         input_model=EchoInput,
-        handler=lambda args: {"echo": args.value},
+        handler=lambda args, context: {"echo": args.value},
     )
 
     registry = ToolRegistry()
@@ -97,7 +98,7 @@ def test_tool_registry_rejects_duplicate_tool_names() -> None:
         name="debug.echo",
         description="Return the input value.",
         input_model=EchoInput,
-        handler=lambda args: {"echo": args.value},
+        handler=lambda args, context: {"echo": args.value},
     )
 
     registry.register(definition)
@@ -109,7 +110,8 @@ def test_tool_registry_rejects_duplicate_tool_names() -> None:
 def test_tool_executor_returns_error_for_unknown_tool() -> None:
     result = asyncio.run(
         ToolExecutor(ToolRegistry()).execute(
-            ToolCall(id="t1", tool="debug.missing", args={})
+            ToolCall(id="t1", tool="debug.missing", args={}),
+            QueryContext(),
         )
     )
 
@@ -125,13 +127,14 @@ def test_tool_executor_returns_error_for_invalid_args() -> None:
             name="debug.echo",
             description="Return the input value.",
             input_model=EchoInput,
-            handler=lambda args: {"echo": args.value},
+            handler=lambda args, context: {"echo": args.value},
         )
     )
 
     result = asyncio.run(
         ToolExecutor(registry).execute(
-            ToolCall(id="t1", tool="debug.echo", args={"value": 0})
+            ToolCall(id="t1", tool="debug.echo", args={"value": 0}),
+            QueryContext(),
         )
     )
 

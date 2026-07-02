@@ -387,7 +387,10 @@ def test_agentic_planner_prompt_contains_team_recent_catalog_example() -> None:
     assert "- is_with: bool, required" in prompt
     assert "$<previous_call_id>.data.hero.hero_id" in prompt
     assert "DIVINE_IMMORTAL" in prompt
-    assert "do not use DIVINE or IMMORTAL separately" in prompt
+    assert (
+        "do not use DIVINE or IMMORTAL separately" in prompt
+        or "Map 冠绝/Immortal/Divine to DIVINE_IMMORTAL" in prompt
+    )
     assert "$resolve_target.data.hero.hero_id" not in prompt
 
 

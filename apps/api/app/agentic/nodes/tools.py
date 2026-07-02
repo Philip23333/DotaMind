@@ -40,7 +40,8 @@ async def tool_executor_node(
             continue
 
         result = await executor.execute(
-            ToolCall(id=call.id, tool=call.tool, args=resolved_args)
+            ToolCall(id=call.id, tool=call.tool, args=resolved_args),
+            state.plan.context,
         )
         state.tool_results.append(result)
         results_by_id[call.id] = result

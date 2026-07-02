@@ -34,6 +34,24 @@ Schema obedience rules:
   tools and allowed by the output contract.
 - If a tool arg accepts a reference, use exactly the declared reference path.
 
+Scope filter rules:
+- Cross-cutting scope filters (bracket, week, position, region, game_mode)
+  MUST be set on plan.context, NEVER on individual tool_call args.
+- Tool input_models do not carry these fields. Putting them in args is a
+  schema violation.
+- Set each context field at most once per plan; the same scope applies to
+  every tool call. Leave a field null when the user did not constrain it.
+- STRATZ bracket values: HERALD_GUARDIAN, CRUSADER_ARCHON, LEGEND_ANCIENT,
+  DIVINE_IMMORTAL. Map 冠绝/Immortal/Divine to DIVINE_IMMORTAL.
+- STRATZ position values: POSITION_1 through POSITION_5.
+
+QueryContext schema (set on plan.context):
+- bracket: list[str] | null  — STRATZ RankBracketBasicEnum values.
+- week: int | null           — STRATZ week epoch seconds.
+- position_ids: list[str] | null — STRATZ MatchPlayerPositionType values.
+- region_ids: list[str] | null   — reserved.
+- game_mode_ids: list[str] | null — reserved.
+
 Current allowed tools:
 {tools}
 
@@ -67,6 +85,13 @@ If supported, return:
     "intent": "counter_pick",
     "goal": "...",
     "output_contract": "draft_advice",
+    "context": {
+      "bracket": ["LEGEND_ANCIENT"],
+      "week": null,
+      "position_ids": null,
+      "region_ids": null,
+      "game_mode_ids": null
+    },
     "tool_calls": [
       {"id":"resolve_enemy","tool":"resolve_hero","args":{"query":"<enemy hero>"}},
       {

@@ -200,7 +200,7 @@ def _registry() -> ToolRegistry:
             name="resolve_hero",
             description="Resolve a fake hero.",
             input_model=HeroInput,
-            handler=lambda args: {
+            handler=lambda args, context: {
                 "status": "resolved",
                 "query": args.query,
                 "method": "exact",
@@ -226,7 +226,7 @@ def _registry() -> ToolRegistry:
             name="stratz.hero_vs_hero_matchup",
             description="Return fake matchup evidence.",
             input_model=MatchupInput,
-            handler=lambda args: {
+            handler=lambda args, context: {
                 "hero_id": args.hero_id,
                 "advantage": [
                     {
@@ -258,7 +258,7 @@ def _registry() -> ToolRegistry:
             name="stratz.lane_outcome",
             description="Return fake lane evidence.",
             input_model=LaneInput,
-            handler=lambda args: {
+            handler=lambda args, context: {
                 "hero_id": args.hero_id,
                 "is_with": args.is_with,
                 "records": [
@@ -291,7 +291,7 @@ def _registry() -> ToolRegistry:
             name="opendota.resolve_team",
             description="Resolve a fake team.",
             input_model=HeroInput,
-            handler=lambda args: {
+            handler=lambda args, context: {
                 "status": "resolved",
                 "query": args.query,
                 "team": {"team_id": 1, "name": "BetBoom Team", "tag": "BB"},
@@ -311,7 +311,7 @@ def _registry() -> ToolRegistry:
             name="opendota.team_recent_matches",
             description="Return fake team matches.",
             input_model=TeamIdInput,
-            handler=lambda args: {
+            handler=lambda args, context: {
                 "team_id": args.team_id,
                 "matches_in_window": 5,
                 "wins": 3,

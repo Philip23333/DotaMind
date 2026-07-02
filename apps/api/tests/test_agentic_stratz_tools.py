@@ -1,6 +1,6 @@
 ﻿import asyncio
 
-from app.agentic.models import ToolCall
+from app.agentic.models import QueryContext, ToolCall
 from app.agentic.tools import ToolExecutor
 from app.agentic.tools.stratz_tools import build_default_tool_registry
 from app.core.config import Settings
@@ -47,13 +47,12 @@ def test_stratz_lane_outcome_tool_returns_records(monkeypatch) -> None:
             ToolCall(
                 id="lane",
                 tool="stratz.lane_outcome",
-                args={
-                    "hero_id": 104,
-                    "is_with": True,
-                    "bracket_basic_ids": ["DIVINE_IMMORTAL"],
-                    "position_ids": ["POSITION_4"],
-                },
-            )
+                args={"hero_id": 104, "is_with": True},
+            ),
+            QueryContext(
+                bracket=["DIVINE_IMMORTAL"],
+                position_ids=["POSITION_4"],
+            ),
         )
     )
 
@@ -77,14 +76,12 @@ def test_stratz_hero_vs_hero_matchup_tool_returns_filters(monkeypatch) -> None:
             ToolCall(
                 id="matchups",
                 tool="stratz.hero_vs_hero_matchup",
-                args={
-                    "hero_id": 25,
-                    "take": 5,
-                    "week": 1782345600,
-                    "bracket_basic_ids": ["DIVINE_IMMORTAL"],
-                    "match_limit": 1000,
-                },
-            )
+                args={"hero_id": 25, "take": 5, "match_limit": 1000},
+            ),
+            QueryContext(
+                bracket=["DIVINE_IMMORTAL"],
+                week=1782345600,
+            ),
         )
     )
 
@@ -104,7 +101,8 @@ def test_stratz_lane_outcome_requires_token() -> None:
                 id="lane",
                 tool="stratz.lane_outcome",
                 args={"hero_id": 104, "is_with": True},
-            )
+            ),
+            QueryContext(),
         )
     )
 

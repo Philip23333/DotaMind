@@ -1,7 +1,7 @@
 ﻿import asyncio
 import time
 
-from app.agentic.models import ToolCall
+from app.agentic.models import QueryContext, ToolCall
 from app.agentic.tools import ToolExecutor, ToolRegistry
 from app.agentic.tools.opendota_tools import register_opendota_tools
 from app.core.config import Settings
@@ -145,7 +145,10 @@ def test_opendota_tool_error_is_exposed_without_mock(monkeypatch) -> None:
 async def _execute(tool: str, args: dict) -> object:
     registry = ToolRegistry()
     register_opendota_tools(registry, Settings(opendota_base_url="https://opendota.test"))
-    return await ToolExecutor(registry).execute(ToolCall(id="t1", tool=tool, args=args))
+    return await ToolExecutor(registry).execute(
+        ToolCall(id="t1", tool=tool, args=args),
+        QueryContext(),
+    )
 
 
 def _fake_clients(_settings):

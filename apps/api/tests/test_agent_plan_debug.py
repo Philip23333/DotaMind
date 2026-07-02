@@ -56,7 +56,7 @@ def test_run_plan_builds_response_with_registry_evidence() -> None:
             name="debug.utility",
             description="Utility tool without evidence.",
             input_model=DebugInput,
-            handler=lambda args: {"value": args.value},
+            handler=lambda args, context: {"value": args.value},
         )
     )
     plan = ExecutionPlan(

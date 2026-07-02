@@ -4,9 +4,9 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from app.agentic.models import ToolResult, ToolSource
+from app.agentic.models import QueryContext, ToolResult, ToolSource
 
-ToolHandler = Callable[[BaseModel], Any | Awaitable[Any]]
+ToolHandler = Callable[[BaseModel, QueryContext], Any | Awaitable[Any]]
 EvidenceExtractor = Callable[[ToolResult], list[Any]]
 
 

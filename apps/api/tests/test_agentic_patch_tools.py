@@ -1,12 +1,14 @@
 ﻿import asyncio
 
-from app.agentic.models import ToolCall
+from app.agentic.models import QueryContext, ToolCall
 from app.agentic.tools import ToolExecutor, ToolRegistry
 from app.agentic.tools.patch_tools import register_patch_tools
 
 
 def test_patch_get_records_reads_latest_patch() -> None:
-    result = asyncio.run(_executor().execute(ToolCall(id="p", tool="patch.get_records")))
+    result = asyncio.run(
+        _executor().execute(ToolCall(id="p", tool="patch.get_records"), QueryContext())
+    )
 
     assert result.status == "ok"
     assert result.data["patch"] == "7.41d"
@@ -20,7 +22,8 @@ def test_patch_hero_changes_filters_single_hero() -> None:
                 id="h",
                 tool="patch.hero_changes",
                 args={"patch": "latest", "hero": "Abaddon"},
-            )
+            ),
+            QueryContext(),
         )
     )
 
@@ -29,7 +32,9 @@ def test_patch_hero_changes_filters_single_hero() -> None:
 
 
 def test_patch_item_changes_returns_item_groups() -> None:
-    result = asyncio.run(_executor().execute(ToolCall(id="i", tool="patch.item_changes")))
+    result = asyncio.run(
+        _executor().execute(ToolCall(id="i", tool="patch.item_changes"), QueryContext())
+    )
 
     assert result.status == "ok"
     assert result.data["change_count"] > 0
@@ -43,7 +48,8 @@ def test_patch_tool_error_is_exposed() -> None:
                 id="missing",
                 tool="patch.get_records",
                 args={"patch": "missing_patch"},
-            )
+            ),
+            QueryContext(),
         )
     )
 

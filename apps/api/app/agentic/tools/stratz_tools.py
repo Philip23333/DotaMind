@@ -3,7 +3,7 @@
 from pydantic import BaseModel, Field
 
 from app.agentic.evidence import EvidenceItem
-from app.agentic.models import ToolResult, ToolSource
+from app.agentic.models import QueryContext, ToolResult, ToolSource
 from app.agentic.tools import (
     AcceptedRef,
     ArgContract,
@@ -17,27 +17,22 @@ from app.integrations.stratz.heroes import StratzHeroes
 from app.integrations.stratz.transport import StratzTransport
 
 STRATZ_BRACKET_BASIC_DESCRIPTION = (
-    "STRATZ RankBracketBasicEnum filters. Use exact enum values only: "
-    "HERALD_GUARDIAN, CRUSADER_ARCHON, LEGEND_ANCIENT, DIVINE_IMMORTAL. "
-    "Map 冠绝/Immortal/Divine to DIVINE_IMMORTAL; do not use DIVINE or "
-    "IMMORTAL separately for bracket_basic_ids."
+    "STRATZ RankBracketBasicEnum scope filter, set on plan.context.bracket. "
+    "Use exact enum values only: HERALD_GUARDIAN, CRUSADER_ARCHON, "
+    "LEGEND_ANCIENT, DIVINE_IMMORTAL. Map 冠绝/Immortal/Divine to "
+    "DIVINE_IMMORTAL; do not use DIVINE or IMMORTAL separately."
 )
 
 
 class StratzHeroVsHeroMatchupInput(BaseModel):
     hero_id: int = Field(gt=0)
     take: int = Field(default=10, ge=1, le=50)
-    week: int | None = Field(default=None, ge=0)
-    bracket_basic_ids: list[str] | None = None
     match_limit: int | None = Field(default=None, ge=1)
 
 
 class StratzLaneOutcomeInput(BaseModel):
     hero_id: int = Field(gt=0)
     is_with: bool
-    week: int | None = Field(default=None, ge=0)
-    bracket_basic_ids: list[str] | None = None
-    position_ids: list[str] | None = None
 
 
 class ResolveHeroInput(BaseModel):
@@ -98,10 +93,6 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
                     ),
                 ),
                 "take": ArgContract(description="Maximum matchup rows to return."),
-                "week": ArgContract(description="STRATZ week filter."),
-                "bracket_basic_ids": ArgContract(
-                    description=STRATZ_BRACKET_BASIC_DESCRIPTION
-                ),
                 "match_limit": ArgContract(description="Maximum source matches to scan."),
             },
             metadata={"game": "dota2", "domain": "hero_matchup"},
@@ -138,11 +129,6 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
                         "opponents against this hero."
                     ),
                 ),
-                "week": ArgContract(description="STRATZ week filter."),
-                "bracket_basic_ids": ArgContract(
-                    description=STRATZ_BRACKET_BASIC_DESCRIPTION
-                ),
-                "position_ids": ArgContract(description="Lane position filters."),
             },
             metadata={"game": "dota2", "domain": "lane_outcome"},
         )
@@ -160,7 +146,7 @@ def build_default_tool_registry(settings: Settings) -> ToolRegistry:
     return registry
 
 
-def _resolve_hero_handler(args: ResolveHeroInput) -> dict[str, Any]:
+def _resolve_hero_handler(args: ResolveHeroInput, context: QueryContext) -> dict[str, Any]:
     return load_default_hero_resolver().resolve(args.query)
 
 
@@ -303,7 +289,10 @@ def lane_outcome_evidence(result: ToolResult) -> list[EvidenceItem]:
 
 
 def _hero_vs_hero_matchup_handler(settings: Settings):
-    async def handle(args: StratzHeroVsHeroMatchupInput) -> dict[str, Any]:
+    async def handle(
+        args: StratzHeroVsHeroMatchupInput,
+        context: QueryContext,
+    ) -> dict[str, Any]:
         if not settings.stratz_token:
             raise ValueError("METAMIND_STRATZ_TOKEN is required")
 
@@ -313,16 +302,16 @@ def _hero_vs_hero_matchup_handler(settings: Settings):
             data = await heroes.hero_vs_hero_matchup(
                 args.hero_id,
                 take=args.take,
-                week=args.week,
-                bracket_basic_ids=args.bracket_basic_ids,
+                week=context.week,
+                bracket_basic_ids=context.bracket,
                 match_limit=args.match_limit,
             )
             return {
                 **data,
                 "filters": {
                     "take": args.take,
-                    "week": args.week,
-                    "bracket_basic_ids": args.bracket_basic_ids,
+                    "week": context.week,
+                    "bracket_basic_ids": context.bracket,
                     "match_limit": args.match_limit,
                 },
             }
@@ -333,7 +322,10 @@ def _hero_vs_hero_matchup_handler(settings: Settings):
 
 
 def _lane_outcome_handler(settings: Settings):
-    async def handle(args: StratzLaneOutcomeInput) -> dict[str, Any]:
+    async def handle(
+        args: StratzLaneOutcomeInput,
+        context: QueryContext,
+    ) -> dict[str, Any]:
         if not settings.stratz_token:
             raise ValueError("METAMIND_STRATZ_TOKEN is required")
 
@@ -343,17 +335,17 @@ def _lane_outcome_handler(settings: Settings):
             records = await heroes.lane_outcome(
                 args.hero_id,
                 is_with=args.is_with,
-                week=args.week,
-                bracket_basic_ids=args.bracket_basic_ids,
-                position_ids=args.position_ids,
+                week=context.week,
+                bracket_basic_ids=context.bracket,
+                position_ids=context.position_ids,
             )
             return {
                 "hero_id": args.hero_id,
                 "is_with": args.is_with,
                 "filters": {
-                    "week": args.week,
-                    "bracket_basic_ids": args.bracket_basic_ids,
-                    "position_ids": args.position_ids,
+                    "week": context.week,
+                    "bracket_basic_ids": context.bracket,
+                    "position_ids": context.position_ids,
                     "is_with": args.is_with,
                 },
                 "records": records,
