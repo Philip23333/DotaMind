@@ -105,8 +105,12 @@ def test_evidence_graph_aggregates_matchup_and_sample_size() -> None:
     assert graph.evidence[0].value["filters"]["bracket_basic_ids"] == [
         "DIVINE_IMMORTAL"
     ]
+    assert graph.evidence[0].value["hero_name"] == "Chen"
+    assert graph.evidence[0].value["target_hero_name"] == "Lina"
+    assert graph.evidence[0].subject == "Chen vs Lina"
     assert graph.evidence[1].value["sample_size"] == 247
     assert graph.evidence[1].value["filters"]["week"] == 1782345600
+    assert graph.evidence[1].value["hero_name"] == "Chen"
 
 
 def test_evidence_graph_reports_missing_required_evidence() -> None:
@@ -257,7 +261,12 @@ def test_evidence_graph_aggregates_lane_outcome() -> None:
     assert graph.evidence[0].value["filters"]["bracket_basic_ids"] == [
         "DIVINE_IMMORTAL"
     ]
+    assert graph.evidence[0].value["hero_name"] == "Legion Commander"
+    assert graph.evidence[0].value["partner_hero_name"] == "Rubick"
+    assert graph.evidence[0].subject == "Legion Commander paired with Rubick"
     assert graph.evidence[1].value["filters"]["position_ids"] == ["POSITION_4"]
+    assert graph.evidence[1].value["hero_name"] == "Legion Commander"
+    assert graph.evidence[1].value["partner_hero_name"] == "Rubick"
 
 
 def test_evidence_graph_aggregates_opendota_team_evidence() -> None:

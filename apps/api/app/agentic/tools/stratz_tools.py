@@ -316,8 +316,15 @@ def pair_lane_outcome_evidence(result: ToolResult) -> list[EvidenceItem]:
     evidence: list[EvidenceItem] = []
     if not isinstance(pair, dict):
         return evidence
+    names = _hero_name_index()
     hero_id = data.get("hero_id")
     partner_hero_id = data.get("partner_hero_id")
+    hero_name = names.get(hero_id) if isinstance(hero_id, int) else None
+    partner_hero_name = (
+        names.get(partner_hero_id) if isinstance(partner_hero_id, int) else None
+    )
+    hero_label = hero_name or hero_id
+    partner_label = partner_hero_name or partner_hero_id
     match_count = pair.get("match_count")
     evidence.append(
         EvidenceItem(
@@ -326,10 +333,12 @@ def pair_lane_outcome_evidence(result: ToolResult) -> list[EvidenceItem]:
                 f"{hero_id}-{partner_hero_id}"
             ),
             kind="pair_lane_winrate",
-            subject=f"{hero_id} paired with {partner_hero_id}",
+            subject=f"{hero_label} paired with {partner_label}",
             value={
                 "hero_id": hero_id,
+                "hero_name": hero_name,
                 "partner_hero_id": partner_hero_id,
+                "partner_hero_name": partner_hero_name,
                 "is_with": data.get("is_with"),
                 "position": pair.get("position"),
                 "match_count": match_count,
@@ -352,11 +361,13 @@ def pair_lane_outcome_evidence(result: ToolResult) -> list[EvidenceItem]:
                     f"{hero_id}-{partner_hero_id}"
                 ),
                 kind="sample_size",
-                subject=f"pair sample for {hero_id}-{partner_hero_id}",
+                subject=f"pair sample for {hero_label} + {partner_label}",
                 value={
                     "sample_size": match_count,
                     "hero_id": hero_id,
+                    "hero_name": hero_name,
                     "partner_hero_id": partner_hero_id,
+                    "partner_hero_name": partner_hero_name,
                     "filters": filters,
                 },
                 source=result.source,
@@ -371,6 +382,7 @@ def hero_matchup_ranking_evidence(result: ToolResult) -> list[EvidenceItem]:
     data = result.data if isinstance(result.data, dict) else {}
     target_hero_id = data.get("hero_id")
     filters = data.get("filters") if isinstance(data.get("filters"), dict) else {}
+    names = _hero_name_index()
     evidence: list[EvidenceItem] = []
     for source_side in ("advantage", "disadvantage"):
         rows = data.get(source_side, [])
@@ -380,18 +392,30 @@ def hero_matchup_ranking_evidence(result: ToolResult) -> list[EvidenceItem]:
             if not isinstance(row, dict):
                 continue
             match_count = row.get("match_count")
+            hero_id = row.get("hero_id")
+            resolved_target_id = row.get("target_hero_id", target_hero_id)
+            hero_name = names.get(hero_id) if isinstance(hero_id, int) else None
+            resolved_target_name = (
+                names.get(resolved_target_id)
+                if isinstance(resolved_target_id, int)
+                else None
+            )
+            hero_label = hero_name or hero_id
+            resolved_target_label = resolved_target_name or resolved_target_id
             evidence.append(
                 EvidenceItem(
                     id=(
                         f"{result.tool_call_id}:matchup_ranking_row:"
-                        f"{source_side}:{row.get('hero_id')}:{index}"
+                        f"{source_side}:{hero_id}:{index}"
                     ),
                     kind="matchup_ranking_row",
-                    subject=f"{row.get('hero_id')} vs {target_hero_id}",
+                    subject=f"{hero_label} vs {resolved_target_label}",
                     value={
                         "source_side": source_side,
-                        "hero_id": row.get("hero_id"),
-                        "target_hero_id": row.get("target_hero_id", target_hero_id),
+                        "hero_id": hero_id,
+                        "hero_name": hero_name,
+                        "target_hero_id": resolved_target_id,
+                        "target_hero_name": resolved_target_name,
                         "win_rate": row.get("win_rate"),
                         "match_count": match_count,
                         "synergy": row.get("synergy"),
@@ -407,17 +431,16 @@ def hero_matchup_ranking_evidence(result: ToolResult) -> list[EvidenceItem]:
                     EvidenceItem(
                         id=(
                             f"{result.tool_call_id}:sample_size:"
-                            f"{source_side}:{row.get('hero_id')}:{index}"
+                            f"{source_side}:{hero_id}:{index}"
                         ),
                         kind="sample_size",
-                        subject=f"{row.get('hero_id')} vs {target_hero_id}",
+                        subject=f"{hero_label} vs {resolved_target_label}",
                         value={
                             "sample_size": match_count,
-                            "hero_id": row.get("hero_id"),
-                            "target_hero_id": row.get(
-                                "target_hero_id",
-                                target_hero_id,
-                            ),
+                            "hero_id": hero_id,
+                            "hero_name": hero_name,
+                            "target_hero_id": resolved_target_id,
+                            "target_hero_name": resolved_target_name,
                             "filters": filters,
                         },
                         source=result.source,
@@ -502,21 +525,26 @@ def hero_position_stats_evidence(result: ToolResult) -> list[EvidenceItem]:
     rows = data.get("rows", [])
     if not isinstance(rows, list):
         return []
+    names = _hero_name_index()
     evidence: list[EvidenceItem] = []
     for index, row in enumerate(rows):
         if not isinstance(row, dict):
             continue
         match_count = row.get("match_count")
+        hero_id = row.get("hero_id")
+        hero_name = names.get(hero_id) if isinstance(hero_id, int) else None
+        hero_label = hero_name or hero_id
         evidence.append(
             EvidenceItem(
                 id=(
                     f"{result.tool_call_id}:position_stat:"
-                    f"{row.get('hero_id')}-{row.get('position')}:{index}"
+                    f"{hero_id}-{row.get('position')}:{index}"
                 ),
                 kind="position_stat",
-                subject=f"hero {row.get('hero_id')} at {row.get('position')}",
+                subject=f"{hero_label} at {row.get('position')}",
                 value={
-                    "hero_id": row.get("hero_id"),
+                    "hero_id": hero_id,
+                    "hero_name": hero_name,
                     "position": row.get("position"),
                     "match_count": match_count,
                     "filters": filters,
@@ -531,13 +559,14 @@ def hero_position_stats_evidence(result: ToolResult) -> list[EvidenceItem]:
                 EvidenceItem(
                     id=(
                         f"{result.tool_call_id}:sample_size:position_stat:"
-                        f"{row.get('hero_id')}-{row.get('position')}:{index}"
+                        f"{hero_id}-{row.get('position')}:{index}"
                     ),
                     kind="sample_size",
-                    subject=f"position sample for hero {row.get('hero_id')}",
+                    subject=f"position sample for {hero_label}",
                     value={
                         "sample_size": match_count,
-                        "hero_id": row.get("hero_id"),
+                        "hero_id": hero_id,
+                        "hero_name": hero_name,
                         "position": row.get("position"),
                         "filters": filters,
                     },

@@ -239,6 +239,35 @@ def test_lane_meta_global_evidence_maps_hero_names() -> None:
     assert sample.value["target_hero_name"] == "Anti-Mage"
 
 
+def test_hero_position_stats_evidence_maps_hero_names() -> None:
+    from app.agentic.tools.stratz_tools import hero_position_stats_evidence
+
+    tool_result = ToolResult(
+        tool_call_id="pos",
+        tool="stratz.hero_position_stats",
+        status="ok",
+        latency_ms=1,
+        source=ToolSource(name="STRATZ", kind="public_graphql_api"),
+        data={
+            "filters": {"week": None, "bracket_basic_ids": None},
+            "rows": [
+                {"hero_id": 8, "position": "POSITION_1", "match_count": 31000},
+            ],
+        },
+    )
+
+    evidence = hero_position_stats_evidence(tool_result)
+    by_kind = {item.kind: item for item in evidence}
+
+    stat = by_kind["position_stat"]
+    assert stat.subject == "Juggernaut at POSITION_1"
+    assert stat.value["hero_id"] == 8
+    assert stat.value["hero_name"] == "Juggernaut"
+
+    sample = by_kind["sample_size"]
+    assert sample.value["hero_name"] == "Juggernaut"
+
+
 def test_hero_position_stats_requires_exactly_one_filter(monkeypatch) -> None:
     monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzTransport", FakeTransport)
     monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzHeroes", FakeHeroes)
