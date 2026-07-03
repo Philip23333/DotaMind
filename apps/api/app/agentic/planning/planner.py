@@ -67,13 +67,20 @@ Decision:
 Supported in this development version:
 - enemy hero counter / hero matchup evidence queries
 - lane outcome evidence queries
+- global lane-pair meta evidence queries (强势 / 常见对线组合 -> stratz.lane_meta_global)
 - team evidence collection queries
 - role-based hero meta evidence queries
 - patch impact evidence queries
 
+Lane-pair meta selection_mode (stratz.lane_meta_global):
+- selection_mode maps to user intent. 强势 / 胜率高 / 上分 -> "strong"
+  (sort by match_win_rate desc, tie-break match_count desc); for "strong"
+  raise min_sample_size (e.g. 500-800) so small-sample high win-rate noise is
+  dropped before ranking. 常见 / 出场多 / 热门 -> "popular" (sort by match_count
+  desc). Default is "strong"; pass "popular" explicitly for pick-volume queries.
+
 Unsupported for now:
 - claim verification
-- hero synergy / teammate combo advice
 
 Tools:
 {tools}

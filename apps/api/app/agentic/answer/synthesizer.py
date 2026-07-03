@@ -22,7 +22,12 @@ _NATURAL_LANGUAGE_SYSTEM_PROMPT = (
     "When evidence items carry week_index/week_epoch (per-week STRATZ buckets), "
     "compare across weeks and state the trend (rising/falling/stable). "
     "If any requested week returned no sample (missing_week_epochs), say so "
-    "explicitly."
+    "explicitly. "
+    "When lane_meta_row evidence carries filters.selection_mode, phrase the "
+    "ranking basis to match it: 'strong' = the top pairs are ranked by win "
+    "rate after the sample-size floor (say so, e.g. \"样本数 >= N 后按胜率排序"
+    "的前 K 个\"); 'popular' = ranked by pick volume. Always state the sample "
+    "floor (filters.min_sample_size) and that only completed weeks count."
 )
 
 AnswerStatus = Literal[

@@ -57,6 +57,7 @@ class LaneMetaGlobalInput(BaseModel):
     is_with: bool
     min_sample_size: int = Field(default=200, ge=0)
     highlight_top: int = Field(default=15, ge=1, le=50)
+    selection_mode: Literal["popular", "strong"] = "strong"
 
 
 class HeroPositionStatsInput(BaseModel):
@@ -204,10 +205,12 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
                 "outcome distribution (no hero filter). STRATZ returns two "
                 "mirror rows per ally pair; this tool collapses them to one "
                 "row per pair, keeping the direction with the larger "
-                "match_count. Returns top `highlight_top` rows sorted by "
-                "match_count desc, after dropping rows below "
-                "`min_sample_size`. Note: sorting by match_count surfaces "
-                "COMMON pairs, not necessarily the STRONGEST by win rate."
+                "match_count. After dropping rows below `min_sample_size`, "
+                "`selection_mode` picks the ranking basis: 'strong' ranks by "
+                "match_win_rate desc (tie-break match_count desc) — the "
+                "strongest pairs; 'popular' ranks by match_count desc — the "
+                "most-played pairs. Returns the top `highlight_top` rows per "
+                "completed week."
             ),
             input_model=LaneMetaGlobalInput,
             handler=_lane_meta_global_handler(settings),
@@ -228,6 +231,14 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
                 ),
                 "highlight_top": ArgContract(
                     description="Cap on rows emitted as evidence."
+                ),
+                "selection_mode": ArgContract(
+                    description=(
+                        "Ranking basis after the min_sample_size floor. "
+                        "'strong' = 强势/胜率高 (sort by match_win_rate desc, "
+                        "tie-break match_count desc); 'popular' = 常见/出场多 "
+                        "(sort by match_count desc). Default 'strong'."
+                    )
                 ),
             },
             metadata={"game": "dota2", "domain": "lane_meta"},
@@ -807,7 +818,20 @@ def _lane_meta_global_handler(settings: Settings):
                     if isinstance(record, dict)
                     and (record.get("match_count") or 0) >= args.min_sample_size
                 ]
-                qualifying.sort(key=lambda r: (r.get("match_count") or 0), reverse=True)
+                if args.selection_mode == "strong":
+                    # Strongest pairs: win rate first, match_count only breaks
+                    # ties (and gates credibility via min_sample_size above).
+                    qualifying.sort(
+                        key=lambda r: (
+                            float(r.get("match_win_rate") or 0),
+                            int(r.get("match_count") or 0),
+                        ),
+                        reverse=True,
+                    )
+                else:  # popular
+                    qualifying.sort(
+                        key=lambda r: int(r.get("match_count") or 0), reverse=True
+                    )
                 top = qualifying[: args.highlight_top]
                 for row in top:
                     row.pop("position", None)
@@ -816,6 +840,11 @@ def _lane_meta_global_handler(settings: Settings):
             await transport.aclose()
 
         weeks_with_record, missing_epochs = _week_summary(buckets)
+        sort_clause = (
+            "match_win_rate desc, match_count desc"
+            if args.selection_mode == "strong"
+            else "match_count desc"
+        )
         return {
             "is_with": args.is_with,
             "weekly_buckets": buckets,
@@ -827,6 +856,7 @@ def _lane_meta_global_handler(settings: Settings):
                     "is_with": args.is_with,
                     "min_sample_size": args.min_sample_size,
                     "highlight_top": args.highlight_top,
+                    "selection_mode": args.selection_mode,
                 },
                 weeks,
                 epochs,
@@ -834,8 +864,9 @@ def _lane_meta_global_handler(settings: Settings):
             "selection_policy": (
                 "per_completed_week: "
                 "deduped=keep_larger_match_count_mirror, "
+                f"selection_mode={args.selection_mode}, "
                 f"min_sample_size>={args.min_sample_size}, "
-                f"sorted_by=match_count desc, top={args.highlight_top}"
+                f"sorted_by={sort_clause}, top={args.highlight_top}"
             ),
         }
 

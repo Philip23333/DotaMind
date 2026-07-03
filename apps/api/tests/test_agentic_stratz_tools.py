@@ -207,6 +207,10 @@ def test_lane_meta_global_truncates_to_highlight_top(monkeypatch) -> None:
     assert all("position" not in row for row in rows)
     assert "position_ids" not in result.data["filters"]
     assert "selection_policy" in result.data
+    # Default selection_mode is "strong": ranks by win rate, so 86 (0.55) leads
+    # 50 (0.52), and the policy string records the win-rate basis.
+    assert result.data["filters"]["selection_mode"] == "strong"
+    assert "match_win_rate" in result.data["selection_policy"]
     assert result.data["filters"]["bracket_basic_ids"] == ["LEGEND_ANCIENT"]
 
 
@@ -276,6 +280,152 @@ def test_lane_meta_global_dedupes_mirror_pairs(monkeypatch) -> None:
     assert pair_by_canonical[(6, 14)]["match_count"] == 1809
     assert len(rows) == 2
     assert "deduped" in result.data["selection_policy"]
+
+
+def test_lane_meta_global_popular_sorts_by_match_count(monkeypatch) -> None:
+    # match_count order != win-rate order, so popular and strong diverge.
+    class CountLeadsHeroes:
+        def __init__(self, transport):
+            self.transport = transport
+
+        async def lane_outcome(self, hero_id, *, is_with, **kwargs):
+            return [
+                {
+                    "hero_id": 10,
+                    "target_hero_id": 11,
+                    "position": "POSITION_1",
+                    "match_count": 2000,
+                    "match_win_rate": 0.45,
+                },
+                {
+                    "hero_id": 12,
+                    "target_hero_id": 13,
+                    "position": "POSITION_1",
+                    "match_count": 800,
+                    "match_win_rate": 0.60,
+                },
+            ]
+
+    monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzTransport", FakeTransport)
+    monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzHeroes", CountLeadsHeroes)
+
+    result = asyncio.run(
+        ToolExecutor(_registry(token="token")).execute(
+            ToolCall(
+                id="meta",
+                tool="stratz.lane_meta_global",
+                args={
+                    "is_with": True,
+                    "min_sample_size": 100,
+                    "highlight_top": 10,
+                    "selection_mode": "popular",
+                },
+            ),
+            QueryContext(),
+        )
+    )
+
+    assert result.status == "ok"
+    rows = result.data["weekly_buckets"][0]["rows"]
+    # popular ranks by match_count desc: 2000 before 800, even though 0.45 < 0.60
+    assert [row["hero_id"] for row in rows] == [10, 12]
+    assert result.data["filters"]["selection_mode"] == "popular"
+    assert "match_count desc" in result.data["selection_policy"]
+    assert "match_win_rate" not in result.data["selection_policy"]
+
+
+def test_lane_meta_global_strong_tiebreaks_by_match_count(monkeypatch) -> None:
+    class TiedWinRateHeroes:
+        def __init__(self, transport):
+            self.transport = transport
+
+        async def lane_outcome(self, hero_id, *, is_with, **kwargs):
+            return [
+                {
+                    "hero_id": 20,
+                    "target_hero_id": 21,
+                    "position": "POSITION_1",
+                    "match_count": 500,
+                    "match_win_rate": 0.55,
+                },
+                {
+                    "hero_id": 22,
+                    "target_hero_id": 23,
+                    "position": "POSITION_1",
+                    "match_count": 900,
+                    "match_win_rate": 0.55,
+                },
+            ]
+
+    monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzTransport", FakeTransport)
+    monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzHeroes", TiedWinRateHeroes)
+
+    result = asyncio.run(
+        ToolExecutor(_registry(token="token")).execute(
+            ToolCall(
+                id="meta",
+                tool="stratz.lane_meta_global",
+                args={
+                    "is_with": True,
+                    "min_sample_size": 100,
+                    "highlight_top": 10,
+                    "selection_mode": "strong",
+                },
+            ),
+            QueryContext(),
+        )
+    )
+
+    assert result.status == "ok"
+    rows = result.data["weekly_buckets"][0]["rows"]
+    # win rate ties at 0.55 -> tie-break by match_count desc: 900 before 500
+    assert [row["hero_id"] for row in rows] == [22, 20]
+
+
+def test_lane_meta_global_propagates_selection_mode_to_evidence() -> None:
+    from app.agentic.tools.stratz_tools import lane_meta_global_evidence
+
+    tool_result = ToolResult(
+        tool_call_id="meta",
+        tool="stratz.lane_meta_global",
+        status="ok",
+        latency_ms=1,
+        source=ToolSource(name="STRATZ", kind="public_graphql_api"),
+        data={
+            "is_with": True,
+            "filters": {
+                "weeks_back": 1,
+                "bracket_basic_ids": None,
+                "is_with": True,
+                "min_sample_size": 800,
+                "highlight_top": 15,
+                "selection_mode": "strong",
+                "week_epochs": [1782345600],
+                "weeks_resolved": 1,
+                "skipped_current_week": True,
+            },
+            "weekly_buckets": [
+                {
+                    "week_epoch": 1782345600,
+                    "week_index": 1,
+                    "window_label": "latest_completed_week",
+                    "rows": [
+                        {
+                            "hero_id": 86,
+                            "target_hero_id": 1,
+                            "match_count": 1200,
+                            "match_win_rate": 0.55,
+                        },
+                    ],
+                },
+            ],
+        },
+    )
+
+    evidence = lane_meta_global_evidence(tool_result)
+    row = next(item for item in evidence if item.kind == "lane_meta_row")
+    # selection_mode reaches the answer layer via evidence value["filters"]
+    assert row.value["filters"]["selection_mode"] == "strong"
 
 
 def test_lane_meta_global_evidence_maps_hero_names() -> None:
