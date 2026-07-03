@@ -1,7 +1,8 @@
-﻿import logging
+﻿import json
+import logging
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from app.agentic.models import ExecutionPlan
 from app.agentic.planning.contracts import (
@@ -20,40 +21,45 @@ PlannerStatus = Literal["planned", "insufficient_tools", "error"]
 
 _PLANNER_SYSTEM_PROMPT = """You are the MetaMind v2.5 Planner.
 
-You must decide whether the user query can be answered with the currently
-registered tools. Return JSON only.
+Decide whether the user query can be answered with the currently registered
+tools. Return JSON only.
 
 Schema obedience rules:
-- Use exact names only. Tool names, args keys, output_contract, and
-  required_evidence entries must be copied exactly from the catalogs below.
-- Do not invent synonyms for args or evidence. For example, if the catalog says
-  current_only, do not write current_roster; if it says recent_matches, do not
-  write matches.
-- For each tool call, args may contain only that tool's allowed_arg_keys.
-- required_evidence may contain only exact evidence names produced by selected
-  tools and allowed by the output contract.
-- If a tool arg accepts a reference, use exactly the declared reference path.
+- Do not invent aliases or synonyms. Copy names exactly from the catalogs
+  below: tool names, arg keys, output_contract, and required_evidence entries.
+  For example, if the catalog says recent_matches, do not write matches.
+- For each tool call, args may contain only that tool's listed arg keys.
+- required_evidence may contain only evidence names a selected tool produces,
+  and must satisfy the chosen output_contract.
+- When an arg accepts a reference, use the declared path shown under that arg.
 
-Scope filter rules:
-- Cross-cutting scope filters (bracket, week, position, region, game_mode)
-  MUST be set on plan.context, NEVER on individual tool_call args.
-- Tool input_models do not carry these fields. Putting them in args is a
-  schema violation.
-- Set each context field at most once per plan; the same scope applies to
-  every tool call. Leave a field null when the user did not constrain it.
+Scope filters:
+- Cross-cutting scope (bracket, week, position_ids, region_ids, game_mode_ids)
+  goes on plan.context ONLY, never on individual tool_call args; tool inputs do
+  not carry these fields.
+- Set each context field at most once per plan; the same scope applies to every
+  call. Leave a field null when the user did not constrain it.
 - STRATZ bracket values: HERALD_GUARDIAN, CRUSADER_ARCHON, LEGEND_ANCIENT,
   DIVINE_IMMORTAL. Map 冠绝/Immortal/Divine to DIVINE_IMMORTAL.
 - STRATZ position values: POSITION_1 through POSITION_5.
+- week is a single STRATZ week epoch (seconds), not a range; for "last N weeks"
+  use the most recent week epoch.
 
-QueryContext schema (set on plan.context):
-- bracket: list[str] | null  — STRATZ RankBracketBasicEnum values.
-- week: int | null           — STRATZ week epoch seconds.
-- position_ids: list[str] | null — STRATZ MatchPlayerPositionType values.
-- region_ids: list[str] | null   — reserved.
-- game_mode_ids: list[str] | null — reserved.
+References:
+- Use "$<previous_call_id>.<declared_output_path>". The call id is any earlier
+  tool call id you chose; the path must be a declared_output_path of that call.
 
-Current allowed tools:
-{tools}
+Output contract:
+- output_contract must be one of the contracts listed below; do not invent
+  values like meta_list or tool_results.
+- For natural_language_answer there is no preset required_evidence — list the
+  evidence kinds your chosen tools produce.
+
+Decision:
+- If the registered tools can produce relevant evidence, plan the calls.
+- If they cannot, return insufficient_tools.
+- If a name is ambiguous and tools cannot resolve it, expose candidates or
+  return insufficient_tools.
 
 Supported in this development version:
 - enemy hero counter / hero matchup evidence queries
@@ -62,22 +68,22 @@ Supported in this development version:
 - role-based hero meta evidence queries
 - patch impact evidence queries
 
-Output contract catalog:
-{contracts}
-
-Do not output meta_list. meta_list is only the internal whitelist of structured
-contracts. If the user asks for an answer outside that whitelist but the
-registered tools can provide relevant evidence, use output_contract
-"natural_language_answer".
-
 Unsupported for now:
 - claim verification
 - hero synergy / teammate combo advice
 
-If unsupported, return:
+Tools:
+{tools}
+
+Output contracts:
+{contracts}
+
+Return JSON in one of these shapes.
+
+If unsupported:
 {"status":"insufficient_tools","reason":"...","plan":null}
 
-If supported, return:
+If supported:
 {
   "status": "planned",
   "reason": "...",
@@ -95,48 +101,16 @@ If supported, return:
     "tool_calls": [
       {"id":"resolve_sk","tool":"resolve_hero","args":{"query":"骷髅王"}},
       {"id":"resolve_aa","tool":"resolve_hero","args":{"query":"冰魂"}},
-      {
-        "id":"pair_lane",
-        "tool":"stratz.pair_lane_outcome",
-        "args":{
-          "hero_id":"$resolve_sk.data.hero.hero_id",
-          "partner_hero_id":"$resolve_aa.data.hero.hero_id",
-          "is_with":true
-        }
-      }
+      {"id":"pair_lane","tool":"stratz.pair_lane_outcome","args":{
+        "hero_id":"$resolve_sk.data.hero.hero_id",
+        "partner_hero_id":"$resolve_aa.data.hero.hero_id",
+        "is_with":true
+      }}
     ],
     "required_evidence":["hero_identity","pair_lane_winrate","sample_size"],
     "constraints":{"max_tool_calls":6,"allow_mock":false}
   }
 }
-
-When an arg accepts a reference, use "$<previous_call_id>.<declared_output_path>".
-The call id may be any earlier tool call id you chose. The declared output path
-must match the tool contract shown above.
-
-If ambiguity cannot be resolved by tools, expose the candidates or return
-insufficient_tools.
-
-For patch impact evidence, use patch.get_records and include patch_records in
-required_evidence. Add patch.hero_changes and patch.item_changes when the user
-asks about hero or item changes.
-
-For role_meta_report, required_evidence may only use hero_stats, role_fit, and
-sample_size. Do not require field names like hero_id, hero_name, win_rate, or
-pick_rate as evidence kinds.
-
-Tool-specific notes:
-- natural_language_answer has no contract-level required_evidence, so you must
-  fill required_evidence explicitly based on what the chosen tools produce.
-  Examples: pair_lane_outcome → ["hero_identity","pair_lane_winrate","sample_size"];
-  hero_matchup_ranking → ["hero_identity","matchup_ranking_row","sample_size"];
-  lane_meta_global → ["lane_meta_row","sample_size"];
-  hero_position_stats → ["position_stat","sample_size"].
-- stratz.hero_matchup_ranking.side only supports "vs" in this version. Ally
-  synergy ("with") is not yet wired through the underlying GraphQL.
-- stratz.lane_meta_global returns high-sample lane pair rows sorted by
-  match_count; this surfaces COMMON pairs, not necessarily the STRONGEST by
-  win rate. Frame any natural-language answer accordingly.
 """
 
 
@@ -164,6 +138,7 @@ class AgenticPlanner:
         *,
         llm: LLMProvider | None = None,
         llm_enabled: bool | None = None,
+        planner_max_retries: int | None = None,
     ) -> None:
         self.registry = registry
         self.policy = get_policy()
@@ -172,6 +147,11 @@ class AgenticPlanner:
         self.llm = llm
         if self.llm is None and self.llm_enabled:
             self.llm = get_llm_provider()
+        self.planner_max_retries = (
+            planner_max_retries
+            if planner_max_retries is not None
+            else self.policy.llm.orchestrator.planner_max_retries
+        )
 
     async def plan(self, query: str, game: str = "dota2") -> AgenticPlannerResult:
         if not self.llm_enabled or self.llm is None:
@@ -181,70 +161,130 @@ class AgenticPlanner:
                 errors=["METAMIND_LLM_ENABLED must be true for /api/v1/plan"],
             )
 
-        try:
-            messages = [
-                {"role": "system", "content": self._system_prompt()},
-                {"role": "user", "content": f"game={game}\nquery={query}"},
-            ]
-            raw = await self.llm.complete_json(
-                messages,
-                temperature=self.policy.llm.orchestrator.temperature,
-                max_tokens=max(self.policy.llm.orchestrator.max_tokens, 1200),
-            )
-            envelope = PlannerEnvelope.model_validate(raw)
-        except LLMJSONDecodeError as exc:
-            logger.warning("Agentic planner failed: %r", exc)
-            return AgenticPlannerResult(
-                status="error",
-                reason="LLM planner failed to return a valid planning envelope",
-                errors=[f"{type(exc).__name__}: {exc}"],
-                raw_content=exc.raw_content,
-                finish_reason=exc.finish_reason,
-                prompt_messages=messages if "messages" in locals() else [],
-            )
-        except Exception as exc:
-            logger.warning("Agentic planner failed: %r", exc)
-            return AgenticPlannerResult(
-                status="error",
-                reason="LLM planner failed to return a valid planning envelope",
-                errors=[f"{type(exc).__name__}: {exc}"],
-                prompt_messages=messages if "messages" in locals() else [],
-            )
+        messages: list[dict[str, str]] = [
+            {"role": "system", "content": self._system_prompt()},
+            {"role": "user", "content": f"game={game}\nquery={query}"},
+        ]
+        temperature = self.policy.llm.orchestrator.temperature
+        max_tokens = max(self.policy.llm.orchestrator.max_tokens, 1200)
+        max_attempts = 1 + self.planner_max_retries
+        last: AgenticPlannerResult | None = None
 
-        if envelope.status == "insufficient_tools":
-            return AgenticPlannerResult(
-                status="insufficient_tools",
-                reason=envelope.reason,
-                plan=None,
-                raw_output=raw,
-                prompt_messages=messages,
-            )
-        if envelope.status == "error":
-            return AgenticPlannerResult(
-                status="error",
-                reason=envelope.reason or "LLM planner returned error",
-                errors=[envelope.reason or "LLM planner returned error"],
-                raw_output=raw,
-                prompt_messages=messages,
-            )
-        if envelope.plan is None:
-            return AgenticPlannerResult(
-                status="error",
-                reason="LLM planner returned planned status without a plan",
-                errors=["planned status requires plan"],
-                raw_output=raw,
-                prompt_messages=messages,
-            )
+        for attempt in range(max_attempts):
+            is_last_attempt = attempt == max_attempts - 1
+            try:
+                raw = await self.llm.complete_json(
+                    messages, temperature=temperature, max_tokens=max_tokens
+                )
+            except LLMJSONDecodeError as exc:
+                logger.warning("Agentic planner JSON decode error: %r", exc)
+                if not is_last_attempt:
+                    _append_retry_turns(
+                        messages,
+                        exc.raw_content or "",
+                        _retry_feedback(
+                            [f"Previous response was not valid JSON: {exc}"]
+                        ),
+                    )
+                last = AgenticPlannerResult(
+                    status="error",
+                    reason="LLM planner failed to return a valid planning envelope",
+                    errors=[f"{type(exc).__name__}: {exc}"],
+                    raw_content=exc.raw_content,
+                    finish_reason=exc.finish_reason,
+                    prompt_messages=messages,
+                )
+                continue
+            except Exception as exc:
+                # Unexpected transport/runtime error: terminal, do not retry.
+                logger.warning("Agentic planner call failed: %r", exc)
+                return AgenticPlannerResult(
+                    status="error",
+                    reason="LLM planner call failed",
+                    errors=[f"{type(exc).__name__}: {exc}"],
+                    prompt_messages=messages,
+                )
 
-        logger.info(
-            "Agentic planner produced intent=%s output_contract=%s tools=%s",
-            envelope.plan.intent,
-            envelope.plan.output_contract,
-            len(envelope.plan.tool_calls),
-        )
-        validation_errors = self.validate_plan(envelope.plan)
-        if validation_errors:
-            return AgenticPlannerResult(
+            try:
+                envelope = PlannerEnvelope.model_validate(raw)
+            except ValidationError as exc:
+                logger.warning("Agentic planner envelope shape error: %r", exc)
+                if not is_last_attempt:
+                    _append_retry_turns(
+                        messages,
+                        json.dumps(raw, ensure_ascii=False),
+                        _retry_feedback([f"Invalid envelope shape: {exc}"]),
+                    )
+                last = AgenticPlannerResult(
+                    status="error",
+                    reason="LLM planner failed to return a valid planning envelope",
+                    errors=[f"ValidationError: {exc}"],
+                    raw_output=raw,
+                    prompt_messages=messages,
+                )
+                continue
+
+            # Intentional terminal states — do not retry.
+            if envelope.status == "insufficient_tools":
+                return AgenticPlannerResult(
+                    status="insufficient_tools",
+                    reason=envelope.reason,
+                    plan=None,
+                    raw_output=raw,
+                    prompt_messages=messages,
+                )
+            if envelope.status == "error":
+                return AgenticPlannerResult(
+                    status="error",
+                    reason=envelope.reason or "LLM planner returned error",
+                    errors=[envelope.reason or "LLM planner returned error"],
+                    raw_output=raw,
+                    prompt_messages=messages,
+                )
+
+            # status == "planned": a missing plan is a shape error, not terminal.
+            if envelope.plan is None:
+                if not is_last_attempt:
+                    _append_retry_turns(
+                        messages,
+                        json.dumps(raw, ensure_ascii=False),
+                        _retry_feedback(
+                            ["status 'planned' requires a non-null plan"]
+                        ),
+                    )
+                last = AgenticPlannerResult(
+                    status="error",
+                    reason="LLM planner returned planned status without a plan",
+                    errors=["planned status requires plan"],
+                    raw_output=raw,
+                    prompt_messages=messages,
+                )
+                continue
+
+            validation_errors = self.validate_plan(envelope.plan)
+            if not validation_errors:
+                logger.info(
+                    "Agentic planner produced intent=%s output_contract=%s tools=%s",
+                    envelope.plan.intent,
+                    envelope.plan.output_contract,
+                    len(envelope.plan.tool_calls),
+                )
+                return AgenticPlannerResult(
+                    status="planned",
+                    reason=envelope.reason,
+                    plan=envelope.plan,
+                    raw_output=raw,
+                    prompt_messages=messages,
+                )
+
+            logger.warning("Agentic planner plan invalid: %s", validation_errors)
+            if not is_last_attempt:
+                _append_retry_turns(
+                    messages,
+                    json.dumps(raw, ensure_ascii=False),
+                    _retry_feedback(validation_errors),
+                )
+            last = AgenticPlannerResult(
                 status="error",
                 reason="LLM planner returned an invalid plan",
                 plan=envelope.plan,
@@ -253,13 +293,12 @@ class AgenticPlanner:
                 prompt_messages=messages,
             )
 
-        return AgenticPlannerResult(
-            status="planned",
-            reason=envelope.reason,
-            plan=envelope.plan,
-            raw_output=raw,
-            prompt_messages=messages,
+        # Retries exhausted. Every non-returning iteration assigned `last`.
+        assert last is not None
+        logger.warning(
+            "Agentic planner exhausted retries attempts=%s", max_attempts
         )
+        return last
 
     def validate_plan(self, plan: ExecutionPlan) -> list[str]:
         logger.info(
@@ -277,6 +316,26 @@ class AgenticPlanner:
             "{contracts}",
             contracts,
         )
+
+
+def _append_retry_turns(
+    messages: list[dict[str, str]],
+    assistant_content: str,
+    feedback: str,
+) -> None:
+    """Echo the model's previous output and the structured feedback, then the
+    caller re-invokes the LLM with the grown message list."""
+    messages.append({"role": "assistant", "content": assistant_content})
+    messages.append({"role": "user", "content": feedback})
+
+
+def _retry_feedback(errors: list[str]) -> str:
+    return (
+        "Your previous response was rejected. Return the FULL corrected plan "
+        "JSON again (same envelope shape), fixing every issue:\n"
+        + "\n".join(f"- {error}" for error in errors)
+        + "\nDo not explain; only return the corrected JSON."
+    )
 
 
 def planner_payload(result: AgenticPlannerResult) -> dict[str, Any]:

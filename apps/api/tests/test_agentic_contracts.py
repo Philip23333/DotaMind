@@ -465,24 +465,28 @@ def test_contract_catalog_known_evidence_comes_from_registry() -> None:
     assert "new_registry_evidence" in known_evidence_kinds(registry)
 
 
-def test_render_planner_contracts_contains_team_recent_example() -> None:
+def test_render_planner_contracts_contains_team_recent_fields() -> None:
     rendered = render_planner_contracts(_registry())
 
     assert "team_recent_report" in rendered
     assert "recent_matches" in rendered
     assert "current_players" in rendered
     assert "team_hero_usage" in rendered
-    assert '"matches": "$get_matches.data.matches"' in rendered
 
 
-def test_render_planner_contracts_uses_null_for_unrestricted_allowed_evidence() -> None:
+def test_render_planner_contracts_omits_allowed_evidence_when_unrestricted() -> None:
     rendered = render_planner_contracts(_registry())
 
-    assert "allowed_evidence: null" in _contract_section(
+    # Unrestricted contracts (no allowlist) omit the line entirely.
+    assert "allowed_evidence" not in _contract_section(
         rendered,
         "patch_impact_report",
     )
-    assert "allowed_evidence: []" not in rendered
+    # Restricted contracts still emit the allowed_evidence line.
+    assert "allowed_evidence" in _contract_section(
+        rendered,
+        "team_recent_report",
+    )
 
 
 def test_render_planner_tools_contains_schema_and_reference_contracts() -> None:
@@ -490,7 +494,7 @@ def test_render_planner_tools_contains_schema_and_reference_contracts() -> None:
 
     assert "evidence_produced" in rendered
     assert "- is_with: bool, required" in rendered
-    assert "accepts reference from resolve_hero" in rendered
+    assert "accepts_ref: resolve_hero.data.hero.hero_id (int)" in rendered
     assert "$<previous_call_id>.data.hero.hero_id" in rendered
 
 
@@ -500,7 +504,7 @@ def test_render_planner_tools_uses_generic_dummy_contracts() -> None:
     assert "dummy.source" in rendered
     assert "dummy_value" in rendered
     assert "- value: int, required" in rendered
-    assert "accepts reference from dummy.source" in rendered
+    assert "accepts_ref: dummy.source.data.value (int)" in rendered
     assert "$<previous_call_id>.data.value" in rendered
 
 

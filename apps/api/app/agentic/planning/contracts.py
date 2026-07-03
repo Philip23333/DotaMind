@@ -21,6 +21,9 @@ class ContractSpec:
     allowed_required_evidence: frozenset[str] | None = None
     allowed_evidence: frozenset[str] | None = None
     required_tools: frozenset[str] = field(default_factory=frozenset)
+    # Not rendered into the planner prompt (the worked example now lives in the
+    # static template). Kept on the data model for potential future consumers;
+    # remove once confirmed unused.
     prompt_example: Mapping[str, Any] | None = None
 
     @property
@@ -129,32 +132,17 @@ def render_planner_contracts(registry: ToolRegistry) -> str:
     sections = []
     for spec in CONTRACT_REGISTRY.values():
         allowed = spec.evidence_allowlist
-        visible_allowed = sorted(allowed & available_evidence) if allowed else None
-        allowed_required = sorted(
-            (spec.evidence_allowlist or available_evidence) & available_evidence
-        )
-        sections.append(
-            "\n".join(
-                [
-                    f"- {spec.name}",
-                    f"  route: {spec.route}",
-                    "  required_evidence: "
-                    + json.dumps(sorted(spec.required_evidence)),
-                    "  allowed_evidence: " + json.dumps(visible_allowed),
-                    "  required_evidence_names_must_be_exact: "
-                    + json.dumps(allowed_required),
-                    "  rule: Copy required_evidence entries exactly from "
-                    "required_evidence/allowed_evidence/tool evidence_produced. "
-                    "Do not invent synonyms.",
-                    "  example: "
-                    + (
-                        json.dumps(spec.prompt_example, ensure_ascii=False)
-                        if spec.prompt_example
-                        else "null"
-                    ),
-                ]
+        lines = [
+            f"- {spec.name}",
+            f"  route: {spec.route}",
+            "  required_evidence: " + json.dumps(sorted(spec.required_evidence)),
+        ]
+        if allowed is not None:
+            lines.append(
+                "  allowed_evidence: "
+                + json.dumps(sorted(allowed & available_evidence))
             )
-        )
+        sections.append("\n".join(lines))
     return "\n".join(sections)
 
 
@@ -167,11 +155,7 @@ def render_planner_tools(registry: ToolRegistry) -> str:
             f"- {definition.name}",
             f"  description: {definition.description}",
             "  evidence_produced: " + json.dumps(list(definition.evidence_kinds)),
-            "  produced_evidence_names_must_be_exact: "
-            + json.dumps(list(definition.evidence_kinds)),
             "  allowed_arg_keys: " + json.dumps(arg_names),
-            "  rule: Use only allowed_arg_keys for args. Do not invent aliases "
-            "or synonyms.",
             "  args:",
         ]
         if not fields:
@@ -188,15 +172,9 @@ def render_planner_tools(registry: ToolRegistry) -> str:
             lines.append(line)
             for accepted in contract.accepts_refs:
                 lines.append(
-                    "      accepted_ref: "
-                    f"from_tool={accepted.from_tool}; "
-                    f"path={accepted.path}; type={accepted.type}; "
-                    f"syntax=$<previous_call_id>.{accepted.path}"
-                )
-                lines.append(
-                    "      accepts reference from "
-                    f"{accepted.from_tool}: $<previous_call_id>.{accepted.path} "
-                    f"({accepted.type})"
+                    "      accepts_ref: "
+                    f"{accepted.from_tool}.{accepted.path} ({accepted.type}) -> "
+                    f'"$<previous_call_id>.{accepted.path}"'
                 )
         if definition.output_paths:
             lines.append("  declared_output_paths:")
