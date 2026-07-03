@@ -236,15 +236,24 @@ def _registry() -> ToolRegistry:
             handler=lambda args, context: {
                 "hero_id": args.hero_id,
                 "side": "vs",
-                "advantage": [
+                "weekly_buckets": [
                     {
-                        "hero_id": 66,
-                        "target_hero_id": args.hero_id,
-                        "match_count": 100,
-                        "win_rate": 0.55,
-                    }
+                        "week_epoch": 1782345600,
+                        "week_index": 1,
+                        "window_label": "latest_completed_week",
+                        "rows": [
+                            {
+                                "source_side": "advantage",
+                                "hero_id": 66,
+                                "target_hero_id": args.hero_id,
+                                "match_count": 100,
+                                "win_rate": 0.55,
+                            }
+                        ],
+                    },
                 ],
-                "disadvantage": [],
+                "weeks_with_record": 1,
+                "missing_week_epochs": [],
                 "filters": {"take": 10, "min_sample_size": 100},
             },
             evidence_extractor=hero_matchup_ranking_evidence,
@@ -271,13 +280,24 @@ def _registry() -> ToolRegistry:
                 "hero_id": args.hero_id,
                 "partner_hero_id": args.partner_hero_id,
                 "is_with": args.is_with,
-                "pair_record": {
-                    "hero_id": args.partner_hero_id,
-                    "target_hero_id": args.hero_id,
-                    "position": "POSITION_2",
-                    "match_count": 25,
-                    "match_win_rate": 0.52,
-                },
+                "weekly_buckets": [
+                    {
+                        "week_epoch": 1782345600,
+                        "week_index": 1,
+                        "window_label": "latest_completed_week",
+                        "rows": [
+                            {
+                                "hero_id": args.partner_hero_id,
+                                "target_hero_id": args.hero_id,
+                                "position": "POSITION_2",
+                                "match_count": 25,
+                                "match_win_rate": 0.52,
+                            }
+                        ],
+                    },
+                ],
+                "weeks_with_record": 1,
+                "missing_week_epochs": [],
                 "filters": {},
             },
             evidence_extractor=pair_lane_outcome_evidence,

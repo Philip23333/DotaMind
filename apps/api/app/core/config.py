@@ -18,6 +18,14 @@ class OpenDotaPolicy(StrictPolicyModel):
     default_cache_ttl_seconds: int = Field(gt=0)
 
 
+class StratzPolicy(StrictPolicyModel):
+    # STRATZ `weeks_back` resolution. A STRATZ week is 604800s-aligned; the
+    # in-progress current week is always skipped (it is partial). Default 1 =
+    # latest completed week; max is a guardrail since N weeks = N STRATZ calls.
+    weeks_back_default: int = Field(default=1, ge=1)
+    weeks_back_max: int = Field(default=8, ge=1, le=52)
+
+
 class MatchDetailPolicy(StrictPolicyModel):
     default_sample_size: int = Field(ge=1, le=100)
     max_sample_size: int = Field(ge=1, le=100)
@@ -169,6 +177,7 @@ class LLMPolicy(StrictPolicyModel):
 class AppPolicy(StrictPolicyModel):
     version: Literal[1]
     opendota: OpenDotaPolicy
+    stratz: StratzPolicy
     team_report: TeamReportPolicy
     hero_report: HeroReportPolicy
     patch_report: PatchReportPolicy

@@ -565,3 +565,25 @@ def _dummy_registry() -> ToolRegistry:
         )
     )
     return registry
+
+
+def test_validate_context_scope_enforces_weeks_back_cap() -> None:
+    from app.agentic.models import QueryContext
+    from app.agentic.planning.contracts import validate_context_scope
+    from app.core.config import get_policy
+
+    cap = get_policy().stratz.weeks_back_max
+
+    def plan_with(weeks_back: int) -> ExecutionPlan:
+        return ExecutionPlan(
+            intent="x",
+            goal="y",
+            output_contract="natural_language_answer",
+            context=QueryContext(weeks_back=weeks_back),
+        )
+
+    assert validate_context_scope(plan_with(1)) == []
+    assert validate_context_scope(plan_with(cap)) == []
+    errors = validate_context_scope(plan_with(cap + 1))
+    assert len(errors) == 1
+    assert "weeks_back" in errors[0]

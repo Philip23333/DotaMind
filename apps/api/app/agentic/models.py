@@ -26,7 +26,11 @@ class QueryContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     bracket: list[str] | None = None
-    week: int | None = Field(default=None, ge=0)
+    # STRATZ-only. Relative count of recent *completed* STRATZ weeks to fetch as
+    # per-week buckets (1 week = one STRATZ week, 604800s-aligned). null is
+    # resolved by STRATZ handlers to the policy default (1 = latest completed
+    # week); the LLM never emits a raw week epoch.
+    weeks_back: int | None = Field(default=None, ge=1)
     position_ids: list[str] | None = None
     region_ids: list[str] | None = None
     game_mode_ids: list[str] | None = None

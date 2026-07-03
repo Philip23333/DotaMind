@@ -190,3 +190,13 @@ class FakeLLM:
         max_tokens: int = 1000,
     ) -> ToolCallResult | None:
         return None
+
+
+def test_natural_language_prompt_asks_for_weekly_trend() -> None:
+    from app.agentic.answer.synthesizer import _NATURAL_LANGUAGE_SYSTEM_PROMPT
+
+    prompt = _NATURAL_LANGUAGE_SYSTEM_PROMPT
+    assert "week_index" in prompt
+    assert "week_epoch" in prompt
+    assert "trend" in prompt
+    assert "missing_week_epochs" in prompt

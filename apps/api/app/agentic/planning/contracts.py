@@ -9,6 +9,7 @@ from pydantic import ValidationError
 from app.agentic.models import ExecutionPlan, ToolCall
 from app.agentic.references import parse_reference
 from app.agentic.tools import ArgContract, ToolDefinition, ToolRegistry
+from app.core.config import get_policy
 
 NATURAL_LANGUAGE_CONTRACT = "natural_language_answer"
 
@@ -196,7 +197,24 @@ def validate_plan_against_catalog(
     errors.extend(validate_tool_args(plan, registry))
     errors.extend(validate_output_contract(plan, registry))
     errors.extend(validate_evidence_producibility(plan, registry))
+    errors.extend(validate_context_scope(plan))
     return errors
+
+
+def validate_context_scope(plan: ExecutionPlan) -> list[str]:
+    """Validate plan.context against policy. The weeks_back lower bound is
+    enforced by pydantic on QueryContext; this checks the policy-driven upper
+    bound so an out-of-range value surfaces as a planner retry signal."""
+    weeks_back = plan.context.weeks_back
+    if weeks_back is None:
+        return []
+    max_weeks = get_policy().stratz.weeks_back_max
+    if weeks_back > max_weeks:
+        return [
+            f"context.weeks_back={weeks_back} exceeds stratz.weeks_back_max"
+            f"={max_weeks}; use 1..{max_weeks}"
+        ]
+    return []
 
 
 def validate_registry_contracts(registry: ToolRegistry) -> list[str]:

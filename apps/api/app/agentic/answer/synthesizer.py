@@ -15,6 +15,16 @@ from app.llm.provider import LLMProvider, get_llm_provider
 
 logger = logging.getLogger(__name__)
 
+_NATURAL_LANGUAGE_SYSTEM_PROMPT = (
+    "You write concise evidence-grounded Dota 2 answers. "
+    "Use only the provided evidence graph. Do not invent stats. "
+    "If the evidence is insufficient, say exactly what is missing. "
+    "When evidence items carry week_index/week_epoch (per-week STRATZ buckets), "
+    "compare across weeks and state the trend (rising/falling/stable). "
+    "If any requested week returned no sample (missing_week_epochs), say so "
+    "explicitly."
+)
+
 AnswerStatus = Literal[
     "ok",
     "insufficient_evidence",
@@ -279,11 +289,7 @@ class NaturalLanguageAnswerSynthesizer:
                 [
                     {
                         "role": "system",
-                        "content": (
-                            "You write concise evidence-grounded Dota 2 answers. "
-                            "Use only the provided evidence graph. Do not invent stats. "
-                            "If the evidence is insufficient, say exactly what is missing."
-                        ),
+                        "content": _NATURAL_LANGUAGE_SYSTEM_PROMPT,
                     },
                     {
                         "role": "user",

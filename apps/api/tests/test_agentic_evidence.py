@@ -76,19 +76,29 @@ def test_evidence_graph_aggregates_matchup_and_sample_size() -> None:
             "filters": {
                 "take": 10,
                 "min_sample_size": 100,
-                "week": 1782345600,
+                "weeks_back": 1,
                 "bracket_basic_ids": ["DIVINE_IMMORTAL"],
+                "week_epochs": [1782345600],
+                "weeks_resolved": 1,
+                "skipped_current_week": True,
             },
-            "advantage": [
+            "weekly_buckets": [
                 {
-                    "hero_id": 66,
-                    "target_hero_id": 25,
-                    "win_rate": 0.57,
-                    "match_count": 247,
-                    "synergy": 5.9,
-                }
+                    "week_epoch": 1782345600,
+                    "week_index": 1,
+                    "window_label": "latest_completed_week",
+                    "rows": [
+                        {
+                            "source_side": "advantage",
+                            "hero_id": 66,
+                            "target_hero_id": 25,
+                            "win_rate": 0.57,
+                            "match_count": 247,
+                            "synergy": 5.9,
+                        }
+                    ],
+                },
             ],
-            "disadvantage": [],
         },
     )
 
@@ -107,9 +117,9 @@ def test_evidence_graph_aggregates_matchup_and_sample_size() -> None:
     ]
     assert graph.evidence[0].value["hero_name"] == "Chen"
     assert graph.evidence[0].value["target_hero_name"] == "Lina"
-    assert graph.evidence[0].subject == "Chen vs Lina"
+    assert graph.evidence[0].subject == "Chen vs Lina (latest_completed_week)"
     assert graph.evidence[1].value["sample_size"] == 247
-    assert graph.evidence[1].value["filters"]["week"] == 1782345600
+    assert graph.evidence[1].value["week_epoch"] == 1782345600
     assert graph.evidence[1].value["hero_name"] == "Chen"
 
 
@@ -237,19 +247,32 @@ def test_evidence_graph_aggregates_lane_outcome() -> None:
             "partner_hero_id": 86,
             "is_with": True,
             "filters": {
-                "week": 1782345600,
+                "weeks_back": 1,
                 "bracket_basic_ids": ["DIVINE_IMMORTAL"],
                 "position_ids": ["POSITION_4"],
                 "is_with": True,
+                "week_epochs": [1782345600],
+                "weeks_resolved": 1,
+                "skipped_current_week": True,
             },
-            "pair_record": {
-                "hero_id": 86,
-                "target_hero_id": 104,
-                "position": "POSITION_4",
-                "match_count": 25,
-                "match_win_rate": 0.6,
-            },
-            "total_partner_matches": 1,
+            "weekly_buckets": [
+                {
+                    "week_epoch": 1782345600,
+                    "week_index": 1,
+                    "window_label": "latest_completed_week",
+                    "rows": [
+                        {
+                            "hero_id": 86,
+                            "target_hero_id": 104,
+                            "position": "POSITION_4",
+                            "match_count": 25,
+                            "match_win_rate": 0.6,
+                        }
+                    ],
+                },
+            ],
+            "weeks_with_record": 1,
+            "missing_week_epochs": [],
         },
     )
 
@@ -263,7 +286,7 @@ def test_evidence_graph_aggregates_lane_outcome() -> None:
     ]
     assert graph.evidence[0].value["hero_name"] == "Legion Commander"
     assert graph.evidence[0].value["partner_hero_name"] == "Rubick"
-    assert graph.evidence[0].subject == "Legion Commander paired with Rubick"
+    assert graph.evidence[0].subject == "Legion Commander paired with Rubick (latest_completed_week)"
     assert graph.evidence[1].value["filters"]["position_ids"] == ["POSITION_4"]
     assert graph.evidence[1].value["hero_name"] == "Legion Commander"
     assert graph.evidence[1].value["partner_hero_name"] == "Rubick"

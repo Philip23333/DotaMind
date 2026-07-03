@@ -5,6 +5,10 @@ opendota:
   request_timeout_seconds: 20
   default_cache_ttl_seconds: 3600
 
+stratz:
+  weeks_back_default: 1   # null weeks_back -> latest completed STRATZ week
+  weeks_back_max: 8       # guardrail: N weeks = N STRATZ calls per tool
+
 team_report:
   default_time_range_days: 30
   resolution:

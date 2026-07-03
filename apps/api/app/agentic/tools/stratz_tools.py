@@ -1,3 +1,6 @@
+import asyncio
+import time
+from collections.abc import Awaitable, Callable
 from functools import lru_cache
 from typing import Any, Literal
 
@@ -13,7 +16,7 @@ from app.agentic.tools import (
     ToolRegistry,
 )
 from app.agentic.tools.hero_tools import load_default_hero_resolver
-from app.core.config import Settings
+from app.core.config import Settings, get_policy
 from app.integrations.stratz.heroes import StratzHeroes
 from app.integrations.stratz.transport import StratzTransport
 
@@ -313,11 +316,10 @@ def resolve_hero_evidence(result: ToolResult) -> list[EvidenceItem]:
 
 def pair_lane_outcome_evidence(result: ToolResult) -> list[EvidenceItem]:
     data = result.data if isinstance(result.data, dict) else {}
-    pair = data.get("pair_record")
     filters = data.get("filters") if isinstance(data.get("filters"), dict) else {}
-    evidence: list[EvidenceItem] = []
-    if not isinstance(pair, dict):
-        return evidence
+    buckets = data.get("weekly_buckets")
+    if not isinstance(buckets, list):
+        return []
     names = _hero_name_index()
     hero_id = data.get("hero_id")
     partner_hero_id = data.get("partner_hero_id")
@@ -327,49 +329,41 @@ def pair_lane_outcome_evidence(result: ToolResult) -> list[EvidenceItem]:
     )
     hero_label = hero_name or hero_id
     partner_label = partner_hero_name or partner_hero_id
-    match_count = pair.get("match_count")
-    evidence.append(
-        EvidenceItem(
-            id=(
-                f"{result.tool_call_id}:pair_lane_winrate:"
-                f"{hero_id}-{partner_hero_id}"
-            ),
-            kind="pair_lane_winrate",
-            subject=f"{hero_label} paired with {partner_label}",
-            value={
-                "hero_id": hero_id,
-                "hero_name": hero_name,
-                "partner_hero_id": partner_hero_id,
-                "partner_hero_name": partner_hero_name,
-                "is_with": data.get("is_with"),
-                "position": pair.get("position"),
-                "match_count": match_count,
-                "match_win_rate": pair.get("match_win_rate"),
-                "win_count": pair.get("win_count"),
-                "loss_count": pair.get("loss_count"),
-                "draw_count": pair.get("draw_count"),
-                "filters": filters,
-            },
-            source=result.source,
-            tool_call_id=result.tool_call_id,
-            tool=result.tool,
-        )
-    )
-    if match_count is not None:
+    evidence: list[EvidenceItem] = []
+    for bucket in buckets:
+        if not isinstance(bucket, dict):
+            continue
+        rows = bucket.get("rows") or []
+        if not rows:
+            continue
+        pair = rows[0] if isinstance(rows[0], dict) else {}
+        week_epoch = bucket.get("week_epoch")
+        week_index = bucket.get("week_index")
+        window_label = bucket.get("window_label")
+        match_count = pair.get("match_count")
         evidence.append(
             EvidenceItem(
                 id=(
-                    f"{result.tool_call_id}:sample_size:pair:"
-                    f"{hero_id}-{partner_hero_id}"
+                    f"{result.tool_call_id}:pair_lane_winrate:"
+                    f"{hero_id}-{partner_hero_id}:{week_epoch}"
                 ),
-                kind="sample_size",
-                subject=f"pair sample for {hero_label} + {partner_label}",
+                kind="pair_lane_winrate",
+                subject=f"{hero_label} paired with {partner_label} ({window_label})",
                 value={
-                    "sample_size": match_count,
                     "hero_id": hero_id,
                     "hero_name": hero_name,
                     "partner_hero_id": partner_hero_id,
                     "partner_hero_name": partner_hero_name,
+                    "is_with": data.get("is_with"),
+                    "position": pair.get("position"),
+                    "match_count": match_count,
+                    "match_win_rate": pair.get("match_win_rate"),
+                    "win_count": pair.get("win_count"),
+                    "loss_count": pair.get("loss_count"),
+                    "draw_count": pair.get("draw_count"),
+                    "week_epoch": week_epoch,
+                    "week_index": week_index,
+                    "window_label": window_label,
                     "filters": filters,
                 },
                 source=result.source,
@@ -377,6 +371,31 @@ def pair_lane_outcome_evidence(result: ToolResult) -> list[EvidenceItem]:
                 tool=result.tool,
             )
         )
+        if match_count is not None:
+            evidence.append(
+                EvidenceItem(
+                    id=(
+                        f"{result.tool_call_id}:sample_size:pair:"
+                        f"{hero_id}-{partner_hero_id}:{week_epoch}"
+                    ),
+                    kind="sample_size",
+                    subject=f"pair sample for {hero_label} + {partner_label} ({window_label})",
+                    value={
+                        "sample_size": match_count,
+                        "hero_id": hero_id,
+                        "hero_name": hero_name,
+                        "partner_hero_id": partner_hero_id,
+                        "partner_hero_name": partner_hero_name,
+                        "week_epoch": week_epoch,
+                        "week_index": week_index,
+                        "window_label": window_label,
+                        "filters": filters,
+                    },
+                    source=result.source,
+                    tool_call_id=result.tool_call_id,
+                    tool=result.tool,
+                )
+            )
     return evidence
 
 
@@ -384,12 +403,18 @@ def hero_matchup_ranking_evidence(result: ToolResult) -> list[EvidenceItem]:
     data = result.data if isinstance(result.data, dict) else {}
     target_hero_id = data.get("hero_id")
     filters = data.get("filters") if isinstance(data.get("filters"), dict) else {}
+    buckets = data.get("weekly_buckets")
+    if not isinstance(buckets, list):
+        return []
     names = _hero_name_index()
     evidence: list[EvidenceItem] = []
-    for source_side in ("advantage", "disadvantage"):
-        rows = data.get(source_side, [])
-        if not isinstance(rows, list):
+    for bucket in buckets:
+        if not isinstance(bucket, dict):
             continue
+        week_epoch = bucket.get("week_epoch")
+        week_index = bucket.get("week_index")
+        window_label = bucket.get("window_label")
+        rows = bucket.get("rows") or []
         for index, row in enumerate(rows):
             if not isinstance(row, dict):
                 continue
@@ -404,14 +429,15 @@ def hero_matchup_ranking_evidence(result: ToolResult) -> list[EvidenceItem]:
             )
             hero_label = hero_name or hero_id
             resolved_target_label = resolved_target_name or resolved_target_id
+            source_side = row.get("source_side", "advantage")
             evidence.append(
                 EvidenceItem(
                     id=(
                         f"{result.tool_call_id}:matchup_ranking_row:"
-                        f"{source_side}:{hero_id}:{index}"
+                        f"{source_side}:{hero_id}:{week_epoch}:{index}"
                     ),
                     kind="matchup_ranking_row",
-                    subject=f"{hero_label} vs {resolved_target_label}",
+                    subject=f"{hero_label} vs {resolved_target_label} ({window_label})",
                     value={
                         "source_side": source_side,
                         "hero_id": hero_id,
@@ -421,6 +447,9 @@ def hero_matchup_ranking_evidence(result: ToolResult) -> list[EvidenceItem]:
                         "win_rate": row.get("win_rate"),
                         "match_count": match_count,
                         "synergy": row.get("synergy"),
+                        "week_epoch": week_epoch,
+                        "week_index": week_index,
+                        "window_label": window_label,
                         "filters": filters,
                     },
                     source=result.source,
@@ -433,16 +462,19 @@ def hero_matchup_ranking_evidence(result: ToolResult) -> list[EvidenceItem]:
                     EvidenceItem(
                         id=(
                             f"{result.tool_call_id}:sample_size:"
-                            f"{source_side}:{hero_id}:{index}"
+                            f"{source_side}:{hero_id}:{week_epoch}:{index}"
                         ),
                         kind="sample_size",
-                        subject=f"{hero_label} vs {resolved_target_label}",
+                        subject=f"{hero_label} vs {resolved_target_label} ({window_label})",
                         value={
                             "sample_size": match_count,
                             "hero_id": hero_id,
                             "hero_name": hero_name,
                             "target_hero_id": resolved_target_id,
                             "target_hero_name": resolved_target_name,
+                            "week_epoch": week_epoch,
+                            "week_index": week_index,
+                            "window_label": window_label,
                             "filters": filters,
                         },
                         source=result.source,
@@ -456,61 +488,49 @@ def hero_matchup_ranking_evidence(result: ToolResult) -> list[EvidenceItem]:
 def lane_meta_global_evidence(result: ToolResult) -> list[EvidenceItem]:
     data = result.data if isinstance(result.data, dict) else {}
     filters = data.get("filters") if isinstance(data.get("filters"), dict) else {}
-    rows = data.get("rows", [])
-    if not isinstance(rows, list):
+    buckets = data.get("weekly_buckets")
+    if not isinstance(buckets, list):
         return []
     names = _hero_name_index()
     evidence: list[EvidenceItem] = []
-    for index, row in enumerate(rows):
-        if not isinstance(row, dict):
+    for bucket in buckets:
+        if not isinstance(bucket, dict):
             continue
-        match_count = row.get("match_count")
-        hero_id = row.get("hero_id")
-        target_hero_id = row.get("target_hero_id")
-        hero_name = names.get(hero_id) if isinstance(hero_id, int) else None
-        target_hero_name = (
-            names.get(target_hero_id) if isinstance(target_hero_id, int) else None
-        )
-        hero_label = hero_name or hero_id
-        target_label = target_hero_name or target_hero_id
-        evidence.append(
-            EvidenceItem(
-                id=(
-                    f"{result.tool_call_id}:lane_meta_row:"
-                    f"{hero_id}-{target_hero_id}:{index}"
-                ),
-                kind="lane_meta_row",
-                subject=f"{hero_label} + {target_label}",
-                value={
-                    "hero_id": hero_id,
-                    "hero_name": hero_name,
-                    "target_hero_id": target_hero_id,
-                    "target_hero_name": target_hero_name,
-                    "match_count": match_count,
-                    "match_win_rate": row.get("match_win_rate"),
-                    "is_with": data.get("is_with"),
-                    "filters": filters,
-                },
-                source=result.source,
-                tool_call_id=result.tool_call_id,
-                tool=result.tool,
+        week_epoch = bucket.get("week_epoch")
+        week_index = bucket.get("week_index")
+        window_label = bucket.get("window_label")
+        rows = bucket.get("rows") or []
+        for index, row in enumerate(rows):
+            if not isinstance(row, dict):
+                continue
+            match_count = row.get("match_count")
+            hero_id = row.get("hero_id")
+            target_hero_id = row.get("target_hero_id")
+            hero_name = names.get(hero_id) if isinstance(hero_id, int) else None
+            target_hero_name = (
+                names.get(target_hero_id) if isinstance(target_hero_id, int) else None
             )
-        )
-        if match_count is not None:
+            hero_label = hero_name or hero_id
+            target_label = target_hero_name or target_hero_id
             evidence.append(
                 EvidenceItem(
                     id=(
-                        f"{result.tool_call_id}:sample_size:lane_meta:"
-                        f"{hero_id}-{target_hero_id}:{index}"
+                        f"{result.tool_call_id}:lane_meta_row:"
+                        f"{hero_id}-{target_hero_id}:{week_epoch}:{index}"
                     ),
-                    kind="sample_size",
-                    subject=f"lane meta sample for {hero_label} + {target_label}",
+                    kind="lane_meta_row",
+                    subject=f"{hero_label} + {target_label} ({window_label})",
                     value={
-                        "sample_size": match_count,
                         "hero_id": hero_id,
                         "hero_name": hero_name,
                         "target_hero_id": target_hero_id,
                         "target_hero_name": target_hero_name,
+                        "match_count": match_count,
+                        "match_win_rate": row.get("match_win_rate"),
+                        "is_with": data.get("is_with"),
+                        "week_epoch": week_epoch,
+                        "week_index": week_index,
+                        "window_label": window_label,
                         "filters": filters,
                     },
                     source=result.source,
@@ -518,58 +538,72 @@ def lane_meta_global_evidence(result: ToolResult) -> list[EvidenceItem]:
                     tool=result.tool,
                 )
             )
+            if match_count is not None:
+                evidence.append(
+                    EvidenceItem(
+                        id=(
+                            f"{result.tool_call_id}:sample_size:lane_meta:"
+                            f"{hero_id}-{target_hero_id}:{week_epoch}:{index}"
+                        ),
+                        kind="sample_size",
+                        subject=f"lane meta sample for {hero_label} + {target_label} ({window_label})",
+                        value={
+                            "sample_size": match_count,
+                            "hero_id": hero_id,
+                            "hero_name": hero_name,
+                            "target_hero_id": target_hero_id,
+                            "target_hero_name": target_hero_name,
+                            "week_epoch": week_epoch,
+                            "week_index": week_index,
+                            "window_label": window_label,
+                            "filters": filters,
+                        },
+                        source=result.source,
+                        tool_call_id=result.tool_call_id,
+                        tool=result.tool,
+                    )
+                )
     return evidence
 
 
 def hero_position_stats_evidence(result: ToolResult) -> list[EvidenceItem]:
     data = result.data if isinstance(result.data, dict) else {}
     filters = data.get("filters") if isinstance(data.get("filters"), dict) else {}
-    rows = data.get("rows", [])
-    if not isinstance(rows, list):
+    buckets = data.get("weekly_buckets")
+    if not isinstance(buckets, list):
         return []
     names = _hero_name_index()
     evidence: list[EvidenceItem] = []
-    for index, row in enumerate(rows):
-        if not isinstance(row, dict):
+    for bucket in buckets:
+        if not isinstance(bucket, dict):
             continue
-        match_count = row.get("match_count")
-        hero_id = row.get("hero_id")
-        hero_name = names.get(hero_id) if isinstance(hero_id, int) else None
-        hero_label = hero_name or hero_id
-        evidence.append(
-            EvidenceItem(
-                id=(
-                    f"{result.tool_call_id}:position_stat:"
-                    f"{hero_id}-{row.get('position')}:{index}"
-                ),
-                kind="position_stat",
-                subject=f"{hero_label} at {row.get('position')}",
-                value={
-                    "hero_id": hero_id,
-                    "hero_name": hero_name,
-                    "position": row.get("position"),
-                    "match_count": match_count,
-                    "filters": filters,
-                },
-                source=result.source,
-                tool_call_id=result.tool_call_id,
-                tool=result.tool,
-            )
-        )
-        if match_count is not None:
+        week_epoch = bucket.get("week_epoch")
+        week_index = bucket.get("week_index")
+        window_label = bucket.get("window_label")
+        rows = bucket.get("rows") or []
+        for index, row in enumerate(rows):
+            if not isinstance(row, dict):
+                continue
+            match_count = row.get("match_count")
+            hero_id = row.get("hero_id")
+            hero_name = names.get(hero_id) if isinstance(hero_id, int) else None
+            hero_label = hero_name or hero_id
             evidence.append(
                 EvidenceItem(
                     id=(
-                        f"{result.tool_call_id}:sample_size:position_stat:"
-                        f"{hero_id}-{row.get('position')}:{index}"
+                        f"{result.tool_call_id}:position_stat:"
+                        f"{hero_id}-{row.get('position')}:{week_epoch}:{index}"
                     ),
-                    kind="sample_size",
-                    subject=f"position sample for {hero_label}",
+                    kind="position_stat",
+                    subject=f"{hero_label} at {row.get('position')} ({window_label})",
                     value={
-                        "sample_size": match_count,
                         "hero_id": hero_id,
                         "hero_name": hero_name,
                         "position": row.get("position"),
+                        "match_count": match_count,
+                        "week_epoch": week_epoch,
+                        "week_index": week_index,
+                        "window_label": window_label,
                         "filters": filters,
                     },
                     source=result.source,
@@ -577,6 +611,30 @@ def hero_position_stats_evidence(result: ToolResult) -> list[EvidenceItem]:
                     tool=result.tool,
                 )
             )
+            if match_count is not None:
+                evidence.append(
+                    EvidenceItem(
+                        id=(
+                            f"{result.tool_call_id}:sample_size:position_stat:"
+                            f"{hero_id}-{row.get('position')}:{week_epoch}:{index}"
+                        ),
+                        kind="sample_size",
+                        subject=f"position sample for {hero_label} ({window_label})",
+                        value={
+                            "sample_size": match_count,
+                            "hero_id": hero_id,
+                            "hero_name": hero_name,
+                            "position": row.get("position"),
+                            "week_epoch": week_epoch,
+                            "week_index": week_index,
+                            "window_label": window_label,
+                            "filters": filters,
+                        },
+                        source=result.source,
+                        tool_call_id=result.tool_call_id,
+                        tool=result.tool,
+                    )
+                )
     return evidence
 
 
@@ -588,37 +646,49 @@ def _pair_lane_outcome_handler(settings: Settings):
         if not settings.stratz_token:
             raise ValueError("METAMIND_STRATZ_TOKEN is required")
 
+        weeks, epochs = _resolve_week_window(context.weeks_back)
         transport = StratzTransport(settings.stratz_graphql_url, settings.stratz_token)
         heroes = StratzHeroes(transport)
+        buckets: list[dict[str, Any]] = []
         try:
-            records = await heroes.lane_outcome(
-                args.hero_id,
-                is_with=args.is_with,
-                week=context.week,
-                bracket_basic_ids=context.bracket,
-                position_ids=context.position_ids,
-            )
+            for week_index, epoch in enumerate(epochs, start=1):
+                records = await _with_retry(
+                    lambda e=epoch: heroes.lane_outcome(
+                        args.hero_id,
+                        is_with=args.is_with,
+                        week=e,
+                        bracket_basic_ids=context.bracket,
+                        position_ids=context.position_ids,
+                    )
+                )
+                matches = [
+                    record
+                    for record in records
+                    if isinstance(record, dict)
+                    and record.get("hero_id") == args.partner_hero_id
+                ]
+                rows = [matches[0]] if matches else []
+                buckets.append(_bucket(epoch, week_index, rows))
         finally:
             await transport.aclose()
 
-        matches = [
-            record
-            for record in records
-            if isinstance(record, dict) and record.get("hero_id") == args.partner_hero_id
-        ]
-        pair_record = matches[0] if matches else None
+        weeks_with_record, missing_epochs = _week_summary(buckets)
         return {
             "hero_id": args.hero_id,
             "partner_hero_id": args.partner_hero_id,
             "is_with": args.is_with,
-            "filters": {
-                "week": context.week,
-                "bracket_basic_ids": context.bracket,
-                "position_ids": context.position_ids,
-                "is_with": args.is_with,
-            },
-            "pair_record": pair_record,
-            "total_partner_matches": len(matches),
+            "weekly_buckets": buckets,
+            "weeks_with_record": weeks_with_record,
+            "missing_week_epochs": missing_epochs,
+            "filters": _window_filters(
+                {
+                    "bracket_basic_ids": context.bracket,
+                    "position_ids": context.position_ids,
+                    "is_with": args.is_with,
+                },
+                weeks,
+                epochs,
+            ),
         }
 
     return handle
@@ -632,33 +702,51 @@ def _hero_matchup_ranking_handler(settings: Settings):
         if not settings.stratz_token:
             raise ValueError("METAMIND_STRATZ_TOKEN is required")
 
+        weeks, epochs = _resolve_week_window(context.weeks_back)
         transport = StratzTransport(settings.stratz_graphql_url, settings.stratz_token)
         heroes = StratzHeroes(transport)
+        buckets: list[dict[str, Any]] = []
         try:
-            data = await heroes.hero_vs_hero_matchup(
-                args.hero_id,
-                take=max(args.take, 50),
-                week=context.week,
-                bracket_basic_ids=context.bracket,
-            )
+            for week_index, epoch in enumerate(epochs, start=1):
+                data = await _with_retry(
+                    lambda e=epoch: heroes.hero_vs_hero_matchup(
+                        args.hero_id,
+                        take=max(args.take, 50),
+                        week=e,
+                        bracket_basic_ids=context.bracket,
+                    )
+                )
+                advantage = _filter_matchup_rows(
+                    data.get("advantage", []), args.min_sample_size, args.take
+                )
+                disadvantage = _filter_matchup_rows(
+                    data.get("disadvantage", []), args.min_sample_size, args.take
+                )
+                rows = [
+                    {"source_side": "advantage", **row} for row in advantage
+                ] + [
+                    {"source_side": "disadvantage", **row} for row in disadvantage
+                ]
+                buckets.append(_bucket(epoch, week_index, rows))
         finally:
             await transport.aclose()
 
-        advantage = _filter_matchup_rows(data.get("advantage", []), args.min_sample_size, args.take)
-        disadvantage = _filter_matchup_rows(
-            data.get("disadvantage", []), args.min_sample_size, args.take
-        )
+        weeks_with_record, missing_epochs = _week_summary(buckets)
         return {
             "hero_id": args.hero_id,
             "side": args.side,
-            "advantage": advantage,
-            "disadvantage": disadvantage,
-            "filters": {
-                "take": args.take,
-                "min_sample_size": args.min_sample_size,
-                "week": context.week,
-                "bracket_basic_ids": context.bracket,
-            },
+            "weekly_buckets": buckets,
+            "weeks_with_record": weeks_with_record,
+            "missing_week_epochs": missing_epochs,
+            "filters": _window_filters(
+                {
+                    "take": args.take,
+                    "min_sample_size": args.min_sample_size,
+                    "bracket_basic_ids": context.bracket,
+                },
+                weeks,
+                epochs,
+            ),
         }
 
     return handle
@@ -698,41 +786,54 @@ def _lane_meta_global_handler(settings: Settings):
         if not settings.stratz_token:
             raise ValueError("METAMIND_STRATZ_TOKEN is required")
 
+        weeks, epochs = _resolve_week_window(context.weeks_back)
         transport = StratzTransport(settings.stratz_graphql_url, settings.stratz_token)
         heroes = StratzHeroes(transport)
+        buckets: list[dict[str, Any]] = []
         try:
-            records = await heroes.lane_outcome(
-                None,
-                is_with=args.is_with,
-                week=context.week,
-                bracket_basic_ids=context.bracket,
-            )
+            for week_index, epoch in enumerate(epochs, start=1):
+                records = await _with_retry(
+                    lambda e=epoch: heroes.lane_outcome(
+                        None,
+                        is_with=args.is_with,
+                        week=e,
+                        bracket_basic_ids=context.bracket,
+                    )
+                )
+                deduped = _dedupe_pair_rows(records)
+                qualifying = [
+                    record
+                    for record in deduped
+                    if isinstance(record, dict)
+                    and (record.get("match_count") or 0) >= args.min_sample_size
+                ]
+                qualifying.sort(key=lambda r: (r.get("match_count") or 0), reverse=True)
+                top = qualifying[: args.highlight_top]
+                for row in top:
+                    row.pop("position", None)
+                buckets.append(_bucket(epoch, week_index, top))
         finally:
             await transport.aclose()
 
-        deduped = _dedupe_pair_rows(records)
-        qualifying = [
-            record
-            for record in deduped
-            if isinstance(record, dict)
-            and (record.get("match_count") or 0) >= args.min_sample_size
-        ]
-        qualifying.sort(key=lambda r: (r.get("match_count") or 0), reverse=True)
-        top = qualifying[: args.highlight_top]
-        for row in top:
-            row.pop("position", None)
+        weeks_with_record, missing_epochs = _week_summary(buckets)
         return {
             "is_with": args.is_with,
-            "filters": {
-                "week": context.week,
-                "bracket_basic_ids": context.bracket,
-                "is_with": args.is_with,
-            },
-            "rows": top,
-            "total_available": len(qualifying),
-            "returned_count": len(top),
+            "weekly_buckets": buckets,
+            "weeks_with_record": weeks_with_record,
+            "missing_week_epochs": missing_epochs,
+            "filters": _window_filters(
+                {
+                    "bracket_basic_ids": context.bracket,
+                    "is_with": args.is_with,
+                    "min_sample_size": args.min_sample_size,
+                    "highlight_top": args.highlight_top,
+                },
+                weeks,
+                epochs,
+            ),
             "selection_policy": (
-                f"deduped=keep_larger_match_count_mirror, "
+                "per_completed_week: "
+                "deduped=keep_larger_match_count_mirror, "
                 f"min_sample_size>={args.min_sample_size}, "
                 f"sorted_by=match_count desc, top={args.highlight_top}"
             ),
@@ -749,30 +850,39 @@ def _hero_position_stats_handler(settings: Settings):
         if not settings.stratz_token:
             raise ValueError("METAMIND_STRATZ_TOKEN is required")
 
+        weeks, epochs = _resolve_week_window(context.weeks_back)
         transport = StratzTransport(settings.stratz_graphql_url, settings.stratz_token)
         heroes = StratzHeroes(transport)
+        buckets: list[dict[str, Any]] = []
         try:
-            rows = await heroes.hero_position_stats(
-                hero_ids=[args.hero_id] if args.hero_id is not None else None,
-                position_ids=[args.position_id] if args.position_id is not None else None,
-                bracket_basic_ids=context.bracket,
-                week=context.week,
-            )
+            for week_index, epoch in enumerate(epochs, start=1):
+                rows = await _with_retry(
+                    lambda e=epoch: heroes.hero_position_stats(
+                        hero_ids=[args.hero_id] if args.hero_id is not None else None,
+                        position_ids=[args.position_id] if args.position_id is not None else None,
+                        bracket_basic_ids=context.bracket,
+                        week=e,
+                    )
+                )
+                if args.position_id is not None:
+                    rows = sorted(rows, key=lambda r: r.get("match_count") or 0, reverse=True)
+                    rows = rows[: args.take]
+                buckets.append(_bucket(epoch, week_index, rows))
         finally:
             await transport.aclose()
 
-        if args.position_id is not None:
-            rows = sorted(rows, key=lambda r: r.get("match_count") or 0, reverse=True)
-            rows = rows[: args.take]
+        weeks_with_record, missing_epochs = _week_summary(buckets)
         return {
             "hero_id": args.hero_id,
             "position_id": args.position_id,
-            "filters": {
-                "week": context.week,
-                "bracket_basic_ids": context.bracket,
-            },
-            "rows": rows,
-            "returned_count": len(rows),
+            "weekly_buckets": buckets,
+            "weeks_with_record": weeks_with_record,
+            "missing_week_epochs": missing_epochs,
+            "filters": _window_filters(
+                {"bracket_basic_ids": context.bracket},
+                weeks,
+                epochs,
+            ),
         }
 
     return handle
@@ -796,3 +906,100 @@ def _filter_matchup_rows(
         reverse=True,
     )
     return filtered[:take]
+
+
+# --- STRATZ week-window resolution -----------------------------------------
+# A STRATZ week is 604800s-aligned to the Unix epoch; verified live that
+# `week` is a single weekly bucket and `null` means the latest *completed*
+# week (see docs/design/time_patch_filtering.md). Handlers resolve a relative
+# `weeks_back` to concrete completed-week epochs and return one bucket per
+# week (never merged across weeks).
+
+_WEEK_SECONDS = 604_800
+
+
+def _now() -> float:
+    """Module clock so tests can monkeypatch deterministic time."""
+    return time.time()
+
+
+def resolve_recent_completed_weeks(weeks_back: int, *, now: float) -> list[int]:
+    """Epoch seconds of the last `weeks_back` *completed* STRATZ weeks, newest
+    first. The in-progress current week is always skipped (it is partial)."""
+    if weeks_back < 1:
+        return []
+    current_index = int(now // _WEEK_SECONDS)
+    return [(current_index - k) * _WEEK_SECONDS for k in range(1, weeks_back + 1)]
+
+
+def _resolve_week_window(weeks_back: int | None) -> tuple[int, list[int]]:
+    """Resolve plan-level weeks_back (null allowed) to (weeks, epochs) using
+    the policy default for null."""
+    default_weeks = get_policy().stratz.weeks_back_default
+    weeks = weeks_back if weeks_back and weeks_back > 0 else default_weeks
+    return weeks, resolve_recent_completed_weeks(weeks, now=_now())
+
+
+def _window_label(week_index: int) -> str:
+    if week_index == 1:
+        return "latest_completed_week"
+    if week_index == 2:
+        return "prior_completed_week"
+    return f"completed_week_{week_index}"
+
+
+def _bucket(
+    week_epoch: int, week_index: int, rows: list[dict[str, Any]]
+) -> dict[str, Any]:
+    return {
+        "week_epoch": week_epoch,
+        "week_index": week_index,
+        "window_label": _window_label(week_index),
+        "rows": rows,
+    }
+
+
+def _week_summary(
+    buckets: list[dict[str, Any]],
+) -> tuple[int, list[int]]:
+    """(weeks_with_record, missing_week_epochs) — empty buckets are preserved
+    so a partial-week gap stays visible to the synthesizer."""
+    weeks_with_record = sum(1 for bucket in buckets if bucket.get("rows"))
+    missing = [bucket["week_epoch"] for bucket in buckets if not bucket.get("rows")]
+    return weeks_with_record, missing
+
+
+def _window_filters(
+    extra: dict[str, Any], weeks: int, epochs: list[int]
+) -> dict[str, Any]:
+    filters = dict(extra)
+    filters.update(
+        {
+            "weeks_back": weeks,
+            "week_epochs": epochs,
+            "weeks_resolved": len(epochs),
+            "skipped_current_week": True,
+        }
+    )
+    return filters
+
+
+async def _with_retry(
+    coro_factory: Callable[[], Awaitable[Any]],
+    *,
+    attempts: int = 4,
+    backoff: float = 2.0,
+) -> Any:
+    """Retry transient STRATZ failures. The last error is re-raised after
+    attempts are exhausted — upstream errors surface, never swallowed into a
+    false success."""
+    last_exc: Exception | None = None
+    for attempt in range(attempts):
+        try:
+            return await coro_factory()
+        except Exception as exc:  # noqa: BLE001 - resilience against flaky upstream
+            last_exc = exc
+            if attempt < attempts - 1:
+                await asyncio.sleep(backoff * (attempt + 1))
+    assert last_exc is not None
+    raise last_exc

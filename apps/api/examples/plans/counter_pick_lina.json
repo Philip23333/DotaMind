@@ -4,7 +4,7 @@
   "output_contract": "natural_language_answer",
   "context": {
     "bracket": ["LEGEND_ANCIENT"],
-    "week": null,
+    "weeks_back": null,
     "position_ids": null,
     "region_ids": null,
     "game_mode_ids": null

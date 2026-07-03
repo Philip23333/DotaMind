@@ -126,13 +126,20 @@ def test_pair_lane_outcome_filters_to_partner(monkeypatch) -> None:
     assert result.status == "ok"
     assert result.data["hero_id"] == 42
     assert result.data["partner_hero_id"] == 68
-    assert result.data["pair_record"]["match_count"] == 797
-    assert result.data["pair_record"]["match_win_rate"] == 0.5797
-    assert result.data["total_partner_matches"] == 1
+    buckets = result.data["weekly_buckets"]
+    assert len(buckets) == 1
+    assert buckets[0]["week_index"] == 1
+    rows = buckets[0]["rows"]
+    assert len(rows) == 1
+    assert rows[0]["match_count"] == 797
+    assert rows[0]["match_win_rate"] == 0.5797
+    assert result.data["weeks_with_record"] == 1
+    assert result.data["missing_week_epochs"] == []
     assert result.data["filters"]["bracket_basic_ids"] == ["LEGEND_ANCIENT"]
+    assert result.data["filters"]["weeks_back"] == 1
 
 
-def test_pair_lane_outcome_missing_partner_returns_null_record(monkeypatch) -> None:
+def test_pair_lane_outcome_missing_partner_returns_empty_bucket(monkeypatch) -> None:
     monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzTransport", FakeTransport)
     monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzHeroes", FakeHeroes)
 
@@ -148,8 +155,11 @@ def test_pair_lane_outcome_missing_partner_returns_null_record(monkeypatch) -> N
     )
 
     assert result.status == "ok"
-    assert result.data["pair_record"] is None
-    assert result.data["total_partner_matches"] == 0
+    buckets = result.data["weekly_buckets"]
+    assert len(buckets) == 1
+    assert buckets[0]["rows"] == []
+    assert result.data["weeks_with_record"] == 0
+    assert buckets[0]["week_epoch"] in result.data["missing_week_epochs"]
 
 
 def test_hero_matchup_ranking_keeps_groups_separate(monkeypatch) -> None:
@@ -168,8 +178,9 @@ def test_hero_matchup_ranking_keeps_groups_separate(monkeypatch) -> None:
     )
 
     assert result.status == "ok"
-    advantage = result.data["advantage"]
-    disadvantage = result.data["disadvantage"]
+    rows = result.data["weekly_buckets"][0]["rows"]
+    advantage = [row for row in rows if row["source_side"] == "advantage"]
+    disadvantage = [row for row in rows if row["source_side"] == "disadvantage"]
     assert [row["hero_id"] for row in advantage] == [66, 71]
     assert [row["hero_id"] for row in disadvantage] == [10]
     assert result.data["filters"]["min_sample_size"] == 100
@@ -191,10 +202,9 @@ def test_lane_meta_global_truncates_to_highlight_top(monkeypatch) -> None:
     )
 
     assert result.status == "ok"
-    assert result.data["total_available"] == 2
-    assert result.data["returned_count"] == 2
-    assert [row["hero_id"] for row in result.data["rows"]] == [86, 50]
-    assert all("position" not in row for row in result.data["rows"])
+    rows = result.data["weekly_buckets"][0]["rows"]
+    assert [row["hero_id"] for row in rows] == [86, 50]
+    assert all("position" not in row for row in rows)
     assert "position_ids" not in result.data["filters"]
     assert "selection_policy" in result.data
     assert result.data["filters"]["bracket_basic_ids"] == ["LEGEND_ANCIENT"]
@@ -252,22 +262,19 @@ def test_lane_meta_global_dedupes_mirror_pairs(monkeypatch) -> None:
     )
 
     assert result.status == "ok"
-    pairs = {
-        (row["hero_id"], row["target_hero_id"])
-        for row in result.data["rows"]
-    }
+    rows = result.data["weekly_buckets"][0]["rows"]
+    pairs = {(row["hero_id"], row["target_hero_id"]) for row in rows}
     # No mirror duplicates: each canonical pair appears once
     canonical = {tuple(sorted(p)) for p in pairs}
     assert len(canonical) == len(pairs)
     # The larger-sample mirror is kept for each pair
     pair_by_canonical = {
         tuple(sorted((row["hero_id"], row["target_hero_id"]))): row
-        for row in result.data["rows"]
+        for row in rows
     }
     assert pair_by_canonical[(2, 22)]["match_count"] == 1774
     assert pair_by_canonical[(6, 14)]["match_count"] == 1809
-    assert result.data["total_available"] == 2
-    assert result.data["returned_count"] == 2
+    assert len(rows) == 2
     assert "deduped" in result.data["selection_policy"]
 
 
@@ -282,13 +289,27 @@ def test_lane_meta_global_evidence_maps_hero_names() -> None:
         source=ToolSource(name="STRATZ", kind="public_graphql_api"),
         data={
             "is_with": True,
-            "filters": {"week": None, "bracket_basic_ids": None, "is_with": True},
-            "rows": [
+            "filters": {
+                "weeks_back": 1,
+                "bracket_basic_ids": None,
+                "is_with": True,
+                "week_epochs": [1782345600],
+                "weeks_resolved": 1,
+                "skipped_current_week": True,
+            },
+            "weekly_buckets": [
                 {
-                    "hero_id": 86,
-                    "target_hero_id": 1,
-                    "match_count": 1200,
-                    "match_win_rate": 0.55,
+                    "week_epoch": 1782345600,
+                    "week_index": 1,
+                    "window_label": "latest_completed_week",
+                    "rows": [
+                        {
+                            "hero_id": 86,
+                            "target_hero_id": 1,
+                            "match_count": 1200,
+                            "match_win_rate": 0.55,
+                        },
+                    ],
                 },
             ],
         },
@@ -298,11 +319,12 @@ def test_lane_meta_global_evidence_maps_hero_names() -> None:
     by_kind = {item.kind: item for item in evidence}
 
     row = by_kind["lane_meta_row"]
-    assert row.subject == "Rubick + Anti-Mage"
+    assert row.subject == "Rubick + Anti-Mage (latest_completed_week)"
     assert row.value["hero_id"] == 86
     assert row.value["hero_name"] == "Rubick"
     assert row.value["target_hero_id"] == 1
     assert row.value["target_hero_name"] == "Anti-Mage"
+    assert row.value["week_epoch"] == 1782345600
     assert "position" not in row.value
 
     sample = by_kind["sample_size"]
@@ -320,9 +342,22 @@ def test_hero_position_stats_evidence_maps_hero_names() -> None:
         latency_ms=1,
         source=ToolSource(name="STRATZ", kind="public_graphql_api"),
         data={
-            "filters": {"week": None, "bracket_basic_ids": None},
-            "rows": [
-                {"hero_id": 8, "position": "POSITION_1", "match_count": 31000},
+            "filters": {
+                "weeks_back": 1,
+                "bracket_basic_ids": None,
+                "week_epochs": [1782345600],
+                "weeks_resolved": 1,
+                "skipped_current_week": True,
+            },
+            "weekly_buckets": [
+                {
+                    "week_epoch": 1782345600,
+                    "week_index": 1,
+                    "window_label": "latest_completed_week",
+                    "rows": [
+                        {"hero_id": 8, "position": "POSITION_1", "match_count": 31000},
+                    ],
+                },
             ],
         },
     )
@@ -331,9 +366,10 @@ def test_hero_position_stats_evidence_maps_hero_names() -> None:
     by_kind = {item.kind: item for item in evidence}
 
     stat = by_kind["position_stat"]
-    assert stat.subject == "Juggernaut at POSITION_1"
+    assert stat.subject == "Juggernaut at POSITION_1 (latest_completed_week)"
     assert stat.value["hero_id"] == 8
     assert stat.value["hero_name"] == "Juggernaut"
+    assert stat.value["week_epoch"] == 1782345600
 
     sample = by_kind["sample_size"]
     assert sample.value["hero_name"] == "Juggernaut"
@@ -355,8 +391,9 @@ def test_hero_position_stats_requires_exactly_one_filter(monkeypatch) -> None:
     )
 
     assert result.status == "ok"
-    assert result.data["rows"][0]["hero_id"] == 8
-    assert len(result.data["rows"]) == 5
+    rows = result.data["weekly_buckets"][0]["rows"]
+    assert rows[0]["hero_id"] == 8
+    assert len(rows) == 5
 
 
 def test_hero_position_stats_rejects_both_filters(monkeypatch) -> None:
@@ -401,3 +438,45 @@ def _registry(token: str | None):
             stratz_token=token,
         )
     )
+
+
+def test_resolve_recent_completed_weeks_skips_current_week() -> None:
+    from app.agentic.tools.stratz_tools import resolve_recent_completed_weeks
+
+    # 2026-07-03 ~12:00 UTC; current week idx 2948 (epoch 1782950400); the
+    # latest *completed* week is 2947 (1782345600), the verified STRATZ epoch.
+    now = 1783048000.0
+    assert resolve_recent_completed_weeks(0, now=now) == []
+    assert resolve_recent_completed_weeks(1, now=now) == [1782345600]
+    assert resolve_recent_completed_weeks(2, now=now) == [1782345600, 1781740800]
+    assert resolve_recent_completed_weeks(3, now=now) == [
+        1782345600,
+        1781740800,
+        1781136000,
+    ]
+
+
+def test_pair_lane_outcome_fans_out_per_week(monkeypatch) -> None:
+    monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzTransport", FakeTransport)
+    monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzHeroes", FakeHeroes)
+
+    result = asyncio.run(
+        ToolExecutor(_registry(token="token")).execute(
+            ToolCall(
+                id="pair",
+                tool="stratz.pair_lane_outcome",
+                args={"hero_id": 42, "partner_hero_id": 68, "is_with": True},
+            ),
+            QueryContext(weeks_back=2),
+        )
+    )
+
+    assert result.status == "ok"
+    buckets = result.data["weekly_buckets"]
+    assert len(buckets) == 2
+    assert [b["week_index"] for b in buckets] == [1, 2]
+    # newest completed week first
+    assert buckets[0]["week_epoch"] > buckets[1]["week_epoch"]
+    assert all(b["rows"][0]["match_count"] == 797 for b in buckets)
+    assert result.data["filters"]["weeks_back"] == 2
+    assert len(result.data["filters"]["week_epochs"]) == 2

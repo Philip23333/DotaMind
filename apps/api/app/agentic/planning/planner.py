@@ -34,16 +34,19 @@ Schema obedience rules:
 - When an arg accepts a reference, use the declared path shown under that arg.
 
 Scope filters:
-- Cross-cutting scope (bracket, week, position_ids, region_ids, game_mode_ids)
-  goes on plan.context ONLY, never on individual tool_call args; tool inputs do
-  not carry these fields.
+- Cross-cutting scope (bracket, weeks_back, position_ids, region_ids,
+  game_mode_ids) goes on plan.context ONLY, never on individual tool_call args;
+  tool inputs do not carry these fields.
 - Set each context field at most once per plan; the same scope applies to every
   call. Leave a field null when the user did not constrain it.
 - STRATZ bracket values: HERALD_GUARDIAN, CRUSADER_ARCHON, LEGEND_ANCIENT,
   DIVINE_IMMORTAL. Map 冠绝/Immortal/Divine to DIVINE_IMMORTAL.
 - STRATZ position values: POSITION_1 through POSITION_5.
-- week is a single STRATZ week epoch (seconds), not a range; for "last N weeks"
-  use the most recent week epoch.
+- weeks_back (STRATZ only) = number of recent completed weeks to fetch as
+  separate per-week buckets, 1..8; set it for window queries ("最近两周" -> 2).
+  Leave null for the default (latest completed week). STRATZ returns per-week
+  evidence so the answer can describe trend; prefer phrasing 最近 N 个已完成周
+  over 本周 (the current STRATZ week is partial). Never emit raw week epochs.
 
 References:
 - Use "$<previous_call_id>.<declared_output_path>". The call id is any earlier
@@ -93,7 +96,7 @@ If supported:
     "output_contract": "natural_language_answer",
     "context": {
       "bracket": ["LEGEND_ANCIENT"],
-      "week": null,
+      "weeks_back": null,
       "position_ids": null,
       "region_ids": null,
       "game_mode_ids": null
