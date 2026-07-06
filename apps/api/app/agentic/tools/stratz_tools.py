@@ -158,12 +158,15 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
             name="stratz.hero_matchup_ranking",
             description=(
                 "Return STRATZ hero-vs-hero matchup ranking rows for a "
-                "target hero. Keeps advantage and disadvantage groups "
-                "separate (each sorted by synergy desc, then match_count "
-                "desc, top `take` per group); does NOT merge into a "
-                "single ranking. side='vs' is the only supported value "
-                "in this version. This is evidence ranking, not a final "
-                "draft recommendation."
+                "target hero. Ranking basis is `synergy` desc (STRATZ's "
+                "composite matchup advantage score, sample-weighted), "
+                "tie-break `match_count` desc. Sorting and the "
+                "`min_sample_size` floor are applied in the agentic layer "
+                "after the integration layer normalizes field names only. "
+                "Keeps advantage and disadvantage groups separate (top "
+                "`take` per group); does NOT merge into a single ranking. "
+                "side='vs' is the only supported value in this version. "
+                "This is evidence ranking, not a final draft recommendation."
             ),
             input_model=HeroMatchupRankingInput,
             handler=_hero_matchup_ranking_handler(settings),

@@ -27,8 +27,6 @@ query HeroVsHeroMatchup(
           matchCount
           winCount
           synergy
-          winRateHeroId1
-          winRateHeroId2
         }
       }
       disadvantage {
@@ -40,8 +38,6 @@ query HeroVsHeroMatchup(
           matchCount
           winCount
           synergy
-          winRateHeroId1
-          winRateHeroId2
         }
       }
     }
@@ -186,6 +182,10 @@ class StratzHeroes:
 
     @classmethod
     def _normalize_matchup_side(cls, side: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        # Integration layer is a thin relay: normalize field names only. Do NOT
+        # sort here — ranking (by synergy) and top-K happen in the agentic layer
+        # (`_filter_matchup_rows`), so the integration output preserves STRATZ's
+        # raw iteration order. See docs/design/STRATZ工具审计与重构输入.md §4 P0-2.
         normalized: list[dict[str, Any]] = []
         for group in side:
             for record in group.get("vs") or []:
@@ -199,17 +199,8 @@ class StratzHeroes:
                         "win_count": win_count,
                         "win_rate": cls._rate(win_count, match_count),
                         "synergy": record.get("synergy"),
-                        "target_win_rate": record.get("winRateHeroId1"),
-                        "hero_win_rate": record.get("winRateHeroId2"),
                     }
                 )
-        normalized.sort(
-            key=lambda item: (
-                float(item["synergy"] or 0),
-                int(item["match_count"]),
-            ),
-            reverse=True,
-        )
         return normalized
 
     @classmethod

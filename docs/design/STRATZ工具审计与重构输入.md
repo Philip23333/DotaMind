@@ -96,7 +96,7 @@
 
 **歧义/风险**：
 - ⚠️ **排序发生两层**：集成层已按 synergy 排序，agentic 层又排一次。冗余且职责不清。
-- ⚠️ **provider 原生胜率被弃用**：STRATZ 给了原生 `winRateHeroId1/winRateHeroId2`（Decimal）与合成 `synergy`，但 ranking 用 `synergy`；本地又算了个 `win_rate=winCount/matchCount` 几乎没被下游用到（`_filter_matchup_rows` 用 synergy 不用 win_rate）。本地 `win_rate` 基本是死字段。
+- ⚠️ **provider 原生胜率被弃用（已修正 2026-07-06）**：STRATZ 给了原生 `winRateHeroId1/winRateHeroId2`（Decimal）与合成 `synergy`，但 ranking 用 `synergy`。核实结论：本地 `win_rate=winCount/matchCount` **会进 evidence**（`hero_matchup_ranking_evidence` 透传），**非死字段**，只是命名太泛未标 matchup 级（P0-1 已重命名为 `matchup_win_rate`）；真正从未透传到 evidence 的死字段是 `target_win_rate`/`hero_win_rate`（= 原生 `winRateHeroId1/2`），P0-3 已删除并同步从 GraphQL query 移除（去 over-fetch）。
 - ⚠️ **服务端能过滤却客户端过滤**：`matchLimit` 参数（duo 最低样本数）集成层暴露了 `match_limit` 形参，但 agentic handler **不传**，改在客户端 `_filter_matchup_rows` 做 `min_sample_size` 过滤——多传了行数据。
 - ⚠️ `matchCountVs`（每个对手分组的总样本）取了但下游没用。
 
@@ -150,7 +150,7 @@
 ### P0 — 正确性与语义（必须先收敛）
 1. **统一胜率口径**：每个工具显式声明并命名其胜率是 match 级 / matchup 级 / lane 级。lane 的 `match_win_rate` 保持 match 级（见 §5 约束）。
 2. **排序/截断收敛到单层**：建议集成层只做 normalize（不排序），排序/topK/selection_policy 全放 agentic 层。删除 `_normalize_matchup_side` 里的排序。
-3. **决定 matchup 排序键**：在 `synergy`（STRATZ 合成优势分）/ 原生 `winRateHeroId*` / 本地 `win_rate` 中显式选一个，删掉其余死字段；或像 lane_meta 一样做成 planner 可选。
+3. **决定 matchup 排序键**（✅ 已收敛 2026-07-06）：固定用 `synergy`（STRATZ 合成优势分，含样本加权）作排序键 + `match_count` tie-break，排序归 agentic 层 `_filter_matchup_rows`；删死字段 `target_win_rate`/`hero_win_rate` + GraphQL `winRateHeroId1/2`（去 over-fetch）。不做 `selection_mode`：matchup 已有 advantage/disadvantage 天然分组，加参数属过度设计。本地 `win_rate` 重命名为 `matchup_win_rate` 并保留进 evidence（见 P0-1）。
 
 ### P1 — 能力扩展（配合 schema，价值最高）
 4. **新增 `winDay` 趋势工具**：day-grain 英雄胜率/出场趋势（最近 12 天）。需配套 bracket 全枚举翻译（basic→full）。
