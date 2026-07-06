@@ -17,6 +17,7 @@ from app.agentic.tools import (
 )
 from app.agentic.tools.hero_tools import load_default_hero_resolver
 from app.core.config import Settings, get_policy
+from app.integrations.stratz.brackets import basic_to_full
 from app.integrations.stratz.heroes import StratzHeroes
 from app.integrations.stratz.transport import StratzTransport
 
@@ -368,6 +369,138 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
             metadata={"game": "dota2", "domain": "hero_position"},
         )
     )
+
+
+    registry.register(
+        ToolDefinition(
+            name="stratz.hero_daily_trends",
+            description=(
+                "Return STRATZ day-grain win-rate/played trend for a hero "
+                "(heroStats.winDay, last `take` days, max 12). Each row is one "
+                "day: win_count/match_count -> win_rate. NOT per-week — does NOT "
+                "use weeks_back; the window is calendar days (STRATZ returns the "
+                "most recent days, newest first). bracket on context.bracket is "
+                "expanded from RankBracketBasicEnum to RankBracket (winDay only "
+                "accepts the full enum); region_ids/game_mode_ids/position_ids on "
+                "context are honored. Use for 'is Lina rising/falling recently / "
+                "still worth practicing' questions. win_rate_basis declares the "
+                "day-level caliber."
+            ),
+            input_model=HeroDailyTrendsInput,
+            handler=_hero_daily_trends_handler(settings),
+            source=ToolSource(
+                name="STRATZ",
+                kind="public_graphql_api",
+                url=settings.stratz_graphql_url,
+                status="live",
+            ),
+            evidence_extractor=hero_daily_trends_evidence,
+            evidence_kinds=("hero_daily_trend",),
+            arg_contracts={
+                "hero_id": ArgContract(
+                    description="Target hero id.",
+                    accepts_refs=(
+                        AcceptedRef(
+                            from_tool="resolve_hero",
+                            path="data.hero.hero_id",
+                            type="int",
+                        ),
+                    ),
+                ),
+                "take": ArgContract(description="Number of recent days (1..12, default 12)."),
+            },
+            metadata={"game": "dota2", "domain": "hero_trend"},
+        )
+    )
+
+
+class HeroDailyTrendsInput(BaseModel):
+    hero_id: int = Field(gt=0)
+    take: int = Field(default=12, ge=1, le=12)
+
+
+def hero_daily_trends_evidence(result: ToolResult) -> list[EvidenceItem]:
+    data = result.data if isinstance(result.data, dict) else {}
+    filters = data.get("filters") if isinstance(data.get("filters"), dict) else {}
+    daily = data.get("daily_buckets")
+    if not isinstance(daily, list):
+        return []
+    names = _hero_name_index()
+    hero_id = data.get("hero_id")
+    hero_name = names.get(hero_id) if isinstance(hero_id, int) else None
+    hero_label = hero_name or hero_id
+    evidence: list[EvidenceItem] = []
+    for index, row in enumerate(daily):
+        if not isinstance(row, dict):
+            continue
+        day = row.get("day")
+        evidence.append(
+            EvidenceItem(
+                id=f"{result.tool_call_id}:hero_daily_trend:{hero_id}:{day}:{index}",
+                kind="hero_daily_trend",
+                subject=f"{hero_label} daily trend (day {day})",
+                value={
+                    "hero_id": hero_id,
+                    "hero_name": hero_name,
+                    "day": day,
+                    "win_count": row.get("win_count"),
+                    "match_count": row.get("match_count"),
+                    "win_rate": row.get("win_rate"),
+                    "win_rate_basis": "day: winCount/matchCount",
+                    "filters": {
+                        **filters,
+                        "win_rate_basis": "day: winCount/matchCount",
+                    },
+                },
+                source=result.source,
+                tool_call_id=result.tool_call_id,
+                tool=result.tool,
+            )
+        )
+    return evidence
+
+
+def _hero_daily_trends_handler(settings: Settings):
+    async def handle(
+        args: HeroDailyTrendsInput,
+        context: QueryContext,
+    ) -> dict[str, Any]:
+        if not settings.stratz_token:
+            raise ValueError("METAMIND_STRATZ_TOKEN is required")
+
+        bracket_full = basic_to_full(context.bracket)
+        transport = StratzTransport(settings.stratz_graphql_url, settings.stratz_token)
+        heroes = StratzHeroes(transport)
+        try:
+            data = await _with_retry(
+                lambda: heroes.hero_win_day(
+                    args.hero_id,
+                    take=args.take,
+                    bracket_ids=bracket_full,
+                    position_ids=context.position_ids,
+                    region_ids=context.region_ids,
+                    game_mode_ids=context.game_mode_ids,
+                )
+            )
+        finally:
+            await transport.aclose()
+
+        daily = data.get("daily", []) if isinstance(data, dict) else []
+        return {
+            "hero_id": args.hero_id,
+            "daily_buckets": daily,
+            "filters": {
+                "take": args.take,
+                "bracket_basic_ids": context.bracket,
+                "bracket_full_ids": bracket_full,
+                "position_ids": context.position_ids,
+                "region_ids": context.region_ids,
+                "game_mode_ids": context.game_mode_ids,
+                "grain": "day",
+            },
+        }
+
+    return handle
 
 
 def build_default_tool_registry(settings: Settings) -> ToolRegistry:

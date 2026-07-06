@@ -138,6 +138,34 @@ query HeroPositionStats(
 """
 
 
+_HERO_WIN_DAY_QUERY = """
+query HeroWinDay(
+  $heroIds: [Short],
+  $take: Int,
+  $bracketIds: [RankBracket],
+  $positionIds: [MatchPlayerPositionType],
+  $regionIds: [BasicRegionType],
+  $gameModeIds: [GameModeEnumType]
+) {
+  heroStats {
+    winDay(
+      heroIds: $heroIds,
+      take: $take,
+      bracketIds: $bracketIds,
+      positionIds: $positionIds,
+      regionIds: $regionIds,
+      gameModeIds: $gameModeIds
+    ) {
+      day
+      heroId
+      winCount
+      matchCount
+    }
+  }
+}
+"""
+
+
 class StratzHeroes:
     def __init__(self, transport: StratzTransport) -> None:
         self.transport = transport
@@ -250,6 +278,46 @@ class StratzHeroes:
                 }
             )
         return normalized
+
+    async def hero_win_day(
+        self,
+        hero_id: int,
+        *,
+        take: int = 12,
+        bracket_ids: list[str] | None = None,
+        position_ids: list[str] | None = None,
+        region_ids: list[str] | None = None,
+        game_mode_ids: list[str] | None = None,
+    ) -> dict[str, Any]:
+        payload = await self.transport.graphql(
+            "HeroWinDay",
+            _HERO_WIN_DAY_QUERY,
+            {
+                "heroIds": [hero_id],
+                "take": take,
+                "bracketIds": bracket_ids,
+                "positionIds": position_ids,
+                "regionIds": region_ids,
+                "gameModeIds": game_mode_ids,
+            },
+        )
+        records = payload["data"]["heroStats"]["winDay"]
+        # Thin relay: preserve STRATZ order (day desc, newest first) and derive
+        # per-day win_rate. Day-grain — does NOT use _resolve_week_window.
+        daily: list[dict[str, Any]] = []
+        for record in records:
+            match_count = int(record.get("matchCount") or 0)
+            win_count = int(record.get("winCount") or 0)
+            daily.append(
+                {
+                    "day": record.get("day"),
+                    "hero_id": record.get("heroId"),
+                    "win_count": win_count,
+                    "match_count": match_count,
+                    "win_rate": self._rate(win_count, match_count),
+                }
+            )
+        return {"hero_id": hero_id, "daily": daily}
 
     @classmethod
     def _normalize_matchup_side(cls, side: list[dict[str, Any]]) -> list[dict[str, Any]]:

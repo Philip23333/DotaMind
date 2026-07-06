@@ -27,7 +27,12 @@ _NATURAL_LANGUAGE_SYSTEM_PROMPT = (
     "ranking basis to match it: 'strong' = the top pairs are ranked by win "
     "rate after the sample-size floor (say so, e.g. \"样本数 >= N 后按胜率排序"
     "的前 K 个\"); 'popular' = ranked by pick volume. Always state the sample "
-    "floor (filters.min_sample_size) and that only completed weeks count."
+    "floor (filters.min_sample_size) and that only completed weeks count. "
+    "When hero_daily_trend evidence is present (per-day STRATZ buckets, "
+    "filters.grain == 'day'), describe the trend across calendar days, not "
+    "weeks — name days/dates and the day-level win_rate direction; do not "
+    "invent week buckets. day evidence uses win_rate_basis 'day: "
+    "winCount/matchCount'."
 )
 
 AnswerStatus = Literal[

@@ -68,6 +68,15 @@ class FakeHeroes:
             ],
         }
 
+    async def hero_win_day(self, hero_id, *, take=12, bracket_ids=None, **kwargs) -> dict:
+        return {
+            "hero_id": hero_id,
+            "daily": [
+                {"day": 1783209600, "hero_id": hero_id, "win_count": 5042, "match_count": 9756, "win_rate": 0.5168},
+                {"day": 1783123200, "hero_id": hero_id, "win_count": 4755, "match_count": 9229, "win_rate": 0.5149},
+            ],
+        }
+
     async def lane_outcome(self, hero_id, *, is_with, **kwargs) -> list[dict]:
         if hero_id is None:
             return [
@@ -278,6 +287,69 @@ def test_hero_synergy_ranking_evidence_uses_ally_pair_basis() -> None:
     assert row.value["win_rate_basis"] == "ally_pair: winCount/matchCount"
     assert row.value["filters"]["win_rate_basis"] == "ally_pair: winCount/matchCount"
     assert " with " in row.subject
+
+
+def test_hero_daily_trends_translates_bracket_and_returns_daily(monkeypatch) -> None:
+    """winDay only accepts RankBracket (full); context.bracket (basic) must be
+    expanded. day-grain: weeks_back is not used; no week_epochs in filters."""
+    monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzTransport", FakeTransport)
+    monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzHeroes", FakeHeroes)
+
+    result = asyncio.run(
+        ToolExecutor(_registry(token="token")).execute(
+            ToolCall(
+                id="trend",
+                tool="stratz.hero_daily_trends",
+                args={"hero_id": 8, "take": 5},
+            ),
+            QueryContext(bracket=["DIVINE_IMMORTAL"]),
+        )
+    )
+
+    assert result.status == "ok"
+    daily = result.data["daily_buckets"]
+    assert len(daily) == 2
+    assert daily[0]["day"] == 1783209600
+    # bracket basic -> full translation reaches filters.
+    assert result.data["filters"]["bracket_basic_ids"] == ["DIVINE_IMMORTAL"]
+    assert result.data["filters"]["bracket_full_ids"] == ["DIVINE", "IMMORTAL"]
+    assert result.data["filters"]["grain"] == "day"
+    # day-grain: weeks_back / week_epochs are not part of this tool.
+    assert "week_epochs" not in result.data["filters"]
+
+
+def test_hero_daily_trends_evidence_uses_day_basis() -> None:
+    from app.agentic.tools.stratz_tools import hero_daily_trends_evidence
+
+    tool_result = ToolResult(
+        tool_call_id="trend",
+        tool="stratz.hero_daily_trends",
+        status="ok",
+        latency_ms=1,
+        source=ToolSource(name="STRATZ", kind="public_graphql_api"),
+        data={
+            "hero_id": 8,
+            "daily_buckets": [
+                {"day": 1783209600, "hero_id": 8, "win_count": 5042, "match_count": 9756, "win_rate": 0.5168},
+            ],
+            "filters": {
+                "take": 5,
+                "bracket_basic_ids": ["DIVINE_IMMORTAL"],
+                "bracket_full_ids": ["DIVINE", "IMMORTAL"],
+                "grain": "day",
+            },
+        },
+    )
+
+    evidence = hero_daily_trends_evidence(tool_result)
+    # Single kind per day; no per-day sample_size evidence.
+    assert len(evidence) == 1
+    row = evidence[0]
+    assert row.kind == "hero_daily_trend"
+    assert row.value["win_rate"] == 0.5168
+    assert row.value["win_rate_basis"] == "day: winCount/matchCount"
+    assert row.value["filters"]["win_rate_basis"] == "day: winCount/matchCount"
+    assert row.value["filters"]["grain"] == "day"
 
 
 def test_lane_meta_global_truncates_to_highlight_top(monkeypatch) -> None:

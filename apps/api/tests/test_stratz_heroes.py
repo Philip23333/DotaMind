@@ -259,3 +259,35 @@ def test_stratz_heroes_normalizes_hero_synergy() -> None:
     assert result["advantage"][0]["synergy"] == 7.7
     assert result["disadvantage"][0]["hero_id"] == 89
     assert result["disadvantage"][0]["synergy"] == -16.9
+
+
+def test_stratz_heroes_normalizes_hero_win_day() -> None:
+    transport = FakeTransport(
+        {
+            "data": {
+                "heroStats": {
+                    "winDay": [
+                        {"day": 1783209600, "heroId": 8, "winCount": 5042, "matchCount": 9756},
+                        {"day": 1783123200, "heroId": 8, "winCount": 4755, "matchCount": 9229},
+                    ]
+                }
+            }
+        }
+    )
+    heroes = StratzHeroes(transport)
+
+    async def exercise() -> dict:
+        try:
+            return await heroes.hero_win_day(8, take=5)
+        finally:
+            await transport.aclose()
+
+    result = asyncio.run(exercise())
+    assert result["hero_id"] == 8
+    assert len(result["daily"]) == 2
+    assert result["daily"][0]["day"] == 1783209600
+    assert result["daily"][0]["win_count"] == 5042
+    assert result["daily"][0]["match_count"] == 9756
+    assert result["daily"][0]["win_rate"] == round(5042 / 9756, 4)
+    # STRATZ order preserved (day desc, newest first); not reordered.
+    assert result["daily"][0]["day"] > result["daily"][1]["day"]

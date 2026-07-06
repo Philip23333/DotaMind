@@ -153,10 +153,10 @@
 3. **决定 matchup 排序键**（✅ 已收敛 2026-07-06）：固定用 `synergy`（STRATZ 合成优势分，含样本加权）作排序键 + `match_count` tie-break，排序归 agentic 层 `_filter_matchup_rows`；删死字段 `target_win_rate`/`hero_win_rate` + GraphQL `winRateHeroId1/2`（去 over-fetch）。不做 `selection_mode`：matchup 已有 advantage/disadvantage 天然分组，加参数属过度设计。本地 `win_rate` 重命名为 `matchup_win_rate` 并保留进 evidence（见 P0-1）。
 
 ### P1 — 能力扩展（配合 schema，价值最高）
-4. **新增 `winDay` 趋势工具**：day-grain 英雄胜率/出场趋势（最近 12 天）。需配套 bracket 全枚举翻译（basic→full）。
-5. **`hero_position_stats` 扩展 `winCount`**：让它能答「某位置胜率最高/出场最多」，复用 lane_meta 的 `selection_mode` 思路。
-6. **laneOutcome 补 `stompWinCount/stompLossCount/csCount`**：作为对线主导度/补刀证据，丰富 lane 证据。
-7. **matchup 补 `with` 子查询**：暴露盟友协同数据，真正支持「英雄搭配」类查询（呼应已删除的 synergy 限制）。
+4. **新增 `winDay` 趋势工具**（✅ 已收敛 2026-07-06 P1-C4）：新增 `stratz.hero_daily_trends`（day-grain，最近 12 天）+ `brackets.basic_to_full`（basic→full 翻译层；winDay 用 RankBracket full 枚举）。
+5. **`hero_position_stats` 扩展 `winCount`**（✅ 已收敛 2026-07-06 P1-C1）：补 `winCount` + `match_win_rate`；selection_mode(strong/popular) 两分支都生效（hero_id 不截断 / position_id 截断 take）。
+6. **laneOutcome 补 `stompWinCount/stompLossCount/csCount`**（✅ 已收敛 2026-07-06 P1-C2）：三字段 int 透传进 pair_lane/lane_meta evidence，不进胜率计算。
+7. **matchup 补 `with` 子查询**（✅ 已收敛 2026-07-06 P1-C3）：新增 `stratz.hero_synergy_ranking`（ally 协同，`pair_win_rate` + `ally_pair` basis，与 matchup 的 `matchup_win_rate` 区分）。
 
 ### P2 — 一致性与清理
 8. **抽 per-week 扇出 helper**：`_fan_out_weeks(epochs, fetch_fn) -> buckets`，消除 4 处重复。

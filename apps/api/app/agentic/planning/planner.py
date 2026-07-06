@@ -40,7 +40,7 @@ Scope filters:
 - Set each context field at most once per plan; the same scope applies to every
   call. Leave a field null when the user did not constrain it.
 - STRATZ bracket values: HERALD_GUARDIAN, CRUSADER_ARCHON, LEGEND_ANCIENT,
-  DIVINE_IMMORTAL. Map 冠绝/Immortal/Divine to DIVINE_IMMORTAL.
+  DIVINE_IMMORTAL, UNCALIBRATED. Map 冠绝/Immortal/Divine to DIVINE_IMMORTAL.
 - STRATZ position values: POSITION_1 through POSITION_5.
 - weeks_back (STRATZ only) = number of recent completed weeks to fetch as
   separate per-week buckets, 1..8; set it for window queries ("最近两周" -> 2).
@@ -70,6 +70,7 @@ Supported in this development version:
 - lane outcome evidence queries (含对线补刀 cs_count / 碾压度 stomp_win_count/stomp_loss_count — pair_lane_outcome / lane_meta_global)
 - global lane-pair meta evidence queries (强势 / 常见对线组合 -> stratz.lane_meta_global)
 - hero position stats with win rate (某位置胜率最高/出场最多、某英雄最强位置 -> stratz.hero_position_stats; uses selection_mode strong/popular like lane_meta)
+- hero daily win-rate trend (Lina 最近还强吗 / 胜率走势 -> stratz.hero_daily_trends; day-grain, NOT weeks_back — do not set weeks_back for this tool)
 - team evidence collection queries
 - role-based hero meta evidence queries
 - patch impact evidence queries
