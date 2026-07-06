@@ -64,6 +64,8 @@ class HeroPositionStatsInput(BaseModel):
     hero_id: int | None = Field(default=None, gt=0)
     position_id: str | None = None
     take: int = Field(default=15, ge=1, le=50)
+    min_sample_size: int = Field(default=300, ge=0)
+    selection_mode: Literal["popular", "strong"] = "strong"
 
     @model_validator(mode="after")
     def validate_exactly_one_filter(self) -> "HeroPositionStatsInput":
@@ -257,10 +259,15 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
         ToolDefinition(
             name="stratz.hero_position_stats",
             description=(
-                "Return hero position distribution from heroStats.stats. "
-                "Exactly one of hero_id or position_id is required: "
-                "hero_id returns that hero's 5 position rows; position_id "
-                "returns top `take` heroes in that position."
+                "Return hero position stats (matchCount + winCount -> match_win_rate) "
+                "from heroStats.stats. Exactly one of hero_id or position_id is required. "
+                "selection_mode/min_sample_size apply to BOTH branches: 'strong' = "
+                "match_win_rate desc (tie-break match_count desc) — answers 某位置胜率最高 / "
+                "某英雄最强位置; 'popular' = match_count desc — answers 出场最多. hero_id "
+                "returns the hero's position rows ranked but NOT truncated (full "
+                "distribution); position_id returns top `take` heroes in that position "
+                "(take truncates only this branch). win_rate_basis declares match-level "
+                "caliber (winCount/matchCount)."
             ),
             input_model=HeroPositionStatsInput,
             handler=_hero_position_stats_handler(settings),
@@ -286,7 +293,18 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
                 "position_id": ArgContract(
                     description="Optional position filter (POSITION_1 .. POSITION_5).",
                 ),
-                "take": ArgContract(description="Top rows when filtering by position_id."),
+                "take": ArgContract(description="Top rows when filtering by position_id (position_id branch only)."),
+                "min_sample_size": ArgContract(
+                    description="Drop rows below this match_count threshold (both branches)."
+                ),
+                "selection_mode": ArgContract(
+                    description=(
+                        "Ranking basis after the min_sample_size floor, applies to both "
+                        "hero_id and position_id branches. 'strong' = 强势/胜率高 "
+                        "(match_win_rate desc, tie-break match_count desc); "
+                        "'popular' = 常见/出场多 (match_count desc). Default 'strong'."
+                    )
+                ),
             },
             metadata={"game": "dota2", "domain": "hero_position"},
         )
@@ -633,10 +651,16 @@ def hero_position_stats_evidence(result: ToolResult) -> list[EvidenceItem]:
                         "hero_name": hero_name,
                         "position": row.get("position"),
                         "match_count": match_count,
+                        "match_win_rate": row.get("match_win_rate"),
+                        "win_count": row.get("win_count"),
+                        "win_rate_basis": "match: winCount/matchCount",
                         "week_epoch": week_epoch,
                         "week_index": week_index,
                         "window_label": window_label,
-                        "filters": filters,
+                        "filters": {
+                            **filters,
+                            "win_rate_basis": "match: winCount/matchCount",
+                        },
                     },
                     source=result.source,
                     tool_call_id=result.tool_call_id,
@@ -916,14 +940,36 @@ def _hero_position_stats_handler(settings: Settings):
                         week=e,
                     )
                 )
+                rows = [
+                    r
+                    for r in rows
+                    if isinstance(r, dict)
+                    and (r.get("match_count") or 0) >= args.min_sample_size
+                ]
+                if args.selection_mode == "strong":
+                    rows.sort(
+                        key=lambda r: (
+                            float(r.get("match_win_rate") or 0),
+                            int(r.get("match_count") or 0),
+                        ),
+                        reverse=True,
+                    )
+                else:  # popular
+                    rows.sort(
+                        key=lambda r: int(r.get("match_count") or 0), reverse=True
+                    )
                 if args.position_id is not None:
-                    rows = sorted(rows, key=lambda r: r.get("match_count") or 0, reverse=True)
                     rows = rows[: args.take]
                 buckets.append(_bucket(epoch, week_index, rows))
         finally:
             await transport.aclose()
 
         weeks_with_record, missing_epochs = _week_summary(buckets)
+        sort_clause = (
+            "match_win_rate desc, match_count desc"
+            if args.selection_mode == "strong"
+            else "match_count desc"
+        )
         return {
             "hero_id": args.hero_id,
             "position_id": args.position_id,
@@ -931,9 +977,20 @@ def _hero_position_stats_handler(settings: Settings):
             "weeks_with_record": weeks_with_record,
             "missing_week_epochs": missing_epochs,
             "filters": _window_filters(
-                {"bracket_basic_ids": context.bracket},
+                {
+                    "bracket_basic_ids": context.bracket,
+                    "min_sample_size": args.min_sample_size,
+                    "selection_mode": args.selection_mode,
+                },
                 weeks,
                 epochs,
+            ),
+            "selection_policy": (
+                "per_completed_week: "
+                f"selection_mode={args.selection_mode}, "
+                f"min_sample_size>={args.min_sample_size}, "
+                f"sorted_by={sort_clause}"
+                + (f", top={args.take}" if args.position_id is not None else "")
             ),
         }
 

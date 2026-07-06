@@ -92,6 +92,7 @@ query HeroPositionStats(
       heroId
       position
       matchCount
+      winCount
     }
   }
 }
@@ -171,14 +172,20 @@ class StratzHeroes:
             },
         )
         records = payload["data"]["heroStats"]["stats"]
-        return [
-            {
-                "hero_id": record.get("heroId"),
-                "position": record.get("position"),
-                "match_count": int(record.get("matchCount") or 0),
-            }
-            for record in records
-        ]
+        normalized: list[dict[str, Any]] = []
+        for record in records:
+            match_count = int(record.get("matchCount") or 0)
+            win_count = int(record.get("winCount") or 0)
+            normalized.append(
+                {
+                    "hero_id": record.get("heroId"),
+                    "position": record.get("position"),
+                    "match_count": match_count,
+                    "win_count": win_count,
+                    "match_win_rate": self._rate(win_count, match_count),
+                }
+            )
+        return normalized
 
     @classmethod
     def _normalize_matchup_side(cls, side: list[dict[str, Any]]) -> list[dict[str, Any]]:

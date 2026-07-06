@@ -178,3 +178,31 @@ def test_stratz_heroes_matchup_preserves_stratz_order() -> None:
     result = asyncio.run(exercise())
     # Raw STRATZ order preserved — NOT reordered by synergy desc.
     assert [row["hero_id"] for row in result["advantage"]] == [66, 71]
+
+
+def test_stratz_heroes_normalizes_position_stats() -> None:
+    transport = FakeTransport(
+        {
+            "data": {
+                "heroStats": {
+                    "stats": [
+                        {"heroId": 8, "position": "POSITION_1", "matchCount": 100, "winCount": 55}
+                    ]
+                }
+            }
+        }
+    )
+    heroes = StratzHeroes(transport)
+
+    async def exercise() -> list[dict]:
+        try:
+            return await heroes.hero_position_stats(hero_ids=[8])
+        finally:
+            await transport.aclose()
+
+    result = asyncio.run(exercise())
+    assert result[0]["hero_id"] == 8
+    assert result[0]["position"] == "POSITION_1"
+    assert result[0]["match_count"] == 100
+    assert result[0]["win_count"] == 55
+    assert result[0]["match_win_rate"] == 0.55

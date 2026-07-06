@@ -98,13 +98,22 @@ class FakeHeroes:
             },
         ]
 
-    async def hero_position_stats(self, **kwargs) -> list[dict]:
+    async def hero_position_stats(self, *, hero_ids=None, position_ids=None, **kwargs) -> list[dict]:
+        # Emulate integration-layer normalize output (win_count + match_win_rate).
+        if hero_ids:
+            hid = hero_ids[0]
+            return [
+                {"hero_id": hid, "position": "POSITION_1", "match_count": 31000, "win_count": 15500, "match_win_rate": 0.5},
+                {"hero_id": hid, "position": "POSITION_2", "match_count": 1500, "win_count": 870, "match_win_rate": 0.58},
+                {"hero_id": hid, "position": "POSITION_3", "match_count": 400, "win_count": 220, "match_win_rate": 0.55},
+                {"hero_id": hid, "position": "POSITION_4", "match_count": 120, "win_count": 60, "match_win_rate": 0.5},
+                {"hero_id": hid, "position": "POSITION_5", "match_count": 80, "win_count": 50, "match_win_rate": 0.625},
+            ]
+        pos = position_ids[0] if position_ids else "POSITION_1"
         return [
-            {"hero_id": 8, "position": "POSITION_1", "match_count": 31000},
-            {"hero_id": 8, "position": "POSITION_2", "match_count": 1500},
-            {"hero_id": 8, "position": "POSITION_3", "match_count": 400},
-            {"hero_id": 8, "position": "POSITION_4", "match_count": 120},
-            {"hero_id": 8, "position": "POSITION_5", "match_count": 80},
+            {"hero_id": 8, "position": pos, "match_count": 5000, "win_count": 2600, "match_win_rate": 0.52},
+            {"hero_id": 7, "position": pos, "match_count": 4000, "win_count": 2300, "match_win_rate": 0.575},
+            {"hero_id": 11, "position": pos, "match_count": 3000, "win_count": 1650, "match_win_rate": 0.55},
         ]
 
 
@@ -505,7 +514,7 @@ def test_hero_position_stats_evidence_maps_hero_names() -> None:
                     "week_index": 1,
                     "window_label": "latest_completed_week",
                     "rows": [
-                        {"hero_id": 8, "position": "POSITION_1", "match_count": 31000},
+                        {"hero_id": 8, "position": "POSITION_1", "match_count": 31000, "win_count": 15500, "match_win_rate": 0.5},
                     ],
                 },
             ],
@@ -520,6 +529,9 @@ def test_hero_position_stats_evidence_maps_hero_names() -> None:
     assert stat.value["hero_id"] == 8
     assert stat.value["hero_name"] == "Juggernaut"
     assert stat.value["week_epoch"] == 1782345600
+    assert stat.value["match_win_rate"] == 0.5
+    assert stat.value["win_rate_basis"] == "match: winCount/matchCount"
+    assert stat.value["filters"]["win_rate_basis"] == "match: winCount/matchCount"
 
     sample = by_kind["sample_size"]
     assert sample.value["hero_name"] == "Juggernaut"
@@ -534,7 +546,7 @@ def test_hero_position_stats_requires_exactly_one_filter(monkeypatch) -> None:
             ToolCall(
                 id="pos",
                 tool="stratz.hero_position_stats",
-                args={"hero_id": 8},
+                args={"hero_id": 8, "min_sample_size": 0},
             ),
             QueryContext(bracket=["LEGEND_ANCIENT"]),
         )
@@ -563,6 +575,63 @@ def test_hero_position_stats_rejects_both_filters(monkeypatch) -> None:
 
     assert result.status == "error"
     assert "exactly one of" in result.error
+
+
+def test_hero_position_stats_hero_id_strong_ranks_by_winrate(monkeypatch) -> None:
+    """hero_id branch: selection_mode applies, rows ranked by match_win_rate desc
+    (tie-break match_count desc), NOT truncated by take."""
+    monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzTransport", FakeTransport)
+    monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzHeroes", FakeHeroes)
+
+    result = asyncio.run(
+        ToolExecutor(_registry(token="token")).execute(
+            ToolCall(
+                id="pos",
+                tool="stratz.hero_position_stats",
+                args={"hero_id": 8, "selection_mode": "strong", "min_sample_size": 0},
+            ),
+            QueryContext(bracket=["LEGEND_ANCIENT"]),
+        )
+    )
+
+    assert result.status == "ok"
+    rows = result.data["weekly_buckets"][0]["rows"]
+    # hero_id branch returns the full distribution, not truncated by take.
+    assert len(rows) == 5
+    # strong = match_win_rate desc, tie-break match_count desc.
+    assert [r["position"] for r in rows] == [
+        "POSITION_5", "POSITION_2", "POSITION_3", "POSITION_1", "POSITION_4",
+    ]
+    assert "selection_policy" in result.data
+    assert "match_win_rate desc" in result.data["selection_policy"]
+
+
+def test_hero_position_stats_position_id_strong_truncates(monkeypatch) -> None:
+    """position_id branch: selection_mode strong ranks by match_win_rate desc,
+    then truncated to `take`."""
+    monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzTransport", FakeTransport)
+    monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzHeroes", FakeHeroes)
+
+    result = asyncio.run(
+        ToolExecutor(_registry(token="token")).execute(
+            ToolCall(
+                id="pos",
+                tool="stratz.hero_position_stats",
+                args={
+                    "position_id": "POSITION_1",
+                    "selection_mode": "strong",
+                    "take": 2,
+                    "min_sample_size": 0,
+                },
+            ),
+            QueryContext(bracket=["LEGEND_ANCIENT"]),
+        )
+    )
+
+    assert result.status == "ok"
+    rows = result.data["weekly_buckets"][0]["rows"]
+    # Truncated to take=2; strong ranks hero 7 (0.575) > hero 11 (0.55) > hero 8 (0.52).
+    assert [r["hero_id"] for r in rows] == [7, 11]
 
 
 def test_stratz_pair_lane_outcome_requires_token() -> None:

@@ -68,6 +68,7 @@ Supported in this development version:
 - enemy hero counter / hero matchup evidence queries
 - lane outcome evidence queries
 - global lane-pair meta evidence queries (强势 / 常见对线组合 -> stratz.lane_meta_global)
+- hero position stats with win rate (某位置胜率最高/出场最多、某英雄最强位置 -> stratz.hero_position_stats; uses selection_mode strong/popular like lane_meta)
 - team evidence collection queries
 - role-based hero meta evidence queries
 - patch impact evidence queries
@@ -78,6 +79,13 @@ Lane-pair meta selection_mode (stratz.lane_meta_global):
   raise min_sample_size (e.g. 500-800) so small-sample high win-rate noise is
   dropped before ranking. 常见 / 出场多 / 热门 -> "popular" (sort by match_count
   desc). Default is "strong"; pass "popular" explicitly for pick-volume queries.
+
+Position stats selection_mode (stratz.hero_position_stats):
+- same strong/popular semantics, applies to BOTH hero_id and position_id branches.
+  'strong' = match_win_rate desc (某位置胜率最高 / 某英雄最强位置); 'popular' =
+  match_count desc (出场最多 / 常见位置). Raise min_sample_size for 'strong' to
+  drop small-sample noise; lower it (or 0) for 'popular' to keep the full
+  position distribution.
 
 Unsupported for now:
 - claim verification
