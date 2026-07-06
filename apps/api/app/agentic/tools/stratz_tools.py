@@ -112,7 +112,9 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
                 "(target hero + partner). Fetches the target hero's lane "
                 "outcome and filters to the partner. Emits 0 rows if the "
                 "partner pair has no recorded sample; the critic then "
-                "flags insufficient evidence."
+                "flags insufficient evidence. Also returns stomp_win_count/"
+                "stomp_loss_count/cs_count as lane dominance / cs evidence "
+                "(win_count/loss_count/draw_count are lane-level; match_win_rate is match-level)."
             ),
             input_model=PairLaneOutcomeInput,
             handler=_pair_lane_outcome_handler(settings),
@@ -220,8 +222,9 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
                 "most-played pairs. `match_win_rate` is match-level "
                 "(matchWinCount/matchCount, the pair's game win rate), NOT "
                 "lane-level (winCount/lossCount track lane outcome instead). "
-                "Each row carries `win_rate_basis` declaring this caliber. "
-                "Returns the top `highlight_top` rows per completed week."
+                "Each row also carries stomp_win_count/stomp_loss_count/cs_count "
+                "as lane dominance / cs evidence, and `win_rate_basis` declaring "
+                "the win-rate caliber. Returns the top `highlight_top` rows per completed week."
             ),
             input_model=LaneMetaGlobalInput,
             handler=_lane_meta_global_handler(settings),
@@ -400,6 +403,9 @@ def pair_lane_outcome_evidence(result: ToolResult) -> list[EvidenceItem]:
                     "win_count": pair.get("win_count"),
                     "loss_count": pair.get("loss_count"),
                     "draw_count": pair.get("draw_count"),
+                    "stomp_win_count": pair.get("stomp_win_count"),
+                    "stomp_loss_count": pair.get("stomp_loss_count"),
+                    "cs_count": pair.get("cs_count"),
                     "week_epoch": week_epoch,
                     "week_index": week_index,
                     "window_label": window_label,
@@ -574,6 +580,9 @@ def lane_meta_global_evidence(result: ToolResult) -> list[EvidenceItem]:
                         "match_count": match_count,
                         "match_win_rate": row.get("match_win_rate"),
                         "win_rate_basis": "match: matchWinCount/matchCount",
+                        "stomp_win_count": row.get("stomp_win_count"),
+                        "stomp_loss_count": row.get("stomp_loss_count"),
+                        "cs_count": row.get("cs_count"),
                         "is_with": data.get("is_with"),
                         "week_epoch": week_epoch,
                         "week_index": week_index,

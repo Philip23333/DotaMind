@@ -106,6 +106,9 @@ def test_stratz_heroes_normalizes_lane_outcomes() -> None:
                                 "lossCount": 8,
                                 "drawCount": 7,
                                 "matchWinCount": 15,
+                                "stompWinCount": 5,
+                                "stompLossCount": 3,
+                                "csCount": 200,
                             }
                         ]
                     }
@@ -124,6 +127,9 @@ def test_stratz_heroes_normalizes_lane_outcomes() -> None:
     assert result[0]["hero_id"] == 86
     assert result[0]["position"] == "POSITION_4"
     assert result[0]["match_win_rate"] == 0.6
+    assert result[0]["stomp_win_count"] == 5
+    assert result[0]["stomp_loss_count"] == 3
+    assert result[0]["cs_count"] == 200
 
 
 def test_stratz_heroes_matchup_preserves_stratz_order() -> None:

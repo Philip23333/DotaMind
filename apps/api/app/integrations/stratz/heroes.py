@@ -69,6 +69,9 @@ query HeroLaneOutcome(
       lossCount
       drawCount
       matchWinCount
+      stompWinCount
+      stompLossCount
+      csCount
     }
   }
 }
@@ -224,6 +227,9 @@ class StratzHeroes:
             "draw_count": int(record.get("drawCount") or 0),
             "match_win_count": match_win_count,
             "match_win_rate": cls._rate(match_win_count, match_count),
+            "stomp_win_count": int(record.get("stompWinCount") or 0),
+            "stomp_loss_count": int(record.get("stompLossCount") or 0),
+            "cs_count": int(record.get("csCount") or 0),
         }
 
     @staticmethod
