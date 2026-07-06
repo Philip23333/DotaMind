@@ -56,6 +56,18 @@ class FakeHeroes:
             ],
         }
 
+    async def hero_synergy_matchup(self, hero_id, **kwargs) -> dict:
+        return {
+            "hero_id": hero_id,
+            "advantage": [
+                {"hero_id": 65, "target_hero_id": hero_id, "match_count": 250, "win_count": 150, "pair_win_rate": 0.6, "synergy": 5.1},
+                {"hero_id": 71, "target_hero_id": hero_id, "match_count": 120, "win_count": 70, "pair_win_rate": 0.5833, "synergy": 2.0},
+            ],
+            "disadvantage": [
+                {"hero_id": 10, "target_hero_id": hero_id, "match_count": 300, "win_count": 120, "pair_win_rate": 0.4, "synergy": -5.5},
+            ],
+        }
+
     async def lane_outcome(self, hero_id, *, is_with, **kwargs) -> list[dict]:
         if hero_id is None:
             return [
@@ -193,6 +205,79 @@ def test_hero_matchup_ranking_keeps_groups_separate(monkeypatch) -> None:
     assert [row["hero_id"] for row in advantage] == [66, 71]
     assert [row["hero_id"] for row in disadvantage] == [10]
     assert result.data["filters"]["min_sample_size"] == 100
+
+
+def test_hero_synergy_ranking_keeps_groups_separate(monkeypatch) -> None:
+    """Ally synergy ranking mirrors matchup ranking shape but from .with (allies).
+    required_evidence must use hero_synergy_ranking_row (not v2.5 legacy synergy_win_rate)."""
+    monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzTransport", FakeTransport)
+    monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzHeroes", FakeHeroes)
+
+    result = asyncio.run(
+        ToolExecutor(_registry(token="token")).execute(
+            ToolCall(
+                id="syn",
+                tool="stratz.hero_synergy_ranking",
+                args={"hero_id": 8, "side": "with", "take": 5, "min_sample_size": 100},
+            ),
+            QueryContext(),
+        )
+    )
+
+    assert result.status == "ok"
+    rows = result.data["weekly_buckets"][0]["rows"]
+    advantage = [row for row in rows if row["source_side"] == "advantage"]
+    disadvantage = [row for row in rows if row["source_side"] == "disadvantage"]
+    # Sorted by synergy desc within each group; groups kept separate.
+    assert [row["hero_id"] for row in advantage] == [65, 71]
+    assert [row["hero_id"] for row in disadvantage] == [10]
+    # Caliber is ally-pair, distinct from matchup's matchup_win_rate.
+    assert advantage[0]["pair_win_rate"] == 0.6
+    assert "matchup_win_rate" not in advantage[0]
+
+
+def test_hero_synergy_ranking_evidence_uses_ally_pair_basis() -> None:
+    from app.agentic.tools.stratz_tools import hero_synergy_ranking_evidence
+
+    tool_result = ToolResult(
+        tool_call_id="syn",
+        tool="stratz.hero_synergy_ranking",
+        status="ok",
+        latency_ms=1,
+        source=ToolSource(name="STRATZ", kind="public_graphql_api"),
+        data={
+            "hero_id": 8,
+            "side": "with",
+            "filters": {"take": 10, "min_sample_size": 100, "bracket_basic_ids": None},
+            "weekly_buckets": [
+                {
+                    "week_epoch": 1782345600,
+                    "week_index": 1,
+                    "window_label": "latest_completed_week",
+                    "rows": [
+                        {
+                            "source_side": "advantage",
+                            "hero_id": 65,
+                            "target_hero_id": 8,
+                            "match_count": 250,
+                            "win_count": 150,
+                            "pair_win_rate": 0.6,
+                            "synergy": 5.1,
+                        }
+                    ],
+                }
+            ],
+        },
+    )
+
+    evidence = hero_synergy_ranking_evidence(tool_result)
+    by_kind = {item.kind: item for item in evidence}
+
+    row = by_kind["hero_synergy_ranking_row"]
+    assert row.value["pair_win_rate"] == 0.6
+    assert row.value["win_rate_basis"] == "ally_pair: winCount/matchCount"
+    assert row.value["filters"]["win_rate_basis"] == "ally_pair: winCount/matchCount"
+    assert " with " in row.subject
 
 
 def test_lane_meta_global_truncates_to_highlight_top(monkeypatch) -> None:

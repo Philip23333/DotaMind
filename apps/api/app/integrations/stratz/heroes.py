@@ -45,6 +45,42 @@ query HeroVsHeroMatchup(
 }
 """
 
+_HERO_SYNERGY_QUERY = """
+query HeroSynergyMatchup(
+  $heroId: Short!,
+  $take: Int,
+  $week: Long,
+  $bracketBasicIds: [RankBracketBasicEnum!]
+) {
+  heroStats {
+    heroVsHeroMatchup(
+      heroId: $heroId,
+      take: $take,
+      week: $week,
+      bracketBasicIds: $bracketBasicIds
+    ) {
+      advantage {
+        with {
+          heroId2
+          matchCount
+          winCount
+          synergy
+        }
+      }
+      disadvantage {
+        with {
+          heroId2
+          matchCount
+          winCount
+          synergy
+        }
+      }
+    }
+  }
+}
+"""
+
+
 _LANE_OUTCOME_QUERY = """
 query HeroLaneOutcome(
   $heroId: Short,
@@ -133,6 +169,31 @@ class StratzHeroes:
             "disadvantage": self._normalize_matchup_side(raw.get("disadvantage", [])),
         }
 
+    async def hero_synergy_matchup(
+        self,
+        hero_id: int,
+        *,
+        take: int = 10,
+        week: int | None = None,
+        bracket_basic_ids: list[str] | None = None,
+    ) -> dict[str, Any]:
+        payload = await self.transport.graphql(
+            "HeroSynergyMatchup",
+            _HERO_SYNERGY_QUERY,
+            {
+                "heroId": hero_id,
+                "take": take,
+                "week": week,
+                "bracketBasicIds": bracket_basic_ids,
+            },
+        )
+        raw = payload["data"]["heroStats"]["heroVsHeroMatchup"]
+        return {
+            "hero_id": hero_id,
+            "advantage": self._normalize_synergy_side(raw.get("advantage", []), hero_id),
+            "disadvantage": self._normalize_synergy_side(raw.get("disadvantage", []), hero_id),
+        }
+
     async def lane_outcome(
         self,
         hero_id: int | None,
@@ -208,6 +269,32 @@ class StratzHeroes:
                         "match_count": match_count,
                         "win_count": win_count,
                         "matchup_win_rate": cls._rate(win_count, match_count),
+                        "synergy": record.get("synergy"),
+                    }
+                )
+        return normalized
+
+    @classmethod
+    def _normalize_synergy_side(
+        cls, side: list[dict[str, Any]], target_hero_id: int
+    ) -> list[dict[str, Any]]:
+        # Thin relay: normalize the `with` (ally) sub-rows only, do NOT sort
+        # (ranking happens in the agentic layer). target_hero_id is the method
+        # arg — live smoke confirmed heroId1 == the arg, but we don't
+        # hard-depend on it. pair_win_rate is ally-pair caliber
+        # (winCount/matchCount), NOT matchup(vs). See audit doc §4 P1-7.
+        normalized: list[dict[str, Any]] = []
+        for group in side:
+            for record in group.get("with") or []:
+                match_count = int(record.get("matchCount") or 0)
+                win_count = int(record.get("winCount") or 0)
+                normalized.append(
+                    {
+                        "hero_id": record.get("heroId2"),
+                        "target_hero_id": target_hero_id,
+                        "match_count": match_count,
+                        "win_count": win_count,
+                        "pair_win_rate": cls._rate(win_count, match_count),
                         "synergy": record.get("synergy"),
                     }
                 )

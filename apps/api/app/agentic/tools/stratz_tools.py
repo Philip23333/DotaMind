@@ -53,6 +53,13 @@ class HeroMatchupRankingInput(BaseModel):
     min_sample_size: int = Field(default=100, ge=0)
 
 
+class HeroSynergyRankingInput(BaseModel):
+    hero_id: int = Field(gt=0)
+    side: Literal["with"] = "with"
+    take: int = Field(default=10, ge=1, le=50)
+    min_sample_size: int = Field(default=100, ge=0)
+
+
 class LaneMetaGlobalInput(BaseModel):
     is_with: bool
     min_sample_size: int = Field(default=200, ge=0)
@@ -205,6 +212,55 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
                 ),
             },
             metadata={"game": "dota2", "domain": "hero_matchup"},
+        )
+    )
+    registry.register(
+        ToolDefinition(
+            name="stratz.hero_synergy_ranking",
+            description=(
+                "Return STRATZ hero-hero ALLY synergy ranking rows for a target "
+                "hero (ally pairs, from heroVsHeroMatchup.with). Ranking basis is "
+                "`synergy` desc (STRATZ's composite synergy score, sample-weighted), "
+                "tie-break `match_count` desc; sorting and the `min_sample_size` floor "
+                "are applied in the agentic layer after the integration layer normalizes "
+                "field names only. Keeps advantage (strong allies) and disadvantage "
+                "(weak allies) groups separate (top `take` per group); does NOT merge. "
+                "side='with' is the only supported value. Use this for 'teammate X, what "
+                "should I pick to synergize' queries; use stratz.hero_matchup_ranking for "
+                "enemy counter-picks. Each row carries `pair_win_rate` (= winCount/matchCount, "
+                "the ally pair's game win rate) with `win_rate_basis` declaring the ally-pair "
+                "caliber (distinct from matchup's matchup_win_rate)."
+            ),
+            input_model=HeroSynergyRankingInput,
+            handler=_hero_synergy_ranking_handler(settings),
+            source=ToolSource(
+                name="STRATZ",
+                kind="public_graphql_api",
+                url=settings.stratz_graphql_url,
+                status="live",
+            ),
+            evidence_extractor=hero_synergy_ranking_evidence,
+            evidence_kinds=("hero_synergy_ranking_row", "sample_size"),
+            arg_contracts={
+                "hero_id": ArgContract(
+                    description="Target hero id.",
+                    accepts_refs=(
+                        AcceptedRef(
+                            from_tool="resolve_hero",
+                            path="data.hero.hero_id",
+                            type="int",
+                        ),
+                    ),
+                ),
+                "side": ArgContract(
+                    description="Synergy side. Only 'with' is supported in this version.",
+                ),
+                "take": ArgContract(description="Top rows per advantage/disadvantage group."),
+                "min_sample_size": ArgContract(
+                    description="Drop rows below this match_count threshold."
+                ),
+            },
+            metadata={"game": "dota2", "domain": "hero_synergy"},
         )
     )
     registry.register(
@@ -537,6 +593,96 @@ def hero_matchup_ranking_evidence(result: ToolResult) -> list[EvidenceItem]:
     return evidence
 
 
+def hero_synergy_ranking_evidence(result: ToolResult) -> list[EvidenceItem]:
+    data = result.data if isinstance(result.data, dict) else {}
+    target_hero_id = data.get("hero_id")
+    filters = data.get("filters") if isinstance(data.get("filters"), dict) else {}
+    buckets = data.get("weekly_buckets")
+    if not isinstance(buckets, list):
+        return []
+    names = _hero_name_index()
+    evidence: list[EvidenceItem] = []
+    for bucket in buckets:
+        if not isinstance(bucket, dict):
+            continue
+        week_epoch = bucket.get("week_epoch")
+        week_index = bucket.get("week_index")
+        window_label = bucket.get("window_label")
+        rows = bucket.get("rows") or []
+        for index, row in enumerate(rows):
+            if not isinstance(row, dict):
+                continue
+            match_count = row.get("match_count")
+            hero_id = row.get("hero_id")
+            resolved_target_id = row.get("target_hero_id", target_hero_id)
+            hero_name = names.get(hero_id) if isinstance(hero_id, int) else None
+            resolved_target_name = (
+                names.get(resolved_target_id)
+                if isinstance(resolved_target_id, int)
+                else None
+            )
+            hero_label = hero_name or hero_id
+            resolved_target_label = resolved_target_name or resolved_target_id
+            source_side = row.get("source_side", "advantage")
+            evidence.append(
+                EvidenceItem(
+                    id=(
+                        f"{result.tool_call_id}:hero_synergy_ranking_row:"
+                        f"{source_side}:{hero_id}:{week_epoch}:{index}"
+                    ),
+                    kind="hero_synergy_ranking_row",
+                    subject=f"{hero_label} with {resolved_target_label} ({window_label})",
+                    value={
+                        "source_side": source_side,
+                        "hero_id": hero_id,
+                        "hero_name": hero_name,
+                        "target_hero_id": resolved_target_id,
+                        "target_hero_name": resolved_target_name,
+                        "pair_win_rate": row.get("pair_win_rate"),
+                        "win_rate_basis": "ally_pair: winCount/matchCount",
+                        "match_count": match_count,
+                        "synergy": row.get("synergy"),
+                        "week_epoch": week_epoch,
+                        "week_index": week_index,
+                        "window_label": window_label,
+                        "filters": {
+                            **filters,
+                            "win_rate_basis": "ally_pair: winCount/matchCount",
+                        },
+                    },
+                    source=result.source,
+                    tool_call_id=result.tool_call_id,
+                    tool=result.tool,
+                )
+            )
+            if match_count is not None:
+                evidence.append(
+                    EvidenceItem(
+                        id=(
+                            f"{result.tool_call_id}:sample_size:synergy:"
+                            f"{source_side}:{hero_id}:{week_epoch}:{index}"
+                        ),
+                        kind="sample_size",
+                        subject=f"{hero_label} with {resolved_target_label} ({window_label})",
+                        value={
+                            "sample_size": match_count,
+                            "hero_id": hero_id,
+                            "hero_name": hero_name,
+                            "target_hero_id": resolved_target_id,
+                            "target_hero_name": resolved_target_name,
+                            "week_epoch": week_epoch,
+                            "week_index": week_index,
+                            "window_label": window_label,
+                            "filters": filters,
+                        },
+                        source=result.source,
+                        tool_call_id=result.tool_call_id,
+                        tool=result.tool,
+                    )
+                )
+    return evidence
+
+
 def lane_meta_global_evidence(result: ToolResult) -> list[EvidenceItem]:
     data = result.data if isinstance(result.data, dict) else {}
     filters = data.get("filters") if isinstance(data.get("filters"), dict) else {}
@@ -841,6 +987,64 @@ def _dedupe_pair_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         ):
             seen[key] = row
     return list(seen.values())
+
+
+def _hero_synergy_ranking_handler(settings: Settings):
+    async def handle(
+        args: HeroSynergyRankingInput,
+        context: QueryContext,
+    ) -> dict[str, Any]:
+        if not settings.stratz_token:
+            raise ValueError("METAMIND_STRATZ_TOKEN is required")
+
+        weeks, epochs = _resolve_week_window(context.weeks_back)
+        transport = StratzTransport(settings.stratz_graphql_url, settings.stratz_token)
+        heroes = StratzHeroes(transport)
+        buckets: list[dict[str, Any]] = []
+        try:
+            for week_index, epoch in enumerate(epochs, start=1):
+                data = await _with_retry(
+                    lambda e=epoch: heroes.hero_synergy_matchup(
+                        args.hero_id,
+                        take=max(args.take, 50),
+                        week=e,
+                        bracket_basic_ids=context.bracket,
+                    )
+                )
+                advantage = _filter_matchup_rows(
+                    data.get("advantage", []), args.min_sample_size, args.take
+                )
+                disadvantage = _filter_matchup_rows(
+                    data.get("disadvantage", []), args.min_sample_size, args.take
+                )
+                rows = [
+                    {"source_side": "advantage", **row} for row in advantage
+                ] + [
+                    {"source_side": "disadvantage", **row} for row in disadvantage
+                ]
+                buckets.append(_bucket(epoch, week_index, rows))
+        finally:
+            await transport.aclose()
+
+        weeks_with_record, missing_epochs = _week_summary(buckets)
+        return {
+            "hero_id": args.hero_id,
+            "side": args.side,
+            "weekly_buckets": buckets,
+            "weeks_with_record": weeks_with_record,
+            "missing_week_epochs": missing_epochs,
+            "filters": _window_filters(
+                {
+                    "take": args.take,
+                    "min_sample_size": args.min_sample_size,
+                    "bracket_basic_ids": context.bracket,
+                },
+                weeks,
+                epochs,
+            ),
+        }
+
+    return handle
 
 
 def _lane_meta_global_handler(settings: Settings):

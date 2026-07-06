@@ -212,3 +212,50 @@ def test_stratz_heroes_normalizes_position_stats() -> None:
     assert result[0]["match_count"] == 100
     assert result[0]["win_count"] == 55
     assert result[0]["match_win_rate"] == 0.55
+
+
+def test_stratz_heroes_normalizes_hero_synergy() -> None:
+    transport = FakeTransport(
+        {
+            "data": {
+                "heroStats": {
+                    "heroVsHeroMatchup": {
+                        "advantage": [
+                            {
+                                "heroId": 8,
+                                "matchCountWith": 50000,
+                                "with": [
+                                    {"heroId1": 8, "heroId2": 65, "matchCount": 200, "winCount": 120, "synergy": 7.7},
+                                ],
+                            }
+                        ],
+                        "disadvantage": [
+                            {
+                                "heroId": 8,
+                                "matchCountWith": 62580,
+                                "with": [
+                                    {"heroId1": 8, "heroId2": 89, "matchCount": 14, "winCount": 5, "synergy": -16.9},
+                                ],
+                            }
+                        ],
+                    }
+                }
+            }
+        }
+    )
+    heroes = StratzHeroes(transport)
+
+    async def exercise() -> dict:
+        try:
+            return await heroes.hero_synergy_matchup(8, take=5)
+        finally:
+            await transport.aclose()
+
+    result = asyncio.run(exercise())
+    assert result["hero_id"] == 8
+    assert result["advantage"][0]["hero_id"] == 65
+    assert result["advantage"][0]["target_hero_id"] == 8
+    assert result["advantage"][0]["pair_win_rate"] == 0.6
+    assert result["advantage"][0]["synergy"] == 7.7
+    assert result["disadvantage"][0]["hero_id"] == 89
+    assert result["disadvantage"][0]["synergy"] == -16.9

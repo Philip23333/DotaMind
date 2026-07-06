@@ -66,6 +66,7 @@ Decision:
 
 Supported in this development version:
 - enemy hero counter / hero matchup evidence queries
+- hero ally synergy / teammate combo evidence queries (队友 X 选什么配合 -> stratz.hero_synergy_ranking; distinct from hero_matchup_ranking which is enemy counter-pick)
 - lane outcome evidence queries (含对线补刀 cs_count / 碾压度 stomp_win_count/stomp_loss_count — pair_lane_outcome / lane_meta_global)
 - global lane-pair meta evidence queries (强势 / 常见对线组合 -> stratz.lane_meta_global)
 - hero position stats with win rate (某位置胜率最高/出场最多、某英雄最强位置 -> stratz.hero_position_stats; uses selection_mode strong/popular like lane_meta)
