@@ -79,7 +79,7 @@ def test_stratz_heroes_normalizes_hero_matchups() -> None:
 
     assert result["hero_id"] == 25
     assert result["advantage"][0]["hero_id"] == 66
-    assert result["advantage"][0]["win_rate"] == 0.6
+    assert result["advantage"][0]["matchup_win_rate"] == 0.6
     assert result["disadvantage"][0]["hero_id"] == 94
     assert result["disadvantage"][0]["synergy"] == -2.0
     # Integration layer must not over-fetch provider native win rates —

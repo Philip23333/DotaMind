@@ -197,7 +197,7 @@ class StratzHeroes:
                         "target_hero_id": record.get("heroId1"),
                         "match_count": match_count,
                         "win_count": win_count,
-                        "win_rate": cls._rate(win_count, match_count),
+                        "matchup_win_rate": cls._rate(win_count, match_count),
                         "synergy": record.get("synergy"),
                     }
                 )

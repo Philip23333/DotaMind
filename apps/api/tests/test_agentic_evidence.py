@@ -92,7 +92,7 @@ def test_evidence_graph_aggregates_matchup_and_sample_size() -> None:
                             "source_side": "advantage",
                             "hero_id": 66,
                             "target_hero_id": 25,
-                            "win_rate": 0.57,
+                            "matchup_win_rate": 0.57,
                             "match_count": 247,
                             "synergy": 5.9,
                         }
@@ -111,7 +111,15 @@ def test_evidence_graph_aggregates_matchup_and_sample_size() -> None:
         "matchup_ranking_row",
         "sample_size",
     ]
-    assert graph.evidence[0].value["win_rate"] == 0.57
+    assert graph.evidence[0].value["matchup_win_rate"] == 0.57
+    assert (
+        graph.evidence[0].value["win_rate_basis"]
+        == "matchup: winCount/matchCount"
+    )
+    assert (
+        graph.evidence[0].value["filters"]["win_rate_basis"]
+        == "matchup: winCount/matchCount"
+    )
     assert graph.evidence[0].value["filters"]["bracket_basic_ids"] == [
         "DIVINE_IMMORTAL"
     ]

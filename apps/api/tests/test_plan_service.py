@@ -75,7 +75,7 @@ def test_plan_service_executes_planned_counter_pick(monkeypatch) -> None:
                         "hero_id": 66,
                         "target_hero_id": 25,
                         "match_count": 100,
-                        "win_rate": 0.55,
+                        "matchup_win_rate": 0.55,
                         "synergy": 2.0,
                     }
                 ],

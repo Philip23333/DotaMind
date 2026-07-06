@@ -247,7 +247,7 @@ def _registry() -> ToolRegistry:
                                 "hero_id": 66,
                                 "target_hero_id": args.hero_id,
                                 "match_count": 100,
-                                "win_rate": 0.55,
+                                "matchup_win_rate": 0.55,
                             }
                         ],
                     },

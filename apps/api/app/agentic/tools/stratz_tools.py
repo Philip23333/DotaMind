@@ -165,6 +165,9 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
                 "after the integration layer normalizes field names only. "
                 "Keeps advantage and disadvantage groups separate (top "
                 "`take` per group); does NOT merge into a single ranking. "
+                "Each row carries `matchup_win_rate` (= winCount/matchCount, "
+                "the target hero's game win rate versus that opponent) with "
+                "`win_rate_basis` declaring the caliber. "
                 "side='vs' is the only supported value in this version. "
                 "This is evidence ranking, not a final draft recommendation."
             ),
@@ -212,8 +215,11 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
                 "`selection_mode` picks the ranking basis: 'strong' ranks by "
                 "match_win_rate desc (tie-break match_count desc) — the "
                 "strongest pairs; 'popular' ranks by match_count desc — the "
-                "most-played pairs. Returns the top `highlight_top` rows per "
-                "completed week."
+                "most-played pairs. `match_win_rate` is match-level "
+                "(matchWinCount/matchCount, the pair's game win rate), NOT "
+                "lane-level (winCount/lossCount track lane outcome instead). "
+                "Each row carries `win_rate_basis` declaring this caliber. "
+                "Returns the top `highlight_top` rows per completed week."
             ),
             input_model=LaneMetaGlobalInput,
             handler=_lane_meta_global_handler(settings),
@@ -372,13 +378,17 @@ def pair_lane_outcome_evidence(result: ToolResult) -> list[EvidenceItem]:
                     "position": pair.get("position"),
                     "match_count": match_count,
                     "match_win_rate": pair.get("match_win_rate"),
+                    "win_rate_basis": "match: matchWinCount/matchCount",
                     "win_count": pair.get("win_count"),
                     "loss_count": pair.get("loss_count"),
                     "draw_count": pair.get("draw_count"),
                     "week_epoch": week_epoch,
                     "week_index": week_index,
                     "window_label": window_label,
-                    "filters": filters,
+                    "filters": {
+                        **filters,
+                        "win_rate_basis": "match: matchWinCount/matchCount",
+                    },
                 },
                 source=result.source,
                 tool_call_id=result.tool_call_id,
@@ -458,13 +468,17 @@ def hero_matchup_ranking_evidence(result: ToolResult) -> list[EvidenceItem]:
                         "hero_name": hero_name,
                         "target_hero_id": resolved_target_id,
                         "target_hero_name": resolved_target_name,
-                        "win_rate": row.get("win_rate"),
+                        "matchup_win_rate": row.get("matchup_win_rate"),
+                        "win_rate_basis": "matchup: winCount/matchCount",
                         "match_count": match_count,
                         "synergy": row.get("synergy"),
                         "week_epoch": week_epoch,
                         "week_index": week_index,
                         "window_label": window_label,
-                        "filters": filters,
+                        "filters": {
+                            **filters,
+                            "win_rate_basis": "matchup: winCount/matchCount",
+                        },
                     },
                     source=result.source,
                     tool_call_id=result.tool_call_id,
@@ -541,11 +555,15 @@ def lane_meta_global_evidence(result: ToolResult) -> list[EvidenceItem]:
                         "target_hero_name": target_hero_name,
                         "match_count": match_count,
                         "match_win_rate": row.get("match_win_rate"),
+                        "win_rate_basis": "match: matchWinCount/matchCount",
                         "is_with": data.get("is_with"),
                         "week_epoch": week_epoch,
                         "week_index": week_index,
                         "window_label": window_label,
-                        "filters": filters,
+                        "filters": {
+                            **filters,
+                            "win_rate_basis": "match: matchWinCount/matchCount",
+                        },
                     },
                     source=result.source,
                     tool_call_id=result.tool_call_id,
