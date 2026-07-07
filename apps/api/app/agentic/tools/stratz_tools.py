@@ -1206,24 +1206,27 @@ def _pair_lane_outcome_handler(settings: Settings):
         heroes = StratzHeroes(transport)
         buckets: list[dict[str, Any]] = []
         try:
-            for week_index, epoch in enumerate(epochs, start=1):
-                records = await _with_retry(
-                    lambda e=epoch: heroes.lane_outcome(
-                        args.hero_id,
-                        is_with=args.is_with,
-                        week=e,
-                        bracket_basic_ids=context.bracket,
-                        position_ids=context.position_ids,
-                    )
-                )
+
+            def _pair_lane_rows(records: Any) -> list[dict[str, Any]]:
                 matches = [
                     record
                     for record in records
                     if isinstance(record, dict)
                     and record.get("hero_id") == args.partner_hero_id
                 ]
-                rows = [matches[0]] if matches else []
-                buckets.append(_bucket(epoch, week_index, rows))
+                return [matches[0]] if matches else []
+
+            buckets = await _fan_out_weeks(
+                epochs,
+                lambda e: heroes.lane_outcome(
+                    args.hero_id,
+                    is_with=args.is_with,
+                    week=e,
+                    bracket_basic_ids=context.bracket,
+                    position_ids=context.position_ids,
+                ),
+                _pair_lane_rows,
+            )
         finally:
             await transport.aclose()
 
@@ -1262,27 +1265,30 @@ def _hero_matchup_ranking_handler(settings: Settings):
         heroes = StratzHeroes(transport)
         buckets: list[dict[str, Any]] = []
         try:
-            for week_index, epoch in enumerate(epochs, start=1):
-                data = await _with_retry(
-                    lambda e=epoch: heroes.hero_vs_hero_matchup(
-                        args.hero_id,
-                        take=max(args.take, 50),
-                        week=e,
-                        bracket_basic_ids=context.bracket,
-                    )
-                )
+
+            def _ranked_rows(data: Any) -> list[dict[str, Any]]:
                 advantage = _filter_matchup_rows(
                     data.get("advantage", []), args.min_sample_size, args.take
                 )
                 disadvantage = _filter_matchup_rows(
                     data.get("disadvantage", []), args.min_sample_size, args.take
                 )
-                rows = [
+                return [
                     {"source_side": "advantage", **row} for row in advantage
                 ] + [
                     {"source_side": "disadvantage", **row} for row in disadvantage
                 ]
-                buckets.append(_bucket(epoch, week_index, rows))
+
+            buckets = await _fan_out_weeks(
+                epochs,
+                lambda e: heroes.hero_vs_hero_matchup(
+                    args.hero_id,
+                    take=max(args.take, 50),
+                    week=e,
+                    bracket_basic_ids=context.bracket,
+                ),
+                _ranked_rows,
+            )
         finally:
             await transport.aclose()
 
@@ -1352,27 +1358,30 @@ def _hero_synergy_ranking_handler(settings: Settings):
         heroes = StratzHeroes(transport)
         buckets: list[dict[str, Any]] = []
         try:
-            for week_index, epoch in enumerate(epochs, start=1):
-                data = await _with_retry(
-                    lambda e=epoch: heroes.hero_synergy_matchup(
-                        args.hero_id,
-                        take=max(args.take, 50),
-                        week=e,
-                        bracket_basic_ids=context.bracket,
-                    )
-                )
+
+            def _ranked_rows(data: Any) -> list[dict[str, Any]]:
                 advantage = _filter_matchup_rows(
                     data.get("advantage", []), args.min_sample_size, args.take
                 )
                 disadvantage = _filter_matchup_rows(
                     data.get("disadvantage", []), args.min_sample_size, args.take
                 )
-                rows = [
+                return [
                     {"source_side": "advantage", **row} for row in advantage
                 ] + [
                     {"source_side": "disadvantage", **row} for row in disadvantage
                 ]
-                buckets.append(_bucket(epoch, week_index, rows))
+
+            buckets = await _fan_out_weeks(
+                epochs,
+                lambda e: heroes.hero_synergy_matchup(
+                    args.hero_id,
+                    take=max(args.take, 50),
+                    week=e,
+                    bracket_basic_ids=context.bracket,
+                ),
+                _ranked_rows,
+            )
         finally:
             await transport.aclose()
 
@@ -1416,15 +1425,8 @@ def _lane_meta_global_handler(settings: Settings):
         heroes = StratzHeroes(transport)
         buckets: list[dict[str, Any]] = []
         try:
-            for week_index, epoch in enumerate(epochs, start=1):
-                records = await _with_retry(
-                    lambda e=epoch: heroes.lane_outcome(
-                        None,
-                        is_with=args.is_with,
-                        week=e,
-                        bracket_basic_ids=context.bracket,
-                    )
-                )
+
+            def _lane_meta_rows(records: Any) -> list[dict[str, Any]]:
                 deduped = _dedupe_pair_rows(records)
                 qualifying = [
                     record
@@ -1449,7 +1451,18 @@ def _lane_meta_global_handler(settings: Settings):
                 top = qualifying[: args.highlight_top]
                 for row in top:
                     row.pop("position", None)
-                buckets.append(_bucket(epoch, week_index, top))
+                return top
+
+            buckets = await _fan_out_weeks(
+                epochs,
+                lambda e: heroes.lane_outcome(
+                    None,
+                    is_with=args.is_with,
+                    week=e,
+                    bracket_basic_ids=context.bracket,
+                ),
+                _lane_meta_rows,
+            )
         finally:
             await transport.aclose()
 
@@ -1500,15 +1513,8 @@ def _hero_position_stats_handler(settings: Settings):
         heroes = StratzHeroes(transport)
         buckets: list[dict[str, Any]] = []
         try:
-            for week_index, epoch in enumerate(epochs, start=1):
-                rows = await _with_retry(
-                    lambda e=epoch: heroes.hero_position_stats(
-                        hero_ids=[args.hero_id] if args.hero_id is not None else None,
-                        position_ids=[args.position_id] if args.position_id is not None else None,
-                        bracket_basic_ids=context.bracket,
-                        week=e,
-                    )
-                )
+
+            def _position_rows(rows: Any) -> list[dict[str, Any]]:
                 rows = [
                     r
                     for r in rows
@@ -1529,7 +1535,18 @@ def _hero_position_stats_handler(settings: Settings):
                     )
                 if args.position_id is not None:
                     rows = rows[: args.take]
-                buckets.append(_bucket(epoch, week_index, rows))
+                return rows
+
+            buckets = await _fan_out_weeks(
+                epochs,
+                lambda e: heroes.hero_position_stats(
+                    hero_ids=[args.hero_id] if args.hero_id is not None else None,
+                    position_ids=[args.position_id] if args.position_id is not None else None,
+                    bracket_basic_ids=context.bracket,
+                    week=e,
+                ),
+                _position_rows,
+            )
         finally:
             await transport.aclose()
 
@@ -1584,6 +1601,22 @@ def _filter_matchup_rows(
         reverse=True,
     )
     return filtered[:take]
+
+
+async def _fan_out_weeks(
+    epochs: list[int],
+    fetch_one: Callable[[int], Awaitable[Any]],
+    transform: Callable[[Any], list[dict[str, Any]]],
+) -> list[dict[str, Any]]:
+    """Per-week fan-out: for each completed-week epoch, fetch one result (via
+    _with_retry) and apply `transform` to produce that week's rows. Buckets are
+    never merged across weeks. Sorting/filtering/top-K live inside `transform`
+    (agentic layer); the integration layer is not involved here."""
+    buckets: list[dict[str, Any]] = []
+    for week_index, epoch in enumerate(epochs, start=1):
+        raw = await _with_retry(lambda e=epoch: fetch_one(e))
+        buckets.append(_bucket(epoch, week_index, transform(raw)))
+    return buckets
 
 
 # --- STRATZ week-window resolution -----------------------------------------
