@@ -627,3 +627,44 @@ def test_validate_context_scope_allows_region_with_daily_trends_only() -> None:
         required_evidence=["hero_daily_trend"],
     )
     assert validate_context_scope(plan) == []
+
+
+def test_validate_plan_accepts_list_dict_ref_without_min_length_error() -> None:
+    """A list arg with min_length, populated via $ref, must not fail validation
+    on an empty placeholder — the real value comes from the ref target at run
+    time. Guards the filter_heroes_by_position candidate_rows contract."""
+    from app.agentic.models import QueryContext, ToolCall
+    from app.agentic.planning.contracts import validate_plan_against_catalog
+    from app.agentic.tools.stratz_tools import build_default_tool_registry
+    from app.core.config import get_settings
+
+    registry = build_default_tool_registry(get_settings())
+    plan = ExecutionPlan(
+        intent="position_filtered_matchup",
+        goal="4 号位克制 Lina",
+        output_contract="natural_language_answer",
+        context=QueryContext(),
+        tool_calls=[
+            ToolCall(id="resolve", tool="resolve_hero", args={"query": "Lina"}),
+            ToolCall(
+                id="matchup",
+                tool="stratz.hero_matchup_ranking",
+                args={"hero_id": "$resolve.data.hero.hero_id"},
+            ),
+            ToolCall(
+                id="filter",
+                tool="stratz.filter_heroes_by_position",
+                args={
+                    "candidate_rows": "$matchup.data.candidate_rows",
+                    "position_id": "POSITION_4",
+                },
+            ),
+        ],
+        required_evidence=[
+            "hero_identity",
+            "matchup_ranking_row",
+            "role_filtered_candidate_row",
+        ],
+    )
+    errors = validate_plan_against_catalog(plan, registry)
+    assert not any("too_short" in e or "candidate_rows" in e for e in errors)

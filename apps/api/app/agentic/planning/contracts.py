@@ -562,7 +562,8 @@ def _placeholder(annotation: Any) -> Any:
     if annotation is str:
         return "ref"
     if origin is list or annotation is list:
-        return []
+        args = get_args(annotation)
+        return [_placeholder(args[0])] if args else []
     if origin is dict or annotation is dict:
         return {}
     return "ref"
