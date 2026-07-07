@@ -212,6 +212,13 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
                     description="Drop rows below this match_count threshold."
                 ),
             },
+            output_paths={
+                "candidate_rows": OutputPathContract(
+                    path="data.candidate_rows",
+                    type="list[dict]",
+                    description="Latest completed week's ranking rows (advantage+disadvantage flattened).",
+                ),
+            },
             metadata={"game": "dota2", "domain": "hero_matchup"},
         )
     )
@@ -259,6 +266,13 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
                 "take": ArgContract(description="Top rows per advantage/disadvantage group."),
                 "min_sample_size": ArgContract(
                     description="Drop rows below this match_count threshold."
+                ),
+            },
+            output_paths={
+                "candidate_rows": OutputPathContract(
+                    path="data.candidate_rows",
+                    type="list[dict]",
+                    description="Latest completed week's ranking rows (advantage+disadvantage flattened).",
                 ),
             },
             metadata={"game": "dota2", "domain": "hero_synergy"},
@@ -416,6 +430,60 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
             metadata={"game": "dota2", "domain": "hero_trend"},
         )
     )
+    registry.register(
+        ToolDefinition(
+            name="stratz.filter_heroes_by_position",
+            description=(
+                "Filter ranking candidates (from stratz.hero_matchup_ranking or "
+                "stratz.hero_synergy_ranking) down to heroes that have a position "
+                "sample at `position_id`. candidate_rows is a $ref to "
+                "$<rank_call>.data.candidate_rows (list[dict]; preserves original "
+                "source_side/synergy/win_rate/sample). Joins hero_position_stats at "
+                "the position; keeps heroes with position match_count >= "
+                "min_position_match_count. Output role_filtered_candidate_row "
+                "evidence carries the ORIGINAL ranking row + position sample — no "
+                "invented composite score (thin relay). Use for '4 号位克制 Lina' "
+                "(matchup Lina -> filter by POSITION_4)."
+            ),
+            input_model=FilterHeroesByPositionInput,
+            handler=_filter_heroes_by_position_handler(settings),
+            source=ToolSource(
+                name="STRATZ",
+                kind="public_graphql_api",
+                url=settings.stratz_graphql_url,
+                status="live",
+            ),
+            evidence_extractor=filter_heroes_by_position_evidence,
+            evidence_kinds=("role_filtered_candidate_row",),
+            arg_contracts={
+                "candidate_rows": ArgContract(
+                    description=(
+                        "Ranking rows from matchup/synergy. Use ref "
+                        "$<rank_call>.data.candidate_rows."
+                    ),
+                    accepts_refs=(
+                        AcceptedRef(
+                            from_tool="stratz.hero_matchup_ranking",
+                            path="data.candidate_rows",
+                            type="list[dict]",
+                        ),
+                        AcceptedRef(
+                            from_tool="stratz.hero_synergy_ranking",
+                            path="data.candidate_rows",
+                            type="list[dict]",
+                        ),
+                    ),
+                ),
+                "position_id": ArgContract(
+                    description="Position to filter by (POSITION_1 .. POSITION_5)."
+                ),
+                "min_position_match_count": ArgContract(
+                    description="Drop heroes below this match_count at the position."
+                ),
+            },
+            metadata={"game": "dota2", "domain": "role_filter"},
+        )
+    )
 
 
 class HeroDailyTrendsInput(BaseModel):
@@ -501,6 +569,145 @@ def _hero_daily_trends_handler(settings: Settings):
                 "region_ids": context.region_ids,
                 "game_mode_ids": context.game_mode_ids,
                 "grain": "day",
+            },
+        }
+
+    return handle
+
+
+class FilterHeroesByPositionInput(BaseModel):
+    candidate_rows: list[dict[str, Any]] = Field(min_length=1)
+    position_id: str
+    min_position_match_count: int = Field(default=300, ge=0)
+
+
+def filter_heroes_by_position_evidence(result: ToolResult) -> list[EvidenceItem]:
+    data = result.data if isinstance(result.data, dict) else {}
+    filters = data.get("filters") if isinstance(data.get("filters"), dict) else {}
+    filtered = data.get("filtered_rows")
+    if not isinstance(filtered, list):
+        return []
+    names = _hero_name_index()
+    evidence: list[EvidenceItem] = []
+    for index, row in enumerate(filtered):
+        if not isinstance(row, dict):
+            continue
+        hero_id = row.get("hero_id")
+        hero_name = names.get(hero_id) if isinstance(hero_id, int) else None
+        # Detect original ranking caliber from the carried row fields.
+        if "matchup_win_rate" in row:
+            caliber = "matchup: winCount/matchCount"
+        elif "pair_win_rate" in row:
+            caliber = "ally_pair: winCount/matchCount"
+        else:
+            caliber = None
+        value: dict[str, Any] = {
+            **row,
+            "hero_name": hero_name,
+        }
+        if caliber:
+            value["win_rate_basis"] = caliber
+        value["filters"] = {
+            **filters,
+            **({"win_rate_basis": caliber} if caliber else {}),
+        }
+        evidence.append(
+            EvidenceItem(
+                id=(
+                    f"{result.tool_call_id}:role_filtered_candidate_row:"
+                    f"{hero_id}:{index}"
+                ),
+                kind="role_filtered_candidate_row",
+                subject=(
+                    f"{hero_name or hero_id} at {row.get('position')} "
+                    f"({row.get('source_side', 'ranked')})"
+                ),
+                value=value,
+                source=result.source,
+                tool_call_id=result.tool_call_id,
+                tool=result.tool,
+            )
+        )
+    return evidence
+
+
+def _filter_heroes_by_position_handler(settings: Settings):
+    async def handle(
+        args: FilterHeroesByPositionInput,
+        context: QueryContext,
+    ) -> dict[str, Any]:
+        if not settings.stratz_token:
+            raise ValueError("METAMIND_STRATZ_TOKEN is required")
+
+        # Single latest completed week — this is a join, not a per-week fan-out.
+        _weeks, epochs = _resolve_week_window(context.weeks_back)
+        latest_epoch = epochs[0]
+        candidate_rows = args.candidate_rows
+        candidate_hero_ids = {
+            row.get("hero_id")
+            for row in candidate_rows
+            if isinstance(row, dict) and isinstance(row.get("hero_id"), int)
+        }
+
+        transport = StratzTransport(settings.stratz_graphql_url, settings.stratz_token)
+        heroes = StratzHeroes(transport)
+        try:
+            position_rows = await _with_retry(
+                lambda: heroes.hero_position_stats(
+                    position_ids=[args.position_id],
+                    bracket_basic_ids=context.bracket,
+                    week=latest_epoch,
+                )
+            )
+        finally:
+            await transport.aclose()
+
+        # Index heroes that have enough sample at this position.
+        position_index = {
+            row["hero_id"]: row
+            for row in position_rows
+            if isinstance(row, dict)
+            and isinstance(row.get("hero_id"), int)
+            and (row.get("match_count") or 0) >= args.min_position_match_count
+        }
+
+        filtered: list[dict[str, Any]] = []
+        dropped: list[int] = []
+        for row in candidate_rows:
+            if not isinstance(row, dict):
+                continue
+            hero_id = row.get("hero_id")
+            if not isinstance(hero_id, int):
+                continue
+            pos = position_index.get(hero_id)
+            if pos is None:
+                dropped.append(hero_id)
+                continue
+            # Thin relay: carry the ORIGINAL ranking row + attach position sample.
+            # No composite role score is invented.
+            filtered.append(
+                {
+                    **row,
+                    "position": args.position_id,
+                    "position_match_count": pos.get("match_count"),
+                    "position_match_win_rate": pos.get("match_win_rate"),
+                    "role_fit_basis": (
+                        f"position_sample: matchCount@{args.position_id}"
+                    ),
+                }
+            )
+
+        return {
+            "position_id": args.position_id,
+            "filtered_rows": filtered,
+            "dropped_hero_ids": sorted(set(dropped)),
+            "filters": {
+                "position_id": args.position_id,
+                "min_position_match_count": args.min_position_match_count,
+                "bracket_basic_ids": context.bracket,
+                "week_epoch": latest_epoch,
+                "candidate_count": len(candidate_rows),
+                "candidate_hero_ids": sorted(candidate_hero_ids),
             },
         }
 
@@ -1084,6 +1291,7 @@ def _hero_matchup_ranking_handler(settings: Settings):
             "hero_id": args.hero_id,
             "side": args.side,
             "weekly_buckets": buckets,
+            "candidate_rows": (buckets[0]["rows"] if buckets else []),
             "weeks_with_record": weeks_with_record,
             "missing_week_epochs": missing_epochs,
             "filters": _window_filters(
@@ -1173,6 +1381,7 @@ def _hero_synergy_ranking_handler(settings: Settings):
             "hero_id": args.hero_id,
             "side": args.side,
             "weekly_buckets": buckets,
+            "candidate_rows": (buckets[0]["rows"] if buckets else []),
             "weeks_with_record": weeks_with_record,
             "missing_week_epochs": missing_epochs,
             "filters": _window_filters(

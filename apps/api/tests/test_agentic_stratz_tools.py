@@ -214,6 +214,115 @@ def test_hero_matchup_ranking_keeps_groups_separate(monkeypatch) -> None:
     assert [row["hero_id"] for row in advantage] == [66, 71]
     assert [row["hero_id"] for row in disadvantage] == [10]
     assert result.data["filters"]["min_sample_size"] == 100
+    # candidate_rows: latest completed week flattened across advantage/disadvantage.
+    assert len(result.data["candidate_rows"]) == 3  # 2 advantage + 1 disadvantage
+    assert all("source_side" in r for r in result.data["candidate_rows"])
+
+
+def test_filter_heroes_by_position_joins_and_drops(monkeypatch) -> None:
+    """Thin-relay join: keep candidates that have enough position sample; carry
+    the ORIGINAL ranking row + attach position sample; no composite score."""
+    monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzTransport", FakeTransport)
+    monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzHeroes", FakeHeroes)
+
+    candidate_rows = [
+        {"source_side": "advantage", "hero_id": 7, "target_hero_id": 25, "match_count": 250, "matchup_win_rate": 0.6, "synergy": 5.1},
+        {"source_side": "advantage", "hero_id": 11, "target_hero_id": 25, "match_count": 120, "matchup_win_rate": 0.5833, "synergy": 2.0},
+        {"source_side": "advantage", "hero_id": 99, "target_hero_id": 25, "match_count": 100, "matchup_win_rate": 0.55, "synergy": 1.0},
+    ]
+    result = asyncio.run(
+        ToolExecutor(_registry(token="token")).execute(
+            ToolCall(
+                id="filter",
+                tool="stratz.filter_heroes_by_position",
+                args={
+                    "candidate_rows": candidate_rows,
+                    "position_id": "POSITION_1",
+                    "min_position_match_count": 0,
+                },
+            ),
+            QueryContext(bracket=["LEGEND_ANCIENT"]),
+        )
+    )
+
+    assert result.status == "ok"
+    # FakeHeroes.hero_position_stats(POSITION_1) returns hero 8/7/11.
+    # candidate {7,11,99} ∩ position {8,7,11} = {7,11}; 99 dropped.
+    filtered = result.data["filtered_rows"]
+    assert [r["hero_id"] for r in filtered] == [7, 11]
+    assert result.data["dropped_hero_ids"] == [99]
+    # Original ranking row preserved + position sample attached.
+    row7 = filtered[0]
+    assert row7["source_side"] == "advantage"
+    assert row7["matchup_win_rate"] == 0.6
+    assert row7["synergy"] == 5.1
+    assert row7["position_match_count"] == 4000
+    assert row7["position_match_win_rate"] == 0.575
+    assert row7["position"] == "POSITION_1"
+    assert "role_fit_basis" in row7
+
+    # min_position_match_count raises the floor: hero 11 (3000) dropped at 3500.
+    result2 = asyncio.run(
+        ToolExecutor(_registry(token="token")).execute(
+            ToolCall(
+                id="filter2",
+                tool="stratz.filter_heroes_by_position",
+                args={
+                    "candidate_rows": candidate_rows,
+                    "position_id": "POSITION_1",
+                    "min_position_match_count": 3500,
+                },
+            ),
+            QueryContext(bracket=["LEGEND_ANCIENT"]),
+        )
+    )
+    assert [r["hero_id"] for r in result2.data["filtered_rows"]] == [7]
+    assert result2.data["dropped_hero_ids"] == [11, 99]
+
+
+def test_filter_heroes_by_position_evidence_preserves_original_row() -> None:
+    from app.agentic.tools.stratz_tools import filter_heroes_by_position_evidence
+
+    tool_result = ToolResult(
+        tool_call_id="filter",
+        tool="stratz.filter_heroes_by_position",
+        status="ok",
+        latency_ms=1,
+        source=ToolSource(name="STRATZ", kind="public_graphql_api"),
+        data={
+            "position_id": "POSITION_4",
+            "filtered_rows": [
+                {
+                    "source_side": "advantage",
+                    "hero_id": 7,
+                    "target_hero_id": 25,
+                    "match_count": 250,
+                    "matchup_win_rate": 0.6,
+                    "synergy": 5.1,
+                    "position": "POSITION_4",
+                    "position_match_count": 4000,
+                    "position_match_win_rate": 0.575,
+                    "role_fit_basis": "position_sample: matchCount@POSITION_4",
+                }
+            ],
+            "dropped_hero_ids": [],
+            "filters": {"position_id": "POSITION_4", "min_position_match_count": 300},
+        },
+    )
+
+    evidence = filter_heroes_by_position_evidence(tool_result)
+    assert len(evidence) == 1
+    row = evidence[0]
+    assert row.kind == "role_filtered_candidate_row"
+    # Original ranking row preserved.
+    assert row.value["source_side"] == "advantage"
+    assert row.value["matchup_win_rate"] == 0.6
+    assert row.value["synergy"] == 5.1
+    # Position sample attached.
+    assert row.value["position_match_count"] == 4000
+    # Caliber detected from matchup_win_rate; mirrored to filters.
+    assert row.value["win_rate_basis"] == "matchup: winCount/matchCount"
+    assert row.value["filters"]["win_rate_basis"] == "matchup: winCount/matchCount"
 
 
 def test_hero_synergy_ranking_keeps_groups_separate(monkeypatch) -> None:
