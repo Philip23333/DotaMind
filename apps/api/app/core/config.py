@@ -164,14 +164,12 @@ class LLMCallPolicy(StrictPolicyModel):
 
 
 class OrchestratorLLMCallPolicy(LLMCallPolicy):
-    # Planner-only knob; kept off LLMCallPolicy so hero_analyzer stays clean.
-    # 0 disables retry; total attempts = 1 + planner_max_retries.
+    # Planner-only knob. 0 disables retry; total attempts = 1 + planner_max_retries.
     planner_max_retries: int = Field(default=2, ge=0, le=5)
 
 
 class LLMPolicy(StrictPolicyModel):
     orchestrator: OrchestratorLLMCallPolicy
-    hero_analyzer: LLMCallPolicy
 
 
 class SamplePolicyToolEntry(StrictPolicyModel):
