@@ -72,3 +72,17 @@ llm:
   hero_analyzer:
     temperature: 0.2
     max_tokens: 1000
+
+planning:
+  sample_policy:
+    # Single source of truth for sample-size thresholds. Each entry names the
+    # input_model field (`arg`) the planner policy fills. `default` must match
+    # the tool's Field default (guarded by test_stratz_tool_defaults_match_sample_policy).
+    # Tiers satisfy relaxed <= default <= strict. Planner picks a tier per call;
+    # apply_sample_policy backfills `default` when the LLM omits/nulls the arg.
+    tools:
+      stratz.hero_matchup_ranking:      { arg: min_sample_size, default: 2000, relaxed: 500, strict: 5000 }
+      stratz.hero_synergy_ranking:      { arg: min_sample_size, default: 2000, relaxed: 500, strict: 5000 }
+      stratz.lane_meta_global:          { arg: min_sample_size, default: 1000, relaxed: 300, strict: 3000 }
+      stratz.hero_position_stats:       { arg: min_sample_size, default: 1000, relaxed: 300, strict: 3000 }
+      stratz.filter_heroes_by_position: { arg: min_position_match_count, default: 1000, relaxed: 300, strict: 3000 }

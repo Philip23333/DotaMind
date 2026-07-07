@@ -673,3 +673,119 @@ def test_agentic_planner_no_retry_when_max_retries_zero() -> None:
         "system",
         "user",
     ]
+
+
+# --- sample-policy integration (stage 1) ------------------------------------
+
+# Sentinel meaning "do not put min_sample_size in the args dict at all".
+_OMIT = object()
+
+
+def _matchup_payload(min_sample_size: Any = _OMIT) -> dict[str, Any]:
+    """A valid matchup plan. min_sample_size=_OMIT leaves the arg out entirely;
+    any other value (incl. None) is written into args verbatim."""
+    args: dict[str, Any] = {
+        "hero_id": "$resolve_target.data.hero.hero_id",
+        "side": "vs",
+        "take": 5,
+    }
+    if min_sample_size is not _OMIT:
+        args["min_sample_size"] = min_sample_size
+    return {
+        "status": "planned",
+        "reason": "matchup ranking can be answered with registered tools",
+        "plan": {
+            "intent": "hero_matchup_ranking",
+            "goal": "Fetch Lina matchup ranking evidence.",
+            "output_contract": "natural_language_answer",
+            "tool_calls": [
+                {"id": "resolve_target", "tool": "resolve_hero", "args": {"query": "Lina"}},
+                {"id": "get_ranking", "tool": "stratz.hero_matchup_ranking", "args": args},
+            ],
+            "required_evidence": ["hero_identity", "matchup_ranking_row", "sample_size"],
+            "constraints": {"max_tool_calls": 6, "allow_mock": False},
+        },
+    }
+
+
+def test_agentic_planner_backfills_sample_policy_default_when_omitted() -> None:
+    # No signal -> planner omits -> post-process fills default (2000) + provenance.
+    planner = AgenticPlanner(
+        _registry(), llm=FakeLLM(_matchup_payload()), llm_enabled=True, planner_max_retries=0
+    )
+
+    result = asyncio.run(planner.plan("enemy picked Lina, what should I pick?"))
+
+    assert result.status == "planned"
+    assert result.plan.tool_calls[1].args["min_sample_size"] == 2000
+    applied = result.plan.metadata["policy_applied"]
+    assert [r["tool_call_id"] for r in applied] == ["get_ranking"]
+    assert applied[0]["mode"] == "default"
+
+
+def test_agentic_planner_preserves_explicit_relaxed_sample_size() -> None:
+    # "冷门也行" -> LLM chose relaxed (500). Preserved, no provenance.
+    planner = AgenticPlanner(
+        _registry(), llm=FakeLLM(_matchup_payload(500)), llm_enabled=True, planner_max_retries=0
+    )
+
+    result = asyncio.run(planner.plan("Lina 克制谁？冷门也行"))
+
+    assert result.status == "planned"
+    assert result.plan.tool_calls[1].args["min_sample_size"] == 500
+    assert result.plan.metadata.get("policy_applied") is None
+
+
+def test_agentic_planner_preserves_explicit_strict_sample_size() -> None:
+    # "稳健" -> LLM chose strict (5000). Preserved, no provenance.
+    planner = AgenticPlanner(
+        _registry(), llm=FakeLLM(_matchup_payload(5000)), llm_enabled=True, planner_max_retries=0
+    )
+
+    result = asyncio.run(planner.plan("Lina 克制谁？要稳健大样本"))
+
+    assert result.status == "planned"
+    assert result.plan.tool_calls[1].args["min_sample_size"] == 5000
+    assert result.plan.metadata.get("policy_applied") is None
+
+
+def test_agentic_planner_preserves_explicit_user_named_sample_size() -> None:
+    # "至少 3000 场" -> explicit (3000), overriding policy tiers. Preserved.
+    planner = AgenticPlanner(
+        _registry(), llm=FakeLLM(_matchup_payload(3000)), llm_enabled=True, planner_max_retries=0
+    )
+
+    result = asyncio.run(planner.plan("Lina 克制谁？至少 3000 场样本"))
+
+    assert result.status == "planned"
+    assert result.plan.tool_calls[1].args["min_sample_size"] == 3000
+    assert result.plan.metadata.get("policy_applied") is None
+
+
+def test_agentic_planner_treats_null_sample_size_as_omitted() -> None:
+    # LLM emitted JSON null — without backfill validate would reject it as
+    # not-an-int. Post-process converts null -> default and records provenance.
+    planner = AgenticPlanner(
+        _registry(), llm=FakeLLM(_matchup_payload(None)), llm_enabled=True, planner_max_retries=0
+    )
+
+    result = asyncio.run(planner.plan("enemy picked Lina, what should I pick?"))
+
+    assert result.status == "planned"
+    assert result.plan.tool_calls[1].args["min_sample_size"] == 2000
+    applied = result.plan.metadata["policy_applied"]
+    assert [r["tool_call_id"] for r in applied] == ["get_ranking"]
+
+
+def test_agentic_planner_prompt_contains_sample_policy_table() -> None:
+    planner = AgenticPlanner(
+        _registry(), llm=FakeLLM(_valid_plan_payload()), llm_enabled=True, planner_max_retries=0
+    )
+
+    prompt = planner._system_prompt()
+
+    assert "Sample-size policy" in prompt
+    assert "explicit > strict > relaxed > default" in prompt
+    assert "stratz.hero_matchup_ranking.min_sample_size" in prompt
+    # Scattered ad-hoc thresholds were removed from selection_mode sections.
+    assert "500-800" not in prompt

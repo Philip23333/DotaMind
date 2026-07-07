@@ -36,6 +36,9 @@ def test_policy_yaml_loads_all_report_sections() -> None:
     assert policy.critic.team_report.min_match_details_analyzed == 5
     assert policy.llm.orchestrator.max_tokens == 4000
     assert policy.llm.hero_analyzer.max_tokens == 1000
+    assert policy.planning.sample_policy.tools["stratz.hero_matchup_ranking"].default == 2000
+    assert policy.planning.sample_policy.tools["stratz.filter_heroes_by_position"].arg == "min_position_match_count"
+    assert policy.planning.sample_policy.tools["stratz.lane_meta_global"].strict == 3000
 
 
 def test_policy_rejects_unknown_fields(tmp_path: Path) -> None:
@@ -78,6 +81,21 @@ def test_policy_rejects_invalid_critic_team_age_thresholds(tmp_path: Path) -> No
     data["critic"]["team_report"]["hard_max_latest_match_age_days"] = 90
 
     with pytest.raises(ValidationError, match="max_latest_match_age_days"):
+        load_policy(_write_policy(tmp_path / "policy.yaml", data))
+
+
+def test_policy_rejects_sample_policy_tiers_out_of_order(tmp_path: Path) -> None:
+    data = deepcopy(_policy_data())
+    # relaxed (500) > default (200) would already be fine, but break the chain:
+    # set default above strict to violate relaxed<=default<=strict.
+    data["planning"]["sample_policy"]["tools"]["stratz.hero_matchup_ranking"] = {
+        "arg": "min_sample_size",
+        "default": 9000,
+        "relaxed": 500,
+        "strict": 5000,
+    }
+
+    with pytest.raises(ValidationError, match="relaxed<=default<=strict"):
         load_policy(_write_policy(tmp_path / "policy.yaml", data))
 
 

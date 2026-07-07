@@ -44,6 +44,10 @@ class ExecutionPlan(BaseModel):
     tool_calls: list[ToolCall] = Field(default_factory=list)
     required_evidence: list[str] = Field(default_factory=list)
     constraints: ExecutionConstraints = Field(default_factory=ExecutionConstraints)
+    # Post-process provenance for planner-level policy decisions (e.g. which
+    # sample-size args were backfilled by apply_sample_policy). Backward
+    # compatible: defaults to empty, so existing fixtures unpickle fine.
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class ToolSource(BaseModel):

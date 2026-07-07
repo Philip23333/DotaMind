@@ -104,6 +104,12 @@ def test_plan_service_executes_planned_counter_pick(monkeypatch) -> None:
                     "hero_id": "$resolve_target.data.hero.hero_id",
                     "side": "vs",
                     "take": 3,
+                    # Set explicitly: this FakePlanner bypasses AgenticPlanner.plan()
+                    # (where apply_sample_policy backfills the default), and the
+                    # fixture row has match_count=100, below the policy default
+                    # of 2000. A relaxed floor keeps the row so the orchestration
+                    # under test produces complete evidence.
+                    "min_sample_size": 100,
                 },
             ),
         ],

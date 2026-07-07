@@ -174,6 +174,44 @@ class LLMPolicy(StrictPolicyModel):
     hero_analyzer: LLMCallPolicy
 
 
+class SamplePolicyToolEntry(StrictPolicyModel):
+    """Sample-size threshold policy for one tool.
+
+    `arg` names the input_model field the policy fills (e.g.
+    min_sample_size vs min_position_match_count) so apply_sample_policy stays
+    generic. The three tiers map to the planner's sample-selection modes:
+    relaxed (cold/小样本也行) <= default (normal) <= strict (稳健/大样本). Tool
+    input_model Field defaults are kept in sync with `default` — see
+    test_stratz_tool_defaults_match_sample_policy.
+    """
+
+    arg: str = Field(min_length=1)
+    default: int = Field(ge=0)
+    relaxed: int = Field(ge=0)
+    strict: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def validate_ordering(self) -> "SamplePolicyToolEntry":
+        if not (self.relaxed <= self.default <= self.strict):
+            raise ValueError(
+                f"sample_policy tiers must satisfy relaxed<=default<=strict "
+                f"got relaxed={self.relaxed} default={self.default} "
+                f"strict={self.strict}"
+            )
+        return self
+
+
+class SamplePolicyConfig(StrictPolicyModel):
+    # Keyed by registered tool name. Generic (not STRATZ-bound): any tool whose
+    # input_model has a sample-size arg can enroll. render_sample_policy verifies
+    # each key is a registered tool and `arg` is a real input field.
+    tools: dict[str, SamplePolicyToolEntry] = Field(default_factory=dict)
+
+
+class PlanningPolicy(StrictPolicyModel):
+    sample_policy: SamplePolicyConfig
+
+
 class AppPolicy(StrictPolicyModel):
     version: Literal[1]
     opendota: OpenDotaPolicy
@@ -183,6 +221,7 @@ class AppPolicy(StrictPolicyModel):
     patch_report: PatchReportPolicy
     critic: CriticPolicy
     llm: LLMPolicy
+    planning: PlanningPolicy
 
 
 class Settings(BaseSettings):

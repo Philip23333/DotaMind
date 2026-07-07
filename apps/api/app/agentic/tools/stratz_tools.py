@@ -51,19 +51,22 @@ class HeroMatchupRankingInput(BaseModel):
     hero_id: int = Field(gt=0)
     side: Literal["vs"] = "vs"
     take: int = Field(default=10, ge=1, le=50)
-    min_sample_size: int = Field(default=100, ge=0)
+    # keep in sync with policy.yaml planning.sample_policy.tools[stratz.hero_matchup_ranking].default
+    min_sample_size: int = Field(default=2000, ge=0)
 
 
 class HeroSynergyRankingInput(BaseModel):
     hero_id: int = Field(gt=0)
     side: Literal["with"] = "with"
     take: int = Field(default=10, ge=1, le=50)
-    min_sample_size: int = Field(default=100, ge=0)
+    # keep in sync with policy.yaml planning.sample_policy.tools[stratz.hero_synergy_ranking].default
+    min_sample_size: int = Field(default=2000, ge=0)
 
 
 class LaneMetaGlobalInput(BaseModel):
     is_with: bool
-    min_sample_size: int = Field(default=200, ge=0)
+    # keep in sync with policy.yaml planning.sample_policy.tools[stratz.lane_meta_global].default
+    min_sample_size: int = Field(default=1000, ge=0)
     highlight_top: int = Field(default=15, ge=1, le=50)
     selection_mode: Literal["popular", "strong"] = "strong"
 
@@ -72,7 +75,8 @@ class HeroPositionStatsInput(BaseModel):
     hero_id: int | None = Field(default=None, gt=0)
     position_id: str | None = None
     take: int = Field(default=15, ge=1, le=50)
-    min_sample_size: int = Field(default=300, ge=0)
+    # keep in sync with policy.yaml planning.sample_policy.tools[stratz.hero_position_stats].default
+    min_sample_size: int = Field(default=1000, ge=0)
     selection_mode: Literal["popular", "strong"] = "strong"
 
     @model_validator(mode="after")
@@ -578,7 +582,8 @@ def _hero_daily_trends_handler(settings: Settings):
 class FilterHeroesByPositionInput(BaseModel):
     candidate_rows: list[dict[str, Any]] = Field(min_length=1)
     position_id: str
-    min_position_match_count: int = Field(default=300, ge=0)
+    # keep in sync with policy.yaml planning.sample_policy.tools[stratz.filter_heroes_by_position].default
+    min_position_match_count: int = Field(default=1000, ge=0)
 
 
 def filter_heroes_by_position_evidence(result: ToolResult) -> list[EvidenceItem]:

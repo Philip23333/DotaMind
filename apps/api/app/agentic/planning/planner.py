@@ -11,6 +11,10 @@ from app.agentic.planning.contracts import (
     render_planner_tools,
     validate_plan_against_catalog,
 )
+from app.agentic.planning.sample_policy import (
+    apply_sample_policy,
+    render_sample_policy,
+)
 from app.agentic.tools import ToolRegistry
 from app.core.config import get_policy, get_settings
 from app.llm.provider import LLMJSONDecodeError, LLMProvider, get_llm_provider
@@ -97,20 +101,25 @@ Supported in this development version:
 
 Lane-pair meta selection_mode (stratz.lane_meta_global):
 - selection_mode maps to user intent. 强势 / 胜率高 / 上分 -> "strong"
-  (sort by match_win_rate desc, tie-break match_count desc); for "strong"
-  raise min_sample_size (e.g. 500-800) so small-sample high win-rate noise is
-  dropped before ranking. 常见 / 出场多 / 热门 -> "popular" (sort by match_count
-  desc). Default is "strong"; pass "popular" explicitly for pick-volume queries.
+  (sort by match_win_rate desc, tie-break match_count desc). 常见 / 出场多 /
+  热门 -> "popular" (sort by match_count desc). Default is "strong"; pass
+  "popular" explicitly for pick-volume queries.
+- Sample-size floor: pick the mode from the Sample-size policy table below
+  (strict for 'strong' to drop small-sample high-winrate noise; relaxed for
+  'popular' to keep the full pick distribution). Write the chosen number into
+  min_sample_size explicitly.
 
 Position stats selection_mode (stratz.hero_position_stats):
 - same strong/popular semantics, applies to BOTH hero_id and position_id branches.
   'strong' = match_win_rate desc (某位置胜率最高 / 某英雄最强位置); 'popular' =
-  match_count desc (出场最多 / 常见位置). Raise min_sample_size for 'strong' to
-  drop small-sample noise; lower it (or 0) for 'popular' to keep the full
-  position distribution.
+  match_count desc (出场最多 / 常见位置).
+- Sample-size floor: same as lane_meta — strict for 'strong', relaxed for
+  'popular', per the Sample-size policy table.
 
 Unsupported for now:
 - claim verification
+
+{sample_policy}
 
 Tools:
 {tools}
@@ -301,6 +310,13 @@ class AgenticPlanner:
                 )
                 continue
 
+            # Sample-size policy backfill (stage 1): fills the policy `default`
+            # for any sample arg the LLM omitted/nulled, recording each under
+            # plan.metadata["policy_applied"]. Done here, inside plan() and
+            # before validate, so AgenticPlannerResult.plan IS the final plan —
+            # no graph node rewrites it afterwards.
+            envelope.plan = apply_sample_policy(envelope.plan, self.policy)
+
             validation_errors = self.validate_plan(envelope.plan)
             if not validation_errors:
                 logger.info(
@@ -352,9 +368,11 @@ class AgenticPlanner:
     def _system_prompt(self) -> str:
         tools = render_planner_tools(self.registry)
         contracts = render_planner_contracts(self.registry)
-        return _PLANNER_SYSTEM_PROMPT.replace("{tools}", tools).replace(
-            "{contracts}",
-            contracts,
+        sample_policy = render_sample_policy(self.policy, self.registry)
+        return (
+            _PLANNER_SYSTEM_PROMPT.replace("{tools}", tools)
+            .replace("{contracts}", contracts)
+            .replace("{sample_policy}", sample_policy)
         )
 
 
