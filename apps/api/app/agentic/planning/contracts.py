@@ -204,17 +204,37 @@ def validate_plan_against_catalog(
 def validate_context_scope(plan: ExecutionPlan) -> list[str]:
     """Validate plan.context against policy. The weeks_back lower bound is
     enforced by pydantic on QueryContext; this checks the policy-driven upper
-    bound so an out-of-range value surfaces as a planner retry signal."""
+    bound so an out-of-range value surfaces as a planner retry signal. Also
+    enforces that region_ids/game_mode_ids (only supported by hero_daily_trends
+    per STRATZ schema) are not silently handed to other tools."""
+    errors: list[str] = []
     weeks_back = plan.context.weeks_back
-    if weeks_back is None:
-        return []
-    max_weeks = get_policy().stratz.weeks_back_max
-    if weeks_back > max_weeks:
-        return [
-            f"context.weeks_back={weeks_back} exceeds stratz.weeks_back_max"
-            f"={max_weeks}; use 1..{max_weeks}"
-        ]
-    return []
+    if weeks_back is not None:
+        max_weeks = get_policy().stratz.weeks_back_max
+        if weeks_back > max_weeks:
+            errors.append(
+                f"context.weeks_back={weeks_back} exceeds stratz.weeks_back_max"
+                f"={max_weeks}; use 1..{max_weeks}"
+            )
+    has_region_or_mode = bool(plan.context.region_ids) or bool(
+        plan.context.game_mode_ids
+    )
+    if has_region_or_mode:
+        non_daily = sorted(
+            {
+                call.tool
+                for call in plan.tool_calls
+                if call.tool != "stratz.hero_daily_trends"
+            }
+        )
+        if non_daily:
+            errors.append(
+                "context.region_ids/game_mode_ids are only supported by "
+                "stratz.hero_daily_trends (STRATZ schema); do not set them "
+                "alongside other tools — the handler would silently ignore them. "
+                f"Non-daily tools in plan: {non_daily}"
+            )
+    return errors
 
 
 def validate_registry_contracts(registry: ToolRegistry) -> list[str]:

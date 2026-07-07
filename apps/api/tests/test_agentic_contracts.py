@@ -587,3 +587,43 @@ def test_validate_context_scope_enforces_weeks_back_cap() -> None:
     errors = validate_context_scope(plan_with(cap + 1))
     assert len(errors) == 1
     assert "weeks_back" in errors[0]
+
+
+def test_validate_context_scope_rejects_region_with_non_daily_tools() -> None:
+    """region_ids/game_mode_ids are only supported by hero_daily_trends (schema).
+    Handing them to other tools must surface as a validation error, not be
+    silently ignored."""
+    from app.agentic.models import QueryContext, ToolCall
+    from app.agentic.planning.contracts import validate_context_scope
+
+    plan = ExecutionPlan(
+        intent="counter_pick",
+        goal="eu west counter",
+        output_contract="natural_language_answer",
+        context=QueryContext(bracket=["DIVINE_IMMORTAL"], region_ids=["EUROPE"]),
+        tool_calls=[
+            ToolCall(
+                id="t1", tool="stratz.hero_matchup_ranking", args={"hero_id": 1}
+            )
+        ],
+        required_evidence=["matchup_ranking_row"],
+    )
+    errors = validate_context_scope(plan)
+    assert any("region_ids" in e and "hero_daily_trends" in e for e in errors)
+
+
+def test_validate_context_scope_allows_region_with_daily_trends_only() -> None:
+    from app.agentic.models import QueryContext, ToolCall
+    from app.agentic.planning.contracts import validate_context_scope
+
+    plan = ExecutionPlan(
+        intent="daily_trend",
+        goal="eu trend",
+        output_contract="natural_language_answer",
+        context=QueryContext(region_ids=["EUROPE"]),
+        tool_calls=[
+            ToolCall(id="t1", tool="stratz.hero_daily_trends", args={"hero_id": 1})
+        ],
+        required_evidence=["hero_daily_trend"],
+    )
+    assert validate_context_scope(plan) == []

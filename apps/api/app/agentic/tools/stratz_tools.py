@@ -281,7 +281,11 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
                 "lane-level (winCount/lossCount track lane outcome instead). "
                 "Each row also carries stomp_win_count/stomp_loss_count/cs_count "
                 "as lane dominance / cs evidence, and `win_rate_basis` declaring "
-                "the win-rate caliber. Returns the top `highlight_top` rows per completed week."
+                "the win-rate caliber. Global view: this tool IGNORES "
+                "context.position_ids (laneOutcome positionIds are dropped by design "
+                "to keep the global pair perspective); for a specific hero+partner "
+                "lane query use stratz.pair_lane_outcome. Returns the top "
+                "`highlight_top` rows per completed week."
             ),
             input_model=LaneMetaGlobalInput,
             handler=_lane_meta_global_handler(settings),
@@ -1091,6 +1095,11 @@ def _hero_matchup_ranking_handler(settings: Settings):
                 weeks,
                 epochs,
             ),
+            "selection_policy": (
+                "per_completed_week: sorted_by=synergy desc, match_count desc, "
+                f"min_sample_size>={args.min_sample_size}, top={args.take}, "
+                "groups=advantage+disadvantage kept separate"
+            ),
         }
 
     return handle
@@ -1174,6 +1183,11 @@ def _hero_synergy_ranking_handler(settings: Settings):
                 },
                 weeks,
                 epochs,
+            ),
+            "selection_policy": (
+                "per_completed_week: sorted_by=synergy desc, match_count desc, "
+                f"min_sample_size>={args.min_sample_size}, top={args.take}, "
+                "groups=advantage+disadvantage kept separate"
             ),
         }
 

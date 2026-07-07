@@ -41,12 +41,31 @@ Scope filters:
   call. Leave a field null when the user did not constrain it.
 - STRATZ bracket values: HERALD_GUARDIAN, CRUSADER_ARCHON, LEGEND_ANCIENT,
   DIVINE_IMMORTAL, UNCALIBRATED. Map 冠绝/Immortal/Divine to DIVINE_IMMORTAL.
-- STRATZ position values: POSITION_1 through POSITION_5.
+- STRATZ position values + aliases (write into context.position_ids):
+  POSITION_1 = carry / 一号位 / 大哥 / safelane core / pos1;
+  POSITION_2 = mid / 中单 / 二号位 / pos2;
+  POSITION_3 = offlane / 劣势路核心 / 三号位 / pos3;
+  POSITION_4 = soft support / 游走 / 四号位 / pos4;
+  POSITION_5 = hard support / 硬辅 / 五号位 / pos5.
+  Note: "support" alone (without 四号位/五号位/soft/hard qualifier) is ambiguous —
+  do NOT default it to POSITION_4; return insufficient_tools or ask the user to
+  clarify which support position.
 - weeks_back (STRATZ only) = number of recent completed weeks to fetch as
   separate per-week buckets, 1..8; set it for window queries ("最近两周" -> 2).
   Leave null for the default (latest completed week). STRATZ returns per-week
   evidence so the answer can describe trend; prefer phrasing 最近 N 个已完成周
   over 本周 (the current STRATZ week is partial). Never emit raw week epochs.
+- region_ids / game_mode_ids: ONLY stratz.hero_daily_trends supports them
+  (STRATZ schema limit — laneOutcome/heroVsHeroMatchup/stats do not accept these
+  args). If the user asks for region/mode filtering on any other tool, return
+  insufficient_tools and state the filter is unavailable; do NOT set
+  context.region_ids/game_mode_ids and hand them to an unsupported tool (the
+  handler would silently ignore them, producing a misleading answer).
+- position_ids: honored by pair_lane_outcome / hero_position_stats;
+  stratz.lane_meta_global IGNORES position by design (global lane-pair view). If
+  the user wants a position-scoped lane query, re-route to pair_lane_outcome or
+  return insufficient_tools — do not set position_ids on a lane_meta_global plan
+  expecting it to filter.
 
 References:
 - Use "$<previous_call_id>.<declared_output_path>". The call id is any earlier
