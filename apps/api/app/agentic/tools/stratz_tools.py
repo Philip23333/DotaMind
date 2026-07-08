@@ -17,7 +17,11 @@ from app.agentic.tools import (
 )
 from app.agentic.tools.hero_tools import load_default_hero_resolver
 from app.core.config import Settings, get_policy
-from app.integrations.stratz.brackets import basic_to_bracket_ids, basic_to_full
+from app.integrations.stratz.brackets import (
+    basic_to_bracket_ids,
+    basic_to_full,
+    basic_to_rank_ids,
+)
 from app.integrations.stratz.heroes import StratzHeroes
 from app.integrations.stratz.players import StratzPlayers
 from app.integrations.stratz.transport import StratzTransport
@@ -100,6 +104,18 @@ class PlayerRecentMatchesInput(BaseModel):
     # take. See docs/technical/stratz_player_page_graphql_inventory.md.
     take: int = Field(default=20, ge=1, le=50)
     days: int | None = Field(default=None, ge=1)
+
+
+class PlayerHeroPerformanceInput(BaseModel):
+    steam_account_id: int = Field(gt=0)
+    # take = output hero rows (outer heroesPerformance take). match_take = the
+    # match sample size contributing to each hero's stats (request.take). days =
+    # date window. Three independent knobs — see inventory §双 take.
+    take: int = Field(default=15, ge=1, le=50)
+    days: int | None = Field(default=None, ge=1)
+    match_take: int | None = Field(default=None, ge=1)
+    min_match_count: int = Field(default=3, ge=0)
+    selection_mode: Literal["popular", "strong"] = "strong"
 
 
 def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
@@ -569,6 +585,65 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
             metadata={"game": "dota2", "domain": "player_matches"},
         )
     )
+    registry.register(
+        ToolDefinition(
+            name="stratz.player_hero_performance",
+            description=(
+                "Return a player's per-hero performance (winCount/matchCount/avg "
+                "stats) by steamAccountId. win_rate is locally derived "
+                "(winCount/matchCount; STRATZ has no native winRate). Scope filters "
+                "(bracket->rankIds 0-80, position_ids) come from plan.context; v1 "
+                "does NOT support region_ids/game_mode_ids. Three independent knobs: "
+                "take=output hero rows (1-50, default 15); match_take=match sample "
+                "size contributing to each hero's stats (the recent N matches); "
+                "days=date window. selection_mode: 'strong' over-fetches then ranks "
+                "by win_rate (min_match_count floor); 'popular' ranks by games "
+                "played. Use for 'which heroes does this player win with lately'. "
+                "Param mapping — '近N场什么英雄胜率高' -> match_take=N (NOT take); "
+                "'返回前N个英雄' -> take=N; '最近一周' -> days=7."
+            ),
+            input_model=PlayerHeroPerformanceInput,
+            handler=_player_hero_performance_handler(settings),
+            source=ToolSource(
+                name="STRATZ",
+                kind="public_graphql_api",
+                url=settings.stratz_graphql_url,
+                status="live",
+            ),
+            evidence_extractor=player_hero_performance_evidence,
+            evidence_kinds=(
+                "player_hero_performance",
+                "sample_size",
+            ),
+            arg_contracts={
+                "steam_account_id": ArgContract(
+                    description="Player Steam32 account id."
+                ),
+                "take": ArgContract(
+                    description="Number of hero rows to return (1-50)."
+                ),
+                "match_take": ArgContract(
+                    description=(
+                        "Match sample size per hero (recent N matches). Use this for "
+                        "'近 N 场'. Optional — omit to use STRATZ default."
+                    )
+                ),
+                "days": ArgContract(
+                    description="Date window in days (within last N days). Optional."
+                ),
+                "min_match_count": ArgContract(
+                    description=(
+                        "Floor on games played; heroes below this are dropped "
+                        "(filters small-sample noise in strong mode)."
+                    )
+                ),
+                "selection_mode": ArgContract(
+                    description="'strong' (rank by win_rate) or 'popular' (by games)."
+                ),
+            },
+            metadata={"game": "dota2", "domain": "player_hero_performance"},
+        )
+    )
 
 
 class HeroDailyTrendsInput(BaseModel):
@@ -1022,6 +1097,162 @@ def _player_recent_matches_handler(settings: Settings):
                 "meaning": meaning,
             },
             "selection_policy": meaning,
+        }
+
+    return handle
+
+
+def _hero_performance_meaning(args: PlayerHeroPerformanceInput) -> str:
+    rank_by = "win_rate" if args.selection_mode == "strong" else "games played"
+    parts = [
+        f"top {args.take} heroes by {rank_by}",
+        f"min {args.min_match_count} games each",
+    ]
+    if args.days:
+        parts.append(f"within last {args.days} days")
+    if args.match_take is not None:
+        parts.append(f"stats from most recent {args.match_take} matches")
+    return "; ".join(parts)
+
+
+def player_hero_performance_evidence(result: ToolResult) -> list[EvidenceItem]:
+    data = result.data if isinstance(result.data, dict) else {}
+    filters = data.get("filters") if isinstance(data.get("filters"), dict) else {}
+    heroes = data.get("heroes") or []
+    names = _hero_name_index()
+    steam_id = data.get("steam_account_id")
+    basis = filters.get("win_rate_basis") or "player_hero: winCount/matchCount"
+    evidence: list[EvidenceItem] = []
+    for index, row in enumerate(heroes):
+        if not isinstance(row, dict):
+            continue
+        hero_id = row.get("hero_id")
+        hero_name = names.get(hero_id) if isinstance(hero_id, int) else None
+        win_count = row.get("win_count")
+        match_count = row.get("match_count")
+        evidence.append(
+            EvidenceItem(
+                id=(
+                    f"{result.tool_call_id}:player_hero_performance:"
+                    f"{steam_id}:{hero_id}:{index}"
+                ),
+                kind="player_hero_performance",
+                subject=f"{hero_name or hero_id} ({win_count}/{match_count})",
+                value={
+                    "steam_account_id": steam_id,
+                    "hero_id": hero_id,
+                    "hero_name": hero_name,
+                    "win_count": win_count,
+                    "match_count": match_count,
+                    "win_rate": row.get("win_rate"),
+                    "win_rate_basis": basis,
+                    "kda": row.get("kda"),
+                    "avg_kills": row.get("avg_kills"),
+                    "avg_deaths": row.get("avg_deaths"),
+                    "avg_assists": row.get("avg_assists"),
+                    "duration": row.get("duration"),
+                    "gold_per_minute": row.get("gold_per_minute"),
+                    "experience_per_minute": row.get("experience_per_minute"),
+                    "imp": row.get("imp"),
+                    "last_played_date_time": row.get("last_played_date_time"),
+                    "filters": {**filters, "win_rate_basis": basis},
+                },
+                source=result.source,
+                tool_call_id=result.tool_call_id,
+                tool=result.tool,
+            )
+        )
+    # Relay provider sample knobs verbatim; do not invent a single aggregate.
+    # match_take caps the per-hero stat sample; returned_hero_match_sum covers
+    # only the RETURNED heroes (a subset after min_match_count + take).
+    evidence.append(
+        EvidenceItem(
+            id=f"{result.tool_call_id}:sample_size:player_hero:{steam_id}",
+            kind="sample_size",
+            subject=f"hero-performance sample for {steam_id}",
+            value={
+                "steam_account_id": steam_id,
+                "match_take": filters.get("match_take"),
+                "returned_hero_count": len(heroes),
+                "returned_hero_match_sum": data.get("returned_hero_match_sum"),
+                "filters": filters,
+            },
+            source=result.source,
+            tool_call_id=result.tool_call_id,
+            tool=result.tool,
+        )
+    )
+    return evidence
+
+
+def _player_hero_performance_handler(settings: Settings):
+    async def handle(
+        args: PlayerHeroPerformanceInput, context: QueryContext
+    ) -> dict[str, Any]:
+        if not settings.stratz_token:
+            raise ValueError("METAMIND_STRATZ_TOKEN is required")
+        # Scope from plan.context: bracket -> rankIds(0-80, LIVE-LOCKED);
+        # position_ids passed through. region/game_mode NOT read (v1 type
+        # mismatch; validator already rejects them on player plans).
+        rank_ids = basic_to_rank_ids(context.bracket)
+        position_ids = context.position_ids
+        start_date_time = int(_now()) - args.days * 86400 if args.days else None
+        # Over-fetch hero rows in strong mode: heroesPerformance default order is
+        # unconfirmed (inventory 🚦), and a low-play high-win hero may sit in the
+        # tail if STRATZ sorts by games played. popular trusts provider order.
+        if args.selection_mode == "strong":
+            hero_row_take = min(max(args.take * 3, 50), 200)
+        else:
+            hero_row_take = args.take
+        transport = StratzTransport(settings.stratz_graphql_url, settings.stratz_token)
+        players = StratzPlayers(transport)
+        try:
+            rows = await _with_retry(
+                lambda: players.get_hero_performance(
+                    args.steam_account_id,
+                    rank_ids=rank_ids,
+                    position_ids=position_ids,
+                    start_date_time=start_date_time,
+                    match_take=args.match_take,
+                    hero_row_take=hero_row_take,
+                )
+            )
+        finally:
+            await transport.aclose()
+        # win_rate derived locally (STRATZ has no native winRate on this type).
+        for row in rows:
+            row["win_rate"] = _rate(row.get("win_count"), row.get("match_count"))
+        kept = [r for r in rows if (r.get("match_count") or 0) >= args.min_match_count]
+        if args.selection_mode == "strong":
+            kept.sort(
+                key=lambda r: (r.get("win_rate") or 0, r.get("match_count") or 0),
+                reverse=True,
+            )
+        else:
+            kept.sort(key=lambda r: r.get("match_count") or 0, reverse=True)
+        top = kept[: args.take]
+        basis = "player_hero: winCount/matchCount"
+        meaning = _hero_performance_meaning(args)
+        return {
+            "steam_account_id": args.steam_account_id,
+            "heroes": top,
+            "filters": {
+                "steam_account_id": args.steam_account_id,
+                "bracket_basic_ids": context.bracket,
+                "rank_ids": rank_ids,
+                "position_ids": position_ids,
+                "days": args.days,
+                "match_take": args.match_take,
+                "min_match_count": args.min_match_count,
+                "selection_mode": args.selection_mode,
+                "hero_row_take": hero_row_take,
+                "win_rate_basis": basis,
+                "meaning": meaning,
+            },
+            "selection_policy": meaning,
+            "returned_hero_match_sum": sum(
+                (r.get("match_count") or 0) for r in top
+            ),
         }
 
     return handle

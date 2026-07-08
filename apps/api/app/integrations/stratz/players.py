@@ -63,6 +63,36 @@ query PlayerRecentMatches(
 }
 """
 
+# NOTE the singular request type name — heroesPerformance (plural field,
+# PlayerHeroesPerformanceType[] rows) takes PlayerHeroPerformanceMatchesRequest
+# Type, NOT the plural-named input type (which also exists but is unused here).
+# See inventory §命名陷阱. The outer `take` = hero rows returned; request.take
+# = match sample size contributing to each hero's stats (two distinct takes).
+_PLAYER_HERO_PERFORMANCE_QUERY = """
+query PlayerHeroPerformance(
+  $steamAccountId: Long!,
+  $request: PlayerHeroPerformanceMatchesRequestType!,
+  $take: Int!
+) {
+  player(steamAccountId: $steamAccountId) {
+    heroesPerformance(request: $request, take: $take) {
+      heroId
+      winCount
+      matchCount
+      kDA
+      avgKills
+      avgDeaths
+      avgAssists
+      duration
+      imp
+      goldPerMinute
+      experiencePerMinute
+      lastPlayedDateTime
+    }
+  }
+}
+"""
+
 
 class StratzPlayers:
     """STRATZ player-domain client. Thin relay: normalize field names only;
@@ -114,6 +144,65 @@ class StratzPlayers:
         # days∩take intersection semantics do not depend on STRATZ's order.
         rows.sort(key=lambda r: r.get("start_time") or 0, reverse=True)
         return rows[:take]
+
+    async def get_hero_performance(
+        self,
+        steam_account_id: int,
+        *,
+        rank_ids: list[int] | None = None,
+        position_ids: list[str] | None = None,
+        start_date_time: int | None = None,
+        end_date_time: int | None = None,
+        match_take: int | None = None,
+        hero_row_take: int = 50,
+    ) -> list[dict[str, Any]]:
+        """heroesPerformance rows. Thin relay — does NOT sort/filter/aggregate;
+        the agentic layer applies win_rate derivation, min_match_count, and
+        selection. Two distinct takes: hero_row_take (outer, hero rows returned)
+        vs match_take (request.take, match sample size per hero).
+        """
+        request: dict[str, Any] = {}
+        if rank_ids:
+            request["rankIds"] = rank_ids
+        if position_ids:
+            request["positionIds"] = position_ids
+        if start_date_time is not None:
+            request["startDateTime"] = start_date_time
+        if end_date_time is not None:
+            request["endDateTime"] = end_date_time
+        if match_take is not None:
+            request["take"] = match_take
+        payload = await self.transport.graphql(
+            "PlayerHeroPerformance",
+            _PLAYER_HERO_PERFORMANCE_QUERY,
+            {
+                "steamAccountId": steam_account_id,
+                "request": request,
+                "take": hero_row_take,
+            },
+        )
+        rows = (
+            ((payload.get("data") or {}).get("player") or {}).get("heroesPerformance")
+            or []
+        )
+        return [self._normalize_hero_performance(row) for row in rows]
+
+    @staticmethod
+    def _normalize_hero_performance(row: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "hero_id": row.get("heroId"),
+            "win_count": row.get("winCount"),
+            "match_count": row.get("matchCount"),
+            "kda": row.get("kDA"),
+            "avg_kills": row.get("avgKills"),
+            "avg_deaths": row.get("avgDeaths"),
+            "avg_assists": row.get("avgAssists"),
+            "duration": row.get("duration"),
+            "imp": row.get("imp"),
+            "gold_per_minute": row.get("goldPerMinute"),
+            "experience_per_minute": row.get("experiencePerMinute"),
+            "last_played_date_time": row.get("lastPlayedDateTime"),
+        }
 
     @staticmethod
     def _normalize_profile(raw: dict[str, Any], steam_account_id: int) -> dict[str, Any]:

@@ -4,7 +4,7 @@ Capture target: player-domain queries for V3.0 G2 (玩家战绩查询).
 
 Capture date: 2026-07-07
 
-Methodology: **schema-introspection based** (parsed `docs/technical/stratz_schema_introspection.json`), not live Playwright capture. Field/description facts below are schema-confirmed; items needing live-query confirmation are marked 🚦LIVE-GATE. No live requests were issued for this inventory.
+Methodology: **schema-introspection based** (parsed `docs/technical/stratz_schema_introspection.json`), not live Playwright capture. Field/description facts below are schema-confirmed; items needing live-query confirmation are marked 🚦LIVE-GATE. The `basic_to_rank_ids` mapping was subsequently **LIVE-LOCKED 2026-07-08** via a one-shot `heroesPerformance` probe (player 853634884) — see that section; all other facts remain schema-level.
 
 ## Summary of confirmed facts (schema-level)
 
@@ -49,17 +49,26 @@ DIVINE_IMMORTAL   -> [7, 8]
 ```
 **风险低**(ordinal 即值是 STRATZ 通行约定),但 enum description 为空,建议 Commit 2 实现时用一个 live query 抽验一次。`FILTERED`/`ALL` 不应进 basic helper(抛错)。
 
-### `basic_to_rank_ids` (0-80 细分空间,hero_performance 用) 🚦LIVE-GATE
+### `basic_to_rank_ids` (0-80 细分空间,hero_performance 用) ✅LIVE-LOCKED 2026-07-08
 
-introspection 描述**只给 "0-80, 0=unknown"**,不给每个 bracket 的细分范围。用户本地核验数据点:`74 = Divine 4 Stars`。推断编码 = `bracket(1-8) * 10 + star`:
+introspection 描述**只给 "0-80, 0=unknown"**,不给每个 bracket 的细分范围。编码 = `bracket(1-8) * 10 + star(0-4)`,Immortal 塌缩为 `{80}`,`*5-*9` 槽位是未用空隙。
+
+**✅LIVE-LOCKED**:2026-07-08 对 player `853634884`(seasonRank=80 Immortal,matchCount=5290)发真实 `heroesPerformance` 探针,变 `rankIds: [X]` 看返回,锁定边界:
+- `74` → 有数据(Divine 4 Stars,与用户本地核验一致)。
+- `80` → 有数据(Immortal;玩家本段位)。
+- `24`/`53`/`64`/`70` → 有数据(各 bracket 的 star 4)。
+- `25`/`65`/`75`/`76`/`79` → **空**(证实 `*5-*9` 空隙未被任何 bracket 使用)。
+- `10` → 空(Herald;Immortal 玩家无此段位对局,符合预期)。
+
+锁定映射:
 ```
-HERALD_GUARDIAN   -> [10..24]   (Herald 10-14, Guardian 20-24)
-CRUSADER_ARCHON   -> [30..44]
-LEGEND_ANCIENT    -> [50..64]
-DIVINE_IMMORTAL   -> [70..75, 80]   (Divine 70-74 或 71-75?,Immortal 80)  ← star 索引(0-4 vs 1-5)未定
 UNCALIBRATED      -> [0]
+HERALD_GUARDIAN   -> [10..14, 20..24]
+CRUSADER_ARCHON   -> [30..34, 40..44]
+LEGEND_ANCIENT    -> [50..54, 60..64]
+DIVINE_IMMORTAL   -> [70, 71, 72, 73, 74, 80]   (Divine 70-74,非 71-75;Immortal 仅 80)
 ```
-**🚦HARD GATE**:Divine/Immortal 的精确边界(70-74 vs 71-75、Immortal 是否含 81+)**必须 live query 锁定**(发真实 `heroesPerformance` 请求,变 rankIds 看返回)。**Commit 3 实现前若未锁定 → hero_performance 的 bracket 过滤不实现**(暴露"不支持",不加假 fallback)。
+推理旁证(独立于 live query):范围上限 80 = `8*10+0`,反推 star 必须 0-indexed(若 1-5,Immortal 会到 81-85 超过 80)。与 OpenDota `rank_tier`(medal*10+star)约定一致。
 
 ## `PlayerType` 关键字段
 
@@ -167,7 +176,7 @@ proSteamAccount: ProSteamAccountType     # 职业选手关联(可选)
 ## 给 Commit 2/3 的锁定项
 
 - ✅ `basic_to_bracket_ids`(0-8)—— 映射确定(ordinal),Commit 2 可实现,live 抽验一次。
-- 🚦 `basic_to_rank_ids`(0-80)—— **HARD GATE**,Commit 3 前必须 live query 锁定 Divine/Immortal 边界;锁不定则 hero_performance 不做 bracket 过滤。
+- ✅ `basic_to_rank_ids`(0-80)—— **LIVE-LOCKED 2026-07-08**(见上节),Commit 3 已实现。
 - 🚦 `heroesPerformance` 默认排序 —— 未声明,strong 模式 over-fetch(~150)兜底;popular 用外层 take。
 - ✅ `MatchType.players(steamAccountId)` 拿当前玩家行 + `isVictory` —— 确认,recent_matches 用。
 - ✅ 双 take(outer=hero rows / request.take=match 统计数)—— 确认,Commit 3 分 `take`/`match_take`。
