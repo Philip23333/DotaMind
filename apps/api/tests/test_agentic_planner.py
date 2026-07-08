@@ -789,3 +789,79 @@ def test_agentic_planner_prompt_contains_sample_policy_table() -> None:
     assert "stratz.hero_matchup_ranking.min_sample_size" in prompt
     # Scattered ad-hoc thresholds were removed from selection_mode sections.
     assert "500-800" not in prompt
+
+
+def _player_hero_performance_payload() -> dict[str, Any]:
+    return {
+        "status": "planned",
+        "reason": "player hero win rates can be answered with player_hero_performance",
+        "plan": {
+            "intent": "player_hero_performance",
+            "goal": "Recent hero win rates for player 853634884.",
+            "output_contract": "natural_language_answer",
+            "context": {
+                "bracket": None,
+                "weeks_back": None,
+                "position_ids": None,
+                "region_ids": None,
+                "game_mode_ids": None,
+            },
+            "tool_calls": [
+                {
+                    "id": "heroperf",
+                    "tool": "stratz.player_hero_performance",
+                    "args": {
+                        "steam_account_id": 853634884,
+                        "take": 15,
+                        "match_take": 20,
+                    },
+                }
+            ],
+            "required_evidence": ["player_hero_performance", "sample_size"],
+            "constraints": {"max_tool_calls": 6, "allow_mock": False},
+        },
+    }
+
+
+def test_agentic_planner_prompt_contains_player_routing() -> None:
+    planner = AgenticPlanner(
+        _registry(), llm=FakeLLM(_valid_plan_payload()), llm_enabled=True, planner_max_retries=0
+    )
+
+    prompt = planner._system_prompt()
+
+    # player tools are registered and surfaced in the rendered catalog
+    assert "stratz.player_profile" in prompt
+    assert "stratz.player_recent_matches" in prompt
+    assert "stratz.player_hero_performance" in prompt
+    # routing + param-semantics guidance is present
+    assert "Player evidence queries" in prompt
+    assert "match_take=N" in prompt
+    assert "NO name search" in prompt
+    assert "numeric Steam32 id" in prompt
+
+
+def test_agentic_planner_accepts_player_hero_performance_plan() -> None:
+    payload = _player_hero_performance_payload()
+    planner = AgenticPlanner(
+        _registry(), llm=FakeLLM(payload), llm_enabled=True, planner_max_retries=0
+    )
+
+    result = asyncio.run(planner.plan("853634884 近 20 场什么英雄胜率高"))
+
+    assert result.status == "planned"
+    assert result.errors == []
+
+
+def test_agentic_planner_rejects_player_plan_with_region_filter() -> None:
+    payload = _player_hero_performance_payload()
+    payload["plan"]["context"]["region_ids"] = ["CHINA"]
+    planner = AgenticPlanner(
+        _registry(), llm=FakeLLM(payload), llm_enabled=True, planner_max_retries=0
+    )
+
+    result = asyncio.run(planner.plan("853634884 国服什么英雄胜率高"))
+
+    # validate_context_scope rejects region_ids on non-hero_daily_trends tools
+    assert result.status == "error"
+    assert any("region_ids/game_mode_ids" in err for err in result.errors)

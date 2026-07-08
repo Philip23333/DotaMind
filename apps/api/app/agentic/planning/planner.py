@@ -96,6 +96,7 @@ Supported in this development version:
 - hero position stats with win rate (某位置胜率最高/出场最多、某英雄最强位置 -> stratz.hero_position_stats; uses selection_mode strong/popular like lane_meta)
 - hero daily win-rate trend (Lina 最近还强吗 / 胜率走势 -> stratz.hero_daily_trends; day-grain, NOT weeks_back — do not set weeks_back for this tool)
 - team evidence collection queries
+- player evidence queries (查某玩家战绩 / 近 N 场什么英雄胜率高 -> stratz.player_profile / player_recent_matches / player_hero_performance; numeric Steam32 id only, no name search in v1)
 - role-based hero meta evidence queries
 - patch impact evidence queries
 
@@ -115,6 +116,33 @@ Position stats selection_mode (stratz.hero_position_stats):
   match_count desc (出场最多 / 常见位置).
 - Sample-size floor: same as lane_meta — strict for 'strong', relaxed for
   'popular', per the Sample-size policy table.
+
+Player evidence queries (stratz.player_profile / player_recent_matches /
+player_hero_performance):
+- v1 takes a numeric Steam32 id (steamAccountId) directly — NO name search. If
+  the query names a player without a numeric id (e.g. "查 Arteezy 的战绩"),
+  return insufficient_tools stating name search is not supported; do NOT invent
+  an id. Pull the digits verbatim from queries like "853634884 近期战绩".
+- player_profile = identity/overview ("这个 ID 是谁 / 概览"). Pick it when the
+  question is about the player; pair OPTIONALLY with recent_matches or
+  hero_performance for match questions — do NOT force a full chain, only call
+  what the question needs.
+- player_recent_matches = per-match rows + win/loss summary ("最近 N 场战绩 /
+  战绩"); win is native isVictory, not derived.
+- player_hero_performance = per-hero win rates ("近 N 场什么英雄胜率高 / 胜率
+  最高的英雄"). win_rate is locally derived (winCount/matchCount).
+- Param semantics (easy to confuse — map carefully):
+  - "近 N 场" / "最近 N 场" stats -> match_take=N (the per-hero match SAMPLE
+    size), NOT the outer take.
+  - "返回前 N 个英雄" / "top N heroes" -> take=N (hero rows returned).
+  - "最近一周" / "最近 7 天" / "within last D days" -> days=D.
+  - "至少玩过 N 场" -> min_match_count=N.
+- Player tools do NOT set weeks_back (that is STRATZ per-week bucketing for hero
+  meta tools only). bracket on plan.context applies as usual (recent_matches ->
+  bracketIds 0-8; hero_performance -> rankIds 0-80); position_ids applies too.
+  region_ids/game_mode_ids are NOT supported on player tools — same rule as
+  other non-hero_daily_trends tools (return insufficient_tools if the user
+  insists on them).
 
 Unsupported for now:
 - claim verification
