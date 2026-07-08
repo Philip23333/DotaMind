@@ -181,11 +181,26 @@ def test_render_contains_per_tool_table_and_four_modes() -> None:
     assert "default" in rendered
     assert "explicit > strict > relaxed > default" in rendered
     # Per-tool table covers all 5 enrolled tools.
-    assert "- stratz.hero_matchup_ranking.min_sample_size: default=2000 relaxed=500 strict=5000" in rendered
-    assert "- stratz.hero_synergy_ranking.min_sample_size: default=2000 relaxed=500 strict=5000" in rendered
-    assert "- stratz.lane_meta_global.min_sample_size: default=1000 relaxed=300 strict=3000" in rendered
-    assert "- stratz.hero_position_stats.min_sample_size: default=1000 relaxed=300 strict=3000" in rendered
-    assert "- stratz.filter_heroes_by_position.min_position_match_count: default=1000 relaxed=300 strict=3000" in rendered
+    assert (
+        "- stratz.hero_matchup_ranking.min_sample_size: "
+        "default=2000 relaxed=500 strict=5000"
+    ) in rendered
+    assert (
+        "- stratz.hero_synergy_ranking.min_sample_size: "
+        "default=2000 relaxed=500 strict=5000"
+    ) in rendered
+    assert (
+        "- stratz.lane_meta_global.min_sample_size: "
+        "default=1000 relaxed=300 strict=3000"
+    ) in rendered
+    assert (
+        "- stratz.hero_position_stats.min_sample_size: "
+        "default=1000 relaxed=300 strict=3000"
+    ) in rendered
+    assert (
+        "- stratz.filter_heroes_by_position.min_position_match_count: "
+        "default=1000 relaxed=300 strict=3000"
+    ) in rendered
 
 
 def test_render_rejects_unknown_tool_typo() -> None:

@@ -73,7 +73,8 @@ class HeroMatchupRankingInput(BaseModel):
     hero_id: int = Field(gt=0)
     side: Literal["vs"] = "vs"
     take: int = Field(default=10, ge=1, le=50)
-    # keep in sync with policy.yaml planning.sample_policy.tools[stratz.hero_matchup_ranking].default
+    # keep in sync with policy.yaml planning.sample_policy
+    # .tools[stratz.hero_matchup_ranking].default
     min_sample_size: int = Field(default=2000, ge=0)
 
 
@@ -81,7 +82,8 @@ class HeroSynergyRankingInput(BaseModel):
     hero_id: int = Field(gt=0)
     side: Literal["with"] = "with"
     take: int = Field(default=10, ge=1, le=50)
-    # keep in sync with policy.yaml planning.sample_policy.tools[stratz.hero_synergy_ranking].default
+    # keep in sync with policy.yaml planning.sample_policy
+    # .tools[stratz.hero_synergy_ranking].default
     min_sample_size: int = Field(default=2000, ge=0)
 
 
@@ -267,7 +269,10 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
                 "candidate_rows": OutputPathContract(
                     path="data.candidate_rows",
                     type="list[dict]",
-                    description="Latest completed week's ranking rows (advantage+disadvantage flattened).",
+                    description=(
+                        "Latest completed week's ranking rows "
+                        "(advantage+disadvantage flattened)."
+                    ),
                 ),
             },
             metadata={"game": "dota2", "domain": "hero_matchup"},
@@ -323,7 +328,10 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
                 "candidate_rows": OutputPathContract(
                     path="data.candidate_rows",
                     type="list[dict]",
-                    description="Latest completed week's ranking rows (advantage+disadvantage flattened).",
+                    description=(
+                        "Latest completed week's ranking rows "
+                        "(advantage+disadvantage flattened)."
+                    ),
                 ),
             },
             metadata={"game": "dota2", "domain": "hero_synergy"},
@@ -425,7 +433,10 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
                 "position_id": ArgContract(
                     description="Optional position filter (POSITION_1 .. POSITION_5).",
                 ),
-                "take": ArgContract(description="Top rows when filtering by position_id (position_id branch only)."),
+                "take": ArgContract(
+                    description="Top rows when filtering by position_id "
+                    "(position_id branch only)."
+                ),
                 "min_sample_size": ArgContract(
                     description="Drop rows below this match_count threshold (both branches)."
                 ),
@@ -759,7 +770,8 @@ def _hero_daily_trends_handler(settings: Settings):
 class FilterHeroesByPositionInput(BaseModel):
     candidate_rows: list[dict[str, Any]] = Field(min_length=1)
     position_id: str
-    # keep in sync with policy.yaml planning.sample_policy.tools[stratz.filter_heroes_by_position].default
+    # keep in sync with policy.yaml planning.sample_policy
+    # .tools[stratz.filter_heroes_by_position].default
     min_position_match_count: int = Field(default=1000, ge=0)
 
 
@@ -1666,7 +1678,10 @@ def lane_meta_global_evidence(result: ToolResult) -> list[EvidenceItem]:
                             f"{hero_id}-{target_hero_id}:{week_epoch}:{index}"
                         ),
                         kind="sample_size",
-                        subject=f"lane meta sample for {hero_label} + {target_label} ({window_label})",
+                        subject=(
+                            f"lane meta sample for {hero_label} + "
+                            f"{target_label} ({window_label})"
+                        ),
                         value={
                             "sample_size": match_count,
                             "hero_id": hero_id,

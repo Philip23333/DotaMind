@@ -225,7 +225,13 @@ def test_stratz_heroes_normalizes_hero_synergy() -> None:
                                 "heroId": 8,
                                 "matchCountWith": 50000,
                                 "with": [
-                                    {"heroId1": 8, "heroId2": 65, "matchCount": 200, "winCount": 120, "synergy": 7.7},
+                                    {
+                                        "heroId1": 8,
+                                        "heroId2": 65,
+                                        "matchCount": 200,
+                                        "winCount": 120,
+                                        "synergy": 7.7,
+                                    },
                                 ],
                             }
                         ],
@@ -234,7 +240,13 @@ def test_stratz_heroes_normalizes_hero_synergy() -> None:
                                 "heroId": 8,
                                 "matchCountWith": 62580,
                                 "with": [
-                                    {"heroId1": 8, "heroId2": 89, "matchCount": 14, "winCount": 5, "synergy": -16.9},
+                                    {
+                                        "heroId1": 8,
+                                        "heroId2": 89,
+                                        "matchCount": 14,
+                                        "winCount": 5,
+                                        "synergy": -16.9,
+                                    },
                                 ],
                             }
                         ],

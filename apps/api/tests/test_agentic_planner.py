@@ -107,7 +107,9 @@ def _valid_plan_payload() -> dict[str, Any]:
 
 
 def test_agentic_planner_accepts_valid_counter_pick_plan() -> None:
-    planner = AgenticPlanner(_registry(), llm=FakeLLM(_valid_plan_payload()), llm_enabled=True, planner_max_retries=0)
+    planner = AgenticPlanner(
+        _registry(), llm=FakeLLM(_valid_plan_payload()), llm_enabled=True, planner_max_retries=0
+    )
 
     result = asyncio.run(planner.plan("enemy picked Lina, what should I pick?"))
 
@@ -166,7 +168,9 @@ def test_agentic_planner_exposes_raw_content_on_json_decode_error() -> None:
 def test_agentic_planner_rejects_unknown_tool() -> None:
     payload = _valid_plan_payload()
     payload["plan"]["tool_calls"][1]["tool"] = "reports.team_report"
-    planner = AgenticPlanner(_registry(), llm=FakeLLM(payload), llm_enabled=True, planner_max_retries=0)
+    planner = AgenticPlanner(
+        _registry(), llm=FakeLLM(payload), llm_enabled=True, planner_max_retries=0
+    )
 
     result = asyncio.run(planner.plan("How Team BB play lately?"))
 
@@ -178,7 +182,9 @@ def test_agentic_planner_rejects_unknown_tool() -> None:
 def test_agentic_planner_accepts_hardcoded_hero_id_when_schema_allows_int() -> None:
     payload = _valid_plan_payload()
     payload["plan"]["tool_calls"][1]["args"]["hero_id"] = 25
-    planner = AgenticPlanner(_registry(), llm=FakeLLM(payload), llm_enabled=True, planner_max_retries=0)
+    planner = AgenticPlanner(
+        _registry(), llm=FakeLLM(payload), llm_enabled=True, planner_max_retries=0
+    )
 
     result = asyncio.run(planner.plan("enemy picked Lina, what should I pick?"))
 
@@ -206,7 +212,9 @@ def test_agentic_planner_accepts_pair_lane_outcome_reference_from_any_previous_c
         "pair_lane_winrate",
         "sample_size",
     ]
-    planner = AgenticPlanner(_registry(), llm=FakeLLM(payload), llm_enabled=True, planner_max_retries=0)
+    planner = AgenticPlanner(
+        _registry(), llm=FakeLLM(payload), llm_enabled=True, planner_max_retries=0
+    )
 
     result = asyncio.run(planner.plan("how does SK + AA lane?"))
 
@@ -233,7 +241,9 @@ def test_agentic_planner_rejects_pair_lane_outcome_missing_is_with() -> None:
         "pair_lane_winrate",
         "sample_size",
     ]
-    planner = AgenticPlanner(_registry(), llm=FakeLLM(payload), llm_enabled=True, planner_max_retries=0)
+    planner = AgenticPlanner(
+        _registry(), llm=FakeLLM(payload), llm_enabled=True, planner_max_retries=0
+    )
 
     result = asyncio.run(planner.plan("how does SK + AA lane?"))
 
@@ -244,7 +254,9 @@ def test_agentic_planner_rejects_pair_lane_outcome_missing_is_with() -> None:
 def test_agentic_planner_rejects_mock_allowed() -> None:
     payload = _valid_plan_payload()
     payload["plan"]["constraints"]["allow_mock"] = True
-    planner = AgenticPlanner(_registry(), llm=FakeLLM(payload), llm_enabled=True, planner_max_retries=0)
+    planner = AgenticPlanner(
+        _registry(), llm=FakeLLM(payload), llm_enabled=True, planner_max_retries=0
+    )
 
     result = asyncio.run(planner.plan("enemy picked Lina, what should I pick?"))
 
@@ -267,7 +279,9 @@ def test_agentic_planner_rejects_missing_required_evidence() -> None:
             "constraints": {"max_tool_calls": 6, "allow_mock": False},
         },
     }
-    planner = AgenticPlanner(_registry(), llm=FakeLLM(payload), llm_enabled=True, planner_max_retries=0)
+    planner = AgenticPlanner(
+        _registry(), llm=FakeLLM(payload), llm_enabled=True, planner_max_retries=0
+    )
 
     result = asyncio.run(planner.plan("what changed in 7.41d?"))
 
@@ -278,7 +292,9 @@ def test_agentic_planner_rejects_missing_required_evidence() -> None:
 def test_agentic_planner_rejects_matchup_tool_results_contract() -> None:
     payload = _valid_plan_payload()
     payload["plan"]["output_contract"] = "tool_results"
-    planner = AgenticPlanner(_registry(), llm=FakeLLM(payload), llm_enabled=True, planner_max_retries=0)
+    planner = AgenticPlanner(
+        _registry(), llm=FakeLLM(payload), llm_enabled=True, planner_max_retries=0
+    )
 
     result = asyncio.run(planner.plan("enemy picked Lina, what should I pick?"))
 
@@ -289,7 +305,9 @@ def test_agentic_planner_rejects_matchup_tool_results_contract() -> None:
 def test_agentic_planner_rejects_meta_list_contract() -> None:
     payload = _valid_plan_payload()
     payload["plan"]["output_contract"] = "meta_list"
-    planner = AgenticPlanner(_registry(), llm=FakeLLM(payload), llm_enabled=True, planner_max_retries=0)
+    planner = AgenticPlanner(
+        _registry(), llm=FakeLLM(payload), llm_enabled=True, planner_max_retries=0
+    )
 
     result = asyncio.run(planner.plan("这版本什么三号位厉害？"))
 
@@ -316,7 +334,9 @@ def test_agentic_planner_accepts_role_meta_report_evidence_contract() -> None:
             "constraints": {"max_tool_calls": 6, "allow_mock": False},
         },
     }
-    planner = AgenticPlanner(_registry(), llm=FakeLLM(payload), llm_enabled=True, planner_max_retries=0)
+    planner = AgenticPlanner(
+        _registry(), llm=FakeLLM(payload), llm_enabled=True, planner_max_retries=0
+    )
 
     result = asyncio.run(planner.plan("what mid heroes are strong?"))
 
@@ -368,7 +388,9 @@ def test_agentic_planner_accepts_team_recent_report_catalog_contract() -> None:
             "constraints": {"max_tool_calls": 6, "allow_mock": False},
         },
     }
-    planner = AgenticPlanner(_registry(), llm=FakeLLM(payload), llm_enabled=True, planner_max_retries=0)
+    planner = AgenticPlanner(
+        _registry(), llm=FakeLLM(payload), llm_enabled=True, planner_max_retries=0
+    )
 
     result = asyncio.run(planner.plan("How Team BB play lately?"))
 
@@ -402,7 +424,9 @@ def test_agentic_planner_rejects_bad_team_recent_report_contract() -> None:
             "constraints": {"max_tool_calls": 6, "allow_mock": False},
         },
     }
-    planner = AgenticPlanner(_registry(), llm=FakeLLM(payload), llm_enabled=True, planner_max_retries=0)
+    planner = AgenticPlanner(
+        _registry(), llm=FakeLLM(payload), llm_enabled=True, planner_max_retries=0
+    )
 
     result = asyncio.run(planner.plan("How Team BB play lately?"))
 
@@ -419,7 +443,9 @@ def test_agentic_planner_rejects_bad_team_recent_report_contract() -> None:
 
 
 def test_agentic_planner_prompt_contains_team_recent_catalog_example() -> None:
-    planner = AgenticPlanner(_registry(), llm=FakeLLM(_valid_plan_payload()), llm_enabled=True, planner_max_retries=0)
+    planner = AgenticPlanner(
+        _registry(), llm=FakeLLM(_valid_plan_payload()), llm_enabled=True, planner_max_retries=0
+    )
 
     prompt = planner._system_prompt()
 
@@ -461,7 +487,9 @@ def test_agentic_planner_rejects_unknown_required_evidence() -> None:
             "constraints": {"max_tool_calls": 6, "allow_mock": False},
         },
     }
-    planner = AgenticPlanner(_registry(), llm=FakeLLM(payload), llm_enabled=True, planner_max_retries=0)
+    planner = AgenticPlanner(
+        _registry(), llm=FakeLLM(payload), llm_enabled=True, planner_max_retries=0
+    )
 
     result = asyncio.run(planner.plan("what mid heroes are strong?"))
 
@@ -488,7 +516,9 @@ def test_agentic_planner_rejects_role_meta_without_hero_stats() -> None:
             "constraints": {"max_tool_calls": 6, "allow_mock": False},
         },
     }
-    planner = AgenticPlanner(_registry(), llm=FakeLLM(payload), llm_enabled=True, planner_max_retries=0)
+    planner = AgenticPlanner(
+        _registry(), llm=FakeLLM(payload), llm_enabled=True, planner_max_retries=0
+    )
 
     result = asyncio.run(planner.plan("what mid heroes are strong?"))
 
@@ -515,7 +545,9 @@ def test_agentic_planner_accepts_patch_impact_plan() -> None:
             "constraints": {"max_tool_calls": 6, "allow_mock": False},
         },
     }
-    planner = AgenticPlanner(_registry(), llm=FakeLLM(payload), llm_enabled=True, planner_max_retries=0)
+    planner = AgenticPlanner(
+        _registry(), llm=FakeLLM(payload), llm_enabled=True, planner_max_retries=0
+    )
 
     result = asyncio.run(planner.plan("latest patch impact?"))
 
@@ -535,7 +567,9 @@ def test_agentic_planner_rejects_patch_impact_without_records_tool() -> None:
             "constraints": {"max_tool_calls": 6, "allow_mock": False},
         },
     }
-    planner = AgenticPlanner(_registry(), llm=FakeLLM(payload), llm_enabled=True, planner_max_retries=0)
+    planner = AgenticPlanner(
+        _registry(), llm=FakeLLM(payload), llm_enabled=True, planner_max_retries=0
+    )
 
     result = asyncio.run(planner.plan("latest patch impact?"))
 
@@ -562,7 +596,9 @@ def test_agentic_planner_rejects_patch_impact_without_patch_records_evidence() -
             "constraints": {"max_tool_calls": 6, "allow_mock": False},
         },
     }
-    planner = AgenticPlanner(_registry(), llm=FakeLLM(payload), llm_enabled=True, planner_max_retries=0)
+    planner = AgenticPlanner(
+        _registry(), llm=FakeLLM(payload), llm_enabled=True, planner_max_retries=0
+    )
 
     result = asyncio.run(planner.plan("latest patch impact?"))
 

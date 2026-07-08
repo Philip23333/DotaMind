@@ -30,7 +30,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--take", type=int, help="Maximum rows per STRATZ matchup side.")
     parser.add_argument("--bracket", action="append", help="STRATZ bracket (repeatable).")
     parser.add_argument("--position", action="append", help="STRATZ position (repeatable).")
-    parser.add_argument("--weeks-back", type=int, dest="weeks_back", help="STRATZ weeks_back (recent completed weeks, 1..8).")
+    parser.add_argument(
+        "--weeks-back",
+        type=int,
+        dest="weeks_back",
+        help="STRATZ weeks_back (recent completed weeks, 1..8).",
+    )
     parser.add_argument("--args-json", help="Raw JSON object with tool args.")
     return parser.parse_args()
 

@@ -13,8 +13,9 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from app.integrations.stratz.transport import StratzTransport
 
@@ -31,10 +32,12 @@ query ProbeLane($isWith: Boolean!, $bracketBasicIds: [RankBracketBasicEnum!], $w
 """
 
 _MATCHUP_QUERY = """
-query ProbeMatchup($heroId: Short!, $take: Int, $bracketBasicIds: [RankBracketBasicEnum!], $week: Long) {
-  heroStats { heroVsHeroMatchup(heroId: $heroId, take: $take, bracketBasicIds: $bracketBasicIds, week: $week) {
+query ProbeMatchup($heroId: Short!, $take: Int,
+                   $bracketBasicIds: [RankBracketBasicEnum!], $week: Long) {
+  heroStats { heroVsHeroMatchup(heroId: $heroId, take: $take,
+                                bracketBasicIds: $bracketBasicIds, week: $week) {
     advantage { heroId matchCountVs vs { heroId1 heroId2 matchCount winCount } }
-    disadvantage { heroId matchCountVs vs { heroId1 heroId2 matchCount winCount } } } } }
+    disadvantage { heroId matchCountVs vs { heroId1 heroId2 matchCount winCount } } } }
 """
 
 WEEK_SECONDS = 604_800
@@ -171,7 +174,10 @@ async def main() -> int:
     ]
 
     print(f"now epoch      = {int(now)}")
-    print(f"current week idx = {idx}  epoch = {idx * WEEK_SECONDS}  ({time.strftime('%Y-%m-%d', time.gmtime(idx * WEEK_SECONDS))} UTC)")
+    print(
+        f"current week idx = {idx}  epoch = {idx * WEEK_SECONDS}  "
+        f"({time.strftime('%Y-%m-%d', time.gmtime(idx * WEEK_SECONDS))} UTC)"
+    )
     print(f"STRATZ url     = {url}")
 
     all_results: dict[str, list[dict[str, Any]]] = {}

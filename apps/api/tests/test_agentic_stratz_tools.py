@@ -66,11 +66,32 @@ class FakeHeroes:
         return {
             "hero_id": hero_id,
             "advantage": [
-                {"hero_id": 65, "target_hero_id": hero_id, "match_count": 250, "win_count": 150, "pair_win_rate": 0.6, "synergy": 5.1},
-                {"hero_id": 71, "target_hero_id": hero_id, "match_count": 120, "win_count": 70, "pair_win_rate": 0.5833, "synergy": 2.0},
+                {
+                    "hero_id": 65,
+                    "target_hero_id": hero_id,
+                    "match_count": 250,
+                    "win_count": 150,
+                    "pair_win_rate": 0.6,
+                    "synergy": 5.1,
+                },
+                {
+                    "hero_id": 71,
+                    "target_hero_id": hero_id,
+                    "match_count": 120,
+                    "win_count": 70,
+                    "pair_win_rate": 0.5833,
+                    "synergy": 2.0,
+                },
             ],
             "disadvantage": [
-                {"hero_id": 10, "target_hero_id": hero_id, "match_count": 300, "win_count": 120, "pair_win_rate": 0.4, "synergy": -5.5},
+                {
+                    "hero_id": 10,
+                    "target_hero_id": hero_id,
+                    "match_count": 300,
+                    "win_count": 120,
+                    "pair_win_rate": 0.4,
+                    "synergy": -5.5,
+                },
             ],
         }
 
@@ -78,8 +99,20 @@ class FakeHeroes:
         return {
             "hero_id": hero_id,
             "daily": [
-                {"day": 1783209600, "hero_id": hero_id, "win_count": 5042, "match_count": 9756, "win_rate": 0.5168},
-                {"day": 1783123200, "hero_id": hero_id, "win_count": 4755, "match_count": 9229, "win_rate": 0.5149},
+                {
+                    "day": 1783209600,
+                    "hero_id": hero_id,
+                    "win_count": 5042,
+                    "match_count": 9756,
+                    "win_rate": 0.5168,
+                },
+                {
+                    "day": 1783123200,
+                    "hero_id": hero_id,
+                    "win_count": 4755,
+                    "match_count": 9229,
+                    "win_rate": 0.5149,
+                },
             ],
         }
 
@@ -128,22 +161,72 @@ class FakeHeroes:
             },
         ]
 
-    async def hero_position_stats(self, *, hero_ids=None, position_ids=None, **kwargs) -> list[dict]:
+    async def hero_position_stats(
+        self, *, hero_ids=None, position_ids=None, **kwargs
+    ) -> list[dict]:
         # Emulate integration-layer normalize output (win_count + match_win_rate).
         if hero_ids:
             hid = hero_ids[0]
             return [
-                {"hero_id": hid, "position": "POSITION_1", "match_count": 31000, "win_count": 15500, "match_win_rate": 0.5},
-                {"hero_id": hid, "position": "POSITION_2", "match_count": 1500, "win_count": 870, "match_win_rate": 0.58},
-                {"hero_id": hid, "position": "POSITION_3", "match_count": 400, "win_count": 220, "match_win_rate": 0.55},
-                {"hero_id": hid, "position": "POSITION_4", "match_count": 120, "win_count": 60, "match_win_rate": 0.5},
-                {"hero_id": hid, "position": "POSITION_5", "match_count": 80, "win_count": 50, "match_win_rate": 0.625},
+                {
+                    "hero_id": hid,
+                    "position": "POSITION_1",
+                    "match_count": 31000,
+                    "win_count": 15500,
+                    "match_win_rate": 0.5,
+                },
+                {
+                    "hero_id": hid,
+                    "position": "POSITION_2",
+                    "match_count": 1500,
+                    "win_count": 870,
+                    "match_win_rate": 0.58,
+                },
+                {
+                    "hero_id": hid,
+                    "position": "POSITION_3",
+                    "match_count": 400,
+                    "win_count": 220,
+                    "match_win_rate": 0.55,
+                },
+                {
+                    "hero_id": hid,
+                    "position": "POSITION_4",
+                    "match_count": 120,
+                    "win_count": 60,
+                    "match_win_rate": 0.5,
+                },
+                {
+                    "hero_id": hid,
+                    "position": "POSITION_5",
+                    "match_count": 80,
+                    "win_count": 50,
+                    "match_win_rate": 0.625,
+                },
             ]
         pos = position_ids[0] if position_ids else "POSITION_1"
         return [
-            {"hero_id": 8, "position": pos, "match_count": 5000, "win_count": 2600, "match_win_rate": 0.52},
-            {"hero_id": 7, "position": pos, "match_count": 4000, "win_count": 2300, "match_win_rate": 0.575},
-            {"hero_id": 11, "position": pos, "match_count": 3000, "win_count": 1650, "match_win_rate": 0.55},
+            {
+                "hero_id": 8,
+                "position": pos,
+                "match_count": 5000,
+                "win_count": 2600,
+                "match_win_rate": 0.52,
+            },
+            {
+                "hero_id": 7,
+                "position": pos,
+                "match_count": 4000,
+                "win_count": 2300,
+                "match_win_rate": 0.575,
+            },
+            {
+                "hero_id": 11,
+                "position": pos,
+                "match_count": 3000,
+                "win_count": 1650,
+                "match_win_rate": 0.55,
+            },
         ]
 
 
@@ -243,9 +326,30 @@ def test_filter_heroes_by_position_joins_and_drops(monkeypatch) -> None:
     monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzHeroes", FakeHeroes)
 
     candidate_rows = [
-        {"source_side": "advantage", "hero_id": 7, "target_hero_id": 25, "match_count": 250, "matchup_win_rate": 0.6, "synergy": 5.1},
-        {"source_side": "advantage", "hero_id": 11, "target_hero_id": 25, "match_count": 120, "matchup_win_rate": 0.5833, "synergy": 2.0},
-        {"source_side": "advantage", "hero_id": 99, "target_hero_id": 25, "match_count": 100, "matchup_win_rate": 0.55, "synergy": 1.0},
+        {
+            "source_side": "advantage",
+            "hero_id": 7,
+            "target_hero_id": 25,
+            "match_count": 250,
+            "matchup_win_rate": 0.6,
+            "synergy": 5.1,
+        },
+        {
+            "source_side": "advantage",
+            "hero_id": 11,
+            "target_hero_id": 25,
+            "match_count": 120,
+            "matchup_win_rate": 0.5833,
+            "synergy": 2.0,
+        },
+        {
+            "source_side": "advantage",
+            "hero_id": 99,
+            "target_hero_id": 25,
+            "match_count": 100,
+            "matchup_win_rate": 0.55,
+            "synergy": 1.0,
+        },
     ]
     result = asyncio.run(
         ToolExecutor(_registry(token="token")).execute(
@@ -462,7 +566,13 @@ def test_hero_daily_trends_evidence_uses_day_basis() -> None:
         data={
             "hero_id": 8,
             "daily_buckets": [
-                {"day": 1783209600, "hero_id": 8, "win_count": 5042, "match_count": 9756, "win_rate": 0.5168},
+                {
+                    "day": 1783209600,
+                    "hero_id": 8,
+                    "win_count": 5042,
+                    "match_count": 9756,
+                    "win_rate": 0.5168,
+                },
             ],
             "filters": {
                 "take": 5,
@@ -884,7 +994,13 @@ def test_hero_position_stats_evidence_maps_hero_names() -> None:
                     "week_index": 1,
                     "window_label": "latest_completed_week",
                     "rows": [
-                        {"hero_id": 8, "position": "POSITION_1", "match_count": 31000, "win_count": 15500, "match_win_rate": 0.5},
+                        {
+                            "hero_id": 8,
+                            "position": "POSITION_1",
+                            "match_count": 31000,
+                            "win_count": 15500,
+                            "match_win_rate": 0.5,
+                        },
                     ],
                 },
             ],

@@ -294,7 +294,9 @@ def test_evidence_graph_aggregates_lane_outcome() -> None:
     ]
     assert graph.evidence[0].value["hero_name"] == "Legion Commander"
     assert graph.evidence[0].value["partner_hero_name"] == "Rubick"
-    assert graph.evidence[0].subject == "Legion Commander paired with Rubick (latest_completed_week)"
+    assert graph.evidence[0].subject == (
+        "Legion Commander paired with Rubick (latest_completed_week)"
+    )
     assert graph.evidence[1].value["filters"]["position_ids"] == ["POSITION_4"]
     assert graph.evidence[1].value["hero_name"] == "Legion Commander"
     assert graph.evidence[1].value["partner_hero_name"] == "Rubick"
