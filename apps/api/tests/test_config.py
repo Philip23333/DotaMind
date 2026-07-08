@@ -57,14 +57,6 @@ def test_policy_rejects_invalid_sample_size_relationship(tmp_path: Path) -> None
         load_policy(_write_policy(tmp_path / "policy.yaml", data))
 
 
-def test_policy_rejects_hero_weights_that_do_not_sum_to_one(tmp_path: Path) -> None:
-    data = deepcopy(_policy_data())
-    data["hero_report"]["score_weights"]["trend"] = 0.5
-
-    with pytest.raises(ValidationError, match="weights must sum to 1.0"):
-        load_policy(_write_policy(tmp_path / "policy.yaml", data))
-
-
 def test_policy_rejects_invalid_critic_confidence_thresholds(tmp_path: Path) -> None:
     data = deepcopy(_policy_data())
     data["critic"]["hard_min_confidence"] = 0.6

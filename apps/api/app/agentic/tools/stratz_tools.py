@@ -25,12 +25,29 @@ from app.integrations.stratz.brackets import (
 from app.integrations.stratz.heroes import StratzHeroes
 from app.integrations.stratz.players import StratzPlayers
 from app.integrations.stratz.transport import StratzTransport
+from app.integrations.stratz.wilson import wilson_lower_bound
 
 STRATZ_BRACKET_BASIC_DESCRIPTION = (
     "STRATZ RankBracketBasicEnum scope filter, set on plan.context.bracket. "
     "Use exact enum values only: HERALD_GUARDIAN, CRUSADER_ARCHON, "
     "LEGEND_ANCIENT, DIVINE_IMMORTAL. Map 冠绝/Immortal/Divine to "
     "DIVINE_IMMORTAL; do not use DIVINE or IMMORTAL separately."
+)
+
+# Provenance for Wilson-score rating fields on hero-recommendation evidence.
+# STRATZ documents its /heroes/meta/trends rating as a Wilson score over
+# (win rate, match count) but does not publish z; z=1.96 (95% CI) is assumed.
+_WILSON_PROVENANCE = (
+    "wilson_lower_bound(winCount, matchCount, z=1.96); "
+    "method per STRATZ trends rating; z assumed 95% CI"
+)
+# Lane win rate is match-level (matchWinCount) — distinct from the winCount the
+# position/matchup/synergy tools feed into Wilson. The lane handler sources
+# match_win_count (GraphQL matchWinCount), so its provenance must name that field,
+# not winCount. See memory lane-match-win-rate-derivation.
+_WILSON_PROVENANCE_MATCH = (
+    "wilson_lower_bound(matchWinCount, matchCount, z=1.96); "
+    "method per STRATZ trends rating; z assumed 95% CI"
 )
 
 
@@ -322,9 +339,10 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
                 "row per pair, keeping the direction with the larger "
                 "match_count. After dropping rows below `min_sample_size`, "
                 "`selection_mode` picks the ranking basis: 'strong' ranks by "
-                "match_win_rate desc (tie-break match_count desc) — the "
-                "strongest pairs; 'popular' ranks by match_count desc — the "
-                "most-played pairs. `match_win_rate` is match-level "
+                "wilson_rating desc (Wilson lower bound of the match win rate, "
+                "z=1.96, confidence-aware; tie-break match_count desc) — the "
+                "strongest, most reliable pairs; 'popular' ranks by match_count "
+                "desc — the most-played pairs. `match_win_rate` is match-level "
                 "(matchWinCount/matchCount, the pair's game win rate), NOT "
                 "lane-level (winCount/lossCount track lane outcome instead). "
                 "Each row also carries stomp_win_count/stomp_loss_count/cs_count "
@@ -358,7 +376,8 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
                 "selection_mode": ArgContract(
                     description=(
                         "Ranking basis after the min_sample_size floor. "
-                        "'strong' = 强势/胜率高 (sort by match_win_rate desc, "
+                        "'strong' = 强势/胜率高 (sort by wilson_rating desc "
+                        "(Wilson lower bound of match win rate, z=1.96), "
                         "tie-break match_count desc); 'popular' = 常见/出场多 "
                         "(sort by match_count desc). Default 'strong'."
                     )
@@ -374,7 +393,8 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
                 "Return hero position stats (matchCount + winCount -> match_win_rate) "
                 "from heroStats.stats. Exactly one of hero_id or position_id is required. "
                 "selection_mode/min_sample_size apply to BOTH branches: 'strong' = "
-                "match_win_rate desc (tie-break match_count desc) — answers 某位置胜率最高 / "
+                "wilson_rating desc (Wilson lower bound of match win rate, z=1.96, "
+                "confidence-aware; tie-break match_count desc) — answers 某位置胜率最高 / "
                 "某英雄最强位置; 'popular' = match_count desc — answers 出场最多. hero_id "
                 "returns the hero's position rows ranked but NOT truncated (full "
                 "distribution); position_id returns top `take` heroes in that position "
@@ -413,7 +433,8 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
                     description=(
                         "Ranking basis after the min_sample_size floor, applies to both "
                         "hero_id and position_id branches. 'strong' = 强势/胜率高 "
-                        "(match_win_rate desc, tie-break match_count desc); "
+                        "(wilson_rating desc = Wilson lower bound of match win rate, "
+                        "z=1.96; tie-break match_count desc); "
                         "'popular' = 常见/出场多 (match_count desc). Default 'strong'."
                     )
                 ),
@@ -1437,6 +1458,8 @@ def hero_matchup_ranking_evidence(result: ToolResult) -> list[EvidenceItem]:
                         "target_hero_id": resolved_target_id,
                         "target_hero_name": resolved_target_name,
                         "matchup_win_rate": row.get("matchup_win_rate"),
+                        "pair_wilson_rating": row.get("pair_wilson_rating"),
+                        "wilson_provenance": _WILSON_PROVENANCE,
                         "win_rate_basis": "matchup: winCount/matchCount",
                         "match_count": match_count,
                         "synergy": row.get("synergy"),
@@ -1527,6 +1550,8 @@ def hero_synergy_ranking_evidence(result: ToolResult) -> list[EvidenceItem]:
                         "target_hero_id": resolved_target_id,
                         "target_hero_name": resolved_target_name,
                         "pair_win_rate": row.get("pair_win_rate"),
+                        "pair_wilson_rating": row.get("pair_wilson_rating"),
+                        "wilson_provenance": _WILSON_PROVENANCE,
                         "win_rate_basis": "ally_pair: winCount/matchCount",
                         "match_count": match_count,
                         "synergy": row.get("synergy"),
@@ -1613,6 +1638,8 @@ def lane_meta_global_evidence(result: ToolResult) -> list[EvidenceItem]:
                         "target_hero_name": target_hero_name,
                         "match_count": match_count,
                         "match_win_rate": row.get("match_win_rate"),
+                        "wilson_rating": row.get("wilson_rating"),
+                        "wilson_provenance": _WILSON_PROVENANCE_MATCH,
                         "win_rate_basis": "match: matchWinCount/matchCount",
                         "stomp_win_count": row.get("stomp_win_count"),
                         "stomp_loss_count": row.get("stomp_loss_count"),
@@ -1695,6 +1722,8 @@ def hero_position_stats_evidence(result: ToolResult) -> list[EvidenceItem]:
                         "position": row.get("position"),
                         "match_count": match_count,
                         "match_win_rate": row.get("match_win_rate"),
+                        "wilson_rating": row.get("wilson_rating"),
+                        "wilson_provenance": _WILSON_PROVENANCE,
                         "win_count": row.get("win_count"),
                         "win_rate_basis": "match: winCount/matchCount",
                         "week_epoch": week_epoch,
@@ -1978,12 +2007,17 @@ def _lane_meta_global_handler(settings: Settings):
                     if isinstance(record, dict)
                     and (record.get("match_count") or 0) >= args.min_sample_size
                 ]
+                for r in qualifying:
+                    r["wilson_rating"] = wilson_lower_bound(
+                        int(r.get("match_win_count") or 0),
+                        int(r.get("match_count") or 0),
+                    )
                 if args.selection_mode == "strong":
-                    # Strongest pairs: win rate first, match_count only breaks
-                    # ties (and gates credibility via min_sample_size above).
+                    # Strongest, most reliable pairs: Wilson lower bound of the
+                    # match win rate (confidence-aware); match_count breaks ties.
                     qualifying.sort(
                         key=lambda r: (
-                            float(r.get("match_win_rate") or 0),
+                            float(r.get("wilson_rating") or 0),
                             int(r.get("match_count") or 0),
                         ),
                         reverse=True,
@@ -2012,7 +2046,7 @@ def _lane_meta_global_handler(settings: Settings):
 
         weeks_with_record, missing_epochs = _week_summary(buckets)
         sort_clause = (
-            "match_win_rate desc, match_count desc"
+            "wilson_rating desc, match_count desc"
             if args.selection_mode == "strong"
             else "match_count desc"
         )
@@ -2065,10 +2099,15 @@ def _hero_position_stats_handler(settings: Settings):
                     if isinstance(r, dict)
                     and (r.get("match_count") or 0) >= args.min_sample_size
                 ]
+                for r in rows:
+                    r["wilson_rating"] = wilson_lower_bound(
+                        int(r.get("win_count") or 0),
+                        int(r.get("match_count") or 0),
+                    )
                 if args.selection_mode == "strong":
                     rows.sort(
                         key=lambda r: (
-                            float(r.get("match_win_rate") or 0),
+                            float(r.get("wilson_rating") or 0),
                             int(r.get("match_count") or 0),
                         ),
                         reverse=True,
@@ -2096,7 +2135,7 @@ def _hero_position_stats_handler(settings: Settings):
 
         weeks_with_record, missing_epochs = _week_summary(buckets)
         sort_clause = (
-            "match_win_rate desc, match_count desc"
+            "wilson_rating desc, match_count desc"
             if args.selection_mode == "strong"
             else "match_count desc"
         )
@@ -2137,6 +2176,14 @@ def _filter_matchup_rows(
         for row in rows
         if isinstance(row, dict) and (row.get("match_count") or 0) >= min_sample_size
     ]
+    # Sample-confidence co-signal: Wilson lower bound of the pairing's win rate.
+    # Primary ranking stays STRATZ synergy (advantage/synergy formula); pair_wilson
+    # only flags how reliable each pairing's sample is — do NOT merge into a score.
+    for r in filtered:
+        r["pair_wilson_rating"] = wilson_lower_bound(
+            int(r.get("win_count") or 0),
+            int(r.get("match_count") or 0),
+        )
     filtered.sort(
         key=lambda r: (
             float(r.get("synergy") or 0),

@@ -35,16 +35,6 @@ hero_report:
     win_rate_high: 0.56
     pick_rate_low: 0.02
     pick_rate_high: 0.18
-  score_weights:
-    win_rate: 0.30
-    pick_rate: 0.25
-    pro_presence: 0.20
-    patch_impact: 0.15
-    trend: 0.10
-  tiers:
-    s: 85
-    a: 72
-    b: 60
 
 patch_report:
   default_patch: latest

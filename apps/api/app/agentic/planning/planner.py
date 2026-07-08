@@ -102,9 +102,10 @@ Supported in this development version:
 
 Lane-pair meta selection_mode (stratz.lane_meta_global):
 - selection_mode maps to user intent. 强势 / 胜率高 / 上分 -> "strong"
-  (sort by match_win_rate desc, tie-break match_count desc). 常见 / 出场多 /
-  热门 -> "popular" (sort by match_count desc). Default is "strong"; pass
-  "popular" explicitly for pick-volume queries.
+  (sort by wilson_rating desc — Wilson lower bound of the match win rate,
+  confidence-aware; tie-break match_count desc). 常见 / 出场多 / 热门 ->
+  "popular" (sort by match_count desc). Default is "strong"; pass "popular"
+  explicitly for pick-volume queries.
 - Sample-size floor: pick the mode from the Sample-size policy table below
   (strict for 'strong' to drop small-sample high-winrate noise; relaxed for
   'popular' to keep the full pick distribution). Write the chosen number into
@@ -112,10 +113,19 @@ Lane-pair meta selection_mode (stratz.lane_meta_global):
 
 Position stats selection_mode (stratz.hero_position_stats):
 - same strong/popular semantics, applies to BOTH hero_id and position_id branches.
-  'strong' = match_win_rate desc (某位置胜率最高 / 某英雄最强位置); 'popular' =
+  'strong' = wilson_rating desc (某位置胜率最高 / 某英雄最强位置); 'popular' =
   match_count desc (出场最多 / 常见位置).
 - Sample-size floor: same as lane_meta — strict for 'strong', relaxed for
   'popular', per the Sample-size policy table.
+
+Hero matchup/synergy ranking (stratz.hero_matchup_ranking / hero_synergy_ranking):
+- primary ranking is STRATZ `synergy` (the advantage/synergy formula) — do NOT
+  re-rank these by win rate. Each row also carries `pair_wilson_rating` (Wilson
+  lower bound of the pairing's win rate) as a sample-confidence CO-SIGNAL: among
+  comparable synergy prefer higher pair_wilson, and flag low pair_wilson as
+  small-sample/uncertain. Never merge synergy and pair_wilson into one score.
+- `wilson_rating`/`pair_wilson_rating` use z=1.96 (95% CI); STRATZ documents the
+  method but not its z, so treat the value as "same method", not "identical".
 
 Player evidence queries (stratz.player_profile / player_recent_matches /
 player_hero_performance):

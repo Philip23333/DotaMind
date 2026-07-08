@@ -1,5 +1,7 @@
 import asyncio
 
+import pytest
+
 from app.agentic.models import QueryContext, ToolCall, ToolResult, ToolSource
 from app.agentic.tools import ToolExecutor
 from app.agentic.tools.stratz_tools import build_default_tool_registry
@@ -27,6 +29,7 @@ class FakeHeroes:
                     "hero_id": 66,
                     "target_hero_id": hero_id,
                     "match_count": 250,
+                    "win_count": 138,
                     "matchup_win_rate": 0.55,
                     "synergy": 5.1,
                 },
@@ -34,6 +37,7 @@ class FakeHeroes:
                     "hero_id": 71,
                     "target_hero_id": hero_id,
                     "match_count": 120,
+                    "win_count": 62,
                     "matchup_win_rate": 0.52,
                     "synergy": 2.0,
                 },
@@ -41,6 +45,7 @@ class FakeHeroes:
                     "hero_id": 80,
                     "target_hero_id": hero_id,
                     "match_count": 50,
+                    "win_count": 26,
                     "matchup_win_rate": 0.51,
                     "synergy": 0.5,
                 },
@@ -50,6 +55,7 @@ class FakeHeroes:
                     "hero_id": 10,
                     "target_hero_id": hero_id,
                     "match_count": 300,
+                    "win_count": 135,
                     "matchup_win_rate": 0.45,
                     "synergy": -5.5,
                 },
@@ -85,6 +91,7 @@ class FakeHeroes:
                     "target_hero_id": 1,
                     "position": "POSITION_1",
                     "match_count": 1200,
+                    "match_win_count": 660,
                     "match_win_rate": 0.55,
                 },
                 {
@@ -92,6 +99,7 @@ class FakeHeroes:
                     "target_hero_id": 1,
                     "position": "POSITION_1",
                     "match_count": 800,
+                    "match_win_count": 416,
                     "match_win_rate": 0.52,
                 },
                 {
@@ -99,6 +107,7 @@ class FakeHeroes:
                     "target_hero_id": 1,
                     "position": "POSITION_1",
                     "match_count": 50,
+                    "match_win_count": 20,
                     "match_win_rate": 0.40,
                 },
             ]
@@ -217,6 +226,14 @@ def test_hero_matchup_ranking_keeps_groups_separate(monkeypatch) -> None:
     # candidate_rows: latest completed week flattened across advantage/disadvantage.
     assert len(result.data["candidate_rows"]) == 3  # 2 advantage + 1 disadvantage
     assert all("source_side" in r for r in result.data["candidate_rows"])
+    # Phase-2: the handler computes pair_wilson_rating from the fixture's win_count
+    # (a real value, not wilson_lower_bound(0, n) == 0) and carries it on every row.
+    from app.integrations.stratz.wilson import wilson_lower_bound
+
+    assert all(r.get("pair_wilson_rating") is not None for r in rows)
+    row66 = next(r for r in advantage if r["hero_id"] == 66)
+    assert row66["pair_wilson_rating"] == pytest.approx(wilson_lower_bound(138, 250))
+    assert row66["pair_wilson_rating"] > 0  # non-degenerate: win_count reached the handler
 
 
 def test_filter_heroes_by_position_joins_and_drops(monkeypatch) -> None:
@@ -352,6 +369,12 @@ def test_hero_synergy_ranking_keeps_groups_separate(monkeypatch) -> None:
     # Caliber is ally-pair, distinct from matchup's matchup_win_rate.
     assert advantage[0]["pair_win_rate"] == 0.6
     assert "matchup_win_rate" not in advantage[0]
+    # Phase-2: pair_wilson_rating is computed from the ally-pair win_count and
+    # carried on every row (synergy stays primary; pair_wilson is the co-signal).
+    from app.integrations.stratz.wilson import wilson_lower_bound
+
+    assert all(r.get("pair_wilson_rating") is not None for r in rows)
+    assert advantage[0]["pair_wilson_rating"] == pytest.approx(wilson_lower_bound(150, 250))
 
 
 def test_hero_synergy_ranking_evidence_uses_ally_pair_basis() -> None:
@@ -482,11 +505,15 @@ def test_lane_meta_global_truncates_to_highlight_top(monkeypatch) -> None:
     assert all("position" not in row for row in rows)
     assert "position_ids" not in result.data["filters"]
     assert "selection_policy" in result.data
-    # Default selection_mode is "strong": ranks by win rate, so 86 (0.55) leads
-    # 50 (0.52), and the policy string records the win-rate basis.
+    # Default selection_mode is "strong": ranks by wilson_rating (Wilson lower
+    # bound of match win rate), so 86 (0.55 over 1200) leads 50 (0.52 over 800).
     assert result.data["filters"]["selection_mode"] == "strong"
-    assert "match_win_rate" in result.data["selection_policy"]
+    assert "wilson_rating" in result.data["selection_policy"]
     assert result.data["filters"]["bracket_basic_ids"] == ["LEGEND_ANCIENT"]
+    # Row-level: every strong-mode row carries a computed wilson_rating (not just
+    # the selection_policy string mentioning it). Reverse-overtake discrimination
+    # is covered by test_lane_meta_global_strong_reverse_overtakes_high_winrate_small_sample.
+    assert all(row.get("wilson_rating") is not None for row in rows)
 
 
 def test_lane_meta_global_dedupes_mirror_pairs(monkeypatch) -> None:
@@ -501,6 +528,7 @@ def test_lane_meta_global_dedupes_mirror_pairs(monkeypatch) -> None:
                     "target_hero_id": 2,
                     "position": "POSITION_1",
                     "match_count": 1774,
+                    "match_win_count": 1023,
                     "match_win_rate": 0.5767,
                 },
                 {
@@ -508,6 +536,7 @@ def test_lane_meta_global_dedupes_mirror_pairs(monkeypatch) -> None:
                     "target_hero_id": 22,
                     "position": "POSITION_1",
                     "match_count": 1685,
+                    "match_win_count": 960,
                     "match_win_rate": 0.5697,
                 },
                 {
@@ -515,6 +544,7 @@ def test_lane_meta_global_dedupes_mirror_pairs(monkeypatch) -> None:
                     "target_hero_id": 14,
                     "position": "POSITION_1",
                     "match_count": 1699,
+                    "match_win_count": 933,
                     "match_win_rate": 0.5491,
                 },
                 {
@@ -522,6 +552,7 @@ def test_lane_meta_global_dedupes_mirror_pairs(monkeypatch) -> None:
                     "target_hero_id": 6,
                     "position": "POSITION_1",
                     "match_count": 1809,
+                    "match_win_count": 974,
                     "match_win_rate": 0.5384,
                 },
             ]
@@ -570,6 +601,7 @@ def test_lane_meta_global_popular_sorts_by_match_count(monkeypatch) -> None:
                     "target_hero_id": 11,
                     "position": "POSITION_1",
                     "match_count": 2000,
+                    "match_win_count": 900,
                     "match_win_rate": 0.45,
                 },
                 {
@@ -577,6 +609,7 @@ def test_lane_meta_global_popular_sorts_by_match_count(monkeypatch) -> None:
                     "target_hero_id": 13,
                     "position": "POSITION_1",
                     "match_count": 800,
+                    "match_win_count": 480,
                     "match_win_rate": 0.60,
                 },
             ]
@@ -606,10 +639,10 @@ def test_lane_meta_global_popular_sorts_by_match_count(monkeypatch) -> None:
     assert [row["hero_id"] for row in rows] == [10, 12]
     assert result.data["filters"]["selection_mode"] == "popular"
     assert "match_count desc" in result.data["selection_policy"]
-    assert "match_win_rate" not in result.data["selection_policy"]
+    assert "wilson_rating" not in result.data["selection_policy"]
 
 
-def test_lane_meta_global_strong_tiebreaks_by_match_count(monkeypatch) -> None:
+def test_lane_meta_global_strong_ranks_larger_sample_higher_at_same_win_rate(monkeypatch) -> None:
     class TiedWinRateHeroes:
         def __init__(self, transport):
             self.transport = transport
@@ -621,6 +654,7 @@ def test_lane_meta_global_strong_tiebreaks_by_match_count(monkeypatch) -> None:
                     "target_hero_id": 21,
                     "position": "POSITION_1",
                     "match_count": 500,
+                    "match_win_count": 275,
                     "match_win_rate": 0.55,
                 },
                 {
@@ -628,6 +662,7 @@ def test_lane_meta_global_strong_tiebreaks_by_match_count(monkeypatch) -> None:
                     "target_hero_id": 23,
                     "position": "POSITION_1",
                     "match_count": 900,
+                    "match_win_count": 495,
                     "match_win_rate": 0.55,
                 },
             ]
@@ -653,8 +688,77 @@ def test_lane_meta_global_strong_tiebreaks_by_match_count(monkeypatch) -> None:
 
     assert result.status == "ok"
     rows = result.data["weekly_buckets"][0]["rows"]
-    # win rate ties at 0.55 -> tie-break by match_count desc: 900 before 500
+    # Same 0.55 win rate on both pairs; the larger sample (900) yields a higher
+    # Wilson lower bound, so 22 leads 20. This proves Wilson rewards sample size
+    # at equal win rate. (The match_count tiebreak itself is non-firing: Wilson is
+    # injective on (wins, match_count), so equal wilson implies equal match_count
+    # — there is nothing left to tie-break. Reverse-overtake across DIFFERENT win
+    # rates is covered by test_lane_meta_global_strong_reverse_overtakes_high_winrate_small_sample.)
     assert [row["hero_id"] for row in rows] == [22, 20]
+
+
+def test_lane_meta_global_strong_reverse_overtakes_high_winrate_small_sample(monkeypatch) -> None:
+    """Lane 'strong' (wilson_rating) must let a LOWER win rate on a LARGE sample
+    overtake a HIGHER win rate on a tiny sample — the whole reason Wilson replaces
+    raw match_win_rate. Raw win-rate DESC would put hero 30 (0.60) first; this test
+    fails if the sort key ever reverts to match_win_rate."""
+    from app.integrations.stratz.wilson import wilson_lower_bound
+
+    class OvertakeHeroes:
+        def __init__(self, transport):
+            self.transport = transport
+
+        async def lane_outcome(self, hero_id, *, is_with, **kwargs):
+            return [
+                {
+                    "hero_id": 30,  # 0.60 win rate, but only 50 matches (tiny sample)
+                    "target_hero_id": 1,
+                    "position": "POSITION_1",
+                    "match_count": 50,
+                    "match_win_count": 30,
+                    "match_win_rate": 0.60,
+                },
+                {
+                    "hero_id": 40,  # 0.55 win rate over 2000 matches (large sample)
+                    "target_hero_id": 1,
+                    "position": "POSITION_1",
+                    "match_count": 2000,
+                    "match_win_count": 1100,
+                    "match_win_rate": 0.55,
+                },
+            ]
+
+    monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzTransport", FakeTransport)
+    monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzHeroes", OvertakeHeroes)
+
+    result = asyncio.run(
+        ToolExecutor(_registry(token="token")).execute(
+            ToolCall(
+                id="meta",
+                tool="stratz.lane_meta_global",
+                args={
+                    "is_with": True,
+                    "min_sample_size": 0,
+                    "highlight_top": 10,
+                    "selection_mode": "strong",
+                },
+            ),
+            QueryContext(),
+        )
+    )
+
+    assert result.status == "ok"
+    rows = result.data["weekly_buckets"][0]["rows"]
+    # Wilson penalises hero 30's tiny sample despite its higher 0.60 rate, so the
+    # large-sample 0.55 (hero 40) leads. Raw win-rate DESC would order [30, 40].
+    assert [row["hero_id"] for row in rows] == [40, 30]
+    # Row-level proof: every row carries wilson_rating, the observed order equals
+    # wilson_rating DESC, and the values match Wilson of match_win_count (the exact
+    # integer the lane handler feeds in — NOT a rate-derived count).
+    assert all(row.get("wilson_rating") is not None for row in rows)
+    assert rows[0]["wilson_rating"] > rows[1]["wilson_rating"]
+    assert rows[0]["wilson_rating"] == pytest.approx(wilson_lower_bound(1100, 2000))
+    assert rows[1]["wilson_rating"] == pytest.approx(wilson_lower_bound(30, 50))
 
 
 def test_lane_meta_global_propagates_selection_mode_to_evidence() -> None:
@@ -843,9 +947,10 @@ def test_hero_position_stats_rejects_both_filters(monkeypatch) -> None:
     assert "exactly one of" in result.error
 
 
-def test_hero_position_stats_hero_id_strong_ranks_by_winrate(monkeypatch) -> None:
-    """hero_id branch: selection_mode applies, rows ranked by match_win_rate desc
-    (tie-break match_count desc), NOT truncated by take."""
+def test_hero_position_stats_hero_id_strong_ranks_by_wilson(monkeypatch) -> None:
+    """hero_id branch: selection_mode strong ranks by wilson_rating desc (Wilson
+    lower bound of win rate, confidence-aware; tie-break match_count desc), NOT
+    truncated by take."""
     monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzTransport", FakeTransport)
     monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzHeroes", FakeHeroes)
 
@@ -864,12 +969,14 @@ def test_hero_position_stats_hero_id_strong_ranks_by_winrate(monkeypatch) -> Non
     rows = result.data["weekly_buckets"][0]["rows"]
     # hero_id branch returns the full distribution, not truncated by take.
     assert len(rows) == 5
-    # strong = match_win_rate desc, tie-break match_count desc.
+    # strong = wilson_rating desc, tie-break match_count desc. POSITION_2 (0.58
+    # over 1500) leads; POSITION_1 (0.50 over 31000) drops below POSITION_5/3
+    # because Wilson penalises the lower win rate despite its huge sample.
     assert [r["position"] for r in rows] == [
-        "POSITION_5", "POSITION_2", "POSITION_3", "POSITION_1", "POSITION_4",
+        "POSITION_2", "POSITION_5", "POSITION_3", "POSITION_1", "POSITION_4",
     ]
     assert "selection_policy" in result.data
-    assert "match_win_rate desc" in result.data["selection_policy"]
+    assert "wilson_rating desc" in result.data["selection_policy"]
 
 
 def test_hero_position_stats_position_id_strong_truncates(monkeypatch) -> None:
@@ -896,8 +1003,162 @@ def test_hero_position_stats_position_id_strong_truncates(monkeypatch) -> None:
 
     assert result.status == "ok"
     rows = result.data["weekly_buckets"][0]["rows"]
-    # Truncated to take=2; strong ranks hero 7 (0.575) > hero 11 (0.55) > hero 8 (0.52).
+    # Truncated to take=2; strong ranks by wilson_rating: hero 7 (0.575) >
+    # hero 11 (0.55) > hero 8 (0.52) — Wilson preserves this order here.
     assert [r["hero_id"] for r in rows] == [7, 11]
+
+
+def test_position_handler_computes_wilson_from_win_count(monkeypatch) -> None:
+    """Every strong-mode row carries a computed wilson_rating (popular mode too).
+    Source discrimination — raw win_count vs round(match_win_rate * match_count) —
+    is covered by test_position_handler_uses_raw_win_count_not_rounded_rate; the
+    shared fixture here happens to satisfy win_count == round(rate * count), so
+    this test guards presence/computation, not the input source."""
+    from app.integrations.stratz.wilson import wilson_lower_bound
+
+    monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzTransport", FakeTransport)
+    monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzHeroes", FakeHeroes)
+
+    result = asyncio.run(
+        ToolExecutor(_registry(token="token")).execute(
+            ToolCall(
+                id="pos",
+                tool="stratz.hero_position_stats",
+                args={"hero_id": 8, "selection_mode": "strong", "min_sample_size": 0},
+            ),
+            QueryContext(bracket=["LEGEND_ANCIENT"]),
+        )
+    )
+    by_pos = {r["position"]: r for r in result.data["weekly_buckets"][0]["rows"]}
+    # POSITION_2 fixture: win_count=870, match_count=1500.
+    assert by_pos["POSITION_2"]["wilson_rating"] == pytest.approx(
+        wilson_lower_bound(870, 1500)
+    )
+    # every row carries a computed wilson_rating, in both strong and popular
+    assert all(r.get("wilson_rating") is not None for r in by_pos.values())
+
+
+def test_position_handler_uses_raw_win_count_not_rounded_rate(monkeypatch) -> None:
+    """wilson_rating must come from the raw win_count, NOT round(match_win_rate *
+    match_count). The fixture deliberately makes those disagree (win_count=900 but
+    round(0.58 * 1500) == 870), so the assertion is only satisfiable by reading
+    win_count directly — a rate-derived implementation would fail it."""
+    from app.integrations.stratz.wilson import wilson_lower_bound
+
+    class DisagreeHeroes:
+        def __init__(self, transport):
+            self.transport = transport
+
+        async def hero_position_stats(self, *, hero_ids=None, position_ids=None, **kwargs):
+            return [
+                {
+                    "hero_id": hero_ids[0],
+                    "position": "POSITION_2",
+                    "match_count": 1500,
+                    "win_count": 900,  # != round(0.58 * 1500) == 870
+                    "match_win_rate": 0.58,
+                }
+            ]
+
+    monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzTransport", FakeTransport)
+    monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzHeroes", DisagreeHeroes)
+
+    result = asyncio.run(
+        ToolExecutor(_registry(token="token")).execute(
+            ToolCall(
+                id="pos",
+                tool="stratz.hero_position_stats",
+                args={"hero_id": 8, "selection_mode": "strong", "min_sample_size": 0},
+            ),
+            QueryContext(bracket=["LEGEND_ANCIENT"]),
+        )
+    )
+    row = result.data["weekly_buckets"][0]["rows"][0]
+    # Equals Wilson of the RAW win_count (900); a buggy impl deriving wins via
+    # round(0.58 * 1500) = 870 would compute a different value and fail here.
+    assert row["wilson_rating"] == pytest.approx(wilson_lower_bound(900, 1500))
+    assert row["wilson_rating"] != pytest.approx(wilson_lower_bound(870, 1500))
+
+
+def test_position_and_lane_evidence_relay_wilson_rating() -> None:
+    """wilson_rating + wilson_provenance reach the answer layer via evidence
+    values (the NL answer LLM ranks hero recommendations by this field)."""
+    from app.agentic.tools.stratz_tools import (
+        hero_position_stats_evidence,
+        lane_meta_global_evidence,
+    )
+
+    pos_result = ToolResult(
+        tool_call_id="pos",
+        tool="stratz.hero_position_stats",
+        status="ok",
+        latency_ms=1,
+        source=ToolSource(name="STRATZ", kind="public_graphql_api"),
+        data={
+            "filters": {},
+            "weekly_buckets": [
+                {
+                    "week_epoch": 1782345600,
+                    "week_index": 1,
+                    "window_label": "latest_completed_week",
+                    "rows": [
+                        {
+                            "hero_id": 8,
+                            "position": "POSITION_2",
+                            "match_count": 1500,
+                            "win_count": 870,
+                            "match_win_rate": 0.58,
+                            "wilson_rating": 0.5548,
+                        },
+                    ],
+                }
+            ],
+        },
+    )
+    pos_row = next(
+        i for i in hero_position_stats_evidence(pos_result) if i.kind == "position_stat"
+    )
+    assert pos_row.value["wilson_rating"] == pytest.approx(0.5548)
+    assert "wilson" in pos_row.value["wilson_provenance"]
+
+    lane_result = ToolResult(
+        tool_call_id="lane",
+        tool="stratz.lane_meta_global",
+        status="ok",
+        latency_ms=1,
+        source=ToolSource(name="STRATZ", kind="public_graphql_api"),
+        data={
+            "is_with": True,
+            "filters": {},
+            "weekly_buckets": [
+                {
+                    "week_epoch": 1782345600,
+                    "week_index": 1,
+                    "window_label": "latest_completed_week",
+                    "rows": [
+                        {
+                            "hero_id": 86,
+                            "target_hero_id": 1,
+                            "match_count": 1200,
+                            "match_win_rate": 0.55,
+                            "wilson_rating": 0.5238,
+                        },
+                    ],
+                }
+            ],
+        },
+    )
+    lane_row = next(
+        i for i in lane_meta_global_evidence(lane_result) if i.kind == "lane_meta_row"
+    )
+    assert lane_row.value["wilson_rating"] == pytest.approx(0.5238)
+    assert "wilson" in lane_row.value["wilson_provenance"]
+    # Provenance names the ACTUAL count field each handler feeds into Wilson:
+    # position -> winCount; lane -> matchWinCount (match-level, distinct — the lane
+    # handler sources match_win_count, not win_count). Guards against lane
+    # provenance drifting back to the winCount string.
+    assert "winCount" in pos_row.value["wilson_provenance"]
+    assert "matchWinCount" in lane_row.value["wilson_provenance"]
 
 
 def test_stratz_pair_lane_outcome_requires_token() -> None:
@@ -914,6 +1175,148 @@ def test_stratz_pair_lane_outcome_requires_token() -> None:
 
     assert result.status == "error"
     assert "METAMIND_STRATZ_TOKEN is required" in result.error
+
+
+def test_filter_matchup_rows_keeps_synergy_primary_and_tags_pair_wilson() -> None:
+    """_filter_matchup_rows ranks by synergy (primary, unchanged) and tags each
+    row with pair_wilson_rating (Wilson lower bound of the pairing win rate) as
+    a sample-confidence co-signal — the two are NOT merged into one score."""
+    from app.agentic.tools.stratz_tools import _filter_matchup_rows
+    from app.integrations.stratz.wilson import wilson_lower_bound
+
+    rows = [
+        # high synergy but tiny sample vs low synergy huge sample
+        {"hero_id": 1, "synergy": 5.0, "win_count": 6, "match_count": 10},
+        {"hero_id": 2, "synergy": 2.0, "win_count": 600, "match_count": 1000},
+        {"hero_id": 3, "synergy": 4.0, "win_count": 3, "match_count": 5},
+    ]
+    out = _filter_matchup_rows(rows, min_sample_size=0, take=10)
+    # primary sort = synergy desc: 1 (5.0) > 3 (4.0) > 2 (2.0) — sample size
+    # does NOT override synergy (that is the whole point of keeping it primary).
+    assert [r["hero_id"] for r in out] == [1, 3, 2]
+    # every row carries a pair_wilson_rating computed from win_count/match_count
+    assert out[0]["pair_wilson_rating"] == pytest.approx(wilson_lower_bound(6, 10))
+    # the co-signal flags that hero 1's high synergy rests on a tiny sample:
+    # its pair_wilson is far below hero 2's, even though hero 1 ranks above it.
+    assert out[0]["pair_wilson_rating"] < out[2]["pair_wilson_rating"]
+
+
+def test_matchup_and_synergy_evidence_relay_pair_wilson() -> None:
+    from app.agentic.tools.stratz_tools import (
+        hero_matchup_ranking_evidence,
+        hero_synergy_ranking_evidence,
+    )
+
+    matchup_result = ToolResult(
+        tool_call_id="m",
+        tool="stratz.hero_matchup_ranking",
+        status="ok",
+        latency_ms=1,
+        source=ToolSource(name="STRATZ", kind="public_graphql_api"),
+        data={
+            "hero_id": 1,
+            "filters": {},
+            "weekly_buckets": [
+                {
+                    "week_epoch": 1782345600,
+                    "week_index": 1,
+                    "window_label": "w",
+                    "rows": [
+                        {
+                            "source_side": "advantage",
+                            "hero_id": 66,
+                            "target_hero_id": 1,
+                            "matchup_win_rate": 0.55,
+                            "match_count": 250,
+                            "synergy": 5.1,
+                            "pair_wilson_rating": 0.51,
+                        }
+                    ],
+                }
+            ],
+        },
+    )
+    m = next(
+        i
+        for i in hero_matchup_ranking_evidence(matchup_result)
+        if i.kind == "matchup_ranking_row"
+    )
+    assert m.value["pair_wilson_rating"] == pytest.approx(0.51)
+    assert "wilson" in m.value["wilson_provenance"]
+    assert m.value["synergy"] == 5.1  # primary signal still present
+
+    synergy_result = ToolResult(
+        tool_call_id="s",
+        tool="stratz.hero_synergy_ranking",
+        status="ok",
+        latency_ms=1,
+        source=ToolSource(name="STRATZ", kind="public_graphql_api"),
+        data={
+            "hero_id": 1,
+            "filters": {},
+            "weekly_buckets": [
+                {
+                    "week_epoch": 1782345600,
+                    "week_index": 1,
+                    "window_label": "w",
+                    "rows": [
+                        {
+                            "source_side": "advantage",
+                            "hero_id": 65,
+                            "target_hero_id": 1,
+                            "pair_win_rate": 0.6,
+                            "match_count": 250,
+                            "synergy": 5.1,
+                            "pair_wilson_rating": 0.56,
+                        }
+                    ],
+                }
+            ],
+        },
+    )
+    s = next(
+        i
+        for i in hero_synergy_ranking_evidence(synergy_result)
+        if i.kind == "hero_synergy_ranking_row"
+    )
+    assert s.value["pair_wilson_rating"] == pytest.approx(0.56)
+    assert "wilson" in s.value["wilson_provenance"]
+
+
+def test_filter_heroes_by_position_passes_pair_wilson_through() -> None:
+    """The position filter spreads {**row}, so pair_wilson_rating survives the
+    join and reaches role_filtered_candidate_row evidence alongside synergy."""
+    from app.agentic.tools.stratz_tools import filter_heroes_by_position_evidence
+
+    result = ToolResult(
+        tool_call_id="f",
+        tool="stratz.filter_heroes_by_position",
+        status="ok",
+        latency_ms=1,
+        source=ToolSource(name="STRATZ", kind="public_graphql_api"),
+        data={
+            "filters": {},
+            "filtered_rows": [
+                {
+                    "hero_id": 66,
+                    "position": "POSITION_2",
+                    "source_side": "advantage",
+                    "synergy": 5.1,
+                    "matchup_win_rate": 0.55,
+                    "match_count": 250,
+                    "pair_wilson_rating": 0.51,
+                    "position_match_count": 4000,
+                }
+            ],
+        },
+    )
+    row = next(
+        i
+        for i in filter_heroes_by_position_evidence(result)
+        if i.kind == "role_filtered_candidate_row"
+    )
+    assert row.value["pair_wilson_rating"] == pytest.approx(0.51)
+    assert row.value["synergy"] == 5.1
 
 
 def _registry(token: str | None):

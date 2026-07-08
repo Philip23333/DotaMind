@@ -84,40 +84,11 @@ class HeroNormalizationPolicy(StrictPolicyModel):
         return self
 
 
-class HeroScoreWeights(StrictPolicyModel):
-    win_rate: float = Field(ge=0, le=1)
-    pick_rate: float = Field(ge=0, le=1)
-    pro_presence: float = Field(ge=0, le=1)
-    patch_impact: float = Field(ge=0, le=1)
-    trend: float = Field(ge=0, le=1)
-
-    @model_validator(mode="after")
-    def validate_total(self) -> "HeroScoreWeights":
-        total = self.win_rate + self.pick_rate + self.pro_presence + self.patch_impact + self.trend
-        if abs(total - 1.0) > 1e-9:
-            raise ValueError("hero score weights must sum to 1.0")
-        return self
-
-
-class HeroTierPolicy(StrictPolicyModel):
-    s: int = Field(ge=0, le=100)
-    a: int = Field(ge=0, le=100)
-    b: int = Field(ge=0, le=100)
-
-    @model_validator(mode="after")
-    def validate_order(self) -> "HeroTierPolicy":
-        if not self.s > self.a > self.b:
-            raise ValueError("hero tier thresholds must satisfy s > a > b")
-        return self
-
-
 class HeroReportPolicy(StrictPolicyModel):
     result_limit: int = Field(ge=1, le=100)
     min_pub_pick: int = Field(ge=0)
     evidence: HeroEvidencePolicy
     normalization: HeroNormalizationPolicy
-    score_weights: HeroScoreWeights
-    tiers: HeroTierPolicy
 
 
 class PatchReportPolicy(StrictPolicyModel):
