@@ -17,8 +17,9 @@ from app.agentic.tools import (
 )
 from app.agentic.tools.hero_tools import load_default_hero_resolver
 from app.core.config import Settings, get_policy
-from app.integrations.stratz.brackets import basic_to_full
+from app.integrations.stratz.brackets import basic_to_bracket_ids, basic_to_full
 from app.integrations.stratz.heroes import StratzHeroes
+from app.integrations.stratz.players import StratzPlayers
 from app.integrations.stratz.transport import StratzTransport
 
 STRATZ_BRACKET_BASIC_DESCRIPTION = (
@@ -86,6 +87,19 @@ class HeroPositionStatsInput(BaseModel):
                 "exactly one of hero_id or position_id is required"
             )
         return self
+
+
+class PlayerProfileInput(BaseModel):
+    steam_account_id: int = Field(gt=0)
+
+
+class PlayerRecentMatchesInput(BaseModel):
+    steam_account_id: int = Field(gt=0)
+    # Count cap. days is a date-window lower bound (within last N days). Both
+    # apply as an intersection: within the days window, newest first, capped at
+    # take. See docs/technical/stratz_player_page_graphql_inventory.md.
+    take: int = Field(default=20, ge=1, le=50)
+    days: int | None = Field(default=None, ge=1)
 
 
 def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
@@ -488,6 +502,73 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
             metadata={"game": "dota2", "domain": "role_filter"},
         )
     )
+    registry.register(
+        ToolDefinition(
+            name="stratz.player_profile",
+            description=(
+                "Return a player's STRATZ profile (name/avatar/seasonRank + "
+                "global matchCount/winCount/imp/lastMatchDate) by steamAccountId "
+                "(Steam32). v1: steamAccountId direct, no name search — non-numeric "
+                "queries should return insufficient_tools. Use for 'who is this "
+                "player / player overview'; pair with player_recent_matches or "
+                "player_hero_performance for match questions."
+            ),
+            input_model=PlayerProfileInput,
+            handler=_player_profile_handler(settings),
+            source=ToolSource(
+                name="STRATZ",
+                kind="public_graphql_api",
+                url=settings.stratz_graphql_url,
+                status="live",
+            ),
+            evidence_extractor=player_profile_evidence,
+            evidence_kinds=("player_identity",),
+            arg_contracts={
+                "steam_account_id": ArgContract(
+                    description="Player Steam32 account id (steamAccountId)."
+                ),
+            },
+            metadata={"game": "dota2", "domain": "player_identity"},
+        )
+    )
+    registry.register(
+        ToolDefinition(
+            name="stratz.player_recent_matches",
+            description=(
+                "Return a player's recent matches by steamAccountId. Win is native "
+                "MatchPlayerType.isVictory (not derived). Scope filters (bracket, "
+                "position_ids) come from plan.context; v1 does NOT support "
+                "region_ids/game_mode_ids. Args: take=count cap (1-50, default 20); "
+                "days=date window (within last N days, newest first, capped at take). "
+                "Emits per-match player_recent_match rows + a player_recent_summary "
+                "(wins/losses/match_count, deterministic counts) + sample_size."
+            ),
+            input_model=PlayerRecentMatchesInput,
+            handler=_player_recent_matches_handler(settings),
+            source=ToolSource(
+                name="STRATZ",
+                kind="public_graphql_api",
+                url=settings.stratz_graphql_url,
+                status="live",
+            ),
+            evidence_extractor=player_recent_matches_evidence,
+            evidence_kinds=(
+                "player_recent_match",
+                "player_recent_summary",
+                "sample_size",
+            ),
+            arg_contracts={
+                "steam_account_id": ArgContract(
+                    description="Player Steam32 account id."
+                ),
+                "take": ArgContract(description="Max matches to return (1-50)."),
+                "days": ArgContract(
+                    description="Date window in days (within last N days). Optional."
+                ),
+            },
+            metadata={"game": "dota2", "domain": "player_matches"},
+        )
+    )
 
 
 class HeroDailyTrendsInput(BaseModel):
@@ -714,6 +795,233 @@ def _filter_heroes_by_position_handler(settings: Settings):
                 "candidate_count": len(candidate_rows),
                 "candidate_hero_ids": sorted(candidate_hero_ids),
             },
+        }
+
+    return handle
+
+
+def _rate(value: int | None, total: int | None) -> float | None:
+    if not total or total <= 0:
+        return None
+    return round((value or 0) / total, 4)
+
+
+def _kda(kills: int | None, deaths: int | None, assists: int | None) -> float | None:
+    # deaths == 0 -> KDA undefined; relay None rather than inventing "perfect".
+    if not deaths:
+        return None
+    return round(((kills or 0) + (assists or 0)) / deaths, 4)
+
+
+def player_profile_evidence(result: ToolResult) -> list[EvidenceItem]:
+    data = result.data if isinstance(result.data, dict) else {}
+    filters = data.get("filters") if isinstance(data.get("filters"), dict) else {}
+    profile = data.get("profile") or {}
+    steam_id = data.get("steam_account_id")
+    if not profile.get("found"):
+        return []
+    win_count = profile.get("win_count")
+    match_count = profile.get("match_count")
+    basis = "player_global: winCount/matchCount"
+    return [
+        EvidenceItem(
+            id=f"{result.tool_call_id}:player_identity:{steam_id}",
+            kind="player_identity",
+            subject=str(profile.get("name") or steam_id),
+            value={
+                "steam_account_id": steam_id,
+                "name": profile.get("name"),
+                "avatar": profile.get("avatar"),
+                "season_rank": profile.get("season_rank"),
+                "pro_name": profile.get("pro_name"),
+                "match_count": match_count,
+                "win_count": win_count,
+                "global_win_rate": _rate(win_count, match_count),
+                "win_rate_basis": basis,
+                "imp": profile.get("imp"),
+                "last_match_date": profile.get("last_match_date"),
+                "filters": {**filters, "win_rate_basis": basis},
+            },
+            source=result.source,
+            tool_call_id=result.tool_call_id,
+            tool=result.tool,
+        )
+    ]
+
+
+def player_recent_matches_evidence(result: ToolResult) -> list[EvidenceItem]:
+    data = result.data if isinstance(result.data, dict) else {}
+    filters = data.get("filters") if isinstance(data.get("filters"), dict) else {}
+    matches = data.get("matches") or []
+    summary = data.get("summary") or {}
+    names = _hero_name_index()
+    steam_id = data.get("steam_account_id")
+    basis = "stratz_native: MatchPlayerType.isVictory"
+    evidence: list[EvidenceItem] = []
+    for index, match in enumerate(matches):
+        if not isinstance(match, dict):
+            continue
+        hero_id = match.get("hero_id")
+        hero_name = names.get(hero_id) if isinstance(hero_id, int) else None
+        match_id = match.get("match_id")
+        evidence.append(
+            EvidenceItem(
+                id=f"{result.tool_call_id}:player_recent_match:{steam_id}:{match_id}:{index}",
+                kind="player_recent_match",
+                subject=(
+                    f"{hero_name or hero_id} "
+                    f"({'win' if match.get('win') else 'loss'})"
+                ),
+                value={
+                    "steam_account_id": steam_id,
+                    "match_id": match_id,
+                    "hero_id": hero_id,
+                    "hero_name": hero_name,
+                    "win": match.get("win"),
+                    "win_rate_basis": basis,
+                    "kills": match.get("kills"),
+                    "deaths": match.get("deaths"),
+                    "assists": match.get("assists"),
+                    "kda": _kda(
+                        match.get("kills"), match.get("deaths"), match.get("assists")
+                    ),
+                    "gold_per_minute": match.get("gold_per_minute"),
+                    "experience_per_minute": match.get("experience_per_minute"),
+                    "position": match.get("position"),
+                    "lane": match.get("lane"),
+                    "role": match.get("role"),
+                    "duration": match.get("duration"),
+                    "start_time": match.get("start_time"),
+                    "lobby_type": match.get("lobby_type"),
+                    "game_mode": match.get("game_mode"),
+                    "level": match.get("level"),
+                    "last_hits": match.get("last_hits"),
+                    "denies": match.get("denies"),
+                    "imp": match.get("imp"),
+                    "filters": {**filters, "win_rate_basis": basis},
+                },
+                source=result.source,
+                tool_call_id=result.tool_call_id,
+                tool=result.tool,
+            )
+        )
+    match_count = summary.get("match_count")
+    summary_basis = "stratz_native: isVictory count / match_count"
+    evidence.append(
+        EvidenceItem(
+            id=f"{result.tool_call_id}:player_recent_summary:{steam_id}",
+            kind="player_recent_summary",
+            subject=f"{steam_id} recent summary",
+            value={
+                "steam_account_id": steam_id,
+                "match_count": match_count,
+                "wins": summary.get("wins"),
+                "losses": summary.get("losses"),
+                "win_rate": _rate(summary.get("wins"), match_count),
+                "win_rate_basis": summary_basis,
+                "latest_match_time": summary.get("latest_match_time"),
+                "filters": {**filters, "win_rate_basis": summary_basis},
+            },
+            source=result.source,
+            tool_call_id=result.tool_call_id,
+            tool=result.tool,
+        )
+    )
+    if match_count is not None:
+        evidence.append(
+            EvidenceItem(
+                id=f"{result.tool_call_id}:sample_size:player_recent:{steam_id}",
+                kind="sample_size",
+                subject=f"recent match sample for {steam_id}",
+                value={
+                    "sample_size": match_count,
+                    "steam_account_id": steam_id,
+                    "filters": filters,
+                },
+                source=result.source,
+                tool_call_id=result.tool_call_id,
+                tool=result.tool,
+            )
+        )
+    return evidence
+
+
+def _player_profile_handler(settings: Settings):
+    async def handle(args: PlayerProfileInput, context: QueryContext) -> dict[str, Any]:
+        if not settings.stratz_token:
+            raise ValueError("METAMIND_STRATZ_TOKEN is required")
+        transport = StratzTransport(settings.stratz_graphql_url, settings.stratz_token)
+        players = StratzPlayers(transport)
+        try:
+            profile = await _with_retry(
+                lambda: players.get_profile(args.steam_account_id)
+            )
+        finally:
+            await transport.aclose()
+        return {
+            "steam_account_id": args.steam_account_id,
+            "profile": profile,
+            "filters": {"steam_account_id": args.steam_account_id},
+        }
+
+    return handle
+
+
+def _player_recent_matches_handler(settings: Settings):
+    async def handle(
+        args: PlayerRecentMatchesInput, context: QueryContext
+    ) -> dict[str, Any]:
+        if not settings.stratz_token:
+            raise ValueError("METAMIND_STRATZ_TOKEN is required")
+        # Scope from plan.context (v2.5 boundary): bracket -> bracketIds(0-8),
+        # position_ids passed through. region_ids/game_mode_ids intentionally NOT
+        # read (v1 type mismatch; validator already rejects them on player plans).
+        bracket_ids = basic_to_bracket_ids(context.bracket)
+        position_ids = context.position_ids
+        start_date_time = int(_now()) - args.days * 86400 if args.days else None
+        transport = StratzTransport(settings.stratz_graphql_url, settings.stratz_token)
+        players = StratzPlayers(transport)
+        try:
+            matches = await _with_retry(
+                lambda: players.get_recent_matches(
+                    args.steam_account_id,
+                    bracket_ids=bracket_ids,
+                    position_ids=position_ids,
+                    start_date_time=start_date_time,
+                    take=args.take,
+                )
+            )
+        finally:
+            await transport.aclose()
+        wins = sum(1 for m in matches if m.get("win") is True)
+        losses = sum(1 for m in matches if m.get("win") is False)
+        latest = max((m.get("start_time") or 0) for m in matches) if matches else None
+        basis = "stratz_native: MatchPlayerType.isVictory"
+        meaning = (
+            f"within last {args.days} days, newest first, capped at {args.take} matches"
+            if args.days
+            else f"most recent {args.take} matches (newest first)"
+        )
+        return {
+            "steam_account_id": args.steam_account_id,
+            "matches": matches,
+            "summary": {
+                "match_count": len(matches),
+                "wins": wins,
+                "losses": losses,
+                "latest_match_time": latest,
+            },
+            "filters": {
+                "steam_account_id": args.steam_account_id,
+                "bracket_basic_ids": context.bracket,
+                "bracket_ids": bracket_ids,
+                "position_ids": position_ids,
+                "days": args.days,
+                "take": args.take,
+                "win_rate_basis": basis,
+                "meaning": meaning,
+            },
+            "selection_policy": meaning,
         }
 
     return handle
