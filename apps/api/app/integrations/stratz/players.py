@@ -38,7 +38,7 @@ query PlayerRecentMatches(
     matches(request: $request) {
       id
       startDateTime
-      duration
+      durationSeconds
       lobbyType
       gameMode
       players(steamAccountId: $steamAccountId) {
@@ -239,7 +239,7 @@ class StratzPlayers:
         return {
             "match_id": match.get("id"),
             "start_time": match.get("startDateTime"),
-            "duration": match.get("duration"),
+            "duration": match.get("durationSeconds"),
             "lobby_type": match.get("lobbyType"),
             "game_mode": match.get("gameMode"),
             "hero_id": player.get("heroId"),

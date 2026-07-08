@@ -146,7 +146,7 @@ lastPlayedDateTime: Long
 MatchType:
   id: Long
   startDateTime: Long
-  duration: Long
+  durationSeconds: Long       # NOT "duration" — live-verified 2026-07-08 (duration is rejected)
   lobbyType: LobbyTypeEnum
   gameMode: GameModeEnumType
   players(steamAccountId: Long): MatchPlayerType[]    # ★ 按 steamAccountId 过滤到当前玩家
