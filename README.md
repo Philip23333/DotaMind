@@ -1,23 +1,32 @@
-# MetaMind
+# DotaMind
 
-MetaMind is a composable esports intelligence agent that turns Dota 2 patch
-notes, match data, and pro team statistics into evidence-grounded answers.
+DotaMind is an evidence-grounded Dota 2 intelligence agent. It plans constrained
+tool calls, retrieves structured data, builds an `EvidenceGraph`, synthesizes an
+answer, and runs a rule-first critic before returning a response.
 
 This repository is in active development. The old fixed report pipeline and its
-public endpoints have been removed. The backend now exposes the v2.5/v3 agentic
-path as the single API workflow:
+public endpoints have been removed. The current product stage is V3.0, built on
+the v2.5 constrained Tool Calling architecture:
 
 ```text
-Planner -> validated tools -> EvidenceGraph -> Answer -> Critic -> Response
+Planner -> Validate -> Tools -> Evidence -> Answer -> Critic -> Response
 ```
+
+Start with the [documentation index](docs/README.md), then read the
+[DotaMind V3.0 design](docs/design/DotaMind_V3.0_design.md) and the
+[v2.5 architecture foundation](docs/design/MetaMind_MVP_v2.5.md).
 
 ## Repository Layout
 
 ```text
 apps/
-  api/        FastAPI service, LangGraph-backed agentic workflow, integrations, tests
+  api/        FastAPI service, LangGraph agentic workflow, integrations, tests
   web/        Deprecated Next.js dashboard; do not modify unless explicitly needed
-docs/         Architecture, API, configuration, and CAP integration notes
+docs/
+  design/     Current architecture, layer detail, roadmaps, and decisions
+  technical/  API, configuration, and provider reference material
+  progress/   Timestamped bilingual handoff snapshots
+  archive/    Superseded product and architecture documents
 ```
 
 ## Run Locally
@@ -28,10 +37,10 @@ python -m pip install -e ".[dev]"
 python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8001 --log-level info
 ```
 
-Or run `npm run dev:api` from the repository root. The startup script uses fixed
-port `8001` and fails if the port is already occupied.
+Alternatively, run `npm run dev:api` from the repository root. The startup
+script uses port `8001` and fails when the port is already occupied.
 
-Open:
+Useful local pages:
 
 - `http://localhost:8001/docs`
 - `http://localhost:8001/debug/plan`
@@ -44,8 +53,14 @@ query test UI.
 ```bash
 curl -X POST http://localhost:8001/api/v1/plan \
   -H "Content-Type: application/json" \
-  -d "{\"game\":\"dota2\",\"query\":\"enemy picked Lina, what should I pick?\"}"
+  -d '{"game":"dota2","query":"enemy picked Lina, what should I pick?"}'
 ```
+
+Active endpoints:
+
+- `GET /health`
+- `POST /api/v1/plan`
+- `GET /debug/plan`
 
 Removed endpoints are intentionally not redirected or wrapped:
 
@@ -57,7 +72,7 @@ Removed endpoints are intentionally not redirected or wrapped:
 - `GET /api/v1/services`
 - `GET /debug/chat`
 
-## Agentic Workflow
+## Agentic Runtime
 
 `POST /api/v1/plan` runs a LangGraph `StateGraph(AgentRunState)`:
 
@@ -74,16 +89,17 @@ planner_node
 Missing tools, validation errors, tool failures, and insufficient evidence are
 returned directly. There is no fallback to the old report pipeline.
 
-Allowed `output_contract` values:
+Current output contracts:
 
+- `natural_language_answer`
 - `patch_impact_report`
 - `role_meta_report`
 - `team_recent_report`
-- `hero_matchup_report`
-- `draft_advice`
-- `natural_language_answer`
 
-Registered agentic tools include hero resolution, STRATZ pair-lane / matchup-ranking / lane-meta / position-stats tools, OpenDota team/meta evidence, and local patch records.
+The current registry exposes 19 deterministic tools across local hero constants,
+STRATZ hero/player analysis, OpenDota team/role data, and local patch records.
+See the [V3 tool inventory](docs/design/DotaMind_V3.0_design.md#8-当前工具列表)
+for the complete list.
 
 ## Configuration
 
@@ -92,39 +108,26 @@ policy lives in `apps/api/app/config/policy.yaml` and is validated on startup.
 
 ```text
 METAMIND_LIVE_DATA_ENABLED=false
+METAMIND_STRATZ_TOKEN=
 METAMIND_LLM_ENABLED=false
 METAMIND_LLM_API_KEY=
 METAMIND_POLICY_PATH=
 ```
 
-`policy.yaml` controls OpenDota transport settings, team resolution and
-sampling, hero scoring and evidence thresholds, patch scoring, Critic rules, and
-LLM call parameters. Restart the API after editing it.
+The policy covers OpenDota and STRATZ transport boundaries, team/hero/patch
+report rules, critic quality gates, LLM call settings, and planner sample policy.
+Restart the API after editing it.
 
-## Data Sources
+## Current V3 Focus
 
-- OpenDota API for public and pro match data.
-- STRATZ GraphQL API for higher-granularity hero, draft, and trend signals.
-- Local curated Dota 2 patch JSON under `apps/api/app/data/patches/`.
+Completed capability slices include hero matchup, synergy, position filtering,
+daily trends, player profile/recent-performance queries, team reports, and patch
+records.
 
-## Current Status
-
-Implemented:
-
-- FastAPI app and OpenAPI schema for `/api/v1/plan`.
-- LangGraph-backed agentic runtime.
-- Tool registry, tool executor, EvidenceGraph, answer synthesis, and critic.
-- `/debug/plan` page for inspecting plan, tool results, evidence, answer, review,
-  and trace.
-- Unit tests and Ruff checks for the backend.
-
-Next:
-
-- Add `hero.enrich_identity`, role filtering, patch context, synergy evidence,
-  and ranking tools.
-- Improve evidence-kind-specific quality rules.
-- Design a CAP surface around agentic output contracts instead of old fixed
-  report services.
+The next P0 capability gap is evidence-grounded hero item/skill/talent build
+guidance. Other planned slices include OpenDota match detail, pick/ban meta, and
+player-name resolution. CAP/CROO integration is parked and is not part of the
+active V3 development line.
 
 ## License
 

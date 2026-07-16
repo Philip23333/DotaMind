@@ -1,5 +1,9 @@
 # CAP Integration Notes
 
+> **Status: parked.** CAP/CROO work is intentionally outside the active
+> `feature/v3-functional-loop` development line. Do not implement or merge it
+> unless the project explicitly resumes this capability.
+
 CAP integration is not implemented. The previous fixed report service catalog
 has been removed together with the old report endpoints.
 
@@ -16,7 +20,8 @@ contracts rather than resurrecting fixed service routes.
 ## Planned Order Flow
 
 ```text
-1. Caller selects an agentic output contract, such as draft_advice.
+1. Caller selects a registered agentic output contract, such as
+   `natural_language_answer`.
 2. Caller creates a CAP order with query, output_contract intent, price, and payload hash.
 3. MetaMind verifies order status or receives a callback.
 4. MetaMind runs /api/v1/plan.
@@ -28,7 +33,7 @@ contracts rather than resurrecting fixed service routes.
 
 ```json
 {
-  "output_contract": "draft_advice",
+  "output_contract": "natural_language_answer",
   "price_usdc": 0.1,
   "input": {
     "game": "dota2",
