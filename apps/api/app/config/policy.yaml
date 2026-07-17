@@ -60,6 +60,15 @@ llm:
     temperature: 0.0
     max_tokens: 4000
 
+conversation:
+  # Multi-turn session memory (Phase 1: single-process in-memory store).
+  history_window: 5              # turns injected into planner prompt
+  max_turns_per_session: 50      # turns retained per session
+  max_sessions: 1000             # LRU eviction threshold
+  answer_summary_max_chars: 300  # per-turn answer summary cap
+  turn_query_max_chars: 200      # per-turn query cap stored in history
+  history_max_chars: 2000        # hard budget for the rendered history block
+
 planning:
   sample_policy:
     # Single source of truth for sample-size thresholds. Each entry names the

@@ -181,6 +181,36 @@ class PlanningPolicy(StrictPolicyModel):
     sample_policy: SamplePolicyConfig
 
 
+class ConversationPolicy(StrictPolicyModel):
+    """Policy for multi-turn session memory (Phase 1: in-memory store).
+
+    All fields have defaults so an existing policy.yaml without a
+    ``conversation`` section still loads without validation errors.
+    """
+
+    # Number of prior turns injected into the planner prompt.
+    history_window: int = Field(default=5, ge=1, le=20)
+    # Maximum turns retained per session (excess oldest turns are evicted).
+    max_turns_per_session: int = Field(default=50, ge=1, le=500)
+    # Maximum number of live sessions (LRU eviction above this threshold).
+    max_sessions: int = Field(default=1000, ge=1, le=100_000)
+    # Hard cap on answer.summary stored per turn.
+    answer_summary_max_chars: int = Field(default=300, ge=50, le=2000)
+    # Hard cap on the query string stored per turn.
+    turn_query_max_chars: int = Field(default=200, ge=20, le=1000)
+    # Hard budget for the entire rendered history block injected into the prompt.
+    history_max_chars: int = Field(default=2000, ge=200, le=10_000)
+
+    @model_validator(mode="after")
+    def validate_window_vs_max(self) -> "ConversationPolicy":
+        if self.history_window > self.max_turns_per_session:
+            raise ValueError(
+                f"history_window ({self.history_window}) cannot exceed "
+                f"max_turns_per_session ({self.max_turns_per_session})"
+            )
+        return self
+
+
 class AppPolicy(StrictPolicyModel):
     version: Literal[1]
     opendota: OpenDotaPolicy
@@ -191,6 +221,8 @@ class AppPolicy(StrictPolicyModel):
     critic: CriticPolicy
     llm: LLMPolicy
     planning: PlanningPolicy
+    # Optional: existing policy.yaml files without this section use defaults.
+    conversation: ConversationPolicy = Field(default_factory=ConversationPolicy)
 
 
 class Settings(BaseSettings):
