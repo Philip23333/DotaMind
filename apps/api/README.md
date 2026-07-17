@@ -10,13 +10,40 @@ The old fixed report/query pipeline has been removed. The current API surface is
 
 ## Run
 
+Python 3.10+ is required. The recommended local workflow uses
+[`uv`](https://docs.astral.sh/uv/), so the API does not depend on whichever
+global Python or Conda environment happens to be active.
+
+From the repository root:
+
 ```bash
+uv sync --project apps/api --extra dev
+uv run --project apps/api uvicorn app.main:app --app-dir apps/api --reload --host 127.0.0.1 --port 8001 --log-level info
+```
+
+From `apps/api`:
+
+```bash
+uv sync --extra dev
+uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 8001 --log-level info
+```
+
+On Windows, `npm run dev:api` from the repository root runs `dev-api.cmd`,
+which executes the same `uv`-managed application on port `8001` and exits when
+the port is already occupied.
+
+If `uv` is not available, install into and run from the **same** Python
+interpreter:
+
+```bash
+cd apps/api
 python -m pip install -e ".[dev]"
 python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8001 --log-level info
 ```
 
-From the repository root, `npm run dev:api` runs `dev-api.cmd`, which uses port
-`8001` and exits when the port is already occupied.
+`No module named uvicorn` means the selected interpreter has not completed the
+install step. Check it with `python -c "import sys; print(sys.executable)"`; do
+not assume an activated Conda environment contains the project dependencies.
 
 Useful local pages:
 

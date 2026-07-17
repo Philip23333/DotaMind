@@ -10,4 +10,10 @@ if errorlevel 1 (
 )
 
 cd /d "%~dp0apps\api"
-python -m uvicorn app.main:app --reload --host 127.0.0.1 --port %API_PORT% --log-level info
+where uv >nul 2>&1
+if errorlevel 1 (
+  echo uv is required. Install it from https://docs.astral.sh/uv/ and retry.
+  exit /b 1
+)
+
+uv run uvicorn app.main:app --reload --host 127.0.0.1 --port %API_PORT% --log-level info
