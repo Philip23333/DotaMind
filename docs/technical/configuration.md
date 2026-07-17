@@ -6,6 +6,7 @@
 .env                            environment, secrets, URLs, and feature flags
 apps/api/app/config/policy.yaml business policy and tunable thresholds
 apps/api/app/core/config.py     strict Pydantic settings and policy models
+apps/api/app/data/heroes/       committed hero ID/name/alias snapshot
 apps/api/app/data/patches/      patch fact data
 apps/api/app/resources/         prompt and debug UI resources
 ```
@@ -56,6 +57,24 @@ METAMIND_POLICY_PATH=C:/absolute/path/policy.yaml
 Policy is cached for the process lifetime. Restart the API after editing the
 YAML or changing the override path.
 
+## Local Game Data
+
+Hero constants and patch records are committed runtime snapshots, not local
+cache files. Regenerate both from Valve's public Dota 2 datafeed with:
+
+```powershell
+cd apps/api
+uv run python scripts/sync_game_data.py --patch latest
+```
+
+The command writes `app/data/heroes/dota2_heroes.yaml` and the selected
+`app/data/patches/<version>.json`. Official English and Simplified Chinese hero
+names come from Valve; community aliases are reviewed separately in
+`scripts/hero_aliases_zh.yaml`. Patch polarity is classified conservatively and
+left `neutral` when the direction is unclear. Review generated diffs before
+committing them; the API never downloads or generates these files at request
+time.
+
 ## Policy Sections
 
 | Section | Responsibility |
@@ -103,5 +122,7 @@ boundary is deliberately redesigned.
 - 修改 OpenDota/STRATZ 边界、采样阈值、报告规则、Critic、LLM 或 Planner
   Sample Policy：编辑 `apps/api/app/config/policy.yaml`。
 - 更新版本事实：增加或修改 `apps/api/app/data/patches/*.json`。
+- 更新英雄 ID、名称、中文名或俗称：运行离线同步脚本，并审查
+  `apps/api/scripts/hero_aliases_zh.yaml` 与生成文件的差异。
 - 修改 Prompt 或调试页面资源：编辑 `apps/api/app/resources/` 下的对应文件。
 - YAML 修改后需要重启 API；配置错误会在服务初始化时直接失败。

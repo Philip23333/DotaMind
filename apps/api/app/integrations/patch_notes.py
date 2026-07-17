@@ -7,6 +7,7 @@ structured access to hero/item changes and polarity (buff/nerf).
 
 import json
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
@@ -25,8 +26,15 @@ def _normalize_patch_id(patch: str) -> str:
 
 def _find_latest() -> Path | None:
     """Find the most recent patch JSON by filename."""
-    files = sorted(_PATCHES_DIR.glob("*.json"), reverse=True)
+    files = sorted(_PATCHES_DIR.glob("*.json"), key=_patch_sort_key, reverse=True)
     return files[0] if files else None
+
+
+def _patch_sort_key(path: Path) -> tuple[int, int, str]:
+    match = re.fullmatch(r"(\d+)_(\d+)([a-z]*)", path.stem, flags=re.IGNORECASE)
+    if match is None:
+        return (-1, -1, path.stem)
+    return int(match.group(1)), int(match.group(2)), match.group(3).lower()
 
 
 def load_patch(patch: str = "latest") -> dict[str, Any] | None:
@@ -45,7 +53,7 @@ def load_patch(patch: str = "latest") -> dict[str, Any] | None:
         normalized = _normalize_patch_id(patch)
         path = _PATCHES_DIR / f"{normalized}.json"
         if not path.exists():
-            path = _find_latest()
+            return None
 
     if path is None or not path.exists():
         logger.warning("No patch file found for %s", patch)
