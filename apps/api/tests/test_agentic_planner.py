@@ -179,7 +179,7 @@ def test_agentic_planner_rejects_unknown_tool() -> None:
     assert result.raw_output == payload
 
 
-def test_agentic_planner_accepts_hardcoded_hero_id_when_schema_allows_int() -> None:
+def test_agentic_planner_rejects_hardcoded_hero_id() -> None:
     payload = _valid_plan_payload()
     payload["plan"]["tool_calls"][1]["args"]["hero_id"] = 25
     planner = AgenticPlanner(
@@ -188,7 +188,8 @@ def test_agentic_planner_accepts_hardcoded_hero_id_when_schema_allows_int() -> N
 
     result = asyncio.run(planner.plan("enemy picked Lina, what should I pick?"))
 
-    assert result.status == "planned"
+    assert result.status == "error"
+    assert any("must reference" in error for error in result.errors)
 
 
 def test_agentic_planner_accepts_pair_lane_outcome_reference_from_any_previous_call_id() -> None:
@@ -844,10 +845,15 @@ def _player_hero_performance_payload() -> dict[str, Any]:
             },
             "tool_calls": [
                 {
+                    "id": "confirm_player",
+                    "tool": "stratz.player_profile",
+                    "args": {"steam_account_id": 853634884},
+                },
+                {
                     "id": "heroperf",
                     "tool": "stratz.player_hero_performance",
                     "args": {
-                        "steam_account_id": 853634884,
+                        "steam_account_id": "$confirm_player.data.confirmed_steam_account_id",
                         "take": 15,
                         "match_take": 20,
                     },
@@ -875,6 +881,8 @@ def test_agentic_planner_prompt_contains_player_routing() -> None:
     assert "match_take=N" in prompt
     assert "NO name search" in prompt
     assert "numeric Steam32 id" in prompt
+    assert "It is mandatory before player_recent_matches or player_hero_performance" in prompt
+    assert "$<profile_call>.data.confirmed_steam_account_id" in prompt
 
 
 def test_agentic_planner_accepts_player_hero_performance_plan() -> None:

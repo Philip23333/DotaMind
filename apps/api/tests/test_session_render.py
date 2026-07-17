@@ -1,8 +1,7 @@
 """Tests for render_history."""
 
 from app.agentic.conversation.models import ResolvedEntity, Turn
-from app.agentic.conversation.render import render_history, _HEADER
-
+from app.agentic.conversation.render import _HEADER, render_history
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -197,6 +197,7 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
                             type="int",
                         ),
                     ),
+                    requires_reference=True,
                 ),
                 "partner_hero_id": ArgContract(
                     description="The other hero in the pair.",
@@ -207,6 +208,7 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
                             type="int",
                         ),
                     ),
+                    requires_reference=True,
                 ),
                 "is_with": ArgContract(
                     description=(
@@ -256,6 +258,7 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
                             type="int",
                         ),
                     ),
+                    requires_reference=True,
                 ),
                 "side": ArgContract(
                     description="Matchup side. Only 'vs' is supported in this version.",
@@ -315,6 +318,7 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
                             type="int",
                         ),
                     ),
+                    requires_reference=True,
                 ),
                 "side": ArgContract(
                     description="Synergy side. Only 'with' is supported in this version.",
@@ -429,6 +433,7 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
                             type="int",
                         ),
                     ),
+                    requires_reference=True,
                 ),
                 "position_id": ArgContract(
                     description="Optional position filter (POSITION_1 .. POSITION_5).",
@@ -490,6 +495,7 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
                             type="int",
                         ),
                     ),
+                    requires_reference=True,
                 ),
                 "take": ArgContract(description="Number of recent days (1..12, default 12)."),
             },
@@ -576,6 +582,13 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
                     description="Player Steam32 account id (steamAccountId)."
                 ),
             },
+            output_paths={
+                "confirmed_steam_account_id": OutputPathContract(
+                    path="data.confirmed_steam_account_id",
+                    type="int",
+                    description="Steam32 id confirmed by a live player profile.",
+                )
+            },
             metadata={"game": "dota2", "domain": "player_identity"},
         )
     )
@@ -607,7 +620,15 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
             ),
             arg_contracts={
                 "steam_account_id": ArgContract(
-                    description="Player Steam32 account id."
+                    description="Player Steam32 account id.",
+                    accepts_refs=(
+                        AcceptedRef(
+                            from_tool="stratz.player_profile",
+                            path="data.confirmed_steam_account_id",
+                            type="int",
+                        ),
+                    ),
+                    requires_reference=True,
                 ),
                 "take": ArgContract(description="Max matches to return (1-50)."),
                 "days": ArgContract(
@@ -649,7 +670,15 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
             ),
             arg_contracts={
                 "steam_account_id": ArgContract(
-                    description="Player Steam32 account id."
+                    description="Player Steam32 account id.",
+                    accepts_refs=(
+                        AcceptedRef(
+                            from_tool="stratz.player_profile",
+                            path="data.confirmed_steam_account_id",
+                            type="int",
+                        ),
+                    ),
+                    requires_reference=True,
                 ),
                 "take": ArgContract(
                     description="Number of hero rows to return (1-50)."
@@ -925,7 +954,7 @@ def player_profile_evidence(result: ToolResult) -> list[EvidenceItem]:
     data = result.data if isinstance(result.data, dict) else {}
     filters = data.get("filters") if isinstance(data.get("filters"), dict) else {}
     profile = data.get("profile") or {}
-    steam_id = data.get("steam_account_id")
+    steam_id = data.get("confirmed_steam_account_id")
     if not profile.get("found"):
         return []
     win_count = profile.get("win_count")
@@ -1066,8 +1095,10 @@ def _player_profile_handler(settings: Settings):
             )
         finally:
             await transport.aclose()
+        if not profile.get("found"):
+            raise LookupError("player profile not found")
         return {
-            "steam_account_id": args.steam_account_id,
+            "confirmed_steam_account_id": args.steam_account_id,
             "profile": profile,
             "filters": {"steam_account_id": args.steam_account_id},
         }

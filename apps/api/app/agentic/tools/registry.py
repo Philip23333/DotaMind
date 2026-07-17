@@ -21,6 +21,7 @@ class AcceptedRef:
 class ArgContract:
     description: str = ""
     accepts_refs: tuple[AcceptedRef, ...] = ()
+    requires_reference: bool = False
 
 
 @dataclass(frozen=True)

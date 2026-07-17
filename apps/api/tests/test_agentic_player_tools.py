@@ -10,7 +10,9 @@ ToolResult inputs.
 """
 import asyncio
 
-from app.agentic.models import QueryContext, ToolCall, ToolResult, ToolSource
+from app.agentic.models import ExecutionPlan, QueryContext, ToolCall, ToolResult, ToolSource
+from app.agentic.nodes.tools import tool_executor_node
+from app.agentic.state import AgentRunState
 from app.agentic.tools import ToolExecutor
 from app.agentic.tools.stratz_tools import build_default_tool_registry
 from app.core.config import Settings
@@ -168,7 +170,70 @@ def test_player_profile_handler_returns_profile(monkeypatch) -> None:
     assert profile["found"] is True
     assert profile["match_count"] == 1000
     assert profile["win_count"] == 600
+    assert result.data["confirmed_steam_account_id"] == 853634884
     assert result.data["filters"]["steam_account_id"] == 853634884
+
+
+def test_player_profile_handler_output_feeds_profile_evidence(monkeypatch) -> None:
+    from app.agentic.tools.stratz_tools import player_profile_evidence
+
+    _patch_players(monkeypatch)
+    result = asyncio.run(
+        ToolExecutor(_registry(token="token")).execute(
+            ToolCall(
+                id="prof",
+                tool="stratz.player_profile",
+                args={"steam_account_id": 853634884},
+            ),
+            QueryContext(),
+        )
+    )
+
+    evidence = player_profile_evidence(result)
+
+    assert result.status == "ok"
+    assert len(evidence) == 1
+    assert evidence[0].kind == "player_identity"
+    assert evidence[0].value["steam_account_id"] == 853634884
+    assert evidence[0].subject == "TestPlayer"
+
+
+def test_unconfirmed_player_skips_dependent_player_tools(monkeypatch) -> None:
+    fake = _patch_players(monkeypatch)
+
+    async def _not_found(_steam_account_id: int) -> dict:
+        return {"found": False}
+
+    fake.get_profile = _not_found
+    plan = ExecutionPlan(
+        intent="player_recent",
+        goal="Confirm then fetch player matches.",
+        output_contract="natural_language_answer",
+        tool_calls=[
+            ToolCall(
+                id="confirm",
+                tool="stratz.player_profile",
+                args={"steam_account_id": 853634884},
+            ),
+            ToolCall(
+                id="recent",
+                tool="stratz.player_recent_matches",
+                args={
+                    "steam_account_id": "$confirm.data.confirmed_steam_account_id"
+                },
+            ),
+        ],
+    )
+    state = asyncio.run(
+        tool_executor_node(
+            AgentRunState(query="q", game="dota2", plan=plan),
+            ToolExecutor(_registry(token="token")),
+        )
+    )
+
+    assert state.status == "error"
+    assert state.tool_results[0].status == "error"
+    assert fake.last_recent_kwargs is None
 
 
 def test_player_recent_matches_translates_bracket_and_summarizes(monkeypatch) -> None:
@@ -289,7 +354,7 @@ def test_player_profile_evidence_threads_basis() -> None:
         latency_ms=1,
         source=ToolSource(name="STRATZ", kind="public_graphql_api"),
         data={
-            "steam_account_id": 853634884,
+            "confirmed_steam_account_id": 853634884,
             "profile": {
                 "found": True, "name": "TestPlayer", "avatar": None,
                 "season_rank": 80, "pro_name": None,

@@ -1,13 +1,16 @@
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import UUID4, BaseModel, Field
 
 SupportedGame = Literal["dota2"]
 
 
 class PlanRequest(BaseModel):
-    query: str
+    query: str = Field(min_length=1, max_length=2000)
     game: SupportedGame = "dota2"
+    # Provide a UUID v4 to enable multi-turn session memory.
+    # Omit (or pass null) for stateless single-turn mode.
+    session_id: UUID4 | None = None
 
 
 class PlanResponse(BaseModel):
@@ -16,6 +19,9 @@ class PlanResponse(BaseModel):
     status: Literal["ok", "insufficient_tools", "error"]
     reason: str
     response_type: str | None = None
+    error_code: str | None = None
+    # Echoed back so clients can continue the conversation.
+    session_id: str | None = None
     planner_output: dict[str, Any] | None = None
     planner_raw_content: str | None = None
     planner_finish_reason: str | None = None

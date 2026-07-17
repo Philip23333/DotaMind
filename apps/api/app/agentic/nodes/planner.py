@@ -8,8 +8,13 @@ logger = logging.getLogger(__name__)
 
 async def planner_node(state: AgentRunState, planner: AgenticPlanner) -> AgentRunState:
     state.add_trace("planner", "create execution plan", "planned")
-    logger.info("node=planner start query_chars=%s game=%s", len(state.query), state.game)
-    planning = await planner.plan(state.query, state.game)
+    logger.info(
+        "node=planner start query_chars=%s game=%s history_turns=%s",
+        len(state.query),
+        state.game,
+        len(state.history),
+    )
+    planning = await planner.plan(state.query, state.game, history=state.history or None)
     state.planning = planning
     state.plan = planning.plan
     state.reason = planning.reason

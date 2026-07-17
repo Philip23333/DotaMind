@@ -1,5 +1,6 @@
 import logging
 
+from app.agentic.conversation.summary import SESSION_REQUEST_FAILED_REASON
 from app.agentic.planning.contracts import get_contract
 from app.agentic.state import AgentRunState
 
@@ -16,6 +17,33 @@ def response_node(state: AgentRunState) -> AgentRunState:
         state.answer is not None,
         state.review is not None,
     )
+    if _requires_stateful_failure_envelope(state):
+        # Keep the runtime result and persisted Turn aligned with the public
+        # response contract.  Sensitive planner fields remain on ``planning``
+        # for internal observability, but are never serialised or stored.
+        state.response_type = "session_request_failed"
+        state.response = {
+            "query": state.query,
+            "game": state.game,
+            "status": state.status,
+            "reason": SESSION_REQUEST_FAILED_REASON,
+            "response_type": "session_request_failed",
+            "error_code": "session_request_failed",
+            "plan": None,
+            "tool_results": [],
+            "evidence_graph": None,
+            "answer": None,
+            "review": None,
+            "errors": [],
+            "trace": [],
+            "planner_output": None,
+            "planner_raw_content": None,
+            "planner_finish_reason": None,
+            "planner_prompt_messages": [],
+        }
+        logger.info("node=response end response_ready=true stateful_failure=true")
+        return state
+
     state.response = state.model_dump(
         mode="json",
         include={
@@ -33,20 +61,37 @@ def response_node(state: AgentRunState) -> AgentRunState:
             "trace",
         },
     )
-    state.response["planner_output"] = (
-        state.planning.raw_output if state.planning is not None else None
-    )
-    state.response["planner_raw_content"] = (
-        state.planning.raw_content if state.planning is not None else None
-    )
-    state.response["planner_finish_reason"] = (
-        state.planning.finish_reason if state.planning is not None else None
-    )
-    state.response["planner_prompt_messages"] = (
-        state.planning.prompt_messages if state.planning is not None else []
-    )
+    if state.session_memory_enabled:
+        state.response.update(
+            planner_output=None,
+            planner_raw_content=None,
+            planner_finish_reason=None,
+            planner_prompt_messages=[],
+        )
+    else:
+        state.response["planner_output"] = (
+            state.planning.raw_output if state.planning is not None else None
+        )
+        state.response["planner_raw_content"] = (
+            state.planning.raw_content if state.planning is not None else None
+        )
+        state.response["planner_finish_reason"] = (
+            state.planning.finish_reason if state.planning is not None else None
+        )
+        state.response["planner_prompt_messages"] = (
+            state.planning.prompt_messages if state.planning is not None else []
+        )
     logger.info("node=response end response_ready=true")
     return state
+
+
+def _requires_stateful_failure_envelope(state: AgentRunState) -> bool:
+    return (
+        state.session_memory_enabled
+        and state.status in {"error", "insufficient_tools"}
+        and state.planning is not None
+        and (state.planning.status != "planned" or state.validation_failed)
+    )
 
 
 def _response_type(state: AgentRunState) -> str:

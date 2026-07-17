@@ -7,6 +7,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_POLICY_PATH = Path(__file__).resolve().parents[1] / "config" / "policy.yaml"
+# Configuration is shared by the repository, so API processes load the root
+# .env regardless of whether they start from apps/api or the repository root.
+DEFAULT_ENV_PATH = Path(__file__).resolve().parents[4] / ".env"
 
 
 class StrictPolicyModel(BaseModel):
@@ -247,7 +250,7 @@ class Settings(BaseSettings):
     llm_enabled: bool = True
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=DEFAULT_ENV_PATH,
         env_prefix="METAMIND_",
         case_sensitive=False,
         extra="ignore",

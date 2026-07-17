@@ -14,4 +14,8 @@ plan_service = PlanService()
 
 @router.post("/plan", response_model=PlanResponse)
 async def plan(request: PlanRequest) -> PlanResponse:
-    return mappers.plan_response(await plan_service.run(request.query, request.game))
+    result = await plan_service.run(request.query, request.game, request.session_id)
+    response = mappers.plan_response(result)
+    # Echo session_id so clients can continue the conversation.
+    response.session_id = str(request.session_id) if request.session_id is not None else None
+    return response

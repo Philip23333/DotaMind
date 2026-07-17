@@ -54,6 +54,32 @@
         background: var(--panel);
       }
 
+      .session-row {
+        grid-column: 1 / -1;
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+      }
+
+      .session-row input {
+        flex: 1;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 0.5rem 0.75rem;
+        font: inherit;
+        font-size: 0.82rem;
+        color: var(--ink);
+      }
+
+      .session-row button {
+        padding: 0.5rem 0.85rem;
+        font-size: 0.78rem;
+        background: var(--panel);
+        color: var(--blue);
+        border: 1px solid var(--blue);
+        white-space: nowrap;
+      }
+
       textarea {
         width: 100%;
         min-height: 3rem;
@@ -224,6 +250,11 @@
       <form id="form">
         <textarea id="query" required>enemy picked Lina, what should I pick?</textarea>
         <button id="submit" type="submit">Run plan</button>
+        <div class="session-row">
+          <input id="session-id" type="text" placeholder="session_id (UUID v4 — 留空 = 单轮无状态模式)" />
+          <button id="new-session" type="button">新建会话</button>
+          <button id="clear-session" type="button" style="color:var(--red);border-color:var(--red);">清除会话</button>
+        </div>
       </form>
 
       <div class="suggestions">
@@ -263,6 +294,16 @@
       const submit = document.querySelector("#submit");
       const result = document.querySelector("#result");
       const errorBox = document.querySelector("#error");
+      const sessionInput = document.querySelector("#session-id");
+      const newSessionBtn = document.querySelector("#new-session");
+      const clearSessionBtn = document.querySelector("#clear-session");
+
+      newSessionBtn.addEventListener("click", () => {
+        sessionInput.value = crypto.randomUUID();
+      });
+      clearSessionBtn.addEventListener("click", () => {
+        sessionInput.value = "";
+      });
 
       document.querySelectorAll(".suggestions button").forEach((button) => {
         button.addEventListener("click", () => {
@@ -282,13 +323,20 @@
         submit.textContent = "Running...";
         errorBox.innerHTML = "";
 
+        const sid = sessionInput.value.trim() || null;
+        const body = { query: text, game: "dota2" };
+        if (sid) body.session_id = sid;
+
         try {
           const response = await fetch("/api/v1/plan", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ query: text, game: "dota2" }),
+            body: JSON.stringify(body),
           });
-          render(await response.json());
+          const payload = await response.json();
+          // Keep session_id in sync with what the server echoed back.
+          if (payload.session_id) sessionInput.value = payload.session_id;
+          render(payload);
         } catch (error) {
           result.hidden = true;
           errorBox.append(textElement("div", "error", `Request failed: ${error}`));
@@ -323,6 +371,7 @@
           metric("Status", payload.status),
           metric("Response Type", payload.response_type || "n/a"),
           metric("Reason", payload.reason || "n/a"),
+          metric("Session", payload.session_id ? payload.session_id.slice(0, 8) + "…" : "stateless"),
         );
       }
 

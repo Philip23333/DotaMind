@@ -7,12 +7,13 @@ report pipeline has been deleted.
 
 ```text
 app/
-  api/v1/          /plan schemas, route, and mapper
-  application/     PlanService
+  api/v1/          /plan schemas (incl. session_id), route, and mapper
+  application/     PlanService, session_store (lease-aware SessionStore transaction + InMemorySessionStore)
   agentic/
     graph.py       LangGraph StateGraph runner
-    state.py       shared AgentRunState
+    state.py       shared AgentRunState (carries injected conversation history)
     models.py      ExecutionPlan, ToolCall, ToolResult
+    conversation/  Turn/ResolvedEntity models, turn summary extractor, history renderer
     nodes/         planner, validate, tools, evidence, answer, critic, response nodes
     tools/         registry, executor, hero, patch, OpenDota, STRATZ, ranking tools
     planning/      planner and output contract catalog

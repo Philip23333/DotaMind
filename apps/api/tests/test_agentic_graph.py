@@ -45,7 +45,9 @@ class FakePlanner:
     def __init__(self, result: AgenticPlannerResult) -> None:
         self.result = result
 
-    async def plan(self, query: str, game: str = "dota2") -> AgenticPlannerResult:
+    async def plan(
+        self, query: str, game: str = "dota2", history=None
+    ) -> AgenticPlannerResult:
         return self.result
 
 

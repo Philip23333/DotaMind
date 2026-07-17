@@ -7,11 +7,8 @@ defensively via getattr().
 
 from types import SimpleNamespace
 
-import pytest
-
 from app.agentic.conversation.models import Turn
 from app.agentic.conversation.summary import build_turn_summary
-
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from app.agentic.conversation.models import ResolvedEntity, Turn
 
+SESSION_REQUEST_FAILED_REASON = "The session request could not be completed safely."
+
 # Evidence kinds that represent resolvable game entities.
 # tuple: (entity_type, name_value_key_or_None, id_value_key)
 # When name_value_key is None, item.subject is used as the name.
@@ -78,6 +80,27 @@ def build_turn_summary(
         resolved_entities=resolved_entities,
         context_scope=context_scope,
         response_summary=response_summary,
+    )
+
+
+def build_session_failure_turn(
+    state: object,
+    *,
+    max_query_chars: int = 200,
+) -> Turn:
+    """Build the only session record allowed for a redacted public failure.
+
+    Planner errors can contain untrusted model text, rejected plans, or a
+    Pydantic echo of historical input.  None of that may become future session
+    context, so this deliberately ignores every field except the current query
+    and coarse status.
+    """
+    return Turn(
+        turn_index=0,
+        query=_safe_str(getattr(state, "query", ""), max_query_chars),
+        status=getattr(state, "status", "error"),  # type: ignore[arg-type]
+        response_type="session_request_failed",
+        response_summary=SESSION_REQUEST_FAILED_REASON,
     )
 
 

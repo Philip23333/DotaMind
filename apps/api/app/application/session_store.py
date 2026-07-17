@@ -14,10 +14,10 @@ from __future__ import annotations
 import asyncio
 from abc import ABC, abstractmethod
 from collections import OrderedDict
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass, field
 
 from app.agentic.conversation.models import Turn
-
 
 # ---------------------------------------------------------------------------
 # Internal session container
@@ -55,16 +55,16 @@ class SessionStore(ABC):
 
         Returns the stored Turn with turn_index set by the store.
         Callers must NOT use the turn_index on the input object.
+
+        This method is part of the same atomic operation as ``get`` and must
+        be called by the task currently inside ``transaction(session_id)``.
+        Implementations must reject writes outside that transaction rather
+        than creating an unlocked session that LRU eviction could remove.
         """
 
     @abstractmethod
-    async def get_lock(self, session_id: str) -> asyncio.Lock:
-        """Return the per-session async lock.
-
-        The lock must be held for the full get → run → append transaction to
-        preserve single-session ordering.  The lock object is stable for the
-        lifetime of the session.
-        """
+    def transaction(self, session_id: str) -> AbstractAsyncContextManager[None]:
+        """Serialize one complete get → run → append transaction."""
 
 
 # ---------------------------------------------------------------------------
@@ -75,8 +75,9 @@ class SessionStore(ABC):
 class InMemorySessionStore(SessionStore):
     """LRU in-memory session store with per-session async locking.
 
-    Eviction: when ``max_sessions`` is reached the least-recently-used session
-    (and its lock) is evicted.  Any read or write refreshes the LRU order.
+    Eviction: inactive least-recently-used sessions are evicted above
+    ``max_sessions``. Active and waiting transactions hold leases and are never
+    evicted; capacity may therefore be temporarily exceeded under concurrency.
 
     Turn capacity: each session keeps at most ``max_turns_per_session`` turns.
     Older turns are dropped from the front of the list; the monotonic counter
@@ -99,6 +100,12 @@ class InMemorySessionStore(SessionStore):
         # OrderedDict gives O(1) LRU move_to_end / popitem.
         self._sessions: OrderedDict[str, _SessionData] = OrderedDict()
         self._locks: dict[str, asyncio.Lock] = {}
+        # Includes both current lock holders and waiters. This prevents the
+        # lock-release/reacquire window from permitting an unsafe eviction.
+        self._leases: dict[str, int] = {}
+        # The task which currently owns each session lock.  A lease alone is
+        # insufficient here: it can belong to a waiter which must not append.
+        self._holders: dict[str, asyncio.Task[object]] = {}
 
     # ------------------------------------------------------------------
     # SessionStore interface
@@ -112,9 +119,16 @@ class InMemorySessionStore(SessionStore):
         return list(data.turns[-limit:])  # snapshot copy, chronological
 
     async def append(self, session_id: str, turn: Turn) -> Turn:
+        holder = self._holders.get(session_id)
+        if holder is None or holder is not asyncio.current_task():
+            raise RuntimeError(
+                "SessionStore.append() must be called inside "
+                "transaction(session_id) by the current task"
+            )
         if session_id not in self._sessions:
-            self._evict_if_full()
             self._sessions[session_id] = _SessionData()
+            self._sessions.move_to_end(session_id)
+            self._evict_to_capacity()
         self._sessions.move_to_end(session_id)  # refresh LRU on write
         data = self._sessions[session_id]
 
@@ -129,17 +143,48 @@ class InMemorySessionStore(SessionStore):
 
         return stored
 
-    async def get_lock(self, session_id: str) -> asyncio.Lock:
-        if session_id not in self._locks:
-            self._locks[session_id] = asyncio.Lock()
-        return self._locks[session_id]
+    @asynccontextmanager
+    async def transaction(self, session_id: str):
+        lock = self._locks.setdefault(session_id, asyncio.Lock())
+        self._leases[session_id] = self._leases.get(session_id, 0) + 1
+        acquired = False
+        try:
+            await lock.acquire()
+            acquired = True
+            current_task = asyncio.current_task()
+            if current_task is None:  # pragma: no cover - asyncio guarantees a task.
+                raise RuntimeError("SessionStore.transaction() requires an asyncio task")
+            self._holders[session_id] = current_task
+            yield
+        finally:
+            if acquired:
+                self._holders.pop(session_id, None)
+                lock.release()
+            remaining = self._leases[session_id] - 1
+            if remaining == 0:
+                self._leases.pop(session_id)
+                if session_id not in self._sessions:
+                    self._locks.pop(session_id, None)
+            else:
+                self._leases[session_id] = remaining
+            self._evict_to_capacity()
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _evict_if_full(self) -> None:
-        """Evict least-recently-used session(s) until under capacity."""
-        while len(self._sessions) >= self._max_sessions:
-            evicted_id, _ = self._sessions.popitem(last=False)
+    def _evict_to_capacity(self) -> None:
+        """Evict inactive LRU sessions until at or below capacity."""
+        while len(self._sessions) > self._max_sessions:
+            evicted_id = next(
+                (
+                    candidate
+                    for candidate in self._sessions
+                    if self._leases.get(candidate, 0) == 0
+                ),
+                None,
+            )
+            if evicted_id is None:
+                return
+            self._sessions.pop(evicted_id)
             self._locks.pop(evicted_id, None)

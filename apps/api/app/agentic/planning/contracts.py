@@ -171,6 +171,8 @@ def render_planner_tools(registry: ToolRegistry) -> str:
             if description:
                 line += f". {description}"
             lines.append(line)
+            if contract.requires_reference:
+                lines.append("      must_reference: true")
             for accepted in contract.accepts_refs:
                 lines.append(
                     "      accepts_ref: "
@@ -194,6 +196,7 @@ def validate_plan_against_catalog(
     errors.extend(validate_registry_contracts(registry))
     errors.extend(validate_tool_calls(plan, registry))
     errors.extend(validate_references(plan, registry))
+    errors.extend(validate_required_references(plan, registry))
     errors.extend(validate_tool_args(plan, registry))
     errors.extend(validate_output_contract(plan, registry))
     errors.extend(validate_evidence_producibility(plan, registry))
@@ -254,6 +257,11 @@ def validate_registry_contracts(registry: ToolRegistry) -> list[str]:
             field = fields.get(arg_name)
             if field is None:
                 continue
+            if arg_contract.requires_reference and not arg_contract.accepts_refs:
+                errors.append(
+                    f"{definition.name}.{arg_name} requires_reference but declares "
+                    "no accepts_refs"
+                )
             for accepted in arg_contract.accepts_refs:
                 if not _contract_type_matches_annotation(
                     accepted.type,
@@ -368,6 +376,26 @@ def validate_references(plan: ExecutionPlan, registry: ToolRegistry) -> list[str
                         f"from {source_definition.name}.{output_contract.path}"
                     )
         previous[call.id] = call
+    return errors
+
+
+def validate_required_references(plan: ExecutionPlan, registry: ToolRegistry) -> list[str]:
+    """Require explicitly marked top-level arguments to use plan-local refs."""
+    errors: list[str] = []
+    registered = {definition.name for definition in registry.list()}
+    for call in plan.tool_calls:
+        if call.tool not in registered:
+            continue
+        definition = registry.get(call.tool)
+        for arg_name, contract in definition.arg_contracts.items():
+            if not contract.requires_reference or arg_name not in call.args:
+                continue
+            value = call.args[arg_name]
+            if not isinstance(value, str) or not value.startswith("$"):
+                errors.append(
+                    f"{call.tool}.{arg_name} must reference a previous "
+                    "current-plan tool result"
+                )
     return errors
 
 

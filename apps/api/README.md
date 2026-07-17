@@ -35,6 +35,43 @@ The response exposes the plan, tool results, evidence graph, answer, review,
 errors, trace, and planner debugging metadata. Missing tools, invalid plans,
 upstream errors, and insufficient evidence are returned directly.
 
+## Multi-turn Sessions
+
+`POST /api/v1/plan` accepts an optional `session_id` (UUID v4). It is opt-in:
+
+- Omit it (or send `null`) for stateless single-turn behaviour. This is the
+  default and is backward compatible, except the response now always carries a
+  `"session_id": null` field and the planner prompt includes a short
+  history-usage rule block even when no history exists.
+- Send a client-generated UUID v4 to enable session memory. The service reads
+  the most recent turns (see `conversation.history_window` in `policy.yaml`),
+  injects a compact summary into the planner prompt so it can resolve pronouns
+  ("那他出什么装") and inherit scope, then stores a summary of the new turn.
+
+```bash
+# Client generates and reuses the same UUID across turns.
+SID=$(python -c "import uuid; print(uuid.uuid4())")
+curl -s -X POST http://localhost:8001/api/v1/plan \
+  -H "Content-Type: application/json" \
+  -d "{\"query\":\"对手选了 Lina 我选什么克制\",\"session_id\":\"$SID\"}"
+curl -s -X POST http://localhost:8001/api/v1/plan \
+  -H "Content-Type: application/json" \
+  -d "{\"query\":\"那他适合走几号位\",\"session_id\":\"$SID\"}"
+```
+
+Notes and Phase 1 limits:
+
+- History is injected as *untrusted context* only, not evidence. Each turn
+  confirms hero/team/player identity through the current plan before a
+  downstream data tool can use its ID. Stateful responses never expose planner
+  prompts or raw planner output; stateful planner failures return a stable,
+  redacted error envelope.
+- The store is in-memory and single-process. Multi-worker deployments need a
+  distributed store (Phase 2, Redis). Active or waiting sessions are never
+  evicted; `max_sessions` can be temporarily exceeded while every candidate is
+  active. The `/debug/plan` console has a
+  `session_id` field with a "新建会话" button for manual multi-turn testing.
+
 Current LangGraph path:
 
 ```text

@@ -88,6 +88,7 @@ time.
 | `critic` | Evidence, mock, confidence, freshness, and team sample-quality gates. |
 | `llm.orchestrator` | Planner temperature, token limit, and retry model defaults. |
 | `planning.sample_policy` | Per-tool relaxed/default/strict sample thresholds and target argument names. |
+| `conversation` | Multi-turn session memory: history window, per-session/turn caps, and prompt-injection character budgets. |
 
 ### STRATZ Window Policy
 
@@ -109,6 +110,26 @@ sample thresholds. Each entry declares:
 The configured tool and argument must exist in the registry. Tiers must satisfy
 `relaxed <= default <= strict`, and tests keep policy defaults aligned with tool
 input-model defaults.
+
+### Conversation Policy
+
+`conversation` controls opt-in multi-turn session memory (Phase 1, in-memory
+single-process store). Fields:
+
+- `history_window`: prior turns injected into the planner prompt.
+- `max_turns_per_session`: turns retained per session (oldest evicted; the
+  monotonic turn counter is never reset).
+- `max_sessions`: inactive-session LRU capacity target. It may be temporarily
+  exceeded when every candidate has an active or waiting transaction lease.
+- `answer_summary_max_chars`: per-turn answer summary cap.
+- `turn_query_max_chars`: per-turn stored query cap.
+- `history_max_chars`: hard budget for the entire rendered history block.
+
+All fields have defaults, so a `policy.yaml` without a `conversation` section
+still loads. The validator enforces `history_window <= max_turns_per_session`.
+Session memory is opt-in per request via `session_id`; omitting it is stateless.
+Active and waiting sessions are never evicted, and the store converges back to
+`max_sessions` after transactions release.
 
 ## Removed Configuration Sources
 
