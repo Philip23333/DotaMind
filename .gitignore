@@ -1,15 +1,7 @@
-# dependencies
-node_modules/
-.pnp/
-.pnp.js
-
 # builds
-.next/
-out/
 dist/
 build/
 coverage/
-*.tsbuildinfo
 
 # Python
 __pycache__/

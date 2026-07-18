@@ -91,8 +91,8 @@ Use:
 http://localhost:8001/debug/plan
 ```
 
-The deprecated Next.js app under `apps/web` should not be modified unless
-explicitly requested.
+The legacy Next.js app has been deleted. `/debug/plan` is the only internal
+query test UI; there is no separate frontend runtime or npm workspace.
 
 ## Migration Status
 
@@ -103,3 +103,4 @@ explicitly requested.
   models.
 - Kept `/api/v1/plan`, `/debug/plan`, and `/health`.
 - Moved team resolution into an OpenDota integration helper used by agentic tools.
+- Deleted the legacy `apps/web` Next.js application and its root npm workspace.

@@ -31,8 +31,8 @@ At the start of every new session in this repository, before analyzing or editin
 
 - When the user has not explicitly requested code changes, only analyze and
   discuss the issue. Do not edit files proactively.
-- Treat `apps/web` as deprecated and do not modify it unless the user explicitly
-  requests changes there. Use `/debug/plan` as the internal query test UI.
+- The legacy `apps/web` frontend has been deleted. Use `/debug/plan` as the
+  internal query test UI; do not recreate a separate frontend compatibility path.
 - After completing a meaningful phase of changes, update the progress
   documentation under `docs/progress/`. Keep the timestamp-prefixed Chinese and
   English progress snapshots aligned.

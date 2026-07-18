@@ -20,8 +20,7 @@ Start with the [documentation index](docs/README.md), then read the
 
 ```text
 apps/
-  api/        FastAPI service, LangGraph agentic workflow, integrations, tests
-  web/        Deprecated Next.js dashboard; do not modify unless explicitly needed
+  api/        FastAPI service, agentic workflow, tests, and `/debug/plan` UI
 docs/
   design/     Current architecture, layer detail, roadmaps, and decisions
   technical/  API, configuration, and provider reference material
@@ -37,15 +36,14 @@ python -m pip install -e ".[dev]"
 python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8001 --log-level info
 ```
 
-Alternatively, run `npm run dev:api` from the repository root. The startup
-script uses port `8001` and fails when the port is already occupied.
+The API uses port `8001` and fails when the port is already occupied.
 
 Useful local pages:
 
 - `http://localhost:8001/docs`
 - `http://localhost:8001/debug/plan`
 
-The frontend under `apps/web` is deprecated. Use `/debug/plan` as the internal
+There is no separate frontend application. Use `/debug/plan` as the internal
 query test UI.
 
 ## Current API

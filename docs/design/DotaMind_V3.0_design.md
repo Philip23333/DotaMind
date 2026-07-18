@@ -101,8 +101,8 @@ GET /debug/plan
 GET /health
 ```
 
-`apps/web` 已废弃，除非明确要求，不应修改。内部查询测试 UI 使用
-`/debug/plan`。
+旧 Next.js 前端已经删除。内部查询测试 UI 统一使用 `/debug/plan`，不再维护
+独立前端运行时或兼容路径。
 
 ### 3.2 当前整体链路
 
@@ -581,7 +581,7 @@ V3.0 当前阶段不做：
 - 人类可读名称、prompt、API display 和 User-Agent 使用 `DotaMind`。
 - 环境变量使用 `DOTAMIND_*` 前缀。
 - Python distribution 使用 `dotamind-api`。
-- npm workspace 使用 `dotamind`，Web package 使用 `@dotamind/web`。
+- 不再维护 npm workspace；旧 Web package 已删除。
 - 设计文档文件名使用 `DotaMind_*`。
 
 ### 15.2 兼容性边界
