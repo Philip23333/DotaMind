@@ -83,7 +83,7 @@ export async function runExperimentalQuery(query: string): Promise<NaturalLangua
 
   if (!response.ok) {
     const detail = await response.text();
-    throw new Error(`MetaMind API returned ${response.status}${detail ? `: ${detail}` : ""}`);
+    throw new Error(`DotaMind API returned ${response.status}${detail ? `: ${detail}` : ""}`);
   }
 
   return response.json() as Promise<NaturalLanguageQueryResponse>;

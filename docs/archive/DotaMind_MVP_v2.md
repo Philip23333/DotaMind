@@ -1,4 +1,4 @@
-# MetaMind MVP 设计文档 v2（工程实施版）
+# DotaMind MVP 设计文档 v2（工程实施版）
 
 本版本仅替换 v1 中的三块：**Agent 架构（原第 5 节）**、**数据源设计与风险（原第 8 节）**、**核心算法（原第 9 节）**。其余章节（定位、商业化、页面、时间线等）继续沿用 v1，但建议按本版本的取舍重新裁剪。
 
@@ -212,7 +212,7 @@ none   : 无支持信号 → 输出 insufficient_data
 - **Ground truth**：patch P 后第 4 周的实际 high-MMR pickrate top 10。
 - **指标**：top-10 重合数（0-10）。
 - **Baseline**：直接按上周 winrate 排序。
-- **目标**：MetaMind 的输出 ≥ baseline + 1。
+- **目标**：DotaMind 的输出 ≥ baseline + 1。
 
 回测脚本放 `eval/backtest.py`，跑 3 个历史版本即可，结果写进 README。**这一条是 v1 完全缺失但对 Technical Execution 评分至关重要**的部分。
 

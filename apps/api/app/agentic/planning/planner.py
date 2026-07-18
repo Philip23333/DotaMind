@@ -1,4 +1,4 @@
-﻿import json
+import json
 import logging
 from typing import Any, Literal
 
@@ -42,7 +42,7 @@ Conversation history rules (applies when a "## 对话历史" block appears in th
   return insufficient_tools rather than guessing or bypassing it.
 """
 
-_PLANNER_SYSTEM_PROMPT = """You are the MetaMind v2.5 Planner.
+_PLANNER_SYSTEM_PROMPT = """You are the DotaMind v2.5 Planner.
 
 Decide whether the user query can be answered with the currently registered
 tools. Return JSON only.
@@ -281,7 +281,7 @@ class AgenticPlanner:
             return AgenticPlannerResult(
                 status="error",
                 reason="LLM planner is disabled",
-                errors=["METAMIND_LLM_ENABLED must be true for /api/v1/plan"],
+                errors=["DOTAMIND_LLM_ENABLED must be true for /api/v1/plan"],
             )
 
         history_block = render_history(

@@ -6,11 +6,11 @@ product
 
 ## Users
 
-MetaMind serves Dota2 players, content creators, esports analysts, team staff, community bot builders, and other agents that need structured game meta intelligence. Users are usually comparing patch changes, hero trends, pro match drafts, and team performance under time pressure.
+DotaMind serves Dota2 players, content creators, esports analysts, team staff, community bot builders, and other agents that need structured game meta intelligence. Users are usually comparing patch changes, hero trends, pro match drafts, and team performance under time pressure.
 
 ## Product Purpose
 
-MetaMind turns patch notes, match data, and pro team statistics into explainable, verifiable, callable reports. Success means a human or another agent can request a meta, patch, team, or claim verification report and receive structured output with sources, reasoning, confidence, and commercial service metadata.
+DotaMind turns patch notes, match data, and pro team statistics into explainable, verifiable, callable reports. Success means a human or another agent can request a meta, patch, team, or claim verification report and receive structured output with sources, reasoning, confidence, and commercial service metadata.
 
 ## Brand Personality
 
@@ -18,7 +18,7 @@ Evidence-led, tactical, composable. The product should feel like a focused espor
 
 ## Anti-references
 
-MetaMind should not feel like a generic win-rate lookup site, a betting prediction product, a marketing landing page, or a black-box chatbot that makes unsupported claims. Avoid decorative dashboards that bury evidence behind visual noise.
+DotaMind should not feel like a generic win-rate lookup site, a betting prediction product, a marketing landing page, or a black-box chatbot that makes unsupported claims. Avoid decorative dashboards that bury evidence behind visual noise.
 
 ## Design Principles
 

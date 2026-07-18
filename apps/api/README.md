@@ -160,15 +160,15 @@ Business policy is loaded from `app/config/policy.yaml` and validated by
 Pydantic at startup.
 
 ```text
-METAMIND_LIVE_DATA_ENABLED=false
-METAMIND_OPENDOTA_API_KEY=
-METAMIND_STRATZ_TOKEN=
-METAMIND_LLM_ENABLED=false
-METAMIND_LLM_PROVIDER=deepseek
-METAMIND_LLM_API_KEY=
-METAMIND_LLM_BASE_URL=https://api.deepseek.com
-METAMIND_LLM_MODEL=deepseek-chat
-METAMIND_POLICY_PATH=
+DOTAMIND_LIVE_DATA_ENABLED=false
+DOTAMIND_OPENDOTA_API_KEY=
+DOTAMIND_STRATZ_TOKEN=
+DOTAMIND_LLM_ENABLED=false
+DOTAMIND_LLM_PROVIDER=deepseek
+DOTAMIND_LLM_API_KEY=
+DOTAMIND_LLM_BASE_URL=https://api.deepseek.com
+DOTAMIND_LLM_MODEL=deepseek-chat
+DOTAMIND_POLICY_PATH=
 ```
 
 Policy is cached for the process lifetime. Restart the API after changing

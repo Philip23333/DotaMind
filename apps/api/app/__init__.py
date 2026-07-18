@@ -1,1 +1,1 @@
-"""MetaMind API package."""
+"""DotaMind API package."""

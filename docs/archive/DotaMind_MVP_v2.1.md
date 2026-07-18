@@ -1,4 +1,4 @@
-# MetaMind MVP 设计文档 v2.1（多 Agent 终态架构）
+# DotaMind MVP 设计文档 v2.1（多 Agent 终态架构）
 
 > 本文是 v2 的修订版。v2 提出了 6→3 Agent 精简，但把 Retriever / Analyzer / Formatter 一律称作 "Agent" 是个用词错误——其中两层根本不需要 LLM 决策。v2.1 重新厘定 Agent 与工具的边界，并新增 **Critic Agent** 形成对抗式审核闭环。
 

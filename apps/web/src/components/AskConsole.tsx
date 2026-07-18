@@ -48,7 +48,7 @@ export function AskConsole() {
       <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 id="ask-heading" className="text-2xl font-semibold tracking-normal sm:text-3xl">
-            Ask MetaMind
+            Ask DotaMind
           </h1>
           <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--color-muted)]">
             Query patch impact, hero recommendations, team reports, or evidence checks.

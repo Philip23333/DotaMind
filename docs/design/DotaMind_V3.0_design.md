@@ -1,17 +1,16 @@
 # DotaMind V3.0 统一设计文档
 
-> 本文是 DotaMind V3.0 的当前主设计入口。历史文档中的
-> `MetaMind` 是旧产品名；新产品名统一为 `DotaMind`。代码、环境变量、
-> 包名和部分旧文档仍可能保留 `MetaMind` / `METAMIND_*` 命名，这是待迁移
-> 的命名债，不改变本文对当前架构和阶段目标的定义。
+> 本文是 DotaMind V3.0 的当前主设计入口。自 2026-07-18 起，产品展示、
+> 代码文案、环境变量、包元数据和文档文件名统一使用 `DotaMind` / `DOTAMIND_*`
+> 命名。v2.5 仍表示受约束 Tool Calling 架构版本，不是独立产品品牌。
 
 更新日期：2026-07-08
 
 主要来源：
 
-- [MetaMind_MVP_v2.5.md](./MetaMind_MVP_v2.5.md)：受约束 Tool Calling
+- [DotaMind_MVP_v2.5.md](./DotaMind_MVP_v2.5.md)：受约束 Tool Calling
   架构底座。
-- [MetaMind_V3_node_tool_edge_inventory.md](./MetaMind_V3_node_tool_edge_inventory.md)：
+- [DotaMind_V3_node_tool_edge_inventory.md](./DotaMind_V3_node_tool_edge_inventory.md)：
   LangGraph node / tool / edge 实现盘点。
 - [V3.0_功能闭环缺口盘点.md](./V3.0_功能闭环缺口盘点.md)：V3.0 功能闭环
   目标和缺口路线图。
@@ -504,7 +503,7 @@ guide。
 |---|---|
 | critic -> planner retry | V3.1 方向；用于稀疏 evidence 后有界补证或放宽阈值。 |
 | Prompt Registry / prompt 收敛 | 新工具增加后 planner prompt 会继续变长，应收敛到 `app/agentic/prompts/` 或 registry-render 层。 |
-| 品牌命名迁移 | 文档、prompt、README、API display 逐步从 MetaMind 迁到 DotaMind；代码内部 env var 可单独规划。 |
+| 品牌命名统一 | 已于 2026-07-18 完成全仓统一；新增内容只使用 `DotaMind` / `DOTAMIND_*`。 |
 
 ---
 
@@ -573,30 +572,26 @@ V3.0 当前阶段不做：
 
 ---
 
-## 15. 文档与命名迁移策略
+## 15. 文档与命名规范
 
 ### 15.1 当前命名状态
 
-新产品名：`DotaMind`
+全仓唯一产品名：`DotaMind`。
 
-历史名称仍存在于：
+- 人类可读名称、prompt、API display 和 User-Agent 使用 `DotaMind`。
+- 环境变量使用 `DOTAMIND_*` 前缀。
+- Python distribution 使用 `dotamind-api`。
+- npm workspace 使用 `dotamind`，Web package 使用 `@dotamind/web`。
+- 设计文档文件名使用 `DotaMind_*`。
 
-- `MetaMind_*` 设计文档文件名。
-- `METAMIND_*` 环境变量。
-- Python package metadata：`metamind-api`。
-- planner / answer prompt 中的旧名称或 v2.5 表述。
-- 部分 docstring 和 README。
+### 15.2 兼容性边界
 
-这些不是当前架构倒退的证据，而是需要后续清理的命名债。
+本项目仍处于开发期，本次命名统一不保留旧标识兼容路径：
 
-### 15.2 建议迁移顺序
-
-1. 文档主入口改为 `DotaMind_V3.0_design.md`。
-2. README / architecture / progress 快照改用 DotaMind 口径。
-3. Planner prompt display name 从 “MetaMind v2.5 Planner” 改为
-   “DotaMind V3 Planner”，同时保留 v2.5 约束语义。
-4. API 展示层和 `/debug/plan` 页面更新产品名。
-5. 最后再评估代码包名、env var、部署变量是否需要兼容迁移。
+- 旧环境变量前缀不再读取。
+- 旧 Python/npm package 名不再发布。
+- 旧文档路径不保留副本或重定向文件。
+- 部署和本地 `.env` 必须同步改用 `DOTAMIND_*`。
 
 ---
 
@@ -624,7 +619,7 @@ V3.0 当前阶段不做：
    为 hero page、player page、build guide、match detail 等 inventory 建一个
    索引页，标记 captured / user-captured / inferred / not captured。
 
-6. **品牌迁移 ADR**
-   单独记录 MetaMind -> DotaMind 的兼容策略：哪些只改展示，哪些要保留
-   backward compatibility，哪些可以直接 rename。
+6. **部署变量变更记录**
+   在部署说明中明确记录 `DOTAMIND_*` 环境变量、`dotamind-api` 包名和
+   `dotamind` PostgreSQL 默认库名，避免旧开发环境继续加载失效配置。
 

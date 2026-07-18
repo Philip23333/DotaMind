@@ -759,7 +759,7 @@ def _hero_daily_trends_handler(settings: Settings):
         context: QueryContext,
     ) -> dict[str, Any]:
         if not settings.stratz_token:
-            raise ValueError("METAMIND_STRATZ_TOKEN is required")
+            raise ValueError("DOTAMIND_STRATZ_TOKEN is required")
 
         bracket_full = basic_to_full(context.bracket)
         transport = StratzTransport(settings.stratz_graphql_url, settings.stratz_token)
@@ -860,7 +860,7 @@ def _filter_heroes_by_position_handler(settings: Settings):
         context: QueryContext,
     ) -> dict[str, Any]:
         if not settings.stratz_token:
-            raise ValueError("METAMIND_STRATZ_TOKEN is required")
+            raise ValueError("DOTAMIND_STRATZ_TOKEN is required")
 
         # Single latest completed week — this is a join, not a per-week fan-out.
         _weeks, epochs = _resolve_week_window(context.weeks_back)
@@ -1086,7 +1086,7 @@ def player_recent_matches_evidence(result: ToolResult) -> list[EvidenceItem]:
 def _player_profile_handler(settings: Settings):
     async def handle(args: PlayerProfileInput, context: QueryContext) -> dict[str, Any]:
         if not settings.stratz_token:
-            raise ValueError("METAMIND_STRATZ_TOKEN is required")
+            raise ValueError("DOTAMIND_STRATZ_TOKEN is required")
         transport = StratzTransport(settings.stratz_graphql_url, settings.stratz_token)
         players = StratzPlayers(transport)
         try:
@@ -1111,7 +1111,7 @@ def _player_recent_matches_handler(settings: Settings):
         args: PlayerRecentMatchesInput, context: QueryContext
     ) -> dict[str, Any]:
         if not settings.stratz_token:
-            raise ValueError("METAMIND_STRATZ_TOKEN is required")
+            raise ValueError("DOTAMIND_STRATZ_TOKEN is required")
         # Scope from plan.context (v2.5 boundary): bracket -> bracketIds(0-8),
         # position_ids passed through. region_ids/game_mode_ids intentionally NOT
         # read (v1 type mismatch; validator already rejects them on player plans).
@@ -1254,7 +1254,7 @@ def _player_hero_performance_handler(settings: Settings):
         args: PlayerHeroPerformanceInput, context: QueryContext
     ) -> dict[str, Any]:
         if not settings.stratz_token:
-            raise ValueError("METAMIND_STRATZ_TOKEN is required")
+            raise ValueError("DOTAMIND_STRATZ_TOKEN is required")
         # Scope from plan.context: bracket -> rankIds(0-80, LIVE-LOCKED);
         # position_ids passed through. region/game_mode NOT read (v1 type
         # mismatch; validator already rejects them on player plans).
@@ -1818,7 +1818,7 @@ def _pair_lane_outcome_handler(settings: Settings):
         context: QueryContext,
     ) -> dict[str, Any]:
         if not settings.stratz_token:
-            raise ValueError("METAMIND_STRATZ_TOKEN is required")
+            raise ValueError("DOTAMIND_STRATZ_TOKEN is required")
 
         weeks, epochs = _resolve_week_window(context.weeks_back)
         transport = StratzTransport(settings.stratz_graphql_url, settings.stratz_token)
@@ -1877,7 +1877,7 @@ def _hero_matchup_ranking_handler(settings: Settings):
         context: QueryContext,
     ) -> dict[str, Any]:
         if not settings.stratz_token:
-            raise ValueError("METAMIND_STRATZ_TOKEN is required")
+            raise ValueError("DOTAMIND_STRATZ_TOKEN is required")
 
         weeks, epochs = _resolve_week_window(context.weeks_back)
         transport = StratzTransport(settings.stratz_graphql_url, settings.stratz_token)
@@ -1970,7 +1970,7 @@ def _hero_synergy_ranking_handler(settings: Settings):
         context: QueryContext,
     ) -> dict[str, Any]:
         if not settings.stratz_token:
-            raise ValueError("METAMIND_STRATZ_TOKEN is required")
+            raise ValueError("DOTAMIND_STRATZ_TOKEN is required")
 
         weeks, epochs = _resolve_week_window(context.weeks_back)
         transport = StratzTransport(settings.stratz_graphql_url, settings.stratz_token)
@@ -2037,7 +2037,7 @@ def _lane_meta_global_handler(settings: Settings):
         context: QueryContext,
     ) -> dict[str, Any]:
         if not settings.stratz_token:
-            raise ValueError("METAMIND_STRATZ_TOKEN is required")
+            raise ValueError("DOTAMIND_STRATZ_TOKEN is required")
 
         weeks, epochs = _resolve_week_window(context.weeks_back)
         transport = StratzTransport(settings.stratz_graphql_url, settings.stratz_token)
@@ -2130,7 +2130,7 @@ def _hero_position_stats_handler(settings: Settings):
         context: QueryContext,
     ) -> dict[str, Any]:
         if not settings.stratz_token:
-            raise ValueError("METAMIND_STRATZ_TOKEN is required")
+            raise ValueError("DOTAMIND_STRATZ_TOKEN is required")
 
         weeks, epochs = _resolve_week_window(context.weeks_back)
         transport = StratzTransport(settings.stratz_graphql_url, settings.stratz_token)

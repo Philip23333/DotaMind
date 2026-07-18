@@ -5,7 +5,7 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from app.core.config import DEFAULT_POLICY_PATH, load_policy
+from app.core.config import DEFAULT_POLICY_PATH, Settings, load_policy
 
 
 def _policy_data() -> dict:
@@ -17,6 +17,15 @@ def _policy_data() -> dict:
 def _write_policy(path: Path, data: dict) -> Path:
     path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
     return path
+
+
+def test_settings_use_dotamind_environment_prefix(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DOTAMIND_APP_NAME", "DotaMind Test API")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.app_name == "DotaMind Test API"
+    assert settings.database_url == "postgresql://dotamind:dotamind@localhost:5432/dotamind"
 
 
 def test_policy_yaml_loads_all_report_sections() -> None:

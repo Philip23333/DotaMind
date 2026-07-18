@@ -3,7 +3,7 @@
 The STRATZ GraphiQL "Docs" panel is generated from the GraphQL introspection
 schema. This script downloads that official schema with the configured API
 token, writes the raw JSON for later lookup, and renders a compact Markdown
-reference for the hero-stat fields MetaMind currently cares about.
+reference for the hero-stat fields DotaMind currently cares about.
 
 Run from the repository root or apps/api:
 
@@ -11,8 +11,8 @@ Run from the repository root or apps/api:
 
 Configuration is read from environment variables first, then apps/api/.env:
 
-    METAMIND_STRATZ_TOKEN
-    METAMIND_STRATZ_GRAPHQL_URL
+    DOTAMIND_STRATZ_TOKEN
+    DOTAMIND_STRATZ_GRAPHQL_URL
 """
 
 from __future__ import annotations
@@ -203,17 +203,17 @@ def _repo_root() -> Path:
 def _load_stratz_config(repo_root: Path) -> tuple[str, str]:
     env_values = _read_env_file(repo_root / "apps" / "api" / ".env")
     url = (
-        os.environ.get("METAMIND_STRATZ_GRAPHQL_URL")
-        or env_values.get("METAMIND_STRATZ_GRAPHQL_URL")
+        os.environ.get("DOTAMIND_STRATZ_GRAPHQL_URL")
+        or env_values.get("DOTAMIND_STRATZ_GRAPHQL_URL")
         or DEFAULT_STRATZ_GRAPHQL_URL
     )
-    token = os.environ.get("METAMIND_STRATZ_TOKEN") or env_values.get(
-        "METAMIND_STRATZ_TOKEN",
+    token = os.environ.get("DOTAMIND_STRATZ_TOKEN") or env_values.get(
+        "DOTAMIND_STRATZ_TOKEN",
         "",
     )
     if not token:
         raise SystemExit(
-            "METAMIND_STRATZ_TOKEN is required in the environment or apps/api/.env"
+            "DOTAMIND_STRATZ_TOKEN is required in the environment or apps/api/.env"
         )
     return url, token
 
@@ -303,9 +303,9 @@ def _render_markdown(schema: dict[str, Any], json_path: Path, md_path: Path) -> 
             "  hero trend charts. Compute win rate as `winCount / matchCount`.",
             "- `HeroStatsQuery.laneOutcome`, `heroVsHeroMatchup`, and `stats`",
             "  use provider week epochs (`week: Long`) and should remain modeled",
-            "  as weekly buckets in MetaMind.",
+            "  as weekly buckets in DotaMind.",
             "- The schema description for `week` says null gives the current week;",
-            "  MetaMind's live probe on 2026-07-03 found null matched the latest",
+            "  DotaMind's live probe on 2026-07-03 found null matched the latest",
             "  completed week. Treat the schema as the field contract, and",
             "  `docs/design/time_patch_filtering.md` as the empirical behavior",
             "  record for null-week semantics.",

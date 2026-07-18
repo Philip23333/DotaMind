@@ -2,7 +2,7 @@
 
 ## System
 
-MetaMind is a product dashboard and callable agent console. Design serves repeated analysis work, so the interface should prioritize scanability, stable controls, and structured report output.
+DotaMind is a product dashboard and callable agent console. Design serves repeated analysis work, so the interface should prioritize scanability, stable controls, and structured report output.
 
 ## Color
 

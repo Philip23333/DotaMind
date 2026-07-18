@@ -1,4 +1,4 @@
-# MetaMind business policy. Secrets and environment-specific URLs stay in .env.
+# DotaMind business policy. Secrets and environment-specific URLs stay in .env.
 version: 1
 
 opendota:

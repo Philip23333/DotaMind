@@ -229,7 +229,7 @@ class AppPolicy(StrictPolicyModel):
 
 
 class Settings(BaseSettings):
-    app_name: str = "MetaMind API"
+    app_name: str = "DotaMind API"
     environment: str = "local"
     api_v1_prefix: str = "/api/v1"
     cors_origins: list[str] = ["http://localhost:3000"]
@@ -239,7 +239,7 @@ class Settings(BaseSettings):
     stratz_graphql_url: str = "https://api.stratz.com/graphql"
     stratz_token: str | None = None
     openai_api_key: str | None = None
-    database_url: str = "postgresql://metamind:metamind@localhost:5432/metamind"
+    database_url: str = "postgresql://dotamind:dotamind@localhost:5432/dotamind"
     redis_url: str = "redis://localhost:6379/0"
     live_data_enabled: bool = False
 
@@ -251,7 +251,7 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_file=DEFAULT_ENV_PATH,
-        env_prefix="METAMIND_",
+        env_prefix="DOTAMIND_",
         case_sensitive=False,
         extra="ignore",
     )

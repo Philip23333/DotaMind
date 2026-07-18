@@ -17,7 +17,7 @@ class StratzTransport:
         token: str | None = None,
         *,
         request_timeout_seconds: float = 20,
-        user_agent: str = "MetaMind/0.1",
+        user_agent: str = "DotaMind/0.1",
         opener: Any | None = None,
     ) -> None:
         self.graphql_url = graphql_url

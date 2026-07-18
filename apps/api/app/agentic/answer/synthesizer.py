@@ -1,4 +1,4 @@
-﻿import logging
+import logging
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -297,7 +297,7 @@ class NaturalLanguageAnswerSynthesizer:
                 limitations=[
                     AnswerLimitation(
                         code="llm_disabled",
-                        detail="METAMIND_LLM_ENABLED must be true for natural_language_answer.",
+                        detail="DOTAMIND_LLM_ENABLED must be true for natural_language_answer.",
                     )
                 ],
                 data_notes=data_notes(graph),

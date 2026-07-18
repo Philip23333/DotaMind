@@ -14,7 +14,7 @@ Planner -> Validate -> Tools -> Evidence -> Answer -> Critic -> Response
 
 Start with the [documentation index](docs/README.md), then read the
 [DotaMind V3.0 design](docs/design/DotaMind_V3.0_design.md) and the
-[v2.5 architecture foundation](docs/design/MetaMind_MVP_v2.5.md).
+[v2.5 architecture foundation](docs/design/DotaMind_MVP_v2.5.md).
 
 ## Repository Layout
 
@@ -107,11 +107,11 @@ Runtime environment, secrets, URLs, and feature flags live in `.env`. Business
 policy lives in `apps/api/app/config/policy.yaml` and is validated on startup.
 
 ```text
-METAMIND_LIVE_DATA_ENABLED=false
-METAMIND_STRATZ_TOKEN=
-METAMIND_LLM_ENABLED=false
-METAMIND_LLM_API_KEY=
-METAMIND_POLICY_PATH=
+DOTAMIND_LIVE_DATA_ENABLED=false
+DOTAMIND_STRATZ_TOKEN=
+DOTAMIND_LLM_ENABLED=false
+DOTAMIND_LLM_API_KEY=
+DOTAMIND_POLICY_PATH=
 ```
 
 The policy covers OpenDota and STRATZ transport boundaries, team/hero/patch

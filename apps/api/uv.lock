@@ -431,7 +431,7 @@ wheels = [
 ]
 
 [[package]]
-name = "metamind-api"
+name = "dotamind-api"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

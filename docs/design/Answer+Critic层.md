@@ -1,6 +1,6 @@
 # Answer + Critic 层工作链路详解
 
-> 本文描述 MetaMind v2.5 架构中的 Answer 与 Critic 层。Answer 层把 EvidenceGraph 转成面向用户的回答；Critic 层对回答和证据进行规则审查。两者共同决定最终响应是否可信，但不执行工具、不补证据。
+> 本文描述 DotaMind v2.5 架构中的 Answer 与 Critic 层。Answer 层把 EvidenceGraph 转成面向用户的回答；Critic 层对回答和证据进行规则审查。两者共同决定最终响应是否可信，但不执行工具、不补证据。
 
 ## 1. 层定位
 

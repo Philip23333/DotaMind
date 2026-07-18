@@ -25,11 +25,11 @@
 
 新增配置项：
 ```env
-METAMIND_LLM_ENABLED=false
-METAMIND_LLM_PROVIDER=deepseek
-METAMIND_LLM_API_KEY=
-METAMIND_LLM_BASE_URL=https://api.deepseek.com
-METAMIND_LLM_MODEL=deepseek-chat
+DOTAMIND_LLM_ENABLED=false
+DOTAMIND_LLM_PROVIDER=deepseek
+DOTAMIND_LLM_API_KEY=
+DOTAMIND_LLM_BASE_URL=https://api.deepseek.com
+DOTAMIND_LLM_MODEL=deepseek-chat
 ```
 
 ### 3. Analyzer Agent LLM 增强

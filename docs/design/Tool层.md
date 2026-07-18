@@ -1,6 +1,6 @@
 # Tool 层工作链路详解
 
-> 本文描述 MetaMind v2.5 架构中的 Tool 层。Tool 层是确定性执行边界：Planner 只声明要调用什么工具，Tool 层负责解析引用、校验参数、调用 handler、捕获错误，并把结果封装成 `ToolResult`。
+> 本文描述 DotaMind v2.5 架构中的 Tool 层。Tool 层是确定性执行边界：Planner 只声明要调用什么工具，Tool 层负责解析引用、校验参数、调用 handler、捕获错误，并把结果封装成 `ToolResult`。
 
 ## 1. 层定位
 

@@ -19,7 +19,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <BrainCircuit aria-hidden="true" size={20} />
             </div>
             <div>
-              <p className="text-base font-semibold leading-5">MetaMind</p>
+              <p className="text-base font-semibold leading-5">DotaMind</p>
               <p className="text-xs leading-4 text-[var(--color-muted)]">
                 Composable esports intelligence
               </p>

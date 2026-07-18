@@ -1,6 +1,6 @@
 # Planner 层工作链路详解
 
-> 本文描述 MetaMind v2.5 架构中的 Planner 层。Planner 是 LLM 驱动的规划器，但它只负责产出受约束的 `ExecutionPlan`，不执行工具、不取数、不拼外部 API，也不决定固定业务 pipeline。
+> 本文描述 DotaMind v2.5 架构中的 Planner 层。Planner 是 LLM 驱动的规划器，但它只负责产出受约束的 `ExecutionPlan`，不执行工具、不取数、不拼外部 API，也不决定固定业务 pipeline。
 
 ## 1. 层定位
 

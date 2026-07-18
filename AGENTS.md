@@ -8,7 +8,7 @@ At the start of every new session in this repository, before analyzing or editin
    when English terminology or bilingual consistency matters.
 2. **Read the canonical design docs** under `docs/design/` and
    `docs/technical/` that are relevant to the task at hand. In particular:
-   - `docs/design/MetaMind_MVP_v2.5.md` — primary architecture direction
+   - `docs/design/DotaMind_MVP_v2.5.md` — primary architecture direction
      (v2.5 constrained tool calling). Treat this as the authority when
      discussing plan/graph/contract structure.
    - `docs/technical/stratz_hero_page_graphql_inventory.md` — empirical
@@ -50,7 +50,7 @@ At the start of every new session in this repository, before analyzing or editin
 - Do not use mock data to mask missing live integrations or incomplete tools.
   Mock data is acceptable only in tests or explicitly marked fixtures.
 
-- For the v2.5 architecture, follow `docs/design/MetaMind_MVP_v2.5.md` as the
+- For the v2.5 architecture, follow `docs/design/DotaMind_MVP_v2.5.md` as the
   primary design direction. Before discussing or planning architecture changes,
   read or reference this design document and keep the proposal aligned with it.
 

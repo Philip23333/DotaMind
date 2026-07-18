@@ -1,6 +1,6 @@
 # Validator 层工作链路详解
 
-> 本文描述 MetaMind v2.5 架构中的 Validator 层。Validator 是 LLM 计划进入执行环境前的硬边界：它不理解自然语言、不执行工具，只检查 `ExecutionPlan` 是否满足 registry、contract、reference、evidence 和 policy 约束。
+> 本文描述 DotaMind v2.5 架构中的 Validator 层。Validator 是 LLM 计划进入执行环境前的硬边界：它不理解自然语言、不执行工具，只检查 `ExecutionPlan` 是否满足 registry、contract、reference、evidence 和 policy 约束。
 
 ## 1. 层定位
 

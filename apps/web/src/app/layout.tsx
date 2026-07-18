@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "MetaMind",
+  title: "DotaMind",
   description: "Composable esports intelligence agent for Dota2 meta reports.",
 };
 

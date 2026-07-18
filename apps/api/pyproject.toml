@@ -1,5 +1,5 @@
 [project]
-name = "metamind-api"
+name = "dotamind-api"
 version = "0.1.0"
 description = "FastAPI service for composable esports intelligence reports."
 requires-python = ">=3.10"

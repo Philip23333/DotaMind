@@ -22,9 +22,9 @@ Implementation notes:
   hero trend charts. Compute win rate as `winCount / matchCount`.
 - `HeroStatsQuery.laneOutcome`, `heroVsHeroMatchup`, and `stats`
   use provider week epochs (`week: Long`) and should remain modeled
-  as weekly buckets in MetaMind.
+  as weekly buckets in DotaMind.
 - The schema description for `week` says null gives the current week;
-  MetaMind's live probe on 2026-07-03 found null matched the latest
+  DotaMind's live probe on 2026-07-03 found null matched the latest
   completed week. Treat the schema as the field contract, and
   `docs/design/time_patch_filtering.md` as the empirical behavior
   record for null-week semantics.

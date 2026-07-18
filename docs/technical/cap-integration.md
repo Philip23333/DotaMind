@@ -23,10 +23,10 @@ contracts rather than resurrecting fixed service routes.
 1. Caller selects a registered agentic output contract, such as
    `natural_language_answer`.
 2. Caller creates a CAP order with query, output_contract intent, price, and payload hash.
-3. MetaMind verifies order status or receives a callback.
-4. MetaMind runs /api/v1/plan.
-5. MetaMind returns plan, evidence, answer, critic review, sources, and confidence metadata.
-6. MetaMind writes an audit record for replay, dispute handling, and demo proof.
+3. DotaMind verifies order status or receives a callback.
+4. DotaMind runs /api/v1/plan.
+5. DotaMind returns plan, evidence, answer, critic review, sources, and confidence metadata.
+6. DotaMind writes an audit record for replay, dispute handling, and demo proof.
 ```
 
 ## Candidate Payload Shape

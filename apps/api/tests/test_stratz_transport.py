@@ -64,7 +64,7 @@ def test_stratz_transport_sends_bearer_token_without_logging_it(caplog) -> None:
     req, timeout = requests[0]
     assert timeout == 20
     assert req.headers["Authorization"] == "Bearer secret-token"
-    assert req.headers["User-agent"] == "MetaMind/0.1"
+    assert req.headers["User-agent"] == "DotaMind/0.1"
     assert json.loads(req.data.decode("utf-8")) == {
         "query": "query { ok }",
         "variables": {},

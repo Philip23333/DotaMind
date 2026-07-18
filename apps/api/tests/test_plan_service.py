@@ -1,4 +1,4 @@
-﻿import asyncio
+import asyncio
 
 from app.agentic.models import ExecutionPlan, ToolCall
 from app.agentic.planning.planner import AgenticPlannerResult
@@ -44,7 +44,7 @@ def test_plan_service_returns_error_when_planner_errors() -> None:
             AgenticPlannerResult(
                 status="error",
                 reason="LLM disabled",
-                errors=["METAMIND_LLM_ENABLED must be true"],
+                errors=["DOTAMIND_LLM_ENABLED must be true"],
             )
         )
     )
@@ -52,7 +52,7 @@ def test_plan_service_returns_error_when_planner_errors() -> None:
     result = asyncio.run(service.run("enemy picked Lina"))
 
     assert result.status == "error"
-    assert result.errors == ["METAMIND_LLM_ENABLED must be true"]
+    assert result.errors == ["DOTAMIND_LLM_ENABLED must be true"]
     assert result.answer is None
     assert result.review is None
     assert result.response

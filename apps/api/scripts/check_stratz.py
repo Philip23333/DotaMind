@@ -21,7 +21,7 @@ def main() -> int:
     args = parse_args()
     settings = get_settings()
     if not settings.stratz_token:
-        print("missing METAMIND_STRATZ_TOKEN", file=sys.stderr)
+        print("missing DOTAMIND_STRATZ_TOKEN", file=sys.stderr)
         return 1
 
     try:

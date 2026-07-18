@@ -1290,7 +1290,7 @@ def test_stratz_pair_lane_outcome_requires_token() -> None:
     )
 
     assert result.status == "error"
-    assert "METAMIND_STRATZ_TOKEN is required" in result.error
+    assert "DOTAMIND_STRATZ_TOKEN is required" in result.error
 
 
 def test_filter_matchup_rows_keeps_synergy_primary_and_tags_pair_wilson() -> None:

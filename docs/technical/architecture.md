@@ -1,6 +1,6 @@
 # Architecture
 
-MetaMind now uses a single agentic backend path. The old canonical v2.1 fixed
+DotaMind now uses a single agentic backend path. The old canonical v2.1 fixed
 report pipeline has been deleted.
 
 ## Backend Layout

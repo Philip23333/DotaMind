@@ -1,4 +1,4 @@
-# MetaMind V3 Node / Tool / Edge Inventory
+# DotaMind V3 Node / Tool / Edge Inventory
 
 > This document tracks the target V3 graph shape, the current implementation,
 > and the next tool-splitting targets. It should be updated whenever `/api/v1/plan`
@@ -6,7 +6,7 @@
 
 ## Purpose
 
-MetaMind is moving from fixed service pipelines:
+DotaMind is moving from fixed service pipelines:
 
 ```text
 query -> route to fixed service -> fixed retriever/analyzer/formatter chain

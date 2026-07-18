@@ -1,12 +1,12 @@
-# MetaMind：Composable Esports Intelligence Agent
+# DotaMind：Composable Esports Intelligence Agent
 
 ## 1. 项目定位
 
-MetaMind 是一个面向电竞游戏的版本情报分析 Agent。
+DotaMind 是一个面向电竞游戏的版本情报分析 Agent。
 
 它以 Dota2 为首个支持游戏，通过读取版本更新、天梯数据、职业比赛数据和战队表现，自动生成可验证、可复用、可付费调用的游戏 Meta 分析报告。
 
-与普通数据网站不同，MetaMind 不只是展示“谁胜率高”，而是回答：
+与普通数据网站不同，DotaMind 不只是展示“谁胜率高”，而是回答：
 
 - 为什么这个英雄在当前版本变强？
 - 版本更新对不同位置有什么影响？
@@ -15,7 +15,7 @@ MetaMind 是一个面向电竞游戏的版本情报分析 Agent。
 - 当前版本的职业比赛趋势是什么？
 - 未来短期内可能流行哪些英雄和阵容？
 
-在 CROO Hackathon 语境下，MetaMind 的最终产品形式不是一个单纯网页，而是一个可以被人类用户和其他 Agent 调用的 A2A 情报服务。
+在 CROO Hackathon 语境下，DotaMind 的最终产品形式不是一个单纯网页，而是一个可以被人类用户和其他 Agent 调用的 A2A 情报服务。
 
 ---
 
@@ -23,7 +23,7 @@ MetaMind 是一个面向电竞游戏的版本情报分析 Agent。
 
 ### 主赛道：Research & Intelligence Agents
 
-MetaMind 提供基于可验证数据源的电竞情报分析服务。
+DotaMind 提供基于可验证数据源的电竞情报分析服务。
 
 核心输出包括：
 
@@ -43,7 +43,7 @@ MetaMind 提供基于可验证数据源的电竞情报分析服务。
 
 ### 副赛道：Data & Verification Agents
 
-MetaMind 同时具备数据校验能力：
+DotaMind 同时具备数据校验能力：
 
 - 校验版本信息来源
 - 校验英雄胜率、登场率、Ban 率
@@ -74,7 +74,7 @@ MetaMind 同时具备数据校验能力：
 - 判断职业队是否适应了版本
 - 将数据转化为可执行建议
 
-MetaMind 要解决的问题是：
+DotaMind 要解决的问题是：
 
 > 将分散的游戏数据转化为可解释、可验证、可付费调用的电竞情报。
 
@@ -188,7 +188,7 @@ Agent 工作流：
 
 ### 功能四：可被其他 Agent 调用的付费服务
 
-CROO Hackathon 强调 A2A composability 和 Agent commerce，因此 MetaMind 需要暴露可调用服务。
+CROO Hackathon 强调 A2A composability 和 Agent commerce，因此 DotaMind 需要暴露可调用服务。
 
 示例服务：
 
@@ -431,7 +431,7 @@ Unsupported
 
 ## 6. A2A 可组合性设计
 
-为了符合 CROO Hackathon 要求，MetaMind 不应只是网页应用，还需要成为其他 Agent 可以调用的服务。
+为了符合 CROO Hackathon 要求，DotaMind 不应只是网页应用，还需要成为其他 Agent 可以调用的服务。
 
 ### 6.1 可被调用的服务
 
@@ -477,15 +477,15 @@ game-related claim
 
 ---
 
-### 6.2 其他 Agent 如何调用 MetaMind
+### 6.2 其他 Agent 如何调用 DotaMind
 
 示例一：内容创作 Agent
 
 ```text
-内容创作 Agent 调用 MetaMind：
+内容创作 Agent 调用 DotaMind：
 请生成 7.41d 版本三号位分析。
 
-MetaMind 返回结构化情报。
+DotaMind 返回结构化情报。
 
 内容创作 Agent 再生成 YouTube 视频脚本。
 ```
@@ -493,10 +493,10 @@ MetaMind 返回结构化情报。
 示例二：战队训练 Agent
 
 ```text
-训练 Agent 调用 MetaMind：
+训练 Agent 调用 DotaMind：
 请分析 Team Falcons 最近 30 天 BP 倾向。
 
-MetaMind 返回 BP 报告。
+DotaMind 返回 BP 报告。
 
 训练 Agent 基于报告生成训练计划。
 ```
@@ -504,10 +504,10 @@ MetaMind 返回 BP 报告。
 示例三：投注风险分析 Agent
 
 ```text
-风险分析 Agent 调用 MetaMind：
+风险分析 Agent 调用 DotaMind：
 请分析 Team Spirit vs Falcons 的版本适应度差异。
 
-MetaMind 返回双方战队情报。
+DotaMind 返回双方战队情报。
 
 风险分析 Agent 再进行风险判断。
 ```
@@ -522,7 +522,7 @@ CROO 的核心问题是：
 
 > You’ve built an Agent that works. How do you make it earn?
 
-因此 MetaMind 需要设计付费能力。
+因此 DotaMind 需要设计付费能力。
 
 ### 7.1 服务定价
 
@@ -545,9 +545,9 @@ Deep Patch Impact Report：0.5 USDC
 
 ### 7.3 为什么其他 Agent 会付费调用？
 
-因为 MetaMind 提供的是垂直数据处理能力。
+因为 DotaMind 提供的是垂直数据处理能力。
 
-其他 Agent 不需要自己接 OpenDota、STRATZ、Patch Notes，也不需要自己做版本分析，只需要调用 MetaMind 的结果。
+其他 Agent 不需要自己接 OpenDota、STRATZ、Patch Notes，也不需要自己做版本分析，只需要调用 DotaMind 的结果。
 
 ---
 
@@ -734,7 +734,7 @@ Neo4j，用于 Patch-Hero-Item-Meta 知识图谱
 内容：
 
 ```text
-MetaMind
+DotaMind
 Composable Esports Intelligence Agent
 
 Ask anything about game meta, patch impact, and pro team performance.
@@ -860,7 +860,7 @@ Agent 输出：
 }
 ```
 
-MetaMind 返回：
+DotaMind 返回：
 
 ```json
 {
@@ -981,9 +981,9 @@ Apache 2.0
 
 - 不只做网页
 - 暴露 3-4 个可调用服务
-- 展示其他 Agent 调用 MetaMind 的例子
+- 展示其他 Agent 调用 DotaMind 的例子
 - 输出结构化 JSON
-- 让 MetaMind 成为其他 Agent 的依赖
+- 让 DotaMind 成为其他 Agent 的依赖
 
 ---
 
@@ -1039,11 +1039,11 @@ Apache 2.0
 
 ## 17. 项目一句话介绍
 
-MetaMind is a composable esports intelligence agent that turns patch notes, match data, and pro team statistics into verifiable, paid game meta reports for humans and other agents.
+DotaMind is a composable esports intelligence agent that turns patch notes, match data, and pro team statistics into verifiable, paid game meta reports for humans and other agents.
 
 中文：
 
-MetaMind 是一个可组合的电竞情报 Agent，它将版本更新、比赛数据和职业战队表现转化为可验证、可付费调用的游戏 Meta 分析报告。
+DotaMind 是一个可组合的电竞情报 Agent，它将版本更新、比赛数据和职业战队表现转化为可验证、可付费调用的游戏 Meta 分析报告。
 
 ---
 
@@ -1055,7 +1055,7 @@ MetaMind 是一个可组合的电竞情报 Agent，它将版本更新、比赛�
 谁胜率高。
 ```
 
-MetaMind 告诉你：
+DotaMind 告诉你：
 
 ```text
 为什么他强，
@@ -1068,7 +1068,7 @@ MetaMind 告诉你：
 
 ## 19. 最终产品形态
 
-MetaMind 的最终产品不是单一网页，而是三部分组成：
+DotaMind 的最终产品不是单一网页，而是三部分组成：
 
 ```text
 Web Dashboard

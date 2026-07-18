@@ -16,23 +16,24 @@ Do not put API keys, database credentials, tokens, or deployment URLs in
 
 ## Environment Settings
 
-`Settings` in `app/core/config.py` uses the `METAMIND_` prefix. The prefix is a
-known naming-migration debt; it remains the current runtime contract.
+`Settings` in `app/core/config.py` uses `DOTAMIND_` as the sole environment
+prefix. Previous prefixes are intentionally unsupported; update local and
+deployed environment files before starting the API.
 
 Important settings include:
 
 | Setting | Responsibility |
 |---|---|
-| `METAMIND_ENVIRONMENT` | Environment label. |
-| `METAMIND_API_V1_PREFIX` | API prefix, normally `/api/v1`. |
-| `METAMIND_CORS_ORIGINS` | Allowed browser origins. |
-| `METAMIND_LIVE_DATA_ENABLED` | Enables live provider calls. |
-| `METAMIND_OPENDOTA_API_KEY` / `METAMIND_OPENDOTA_BASE_URL` | OpenDota access. |
-| `METAMIND_STRATZ_TOKEN` / `METAMIND_STRATZ_GRAPHQL_URL` | STRATZ access. |
-| `METAMIND_LLM_ENABLED` | Enables planner/answer LLM calls. |
-| `METAMIND_LLM_PROVIDER` / `METAMIND_LLM_API_KEY` | LLM provider selection and secret. |
-| `METAMIND_LLM_BASE_URL` / `METAMIND_LLM_MODEL` | OpenAI-compatible endpoint and model. |
-| `METAMIND_POLICY_PATH` | Optional absolute policy YAML override. |
+| `DOTAMIND_ENVIRONMENT` | Environment label. |
+| `DOTAMIND_API_V1_PREFIX` | API prefix, normally `/api/v1`. |
+| `DOTAMIND_CORS_ORIGINS` | Allowed browser origins. |
+| `DOTAMIND_LIVE_DATA_ENABLED` | Enables live provider calls. |
+| `DOTAMIND_OPENDOTA_API_KEY` / `DOTAMIND_OPENDOTA_BASE_URL` | OpenDota access. |
+| `DOTAMIND_STRATZ_TOKEN` / `DOTAMIND_STRATZ_GRAPHQL_URL` | STRATZ access. |
+| `DOTAMIND_LLM_ENABLED` | Enables planner/answer LLM calls. |
+| `DOTAMIND_LLM_PROVIDER` / `DOTAMIND_LLM_API_KEY` | LLM provider selection and secret. |
+| `DOTAMIND_LLM_BASE_URL` / `DOTAMIND_LLM_MODEL` | OpenAI-compatible endpoint and model. |
+| `DOTAMIND_POLICY_PATH` | Optional absolute policy YAML override. |
 
 Use `.env.example` as the environment template. Never commit populated secrets.
 
@@ -51,7 +52,7 @@ apps/api/app/config/policy.yaml
 Deployments may override it with:
 
 ```text
-METAMIND_POLICY_PATH=C:/absolute/path/policy.yaml
+DOTAMIND_POLICY_PATH=C:/absolute/path/policy.yaml
 ```
 
 Policy is cached for the process lifetime. Restart the API after editing the

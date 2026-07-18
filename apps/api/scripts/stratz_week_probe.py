@@ -55,12 +55,12 @@ def _load_env() -> tuple[str, str]:
             continue
         key, _, value = line.partition("=")
         key, value = key.strip(), value.strip()
-        if key == "METAMIND_STRATZ_TOKEN":
+        if key == "DOTAMIND_STRATZ_TOKEN":
             token = value
-        elif key == "METAMIND_STRATZ_GRAPHQL_URL":
+        elif key == "DOTAMIND_STRATZ_GRAPHQL_URL":
             url = value
     if not token:
-        raise SystemExit("METAMIND_STRATZ_TOKEN not found in apps/api/.env")
+        raise SystemExit("DOTAMIND_STRATZ_TOKEN not found in apps/api/.env")
     return url, token
 
 

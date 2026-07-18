@@ -1,4 +1,4 @@
-# MetaMind MVP 设计文档 v2.5（受约束 Tool Calling 架构）
+# DotaMind MVP 设计文档 v2.5（受约束 Tool Calling 架构）
 
 > 本文替代 v2.1 的内部执行架构方向。v2.1 已经明确 Agent 与 Tool 的边界，但当前实现仍以 `task_type -> 固定服务链路` 为核心。v2.5 将主链路升级为 **受约束 Tool Calling / Execution Plan 架构**，让 Orchestrator 不只是选择服务，而是规划需要调用哪些工具、需要哪些证据、如何组合结果。
 
