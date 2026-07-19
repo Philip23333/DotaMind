@@ -143,7 +143,7 @@ def test_tool_executor_returns_error_for_invalid_args() -> None:
     assert "ValidationError" in result.error
 
 
-def test_default_registry_includes_agentic_data_tools() -> None:
+def test_default_registry_matches_v32_frozen_tool_catalog() -> None:
     registry = build_default_tool_registry(
         Settings(
             opendota_base_url="https://api.opendota.test/api",
@@ -154,12 +154,18 @@ def test_default_registry_includes_agentic_data_tools() -> None:
 
     names = {definition.name for definition in registry.list()}
 
-    assert {
+    assert names == {
         "resolve_hero",
         "stratz.pair_lane_outcome",
         "stratz.hero_matchup_ranking",
+        "stratz.hero_synergy_ranking",
         "stratz.lane_meta_global",
         "stratz.hero_position_stats",
+        "stratz.hero_daily_trends",
+        "stratz.filter_heroes_by_position",
+        "stratz.player_profile",
+        "stratz.player_recent_matches",
+        "stratz.player_hero_performance",
         "opendota.resolve_team",
         "opendota.team_recent_matches",
         "opendota.team_players",
@@ -168,7 +174,7 @@ def test_default_registry_includes_agentic_data_tools() -> None:
         "patch.get_records",
         "patch.hero_changes",
         "patch.item_changes",
-    } <= names
+    }
 
 
 def test_default_registry_declares_primary_mandatory_evidence() -> None:

@@ -1,19 +1,21 @@
 # DotaMind Documentation
 
-This directory is the documentation entry point for the current
-`feature/v3-functional-loop` development line.
+This directory is the documentation entry point for the current V3 development
+line.
 
 ## Start Here
 
 Read documents in this order:
 
-1. The latest timestamp-prefixed Chinese progress snapshot under
+1. The latest daily cumulative Chinese progress snapshot under
    [`progress/`](./progress/), with the matching English snapshot when needed.
-2. [`design/DotaMind_V3.0_design.md`](./design/DotaMind_V3.0_design.md) for the
-   current product stage, implemented capability map, and V3 roadmap.
-3. [`design/DotaMind_MVP_v2.5.md`](./design/DotaMind_MVP_v2.5.md) for the
+2. [`design/DotaMind_V3.2_design.md`](./design/DotaMind_V3.2_design.md) for the
+   target Agent Runtime Foundation and architecture-stabilization sequence.
+3. [`design/DotaMind_V3.0_design.md`](./design/DotaMind_V3.0_design.md) for the
+   implemented capability map and V3 product roadmap.
+4. [`design/DotaMind_MVP_v2.5.md`](./design/DotaMind_MVP_v2.5.md) for the
    constrained Tool Calling architecture boundaries that V3 must preserve.
-4. [`technical/architecture.md`](./technical/architecture.md) for the current
+5. [`technical/architecture.md`](./technical/architecture.md) for the current
    code and runtime map.
 
 The current runtime has one business API, `POST /api/v1/plan`, backed by the
@@ -23,6 +25,9 @@ LangGraph agentic path. The internal query UI is `GET /debug/plan`.
 
 ### Current design
 
+- [`design/DotaMind_V3.2_design.md`](./design/DotaMind_V3.2_design.md) — target
+  runtime architecture: attempts, bounded recovery, idempotency, Redis, Prompt
+  Registry, and observability. Items remain target design until implemented.
 - [`design/DotaMind_V3.0_design.md`](./design/DotaMind_V3.0_design.md) — primary
   product and capability design.
 - [`design/DotaMind_MVP_v2.5.md`](./design/DotaMind_MVP_v2.5.md) — primary
@@ -62,8 +67,9 @@ LangGraph agentic path. The internal query UI is `GET /debug/plan`.
 
 ### Progress and history
 
-- [`progress/`](./progress/) contains immutable timestamp-prefixed bilingual
-  handoff snapshots. Do not treat an older snapshot as current state.
+- [`progress/`](./progress/) contains one cumulative bilingual snapshot pair per
+  calendar date. Legacy timestamp-prefixed snapshots remain historical; do not
+  treat an older snapshot as current state.
 - [`archive/`](./archive/) contains superseded product, UI, and pre-v2.5 design
   documents retained only for historical context.
 

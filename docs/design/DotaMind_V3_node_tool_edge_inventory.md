@@ -27,6 +27,34 @@ flowchart TD
 No node routes on `intent`. Only `decision.kind`, validated `tool_calls`, the
 output contract, effective evidence and runtime status influence execution.
 
+## V3.2 Target Runtime Nodes (Not Implemented)
+
+V3.2 keeps every current decision and tool/evidence edge above, but wraps one
+or two bounded attempts in a request-level runtime. The following nodes are
+design targets from `DotaMind_V3.2_design.md`; they are intentionally absent
+from the current graph and must not be described as available behavior.
+
+```text
+START
+  -> run_init_node
+  -> current Controller/decision/tool path
+  -> attempt_finalize_node
+  -> recovery_node
+      -> terminal -> run_finalize_node -> response_node -> END
+      -> replan   -> attempt_reset_node -> controller_node
+```
+
+| Target node | Planned responsibility | Planned phase | Current status |
+|---|---|---|---|
+| `run_init_node` | Create `RunContext`, deadline and global `RunBudget`. | V3.2-1 | Not implemented |
+| `attempt_finalize_node` | Append an allowlisted `AttemptRecord` without overwriting earlier attempts. | V3.2-3 | Not implemented |
+| `recovery_node` | Deterministically classify the terminal state and permit at most one legal replan. | V3.2-3 | Not implemented |
+| `attempt_reset_node` | Clear attempt-local fields while preserving history, budget, trace and successful-call cache. | V3.2-3 | Not implemented |
+| `run_finalize_node` | Seal run totals and the final terminal stage before public serialization. | V3.2-1 | Not implemented |
+
+The target graph will continue to route on decision discriminators, runtime
+status and recovery results only. `intent` remains non-executable metadata.
+
 ## Node Inventory
 
 | Node | Responsibility | Tool/Evidence behavior |
@@ -122,6 +150,26 @@ The ordering means `tool_error` wins when the same failure also causes missing
 evidence, and `answer_error` wins over a critic-quality failure. Reference
 resolution failures create failed ToolResults; other unclassified runtime
 errors map to `execution_error`.
+
+## V3.2-0 Characterization Baseline
+
+The current behavior is frozen by the following existing tests plus the exact
+tool-catalog assertion introduced for V3.2-0. Later phases may change internal
+state and add target nodes, but these public and semantic invariants must remain
+green unless the authoritative design is changed first.
+
+| Frozen invariant | Characterization coverage |
+|---|---|
+| All five `ControllerDecision` branches and non-tool isolation | `test_controller_decisions.py::test_quote_user_query_uses_validated_turn_and_no_tool_pipeline`, `test_controller_decisions.py::test_social_answer_and_non_tool_decisions_skip_evidence_and_critic`, `test_agentic_graph.py::test_graph_stops_when_tools_are_insufficient`, `test_agentic_graph.py::test_graph_success_reaches_answer_review_and_response` |
+| Current graph stops on invalid plans and tool errors, and reaches Answer/Critic only on the valid tool path | `test_agentic_graph.py::test_graph_validation_error_stops_before_tools`, `test_agentic_graph.py::test_graph_tool_error_stops_before_evidence`, `test_agentic_graph.py::test_graph_success_reaches_answer_review_and_response` |
+| Terminal error precedence | `test_agentic_nodes.py::test_response_node_prioritizes_tool_error_over_missing_evidence`, `test_agentic_nodes.py::test_response_node_prioritizes_answer_error_over_critic_failure`, `test_agentic_nodes.py::test_response_node_maps_unclassified_runtime_error_to_execution_error` |
+| Session history and Controller internals do not cross the public response boundary | `test_session_privacy.py::test_prior_turn_sentinel_absent_from_next_turn_response`, `test_session_privacy.py::test_history_field_excluded_from_response`, `test_session_privacy.py::test_stateful_safe_failure_persists_only_stable_redacted_turn` |
+| Tool catalog is frozen exactly, registry metadata fails fast, and mandatory evidence remains per call | `test_agentic_registry.py::test_default_registry_matches_v32_frozen_tool_catalog`, `test_agentic_registry.py::test_default_registry_declares_primary_mandatory_evidence`, `test_agentic_contracts.py::test_registry_contracts_fail_fast_on_invalid_evidence_declarations`, `test_agentic_evidence.py::test_mandatory_evidence_is_enforced_per_successful_tool_call` |
+| Deleted legacy routes stay deleted | `test_plan_route.py::test_removed_legacy_routes_return_404` |
+
+V3.2-0 freezes the catalog contents, not their live upstream values. STRATZ
+responses remain volatile and no characterization test may pin exact current
+win rates or match counts.
 
 ## Explicitly Out of Scope
 

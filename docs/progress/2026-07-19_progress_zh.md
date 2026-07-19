@@ -24,3 +24,48 @@
 - `uv lock --check` 通过。
 - `git diff --check` 通过；仅输出仓库既有的 LF/CRLF 转换提示。
 - 本阶段未运行真实 DeepSeek/STRATZ 网络请求。
+
+## 15:09 — V3.2 Agent Runtime Foundation 目标设计
+
+- 新建 `codex/v3.2-agent-runtime-foundation` 分支，冻结新增业务工具，将下一阶段
+  定位为 Agent 运行时架构完善。
+- 新增 `docs/design/DotaMind_V3.2_design.md`。目标设计覆盖 `RunContext`、
+  `RunBudget`、`AttemptRecord`、有界 Recovery/Replan、跨 attempt 工具指纹复用、
+  `request_id` 幂等、`RedisSessionStore`、Prompt Registry、可观测性与隐私边界。
+- Replan 设计固定采用全局预算：`max_replans=1`、总工具调用和总运行时间上限；
+  tool/transport、非法计划、Answer 失败和用户明确约束导致的稀疏结果不自动重试。
+- 分阶段顺序为 Run/Attempt/Budget、Prompt Registry、有界 Replan、请求幂等、
+  Redis Session Store、观测与故障注入；完成前不解冻业务工具开发。
+- 更新根 README 与 `docs/README.md`，区分 V3.0 已实现能力、V3.2 目标运行时设计
+  和 v2.5 constrained tool calling 底座，并同步每日累计快照说明。
+- 本阶段仅完成设计和文档入口，没有把目标节点、Redis、Replan 或幂等行为描述为
+  已实现功能。
+
+### 验证
+
+- `git diff --check` 通过；仅输出既有 LF/CRLF 转换提示。
+- V3.2、V3.0、v2.5 和 technical architecture 的文档入口目标均存在。
+- 本阶段未修改 API 运行代码，因此未运行 API 测试、DeepSeek 或 STRATZ 请求。
+
+## 16:12 — V3.2-0 冻结与护栏收口
+
+- 更新 `DotaMind_V3_node_tool_edge_inventory.md`，保留当前 V3.0 单 attempt
+  运行图，并单独列出 V3.2 目标 `run_init`、`attempt_finalize`、`recovery`、
+  `attempt_reset` 和 `run_finalize` 节点；所有目标节点均明确标记为尚未实现。
+- 为五类 Controller decision、当前 Graph 分支、终态错误优先级、Session 隐私、
+  Tool/Evidence contract 和已删除 legacy route 建立现有 characterization tests
+  的可审计映射，作为后续 V3.2 阶段的行为基线。
+- 将默认 Tool Registry 测试从“包含已知工具子集”收紧为冻结目录的精确集合断言；
+  V3.2 期间新增或删除业务工具都会直接触发测试失败。
+- 本阶段没有增加运行时状态、目标 Graph 节点、Replan、`request_id` 或 Redis
+  行为；STRATZ 易变数据仍不固定精确胜率或场次数值。
+
+### 验证
+
+- V3.2-0 定向护栏：`87 passed, 1 warning`。
+- API 完整测试：`356 passed, 1 warning`。warning 为 FastAPI/Starlette 上游
+  `httpx` 弃用提示。
+- `uv run ruff check .` 通过。
+- `uv lock --check` 通过。
+- `git diff --check` 通过；仅输出既有 LF/CRLF 转换提示。
+- 本阶段未运行真实 DeepSeek/STRATZ 网络请求。

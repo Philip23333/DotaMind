@@ -30,3 +30,59 @@
 - `git diff --check` passed with only the repository's existing LF/CRLF
   conversion notices.
 - No live DeepSeek/STRATZ network request was run in this phase.
+
+## 15:09 — V3.2 Agent Runtime Foundation target design
+
+- Created the `codex/v3.2-agent-runtime-foundation` branch, froze new business
+  tools, and made Agent runtime architecture the next development phase.
+- Added `docs/design/DotaMind_V3.2_design.md`. The target design covers
+  `RunContext`, `RunBudget`, `AttemptRecord`, bounded Recovery/Replan,
+  cross-attempt tool-fingerprint reuse, `request_id` idempotency,
+  `RedisSessionStore`, Prompt Registry, observability, and privacy boundaries.
+- Replan is globally bounded with `max_replans=1`, a total tool-call limit, and
+  a total runtime deadline. Tool/transport errors, invalid plans, Answer
+  failures, and sparse results caused by explicit user constraints are not
+  automatically retried.
+- Delivery order is Run/Attempt/Budget, Prompt Registry, bounded Replan, request
+  idempotency, Redis Session Store, then observability and fault injection.
+  Business-tool development remains frozen until those gates are complete.
+- Updated the root README and `docs/README.md` to distinguish implemented V3.0
+  capabilities, the V3.2 target runtime, and the v2.5 constrained tool-calling
+  foundation, while also documenting cumulative daily snapshots.
+- This phase delivers design and documentation entry points only; target nodes,
+  Redis, Replan, and idempotency are not described as implemented behavior.
+
+### Verification
+
+- `git diff --check` passed with only existing LF/CRLF conversion notices.
+- The V3.2, V3.0, v2.5, and technical architecture documentation targets all
+  exist.
+- No API runtime code changed, so no API tests or live DeepSeek/STRATZ requests
+  were run in this phase.
+
+## 16:12 — V3.2-0 freeze and guardrail closure
+
+- Updated `DotaMind_V3_node_tool_edge_inventory.md` to preserve the current
+  V3.0 single-attempt graph while separately listing the V3.2 target
+  `run_init`, `attempt_finalize`, `recovery`, `attempt_reset`, and
+  `run_finalize` nodes; every target node is explicitly marked not implemented.
+- Added an auditable map from the five Controller decisions, current Graph
+  branches, terminal error precedence, Session privacy, Tool/Evidence
+  contracts, and deleted legacy route to their existing characterization
+  tests, establishing the behavioral baseline for later V3.2 phases.
+- Tightened the default Tool Registry test from a known-tool subset assertion
+  to exact equality with the frozen catalog. Adding or removing a business
+  tool during V3.2 now fails the test directly.
+- This phase adds no runtime state, target Graph nodes, Replan, `request_id`, or
+  Redis behavior. Tests still avoid pinning exact values from volatile STRATZ
+  data.
+
+### Verification
+
+- Focused V3.2-0 guardrails: `87 passed, 1 warning`.
+- Full API suite: `356 passed, 1 warning`; the warning is FastAPI/Starlette's
+  upstream `httpx` deprecation notice.
+- `uv run ruff check .` passed.
+- `uv lock --check` passed.
+- `git diff --check` passed with only existing LF/CRLF conversion notices.
+- No live DeepSeek/STRATZ network request was run in this phase.

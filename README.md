@@ -5,15 +5,18 @@ tool calls, retrieves structured data, builds an `EvidenceGraph`, synthesizes an
 answer, and runs a rule-first critic before returning a response.
 
 This repository is in active development. The old fixed report pipeline and its
-public endpoints have been removed. The current product stage is V3.0, built on
-the v2.5 constrained Tool Calling architecture:
+public endpoints have been removed. The implemented product capabilities are
+described by V3.0, while the V3.2 target freezes tool expansion to strengthen the
+Agent Runtime Foundation. Both preserve the v2.5 constrained Tool Calling
+architecture:
 
 ```text
 Planner -> Validate -> Tools -> Evidence -> Answer -> Critic -> Response
 ```
 
 Start with the [documentation index](docs/README.md), then read the
-[DotaMind V3.0 design](docs/design/DotaMind_V3.0_design.md) and the
+[DotaMind V3.2 runtime design](docs/design/DotaMind_V3.2_design.md), the
+[DotaMind V3.0 capability design](docs/design/DotaMind_V3.0_design.md), and the
 [v2.5 architecture foundation](docs/design/DotaMind_MVP_v2.5.md).
 
 ## Repository Layout
@@ -24,7 +27,7 @@ apps/
 docs/
   design/     Current architecture, layer detail, roadmaps, and decisions
   technical/  API, configuration, and provider reference material
-  progress/   Timestamped bilingual handoff snapshots
+  progress/   Daily cumulative bilingual handoff snapshots
   archive/    Superseded product and architecture documents
 ```
 
@@ -122,10 +125,12 @@ Completed capability slices include hero matchup, synergy, position filtering,
 daily trends, player profile/recent-performance queries, team reports, and patch
 records.
 
-The next P0 capability gap is evidence-grounded hero item/skill/talent build
-guidance. Other planned slices include OpenDota match detail, pick/ban meta, and
-player-name resolution. CAP/CROO integration is parked and is not part of the
-active V3 development line.
+The active V3.2 architecture-stabilization target freezes new business tools
+while adding run/attempt state, bounded recovery, request idempotency, Redis
+session persistence, Prompt Registry, and observability. See the
+[V3.2 design](docs/design/DotaMind_V3.2_design.md). Product capability gaps such
+as item/skill/talent guidance remain documented but are deferred until the
+runtime foundation is complete. CAP/CROO integration remains parked.
 
 ## License
 
