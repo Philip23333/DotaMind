@@ -12,6 +12,7 @@ from app.agentic.planning.contracts import (
 )
 from app.agentic.planning.decisions import (
     ControllerDecision,
+    DirectAnswerDecision,
     RequiredEvidenceResolution,
     ToolPlanDecision,
     normalize_controller_decision,
@@ -215,6 +216,12 @@ Output contracts:
 
 Return JSON in one of these shapes.
 
+Direct-answer rules:
+- For quote_user_query, recall_entity, and recall_assistant_summary, basis MUST
+  be non-empty and answer MUST be JSON null. Do not write the final recalled
+  text; the server renders it from the validated Turn.
+- For social, basis MUST be empty and answer MUST contain the reply text.
+
 Conversation recall:
 {"kind":"direct_answer","intent":"conversation_recall","response_mode":"recall_entity","basis":[{"turn_index":2,"field":"resolved_entities","entity_type":"hero"}],"answer":null}
 
@@ -389,7 +396,17 @@ class AgentController:
                 )
                 continue
 
+            discard_recall_answer = (
+                isinstance(decision, DirectAnswerDecision)
+                and decision.response_mode != "social"
+                and decision.answer is not None
+            )
             decision = normalize_controller_decision(decision)
+            if discard_recall_answer:
+                logger.info(
+                    "Agent controller discarded recall answer mode=%s",
+                    decision.response_mode,
+                )
             if isinstance(decision, ToolPlanDecision):
                 # Preserve the established ordering: sample policy mutates the
                 # final executable plan exactly once, before its first validation.

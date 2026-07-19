@@ -157,7 +157,10 @@ def normalize_controller_decision(decision: ControllerDecision) -> ControllerDec
         }
         keys = sorted(unique, key=lambda item: (item[0], item[1], item[2] or ""))
         basis = [unique[key] for key in keys]
-        return decision.model_copy(update={"basis": basis})
+        updates = {"basis": basis}
+        if decision.response_mode != "social":
+            updates["answer"] = None
+        return decision.model_copy(update=updates)
     if isinstance(decision, ClarificationDecision):
         return decision.model_copy(update={"missing_fields": sorted(set(decision.missing_fields))})
     return decision
@@ -200,7 +203,10 @@ def _validate_direct_answer(
         return errors
 
     if decision.answer is not None:
-        errors.append("conversation recall answer must be rendered deterministically")
+        errors.append(
+            'For conversation recall, set "answer" to JSON null; '
+            "the server renders the final answer from the validated basis"
+        )
     if not decision.basis:
         errors.append(f"{decision.response_mode} requires conversation basis")
         return errors

@@ -6,6 +6,7 @@ from app.agentic.planning.decisions import (
     ContextMissingDecision,
     DirectAnswerDecision,
     ToolPlanDecision,
+    normalize_controller_decision,
     resolve_required_evidence,
     validate_controller_decision,
 )
@@ -28,6 +29,22 @@ def decision_validate_node(
         state.errors.append("missing controller decision")
         state.add_trace("decision_validate", "missing decision", "failed")
         return state
+
+    discard_recall_answer = (
+        isinstance(decision, DirectAnswerDecision)
+        and decision.response_mode != "social"
+        and decision.answer is not None
+    )
+    decision = normalize_controller_decision(decision)
+    state.decision = decision
+    state.decision_kind = decision.kind
+    if isinstance(decision, ToolPlanDecision):
+        state.plan = decision.plan
+    if discard_recall_answer:
+        logger.info(
+            "node=decision_validate discarded recall answer mode=%s",
+            decision.response_mode,
+        )
 
     evidence = (
         resolve_required_evidence(decision.plan, registry)

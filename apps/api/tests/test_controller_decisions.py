@@ -8,6 +8,7 @@ from app.agentic.planning.decisions import (
     ContextMissingDecision,
     DirectAnswerDecision,
     normalize_controller_decision,
+    validate_controller_decision,
 )
 from app.agentic.state import AgentRunState
 from app.agentic.tools import ToolRegistry
@@ -86,12 +87,15 @@ def test_recall_entity_filters_entity_type_and_deduplicates_names() -> None:
                 "entity_type": "hero",
             }
         ],
+        answer="你上次提到的是影魔。",
     )
 
     state = _run(decision, history)
 
     assert state.answer is not None
     assert state.answer.summary == "你上次提到的是 Lina。"
+    assert isinstance(state.decision, DirectAnswerDecision)
+    assert state.decision.answer is None
 
 
 def test_invalid_recall_basis_returns_redactable_validation_error() -> None:
@@ -187,10 +191,71 @@ def test_decision_normalization_sorts_and_deduplicates_public_lists() -> None:
             {"turn_index": 1, "field": "query"},
             {"turn_index": 2, "field": "query"},
         ],
+        answer="模型自由复述的历史内容",
     )
 
     normalized_clarification = normalize_controller_decision(clarification)
     normalized_direct = normalize_controller_decision(direct)
+    normalized_twice = normalize_controller_decision(normalized_direct)
 
     assert normalized_clarification.missing_fields == ["hero_query", "role"]
     assert [basis.turn_index for basis in normalized_direct.basis] == [1, 2]
+    assert normalized_direct.answer is None
+    assert normalized_twice == normalized_direct
+
+
+def test_normalization_clears_all_recall_answers_and_preserves_social() -> None:
+    recall_cases = (
+        ("quote_user_query", "query", None),
+        ("recall_entity", "resolved_entities", "hero"),
+        ("recall_assistant_summary", "response_summary", None),
+    )
+    for mode, field, entity_type in recall_cases:
+        decision = DirectAnswerDecision(
+            kind="direct_answer",
+            intent="conversation_recall",
+            response_mode=mode,
+            basis=[
+                {
+                    "turn_index": 1,
+                    "field": field,
+                    "entity_type": entity_type,
+                }
+            ],
+            answer="不应被使用的自由回答",
+        )
+        assert normalize_controller_decision(decision).answer is None
+
+    social = DirectAnswerDecision(
+        kind="direct_answer",
+        intent="social",
+        response_mode="social",
+        basis=[],
+        answer="你好！",
+    )
+    assert normalize_controller_decision(social).answer == "你好！"
+
+
+def test_unnormalized_recall_answer_validation_feedback_is_actionable() -> None:
+    decision = DirectAnswerDecision(
+        kind="direct_answer",
+        intent="conversation_recall",
+        response_mode="quote_user_query",
+        basis=[{"turn_index": 1, "field": "query"}],
+        answer="自由回答",
+    )
+    history = [
+        Turn(
+            turn_index=1,
+            query="我上次问了什么？",
+            status="ok",
+            response_type="direct_answer",
+        )
+    ]
+
+    errors = validate_controller_decision(decision, history, ToolRegistry())
+
+    assert errors == [
+        'For conversation recall, set "answer" to JSON null; '
+        "the server renders the final answer from the validated basis"
+    ]

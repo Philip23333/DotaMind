@@ -1,10 +1,13 @@
 import asyncio
 from typing import Any
 
+from app.agentic.conversation.models import ResolvedEntity, Turn
+from app.agentic.graph import AgentGraphRunner
 from app.agentic.nodes.decision_validate import decision_validate_node
 from app.agentic.planning.controller import AgentController, AgentControllerResult
 from app.agentic.planning.decisions import (
     CapabilityBoundaryDecision,
+    DirectAnswerDecision,
     ToolPlanDecision,
 )
 from app.agentic.state import AgentRunState
@@ -34,6 +37,7 @@ class FakeLLM:
             self._sequence = None
             self._single = payload
         self._index = 0
+        self.calls = 0
 
     async def complete(
         self,
@@ -49,6 +53,7 @@ class FakeLLM:
         temperature: float = 0.7,
         max_tokens: int = 1000,
     ) -> dict[str, Any]:
+        self.calls += 1
         if self._error is not None:
             raise self._error
         if self._sequence is not None:
@@ -505,6 +510,10 @@ def test_agentic_planner_prompt_contains_team_recent_catalog_example() -> None:
     assert "allowed_arg_keys" in prompt
     assert "Do not invent aliases or synonyms" in prompt
     assert "recent_matches, do not" in prompt
+    assert "answer MUST be JSON null" in prompt
+    assert "Do not write the final recalled" in prompt
+    assert "server renders it from the validated Turn" in prompt
+    assert "For social, basis MUST be empty" in prompt
     assert "- is_with: bool, required" in prompt
     assert "$<previous_call_id>.data.hero.hero_id" in prompt
     assert "DIVINE_IMMORTAL" in prompt
@@ -514,6 +523,80 @@ def test_agentic_planner_prompt_contains_team_recent_catalog_example() -> None:
     assert "produced_evidence_names_must_be_exact" not in prompt
     assert "required_evidence_names_must_be_exact" not in prompt
     assert '"matches": "$get_matches.data.matches"' not in prompt
+
+
+def test_recall_answer_is_discarded_without_retry_and_rendered_from_turn() -> None:
+    registry = _registry()
+    llm = FakeLLM(
+        {
+            "kind": "direct_answer",
+            "intent": "conversation_recall",
+            "response_mode": "recall_entity",
+            "basis": [
+                {
+                    "turn_index": 1,
+                    "field": "resolved_entities",
+                    "entity_type": "hero",
+                }
+            ],
+            "answer": "你上次提到的是影魔。",
+        }
+    )
+    controller = AgentController(
+        registry,
+        llm=llm,
+        llm_enabled=True,
+        planner_max_retries=2,
+    )
+    history = [
+        Turn(
+            turn_index=1,
+            query="我想练 Lina。",
+            status="ok",
+            response_type="direct_answer",
+            resolved_entities=[ResolvedEntity(type="hero", name="Lina", id=25)],
+            response_summary="记录了用户想练 Lina。",
+        )
+    ]
+
+    state = asyncio.run(
+        AgentGraphRunner(controller, registry).run(
+            AgentRunState(query="我上次提到的是谁？", game="dota2", history=history)
+        )
+    )
+
+    assert llm.calls == 1
+    assert state.status == "ok"
+    assert isinstance(state.decision, DirectAnswerDecision)
+    assert state.decision.answer is None
+    assert state.answer is not None
+    assert state.answer.summary == "你上次提到的是 Lina。"
+
+
+def test_malformed_recall_answers_remain_decision_shape_errors() -> None:
+    for invalid_answer in ({"text": "错误类型"}, "x" * 1001):
+        llm = FakeLLM(
+            {
+                "kind": "direct_answer",
+                "intent": "conversation_recall",
+                "response_mode": "quote_user_query",
+                "basis": [{"turn_index": 1, "field": "query"}],
+                "answer": invalid_answer,
+            }
+        )
+        controller = AgentController(
+            _registry(),
+            llm=llm,
+            llm_enabled=True,
+            planner_max_retries=0,
+        )
+
+        result = asyncio.run(controller.decide("我上次问了什么？"))
+
+        assert llm.calls == 1
+        assert result.status == "error"
+        assert result.failure_type == "decision_validation_error"
+        assert any("answer" in error for error in result.errors)
 
 
 def test_agentic_planner_rejects_unknown_required_evidence() -> None:
