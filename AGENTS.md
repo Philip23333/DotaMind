@@ -37,6 +37,51 @@ At the start of every new session in this repository, before analyzing or editin
   documentation under `docs/progress/`. Keep the timestamp-prefixed Chinese and
   English progress snapshots aligned.
 
+## Git Commit Message Reference
+
+When generating a commit message, use the following Chinese Conventional Commit
+style unless the user requests another format:
+
+```text
+<type>(<scope>): <work item or priority> <concise summary>
+
+- <primary implementation change>.
+- <contract, evidence, documentation, or capability change>.
+- <important semantic boundary or behavior intentionally left unchanged>.
+- <tests and aligned progress snapshots actually completed>.
+
+Plan: <design or plan document path> <section reference>
+```
+
+- Use a conventional `type` such as `feat`, `fix`, `refactor`, `test`, `docs`,
+  `chore`, or `build`, and a short repository-relevant `scope`.
+- Keep the subject concise. A work-item label such as `P1-C2` is optional and
+  should appear only when the change has one.
+- Use Chinese `- ` bullets to summarize the staged change, its observable
+  capability, and any important non-goals or invariant semantics.
+- Report tests as concrete verified results, for example `108 passed`. Never
+  invent a test count or claim that tests, snapshots, or documentation were
+  updated when they were not.
+- Include the `Plan:` line only when the implementation follows a specific
+  repository plan or design section. Use a repository-relative path and the
+  most precise section reference available.
+- Describe only files and behavior included in the commit; do not summarize
+  unrelated working-tree changes.
+
+Reference example:
+
+```text
+feat(stratz): P1-C2 laneOutcome 补 stomp/cs 对线证据
+
+- query 加 stompWinCount/stompLossCount/csCount；normalize int 透传。
+- pair_lane_outcome / lane_meta_global evidence 加三字段；两工具 description 补能力声明。
+- planner Supported 段补 cs_count / stomp 可答对线补刀/碾压度。
+- 薄 relay：stomp/cs 不进胜率计算，不改 match_win_rate 口径。
+- 测试 + 中英 snapshot。108 passed。
+
+Plan: docs/design/STRATZ工具审计与重构输入.md §4 P1-6
+```
+
 ## Development Priorities
 
 - This project is still in active development and is not yet in production.
