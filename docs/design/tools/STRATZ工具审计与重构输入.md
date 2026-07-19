@@ -29,7 +29,7 @@
 
 ### 2.1 `laneOutcome`（pair_lane_outcome + lane_meta_global 共用）
 
-**GraphQL 操作** `HeroLaneOutcome`（[heroes.py:52](../../apps/api/app/integrations/stratz/heroes.py:52)）
+**GraphQL 操作** `HeroLaneOutcome`（[heroes.py:52](../../../apps/api/app/integrations/stratz/heroes.py:52)）
 参数：`heroId`、`isWith`、`week`、`bracketBasicIds`、`positionIds`。
 
 **请求字段**：`heroId1, heroId2, position, matchCount, winCount, lossCount, drawCount, matchWinCount`
@@ -52,7 +52,7 @@
 | `stompLossCount` | Long | ❌ | **未用**：碾压输 |
 | `csCount` | Long | ❌ | **未用**：对线补刀 |
 
-**集成层派生**（[`_normalize_lane_outcome`](../../apps/api/app/integrations/stratz/heroes.py:216)）：
+**集成层派生**（[`_normalize_lane_outcome`](../../../apps/api/app/integrations/stratz/heroes.py:216)）：
 `match_win_rate = matchWinCount / matchCount`（match 级，4 位小数）；同时原样保留 lane 级 `win_count/loss_count/draw_count`。
 
 **agentic 层变换**：
@@ -65,7 +65,7 @@
 
 ### 2.2 `heroVsHeroMatchup`（hero_matchup_ranking）
 
-**GraphQL 操作** `HeroVsHeroMatchup`（[heroes.py:5](../../apps/api/app/integrations/stratz/heroes.py:5)）
+**GraphQL 操作** `HeroVsHeroMatchup`（[heroes.py:5](../../../apps/api/app/integrations/stratz/heroes.py:5)）
 参数：`heroId, take, week, bracketBasicIds, matchLimit`。
 
 **请求字段**：`advantage/disadvantage → { heroId, matchCountVs, vs { heroId1, heroId2, matchCount, winCount, synergy, winRateHeroId1, winRateHeroId2 } }`
@@ -86,13 +86,13 @@
 我们只取 `heroId1, heroId2, matchCount, winCount, synergy, winRateHeroId1, winRateHeroId2`。
 **未取**：`kills, deaths, assists, networth, duration, firstBloodTime, cs, dn, goldEarned, xp, heroDamage, towerDamage, heroHealing, level, winsAverage`。
 
-**集成层派生**（[`_normalize_matchup_side`](../../apps/api/app/integrations/stratz/heroes.py:187)）：
+**集成层派生**（[`_normalize_matchup_side`](../../../apps/api/app/integrations/stratz/heroes.py:187)）：
 - `hero_id=heroId2`, `target_hero_id=heroId1`
 - 本地 `win_rate = winCount / matchCount`（这里的 `winCount` 是 **matchup 级**，语义不同于 lane 的 match 级）
 - 重命名 `winRateHeroId1→target_win_rate`、`winRateHeroId2→hero_win_rate`
 - **集成层自己排序**：按 `(synergy, match_count) desc`
 
-**agentic 层变换**（[`_filter_matchup_rows`](../../apps/api/app/agentic/tools/stratz_tools.py)）：`min_sample_size` 过滤 → 按 `(synergy, match_count)` desc → `take` 截断。
+**agentic 层变换**（[`_filter_matchup_rows`](../../../apps/api/app/agentic/tools/stratz_tools.py)）：`min_sample_size` 过滤 → 按 `(synergy, match_count)` desc → `take` 截断。
 
 **歧义/风险**：
 - ⚠️ **排序发生两层**：集成层已按 synergy 排序，agentic 层又排一次。冗余且职责不清。
@@ -102,7 +102,7 @@
 
 ### 2.3 `stats`（hero_position_stats）
 
-**GraphQL 操作** `HeroPositionStats`（[heroes.py:81](../../apps/api/app/integrations/stratz/heroes.py:81)）
+**GraphQL 操作** `HeroPositionStats`（[heroes.py:81](../../../apps/api/app/integrations/stratz/heroes.py:81)）
 参数：`heroIds, bracketBasicIds, positionIds, week` + 固定 `groupByPosition: true`。
 
 **请求字段**：仅 `heroId, position, matchCount`。
@@ -168,7 +168,7 @@
 ## 5. 重构必须保留的约束（do-not-break）
 
 - **`match_win_rate = matchWinCount / matchCount`（match 级）**：不可「简化」成 `winCount/matchCount`（那是 lane 级）。见 memory `lane-match-win-rate-derivation`。
-- **已完成周口径**：`_resolve_week_window` 永远跳过当前未完成周，传显式 epoch（不依赖 schema 里 null 的歧义语义）。见 `docs/design/time_patch_filtering.md`。
+- **已完成周口径**：`_resolve_week_window` 永远跳过当前未完成周，传显式 epoch（不依赖 schema 里 null 的歧义语义）。见 `docs/design/tools/time_patch_filtering.md`。
 - **provenance 必须进 evidence `value["filters"]`**：answer LLM 只看 evidence graph，不看 `result.data`。见 memory `answer-sees-evidence-graph-only`。
 - **薄 relay 原则**：工具只做排序/过滤/字段映射，不发明自创聚合分（如加权综合分）。见 memory `prefer-honest-data-boundaries-over-aggregation`。
 - **镜像折叠语义**：`_dedupe_pair_rows` 按 `match_count` 取较大样本方向（可信度，非最终排序）。

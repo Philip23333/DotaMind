@@ -69,3 +69,33 @@
 - `uv lock --check` 通过。
 - `git diff --check` 通过；仅输出既有 LF/CRLF 转换提示。
 - 本阶段未运行真实 DeepSeek/STRATZ 网络请求。
+
+## 16:50 — V3.2-1 蓝图与 design 文档分类
+
+- 新增 `docs/design/versions/DotaMind_V3.2-1_design.md`，将 V3.2-1 固化为
+  Run / Attempt / Budget 单 attempt 实施蓝图；明确目标运行图、runtime package、
+  `RunContext`、`RunBudget`、`AttemptRecord`、Trace、终态收口、公开 runtime
+  allowlist、配置、工作包、测试矩阵和完成定义。
+- V3.2-1 保持单次 Graph 执行：只新增目标 `run_init_node` 和
+  `run_finalize_node`；预算在本阶段建模和计数但不产生新错误路由，
+  `attempt_finalize_node`、Recovery/Replan、工具指纹、`request_id`、Prompt
+  Registry 和 Redis 继续留在后续既定阶段。
+- 将 `docs/design/` 整理为四类：`versions/` 版本蓝图、`architecture/` 分层与
+  运行时架构、`tools/` 工具专项设计、`roadmaps/` 能力缺口与优先级；新增
+  `docs/design/README.md` 作为分类和阅读顺序入口。
+- 同步更新根 README、`docs/README.md`、`AGENTS.md`、archive 入口、设计文档
+  内部链接、technical reference 和代码注释中的规范路径。移动后的 design 目录内
+  本地 Markdown 链接均可解析，当前文件中不再存在旧分类路径；历史 progress
+  快照保持原样。
+- 本阶段只修改文档、文档路径和相关注释/文档生成字符串，没有实现 V3.2-1
+  运行时代码，也没有改变 Tool Registry 或 API 行为。
+
+### 验证
+
+- API 完整测试：`356 passed, 1 warning`。warning 为 FastAPI/Starlette 上游
+  `httpx` 弃用提示。
+- `docs/design/` 本地 Markdown 链接解析检查通过；当前非历史文件旧路径检索为空。
+- `uv run ruff check .` 通过。
+- `uv lock --check` 通过。
+- `git diff --check` 通过；仅输出既有 LF/CRLF 转换提示。
+- 本阶段未运行真实 DeepSeek/STRATZ 网络请求。

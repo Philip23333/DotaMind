@@ -324,7 +324,7 @@ class StratzHeroes:
         # Integration layer is a thin relay: normalize field names only. Do NOT
         # sort here — ranking (by synergy) and top-K happen in the agentic layer
         # (`_filter_matchup_rows`), so the integration output preserves STRATZ's
-        # raw iteration order. See docs/design/STRATZ工具审计与重构输入.md §4 P0-2.
+        # raw iteration order. See docs/design/tools/STRATZ工具审计与重构输入.md §4 P0-2.
         normalized: list[dict[str, Any]] = []
         for group in side:
             for record in group.get("vs") or []:

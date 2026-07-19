@@ -9,13 +9,15 @@ Read documents in this order:
 
 1. The latest daily cumulative Chinese progress snapshot under
    [`progress/`](./progress/), with the matching English snapshot when needed.
-2. [`design/DotaMind_V3.2_design.md`](./design/DotaMind_V3.2_design.md) for the
+2. [`design/versions/DotaMind_V3.2_design.md`](./design/versions/DotaMind_V3.2_design.md) for the
    target Agent Runtime Foundation and architecture-stabilization sequence.
-3. [`design/DotaMind_V3.0_design.md`](./design/DotaMind_V3.0_design.md) for the
+3. [`design/versions/DotaMind_V3.2-1_design.md`](./design/versions/DotaMind_V3.2-1_design.md)
+   for the active Run / Attempt / Budget implementation blueprint.
+4. [`design/versions/DotaMind_V3.0_design.md`](./design/versions/DotaMind_V3.0_design.md) for the
    implemented capability map and V3 product roadmap.
-4. [`design/DotaMind_MVP_v2.5.md`](./design/DotaMind_MVP_v2.5.md) for the
+5. [`design/versions/DotaMind_MVP_v2.5.md`](./design/versions/DotaMind_MVP_v2.5.md) for the
    constrained Tool Calling architecture boundaries that V3 must preserve.
-5. [`technical/architecture.md`](./technical/architecture.md) for the current
+6. [`technical/architecture.md`](./technical/architecture.md) for the current
    code and runtime map.
 
 The current runtime has one business API, `POST /api/v1/plan`, backed by the
@@ -23,33 +25,41 @@ LangGraph agentic path. The internal query UI is `GET /debug/plan`.
 
 ## Document Status
 
-### Current design
+### Version blueprints
 
-- [`design/DotaMind_V3.2_design.md`](./design/DotaMind_V3.2_design.md) — target
+- [`design/versions/DotaMind_V3.2_design.md`](./design/versions/DotaMind_V3.2_design.md) — target
   runtime architecture: attempts, bounded recovery, idempotency, Redis, Prompt
   Registry, and observability. Items remain target design until implemented.
-- [`design/DotaMind_V3.0_design.md`](./design/DotaMind_V3.0_design.md) — primary
+- [`design/versions/DotaMind_V3.2-1_design.md`](./design/versions/DotaMind_V3.2-1_design.md)
+  — active single-attempt Run / Attempt / Budget design blueprint.
+- [`design/versions/DotaMind_V3.0_design.md`](./design/versions/DotaMind_V3.0_design.md) — primary
   product and capability design.
-- [`design/DotaMind_MVP_v2.5.md`](./design/DotaMind_MVP_v2.5.md) — primary
+- [`design/versions/DotaMind_MVP_v2.5.md`](./design/versions/DotaMind_MVP_v2.5.md) — primary
   architecture foundation.
-- [`design/Controller层.md`](./design/Controller层.md),
-  [`design/Validator层.md`](./design/Validator层.md),
-  [`design/Tool层.md`](./design/Tool层.md),
-  [`design/Evidence层.md`](./design/Evidence层.md), and
-  [`design/Answer+Critic层.md`](./design/Answer+Critic层.md) — layer-level
+
+### Architecture design
+
+- [`design/architecture/Controller层.md`](./design/architecture/Controller层.md),
+  [`design/architecture/Validator层.md`](./design/architecture/Validator层.md),
+  [`design/architecture/Tool层.md`](./design/architecture/Tool层.md),
+  [`design/architecture/Evidence层.md`](./design/architecture/Evidence层.md), and
+  [`design/architecture/Answer+Critic层.md`](./design/architecture/Answer+Critic层.md)
+  — layer-level
   implementation detail.
+- [`design/architecture/DotaMind_V3_node_tool_edge_inventory.md`](./design/architecture/DotaMind_V3_node_tool_edge_inventory.md)
+  — current and target node, tool, contract, and edge inventory.
 
-### Roadmap and decision records
+### Tool design and roadmaps
 
-- [`design/V3.0_功能闭环缺口盘点.md`](./design/V3.0_功能闭环缺口盘点.md) — V3
+- [`design/tools/time_patch_filtering.md`](./design/tools/time_patch_filtering.md)
+  and [`design/tools/STRATZ工具审计与重构输入.md`](./design/tools/STRATZ工具审计与重构输入.md)
+  — tool-specific design and audit records.
+- [`design/roadmaps/V3.0_功能闭环缺口盘点.md`](./design/roadmaps/V3.0_功能闭环缺口盘点.md) — V3
   capability gaps and delivery slices.
-- [`design/DotaMind_V3_node_tool_edge_inventory.md`](./design/DotaMind_V3_node_tool_edge_inventory.md)
-  — node, tool, contract, and edge inventory.
-- [`design/agent_basic_tool_priorities.md`](./design/agent_basic_tool_priorities.md)
+- [`design/roadmaps/agent_basic_tool_priorities.md`](./design/roadmaps/agent_basic_tool_priorities.md)
   — tool priority input.
-- [`design/time_patch_filtering.md`](./design/time_patch_filtering.md) and
-  [`design/STRATZ工具审计与重构输入.md`](./design/STRATZ工具审计与重构输入.md)
-  — scoped design and audit records.
+- [`design/README.md`](./design/README.md) defines the classification rules for
+  future design documents.
 
 ### Technical reference
 

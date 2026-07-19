@@ -86,3 +86,39 @@
 - `uv lock --check` passed.
 - `git diff --check` passed with only existing LF/CRLF conversion notices.
 - No live DeepSeek/STRATZ network request was run in this phase.
+
+## 16:50 — V3.2-1 blueprint and design-document classification
+
+- Added `docs/design/versions/DotaMind_V3.2-1_design.md`, recording V3.2-1 as
+  the single-attempt Run / Attempt / Budget implementation blueprint. It defines
+  the target graph, runtime package, `RunContext`, `RunBudget`, `AttemptRecord`,
+  trace, terminal finalization, the public runtime allowlist, configuration,
+  work packages, test matrix, and definition of done.
+- V3.2-1 keeps one Graph execution: only target `run_init_node` and
+  `run_finalize_node` are introduced. Budgets are modeled and counted without
+  adding new error routes; `attempt_finalize_node`, Recovery/Replan, tool
+  fingerprints, `request_id`, Prompt Registry, and Redis remain in their later
+  designated phases.
+- Reorganized `docs/design/` into four categories: `versions/` for version
+  blueprints, `architecture/` for layer/runtime architecture, `tools/` for
+  tool-specific design, and `roadmaps/` for capability gaps and priorities.
+  Added `docs/design/README.md` as the classification and reading-order index.
+- Updated the root README, `docs/README.md`, `AGENTS.md`, archive entry point,
+  internal design links, technical references, and canonical paths in code
+  comments. Every local Markdown link under the moved design tree resolves,
+  and current files no longer contain the old category paths; historical
+  progress snapshots were left unchanged.
+- This phase changed only documentation, documentation paths, and related
+  comments/document-generation strings. It did not implement V3.2-1 runtime
+  code or change the Tool Registry or API behavior.
+
+### Verification
+
+- Full API suite: `356 passed, 1 warning`; the warning is FastAPI/Starlette's
+  upstream `httpx` deprecation notice.
+- Local Markdown-link resolution under `docs/design/` passed; stale-path search
+  across current non-historical files returned no matches.
+- `uv run ruff check .` passed.
+- `uv lock --check` passed.
+- `git diff --check` passed with only existing LF/CRLF conversion notices.
+- No live DeepSeek/STRATZ network request was run in this phase.

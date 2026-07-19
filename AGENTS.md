@@ -12,7 +12,11 @@ At the start of every new session in this repository, before analyzing or editin
    matters.
 2. **Read the canonical design docs** under `docs/design/` and
    `docs/technical/` that are relevant to the task at hand. In particular:
-   - `docs/design/DotaMind_MVP_v2.5.md` — primary architecture direction
+   - `docs/design/versions/DotaMind_V3.2_design.md` — current Agent Runtime
+     Foundation target and phase order.
+   - `docs/design/versions/DotaMind_V3.2-1_design.md` — Run / Attempt / Budget
+     implementation blueprint for the active V3.2-1 phase.
+   - `docs/design/versions/DotaMind_MVP_v2.5.md` — primary architecture direction
      (v2.5 constrained tool calling). Treat this as the authority when
      discussing plan/graph/contract structure.
    - `docs/technical/stratz_hero_page_graphql_inventory.md` — empirical
@@ -101,7 +105,7 @@ feat(stratz): P1-C2 laneOutcome 补 stomp/cs 对线证据
 - 薄 relay：stomp/cs 不进胜率计算，不改 match_win_rate 口径。
 - 测试 + 中英 snapshot。108 passed。
 
-Plan: docs/design/STRATZ工具审计与重构输入.md §4 P1-6
+Plan: docs/design/tools/STRATZ工具审计与重构输入.md §4 P1-6
 ```
 
 ## Development Priorities
@@ -117,7 +121,7 @@ Plan: docs/design/STRATZ工具审计与重构输入.md §4 P1-6
 - Do not use mock data to mask missing live integrations or incomplete tools.
   Mock data is acceptable only in tests or explicitly marked fixtures.
 
-- For the v2.5 architecture, follow `docs/design/DotaMind_MVP_v2.5.md` as the
+- For the v2.5 architecture, follow `docs/design/versions/DotaMind_MVP_v2.5.md` as the
   primary design direction. Before discussing or planning architecture changes,
   read or reference this design document and keep the proposal aligned with it.
 

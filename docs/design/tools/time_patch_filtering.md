@@ -19,16 +19,16 @@ The codebase has two unrelated ways to express "when", and they do not reconcile
 ### STRATZ — `week` (absolute week epoch)
 
 - Defined as a cross-cutting scope filter on
-  [`QueryContext.week`](../../apps/api/app/agentic/models.py): `int | None`,
+  [`QueryContext.week`](../../../apps/api/app/agentic/models.py): `int | None`,
   `ge=0`. **Verified meaning of `null`: the most recent *completed* week — NOT
   all time.** See [Verified findings](#verified-findings--stratz-week-semantics).
 - GraphQL type is `Long` (seconds-since-epoch of a STRATZ week boundary), see
-  the queries in [stratz/heroes.py](../../apps/api/app/integrations/stratz/heroes.py).
+  the queries in [stratz/heroes.py](../../../apps/api/app/integrations/stratz/heroes.py).
 - Passed through `context.week` by four handlers: `pair_lane_outcome`,
   `hero_matchup_ranking`, `lane_meta_global`, `hero_position_stats`
-  ([stratz_tools.py:597,641,707,759](../../apps/api/app/agentic/tools/stratz_tools.py)).
+  ([stratz_tools.py:597,641,707,759](../../../apps/api/app/agentic/tools/stratz_tools.py)).
 - The planner prompt's stated contract
-  ([planner.py:45-46](../../apps/api/app/agentic/planning/planner.py)):
+  ([controller.py](../../../apps/api/app/agentic/planning/controller.py)):
   *"week is a single STRATZ week epoch (seconds), not a range; for 'last N
   weeks' use the most recent week epoch."* — the "not a range" half is correct;
   the "last N weeks" guidance is wrong (see P1/P3 below).
@@ -37,22 +37,22 @@ The codebase has two unrelated ways to express "when", and they do not reconcile
 
 - A **per-tool argument**, not on `QueryContext`. e.g.
   `team_recent_matches.days: int = 30`
-  ([opendota_tools.py:28](../../apps/api/app/agentic/tools/opendota_tools.py)).
+  ([opendota_tools.py:28](../../../apps/api/app/agentic/tools/opendota_tools.py)).
 - Computed server-side by Python:
   `cutoff = time.time() - args.days * 86400`
-  ([opendota_tools.py:353](../../apps/api/app/agentic/tools/opendota_tools.py)).
+  ([opendota_tools.py:353](../../../apps/api/app/agentic/tools/opendota_tools.py)).
 
 ### Patch — separate dimension, not connected to time
 
 - Patch is its own evidence source via `patch.get_records` / `patch.hero_changes`
-  / `patch.item_changes` ([patch_tools.py](../../apps/api/app/agentic/tools/patch_tools.py)).
+  / `patch.item_changes` ([patch_tools.py](../../../apps/api/app/agentic/tools/patch_tools.py)).
 - STRATZ hero stats take `week`, **not** patch. So "7.38 版本的 PA 胜率"
   cannot be cleanly scoped on STRATZ today.
 
 ## Verified findings — STRATZ `week` semantics
 
 Probed live (2026-07-03, DIVINE_IMMORTAL) via
-[scripts/stratz_week_probe.py](../../apps/api/scripts/stratz_week_probe.py)
+[scripts/stratz_week_probe.py](../../../apps/api/scripts/stratz_week_probe.py)
 across all three production endpoints. Same shape on every endpoint:
 
 | week value            | stats total | laneOutcome total | heroVsHeroMatchup total |
@@ -174,7 +174,7 @@ produces a relative integer, never an epoch.
 
 Scope filters live on plan-level `QueryContext`, which is (a) set-once-per-plan
 and (b) not ref-resolvable — the `$ref` mechanism only applies to tool args
-([contracts.py:279-333](../../apps/api/app/agentic/planning/contracts.py)). So a
+([contracts.py:279-333](../../../apps/api/app/agentic/planning/contracts.py)). So a
 tool that "returns week epochs" has no consumer: its output cannot be wired
 into `context.week`. Resolution therefore must happen inside the handler, which
 has the clock (`time.time()`). The shared helper centralizes the epoch math;
@@ -183,14 +183,14 @@ so each evidence shape's existing per-week filter/sort/select applies unchanged.
 
 ### Data model
 
-- [`QueryContext.week: int | None`](../../apps/api/app/agentic/models.py)
+- [`QueryContext.week: int | None`](../../../apps/api/app/agentic/models.py)
   (absolute epoch) → **`weeks_back: int | None`** (relative). `null`/unset →
   treated as `1` (latest completed week), matching today's effective behavior
   once the `null` label is fixed.
 - Bounded via policy: `1 ≤ weeks_back ≤ cap` (recommend `cap = 8`, in
   `policy.yaml`). Reject out-of-range in the existing planner validation path
   so the LLM gets a retry signal rather than a silent clamp.
-- The wire layer [stratz/heroes.py](../../apps/api/app/integrations/stratz/heroes.py)
+- The wire layer [stratz/heroes.py](../../../apps/api/app/integrations/stratz/heroes.py)
   is unchanged: it still takes absolute `week` and maps 1:1 to GraphQL `$week`.
   Handlers call it once per resolved epoch.
 
@@ -263,21 +263,21 @@ to compare across weeks and state trend, and to name any `missing_week_epochs`.
 
 ### Ripple / migration
 
-- [`models.QueryContext`](../../apps/api/app/agentic/models.py): rename field +
+- [`models.QueryContext`](../../../apps/api/app/agentic/models.py): rename field +
   validator bounds.
-- [`stratz_tools.py`](../../apps/api/app/agentic/tools/stratz_tools.py): 4
+- [`stratz_tools.py`](../../../apps/api/app/agentic/tools/stratz_tools.py): 4
   handlers gain epoch-resolution + per-week fan-out (no merge); add
   `resolve_recent_completed_weeks`, `_with_retry`, `_bucket`/`_week_summary`
   helpers; evidence extractors flatten `weekly_buckets`.
-- [`synthesizer.py`](../../apps/api/app/agentic/answer/synthesizer.py): prompt
+- [`synthesizer.py`](../../../apps/api/app/agentic/answer/synthesizer.py): prompt
   constant asks for per-week trend + `missing_week_epochs` disclosure.
-- [`planner.py`](../../apps/api/app/agentic/planning/planner.py): prompt text +
+- [`controller.py`](../../../apps/api/app/agentic/planning/controller.py): prompt text +
   the worked-example `context` field name (`week` → `weeks_back`).
 - Tests (`test_agentic_evidence.py`, `test_agentic_stratz_tools.py`): the
   `1782345600` literal → `weeks_back`; keep one unit test asserting
   `resolve_recent_completed_weeks(1)` at a frozen `now` returns that epoch.
-- [`heroes.py`](../../apps/api/app/integrations/stratz/heroes.py): no change.
-- [`policy.yaml`](../../apps/api/app/config/policy.yaml): add `weeks_back` cap
+- [`heroes.py`](../../../apps/api/app/integrations/stratz/heroes.py): no change.
+- [`policy.yaml`](../../../apps/api/app/config/policy.yaml): add `weeks_back` cap
   (+ default).
 
 ### Cost / limits
@@ -306,7 +306,7 @@ to compare across weeks and state trend, and to name any `missing_week_epochs`.
   aggregation, and epoch values must be computed by the backend (which has a
   clock), not the planner LLM. Raw evidence in
   [Verified findings](#verified-findings--stratz-week-semantics); re-runnable
-  via [scripts/stratz_week_probe.py](../../apps/api/scripts/stratz_week_probe.py).
+  via [scripts/stratz_week_probe.py](../../../apps/api/scripts/stratz_week_probe.py).
 - **2026-07-03 — STRATZ windowing shape (closes P1/P2 for STRATZ):** implement
   per-tool windowing (reading 2), not a separate LLM-callable time-map tool.
   `QueryContext.week` (absolute epoch) → `weeks_back` (relative int, 1–8); a

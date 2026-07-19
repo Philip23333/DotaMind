@@ -5,8 +5,8 @@ for product and architecture history, not as implementation guidance.
 
 Current work must follow:
 
-- [`../design/DotaMind_V3.0_design.md`](../design/DotaMind_V3.0_design.md)
-- [`../design/DotaMind_MVP_v2.5.md`](../design/DotaMind_MVP_v2.5.md)
+- [`../design/versions/DotaMind_V3.0_design.md`](../design/versions/DotaMind_V3.0_design.md)
+- [`../design/versions/DotaMind_MVP_v2.5.md`](../design/versions/DotaMind_MVP_v2.5.md)
 - [`../technical/architecture.md`](../technical/architecture.md)
 
 Archived here:

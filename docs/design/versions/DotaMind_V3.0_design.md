@@ -10,12 +10,12 @@
 
 - [DotaMind_MVP_v2.5.md](./DotaMind_MVP_v2.5.md)：受约束 Tool Calling
   架构底座。
-- [DotaMind_V3_node_tool_edge_inventory.md](./DotaMind_V3_node_tool_edge_inventory.md)：
+- [DotaMind_V3_node_tool_edge_inventory.md](../architecture/DotaMind_V3_node_tool_edge_inventory.md)：
   LangGraph node / tool / edge 实现盘点。
-- [V3.0_功能闭环缺口盘点.md](./V3.0_功能闭环缺口盘点.md)：V3.0 功能闭环
+- [V3.0_功能闭环缺口盘点.md](../roadmaps/V3.0_功能闭环缺口盘点.md)：V3.0 功能闭环
   目标和缺口路线图。
-- [architecture.md](../technical/architecture.md)：当前实现地图。
-- [stratz_hero_page_graphql_inventory.md](../technical/stratz_hero_page_graphql_inventory.md)
+- [architecture.md](../../technical/architecture.md)：当前实现地图。
+- [stratz_hero_page_graphql_inventory.md](../../technical/stratz_hero_page_graphql_inventory.md)
   与 STRATZ 相关 technical inventory：STRATZ GraphQL 工具设计依据。
 
 ---
@@ -628,6 +628,5 @@ V3.0 当前阶段不做：
 # 2026-07-18 runtime update
 
 The current runtime uses the discriminated Controller flow documented in
-`DotaMind_V3_node_tool_edge_inventory.md`. Any later historical section that
+`../architecture/DotaMind_V3_node_tool_edge_inventory.md`. Any later historical section that
 describes a mandatory Planner envelope is superseded by that inventory.
-

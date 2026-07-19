@@ -31,7 +31,7 @@ output contract, effective evidence and runtime status influence execution.
 
 V3.2 keeps every current decision and tool/evidence edge above, but wraps one
 or two bounded attempts in a request-level runtime. The following nodes are
-design targets from `DotaMind_V3.2_design.md`; they are intentionally absent
+design targets from `../versions/DotaMind_V3.2_design.md`; they are intentionally absent
 from the current graph and must not be described as available behavior.
 
 ```text

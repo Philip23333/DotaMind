@@ -2270,7 +2270,7 @@ async def _fan_out_weeks(
 # --- STRATZ week-window resolution -----------------------------------------
 # A STRATZ week is 604800s-aligned to the Unix epoch; verified live that
 # `week` is a single weekly bucket and `null` means the latest *completed*
-# week (see docs/design/time_patch_filtering.md). Handlers resolve a relative
+# week (see docs/design/tools/time_patch_filtering.md). Handlers resolve a relative
 # `weeks_back` to concrete completed-week epochs and return one bucket per
 # week (never merged across weeks).
 

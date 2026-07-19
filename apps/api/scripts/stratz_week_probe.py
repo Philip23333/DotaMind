@@ -6,7 +6,7 @@ three production endpoints that take `week`: heroStats.stats,
 heroStats.laneOutcome, heroStats.heroVsHeroMatchup.
 
 Run from anywhere; reads apps/api/.env directly. Delete after the semantics are
-settled and recorded in docs/design/time_patch_filtering.md.
+settled and recorded in docs/design/tools/time_patch_filtering.md.
 """
 
 from __future__ import annotations

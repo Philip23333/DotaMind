@@ -9,7 +9,7 @@ STRATZ exposes two rank enums:
 
 winDay only accepts the full RankBracket enum, so a basic bracket set on
 plan.context.bracket must be expanded before calling winDay. Other tools keep
-using basic directly. See docs/design/STRATZ工具审计与重构输入.md §4 P1-4.
+using basic directly. See docs/design/tools/STRATZ工具审计与重构输入.md §4 P1-4.
 """
 
 _BASIC_TO_FULL: dict[str, list[str]] = {

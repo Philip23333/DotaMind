@@ -26,7 +26,7 @@ Implementation notes:
 - The schema description for `week` says null gives the current week;
   DotaMind's live probe on 2026-07-03 found null matched the latest
   completed week. Treat the schema as the field contract, and
-  `docs/design/time_patch_filtering.md` as the empirical behavior
+  `docs/design/tools/time_patch_filtering.md` as the empirical behavior
   record for null-week semantics.
 
 ### `HeroStatsQuery.winDay`

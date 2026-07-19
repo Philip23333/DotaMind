@@ -15,9 +15,10 @@ Planner -> Validate -> Tools -> Evidence -> Answer -> Critic -> Response
 ```
 
 Start with the [documentation index](docs/README.md), then read the
-[DotaMind V3.2 runtime design](docs/design/DotaMind_V3.2_design.md), the
-[DotaMind V3.0 capability design](docs/design/DotaMind_V3.0_design.md), and the
-[v2.5 architecture foundation](docs/design/DotaMind_MVP_v2.5.md).
+[DotaMind V3.2 runtime design](docs/design/versions/DotaMind_V3.2_design.md), the
+[V3.2-1 implementation blueprint](docs/design/versions/DotaMind_V3.2-1_design.md),
+the [DotaMind V3.0 capability design](docs/design/versions/DotaMind_V3.0_design.md),
+and the [v2.5 architecture foundation](docs/design/versions/DotaMind_MVP_v2.5.md).
 
 ## Repository Layout
 
@@ -25,7 +26,7 @@ Start with the [documentation index](docs/README.md), then read the
 apps/
   api/        FastAPI service, agentic workflow, tests, and `/debug/plan` UI
 docs/
-  design/     Current architecture, layer detail, roadmaps, and decisions
+  design/     Version blueprints, architecture, tool designs, and roadmaps
   technical/  API, configuration, and provider reference material
   progress/   Daily cumulative bilingual handoff snapshots
   archive/    Superseded product and architecture documents
@@ -99,7 +100,7 @@ Current output contracts:
 
 The current registry exposes 19 deterministic tools across local hero constants,
 STRATZ hero/player analysis, OpenDota team/role data, and local patch records.
-See the [V3 tool inventory](docs/design/DotaMind_V3.0_design.md#8-当前工具列表)
+See the [V3 tool inventory](docs/design/versions/DotaMind_V3.0_design.md#8-当前工具列表)
 for the complete list.
 
 ## Configuration
@@ -128,7 +129,7 @@ records.
 The active V3.2 architecture-stabilization target freezes new business tools
 while adding run/attempt state, bounded recovery, request idempotency, Redis
 session persistence, Prompt Registry, and observability. See the
-[V3.2 design](docs/design/DotaMind_V3.2_design.md). Product capability gaps such
+[V3.2 design](docs/design/versions/DotaMind_V3.2_design.md). Product capability gaps such
 as item/skill/talent guidance remain documented but are deferred until the
 runtime foundation is complete. CAP/CROO integration remains parked.
 
