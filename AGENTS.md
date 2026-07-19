@@ -2,10 +2,14 @@
 
 At the start of every new session in this repository, before analyzing or editing code:
 
-1. **Read the latest timestamp-prefixed Chinese progress snapshot** matching
-   `docs/progress/YYYY-MM-DD_HH-mm_progress_zh.md` (sort by filename
-   timestamp, take the newest). Use the matching `_progress_en.md` document
-   when English terminology or bilingual consistency matters.
+1. **Read the latest Chinese progress snapshot** under `docs/progress/`.
+   Current snapshots use `YYYY-MM-DD_progress_zh.md`, with one cumulative file
+   per calendar date. Historical snapshots may still use the legacy
+   `YYYY-MM-DD_HH-mm_progress_zh.md` format. Consider both formats, select the
+   newest date (and newest legacy timestamp when needed), and prefer the daily
+   cumulative file when both formats exist for the same date. Use the matching
+   `_progress_en.md` document when English terminology or bilingual consistency
+   matters.
 2. **Read the canonical design docs** under `docs/design/` and
    `docs/technical/` that are relevant to the task at hand. In particular:
    - `docs/design/DotaMind_MVP_v2.5.md` — primary architecture direction
@@ -34,8 +38,26 @@ At the start of every new session in this repository, before analyzing or editin
 - The legacy `apps/web` frontend has been deleted. Use `/debug/plan` as the
   internal query test UI; do not recreate a separate frontend compatibility path.
 - After completing a meaningful phase of changes, update the progress
-  documentation under `docs/progress/`. Keep the timestamp-prefixed Chinese and
-  English progress snapshots aligned.
+  documentation under `docs/progress/` according to the daily snapshot rules
+  below. Keep the Chinese and English progress snapshots aligned.
+
+## Daily Progress Snapshot Rules
+
+- Maintain exactly one Chinese/English snapshot pair for each calendar date:
+  `docs/progress/YYYY-MM-DD_progress_zh.md` and
+  `docs/progress/YYYY-MM-DD_progress_en.md`.
+- For the first meaningful update on a date, create that date's pair. For every
+  later update on the same date, append a new time-labelled section to the same
+  two files instead of creating another snapshot pair.
+- Use chronological section headings such as `## 14:30 — Controller validation`
+  so multiple updates on one date remain distinguishable and reviewable.
+- Append new sections after existing same-day content. Do not rewrite or remove
+  earlier same-day entries except to correct an identified factual error.
+- Keep the Chinese and English files structurally aligned: the same sections,
+  facts, limitations, and verified test results in the same order.
+- Do not create new `YYYY-MM-DD_HH-mm_progress_*.md` files. Existing timestamped
+  snapshots are legacy history and must not be renamed, consolidated, or deleted
+  unless the user explicitly requests a migration.
 
 ## Git Commit Message Reference
 
@@ -125,3 +147,21 @@ Plan: docs/design/STRATZ工具审计与重构输入.md §4 P1-6
 - Evidence obligations are determined by `required_evidence` and contract rules.
 - Do not recreate old `task_type` behavior through `intent`. In particular,
   never add branches such as `if intent == "lane_outcome": run_lane_outcome_flow()`.
+
+## Tool and Runtime-Data Changes
+
+When adding or changing a registered tool, verify all affected layers:
+
+- input model and argument/reference contracts;
+- `ToolRegistry` definition and declared output paths;
+- mandatory and producible evidence kinds;
+- evidence extractor and source metadata;
+- Controller tool catalog and supported-capability description;
+- output-contract compatibility;
+- focused tests and relevant architecture documentation.
+
+Do not add direct upstream HTTP calls outside the integration/transport boundary.
+
+Hero and patch files under `apps/api/app/data/` are committed runtime snapshots,
+not disposable caches. Regenerate them through the repository script, validate
+their structure, and review their diff before committing.
