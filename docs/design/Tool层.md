@@ -72,7 +72,7 @@ ToolRegistry()
 
 `PlanService` 初始化时创建 registry，并把同一份 registry 传给：
 
-- `AgenticPlanner`
+- `AgentController`
 - `AgentGraphRunner`
 - `ToolExecutor`
 - `EvidenceGraph` builder

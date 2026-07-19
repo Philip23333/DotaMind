@@ -38,6 +38,7 @@ def register_patch_tools(registry: ToolRegistry) -> None:
             source=source,
             evidence_extractor=patch_records_evidence,
             evidence_kinds=("patch_records", "patch_buff_count", "patch_nerf_count"),
+            mandatory_evidence=("patch_records",),
             arg_contracts={
                 "patch": ArgContract(description="Patch version, or latest."),
             },
@@ -56,6 +57,7 @@ def register_patch_tools(registry: ToolRegistry) -> None:
             source=source,
             evidence_extractor=patch_hero_changes_evidence,
             evidence_kinds=("hero_patch_changes",),
+            mandatory_evidence=("hero_patch_changes",),
             arg_contracts={
                 "patch": ArgContract(description="Patch version, or latest."),
                 "hero": ArgContract(description="Optional hero name filter."),
@@ -75,6 +77,7 @@ def register_patch_tools(registry: ToolRegistry) -> None:
             source=source,
             evidence_extractor=patch_item_changes_evidence,
             evidence_kinds=("item_patch_changes",),
+            mandatory_evidence=("item_patch_changes",),
             arg_contracts={
                 "patch": ArgContract(description="Patch version, or latest."),
             },

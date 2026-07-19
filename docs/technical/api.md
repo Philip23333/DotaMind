@@ -1,10 +1,6 @@
 # API
 
-Base URL:
-
-```text
-http://localhost:8001
-```
+Base URL: `http://localhost:8001`.
 
 ## Health
 
@@ -12,35 +8,46 @@ http://localhost:8001
 GET /health
 ```
 
-## Agentic Plan
+## Controller Request
 
 ```http
 POST /api/v1/plan
 ```
 
-Request:
-
 ```json
 {
   "game": "dota2",
-  "query": "enemy picked Lina, what should I pick?"
+  "query": "我上次问的是什么英雄来着",
+  "session_id": "optional UUID v4"
 }
 ```
 
-Response fields:
+`session_id` is optional. Omitting it runs a stateless request. Reusing it
+enables compact `Turn` memory for the same user security subject.
 
-- `status`: `ok`, `insufficient_tools`, or `error`
-- `response_type`: final response category, such as `draft_advice` or
-  `capability_boundary`
-- `plan`: planner-produced `ExecutionPlan`
-- `tool_results`: deterministic tool execution results
-- `evidence_graph`: extracted evidence and quality metadata
-- `answer`: synthesized answer, when available
-- `review`: critic review, when available
-- `errors`: validation or execution errors
-- `trace`: node trace
-- `planner_output`, `planner_raw_content`, `planner_finish_reason`: planner
-  debugging metadata
+Response fields include:
+
+- `status`: `ok`, `clarification_required`, `insufficient_context`,
+  `insufficient_tools`, `insufficient_evidence`, or `error`.
+- `response_type`: `direct_answer`, `clarification`,
+  `conversation_context_missing`, `capability_boundary`, a tool answer
+  contract, `tool_error`, `answer_error`, `execution_error`, `planning_error`,
+  `decision_validation_error`, or `insufficient_evidence`.
+- `decision_kind` and `missing_fields`.
+- `plan` and `tool_results` for tool decisions.
+- `planner_required_evidence`, `effective_required_evidence`, and
+  `required_evidence_sources`.
+- `evidence_graph`, `answer`, and `review` when that branch creates them.
+- `errors`, `error_code`, and `trace`.
+For session requests, internal history, the rendered history block, raw
+Controller output, retry feedback and validation details are not serialized.
+Invalid Controller/plan results use a redacted failure envelope and a redacted
+failure `Turn`.
+
+Within `evidence_graph`, registry minimum evidence is tracked by
+`mandatory_evidence_by_call`. Missing per-call proof is reported as
+`<tool_call_id>:<evidence_kind>`. Unclassified runtime failures use
+`error/execution_error` rather than a successful raw-results response type.
 
 ## Debug UI
 
@@ -48,12 +55,13 @@ Response fields:
 GET /debug/plan
 ```
 
-Serves the internal plan console for querying `/api/v1/plan` and inspecting raw
-state.
+This is the only internal query UI. It displays both no-tool decisions and the
+conditional tool/evidence path.
 
 ## Removed Endpoints
 
-The old fixed report/query surface has been deleted and returns FastAPI 404:
+The old fixed report/query surface returns 404. No redirects or compatibility
+adapters are provided:
 
 - `GET /api/v1/services`
 - `POST /api/v1/query`
@@ -62,5 +70,3 @@ The old fixed report/query surface has been deleted and returns FastAPI 404:
 - `POST /api/v1/team-report`
 - `POST /api/v1/verify-claim`
 - `GET /debug/chat`
-
-No compatibility redirect, adapter, or fallback is provided.

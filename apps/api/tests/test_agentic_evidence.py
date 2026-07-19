@@ -178,6 +178,69 @@ def test_evidence_graph_keeps_utility_tool_result_without_evidence() -> None:
     assert graph.data_quality.completeness == 1
 
 
+def test_mandatory_evidence_is_enforced_per_successful_tool_call() -> None:
+    def extractor(result: ToolResult) -> list[EvidenceItem]:
+        if not result.data["emit"]:
+            return []
+        return [
+            EvidenceItem(
+                id=f"{result.tool_call_id}:main",
+                kind="main",
+                subject=result.tool_call_id,
+                value={"ok": True},
+                tool_call_id=result.tool_call_id,
+                tool=result.tool,
+            )
+        ]
+
+    registry = ToolRegistry()
+    registry.register(
+        ToolDefinition(
+            name="debug.evidence",
+            description="Conditionally emits primary evidence.",
+            input_model=DebugInput,
+            handler=lambda args, context: {},
+            evidence_extractor=extractor,
+            evidence_kinds=("main",),
+            mandatory_evidence=("main",),
+        )
+    )
+    plan = ExecutionPlan(
+        intent="debug",
+        goal="Run the same evidence tool twice.",
+        output_contract="tool_results",
+        tool_calls=[
+            ToolCall(id="call_a", tool="debug.evidence", args={}),
+            ToolCall(id="call_b", tool="debug.evidence", args={}),
+        ],
+    )
+    results = [
+        ToolResult(
+            tool_call_id="call_a",
+            tool="debug.evidence",
+            status="ok",
+            latency_ms=1,
+            data={"emit": True},
+        ),
+        ToolResult(
+            tool_call_id="call_b",
+            tool="debug.evidence",
+            status="ok",
+            latency_ms=1,
+            data={"emit": False},
+        ),
+    ]
+
+    graph = build_evidence_graph(plan, results, registry)
+
+    assert graph.mandatory_evidence_by_call == {
+        "call_a": ["main"],
+        "call_b": ["main"],
+    }
+    assert graph.missing == ["call_b:main"]
+    assert graph.data_quality.completeness == 0.5
+
+
 def test_evidence_graph_reports_extractor_failure() -> None:
     def broken_extractor(_result: ToolResult) -> list[EvidenceItem]:
         raise ValueError("bad evidence")

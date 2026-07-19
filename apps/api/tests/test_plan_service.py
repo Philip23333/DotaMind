@@ -1,28 +1,50 @@
 import asyncio
 
 from app.agentic.models import ExecutionPlan, ToolCall
-from app.agentic.planning.planner import AgenticPlannerResult
+from app.agentic.planning.controller import AgentControllerResult
+from app.agentic.planning.decisions import (
+    CapabilityBoundaryDecision,
+    ToolPlanDecision,
+    resolve_required_evidence,
+)
+from app.agentic.tools.stratz_tools import build_default_tool_registry
 from app.application.plan_service import PlanService
+from app.core.config import get_settings
 
 
-class FakePlanner:
-    def __init__(self, result: AgenticPlannerResult) -> None:
+class FakeController:
+    def __init__(self, result: AgentControllerResult) -> None:
         self.result = result
         self.received_history: list = []
 
-    async def plan(
+    async def decide(
         self, query: str, game: str = "dota2", history=None
-    ) -> AgenticPlannerResult:
+    ) -> AgentControllerResult:
         self.received_history = list(history or [])
         return self.result
 
 
+def _tool_result(plan: ExecutionPlan, reason: str) -> AgentControllerResult:
+    registry = build_default_tool_registry(get_settings())
+    return AgentControllerResult(
+        status="decided",
+        reason=reason,
+        decision=ToolPlanDecision(kind="tool_plan", plan=plan),
+        evidence_resolution=resolve_required_evidence(plan, registry),
+    )
+
+
 def test_plan_service_returns_insufficient_tools_without_execution() -> None:
     service = PlanService(
-        planner=FakePlanner(
-            AgenticPlannerResult(
-                status="insufficient_tools",
+        controller=FakeController(
+            AgentControllerResult(
+                status="decided",
                 reason="no team tool is registered",
+                decision=CapabilityBoundaryDecision(
+                    kind="capability_boundary",
+                    intent="team_recent",
+                    reason="no team tool is registered",
+                ),
             )
         )
     )
@@ -34,16 +56,17 @@ def test_plan_service_returns_insufficient_tools_without_execution() -> None:
     assert result.evidence_graph is None
     assert result.answer is None
     assert result.review is None
-    assert result.trace[-1].status == "insufficient_tools"
+    assert result.trace[-1].status == "completed"
     assert result.response
 
 
 def test_plan_service_returns_error_when_planner_errors() -> None:
     service = PlanService(
-        planner=FakePlanner(
-            AgenticPlannerResult(
+        controller=FakeController(
+            AgentControllerResult(
                 status="error",
                 reason="LLM disabled",
+                failure_type="planning_error",
                 errors=["DOTAMIND_LLM_ENABLED must be true"],
             )
         )
@@ -108,7 +131,7 @@ def test_plan_service_executes_planned_counter_pick(monkeypatch) -> None:
                     "hero_id": "$resolve_target.data.hero.hero_id",
                     "side": "vs",
                     "take": 3,
-                    # Set explicitly: this FakePlanner bypasses AgenticPlanner.plan()
+                    # Set explicitly: this FakeController bypasses AgentController.plan()
                     # (where apply_sample_policy backfills the default), and the
                     # fixture row has match_count=100, below the policy default
                     # of 2000. A relaxed floor keeps the row so the orchestration
@@ -120,12 +143,8 @@ def test_plan_service_executes_planned_counter_pick(monkeypatch) -> None:
         required_evidence=["hero_identity", "matchup_ranking_row", "sample_size"],
     )
     service = PlanService(
-        planner=FakePlanner(
-            AgenticPlannerResult(
-                status="planned",
-                reason="matchup ranking plan",
-                plan=plan,
-            )
+        controller=FakeController(
+            _tool_result(plan, "matchup ranking plan")
         )
     )
 
@@ -158,19 +177,15 @@ def test_plan_service_returns_error_without_answer_when_runner_fails() -> None:
         required_evidence=["matchup_ranking_row"],
     )
     service = PlanService(
-        planner=FakePlanner(
-            AgenticPlannerResult(
-                status="planned",
-                reason="bad plan",
-                plan=plan,
-            )
+        controller=FakeController(
+            _tool_result(plan, "bad plan")
         )
     )
 
     result = asyncio.run(service.run("enemy picked Lina"))
 
     assert result.status == "error"
-    assert result.evidence_graph is not None
+    assert result.evidence_graph is None
     assert result.answer is None
     assert result.review is None
     assert result.errors
@@ -188,12 +203,8 @@ def test_plan_service_rejects_unproducible_required_evidence() -> None:
         required_evidence=["hero_identity", "matchup_ranking_row", "sample_size"],
     )
     service = PlanService(
-        planner=FakePlanner(
-            AgenticPlannerResult(
-                status="planned",
-                reason="partial plan",
-                plan=plan,
-            )
+        controller=FakeController(
+            _tool_result(plan, "partial plan")
         )
     )
 
@@ -215,10 +226,15 @@ from uuid import uuid4  # noqa: E402
 
 def _insufficient_service() -> PlanService:
     return PlanService(
-        planner=FakePlanner(
-            AgenticPlannerResult(
-                status="insufficient_tools",
+        controller=FakeController(
+            AgentControllerResult(
+                status="decided",
                 reason="no tool",
+                decision=CapabilityBoundaryDecision(
+                    kind="capability_boundary",
+                    intent="unsupported",
+                    reason="no tool",
+                ),
             )
         )
     )
@@ -259,10 +275,18 @@ def test_session_run_writes_turn() -> None:
 
 
 def test_session_second_turn_reads_prior_history() -> None:
-    planner = FakePlanner(
-        AgenticPlannerResult(status="insufficient_tools", reason="no tool")
+    planner = FakeController(
+        AgentControllerResult(
+            status="decided",
+            reason="no tool",
+            decision=CapabilityBoundaryDecision(
+                kind="capability_boundary",
+                intent="unsupported",
+                reason="no tool",
+            ),
+        )
     )
-    service = PlanService(planner=planner)
+    service = PlanService(controller=planner)
     sid = uuid4()
 
     async def _scenario():

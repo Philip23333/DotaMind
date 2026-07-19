@@ -316,7 +316,7 @@ class NaturalLanguageAnswerSynthesizer:
                         "role": "user",
                         "content": (
                             f"goal={plan.goal}\n"
-                            f"required_evidence={plan.required_evidence}\n"
+                            f"required_evidence={graph.required_evidence}\n"
                             f"evidence_graph={graph.model_dump(mode='json')}"
                         ),
                     },

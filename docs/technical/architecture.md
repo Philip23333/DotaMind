@@ -1,106 +1,149 @@
 # Architecture
 
-DotaMind now uses a single agentic backend path. The old canonical v2.1 fixed
-report pipeline has been deleted.
+DotaMind uses one agentic backend path. The deleted fixed report pipeline has
+no compatibility fallback.
 
 ## Backend Layout
 
 ```text
 app/
-  api/v1/          /plan schemas (incl. session_id), route, and mapper
-  application/     PlanService, session_store (lease-aware SessionStore transaction + InMemorySessionStore)
+  api/v1/          /plan schema, route, mapper
+  application/     PlanService and lease-aware SessionStore
   agentic/
-    graph.py       LangGraph StateGraph runner
-    state.py       shared AgentRunState (carries injected conversation history)
-    models.py      ExecutionPlan, ToolCall, ToolResult
-    conversation/  Turn/ResolvedEntity models, turn summary extractor, history renderer
-    nodes/         planner, validate, tools, evidence, answer, critic, response nodes
-    tools/         registry, executor, hero, patch, OpenDota, STRATZ, ranking tools
-    planning/      planner and output contract catalog
+    graph.py       conditional LangGraph workflow
+    state.py       AgentRunState and public-result state
+    conversation/  compact Turn memory, summary extraction, history rendering
+    planning/      ControllerDecision, Controller, contracts, sample policy
+    nodes/         controller, decision validation, conversation/tool paths
+    tools/         registry, executor, OpenDota, STRATZ, patch and local tools
     evidence/      EvidenceGraph and extraction helpers
-    answer/        answer synthesizer, structured and natural-language routing
-    critic/        rule-first reviewer and critic rules
-  integrations/    OpenDota, STRATZ, patch-note clients and deterministic helpers
+    answer/        evidence-grounded answer synthesis
+    critic/        rule-first evidence quality review
+  integrations/    upstream API clients and deterministic helpers
   config/          policy.yaml business policy
-  resources/       prompts and /debug/plan asset
+  resources/       /debug/plan asset
 ```
 
-There is no `app/pipeline/` or old report domain layer. New capabilities should
-be exposed as deterministic agentic tools and output contracts, not as fixed
-business pipelines.
+## Controller and Graph
 
-## Runtime Workflow
+Every request first produces one discriminated `ControllerDecision`:
 
 ```text
-POST /api/v1/plan
-  -> PlanService
-  -> AgentGraphRunner
-  -> LangGraph StateGraph(AgentRunState)
-      -> planner_node
-      -> validate_plan_node
-      -> tool_executor_node
-      -> evidence_node
-      -> answer_node
-      -> critic_node
-      -> response_node
+direct_answer | clarification | context_missing | capability_boundary | tool_plan
 ```
 
-The planner creates a constrained `ExecutionPlan`. Code validates and executes
-registered tools, builds an `EvidenceGraph`, synthesizes an answer, runs a critic,
-and serializes the final response.
+Only `tool_plan` owns an `ExecutionPlan` and enters the external-data path:
 
-Missing tools, invalid plans, upstream tool errors, and insufficient evidence are
-surfaced directly. There is no fallback to deleted report endpoints.
+```text
+START
+  -> controller_node
+  -> decision_validate_node
+      -> direct_answer -> conversation_answer_node -> response_node
+      -> clarification -----------------------------> response_node
+      -> context_missing ---------------------------> response_node
+      -> capability_boundary -----------------------> response_node
+      -> tool_plan
+           -> validate_plan_node
+           -> tool_executor_node
+           -> evidence_node
+           -> answer_node
+           -> critic_node
+           -> response_node
+```
 
-## Tool Contract Runtime
+Non-tool decisions never create an `EvidenceGraph` and never run the critic.
+`intent` is only a semantic label. Graph routing reads `decision.kind` and
+runtime status; it never branches on `intent`.
 
-`ToolDefinition` is the single source of truth for tool field contracts:
+## Conversation Memory
 
-- `input_model` defines argument type and required-field validation.
-- `arg_contracts` defines argument semantics and accepted references.
-- `output_paths` defines stable `$<call_id>.<output_path>` references against
-  `ToolResult.model_dump(mode="json")`.
-- `evidence_kinds` defines which required evidence a selected tool can produce.
+Session memory remains a compact `Turn` history. It does not store raw model
+messages and does not use a LangGraph checkpointer. Direct recall can read only
+the current request's `state.history` snapshot through a validated
+`ConversationBasis`:
 
-Planner prompt rendering and validator rules both consume these registry
-contracts. Tool-specific names such as hero or team fields must live in tool
-registration metadata, tests, docs, or prompt output, not in validator branches.
+- `query` recalls what the user asked.
+- `resolved_entities` recalls successful hero/team/player resolution.
+- `response_summary` recalls an earlier answer explicitly as a past answer.
 
-Current limitation: top-level reference placeholders are type-compatible with
-their target input fields. Nested references inside `list[T]` or `dict[K,V]`
-are detected, but placeholder replacement is not yet fully element-type-aware.
+`conversation_answer_node` renders these modes with deterministic templates.
+Social, clarification and capability-boundary text may be generated by the
+Controller. A `session_id` is a bearer capability for one user security
+subject; cross-session history access is not available to the Controller.
 
-## Component Roles
+## Tool Plan Validation Order
 
-| Component | Type | LLM | Responsibility |
-|---|---|---:|---|
-| `AgenticPlanner` | Agent | yes | Create constrained execution plans |
-| `validate_plan_node` | Runtime | no | Validate tool calls, args, references, output contracts, and evidence producibility from ToolRegistry contracts |
-| `ToolExecutor` | Runtime | no | Resolve references and execute registered tool calls |
-| Agentic tools | Tools | no | Fetch structured evidence from OpenDota, STRATZ, patch data, and local constants |
-| `EvidenceGraph` builder | Runtime | no | Extract evidence from tool results |
-| `AnswerSynthesizer` | Agent/rules | optional | Produce structured or natural-language answers from evidence |
-| `AgenticCritic` | Rules | no | Review missing evidence, tool failures, mock usage, and confidence |
-| `response_node` | Runtime | no | Serialize public `/api/v1/plan` response shape |
+For every Controller candidate:
+
+```text
+parse ControllerDecision
+  -> apply_sample_policy(plan) once for tool_plan
+  -> resolve effective required evidence
+  -> validate ControllerDecision
+  -> validate final ExecutionPlan
+```
+
+Graph validation repeats deterministic checks but never mutates tool args,
+metadata, or evidence obligations. Therefore state, debug output and execution
+all use the same final plan.
+
+## Tool and Evidence Contracts
+
+`ToolDefinition` is the source of truth for:
+
+- `input_model`: argument schema.
+- `arg_contracts`: semantics and accepted plan-local references.
+- `output_paths`: stable `$<call_id>.<output_path>` references.
+- `source`: evidence provenance.
+- `evidence_extractor` / `evidence_kinds`: possible extracted evidence.
+- `mandatory_evidence`: runtime-owned primary proof obligations.
+
+Evidence obligations are computed without mutating `plan.required_evidence`:
+
+```text
+contract.required_evidence
+  union plan.required_evidence
+  -> global kind obligations
+
+each selected tool call's mandatory_evidence
+  -> per-tool_call_id obligations
+```
+
+State exposes the original model list, effective kind union and stable source map as
+`planner_required_evidence`, `effective_required_evidence`, and
+`required_evidence_sources`. It also carries `mandatory_evidence_by_call`
+internally. EvidenceGraph checks contract/model evidence globally by kind, but
+checks registry mandatory evidence against the evidence emitted by each
+successful `tool_call_id`; one call cannot satisfy another call's obligation.
+Registry metadata is validated once at service startup; plan-specific
+producibility is validated for each tool plan.
+
+The first release mandates primary result evidence only. `sample_size` remains
+available through sample-policy parameters, extraction, data-quality metadata,
+answer disclosure and explicit contract/model requirements, but is not a
+universal registry obligation.
+
+## Terminal Result Priority
+
+The response node applies one status ordering:
+
+1. Controller transport/model error: `error/planning_error`.
+2. Decision or plan validation error: `error/decision_validation_error`.
+3. Tool failure: `error/tool_error`.
+4. Answer model failure: `error/answer_error`.
+5. Missing effective evidence: `insufficient_evidence`.
+6. Critic evidence-quality failure: `insufficient_evidence`.
+7. Otherwise the decision/contract succeeds.
+
+In particular, a tool failure is never hidden as missing evidence, and an
+answer failure is never hidden as a critic failure. Reference-resolution
+failures produce failed `ToolResult` records and map to `tool_error`; otherwise
+an unclassified runtime error falls back to `execution_error`. Terminal errors
+also replace the Controller's provisional `decision accepted` reason with a
+stable failure reason.
 
 ## Debugging
 
-Use:
-
-```text
-http://localhost:8001/debug/plan
-```
-
-The legacy Next.js app has been deleted. `/debug/plan` is the only internal
-query test UI; there is no separate frontend runtime or npm workspace.
-
-## Migration Status
-
-- Deleted `/api/v1/query` and structured report endpoints.
-- Deleted `/api/v1/services` and `/debug/chat`.
-- Deleted `application/query_service.py`, `application/report_service.py`,
-  `application/catalog.py`, `app/pipeline/`, and old report/task/evidence domain
-  models.
-- Kept `/api/v1/plan`, `/debug/plan`, and `/health`.
-- Moved team resolution into an OpenDota integration helper used by agentic tools.
-- Deleted the legacy `apps/web` Next.js application and its root npm workspace.
+Use `http://localhost:8001/debug/plan`. It shows the Controller decision, final
+plan, required-evidence sources, tools, EvidenceGraph, answer, critic and trace.
+The legacy frontend has been deleted and must not be recreated.

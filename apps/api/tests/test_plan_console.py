@@ -11,9 +11,10 @@ def test_plan_console_is_served_by_api() -> None:
     assert "DotaMind Plan Lab" in response.text
     assert 'fetch("/api/v1/plan"' in response.text
     assert "Node Flow" in response.text
-    assert "Planner LLM JSON" in response.text
-    assert "Planner Prompt Messages" in response.text
-    assert "Planner Raw Content" in response.text
+    assert "Validated Decision" in response.text
+    assert "Required Evidence Sources" in response.text
+    assert "Controller Prompt Messages" not in response.text
+    assert "Controller Raw Content" not in response.text
     assert "Final User Output" in response.text
     assert "Parsed Final Data" in response.text
     assert "Raw JSON" in response.text

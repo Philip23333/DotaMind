@@ -111,13 +111,12 @@ POST /api/v1/plan
   -> PlanService
   -> AgentGraphRunner
   -> LangGraph StateGraph(AgentRunState)
-      -> planner_node
-      -> validate_plan_node
-      -> tool_executor_node
-      -> evidence_node
-      -> answer_node
-      -> critic_node
-      -> response_node
+      -> controller_node
+      -> decision_validate_node
+          -> direct_answer -> conversation_answer_node -> response_node
+          -> clarification/context_missing/capability_boundary -> response_node
+          -> tool_plan -> validate_plan_node -> tool_executor_node
+                       -> evidence_node -> answer_node -> critic_node -> response_node
 ```
 
 当前实现已经使用 LangGraph `StateGraph` 承载节点编排。Graph 只表达通用
@@ -127,14 +126,18 @@ POST /api/v1/plan
 
 ```mermaid
 flowchart TD
-    START["START"] --> Planner["planner_node"]
-    Planner -->|planned| Validate["validate_plan_node"]
-    Planner -->|insufficient_tools / error| Response["response_node"]
+    START["START"] --> Controller["controller_node"]
+    Controller --> Decision["decision_validate_node"]
+    Decision -->|"direct_answer"| Conversation["conversation_answer_node"]
+    Conversation --> Response["response_node"]
+    Decision -->|"no-tool terminal"| Response
+    Decision -->|"tool_plan"| Validate["validate_plan_node"]
     Validate -->|valid| Tools["tool_executor_node"]
-    Validate -->|invalid| Evidence["evidence_node"]
-    Tools --> Evidence
-    Evidence -->|fatal error| Response
+    Validate -->|invalid| Response
+    Tools -->|success| Evidence["evidence_node"]
+    Tools -->|error| Response
     Evidence -->|usable result| Answer["answer_node"]
+    Evidence -->|missing evidence| Response
     Answer -->|ok| Critic["critic_node"]
     Answer -->|error| Response
     Critic --> Response
@@ -155,7 +158,7 @@ flowchart TD
 | `apps/api/app/agentic/graph.py` | LangGraph `StateGraph` 编排和 node dependency injection。 |
 | `apps/api/app/agentic/state.py` | `AgentRunState`、trace、status、response holder。 |
 | `apps/api/app/agentic/models.py` | `ExecutionPlan`、`ToolCall`、`QueryContext`、`ToolResult`。 |
-| `apps/api/app/agentic/planning/planner.py` | LLM planner、system prompt、retry invalid JSON/invalid plan、sample policy backfill。 |
+| `apps/api/app/agentic/planning/controller.py` | LLM Controller、discriminated decisions、validation retry、sample policy backfill。 |
 | `apps/api/app/agentic/planning/contracts.py` | output contracts、tool prompt renderer、plan validation。 |
 | `apps/api/app/agentic/planning/sample_policy.py` | sample-size policy prompt rendering 和默认值注入 provenance。 |
 | `apps/api/app/agentic/tools/registry.py` | `ToolDefinition`、field contract、accepted refs、output paths。 |
@@ -622,4 +625,9 @@ V3.0 当前阶段不做：
 6. **部署变量变更记录**
    在部署说明中明确记录 `DOTAMIND_*` 环境变量、`dotamind-api` 包名和
    `dotamind` PostgreSQL 默认库名，避免旧开发环境继续加载失效配置。
+# 2026-07-18 runtime update
+
+The current runtime uses the discriminated Controller flow documented in
+`DotaMind_V3_node_tool_edge_inventory.md`. Any later historical section that
+describes a mandatory Planner envelope is superseded by that inventory.
 

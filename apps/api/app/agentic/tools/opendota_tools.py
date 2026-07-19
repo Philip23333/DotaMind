@@ -59,6 +59,7 @@ def register_opendota_tools(registry: ToolRegistry, settings: Settings) -> None:
             source=source,
             evidence_extractor=resolve_team_evidence,
             evidence_kinds=("team_identity",),
+            mandatory_evidence=("team_identity",),
             arg_contracts={
                 "query": ArgContract(description="Team name, tag, or alias to resolve."),
             },
@@ -81,6 +82,7 @@ def register_opendota_tools(registry: ToolRegistry, settings: Settings) -> None:
             source=source,
             evidence_extractor=team_recent_matches_evidence,
             evidence_kinds=("recent_matches", "sample_size"),
+            mandatory_evidence=("recent_matches",),
             arg_contracts={
                 "team_id": ArgContract(
                     description="OpenDota team id.",
@@ -114,6 +116,7 @@ def register_opendota_tools(registry: ToolRegistry, settings: Settings) -> None:
             source=source,
             evidence_extractor=team_players_evidence,
             evidence_kinds=("current_players",),
+            mandatory_evidence=("current_players",),
             arg_contracts={
                 "team_id": ArgContract(
                     description="OpenDota team id.",
@@ -140,6 +143,7 @@ def register_opendota_tools(registry: ToolRegistry, settings: Settings) -> None:
             source=source,
             evidence_extractor=team_heroes_evidence,
             evidence_kinds=("team_hero_usage", "match_detail_sample", "sample_size"),
+            mandatory_evidence=("team_hero_usage",),
             arg_contracts={
                 "matches": ArgContract(
                     description="OpenDota match rows to aggregate.",
@@ -167,6 +171,7 @@ def register_opendota_tools(registry: ToolRegistry, settings: Settings) -> None:
             source=source,
             evidence_extractor=hero_stats_by_role_evidence,
             evidence_kinds=("hero_stats", "role_fit", "sample_size"),
+            mandatory_evidence=("hero_stats",),
             arg_contracts={
                 "role": ArgContract(description="Role name to filter."),
                 "min_pub_pick": ArgContract(description="Minimum public pick count."),

@@ -1,7 +1,7 @@
 """Privacy regression tests for conversation history.
 
 Blocking-item guard: history injected into the planner prompt must NOT leak
-back to API clients via planner_prompt_messages (or anywhere in the response).
+back to API clients through any public response field.
 """
 
 import asyncio
@@ -11,10 +11,14 @@ from uuid import uuid4
 from app.agentic.conversation.models import Turn
 from app.agentic.models import ExecutionPlan, ToolCall
 from app.agentic.nodes.response import response_node
-from app.agentic.planning.planner import (
-    AgenticPlanner,
-    AgenticPlannerResult,
+from app.agentic.planning.controller import (
+    AgentController,
+    AgentControllerResult,
     _redact_history_from_messages,
+)
+from app.agentic.planning.decisions import (
+    CapabilityBoundaryDecision,
+    ToolPlanDecision,
 )
 from app.agentic.state import AgentRunState
 from app.agentic.tools.stratz_tools import build_default_tool_registry
@@ -23,6 +27,54 @@ from app.application.session_store import InMemorySessionStore
 from app.core.config import get_settings
 
 SENTINEL = "SENTINEL_PRIVACY_ABC123"
+
+
+def test_stateless_response_excludes_raw_controller_debug_data() -> None:
+    decision = CapabilityBoundaryDecision(
+        kind="capability_boundary",
+        intent="unsupported",
+        reason="No registered capability.",
+    )
+    state = AgentRunState(
+        query="debug",
+        game="dota2",
+        status="insufficient_tools",
+        decision=decision,
+        decision_kind=decision.kind,
+        controller_result=AgentControllerResult(
+            status="decided",
+            reason="decision accepted",
+            decision=decision,
+            raw_output={"sentinel": SENTINEL},
+            raw_content=SENTINEL,
+            prompt_messages=[{"role": "user", "content": SENTINEL}],
+        ),
+    )
+
+    response = response_node(state).response
+
+    assert response is not None
+    assert SENTINEL not in json.dumps(response, ensure_ascii=False)
+    assert not any(key.startswith("controller_") for key in response)
+
+
+def test_stateless_validation_failure_uses_redacted_public_envelope() -> None:
+    state = AgentRunState(
+        query="current query",
+        game="dota2",
+        status="error",
+        validation_failed=True,
+        safe_failure_required=True,
+        reason=SENTINEL,
+        errors=[SENTINEL],
+    )
+
+    response = response_node(state).response
+
+    assert response is not None
+    assert response["response_type"] == "decision_validation_error"
+    assert response["errors"] == []
+    assert SENTINEL not in json.dumps(response, ensure_ascii=False)
 
 
 async def _seed_turn(store: InMemorySessionStore, session_id: str, turn: Turn) -> None:
@@ -78,13 +130,17 @@ class TestRedactHelper:
 
 
 class _FakeLLM:
-    """Always returns insufficient_tools; enough to exercise the planner path."""
+    """Always returns a capability boundary decision."""
 
     async def complete(self, *args, **kwargs) -> str:
         return ""
 
     async def complete_json(self, messages, **kwargs) -> dict:
-        return {"status": "insufficient_tools", "reason": "no tool", "plan": None}
+        return {
+            "kind": "capability_boundary",
+            "intent": "unsupported",
+            "reason": "no tool",
+        }
 
     async def complete_with_tools(self, *args, **kwargs):
         return None
@@ -92,9 +148,9 @@ class _FakeLLM:
 
 def test_prior_turn_sentinel_absent_from_next_turn_response():
     registry = build_default_tool_registry(get_settings())
-    planner = AgenticPlanner(registry, llm=_FakeLLM(), llm_enabled=True)
+    planner = AgentController(registry, llm=_FakeLLM(), llm_enabled=True)
     store = InMemorySessionStore()
-    service = PlanService(planner=planner, session_store=store)
+    service = PlanService(controller=planner, session_store=store)
     sid = uuid4()
 
     async def _scenario():
@@ -115,7 +171,7 @@ def test_prior_turn_sentinel_absent_from_next_turn_response():
     result = asyncio.run(_scenario())
 
     # The full API-facing response must not contain the sentinel anywhere,
-    # including planner_prompt_messages.
+    # including any public debug field.
     response_json = json.dumps(result.response, ensure_ascii=False)
     assert SENTINEL not in response_json, "history leaked into API response"
 
@@ -123,9 +179,9 @@ def test_prior_turn_sentinel_absent_from_next_turn_response():
 def test_history_field_excluded_from_response():
     """AgentRunState.history must not be serialised into the response dict."""
     registry = build_default_tool_registry(get_settings())
-    planner = AgenticPlanner(registry, llm=_FakeLLM(), llm_enabled=True)
+    planner = AgentController(registry, llm=_FakeLLM(), llm_enabled=True)
     store = InMemorySessionStore()
-    service = PlanService(planner=planner, session_store=store)
+    service = PlanService(controller=planner, session_store=store)
     sid = uuid4()
 
     async def _scenario():
@@ -154,10 +210,11 @@ def test_stateful_validator_failure_uses_sentinel_free_public_envelope():
         reason=SENTINEL,
         errors=[SENTINEL],
         plan=rejected_plan,
-        planning=AgenticPlannerResult(
-            status="planned",
+        safe_failure_required=True,
+        controller_result=AgentControllerResult(
+            status="decided",
             reason=SENTINEL,
-            plan=rejected_plan,
+            decision=ToolPlanDecision(kind="tool_plan", plan=rejected_plan),
             errors=[SENTINEL],
             raw_output={"echo": SENTINEL},
             raw_content=SENTINEL,
@@ -169,7 +226,7 @@ def test_stateful_validator_failure_uses_sentinel_free_public_envelope():
 
     assert response is not None
     assert SENTINEL not in json.dumps(response, ensure_ascii=False)
-    assert response["error_code"] == "session_request_failed"
+    assert response["error_code"] == "decision_validation_error"
     assert response["plan"] is None
 
 
@@ -192,10 +249,11 @@ def test_stateful_safe_failure_persists_only_stable_redacted_turn():
                 reason=SENTINEL,
                 errors=[SENTINEL],
                 plan=rejected_plan,
-                planning=AgenticPlannerResult(
-                    status="planned",
+                safe_failure_required=True,
+                controller_result=AgentControllerResult(
+                    status="decided",
                     reason=SENTINEL,
-                    plan=rejected_plan,
+                    decision=ToolPlanDecision(kind="tool_plan", plan=rejected_plan),
                     raw_content=SENTINEL,
                     prompt_messages=[{"role": "user", "content": SENTINEL}],
                 ),
@@ -214,7 +272,7 @@ def test_stateful_safe_failure_persists_only_stable_redacted_turn():
 
     result, turns = asyncio.run(_scenario())
 
-    assert result.response_type == "session_request_failed"
+    assert result.response_type == "decision_validation_error"
     assert len(turns) == 1
     turn = turns[0]
     assert turn.response_type == "session_request_failed"

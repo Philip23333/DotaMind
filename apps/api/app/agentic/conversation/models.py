@@ -24,7 +24,7 @@ class ResolvedEntity(BaseModel):
 class Turn(BaseModel):
     """Compact summary of one completed planning turn.
 
-    Stored in the session history and rendered into the planner prompt as
+    Stored in the session history and rendered into the Controller prompt as
     *untrusted context data*, not as instructions or evidence.
     """
 
@@ -34,14 +34,23 @@ class Turn(BaseModel):
     # Raw user query, truncated to turn_query_max_chars at extraction time.
     query: str
     # Mirrors AgentRunState.status so downstream renderers can warn on errors.
-    status: Literal["ok", "insufficient_tools", "error"] = "ok"
+    status: Literal[
+        "ok",
+        "clarification_required",
+        "insufficient_context",
+        "insufficient_tools",
+        "insufficient_evidence",
+        "error",
+    ] = "ok"
     # Mirrors AgentRunState.response_type.
     response_type: str | None = None
-    # Planner intent from ExecutionPlan.intent; None when planning failed.
+    # Semantic intent from the decision; never used as a routing key.
     intent: str | None = None
     # Game entities resolved during the turn (hero/team/player).
     resolved_entities: list[ResolvedEntity] = Field(default_factory=list)
     # Cross-cutting scope filters from ExecutionPlan.context, JSON-safe dict.
     context_scope: dict[str, Any] = Field(default_factory=dict)
+    # Minimal continuation state for a clarification turn.
+    missing_fields: list[str] = Field(default_factory=list)
     # Human-readable answer summary (truncated) or state.reason on failure.
     response_summary: str = ""

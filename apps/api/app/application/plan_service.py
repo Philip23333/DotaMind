@@ -1,4 +1,4 @@
-"""PlanService: v2.5 LLM planner use case.
+"""PlanService: v2.5 LLM Controller use case.
 
 No fallback to legacy pipeline. Session memory is opt-in via session_id;
 omitting it preserves the original stateless single-turn behaviour.
@@ -12,7 +12,8 @@ from app.agentic.conversation.summary import (
     build_turn_summary,
 )
 from app.agentic.graph import AgentGraphRunner
-from app.agentic.planning.planner import AgenticPlanner
+from app.agentic.planning.contracts import validate_registry_contracts
+from app.agentic.planning.controller import AgentController
 from app.agentic.state import AgentRunState
 from app.agentic.tools.stratz_tools import build_default_tool_registry
 from app.application.session_store import InMemorySessionStore, SessionStore
@@ -22,20 +23,25 @@ logger = logging.getLogger(__name__)
 
 
 class PlanService:
-    """Experimental v2.5 LLM planner use case. No fallback to legacy pipeline."""
+    """Experimental v2.5 LLM Controller use case. No legacy fallback."""
 
     def __init__(
         self,
-        planner: AgenticPlanner | None = None,
+        controller: AgentController | None = None,
         session_store: SessionStore | None = None,
     ) -> None:
         settings = get_settings()
         policy = get_policy()
         self.registry = build_default_tool_registry(settings)
-        self.planner = planner or AgenticPlanner(self.registry)
+        registry_errors = validate_registry_contracts(self.registry)
+        if registry_errors:
+            raise RuntimeError(
+                "invalid tool registry contracts: " + "; ".join(registry_errors)
+            )
+        self.controller = controller or AgentController(self.registry)
         # Compile graph once; AgentGraphRunner.run() is concurrency-safe across
         # sessions because executor/critic/synthesizer carry no per-request state.
-        self.runner = AgentGraphRunner(self.planner, self.registry)
+        self.runner = AgentGraphRunner(self.controller, self.registry)
         self.session_store: SessionStore = session_store or InMemorySessionStore(
             max_sessions=policy.conversation.max_sessions,
             max_turns_per_session=policy.conversation.max_turns_per_session,
@@ -82,7 +88,7 @@ class PlanService:
                 session_memory_enabled=True,
             )
             result = await self.runner.run(state)
-            if result.response_type == "session_request_failed":
+            if result.safe_failure_required:
                 turn = build_session_failure_turn(
                     result,
                     max_query_chars=self._conv_policy.turn_query_max_chars,

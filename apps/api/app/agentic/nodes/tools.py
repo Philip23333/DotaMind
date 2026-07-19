@@ -31,7 +31,18 @@ async def tool_executor_node(
         logger.info("node=tools call_start id=%s tool=%s", call.id, call.tool)
         resolved_args, resolve_errors = _resolve_args(call.args, results_by_id)
         if resolve_errors:
-            state.errors.extend(f"{call.id}: {error}" for error in resolve_errors)
+            error = "; ".join(resolve_errors)
+            result = ToolResult(
+                tool_call_id=call.id,
+                tool=call.tool,
+                status="error",
+                latency_ms=0,
+                error=f"reference resolution failed: {error}",
+                metadata={"stage": "reference_resolution"},
+            )
+            state.tool_results.append(result)
+            results_by_id[call.id] = result
+            state.errors.append(f"{call.id}: {result.error}")
             logger.info(
                 "node=tools call_skip id=%s resolve_errors=%s",
                 call.id,

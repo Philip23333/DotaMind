@@ -243,7 +243,7 @@
         <h1>DotaMind Plan Lab</h1>
         <p>/api/v1/plan node flow debugger</p>
       </div>
-      <p>Shows planner, validation, tools, evidence, answer, critic, response.</p>
+      <p>Shows Controller decisions and the conditional tool evidence pipeline.</p>
     </header>
 
     <main>
@@ -273,9 +273,8 @@
 
         <div class="card">
           <h2>Readable Output</h2>
-          <details open><summary>Planner Prompt Messages</summary><pre id="planner-prompt-messages"></pre></details>
-          <details open><summary>Planner LLM JSON</summary><pre id="planner-output"></pre></details>
-          <details open><summary>Planner Raw Content</summary><pre id="planner-raw-content"></pre></details>
+          <details open><summary>Validated Decision</summary><pre id="validated-decision"></pre></details>
+          <details><summary>Required Evidence Sources</summary><pre id="required-evidence-sources"></pre></details>
           <details open><summary>Final User Output</summary><div id="final-output" class="final-output"></div></details>
           <details open><summary>Parsed Final Data</summary><pre id="parsed-final"></pre></details>
           <details open><summary>Plan</summary><pre id="plan"></pre></details>
@@ -350,10 +349,11 @@
         result.hidden = false;
         renderSummary(payload);
         renderFlow(payload.trace || []);
-        setJson("planner-prompt-messages", payload.planner_prompt_messages || []);
-        setJson("planner-output", payload.planner_output);
-        document.getElementById("planner-raw-content").textContent =
-          payload.planner_raw_content ?? "null";
+        setJson("validated-decision", {
+          kind: payload.decision_kind,
+          missing_fields: payload.missing_fields || [],
+        });
+        setJson("required-evidence-sources", payload.required_evidence_sources || {});
         renderFinalOutput(payload);
         setJson("parsed-final", parsedFinalData(payload));
         setJson("plan", payload.plan);
@@ -370,6 +370,7 @@
         summary.append(
           metric("Status", payload.status),
           metric("Response Type", payload.response_type || "n/a"),
+          metric("Decision", payload.decision_kind || "n/a"),
           metric("Reason", payload.reason || "n/a"),
           metric("Session", payload.session_id ? payload.session_id.slice(0, 8) + "…" : "stateless"),
         );

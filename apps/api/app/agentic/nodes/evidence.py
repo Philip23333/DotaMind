@@ -19,6 +19,9 @@ def evidence_node(state: AgentRunState, registry: ToolRegistry) -> AgentRunState
         state.plan,
         state.tool_results,
         registry,
+        required_evidence=state.effective_required_evidence,
+        global_required_evidence=state.global_required_evidence,
+        mandatory_evidence_by_call=state.mandatory_evidence_by_call,
     )
     state.add_trace("evidence", "evidence graph completed", "completed")
     logger.info(

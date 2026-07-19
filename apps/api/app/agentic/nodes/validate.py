@@ -18,11 +18,16 @@ def validate_plan_node(state: AgentRunState, registry: ToolRegistry) -> AgentRun
         logger.info("node=validate end status=error errors=%s", len(state.errors))
         return state
 
-    errors = validate_plan_against_catalog(plan, registry)
+    errors = validate_plan_against_catalog(
+        plan,
+        registry,
+        required_evidence=state.effective_required_evidence,
+    )
 
     if errors:
         state.status = "error"
         state.validation_failed = True
+        state.safe_failure_required = True
         state.errors.extend(errors)
         state.add_trace("validate", "plan validation failed", "failed")
         logger.info("node=validate end status=error errors=%s", len(state.errors))

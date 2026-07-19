@@ -169,3 +169,39 @@ def test_default_registry_includes_agentic_data_tools() -> None:
         "patch.hero_changes",
         "patch.item_changes",
     } <= names
+
+
+def test_default_registry_declares_primary_mandatory_evidence() -> None:
+    registry = build_default_tool_registry(
+        Settings(
+            opendota_base_url="https://api.opendota.test/api",
+            stratz_graphql_url="https://api.stratz.test/graphql",
+            stratz_token="token",
+        )
+    )
+    expected = {
+        "resolve_hero": ("hero_identity",),
+        "stratz.pair_lane_outcome": ("pair_lane_winrate",),
+        "stratz.hero_matchup_ranking": ("matchup_ranking_row",),
+        "stratz.hero_synergy_ranking": ("hero_synergy_ranking_row",),
+        "stratz.lane_meta_global": ("lane_meta_row",),
+        "stratz.hero_position_stats": ("position_stat",),
+        "stratz.hero_daily_trends": ("hero_daily_trend",),
+        "stratz.filter_heroes_by_position": ("role_filtered_candidate_row",),
+        "stratz.player_profile": ("player_identity",),
+        "stratz.player_recent_matches": ("player_recent_summary",),
+        "stratz.player_hero_performance": ("player_hero_performance",),
+        "opendota.resolve_team": ("team_identity",),
+        "opendota.team_recent_matches": ("recent_matches",),
+        "opendota.team_players": ("current_players",),
+        "opendota.team_heroes": ("team_hero_usage",),
+        "opendota.hero_stats_by_role": ("hero_stats",),
+        "patch.get_records": ("patch_records",),
+        "patch.hero_changes": ("hero_patch_changes",),
+        "patch.item_changes": ("item_patch_changes",),
+    }
+
+    assert {
+        name: registry.get(name).mandatory_evidence for name in expected
+    } == expected
+    assert all("sample_size" not in kinds for kinds in expected.values())

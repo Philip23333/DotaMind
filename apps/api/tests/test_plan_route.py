@@ -22,7 +22,7 @@ class FakePlanService:
             reason="no registered team tool",
         )
         state.response = None
-        state.add_trace("planner", "no registered team tool", "insufficient_tools")
+        state.add_trace("controller", "no registered team tool", "completed")
         return response_node(state)
 
 
@@ -44,19 +44,15 @@ def test_plan_route_returns_plan_response(monkeypatch) -> None:
     # Stateless request → session_id echoed as null.
     assert payload["session_id"] is None
     assert service.received_session_ids == [None]
-    assert "planner_output" in payload
-    assert payload["planner_output"] is None
-    assert "planner_raw_content" in payload
-    assert payload["planner_raw_content"] is None
-    assert "planner_finish_reason" in payload
-    assert payload["planner_finish_reason"] is None
-    assert "planner_prompt_messages" in payload
-    assert payload["planner_prompt_messages"] == []
+    assert "controller_output" not in payload
+    assert "controller_raw_content" not in payload
+    assert "controller_finish_reason" not in payload
+    assert "controller_prompt_messages" not in payload
     assert payload["tool_results"] == []
     assert payload["evidence_graph"] is None
     assert payload["answer"] is None
     assert payload["review"] is None
-    assert payload["trace"][0]["node"] == "planner"
+    assert payload["trace"][0]["node"] == "controller"
 
 
 def test_plan_route_echoes_session_id(monkeypatch) -> None:

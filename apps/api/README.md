@@ -58,21 +58,22 @@ curl -X POST http://localhost:8001/api/v1/plan \
   -d '{"game":"dota2","query":"enemy picked Lina, what should I pick?"}'
 ```
 
-The response exposes the plan, tool results, evidence graph, answer, review,
-errors, trace, and planner debugging metadata. Missing tools, invalid plans,
-upstream errors, and insufficient evidence are returned directly.
+The response exposes the Controller decision kind and, when applicable, the
+final plan, effective evidence obligations, tool results, evidence graph,
+answer, review, errors and trace. Conversation recall, clarification, missing
+context and capability boundaries skip the tool/evidence/critic path.
 
 ## Multi-turn Sessions
 
 `POST /api/v1/plan` accepts an optional `session_id` (UUID v4). It is opt-in:
 
 - Omit it (or send `null`) for stateless single-turn behaviour. This is the
-  default and is backward compatible, except the response now always carries a
-  `"session_id": null` field and the planner prompt includes a short
+  default, except the response always carries a `"session_id": null` field and
+  the Controller prompt includes a short
   history-usage rule block even when no history exists.
 - Send a client-generated UUID v4 to enable session memory. The service reads
   the most recent turns (see `conversation.history_window` in `policy.yaml`),
-  injects a compact summary into the planner prompt so it can resolve pronouns
+  injects a compact summary into the Controller prompt so it can resolve pronouns
   ("那他出什么装") and inherit scope, then stores a summary of the new turn.
 
 ```bash
@@ -90,8 +91,8 @@ Notes and Phase 1 limits:
 
 - History is injected as *untrusted context* only, not evidence. Each turn
   confirms hero/team/player identity through the current plan before a
-  downstream data tool can use its ID. Stateful responses never expose planner
-  prompts or raw planner output; stateful planner failures return a stable,
+  downstream data tool can use its ID. Stateful responses never expose Controller
+  prompts or raw Controller output; stateful Controller failures return a stable,
   redacted error envelope.
 - The store is in-memory and single-process. Multi-worker deployments need a
   distributed store (Phase 2, Redis). Active or waiting sessions are never
@@ -99,16 +100,15 @@ Notes and Phase 1 limits:
   active. The `/debug/plan` console has a
   `session_id` field with a "新建会话" button for manual multi-turn testing.
 
-Current LangGraph path:
+Current conditional LangGraph path:
 
 ```text
-planner_node
-  -> validate_plan_node
-  -> tool_executor_node
-  -> evidence_node
-  -> answer_node
-  -> critic_node
-  -> response_node
+controller_node
+  -> decision_validate_node
+      -> direct_answer -> conversation_answer_node -> response_node
+      -> clarification/context_missing/capability_boundary -> response_node
+      -> tool_plan -> validate_plan_node -> tool_executor_node
+                   -> evidence_node -> answer_node -> critic_node -> response_node
 ```
 
 ## Output Contracts

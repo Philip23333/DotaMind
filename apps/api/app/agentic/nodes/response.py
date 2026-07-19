@@ -2,13 +2,16 @@ import logging
 
 from app.agentic.conversation.summary import SESSION_REQUEST_FAILED_REASON
 from app.agentic.planning.contracts import get_contract
+from app.agentic.planning.decisions import ConversationAnswerResult
 from app.agentic.state import AgentRunState
 
 logger = logging.getLogger(__name__)
 
 
 def response_node(state: AgentRunState) -> AgentRunState:
+    _apply_terminal_priority(state)
     state.response_type = _response_type(state)
+    state.reason = _terminal_reason(state)
     logger.info(
         "node=response start status=%s type=%s errors=%s has_answer=%s has_review=%s",
         state.status,
@@ -17,18 +20,20 @@ def response_node(state: AgentRunState) -> AgentRunState:
         state.answer is not None,
         state.review is not None,
     )
-    if _requires_stateful_failure_envelope(state):
-        # Keep the runtime result and persisted Turn aligned with the public
-        # response contract.  Sensitive planner fields remain on ``planning``
-        # for internal observability, but are never serialised or stored.
-        state.response_type = "session_request_failed"
+    if state.safe_failure_required:
+        response_type = state.response_type or "decision_validation_error"
         state.response = {
             "query": state.query,
             "game": state.game,
-            "status": state.status,
+            "status": "error",
             "reason": SESSION_REQUEST_FAILED_REASON,
-            "response_type": "session_request_failed",
-            "error_code": "session_request_failed",
+            "response_type": response_type,
+            "error_code": response_type,
+            "decision_kind": None,
+            "missing_fields": [],
+            "planner_required_evidence": [],
+            "effective_required_evidence": [],
+            "required_evidence_sources": {},
             "plan": None,
             "tool_results": [],
             "evidence_graph": None,
@@ -36,12 +41,8 @@ def response_node(state: AgentRunState) -> AgentRunState:
             "review": None,
             "errors": [],
             "trace": [],
-            "planner_output": None,
-            "planner_raw_content": None,
-            "planner_finish_reason": None,
-            "planner_prompt_messages": [],
         }
-        logger.info("node=response end response_ready=true stateful_failure=true")
+        logger.info("node=response end response_ready=true safe_failure=true")
         return state
 
     state.response = state.model_dump(
@@ -52,6 +53,11 @@ def response_node(state: AgentRunState) -> AgentRunState:
             "status",
             "reason",
             "response_type",
+            "decision_kind",
+            "missing_fields",
+            "planner_required_evidence",
+            "effective_required_evidence",
+            "required_evidence_sources",
             "plan",
             "tool_results",
             "evidence_graph",
@@ -61,53 +67,79 @@ def response_node(state: AgentRunState) -> AgentRunState:
             "trace",
         },
     )
-    if state.session_memory_enabled:
-        state.response.update(
-            planner_output=None,
-            planner_raw_content=None,
-            planner_finish_reason=None,
-            planner_prompt_messages=[],
-        )
-    else:
-        state.response["planner_output"] = (
-            state.planning.raw_output if state.planning is not None else None
-        )
-        state.response["planner_raw_content"] = (
-            state.planning.raw_content if state.planning is not None else None
-        )
-        state.response["planner_finish_reason"] = (
-            state.planning.finish_reason if state.planning is not None else None
-        )
-        state.response["planner_prompt_messages"] = (
-            state.planning.prompt_messages if state.planning is not None else []
-        )
+    state.response["error_code"] = (
+        state.response_type if state.status == "error" else None
+    )
     logger.info("node=response end response_ready=true")
     return state
 
 
-def _requires_stateful_failure_envelope(state: AgentRunState) -> bool:
-    return (
-        state.session_memory_enabled
-        and state.status in {"error", "insufficient_tools"}
-        and state.planning is not None
-        and (state.planning.status != "planned" or state.validation_failed)
-    )
+def _apply_terminal_priority(state: AgentRunState) -> None:
+    """Apply one deterministic top-level status/error ordering."""
+    result = state.controller_result
+    if result is not None and result.status == "error":
+        state.status = "error"
+        return
+    if state.validation_failed:
+        state.status = "error"
+        return
+    if any(item.status == "error" for item in state.tool_results):
+        state.status = "error"
+        return
+    if state.answer is not None and state.answer.status == "error":
+        state.status = "error"
+        return
+    if state.evidence_graph is not None and state.evidence_graph.missing:
+        state.status = "insufficient_evidence"
+        return
+    if state.answer is not None and state.answer.status == "insufficient_evidence":
+        state.status = "insufficient_evidence"
+        return
+    if state.review is not None and not state.review.passed:
+        state.status = "insufficient_evidence"
 
 
 def _response_type(state: AgentRunState) -> str:
+    result = state.controller_result
+    if result is not None and result.status == "error":
+        return result.failure_type or "planning_error"
+    if state.validation_failed:
+        return "decision_validation_error"
+    if any(item.status == "error" for item in state.tool_results):
+        return "tool_error"
+    if state.answer is not None and state.answer.status == "error":
+        return "answer_error"
+    if state.status == "insufficient_evidence":
+        return "insufficient_evidence"
+    if state.status == "clarification_required":
+        return "clarification"
+    if state.status == "insufficient_context":
+        return "conversation_context_missing"
     if state.status == "insufficient_tools":
         return "capability_boundary"
+    if isinstance(state.answer, ConversationAnswerResult):
+        return "direct_answer"
     if state.status == "error":
         return "execution_error"
     if state.answer is None:
         return "raw_tool_results"
     if state.answer.status == "insufficient_evidence":
         return "insufficient_evidence"
-    if state.answer.status == "error":
-        return "answer_error"
     contract = get_contract(state.answer.answer_type)
     if state.answer.status == "ok" and contract is not None:
         return state.answer.answer_type
     if state.answer.status == "unsupported_output_contract":
         return "unsupported_answer"
     return "raw_tool_results"
+
+
+def _terminal_reason(state: AgentRunState) -> str:
+    stable_reasons = {
+        "planning_error": "planning failed",
+        "decision_validation_error": "decision validation failed",
+        "tool_error": "tool execution failed",
+        "answer_error": "answer generation failed",
+        "execution_error": "execution failed",
+        "insufficient_evidence": "insufficient evidence",
+    }
+    return stable_reasons.get(state.response_type or "", state.reason)

@@ -1,10 +1,15 @@
-﻿import asyncio
+import asyncio
 
 from pydantic import BaseModel
 
 from app.agentic.graph import AgentGraphRunner
 from app.agentic.models import ExecutionPlan, ToolCall
-from app.agentic.planning.planner import AgenticPlannerResult
+from app.agentic.planning.controller import AgentControllerResult
+from app.agentic.planning.decisions import (
+    CapabilityBoundaryDecision,
+    ToolPlanDecision,
+    resolve_required_evidence,
+)
 from app.agentic.state import AgentRunState
 from app.agentic.tools import (
     AcceptedRef,
@@ -41,23 +46,32 @@ class TeamIdInput(BaseModel):
     days: int = 30
 
 
-class FakePlanner:
-    def __init__(self, result: AgenticPlannerResult) -> None:
+class EmptyInput(BaseModel):
+    pass
+
+
+class FakeController:
+    def __init__(self, result: AgentControllerResult) -> None:
         self.result = result
 
-    async def plan(
+    async def decide(
         self, query: str, game: str = "dota2", history=None
-    ) -> AgenticPlannerResult:
+    ) -> AgentControllerResult:
         return self.result
 
 
 def test_graph_stops_when_tools_are_insufficient() -> None:
     state = asyncio.run(
         AgentGraphRunner(
-            FakePlanner(
-                AgenticPlannerResult(
-                    status="insufficient_tools",
+            FakeController(
+                AgentControllerResult(
+                    status="decided",
                     reason="no team tool",
+                    decision=CapabilityBoundaryDecision(
+                        kind="capability_boundary",
+                        intent="team_recent",
+                        reason="no team tool",
+                    ),
                 )
             ),
             ToolRegistry(),
@@ -87,26 +101,28 @@ def test_graph_validation_error_stops_before_tools() -> None:
 
     assert state.status == "error"
     assert state.tool_results == []
-    assert state.evidence_graph
+    assert state.evidence_graph is None
     assert "duplicate tool call id" in state.errors[0]
 
 
-def test_graph_tool_error_still_builds_evidence_graph() -> None:
+def test_graph_tool_error_stops_before_evidence() -> None:
     plan = ExecutionPlan(
         intent="counter_pick",
-        goal="Call missing tool.",
-        output_contract="draft_advice",
-        tool_calls=[ToolCall(id="missing", tool="debug.missing", args={})],
-        required_evidence=["hero_identity"],
+        goal="Call a registered tool that fails at execution time.",
+        output_contract="natural_language_answer",
+        tool_calls=[ToolCall(id="failure", tool="debug.failure", args={})],
+        required_evidence=["debug_result"],
     )
 
     state = asyncio.run(_runner(plan).run(AgentRunState(query="debug", game="dota2")))
 
     assert state.status == "error"
-    assert state.evidence_graph
+    assert len(state.tool_results) == 1
+    assert state.tool_results[0].status == "error"
+    assert state.evidence_graph is None
     assert state.answer is None
     assert state.response
-    assert state.response_type == "execution_error"
+    assert state.response_type == "tool_error"
 
 
 def test_graph_success_reaches_answer_review_and_response() -> None:
@@ -137,6 +153,42 @@ def test_graph_success_reaches_answer_review_and_response() -> None:
     assert state.review.severity == "pass"
     assert state.response
     assert state.response_type == "natural_language_answer"
+
+
+def test_decision_validation_refreshes_runtime_evidence_obligations() -> None:
+    plan = ExecutionPlan(
+        intent="hero_identity",
+        goal="Resolve Lina.",
+        output_contract="natural_language_answer",
+        tool_calls=[
+            ToolCall(id="resolve_target", tool="resolve_hero", args={"query": "Lina"})
+        ],
+        required_evidence=[],
+    )
+    registry = _registry()
+    controller = FakeController(
+        AgentControllerResult(
+            status="decided",
+            reason="decision accepted",
+            decision=ToolPlanDecision(kind="tool_plan", plan=plan),
+        )
+    )
+
+    state = asyncio.run(
+        AgentGraphRunner(controller, registry).run(
+            AgentRunState(query="resolve Lina", game="dota2")
+        )
+    )
+
+    assert state.effective_required_evidence == ["hero_identity"]
+    assert state.required_evidence_sources == {
+        "hero_identity": ["tool:resolve_hero"]
+    }
+    assert state.mandatory_evidence_by_call == {
+        "resolve_target": ["hero_identity"]
+    }
+    assert state.evidence_graph is not None
+    assert state.evidence_graph.missing == []
 
 
 def test_graph_team_evidence_reaches_unsupported_answer_response() -> None:
@@ -196,14 +248,33 @@ def test_graph_lane_outcome_plan_generates_lane_evidence() -> None:
 
 
 def _runner(plan: ExecutionPlan) -> AgentGraphRunner:
+    registry = _registry()
     return AgentGraphRunner(
-        FakePlanner(AgenticPlannerResult(status="planned", reason="planned", plan=plan)),
-        _registry(),
+        FakeController(
+            AgentControllerResult(
+                status="decided",
+                reason="decision accepted",
+                decision=ToolPlanDecision(kind="tool_plan", plan=plan),
+                evidence_resolution=resolve_required_evidence(plan, registry),
+            )
+        ),
+        registry,
     )
 
 
 def _registry() -> ToolRegistry:
     registry = ToolRegistry()
+    registry.register(
+        ToolDefinition(
+            name="debug.failure",
+            description="Raise a deterministic execution error.",
+            input_model=EmptyInput,
+            handler=lambda args, context: (_ for _ in ()).throw(RuntimeError("boom")),
+            evidence_extractor=lambda result: [],
+            evidence_kinds=("debug_result",),
+            mandatory_evidence=("debug_result",),
+        )
+    )
     registry.register(
         ToolDefinition(
             name="resolve_hero",
@@ -222,6 +293,7 @@ def _registry() -> ToolRegistry:
             },
             evidence_extractor=resolve_hero_evidence,
             evidence_kinds=("hero_identity",),
+            mandatory_evidence=("hero_identity",),
             output_paths={
                 "hero_id": OutputPathContract(
                     path="data.hero.hero_id",

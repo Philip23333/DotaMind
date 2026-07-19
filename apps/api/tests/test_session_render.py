@@ -18,6 +18,7 @@ def _turn(
     scope: dict | None = None,
     summary: str = "some answer",
     response_type: str | None = "natural_language_answer",
+    missing_fields: list[str] | None = None,
 ) -> Turn:
     return Turn(
         turn_index=turn_index,
@@ -28,6 +29,7 @@ def _turn(
         context_scope=scope or {},
         response_summary=summary,
         response_type=response_type,
+        missing_fields=missing_fields or [],
     )
 
 
@@ -59,6 +61,13 @@ class TestEmptyAndSingle:
     def test_single_turn_contains_summary(self):
         result = render_history([_turn(summary="Kunka is strong")])
         assert "Kunka is strong" in result
+
+    def test_clarification_turn_contains_missing_fields(self):
+        result = render_history(
+            [_turn(status="clarification_required", missing_fields=["position_ids"])]
+        )
+        assert "position_ids" in result
+        assert "⚠" not in result
 
     def test_single_turn_contains_untrusted_declaration(self):
         """Header must label history as untrusted data, not instructions."""

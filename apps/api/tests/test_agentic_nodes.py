@@ -3,7 +3,9 @@
 from pydantic import BaseModel
 
 from app.agentic.answer import AnswerSynthesisResult
-from app.agentic.models import ExecutionConstraints, ExecutionPlan, ToolCall
+from app.agentic.critic import AgenticCriticReview
+from app.agentic.evidence import EvidenceDataQuality, EvidenceGraph
+from app.agentic.models import ExecutionConstraints, ExecutionPlan, ToolCall, ToolResult
 from app.agentic.nodes import (
     evidence_node,
     response_node,
@@ -94,8 +96,14 @@ def test_tool_executor_node_returns_error_for_missing_reference_path() -> None:
     result = asyncio.run(tool_executor_node(state, ToolExecutor(_registry())))
 
     assert result.status == "error"
-    assert len(result.tool_results) == 1
+    assert len(result.tool_results) == 2
+    assert result.tool_results[1].status == "error"
+    assert result.tool_results[1].metadata["stage"] == "reference_resolution"
     assert "reference path not found" in result.errors[0]
+
+    response_node(result)
+    assert result.response_type == "tool_error"
+    assert result.reason == "tool execution failed"
 
 
 def test_tool_executor_node_skips_failed_dependency() -> None:
@@ -139,7 +147,8 @@ def test_tool_executor_node_skips_failed_dependency() -> None:
 
     assert result.status == "error"
     assert calls == []
-    assert len(result.tool_results) == 1
+    assert len(result.tool_results) == 2
+    assert result.tool_results[1].metadata["stage"] == "reference_resolution"
     assert "reference target failed" in result.errors[-1]
 
 
@@ -175,6 +184,7 @@ def test_response_node_maps_insufficient_evidence() -> None:
 
     response_node(state)
 
+    assert state.status == "insufficient_evidence"
     assert state.response["response_type"] == "insufficient_evidence"
 
 
@@ -190,6 +200,71 @@ def test_response_node_maps_answer_error() -> None:
     response_node(state)
 
     assert state.response["response_type"] == "answer_error"
+    assert state.reason == "answer generation failed"
+
+
+def test_response_node_maps_unclassified_runtime_error_to_execution_error() -> None:
+    state = AgentRunState(
+        query="debug",
+        game="dota2",
+        status="error",
+        reason="decision accepted",
+        errors=["unexpected runtime failure"],
+    )
+
+    response_node(state)
+
+    assert state.response_type == "execution_error"
+    assert state.reason == "execution failed"
+    assert state.response["error_code"] == "execution_error"
+
+
+def test_response_node_prioritizes_tool_error_over_missing_evidence() -> None:
+    failed_tool = ToolResult(
+        tool_call_id="upstream",
+        tool="debug.failure",
+        status="error",
+        latency_ms=1,
+        error="timeout",
+    )
+    state = AgentRunState(
+        query="debug",
+        game="dota2",
+        status="error",
+        tool_results=[failed_tool],
+        evidence_graph=EvidenceGraph(
+            intent="debug",
+            required_evidence=["main_result"],
+            tool_results=[failed_tool],
+            missing=["upstream: tool_failed", "main_result"],
+            data_quality=EvidenceDataQuality(completeness=0),
+        ),
+    )
+
+    response_node(state)
+
+    assert state.status == "error"
+    assert state.response_type == "tool_error"
+
+
+def test_response_node_prioritizes_answer_error_over_critic_failure() -> None:
+    state = AgentRunState(query="debug", game="dota2", status="error")
+    state.answer = AnswerSynthesisResult(
+        answer_type="natural_language_answer",
+        status="error",
+        summary="LLM failed",
+        confidence=0,
+    )
+    state.review = AgenticCriticReview(
+        passed=False,
+        severity="failed",
+        reasons=["quality failure"],
+    )
+
+    response_node(state)
+
+    assert state.status == "error"
+    assert state.response_type == "answer_error"
 
 
 def test_response_node_maps_structured_report() -> None:

@@ -1,8 +1,8 @@
 """Extract a compact Turn summary from a completed AgentRunState.
 
-The summary is intentionally lossy: only the fields the planner needs for
+The summary is intentionally lossy: only the fields the Controller needs for
 pronoun resolution and context inheritance are preserved.  Full tool results,
-evidence, traces, and raw planner messages are NOT stored.
+evidence, traces, and raw Controller messages are NOT stored.
 """
 
 from __future__ import annotations
@@ -37,8 +37,13 @@ def build_turn_summary(
     status = getattr(state, "status", "error")
     response_type = getattr(state, "response_type", None)
 
+    decision = getattr(state, "decision", None)
+
     plan = getattr(state, "plan", None)
-    intent: str | None = getattr(plan, "intent", None) if plan is not None else None
+    if plan is not None:
+        intent: str | None = getattr(plan, "intent", None)
+    else:
+        intent = getattr(decision, "intent", None) if decision is not None else None
     context_scope: dict = {}
     if plan is not None:
         ctx = getattr(plan, "context", None)
@@ -51,6 +56,10 @@ def build_turn_summary(
     answer = getattr(state, "answer", None)
     if answer is not None and getattr(answer, "summary", None):
         response_summary = _safe_str(answer.summary, max_summary_chars)
+    elif decision is not None and getattr(decision, "question", None):
+        response_summary = _safe_str(decision.question, max_summary_chars)
+    elif decision is not None and getattr(decision, "reason", None):
+        response_summary = _safe_str(decision.reason, max_summary_chars)
     else:
         response_summary = _safe_str(getattr(state, "reason", "") or "", max_summary_chars)
 
@@ -79,6 +88,7 @@ def build_turn_summary(
         intent=intent,
         resolved_entities=resolved_entities,
         context_scope=context_scope,
+        missing_fields=list(getattr(decision, "missing_fields", []) or []),
         response_summary=response_summary,
     )
 
@@ -90,7 +100,7 @@ def build_session_failure_turn(
 ) -> Turn:
     """Build the only session record allowed for a redacted public failure.
 
-    Planner errors can contain untrusted model text, rejected plans, or a
+    Controller errors can contain untrusted model text, rejected plans, or a
     Pydantic echo of historical input.  None of that may become future session
     context, so this deliberately ignores every field except the current query
     and coarse status.

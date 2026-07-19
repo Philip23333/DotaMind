@@ -4,21 +4,23 @@ from app.agentic.answer import AnswerSynthesizer
 from app.agentic.critic import AgenticCritic
 from app.agentic.nodes import (
     answer_node,
+    controller_node,
+    conversation_answer_node,
     critic_node,
+    decision_validate_node,
     evidence_node,
-    planner_node,
     response_node,
     tool_executor_node,
     validate_plan_node,
 )
-from app.agentic.planning.planner import AgenticPlanner
+from app.agentic.planning.controller import AgentController
 from app.agentic.state import AgentRunState
 from app.agentic.tools import ToolExecutor, ToolRegistry
 
 
 class AgentGraphRunner:
-    def __init__(self, planner: AgenticPlanner, registry: ToolRegistry) -> None:
-        self.planner = planner
+    def __init__(self, controller: AgentController, registry: ToolRegistry) -> None:
+        self.controller = controller
         self.registry = registry
         self.executor = ToolExecutor(registry)
         self.answer_synthesizer = AnswerSynthesizer()
@@ -31,7 +33,9 @@ class AgentGraphRunner:
 
     def _compile_graph(self):
         graph = StateGraph(AgentRunState)
-        graph.add_node("planner", self._planner)
+        graph.add_node("controller", self._controller)
+        graph.add_node("decision_validate", self._decision_validate)
+        graph.add_node("conversation_answer", conversation_answer_node)
         graph.add_node("validate", self._validate)
         graph.add_node("tools", self._tools)
         graph.add_node("evidence", self._evidence)
@@ -39,24 +43,38 @@ class AgentGraphRunner:
         graph.add_node("critic", self._critic)
         graph.add_node("response", response_node)
 
-        graph.add_edge(START, "planner")
+        graph.add_edge(START, "controller")
         graph.add_conditional_edges(
-            "planner",
-            _route_after_planner,
+            "controller",
+            _route_after_controller,
             {
+                "decision_validate": "decision_validate",
+                "response": "response",
+            },
+        )
+        graph.add_conditional_edges(
+            "decision_validate",
+            _route_after_decision,
+            {
+                "conversation_answer": "conversation_answer",
                 "validate": "validate",
                 "response": "response",
             },
         )
+        graph.add_edge("conversation_answer", "response")
         graph.add_conditional_edges(
             "validate",
             _route_after_validate,
             {
                 "tools": "tools",
-                "evidence": "evidence",
+                "response": "response",
             },
         )
-        graph.add_edge("tools", "evidence")
+        graph.add_conditional_edges(
+            "tools",
+            _route_after_tools,
+            {"evidence": "evidence", "response": "response"},
+        )
         graph.add_conditional_edges(
             "evidence",
             _route_after_evidence,
@@ -77,8 +95,11 @@ class AgentGraphRunner:
         graph.add_edge("response", END)
         return graph.compile()
 
-    async def _planner(self, state: AgentRunState) -> AgentRunState:
-        return await planner_node(state, self.planner)
+    async def _controller(self, state: AgentRunState) -> AgentRunState:
+        return await controller_node(state, self.controller)
+
+    def _decision_validate(self, state: AgentRunState) -> AgentRunState:
+        return decision_validate_node(state, self.registry)
 
     async def _tools(self, state: AgentRunState) -> AgentRunState:
         return await tool_executor_node(state, self.executor)
@@ -96,16 +117,32 @@ class AgentGraphRunner:
         return critic_node(state, self.critic)
 
 
-def _route_after_planner(state: AgentRunState) -> str:
-    if state.status in {"error", "insufficient_tools"}:
+def _route_after_controller(state: AgentRunState) -> str:
+    if state.status == "error":
         return "response"
-    return "validate"
+    return "decision_validate"
+
+
+def _route_after_decision(state: AgentRunState) -> str:
+    if state.status == "error":
+        return "response"
+    if state.decision_kind == "direct_answer":
+        return "conversation_answer"
+    if state.decision_kind == "tool_plan":
+        return "validate"
+    return "response"
 
 
 def _route_after_validate(state: AgentRunState) -> str:
     if state.status == "error":
-        return "evidence"
+        return "response"
     return "tools"
+
+
+def _route_after_tools(state: AgentRunState) -> str:
+    if state.status == "error":
+        return "response"
+    return "evidence"
 
 
 def _route_after_evidence(state: AgentRunState) -> str:

@@ -5,8 +5,8 @@ from app.agentic.planning.contracts import (
     CONTRACT_REGISTRY,
     STRUCTURED_OUTPUT_CONTRACTS,
     known_evidence_kinds,
-    render_planner_contracts,
-    render_planner_tools,
+    render_controller_contracts,
+    render_controller_tools,
     validate_contract_plan_with_evidence,
     validate_plan_against_catalog,
     validate_registry_contracts,
@@ -335,7 +335,7 @@ def test_contract_runtime_accepts_dummy_declared_reference() -> None:
     assert validate_plan_against_catalog(plan, registry) == []
 
 
-def test_contract_runtime_rejects_dummy_type_mismatch_reference() -> None:
+def test_registry_startup_rejects_dummy_type_mismatch_reference() -> None:
     registry = ToolRegistry()
     registry.register(
         ToolDefinition(
@@ -369,22 +369,7 @@ def test_contract_runtime_rejects_dummy_type_mismatch_reference() -> None:
             },
         )
     )
-    plan = ExecutionPlan(
-        intent="dummy",
-        goal="Use generic references.",
-        output_contract="natural_language_answer",
-        tool_calls=[
-            ToolCall(id="source_call", tool="dummy.source", args={}),
-            ToolCall(
-                id="consumer_call",
-                tool="dummy.consumer",
-                args={"value": "$source_call.data.value"},
-            ),
-        ],
-        required_evidence=["dummy_value"],
-    )
-
-    errors = validate_plan_against_catalog(plan, registry)
+    errors = validate_registry_contracts(registry)
 
     assert any("is incompatible with input field int" in item for item in errors)
 
@@ -465,8 +450,32 @@ def test_contract_catalog_known_evidence_comes_from_registry() -> None:
     assert "new_registry_evidence" in known_evidence_kinds(registry)
 
 
-def test_render_planner_contracts_contains_team_recent_fields() -> None:
-    rendered = render_planner_contracts(_registry())
+def test_registry_contracts_fail_fast_on_invalid_evidence_declarations() -> None:
+    class DummyInput(BaseModel):
+        query: str
+
+    registry = ToolRegistry()
+    registry.register(
+        ToolDefinition(
+            name="dummy.tool",
+            description="Invalid evidence metadata.",
+            input_model=DummyInput,
+            handler=lambda args, context: {},
+            evidence_kinds=("declared_result",),
+            mandatory_evidence=("undeclared_result",),
+        )
+    )
+
+    errors = validate_registry_contracts(registry)
+
+    assert any("mandatory_evidence is not declared" in item for item in errors)
+    assert any("without an evidence_extractor" in item for item in errors)
+    assert any("produces evidence without declaring source" in item for item in errors)
+    assert any("contract patch_impact_report requires unknown evidence" in item for item in errors)
+
+
+def test_render_controller_contracts_contains_team_recent_fields() -> None:
+    rendered = render_controller_contracts(_registry())
 
     assert "team_recent_report" in rendered
     assert "recent_matches" in rendered
@@ -474,8 +483,8 @@ def test_render_planner_contracts_contains_team_recent_fields() -> None:
     assert "team_hero_usage" in rendered
 
 
-def test_render_planner_contracts_omits_allowed_evidence_when_unrestricted() -> None:
-    rendered = render_planner_contracts(_registry())
+def test_render_controller_contracts_omits_allowed_evidence_when_unrestricted() -> None:
+    rendered = render_controller_contracts(_registry())
 
     # Unrestricted contracts (no allowlist) omit the line entirely.
     assert "allowed_evidence" not in _contract_section(
@@ -489,8 +498,8 @@ def test_render_planner_contracts_omits_allowed_evidence_when_unrestricted() -> 
     )
 
 
-def test_render_planner_tools_contains_schema_and_reference_contracts() -> None:
-    rendered = render_planner_tools(_registry())
+def test_render_controller_tools_contains_schema_and_reference_contracts() -> None:
+    rendered = render_controller_tools(_registry())
 
     assert "evidence_produced" in rendered
     assert "- is_with: bool, required" in rendered
@@ -498,8 +507,8 @@ def test_render_planner_tools_contains_schema_and_reference_contracts() -> None:
     assert "$<previous_call_id>.data.hero.hero_id" in rendered
 
 
-def test_render_planner_tools_uses_generic_dummy_contracts() -> None:
-    rendered = render_planner_tools(_dummy_registry())
+def test_render_controller_tools_uses_generic_dummy_contracts() -> None:
+    rendered = render_controller_tools(_dummy_registry())
 
     assert "dummy.source" in rendered
     assert "dummy_value" in rendered

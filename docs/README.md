@@ -27,7 +27,7 @@ LangGraph agentic path. The internal query UI is `GET /debug/plan`.
   product and capability design.
 - [`design/DotaMind_MVP_v2.5.md`](./design/DotaMind_MVP_v2.5.md) — primary
   architecture foundation.
-- [`design/Planner层.md`](./design/Planner层.md),
+- [`design/Controller层.md`](./design/Controller层.md),
   [`design/Validator层.md`](./design/Validator层.md),
   [`design/Tool层.md`](./design/Tool层.md),
   [`design/Evidence层.md`](./design/Evidence层.md), and

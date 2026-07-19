@@ -1,10 +1,10 @@
-"""Render a list of Turn objects into a planner-prompt history block.
+"""Render a list of Turn objects into a Controller-prompt history block.
 
-The rendered block is prepended to the planner's user message so the LLM can
+The rendered block is prepended to the Controller's user message so the LLM can
 resolve pronouns and inherit scope from prior turns.
 
 IMPORTANT: the block is explicitly labelled as untrusted external data — not
-instructions and not evidence — so the planner does not treat it as
+instructions and not evidence — so the Controller does not treat it as
 authoritative or executable.
 """
 
@@ -19,7 +19,7 @@ _HEADER = (
 
 
 def render_history(turns: list[Turn], history_max_chars: int = 2000) -> str:
-    """Render *turns* into a history block for the planner prompt.
+    """Render *turns* into a history block for the Controller prompt.
 
     Fills the budget (``history_max_chars``) from newest turn backwards so the
     most recent context always fits.  Returns ``""`` for an empty list so
@@ -72,10 +72,13 @@ def _render_turn(turn: Turn) -> str:
     if turn.context_scope:
         lines.append(f"  scope: {turn.context_scope}")
 
+    if turn.missing_fields:
+        lines.append(f"  待补字段: {turn.missing_fields}")
+
     if turn.response_summary:
         lines.append(f"  回答: {turn.response_summary}")
 
-    if turn.status != "ok":
+    if turn.status not in {"ok", "clarification_required"}:
         lines.append(f"  [⚠ 该轮 status={turn.status},结论不可作为事实依据]")
 
     return "\n".join(lines)

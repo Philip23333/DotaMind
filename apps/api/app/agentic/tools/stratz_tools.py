@@ -152,6 +152,7 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
             ),
             evidence_extractor=resolve_hero_evidence,
             evidence_kinds=("hero_identity",),
+            mandatory_evidence=("hero_identity",),
             arg_contracts={
                 "query": ArgContract(description="Hero name or alias to resolve."),
             },
@@ -187,6 +188,7 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
             ),
             evidence_extractor=pair_lane_outcome_evidence,
             evidence_kinds=("pair_lane_winrate", "sample_size"),
+            mandatory_evidence=("pair_lane_winrate",),
             arg_contracts={
                 "hero_id": ArgContract(
                     description="Target hero id.",
@@ -248,6 +250,7 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
             ),
             evidence_extractor=hero_matchup_ranking_evidence,
             evidence_kinds=("matchup_ranking_row", "sample_size"),
+            mandatory_evidence=("matchup_ranking_row",),
             arg_contracts={
                 "hero_id": ArgContract(
                     description="Target hero id.",
@@ -308,6 +311,7 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
             ),
             evidence_extractor=hero_synergy_ranking_evidence,
             evidence_kinds=("hero_synergy_ranking_row", "sample_size"),
+            mandatory_evidence=("hero_synergy_ranking_row",),
             arg_contracts={
                 "hero_id": ArgContract(
                     description="Target hero id.",
@@ -375,6 +379,7 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
             ),
             evidence_extractor=lane_meta_global_evidence,
             evidence_kinds=("lane_meta_row", "sample_size"),
+            mandatory_evidence=("lane_meta_row",),
             arg_contracts={
                 "is_with": ArgContract(
                     description="true for ally lane pairs; false for opposing pairs."
@@ -423,6 +428,7 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
             ),
             evidence_extractor=hero_position_stats_evidence,
             evidence_kinds=("position_stat", "sample_size"),
+            mandatory_evidence=("position_stat",),
             arg_contracts={
                 "hero_id": ArgContract(
                     description="Optional hero filter.",
@@ -485,6 +491,7 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
             ),
             evidence_extractor=hero_daily_trends_evidence,
             evidence_kinds=("hero_daily_trend",),
+            mandatory_evidence=("hero_daily_trend",),
             arg_contracts={
                 "hero_id": ArgContract(
                     description="Target hero id.",
@@ -527,6 +534,7 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
             ),
             evidence_extractor=filter_heroes_by_position_evidence,
             evidence_kinds=("role_filtered_candidate_row",),
+            mandatory_evidence=("role_filtered_candidate_row",),
             arg_contracts={
                 "candidate_rows": ArgContract(
                     description=(
@@ -577,6 +585,7 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
             ),
             evidence_extractor=player_profile_evidence,
             evidence_kinds=("player_identity",),
+            mandatory_evidence=("player_identity",),
             arg_contracts={
                 "steam_account_id": ArgContract(
                     description="Player Steam32 account id (steamAccountId)."
@@ -618,6 +627,7 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
                 "player_recent_summary",
                 "sample_size",
             ),
+            mandatory_evidence=("player_recent_summary",),
             arg_contracts={
                 "steam_account_id": ArgContract(
                     description="Player Steam32 account id.",
@@ -668,6 +678,7 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
                 "player_hero_performance",
                 "sample_size",
             ),
+            mandatory_evidence=("player_hero_performance",),
             arg_contracts={
                 "steam_account_id": ArgContract(
                     description="Player Steam32 account id.",

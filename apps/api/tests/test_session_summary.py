@@ -9,6 +9,7 @@ from types import SimpleNamespace
 
 from app.agentic.conversation.models import Turn
 from app.agentic.conversation.summary import build_turn_summary
+from app.agentic.planning.decisions import ClarificationDecision
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -43,6 +44,7 @@ def _state(
     answer=None,
     evidence_graph=None,
     reason="",
+    decision=None,
 ):
     return SimpleNamespace(
         query=query,
@@ -52,6 +54,7 @@ def _state(
         answer=answer,
         evidence_graph=evidence_graph,
         reason=reason,
+        decision=decision,
     )
 
 
@@ -99,6 +102,16 @@ class TestIntent:
         turn = build_turn_summary(_state(plan=None))
         assert turn.intent is None
 
+    def test_intent_from_non_tool_decision(self):
+        decision = ClarificationDecision(
+            kind="clarification",
+            intent="position_filtered_recommendation",
+            question="四号位还是五号位？",
+            missing_fields=["position_ids"],
+        )
+        turn = build_turn_summary(_state(plan=None, decision=decision))
+        assert turn.intent == "position_filtered_recommendation"
+
 
 class TestContextScope:
     def test_scope_from_plan_context(self):
@@ -133,6 +146,23 @@ class TestResponseSummary:
     def test_empty_summary_on_error_with_no_reason(self):
         turn = build_turn_summary(_state(status="error", answer=None, reason=""))
         assert turn.response_summary == ""
+
+    def test_clarification_persists_question_and_missing_fields(self):
+        decision = ClarificationDecision(
+            kind="clarification",
+            intent="position_filtered_recommendation",
+            question="四号位还是五号位？",
+            missing_fields=["position_ids"],
+        )
+        turn = build_turn_summary(
+            _state(
+                status="clarification_required",
+                response_type="clarification",
+                decision=decision,
+            )
+        )
+        assert turn.response_summary == "四号位还是五号位？"
+        assert turn.missing_fields == ["position_ids"]
 
 
 class TestResolvedEntities:

@@ -22,7 +22,7 @@ class ContractSpec:
     allowed_required_evidence: frozenset[str] | None = None
     allowed_evidence: frozenset[str] | None = None
     required_tools: frozenset[str] = field(default_factory=frozenset)
-    # Not rendered into the planner prompt (the worked example now lives in the
+    # Not rendered into the Controller prompt (the worked example lives in the
     # static template). Kept on the data model for potential future consumers;
     # remove once confirmed unused.
     prompt_example: Mapping[str, Any] | None = None
@@ -128,7 +128,7 @@ def known_evidence_kinds(registry: ToolRegistry) -> set[str]:
     }
 
 
-def render_planner_contracts(registry: ToolRegistry) -> str:
+def render_controller_contracts(registry: ToolRegistry) -> str:
     available_evidence = known_evidence_kinds(registry)
     sections = []
     for spec in CONTRACT_REGISTRY.values():
@@ -147,7 +147,7 @@ def render_planner_contracts(registry: ToolRegistry) -> str:
     return "\n".join(sections)
 
 
-def render_planner_tools(registry: ToolRegistry) -> str:
+def render_controller_tools(registry: ToolRegistry) -> str:
     sections = []
     for definition in registry.list():
         fields = definition.input_model.model_fields
@@ -191,15 +191,28 @@ def render_planner_tools(registry: ToolRegistry) -> str:
 def validate_plan_against_catalog(
     plan: ExecutionPlan,
     registry: ToolRegistry,
+    *,
+    required_evidence: list[str] | None = None,
 ) -> list[str]:
     errors: list[str] = []
-    errors.extend(validate_registry_contracts(registry))
     errors.extend(validate_tool_calls(plan, registry))
     errors.extend(validate_references(plan, registry))
     errors.extend(validate_required_references(plan, registry))
     errors.extend(validate_tool_args(plan, registry))
-    errors.extend(validate_output_contract(plan, registry))
-    errors.extend(validate_evidence_producibility(plan, registry))
+    errors.extend(
+        validate_output_contract(
+            plan,
+            registry,
+            required_evidence=required_evidence,
+        )
+    )
+    errors.extend(
+        validate_evidence_producibility(
+            plan,
+            registry,
+            required_evidence=required_evidence,
+        )
+    )
     errors.extend(validate_context_scope(plan))
     return errors
 
@@ -207,7 +220,7 @@ def validate_plan_against_catalog(
 def validate_context_scope(plan: ExecutionPlan) -> list[str]:
     """Validate plan.context against policy. The weeks_back lower bound is
     enforced by pydantic on QueryContext; this checks the policy-driven upper
-    bound so an out-of-range value surfaces as a planner retry signal. Also
+    bound so an out-of-range value surfaces as a Controller retry signal. Also
     enforces that region_ids/game_mode_ids (only supported by hero_daily_trends
     per STRATZ schema) are not silently handed to other tools."""
     errors: list[str] = []
@@ -243,8 +256,35 @@ def validate_context_scope(plan: ExecutionPlan) -> list[str]:
 def validate_registry_contracts(registry: ToolRegistry) -> list[str]:
     errors: list[str] = []
     definitions = {definition.name: definition for definition in registry.list()}
+    known_evidence = known_evidence_kinds(registry)
+
+    for contract in CONTRACT_REGISTRY.values():
+        unknown = sorted(contract.required_evidence - known_evidence)
+        if unknown:
+            errors.append(
+                f"contract {contract.name} requires unknown evidence kinds: "
+                + ", ".join(unknown)
+            )
 
     for definition in definitions.values():
+        mandatory = set(definition.mandatory_evidence)
+        declared = set(definition.evidence_kinds)
+        unknown_mandatory = sorted(mandatory - declared)
+        if unknown_mandatory:
+            errors.append(
+                f"{definition.name} mandatory_evidence is not declared in "
+                "evidence_kinds: " + ", ".join(unknown_mandatory)
+            )
+        if mandatory and definition.evidence_extractor is None:
+            errors.append(
+                f"{definition.name} declares mandatory_evidence without an "
+                "evidence_extractor"
+            )
+        if declared and definition.source is None:
+            errors.append(
+                f"{definition.name} produces evidence without declaring source"
+            )
+
         fields = definition.input_model.model_fields
         unknown_args = sorted(set(definition.arg_contracts) - set(fields))
         if unknown_args:
@@ -409,13 +449,24 @@ def validate_tool_args(plan: ExecutionPlan, registry: ToolRegistry) -> list[str]
     return errors
 
 
-def validate_output_contract(plan: ExecutionPlan, registry: ToolRegistry) -> list[str]:
-    return validate_contract_plan_with_evidence(plan, known_evidence_kinds(registry))
+def validate_output_contract(
+    plan: ExecutionPlan,
+    registry: ToolRegistry,
+    *,
+    required_evidence: list[str] | None = None,
+) -> list[str]:
+    return validate_contract_plan_with_evidence(
+        plan,
+        known_evidence_kinds(registry),
+        required_evidence=required_evidence,
+    )
 
 
 def validate_evidence_producibility(
     plan: ExecutionPlan,
     registry: ToolRegistry,
+    *,
+    required_evidence: list[str] | None = None,
 ) -> list[str]:
     registered = {definition.name for definition in registry.list()}
     produced = {
@@ -424,7 +475,8 @@ def validate_evidence_producibility(
         if call.tool in registered
         for evidence_kind in registry.get(call.tool).evidence_kinds
     }
-    missing = sorted(set(plan.required_evidence) - produced)
+    required = plan.required_evidence if required_evidence is None else required_evidence
+    missing = sorted(set(required) - produced)
     if missing:
         return [
             "required_evidence is not producible by selected tools: "
@@ -436,13 +488,17 @@ def validate_evidence_producibility(
 def validate_contract_plan_with_evidence(
     plan: ExecutionPlan,
     evidence_kinds: set[str],
+    *,
+    required_evidence: list[str] | None = None,
 ) -> list[str]:
     spec = get_contract(plan.output_contract)
     if spec is None:
         return [f"unknown output_contract: {plan.output_contract}"]
 
     errors: list[str] = []
-    required = set(plan.required_evidence)
+    required = set(
+        plan.required_evidence if required_evidence is None else required_evidence
+    )
     unknown_evidence = sorted(required - evidence_kinds)
     if unknown_evidence:
         errors.append("unknown required_evidence: " + ", ".join(unknown_evidence))

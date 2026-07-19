@@ -795,3 +795,38 @@ Formatter 输出推荐
 
 > v2.5 的核心不是“更多 Agent”，而是把 Orchestrator 从服务选择器升级为受约束工具规划器：LLM 负责决定需要哪些证据，代码负责安全、可测地获取证据，Critic 负责确认这些证据足够支撑回答。
 
+# 2026-07 Controller 决策层补充（当前实现权威说明）
+
+v2.5 的 constrained tool calling 现由轻量 Controller 决策层承载。以下
+规则覆盖本文后续仍使用 “Planner 必须返回 ExecutionPlan” 的历史描述：
+
+```text
+ControllerDecision
+├─ direct_answer
+├─ clarification
+├─ context_missing
+├─ capability_boundary
+└─ tool_plan -> ExecutionPlan
+```
+
+- Graph 只按 `decision.kind` 和运行状态分流；`intent` 永远只是语义标签。
+- 只有 `tool_plan` 进入 `validate -> tools -> evidence -> answer -> critic`。
+- 其他决策不创建 EvidenceGraph，也不运行 Critic。
+- `tool_plan` 候选在首次 catalog/contract validation 前只执行一次
+  `apply_sample_policy()`；Graph 后续只重复校验最终计划，不再修改计划。
+- direct recall 只能引用当前 `state.history` 中经过校验的 `Turn` 字段，并由
+  服务端确定性模板生成；不从全局 SessionStore 按模型索引取值。
+- clarification 保存固定枚举的 `missing_fields`；后续工具计划仍须在当前轮
+  重新执行 resolver，不得复用历史实体 ID。
+- contract 与 plan evidence 继续按全局 kind 校验；所选工具的
+  `mandatory_evidence` 按每个成功 `tool_call_id` 校验，不能跨调用借用。
+- effective required evidence 仍公开为所有 evidence kind 的并集，不修改
+  plan 本身；运行时另保存 per-call mandatory obligation。
+- 首版 mandatory evidence 只强制主结果，不把 `sample_size` 统一升级为硬义务。
+- 工具失败优先于 evidence missing；Answer LLM 失败优先于 Critic quality failure。
+- 所有 LLM-facing decision/basis model 禁止未知字段；引用解析失败生成失败的
+  ToolResult 并映射为 tool_error，未分类运行时错误映射为 execution_error。
+- 不引入原始消息存储、checkpointer、第二次 LLM 审核、兼容 endpoint 或并行旧链路。
+
+当前运行图、公开状态和隐私边界以
+`docs/technical/architecture.md` 与 `docs/technical/api.md` 为准。

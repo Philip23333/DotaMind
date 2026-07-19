@@ -4,7 +4,7 @@ Single source of truth lives in policy.yaml `planning.sample_policy`. This
 module has two jobs:
 
 - render_sample_policy: inject a per-tool threshold table + the 4 sample modes
-  into the planner system prompt. Stage 1 of a thin relay: the planner decides
+  into the Controller system prompt. The Controller decides
   the value, the tool only takes evidence.
 - apply_sample_policy: backfill `default` for any tool_call arg the LLM omitted
   or nulled, and record what it injected under plan.metadata["policy_applied"]
@@ -17,7 +17,7 @@ from app.agentic.models import ExecutionPlan
 from app.agentic.tools import ToolDefinition, ToolRegistry
 from app.core.config import AppPolicy
 
-# The four sample-selection modes the planner chooses between, in priority
+# The four sample-selection modes the Controller chooses between, in priority
 # order. Mirrored in the prompt text below; keep in sync.
 _SAMPLE_MODES_HEADER = """Sample-size policy (per tool, choose one mode per call):
 - explicit: the user named a concrete sample floor (e.g. "至少 3000 场"). Copy
@@ -30,7 +30,7 @@ _SAMPLE_MODES_HEADER = """Sample-size policy (per tool, choose one mode per call
 
 Priority when more than one applies: explicit > strict > relaxed > default.
 Always write the chosen number into the tool's sample arg explicitly; if you
-omit it the planner backfills `default` (recorded under policy_applied), but
+omit it the Controller backfills `default` (recorded under policy_applied), but
 explicit is preferred so the decision is observable in args."""
 
 
@@ -39,7 +39,7 @@ def _known_tools(registry: ToolRegistry) -> dict[str, ToolDefinition]:
 
 
 def render_sample_policy(policy: AppPolicy, registry: ToolRegistry) -> str:
-    """Render the sample-policy section for the planner prompt.
+    """Render the sample-policy section for the Controller prompt.
 
     Typo guard: each policy tool key must be a registered tool and `arg` must
     be a real field on that tool's input_model. A config typo raises ValueError
@@ -48,7 +48,7 @@ def render_sample_policy(policy: AppPolicy, registry: ToolRegistry) -> str:
     tools = _known_tools(registry)
     entries = policy.planning.sample_policy.tools
     if not entries:
-        # Nothing configured: emit the mode rules alone so the planner still
+        # Nothing configured: emit the mode rules alone so the Controller still
         # knows the vocabulary, with no per-tool table.
         return _SAMPLE_MODES_HEADER
 
@@ -74,7 +74,7 @@ def render_sample_policy(policy: AppPolicy, registry: ToolRegistry) -> str:
 
 
 def apply_sample_policy(plan: ExecutionPlan, policy: AppPolicy) -> ExecutionPlan:
-    """Backfill default sample-size args the planner omitted or nulled.
+    """Backfill default sample-size args the Controller omitted or nulled.
 
     Mutates and returns `plan`. For each enrolled tool, if the sample arg is
     missing or None (LLM left it out or emitted JSON null), set it to the
@@ -110,6 +110,6 @@ def apply_sample_policy(plan: ExecutionPlan, policy: AppPolicy) -> ExecutionPlan
             }
         )
     if applied:
-        # Preserve any pre-existing records (defensive; planner starts clean).
+        # Preserve any pre-existing records (defensive; Controller starts clean).
         plan.metadata.setdefault("policy_applied", []).extend(applied)
     return plan

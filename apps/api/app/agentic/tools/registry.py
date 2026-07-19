@@ -40,6 +40,9 @@ class ToolDefinition:
     source: ToolSource | None = None
     evidence_extractor: EvidenceExtractor | None = None
     evidence_kinds: tuple[str, ...] = ()
+    # Runtime-owned minimum proof obligation. The controller may add evidence
+    # requirements, but cannot remove these primary result kinds.
+    mandatory_evidence: tuple[str, ...] = ()
     arg_contracts: dict[str, ArgContract] = field(default_factory=dict)
     output_paths: dict[str, OutputPathContract] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
