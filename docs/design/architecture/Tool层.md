@@ -17,6 +17,23 @@ validate_plan_node
 
 它的职责是执行经过校验的 `tool_calls`，但不负责最终解释结果。
 
+### 跨层执行链路
+
+```mermaid
+flowchart LR
+    Controller["Controller tool_plan"] --> Validate["Decision + Plan Validation"]
+    Validate --> References["Runtime Reference Resolution"]
+    References --> Executor["ToolExecutor"]
+    Executor --> Handler["Registered Handler"]
+    Handler --> Integration["Provider Integration"]
+    Integration --> Result["ToolResult"]
+    Result --> Extractor["Tool-owned Evidence Extractor"]
+    Extractor --> Evidence["EvidenceGraph"]
+```
+
+Planner、Validator、Executor 和 Evidence 层消费同一份 `ToolDefinition`，但只有
+ToolExecutor 能进入 handler；LLM 不接触 provider URL、认证信息或请求正文。
+
 ## 2. ToolDefinition 是能力契约
 
 每个工具由 `ToolDefinition` 注册：
@@ -86,8 +103,13 @@ ToolRegistry()
 ```text
 for call in plan.tool_calls:
   resolved_args = _resolve_args(call.args, previous_results)
-  result = executor.execute(ToolCall(call.id, call.tool, resolved_args), context)
+  result, dispatch = executor.execute(
+      ToolCall(call.id, call.tool, resolved_args),
+      context,
+      on_handler_entered=run_budget.record_tool_call,
+  )
   state.tool_results.append(result)
+  state.tool_dispatch_records.append(dispatch)
   previous_results[call.id] = result
 ```
 
@@ -103,7 +125,7 @@ for call in plan.tool_calls:
 
 - 错误写入 `state.errors`。
 - node 最终 `state.status="error"`。
-- graph 进入 evidence node，不继续正常 answer 链路。
+- graph 直接进入 `run_finalize_node`，不再构建 EvidenceGraph 或进入 Answer。
 
 ## 5. Runtime Reference 解析
 
@@ -135,24 +157,33 @@ parse_reference()
 
 ## 6. ToolExecutor 执行单个工具
 
-`ToolExecutor.execute(call, context)` 的内部流程：
+`ToolExecutor.execute(call, context, on_handler_entered=...)` 的内部流程：
 
 ```text
 registry.get(call.tool)
   -> definition.input_model.model_validate(call.args)
+  -> on_handler_entered()             # 这里才消耗工具预算
   -> definition.handler(validated_args, context)
   -> await if awaitable
-  -> ToolResult(status="ok", data=data, source=source, metadata=metadata)
+  -> (ToolResult, ToolDispatchRecord)
 ```
 
 如果过程中抛异常：
 
 ```text
-Exception
+registry/input validation error
+  -> ToolResult(status="error")
+  -> ToolDispatchRecord(handler_entered=false, stage="pre_dispatch")
+
+handler exception
   -> ToolResult(status="error", error="TypeError: ...")
+  -> ToolDispatchRecord(handler_entered=true, stage="handler")
 ```
 
 ToolExecutor 不抛出业务异常给上层，而是把异常结构化为 `ToolResult`，让 evidence/critic/response 能统一处理。
+`ToolDispatchRecord` 是预算和 Attempt 摘要使用的非公开审计旁路，不写入公开
+`ToolResult.metadata`。Reference resolution 在 node 层失败时也生成对应 dispatch
+记录，但不会消耗 handler 工具预算。
 
 ## 7. QueryContext 的作用
 

@@ -35,6 +35,8 @@
 
 解释系统分层职责、数据流、校验边界、失败语义和当前/目标节点关系。
 
+- [`整体架构.md`](./architecture/整体架构.md) — 当前端到端架构、Graph、
+  Evidence、Session、Runtime 与 V3.2 后续边界的统一入口。
 - [`Controller层.md`](./architecture/Controller层.md)
 - [`Validator层.md`](./architecture/Validator层.md)
 - [`Tool层.md`](./architecture/Tool层.md)

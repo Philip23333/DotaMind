@@ -230,7 +230,22 @@ elif confidence < min_confidence:
 
 ## 11. Response Node
 
-Response node 统一序列化最终状态：
+V3.2-1 将终态归约与公开序列化分开：
+
+```mermaid
+flowchart LR
+    Evidence["Complete EvidenceGraph"] --> Answer["answer_node"]
+    Answer -->|"success"| Critic["critic_node"]
+    Answer -->|"answer error"| Finalize["run_finalize_node"]
+    Critic --> Finalize
+    Finalize --> Outcome["resolve_terminal_outcome"]
+    Outcome --> Attempt["Sanitized AttemptRecord"]
+    Attempt --> Response["response_node"]
+    Response --> Public["PlanResponse + runtime"]
+```
+
+`run_finalize_node` 负责唯一一次终态归约和 Attempt 收口；Response node 只接受已
+finalized state，并统一序列化最终状态：
 
 ```text
 query
@@ -245,10 +260,13 @@ answer
 review
 errors
 trace
-planner raw output / prompt messages
+runtime
 ```
 
-`response_type` 根据状态和 answer 类型决定：
+Planner raw output、Prompt messages、history、原始 validation/retry 内容不会进入公开
+响应。
+
+`response_type` 已由 `resolve_terminal_outcome()` 确定：
 
 - `capability_boundary`
 - `execution_error`
@@ -258,7 +276,8 @@ planner raw output / prompt messages
 - output contract name
 - `unsupported_answer`
 
-这让 debug UI 可以同时看到计划、工具、证据、回答和审查结果。
+这让 debug UI 可以同时看到计划、工具、证据、回答、审查结果，以及 Run、Budget、
+单 Attempt 和带耗时的 Trace。Response node 不再保留第二套终态判断逻辑。
 
 ## 12. 失败路径
 

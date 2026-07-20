@@ -45,6 +45,39 @@ direct recall 只能通过 `ConversationBasis` 引用当前 `state.history`：
 校验成功后，`conversation_answer_node` 用确定性模板读取字段。模型给出的
 自由回答不能覆盖 recall 结果。social 允许自由文本，但 basis 必须为空。
 
+### 请求与会话上下文
+
+Controller 不直接访问全局 SessionStore。`PlanService` 在进入 Graph 前取得当前
+session 的 compact Turn 快照，并通过 `state.history` 注入；无 `session_id` 的请求
+保持无状态。
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Service as PlanService
+    participant Store as InMemorySessionStore
+    participant Graph as AgentGraphRunner
+    participant Controller
+
+    Client->>Service: query + optional session_id
+    alt stateful request
+        Service->>Store: acquire transaction and read compact Turns
+        Store-->>Service: history snapshot
+        Service->>Graph: AgentRunState(history, internal_session_id)
+    else stateless request
+        Service->>Graph: AgentRunState(no history)
+    end
+    Graph->>Controller: query + rendered validated history
+    Controller-->>Graph: ControllerDecision
+    Graph-->>Service: finalized response
+    opt stateful request
+        Service->>Store: append sanitized Turn summary
+    end
+    Service-->>Client: PlanResponse
+```
+
+完整请求边界和 Runtime 关系见 [`整体架构.md`](./整体架构.md)。
+
 ## clarification
 
 clarification 使用固定 missing-field 枚举，问题文本可由 Controller 生成。

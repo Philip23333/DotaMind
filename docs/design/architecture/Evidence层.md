@@ -15,7 +15,30 @@ tool_executor_node
   -> answer_node
 ```
 
-如果前面 validate/tool 阶段已经出错，graph 仍可能进入 evidence node，以便形成统一的 response shape。但 Evidence 层不会把错误状态改成成功。
+如果 validate/tool 阶段已经出错，当前 Graph 会直接进入 `run_finalize_node`，不会
+构建 EvidenceGraph。只有工具执行成功的计划进入 Evidence 层；若 actual evidence
+仍有缺失，V3.2-1 会在 Answer 前收口为 `insufficient_evidence`。
+
+### 跨层证据义务流
+
+```mermaid
+flowchart LR
+    Contract["Output Contract Evidence"] --> Global["Global Required Evidence"]
+    Planner["Planner Required Evidence"] --> Global
+    Registry["Tool Mandatory Evidence"] --> PerCall["Per-call Obligations"]
+
+    Results["Successful ToolResults"] --> Extractors["Tool-owned Extractors"]
+    Extractors --> Graph["EvidenceGraph"]
+    Global --> Graph
+    PerCall --> Graph
+
+    Graph --> Missing["Missing Kinds"]
+    Graph --> Quality["Completeness / Sample / Mock"]
+    Missing -->|"非空"| Finalize["run_finalize: insufficient_evidence"]
+    Missing -->|"为空"| Answer["Answer"]
+    Quality --> Answer
+    Answer --> Critic["Critic"]
+```
 
 ## 2. 输入与输出
 
@@ -110,7 +133,9 @@ Validator 阶段确认 selected tools 理论上能产出 required evidence。Evi
 "required_evidence": ["hero_identity", "matchup_ranking_row", "sample_size"]
 ```
 
-如果工具执行成功但没有任何 `matchup_ranking_row`，EvidenceGraph 会把它加入 `missing`。随后 Critic 会把 missing evidence 视为失败。
+如果工具执行成功但没有任何 `matchup_ranking_row`，EvidenceGraph 会把它加入
+`missing`。当前 Graph 随后直接进入 `run_finalize_node`，不调用 Answer；Critic 中的
+missing-evidence 检查保留为纵深防御，但不是正常可达路径。
 
 这区分了两类问题：
 
@@ -175,9 +200,9 @@ evidence_graph
 
 ## 9. 与 Critic 层的关系
 
-Critic 直接读取 EvidenceGraph：
+在 evidence 完整并进入 Answer 后，Critic 读取 EvidenceGraph：
 
-- `graph.missing` -> 缺失证据失败。
+- `graph.missing` -> 纵深防御检查；正常 Graph 已在 Answer 前拦截。
 - `graph.data_quality.mock_used` -> mock source 失败。
 - `graph.data_quality.min_sample_size` -> answer confidence 的输入之一。
 - `graph.tool_results` -> tool failure 检查。
@@ -200,7 +225,8 @@ required evidence 未出现
   -> missing += "<evidence_kind>"
 ```
 
-Evidence 层不会重试工具，也不会补调用工具。后续如要 replan，应在单独 replan 机制中实现。
+Evidence 层不会重试工具，也不会补调用工具。V3.2-1 直接终止；自动补证由后续
+V3.2-3 的 `recovery_node` 和 `attempt_reset_node` 实现。
 
 ## 11. 层边界
 
