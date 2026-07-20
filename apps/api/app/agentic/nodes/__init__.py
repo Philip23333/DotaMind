@@ -5,6 +5,8 @@ from app.agentic.nodes.critic import critic_node
 from app.agentic.nodes.decision_validate import decision_validate_node
 from app.agentic.nodes.evidence import evidence_node
 from app.agentic.nodes.response import response_node
+from app.agentic.nodes.run_finalize import run_finalize_node
+from app.agentic.nodes.run_init import run_init_node
 from app.agentic.nodes.tools import tool_executor_node
 from app.agentic.nodes.validate import validate_plan_node
 
@@ -16,6 +18,8 @@ __all__ = [
     "decision_validate_node",
     "evidence_node",
     "response_node",
+    "run_finalize_node",
+    "run_init_node",
     "tool_executor_node",
     "validate_plan_node",
 ]

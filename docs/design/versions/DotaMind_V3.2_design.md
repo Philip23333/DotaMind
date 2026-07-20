@@ -156,7 +156,9 @@ class RunBudget(BaseModel):
 
 - Controller 自身的 JSON/validation retry 与 replan 是两个预算维度，必须分别记录。
 - `max_tool_calls_total` 按整个 run 的唯一工具调用计数，不按 attempt 重置。
-- 达到 deadline 后，尚未启动的 node 不得继续执行。
+- `deadline_at` 只用于审计展示；是否超限使用 monotonic elapsed 判断。
+- V3.2-1 只记录超限而不阻止节点；从 V3.2-3 起，达到 deadline 后尚未启动的 node
+  不得继续执行，并归约为 `execution_timeout`。
 - 用户明确的样本或过滤条件不得为了“恢复成功”而静默放宽。
 
 ### 5.3 AttemptRecord
@@ -165,20 +167,20 @@ class RunBudget(BaseModel):
 class AttemptRecord(BaseModel):
     attempt_index: int
     decision_kind: str | None
-    plan: ExecutionPlan | None
-    tool_results: list[ToolResult]
+    plan_summary: AttemptPlanSummary | None
+    tool_calls: list[AttemptToolCallSummary]
     evidence_summary: AttemptEvidenceSummary | None
-    answer_summary: str | None
+    answer_summary: AttemptAnswerSummary | None
     critic_summary: AttemptCriticSummary | None
-    status: str
-    failure_stage: str | None
-    recovery_reason: str | None
+    status: AttemptStatus
+    failure_stage: FailureStage | None
     started_at: datetime
     duration_ms: int
 ```
 
 `AttemptRecord` 是审计摘要，不存储：
 
+- 完整 `ExecutionPlan`、完整 `ToolResult`、回答文本或 Critic reasons；
 - 原始模型 output；
 - Prompt messages；
 - 完整 conversation history；
@@ -200,7 +202,13 @@ reused_tool_result_ids
 terminal_stage
 ```
 
-进入下一次 attempt 前，`attempt_reset_node` 只清理当前 attempt 的：
+V3.2 的长期状态选择是“平铺 state + 集中 reset”：原始 attempt 工作字段永久平铺在
+`AgentRunState`，不引入 `InternalAttemptState`、`current_attempt`、代理属性或双写路径。
+`AttemptRecord` 永远只承载 allowlist 审计摘要。V3.2-1 实现纯函数
+`reset_attempt_working_state()`；V3.2-3 的 `attempt_reset_node` 只能调用该函数，不能复制
+或另建 reset 逻辑。
+
+进入下一次 attempt 前，集中 reset 只清理当前 attempt 的：
 
 ```text
 controller_result / decision / plan
@@ -499,6 +507,8 @@ tool error 改写成 missing evidence，也不能把 Answer error 改写成 crit
   增加 owner 绑定。
 - history 只进入当前请求 Controller，不进入公开 response、trace 或 metrics。
 - AttemptRecord 和 Redis record 均使用 allowlist DTO。
+- 恢复机器码不在 V3.2-1 定义；V3.2-3 再引入固定 `RecoveryCode`，不向历史 Attempt
+  写入自由文本恢复原因。
 - 日志不得输出 discarded recall answer、raw validation echo 或 retry messages。
 - 幂等缓存保存的是已经过 public mapper/response allowlist 的响应。
 - Redis key 不直接使用可读 query 或用户文本；session/request UUID 应 hash 或使用
@@ -517,6 +527,7 @@ tool error 改写成 missing evidence，也不能把 Answer error 改写成 crit
 ### V3.2-1：Run / Attempt / Budget
 
 - 增加 `RunContext`、`RunBudget`、`AttemptRecord`。
+- 固定“平铺 state + 集中 `reset_attempt_working_state()`”长期边界。
 - Trace 增加 attempt 和时延。
 - Graph 保持一次执行，外部行为不变。
 - `/debug/plan` 能显示单 attempt。
@@ -551,6 +562,8 @@ tool error 改写成 missing evidence，也不能把 Answer error 改写成 crit
 - 补指标、结构化日志和慢节点定位。
 - 覆盖进程崩溃、锁超时、旧 owner 迟到写入、Controller invalid、上游错误、预算耗尽
   和取消请求。
+- V3.2-1 的“每个请求恰好一个 Attempt”只覆盖受控 Graph 终态；未捕获异常、取消和
+  进程退出的 Attempt 封存由本阶段闭合。
 - 完成架构验收后再解冻业务工具。
 
 ## 15. 测试与验收

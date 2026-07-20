@@ -30,8 +30,15 @@ async def answer_node(
         logger.info("node=answer end status=error errors=%s", len(state.errors))
         return state
 
+    if state.run_budget is not None:
+        state.run_budget.record_answer_call()
     state.answer = await synthesizer.synthesize(state.plan, state.evidence_graph)
-    state.add_trace("answer", f"answer status: {state.answer.status}", "completed")
+    trace_status = (
+        "failed"
+        if state.answer.status in {"error", "insufficient_evidence"}
+        else "completed"
+    )
+    state.add_trace("answer", f"answer status: {state.answer.status}", trace_status)
     logger.info(
         "node=answer end status=%s recommendations=%s confidence=%.2f",
         state.answer.status,

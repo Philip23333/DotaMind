@@ -1,25 +1,21 @@
 import logging
 
 from app.agentic.conversation.summary import SESSION_REQUEST_FAILED_REASON
-from app.agentic.planning.contracts import get_contract
-from app.agentic.planning.decisions import ConversationAnswerResult
 from app.agentic.state import AgentRunState
 
 logger = logging.getLogger(__name__)
 
 
 def response_node(state: AgentRunState) -> AgentRunState:
-    _apply_terminal_priority(state)
-    state.response_type = _response_type(state)
-    state.reason = _terminal_reason(state)
-    logger.info(
-        "node=response start status=%s type=%s errors=%s has_answer=%s has_review=%s",
-        state.status,
-        state.response_type,
-        len(state.errors),
-        state.answer is not None,
-        state.review is not None,
-    )
+    if (
+        state.run_context is None
+        or state.run_budget is None
+        or state.terminal_stage is None
+        or state.run_duration_ms is None
+        or len(state.attempts) != 1
+    ):
+        raise RuntimeError("response_node requires one finalized runtime attempt")
+    runtime = _public_runtime(state, safe_failure=state.safe_failure_required)
     if state.safe_failure_required:
         response_type = state.response_type or "decision_validation_error"
         state.response = {
@@ -41,10 +37,9 @@ def response_node(state: AgentRunState) -> AgentRunState:
             "review": None,
             "errors": [],
             "trace": [],
+            "runtime": runtime,
         }
-        logger.info("node=response end response_ready=true safe_failure=true")
         return state
-
     state.response = state.model_dump(
         mode="json",
         include={
@@ -70,76 +65,72 @@ def response_node(state: AgentRunState) -> AgentRunState:
     state.response["error_code"] = (
         state.response_type if state.status == "error" else None
     )
+    state.response["runtime"] = runtime
     logger.info("node=response end response_ready=true")
     return state
 
 
-def _apply_terminal_priority(state: AgentRunState) -> None:
-    """Apply one deterministic top-level status/error ordering."""
-    result = state.controller_result
-    if result is not None and result.status == "error":
-        state.status = "error"
-        return
-    if state.validation_failed:
-        state.status = "error"
-        return
-    if any(item.status == "error" for item in state.tool_results):
-        state.status = "error"
-        return
-    if state.answer is not None and state.answer.status == "error":
-        state.status = "error"
-        return
-    if state.evidence_graph is not None and state.evidence_graph.missing:
-        state.status = "insufficient_evidence"
-        return
-    if state.answer is not None and state.answer.status == "insufficient_evidence":
-        state.status = "insufficient_evidence"
-        return
-    if state.review is not None and not state.review.passed:
-        state.status = "insufficient_evidence"
-
-
-def _response_type(state: AgentRunState) -> str:
-    result = state.controller_result
-    if result is not None and result.status == "error":
-        return result.failure_type or "planning_error"
-    if state.validation_failed:
-        return "decision_validation_error"
-    if any(item.status == "error" for item in state.tool_results):
-        return "tool_error"
-    if state.answer is not None and state.answer.status == "error":
-        return "answer_error"
-    if state.status == "insufficient_evidence":
-        return "insufficient_evidence"
-    if state.status == "clarification_required":
-        return "clarification"
-    if state.status == "insufficient_context":
-        return "conversation_context_missing"
-    if state.status == "insufficient_tools":
-        return "capability_boundary"
-    if isinstance(state.answer, ConversationAnswerResult):
-        return "direct_answer"
-    if state.status == "error":
-        return "execution_error"
-    if state.answer is None:
-        return "raw_tool_results"
-    if state.answer.status == "insufficient_evidence":
-        return "insufficient_evidence"
-    contract = get_contract(state.answer.answer_type)
-    if state.answer.status == "ok" and contract is not None:
-        return state.answer.answer_type
-    if state.answer.status == "unsupported_output_contract":
-        return "unsupported_answer"
-    return "raw_tool_results"
-
-
-def _terminal_reason(state: AgentRunState) -> str:
-    stable_reasons = {
-        "planning_error": "planning failed",
-        "decision_validation_error": "decision validation failed",
-        "tool_error": "tool execution failed",
-        "answer_error": "answer generation failed",
-        "execution_error": "execution failed",
-        "insufficient_evidence": "insufficient evidence",
+def _public_runtime(state: AgentRunState, *, safe_failure: bool) -> dict:
+    budget = state.run_budget
+    context = state.run_context
+    assert budget is not None and context is not None and state.terminal_stage is not None
+    attempts = []
+    for attempt in state.attempts:
+        item = {
+            "attempt_index": attempt.attempt_index,
+            "decision_kind": None if safe_failure else attempt.decision_kind,
+            "status": attempt.status,
+            "failure_stage": attempt.failure_stage,
+            "duration_ms": attempt.duration_ms,
+            "tool_call_statuses": [],
+            "evidence_summary": None,
+            "answer_summary": None,
+            "critic_summary": None,
+        }
+        if not safe_failure:
+            item["tool_call_statuses"] = [
+                {
+                    "tool_call_id": call.tool_call_id,
+                    "tool": call.tool,
+                    "status": call.status,
+                    "latency_ms": call.latency_ms,
+                }
+                for call in attempt.tool_calls
+            ]
+            item["evidence_summary"] = (
+                attempt.evidence_summary.model_dump(mode="json")
+                if attempt.evidence_summary
+                else None
+            )
+            item["answer_summary"] = (
+                attempt.answer_summary.model_dump(mode="json")
+                if attempt.answer_summary
+                else None
+            )
+            item["critic_summary"] = (
+                attempt.critic_summary.model_dump(mode="json")
+                if attempt.critic_summary
+                else None
+            )
+        attempts.append(item)
+    return {
+        "run_id": str(context.run_id),
+        "duration_ms": state.run_duration_ms,
+        "terminal_stage": state.terminal_stage,
+        "budget": {
+            "limits": {
+                "max_replans": budget.max_replans,
+                "max_tool_calls_total": budget.max_tool_calls_total,
+                "max_controller_calls": budget.max_controller_calls,
+                "max_answer_calls": budget.max_answer_calls,
+                "max_elapsed_seconds": budget.max_elapsed_seconds,
+            },
+            "used": {
+                "replans_used": budget.replans_used,
+                "tool_calls_used": budget.tool_calls_used,
+                "controller_calls_used": budget.controller_calls_used,
+                "answer_calls_used": budget.answer_calls_used,
+            },
+        },
+        "attempts": attempts,
     }
-    return stable_reasons.get(state.response_type or "", state.reason)

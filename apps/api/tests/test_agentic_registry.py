@@ -30,7 +30,7 @@ def test_tool_registry_executes_registered_tool() -> None:
         )
     )
 
-    result = asyncio.run(
+    result, dispatch = asyncio.run(
         ToolExecutor(registry).execute(
             ToolCall(id="t1", tool="debug.echo", args={"value": 7}),
             QueryContext(),
@@ -44,6 +44,7 @@ def test_tool_registry_executes_registered_tool() -> None:
     assert result.source.name == "UnitTest"
     assert result.metadata == {"domain": "test"}
     assert result.latency_ms >= 0
+    assert dispatch.handler_entered is True
 
 
 def test_tool_registry_accepts_optional_evidence_extractor() -> None:
@@ -108,7 +109,7 @@ def test_tool_registry_rejects_duplicate_tool_names() -> None:
 
 
 def test_tool_executor_returns_error_for_unknown_tool() -> None:
-    result = asyncio.run(
+    result, dispatch = asyncio.run(
         ToolExecutor(ToolRegistry()).execute(
             ToolCall(id="t1", tool="debug.missing", args={}),
             QueryContext(),
@@ -118,6 +119,7 @@ def test_tool_executor_returns_error_for_unknown_tool() -> None:
     assert result.status == "error"
     assert result.error
     assert "unknown tool" in result.error
+    assert dispatch.error_code == "tool_not_registered"
 
 
 def test_tool_executor_returns_error_for_invalid_args() -> None:
@@ -131,7 +133,7 @@ def test_tool_executor_returns_error_for_invalid_args() -> None:
         )
     )
 
-    result = asyncio.run(
+    result, dispatch = asyncio.run(
         ToolExecutor(registry).execute(
             ToolCall(id="t1", tool="debug.echo", args={"value": 0}),
             QueryContext(),
@@ -141,6 +143,7 @@ def test_tool_executor_returns_error_for_invalid_args() -> None:
     assert result.status == "error"
     assert result.error
     assert "ValidationError" in result.error
+    assert dispatch.error_code == "input_validation_error"
 
 
 def test_default_registry_matches_v32_frozen_tool_catalog() -> None:

@@ -11,6 +11,8 @@ async def controller_node(
     state: AgentRunState,
     controller: AgentController,
 ) -> AgentRunState:
+    if state.run_budget is not None:
+        state.run_budget.record_controller_call()
     state.add_trace("controller", "create controller decision", "planned")
     logger.info(
         "node=controller start query_chars=%s game=%s history_turns=%s",
@@ -30,6 +32,11 @@ async def controller_node(
         state.errors = result.errors
         state.safe_failure_required = True
         state.validation_failed = result.failure_type == "decision_validation_error"
+        state.attempt_failure_stage = (
+            "decision_validation"
+            if state.validation_failed
+            else "controller"
+        )
         state.add_trace(
             "controller",
             result.reason or result.failure_type or "controller error",

@@ -17,7 +17,9 @@ def main() -> int:
     args = parse_args()
     call = ToolCall(id="debug-1", tool=args.tool, args=parse_tool_args(args))
     registry = build_default_tool_registry(get_settings())
-    result = asyncio.run(ToolExecutor(registry).execute(call, parse_context(args)))
+    result, _dispatch = asyncio.run(
+        ToolExecutor(registry).execute(call, parse_context(args))
+    )
     print(result.model_dump_json(indent=2))
     return 0 if result.status == "ok" else 1
 

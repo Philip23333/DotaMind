@@ -109,6 +109,26 @@ def test_policy_defaults_come_from_policy_yaml() -> None:
     assert policy.team_report.default_time_range_days == 30
 
 
+def test_runtime_policy_loads_strict_v32_1_defaults() -> None:
+    runtime = load_policy(DEFAULT_POLICY_PATH).planning.runtime
+
+    assert runtime.model_dump() == {
+        "max_replans": 1,
+        "max_tool_calls_total": 8,
+        "max_controller_calls": 2,
+        "max_answer_calls": 2,
+        "max_elapsed_seconds": 60,
+    }
+
+
+def test_runtime_policy_rejects_more_than_one_replan(tmp_path: Path) -> None:
+    data = deepcopy(_policy_data())
+    data["planning"]["runtime"]["max_replans"] = 2
+
+    with pytest.raises(ValidationError, match="max_replans must equal 1"):
+        load_policy(_write_policy(tmp_path / "policy.yaml", data))
+
+
 # ---------------------------------------------------------------------------
 # ConversationPolicy
 # ---------------------------------------------------------------------------

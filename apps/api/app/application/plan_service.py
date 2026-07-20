@@ -41,7 +41,11 @@ class PlanService:
         self.controller = controller or AgentController(self.registry)
         # Compile graph once; AgentGraphRunner.run() is concurrency-safe across
         # sessions because executor/critic/synthesizer carry no per-request state.
-        self.runner = AgentGraphRunner(self.controller, self.registry)
+        self.runner = AgentGraphRunner(
+            self.controller,
+            self.registry,
+            runtime_policy=policy.planning.runtime,
+        )
         self.session_store: SessionStore = session_store or InMemorySessionStore(
             max_sessions=policy.conversation.max_sessions,
             max_turns_per_session=policy.conversation.max_turns_per_session,
@@ -86,6 +90,7 @@ class PlanService:
                 game=game,
                 history=history,
                 session_memory_enabled=True,
+                internal_session_id=session_id,
             )
             result = await self.runner.run(state)
             if result.safe_failure_required:

@@ -145,10 +145,11 @@ def test_opendota_tool_error_is_exposed_without_mock(monkeypatch) -> None:
 async def _execute(tool: str, args: dict) -> object:
     registry = ToolRegistry()
     register_opendota_tools(registry, Settings(opendota_base_url="https://opendota.test"))
-    return await ToolExecutor(registry).execute(
+    result, _dispatch = await ToolExecutor(registry).execute(
         ToolCall(id="t1", tool=tool, args=args),
         QueryContext(),
     )
+    return result
 
 
 def _fake_clients(_settings):

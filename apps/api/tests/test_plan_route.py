@@ -3,7 +3,11 @@ from uuid import UUID
 from fastapi.testclient import TestClient
 
 from app.agentic.nodes import response_node
+from app.agentic.nodes.run_finalize import run_finalize_node
+from app.agentic.nodes.run_init import run_init_node
+from app.agentic.runtime.clock import SystemClock
 from app.agentic.state import AgentRunState
+from app.core.config import RuntimePolicy
 from app.main import app
 
 
@@ -22,7 +26,10 @@ class FakePlanService:
             reason="no registered team tool",
         )
         state.response = None
+        clock = SystemClock()
+        run_init_node(state, RuntimePolicy(), clock)
         state.add_trace("controller", "no registered team tool", "completed")
+        run_finalize_node(state, clock)
         return response_node(state)
 
 
@@ -52,7 +59,9 @@ def test_plan_route_returns_plan_response(monkeypatch) -> None:
     assert payload["evidence_graph"] is None
     assert payload["answer"] is None
     assert payload["review"] is None
-    assert payload["trace"][0]["node"] == "controller"
+    assert payload["trace"][0]["node"] == "run_init"
+    assert any(event["node"] == "controller" for event in payload["trace"])
+    assert payload["runtime"]["attempts"][0]["status"] == "insufficient_tools"
 
 
 def test_plan_route_echoes_session_id(monkeypatch) -> None:

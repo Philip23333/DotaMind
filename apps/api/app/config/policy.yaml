@@ -70,6 +70,12 @@ conversation:
   history_max_chars: 2000        # hard budget for the rendered history block
 
 planning:
+  runtime:
+    max_replans: 1
+    max_tool_calls_total: 8
+    max_controller_calls: 2
+    max_answer_calls: 2
+    max_elapsed_seconds: 60
   sample_policy:
     # Single source of truth for sample-size thresholds. Each entry names the
     # input_model field (`arg`) the planner policy fills. `default` must match

@@ -9,9 +9,13 @@ from app.agentic.models import ExecutionConstraints, ExecutionPlan, ToolCall, To
 from app.agentic.nodes import (
     evidence_node,
     response_node,
+    run_finalize_node,
+    run_init_node,
     tool_executor_node,
     validate_plan_node,
 )
+from app.agentic.runtime.clock import SystemClock
+from app.agentic.runtime.summaries import resolve_terminal_outcome
 from app.agentic.state import AgentRunState
 from app.agentic.tools import (
     AcceptedRef,
@@ -21,6 +25,14 @@ from app.agentic.tools import (
     ToolExecutor,
     ToolRegistry,
 )
+from app.core.config import RuntimePolicy
+
+
+def _finalize_response(state: AgentRunState) -> AgentRunState:
+    clock = SystemClock()
+    run_init_node(state, RuntimePolicy(), clock)
+    run_finalize_node(state, clock)
+    return response_node(state)
 
 
 class HeroLookupInput(BaseModel):
@@ -98,12 +110,14 @@ def test_tool_executor_node_returns_error_for_missing_reference_path() -> None:
     assert result.status == "error"
     assert len(result.tool_results) == 2
     assert result.tool_results[1].status == "error"
-    assert result.tool_results[1].metadata["stage"] == "reference_resolution"
+    assert result.tool_results[1].metadata == {}
+    assert result.tool_dispatch_records[1].stage == "reference_resolution"
+    assert result.tool_dispatch_records[1].error_code == "reference_resolution_error"
     assert "reference path not found" in result.errors[0]
 
-    response_node(result)
-    assert result.response_type == "tool_error"
-    assert result.reason == "tool execution failed"
+    outcome = resolve_terminal_outcome(result)
+    assert outcome.response_type == "tool_error"
+    assert outcome.stable_reason == "tool execution failed"
 
 
 def test_tool_executor_node_skips_failed_dependency() -> None:
@@ -148,7 +162,8 @@ def test_tool_executor_node_skips_failed_dependency() -> None:
     assert result.status == "error"
     assert calls == []
     assert len(result.tool_results) == 2
-    assert result.tool_results[1].metadata["stage"] == "reference_resolution"
+    assert result.tool_results[1].metadata == {}
+    assert result.tool_dispatch_records[1].stage == "reference_resolution"
     assert "reference target failed" in result.errors[-1]
 
 
@@ -166,7 +181,7 @@ def test_evidence_node_builds_graph_from_tool_results() -> None:
 def test_response_node_writes_response() -> None:
     state = AgentRunState(query="debug", game="dota2", status="ok", reason="done")
 
-    response_node(state)
+    _finalize_response(state)
 
     assert state.response
     assert state.response["status"] == "ok"
@@ -182,10 +197,10 @@ def test_response_node_maps_insufficient_evidence() -> None:
         confidence=0,
     )
 
-    response_node(state)
+    outcome = resolve_terminal_outcome(state)
 
-    assert state.status == "insufficient_evidence"
-    assert state.response["response_type"] == "insufficient_evidence"
+    assert outcome.public_status == "insufficient_evidence"
+    assert outcome.response_type == "insufficient_evidence"
 
 
 def test_response_node_maps_answer_error() -> None:
@@ -197,10 +212,10 @@ def test_response_node_maps_answer_error() -> None:
         confidence=0,
     )
 
-    response_node(state)
+    outcome = resolve_terminal_outcome(state)
 
-    assert state.response["response_type"] == "answer_error"
-    assert state.reason == "answer generation failed"
+    assert outcome.response_type == "answer_error"
+    assert outcome.stable_reason == "answer generation failed"
 
 
 def test_response_node_maps_unclassified_runtime_error_to_execution_error() -> None:
@@ -212,11 +227,10 @@ def test_response_node_maps_unclassified_runtime_error_to_execution_error() -> N
         errors=["unexpected runtime failure"],
     )
 
-    response_node(state)
+    outcome = resolve_terminal_outcome(state)
 
-    assert state.response_type == "execution_error"
-    assert state.reason == "execution failed"
-    assert state.response["error_code"] == "execution_error"
+    assert outcome.response_type == "execution_error"
+    assert outcome.stable_reason == "execution failed"
 
 
 def test_response_node_prioritizes_tool_error_over_missing_evidence() -> None:
@@ -241,10 +255,10 @@ def test_response_node_prioritizes_tool_error_over_missing_evidence() -> None:
         ),
     )
 
-    response_node(state)
+    outcome = resolve_terminal_outcome(state)
 
-    assert state.status == "error"
-    assert state.response_type == "tool_error"
+    assert outcome.public_status == "error"
+    assert outcome.response_type == "tool_error"
 
 
 def test_response_node_prioritizes_answer_error_over_critic_failure() -> None:
@@ -261,10 +275,10 @@ def test_response_node_prioritizes_answer_error_over_critic_failure() -> None:
         reasons=["quality failure"],
     )
 
-    response_node(state)
+    outcome = resolve_terminal_outcome(state)
 
-    assert state.status == "error"
-    assert state.response_type == "answer_error"
+    assert outcome.public_status == "error"
+    assert outcome.response_type == "answer_error"
 
 
 def test_response_node_maps_structured_report() -> None:
@@ -276,7 +290,7 @@ def test_response_node_maps_structured_report() -> None:
         confidence=1,
     )
 
-    response_node(state)
+    _finalize_response(state)
 
     assert state.response["response_type"] == "role_meta_report"
 

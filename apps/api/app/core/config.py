@@ -180,7 +180,23 @@ class SamplePolicyConfig(StrictPolicyModel):
     tools: dict[str, SamplePolicyToolEntry] = Field(default_factory=dict)
 
 
+class RuntimePolicy(StrictPolicyModel):
+    max_replans: int = Field(default=1, ge=1)
+    max_tool_calls_total: int = Field(default=8, ge=1)
+    max_controller_calls: int = Field(default=2, ge=1)
+    max_answer_calls: int = Field(default=2, ge=1)
+    max_elapsed_seconds: int = Field(default=60, ge=1)
+
+    @field_validator("max_replans")
+    @classmethod
+    def require_one_replan(cls, value: int) -> int:
+        if value != 1:
+            raise ValueError("max_replans must equal 1")
+        return value
+
+
 class PlanningPolicy(StrictPolicyModel):
+    runtime: RuntimePolicy = Field(default_factory=RuntimePolicy)
     sample_policy: SamplePolicyConfig
 
 

@@ -274,6 +274,7 @@
         <div class="card">
           <h2>Readable Output</h2>
           <details open><summary>Validated Decision</summary><pre id="validated-decision"></pre></details>
+          <details open><summary>Runtime / Attempt / Budget</summary><pre id="runtime"></pre></details>
           <details><summary>Required Evidence Sources</summary><pre id="required-evidence-sources"></pre></details>
           <details open><summary>Final User Output</summary><div id="final-output" class="final-output"></div></details>
           <details open><summary>Parsed Final Data</summary><pre id="parsed-final"></pre></details>
@@ -353,6 +354,7 @@
           kind: payload.decision_kind,
           missing_fields: payload.missing_fields || [],
         });
+        setJson("runtime", payload.runtime);
         setJson("required-evidence-sources", payload.required_evidence_sources || {});
         renderFinalOutput(payload);
         setJson("parsed-final", parsedFinalData(payload));
@@ -373,6 +375,9 @@
           metric("Decision", payload.decision_kind || "n/a"),
           metric("Reason", payload.reason || "n/a"),
           metric("Session", payload.session_id ? payload.session_id.slice(0, 8) + "…" : "stateless"),
+          metric("Run", payload.runtime?.run_id ? payload.runtime.run_id.slice(0, 8) + "…" : "n/a"),
+          metric("Duration", payload.runtime ? `${payload.runtime.duration_ms} ms` : "n/a"),
+          metric("Terminal Stage", payload.runtime?.terminal_stage || "n/a"),
         );
       }
 
@@ -421,7 +426,10 @@
             textElement("div", "node-name", `${index + 1}. ${event.node}`),
             textElement("div", "status", event.status || "unknown"),
           );
-          node.append(head, textElement("div", "node-action", event.action || ""));
+          const timing = event.started_at
+            ? ` · attempt ${event.attempt_index ?? 0} · ${event.duration_ms ?? 0} ms`
+            : "";
+          node.append(head, textElement("div", "node-action", `${event.action || ""}${timing}`));
           flow.append(node);
         });
       }

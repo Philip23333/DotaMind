@@ -154,7 +154,7 @@ def _patch_players(monkeypatch) -> FakePlayers:
 def test_player_profile_handler_returns_profile(monkeypatch) -> None:
     _patch_players(monkeypatch)
 
-    result = asyncio.run(
+    result, _dispatch = asyncio.run(
         ToolExecutor(_registry(token="token")).execute(
             ToolCall(
                 id="prof",
@@ -178,7 +178,7 @@ def test_player_profile_handler_output_feeds_profile_evidence(monkeypatch) -> No
     from app.agentic.tools.stratz_tools import player_profile_evidence
 
     _patch_players(monkeypatch)
-    result = asyncio.run(
+    result, _dispatch = asyncio.run(
         ToolExecutor(_registry(token="token")).execute(
             ToolCall(
                 id="prof",
@@ -239,7 +239,7 @@ def test_unconfirmed_player_skips_dependent_player_tools(monkeypatch) -> None:
 def test_player_recent_matches_translates_bracket_and_summarizes(monkeypatch) -> None:
     fake = _patch_players(monkeypatch)
 
-    result = asyncio.run(
+    result, _dispatch = asyncio.run(
         ToolExecutor(_registry(token="token")).execute(
             ToolCall(
                 id="recent",
@@ -268,7 +268,7 @@ def test_player_recent_matches_translates_bracket_and_summarizes(monkeypatch) ->
 def test_player_hero_performance_strong_sorts_and_caps(monkeypatch) -> None:
     fake = _patch_players(monkeypatch)
 
-    result = asyncio.run(
+    result, _dispatch = asyncio.run(
         ToolExecutor(_registry(token="token")).execute(
             ToolCall(
                 id="heroperf",
@@ -320,7 +320,7 @@ def test_player_hero_performance_translates_bracket_to_rank_ids(monkeypatch) -> 
 def test_player_hero_performance_popular_ranks_by_games(monkeypatch) -> None:
     _patch_players(monkeypatch)
 
-    result = asyncio.run(
+    result, _dispatch = asyncio.run(
         ToolExecutor(_registry(token="token")).execute(
             ToolCall(
                 id="heroperf",

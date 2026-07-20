@@ -11,6 +11,8 @@ from uuid import uuid4
 from app.agentic.conversation.models import Turn
 from app.agentic.models import ExecutionPlan, ToolCall
 from app.agentic.nodes.response import response_node
+from app.agentic.nodes.run_finalize import run_finalize_node
+from app.agentic.nodes.run_init import run_init_node
 from app.agentic.planning.controller import (
     AgentController,
     AgentControllerResult,
@@ -20,13 +22,21 @@ from app.agentic.planning.decisions import (
     CapabilityBoundaryDecision,
     ToolPlanDecision,
 )
+from app.agentic.runtime.clock import SystemClock
 from app.agentic.state import AgentRunState
 from app.agentic.tools.stratz_tools import build_default_tool_registry
 from app.application.plan_service import PlanService
 from app.application.session_store import InMemorySessionStore
-from app.core.config import get_settings
+from app.core.config import RuntimePolicy, get_settings
 
 SENTINEL = "SENTINEL_PRIVACY_ABC123"
+
+
+def _finalize_response(state: AgentRunState) -> AgentRunState:
+    clock = SystemClock()
+    run_init_node(state, RuntimePolicy(), clock)
+    run_finalize_node(state, clock)
+    return response_node(state)
 
 
 def test_stateless_response_excludes_raw_controller_debug_data() -> None:
@@ -51,7 +61,7 @@ def test_stateless_response_excludes_raw_controller_debug_data() -> None:
         ),
     )
 
-    response = response_node(state).response
+    response = _finalize_response(state).response
 
     assert response is not None
     assert SENTINEL not in json.dumps(response, ensure_ascii=False)
@@ -69,7 +79,7 @@ def test_stateless_validation_failure_uses_redacted_public_envelope() -> None:
         errors=[SENTINEL],
     )
 
-    response = response_node(state).response
+    response = _finalize_response(state).response
 
     assert response is not None
     assert response["response_type"] == "decision_validation_error"
@@ -222,7 +232,7 @@ def test_stateful_validator_failure_uses_sentinel_free_public_envelope():
         ),
     )
 
-    response = response_node(state).response
+    response = _finalize_response(state).response
 
     assert response is not None
     assert SENTINEL not in json.dumps(response, ensure_ascii=False)
@@ -258,7 +268,7 @@ def test_stateful_safe_failure_persists_only_stable_redacted_turn():
                     prompt_messages=[{"role": "user", "content": SENTINEL}],
                 ),
             )
-            return response_node(unsafe_state)
+            return _finalize_response(unsafe_state)
 
     store = InMemorySessionStore()
     service = PlanService(session_store=store)

@@ -16,6 +16,7 @@ def conversation_answer_node(state: AgentRunState) -> AgentRunState:
     if not isinstance(decision, DirectAnswerDecision):
         state.status = "error"
         state.validation_failed = True
+        state.attempt_failure_stage = "conversation_answer"
         state.safe_failure_required = True
         state.errors.append("direct answer node received incompatible decision")
         state.add_trace("conversation_answer", "invalid decision", "failed")

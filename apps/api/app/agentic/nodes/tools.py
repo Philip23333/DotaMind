@@ -3,6 +3,7 @@ from typing import Any
 
 from app.agentic.models import ToolCall, ToolResult
 from app.agentic.references import lookup_path, parse_reference
+from app.agentic.runtime.models import ToolDispatchRecord
 from app.agentic.state import AgentRunState
 from app.agentic.tools.executor import ToolExecutor
 
@@ -38,9 +39,17 @@ async def tool_executor_node(
                 status="error",
                 latency_ms=0,
                 error=f"reference resolution failed: {error}",
-                metadata={"stage": "reference_resolution"},
             )
             state.tool_results.append(result)
+            state.tool_dispatch_records.append(
+                ToolDispatchRecord(
+                    tool_call_id=call.id,
+                    tool=call.tool,
+                    handler_entered=False,
+                    stage="reference_resolution",
+                    error_code="reference_resolution_error",
+                )
+            )
             results_by_id[call.id] = result
             state.errors.append(f"{call.id}: {result.error}")
             logger.info(
@@ -50,11 +59,15 @@ async def tool_executor_node(
             )
             continue
 
-        result = await executor.execute(
+        result, dispatch = await executor.execute(
             ToolCall(id=call.id, tool=call.tool, args=resolved_args),
             state.plan.context,
+            on_handler_entered=(
+                state.run_budget.record_tool_call if state.run_budget else None
+            ),
         )
         state.tool_results.append(result)
+        state.tool_dispatch_records.append(dispatch)
         results_by_id[call.id] = result
         logger.info(
             "node=tools call_end id=%s tool=%s status=%s latency_ms=%s",

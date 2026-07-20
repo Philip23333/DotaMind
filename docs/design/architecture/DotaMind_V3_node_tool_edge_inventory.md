@@ -3,36 +3,40 @@
 This document records the current single-path Controller architecture. It must
 stay aligned with `/api/v1/plan` and `/debug/plan`.
 
+For the end-to-end request, Session, Evidence and Runtime views, start with
+[`整体架构.md`](./整体架构.md).
+
 ## Runtime Shape
 
 ```mermaid
 flowchart TD
-    Start["START"] --> Controller["controller_node"]
+    Start["START"] --> RunInit["run_init_node"]
+    RunInit --> Controller["controller_node"]
     Controller --> DecisionValidate["decision_validate_node"]
     DecisionValidate -->|"direct_answer"| Conversation["conversation_answer_node"]
-    DecisionValidate -->|"clarification / context_missing / capability_boundary"| Response["response_node"]
+    DecisionValidate -->|"clarification / context_missing / capability_boundary"| RunFinalize["run_finalize_node"]
     DecisionValidate -->|"tool_plan"| Validate["validate_plan_node"]
-    Conversation --> Response
+    Conversation --> RunFinalize
     Validate -->|"valid"| Tools["tool_executor_node"]
-    Validate -->|"invalid"| Response
+    Validate -->|"invalid"| RunFinalize
     Tools -->|"success"| Evidence["evidence_node"]
-    Tools -->|"tool error"| Response
-    Evidence --> Answer["answer_node"]
+    Tools -->|"tool error"| RunFinalize
+    Evidence -->|"complete"| Answer["answer_node"]
+    Evidence -->|"missing"| RunFinalize
     Answer -->|"success"| Critic["critic_node"]
-    Answer -->|"answer error"| Response
-    Critic --> Response
+    Answer -->|"error / insufficient evidence"| RunFinalize
+    Critic --> RunFinalize
+    RunFinalize --> Response["response_node"]
     Response --> End["END"]
 ```
 
 No node routes on `intent`. Only `decision.kind`, validated `tool_calls`, the
 output contract, effective evidence and runtime status influence execution.
 
-## V3.2 Target Runtime Nodes (Not Implemented)
+## V3.2 Runtime Nodes
 
-V3.2 keeps every current decision and tool/evidence edge above, but wraps one
-or two bounded attempts in a request-level runtime. The following nodes are
-design targets from `../versions/DotaMind_V3.2_design.md`; they are intentionally absent
-from the current graph and must not be described as available behavior.
+V3.2-1 now wraps the current path in one request-level run and exactly one
+controlled attempt. The later V3.2-3 target adds at most one recovery attempt:
 
 ```text
 START
@@ -46,28 +50,35 @@ START
 
 | Target node | Planned responsibility | Planned phase | Current status |
 |---|---|---|---|
-| `run_init_node` | Create `RunContext`, deadline and global `RunBudget`. | V3.2-1 | Not implemented |
+| `run_init_node` | Create `RunContext`, audit deadline and global `RunBudget`. | V3.2-1 | Implemented |
 | `attempt_finalize_node` | Append an allowlisted `AttemptRecord` without overwriting earlier attempts. | V3.2-3 | Not implemented |
 | `recovery_node` | Deterministically classify the terminal state and permit at most one legal replan. | V3.2-3 | Not implemented |
-| `attempt_reset_node` | Clear attempt-local fields while preserving history, budget, trace and successful-call cache. | V3.2-3 | Not implemented |
-| `run_finalize_node` | Seal run totals and the final terminal stage before public serialization. | V3.2-1 | Not implemented |
+| `attempt_reset_node` | Call the centralized flat-state `reset_attempt_working_state()` function. | V3.2-3 | Not implemented; reset function implemented in V3.2-1 |
+| `run_finalize_node` | Resolve the terminal outcome once, append attempt 0 and seal run totals. | V3.2-1 | Implemented |
 
 The target graph will continue to route on decision discriminators, runtime
 status and recovery results only. `intent` remains non-executable metadata.
+
+Attempt working fields remain permanently flat on `AgentRunState`. V3.2 does
+not introduce `InternalAttemptState`, `current_attempt`, proxy properties or
+dual writes. `AttemptRecord` is always an allowlisted audit summary, while all
+future reset nodes delegate to the centralized pure reset function.
 
 ## Node Inventory
 
 | Node | Responsibility | Tool/Evidence behavior |
 |---|---|---|
+| `run_init_node` | Fail fast on an existing run, then create UUID4/UTC/monotonic run and attempt state. | Initializes observing-only budget; no business call. |
 | `controller_node` | Ask the LLM for one discriminated `ControllerDecision`; apply sample policy to a tool plan before first deterministic plan validation. | No tool execution. |
 | `decision_validate_node` | Repeat shared deterministic decision/basis/plan validation without mutating the decision. | Recomputes and refreshes authoritative evidence obligations in state. |
 | `conversation_answer_node` | Read only validated `Turn` basis and render recall templates or an approved social answer. | Never creates EvidenceGraph. |
 | `validate_plan_node` | Validate final args, references, contract and effective evidence producibility. | Never applies policy or modifies evidence. |
-| `tool_executor_node` | Resolve plan-local references and execute registered tools. | Failure routes directly to response. |
-| `evidence_node` | Run tool-owned extractors and compute missing effective evidence and data quality. | Tool-plan branch only. |
+| `tool_executor_node` | Resolve plan-local references and execute registered tools. | Produces unchanged public ToolResults plus internal dispatch records; failure routes to finalize. |
+| `evidence_node` | Run tool-owned extractors and compute missing effective evidence and data quality. | Missing effective evidence routes to finalize before Answer. |
 | `answer_node` | Produce structured or natural-language answers from EvidenceGraph. | Tool-plan branch only. |
 | `critic_node` | Review missing/quality/mock/confidence constraints. | Tool-plan branch only. |
-| `response_node` | Apply deterministic status priority and serialize the public response. | Never serializes `state.history`. |
+| `run_finalize_node` | Call `resolve_terminal_outcome`, append one sanitized AttemptRecord and seal duration/stage. | The sole terminal reduction entry in V3.2-1. |
+| `response_node` | Require finalized state, apply safe-failure allowlist and serialize public schemas. | Does not recompute terminal priority or serialize `state.history`. |
 
 ## Decision Inventory
 
@@ -162,7 +173,7 @@ green unless the authoritative design is changed first.
 |---|---|
 | All five `ControllerDecision` branches and non-tool isolation | `test_controller_decisions.py::test_quote_user_query_uses_validated_turn_and_no_tool_pipeline`, `test_controller_decisions.py::test_social_answer_and_non_tool_decisions_skip_evidence_and_critic`, `test_agentic_graph.py::test_graph_stops_when_tools_are_insufficient`, `test_agentic_graph.py::test_graph_success_reaches_answer_review_and_response` |
 | Current graph stops on invalid plans and tool errors, and reaches Answer/Critic only on the valid tool path | `test_agentic_graph.py::test_graph_validation_error_stops_before_tools`, `test_agentic_graph.py::test_graph_tool_error_stops_before_evidence`, `test_agentic_graph.py::test_graph_success_reaches_answer_review_and_response` |
-| Terminal error precedence | `test_agentic_nodes.py::test_response_node_prioritizes_tool_error_over_missing_evidence`, `test_agentic_nodes.py::test_response_node_prioritizes_answer_error_over_critic_failure`, `test_agentic_nodes.py::test_response_node_maps_unclassified_runtime_error_to_execution_error` |
+| Terminal error precedence and complete runtime mapping | `test_agentic_nodes.py::test_response_node_prioritizes_tool_error_over_missing_evidence`, `test_agentic_nodes.py::test_response_node_prioritizes_answer_error_over_critic_failure`, `test_agentic_nodes.py::test_response_node_maps_unclassified_runtime_error_to_execution_error`, `test_agentic_runtime.py::test_terminal_outcome_table` (the characterization names remain, but the first three now call `resolve_terminal_outcome`) |
 | Session history and Controller internals do not cross the public response boundary | `test_session_privacy.py::test_prior_turn_sentinel_absent_from_next_turn_response`, `test_session_privacy.py::test_history_field_excluded_from_response`, `test_session_privacy.py::test_stateful_safe_failure_persists_only_stable_redacted_turn` |
 | Tool catalog is frozen exactly, registry metadata fails fast, and mandatory evidence remains per call | `test_agentic_registry.py::test_default_registry_matches_v32_frozen_tool_catalog`, `test_agentic_registry.py::test_default_registry_declares_primary_mandatory_evidence`, `test_agentic_contracts.py::test_registry_contracts_fail_fast_on_invalid_evidence_declarations`, `test_agentic_evidence.py::test_mandatory_evidence_is_enforced_per_successful_tool_call` |
 | Deleted legacy routes stay deleted | `test_plan_route.py::test_removed_legacy_routes_return_404` |

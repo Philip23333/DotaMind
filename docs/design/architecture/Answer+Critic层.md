@@ -236,7 +236,7 @@ V3.2-1 将终态归约与公开序列化分开：
 flowchart LR
     Evidence["Complete EvidenceGraph"] --> Answer["answer_node"]
     Answer -->|"success"| Critic["critic_node"]
-    Answer -->|"answer error"| Finalize["run_finalize_node"]
+    Answer -->|"error / insufficient evidence"| Finalize["run_finalize_node"]
     Critic --> Finalize
     Finalize --> Outcome["resolve_terminal_outcome"]
     Outcome --> Attempt["Sanitized AttemptRecord"]

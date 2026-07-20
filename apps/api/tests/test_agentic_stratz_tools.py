@@ -234,7 +234,7 @@ def test_pair_lane_outcome_filters_to_partner(monkeypatch) -> None:
     monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzTransport", FakeTransport)
     monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzHeroes", FakeHeroes)
 
-    result = asyncio.run(
+    result, _dispatch = asyncio.run(
         ToolExecutor(_registry(token="token")).execute(
             ToolCall(
                 id="pair",
@@ -265,7 +265,7 @@ def test_pair_lane_outcome_missing_partner_returns_empty_bucket(monkeypatch) -> 
     monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzTransport", FakeTransport)
     monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzHeroes", FakeHeroes)
 
-    result = asyncio.run(
+    result, _dispatch = asyncio.run(
         ToolExecutor(_registry(token="token")).execute(
             ToolCall(
                 id="pair",
@@ -288,7 +288,7 @@ def test_hero_matchup_ranking_keeps_groups_separate(monkeypatch) -> None:
     monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzTransport", FakeTransport)
     monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzHeroes", FakeHeroes)
 
-    result = asyncio.run(
+    result, _dispatch = asyncio.run(
         ToolExecutor(_registry(token="token")).execute(
             ToolCall(
                 id="rank",
@@ -351,7 +351,7 @@ def test_filter_heroes_by_position_joins_and_drops(monkeypatch) -> None:
             "synergy": 1.0,
         },
     ]
-    result = asyncio.run(
+    result, _dispatch = asyncio.run(
         ToolExecutor(_registry(token="token")).execute(
             ToolCall(
                 id="filter",
@@ -383,7 +383,7 @@ def test_filter_heroes_by_position_joins_and_drops(monkeypatch) -> None:
     assert "role_fit_basis" in row7
 
     # min_position_match_count raises the floor: hero 11 (3000) dropped at 3500.
-    result2 = asyncio.run(
+    result2, _dispatch2 = asyncio.run(
         ToolExecutor(_registry(token="token")).execute(
             ToolCall(
                 id="filter2",
@@ -452,7 +452,7 @@ def test_hero_synergy_ranking_keeps_groups_separate(monkeypatch) -> None:
     monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzTransport", FakeTransport)
     monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzHeroes", FakeHeroes)
 
-    result = asyncio.run(
+    result, _dispatch = asyncio.run(
         ToolExecutor(_registry(token="token")).execute(
             ToolCall(
                 id="syn",
@@ -531,7 +531,7 @@ def test_hero_daily_trends_translates_bracket_and_returns_daily(monkeypatch) -> 
     monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzTransport", FakeTransport)
     monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzHeroes", FakeHeroes)
 
-    result = asyncio.run(
+    result, _dispatch = asyncio.run(
         ToolExecutor(_registry(token="token")).execute(
             ToolCall(
                 id="trend",
@@ -598,7 +598,7 @@ def test_lane_meta_global_truncates_to_highlight_top(monkeypatch) -> None:
     monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzTransport", FakeTransport)
     monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzHeroes", FakeHeroes)
 
-    result = asyncio.run(
+    result, _dispatch = asyncio.run(
         ToolExecutor(_registry(token="token")).execute(
             ToolCall(
                 id="meta",
@@ -670,7 +670,7 @@ def test_lane_meta_global_dedupes_mirror_pairs(monkeypatch) -> None:
     monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzTransport", FakeTransport)
     monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzHeroes", MirrorHeroes)
 
-    result = asyncio.run(
+    result, _dispatch = asyncio.run(
         ToolExecutor(_registry(token="token")).execute(
             ToolCall(
                 id="meta",
@@ -727,7 +727,7 @@ def test_lane_meta_global_popular_sorts_by_match_count(monkeypatch) -> None:
     monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzTransport", FakeTransport)
     monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzHeroes", CountLeadsHeroes)
 
-    result = asyncio.run(
+    result, _dispatch = asyncio.run(
         ToolExecutor(_registry(token="token")).execute(
             ToolCall(
                 id="meta",
@@ -780,7 +780,7 @@ def test_lane_meta_global_strong_ranks_larger_sample_higher_at_same_win_rate(mon
     monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzTransport", FakeTransport)
     monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzHeroes", TiedWinRateHeroes)
 
-    result = asyncio.run(
+    result, _dispatch = asyncio.run(
         ToolExecutor(_registry(token="token")).execute(
             ToolCall(
                 id="meta",
@@ -841,7 +841,7 @@ def test_lane_meta_global_strong_reverse_overtakes_high_winrate_small_sample(mon
     monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzTransport", FakeTransport)
     monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzHeroes", OvertakeHeroes)
 
-    result = asyncio.run(
+    result, _dispatch = asyncio.run(
         ToolExecutor(_registry(token="token")).execute(
             ToolCall(
                 id="meta",
@@ -1027,7 +1027,7 @@ def test_hero_position_stats_requires_exactly_one_filter(monkeypatch) -> None:
     monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzTransport", FakeTransport)
     monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzHeroes", FakeHeroes)
 
-    result = asyncio.run(
+    result, _dispatch = asyncio.run(
         ToolExecutor(_registry(token="token")).execute(
             ToolCall(
                 id="pos",
@@ -1048,7 +1048,7 @@ def test_hero_position_stats_rejects_both_filters(monkeypatch) -> None:
     monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzTransport", FakeTransport)
     monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzHeroes", FakeHeroes)
 
-    result = asyncio.run(
+    result, _dispatch = asyncio.run(
         ToolExecutor(_registry(token="token")).execute(
             ToolCall(
                 id="pos",
@@ -1070,7 +1070,7 @@ def test_hero_position_stats_hero_id_strong_ranks_by_wilson(monkeypatch) -> None
     monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzTransport", FakeTransport)
     monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzHeroes", FakeHeroes)
 
-    result = asyncio.run(
+    result, _dispatch = asyncio.run(
         ToolExecutor(_registry(token="token")).execute(
             ToolCall(
                 id="pos",
@@ -1101,7 +1101,7 @@ def test_hero_position_stats_position_id_strong_truncates(monkeypatch) -> None:
     monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzTransport", FakeTransport)
     monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzHeroes", FakeHeroes)
 
-    result = asyncio.run(
+    result, _dispatch = asyncio.run(
         ToolExecutor(_registry(token="token")).execute(
             ToolCall(
                 id="pos",
@@ -1135,7 +1135,7 @@ def test_position_handler_computes_wilson_from_win_count(monkeypatch) -> None:
     monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzTransport", FakeTransport)
     monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzHeroes", FakeHeroes)
 
-    result = asyncio.run(
+    result, _dispatch = asyncio.run(
         ToolExecutor(_registry(token="token")).execute(
             ToolCall(
                 id="pos",
@@ -1179,7 +1179,7 @@ def test_position_handler_uses_raw_win_count_not_rounded_rate(monkeypatch) -> No
     monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzTransport", FakeTransport)
     monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzHeroes", DisagreeHeroes)
 
-    result = asyncio.run(
+    result, _dispatch = asyncio.run(
         ToolExecutor(_registry(token="token")).execute(
             ToolCall(
                 id="pos",
@@ -1278,7 +1278,7 @@ def test_position_and_lane_evidence_relay_wilson_rating() -> None:
 
 
 def test_stratz_pair_lane_outcome_requires_token() -> None:
-    result = asyncio.run(
+    result, _dispatch = asyncio.run(
         ToolExecutor(_registry(token=None)).execute(
             ToolCall(
                 id="pair",
@@ -1464,7 +1464,7 @@ def test_pair_lane_outcome_fans_out_per_week(monkeypatch) -> None:
     monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzTransport", FakeTransport)
     monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzHeroes", FakeHeroes)
 
-    result = asyncio.run(
+    result, _dispatch = asyncio.run(
         ToolExecutor(_registry(token="token")).execute(
             ToolCall(
                 id="pair",

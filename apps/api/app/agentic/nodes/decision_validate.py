@@ -25,6 +25,7 @@ def decision_validate_node(
     if decision is None:
         state.status = "error"
         state.validation_failed = True
+        state.attempt_failure_stage = "decision_validation"
         state.safe_failure_required = True
         state.errors.append("missing controller decision")
         state.add_trace("decision_validate", "missing decision", "failed")
@@ -60,6 +61,7 @@ def decision_validate_node(
     if errors:
         state.status = "error"
         state.validation_failed = True
+        state.attempt_failure_stage = "decision_validation"
         state.safe_failure_required = True
         state.errors.extend(errors)
         state.add_trace("decision_validate", "decision validation failed", "failed")

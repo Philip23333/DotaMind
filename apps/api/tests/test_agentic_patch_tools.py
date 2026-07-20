@@ -6,7 +6,7 @@ from app.agentic.tools.patch_tools import register_patch_tools
 
 
 def test_patch_get_records_reads_latest_patch() -> None:
-    result = asyncio.run(
+    result, _dispatch = asyncio.run(
         _executor().execute(ToolCall(id="p", tool="patch.get_records"), QueryContext())
     )
 
@@ -16,7 +16,7 @@ def test_patch_get_records_reads_latest_patch() -> None:
 
 
 def test_patch_hero_changes_filters_single_hero() -> None:
-    result = asyncio.run(
+    result, _dispatch = asyncio.run(
         _executor().execute(
             ToolCall(
                 id="h",
@@ -32,7 +32,7 @@ def test_patch_hero_changes_filters_single_hero() -> None:
 
 
 def test_patch_item_changes_returns_item_groups() -> None:
-    result = asyncio.run(
+    result, _dispatch = asyncio.run(
         _executor().execute(ToolCall(id="i", tool="patch.item_changes"), QueryContext())
     )
 
@@ -42,7 +42,7 @@ def test_patch_item_changes_returns_item_groups() -> None:
 
 
 def test_patch_tool_error_is_exposed() -> None:
-    result = asyncio.run(
+    result, _dispatch = asyncio.run(
         _executor().execute(
             ToolCall(
                 id="missing",

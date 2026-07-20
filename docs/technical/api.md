@@ -39,6 +39,17 @@ Response fields include:
   `required_evidence_sources`.
 - `evidence_graph`, `answer`, and `review` when that branch creates them.
 - `errors`, `error_code`, and `trace`.
+- required `runtime`: UUID4 run id, duration, terminal stage, budget limits and
+  usage, plus one sanitized attempt summary.
+
+The public attempt contains index, decision kind, status/failure stage,
+duration, tool call status/latency, evidence summary, answer type/status/
+confidence, and critic pass/severity/issue count. It never contains plan goal
+or args, ToolResult data/error/source/metadata, internal dispatch records,
+answer text, critic reasons, history, session/request ids, prompts, Controller
+raw output, or validation/retry content. A stateful safe failure still includes
+runtime but reduces its attempt to index/status/failure stage/duration.
+
 For session requests, internal history, the rendered history block, raw
 Controller output, retry feedback and validation details are not serialized.
 Invalid Controller/plan results use a redacted failure envelope and a redacted
@@ -56,7 +67,7 @@ GET /debug/plan
 ```
 
 This is the only internal query UI. It displays both no-tool decisions and the
-conditional tool/evidence path.
+conditional tool/evidence path, plus Run/Attempt/Budget and timed trace data.
 
 ## Removed Endpoints
 

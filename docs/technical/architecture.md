@@ -12,6 +12,7 @@ app/
   agentic/
     graph.py       conditional LangGraph workflow
     state.py       AgentRunState and public-result state
+    runtime/       Run/Attempt/Budget models, clocks, summaries and flat-state reset
     conversation/  compact Turn memory, summary extraction, history rendering
     planning/      ControllerDecision, Controller, contracts, sample policy
     nodes/         controller, decision validation, conversation/tool paths
@@ -36,24 +37,39 @@ Only `tool_plan` owns an `ExecutionPlan` and enters the external-data path:
 
 ```text
 START
+  -> run_init_node
   -> controller_node
   -> decision_validate_node
-      -> direct_answer -> conversation_answer_node -> response_node
-      -> clarification -----------------------------> response_node
-      -> context_missing ---------------------------> response_node
-      -> capability_boundary -----------------------> response_node
+      -> direct_answer -> conversation_answer_node -> run_finalize_node
+      -> clarification -----------------------------> run_finalize_node
+      -> context_missing ---------------------------> run_finalize_node
+      -> capability_boundary -----------------------> run_finalize_node
       -> tool_plan
            -> validate_plan_node
            -> tool_executor_node
            -> evidence_node
            -> answer_node
            -> critic_node
-           -> response_node
+           -> run_finalize_node
+  -> response_node
 ```
 
 Non-tool decisions never create an `EvidenceGraph` and never run the critic.
 `intent` is only a semantic label. Graph routing reads `decision.kind` and
 runtime status; it never branches on `intent`.
+
+V3.2-1 has one request-level `RunContext`, one cumulative `RunBudget`, and one
+sanitized `AttemptRecord`. Attempt working fields remain flat on
+`AgentRunState`; `reset_attempt_working_state()` is the sole reset mechanism
+for future recovery nodes. The audit record contains only plan/tool/evidence/
+answer/critic summaries, never complete plans, tool payloads, answer text,
+critic reasons, history, controller raw output, or raw exceptions.
+
+Tool execution has a private dispatch side channel. Registry lookup and input
+validation occur before handler entry and do not consume tool budget. A
+synchronous callback records budget immediately before calling the handler, so
+both successful and failed handler entries count exactly once. Dispatch stage
+and stable internal error codes never modify the public `ToolResult`.
 
 ## Conversation Memory
 
@@ -125,7 +141,8 @@ universal registry obligation.
 
 ## Terminal Result Priority
 
-The response node applies one status ordering:
+`run_finalize_node` calls the pure `resolve_terminal_outcome()` function once
+and applies this ordering:
 
 1. Controller transport/model error: `error/planning_error`.
 2. Decision or plan validation error: `error/decision_validation_error`.
@@ -142,8 +159,19 @@ an unclassified runtime error falls back to `execution_error`. Terminal errors
 also replace the Controller's provisional `decision accepted` reason with a
 stable failure reason.
 
+`response_node` only accepts a finalized state, applies the safe-failure
+allowlist, and serializes the response. It does not contain a legacy terminal
+reduction path. Every controlled Graph terminal produces exactly one attempt;
+unhandled exceptions, cancellation, and process exit are deferred to V3.2-6.
+
+Wall-clock UTC timestamps provide audit fields such as `deadline_at`; all
+durations and timeout observation use an injectable monotonic clock. V3.2-1
+records deadline/budget exhaustion without blocking nodes. Execution gates and
+`execution_timeout` start in V3.2-3.
+
 ## Debugging
 
-Use `http://localhost:8001/debug/plan`. It shows the Controller decision, final
-plan, required-evidence sources, tools, EvidenceGraph, answer, critic and trace.
+Use `http://localhost:8001/debug/plan`. It shows the Run, budget, single
+Attempt, Controller decision, final plan, required-evidence sources, tools,
+EvidenceGraph, answer, critic and timed trace.
 The legacy frontend has been deleted and must not be recreated.

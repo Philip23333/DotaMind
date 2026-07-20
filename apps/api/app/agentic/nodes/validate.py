@@ -13,6 +13,9 @@ def validate_plan_node(state: AgentRunState, registry: ToolRegistry) -> AgentRun
     plan = state.plan
     if plan is None:
         state.status = "error"
+        state.validation_failed = True
+        state.attempt_failure_stage = "plan_validation"
+        state.safe_failure_required = True
         state.errors.append("missing execution plan")
         state.add_trace("validate", "missing execution plan", "failed")
         logger.info("node=validate end status=error errors=%s", len(state.errors))
@@ -27,6 +30,7 @@ def validate_plan_node(state: AgentRunState, registry: ToolRegistry) -> AgentRun
     if errors:
         state.status = "error"
         state.validation_failed = True
+        state.attempt_failure_stage = "plan_validation"
         state.safe_failure_required = True
         state.errors.extend(errors)
         state.add_trace("validate", "plan validation failed", "failed")

@@ -158,7 +158,8 @@ def test_plan_service_executes_planned_counter_pick(monkeypatch) -> None:
     assert result.answer.status == "ok"
     assert result.review is not None
     assert result.review.severity == "pass"
-    assert result.trace[-1].node == "critic"
+    assert any(event.node == "critic" for event in result.trace)
+    assert result.trace[-1].node == "run_finalize"
     assert result.response
 
 

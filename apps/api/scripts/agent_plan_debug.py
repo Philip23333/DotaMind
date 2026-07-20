@@ -19,13 +19,16 @@ from app.agentic.nodes import (
     critic_node,
     evidence_node,
     response_node,
+    run_finalize_node,
+    run_init_node,
     tool_executor_node,
     validate_plan_node,
 )
+from app.agentic.runtime.clock import SystemClock
 from app.agentic.state import AgentRunState
 from app.agentic.tools import ToolExecutor
 from app.agentic.tools.stratz_tools import build_default_tool_registry
-from app.core.config import get_settings
+from app.core.config import RuntimePolicy, get_settings
 
 
 def main() -> int:
@@ -71,6 +74,8 @@ async def run_plan(
     if executor is None:
         executor = ToolExecutor(build_default_tool_registry(get_settings()))
     state = AgentRunState(query="debug plan", game="dota2", plan=plan, reason="loaded plan")
+    clock = SystemClock()
+    state = run_init_node(state, RuntimePolicy(), clock)
     state = validate_plan_node(state, executor.registry)
     if state.status != "error":
         state = await tool_executor_node(state, executor)
@@ -79,6 +84,7 @@ async def run_plan(
         state = await answer_node(state, AnswerSynthesizer())
     if state.status != "error":
         state = critic_node(state, AgenticCritic())
+    state = run_finalize_node(state, clock)
     return response_node(state)
 
 

@@ -20,7 +20,7 @@ def critic_node(state: AgentRunState, critic: AgenticCritic) -> AgentRunState:
     state.add_trace(
         "critic",
         f"review severity: {state.review.severity}",
-        state.review.severity,
+        "completed" if state.review.passed else "failed",
     )
     logger.info(
         "node=critic end severity=%s reasons=%s passed=%s",
