@@ -5,13 +5,78 @@ from pydantic import BaseModel, Field
 
 from app.agentic.evidence import EvidenceItem
 from app.agentic.models import QueryContext, ToolCall, ToolResult, ToolSource
-from app.agentic.tools import ToolDefinition, ToolExecutor, ToolRegistry
+from app.agentic.planning.controller import AgentController
+from app.agentic.tools import ArgContract, ToolDefinition, ToolExecutor, ToolRegistry
 from app.agentic.tools.stratz_tools import build_default_tool_registry
 from app.core.config import Settings
 
 
 class EchoInput(BaseModel):
     value: int = Field(gt=0)
+
+
+def _echo_definition(name: str = "debug.echo") -> ToolDefinition:
+    return ToolDefinition(
+        name=name,
+        description="Return the input value.",
+        input_model=EchoInput,
+        handler=lambda args, context: {"echo": args.value},
+    )
+
+
+def test_tool_registry_freeze_is_idempotent_and_blocks_registration() -> None:
+    registry = ToolRegistry()
+    registry.register(_echo_definition())
+
+    registry.freeze()
+    registry.freeze()
+
+    with pytest.raises(RuntimeError, match="tool registry is frozen"):
+        registry.register(_echo_definition("debug.late"))
+
+    assert registry.get("debug.echo").name == "debug.echo"
+
+
+def test_frozen_registry_exposes_deeply_read_only_tool_contracts() -> None:
+    registry = ToolRegistry()
+    registry.register(
+        ToolDefinition(
+            name="debug.echo",
+            description="Return the input value.",
+            input_model=EchoInput,
+            handler=lambda args, context: {"echo": args.value},
+            arg_contracts={"value": ArgContract(description="value")},
+            output_paths={},
+            metadata={"nested": {"values": [1]}},
+        )
+    )
+    registry.freeze()
+    definition = registry.get("debug.echo")
+
+    with pytest.raises(TypeError):
+        definition.arg_contracts["other"] = ArgContract()
+    with pytest.raises(TypeError):
+        definition.output_paths["data"] = None
+    with pytest.raises(TypeError):
+        definition.metadata["nested"] = {}
+    with pytest.raises(AttributeError):
+        definition.metadata["nested"]["values"].append(2)
+
+
+def test_controller_freezes_the_registry_before_caching_its_prompt() -> None:
+    registry = build_default_tool_registry(
+        Settings(
+            opendota_base_url="https://api.opendota.test/api",
+            stratz_graphql_url="https://api.stratz.test/graphql",
+            stratz_token="token",
+        )
+    )
+    controller = AgentController(registry, llm_enabled=False)
+
+    with pytest.raises(RuntimeError, match="tool registry is frozen"):
+        registry.register(_echo_definition("debug.late"))
+
+    assert controller.prompt_versions["controller.system.sha256"]
 
 
 def test_tool_registry_executes_registered_tool() -> None:

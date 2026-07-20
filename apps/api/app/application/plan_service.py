@@ -32,7 +32,11 @@ class PlanService:
     ) -> None:
         settings = get_settings()
         policy = get_policy()
-        self.registry = build_default_tool_registry(settings)
+        self.registry = (
+            controller.registry
+            if isinstance(controller, AgentController)
+            else build_default_tool_registry(settings)
+        )
         registry_errors = validate_registry_contracts(self.registry)
         if registry_errors:
             raise RuntimeError(

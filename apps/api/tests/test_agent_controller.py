@@ -38,6 +38,7 @@ class FakeLLM:
             self._single = payload
         self._index = 0
         self.calls = 0
+        self.received_messages: list[list[dict[str, str]]] = []
 
     async def complete(
         self,
@@ -54,6 +55,7 @@ class FakeLLM:
         max_tokens: int = 1000,
     ) -> dict[str, Any]:
         self.calls += 1
+        self.received_messages.append([dict(message) for message in messages])
         if self._error is not None:
             raise self._error
         if self._sequence is not None:

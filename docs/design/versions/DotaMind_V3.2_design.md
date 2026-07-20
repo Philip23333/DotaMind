@@ -535,7 +535,10 @@ tool error 改写成 missing evidence，也不能把 Answer error 改写成 crit
 ### V3.2-2：Prompt Registry
 
 - 拆分 Controller Prompt 和 retry feedback。
-- 增加 recovery rules renderer 和 prompt version/hash。
+- 增加 recovery rules renderer 和 prompt version/hash；hash 表示 configured/prepared
+  system prompt，不表示 LLM 已发送或成功。
+- Controller 渲染 Prompt 前封存 ToolRegistry，保证 Prompt、validation 与 executor
+  使用同一 catalog；recovery rules 在本阶段保持 dormant。
 - 使用 golden tests 确认语义不漂移。
 
 ### V3.2-3：有界 Recovery/Replan

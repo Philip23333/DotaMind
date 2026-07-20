@@ -1,10 +1,11 @@
 import asyncio
 
+import pytest
 from pydantic import BaseModel
 
 from app.agentic.graph import AgentGraphRunner
 from app.agentic.models import ExecutionPlan, ToolCall
-from app.agentic.planning.controller import AgentControllerResult
+from app.agentic.planning.controller import AgentController, AgentControllerResult
 from app.agentic.planning.decisions import (
     CapabilityBoundaryDecision,
     ToolPlanDecision,
@@ -20,10 +21,12 @@ from app.agentic.tools import (
 )
 from app.agentic.tools.opendota_tools import resolve_team_evidence, team_recent_matches_evidence
 from app.agentic.tools.stratz_tools import (
+    build_default_tool_registry,
     hero_matchup_ranking_evidence,
     pair_lane_outcome_evidence,
     resolve_hero_evidence,
 )
+from app.core.config import Settings
 
 
 class HeroInput(BaseModel):
@@ -54,10 +57,25 @@ class FakeController:
     def __init__(self, result: AgentControllerResult) -> None:
         self.result = result
 
+    @property
+    def prompt_versions(self) -> dict[str, str]:
+        return {}
+
     async def decide(
         self, query: str, game: str = "dota2", history=None
     ) -> AgentControllerResult:
         return self.result
+
+
+def test_graph_rejects_real_controller_with_a_different_registry() -> None:
+    settings = Settings(
+        stratz_graphql_url="https://api.stratz.test/graphql",
+        stratz_token="token",
+    )
+    controller = AgentController(build_default_tool_registry(settings), llm_enabled=False)
+
+    with pytest.raises(ValueError, match="must share a registry"):
+        AgentGraphRunner(controller, build_default_tool_registry(settings))
 
 
 def test_graph_stops_when_tools_are_insufficient() -> None:

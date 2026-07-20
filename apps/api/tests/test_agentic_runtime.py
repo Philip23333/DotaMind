@@ -453,6 +453,10 @@ def test_graph_trace_has_two_events_per_node_and_injected_timing() -> None:
     clock = FakeClock(UTC_START, 1.0)
 
     class AdvancingController:
+        @property
+        def prompt_versions(self) -> dict[str, str]:
+            return {}
+
         async def decide(self, query: str, game: str = "dota2", history=None):
             clock.advance(0.25)
             return AgentControllerResult(
@@ -582,6 +586,10 @@ def _answer_graph_runner(*, answer_status: str, confidence: float) -> AgentGraph
     )
 
     class Controller:
+        @property
+        def prompt_versions(self) -> dict[str, str]:
+            return {}
+
         async def decide(self, query: str, game: str = "dota2", history=None):
             return AgentControllerResult(
                 status="decided",

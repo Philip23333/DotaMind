@@ -13,6 +13,8 @@ async def controller_node(
 ) -> AgentRunState:
     if state.run_budget is not None:
         state.run_budget.record_controller_call()
+    if state.run_context is not None:
+        state.run_context.prompt_versions = controller.prompt_versions
     state.add_trace("controller", "create controller decision", "planned")
     logger.info(
         "node=controller start query_chars=%s game=%s history_turns=%s",

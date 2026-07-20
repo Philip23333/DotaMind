@@ -14,8 +14,10 @@ At the start of every new session in this repository, before analyzing or editin
    `docs/technical/` that are relevant to the task at hand. In particular:
    - `docs/design/versions/DotaMind_V3.2_design.md` — current Agent Runtime
      Foundation target and phase order.
-   - `docs/design/versions/DotaMind_V3.2-1_design.md` — Run / Attempt / Budget
-     implementation blueprint for the active V3.2-1 phase.
+   - `docs/design/versions/DotaMind_V3.2-1_design.md` — completed Run / Attempt / Budget
+     implementation blueprint and compatibility boundary.
+   - `docs/design/versions/DotaMind_V3.2-2_design.md` — active Prompt Registry
+     implementation blueprint and audit/frozen-catalog boundary.
    - `docs/design/versions/DotaMind_MVP_v2.5.md` — primary architecture direction
      (v2.5 constrained tool calling). Treat this as the authority when
      discussing plan/graph/contract structure.

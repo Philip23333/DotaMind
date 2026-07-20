@@ -17,6 +17,10 @@ class FakeController:
         self.result = result
         self.received_history: list = []
 
+    @property
+    def prompt_versions(self) -> dict[str, str]:
+        return {}
+
     async def decide(
         self, query: str, game: str = "dota2", history=None
     ) -> AgentControllerResult:

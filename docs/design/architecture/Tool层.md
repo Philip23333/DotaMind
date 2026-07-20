@@ -94,6 +94,10 @@ ToolRegistry()
 - `ToolExecutor`
 - `EvidenceGraph` builder
 
+V3.2-2 中 `AgentController` 在 Prompt 渲染前封存这份 registry。之后 `register()`
+直接失败，读取路径保持不变，从而保证 Prompt catalog、validation catalog 和 executor
+catalog 使用同一不可变集合。
+
 这保证 Planner 看见的工具目录、Validator 校验的目录、Executor 执行的目录一致。
 
 ## 4. ToolExecutor Node 链路

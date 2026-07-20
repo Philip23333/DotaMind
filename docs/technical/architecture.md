@@ -15,6 +15,7 @@ app/
     runtime/       Run/Attempt/Budget models, clocks, summaries and flat-state reset
     conversation/  compact Turn memory, summary extraction, history rendering
     planning/      ControllerDecision, Controller, contracts, sample policy
+    prompts/       Controller prompt bundle, feedback renderers and audit versions
     nodes/         controller, decision validation, conversation/tool paths
     tools/         registry, executor, OpenDota, STRATZ, patch and local tools
     evidence/      EvidenceGraph and extraction helpers
@@ -98,6 +99,17 @@ parse ControllerDecision
   -> validate ControllerDecision
   -> validate final ExecutionPlan
 ```
+
+## Prompt Registry
+
+`AgentController` freezes the shared `ToolRegistry` before rendering and caching its
+Prompt bundle. Tool contracts, output paths and metadata become read-only, while the
+Controller snapshots contracts and sample policy. A real Controller and GraphRunner must
+share the exact same Registry. `controller_node` copies the bundle manifest to
+`RunContext.prompt_versions` before the LLM call. Its SHA-256 identifies the configured/
+prepared system prompt, not delivery or model success; a separate hash covers only
+`history_window` and `history_max_chars`. Prompt text, retry feedback, validation errors
+and raw model output stay out of public and persistent DTOs.
 
 Graph validation repeats deterministic checks but never mutates tool args,
 metadata, or evidence obligations. Therefore state, debug output and execution

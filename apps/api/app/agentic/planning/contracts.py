@@ -1,7 +1,8 @@
 import json
 from collections.abc import Mapping
+from copy import deepcopy
 from dataclasses import dataclass, field
-from types import UnionType
+from types import MappingProxyType, UnionType
 from typing import Any, Union, get_args, get_origin
 
 from pydantic import ValidationError
@@ -22,10 +23,6 @@ class ContractSpec:
     allowed_required_evidence: frozenset[str] | None = None
     allowed_evidence: frozenset[str] | None = None
     required_tools: frozenset[str] = field(default_factory=frozenset)
-    # Not rendered into the Controller prompt (the worked example lives in the
-    # static template). Kept on the data model for potential future consumers;
-    # remove once confirmed unused.
-    prompt_example: Mapping[str, Any] | None = None
 
     @property
     def structured(self) -> bool:
@@ -63,46 +60,6 @@ CONTRACT_REGISTRY = {
                 "sample_size",
             }
         ),
-        prompt_example={
-            "intent": "team_recent_performance",
-            "goal": "Summarize a team's recent OpenDota evidence.",
-            "output_contract": "team_recent_report",
-            "tool_calls": [
-                {
-                    "id": "resolve_team",
-                    "tool": "opendota.resolve_team",
-                    "args": {"query": "<team query>"},
-                },
-                {
-                    "id": "get_matches",
-                    "tool": "opendota.team_recent_matches",
-                    "args": {
-                        "team_id": "$resolve_team.data.team.team_id",
-                        "days": 30,
-                    },
-                },
-                {
-                    "id": "get_players",
-                    "tool": "opendota.team_players",
-                    "args": {
-                        "team_id": "$resolve_team.data.team.team_id",
-                        "current_only": True,
-                    },
-                },
-                {
-                    "id": "get_heroes",
-                    "tool": "opendota.team_heroes",
-                    "args": {"matches": "$get_matches.data.matches"},
-                },
-            ],
-            "required_evidence": [
-                "team_identity",
-                "recent_matches",
-                "current_players",
-                "team_hero_usage",
-            ],
-            "constraints": {"max_tool_calls": 6, "allow_mock": False},
-        },
     ),
     NATURAL_LANGUAGE_CONTRACT: ContractSpec(
         name=NATURAL_LANGUAGE_CONTRACT,
@@ -116,8 +73,17 @@ STRUCTURED_OUTPUT_CONTRACTS = {
 ALLOWED_OUTPUT_CONTRACTS = set(CONTRACT_REGISTRY)
 
 
-def get_contract(name: str) -> ContractSpec | None:
-    return CONTRACT_REGISTRY.get(name)
+def snapshot_contract_registry() -> Mapping[str, ContractSpec]:
+    """Return a detached, read-only contract catalog for one Controller."""
+
+    return MappingProxyType(deepcopy(CONTRACT_REGISTRY))
+
+
+def get_contract(
+    name: str,
+    contracts: Mapping[str, ContractSpec] = CONTRACT_REGISTRY,
+) -> ContractSpec | None:
+    return contracts.get(name)
 
 
 def known_evidence_kinds(registry: ToolRegistry) -> set[str]:
@@ -128,10 +94,13 @@ def known_evidence_kinds(registry: ToolRegistry) -> set[str]:
     }
 
 
-def render_controller_contracts(registry: ToolRegistry) -> str:
+def render_controller_contracts(
+    registry: ToolRegistry,
+    contracts: Mapping[str, ContractSpec] = CONTRACT_REGISTRY,
+) -> str:
     available_evidence = known_evidence_kinds(registry)
     sections = []
-    for spec in CONTRACT_REGISTRY.values():
+    for spec in contracts.values():
         allowed = spec.evidence_allowlist
         lines = [
             f"- {spec.name}",
@@ -193,6 +162,7 @@ def validate_plan_against_catalog(
     registry: ToolRegistry,
     *,
     required_evidence: list[str] | None = None,
+    contracts: Mapping[str, ContractSpec] = CONTRACT_REGISTRY,
 ) -> list[str]:
     errors: list[str] = []
     errors.extend(validate_tool_calls(plan, registry))
@@ -204,6 +174,7 @@ def validate_plan_against_catalog(
             plan,
             registry,
             required_evidence=required_evidence,
+            contracts=contracts,
         )
     )
     errors.extend(
@@ -454,11 +425,13 @@ def validate_output_contract(
     registry: ToolRegistry,
     *,
     required_evidence: list[str] | None = None,
+    contracts: Mapping[str, ContractSpec] = CONTRACT_REGISTRY,
 ) -> list[str]:
     return validate_contract_plan_with_evidence(
         plan,
         known_evidence_kinds(registry),
         required_evidence=required_evidence,
+        contracts=contracts,
     )
 
 
@@ -490,8 +463,9 @@ def validate_contract_plan_with_evidence(
     evidence_kinds: set[str],
     *,
     required_evidence: list[str] | None = None,
+    contracts: Mapping[str, ContractSpec] = CONTRACT_REGISTRY,
 ) -> list[str]:
-    spec = get_contract(plan.output_contract)
+    spec = get_contract(plan.output_contract, contracts)
     if spec is None:
         return [f"unknown output_contract: {plan.output_contract}"]
 

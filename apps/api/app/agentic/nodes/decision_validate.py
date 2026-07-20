@@ -1,5 +1,7 @@
 import logging
+from collections.abc import Mapping
 
+from app.agentic.planning.contracts import CONTRACT_REGISTRY, ContractSpec
 from app.agentic.planning.decisions import (
     CapabilityBoundaryDecision,
     ClarificationDecision,
@@ -19,6 +21,7 @@ logger = logging.getLogger(__name__)
 def decision_validate_node(
     state: AgentRunState,
     registry: ToolRegistry,
+    contracts: Mapping[str, ContractSpec] = CONTRACT_REGISTRY,
 ) -> AgentRunState:
     state.add_trace("decision_validate", "validate controller decision", "planned")
     decision = state.decision
@@ -48,7 +51,7 @@ def decision_validate_node(
         )
 
     evidence = (
-        resolve_required_evidence(decision.plan, registry)
+        resolve_required_evidence(decision.plan, registry, contracts)
         if isinstance(decision, ToolPlanDecision)
         else None
     )
@@ -57,6 +60,7 @@ def decision_validate_node(
         state.history,
         registry,
         evidence,
+        contracts,
     )
     if errors:
         state.status = "error"

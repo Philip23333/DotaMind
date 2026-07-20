@@ -89,3 +89,10 @@ Turn 保存 `query + response_summary + missing_fields`，供下一轮理解补�
 服务端不序列化 `state.history`、完整历史渲染块、Controller prompt、retry
 feedback、raw Controller output 或未脱敏 validation error。每个 session
 对应一个用户安全主体；`session_id` 在无独立认证层时视为 bearer capability。
+
+## Prompt Registry（V3.2-2）
+
+Controller 在构造时封存 ToolRegistry，并缓存由静态规则、catalog、contract 和 sample
+policy 组成的 Prompt bundle。每个 Run 在调用前记录 renderer 版本和完整 system prompt
+的 SHA-256；它表示 configured/prepared Prompt，不表示网络发送成功。历史与用户消息
+renderer 只通过版本覆盖动态内容。recovery rules 仍未接线，不进入当前 Prompt 或 manifest。

@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.agentic.conversation.models import Turn
 from app.agentic.models import ExecutionPlan
-from app.agentic.planning.contracts import get_contract, validate_plan_against_catalog
+from app.agentic.planning.contracts import (
+    CONTRACT_REGISTRY,
+    ContractSpec,
+    get_contract,
+    validate_plan_against_catalog,
+)
 from app.agentic.tools import ToolRegistry
 
 ClarificationField = Literal[
@@ -110,13 +116,14 @@ def decision_intent(decision: ControllerDecision) -> str:
 def resolve_required_evidence(
     plan: ExecutionPlan,
     registry: ToolRegistry,
+    contracts: Mapping[str, ContractSpec] = CONTRACT_REGISTRY,
 ) -> RequiredEvidenceResolution:
     """Merge contract, registry, and model-requested evidence without mutation."""
     sources: dict[str, set[str]] = {}
     global_required: set[str] = set(plan.required_evidence)
     mandatory_by_call: dict[str, list[str]] = {}
 
-    contract = get_contract(plan.output_contract)
+    contract = get_contract(plan.output_contract, contracts)
     if contract is not None:
         for kind in contract.required_evidence:
             sources.setdefault(kind, set()).add(f"contract:{contract.name}")
@@ -171,6 +178,7 @@ def validate_controller_decision(
     history: list[Turn],
     registry: ToolRegistry,
     evidence: RequiredEvidenceResolution | None = None,
+    contracts: Mapping[str, ContractSpec] = CONTRACT_REGISTRY,
 ) -> list[str]:
     if isinstance(decision, DirectAnswerDecision):
         return _validate_direct_answer(decision, history)
@@ -181,11 +189,14 @@ def validate_controller_decision(
     if isinstance(decision, ToolPlanDecision):
         if not decision.plan.tool_calls:
             return ["tool_plan requires at least one tool call"]
-        required = evidence or resolve_required_evidence(decision.plan, registry)
+        required = evidence or resolve_required_evidence(
+            decision.plan, registry, contracts
+        )
         return validate_plan_against_catalog(
             decision.plan,
             registry,
             required_evidence=required.effective_required_evidence,
+            contracts=contracts,
         )
     return []
 

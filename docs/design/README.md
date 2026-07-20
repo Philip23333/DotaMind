@@ -78,3 +78,10 @@ V3.2 完成前业务工具目录保持冻结，因此这些路线图当前是延
 
 移动文档时必须同步更新当前入口、代码注释和有效交叉链接。历史进度快照保持原始记录，
 通过新的当日追加章节说明迁移后的规范路径。
+
+## 当前 V3.2-2 阅读顺序
+
+Prompt Registry 为当前阶段。先阅读
+[`versions/DotaMind_V3.2-2_design.md`](./versions/DotaMind_V3.2-2_design.md)，再阅读
+[`versions/DotaMind_V3.2-1_design.md`](./versions/DotaMind_V3.2-1_design.md) 确认单
+Attempt 与 Run/Attempt/Budget 兼容边界。

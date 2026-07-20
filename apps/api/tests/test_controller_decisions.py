@@ -22,6 +22,10 @@ class FakeController:
             decision=decision,
         )
 
+    @property
+    def prompt_versions(self) -> dict[str, str]:
+        return {}
+
     async def decide(self, query: str, game: str = "dota2", history=None):
         return self._result
 

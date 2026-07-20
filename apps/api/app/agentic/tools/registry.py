@@ -1,5 +1,7 @@
-from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field
+from collections.abc import Awaitable, Callable, Mapping
+from copy import deepcopy
+from dataclasses import dataclass, field, replace
+from types import MappingProxyType
 from typing import Any
 
 from pydantic import BaseModel
@@ -51,11 +53,30 @@ class ToolDefinition:
 class ToolRegistry:
     def __init__(self) -> None:
         self._tools: dict[str, ToolDefinition] = {}
+        self._frozen = False
 
     def register(self, definition: ToolDefinition) -> None:
+        if self._frozen:
+            raise RuntimeError("tool registry is frozen")
         if definition.name in self._tools:
             raise ValueError(f"tool already registered: {definition.name}")
         self._tools[definition.name] = definition
+
+    def freeze(self) -> None:
+        """Seal the catalog shared by prompt rendering, validation and execution."""
+
+        if self._frozen:
+            return
+        self._tools = {
+            name: replace(
+                definition,
+                arg_contracts=_freeze_mapping(definition.arg_contracts),
+                output_paths=_freeze_mapping(definition.output_paths),
+                metadata=_freeze_mapping(definition.metadata),
+            )
+            for name, definition in self._tools.items()
+        }
+        self._frozen = True
 
     def get(self, name: str) -> ToolDefinition:
         try:
@@ -65,4 +86,24 @@ class ToolRegistry:
 
     def list(self) -> list[ToolDefinition]:
         return list(self._tools.values())
+
+
+def _freeze_mapping(values: Mapping[str, Any]) -> Mapping[str, Any]:
+    return MappingProxyType(
+        {key: _freeze_value(value) for key, value in deepcopy(dict(values)).items()}
+    )
+
+
+def _freeze_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        return MappingProxyType(
+            {key: _freeze_value(item) for key, item in value.items()}
+        )
+    if isinstance(value, list):
+        return tuple(_freeze_value(item) for item in value)
+    if isinstance(value, set):
+        return frozenset(_freeze_value(item) for item in value)
+    if isinstance(value, tuple):
+        return tuple(_freeze_value(item) for item in value)
+    return value
 
