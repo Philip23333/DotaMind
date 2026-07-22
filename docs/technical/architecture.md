@@ -102,14 +102,14 @@ parse ControllerDecision
 
 ## Prompt Registry
 
-`AgentController` freezes the shared `ToolRegistry` before rendering and caching its
-Prompt bundle. Tool contracts, output paths and metadata become read-only, while the
-Controller snapshots contracts and sample policy. A real Controller and GraphRunner must
-share the exact same Registry. `controller_node` copies the bundle manifest to
+`AgentController` closes `ToolRegistry` registration before rendering and caching its
+Prompt bundle; existing ToolDefinition mappings are not copied or deeply frozen. The
+default PlanService path registers and validates tools, then constructs the Controller and
+GraphRunner with that registry. `controller_node` copies the bundle manifest to
 `RunContext.prompt_versions` before the LLM call. Its SHA-256 identifies the configured/
-prepared system prompt, not delivery or model success; a separate hash covers only
-`history_window` and `history_max_chars`. Prompt text, retry feedback, validation errors
-and raw model output stay out of public and persistent DTOs.
+prepared system prompt, not delivery or model success. Dynamic history and user-message
+rendering are versioned without hashing request content. Prompt text, retry feedback,
+validation errors and raw model output stay out of public and persistent DTOs.
 
 Graph validation repeats deterministic checks but never mutates tool args,
 metadata, or evidence obligations. Therefore state, debug output and execution

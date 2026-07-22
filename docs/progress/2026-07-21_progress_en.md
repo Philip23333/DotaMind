@@ -35,3 +35,34 @@
   `prompt_versions` is documented as a configured/prepared manifest.
 - Verified: `ruff check .`, `pytest` (399 passed, 1 warning), `uv lock --locked`, and
   `git diff --check` pass. `git diff --check` only emits existing LF/CRLF conversion notices.
+
+## 21:40 — V3.2-2 lightweight revision
+
+- Removed the defensive layer outside the phase boundary: `ToolRegistry.freeze()` now only closes
+  registration, retaining the invariant that `register()` fails after Controller construction without
+  copying or deeply sealing ToolDefinition contents.
+- Removed Contract Registry / Sample Policy snapshots, Graph Registry identity validation, and the
+  PlanService branch that reused a real injected Controller's Registry. The default production path
+  still registers and validates tools before constructing Controller, GraphRunner, and executor with
+  the same Registry.
+- Removed `controller.history_policy.sha256`; the manifest now records only the system-prompt SHA-256
+  and connected renderer versions. Dynamic query, history, and retry feedback remain outside it.
+- Removed the corresponding deep-freeze, snapshot, Registry-identity, and history-policy tests while
+  retaining golden, enabled/disabled manifest, sent-system hash, post-freeze registration rejection,
+  catalog/contract/sample-policy hash-change, and fresh-import coverage.
+- This section supersedes the deep-freeze, snapshot, identity-check, and history-policy-hash details in
+  the 21:15 entry. Recovery/Replan, Graph/API/Attempt, and persistence boundaries remain unchanged.
+- Verified: `ruff check .`, `pytest` (395 passed, 1 warning), `uv lock --locked`, and
+  `git diff --check` pass.
+
+## 22:00 — V3.2-2 lightweight acceptance closure
+
+- Tightened the V3.2-2 and Tool-layer documentation: only the default PlanService assembly is
+  constrained to have Controller, GraphRunner, and ToolExecutor read the same Registry instance with
+  registration closed; it is no longer described as an immutable collection.
+- Made the non-goals explicit: no deep ToolDefinition freeze, Contract Registry/Sample Policy snapshots,
+  arbitrary dependency-injection identity validation, or history-policy hash.
+- Added default `PlanService()` assembly coverage asserting that Controller, Runner, and Executor all use
+  `service.registry`; it does not expand into identity defenses for arbitrary injected objects.
+- Verified: `ruff check .`, `tests/test_plan_service.py` (11 passed), the full `pytest` suite
+  (396 passed, 1 warning), and `uv lock --locked` pass.

@@ -2,17 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass
 
 from app.agentic.conversation.models import Turn
 from app.agentic.conversation.render import render_history
-from app.agentic.planning.contracts import (
-    CONTRACT_REGISTRY,
-    ContractSpec,
-    render_controller_contracts,
-    render_controller_tools,
-)
+from app.agentic.planning.contracts import render_controller_contracts, render_controller_tools
 from app.agentic.planning.sample_policy import render_sample_policy
 from app.agentic.prompts.versions import build_prompt_versions
 from app.agentic.tools import ToolRegistry
@@ -263,10 +257,9 @@ class ControllerPromptBundle:
 def build_controller_prompt(
     registry: ToolRegistry,
     policy: AppPolicy,
-    contracts: Mapping[str, ContractSpec] = CONTRACT_REGISTRY,
 ) -> ControllerPromptBundle:
     tools = render_controller_tools(registry)
-    rendered_contracts = render_controller_contracts(registry, contracts)
+    rendered_contracts = render_controller_contracts(registry)
     sample_policy = render_sample_policy(policy, registry)
     base = (
         _PLANNER_SYSTEM_PROMPT.replace("{tools}", tools)
@@ -276,11 +269,7 @@ def build_controller_prompt(
     system_prompt = _CONVERSATION_HISTORY_RULES + base
     return ControllerPromptBundle(
         system_prompt=system_prompt,
-        prompt_versions=build_prompt_versions(
-            system_prompt,
-            history_window=policy.conversation.history_window,
-            history_max_chars=policy.conversation.history_max_chars,
-        ),
+        prompt_versions=build_prompt_versions(system_prompt),
     )
 
 

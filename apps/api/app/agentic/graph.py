@@ -15,7 +15,6 @@ from app.agentic.nodes import (
     tool_executor_node,
     validate_plan_node,
 )
-from app.agentic.planning.contracts import CONTRACT_REGISTRY
 from app.agentic.planning.controller import AgentController
 from app.agentic.runtime.clock import (
     Clock,
@@ -36,15 +35,8 @@ class AgentGraphRunner:
         runtime_policy: RuntimePolicy | None = None,
         clock: Clock | None = None,
     ) -> None:
-        if isinstance(controller, AgentController) and controller.registry is not registry:
-            raise ValueError("AgentController and AgentGraphRunner must share a registry")
         self.controller = controller
         self.registry = registry
-        self.contract_registry = (
-            controller.contract_registry
-            if isinstance(controller, AgentController)
-            else CONTRACT_REGISTRY
-        )
         self.executor = ToolExecutor(registry)
         self.answer_synthesizer = AnswerSynthesizer()
         self.critic = AgenticCritic()
@@ -132,7 +124,6 @@ class AgentGraphRunner:
             state,
             decision_validate_node,
             self.registry,
-            self.contract_registry,
         )
 
     async def _tools(self, state: AgentRunState) -> AgentRunState:
@@ -143,7 +134,6 @@ class AgentGraphRunner:
             state,
             validate_plan_node,
             self.registry,
-            self.contract_registry,
         )
 
     def _evidence(self, state: AgentRunState) -> AgentRunState:

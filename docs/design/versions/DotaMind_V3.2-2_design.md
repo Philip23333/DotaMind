@@ -20,12 +20,15 @@
 ## Registry 不变量
 
 `AgentController` 在渲染并缓存 Prompt bundle 前调用 `ToolRegistry.freeze()`。冻结后
-`register()` 稳定抛出 `RuntimeError`；ToolDefinition 的 arg contracts、output paths 与
-metadata 被深度只读快照替换，而 get/list、validation、executor 与 evidence 的读取行为不变。
-Controller 同时持有只读 Contract Registry 和 Sample Policy 快照。因此：
+`register()` 稳定抛出 `RuntimeError`；冻结仅关闭注册期，不复制或深度封存既有
+ToolDefinition。默认生产装配先注册工具并校验 contracts，再构造 Controller，随后以该
+registry 构造 GraphRunner 与 ToolExecutor。因此：
 
 ```text
-Prompt catalog = validation catalog = executor catalog
+PlanService 默认装配：同一 Registry 实例（注册集合已关闭）
+  -> AgentController
+  -> AgentGraphRunner
+  -> ToolExecutor
 ```
 
 ## Run 审计
@@ -33,18 +36,19 @@ Prompt catalog = validation catalog = executor catalog
 `controller_node` 在调用 Controller 前复制 prompt manifest 到
 `RunContext.prompt_versions`，所以 LLM disabled 的 planning error 也保留同一份
 configured/prepared 审计信息。当前 manifest 包含 base、conversation、catalog、contract、
-sample-policy、history、user-message、validation-retry renderer 版本、system SHA-256，以及只含
-`history_window` / `history_max_chars` 的 history-policy SHA-256。
+sample-policy、history、user-message、validation-retry renderer 版本和 system SHA-256。
 `recovery_rules` 具有独立版本，但在 V3.2-2 仍是 dormant，绝不进入 Prompt、messages 或 manifest。
 
 ## 隐私与非目标
 
 不新增 Prompt 正文存储。Prompt、validation errors 与模型输出不进入 manifest、AttemptRecord、
 公开 DTO、trace、Session 或持久化存储；既有 attempt-local Controller diagnostics 保持内部瞬态。
-本阶段不引入 recovery/replan、第二 Attempt、预算 gate、registry fingerprint 或 API 字段。
+本阶段不引入 recovery/replan、第二 Attempt、预算 gate、registry fingerprint 或 API 字段；也不
+深度冻结 ToolDefinition、不快照 Contract Registry/Sample Policy、不校验任意依赖注入对象身份，
+且不计算 history-policy hash。
 
 ## 验收
 
-golden fixture 必须为 UTF-8、无 BOM、LF，并按原始 bytes 与默认 frozen registry/policy 的
+golden fixture 必须为 UTF-8、无 BOM、LF，并按原始 bytes 与默认 registry/policy 的
 完整 system prompt 比较。测试覆盖 enabled/disabled manifest、实际发送 system message hash、
-冻结后注册失败、双向 fresh-import，以及 tool/contract/sample-policy 变化改变 hash。
+冻结后注册失败、双向 fresh-import，以及构造 Prompt 前 tool/contract/sample-policy 变化改变 hash。

@@ -6,7 +6,6 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 
-import pytest
 from pydantic import BaseModel
 
 import app.agentic.prompts.controller as controller_prompts
@@ -147,67 +146,6 @@ def test_dynamic_user_and_retry_messages_do_not_change_prompt_manifest() -> None
     assert render_validation_retry_feedback(["first error"]) != render_validation_retry_feedback(
         ["second error"]
     )
-    assert controller.prompt_versions == before
-
-
-def test_history_policy_hash_changes_without_hashing_dynamic_history() -> None:
-    policy = get_policy()
-    changed_policy = policy.model_copy(
-        update={
-            "conversation": policy.conversation.model_copy(
-                update={"history_window": policy.conversation.history_window + 1}
-            )
-        }
-    )
-    baseline = build_controller_prompt(_registry(), policy)
-    changed = build_controller_prompt(_registry(), changed_policy)
-
-    assert baseline.system_prompt == changed.system_prompt
-    assert (
-        baseline.prompt_versions["controller.history_policy.sha256"]
-        != changed.prompt_versions["controller.history_policy.sha256"]
-    )
-    max_chars_changed = policy.model_copy(
-        update={
-            "conversation": policy.conversation.model_copy(
-                update={"history_max_chars": policy.conversation.history_max_chars + 1}
-            )
-        }
-    )
-    assert (
-        baseline.prompt_versions["controller.history_policy.sha256"]
-        != build_controller_prompt(_registry(), max_chars_changed).prompt_versions[
-            "controller.history_policy.sha256"
-        ]
-    )
-    assert "first query" not in changed.prompt_versions["controller.history_policy.sha256"]
-
-
-def test_controller_snapshots_contract_and_sample_policy(monkeypatch) -> None:
-    controller = AgentController(_registry(), llm_enabled=False)
-    before = controller.prompt_versions
-    original_contract = CONTRACT_REGISTRY["natural_language_answer"]
-
-    with pytest.raises(TypeError):
-        controller.contract_registry["new"] = CONTRACT_REGISTRY["natural_language_answer"]
-    with pytest.raises(TypeError):
-        controller.policy.planning.sample_policy.tools["new"] = next(
-            iter(controller.policy.planning.sample_policy.tools.values())
-        )
-
-    monkeypatch.setitem(
-        CONTRACT_REGISTRY,
-        "natural_language_answer",
-        replace(original_contract, route="mutated-global-contract"),
-    )
-    monkeypatch.setitem(
-        get_policy().planning.sample_policy.tools,
-        "new-global-policy-entry",
-        next(iter(get_policy().planning.sample_policy.tools.values())),
-    )
-
-    assert controller.contract_registry["natural_language_answer"] == original_contract
-    assert "new-global-policy-entry" not in controller.policy.planning.sample_policy.tools
     assert controller.prompt_versions == before
 
 

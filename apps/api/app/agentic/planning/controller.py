@@ -1,12 +1,10 @@
 import json
 import logging
-from types import MappingProxyType
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, TypeAdapter, ValidationError
 
 from app.agentic.conversation.models import Turn
-from app.agentic.planning.contracts import snapshot_contract_registry
 from app.agentic.planning.decisions import (
     ControllerDecision,
     DirectAnswerDecision,
@@ -57,13 +55,11 @@ class AgentController:
         planner_max_retries: int | None = None,
     ) -> None:
         self.registry = registry
-        self.policy = _snapshot_policy(get_policy())
-        self.contract_registry = snapshot_contract_registry()
         self.registry.freeze()
+        self.policy = get_policy()
         self._prompt_bundle: ControllerPromptBundle = build_controller_prompt(
             self.registry,
             self.policy,
-            self.contract_registry,
         )
         settings = get_settings()
         self.llm_enabled = settings.llm_enabled if llm_enabled is None else llm_enabled
@@ -185,7 +181,6 @@ class AgentController:
                 evidence = resolve_required_evidence(
                     final_plan,
                     self.registry,
-                    self.contract_registry,
                 )
             else:
                 evidence = RequiredEvidenceResolution()
@@ -195,7 +190,6 @@ class AgentController:
                 history or [],
                 self.registry,
                 evidence,
-                self.contract_registry,
             )
             if not validation_errors:
                 logger.info(
@@ -283,17 +277,3 @@ def _append_retry_turns(
     caller re-invokes the LLM with the grown message list."""
     messages.append({"role": "assistant", "content": assistant_content})
     messages.append({"role": "user", "content": feedback})
-
-
-def _snapshot_policy(policy):
-    """Detach the Prompt-relevant policy values from the global cache."""
-
-    sample_policy = policy.planning.sample_policy.model_copy(
-        update={
-            "tools": MappingProxyType(
-                dict(policy.planning.sample_policy.tools)
-            )
-        }
-    )
-    planning = policy.planning.model_copy(update={"sample_policy": sample_policy})
-    return policy.model_copy(update={"planning": planning})

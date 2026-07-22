@@ -35,3 +35,31 @@
   configured/prepared manifest。
 - 验证：`ruff check .`、`pytest`（399 passed, 1 warning）、`uv lock --locked` 和
   `git diff --check` 通过。`git diff --check` 仅输出既有 LF/CRLF 转换提示。
+
+## 21:40 — V3.2-2 轻量化修订
+
+- 按修订方案移除超出阶段范围的防御层：`ToolRegistry.freeze()` 仅关闭注册期，保留
+  Controller 构造后拒绝 `register()` 的不变量，不再深度复制或封存 ToolDefinition 内容。
+- 删除 Contract Registry / Sample Policy 快照、Graph 的 Registry 身份校验和 PlanService 对真实
+  Controller 的 Registry 复用分支；默认生产装配仍先注册并校验工具，再用同一 Registry 构造
+  Controller、GraphRunner 与 executor。
+- 删除 `controller.history_policy.sha256`；manifest 只记录 system prompt 的 SHA-256 和已接线
+  renderer 版本。动态 query、history 与 retry feedback 仍不进入 manifest。
+- 删除对应的深度冻结、快照、Registry 一致性和 history-policy 测试；保留 golden、enabled/disabled
+  manifest、实际发送 system hash、冻结后拒绝注册、catalog/contract/sample-policy hash 变化和
+  fresh-import 覆盖。
+- 本节以轻量化契约替代 21:15 中的深度冻结、快照、身份校验及 history-policy hash 描述；不改变
+  Recovery/Replan、Graph/API/Attempt 或持久化边界。
+- 验证：`ruff check .`、`pytest`（395 passed, 1 warning）、`uv lock --locked` 和
+  `git diff --check` 均通过。
+
+## 22:00 — V3.2-2 轻量化验收收口
+
+- 收紧 V3.2-2 与 Tool 层文档：仅约束默认 PlanService 装配中 Controller、GraphRunner、
+  ToolExecutor 读取同一 Registry 实例且注册期已关闭；不再称为不可变集合。
+- 明确非目标：不深度冻结 ToolDefinition、不快照 Contract Registry/Sample Policy、不校验任意
+  依赖注入对象身份，且不计算 history-policy hash。
+- 新增默认 `PlanService()` 装配回归，断言 Controller、Runner 与 Executor 均使用
+  `service.registry`；不扩展为任意注入对象的身份防御。
+- 验证：`ruff check .`、`tests/test_plan_service.py`（11 passed）、完整 `pytest`
+  （396 passed, 1 warning）和 `uv lock --locked` 均通过。

@@ -1,8 +1,6 @@
 import json
-from collections.abc import Mapping
-from copy import deepcopy
 from dataclasses import dataclass, field
-from types import MappingProxyType, UnionType
+from types import UnionType
 from typing import Any, Union, get_args, get_origin
 
 from pydantic import ValidationError
@@ -73,17 +71,8 @@ STRUCTURED_OUTPUT_CONTRACTS = {
 ALLOWED_OUTPUT_CONTRACTS = set(CONTRACT_REGISTRY)
 
 
-def snapshot_contract_registry() -> Mapping[str, ContractSpec]:
-    """Return a detached, read-only contract catalog for one Controller."""
-
-    return MappingProxyType(deepcopy(CONTRACT_REGISTRY))
-
-
-def get_contract(
-    name: str,
-    contracts: Mapping[str, ContractSpec] = CONTRACT_REGISTRY,
-) -> ContractSpec | None:
-    return contracts.get(name)
+def get_contract(name: str) -> ContractSpec | None:
+    return CONTRACT_REGISTRY.get(name)
 
 
 def known_evidence_kinds(registry: ToolRegistry) -> set[str]:
@@ -94,13 +83,10 @@ def known_evidence_kinds(registry: ToolRegistry) -> set[str]:
     }
 
 
-def render_controller_contracts(
-    registry: ToolRegistry,
-    contracts: Mapping[str, ContractSpec] = CONTRACT_REGISTRY,
-) -> str:
+def render_controller_contracts(registry: ToolRegistry) -> str:
     available_evidence = known_evidence_kinds(registry)
     sections = []
-    for spec in contracts.values():
+    for spec in CONTRACT_REGISTRY.values():
         allowed = spec.evidence_allowlist
         lines = [
             f"- {spec.name}",
@@ -162,7 +148,6 @@ def validate_plan_against_catalog(
     registry: ToolRegistry,
     *,
     required_evidence: list[str] | None = None,
-    contracts: Mapping[str, ContractSpec] = CONTRACT_REGISTRY,
 ) -> list[str]:
     errors: list[str] = []
     errors.extend(validate_tool_calls(plan, registry))
@@ -174,7 +159,6 @@ def validate_plan_against_catalog(
             plan,
             registry,
             required_evidence=required_evidence,
-            contracts=contracts,
         )
     )
     errors.extend(
@@ -425,13 +409,11 @@ def validate_output_contract(
     registry: ToolRegistry,
     *,
     required_evidence: list[str] | None = None,
-    contracts: Mapping[str, ContractSpec] = CONTRACT_REGISTRY,
 ) -> list[str]:
     return validate_contract_plan_with_evidence(
         plan,
         known_evidence_kinds(registry),
         required_evidence=required_evidence,
-        contracts=contracts,
     )
 
 
@@ -463,9 +445,8 @@ def validate_contract_plan_with_evidence(
     evidence_kinds: set[str],
     *,
     required_evidence: list[str] | None = None,
-    contracts: Mapping[str, ContractSpec] = CONTRACT_REGISTRY,
 ) -> list[str]:
-    spec = get_contract(plan.output_contract, contracts)
+    spec = get_contract(plan.output_contract)
     if spec is None:
         return [f"unknown output_contract: {plan.output_contract}"]
 

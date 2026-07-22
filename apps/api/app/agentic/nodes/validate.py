@@ -1,11 +1,6 @@
 import logging
-from collections.abc import Mapping
 
-from app.agentic.planning.contracts import (
-    CONTRACT_REGISTRY,
-    ContractSpec,
-    validate_plan_against_catalog,
-)
+from app.agentic.planning.contracts import validate_plan_against_catalog
 from app.agentic.state import AgentRunState
 from app.agentic.tools import ToolRegistry
 
@@ -15,7 +10,6 @@ logger = logging.getLogger(__name__)
 def validate_plan_node(
     state: AgentRunState,
     registry: ToolRegistry,
-    contracts: Mapping[str, ContractSpec] = CONTRACT_REGISTRY,
 ) -> AgentRunState:
     state.add_trace("validate", "validate execution plan", "planned")
     logger.info("node=validate start has_plan=%s", state.plan is not None)
@@ -34,7 +28,6 @@ def validate_plan_node(
         plan,
         registry,
         required_evidence=state.effective_required_evidence,
-        contracts=contracts,
     )
 
     if errors:

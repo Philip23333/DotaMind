@@ -38,6 +38,14 @@ def _tool_result(plan: ExecutionPlan, reason: str) -> AgentControllerResult:
     )
 
 
+def test_default_plan_service_shares_one_registry_across_runtime_components() -> None:
+    service = PlanService()
+
+    assert service.controller.registry is service.registry
+    assert service.runner.registry is service.registry
+    assert service.runner.executor.registry is service.registry
+
+
 def test_plan_service_returns_insufficient_tools_without_execution() -> None:
     service = PlanService(
         controller=FakeController(
