@@ -1,3 +1,15 @@
+# Local File Inspection
+
+- Prefer the FastCtx MCP tools for local repository inspection:
+  `mcp__fastctx__read`, `mcp__fastctx__grep`, and `mcp__fastctx__glob`.
+- Use them before shell alternatives such as `Get-Content`, `rg`, `findstr`,
+  `Select-String`, `dir`, or recursive `ls` when the FastCtx operation covers
+  the task.
+- Pass absolute paths. If a FastCtx result ends with `Partial`, continue only
+  with the exact paging parameters it provides.
+- Use `mcp__fastctx__replace` for mechanical replacements. Use `apply_patch`
+  for generated content, semantic rewrites, or small local edits.
+
 # Project Session Context
 
 At the start of every new session in this repository, before analyzing or editing code:
@@ -111,6 +123,16 @@ Plan: docs/design/tools/STRATZ工具审计与重构输入.md §4 P1-6
 ```
 
 ## Development Priorities
+
+- When drafting or reviewing implementation plans, prefer the smallest clear
+  design that closes the current phase. Focus first on confirmed blocking
+  issues and core contracts rather than making every hypothetical boundary
+  complete.
+- Do not add speculative edge-case handling, redundant safety layers, parallel
+  abstractions, or defensive machinery without a concrete requirement or
+  demonstrated failure mode. Record lower-priority gaps as explicit non-goals
+  or follow-up work instead. Existing explicit security, privacy, and data
+  integrity invariants still apply.
 
 - This project is still in active development and is not yet in production.
   Prioritize implementing the target architecture and capabilities over

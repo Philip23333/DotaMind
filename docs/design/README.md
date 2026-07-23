@@ -8,8 +8,9 @@
 1. 先读最新 [`../progress/`](../progress/) 中英文进度快照。
 2. 读 [`versions/DotaMind_V3.2_design.md`](./versions/DotaMind_V3.2_design.md)
    了解当前 Agent Runtime Foundation 总体目标。
-3. 读当前阶段蓝图
-   [`versions/DotaMind_V3.2-3_design.md`](./versions/DotaMind_V3.2-3_design.md)。
+3. 读已完成阶段蓝图
+   [`versions/DotaMind_V3.2-3_design.md`](./versions/DotaMind_V3.2-3_design.md)，
+   再读总设计的 V3.2-4 请求幂等章节了解下一阶段目标。
 4. 读 [`versions/DotaMind_V3.0_design.md`](./versions/DotaMind_V3.0_design.md)
    了解已实现业务能力。
 5. 读 [`versions/DotaMind_MVP_v2.5.md`](./versions/DotaMind_MVP_v2.5.md)
@@ -83,9 +84,12 @@ V3.2 完成前业务工具目录保持冻结，因此这些路线图当前是延
 移动文档时必须同步更新当前入口、代码注释和有效交叉链接。历史进度快照保持原始记录，
 通过新的当日追加章节说明迁移后的规范路径。
 
-## 当前 V3.2-3 阅读顺序
+## 当前 V3.2 阅读顺序
 
-有界 missing-evidence Recovery/Replan 为当前阶段。先阅读
+V3.2-3 有界 missing-evidence Recovery/Replan 已完成，V3.2-4 请求幂等是下一阶段。
+当前还没有单独的 V3.2-4 实施蓝图；进入实现前，应先以
+[`versions/DotaMind_V3.2_design.md`](./versions/DotaMind_V3.2_design.md) 的请求幂等、
+分阶段实施和并发验收章节为边界形成阶段蓝图。运行时基线先阅读
 [`versions/DotaMind_V3.2-3_design.md`](./versions/DotaMind_V3.2-3_design.md)，再阅读
 [`versions/DotaMind_V3.2-2_design.md`](./versions/DotaMind_V3.2-2_design.md) 确认 Prompt
 manifest 与冻结 catalog 边界，并回看

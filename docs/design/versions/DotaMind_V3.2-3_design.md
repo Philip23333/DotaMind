@@ -1,6 +1,8 @@
 # DotaMind V3.2-3 有界缺证 Recovery/Replan 设计
 
-> 状态：已实现，待最终提交验收。本文是 V3.2-3 的阶段实施蓝图；总体阶段顺序和
+> 状态：已完成。实现与文档已由提交 `9a8dfae` 收口，验收结果为
+> `425 passed, 1 warning`，且 `ruff check .`、`uv lock --locked`、
+> `git diff --check` 均通过。本文是 V3.2-3 的阶段实施蓝图；总体阶段顺序和
 > 后续幂等、Redis、可观测性边界以
 > [`DotaMind_V3.2_design.md`](./DotaMind_V3.2_design.md) 为准。
 

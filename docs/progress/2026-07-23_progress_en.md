@@ -32,3 +32,24 @@
 
 - `AGENTS.md` remains a user-maintained independent modification and continues to be excluded
   from the V3.2-3 commit.
+
+## 10:07 — V3.2-3 documentation closure and V3.2-4 entry point
+
+### Phase status
+
+- V3.2-3 was closed by commit `9a8dfae`; the phase blueprint status now reads
+  "completed" instead of "implemented, pending final commit acceptance."
+- The V3.2 master design and design index now mark V3.2-3 as completed and V3.2-4 request
+  idempotency as the next phase.
+- There is no standalone V3.2-4 implementation blueprint yet. Before implementation, the
+  phase must define the InMemory `RequestRecord`, concurrent single-flight, public-response
+  replay, and single-Turn commit boundaries.
+
+### Verification and boundaries
+
+- This update changes documentation only and does not rerun tests. It carries forward the
+  V3.2-3 pre-commit verification of `425 passed, 1 warning`, Ruff, lock, and diff checks.
+- The current implementation still fixes `request_id=None` in `run_init_node` and has no
+  `RequestRecord`; V3.2-4 behavior is not implemented yet.
+- `AGENTS.md` remains a user-maintained independent modification outside this documentation
+  update.

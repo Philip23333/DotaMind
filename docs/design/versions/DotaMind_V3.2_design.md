@@ -6,7 +6,7 @@
 > `DotaMind_MVP_v2.5.md` 的 constrained tool calling 边界，也不改变 V3.0
 > 已闭环的业务能力；它定义的是已有能力如何更可靠、可恢复、可追踪地运行。
 
-更新日期：2026-07-19
+更新日期：2026-07-23
 
 ## 1. 背景
 
@@ -547,7 +547,7 @@ tool error 改写成 missing evidence，也不能把 Answer error 改写成 crit
   executor 使用同一 registry catalog；不引入深度冻结或 fingerprint；recovery rules 在本阶段保持 dormant。
 - 使用 golden tests 确认语义不漂移。
 
-### V3.2-3：有界 Recovery/Replan
+### V3.2-3：有界 Recovery/Replan（已完成）
 
 - 增加 attempt finalize、recovery、attempt reset 节点。
 - 首版只恢复真实可达的全局 missing-evidence 缺口；Critic Recovery 延后。
@@ -556,7 +556,7 @@ tool error 改写成 missing evidence，也不能把 Answer error 改写成 crit
 - duplicate fingerprint 阻断始终启用，不增加配置开关或 `reused_tool_result_ids`。
 - debug UI 沿用 runtime JSON 展示最多两个 attempt。
 
-### V3.2-4：请求幂等
+### V3.2-4：请求幂等（下一阶段）
 
 - API 增加可选 `request_id`。
 - InMemory store 先实现 RequestRecord 语义和并发测试。
