@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 
+RECOVERY_RULES_VERSION = "v1"
+
 _COMPONENT_VERSIONS = {
     "controller.base": "v1",
     "controller.conversation_rules": "v1",
@@ -13,9 +15,8 @@ _COMPONENT_VERSIONS = {
     "controller.history_renderer": "v1",
     "controller.user_message_renderer": "v1",
     "controller.validation_retry": "v1",
+    "controller.recovery_rules": RECOVERY_RULES_VERSION,
 }
-
-RECOVERY_RULES_VERSION = "v1"
 
 
 def build_prompt_versions(system_prompt: str) -> dict[str, str]:

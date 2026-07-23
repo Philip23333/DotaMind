@@ -10,14 +10,22 @@ from app.agentic.critic import AgenticCriticReview
 from app.agentic.evidence import EvidenceGraph
 from app.agentic.models import ExecutionPlan, ToolResult
 from app.agentic.planning.controller import AgentControllerResult
-from app.agentic.planning.decisions import ControllerDecision, ConversationAnswerResult
+from app.agentic.planning.decisions import (
+    ControllerDecision,
+    ConversationAnswerResult,
+    ToolPlanDecision,
+)
 from app.agentic.runtime.clock import current_node_timing
 from app.agentic.runtime.models import (
     AgentRunStatus,
     AttemptRecord,
+    CachedToolCall,
     FailureStage,
+    RecoveryAction,
+    RecoveryFeedback,
     RunBudget,
     RunContext,
+    RuntimeFailureCode,
     TerminalStage,
     ToolDispatchRecord,
 )
@@ -49,6 +57,11 @@ class AgentRunState(BaseModel):
     attempt_started_at: datetime | None = None
     attempt_started_monotonic: float | None = None
     attempts: list[AttemptRecord] = Field(default_factory=list)
+    recovery_action: RecoveryAction | None = None
+    recovery_feedback: RecoveryFeedback | None = None
+    recovery_baseline_decision: ToolPlanDecision | None = None
+    executed_call_fingerprints: dict[str, CachedToolCall] = Field(default_factory=dict)
+    runtime_failure_code: RuntimeFailureCode | None = None
     attempt_failure_stage: FailureStage | None = None
     terminal_stage: TerminalStage | None = None
     run_duration_ms: int | None = None

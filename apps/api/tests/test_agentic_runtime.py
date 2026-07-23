@@ -11,7 +11,13 @@ from app.agentic.critic import AgenticCriticReview
 from app.agentic.evidence import EvidenceDataQuality, EvidenceGraph
 from app.agentic.graph import AgentGraphRunner, _route_after_evidence
 from app.agentic.models import ExecutionPlan, QueryContext, ToolCall, ToolResult, ToolSource
-from app.agentic.nodes import evidence_node, response_node, run_finalize_node, run_init_node
+from app.agentic.nodes import (
+    attempt_finalize_node,
+    evidence_node,
+    response_node,
+    run_finalize_node,
+    run_init_node,
+)
 from app.agentic.planning.controller import AgentControllerResult
 from app.agentic.planning.decisions import (
     CapabilityBoundaryDecision,
@@ -22,6 +28,7 @@ from app.agentic.planning.decisions import (
 from app.agentic.runtime import (
     AttemptAnswerSummary,
     FakeClock,
+    RecoveryFeedback,
     RunBudget,
     RunContext,
     ToolDispatchRecord,
@@ -67,7 +74,7 @@ def test_run_context_budget_and_fake_clock_contracts() -> None:
     assert state.run_budget.deadline_exceeded(clock.monotonic() - 10.0)
 
 
-def test_runtime_models_are_strict_and_have_no_recovery_fields() -> None:
+def test_runtime_models_are_strict_and_limit_recovery_to_attempts() -> None:
     with pytest.raises(ValidationError):
         AttemptAnswerSummary(
             answer_type="direct_answer",
@@ -87,7 +94,7 @@ def test_runtime_models_are_strict_and_have_no_recovery_fields() -> None:
     from app.agentic.runtime import AttemptRecord
 
     assert "recovery_reason" not in AttemptRecord.model_fields
-    assert "recovery_code" not in AttemptRecord.model_fields
+    assert "recovery_code" in AttemptRecord.model_fields
 
 
 def test_budget_records_over_limit_without_enforcement() -> None:
@@ -131,6 +138,15 @@ def test_reset_attempt_state_is_pure_clears_work_and_detaches_mutables() -> None
         terminal_stage="critic",
         run_duration_ms=123,
         trace=[AgentTraceEvent(node="old", action="keep trace", status="completed")],
+        recovery_action="replan",
+        recovery_feedback=RecoveryFeedback(
+            missing_evidence=["kind"],
+            remaining_tool_budget=2,
+        ),
+        recovery_baseline_decision=ToolPlanDecision(
+            kind="tool_plan",
+            plan=_private_plan(),
+        ),
     )
     run_init_node(state, RuntimePolicy(), clock)
     original = state.model_copy(deep=True)
@@ -168,6 +184,11 @@ def test_reset_attempt_state_is_pure_clears_work_and_detaches_mutables() -> None
     assert reset.response is None
     assert reset.terminal_stage is None
     assert reset.run_duration_ms is None
+    assert reset.recovery_action is None
+    assert reset.recovery_feedback == state.recovery_feedback
+    assert reset.recovery_feedback is not state.recovery_feedback
+    assert reset.recovery_baseline_decision == state.recovery_baseline_decision
+    assert reset.recovery_baseline_decision is not state.recovery_baseline_decision
 
     assert reset.run_budget is not state.run_budget
     assert reset.history is not state.history
@@ -403,6 +424,7 @@ def test_attempt_and_public_runtime_do_not_leak_private_payloads() -> None:
     )
     run_init_node(state, RuntimePolicy(), clock)
     clock.advance(0.125)
+    attempt_finalize_node(state, clock)
     run_finalize_node(state, clock)
     response_node(state)
 
@@ -436,6 +458,7 @@ def test_safe_failure_runtime_is_minimal_and_sanitized() -> None:
         errors=[SENTINEL],
     )
     run_init_node(state, RuntimePolicy(), clock)
+    attempt_finalize_node(state, clock)
     run_finalize_node(state, clock)
     response_node(state)
 
@@ -482,7 +505,14 @@ def test_graph_trace_has_two_events_per_node_and_injected_timing() -> None:
         assert event.attempt_index == 0
         assert event.started_at is not None
     assert "response" not in grouped
-    assert set(grouped) == {"run_init", "controller", "decision_validate", "run_finalize"}
+    assert set(grouped) == {
+        "run_init",
+        "controller",
+        "decision_validate",
+        "attempt_finalize",
+        "recovery",
+        "run_finalize",
+    }
     assert all(
         [event.status for event in events] == ["planned", "completed"]
         for events in grouped.values()
@@ -509,6 +539,7 @@ def test_missing_evidence_plan_is_execution_error_not_raw_success() -> None:
     assert state.status == "error"
     assert state.errors == ["missing execution plan for evidence construction"]
     assert _route_after_evidence(state) == "response"
+    attempt_finalize_node(state, clock)
     run_finalize_node(state, clock)
     response_node(state)
     assert state.response["status"] == "error"

@@ -53,6 +53,7 @@ class RuntimeToolCallStatus(StrictPublicModel):
     tool: str
     status: Literal["ok", "error"]
     latency_ms: int
+    reused: bool
 
 
 class RuntimeEvidenceSummary(StrictPublicModel):
@@ -88,6 +89,7 @@ class RuntimeAttemptSummary(StrictPublicModel):
         "error",
     ]
     failure_stage: RuntimeStage | None
+    recovery_code: Literal["missing_evidence"] | None
     duration_ms: int
     tool_call_statuses: list[RuntimeToolCallStatus]
     evidence_summary: RuntimeEvidenceSummary | None

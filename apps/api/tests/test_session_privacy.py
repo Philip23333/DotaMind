@@ -10,6 +10,7 @@ from uuid import uuid4
 
 from app.agentic.conversation.models import Turn
 from app.agentic.models import ExecutionPlan, ToolCall
+from app.agentic.nodes.attempt_finalize import attempt_finalize_node
 from app.agentic.nodes.response import response_node
 from app.agentic.nodes.run_finalize import run_finalize_node
 from app.agentic.nodes.run_init import run_init_node
@@ -35,6 +36,7 @@ SENTINEL = "SENTINEL_PRIVACY_ABC123"
 def _finalize_response(state: AgentRunState) -> AgentRunState:
     clock = SystemClock()
     run_init_node(state, RuntimePolicy(), clock)
+    attempt_finalize_node(state, clock)
     run_finalize_node(state, clock)
     return response_node(state)
 

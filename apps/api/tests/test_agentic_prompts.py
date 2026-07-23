@@ -1,6 +1,7 @@
 import asyncio
 import codecs
 import hashlib
+import json
 import subprocess
 import sys
 from dataclasses import replace
@@ -12,15 +13,18 @@ import app.agentic.prompts.controller as controller_prompts
 from app.agentic.graph import AgentGraphRunner
 from app.agentic.planning.contracts import CONTRACT_REGISTRY
 from app.agentic.planning.controller import AgentController
+from app.agentic.planning.decisions import ToolPlanDecision
 from app.agentic.prompts.controller import (
     build_controller_prompt,
     render_controller_user_message,
 )
 from app.agentic.prompts.feedback import (
+    render_recovery_feedback,
     render_recovery_rules,
     render_validation_retry_feedback,
 )
 from app.agentic.prompts.versions import RECOVERY_RULES_VERSION
+from app.agentic.runtime.models import RecoveryExecutedCall, RecoveryFeedback
 from app.agentic.state import AgentRunState
 from app.agentic.tools import ToolDefinition
 from app.agentic.tools.stratz_tools import build_default_tool_registry
@@ -46,6 +50,16 @@ class CapturingLLM:
             "basis": [],
             "answer": "hello",
         }
+
+
+class SequenceCapturingLLM:
+    def __init__(self, *payloads: dict) -> None:
+        self.payloads = list(payloads)
+        self.messages: list[list[dict[str, str]]] = []
+
+    async def complete_json(self, messages, **kwargs):
+        self.messages.append([dict(message) for message in messages])
+        return self.payloads.pop(0)
 
 
 def _registry():
@@ -163,7 +177,7 @@ def test_enabled_llm_system_message_matches_run_manifest() -> None:
     assert hashlib.sha256(sent_system.encode("utf-8")).hexdigest() == manifest[
         "controller.system.sha256"
     ]
-    assert "recovery_rules" not in manifest
+    assert manifest["controller.recovery_rules"] == "v1"
     assert state.response["runtime"]["attempts"][0].get("prompt_versions") is None
 
 
@@ -181,12 +195,12 @@ def test_disabled_llm_still_records_prepared_prompt_manifest() -> None:
     assert state.run_context.prompt_versions["controller.validation_retry"] == "v1"
 
 
-def test_recovery_rules_remain_dormant_and_imports_are_acyclic() -> None:
+def test_recovery_rules_are_versioned_but_not_in_system_prompt() -> None:
     controller = AgentController(_registry(), llm_enabled=False)
 
     assert RECOVERY_RULES_VERSION == "v1"
     assert render_recovery_rules() not in controller._system_prompt()
-    assert "recovery_rules" not in controller.prompt_versions
+    assert controller.prompt_versions["controller.recovery_rules"] == "v1"
     assert controller.prompt_versions["controller.validation_retry"] == "v1"
     assert render_validation_retry_feedback(["bad field"]) == (
         "Your previous response was rejected. Return the FULL corrected "
@@ -197,7 +211,8 @@ def test_recovery_rules_remain_dormant_and_imports_are_acyclic() -> None:
     for clause in (
         "preserve every successful prior call's\n  id, tool, and args",
         "append only legal evidence-producing calls",
-        "Do not weaken the output contract, required evidence, or explicit user\n  constraints",
+        "Preserve intent, goal, output contract, context, constraints, and required\n"
+        "  evidence exactly",
         "Do not use changed call ids",
     ):
         assert clause in recovery_rules
@@ -208,3 +223,123 @@ def test_recovery_rules_remain_dormant_and_imports_are_acyclic() -> None:
         "import app.agentic.planning.controller; import app.agentic.prompts.controller",
     ):
         subprocess.run([sys.executable, "-c", statement], cwd=root, check=True)
+
+
+def test_recovery_controller_message_uses_original_prompt_and_full_baseline() -> None:
+    baseline_payload = _matchup_plan_payload()
+    recovered_payload = _matchup_plan_payload()
+    recovered_payload["plan"]["tool_calls"].append(
+        {
+            "id": "get_synergy",
+            "tool": "stratz.hero_synergy_ranking",
+            "args": {
+                "hero_id": "$resolve_target.data.hero.hero_id",
+                "side": "with",
+                "take": 5,
+            },
+        }
+    )
+    llm = SequenceCapturingLLM(baseline_payload, recovered_payload)
+    controller = AgentController(
+        _registry(),
+        llm=llm,
+        llm_enabled=True,
+        planner_max_retries=0,
+    )
+    initial = asyncio.run(controller.decide("enemy picked Lina"))
+    assert isinstance(initial.decision, ToolPlanDecision)
+    feedback = RecoveryFeedback(
+        missing_evidence=["sample_size"],
+        executed_calls=[
+            RecoveryExecutedCall(
+                id="get_ranking",
+                tool="stratz.hero_matchup_ranking",
+            )
+        ],
+        remaining_tool_budget=5,
+    )
+
+    recovered = asyncio.run(
+        controller.decide(
+            "enemy picked Lina",
+            recovery_feedback=feedback,
+            recovery_baseline_decision=initial.decision,
+        )
+    )
+
+    assert recovered.status == "decided"
+    recovery_messages = llm.messages[1]
+    assert [message["role"] for message in recovery_messages] == [
+        "system",
+        "user",
+        "assistant",
+        "user",
+    ]
+    assert recovery_messages[0] == llm.messages[0][0]
+    assert json.loads(recovery_messages[2]["content"]) == initial.decision.model_dump(
+        mode="json"
+    )
+    assert recovery_messages[3]["content"] == render_recovery_feedback(feedback)
+
+
+def test_recovery_controller_combines_generic_and_replan_errors() -> None:
+    baseline_payload = _matchup_plan_payload()
+    invalid_payload = _matchup_plan_payload()
+    invalid_payload["plan"]["tool_calls"][0]["tool"] = "debug.unknown"
+    llm = SequenceCapturingLLM(baseline_payload, invalid_payload)
+    controller = AgentController(
+        _registry(),
+        llm=llm,
+        llm_enabled=True,
+        planner_max_retries=0,
+    )
+    initial = asyncio.run(controller.decide("enemy picked Lina"))
+    assert isinstance(initial.decision, ToolPlanDecision)
+
+    result = asyncio.run(
+        controller.decide(
+            "enemy picked Lina",
+            recovery_feedback=RecoveryFeedback(
+                missing_evidence=["sample_size"],
+                remaining_tool_budget=5,
+            ),
+            recovery_baseline_decision=initial.decision,
+        )
+    )
+
+    assert result.status == "error"
+    assert any("unknown tool" in error for error in result.errors)
+    assert any("exact prefix" in error for error in result.errors)
+
+
+def _matchup_plan_payload() -> dict:
+    return {
+        "kind": "tool_plan",
+        "plan": {
+            "intent": "hero_matchup_ranking",
+            "goal": "Fetch Lina matchup ranking evidence.",
+            "output_contract": "natural_language_answer",
+            "tool_calls": [
+                {
+                    "id": "resolve_target",
+                    "tool": "resolve_hero",
+                    "args": {"query": "Lina"},
+                },
+                {
+                    "id": "get_ranking",
+                    "tool": "stratz.hero_matchup_ranking",
+                    "args": {
+                        "hero_id": "$resolve_target.data.hero.hero_id",
+                        "side": "vs",
+                        "take": 5,
+                    },
+                },
+            ],
+            "required_evidence": [
+                "hero_identity",
+                "matchup_ranking_row",
+                "sample_size",
+            ],
+            "constraints": {"max_tool_calls": 6, "allow_mock": False},
+        },
+    }

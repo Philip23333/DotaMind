@@ -22,11 +22,22 @@ async def controller_node(
         state.game,
         len(state.history),
     )
-    result = await controller.decide(
-        state.query,
-        state.game,
-        history=state.history or None,
-    )
+    if state.recovery_feedback is None:
+        result = await controller.decide(
+            state.query,
+            state.game,
+            history=state.history or None,
+        )
+    else:
+        if state.recovery_baseline_decision is None:
+            raise RuntimeError("recovery baseline decision is missing")
+        result = await controller.decide(
+            state.query,
+            state.game,
+            history=state.history or None,
+            recovery_feedback=state.recovery_feedback,
+            recovery_baseline_decision=state.recovery_baseline_decision,
+        )
     state.controller_result = result
     state.reason = result.reason
     if result.status != "decided" or result.decision is None:

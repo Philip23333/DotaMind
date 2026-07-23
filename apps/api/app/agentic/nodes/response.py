@@ -12,9 +12,12 @@ def response_node(state: AgentRunState) -> AgentRunState:
         or state.run_budget is None
         or state.terminal_stage is None
         or state.run_duration_ms is None
-        or len(state.attempts) != 1
+        or len(state.attempts) not in {1, 2}
     ):
-        raise RuntimeError("response_node requires one finalized runtime attempt")
+        raise RuntimeError("response_node requires one or two finalized attempts")
+    expected_indexes = list(range(len(state.attempts)))
+    if [attempt.attempt_index for attempt in state.attempts] != expected_indexes:
+        raise RuntimeError("response_node requires contiguous attempt records")
     runtime = _public_runtime(state, safe_failure=state.safe_failure_required)
     if state.safe_failure_required:
         response_type = state.response_type or "decision_validation_error"
@@ -81,6 +84,7 @@ def _public_runtime(state: AgentRunState, *, safe_failure: bool) -> dict:
             "decision_kind": None if safe_failure else attempt.decision_kind,
             "status": attempt.status,
             "failure_stage": attempt.failure_stage,
+            "recovery_code": attempt.recovery_code,
             "duration_ms": attempt.duration_ms,
             "tool_call_statuses": [],
             "evidence_summary": None,
@@ -94,6 +98,7 @@ def _public_runtime(state: AgentRunState, *, safe_failure: bool) -> dict:
                     "tool": call.tool,
                     "status": call.status,
                     "latency_ms": call.latency_ms,
+                    "reused": call.reused,
                 }
                 for call in attempt.tool_calls
             ]

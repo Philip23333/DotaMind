@@ -3,16 +3,30 @@ from typing import Any
 
 from app.agentic.models import ToolCall, ToolResult
 from app.agentic.references import lookup_path, parse_reference
-from app.agentic.runtime.models import ToolDispatchRecord
+from app.agentic.runtime.clock import Clock
+from app.agentic.runtime.guards import apply_runtime_failure, runtime_gate_failure
+from app.agentic.runtime.models import (
+    CachedToolCall,
+    RuntimeFailureCode,
+    ToolDispatchRecord,
+)
+from app.agentic.runtime.recovery import tool_call_fingerprint
 from app.agentic.state import AgentRunState
 from app.agentic.tools.executor import ToolExecutor
 
 logger = logging.getLogger(__name__)
 
 
+class _RuntimeGateBlocked(RuntimeError):
+    def __init__(self, code: RuntimeFailureCode) -> None:
+        self.code = code
+        super().__init__(code)
+
+
 async def tool_executor_node(
     state: AgentRunState,
     executor: ToolExecutor,
+    clock: Clock,
 ) -> AgentRunState:
     state.add_trace("tools", "execute planned tool calls", "planned")
     logger.info(
@@ -59,15 +73,63 @@ async def tool_executor_node(
             )
             continue
 
-        result, dispatch = await executor.execute(
-            ToolCall(id=call.id, tool=call.tool, args=resolved_args),
+        fingerprint = tool_call_fingerprint(
+            call.tool,
+            resolved_args,
             state.plan.context,
-            on_handler_entered=(
-                state.run_budget.record_tool_call if state.run_budget else None
-            ),
         )
+        cached = state.executed_call_fingerprints.get(fingerprint)
+        if cached is not None:
+            if cached.call_id != call.id:
+                apply_runtime_failure(
+                    state,
+                    "execution_budget_error",
+                    detail=(
+                        "duplicate tool call fingerprint uses a different call id: "
+                        f"{cached.call_id} -> {call.id}"
+                    ),
+                )
+                break
+            result = cached.result.model_copy(update={"latency_ms": 0}, deep=True)
+            dispatch = ToolDispatchRecord(
+                tool_call_id=call.id,
+                tool=call.tool,
+                handler_entered=False,
+                stage="cache_reuse",
+                error_code=cached.dispatch.error_code,
+            )
+            state.tool_results.append(result)
+            state.tool_dispatch_records.append(dispatch)
+            results_by_id[call.id] = result
+            if result.status == "error":
+                state.errors.append(
+                    f"{call.id}: {result.error or 'tool execution failed'}"
+                )
+            continue
+
+        def check_handler_gate() -> None:
+            if failure := runtime_gate_failure(state, clock, resource="tools"):
+                raise _RuntimeGateBlocked(failure)
+
+        try:
+            result, dispatch = await executor.execute(
+                ToolCall(id=call.id, tool=call.tool, args=resolved_args),
+                state.plan.context,
+                before_handler_entered=check_handler_gate,
+                on_handler_entered=(
+                    state.run_budget.record_tool_call if state.run_budget else None
+                ),
+            )
+        except _RuntimeGateBlocked as exc:
+            apply_runtime_failure(state, exc.code)
+            break
         state.tool_results.append(result)
         state.tool_dispatch_records.append(dispatch)
+        state.executed_call_fingerprints[fingerprint] = CachedToolCall(
+            call_id=call.id,
+            result=result.model_copy(deep=True),
+            dispatch=dispatch.model_copy(deep=True),
+        )
         results_by_id[call.id] = result
         logger.info(
             "node=tools call_end id=%s tool=%s status=%s latency_ms=%s",

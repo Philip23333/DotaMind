@@ -100,11 +100,8 @@ START
                     -> critic_node
                     -> attempt_finalize_node
   -> recovery_node
-      -> success / terminal -> response_node
+      -> terminal -> run_finalize_node -> response_node -> END
       -> replan -> attempt_reset_node -> controller_node
-  -> run_finalize_node
-  -> response_node
-  -> END
 ```
 
 ### 4.1 路由规则
@@ -114,7 +111,8 @@ START
 - `direct_answer`、clarification、context missing 和 capability boundary 不进入
   tool/evidence/critic 路径，也不会因为 recovery 机制被转换成工具计划。
 - evidence 已确定缺失时，不应先调用 Answer LLM 再尝试恢复。
-- Critic 只对 evidence 已满足但质量不足的结果给出 recovery candidate。
+- V3.2-3 首版只恢复全局 missing-evidence 缺口；Critic Recovery 延后到存在稳定、
+  Graph 可达的结构化质量失败码后再设计。
 - `recovery_node` 是确定性规则节点，不是新的 LLM Agent。
 
 ## 5. 核心状态模型
@@ -174,6 +172,7 @@ class AttemptRecord(BaseModel):
     critic_summary: AttemptCriticSummary | None
     status: AttemptStatus
     failure_stage: FailureStage | None
+    recovery_code: Literal["missing_evidence"] | None
     started_at: datetime
     duration_ms: int
 ```
@@ -196,9 +195,11 @@ run_context
 run_budget
 attempt_index
 attempts[]
+recovery_action
 recovery_feedback
+recovery_baseline_decision
 executed_call_fingerprints
-reused_tool_result_ids
+runtime_failure_code
 terminal_stage
 ```
 
@@ -223,7 +224,7 @@ attempt-local errors
 history / session_memory_enabled
 run_context / run_budget
 attempts
-成功工具调用缓存
+成功或失败的 Run-local 工具调用缓存
 累计 trace
 ```
 
@@ -236,8 +237,8 @@ Controller 接收的是结构化、脱敏后的失败摘要：
 ```json
 {
   "failure_stage": "evidence",
+  "code": "missing_evidence",
   "missing_evidence": ["sample_size"],
-  "quality_reasons": ["selected rows do not meet the requested sample floor"],
   "executed_calls": [
     {
       "id": "matchup",
@@ -260,22 +261,24 @@ Controller 接收的是结构化、脱敏后的失败摘要：
 | Decision/plan validation retries exhausted | 否 | 候选计划不可信。 |
 | clarification/context missing/capability boundary | 否 | 需要用户输入或缺少注册能力。 |
 | Tool transport/handler/reference error | 否 | 必须直接暴露真实上游或执行错误。 |
-| Effective evidence 缺失，且 registry 中存在未使用的可产出工具 | 是 | 可以补工具调用。 |
-| Critic 判定样本/质量不足，且存在合法替代计划 | 是 | 可以在用户约束内补证。 |
+| 全局 effective evidence 缺失，且 registry 中存在未使用的可产出工具 | 是 | 可以补工具调用。 |
+| Critic 判定质量不足 | 否 | 首版没有真实、稳定且 Graph 可达的结构化失败码。 |
 | 用户明确样本/范围导致结果稀疏 | 否 | 不得静默放宽用户约束。 |
 | Answer LLM failure | 否 | 与 plan/evidence 无关。 |
-| Duplicate-call 或 run budget exhausted | 否 | 运行时护栏终止。 |
+| 可恢复缺口但 replan/controller/tool budget exhausted | 否 | `replan_exhausted` 收口。 |
+| Attempt 执行中超预算或 duplicate fingerprint | 否 | `execution_budget_error` 收口。 |
 
 ### 6.3 Replan 输出约束
 
 Replan 仍返回完整 `ControllerDecision`。若返回 `tool_plan`：
 
-- 之前成功的工具调用必须以相同 `id/tool/args` 保留。
-- 新调用只能追加，不能篡改已成功调用的含义。
+- Attempt 0 的全部调用必须以相同顺序和 `id/tool/args` 作为完整前缀。
+- `intent`、`goal`、`output_contract`、`context`、`constraints` 必须完全一致。
+- `required_evidence` 规范化后必须完全相等，不允许增加或删除。
+- 至少追加一个使用此前未用工具的新调用，且新 id 不得与旧 id 重复。
 - 既有 output reference 继续指向原 call id。
 - 新 plan 必须重新经过 sample policy、catalog、contract、reference 和 evidence
   producibility 校验。
-- 新 plan 不得降低 output contract 或删除用户明确要求的 evidence。
 - 不允许通过改变 call id 绕过重复调用检测。
 
 ### 6.4 工具调用指纹与复用
@@ -283,14 +286,18 @@ Replan 仍返回完整 `ControllerDecision`。若返回 `tool_plan`：
 工具指纹按以下内容规范化后计算：
 
 ```text
-sha256(tool_name + canonical_json(resolved_args) + canonical_json(effective_context))
+sha256(canonical_json({"tool": tool_name, "args": resolved_args,
+                       "context": full_query_context}))
 ```
 
 - 不包含模型生成的 call id。
 - 引用参数必须先解析成实际值再计算。
-- 相同指纹已有成功结果时，executor 复用原 ToolResult，不再次调用上游。
+- 相同指纹且 call id 相同时，executor 复用原 ToolResult，不再次调用上游；成功结果
+  的复用延迟记为 `0`。
 - 相同指纹已有失败结果时，不自动重试；最终保留 tool error。
-- 复用事件进入 trace，但不增加唯一工具调用预算。
+- 相同指纹换 call id 时返回 `execution_budget_error`。
+- 复用通过 Attempt tool-call summary 的 `reused` 字段公开，不增加唯一工具调用预算；
+  V3.2-6 前不增加工具级 TraceEvent。
 
 ## 7. 请求幂等
 
@@ -448,9 +455,8 @@ class AgentTraceEvent(BaseModel):
 `/debug/plan` 增加：
 
 - Run summary：run id、预算、总耗时；
-- Attempt 列表和每次终态；
-- ToolResult reused/executed 标识；
-- recovery 原因和剩余预算；
+- 最多两个 Attempt 的列表和每次终态；
+- ToolResult `reused` 标识和 Attempt 1 的固定 `recovery_code`；
 - 最终公开结果。
 
 继续禁止展示 raw Prompt、raw Controller output 和完整 history。
@@ -467,7 +473,6 @@ planning:
     max_controller_calls: 2
     max_answer_calls: 2
     max_elapsed_seconds: 60
-    forbid_duplicate_tool_calls: true
 
 conversation:
   backend: memory
@@ -507,8 +512,9 @@ tool error 改写成 missing evidence，也不能把 Answer error 改写成 crit
   增加 owner 绑定。
 - history 只进入当前请求 Controller，不进入公开 response、trace 或 metrics。
 - AttemptRecord 和 Redis record 均使用 allowlist DTO。
-- 恢复机器码不在 V3.2-1 定义；V3.2-3 再引入固定 `RecoveryCode`，不向历史 Attempt
-  写入自由文本恢复原因。
+- V3.2-3 只引入固定 `RecoveryCode="missing_evidence"`。它表示“当前 Attempt 因何
+  启动”：Attempt 0 永远为 null，实际启动的 Attempt 1 才记录该 code；已经封存的
+  Attempt 0 不回写。
 - 日志不得输出 discarded recall answer、raw validation echo 或 retry messages。
 - 幂等缓存保存的是已经过 public mapper/response allowlist 的响应。
 - Redis key 不直接使用可读 query 或用户文本；session/request UUID 应 hash 或使用
@@ -544,9 +550,11 @@ tool error 改写成 missing evidence，也不能把 Answer error 改写成 crit
 ### V3.2-3：有界 Recovery/Replan
 
 - 增加 attempt finalize、recovery、attempt reset 节点。
-- 实现可恢复矩阵、全局预算和工具指纹复用。
+- 首版只恢复真实可达的全局 missing-evidence 缺口；Critic Recovery 延后。
+- 实现可恢复矩阵、全局预算、deadline guard 和工具指纹复用。
 - `max_replans` 固定从 1 起步；不提供无限配置。
-- debug UI 展示多 attempt。
+- duplicate fingerprint 阻断始终启用，不增加配置开关或 `reused_tool_result_ids`。
+- debug UI 沿用 runtime JSON 展示最多两个 attempt。
 
 ### V3.2-4：请求幂等
 
@@ -584,9 +592,9 @@ tool error 改写成 missing evidence，也不能把 Answer error 改写成 crit
 
 1. 正常 plan 一次成功，只生成一个 Attempt。
 2. 缺 evidence 且存在补证能力时触发一次 replan。
-3. 第二次仍失败时返回 `replan_exhausted`，不进入第三次 Controller。
+3. 第二次仍缺证时返回 `replan_exhausted`，不进入第三次 Controller。
 4. 旧成功调用在新 attempt 中复用，不访问 handler 第二次。
-5. 同工具同参数换 call id 仍被 fingerprint 识别。
+5. 同工具同参数换 call id 返回 `execution_budget_error`。
 6. Tool error、Answer error、invalid plan 和 capability boundary 不触发 replan。
 7. 用户明确样本约束不被 recovery 放宽。
 8. Stateful safe failure 仍只持久化脱敏 Turn。
@@ -618,7 +626,8 @@ V3.2 完成必须同时满足：
 
 - 业务工具目录没有因本阶段扩张。
 - 单 attempt 请求与 V3.0 行为兼容。
-- Recoverable evidence/quality gap 最多 replan 一次，并受总工具数和 deadline 限制。
+- 可恢复的全局 missing-evidence gap 最多 replan 一次，并受总工具数和 deadline 限制；
+  Critic quality gap 不在 V3.2-3 首版范围。
 - 重复工具调用不会重复访问上游。
 - `request_id` 重试不会重复执行或重复写 Turn。
 - Redis backend 在多 worker 下保持 session 顺序、锁所有权和幂等。

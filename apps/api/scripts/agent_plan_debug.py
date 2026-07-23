@@ -16,6 +16,7 @@ from app.agentic.critic import AgenticCritic
 from app.agentic.models import ExecutionPlan
 from app.agentic.nodes import (
     answer_node,
+    attempt_finalize_node,
     critic_node,
     evidence_node,
     response_node,
@@ -78,12 +79,13 @@ async def run_plan(
     state = run_init_node(state, RuntimePolicy(), clock)
     state = validate_plan_node(state, executor.registry)
     if state.status != "error":
-        state = await tool_executor_node(state, executor)
+        state = await tool_executor_node(state, executor, clock)
     state = evidence_node(state, executor.registry)
     if state.status != "error":
         state = await answer_node(state, AnswerSynthesizer())
     if state.status != "error":
         state = critic_node(state, AgenticCritic())
+    state = attempt_finalize_node(state, clock)
     state = run_finalize_node(state, clock)
     return response_node(state)
 

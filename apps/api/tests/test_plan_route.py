@@ -2,7 +2,7 @@ from uuid import UUID
 
 from fastapi.testclient import TestClient
 
-from app.agentic.nodes import response_node
+from app.agentic.nodes import attempt_finalize_node, response_node
 from app.agentic.nodes.run_finalize import run_finalize_node
 from app.agentic.nodes.run_init import run_init_node
 from app.agentic.runtime.clock import SystemClock
@@ -29,6 +29,7 @@ class FakePlanService:
         clock = SystemClock()
         run_init_node(state, RuntimePolicy(), clock)
         state.add_trace("controller", "no registered team tool", "completed")
+        attempt_finalize_node(state, clock)
         run_finalize_node(state, clock)
         return response_node(state)
 

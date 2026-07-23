@@ -1,6 +1,9 @@
 """Controller feedback renderers with separate validation and recovery contracts."""
 
+import json
 from collections.abc import Sequence
+
+from app.agentic.runtime.models import RecoveryFeedback
 
 
 def render_validation_retry_feedback(errors: Sequence[str]) -> str:
@@ -13,12 +16,22 @@ def render_validation_retry_feedback(errors: Sequence[str]) -> str:
 
 
 def render_recovery_rules() -> str:
-    """Return dormant V3.2-3 recovery guidance without wiring it into V3.2-2."""
+    """Return the fixed rules for one missing-evidence replan."""
 
-    return """Recovery/replan rules (V3.2-3 only):
+    return """Recovery/replan rules:
 - Apply these rules only when the server supplies explicit recovery feedback.
 - Return a full ControllerDecision; preserve every successful prior call's
   id, tool, and args, then append only legal evidence-producing calls.
-- Do not weaken the output contract, required evidence, or explicit user
-  constraints to make a recovery succeed.
+- Preserve intent, goal, output contract, context, constraints, and required
+  evidence exactly.
 - Do not use changed call ids to repeat an equivalent successful call."""
+
+
+def render_recovery_feedback(feedback: RecoveryFeedback) -> str:
+    payload = json.dumps(
+        feedback.model_dump(mode="json"),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return f"{render_recovery_rules()}\n\nRecovery feedback:\n{payload}"

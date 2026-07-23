@@ -4,6 +4,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.agentic.models import ToolResult
+
 AgentRunStatus = Literal[
     "ok",
     "clarification_required",
@@ -13,6 +15,9 @@ AgentRunStatus = Literal[
     "error",
 ]
 AttemptStatus = AgentRunStatus
+RecoveryCode = Literal["missing_evidence"]
+RecoveryAction = Literal["replan", "terminal"]
+RuntimeFailureCode = Literal["execution_budget_error", "execution_timeout"]
 TerminalStage = Literal[
     "controller",
     "decision_validation",
@@ -35,7 +40,12 @@ FailureStage = Literal[
     "critic",
     "execution",
 ]
-ToolDispatchStage = Literal["reference_resolution", "pre_dispatch", "handler"]
+ToolDispatchStage = Literal[
+    "reference_resolution",
+    "pre_dispatch",
+    "handler",
+    "cache_reuse",
+]
 ToolErrorCode = Literal[
     "reference_resolution_error",
     "tool_not_registered",
@@ -137,6 +147,27 @@ class ToolDispatchRecord(StrictRuntimeModel):
     error_code: ToolErrorCode | None = None
 
 
+class RecoveryExecutedCall(StrictRuntimeModel):
+    id: str
+    tool: str
+    status: Literal["ok"] = "ok"
+
+
+class RecoveryFeedback(StrictRuntimeModel):
+    code: RecoveryCode = "missing_evidence"
+    failure_stage: Literal["evidence"] = "evidence"
+    missing_evidence: list[str] = Field(min_length=1)
+    executed_calls: list[RecoveryExecutedCall] = Field(default_factory=list)
+    remaining_tool_budget: int = Field(ge=0)
+    replan_index: Literal[1] = 1
+
+
+class CachedToolCall(StrictRuntimeModel):
+    call_id: str
+    result: ToolResult
+    dispatch: ToolDispatchRecord
+
+
 class AttemptPlanSummary(StrictRuntimeModel):
     output_contract: str
     tool_call_count: int = Field(ge=0)
@@ -151,6 +182,7 @@ class AttemptToolCallSummary(StrictRuntimeModel):
     handler_entered: bool
     dispatch_stage: ToolDispatchStage
     error_code: ToolErrorCode | None = None
+    reused: bool = False
 
 
 class AttemptEvidenceSummary(StrictRuntimeModel):
@@ -184,6 +216,7 @@ class AttemptRecord(StrictRuntimeModel):
     critic_summary: AttemptCriticSummary | None = None
     status: AttemptStatus
     failure_stage: FailureStage | None = None
+    recovery_code: RecoveryCode | None = None
     started_at: datetime
     duration_ms: int = Field(ge=0)
 

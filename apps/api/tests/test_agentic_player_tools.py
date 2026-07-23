@@ -11,11 +11,13 @@ ToolResult inputs.
 import asyncio
 
 from app.agentic.models import ExecutionPlan, QueryContext, ToolCall, ToolResult, ToolSource
+from app.agentic.nodes import run_init_node
 from app.agentic.nodes.tools import tool_executor_node
+from app.agentic.runtime.clock import SystemClock
 from app.agentic.state import AgentRunState
 from app.agentic.tools import ToolExecutor
 from app.agentic.tools.stratz_tools import build_default_tool_registry
-from app.core.config import Settings
+from app.core.config import RuntimePolicy, Settings
 
 
 class FakeTransport:
@@ -224,10 +226,14 @@ def test_unconfirmed_player_skips_dependent_player_tools(monkeypatch) -> None:
             ),
         ],
     )
+    state = AgentRunState(query="q", game="dota2", plan=plan)
+    clock = SystemClock()
+    run_init_node(state, RuntimePolicy(), clock)
     state = asyncio.run(
         tool_executor_node(
-            AgentRunState(query="q", game="dota2", plan=plan),
+            state,
             ToolExecutor(_registry(token="token")),
+            clock,
         )
     )
 

@@ -18,6 +18,22 @@ def reset_attempt_working_state(
         "run_budget": state.run_budget.model_copy(deep=True) if state.run_budget else None,
         "attempts": deepcopy(state.attempts),
         "trace": deepcopy(state.trace),
+        "recovery_action": None,
+        "recovery_feedback": (
+            state.recovery_feedback.model_copy(deep=True)
+            if state.recovery_feedback
+            else None
+        ),
+        "recovery_baseline_decision": (
+            state.recovery_baseline_decision.model_copy(deep=True)
+            if state.recovery_baseline_decision
+            else None
+        ),
+        "executed_call_fingerprints": {
+            fingerprint: cached.model_copy(deep=True)
+            for fingerprint, cached in state.executed_call_fingerprints.items()
+        },
+        "runtime_failure_code": None,
         "attempt_index": next_attempt_index,
         "attempt_started_at": started_at,
         "attempt_started_monotonic": started_monotonic,

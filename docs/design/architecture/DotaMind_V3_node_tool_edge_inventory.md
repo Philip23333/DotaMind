@@ -1,6 +1,6 @@
 # DotaMind V3 Node / Tool / Edge Inventory
 
-This document records the current single-path Controller architecture. It must
+This document records the current bounded Controller architecture. It must
 stay aligned with `/api/v1/plan` and `/debug/plan`.
 
 For the end-to-end request, Session, Evidence and Runtime views, start with
@@ -14,18 +14,22 @@ flowchart TD
     RunInit --> Controller["controller_node"]
     Controller --> DecisionValidate["decision_validate_node"]
     DecisionValidate -->|"direct_answer"| Conversation["conversation_answer_node"]
-    DecisionValidate -->|"clarification / context_missing / capability_boundary"| RunFinalize["run_finalize_node"]
+    DecisionValidate -->|"clarification / context_missing / capability_boundary"| AttemptFinalize["attempt_finalize_node"]
     DecisionValidate -->|"tool_plan"| Validate["validate_plan_node"]
-    Conversation --> RunFinalize
+    Conversation --> AttemptFinalize
     Validate -->|"valid"| Tools["tool_executor_node"]
-    Validate -->|"invalid"| RunFinalize
+    Validate -->|"invalid"| AttemptFinalize
     Tools -->|"success"| Evidence["evidence_node"]
-    Tools -->|"tool error"| RunFinalize
+    Tools -->|"tool error"| AttemptFinalize
     Evidence -->|"complete"| Answer["answer_node"]
-    Evidence -->|"missing"| RunFinalize
+    Evidence -->|"missing"| AttemptFinalize
     Answer -->|"success"| Critic["critic_node"]
-    Answer -->|"error / insufficient evidence"| RunFinalize
-    Critic --> RunFinalize
+    Answer -->|"error / insufficient evidence"| AttemptFinalize
+    Critic --> AttemptFinalize
+    AttemptFinalize --> Recovery["recovery_node"]
+    Recovery -->|"terminal"| RunFinalize["run_finalize_node"]
+    Recovery -->|"replan once"| AttemptReset["attempt_reset_node"]
+    AttemptReset --> Controller
     RunFinalize --> Response["response_node"]
     Response --> End["END"]
 ```
@@ -35,8 +39,7 @@ output contract, effective evidence and runtime status influence execution.
 
 ## V3.2 Runtime Nodes
 
-V3.2-1 now wraps the current path in one request-level run and exactly one
-controlled attempt. The later V3.2-3 target adds at most one recovery attempt:
+V3.2-3 wraps the path in one request-level run and at most two controlled Attempts:
 
 ```text
 START
@@ -48,15 +51,15 @@ START
       -> replan   -> attempt_reset_node -> controller_node
 ```
 
-| Target node | Planned responsibility | Planned phase | Current status |
+| Node | Responsibility | Phase | Current status |
 |---|---|---|---|
 | `run_init_node` | Create `RunContext`, audit deadline and global `RunBudget`. | V3.2-1 | Implemented |
-| `attempt_finalize_node` | Append an allowlisted `AttemptRecord` without overwriting earlier attempts. | V3.2-3 | Not implemented |
-| `recovery_node` | Deterministically classify the terminal state and permit at most one legal replan. | V3.2-3 | Not implemented |
-| `attempt_reset_node` | Call the centralized flat-state `reset_attempt_working_state()` function. | V3.2-3 | Not implemented; reset function implemented in V3.2-1 |
-| `run_finalize_node` | Resolve the terminal outcome once, append attempt 0 and seal run totals. | V3.2-1 | Implemented |
+| `attempt_finalize_node` | Append an allowlisted `AttemptRecord` without overwriting earlier attempts. | V3.2-3 | Implemented |
+| `recovery_node` | Recover only plain global missing-evidence gaps and permit at most one legal replan. | V3.2-3 | Implemented |
+| `attempt_reset_node` | Call the centralized flat-state `reset_attempt_working_state()` function. | V3.2-3 | Implemented |
+| `run_finalize_node` | Resolve the final public outcome and seal run totals without creating an Attempt. | V3.2-3 | Implemented |
 
-The target graph will continue to route on decision discriminators, runtime
+The graph continues to route on decision discriminators, runtime
 status and recovery results only. `intent` remains non-executable metadata.
 
 Attempt working fields remain permanently flat on `AgentRunState`. V3.2 does
@@ -73,11 +76,14 @@ future reset nodes delegate to the centralized pure reset function.
 | `decision_validate_node` | Repeat shared deterministic decision/basis/plan validation without mutating the decision. | Recomputes and refreshes authoritative evidence obligations in state. |
 | `conversation_answer_node` | Read only validated `Turn` basis and render recall templates or an approved social answer. | Never creates EvidenceGraph. |
 | `validate_plan_node` | Validate final args, references, contract and effective evidence producibility. | Never applies policy or modifies evidence. |
-| `tool_executor_node` | Resolve plan-local references and execute registered tools. | Produces unchanged public ToolResults plus internal dispatch records; failure routes to finalize. |
+| `tool_executor_node` | Resolve references, reuse Run-local fingerprints and execute registered tools. | Same-id results are reused; changed-id duplicates and per-handler budget/deadline failures are blocked. |
 | `evidence_node` | Run tool-owned extractors and compute missing effective evidence and data quality. | Missing effective evidence routes to finalize before Answer. |
 | `answer_node` | Produce structured or natural-language answers from EvidenceGraph. | Tool-plan branch only. |
 | `critic_node` | Review missing/quality/mock/confidence constraints. | Tool-plan branch only. |
-| `run_finalize_node` | Call `resolve_terminal_outcome`, append one sanitized AttemptRecord and seal duration/stage. | The sole terminal reduction entry in V3.2-1. |
+| `attempt_finalize_node` | Call `resolve_terminal_outcome` and append one sanitized immutable AttemptRecord. | Runs once per Attempt. |
+| `recovery_node` | Classify a missing-evidence terminal without an LLM call. | Either terminates or records one Replan and feedback. |
+| `attempt_reset_node` | Start Attempt 1 through the centralized reset function. | Rechecks deadline before the only back edge. |
+| `run_finalize_node` | Resolve final public state and seal Run duration. | Never creates or mutates Attempt records. |
 | `response_node` | Require finalized state, apply safe-failure allowlist and serialize public schemas. | Does not recompute terminal priority or serialize `state.history`. |
 
 ## Decision Inventory

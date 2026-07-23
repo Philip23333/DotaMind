@@ -18,6 +18,7 @@ class ToolExecutor:
         call: ToolCall,
         context: QueryContext,
         *,
+        before_handler_entered: Callable[[], None] | None = None,
         on_handler_entered: Callable[[], None] | None = None,
     ) -> tuple[ToolResult, ToolDispatchRecord]:
         started = time.perf_counter()
@@ -41,6 +42,8 @@ class ToolExecutor:
                 stage="pre_dispatch",
                 error_code="input_validation_error",
             )
+        if before_handler_entered is not None:
+            before_handler_entered()
         if on_handler_entered is not None:
             on_handler_entered()
         try:

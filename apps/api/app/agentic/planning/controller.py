@@ -14,13 +14,18 @@ from app.agentic.planning.decisions import (
     resolve_required_evidence,
     validate_controller_decision,
 )
+from app.agentic.planning.recovery import validate_replan_decision
 from app.agentic.planning.sample_policy import apply_sample_policy
 from app.agentic.prompts.controller import (
     ControllerPromptBundle,
     build_controller_prompt,
     render_controller_user_message,
 )
-from app.agentic.prompts.feedback import render_validation_retry_feedback
+from app.agentic.prompts.feedback import (
+    render_recovery_feedback,
+    render_validation_retry_feedback,
+)
+from app.agentic.runtime.models import RecoveryFeedback
 from app.agentic.tools import ToolRegistry
 from app.core.config import get_policy, get_settings
 from app.llm.provider import LLMJSONDecodeError, LLMProvider, get_llm_provider
@@ -77,7 +82,14 @@ class AgentController:
         query: str,
         game: str = "dota2",
         history: list[Turn] | None = None,
+        *,
+        recovery_feedback: RecoveryFeedback | None = None,
+        recovery_baseline_decision: ToolPlanDecision | None = None,
     ) -> AgentControllerResult:
+        if (recovery_feedback is None) != (recovery_baseline_decision is None):
+            raise ValueError(
+                "recovery feedback and baseline decision must be provided together"
+            )
         if not self.llm_enabled or self.llm is None:
             return AgentControllerResult(
                 status="error",
@@ -97,6 +109,24 @@ class AgentController:
             {"role": "system", "content": self._prompt_bundle.system_prompt},
             {"role": "user", "content": user_content},
         ]
+        if recovery_feedback is not None and recovery_baseline_decision is not None:
+            messages.extend(
+                [
+                    {
+                        "role": "assistant",
+                        "content": json.dumps(
+                            recovery_baseline_decision.model_dump(mode="json"),
+                            ensure_ascii=False,
+                            sort_keys=True,
+                            separators=(",", ":"),
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": render_recovery_feedback(recovery_feedback),
+                    },
+                ]
+            )
         temperature = self.policy.llm.orchestrator.temperature
         max_tokens = max(self.policy.llm.orchestrator.max_tokens, 1200)
         max_attempts = 1 + self.planner_max_retries
@@ -191,6 +221,19 @@ class AgentController:
                 self.registry,
                 evidence,
             )
+            if (
+                recovery_feedback is not None
+                and recovery_baseline_decision is not None
+            ):
+                validation_errors.extend(
+                    validate_replan_decision(
+                        decision,
+                        recovery_baseline_decision,
+                        recovery_feedback,
+                        self.registry,
+                        remaining_tool_budget=recovery_feedback.remaining_tool_budget,
+                    )
+                )
             if not validation_errors:
                 logger.info(
                     "Agent controller produced kind=%s tools=%s",

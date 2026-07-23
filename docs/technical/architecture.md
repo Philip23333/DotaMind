@@ -41,36 +41,41 @@ START
   -> run_init_node
   -> controller_node
   -> decision_validate_node
-      -> direct_answer -> conversation_answer_node -> run_finalize_node
-      -> clarification -----------------------------> run_finalize_node
-      -> context_missing ---------------------------> run_finalize_node
-      -> capability_boundary -----------------------> run_finalize_node
+      -> direct_answer -> conversation_answer_node -> attempt_finalize_node
+      -> clarification -----------------------------> attempt_finalize_node
+      -> context_missing ---------------------------> attempt_finalize_node
+      -> capability_boundary -----------------------> attempt_finalize_node
       -> tool_plan
            -> validate_plan_node
            -> tool_executor_node
            -> evidence_node
            -> answer_node
            -> critic_node
-           -> run_finalize_node
-  -> response_node
+           -> attempt_finalize_node
+  -> recovery_node
+      -> terminal -> run_finalize_node -> response_node -> END
+      -> replan   -> attempt_reset_node -> controller_node
 ```
 
 Non-tool decisions never create an `EvidenceGraph` and never run the critic.
 `intent` is only a semantic label. Graph routing reads `decision.kind` and
 runtime status; it never branches on `intent`.
 
-V3.2-1 has one request-level `RunContext`, one cumulative `RunBudget`, and one
-sanitized `AttemptRecord`. Attempt working fields remain flat on
+V3.2-3 has one request-level `RunContext`, one cumulative `RunBudget`, and one
+or two sanitized `AttemptRecord` values. Attempt working fields remain flat on
 `AgentRunState`; `reset_attempt_working_state()` is the sole reset mechanism
-for future recovery nodes. The audit record contains only plan/tool/evidence/
+for the bounded recovery edge. The audit record contains only plan/tool/evidence/
 answer/critic summaries, never complete plans, tool payloads, answer text,
 critic reasons, history, controller raw output, or raw exceptions.
 
 Tool execution has a private dispatch side channel. Registry lookup and input
 validation occur before handler entry and do not consume tool budget. A
-synchronous callback records budget immediately before calling the handler, so
+synchronous guard checks monotonic deadline and remaining tool budget after
+pre-dispatch validation, then a callback records budget immediately before the handler, so
 both successful and failed handler entries count exactly once. Dispatch stage
-and stable internal error codes never modify the public `ToolResult`.
+and stable internal error codes never modify the public `ToolResult`. Within a
+Run, canonical fingerprints reuse same-id results and reject an equivalent call
+under a changed id.
 
 ## Conversation Memory
 
@@ -110,6 +115,8 @@ GraphRunner with that registry. `controller_node` copies the bundle manifest to
 prepared system prompt, not delivery or model success. Dynamic history and user-message
 rendering are versioned without hashing request content. Prompt text, retry feedback,
 validation errors and raw model output stay out of public and persistent DTOs.
+`controller.recovery_rules=v1` versions the separate dynamic Recovery renderer;
+it does not change the system Prompt hash.
 
 Graph validation repeats deterministic checks but never mutates tool args,
 metadata, or evidence obligations. Therefore state, debug output and execution
@@ -153,16 +160,20 @@ universal registry obligation.
 
 ## Terminal Result Priority
 
-`run_finalize_node` calls the pure `resolve_terminal_outcome()` function once
-and applies this ordering:
+`attempt_finalize_node` calls the pure `resolve_terminal_outcome()` function to
+seal each Attempt. `run_finalize_node` reuses the resolver for the final public
+state and Run totals. The ordering is:
 
 1. Controller transport/model error: `error/planning_error`.
 2. Decision or plan validation error: `error/decision_validation_error`.
 3. Tool failure: `error/tool_error`.
 4. Answer model failure: `error/answer_error`.
-5. Missing effective evidence: `insufficient_evidence`.
-6. Critic evidence-quality failure: `insufficient_evidence`.
-7. Otherwise the decision/contract succeeds.
+5. Runtime budget/duplicate/deadline failure: `execution_budget_error` or
+   `execution_timeout`.
+6. Replan budget exhaustion: `insufficient_evidence/replan_exhausted`.
+7. Missing effective evidence: `insufficient_evidence`.
+8. Critic evidence-quality failure: `insufficient_evidence` without Recovery.
+9. Otherwise the decision/contract succeeds.
 
 In particular, a tool failure is never hidden as missing evidence, and an
 answer failure is never hidden as a critic failure. Reference-resolution
@@ -171,19 +182,20 @@ an unclassified runtime error falls back to `execution_error`. Terminal errors
 also replace the Controller's provisional `decision accepted` reason with a
 stable failure reason.
 
-`response_node` only accepts a finalized state, applies the safe-failure
+`response_node` only accepts a finalized state with one or two contiguous Attempts,
+applies the safe-failure
 allowlist, and serializes the response. It does not contain a legacy terminal
-reduction path. Every controlled Graph terminal produces exactly one attempt;
-unhandled exceptions, cancellation, and process exit are deferred to V3.2-6.
+reduction path. Missing-evidence Recovery can produce Attempt 1 once; unhandled
+exceptions, cancellation, and process exit are deferred to V3.2-6.
 
 Wall-clock UTC timestamps provide audit fields such as `deadline_at`; all
-durations and timeout observation use an injectable monotonic clock. V3.2-1
-records deadline/budget exhaustion without blocking nodes. Execution gates and
-`execution_timeout` start in V3.2-3.
+durations and timeout observation use an injectable monotonic clock. V3.2-3
+blocks not-yet-started business nodes and handlers after deadline while allowing
+attempt/recovery/run/response closure.
 
 ## Debugging
 
-Use `http://localhost:8001/debug/plan`. It shows the Run, budget, single
-Attempt, Controller decision, final plan, required-evidence sources, tools,
+Use `http://localhost:8001/debug/plan`. It shows the Run, budget, one or two
+Attempts, Controller decision, final plan, required-evidence sources, tools,
 EvidenceGraph, answer, critic and timed trace.
 The legacy frontend has been deleted and must not be recreated.

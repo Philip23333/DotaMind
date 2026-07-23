@@ -29,6 +29,24 @@ def resolve_terminal_outcome(state: AgentRunState) -> TerminalOutcome:
         return _outcome("error", "tool_error", "tool_execution", "tool_execution")
     if state.answer is not None and state.answer.status == "error":
         return _outcome("error", "answer_error", "answer", "answer")
+    if state.runtime_failure_code is not None:
+        return _outcome(
+            "error",
+            state.runtime_failure_code,
+            "execution",
+            "execution",
+        )
+    if (
+        state.response_type == "replan_exhausted"
+        and state.evidence_graph is not None
+        and state.evidence_graph.missing
+    ):
+        return _outcome(
+            "insufficient_evidence",
+            "replan_exhausted",
+            "evidence",
+            "evidence",
+        )
     if state.evidence_graph is not None and state.evidence_graph.missing:
         return _outcome(
             "insufficient_evidence",
@@ -102,6 +120,7 @@ def build_attempt_record(
                 handler_entered=dispatch.handler_entered,
                 dispatch_stage=dispatch.stage,
                 error_code=dispatch.error_code,
+                reused=dispatch.stage == "cache_reuse",
             )
         )
     return AttemptRecord(
@@ -114,6 +133,11 @@ def build_attempt_record(
         critic_summary=_critic_summary(state),
         status=outcome.attempt_status,
         failure_stage=outcome.failure_stage,
+        recovery_code=(
+            state.recovery_feedback.code
+            if state.attempt_index == 1 and state.recovery_feedback is not None
+            else None
+        ),
         started_at=state.attempt_started_at,
         duration_ms=duration_ms,
     )
@@ -126,7 +150,10 @@ def _outcome(status, response_type, terminal_stage, failure_stage, reason=""):
         "tool_error": "tool execution failed",
         "answer_error": "answer generation failed",
         "execution_error": "execution failed",
+        "execution_budget_error": "execution budget exhausted",
+        "execution_timeout": "execution deadline exceeded",
         "insufficient_evidence": "insufficient evidence",
+        "replan_exhausted": "replan exhausted",
     }.get(response_type, reason)
     return TerminalOutcome(
         public_status=status,

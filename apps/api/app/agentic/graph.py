@@ -4,11 +4,14 @@ from app.agentic.answer import AnswerSynthesizer
 from app.agentic.critic import AgenticCritic
 from app.agentic.nodes import (
     answer_node,
+    attempt_finalize_node,
+    attempt_reset_node,
     controller_node,
     conversation_answer_node,
     critic_node,
     decision_validate_node,
     evidence_node,
+    recovery_node,
     response_node,
     run_finalize_node,
     run_init_node,
@@ -21,6 +24,11 @@ from app.agentic.runtime.clock import (
     SystemClock,
     begin_node_timing,
     end_node_timing,
+)
+from app.agentic.runtime.guards import (
+    BudgetResource,
+    apply_runtime_failure,
+    runtime_gate_failure,
 )
 from app.agentic.state import AgentRunState
 from app.agentic.tools import ToolExecutor, ToolRegistry
@@ -59,6 +67,9 @@ class AgentGraphRunner:
         graph.add_node("evidence", self._evidence)
         graph.add_node("answer", self._answer)
         graph.add_node("critic", self._critic)
+        graph.add_node("attempt_finalize", self._attempt_finalize)
+        graph.add_node("recovery", self._recovery)
+        graph.add_node("attempt_reset", self._attempt_reset)
         graph.add_node("run_finalize", self._run_finalize)
         graph.add_node("response", response_node)
 
@@ -69,7 +80,7 @@ class AgentGraphRunner:
             _route_after_controller,
             {
                 "decision_validate": "decision_validate",
-                "response": "run_finalize",
+                "response": "attempt_finalize",
             },
         )
         graph.add_conditional_edges(
@@ -78,29 +89,29 @@ class AgentGraphRunner:
             {
                 "conversation_answer": "conversation_answer",
                 "validate": "validate",
-                "response": "run_finalize",
+                "response": "attempt_finalize",
             },
         )
-        graph.add_edge("conversation_answer", "run_finalize")
+        graph.add_edge("conversation_answer", "attempt_finalize")
         graph.add_conditional_edges(
             "validate",
             _route_after_validate,
             {
                 "tools": "tools",
-                "response": "run_finalize",
+                "response": "attempt_finalize",
             },
         )
         graph.add_conditional_edges(
             "tools",
             _route_after_tools,
-            {"evidence": "evidence", "response": "run_finalize"},
+            {"evidence": "evidence", "response": "attempt_finalize"},
         )
         graph.add_conditional_edges(
             "evidence",
             _route_after_evidence,
             {
                 "answer": "answer",
-                "response": "run_finalize",
+                "response": "attempt_finalize",
             },
         )
         graph.add_conditional_edges(
@@ -108,18 +119,33 @@ class AgentGraphRunner:
             _route_after_answer,
             {
                 "critic": "critic",
-                "response": "run_finalize",
+                "response": "attempt_finalize",
             },
         )
-        graph.add_edge("critic", "run_finalize")
+        graph.add_edge("critic", "attempt_finalize")
+        graph.add_edge("attempt_finalize", "recovery")
+        graph.add_conditional_edges(
+            "recovery",
+            _route_after_recovery,
+            {"replan": "attempt_reset", "terminal": "run_finalize"},
+        )
+        graph.add_conditional_edges(
+            "attempt_reset",
+            _route_after_attempt_reset,
+            {"controller": "controller", "terminal": "run_finalize"},
+        )
         graph.add_edge("run_finalize", "response")
         graph.add_edge("response", END)
         return graph.compile()
 
     async def _controller(self, state: AgentRunState) -> AgentRunState:
+        if self._guard(state, resource="controller"):
+            return state
         return await self._timed_async(state, controller_node, self.controller)
 
     def _decision_validate(self, state: AgentRunState) -> AgentRunState:
+        if self._guard(state):
+            return state
         return self._timed_sync(
             state,
             decision_validate_node,
@@ -127,9 +153,18 @@ class AgentGraphRunner:
         )
 
     async def _tools(self, state: AgentRunState) -> AgentRunState:
-        return await self._timed_async(state, tool_executor_node, self.executor)
+        if self._guard(state):
+            return state
+        return await self._timed_async(
+            state,
+            tool_executor_node,
+            self.executor,
+            self.clock,
+        )
 
     def _validate(self, state: AgentRunState) -> AgentRunState:
+        if self._guard(state):
+            return state
         return self._timed_sync(
             state,
             validate_plan_node,
@@ -137,22 +172,51 @@ class AgentGraphRunner:
         )
 
     def _evidence(self, state: AgentRunState) -> AgentRunState:
+        if self._guard(state):
+            return state
         return self._timed_sync(state, evidence_node, self.registry)
 
     async def _answer(self, state: AgentRunState) -> AgentRunState:
+        if self._guard(state, resource="answer"):
+            return state
         return await self._timed_async(state, answer_node, self.answer_synthesizer)
 
     def _critic(self, state: AgentRunState) -> AgentRunState:
+        if self._guard(state):
+            return state
         return self._timed_sync(state, critic_node, self.critic)
 
     def _run_init(self, state: AgentRunState) -> AgentRunState:
         return self._timed_sync(state, run_init_node, self.runtime_policy, self.clock)
 
     def _conversation_answer(self, state: AgentRunState) -> AgentRunState:
+        if self._guard(state):
+            return state
         return self._timed_sync(state, conversation_answer_node)
+
+    def _attempt_finalize(self, state: AgentRunState) -> AgentRunState:
+        return self._timed_sync(state, attempt_finalize_node, self.clock)
+
+    def _recovery(self, state: AgentRunState) -> AgentRunState:
+        return self._timed_sync(state, recovery_node, self.registry, self.clock)
+
+    def _attempt_reset(self, state: AgentRunState) -> AgentRunState:
+        return self._timed_sync(state, attempt_reset_node, self.clock)
 
     def _run_finalize(self, state: AgentRunState) -> AgentRunState:
         return self._timed_sync(state, run_finalize_node, self.clock)
+
+    def _guard(
+        self,
+        state: AgentRunState,
+        *,
+        resource: BudgetResource | None = None,
+    ) -> bool:
+        failure = runtime_gate_failure(state, self.clock, resource=resource)
+        if failure is None:
+            return False
+        apply_runtime_failure(state, failure)
+        return True
 
     def _timed_sync(self, state, function, *args):
         token = begin_node_timing(self.clock)
@@ -215,3 +279,13 @@ def _route_after_answer(state: AgentRunState) -> str:
     ):
         return "response"
     return "critic"
+
+
+def _route_after_recovery(state: AgentRunState) -> str:
+    return "replan" if state.recovery_action == "replan" else "terminal"
+
+
+def _route_after_attempt_reset(state: AgentRunState) -> str:
+    if state.recovery_action == "terminal" or state.runtime_failure_code is not None:
+        return "terminal"
+    return "controller"

@@ -7,6 +7,7 @@ from app.agentic.critic import AgenticCriticReview
 from app.agentic.evidence import EvidenceDataQuality, EvidenceGraph
 from app.agentic.models import ExecutionConstraints, ExecutionPlan, ToolCall, ToolResult
 from app.agentic.nodes import (
+    attempt_finalize_node,
     evidence_node,
     response_node,
     run_finalize_node,
@@ -31,8 +32,15 @@ from app.core.config import RuntimePolicy
 def _finalize_response(state: AgentRunState) -> AgentRunState:
     clock = SystemClock()
     run_init_node(state, RuntimePolicy(), clock)
+    attempt_finalize_node(state, clock)
     run_finalize_node(state, clock)
     return response_node(state)
+
+
+def _execute_tools(state: AgentRunState, registry: ToolRegistry) -> AgentRunState:
+    clock = SystemClock()
+    run_init_node(state, RuntimePolicy(), clock)
+    return asyncio.run(tool_executor_node(state, ToolExecutor(registry), clock))
 
 
 class HeroLookupInput(BaseModel):
@@ -90,7 +98,7 @@ def test_validate_plan_rejects_duplicate_tool_call_ids() -> None:
 def test_tool_executor_node_executes_tools_and_resolves_references() -> None:
     state = AgentRunState(query="debug", game="dota2", plan=_debug_plan())
 
-    result = asyncio.run(tool_executor_node(state, ToolExecutor(_registry())))
+    result = _execute_tools(state, _registry())
 
     assert result.status == "ok"
     assert [item.tool_call_id for item in result.tool_results] == [
@@ -105,7 +113,7 @@ def test_tool_executor_node_returns_error_for_missing_reference_path() -> None:
     plan.tool_calls[1].args = {"hero_id": "$resolve_target.data.missing.hero_id"}
     state = AgentRunState(query="debug", game="dota2", plan=plan)
 
-    result = asyncio.run(tool_executor_node(state, ToolExecutor(_registry())))
+    result = _execute_tools(state, _registry())
 
     assert result.status == "error"
     assert len(result.tool_results) == 2
@@ -157,7 +165,7 @@ def test_tool_executor_node_skips_failed_dependency() -> None:
         ),
     )
 
-    result = asyncio.run(tool_executor_node(state, ToolExecutor(registry)))
+    result = _execute_tools(state, registry)
 
     assert result.status == "error"
     assert calls == []
@@ -169,7 +177,7 @@ def test_tool_executor_node_skips_failed_dependency() -> None:
 
 def test_evidence_node_builds_graph_from_tool_results() -> None:
     state = AgentRunState(query="debug", game="dota2", plan=_debug_plan())
-    state = asyncio.run(tool_executor_node(state, ToolExecutor(_registry())))
+    state = _execute_tools(state, _registry())
 
     evidence_node(state, _registry())
 
