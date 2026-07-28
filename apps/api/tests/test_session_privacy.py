@@ -184,7 +184,7 @@ def test_prior_turn_sentinel_absent_from_next_turn_response():
 
     # The full API-facing response must not contain the sentinel anywhere,
     # including any public debug field.
-    response_json = json.dumps(result.response, ensure_ascii=False)
+    response_json = json.dumps(result.public_response, ensure_ascii=False)
     assert SENTINEL not in response_json, "history leaked into API response"
 
 
@@ -203,7 +203,7 @@ def test_history_field_excluded_from_response():
         return await service.run("two", session_id=sid)
 
     result = asyncio.run(_scenario())
-    assert "history" not in (result.response or {})
+    assert "history" not in result.public_response
 
 
 def test_stateful_validator_failure_uses_sentinel_free_public_envelope():
@@ -284,7 +284,8 @@ def test_stateful_safe_failure_persists_only_stable_redacted_turn():
 
     result, turns = asyncio.run(_scenario())
 
-    assert result.response_type == "decision_validation_error"
+    assert result.state is not None
+    assert result.state.response_type == "decision_validation_error"
     assert len(turns) == 1
     turn = turns[0]
     assert turn.response_type == "session_request_failed"

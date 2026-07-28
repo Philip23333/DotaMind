@@ -9,8 +9,8 @@
 2. 读 [`versions/DotaMind_V3.2_design.md`](./versions/DotaMind_V3.2_design.md)
    了解当前 Agent Runtime Foundation 总体目标。
 3. 读已完成阶段蓝图
-   [`versions/DotaMind_V3.2-3_design.md`](./versions/DotaMind_V3.2-3_design.md)，
-   再读总设计的 V3.2-4 请求幂等章节了解下一阶段目标。
+   [`versions/DotaMind_V3.2-4_design.md`](./versions/DotaMind_V3.2-4_design.md)，
+   再读总设计的 V3.2-5 Redis Session Store 章节了解下一阶段目标。
 4. 读 [`versions/DotaMind_V3.0_design.md`](./versions/DotaMind_V3.0_design.md)
    了解已实现业务能力。
 5. 读 [`versions/DotaMind_MVP_v2.5.md`](./versions/DotaMind_MVP_v2.5.md)
@@ -33,6 +33,8 @@
   Prompt Registry 阶段实施蓝图。
 - [`DotaMind_V3.2-3_design.md`](./versions/DotaMind_V3.2-3_design.md) —
   有界 missing-evidence Recovery/Replan 阶段实施蓝图。
+- [`DotaMind_V3.2-4_design.md`](./versions/DotaMind_V3.2-4_design.md) —
+  stateful request idempotency 阶段实施蓝图。
 
 版本蓝图负责回答“这个版本要到哪里”，但当前实现状态仍以最新进度快照和工作树为准。
 
@@ -86,11 +88,12 @@ V3.2 完成前业务工具目录保持冻结，因此这些路线图当前是延
 
 ## 当前 V3.2 阅读顺序
 
-V3.2-3 有界 missing-evidence Recovery/Replan 已完成，V3.2-4 请求幂等是下一阶段。
-当前还没有单独的 V3.2-4 实施蓝图；进入实现前，应先以
-[`versions/DotaMind_V3.2_design.md`](./versions/DotaMind_V3.2_design.md) 的请求幂等、
-分阶段实施和并发验收章节为边界形成阶段蓝图。运行时基线先阅读
-[`versions/DotaMind_V3.2-3_design.md`](./versions/DotaMind_V3.2-3_design.md)，再阅读
+V3.2-4 stateful request idempotency 已完成；V3.2-5 Redis Session Store 是下一阶段。
+当前尚无独立的 V3.2-5 实施蓝图；进入实现前，应先以
+[`versions/DotaMind_V3.2_design.md`](./versions/DotaMind_V3.2_design.md) 的 Redis、
+分布式锁和并发验收章节为边界形成阶段蓝图。运行时基线先阅读
+[`versions/DotaMind_V3.2-4_design.md`](./versions/DotaMind_V3.2-4_design.md)，再阅读
+[`versions/DotaMind_V3.2-3_design.md`](./versions/DotaMind_V3.2-3_design.md)，并回看
 [`versions/DotaMind_V3.2-2_design.md`](./versions/DotaMind_V3.2-2_design.md) 确认 Prompt
 manifest 与冻结 catalog 边界，并回看
 [`versions/DotaMind_V3.2-1_design.md`](./versions/DotaMind_V3.2-1_design.md) 的

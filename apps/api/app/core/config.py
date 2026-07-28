@@ -219,6 +219,9 @@ class ConversationPolicy(StrictPolicyModel):
     turn_query_max_chars: int = Field(default=200, ge=20, le=1000)
     # Hard budget for the entire rendered history block injected into the prompt.
     history_max_chars: int = Field(default=2000, ge=200, le=10_000)
+    # Completed request-idempotency records retained per active session.
+    request_record_ttl_seconds: int = Field(default=3600, ge=1, le=86_400)
+    max_request_records_per_session: int = Field(default=200, ge=1, le=10_000)
 
     @model_validator(mode="after")
     def validate_window_vs_max(self) -> "ConversationPolicy":

@@ -61,7 +61,9 @@ def test_plan_service_returns_insufficient_tools_without_execution() -> None:
         )
     )
 
-    result = asyncio.run(service.run("How Team BB play lately?"))
+    service_result = asyncio.run(service.run("How Team BB play lately?"))
+    assert service_result.state is not None
+    result = service_result.state
 
     assert result.status == "insufficient_tools"
     assert result.tool_results == []
@@ -84,7 +86,9 @@ def test_plan_service_returns_error_when_planner_errors() -> None:
         )
     )
 
-    result = asyncio.run(service.run("enemy picked Lina"))
+    service_result = asyncio.run(service.run("enemy picked Lina"))
+    assert service_result.state is not None
+    result = service_result.state
 
     assert result.status == "error"
     assert result.errors == ["DOTAMIND_LLM_ENABLED must be true"]
@@ -160,7 +164,9 @@ def test_plan_service_executes_planned_counter_pick(monkeypatch) -> None:
         )
     )
 
-    result = asyncio.run(service.run("enemy picked Lina, what should I pick?"))
+    service_result = asyncio.run(service.run("enemy picked Lina, what should I pick?"))
+    assert service_result.state is not None
+    result = service_result.state
 
     assert result.status == "ok"
     assert len(result.tool_results) == 2
@@ -195,7 +201,9 @@ def test_plan_service_returns_error_without_answer_when_runner_fails() -> None:
         )
     )
 
-    result = asyncio.run(service.run("enemy picked Lina"))
+    service_result = asyncio.run(service.run("enemy picked Lina"))
+    assert service_result.state is not None
+    result = service_result.state
 
     assert result.status == "error"
     assert result.evidence_graph is None
@@ -221,7 +229,9 @@ def test_plan_service_rejects_unproducible_required_evidence() -> None:
         )
     )
 
-    result = asyncio.run(service.run("enemy picked Lina"))
+    service_result = asyncio.run(service.run("enemy picked Lina"))
+    assert service_result.state is not None
+    result = service_result.state
 
     assert result.status == "error"
     assert result.answer is None

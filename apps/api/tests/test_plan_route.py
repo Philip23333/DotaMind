@@ -7,6 +7,8 @@ from app.agentic.nodes.run_finalize import run_finalize_node
 from app.agentic.nodes.run_init import run_init_node
 from app.agentic.runtime.clock import SystemClock
 from app.agentic.state import AgentRunState
+from app.application.idempotency import IdempotencyConflictError
+from app.application.plan_service import PlanServiceResult
 from app.core.config import RuntimePolicy
 from app.main import app
 
@@ -14,11 +16,17 @@ from app.main import app
 class FakePlanService:
     def __init__(self) -> None:
         self.received_session_ids: list[UUID | None] = []
+        self.received_request_ids: list[UUID | None] = []
 
     async def run(
-        self, query: str, game: str = "dota2", session_id: UUID | None = None
-    ) -> AgentRunState:
+        self,
+        query: str,
+        game: str = "dota2",
+        session_id: UUID | None = None,
+        request_id: UUID | None = None,
+    ) -> PlanServiceResult:
         self.received_session_ids.append(session_id)
+        self.received_request_ids.append(request_id)
         state = AgentRunState(
             query=query,
             game=game,
@@ -31,7 +39,14 @@ class FakePlanService:
         state.add_trace("controller", "no registered team tool", "completed")
         attempt_finalize_node(state, clock)
         run_finalize_node(state, clock)
-        return response_node(state)
+        state = response_node(state)
+        response = dict(state.response or {})
+        response["session_id"] = str(session_id) if session_id is not None else None
+        return PlanServiceResult(
+            public_response=response,
+            state=state,
+            idempotency_status="disabled",
+        )
 
 
 def test_plan_route_returns_plan_response(monkeypatch) -> None:
@@ -98,6 +113,42 @@ def test_plan_route_rejects_non_v4_session_ids() -> None:
     ):
         response = client.post("/api/v1/plan", json={"query": "hello", "session_id": sid})
         assert response.status_code == 422
+
+
+def test_plan_route_rejects_request_id_without_session_id() -> None:
+    response = TestClient(app).post(
+        "/api/v1/plan",
+        json={"query": "hello", "request_id": "12345678-1234-4234-8234-123456789abc"},
+    )
+
+    assert response.status_code == 422
+
+
+def test_plan_route_maps_idempotency_conflict_to_409(monkeypatch) -> None:
+    from app.api.v1 import routes
+
+    class ConflictPlanService:
+        async def run(self, query, game, session_id, request_id):
+            assert request_id is not None
+            assert session_id is not None
+            raise IdempotencyConflictError(
+                query=query,
+                game=game,
+                session_id=str(session_id),
+            )
+
+    monkeypatch.setattr(routes, "plan_service", ConflictPlanService())
+    session_id = "12345678-1234-4234-8234-123456789abc"
+    request_id = "22345678-1234-4234-8234-123456789abc"
+
+    response = TestClient(app).post(
+        "/api/v1/plan",
+        json={"query": "hello", "session_id": session_id, "request_id": request_id},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["error_code"] == "idempotency_conflict"
+    assert "runtime" not in response.json()
 
 
 def test_removed_legacy_routes_return_404() -> None:

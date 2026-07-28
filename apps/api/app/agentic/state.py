@@ -49,6 +49,7 @@ class AgentRunState(BaseModel):
     history: list[Turn] = Field(default_factory=list)
     session_memory_enabled: bool = False
     internal_session_id: UUID | None = None
+    internal_request_id: UUID | None = None
 
     run_context: RunContext | None = None
     run_budget: RunBudget | None = None

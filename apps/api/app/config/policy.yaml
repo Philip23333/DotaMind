@@ -68,6 +68,8 @@ conversation:
   answer_summary_max_chars: 300  # per-turn answer summary cap
   turn_query_max_chars: 200      # per-turn query cap stored in history
   history_max_chars: 2000        # hard budget for the rendered history block
+  request_record_ttl_seconds: 3600       # completed request-idempotency replay window
+  max_request_records_per_session: 200   # bounded completed/failed request records
 
 planning:
   runtime:

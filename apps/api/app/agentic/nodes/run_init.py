@@ -18,7 +18,7 @@ def run_init_node(
     started_monotonic = clock.monotonic()
     state.run_context = RunContext(
         run_id=uuid4(),
-        request_id=None,
+        request_id=state.internal_request_id,
         session_id=state.internal_session_id,
         started_at=started_at,
         deadline_at=started_at + timedelta(seconds=policy.max_elapsed_seconds),

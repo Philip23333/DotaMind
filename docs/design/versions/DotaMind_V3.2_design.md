@@ -556,13 +556,15 @@ tool error 改写成 missing evidence，也不能把 Answer error 改写成 crit
 - duplicate fingerprint 阻断始终启用，不增加配置开关或 `reused_tool_result_ids`。
 - debug UI 沿用 runtime JSON 展示最多两个 attempt。
 
-### V3.2-4：请求幂等（下一阶段）
+### V3.2-4：请求幂等（已完成）
 
 - API 增加可选 `request_id`。
 - InMemory store 先实现 RequestRecord 语义和并发测试。
 - 相同请求只执行一次、只写一个 Turn。
+- 首版只支持 stateful `(session_id, request_id)`；request record 使用 TTL 与每
+  Session 容量上限，Redis/lease/fencing 延后到 V3.2-5。
 
-### V3.2-5：Redis Session Store
+### V3.2-5：Redis Session Store（下一阶段）
 
 - 实现 JSON schema、TTL、distributed lease、fencing 和 atomic append。
 - 保留 memory backend 用于测试和单 worker 本地开发。

@@ -1,6 +1,6 @@
 from typing import Any, Literal
 
-from pydantic import UUID4, BaseModel, ConfigDict, Field
+from pydantic import UUID4, BaseModel, ConfigDict, Field, model_validator
 
 SupportedGame = Literal["dota2"]
 RuntimeStage = Literal[
@@ -22,6 +22,14 @@ class PlanRequest(BaseModel):
     # Provide a UUID v4 to enable multi-turn session memory.
     # Omit (or pass null) for stateless single-turn mode.
     session_id: UUID4 | None = None
+    # A request key is supported only for stateful requests in V3.2-4.
+    request_id: UUID4 | None = None
+
+    @model_validator(mode="after")
+    def require_session_for_request_id(self) -> "PlanRequest":
+        if self.request_id is not None and self.session_id is None:
+            raise ValueError("request_id requires session_id")
+        return self
 
 
 class StrictPublicModel(BaseModel):
@@ -134,3 +142,13 @@ class PlanResponse(BaseModel):
     errors: list[str] = Field(default_factory=list)
     trace: list[dict[str, Any]] = Field(default_factory=list)
     runtime: RuntimeSummary
+
+
+class IdempotencyConflictResponse(StrictPublicModel):
+    query: str
+    game: SupportedGame
+    session_id: str
+    status: Literal["error"] = "error"
+    reason: str
+    response_type: Literal["idempotency_conflict"] = "idempotency_conflict"
+    error_code: Literal["idempotency_conflict"] = "idempotency_conflict"

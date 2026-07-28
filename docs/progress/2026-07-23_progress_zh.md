@@ -46,3 +46,33 @@
 - 当前实现仍在 `run_init_node` 中固定 `request_id=None`，且没有 `RequestRecord`；
   V3.2-4 行为尚未实现。
 - `AGENTS.md` 继续作为用户维护的独立修改，不纳入本次文档范围。
+
+## 10:29 — V3.2-4 Stateful Request Idempotency
+
+### 实现
+
+- `POST /api/v1/plan` 增加可选 UUID v4 `request_id`；首版仅接受
+  `(session_id, request_id)`，缺少 `session_id` 时返回 422。
+- 新增 canonical request hash、`RequestRecord` 和 owner token；同 key 同 hash 重放
+  allowlisted public response，不运行第二个 Graph、不追加第二个 Turn；不同 hash 返回
+  HTTP 409 `idempotency_conflict`。
+- `InMemorySessionStore` 在原有 per-session transaction 内新增 claim、failed takeover、
+  TTL/容量清理，以及原子 `complete_request_with_turn`，使 Turn 与 completed record
+  同步提交。
+- `RunContext.request_id` 由内部 state 传递；request id 不进入 Prompt、history、
+  AttemptRecord 或公开 trace。缓存命中不创建新 Run，保留首次 `runtime.run_id`。
+
+### 测试与文档
+
+- 新增顺序/并发重放、冲突、取消接管、TTL、容量、缓存深拷贝和 request-id 传播测试；
+  同步更新 Route、Session privacy 和既有 PlanService 测试。
+- 新增 V3.2-4 阶段蓝图，并同步总设计、设计索引、整体架构、技术架构和 API 文档。
+- 已验证：`uv run ruff check .` 通过；完整 `uv run pytest -q` 为
+  `436 passed, 1 warning`；`uv lock --locked` 与 `git diff --check` 通过。
+
+### 明确边界
+
+- 仅保证单进程 InMemorySessionStore 有效期内的 stateful 幂等；stateless、Redis、
+  多 worker、lease/fencing、进程重启恢复和跨 Run 工具缓存继续留给 V3.2-5/6。
+- 未捕获异常或 cancellation 不写 Turn，并允许同 hash 后续请求接管；上游已发生副作用
+  时的跨进程 exactly-once 语义不在本阶段承诺范围。

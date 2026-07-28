@@ -12,12 +12,18 @@ deployments require a distributed store (Phase 2, Redis).
 from __future__ import annotations
 
 import asyncio
+import copy
 from abc import ABC, abstractmethod
 from collections import OrderedDict
+from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
+from typing import Any
+from uuid import UUID, uuid4
 
 from app.agentic.conversation.models import Turn
+from app.application.idempotency import RequestBeginResult, RequestRecord
 
 # ---------------------------------------------------------------------------
 # Internal session container
@@ -31,6 +37,7 @@ class _SessionData:
     turns: list[Turn] = field(default_factory=list)
     # Monotonically increasing counter; never reset even after turn eviction.
     next_turn_index: int = 1
+    request_records: OrderedDict[str, RequestRecord] = field(default_factory=OrderedDict)
 
 
 # ---------------------------------------------------------------------------
@@ -61,6 +68,36 @@ class SessionStore(ABC):
         Implementations must reject writes outside that transaction rather
         than creating an unlocked session that LRU eviction could remove.
         """
+
+    @abstractmethod
+    async def begin_request(
+        self,
+        session_id: str,
+        request_id: UUID,
+        request_hash: str,
+    ) -> RequestBeginResult:
+        """Claim, replay, or reject an idempotent request inside its transaction."""
+
+    @abstractmethod
+    async def complete_request_with_turn(
+        self,
+        session_id: str,
+        request_id: UUID,
+        owner_token: UUID,
+        turn: Turn,
+        public_response: dict[str, Any],
+        run_id: UUID,
+    ) -> Turn:
+        """Atomically append a Turn and mark the owned request completed."""
+
+    @abstractmethod
+    async def fail_request(
+        self,
+        session_id: str,
+        request_id: UUID,
+        owner_token: UUID,
+    ) -> None:
+        """Mark an owned in-progress request failed without appending a Turn."""
 
     @abstractmethod
     def transaction(self, session_id: str) -> AbstractAsyncContextManager[None]:
@@ -94,9 +131,15 @@ class InMemorySessionStore(SessionStore):
         self,
         max_sessions: int = 1000,
         max_turns_per_session: int = 50,
+        request_record_ttl_seconds: int = 3600,
+        max_request_records_per_session: int = 200,
+        now: Callable[[], datetime] | None = None,
     ) -> None:
         self._max_sessions = max_sessions
         self._max_turns = max_turns_per_session
+        self._request_record_ttl = timedelta(seconds=request_record_ttl_seconds)
+        self._max_request_records = max_request_records_per_session
+        self._now = now or (lambda: datetime.now(UTC))
         # OrderedDict gives O(1) LRU move_to_end / popitem.
         self._sessions: OrderedDict[str, _SessionData] = OrderedDict()
         self._locks: dict[str, asyncio.Lock] = {}
@@ -119,29 +162,98 @@ class InMemorySessionStore(SessionStore):
         return list(data.turns[-limit:])  # snapshot copy, chronological
 
     async def append(self, session_id: str, turn: Turn) -> Turn:
-        holder = self._holders.get(session_id)
-        if holder is None or holder is not asyncio.current_task():
-            raise RuntimeError(
-                "SessionStore.append() must be called inside "
-                "transaction(session_id) by the current task"
-            )
-        if session_id not in self._sessions:
-            self._sessions[session_id] = _SessionData()
-            self._sessions.move_to_end(session_id)
-            self._evict_to_capacity()
-        self._sessions.move_to_end(session_id)  # refresh LRU on write
-        data = self._sessions[session_id]
+        self._require_holder(session_id, "append")
+        return self._append_locked(session_id, turn)
 
-        # Assign monotonic index atomically (we hold the session lock).
-        stored = turn.model_copy(update={"turn_index": data.next_turn_index})
-        data.next_turn_index += 1
-        data.turns.append(stored)
+    async def begin_request(
+        self,
+        session_id: str,
+        request_id: UUID,
+        request_hash: str,
+    ) -> RequestBeginResult:
+        self._require_holder(session_id, "begin_request")
+        data = self._get_or_create_session(session_id)
+        self._purge_expired_request_records(data)
+        key = str(request_id)
+        existing = data.request_records.get(key)
+        if existing is not None:
+            data.request_records.move_to_end(key)
+            if existing.request_hash != request_hash:
+                return RequestBeginResult(
+                    action="conflict",
+                    existing_request_hash=existing.request_hash,
+                )
+            if existing.status == "completed":
+                if existing.cached_public_response is None:
+                    raise RuntimeError("completed request record missing public response")
+                return RequestBeginResult(
+                    action="replay",
+                    cached_public_response=copy.deepcopy(existing.cached_public_response),
+                )
 
-        # Trim oldest turns while preserving the counter.
-        if len(data.turns) > self._max_turns:
-            data.turns = data.turns[-self._max_turns :]
+        now = self._now()
+        owner_token = uuid4()
+        data.request_records[key] = RequestRecord(
+            request_id=request_id,
+            request_hash=request_hash,
+            status="in_progress",
+            owner_token=owner_token,
+            started_at=now,
+            expires_at=now + self._request_record_ttl,
+        )
+        data.request_records.move_to_end(key)
+        self._trim_request_records(data)
+        return RequestBeginResult(action="execute", owner_token=owner_token)
 
+    async def complete_request_with_turn(
+        self,
+        session_id: str,
+        request_id: UUID,
+        owner_token: UUID,
+        turn: Turn,
+        public_response: dict[str, Any],
+        run_id: UUID,
+    ) -> Turn:
+        self._require_holder(session_id, "complete_request_with_turn")
+        data = self._get_or_create_session(session_id)
+        key = str(request_id)
+        record = data.request_records.get(key)
+        if record is None or record.status != "in_progress" or record.owner_token != owner_token:
+            raise RuntimeError("request completion requires the current request owner")
+        stored = self._append_locked(session_id, turn)
+        now = self._now()
+        data.request_records[key] = record.model_copy(
+            update={
+                "status": "completed",
+                "run_id": run_id,
+                "cached_public_response": copy.deepcopy(public_response),
+                "turn_index": stored.turn_index,
+                "completed_at": now,
+            }
+        )
+        data.request_records.move_to_end(key)
+        self._trim_request_records(data)
         return stored
+
+    async def fail_request(
+        self,
+        session_id: str,
+        request_id: UUID,
+        owner_token: UUID,
+    ) -> None:
+        self._require_holder(session_id, "fail_request")
+        data = self._sessions.get(session_id)
+        if data is None:
+            return
+        key = str(request_id)
+        record = data.request_records.get(key)
+        if record is None or record.status != "in_progress" or record.owner_token != owner_token:
+            return
+        data.request_records[key] = record.model_copy(
+            update={"status": "failed", "completed_at": self._now()}
+        )
+        data.request_records.move_to_end(key)
+        self._trim_request_records(data)
 
     @asynccontextmanager
     async def transaction(self, session_id: str):
@@ -172,6 +284,55 @@ class InMemorySessionStore(SessionStore):
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    def _require_holder(self, session_id: str, operation: str) -> None:
+        holder = self._holders.get(session_id)
+        if holder is None or holder is not asyncio.current_task():
+            raise RuntimeError(
+                f"SessionStore.{operation}() must be called inside "
+                "transaction(session_id) by the current task"
+            )
+
+    def _get_or_create_session(self, session_id: str) -> _SessionData:
+        if session_id not in self._sessions:
+            self._sessions[session_id] = _SessionData()
+            self._sessions.move_to_end(session_id)
+            self._evict_to_capacity()
+        self._sessions.move_to_end(session_id)
+        return self._sessions[session_id]
+
+    def _append_locked(self, session_id: str, turn: Turn) -> Turn:
+        data = self._get_or_create_session(session_id)
+        stored = turn.model_copy(update={"turn_index": data.next_turn_index})
+        data.next_turn_index += 1
+        data.turns.append(stored)
+        if len(data.turns) > self._max_turns:
+            data.turns = data.turns[-self._max_turns :]
+        return stored
+
+    def _purge_expired_request_records(self, data: _SessionData) -> None:
+        now = self._now()
+        expired = [
+            key
+            for key, record in data.request_records.items()
+            if record.status != "in_progress" and record.expires_at <= now
+        ]
+        for key in expired:
+            data.request_records.pop(key)
+
+    def _trim_request_records(self, data: _SessionData) -> None:
+        while len(data.request_records) > self._max_request_records:
+            evicted_key = next(
+                (
+                    key
+                    for key, record in data.request_records.items()
+                    if record.status != "in_progress"
+                ),
+                None,
+            )
+            if evicted_key is None:
+                return
+            data.request_records.pop(evicted_key)
 
     def _evict_to_capacity(self) -> None:
         """Evict inactive LRU sessions until at or below capacity."""

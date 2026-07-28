@@ -18,12 +18,36 @@ POST /api/v1/plan
 {
   "game": "dota2",
   "query": "我上次问的是什么英雄来着",
-  "session_id": "optional UUID v4"
+  "session_id": "optional UUID v4",
+  "request_id": "optional UUID v4; requires session_id"
 }
 ```
 
 `session_id` is optional. Omitting it runs a stateless request. Reusing it
 enables compact `Turn` memory for the same user security subject.
+
+`request_id` is optional and currently supported only with `session_id`. It
+identifies one logical stateful request using `(session_id, request_id)`: replaying
+the same validated `query` and `game` returns the original public response,
+including the original `runtime.run_id`, without running the Graph or appending
+another Turn. Reusing the same key with different inputs returns HTTP 409:
+
+```json
+{
+  "query": "...",
+  "game": "dota2",
+  "session_id": "UUID v4",
+  "status": "error",
+  "reason": "request_id has already been used with different request inputs",
+  "response_type": "idempotency_conflict",
+  "error_code": "idempotency_conflict"
+}
+```
+
+This pre-execution conflict has no `runtime`; it does not create a Run, Attempt,
+or Session Turn. Supplying `request_id` without `session_id` is a 422 validation
+error. The memory-backend replay window is bounded by request-record TTL/capacity;
+Redis and multi-worker idempotency are not implemented yet.
 
 Response fields include:
 
@@ -33,7 +57,8 @@ Response fields include:
   `conversation_context_missing`, `capability_boundary`, a tool answer
   contract, `tool_error`, `answer_error`, `execution_error`,
   `execution_budget_error`, `execution_timeout`, `planning_error`,
-  `decision_validation_error`, `insufficient_evidence`, or `replan_exhausted`.
+  `decision_validation_error`, `insufficient_evidence`, `replan_exhausted`, or
+  `idempotency_conflict` for the 409 pre-execution envelope.
 - `decision_kind` and `missing_fields`.
 - `plan` and `tool_results` for tool decisions.
 - `planner_required_evidence`, `effective_required_evidence`, and
