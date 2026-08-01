@@ -6,7 +6,7 @@
 > `DotaMind_MVP_v2.5.md` 的 constrained tool calling 边界，也不改变 V3.0
 > 已闭环的业务能力；它定义的是已有能力如何更可靠、可恢复、可追踪地运行。
 
-更新日期：2026-07-23
+更新日期：2026-08-01
 
 ## 1. 背景
 
@@ -564,11 +564,17 @@ tool error 改写成 missing evidence，也不能把 Answer error 改写成 crit
 - 首版只支持 stateful `(session_id, request_id)`；request record 使用 TTL 与每
   Session 容量上限，Redis/lease/fencing 延后到 V3.2-5。
 
-### V3.2-5：Redis Session Store（下一阶段）
+### V3.2-5：Redis Session Store（已完成）
 
 - 实现 JSON schema、TTL、distributed lease、fencing 和 atomic append。
 - 保留 memory backend 用于测试和单 worker 本地开发。
 - Redis 配置失败时直接启动失败或返回 session store error，不回退到分叉的本地状态。
+- Redis key、schema、lease/fencing、RequestRecord Hash + GC ZSET 与 API/worker 重建
+  恢复边界以 `DotaMind_V3.2-5_design.md` 为准；Redis Server 重启的数据保留取决于
+  部署时的 AOF/RDB 与持久卷。
+- 2026-08-01 已用本机 Docker Redis 完成真实跨 Store 集成验收（`13 passed`）；启用 Redis
+  的完整回归为 `459 passed, 1 warning`，未设置 Redis 环境变量的常规回归为
+  `446 passed, 13 skipped, 1 warning`。
 
 ### V3.2-6：观测与故障注入
 

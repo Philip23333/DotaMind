@@ -28,8 +28,10 @@ At the start of every new session in this repository, before analyzing or editin
      Foundation target and phase order.
    - `docs/design/versions/DotaMind_V3.2-1_design.md` — completed Run / Attempt / Budget
      implementation blueprint and compatibility boundary.
-   - `docs/design/versions/DotaMind_V3.2-2_design.md` — active Prompt Registry
+   - `docs/design/versions/DotaMind_V3.2-2_design.md` — completed Prompt Registry
      implementation blueprint and audit/frozen-catalog boundary.
+   - `docs/design/versions/DotaMind_V3.2-5_design.md` — completed Redis Session Store,
+     lease/fencing, and API/worker recovery boundary.
    - `docs/design/versions/DotaMind_MVP_v2.5.md` — primary architecture direction
      (v2.5 constrained tool calling). Treat this as the authority when
      discussing plan/graph/contract structure.

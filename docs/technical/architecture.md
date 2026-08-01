@@ -107,8 +107,18 @@ cycle. `complete_request_with_turn` atomically assigns the Turn index, appends
 the Turn, stores the already-allowlisted response, and marks the request
 completed. Request records have a bounded TTL/capacity and only retain public
 responses, never history, prompt text, raw Controller output, recovery feedback,
-fingerprints, or secrets. This guarantee is single-process only; Redis lease,
-fencing and multi-worker recovery remain V3.2-5 work.
+fingerprints, or secrets. InMemory provides single-process state; Redis adds the
+multi-worker lease, fencing, and rebuild-recovery boundary described below.
+
+## Redis Session Store
+
+V3.2-5 adds `RedisSessionStore` behind the same `SessionStore` interface. It uses hashed
+session/request identifiers, schema-v1 JSON envelopes, a per-session Redis lease and fencing
+counter, plus atomic Lua operations for Turn append and RequestRecord completion. The API
+lifespan selects `memory` or `redis` through configuration; Redis startup and runtime failures
+surface as `session_store_error` and never fall back to a new in-memory session. API/worker
+rebuilds recover state by reconnecting to the same Redis data. Redis Server restart durability is
+a deployment concern: AOF/RDB and persistent volumes determine the allowed data-loss window.
 
 ## Tool Plan Validation Order
 

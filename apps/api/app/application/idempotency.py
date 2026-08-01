@@ -30,7 +30,7 @@ class RequestRecord(BaseModel):
     """Allowlisted state needed to replay one completed stateful request."""
 
     request_id: UUID
-    request_hash: str
+    payload_hash: str
     status: RequestStatus
     owner_token: UUID
     run_id: UUID | None = None
@@ -47,7 +47,7 @@ class RequestBeginResult(BaseModel):
     action: RequestBeginAction
     owner_token: UUID | None = None
     cached_public_response: dict[str, Any] | None = None
-    existing_request_hash: str | None = None
+    existing_payload_hash: str | None = None
 
 
 class IdempotencyConflictError(Exception):

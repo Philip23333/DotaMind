@@ -1,4 +1,5 @@
 import logging
+from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 
@@ -7,7 +8,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 from app.api.v1.routes import router as v1_router
-from app.core.config import get_settings
+from app.application.redis_session_store import RedisSessionStore
+from app.application.session_store_factory import build_session_store
+from app.core.config import get_policy, get_settings
 
 settings = get_settings()
 PLAN_CONSOLE_PATH = Path(__file__).parent / "resources" / "plan_console.html"
@@ -47,10 +50,25 @@ for handler in logging.getLogger().handlers:
     handler.addFilter(QueryStringRedactionFilter())
     handler.setFormatter(PipeFormatter())
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    store = build_session_store(settings, get_policy())
+    if isinstance(store, RedisSessionStore):
+        await store.ping()
+    from app.application.plan_service import PlanService
+
+    app.state.plan_service = PlanService(session_store=store)
+    try:
+        yield
+    finally:
+        await store.aclose()
+
+
 app = FastAPI(
     title=settings.app_name,
     description="Composable esports intelligence reports for humans and agents.",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(

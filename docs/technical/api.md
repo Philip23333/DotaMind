@@ -46,8 +46,22 @@ another Turn. Reusing the same key with different inputs returns HTTP 409:
 
 This pre-execution conflict has no `runtime`; it does not create a Run, Attempt,
 or Session Turn. Supplying `request_id` without `session_id` is a 422 validation
-error. The memory-backend replay window is bounded by request-record TTL/capacity;
-Redis and multi-worker idempotency are not implemented yet.
+error. The memory-backend replay window is bounded by request-record TTL/capacity.
+When `DOTAMIND_SESSION_STORE_BACKEND=redis`, the same semantics are shared by Redis-backed
+workers; Redis Server restart durability still depends on the deployment's AOF/RDB and volume setup.
+
+When the configured SessionStore is unavailable, locked past its acquisition deadline, loses its
+lease, or detects invalid persisted data, `/plan` returns HTTP 503:
+
+```json
+{
+  "status": "error",
+  "response_type": "session_store_error",
+  "error_code": "session_store_error"
+}
+```
+
+This envelope has no `runtime`; Redis errors never fall back to stateless or memory execution.
 
 Response fields include:
 

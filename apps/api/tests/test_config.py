@@ -5,6 +5,9 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
+from app.application.redis_session_store import RedisSessionStore
+from app.application.session_store import InMemorySessionStore
+from app.application.session_store_factory import build_session_store
 from app.core.config import DEFAULT_POLICY_PATH, Settings, load_policy
 
 
@@ -26,6 +29,27 @@ def test_settings_use_dotamind_environment_prefix(monkeypatch: pytest.MonkeyPatc
 
     assert settings.app_name == "DotaMind Test API"
     assert settings.database_url == "postgresql://dotamind:dotamind@localhost:5432/dotamind"
+
+
+def test_redis_backend_requires_url() -> None:
+    with pytest.raises(ValidationError, match="REDIS_URL"):
+        Settings(_env_file=None, session_store_backend="redis", redis_url=None)
+
+
+def test_session_store_factory_selects_only_configured_backend() -> None:
+    policy = load_policy(DEFAULT_POLICY_PATH)
+    memory = build_session_store(Settings(_env_file=None), policy)
+    redis = build_session_store(
+        Settings(
+            _env_file=None,
+            session_store_backend="redis",
+            redis_url="redis://localhost:6379/0",
+        ),
+        policy,
+    )
+
+    assert isinstance(memory, InMemorySessionStore)
+    assert isinstance(redis, RedisSessionStore)
 
 
 def test_policy_yaml_loads_all_report_sections() -> None:

@@ -222,6 +222,9 @@ class ConversationPolicy(StrictPolicyModel):
     # Completed request-idempotency records retained per active session.
     request_record_ttl_seconds: int = Field(default=3600, ge=1, le=86_400)
     max_request_records_per_session: int = Field(default=200, ge=1, le=10_000)
+    session_ttl_seconds: int = Field(default=86_400, ge=1, le=2_592_000)
+    lock_lease_seconds: int = Field(default=90, ge=1, le=600)
+    lock_acquire_timeout_seconds: int = Field(default=60, ge=1, le=600)
 
     @model_validator(mode="after")
     def validate_window_vs_max(self) -> "ConversationPolicy":
@@ -259,7 +262,8 @@ class Settings(BaseSettings):
     stratz_token: str | None = None
     openai_api_key: str | None = None
     database_url: str = "postgresql://dotamind:dotamind@localhost:5432/dotamind"
-    redis_url: str = "redis://localhost:6379/0"
+    session_store_backend: Literal["memory", "redis"] = "memory"
+    redis_url: str | None = None
     live_data_enabled: bool = False
 
     llm_provider: str = "deepseek"
@@ -288,6 +292,12 @@ class Settings(BaseSettings):
                 return json.loads(stripped)
             return [origin.strip() for origin in stripped.split(",") if origin.strip()]
         return ["http://localhost:3000"]
+
+    @model_validator(mode="after")
+    def validate_session_store_backend(self) -> "Settings":
+        if self.session_store_backend == "redis" and not self.redis_url:
+            raise ValueError("DOTAMIND_REDIS_URL is required for redis session storage")
+        return self
 
 
 def load_policy(path: Path) -> AppPolicy:

@@ -70,6 +70,9 @@ conversation:
   history_max_chars: 2000        # hard budget for the rendered history block
   request_record_ttl_seconds: 3600       # completed request-idempotency replay window
   max_request_records_per_session: 200   # bounded completed/failed request records
+  session_ttl_seconds: 86400             # Redis session data retention window
+  lock_lease_seconds: 90                 # distributed session lock lease
+  lock_acquire_timeout_seconds: 60       # bounded wait for a session lock
 
 planning:
   runtime:

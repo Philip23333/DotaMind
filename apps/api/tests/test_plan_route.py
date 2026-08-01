@@ -9,6 +9,7 @@ from app.agentic.runtime.clock import SystemClock
 from app.agentic.state import AgentRunState
 from app.application.idempotency import IdempotencyConflictError
 from app.application.plan_service import PlanServiceResult
+from app.application.session_store import SessionStoreError
 from app.core.config import RuntimePolicy
 from app.main import app
 
@@ -53,7 +54,7 @@ def test_plan_route_returns_plan_response(monkeypatch) -> None:
     from app.api.v1 import routes
 
     service = FakePlanService()
-    monkeypatch.setattr(routes, "plan_service", service)
+    monkeypatch.setattr(routes, "_plan_service", lambda _request: service)
 
     response = TestClient(app).post(
         "/api/v1/plan",
@@ -84,7 +85,7 @@ def test_plan_route_echoes_session_id(monkeypatch) -> None:
     from app.api.v1 import routes
 
     service = FakePlanService()
-    monkeypatch.setattr(routes, "plan_service", service)
+    monkeypatch.setattr(routes, "_plan_service", lambda _request: service)
 
     sid = "12345678-1234-4234-8234-123456789abc"
     response = TestClient(app).post(
@@ -137,7 +138,11 @@ def test_plan_route_maps_idempotency_conflict_to_409(monkeypatch) -> None:
                 session_id=str(session_id),
             )
 
-    monkeypatch.setattr(routes, "plan_service", ConflictPlanService())
+    monkeypatch.setattr(
+        routes,
+        "_plan_service",
+        lambda _request: ConflictPlanService(),
+    )
     session_id = "12345678-1234-4234-8234-123456789abc"
     request_id = "22345678-1234-4234-8234-123456789abc"
 
@@ -149,6 +154,20 @@ def test_plan_route_maps_idempotency_conflict_to_409(monkeypatch) -> None:
     assert response.status_code == 409
     assert response.json()["error_code"] == "idempotency_conflict"
     assert "runtime" not in response.json()
+
+
+def test_plan_route_maps_session_store_error_to_503(monkeypatch) -> None:
+    from app.api.v1 import routes
+
+    class BrokenPlanService:
+        async def run(self, query, game, session_id, request_id):
+            raise SessionStoreError("unavailable")
+
+    monkeypatch.setattr(routes, "_plan_service", lambda _request: BrokenPlanService())
+    response = TestClient(app).post("/api/v1/plan", json={"query": "hello"})
+
+    assert response.status_code == 503
+    assert response.json()["error_code"] == "session_store_error"
 
 
 def test_removed_legacy_routes_return_404() -> None:

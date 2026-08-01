@@ -87,17 +87,21 @@ curl -s -X POST http://localhost:8001/api/v1/plan \
   -d "{\"query\":\"那他适合走几号位\",\"session_id\":\"$SID\"}"
 ```
 
-Notes and Phase 1 limits:
+Notes and SessionStore limits:
 
 - History is injected as *untrusted context* only, not evidence. Each turn
   confirms hero/team/player identity through the current plan before a
   downstream data tool can use its ID. Stateful responses never expose Controller
   prompts or raw Controller output; stateful Controller failures return a stable,
   redacted error envelope.
-- The store is in-memory and single-process. Multi-worker deployments need a
-  distributed store (Phase 2, Redis). Active or waiting sessions are never
-  evicted; `max_sessions` can be temporarily exceeded while every candidate is
-  active. The `/debug/plan` console has a
+- `DOTAMIND_SESSION_STORE_BACKEND=memory` is the default for local development.
+  `DOTAMIND_SESSION_STORE_BACKEND=redis` requires `DOTAMIND_REDIS_URL` and shares
+  sessions across workers. Redis startup failure stops the API; runtime failure returns
+  `session_store_error` and never falls back to memory. Redis retains compact Turns and
+  allowlisted completed responses, not prompts, raw model output, history render blocks or secrets.
+  API/worker rebuild recovery requires the same Redis data; Redis Server restart durability requires
+  AOF/RDB plus a persistent volume. Active or waiting in-memory sessions are never evicted;
+  `max_sessions` can be temporarily exceeded while every candidate is active. The `/debug/plan` console has a
   `session_id` field with a "新建会话" button for manual multi-turn testing.
 
 Current conditional LangGraph path:
@@ -169,6 +173,8 @@ DOTAMIND_LLM_API_KEY=
 DOTAMIND_LLM_BASE_URL=https://api.deepseek.com
 DOTAMIND_LLM_MODEL=deepseek-chat
 DOTAMIND_POLICY_PATH=
+DOTAMIND_SESSION_STORE_BACKEND=memory
+DOTAMIND_REDIS_URL=redis://localhost:6379/0
 ```
 
 Policy is cached for the process lifetime. Restart the API after changing

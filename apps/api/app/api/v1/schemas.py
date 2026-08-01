@@ -152,3 +152,10 @@ class IdempotencyConflictResponse(StrictPublicModel):
     reason: str
     response_type: Literal["idempotency_conflict"] = "idempotency_conflict"
     error_code: Literal["idempotency_conflict"] = "idempotency_conflict"
+
+
+class SessionStoreErrorResponse(StrictPublicModel):
+    status: Literal["error"] = "error"
+    reason: str = "session storage is temporarily unavailable"
+    response_type: Literal["session_store_error"] = "session_store_error"
+    error_code: Literal["session_store_error"] = "session_store_error"

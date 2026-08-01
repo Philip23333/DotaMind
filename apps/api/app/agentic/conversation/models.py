@@ -3,7 +3,7 @@
 Intentionally free of imports from the rest of the agentic pipeline so this
 module can be used by both the agentic layer (summary extraction) and the
 application layer (session store / service) without circular dependencies.
-These models are also the unit of Redis serialisation in Phase 2.
+These models are also the unit of Redis serialisation in V3.2-5.
 """
 
 from __future__ import annotations

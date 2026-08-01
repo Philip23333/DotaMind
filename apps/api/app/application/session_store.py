@@ -1,12 +1,12 @@
 """Session store: persistence layer for multi-turn conversation history.
 
-Phase 1 ships InMemorySessionStore (LRU, per-session async lock, single
-process only).  The abstract base defines an async interface so Phase 2 can
-drop in a Redis backend without changing callers.
+InMemorySessionStore provides an LRU, per-session async lock for local development
+and single-worker operation.  The abstract base defines the shared async interface
+used by the Redis backend without changing callers.
 
-Phase 1 limitation: InMemorySessionStore provides correctness only within a
-single process / single Uvicorn worker.  Multi-worker or multi-process
-deployments require a distributed store (Phase 2, Redis).
+The InMemory backend provides correctness only within a single process / single
+Uvicorn worker.  Multi-worker or multi-process deployments should select the
+Redis backend from V3.2-5.
 """
 
 from __future__ import annotations
@@ -25,6 +25,14 @@ from uuid import UUID, uuid4
 from app.agentic.conversation.models import Turn
 from app.application.idempotency import RequestBeginResult, RequestRecord
 
+
+class SessionStoreError(RuntimeError):
+    """Stable infrastructure failure exposed by a SessionStore backend."""
+
+    def __init__(self, code: str) -> None:
+        super().__init__(code)
+        self.code = code
+
 # ---------------------------------------------------------------------------
 # Internal session container
 # ---------------------------------------------------------------------------
@@ -41,7 +49,7 @@ class _SessionData:
 
 
 # ---------------------------------------------------------------------------
-# Abstract interface (async so Phase 2 Redis backend is a drop-in)
+# Abstract interface shared by memory and Redis backends
 # ---------------------------------------------------------------------------
 
 
@@ -74,7 +82,7 @@ class SessionStore(ABC):
         self,
         session_id: str,
         request_id: UUID,
-        request_hash: str,
+        payload_hash: str,
     ) -> RequestBeginResult:
         """Claim, replay, or reject an idempotent request inside its transaction."""
 
@@ -98,6 +106,10 @@ class SessionStore(ABC):
         owner_token: UUID,
     ) -> None:
         """Mark an owned in-progress request failed without appending a Turn."""
+
+    async def aclose(self) -> None:
+        """Close backend resources. Memory storage has nothing to release."""
+        return None
 
     @abstractmethod
     def transaction(self, session_id: str) -> AbstractAsyncContextManager[None]:
@@ -123,8 +135,8 @@ class InMemorySessionStore(SessionStore):
     Concurrency: the per-session Lock covers the full
     get → runner.run → append cycle in PlanService, guaranteeing that
     concurrent requests for the same session are serialised.  This guarantee
-    holds only within a single process; multi-worker deployments need a
-    distributed lock (Phase 2).
+    holds only within a single process; multi-worker deployments should use
+    RedisSessionStore.
     """
 
     def __init__(
@@ -169,7 +181,7 @@ class InMemorySessionStore(SessionStore):
         self,
         session_id: str,
         request_id: UUID,
-        request_hash: str,
+        payload_hash: str,
     ) -> RequestBeginResult:
         self._require_holder(session_id, "begin_request")
         data = self._get_or_create_session(session_id)
@@ -178,10 +190,10 @@ class InMemorySessionStore(SessionStore):
         existing = data.request_records.get(key)
         if existing is not None:
             data.request_records.move_to_end(key)
-            if existing.request_hash != request_hash:
+            if existing.payload_hash != payload_hash:
                 return RequestBeginResult(
                     action="conflict",
-                    existing_request_hash=existing.request_hash,
+                    existing_payload_hash=existing.payload_hash,
                 )
             if existing.status == "completed":
                 if existing.cached_public_response is None:
@@ -195,7 +207,7 @@ class InMemorySessionStore(SessionStore):
         owner_token = uuid4()
         data.request_records[key] = RequestRecord(
             request_id=request_id,
-            request_hash=request_hash,
+            payload_hash=payload_hash,
             status="in_progress",
             owner_token=owner_token,
             started_at=now,

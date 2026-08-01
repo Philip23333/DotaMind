@@ -89,8 +89,8 @@ class PlanService:
         3. Runs the graph with history injected into AgentRunState.
         4. Appends a compact turn summary back to the store.
 
-        Phase 1 limitation: the session lock is per-process only.
-        Multi-worker deployments require a distributed lock (Phase 2, Redis).
+        The InMemory backend's session lock is per-process only. Select the
+        Redis backend for multi-worker deployments.
         """
         if request_id is not None and session_id is None:
             raise ValueError("request_id requires session_id")
