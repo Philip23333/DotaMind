@@ -14,8 +14,14 @@ def test_plan_console_is_served_by_api() -> None:
     assert "Validated Decision" in response.text
     assert "Required Evidence Sources" in response.text
     assert "Runtime / Attempt / Budget" in response.text
-    assert 'setJson("runtime", payload.runtime)' in response.text
+    assert 'setJson("runtime", sanitizeForDebug(payload.runtime))' in response.text
     assert "Terminal Stage" in response.text
+    assert "Slowest Node" in response.text
+    assert "Failure Stage" in response.text
+    assert "renderAttemptSummary" in response.text
+    assert "nodeDurations" in response.text
+    assert "Budget limits / used" in response.text
+    assert "shortId(call.tool_call_id)" in response.text
     assert "Controller Prompt Messages" not in response.text
     assert "Controller Raw Content" not in response.text
     assert "Final User Output" in response.text

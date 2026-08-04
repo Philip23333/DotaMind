@@ -37,15 +37,14 @@ def test_transport_is_shared_across_team_endpoints_and_cache(caplog) -> None:
 
     assert requests == ["/teams", "/teams/2163/players"]
     assert transport.cache_stats() == {"hits": 1, "misses": 2}
-    assert "OpenDota request completed path=/teams" in caplog.text
-    assert "OpenDota cache hit path=/teams" in caplog.text
+    assert "/teams" not in caplog.text
 
     asyncio.run(transport.aclose())
     assert http_client.is_closed
     assert transport._client is None
 
 
-def test_transport_logs_failed_path_and_exception(caplog) -> None:
+def test_transport_does_not_log_failed_path_or_raw_exception(caplog) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ReadTimeout("upstream stalled", request=request)
 
@@ -65,9 +64,9 @@ def test_transport_logs_failed_path_and_exception(caplog) -> None:
     caplog.set_level(logging.WARNING, logger="app.integrations.opendota")
     asyncio.run(exercise())
 
-    assert "path=/teams/2163/players" in caplog.text
-    assert "type=ReadTimeout" in caplog.text
-    assert "upstream stalled" in caplog.text
+    assert "/teams/2163/players" not in caplog.text
+    assert "ReadTimeout" not in caplog.text
+    assert "upstream stalled" not in caplog.text
 
 
 def test_match_details_use_long_lived_cache() -> None:

@@ -1,12 +1,12 @@
 # DotaMind V3.2 Agent Runtime Foundation 设计
 
-> 状态：目标设计，尚未全部实现。
+> 状态：已完成并通过 V3.2-6 最终验收（2026-08-02）。
 >
 > V3.2 冻结业务工具扩张，优先完善 Agent 运行时。本文不替代
 > `DotaMind_MVP_v2.5.md` 的 constrained tool calling 边界，也不改变 V3.0
 > 已闭环的业务能力；它定义的是已有能力如何更可靠、可恢复、可追踪地运行。
 
-更新日期：2026-08-01
+更新日期：2026-08-02
 
 ## 1. 背景
 
@@ -576,14 +576,18 @@ tool error 改写成 missing evidence，也不能把 Answer error 改写成 crit
   的完整回归为 `459 passed, 1 warning`，未设置 Redis 环境变量的常规回归为
   `446 passed, 13 skipped, 1 warning`。
 
-### V3.2-6：观测与故障注入
+### V3.2-6：观测与故障边界（已完成）
 
-- 补指标、结构化日志和慢节点定位。
-- 覆盖进程崩溃、锁超时、旧 owner 迟到写入、Controller invalid、上游错误、预算耗尽
-  和取消请求。
-- V3.2-1 的“每个请求恰好一个 Attempt”只覆盖受控 Graph 终态；未捕获异常、取消和
-  进程退出的 Attempt 封存由本阶段闭合。
-- 完成架构验收后再解冻业务工具。
+- 以共用 Attempt/Run finalizer 和封闭 `StableFailureCode` 固定 terminal 语义。
+- 补单进程 Prometheus `/metrics`、固定键值日志、公开 Trace 的工具/复用/recovery/failure 字段。
+- 未捕获异常返回 500 `execution_error`，不写 Turn 或 completed replay；取消在提交前失败可接管，
+  提交竞争后保持一个 completed Turn。
+- `/debug/plan` 只显示公开 Trace/runtime/tool result，不暴露 Store 或幂等内部状态；业务工具仍冻结。
+- Run/Attempt 指标移至 Runner 唯一终态边界；Store 的 `failed/completed/noop` 结果驱动幂等指标，
+  Redis 提交后取消保持 `completed + 1 Turn`，提交前取消保持 `failed/takeover + 0 Turn`。
+- 指标合同收敛为 13 组低基数单进程 collector；reused 保留原始耗时但不重复观察 duration。
+- 2026-08-02 最终验收：无 Redis 环境变量 `460 passed, 14 skipped`，启用真实 Redis
+  `474 passed`，真实 Redis 模块 `14 passed`；Ruff、lock 和 diff 检查均通过。
 
 ## 15. 测试与验收
 

@@ -1,3 +1,5 @@
+import logging
+
 from app.agentic.planning.decisions import ToolPlanDecision
 from app.agentic.runtime.clock import Clock
 from app.agentic.runtime.guards import apply_runtime_failure, runtime_gate_failure
@@ -8,6 +10,9 @@ from app.agentic.runtime.recovery import (
 )
 from app.agentic.state import AgentRunState
 from app.agentic.tools import ToolRegistry
+from app.observability import emit_event, record_recovery
+
+logger = logging.getLogger(__name__)
 
 
 def recovery_node(
@@ -23,13 +28,38 @@ def recovery_node(
         state.add_trace("recovery", "recovery not applicable", "completed")
         return state
 
+    emit_event(
+        logger,
+        "recovery_started",
+        status="started",
+        attempt_index=state.attempt_index,
+        recovery_code="missing_evidence",
+    )
+
     gate_failure = runtime_gate_failure(state, clock)
     if gate_failure is not None:
+        record_recovery("exhausted", "missing_evidence")
+        emit_event(
+            logger,
+            "recovery_exhausted",
+            status="error",
+            attempt_index=state.attempt_index,
+            failure_code=gate_failure,
+            recovery_code="missing_evidence",
+        )
         apply_runtime_failure(state, gate_failure)
         state.add_trace("recovery", state.reason, "failed")
         return state
 
     if state.attempt_index == 1:
+        record_recovery("exhausted", "missing_evidence")
+        emit_event(
+            logger,
+            "recovery_exhausted",
+            status="completed",
+            attempt_index=state.attempt_index,
+            recovery_code="missing_evidence",
+        )
         state.status = "insufficient_evidence"
         state.response_type = "replan_exhausted"
         state.reason = "replan exhausted"
@@ -38,6 +68,14 @@ def recovery_node(
 
     missing = recoverable_missing_evidence(state, registry)
     if missing is None:
+        record_recovery("exhausted", "missing_evidence")
+        emit_event(
+            logger,
+            "recovery_exhausted",
+            status="completed",
+            attempt_index=state.attempt_index,
+            recovery_code="missing_evidence",
+        )
         state.add_trace("recovery", "missing evidence is not recoverable", "completed")
         return state
 
@@ -57,6 +95,14 @@ def recovery_node(
         state.run_budget.exhausted(resource)
         for resource in ("replans", "controller", "tools")
     ) or available_tool_capacity < required_tool_calls:
+        record_recovery("exhausted", "missing_evidence")
+        emit_event(
+            logger,
+            "recovery_exhausted",
+            status="completed",
+            attempt_index=state.attempt_index,
+            recovery_code="missing_evidence",
+        )
         state.status = "insufficient_evidence"
         state.response_type = "replan_exhausted"
         state.reason = "replan exhausted"
@@ -73,5 +119,18 @@ def recovery_node(
     state.recovery_baseline_decision = state.decision.model_copy(deep=True)
     state.run_budget.record_replan()
     state.recovery_action = "replan"
-    state.add_trace("recovery", "start bounded replan", "completed")
+    record_recovery("completed", "missing_evidence")
+    emit_event(
+        logger,
+        "recovery_completed",
+        status="completed",
+        attempt_index=state.attempt_index,
+        recovery_code="missing_evidence",
+    )
+    state.add_trace(
+        "recovery",
+        "start bounded replan",
+        "completed",
+        recovery_code="missing_evidence",
+    )
     return state

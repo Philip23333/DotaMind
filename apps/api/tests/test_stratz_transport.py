@@ -70,7 +70,7 @@ def test_stratz_transport_sends_bearer_token_without_logging_it(caplog) -> None:
         "variables": {},
     }
     assert "secret-token" not in caplog.text
-    assert "STRATZ request completed operation=TestOperation" in caplog.text
+    assert "TestOperation" not in caplog.text
 
 
 def test_stratz_transport_raises_graphql_errors() -> None:

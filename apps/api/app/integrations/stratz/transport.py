@@ -1,11 +1,7 @@
 import asyncio
 import json
-import logging
-import time
 from typing import Any
 from urllib import error, request
-
-logger = logging.getLogger(__name__)
 
 
 class StratzTransport:
@@ -35,7 +31,6 @@ class StratzTransport:
         query: str,
         variables: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        started = time.perf_counter()
         payload = {"query": query, "variables": variables or {}}
         try:
             response = await asyncio.to_thread(self._post, payload)
@@ -47,32 +42,12 @@ class StratzTransport:
                     response.body,
                 )
             data = self._json(response, operation_name)
-        except Exception as exc:
-            logger.warning(
-                "STRATZ request failed operation=%s elapsed_ms=%s type=%s error=%r",
-                operation_name,
-                round((time.perf_counter() - started) * 1000),
-                type(exc).__name__,
-                exc,
-            )
+        except Exception:
             raise
 
         errors = data.get("errors")
         if errors:
-            logger.warning(
-                "STRATZ GraphQL errors operation=%s elapsed_ms=%s error_count=%s",
-                operation_name,
-                round((time.perf_counter() - started) * 1000),
-                len(errors),
-            )
             raise StratzGraphQLError(operation_name, errors)
-
-        logger.info(
-            "STRATZ request completed operation=%s status=%s elapsed_ms=%s",
-            operation_name,
-            response.status_code,
-            round((time.perf_counter() - started) * 1000),
-        )
         return data
 
     def _post(self, payload: dict[str, Any]) -> "_StratzHTTPResponse":

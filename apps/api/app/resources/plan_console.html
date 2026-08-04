@@ -160,6 +160,11 @@
       }
 
       .flow { display: grid; gap: 0.65rem; padding: 1rem; }
+      .attempt-group { display: grid; gap: 0.65rem; }
+      .attempt-group + .attempt-group { margin-top: 0.8rem; }
+      .attempt-title { margin: 0.2rem 0; color: var(--muted); font-size: 0.8rem; }
+      .attempt-summary { border-top: 1px solid var(--line); padding: 1rem; }
+      .attempt-summary h3 { margin: 0 0 0.7rem; font-size: 0.88rem; }
       .node {
         border: 1px solid var(--line);
         border-left: 5px solid var(--blue);
@@ -273,6 +278,7 @@
 
         <div class="card">
           <h2>Readable Output</h2>
+          <div id="attempt-summary"></div>
           <details open><summary>Validated Decision</summary><pre id="validated-decision"></pre></details>
           <details open><summary>Runtime / Attempt / Budget</summary><pre id="runtime"></pre></details>
           <details><summary>Required Evidence Sources</summary><pre id="required-evidence-sources"></pre></details>
@@ -336,7 +342,7 @@
           const payload = await response.json();
           // Keep session_id in sync with what the server echoed back.
           if (payload.session_id) sessionInput.value = payload.session_id;
-          render(payload);
+          render(payload, response.status);
         } catch (error) {
           result.hidden = true;
           errorBox.append(textElement("div", "error", `Request failed: ${error}`));
@@ -346,30 +352,34 @@
         }
       }
 
-      function render(payload) {
+      function render(payload, httpStatus) {
         result.hidden = false;
-        renderSummary(payload);
+        renderSummary(payload, httpStatus);
         renderFlow(payload.trace || []);
+        renderAttemptSummary(payload.runtime, payload.trace || []);
         setJson("validated-decision", {
           kind: payload.decision_kind,
           missing_fields: payload.missing_fields || [],
         });
-        setJson("runtime", payload.runtime);
+        setJson("runtime", sanitizeForDebug(payload.runtime));
         setJson("required-evidence-sources", payload.required_evidence_sources || {});
         renderFinalOutput(payload);
         setJson("parsed-final", parsedFinalData(payload));
-        setJson("plan", payload.plan);
-        setJson("tool-results", payload.tool_results || []);
-        setJson("evidence", payload.evidence_graph);
+        setJson("plan", sanitizeForDebug(payload.plan));
+        setJson("tool-results", sanitizeForDebug(payload.tool_results || []));
+        setJson("evidence", sanitizeForDebug(payload.evidence_graph));
         setJson("answer", payload.answer);
         setJson("review", payload.review);
-        setJson("raw", payload);
+        setJson("raw", sanitizeForDebug(payload));
       }
 
-      function renderSummary(payload) {
+      function renderSummary(payload, httpStatus) {
         const summary = document.querySelector("#summary");
+        const finalAttempt = payload.runtime?.attempts?.at(-1) || null;
+        const slowest = slowestNode(payload.trace || []);
         summary.innerHTML = "";
         summary.append(
+          metric("HTTP", httpStatus),
           metric("Status", payload.status),
           metric("Response Type", payload.response_type || "n/a"),
           metric("Decision", payload.decision_kind || "n/a"),
@@ -377,8 +387,51 @@
           metric("Session", payload.session_id ? payload.session_id.slice(0, 8) + "…" : "stateless"),
           metric("Run", payload.runtime?.run_id ? payload.runtime.run_id.slice(0, 8) + "…" : "n/a"),
           metric("Duration", payload.runtime ? `${payload.runtime.duration_ms} ms` : "n/a"),
+          metric("Slowest Node", slowest ? `${slowest.node} · ${slowest.duration_ms} ms` : "n/a"),
           metric("Terminal Stage", payload.runtime?.terminal_stage || "n/a"),
+          metric("Failure Stage", finalAttempt?.failure_stage || "n/a"),
+          metric("Failure Code", finalAttempt?.failure_code || payload.error_code || "n/a"),
         );
+      }
+
+      function renderAttemptSummary(runtime, trace) {
+        const target = document.getElementById("attempt-summary");
+        target.innerHTML = "";
+        if (!runtime?.attempts?.length) {
+          target.append(textElement("div", "empty", "No runtime attempt summary returned."));
+          return;
+        }
+        runtime.attempts.forEach((attempt) => {
+          const section = element("section", "attempt-summary");
+          const durations = nodeDurations(trace, attempt.attempt_index);
+          section.append(textElement("h3", "", `Attempt ${attempt.attempt_index}`));
+          const stats = element("div", "meta");
+          stats.append(
+            metric("Status", attempt.status),
+            metric("Controller", `${durations.controller || 0} ms`),
+            metric("Tools", `${durations.tools || 0} ms`),
+            metric("Answer", `${durations.answer || 0} ms`),
+            metric("Failure", attempt.failure_code || "none"),
+            metric("Recovery", attempt.recovery_code || "none"),
+          );
+          section.append(stats);
+          const tools = (attempt.tool_call_statuses || []).map((call) => ({
+            tool: call.tool,
+            call: shortId(call.tool_call_id),
+            status: call.status,
+            latency_ms: call.latency_ms,
+            reused: call.reused === true,
+          }));
+          if (tools.length) {
+            const toolOutput = textElement("pre", "", JSON.stringify(tools, null, 2));
+            section.append(toolOutput);
+          }
+          target.append(section);
+        });
+        const budget = element("section", "attempt-summary");
+        budget.append(textElement("h3", "", "Budget limits / used"));
+        budget.append(textElement("pre", "", JSON.stringify(runtime.budget || {}, null, 2)));
+        target.append(budget);
       }
 
       function renderFinalOutput(payload) {
@@ -419,7 +472,16 @@
           flow.append(textElement("div", "empty", "No trace events returned."));
           return;
         }
-        trace.forEach((event, index) => {
+        const grouped = new Map();
+        trace.forEach((event) => {
+          const attemptIndex = event.attempt_index ?? 0;
+          if (!grouped.has(attemptIndex)) grouped.set(attemptIndex, []);
+          grouped.get(attemptIndex).push(event);
+        });
+        grouped.forEach((events, attemptIndex) => {
+          const group = element("section", "attempt-group");
+          group.append(textElement("h3", "attempt-title", `Attempt ${attemptIndex}`));
+          events.forEach((event, index) => {
           const node = element("article", `node ${event.status || ""}`);
           const head = element("div", "node-head");
           head.append(
@@ -429,9 +491,69 @@
           const timing = event.started_at
             ? ` · attempt ${event.attempt_index ?? 0} · ${event.duration_ms ?? 0} ms`
             : "";
-          node.append(head, textElement("div", "node-action", `${event.action || ""}${timing}`));
-          flow.append(node);
+          const details = [
+            event.tool ? `tool=${event.tool}` : null,
+            event.tool_call_id ? `call=${shortId(event.tool_call_id)}` : null,
+            event.reused === true ? "reused=true" : null,
+            event.recovery_code ? `recovery=${event.recovery_code}` : null,
+            event.failure_code ? `failure=${event.failure_code}` : null,
+          ].filter(Boolean);
+          const suffix = details.length ? ` · ${details.join(" · ")}` : "";
+          node.append(
+            head,
+            textElement("div", "node-action", `${event.action || ""}${timing}${suffix}`),
+          );
+            group.append(node);
+          });
+          flow.append(group);
         });
+      }
+
+      function nodeDurations(trace, attemptIndex) {
+        const durations = {};
+        trace
+          .filter((event) =>
+            (event.attempt_index ?? 0) === attemptIndex &&
+            ["completed", "failed"].includes(event.status) &&
+            event.action !== "tool_call"
+          )
+          .forEach((event) => {
+            durations[event.node] = Math.max(durations[event.node] || 0, event.duration_ms || 0);
+          });
+        return durations;
+      }
+
+      function slowestNode(trace) {
+        const candidates = trace.filter((event) =>
+          ["completed", "failed"].includes(event.status) && event.action !== "tool_call"
+        );
+        return candidates.reduce(
+          (slowest, event) => !slowest || (event.duration_ms || 0) > slowest.duration_ms
+            ? { node: event.node, duration_ms: event.duration_ms || 0 }
+            : slowest,
+          null,
+        );
+      }
+
+      function shortId(value) {
+        return value ? `${String(value).replaceAll("-", "").slice(0, 8)}…` : null;
+      }
+
+      function sanitizeForDebug(value, key = "") {
+        if (Array.isArray(value)) return value.map((item) => sanitizeForDebug(item));
+        if (value && typeof value === "object") {
+          return Object.fromEntries(
+            Object.entries(value).map(([childKey, childValue]) => [
+              childKey,
+              sanitizeForDebug(childValue, childKey),
+            ]),
+          );
+        }
+        if (["run_id", "session_id", "request_id", "tool_call_id", "id"].includes(key)) {
+          return typeof value === "string" ? shortId(value) : value;
+        }
+        if (/^(player|account|match)_id$/.test(key)) return "[redacted]";
+        return value;
       }
 
       function setJson(id, value) {

@@ -16,10 +16,12 @@ from redis.asyncio import Redis
 from app.agentic.conversation.models import Turn
 from app.api.v1.schemas import PlanResponse
 from app.application.redis_session_store import (
+    _COMPLETE_LUA,
     _RENEW_LUA,
     RedisSessionStore,
 )
 from app.application.session_store import SessionStoreError
+from app.observability import IDEMPOTENCY
 
 pytestmark = pytest.mark.skipif(
     not os.getenv("DOTAMIND_TEST_REDIS_URL"),
@@ -81,6 +83,20 @@ class RedisHarness:
         await self.client.aclose()
 
 
+class CommitReturnBlockingStore(RedisSessionStore):
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.lua_committed = asyncio.Event()
+        self.release_result = asyncio.Event()
+
+    async def _eval(self, script: str, keys: list[str], *args: str):
+        result = await super()._eval(script, keys, *args)
+        if script == _COMPLETE_LUA:
+            self.lua_committed.set()
+            await self.release_result.wait()
+        return result
+
+
 def _public_response(run_id) -> dict:
     return {
         "query": "q",
@@ -120,6 +136,58 @@ def _public_response(run_id) -> dict:
 
 def _run(coro):
     return asyncio.run(coro)
+
+
+def test_cancel_after_complete_lua_keeps_completed_turn_and_executed_metric() -> None:
+    harness = RedisHarness(os.environ["DOTAMIND_TEST_REDIS_URL"])
+    request_id, run_id = uuid4(), uuid4()
+    executed = IDEMPOTENCY.labels("redis", "executed")._value
+    cancelled = IDEMPOTENCY.labels("redis", "cancelled")._value
+
+    async def scenario():
+        await harness.open()
+        assert harness.client is not None
+        store = CommitReturnBlockingStore(
+            redis=harness.client,
+            key_prefix=harness.prefix,
+            lock_lease_seconds=3,
+            lock_acquire_timeout_seconds=3,
+            session_ttl_seconds=120,
+            request_record_ttl_seconds=60,
+        )
+        session_id = harness.session()
+
+        async def execute():
+            async with store.transaction(session_id):
+                claim = await store.begin_request(session_id, request_id, "payload")
+                assert claim.owner_token is not None
+                await store.complete_request_with_turn(
+                    session_id,
+                    request_id,
+                    claim.owner_token,
+                    Turn(query="q"),
+                    _public_response(run_id),
+                    run_id,
+                )
+
+        task = asyncio.create_task(execute())
+        await store.lua_committed.wait()
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        async with store.transaction(session_id):
+            replay = await store.begin_request(session_id, request_id, "payload")
+            turns = await store.get(session_id, 5)
+        await harness.close()
+        return replay, turns
+
+    before = executed.get(), cancelled.get()
+    replay, turns = _run(scenario())
+
+    assert replay.action == "replay"
+    assert len(turns) == 1
+    assert executed.get() - before[0] == 1
+    assert cancelled.get() - before[1] == 0
 
 
 def test_replay_preserves_public_response_empty_arrays() -> None:

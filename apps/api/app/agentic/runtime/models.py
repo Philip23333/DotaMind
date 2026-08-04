@@ -5,6 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.agentic.models import ToolResult
+from app.failure_codes import StableFailureCode
 
 AgentRunStatus = Literal[
     "ok",
@@ -17,7 +18,12 @@ AgentRunStatus = Literal[
 AttemptStatus = AgentRunStatus
 RecoveryCode = Literal["missing_evidence"]
 RecoveryAction = Literal["replan", "terminal"]
-RuntimeFailureCode = Literal["execution_budget_error", "execution_timeout"]
+RuntimeFailureCode = Literal[
+    "execution_error",
+    "execution_budget_error",
+    "execution_timeout",
+    "request_cancelled",
+]
 TerminalStage = Literal[
     "controller",
     "decision_validation",
@@ -216,6 +222,7 @@ class AttemptRecord(StrictRuntimeModel):
     critic_summary: AttemptCriticSummary | None = None
     status: AttemptStatus
     failure_stage: FailureStage | None = None
+    failure_code: StableFailureCode | None = None
     recovery_code: RecoveryCode | None = None
     started_at: datetime
     duration_ms: int = Field(ge=0)
@@ -235,3 +242,4 @@ class TerminalOutcome(StrictRuntimeModel):
     attempt_status: AttemptStatus
     terminal_stage: TerminalStage
     failure_stage: FailureStage | None = None
+    failure_code: StableFailureCode | None = None

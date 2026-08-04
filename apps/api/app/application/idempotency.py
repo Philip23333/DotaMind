@@ -12,6 +12,8 @@ from pydantic import BaseModel
 
 RequestStatus = Literal["in_progress", "completed", "failed"]
 RequestBeginAction = Literal["execute", "replay", "conflict"]
+RequestClaimKind = Literal["new", "takeover"]
+RequestFailAction = Literal["failed", "completed", "noop"]
 
 
 def build_request_hash(*, query: str, game: str) -> str:
@@ -45,6 +47,7 @@ class RequestBeginResult(BaseModel):
     """Deterministic result of claiming, replaying, or rejecting a request."""
 
     action: RequestBeginAction
+    claim_kind: RequestClaimKind | None = None
     owner_token: UUID | None = None
     cached_public_response: dict[str, Any] | None = None
     existing_payload_hash: str | None = None

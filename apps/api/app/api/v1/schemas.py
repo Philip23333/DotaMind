@@ -97,6 +97,7 @@ class RuntimeAttemptSummary(StrictPublicModel):
         "error",
     ]
     failure_stage: RuntimeStage | None
+    failure_code: str | None
     recovery_code: Literal["missing_evidence"] | None
     duration_ms: int
     tool_call_statuses: list[RuntimeToolCallStatus]
@@ -159,3 +160,10 @@ class SessionStoreErrorResponse(StrictPublicModel):
     reason: str = "session storage is temporarily unavailable"
     response_type: Literal["session_store_error"] = "session_store_error"
     error_code: Literal["session_store_error"] = "session_store_error"
+
+
+class ExecutionErrorResponse(StrictPublicModel):
+    status: Literal["error"] = "error"
+    reason: str = "execution failed"
+    response_type: Literal["execution_error"] = "execution_error"
+    error_code: Literal["execution_error"] = "execution_error"

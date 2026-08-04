@@ -1,12 +1,8 @@
-import logging
-
 from app.agentic.planning.decisions import (
     ConversationAnswerResult,
     DirectAnswerDecision,
 )
 from app.agentic.state import AgentRunState
-
-logger = logging.getLogger(__name__)
 
 
 def conversation_answer_node(state: AgentRunState) -> AgentRunState:
@@ -54,7 +50,6 @@ def conversation_answer_node(state: AgentRunState) -> AgentRunState:
     )
     state.status = "ok"
     state.add_trace("conversation_answer", "direct answer completed", "completed")
-    logger.info("node=conversation_answer end mode=%s", decision.response_mode)
     return state
 
 

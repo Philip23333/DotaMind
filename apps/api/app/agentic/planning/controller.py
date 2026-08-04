@@ -7,7 +7,6 @@ from pydantic import BaseModel, Field, TypeAdapter, ValidationError
 from app.agentic.conversation.models import Turn
 from app.agentic.planning.decisions import (
     ControllerDecision,
-    DirectAnswerDecision,
     RequiredEvidenceResolution,
     ToolPlanDecision,
     normalize_controller_decision,
@@ -29,6 +28,7 @@ from app.agentic.runtime.models import RecoveryFeedback
 from app.agentic.tools import ToolRegistry
 from app.core.config import get_policy, get_settings
 from app.llm.provider import LLMJSONDecodeError, LLMProvider, get_llm_provider
+from app.observability import emit_event, record_controller
 
 logger = logging.getLogger(__name__)
 
@@ -140,7 +140,13 @@ class AgentController:
                     messages, temperature=temperature, max_tokens=max_tokens
                 )
             except LLMJSONDecodeError as exc:
-                logger.warning("Agent controller JSON decode error: %r", exc)
+                record_controller("error", "planning_error")
+                emit_event(
+                    logger,
+                    "controller_failed",
+                    status="error",
+                    failure_code="planning_error",
+                )
                 if not is_last_attempt:
                     _append_retry_turns(
                         messages,
@@ -161,7 +167,13 @@ class AgentController:
                 continue
             except Exception as exc:
                 # Unexpected transport/runtime error: terminal, do not retry.
-                logger.warning("Agent controller call failed: %r", exc)
+                record_controller("error", "planning_error")
+                emit_event(
+                    logger,
+                    "controller_failed",
+                    status="error",
+                    failure_code="planning_error",
+                )
                 return AgentControllerResult(
                     status="error",
                     reason="LLM controller call failed",
@@ -173,7 +185,13 @@ class AgentController:
             try:
                 decision = adapter.validate_python(raw)
             except ValidationError as exc:
-                logger.warning("Agent controller decision shape error: %r", exc)
+                record_controller("error", "decision_validation_error")
+                emit_event(
+                    logger,
+                    "controller_failed",
+                    status="error",
+                    failure_code="decision_validation_error",
+                )
                 if not is_last_attempt:
                     _append_retry_turns(
                         messages,
@@ -192,17 +210,7 @@ class AgentController:
                 )
                 continue
 
-            discard_recall_answer = (
-                isinstance(decision, DirectAnswerDecision)
-                and decision.response_mode != "social"
-                and decision.answer is not None
-            )
             decision = normalize_controller_decision(decision)
-            if discard_recall_answer:
-                logger.info(
-                    "Agent controller discarded recall answer mode=%s",
-                    decision.response_mode,
-                )
             if isinstance(decision, ToolPlanDecision):
                 # Preserve the established ordering: sample policy mutates the
                 # final executable plan exactly once, before its first validation.
@@ -235,13 +243,8 @@ class AgentController:
                     )
                 )
             if not validation_errors:
-                logger.info(
-                    "Agent controller produced kind=%s tools=%s",
-                    decision.kind,
-                    len(decision.plan.tool_calls)
-                    if isinstance(decision, ToolPlanDecision)
-                    else 0,
-                )
+                record_controller("ok")
+                emit_event(logger, "controller_completed", status="ok")
                 return AgentControllerResult(
                     status="decided",
                     reason="decision accepted",
@@ -251,7 +254,13 @@ class AgentController:
                     prompt_messages=_redact_history_from_messages(messages, history_block),
                 )
 
-            logger.warning("Agent controller decision invalid: %s", validation_errors)
+            record_controller("error", "decision_validation_error")
+            emit_event(
+                logger,
+                "controller_failed",
+                status="error",
+                failure_code="decision_validation_error",
+            )
             if not is_last_attempt:
                 _append_retry_turns(
                     messages,
@@ -271,9 +280,6 @@ class AgentController:
 
         # Retries exhausted. Every non-returning iteration assigned `last`.
         assert last is not None
-        logger.warning(
-            "Agent controller exhausted retries attempts=%s", max_attempts
-        )
         return last
 
     @property

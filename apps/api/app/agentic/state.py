@@ -22,6 +22,7 @@ from app.agentic.runtime.models import (
     CachedToolCall,
     FailureStage,
     RecoveryAction,
+    RecoveryCode,
     RecoveryFeedback,
     RunBudget,
     RunContext,
@@ -29,6 +30,7 @@ from app.agentic.runtime.models import (
     TerminalStage,
     ToolDispatchRecord,
 )
+from app.failure_codes import StableFailureCode
 
 TraceEventStatus = Literal["planned", "completed", "failed"]
 
@@ -41,6 +43,11 @@ class AgentTraceEvent(BaseModel):
     status: TraceEventStatus
     started_at: datetime | None = None
     duration_ms: int = 0
+    tool_call_id: str | None = None
+    tool: str | None = None
+    reused: bool | None = None
+    recovery_code: RecoveryCode | None = None
+    failure_code: StableFailureCode | None = None
 
 
 class AgentRunState(BaseModel):
@@ -91,7 +98,18 @@ class AgentRunState(BaseModel):
     response_type: str | None = None
     response: dict[str, Any] | None = None
 
-    def add_trace(self, node: str, action: str, status: TraceEventStatus) -> None:
+    def add_trace(
+        self,
+        node: str,
+        action: str,
+        status: TraceEventStatus,
+        *,
+        tool_call_id: str | None = None,
+        tool: str | None = None,
+        reused: bool | None = None,
+        recovery_code: RecoveryCode | None = None,
+        failure_code: StableFailureCode | None = None,
+    ) -> None:
         timing = current_node_timing()
         started_at = self.run_context.started_at if self.run_context else None
         duration_ms = 0
@@ -111,5 +129,10 @@ class AgentRunState(BaseModel):
                 status=status,
                 started_at=started_at,
                 duration_ms=duration_ms,
+                tool_call_id=tool_call_id,
+                tool=tool,
+                reused=reused,
+                recovery_code=recovery_code,
+                failure_code=failure_code,
             )
         )

@@ -13,6 +13,7 @@ from app.agentic.runtime.models import (
 from app.agentic.runtime.recovery import tool_call_fingerprint
 from app.agentic.state import AgentRunState
 from app.agentic.tools.executor import ToolExecutor
+from app.observability import emit_event
 
 logger = logging.getLogger(__name__)
 
@@ -29,21 +30,14 @@ async def tool_executor_node(
     clock: Clock,
 ) -> AgentRunState:
     state.add_trace("tools", "execute planned tool calls", "planned")
-    logger.info(
-        "node=tools start tool_calls=%s",
-        len(state.plan.tool_calls) if state.plan else 0,
-    )
     if state.plan is None:
         state.status = "error"
         state.errors.append("missing execution plan")
         state.add_trace("tools", "missing execution plan", "failed")
-        logger.info("node=tools end status=error errors=%s", len(state.errors))
         return state
 
     results_by_id: dict[str, ToolResult] = {}
     for call in state.plan.tool_calls:
-        logger.info("Node tools called %s id=%s", call.tool, call.id)
-        logger.info("node=tools call_start id=%s tool=%s", call.id, call.tool)
         resolved_args, resolve_errors = _resolve_args(call.args, results_by_id)
         if resolve_errors:
             error = "; ".join(resolve_errors)
@@ -66,10 +60,22 @@ async def tool_executor_node(
             )
             results_by_id[call.id] = result
             state.errors.append(f"{call.id}: {result.error}")
-            logger.info(
-                "node=tools call_skip id=%s resolve_errors=%s",
-                call.id,
-                len(resolve_errors),
+            state.add_trace(
+                "tools",
+                "tool_call",
+                "failed",
+                tool_call_id=call.id,
+                tool=call.tool,
+                failure_code="tool_error",
+            )
+            emit_event(
+                logger,
+                "tool_call_failed",
+                status="error",
+                tool_name=call.tool,
+                tool_call_id=call.id,
+                reused=False,
+                failure_code="tool_error",
             )
             continue
 
@@ -90,7 +96,7 @@ async def tool_executor_node(
                     ),
                 )
                 break
-            result = cached.result.model_copy(update={"latency_ms": 0}, deep=True)
+            result = cached.result.model_copy(deep=True)
             dispatch = ToolDispatchRecord(
                 tool_call_id=call.id,
                 tool=call.tool,
@@ -105,6 +111,24 @@ async def tool_executor_node(
                 state.errors.append(
                     f"{call.id}: {result.error or 'tool execution failed'}"
                 )
+            state.add_trace(
+                "tools",
+                "tool_call",
+                "completed" if result.status == "ok" else "failed",
+                tool_call_id=call.id,
+                tool=call.tool,
+                reused=True,
+                failure_code="tool_error" if result.status == "error" else None,
+            )
+            emit_event(
+                logger,
+                "tool_call_reused",
+                status=result.status,
+                tool_name=call.tool,
+                tool_call_id=call.id,
+                reused=True,
+                failure_code="tool_error" if result.status == "error" else None,
+            )
             continue
 
         def check_handler_gate() -> None:
@@ -131,12 +155,23 @@ async def tool_executor_node(
             dispatch=dispatch.model_copy(deep=True),
         )
         results_by_id[call.id] = result
-        logger.info(
-            "node=tools call_end id=%s tool=%s status=%s latency_ms=%s",
-            call.id,
-            call.tool,
-            result.status,
-            result.latency_ms,
+        state.add_trace(
+            "tools",
+            "tool_call",
+            "completed" if result.status == "ok" else "failed",
+            tool_call_id=call.id,
+            tool=call.tool,
+            reused=False,
+            failure_code="tool_error" if result.status == "error" else None,
+        )
+        emit_event(
+            logger,
+            "tool_call_completed" if result.status == "ok" else "tool_call_failed",
+            status=result.status,
+            tool_name=call.tool,
+            tool_call_id=call.id,
+            reused=False,
+            failure_code="tool_error" if result.status == "error" else None,
         )
         if result.status == "error":
             state.errors.append(f"{call.id}: {result.error or 'tool execution failed'}")
@@ -144,16 +179,10 @@ async def tool_executor_node(
     if state.errors:
         state.status = "error"
         state.add_trace("tools", "tool execution failed", "failed")
-        logger.info(
-            "node=tools end status=error results=%s errors=%s",
-            len(state.tool_results),
-            len(state.errors),
-        )
         return state
 
     state.status = "ok"
     state.add_trace("tools", "tool execution completed", "completed")
-    logger.info("node=tools end status=ok results=%s", len(state.tool_results))
     return state
 
 

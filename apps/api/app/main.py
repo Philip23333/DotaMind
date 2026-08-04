@@ -3,9 +3,10 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from app.api.v1.routes import router as v1_router
 from app.application.redis_session_store import RedisSessionStore
@@ -85,6 +86,11 @@ app.include_router(v1_router, prefix=settings.api_v1_prefix)
 @app.get("/health", tags=["system"])
 def health_check() -> dict[str, str]:
     return {"status": "ok", "service": settings.app_name}
+
+
+@app.get("/metrics", include_in_schema=False)
+def metrics() -> Response:
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 @app.get("/debug/plan", include_in_schema=False, response_class=FileResponse)

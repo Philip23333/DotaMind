@@ -1,8 +1,12 @@
+import logging
+
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
+from app.agentic.runtime.errors import AgentExecutionError
 from app.api.v1 import mappers
 from app.api.v1.schemas import (
+    ExecutionErrorResponse,
     IdempotencyConflictResponse,
     PlanRequest,
     PlanResponse,
@@ -10,8 +14,10 @@ from app.api.v1.schemas import (
 )
 from app.application.idempotency import IdempotencyConflictError
 from app.application.session_store import SessionStoreError
+from app.observability import emit_event
 
 router = APIRouter(tags=["agentic"])
+logger = logging.getLogger(__name__)
 
 def _plan_service(request: Request):
     return request.app.state.plan_service
@@ -23,6 +29,7 @@ def _plan_service(request: Request):
     responses={
         409: {"model": IdempotencyConflictResponse},
         503: {"model": SessionStoreErrorResponse},
+        500: {"model": ExecutionErrorResponse},
     },
 )
 async def plan(request: PlanRequest, http_request: Request) -> PlanResponse:
@@ -33,6 +40,7 @@ async def plan(request: PlanRequest, http_request: Request) -> PlanResponse:
             request.session_id,
             request.request_id,
         )
+        return mappers.plan_response(result.public_response)
     except IdempotencyConflictError as exc:
         response = IdempotencyConflictResponse(
             query=exc.query,
@@ -44,4 +52,16 @@ async def plan(request: PlanRequest, http_request: Request) -> PlanResponse:
     except SessionStoreError:
         response = SessionStoreErrorResponse()
         return JSONResponse(status_code=503, content=response.model_dump(mode="json"))
-    return mappers.plan_response(result.public_response)
+    except AgentExecutionError:
+        response = ExecutionErrorResponse()
+        return JSONResponse(status_code=500, content=response.model_dump(mode="json"))
+    except Exception:
+        emit_event(
+            logger,
+            "agent_run_failed",
+            status="error",
+            failure_stage="execution",
+            failure_code="execution_error",
+        )
+        response = ExecutionErrorResponse()
+        return JSONResponse(status_code=500, content=response.model_dump(mode="json"))

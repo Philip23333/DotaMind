@@ -13,17 +13,27 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import logging
+import time
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID, uuid4
 
 from app.agentic.conversation.models import Turn
-from app.application.idempotency import RequestBeginResult, RequestRecord
+from app.application.idempotency import RequestBeginResult, RequestFailAction, RequestRecord
+from app.observability import (
+    emit_event,
+    record_idempotency,
+    record_lock_wait,
+    record_session_operation,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class SessionStoreError(RuntimeError):
@@ -55,6 +65,8 @@ class _SessionData:
 
 class SessionStore(ABC):
     """Abstract session store.  All methods are async."""
+
+    backend_name: Literal["memory", "redis"]
 
     @abstractmethod
     async def get(self, session_id: str, limit: int) -> list[Turn]:
@@ -104,8 +116,8 @@ class SessionStore(ABC):
         session_id: str,
         request_id: UUID,
         owner_token: UUID,
-    ) -> None:
-        """Mark an owned in-progress request failed without appending a Turn."""
+    ) -> RequestFailAction:
+        """Fail the owned request or report the durable no-op outcome."""
 
     async def aclose(self) -> None:
         """Close backend resources. Memory storage has nothing to release."""
@@ -139,6 +151,8 @@ class InMemorySessionStore(SessionStore):
     RedisSessionStore.
     """
 
+    backend_name = "memory"
+
     def __init__(
         self,
         max_sessions: int = 1000,
@@ -168,14 +182,19 @@ class InMemorySessionStore(SessionStore):
 
     async def get(self, session_id: str, limit: int) -> list[Turn]:
         if session_id not in self._sessions:
+            record_session_operation(self.backend_name, "get", "ok")
             return []
         self._sessions.move_to_end(session_id)  # refresh LRU on read
         data = self._sessions[session_id]
-        return list(data.turns[-limit:])  # snapshot copy, chronological
+        result = list(data.turns[-limit:])  # snapshot copy, chronological
+        record_session_operation(self.backend_name, "get", "ok")
+        return result
 
     async def append(self, session_id: str, turn: Turn) -> Turn:
         self._require_holder(session_id, "append")
-        return self._append_locked(session_id, turn)
+        stored = self._append_locked(session_id, turn)
+        record_session_operation(self.backend_name, "append", "ok")
+        return stored
 
     async def begin_request(
         self,
@@ -188,9 +207,11 @@ class InMemorySessionStore(SessionStore):
         self._purge_expired_request_records(data)
         key = str(request_id)
         existing = data.request_records.get(key)
+        claim_kind = "takeover" if existing is not None else "new"
         if existing is not None:
             data.request_records.move_to_end(key)
             if existing.payload_hash != payload_hash:
+                record_session_operation(self.backend_name, "begin_request", "ok")
                 return RequestBeginResult(
                     action="conflict",
                     existing_payload_hash=existing.payload_hash,
@@ -198,6 +219,7 @@ class InMemorySessionStore(SessionStore):
             if existing.status == "completed":
                 if existing.cached_public_response is None:
                     raise RuntimeError("completed request record missing public response")
+                record_session_operation(self.backend_name, "begin_request", "ok")
                 return RequestBeginResult(
                     action="replay",
                     cached_public_response=copy.deepcopy(existing.cached_public_response),
@@ -215,7 +237,12 @@ class InMemorySessionStore(SessionStore):
         )
         data.request_records.move_to_end(key)
         self._trim_request_records(data)
-        return RequestBeginResult(action="execute", owner_token=owner_token)
+        record_session_operation(self.backend_name, "begin_request", "ok")
+        return RequestBeginResult(
+            action="execute",
+            claim_kind=claim_kind,
+            owner_token=owner_token,
+        )
 
     async def complete_request_with_turn(
         self,
@@ -245,6 +272,8 @@ class InMemorySessionStore(SessionStore):
         )
         data.request_records.move_to_end(key)
         self._trim_request_records(data)
+        record_session_operation(self.backend_name, "complete_request", "ok")
+        record_idempotency(self.backend_name, "executed")
         return stored
 
     async def fail_request(
@@ -252,29 +281,53 @@ class InMemorySessionStore(SessionStore):
         session_id: str,
         request_id: UUID,
         owner_token: UUID,
-    ) -> None:
+    ) -> RequestFailAction:
         self._require_holder(session_id, "fail_request")
         data = self._sessions.get(session_id)
         if data is None:
-            return
+            record_session_operation(self.backend_name, "fail_request", "noop")
+            return "noop"
         key = str(request_id)
         record = data.request_records.get(key)
-        if record is None or record.status != "in_progress" or record.owner_token != owner_token:
-            return
+        if record is None:
+            record_session_operation(self.backend_name, "fail_request", "noop")
+            return "noop"
+        if record.status == "completed":
+            record_session_operation(self.backend_name, "fail_request", "noop")
+            return "completed"
+        if record.status != "in_progress" or record.owner_token != owner_token:
+            record_session_operation(self.backend_name, "fail_request", "noop")
+            return "noop"
         data.request_records[key] = record.model_copy(
             update={"status": "failed", "completed_at": self._now()}
         )
         data.request_records.move_to_end(key)
         self._trim_request_records(data)
+        record_session_operation(self.backend_name, "fail_request", "ok")
+        return "failed"
 
     @asynccontextmanager
     async def transaction(self, session_id: str):
         lock = self._locks.setdefault(session_id, asyncio.Lock())
         self._leases[session_id] = self._leases.get(session_id, 0) + 1
         acquired = False
+        started = time.monotonic()
         try:
-            await lock.acquire()
+            try:
+                await lock.acquire()
+            except asyncio.CancelledError:
+                record_lock_wait("cancelled", time.monotonic() - started)
+                raise
             acquired = True
+            waited = time.monotonic() - started
+            record_lock_wait("acquired", waited)
+            emit_event(
+                logger,
+                "session_lock_acquired",
+                status="acquired",
+                backend=self.backend_name,
+                lock_wait_ms=round(waited * 1000),
+            )
             current_task = asyncio.current_task()
             if current_task is None:  # pragma: no cover - asyncio guarantees a task.
                 raise RuntimeError("SessionStore.transaction() requires an asyncio task")

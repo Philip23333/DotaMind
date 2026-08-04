@@ -1,4 +1,3 @@
-import logging
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -12,8 +11,6 @@ from app.agentic.planning.contracts import (
 )
 from app.core.config import get_policy, get_settings
 from app.llm.provider import LLMProvider, get_llm_provider
-
-logger = logging.getLogger(__name__)
 
 _NATURAL_LANGUAGE_SYSTEM_PROMPT = (
     "You write concise evidence-grounded Dota 2 answers. "
@@ -112,17 +109,10 @@ class AnswerSynthesizer:
         graph: EvidenceGraph,
     ) -> AnswerSynthesisResult:
         structured = plan.output_contract in STRUCTURED_OUTPUT_CONTRACTS
-        logger.info(
-            "AnswerSynthesizer route output_contract=%s structured_contract=%s",
-            plan.output_contract,
-            structured,
-        )
         contract = get_contract(plan.output_contract)
         if structured:
-            logger.info("AnswerSynthesizer using StructuredReportSynthesizer")
             return self.structured.synthesize(plan, graph)
         if contract is not None and contract.name == NATURAL_LANGUAGE_CONTRACT:
-            logger.info("AnswerSynthesizer using NaturalLanguageAnswerSynthesizer")
             return await self.natural.synthesize(plan, graph)
         return unsupported_contract(plan, graph)
 
@@ -304,7 +294,6 @@ class NaturalLanguageAnswerSynthesizer:
                 confidence=0.0,
             )
 
-        logger.info("NaturalLanguageAnswerSynthesizer start evidence=%s", len(graph.evidence))
         try:
             summary = await self.llm.complete(
                 [
@@ -324,7 +313,6 @@ class NaturalLanguageAnswerSynthesizer:
                 temperature=self.policy.llm.orchestrator.temperature,
                 max_tokens=max(self.policy.llm.orchestrator.max_tokens, 1200),
             )
-            logger.info("NaturalLanguageAnswerSynthesizer complete")
             return AnswerSynthesisResult(
                 answer_type=plan.output_contract,
                 status="ok",
@@ -333,8 +321,7 @@ class NaturalLanguageAnswerSynthesizer:
                 data_notes=data_notes(graph),
                 confidence=confidence(graph, has_output=bool(summary.strip())),
             )
-        except Exception as exc:
-            logger.warning("NaturalLanguageAnswerSynthesizer failed: %r", exc)
+        except Exception:
             return AnswerSynthesisResult(
                 answer_type=plan.output_contract,
                 status="error",
@@ -342,7 +329,7 @@ class NaturalLanguageAnswerSynthesizer:
                 limitations=[
                     AnswerLimitation(
                         code="llm_error",
-                        detail=f"{type(exc).__name__}: {exc}",
+                        detail="answer generation failed",
                     )
                 ],
                 data_notes=data_notes(graph),

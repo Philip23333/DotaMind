@@ -6,7 +6,6 @@ Supports OpenAI-compatible APIs (OpenAI, DeepSeek, etc.) and Anthropic.
 
 import json
 import logging
-import time
 from abc import ABC, abstractmethod
 from json import JSONDecodeError
 from typing import Any, Literal, TypedDict
@@ -94,54 +93,24 @@ class OpenAICompatibleProvider(LLMProvider):
         max_tokens: int = 1000,
     ) -> str:
         """Generate a completion."""
-        started_at = time.perf_counter()
-        finish_reason = "unknown"
-        logger.info(
-            "LLM complete start provider=openai_compatible model=%s base_url=%s "
-            "messages=%s max_tokens=%s temperature=%s",
-            self.model,
-            self.base_url,
-            len(messages),
-            max_tokens,
-            temperature,
-        )
-        try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.post(
-                    f"{self.base_url}/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {self.api_key}",
-                        "Content-Type": "application/json",
-                    },
-                    json={
-                        "model": self.model,
-                        "messages": messages,
-                        "temperature": temperature,
-                        "max_tokens": max_tokens,
-                    },
-                )
-                response.raise_for_status()
-                data = response.json()
-                choice = data["choices"][0]
-                content = choice["message"]["content"]
-                finish_reason = choice.get("finish_reason", "unknown")
-                logger.info(
-                    "LLM complete success model=%s elapsed_ms=%s output_chars=%s finish_reason=%s",
-                    self.model,
-                    round((time.perf_counter() - started_at) * 1000),
-                    len(content),
-                    finish_reason,
-                )
-                return content
-        except Exception as e:
-            logger.error(
-                "LLM complete failed model=%s elapsed_ms=%s finish_reason=%s error=%s",
-                self.model,
-                round((time.perf_counter() - started_at) * 1000),
-                finish_reason,
-                e,
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            response = await client.post(
+                f"{self.base_url}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": self.model,
+                    "messages": messages,
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
+                },
             )
-            raise
+            response.raise_for_status()
+            data = response.json()
+            choice = data["choices"][0]
+            return choice["message"]["content"]
 
     async def complete_json(
         self,
@@ -150,17 +119,7 @@ class OpenAICompatibleProvider(LLMProvider):
         max_tokens: int = 1000,
     ) -> dict[str, Any]:
         """Generate a JSON response."""
-        started_at = time.perf_counter()
         finish_reason = "unknown"
-        logger.info(
-            "LLM complete_json start provider=openai_compatible model=%s base_url=%s "
-            "messages=%s max_tokens=%s temperature=%s",
-            self.model,
-            self.base_url,
-            len(messages),
-            max_tokens,
-            temperature,
-        )
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.post(
@@ -202,35 +161,8 @@ class OpenAICompatibleProvider(LLMProvider):
                 if not isinstance(parsed, dict):
                     raise ValueError("LLM JSON response was not an object")
 
-                logger.info(
-                    "LLM complete_json success model=%s elapsed_ms=%s output_chars=%s "
-                    "finish_reason=%s keys=%s",
-                    self.model,
-                    round((time.perf_counter() - started_at) * 1000),
-                    len(content),
-                    finish_reason,
-                    list(parsed.keys()) if isinstance(parsed, dict) else [],
-                )
                 return parsed
-        except Exception as e:
-            if isinstance(e, LLMJSONDecodeError):
-                logger.error(
-                    "LLM complete_json failed model=%s elapsed_ms=%s finish_reason=%s "
-                    "raw_content_chars=%s error=%s",
-                    self.model,
-                    round((time.perf_counter() - started_at) * 1000),
-                    e.finish_reason,
-                    len(e.raw_content),
-                    e,
-                )
-            else:
-                logger.error(
-                    "LLM complete_json failed model=%s elapsed_ms=%s finish_reason=%s error=%s",
-                    self.model,
-                    round((time.perf_counter() - started_at) * 1000),
-                    finish_reason,
-                    e,
-                )
+        except Exception:
             raise
 
     async def complete_with_tools(
@@ -247,13 +179,6 @@ class OpenAICompatibleProvider(LLMProvider):
         """
         import json
 
-        started_at = time.perf_counter()
-        logger.info(
-            "LLM complete_with_tools start model=%s tools=%s messages=%s",
-            self.model,
-            [t["function"]["name"] for t in tools],
-            len(messages),
-        )
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.post(
@@ -278,29 +203,13 @@ class OpenAICompatibleProvider(LLMProvider):
 
                 tool_calls = message.get("tool_calls")
                 if not tool_calls:
-                    logger.info(
-                        "LLM complete_with_tools no_tool_call model=%s elapsed_ms=%s",
-                        self.model,
-                        round((time.perf_counter() - started_at) * 1000),
-                    )
                     return None
 
                 call = tool_calls[0]
                 name = call["function"]["name"]
                 arguments = json.loads(call["function"]["arguments"])
-                logger.info(
-                    "LLM complete_with_tools success model=%s elapsed_ms=%s tool=%s",
-                    self.model,
-                    round((time.perf_counter() - started_at) * 1000),
-                    name,
-                )
                 return {"name": name, "arguments": arguments}
-        except Exception as e:
-            logger.error(
-                "LLM complete_with_tools failed model=%s error=%s",
-                self.model,
-                e,
-            )
+        except Exception:
             raise
 
 

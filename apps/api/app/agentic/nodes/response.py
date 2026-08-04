@@ -1,9 +1,5 @@
-import logging
-
 from app.agentic.conversation.summary import SESSION_REQUEST_FAILED_REASON
 from app.agentic.state import AgentRunState
-
-logger = logging.getLogger(__name__)
 
 
 def response_node(state: AgentRunState) -> AgentRunState:
@@ -68,8 +64,14 @@ def response_node(state: AgentRunState) -> AgentRunState:
     state.response["error_code"] = (
         state.response_type if state.status == "error" else None
     )
+    state.response["errors"] = [
+        "tool execution failed" if state.tool_results else "request processing failed"
+        for _ in state.errors
+    ]
+    for item in state.response["tool_results"]:
+        if item.get("status") == "error":
+            item["error"] = "tool execution failed"
     state.response["runtime"] = runtime
-    logger.info("node=response end response_ready=true")
     return state
 
 
@@ -84,6 +86,7 @@ def _public_runtime(state: AgentRunState, *, safe_failure: bool) -> dict:
             "decision_kind": None if safe_failure else attempt.decision_kind,
             "status": attempt.status,
             "failure_stage": attempt.failure_stage,
+            "failure_code": attempt.failure_code,
             "recovery_code": attempt.recovery_code,
             "duration_ms": attempt.duration_ms,
             "tool_call_statuses": [],

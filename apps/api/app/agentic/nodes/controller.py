@@ -1,10 +1,6 @@
-import logging
-
 from app.agentic.planning.controller import AgentController
 from app.agentic.planning.decisions import ToolPlanDecision
 from app.agentic.state import AgentRunState
-
-logger = logging.getLogger(__name__)
 
 
 async def controller_node(
@@ -16,12 +12,6 @@ async def controller_node(
     if state.run_context is not None:
         state.run_context.prompt_versions = controller.prompt_versions
     state.add_trace("controller", "create controller decision", "planned")
-    logger.info(
-        "node=controller start query_chars=%s game=%s history_turns=%s",
-        len(state.query),
-        state.game,
-        len(state.history),
-    )
     if state.recovery_feedback is None:
         result = await controller.decide(
             state.query,
@@ -55,11 +45,6 @@ async def controller_node(
             result.reason or result.failure_type or "controller error",
             "failed",
         )
-        logger.info(
-            "node=controller end status=error failure_type=%s errors=%s",
-            result.failure_type,
-            len(state.errors),
-        )
         return state
 
     state.decision = result.decision
@@ -83,9 +68,4 @@ async def controller_node(
         state.plan = result.decision.plan
     state.status = "ok"
     state.add_trace("controller", f"decision kind: {result.decision.kind}", "completed")
-    logger.info(
-        "node=controller end status=decided kind=%s tools=%s",
-        result.decision.kind,
-        len(state.plan.tool_calls) if state.plan else 0,
-    )
     return state

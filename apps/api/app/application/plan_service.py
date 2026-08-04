@@ -4,6 +4,7 @@ No fallback to legacy pipeline. Session memory is opt-in via session_id;
 omitting it preserves the original stateless single-turn behaviour.
 """
 
+import asyncio
 import logging
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -24,6 +25,7 @@ from app.application.idempotency import (
 )
 from app.application.session_store import InMemorySessionStore, SessionStore
 from app.core.config import get_policy, get_settings
+from app.observability import emit_event, record_idempotency
 
 logger = logging.getLogger(__name__)
 
@@ -115,18 +117,42 @@ class PlanService:
                 )
                 if request_begin.action == "replay":
                     assert request_begin.cached_public_response is not None
+                    record_idempotency(self.session_store.backend_name, "replayed")
+                    emit_event(
+                        logger,
+                        "request_replayed",
+                        status="completed",
+                        backend=self.session_store.backend_name,
+                    )
                     return PlanServiceResult(
                         public_response=request_begin.cached_public_response,
                         state=None,
                         idempotency_status="replayed",
                     )
                 if request_begin.action == "conflict":
+                    record_idempotency(self.session_store.backend_name, "conflict")
+                    emit_event(
+                        logger,
+                        "request_conflict",
+                        status="error",
+                        failure_code="idempotency_conflict",
+                        backend=self.session_store.backend_name,
+                    )
                     raise IdempotencyConflictError(
                         query=query,
                         game=game,
                         session_id=sid,
                     )
                 assert request_begin.owner_token is not None
+                claim_action = request_begin.claim_kind or "new"
+                record_idempotency(self.session_store.backend_name, claim_action)
+                if claim_action == "takeover":
+                    emit_event(
+                        logger,
+                        "request_takeover",
+                        status="started",
+                        backend=self.session_store.backend_name,
+                    )
                 return await self._execute_idempotent_stateful_request(
                     sid=sid,
                     session_id=session_id,
@@ -154,7 +180,6 @@ class PlanService:
         history = await self.session_store.get(
             sid, limit=self._conv_policy.history_window
         )
-        logger.info("plan_service session=%s history_turns=%s", sid[:8], len(history))
         state = AgentRunState(
             query=query,
             game=game,
@@ -163,13 +188,7 @@ class PlanService:
             internal_session_id=session_id,
         )
         result = await self.runner.run(state)
-        stored = await self.session_store.append(sid, self._build_turn(result))
-        logger.info(
-            "plan_service session=%s turn_index=%s status=%s",
-            sid[:8],
-            stored.turn_index,
-            stored.status,
-        )
+        await self.session_store.append(sid, self._build_turn(result))
         return PlanServiceResult(
             public_response=self._public_response(result, session_id=session_id),
             state=result,
@@ -190,9 +209,6 @@ class PlanService:
             history = await self.session_store.get(
                 sid, limit=self._conv_policy.history_window
             )
-            logger.info(
-                "plan_service session=%s history_turns=%s", sid[:8], len(history)
-            )
             state = AgentRunState(
                 query=query,
                 game=game,
@@ -205,7 +221,7 @@ class PlanService:
             public_response = self._public_response(result, session_id=session_id)
             if result.run_context is None:
                 raise RuntimeError("idempotent request completed without a run context")
-            stored = await self.session_store.complete_request_with_turn(
+            await self.session_store.complete_request_with_turn(
                 sid,
                 request_id,
                 owner_token,
@@ -213,20 +229,39 @@ class PlanService:
                 public_response,
                 result.run_context.run_id,
             )
-            logger.info(
-                "plan_service session=%s turn_index=%s status=%s",
-                sid[:8],
-                stored.turn_index,
-                stored.status,
-            )
             return PlanServiceResult(
                 public_response=public_response,
                 state=result,
                 idempotency_status="executed",
             )
-        except BaseException:
-            await self.session_store.fail_request(sid, request_id, owner_token)
+        except asyncio.CancelledError:
+            await self._fail_idempotent_request(sid, request_id, owner_token, "cancelled")
             raise
+        except Exception:
+            await self._fail_idempotent_request(sid, request_id, owner_token, "failed")
+            raise
+
+    async def _fail_idempotent_request(
+        self,
+        sid: str,
+        request_id: UUID,
+        owner_token: UUID,
+        outcome: str,
+    ) -> None:
+        try:
+            action = await self.session_store.fail_request(sid, request_id, owner_token)
+        except Exception:
+            emit_event(
+                logger,
+                "request_commit_failed",
+                status="error",
+                failure_code="session_store_error",
+                backend=self.session_store.backend_name,
+                operation="fail_request",
+            )
+            return
+        if action == "failed":
+            record_idempotency(self.session_store.backend_name, outcome)
 
     def _build_turn(self, result: AgentRunState):
         if result.safe_failure_required:

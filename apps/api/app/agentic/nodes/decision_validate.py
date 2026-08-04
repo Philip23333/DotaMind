@@ -1,5 +1,3 @@
-import logging
-
 from app.agentic.planning.decisions import (
     CapabilityBoundaryDecision,
     ClarificationDecision,
@@ -12,8 +10,6 @@ from app.agentic.planning.decisions import (
 )
 from app.agentic.state import AgentRunState
 from app.agentic.tools import ToolRegistry
-
-logger = logging.getLogger(__name__)
 
 
 def decision_validate_node(
@@ -31,22 +27,11 @@ def decision_validate_node(
         state.add_trace("decision_validate", "missing decision", "failed")
         return state
 
-    discard_recall_answer = (
-        isinstance(decision, DirectAnswerDecision)
-        and decision.response_mode != "social"
-        and decision.answer is not None
-    )
     decision = normalize_controller_decision(decision)
     state.decision = decision
     state.decision_kind = decision.kind
     if isinstance(decision, ToolPlanDecision):
         state.plan = decision.plan
-    if discard_recall_answer:
-        logger.info(
-            "node=decision_validate discarded recall answer mode=%s",
-            decision.response_mode,
-        )
-
     evidence = (
         resolve_required_evidence(decision.plan, registry)
         if isinstance(decision, ToolPlanDecision)
@@ -65,7 +50,6 @@ def decision_validate_node(
         state.safe_failure_required = True
         state.errors.extend(errors)
         state.add_trace("decision_validate", "decision validation failed", "failed")
-        logger.info("node=decision_validate end status=error errors=%s", len(errors))
         return state
 
     if evidence is not None:
@@ -93,5 +77,4 @@ def decision_validate_node(
         state.plan = decision.plan
 
     state.add_trace("decision_validate", "decision validation completed", "completed")
-    logger.info("node=decision_validate end status=%s kind=%s", state.status, decision.kind)
     return state

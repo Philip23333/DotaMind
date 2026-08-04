@@ -1,4 +1,7 @@
-﻿from langgraph.graph import END, START, StateGraph
+﻿import asyncio
+import logging
+
+from langgraph.graph import END, START, StateGraph
 
 from app.agentic.answer import AnswerSynthesizer
 from app.agentic.critic import AgenticCritic
@@ -25,14 +28,20 @@ from app.agentic.runtime.clock import (
     begin_node_timing,
     end_node_timing,
 )
+from app.agentic.runtime.errors import AgentExecutionError, NodeExecutionFailure
+from app.agentic.runtime.finalization import build_interrupted_summary
 from app.agentic.runtime.guards import (
     BudgetResource,
     apply_runtime_failure,
     runtime_gate_failure,
 )
+from app.agentic.runtime.models import FailureStage
 from app.agentic.state import AgentRunState
 from app.agentic.tools import ToolExecutor, ToolRegistry
 from app.core.config import RuntimePolicy
+from app.observability import emit_event, id_prefix, record_run
+
+logger = logging.getLogger(__name__)
 
 
 class AgentGraphRunner:
@@ -53,8 +62,119 @@ class AgentGraphRunner:
         self.graph = self._compile_graph()
 
     async def run(self, state: AgentRunState) -> AgentRunState:
-        result = await self.graph.ainvoke(state)
-        return AgentRunState.model_validate(result)
+        started_monotonic = self.clock.monotonic()
+        emit_event(logger, "agent_run_started", status="started")
+        try:
+            result = await self.graph.ainvoke(state)
+        except asyncio.CancelledError:
+            duration_ms = self._elapsed_ms(started_monotonic)
+            summary = build_interrupted_summary(
+                state,
+                self.clock,
+                failure_code="request_cancelled",
+                failure_stage="execution",
+                failed_node="graph",
+            )
+            record_run(
+                summary,
+                status="cancelled",
+                response_type="request_cancelled",
+                duration_ms=duration_ms,
+            )
+            emit_event(
+                logger,
+                "agent_run_cancelled",
+                status="cancelled",
+                run_id_prefix=self._run_id_prefix(summary),
+                duration_ms=duration_ms,
+                failure_stage="execution",
+                failure_code="request_cancelled",
+            )
+            raise
+        except NodeExecutionFailure as exc:
+            duration_ms = self._elapsed_ms(started_monotonic)
+            summary = build_interrupted_summary(
+                exc.state,
+                self.clock,
+                failure_code="execution_error",
+                failure_stage=exc.failure_stage,
+                failed_node=exc.node,
+            )
+            self._record_failed_run(summary, exc.node, exc.failure_stage, duration_ms)
+            raise AgentExecutionError(exc.failure_stage) from exc
+        except Exception as exc:
+            duration_ms = self._elapsed_ms(started_monotonic)
+            summary = build_interrupted_summary(
+                state,
+                self.clock,
+                failure_code="execution_error",
+                failure_stage="execution",
+                failed_node="graph",
+            )
+            self._record_failed_run(summary, "graph", "execution", duration_ms)
+            raise AgentExecutionError() from exc
+        completed = AgentRunState.model_validate(result)
+        duration_ms = self._elapsed_ms(started_monotonic)
+        completed.run_duration_ms = duration_ms
+        if completed.response is not None and isinstance(completed.response.get("runtime"), dict):
+            completed.response["runtime"]["duration_ms"] = duration_ms
+        record_run(completed, duration_ms=duration_ms)
+        emit_event(
+            logger,
+            "agent_run_completed",
+            status=completed.status,
+            run_id_prefix=self._run_id_prefix(completed),
+            duration_ms=duration_ms,
+        )
+        self._emit_attempts(completed)
+        return completed
+
+    def _record_failed_run(
+        self,
+        state: AgentRunState,
+        node: str,
+        failure_stage: FailureStage,
+        duration_ms: int,
+    ) -> None:
+        record_run(
+            state,
+            status="error",
+            response_type="execution_error",
+            duration_ms=duration_ms,
+        )
+        emit_event(
+            logger,
+            "agent_run_failed",
+            status="error",
+            run_id_prefix=self._run_id_prefix(state),
+            node=node,
+            duration_ms=duration_ms,
+            failure_stage=failure_stage,
+            failure_code="execution_error",
+        )
+        self._emit_attempts(state)
+
+    def _emit_attempts(self, state: AgentRunState) -> None:
+        run_id = self._run_id_prefix(state)
+        for attempt in state.attempts:
+            emit_event(
+                logger,
+                "agent_attempt_finalized",
+                status=attempt.status,
+                run_id_prefix=run_id,
+                attempt_index=attempt.attempt_index,
+                duration_ms=attempt.duration_ms,
+                failure_stage=attempt.failure_stage,
+                failure_code=attempt.failure_code,
+                recovery_code=attempt.recovery_code,
+            )
+
+    def _elapsed_ms(self, started_monotonic: float) -> int:
+        return max(0, round((self.clock.monotonic() - started_monotonic) * 1000))
+
+    @staticmethod
+    def _run_id_prefix(state: AgentRunState) -> str | None:
+        return id_prefix(state.run_context.run_id) if state.run_context is not None else None
 
     def _compile_graph(self):
         graph = StateGraph(AgentRunState)
@@ -71,7 +191,7 @@ class AgentGraphRunner:
         graph.add_node("recovery", self._recovery)
         graph.add_node("attempt_reset", self._attempt_reset)
         graph.add_node("run_finalize", self._run_finalize)
-        graph.add_node("response", response_node)
+        graph.add_node("response", self._response)
 
         graph.add_edge(START, "run_init")
         graph.add_edge("run_init", "controller")
@@ -141,7 +261,13 @@ class AgentGraphRunner:
     async def _controller(self, state: AgentRunState) -> AgentRunState:
         if self._guard(state, resource="controller"):
             return state
-        return await self._timed_async(state, controller_node, self.controller)
+        return await self._timed_async(
+            state,
+            controller_node,
+            self.controller,
+            node="controller",
+            failure_stage="controller",
+        )
 
     def _decision_validate(self, state: AgentRunState) -> AgentRunState:
         if self._guard(state):
@@ -150,6 +276,8 @@ class AgentGraphRunner:
             state,
             decision_validate_node,
             self.registry,
+            node="decision_validate",
+            failure_stage="decision_validation",
         )
 
     async def _tools(self, state: AgentRunState) -> AgentRunState:
@@ -160,6 +288,8 @@ class AgentGraphRunner:
             tool_executor_node,
             self.executor,
             self.clock,
+            node="tools",
+            failure_stage="tool_execution",
         )
 
     def _validate(self, state: AgentRunState) -> AgentRunState:
@@ -169,42 +299,100 @@ class AgentGraphRunner:
             state,
             validate_plan_node,
             self.registry,
+            node="validate",
+            failure_stage="plan_validation",
         )
 
     def _evidence(self, state: AgentRunState) -> AgentRunState:
         if self._guard(state):
             return state
-        return self._timed_sync(state, evidence_node, self.registry)
+        return self._timed_sync(
+            state,
+            evidence_node,
+            self.registry,
+            node="evidence",
+            failure_stage="evidence",
+        )
 
     async def _answer(self, state: AgentRunState) -> AgentRunState:
         if self._guard(state, resource="answer"):
             return state
-        return await self._timed_async(state, answer_node, self.answer_synthesizer)
+        return await self._timed_async(
+            state,
+            answer_node,
+            self.answer_synthesizer,
+            node="answer",
+            failure_stage="answer",
+        )
 
     def _critic(self, state: AgentRunState) -> AgentRunState:
         if self._guard(state):
             return state
-        return self._timed_sync(state, critic_node, self.critic)
+        return self._timed_sync(
+            state, critic_node, self.critic, node="critic", failure_stage="critic"
+        )
 
     def _run_init(self, state: AgentRunState) -> AgentRunState:
-        return self._timed_sync(state, run_init_node, self.runtime_policy, self.clock)
+        return self._timed_sync(
+            state,
+            run_init_node,
+            self.runtime_policy,
+            self.clock,
+            node="run_init",
+            failure_stage="execution",
+        )
 
     def _conversation_answer(self, state: AgentRunState) -> AgentRunState:
         if self._guard(state):
             return state
-        return self._timed_sync(state, conversation_answer_node)
+        return self._timed_sync(
+            state,
+            conversation_answer_node,
+            node="conversation_answer",
+            failure_stage="conversation_answer",
+        )
 
     def _attempt_finalize(self, state: AgentRunState) -> AgentRunState:
-        return self._timed_sync(state, attempt_finalize_node, self.clock)
+        return self._timed_sync(
+            state,
+            attempt_finalize_node,
+            self.clock,
+            node="attempt_finalize",
+            failure_stage="execution",
+        )
 
     def _recovery(self, state: AgentRunState) -> AgentRunState:
-        return self._timed_sync(state, recovery_node, self.registry, self.clock)
+        return self._timed_sync(
+            state,
+            recovery_node,
+            self.registry,
+            self.clock,
+            node="recovery",
+            failure_stage="execution",
+        )
 
     def _attempt_reset(self, state: AgentRunState) -> AgentRunState:
-        return self._timed_sync(state, attempt_reset_node, self.clock)
+        return self._timed_sync(
+            state,
+            attempt_reset_node,
+            self.clock,
+            node="attempt_reset",
+            failure_stage="execution",
+        )
 
     def _run_finalize(self, state: AgentRunState) -> AgentRunState:
-        return self._timed_sync(state, run_finalize_node, self.clock)
+        return self._timed_sync(
+            state,
+            run_finalize_node,
+            self.clock,
+            node="run_finalize",
+            failure_stage="execution",
+        )
+
+    def _response(self, state: AgentRunState) -> AgentRunState:
+        return self._timed_sync(
+            state, response_node, node="response", failure_stage="execution"
+        )
 
     def _guard(
         self,
@@ -218,17 +406,63 @@ class AgentGraphRunner:
         apply_runtime_failure(state, failure)
         return True
 
-    def _timed_sync(self, state, function, *args):
+    def _timed_sync(
+        self,
+        state: AgentRunState,
+        function,
+        *args,
+        node: str,
+        failure_stage: FailureStage,
+    ):
         token = begin_node_timing(self.clock)
         try:
             return function(state, *args)
+        except asyncio.CancelledError:
+            state.add_trace(
+                node,
+                "request_cancelled",
+                "failed",
+                failure_code="request_cancelled",
+            )
+            raise
+        except Exception as exc:
+            state.add_trace(
+                node,
+                "unexpected_failure",
+                "failed",
+                failure_code="execution_error",
+            )
+            raise NodeExecutionFailure(state, node, failure_stage) from exc
         finally:
             end_node_timing(token)
 
-    async def _timed_async(self, state, function, *args):
+    async def _timed_async(
+        self,
+        state: AgentRunState,
+        function,
+        *args,
+        node: str,
+        failure_stage: FailureStage,
+    ):
         token = begin_node_timing(self.clock)
         try:
             return await function(state, *args)
+        except asyncio.CancelledError:
+            state.add_trace(
+                node,
+                "request_cancelled",
+                "failed",
+                failure_code="request_cancelled",
+            )
+            raise
+        except Exception as exc:
+            state.add_trace(
+                node,
+                "unexpected_failure",
+                "failed",
+                failure_code="execution_error",
+            )
+            raise NodeExecutionFailure(state, node, failure_stage) from exc
         finally:
             end_node_timing(token)
 

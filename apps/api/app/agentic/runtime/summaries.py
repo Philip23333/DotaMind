@@ -30,11 +30,12 @@ def resolve_terminal_outcome(state: AgentRunState) -> TerminalOutcome:
     if state.answer is not None and state.answer.status == "error":
         return _outcome("error", "answer_error", "answer", "answer")
     if state.runtime_failure_code is not None:
+        stage = state.attempt_failure_stage or "execution"
         return _outcome(
             "error",
             state.runtime_failure_code,
-            "execution",
-            "execution",
+            stage,
+            stage,
         )
     if (
         state.response_type == "replan_exhausted"
@@ -133,6 +134,7 @@ def build_attempt_record(
         critic_summary=_critic_summary(state),
         status=outcome.attempt_status,
         failure_stage=outcome.failure_stage,
+        failure_code=outcome.failure_code,
         recovery_code=(
             state.recovery_feedback.code
             if state.attempt_index == 1 and state.recovery_feedback is not None
@@ -162,6 +164,7 @@ def _outcome(status, response_type, terminal_stage, failure_stage, reason=""):
         attempt_status=status,
         terminal_stage=terminal_stage,
         failure_stage=failure_stage,
+        failure_code=(response_type if failure_stage is not None else None),
     )
 
 

@@ -513,6 +513,7 @@ def test_failed_fingerprint_is_reused_without_retry() -> None:
     state = AgentRunState(query="fixture", game="dota2", plan=plan)
     run_init_node(state, RuntimePolicy(), clock)
     asyncio.run(tool_executor_node(state, ToolExecutor(registry), clock))
+    next(iter(state.executed_call_fingerprints.values())).result.latency_ms = 37
     reset = reset_attempt_working_state(
         state,
         next_attempt_index=1,
@@ -526,7 +527,7 @@ def test_failed_fingerprint_is_reused_without_retry() -> None:
     assert reset.run_budget.tool_calls_used == 1
     assert reset.tool_dispatch_records[0].stage == "cache_reuse"
     assert reset.tool_results[0].status == "error"
-    assert reset.tool_results[0].latency_ms == 0
+    assert reset.tool_results[0].latency_ms == 37
 
 
 def test_shared_and_attempt_start_deadline_guards_close_the_run() -> None:

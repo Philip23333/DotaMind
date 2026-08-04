@@ -1,10 +1,8 @@
-import logging
 import time
 from typing import Any
 
 import httpx
 
-logger = logging.getLogger(__name__)
 
 class OpenDotaTransport:
     """Shared HTTP transport, cache, and request diagnostics for OpenDota."""
@@ -38,17 +36,11 @@ class OpenDotaTransport:
         *,
         cache_ttl_seconds: int | None = None,
     ) -> Any:
-        started = time.perf_counter()
         now = time.monotonic()
         if key in self._cache:
             expires_at, data = self._cache[key]
             if now < expires_at:
                 self._cache_hits += 1
-                logger.info(
-                    "OpenDota cache hit path=%s elapsed_ms=%s",
-                    path,
-                    round((time.perf_counter() - started) * 1000),
-                )
                 return data
 
         self._cache_misses += 1
@@ -57,24 +49,11 @@ class OpenDotaTransport:
             response = await self.http_client().get(path, params=params)
             response.raise_for_status()
             data = response.json()
-        except Exception as exc:
-            logger.warning(
-                "OpenDota request failed path=%s elapsed_ms=%s type=%s error=%r",
-                path,
-                round((time.perf_counter() - started) * 1000),
-                type(exc).__name__,
-                exc,
-            )
+        except Exception:
             raise
 
         ttl_seconds = cache_ttl_seconds or self.default_cache_ttl_seconds
         self._cache[key] = (now + ttl_seconds, data)
-        logger.info(
-            "OpenDota request completed path=%s status=%s elapsed_ms=%s",
-            path,
-            response.status_code,
-            round((time.perf_counter() - started) * 1000),
-        )
         return data
 
     def cache_stats(self) -> dict[str, int]:

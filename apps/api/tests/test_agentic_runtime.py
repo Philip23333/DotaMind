@@ -437,7 +437,7 @@ def test_attempt_and_public_runtime_do_not_leak_private_payloads() -> None:
     assert "handler_entered" not in runtime_json
     assert "dispatch_stage" not in runtime_json
     assert "error_code" not in runtime_json
-    assert state.response["tool_results"][0]["error"] == SENTINEL
+    assert state.response["tool_results"][0]["error"] == "tool execution failed"
 
 
 def test_safe_failure_runtime_is_minimal_and_sanitized() -> None:

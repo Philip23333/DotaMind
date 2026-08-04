@@ -5,10 +5,12 @@ from __future__ import annotations
 import asyncio
 import copy
 import hashlib
+import logging
 import time
 from contextlib import AbstractAsyncContextManager, asynccontextmanager, suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from functools import wraps
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -16,7 +18,7 @@ from redis.asyncio import Redis
 from redis.exceptions import RedisError, ResponseError
 
 from app.agentic.conversation.models import Turn
-from app.application.idempotency import RequestBeginResult, RequestRecord
+from app.application.idempotency import RequestBeginResult, RequestFailAction, RequestRecord
 from app.application.redis_models import (
     deserialize_request_record,
     deserialize_turn,
@@ -24,8 +26,46 @@ from app.application.redis_models import (
     serialize_turn,
 )
 from app.application.session_store import SessionStore, SessionStoreError
+from app.observability import (
+    emit_event,
+    record_idempotency,
+    record_lock_wait,
+    record_session_operation,
+)
 
 _SCHEMA_VERSION = "1"
+logger = logging.getLogger(__name__)
+
+
+def _observe_session_operation(operation: str, *, record_success: bool = True):
+    def decorate(function):
+        @wraps(function)
+        async def observed(self, *args, **kwargs):
+            try:
+                result = await function(self, *args, **kwargs)
+            except SessionStoreError as exc:
+                record_session_operation(
+                    self.backend_name,
+                    operation,
+                    "error",
+                    exc.code,
+                )
+                emit_event(
+                    logger,
+                    "session_store_failed",
+                    status="error",
+                    failure_code=exc.code,
+                    backend=self.backend_name,
+                    operation=operation,
+                )
+                raise
+            if record_success:
+                record_session_operation(self.backend_name, operation, "ok")
+            return result
+
+        return observed
+
+    return decorate
 
 _ACQUIRE_LUA = """
 local existing_schema = redis.call('HGET', KEYS[2], 'schema_version')
@@ -190,6 +230,8 @@ class RedisTransactionContext:
 class RedisSessionStore(SessionStore):
     """SessionStore backed by one Redis primary and fenced session locks."""
 
+    backend_name = "redis"
+
     def __init__(
         self,
         *,
@@ -216,18 +258,21 @@ class RedisSessionStore(SessionStore):
         self._key_prefix = key_prefix.rstrip(":")
         self._contexts: dict[asyncio.Task[object], dict[str, RedisTransactionContext]] = {}
 
+    @_observe_session_operation("ping")
     async def ping(self) -> None:
         try:
             await self._redis.ping()
         except (OSError, RedisError) as exc:
             raise SessionStoreError("unavailable") from exc
 
+    @_observe_session_operation("close")
     async def aclose(self) -> None:
         try:
             await self._redis.aclose()
         except (OSError, RedisError) as exc:
             raise SessionStoreError("unavailable") from exc
 
+    @_observe_session_operation("get")
     async def get(self, session_id: str, limit: int) -> list[Turn]:
         keys = self._keys(session_id)
         try:
@@ -249,6 +294,7 @@ class RedisSessionStore(SessionStore):
             raise SessionStoreError("data_invalid") from exc
         return sorted(turns, key=lambda turn: turn.turn_index)
 
+    @_observe_session_operation("append")
     async def append(self, session_id: str, turn: Turn) -> Turn:
         context = self._require_context(session_id)
         result = await self._eval(
@@ -266,6 +312,7 @@ class RedisSessionStore(SessionStore):
         except (IndexError, ValueError) as exc:
             raise SessionStoreError("data_invalid") from exc
 
+    @_observe_session_operation("begin_request", record_success=False)
     async def begin_request(
         self,
         session_id: str,
@@ -286,6 +333,7 @@ class RedisSessionStore(SessionStore):
             ):
                 mode = "new"
             elif stored_record.payload_hash != payload_hash:
+                record_session_operation("redis", "begin_request", "ok")
                 return RequestBeginResult(
                     action="conflict",
                     existing_payload_hash=stored_record.payload_hash,
@@ -293,6 +341,7 @@ class RedisSessionStore(SessionStore):
             elif stored_record.status == "completed":
                 if stored_record.cached_public_response is None:
                     raise SessionStoreError("data_invalid")
+                record_session_operation("redis", "begin_request", "ok")
                 return RequestBeginResult(
                     action="replay",
                     cached_public_response=stored_record.cached_public_response,
@@ -335,8 +384,14 @@ class RedisSessionStore(SessionStore):
             raise SessionStoreError("data_invalid")
         if action != "execute":
             raise SessionStoreError("data_invalid")
-        return RequestBeginResult(action="execute", owner_token=record.owner_token)
+        record_session_operation("redis", "begin_request", "ok")
+        return RequestBeginResult(
+            action="execute",
+            claim_kind="takeover" if mode == "takeover" else "new",
+            owner_token=record.owner_token,
+        )
 
+    @_observe_session_operation("complete_request", record_success=False)
     async def complete_request_with_turn(
         self,
         session_id: str,
@@ -366,42 +421,77 @@ class RedisSessionStore(SessionStore):
                 "expires_at": expires_at,
             }
         )
-        result = await self._eval(
-            _COMPLETE_LUA,
-            self._data_keys(context.base),
-            context.lock_value,
-            request_key,
-            str(owner_token),
-            serialize_turn(turn),
-            str(self._max_turns),
-            raw_existing,
-            serialize_request_record(completed_record),
-            str(expires_at.timestamp()),
-            _SCHEMA_VERSION,
-            str(self._session_ttl),
-        )
+        try:
+            result = await self._eval(
+                _COMPLETE_LUA,
+                self._data_keys(context.base),
+                context.lock_value,
+                request_key,
+                str(owner_token),
+                serialize_turn(turn),
+                str(self._max_turns),
+                raw_existing,
+                serialize_request_record(completed_record),
+                str(expires_at.timestamp()),
+                _SCHEMA_VERSION,
+                str(self._session_ttl),
+            )
+        except asyncio.CancelledError:
+            committed = await self._request_is_completed(
+                context,
+                request_id,
+                request_key,
+                owner_token,
+            )
+            emit_event(
+                logger,
+                "request_commit_cancelled",
+                status="completed" if committed else "cancelled",
+                backend=self.backend_name,
+                operation="complete_request",
+            )
+            if committed:
+                record_session_operation("redis", "complete_request", "ok")
+                record_idempotency("redis", "executed")
+            else:
+                record_session_operation(
+                    "redis",
+                    "complete_request",
+                    "error",
+                    "request_cancelled",
+                )
+            raise
         self._raise_write_failure(result)
         try:
-            return deserialize_turn(str(result[2]))
+            stored_turn = deserialize_turn(str(result[2]))
         except (IndexError, ValueError) as exc:
             raise SessionStoreError("data_invalid") from exc
+        record_session_operation("redis", "complete_request", "ok")
+        record_idempotency("redis", "executed")
+        return stored_turn
 
+    @_observe_session_operation("fail_request", record_success=False)
     async def fail_request(
         self,
         session_id: str,
         request_id: UUID,
         owner_token: UUID,
-    ) -> None:
+    ) -> RequestFailAction:
         context = self._require_context(session_id)
         now = datetime.now(UTC)
         expires_at = now + timedelta(seconds=self._request_ttl)
         request_key = self.request_key_hash(request_id)
         existing = await self._read_request_record(context, request_id, request_key)
         if existing is None:
-            return
+            record_session_operation("redis", "fail_request", "noop")
+            return "noop"
         raw_existing, stored_record = existing
+        if stored_record.status == "completed":
+            record_session_operation("redis", "fail_request", "noop")
+            return "completed"
         if stored_record.status != "in_progress" or stored_record.owner_token != owner_token:
-            return
+            record_session_operation("redis", "fail_request", "noop")
+            return "noop"
         failed_record = stored_record.model_copy(
             update={
                 "status": "failed",
@@ -428,6 +518,8 @@ class RedisSessionStore(SessionStore):
             _SCHEMA_VERSION,
         )
         self._raise_write_failure(result)
+        record_session_operation("redis", "fail_request", "ok")
+        return "failed" if len(result) > 1 and str(result[1]) == "ok" else "noop"
 
     @asynccontextmanager
     async def transaction(self, session_id: str) -> AbstractAsyncContextManager[None]:
@@ -466,29 +558,53 @@ class RedisSessionStore(SessionStore):
         base = self._base(session_id)
         keys = self._data_keys(base)
         owner_token = uuid4()
-        deadline = time.monotonic() + self._acquire_timeout
-        while True:
-            result = await self._eval(
-                _ACQUIRE_LUA,
-                keys,
-                str(owner_token),
-                _SCHEMA_VERSION,
-                str(self._lease_ms),
-                str(self._session_ttl),
-            )
-            if int(result[0]) == 1:
-                return RedisTransactionContext(
-                    session_id=session_id,
-                    base=base,
-                    owner_token=owner_token,
-                    fencing_token=int(result[1]),
-                    lock_value=str(result[2]),
+        started = time.monotonic()
+        deadline = started + self._acquire_timeout
+        try:
+            while True:
+                result = await self._eval(
+                    _ACQUIRE_LUA,
+                    keys,
+                    str(owner_token),
+                    _SCHEMA_VERSION,
+                    str(self._lease_ms),
+                    str(self._session_ttl),
                 )
-            if str(result[1]) == "data_invalid":
-                raise SessionStoreError("data_invalid")
-            if time.monotonic() >= deadline:
-                raise SessionStoreError("lock_timeout")
-            await asyncio.sleep(0.05)
+                if int(result[0]) == 1:
+                    waited = time.monotonic() - started
+                    record_lock_wait("acquired", waited)
+                    emit_event(
+                        logger,
+                        "session_lock_acquired",
+                        status="acquired",
+                        backend=self.backend_name,
+                        lock_wait_ms=round(waited * 1000),
+                    )
+                    return RedisTransactionContext(
+                        session_id=session_id,
+                        base=base,
+                        owner_token=owner_token,
+                        fencing_token=int(result[1]),
+                        lock_value=str(result[2]),
+                    )
+                if str(result[1]) == "data_invalid":
+                    raise SessionStoreError("data_invalid")
+                if time.monotonic() >= deadline:
+                    waited = time.monotonic() - started
+                    record_lock_wait("timeout", waited)
+                    emit_event(
+                        logger,
+                        "session_lock_timeout",
+                        status="error",
+                        failure_code="lock_timeout",
+                        backend=self.backend_name,
+                        lock_wait_ms=round(waited * 1000),
+                    )
+                    raise SessionStoreError("lock_timeout")
+                await asyncio.sleep(0.05)
+        except asyncio.CancelledError:
+            record_lock_wait("cancelled", time.monotonic() - started)
+            raise
 
     async def _renew_loop(self, context: RedisTransactionContext) -> None:
         while True:
@@ -552,6 +668,22 @@ class RedisSessionStore(SessionStore):
         if record.request_id != request_id:
             raise SessionStoreError("data_invalid")
         return str(raw), record
+
+    async def _request_is_completed(
+        self,
+        context: RedisTransactionContext,
+        request_id: UUID,
+        request_key: str,
+        owner_token: UUID,
+    ) -> bool:
+        try:
+            existing = await self._read_request_record(context, request_id, request_key)
+        except SessionStoreError:
+            return False
+        if existing is None:
+            return False
+        record = existing[1]
+        return record.status == "completed" and record.owner_token == owner_token
 
     def _raise_write_failure(self, result: list[Any]) -> None:
         if not result or int(result[0]) == 1:

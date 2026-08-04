@@ -3,6 +3,7 @@ from typing import Literal
 from app.agentic.runtime.clock import Clock
 from app.agentic.runtime.models import RuntimeFailureCode
 from app.agentic.state import AgentRunState
+from app.observability import BUDGET
 
 BudgetResource = Literal["controller", "tools", "answer"]
 
@@ -31,6 +32,7 @@ def apply_runtime_failure(
     *,
     detail: str | None = None,
 ) -> AgentRunState:
+    BUDGET.labels("deadline" if code == "execution_timeout" else "resource").inc()
     state.runtime_failure_code = code
     state.status = "error"
     state.attempt_failure_stage = "execution"
