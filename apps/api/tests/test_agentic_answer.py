@@ -149,6 +149,27 @@ def test_answer_synthesizer_natural_language_answer_errors_when_llm_disabled() -
     assert answer.confidence == 0
 
 
+def test_answer_synthesizer_streams_natural_language_deltas() -> None:
+    plan = ExecutionPlan(
+        intent="freeform",
+        goal="Answer from evidence.",
+        output_contract="natural_language_answer",
+    )
+    graph = build_evidence_graph(plan, [], _registry())
+    deltas: list[str] = []
+
+    answer = asyncio.run(
+        AnswerSynthesizer(llm=StreamingFakeLLM(), llm_enabled=True).synthesize(
+            plan,
+            graph,
+            on_delta=deltas.append,
+        )
+    )
+
+    assert deltas == ["Grounded", " answer."]
+    assert answer.summary == "Grounded answer."
+
+
 def _synthesize(plan: ExecutionPlan, graph):
     return asyncio.run(AnswerSynthesizer(llm_enabled=False).synthesize(plan, graph))
 
@@ -190,6 +211,12 @@ class FakeLLM:
         max_tokens: int = 1000,
     ) -> ToolCallResult | None:
         return None
+
+
+class StreamingFakeLLM(FakeLLM):
+    async def stream_complete(self, *args, **kwargs):
+        yield "Grounded"
+        yield " answer."
 
 
 def test_natural_language_prompt_asks_for_weekly_trend() -> None:

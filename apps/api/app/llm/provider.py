@@ -7,6 +7,7 @@ Supports OpenAI-compatible APIs (OpenAI, DeepSeek, etc.) and Anthropic.
 import json
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
 from json import JSONDecodeError
 from typing import Any, Literal, TypedDict
 
@@ -65,6 +66,16 @@ class LLMProvider(ABC):
         max_tokens: int = 1000,
     ) -> ToolCallResult | None:
         """Send a function-calling request; return the first tool call or None."""
+
+    async def stream_complete(
+        self,
+        messages: list[dict[str, str]],
+        temperature: float = 0.7,
+        max_tokens: int = 1000,
+    ) -> AsyncIterator[str]:
+        """Yield text increments; providers without streaming yield one complete value."""
+
+        yield await self.complete(messages, temperature=temperature, max_tokens=max_tokens)
 
 
 class OpenAICompatibleProvider(LLMProvider):
@@ -164,6 +175,47 @@ class OpenAICompatibleProvider(LLMProvider):
                 return parsed
         except Exception:
             raise
+
+    async def stream_complete(
+        self,
+        messages: list[dict[str, str]],
+        temperature: float = 0.7,
+        max_tokens: int = 1000,
+    ) -> AsyncIterator[str]:
+        """Forward OpenAI-compatible SSE text deltas without buffering the answer."""
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            async with client.stream(
+                "POST",
+                f"{self.base_url}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": self.model,
+                    "messages": messages,
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
+                    "stream": True,
+                },
+            ) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    line = line.strip()
+                    if not line or not line.startswith("data:"):
+                        continue
+                    payload = line.removeprefix("data:").strip()
+                    if payload == "[DONE]":
+                        break
+                    data = json.loads(payload)
+                    choices = data.get("choices") or []
+                    if not choices:
+                        continue
+                    delta = choices[0].get("delta") or {}
+                    content = delta.get("content")
+                    if isinstance(content, str) and content:
+                        yield content
 
     async def complete_with_tools(
         self,

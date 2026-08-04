@@ -11,6 +11,7 @@ from app.agentic.runtime.models import (
     ToolDispatchRecord,
 )
 from app.agentic.runtime.recovery import tool_call_fingerprint
+from app.agentic.runtime.streaming import ToolStreamEvent, publish_stream_event
 from app.agentic.state import AgentRunState
 from app.agentic.tools.executor import ToolExecutor
 from app.observability import emit_event
@@ -77,6 +78,17 @@ async def tool_executor_node(
                 reused=False,
                 failure_code="tool_error",
             )
+            publish_stream_event(
+                ToolStreamEvent(
+                    tool_call_id=call.id,
+                    tool=call.tool,
+                attempt_index=state.attempt_index,
+                status="error",
+                latency_ms=0,
+                reused=False,
+                failure_code="reference_resolution_error",
+                )
+            )
             continue
 
         fingerprint = tool_call_fingerprint(
@@ -129,22 +141,59 @@ async def tool_executor_node(
                 reused=True,
                 failure_code="tool_error" if result.status == "error" else None,
             )
+            publish_stream_event(
+                ToolStreamEvent(
+                    tool_call_id=call.id,
+                    tool=call.tool,
+                    attempt_index=state.attempt_index,
+                    status=result.status,
+                    latency_ms=0,
+                    reused=True,
+                    failure_code="tool_error" if result.status == "error" else None,
+                )
+            )
             continue
 
         def check_handler_gate() -> None:
             if failure := runtime_gate_failure(state, clock, resource="tools"):
                 raise _RuntimeGateBlocked(failure)
 
+        def on_handler_entered(
+            tool_call_id: str = call.id,
+            tool_name: str = call.tool,
+            attempt_index: int = state.attempt_index,
+        ) -> None:
+            if state.run_budget is not None:
+                state.run_budget.record_tool_call()
+            publish_stream_event(
+                ToolStreamEvent(
+                    tool_call_id=tool_call_id,
+                    tool=tool_name,
+                    attempt_index=attempt_index,
+                    status="running",
+                    reused=False,
+                )
+            )
+
         try:
             result, dispatch = await executor.execute(
                 ToolCall(id=call.id, tool=call.tool, args=resolved_args),
                 state.plan.context,
                 before_handler_entered=check_handler_gate,
-                on_handler_entered=(
-                    state.run_budget.record_tool_call if state.run_budget else None
-                ),
+                on_handler_entered=on_handler_entered,
             )
         except _RuntimeGateBlocked as exc:
+            publish_stream_event(
+                ToolStreamEvent(
+                    tool_call_id=call.id,
+                    tool=call.tool,
+                    attempt_index=state.attempt_index,
+                    status="error",
+                    latency_ms=0,
+                    reused=False,
+                    failure_code=exc.code,
+                )
+            )
             apply_runtime_failure(state, exc.code)
             break
         state.tool_results.append(result)
@@ -172,6 +221,17 @@ async def tool_executor_node(
             tool_call_id=call.id,
             reused=False,
             failure_code="tool_error" if result.status == "error" else None,
+        )
+        publish_stream_event(
+            ToolStreamEvent(
+                tool_call_id=call.id,
+                tool=call.tool,
+                attempt_index=state.attempt_index,
+                status=result.status,
+                latency_ms=result.latency_ms,
+                reused=False,
+                failure_code="tool_error" if result.status == "error" else None,
+            )
         )
         if result.status == "error":
             state.errors.append(f"{call.id}: {result.error or 'tool execution failed'}")

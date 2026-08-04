@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -107,13 +108,15 @@ class AnswerSynthesizer:
         self,
         plan: ExecutionPlan,
         graph: EvidenceGraph,
+        *,
+        on_delta: Callable[[str], None] | None = None,
     ) -> AnswerSynthesisResult:
         structured = plan.output_contract in STRUCTURED_OUTPUT_CONTRACTS
         contract = get_contract(plan.output_contract)
         if structured:
             return self.structured.synthesize(plan, graph)
         if contract is not None and contract.name == NATURAL_LANGUAGE_CONTRACT:
-            return await self.natural.synthesize(plan, graph)
+            return await self.natural.synthesize(plan, graph, on_delta=on_delta)
         return unsupported_contract(plan, graph)
 
 
@@ -278,6 +281,8 @@ class NaturalLanguageAnswerSynthesizer:
         self,
         plan: ExecutionPlan,
         graph: EvidenceGraph,
+        *,
+        on_delta: Callable[[str], None] | None = None,
     ) -> AnswerSynthesisResult:
         if not self.llm_enabled or self.llm is None:
             return AnswerSynthesisResult(
@@ -295,24 +300,33 @@ class NaturalLanguageAnswerSynthesizer:
             )
 
         try:
-            summary = await self.llm.complete(
-                [
-                    {
-                        "role": "system",
-                        "content": _NATURAL_LANGUAGE_SYSTEM_PROMPT,
-                    },
-                    {
-                        "role": "user",
-                        "content": (
-                            f"goal={plan.goal}\n"
-                            f"required_evidence={graph.required_evidence}\n"
-                            f"evidence_graph={graph.model_dump(mode='json')}"
-                        ),
-                    },
-                ],
-                temperature=self.policy.llm.orchestrator.temperature,
-                max_tokens=max(self.policy.llm.orchestrator.max_tokens, 1200),
-            )
+            messages = [
+                {"role": "system", "content": _NATURAL_LANGUAGE_SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": (
+                        f"goal={plan.goal}\n"
+                        f"required_evidence={graph.required_evidence}\n"
+                        f"evidence_graph={graph.model_dump(mode='json')}"
+                    ),
+                },
+            ]
+            if on_delta is None:
+                summary = await self.llm.complete(
+                    messages,
+                    temperature=self.policy.llm.orchestrator.temperature,
+                    max_tokens=max(self.policy.llm.orchestrator.max_tokens, 1200),
+                )
+            else:
+                chunks: list[str] = []
+                async for delta in self.llm.stream_complete(
+                    messages,
+                    temperature=self.policy.llm.orchestrator.temperature,
+                    max_tokens=max(self.policy.llm.orchestrator.max_tokens, 1200),
+                ):
+                    chunks.append(delta)
+                    on_delta(delta)
+                summary = "".join(chunks)
             return AnswerSynthesisResult(
                 answer_type=plan.output_contract,
                 status="ok",

@@ -101,3 +101,69 @@
   attachments, or user authentication; refreshing the page creates a new session.
 - `/debug/plan` remains the internal runtime debugger; this change does not modify V3.2 API or Agent
   Runtime behavior.
+
+## 21:47 — V3.3 true streaming and compact runtime information
+
+### Completed
+
+- Added `POST /api/v1/plan/stream`: the same `PlanRequest` now returns NDJSON phase, tool,
+  natural-language answer-delta, and single terminal events over POST; the existing `/api/v1/plan` does
+  not bind a stream publisher and retains its existing response behavior.
+- Bound a safe request-scoped `ContextVar` publisher before creating the background `PlanService.run()`
+  task. Graph, tool, and natural-answer nodes publish allowlisted fields only. A tool shows running only
+  after validation immediately before handler entry; reuse, reference resolution, pre-dispatch blocking,
+  and handler failure all produce a safe terminal event.
+- The OpenAI-compatible Provider reads upstream SSE with `stream: true` incrementally and accumulates a
+  complete summary for the existing Critic flow; direct replies and deterministic structured replies do
+  not simulate token streaming.
+- Converted the chat LocalRuntime adapter to an async generator that parses NDJSON across network chunks
+  and accumulates provisional prose. It replaces that prose with the public `result` response; failures,
+  cancellation, and failed review do not retain the provisional content.
+- Added a per-message aggregate runtime card showing “analyze → use tools → organize answer → review
+  evidence”, Chinese tool names, and statuses. It remains expanded while running, automatically folds on
+  success, and remains open on failure or cancellation.
+- Updated API, architecture, and chat documentation with the NDJSON protocol, event privacy allowlist,
+  reconnect non-goals, and the requirement to disable reverse-proxy buffering for this path.
+
+### Verified
+
+- `apps/api/.venv/Scripts/python.exe -m ruff check app tests`: passed.
+- `apps/api/.venv/Scripts/python.exe -m pytest tests/test_plan_route.py tests/test_agentic_answer.py tests/test_agentic_recovery.py tests/test_agentic_runtime.py -q`: `74 passed`.
+- `apps/api/.venv/Scripts/python.exe -m pytest -q`: `465 passed, 14 skipped` (with the pre-existing FastAPI TestClient deprecation warning).
+- In `apps/chat`, both `npm run lint` and `npm run build` passed.
+
+### Boundaries
+
+- This first phase does not provide reconnect, heartbeat, background recovery, cross-page session history,
+  or individual default tool cards.
+- Only the natural-language synthesizer may show genuine deltas before the Critic with a “generating,
+  pending review” marker. The final public response is the only formal answer; Critic or execution
+  failure withdraws the provisional prose.
+
+## 21:55 — Official 7.41e patch snapshot
+
+### Completed
+
+- Used the existing offline sync script to read Valve's official Dota 2 datafeed directly and added
+  `apps/api/app/data/patches/7_41e.json`.
+- The generated schema v1 snapshot records the 7.41e release time `2026-07-30T07:00:00Z` and 151
+  changes: 2 general, 31 regular-item, 5 neutral-item, 3 enchantment, and 110 hero changes.
+- The sync script also checked Valve's official hero list; it remains at 127 heroes and produced no
+  effective change to the committed hero snapshot.
+- Updated the patch-tool latest-version assertion from 7.41d to 7.41e. Runtime requests still read only
+  reviewed local snapshots and never access the official site from the request path.
+
+### Verified
+
+- Assertions passed for the JSON structure, required change fields, polarity enum, and 151-record count;
+  `load_patch("latest")` correctly returns 7.41e.
+- `uv run pytest tests/test_agentic_patch_tools.py -q`: `4 passed`.
+- `uv run ruff check tests/test_agentic_patch_tools.py scripts/sync_game_data.py app/integrations/patch_notes.py`: passed.
+
+### Boundaries
+
+- Polarity retains the existing conservative rule-based classification; ambiguous official text remains
+  `neutral`, with no manual rewriting introduced.
+- Valve's lists do not resolve names for some neutral-item/enchantment IDs or entity `1961`. As in 7.41d,
+  the snapshot retains `neutral_<id>` or numeric targets and the official text instead of masking the
+  upstream gap with manual mappings.

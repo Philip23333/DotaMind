@@ -1,6 +1,7 @@
 "use client";
 
 import { MarkdownText } from "@/components/markdown-text";
+import { RuntimeInfoCard, useRuntimeInfo } from "@/components/runtime-info";
 import { Button } from "@/components/ui/button";
 import {
   ActionBarPrimitive,
@@ -85,43 +86,52 @@ const UserMessage: FC = () => (
   </MessagePrimitive.Root>
 );
 
-const AssistantMessage: FC = () => (
-  <MessagePrimitive.Root className="group relative pr-8">
-    <div className="min-w-0 leading-relaxed wrap-break-word">
-      <MessagePrimitive.Parts components={{ Text: MarkdownText }} />
-      <MessagePrimitive.Error>
-        <ErrorPrimitive.Root className="mt-2 rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-          <ErrorPrimitive.Message />
-        </ErrorPrimitive.Root>
-      </MessagePrimitive.Error>
-    </div>
-    <ActionBarPrimitive.Root
-      hideWhenRunning
-      autohide="not-last"
-      className="mt-2 flex items-center gap-1 text-muted-foreground"
-    >
-      <ActionBarPrimitive.Copy
-        render={
-          <Button variant="ghost" size="icon" className="size-8" aria-label="复制回答" />
-        }
+const AssistantMessage: FC = () => {
+  const messageId = useAuiState((state) => state.message.id);
+  const runtimeInfo = useRuntimeInfo(messageId);
+
+  return (
+    <MessagePrimitive.Root className="group relative pr-8">
+      <div className="min-w-0 leading-relaxed wrap-break-word">
+        {runtimeInfo && <RuntimeInfoCard run={runtimeInfo} />}
+        {runtimeInfo?.status === "running" && runtimeInfo.phase === "answering" && (
+          <p className="mb-2 text-xs text-muted-foreground">生成中 · 待核验</p>
+        )}
+        <MessagePrimitive.Parts components={{ Text: MarkdownText }} />
+        <MessagePrimitive.Error>
+          <ErrorPrimitive.Root className="mt-2 rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+            <ErrorPrimitive.Message />
+          </ErrorPrimitive.Root>
+        </MessagePrimitive.Error>
+      </div>
+      <ActionBarPrimitive.Root
+        hideWhenRunning
+        autohide="not-last"
+        className="mt-2 flex items-center gap-1 text-muted-foreground"
       >
-        <AuiIf condition={(state) => state.message.isCopied}>
-          <CheckIcon className="size-4" />
-        </AuiIf>
-        <AuiIf condition={(state) => !state.message.isCopied}>
-          <CopyIcon className="size-4" />
-        </AuiIf>
-      </ActionBarPrimitive.Copy>
-      <ActionBarPrimitive.Reload
-        render={
-          <Button variant="ghost" size="icon" className="size-8" aria-label="重新生成" />
-        }
-      >
-        <RefreshCwIcon className="size-4" />
-      </ActionBarPrimitive.Reload>
-    </ActionBarPrimitive.Root>
-  </MessagePrimitive.Root>
-);
+        <ActionBarPrimitive.Copy
+          render={
+            <Button variant="ghost" size="icon" className="size-8" aria-label="复制回答" />
+          }
+        >
+          <AuiIf condition={(state) => state.message.isCopied}>
+            <CheckIcon className="size-4" />
+          </AuiIf>
+          <AuiIf condition={(state) => !state.message.isCopied}>
+            <CopyIcon className="size-4" />
+          </AuiIf>
+        </ActionBarPrimitive.Copy>
+        <ActionBarPrimitive.Reload
+          render={
+            <Button variant="ghost" size="icon" className="size-8" aria-label="重新生成" />
+          }
+        >
+          <RefreshCwIcon className="size-4" />
+        </ActionBarPrimitive.Reload>
+      </ActionBarPrimitive.Root>
+    </MessagePrimitive.Root>
+  );
+};
 
 const Composer: FC = () => (
   <ComposerPrimitive.Root className="rounded-3xl border bg-background p-2 shadow-sm focus-within:ring-2 focus-within:ring-ring/30">

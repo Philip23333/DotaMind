@@ -36,6 +36,7 @@ from app.agentic.runtime.guards import (
     runtime_gate_failure,
 )
 from app.agentic.runtime.models import FailureStage
+from app.agentic.runtime.streaming import PhaseStreamEvent, publish_stream_event
 from app.agentic.state import AgentRunState
 from app.agentic.tools import ToolExecutor, ToolRegistry
 from app.core.config import RuntimePolicy
@@ -261,6 +262,7 @@ class AgentGraphRunner:
     async def _controller(self, state: AgentRunState) -> AgentRunState:
         if self._guard(state, resource="controller"):
             return state
+        publish_stream_event(PhaseStreamEvent(phase="planning", attempt_index=state.attempt_index))
         return await self._timed_async(
             state,
             controller_node,
@@ -283,6 +285,9 @@ class AgentGraphRunner:
     async def _tools(self, state: AgentRunState) -> AgentRunState:
         if self._guard(state):
             return state
+        publish_stream_event(
+            PhaseStreamEvent(phase="tool_execution", attempt_index=state.attempt_index)
+        )
         return await self._timed_async(
             state,
             tool_executor_node,
@@ -317,6 +322,7 @@ class AgentGraphRunner:
     async def _answer(self, state: AgentRunState) -> AgentRunState:
         if self._guard(state, resource="answer"):
             return state
+        publish_stream_event(PhaseStreamEvent(phase="answering", attempt_index=state.attempt_index))
         return await self._timed_async(
             state,
             answer_node,
@@ -328,6 +334,7 @@ class AgentGraphRunner:
     def _critic(self, state: AgentRunState) -> AgentRunState:
         if self._guard(state):
             return state
+        publish_stream_event(PhaseStreamEvent(phase="reviewing", attempt_index=state.attempt_index))
         return self._timed_sync(
             state, critic_node, self.critic, node="critic", failure_stage="critic"
         )

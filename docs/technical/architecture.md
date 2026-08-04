@@ -7,12 +7,12 @@ no compatibility fallback.
 
 ```text
 app/
-  api/v1/          /plan schema, route, mapper
+  api/v1/          /plan and /plan/stream routes, schemas, mapper
   application/     PlanService and lease-aware SessionStore
   agentic/
     graph.py       conditional LangGraph workflow
     state.py       AgentRunState and public-result state
-    runtime/       Run/Attempt/Budget models, clocks, summaries and flat-state reset
+    runtime/       Run/Attempt/Budget models, clocks, summaries, stream events and flat-state reset
     conversation/  compact Turn memory, summary extraction, history rendering
     planning/      ControllerDecision, Controller, contracts, sample policy
     prompts/       Controller prompt bundle, feedback renderers and audit versions
@@ -223,15 +223,32 @@ attempt/recovery/run/response closure.
 ## Chat Frontend
 
 `apps/chat` is a minimal Next.js and assistant-ui client for the existing
-`POST /api/v1/plan` contract. Its custom LocalRuntime adapter sends only the
-latest user query with one page-scoped UUID v4 `session_id` and a fresh UUID v4
-`request_id`. The API remains responsible for conversation memory, planning,
-tool execution, evidence and answer generation.
+agentic API path. Its custom `LocalRuntime` adapter sends only the latest user
+query with one page-scoped UUID v4 `session_id` and a fresh UUID v4
+`request_id` to `POST /api/v1/plan/stream`. It incrementally parses NDJSON across
+network chunks, accumulates real `answer_delta` tokens, and always replaces that
+provisional text with the final public `result` response. The API remains
+responsible for conversation memory, planning, tool execution, evidence and
+answer generation.
 
-The frontend does not introduce another model endpoint, a fallback runtime, or
-a legacy compatibility route. It currently keeps assistant-ui message state in
-the browser for the lifetime of the page; durable thread listing/history,
-streaming and authentication remain outside this minimal slice.
+The stream route binds an event publisher in a request `ContextVar` before it
+creates the canonical `PlanService.run()` task. Graph nodes publish only phase
+names; tools publish the allowlisted call id/name/status/latency/reuse/failure
+code; and natural answer synthesis relays real provider SSE deltas. The same
+`PlanService` transaction, idempotency replay and Turn-commit semantics serve
+both routes. The non-streaming `/plan` route does not bind a publisher, so its
+behavior is unchanged. If the browser disconnects, the route cancels and awaits
+the task so the existing cancellation cleanup remains the only execution path.
+
+The chat renders those events as one compact per-message run card: analysis,
+tool use, answer organization and evidence review. It is expanded while running,
+folds after a successful final result, and stays open on failure or cancellation.
+Provisional prose is explicitly marked as pending review and is discarded when
+the stream terminates in error or the final status is not `ok`. The frontend does
+not introduce another model endpoint, a fallback runtime or a legacy
+compatibility route. It keeps assistant-ui message state in the browser for the
+lifetime of the page; reconnect, heartbeat, durable thread listing/history and
+authentication remain outside this slice.
 
 ## Debugging
 

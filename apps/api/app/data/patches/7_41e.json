@@ -1,0 +1,1519 @@
+{
+  "schema_version": 1,
+  "patch": "7.41e",
+  "released_at": "2026-07-30T07:00:00Z",
+  "source_url": "https://www.dota2.com/patches/7.41e?l=english",
+  "source_data_url": "https://www.dota2.com/datafeed/patchnotes?version=7.41e&language=english",
+  "normalization": "Valve datafeed flattened locally; polarity is conservative rule-based classification and neutral when direction is unclear.",
+  "changes": [
+    {
+      "target_type": "general",
+      "target": "general",
+      "field": "twin_gates",
+      "polarity": "neutral",
+      "raw": "Channeling the Twin Gate can now be interrupted by root"
+    },
+    {
+      "target_type": "general",
+      "target": "general",
+      "field": "tormentor",
+      "polarity": "neutral",
+      "raw": "Now disjoints projectiles when moving between chasms"
+    },
+    {
+      "target_type": "item",
+      "target": "abyssal_blade",
+      "field": "strength_bonus",
+      "polarity": "buff",
+      "raw": "Strength bonus increased from +26 to +30",
+      "target_display_name": "Abyssal Blade",
+      "source_id": 208
+    },
+    {
+      "target_type": "item",
+      "target": "butterfly",
+      "field": "agility_bonus",
+      "polarity": "nerf",
+      "raw": "Agility bonus decreased from +35 to +30",
+      "target_display_name": "Butterfly",
+      "source_id": 139
+    },
+    {
+      "target_type": "item",
+      "target": "butterfly",
+      "field": "damage_bonus",
+      "polarity": "buff",
+      "raw": "Damage bonus increased from +25 to +30",
+      "target_display_name": "Butterfly",
+      "source_id": 139
+    },
+    {
+      "target_type": "item",
+      "target": "chasm_stone",
+      "field": "cost",
+      "polarity": "neutral",
+      "raw": "Cost increased from 800 to 900",
+      "target_display_name": "Chasm Stone",
+      "source_id": 1872
+    },
+    {
+      "target_type": "item",
+      "target": "shivas_guard",
+      "field": "recipe_cost",
+      "polarity": "buff",
+      "raw": "Recipe cost decreased from 1350 to 1250. Total cost unchanged at 4500g",
+      "target_display_name": "Shiva's Guard",
+      "source_id": 119
+    },
+    {
+      "target_type": "item",
+      "target": "gungir",
+      "field": "recipe_cost",
+      "polarity": "buff",
+      "raw": "Recipe cost decreased from 400 to 300. Total cost unchanged at 4650g",
+      "target_display_name": "Gleipnir",
+      "source_id": 1466
+    },
+    {
+      "target_type": "item",
+      "target": "crellas_crozier",
+      "field": "rite_of_rumusque_movement_speed_steal_duration",
+      "polarity": "buff",
+      "raw": "Rite of Rumusque movement speed steal duration increased from 1.5s to 2s",
+      "target_display_name": "Crella's Crozier",
+      "source_id": 1856
+    },
+    {
+      "target_type": "item",
+      "target": "crellas_crozier",
+      "field": "rite_of_rumusque_putrefaction_aura_effect",
+      "polarity": "neutral",
+      "raw": "Rite of Rumusque Putrefaction Aura effect increased from 75% to 90%",
+      "target_display_name": "Crella's Crozier",
+      "source_id": 1856
+    },
+    {
+      "target_type": "item",
+      "target": "rapier",
+      "field": "spell_amplification_from_multiple_divine_rapiers",
+      "polarity": "neutral",
+      "raw": "Spell Amplification from multiple Divine Rapiers no longer stacks",
+      "target_display_name": "Divine Rapier",
+      "source_id": 133
+    },
+    {
+      "target_type": "item",
+      "target": "skadi",
+      "field": "cold_attack_attack_speed_slow",
+      "polarity": "buff",
+      "raw": "Cold Attack attack speed slow increased from 20% to 25%",
+      "target_display_name": "Eye of Skadi",
+      "source_id": 160
+    },
+    {
+      "target_type": "item",
+      "target": "hand_of_midas",
+      "field": "attack_speed_bonus",
+      "polarity": "buff",
+      "raw": "Attack Speed bonus increased from +35 to +40",
+      "target_display_name": "Hand of Midas",
+      "source_id": 65
+    },
+    {
+      "target_type": "item",
+      "target": "heavens_halberd",
+      "field": "disarm_cooldown",
+      "polarity": "buff",
+      "raw": "Disarm cooldown decreased from 16s to 15s",
+      "target_display_name": "Heaven's Halberd",
+      "source_id": 210
+    },
+    {
+      "target_type": "item",
+      "target": "hurricane_pike",
+      "field": "hurricane_thrust_buff_duration",
+      "polarity": "neutral",
+      "raw": "Hurricane Thrust buff duration decreased from 6s to 5s",
+      "target_display_name": "Hurricane Pike",
+      "source_id": 263
+    },
+    {
+      "target_type": "item",
+      "target": "kaya",
+      "field": "mana_regen_amplification",
+      "polarity": "nerf",
+      "raw": "Mana Regen Amplification decreased from 30% to 20%",
+      "target_display_name": "Kaya",
+      "source_id": 259
+    },
+    {
+      "target_type": "item",
+      "target": "meteor_hammer",
+      "field": "mana_regen_amplification",
+      "polarity": "nerf",
+      "raw": "Mana Regen Amplification decreased from 35% to 25%",
+      "target_display_name": "Meteor Hammer",
+      "source_id": 223
+    },
+    {
+      "target_type": "item",
+      "target": "kaya_and_sange",
+      "field": "mana_regen_amplification",
+      "polarity": "nerf",
+      "raw": "Mana Regen Amplification decreased from 40% to 30%",
+      "target_display_name": "Kaya and Sange",
+      "source_id": 273
+    },
+    {
+      "target_type": "item",
+      "target": "yasha_and_kaya",
+      "field": "mana_regen_amplification",
+      "polarity": "nerf",
+      "raw": "Mana Regen Amplification decreased from 40% to 30%",
+      "target_display_name": "Yasha and Kaya",
+      "source_id": 277
+    },
+    {
+      "target_type": "item",
+      "target": "mask_of_madness",
+      "field": "berserk_movement_speed_bonus_on_ranged_heroes",
+      "polarity": "nerf",
+      "raw": "Berserk movement speed bonus on ranged heroes decreased from 8% to 6%",
+      "target_display_name": "Mask of Madness",
+      "source_id": 172
+    },
+    {
+      "target_type": "item",
+      "target": "mask_of_madness",
+      "field": "berserk",
+      "polarity": "neutral",
+      "raw": "Berserk now provides 15% slow resistance for ranged heroes and 30% for melee heroes, instead of 30% for any hero",
+      "target_display_name": "Mask of Madness",
+      "source_id": 172
+    },
+    {
+      "target_type": "item",
+      "target": "orb_of_frost",
+      "field": "frost",
+      "polarity": "neutral",
+      "raw": "Frost no longer applies when attacking allies",
+      "target_display_name": "Orb of Frost",
+      "source_id": 1575
+    },
+    {
+      "target_type": "item",
+      "target": "orb_of_frost",
+      "field": "frost_health_restoration_reduction",
+      "polarity": "buff",
+      "raw": "Frost health restoration reduction increased from 13% to 15%",
+      "target_display_name": "Orb of Frost",
+      "source_id": 1575
+    },
+    {
+      "target_type": "item",
+      "target": "orb_of_corrosion",
+      "field": "corrosion_health_restoration_reduction",
+      "polarity": "buff",
+      "raw": "Corrosion health restoration reduction increased from 16% to 18%",
+      "target_display_name": "Orb of Corrosion",
+      "source_id": 569
+    },
+    {
+      "target_type": "item",
+      "target": "orb_of_venom",
+      "field": "poison_attack_damage_per_second",
+      "polarity": "buff",
+      "raw": "Poison Attack damage per second increased from 10 to 12",
+      "target_display_name": "Orb of Venom",
+      "source_id": 181
+    },
+    {
+      "target_type": "item",
+      "target": "refresher_shard",
+      "field": "no_longer_provides_12_health_regen_6_mana_regen_or_20_damage",
+      "polarity": "neutral",
+      "raw": "No longer provides +12 Health Regen, +6 Mana Regen, or +20 Damage",
+      "target_display_name": "Refresher Shard",
+      "source_id": 260
+    },
+    {
+      "target_type": "item",
+      "target": "satanic",
+      "field": "unholy_rage_cooldown",
+      "polarity": "nerf",
+      "raw": "Unholy Rage cooldown increased from 30s to 40s",
+      "target_display_name": "Satanic",
+      "source_id": 156
+    },
+    {
+      "target_type": "item",
+      "target": "smoke_of_deceit",
+      "field": "disguise",
+      "polarity": "neutral",
+      "raw": "Disguise now has a fixed duration and is not affected by buff duration amplification",
+      "target_display_name": "Smoke of Deceit",
+      "source_id": 188
+    },
+    {
+      "target_type": "item",
+      "target": "urn_of_shadows",
+      "field": "mana_regen_bonus",
+      "polarity": "nerf",
+      "raw": "Mana Regen bonus decreased from +1.25 to +1",
+      "target_display_name": "Urn of Shadows",
+      "source_id": 92
+    },
+    {
+      "target_type": "item",
+      "target": "urn_of_shadows",
+      "field": "when_in_stash",
+      "polarity": "neutral",
+      "raw": "When in Stash, no longer grants charges from nearby hero deaths",
+      "target_display_name": "Urn of Shadows",
+      "source_id": 92
+    },
+    {
+      "target_type": "item",
+      "target": "essence_distiller",
+      "field": "when_in_stash",
+      "polarity": "neutral",
+      "raw": "When in Stash, no longer grants charges from nearby hero deaths",
+      "target_display_name": "Essence Distiller",
+      "source_id": 1852
+    },
+    {
+      "target_type": "item",
+      "target": "spirit_vessel",
+      "field": "when_in_stash",
+      "polarity": "neutral",
+      "raw": "When in Stash, no longer grants charges from nearby hero deaths",
+      "target_display_name": "Spirit Vessel",
+      "source_id": 267
+    },
+    {
+      "target_type": "item",
+      "target": "veil_of_discord",
+      "field": "spell_weakness_mana_cost",
+      "polarity": "buff",
+      "raw": "Spell Weakness mana cost decreased from 50 to 25",
+      "target_display_name": "Veil of Discord",
+      "source_id": 190
+    },
+    {
+      "target_type": "neutral_item",
+      "target": "neutral_1868",
+      "field": "forage_time",
+      "polarity": "neutral",
+      "raw": "Forage time decreased from 1s to 0.75s",
+      "target_display_name": "neutral_1868",
+      "source_id": 1868
+    },
+    {
+      "target_type": "neutral_item",
+      "target": "neutral_1864",
+      "field": "spellover_non_hero_explosion_damage",
+      "polarity": "nerf",
+      "raw": "Spellover non-hero explosion damage decreased from 30 to 20",
+      "target_display_name": "neutral_1864",
+      "source_id": 1864
+    },
+    {
+      "target_type": "neutral_item",
+      "target": "neutral_1864",
+      "field": "spellover_damage_threshold_on_illusions",
+      "polarity": "neutral",
+      "raw": "Spellover damage threshold on illusions now only considers pre-amplification damage",
+      "target_display_name": "neutral_1864",
+      "source_id": 1864
+    },
+    {
+      "target_type": "neutral_item",
+      "target": "neutral_1862",
+      "field": "enchant_recraft_bonus",
+      "polarity": "nerf",
+      "raw": "Enchant recraft bonus decreased from 40% to 35%",
+      "target_display_name": "neutral_1862",
+      "source_id": 1862
+    },
+    {
+      "target_type": "neutral_item",
+      "target": "neutral_837",
+      "field": "cleanse_cooldown",
+      "polarity": "buff",
+      "raw": "Cleanse cooldown decreased from 40s to 30s",
+      "target_display_name": "neutral_837",
+      "source_id": 837
+    },
+    {
+      "target_type": "enchantment",
+      "target": "neutral_1593",
+      "field": "gpm_bonus",
+      "polarity": "nerf",
+      "raw": "GPM Bonus decreased from +75/100 to +65/90",
+      "target_display_name": "neutral_1593",
+      "source_id": 1593
+    },
+    {
+      "target_type": "enchantment",
+      "target": "neutral_1587",
+      "field": "no_longer_increases_mana_cost_lost_by_7",
+      "polarity": "neutral",
+      "raw": "No longer increases Mana Cost/Lost by 7%",
+      "target_display_name": "neutral_1587",
+      "source_id": 1587
+    },
+    {
+      "target_type": "enchantment",
+      "target": "neutral_1587",
+      "field": "now_decreases_maximum_mana_by_20",
+      "polarity": "neutral",
+      "raw": "Now decreases maximum mana by 20%",
+      "target_display_name": "neutral_1587",
+      "source_id": 1587
+    },
+    {
+      "target_type": "hero",
+      "target": "axe",
+      "field": "base_agility",
+      "polarity": "neutral",
+      "raw": "Base Agility decreased from 20 to 18",
+      "target_display_name": "Axe",
+      "source_id": 2
+    },
+    {
+      "target_type": "hero",
+      "target": "axe",
+      "field": "axe_battle_hunger",
+      "polarity": "nerf",
+      "raw": "Damage per second decreased from 12/18/24/30 to 12/16/20/24",
+      "target_display_name": "Axe",
+      "field_display_name": "Battle Hunger",
+      "source_id": 2,
+      "ability_id": 5008
+    },
+    {
+      "target_type": "hero",
+      "target": "bane",
+      "field": "bane_ichor_of_nyctasha",
+      "polarity": "neutral",
+      "raw": "Max Terrors per hero increased from 5 to 6",
+      "target_display_name": "Bane",
+      "field_display_name": "Ichor of Nyctasha",
+      "source_id": 3,
+      "ability_id": 1202
+    },
+    {
+      "target_type": "hero",
+      "target": "bane",
+      "field": "bane_ichor_of_nyctasha",
+      "polarity": "neutral",
+      "raw": "Status Resistance per Terror decreased from 5% to 4%",
+      "target_display_name": "Bane",
+      "field_display_name": "Ichor of Nyctasha",
+      "source_id": 3,
+      "ability_id": 1202
+    },
+    {
+      "target_type": "hero",
+      "target": "bane",
+      "field": "bane_nightmare",
+      "polarity": "neutral",
+      "raw": "Duration decreased from 3.5/4.5/5.5/6.5s to 3/4/5/6s",
+      "target_display_name": "Bane",
+      "field_display_name": "Nightmare",
+      "source_id": 3,
+      "ability_id": 5014
+    },
+    {
+      "target_type": "hero",
+      "target": "bane",
+      "field": "bane_nightmare",
+      "polarity": "neutral",
+      "raw": "Now completely disables the target's sight, instead of overriding the vision range value",
+      "target_display_name": "Bane",
+      "field_display_name": "Nightmare",
+      "source_id": 3,
+      "ability_id": 5014
+    },
+    {
+      "target_type": "hero",
+      "target": "bane",
+      "field": "bane_fiends_grip",
+      "polarity": "buff",
+      "raw": "Aghanim's Scepter cooldown reduction decreased from 45s to 40s",
+      "target_display_name": "Bane",
+      "field_display_name": "Fiend's Grip",
+      "source_id": 3,
+      "ability_id": 5013
+    },
+    {
+      "target_type": "hero",
+      "target": "drow_ranger",
+      "field": "drow_ranger_multishot",
+      "polarity": "nerf",
+      "raw": "Mana Cost increased from 50/70/90/110 to 70/85/100/115",
+      "target_display_name": "Drow Ranger",
+      "field_display_name": "Multishot",
+      "source_id": 6,
+      "ability_id": 343
+    },
+    {
+      "target_type": "hero",
+      "target": "drow_ranger",
+      "field": "drow_ranger_multishot",
+      "polarity": "neutral",
+      "raw": "Arrow Range rescaled from 1.75x Drow Ranger's Attack Range to 475 + 1x Drow Ranger's Attack Range",
+      "target_display_name": "Drow Ranger",
+      "field_display_name": "Multishot",
+      "source_id": 6,
+      "ability_id": 343
+    },
+    {
+      "target_type": "hero",
+      "target": "drow_ranger",
+      "field": "drow_ranger_multishot",
+      "polarity": "nerf",
+      "raw": "Arrow Base Damage Bonus decreased from 100/120/140/160% to 80/100/120/140%",
+      "target_display_name": "Drow Ranger",
+      "field_display_name": "Multishot",
+      "source_id": 6,
+      "ability_id": 343
+    },
+    {
+      "target_type": "hero",
+      "target": "morphling",
+      "field": "morphling_replicate",
+      "polarity": "buff",
+      "raw": "Cooldown decreased from 140/100/60s to 125/90/55s",
+      "target_display_name": "Morphling",
+      "field_display_name": "Morph",
+      "source_id": 10,
+      "ability_id": 5057
+    },
+    {
+      "target_type": "hero",
+      "target": "morphling",
+      "field": "morphling_replicate",
+      "polarity": "neutral",
+      "raw": "Aghanim's Scepter illusion no longer has illusion vision penalty",
+      "target_display_name": "Morphling",
+      "field_display_name": "Morph",
+      "source_id": 10,
+      "ability_id": 5057
+    },
+    {
+      "target_type": "hero",
+      "target": "nevermore",
+      "field": "base_intelligence",
+      "polarity": "neutral",
+      "raw": "Base Intelligence decreased from 18 to 16",
+      "target_display_name": "Shadow Fiend",
+      "source_id": 11
+    },
+    {
+      "target_type": "hero",
+      "target": "nevermore",
+      "field": "talent",
+      "polarity": "neutral",
+      "raw": "Level 25 Talent Shadowraze Applies Attack Damage no longer applies attack modifiers or procs",
+      "target_display_name": "Shadow Fiend",
+      "source_id": 11
+    },
+    {
+      "target_type": "hero",
+      "target": "nevermore",
+      "field": "nevermore_shadowraze1",
+      "polarity": "neutral",
+      "raw": "Stack duration decreased from 7s to 6s",
+      "target_display_name": "Shadow Fiend",
+      "field_display_name": "Shadowraze",
+      "source_id": 11,
+      "ability_id": 5059
+    },
+    {
+      "target_type": "hero",
+      "target": "phantom_lancer",
+      "field": "phantom_lancer_juxtapose",
+      "polarity": "nerf",
+      "raw": "Aghanim's Shard cooldown increased from 15s to 18s",
+      "target_display_name": "Phantom Lancer",
+      "field_display_name": "Juxtapose",
+      "source_id": 12,
+      "ability_id": 5067
+    },
+    {
+      "target_type": "hero",
+      "target": "puck",
+      "field": "puck_illusory_orb",
+      "polarity": "nerf",
+      "raw": "Cooldown increased from 11/10/9/8s to 12/11/10/9s",
+      "target_display_name": "Puck",
+      "field_display_name": "Illusory Orb",
+      "source_id": 13,
+      "ability_id": 5069
+    },
+    {
+      "target_type": "hero",
+      "target": "tiny",
+      "field": "base_health_regen",
+      "polarity": "nerf",
+      "raw": "Base Health Regen decreased by 1.0",
+      "target_display_name": "Tiny",
+      "source_id": 19
+    },
+    {
+      "target_type": "hero",
+      "target": "vengefulspirit",
+      "field": "vengefulspirit_command_aura",
+      "polarity": "neutral",
+      "raw": "Aghanim's Scepter illusion no longer has illusion vision penalty",
+      "target_display_name": "Vengeful Spirit",
+      "field_display_name": "Vengeance Aura",
+      "source_id": 20,
+      "ability_id": 5123
+    },
+    {
+      "target_type": "hero",
+      "target": "zuus",
+      "field": "zuus_thundergods_wrath",
+      "polarity": "nerf",
+      "raw": "Damage decreased from 300/475/650 to 275/425/575",
+      "target_display_name": "Zeus",
+      "field_display_name": "Thundergod's Wrath",
+      "source_id": 22,
+      "ability_id": 5113
+    },
+    {
+      "target_type": "hero",
+      "target": "zuus",
+      "field": "zuus_lightning_hands",
+      "polarity": "neutral",
+      "raw": "Toggling on/off no longer breaks invisibility and can be done while silenced",
+      "target_display_name": "Zeus",
+      "field_display_name": "Lightning Hands",
+      "source_id": 22,
+      "ability_id": 1110
+    },
+    {
+      "target_type": "hero",
+      "target": "zuus",
+      "field": "zuus_lightning_hands",
+      "polarity": "nerf",
+      "raw": "Bonus Attack Speed decreased from 30 to 20",
+      "target_display_name": "Zeus",
+      "field_display_name": "Lightning Hands",
+      "source_id": 22,
+      "ability_id": 1110
+    },
+    {
+      "target_type": "hero",
+      "target": "lina",
+      "field": "base_agility",
+      "polarity": "neutral",
+      "raw": "Base Agility decreased from 23 to 21",
+      "target_display_name": "Lina",
+      "source_id": 25
+    },
+    {
+      "target_type": "hero",
+      "target": "witch_doctor",
+      "field": "witch_doctor_maledict",
+      "polarity": "neutral",
+      "raw": "Level 20 Talent Maledict bursts deal 75% damage in a 800 AoE now considers illusions as creep targets and bursts from them will not deal damage",
+      "target_display_name": "Witch Doctor",
+      "field_display_name": "Maledict",
+      "source_id": 30,
+      "ability_id": 5140
+    },
+    {
+      "target_type": "hero",
+      "target": "sniper",
+      "field": "sniper_concussive_grenade",
+      "polarity": "neutral",
+      "raw": "Can now be cast while rooted, but will not knock Sniper back if he is under the effect of root",
+      "target_display_name": "Sniper",
+      "field_display_name": "Concussive Grenade",
+      "source_id": 35,
+      "ability_id": 694
+    },
+    {
+      "target_type": "hero",
+      "target": "necrolyte",
+      "field": "necrolyte_sadist",
+      "polarity": "nerf",
+      "raw": "HP/Mana Regen decreased from 3.7 + 0.3 per level to 3.8 + 0.2 per level",
+      "target_display_name": "Necrophos",
+      "field_display_name": "Sadist",
+      "source_id": 36,
+      "ability_id": 5160
+    },
+    {
+      "target_type": "hero",
+      "target": "necrolyte",
+      "field": "necrolyte_death_seeker",
+      "polarity": "nerf",
+      "raw": "Cast Range decreased from 750 to 600",
+      "target_display_name": "Necrophos",
+      "field_display_name": "Death Seeker",
+      "source_id": 36,
+      "ability_id": 661
+    },
+    {
+      "target_type": "hero",
+      "target": "beastmaster",
+      "field": "talent",
+      "polarity": "nerf",
+      "raw": "Level 20 Talent Damage to Beastmaster and his summons decreased from +30 to +25",
+      "target_display_name": "Beastmaster",
+      "source_id": 38
+    },
+    {
+      "target_type": "hero",
+      "target": "beastmaster",
+      "field": "talent",
+      "polarity": "buff",
+      "raw": "Level 25 Talent Primal Roar Cooldown Reduction decreased from 25s to 20s",
+      "target_display_name": "Beastmaster",
+      "source_id": 38
+    },
+    {
+      "target_type": "hero",
+      "target": "queenofpain",
+      "field": "queenofpain_shadow_strike",
+      "polarity": "buff",
+      "raw": "Mana Cost decreased from 100/110/120/130 to 100/105/110/115",
+      "target_display_name": "Queen of Pain",
+      "field_display_name": "Shadow Strike",
+      "source_id": 39,
+      "ability_id": 5173
+    },
+    {
+      "target_type": "hero",
+      "target": "queenofpain",
+      "field": "queenofpain_sonic_wave",
+      "polarity": "neutral",
+      "raw": "Damage from two Sonic Waves cast in quick succession now stack",
+      "target_display_name": "Queen of Pain",
+      "field_display_name": "Sonic Wave",
+      "source_id": 39,
+      "ability_id": 5176
+    },
+    {
+      "target_type": "hero",
+      "target": "venomancer",
+      "field": "venomancer_snakebite",
+      "polarity": "buff",
+      "raw": "Initial Damage increased from 40/60/80/100 to 40/70/100/130",
+      "target_display_name": "Venomancer",
+      "field_display_name": "Snakebite",
+      "source_id": 40,
+      "ability_id": 1749
+    },
+    {
+      "target_type": "hero",
+      "target": "death_prophet",
+      "field": "agility_gain",
+      "polarity": "neutral",
+      "raw": "Agility gain increased from 2.0 to 2.3",
+      "target_display_name": "Death Prophet",
+      "source_id": 43
+    },
+    {
+      "target_type": "hero",
+      "target": "death_prophet",
+      "field": "damage_gain_per_level",
+      "polarity": "buff",
+      "raw": "Damage gain per level increased from 3.6 to 3.7",
+      "target_display_name": "Death Prophet",
+      "source_id": 43
+    },
+    {
+      "target_type": "hero",
+      "target": "phantom_assassin",
+      "field": "phantom_assassin_blur",
+      "polarity": "neutral",
+      "raw": "Now cannot be dispelled",
+      "target_display_name": "Phantom Assassin",
+      "field_display_name": "Blur",
+      "source_id": 44,
+      "ability_id": 5192
+    },
+    {
+      "target_type": "hero",
+      "target": "pugna",
+      "field": "base_intelligence",
+      "polarity": "neutral",
+      "raw": "Base Intelligence increased from 26 to 27",
+      "target_display_name": "Pugna",
+      "source_id": 45
+    },
+    {
+      "target_type": "hero",
+      "target": "pugna",
+      "field": "damage_at_level_1",
+      "polarity": "buff",
+      "raw": "Damage at level 1 increased from 47-54 to 48-55",
+      "target_display_name": "Pugna",
+      "source_id": 45
+    },
+    {
+      "target_type": "hero",
+      "target": "templar_assassin",
+      "field": "templar_assassin_trap_teleport",
+      "polarity": "neutral",
+      "raw": "Can now be now interrupted by root",
+      "target_display_name": "Templar Assassin",
+      "field_display_name": "Psionic Projection",
+      "source_id": 46,
+      "ability_id": 7853
+    },
+    {
+      "target_type": "hero",
+      "target": "dragon_knight",
+      "field": "dragon_knight_wyrms_wrath",
+      "polarity": "buff",
+      "raw": "AoE Bonus increased from 25/50/75/100 to 30/60/90/120",
+      "target_display_name": "Dragon Knight",
+      "field_display_name": "Wyrm's Wrath",
+      "source_id": 49,
+      "ability_id": 1752
+    },
+    {
+      "target_type": "hero",
+      "target": "rattletrap",
+      "field": "rattletrap_power_cogs",
+      "polarity": "neutral",
+      "raw": "Mana Burn decreased from 40/80/120/160 to 40/75/110/145",
+      "target_display_name": "Clockwerk",
+      "field_display_name": "Power Cogs",
+      "source_id": 51,
+      "ability_id": 5238
+    },
+    {
+      "target_type": "hero",
+      "target": "rattletrap",
+      "field": "rattletrap_power_cogs",
+      "polarity": "neutral",
+      "raw": "Cogs Travel Distance decreased from 1000 to 850/900/950/1000",
+      "target_display_name": "Clockwerk",
+      "field_display_name": "Power Cogs",
+      "source_id": 51,
+      "ability_id": 5238
+    },
+    {
+      "target_type": "hero",
+      "target": "rattletrap",
+      "field": "rattletrap_power_cogs",
+      "polarity": "neutral",
+      "raw": "Cogs Day/Night Vision decreased from 1600/600 to 800/400",
+      "target_display_name": "Clockwerk",
+      "field_display_name": "Power Cogs",
+      "source_id": 51,
+      "ability_id": 5238
+    },
+    {
+      "target_type": "hero",
+      "target": "rattletrap",
+      "field": "rattletrap_power_cogs",
+      "polarity": "neutral",
+      "raw": "Cogs no longer block creep camps",
+      "target_display_name": "Clockwerk",
+      "field_display_name": "Power Cogs",
+      "source_id": 51,
+      "ability_id": 5238
+    },
+    {
+      "target_type": "hero",
+      "target": "omniknight",
+      "field": "omniknight_hammer_of_purity",
+      "polarity": "neutral",
+      "raw": "Heal Amount improved from 35% over 5s to 40% over 4s",
+      "target_display_name": "Omniknight",
+      "field_display_name": "Hammer of Purity",
+      "source_id": 57,
+      "ability_id": 656
+    },
+    {
+      "target_type": "hero",
+      "target": "night_stalker",
+      "field": "night_stalker_crippling_fear",
+      "polarity": "nerf",
+      "raw": "Radius decreased from 375 to 350",
+      "target_display_name": "Night Stalker",
+      "field_display_name": "Crippling Fear",
+      "source_id": 60,
+      "ability_id": 5276
+    },
+    {
+      "target_type": "hero",
+      "target": "weaver",
+      "field": "weaver_threads_of_fate",
+      "polarity": "neutral",
+      "raw": "Thread Break Distance increased from 900 to 890 + 10 per hero level",
+      "target_display_name": "Weaver",
+      "field_display_name": "Threads of Fate",
+      "source_id": 63,
+      "ability_id": 1754
+    },
+    {
+      "target_type": "hero",
+      "target": "jakiro",
+      "field": "intelligence_gain",
+      "polarity": "neutral",
+      "raw": "Intelligence gain increased from 3.0 to 3.3",
+      "target_display_name": "Jakiro",
+      "source_id": 64
+    },
+    {
+      "target_type": "hero",
+      "target": "batrider",
+      "field": "batrider_smoldering_resin",
+      "polarity": "neutral",
+      "raw": "No longer applies when attacking allies",
+      "target_display_name": "Batrider",
+      "field_display_name": "Smoldering Resin",
+      "source_id": 65,
+      "ability_id": 1319
+    },
+    {
+      "target_type": "hero",
+      "target": "spectre",
+      "field": "talent",
+      "polarity": "nerf",
+      "raw": "Level 25 Talent All Spectre Illusion Damage decreased from +15% to +12%",
+      "target_display_name": "Spectre",
+      "source_id": 67
+    },
+    {
+      "target_type": "hero",
+      "target": "spectre",
+      "field": "spectre_haunt",
+      "polarity": "neutral",
+      "raw": "Illusion Damage rescaled from 30/50/70% to 35/50/65%",
+      "target_display_name": "Spectre",
+      "field_display_name": "Haunt",
+      "source_id": 67,
+      "ability_id": 5337
+    },
+    {
+      "target_type": "hero",
+      "target": "ancient_apparition",
+      "field": "ancient_apparition_ice_blast",
+      "polarity": "buff",
+      "raw": "Cooldown decreased from 60/50/40s to 50/45/40s",
+      "target_display_name": "Ancient Apparition",
+      "field_display_name": "Ice Blast",
+      "source_id": 68,
+      "ability_id": 5348
+    },
+    {
+      "target_type": "hero",
+      "target": "doom_bringer",
+      "field": "attack_range",
+      "polarity": "nerf",
+      "raw": "Attack Range decreased from 200 to 175",
+      "target_display_name": "Doom",
+      "source_id": 69
+    },
+    {
+      "target_type": "hero",
+      "target": "doom_bringer",
+      "field": "doom_bringer_infernal_blade",
+      "polarity": "buff",
+      "raw": "Base Burn Damage increased from 15/30/45/60 to 18/34/50/66",
+      "target_display_name": "Doom",
+      "field_display_name": "Infernal Blade",
+      "source_id": 69,
+      "ability_id": 5341
+    },
+    {
+      "target_type": "hero",
+      "target": "doom_bringer",
+      "field": "doom_bringer_infernal_blade",
+      "polarity": "neutral",
+      "raw": "Max HP As Damage rescaled from 1/2/3/4% to 0.5/1.75/3/4.25%",
+      "target_display_name": "Doom",
+      "field_display_name": "Infernal Blade",
+      "source_id": 69,
+      "ability_id": 5341
+    },
+    {
+      "target_type": "hero",
+      "target": "gyrocopter",
+      "field": "gyrocopter_rocket_barrage",
+      "polarity": "buff",
+      "raw": "Mana Cost decreased from 85 to 75",
+      "target_display_name": "Gyrocopter",
+      "field_display_name": "Rocket Barrage",
+      "source_id": 72,
+      "ability_id": 5361
+    },
+    {
+      "target_type": "hero",
+      "target": "gyrocopter",
+      "field": "gyrocopter_homing_missile",
+      "polarity": "buff",
+      "raw": "Mana Cost decreased from 120/130/140/150 to 120",
+      "target_display_name": "Gyrocopter",
+      "field_display_name": "Homing Missile",
+      "source_id": 72,
+      "ability_id": 5362
+    },
+    {
+      "target_type": "hero",
+      "target": "gyrocopter",
+      "field": "gyrocopter_homing_missile",
+      "polarity": "buff",
+      "raw": "Cooldown decreased from 30/24/18/12s to 26/21/16/11s",
+      "target_display_name": "Gyrocopter",
+      "field_display_name": "Homing Missile",
+      "source_id": 72,
+      "ability_id": 5362
+    },
+    {
+      "target_type": "hero",
+      "target": "invoker",
+      "field": "invoker_ghost_walk",
+      "polarity": "neutral",
+      "raw": "Duration decreased from 60s to 50s",
+      "target_display_name": "Invoker",
+      "field_display_name": "Ghost Walk",
+      "source_id": 74,
+      "ability_id": 5381
+    },
+    {
+      "target_type": "hero",
+      "target": "invoker",
+      "field": "invoker_ghost_walk",
+      "polarity": "neutral",
+      "raw": "Aghanim's Shard no longer increases radius",
+      "target_display_name": "Invoker",
+      "field_display_name": "Ghost Walk",
+      "source_id": 74,
+      "ability_id": 5381
+    },
+    {
+      "target_type": "hero",
+      "target": "obsidian_destroyer",
+      "field": "obsidian_destroyer_objurgation",
+      "polarity": "neutral",
+      "raw": "Now has an instant cast and no longer cancels movement",
+      "target_display_name": "Outworld Destroyer",
+      "field_display_name": "Objurgation",
+      "source_id": 76,
+      "ability_id": 1760
+    },
+    {
+      "target_type": "hero",
+      "target": "obsidian_destroyer",
+      "field": "obsidian_destroyer_objurgation",
+      "polarity": "neutral",
+      "raw": "Barrier increased from 120/180/240/300 to 150/200/250/300",
+      "target_display_name": "Outworld Destroyer",
+      "field_display_name": "Objurgation",
+      "source_id": 76,
+      "ability_id": 1760
+    },
+    {
+      "target_type": "hero",
+      "target": "obsidian_destroyer",
+      "field": "obsidian_destroyer_objurgation",
+      "polarity": "buff",
+      "raw": "Cooldown decreased from 36/34/32/30 to 36/33/30/27s",
+      "target_display_name": "Outworld Destroyer",
+      "field_display_name": "Objurgation",
+      "source_id": 76,
+      "ability_id": 1760
+    },
+    {
+      "target_type": "hero",
+      "target": "lone_druid",
+      "field": "talent",
+      "polarity": "buff",
+      "raw": "Level 15 Talent Savage Roar Cooldown Reduction decreased from 5s to 4s",
+      "target_display_name": "Lone Druid",
+      "source_id": 80
+    },
+    {
+      "target_type": "hero",
+      "target": "lone_druid",
+      "field": "talent",
+      "polarity": "nerf",
+      "raw": "Level 20 Talent Savage Roar Radius decreased from +150 to +125",
+      "target_display_name": "Lone Druid",
+      "source_id": 80
+    },
+    {
+      "target_type": "hero",
+      "target": "chaos_knight",
+      "field": "chaos_knight_chaos_bolt",
+      "polarity": "neutral",
+      "raw": "Bolt Speed increased from 700 to 900",
+      "target_display_name": "Chaos Knight",
+      "field_display_name": "Chaos Bolt",
+      "source_id": 81,
+      "ability_id": 5426
+    },
+    {
+      "target_type": "hero",
+      "target": "treant",
+      "field": "base_attack_speed",
+      "polarity": "nerf",
+      "raw": "Base Attack Speed decreased from 100 to 90",
+      "target_display_name": "Treant Protector",
+      "source_id": 83
+    },
+    {
+      "target_type": "hero",
+      "target": "treant",
+      "field": "treant_leech_seed",
+      "polarity": "neutral",
+      "raw": "Root duration decreased from 0.9/1.1/1.3/1.5s to 0.75/1.0/1.25/1.5s",
+      "target_display_name": "Treant Protector",
+      "field_display_name": "Leech Seed",
+      "source_id": 83,
+      "ability_id": 5435
+    },
+    {
+      "target_type": "hero",
+      "target": "treant",
+      "field": "treant_living_armor",
+      "polarity": "nerf",
+      "raw": "Mana Cost increased from 65/70/75/80 to 80",
+      "target_display_name": "Treant Protector",
+      "field_display_name": "Living Armor",
+      "source_id": 83,
+      "ability_id": 5436
+    },
+    {
+      "target_type": "hero",
+      "target": "undying",
+      "field": "base_movement_speed",
+      "polarity": "nerf",
+      "raw": "Base Movement Speed decreased from 300 to 295",
+      "target_display_name": "Undying",
+      "source_id": 85
+    },
+    {
+      "target_type": "hero",
+      "target": "undying",
+      "field": "undying_flesh_golem",
+      "polarity": "buff",
+      "raw": "Bonus Movement Speed increased from 20 to 25",
+      "target_display_name": "Undying",
+      "field_display_name": "Flesh Golem",
+      "source_id": 85,
+      "ability_id": 5447
+    },
+    {
+      "target_type": "hero",
+      "target": "keeper_of_the_light",
+      "field": "keeper_of_the_light_chakra_magic",
+      "polarity": "nerf",
+      "raw": "Cooldown increased from 19/16/13/10s to 20/17/14/11s",
+      "target_display_name": "Keeper of the Light",
+      "field_display_name": "Chakra Magic",
+      "source_id": 90,
+      "ability_id": 5473
+    },
+    {
+      "target_type": "hero",
+      "target": "keeper_of_the_light",
+      "field": "keeper_of_the_light_radiant_bind",
+      "polarity": "nerf",
+      "raw": "Cast Range decreased from 850 to 750",
+      "target_display_name": "Keeper of the Light",
+      "field_display_name": "Solar Bind",
+      "source_id": 90,
+      "ability_id": 1372
+    },
+    {
+      "target_type": "hero",
+      "target": "visage",
+      "field": "visage_stone_form_self_cast",
+      "polarity": "neutral",
+      "raw": "No longer breaks Visage's invisibility when used to order Familiars to execute",
+      "target_display_name": "Visage",
+      "field_display_name": "Stone Form",
+      "source_id": 92,
+      "ability_id": 7116
+    },
+    {
+      "target_type": "hero",
+      "target": "medusa",
+      "field": "medusa_split_shot",
+      "polarity": "neutral",
+      "raw": "Toggling on/off no longer breaks invisibility and can be done while silenced",
+      "target_display_name": "Medusa",
+      "field_display_name": "Split Shot",
+      "source_id": 94,
+      "ability_id": 5504
+    },
+    {
+      "target_type": "hero",
+      "target": "troll_warlord",
+      "field": "base_agility",
+      "polarity": "neutral",
+      "raw": "Base Agility increased from 23 to 24",
+      "target_display_name": "Troll Warlord",
+      "source_id": 95
+    },
+    {
+      "target_type": "hero",
+      "target": "troll_warlord",
+      "field": "damage_on_level_1",
+      "polarity": "buff",
+      "raw": "Damage on level 1 increased from 50-58 to 51-59",
+      "target_display_name": "Troll Warlord",
+      "source_id": 95
+    },
+    {
+      "target_type": "hero",
+      "target": "troll_warlord",
+      "field": "troll_warlord_switch_stance",
+      "polarity": "neutral",
+      "raw": "Toggling between stances no longer breaks invisibility",
+      "target_display_name": "Troll Warlord",
+      "field_display_name": "Battle Stance",
+      "source_id": 95,
+      "ability_id": 1478
+    },
+    {
+      "target_type": "hero",
+      "target": "troll_warlord",
+      "field": "troll_warlord_battle_trance",
+      "polarity": "neutral",
+      "raw": "Now also grants 35% Slow Resistance",
+      "target_display_name": "Troll Warlord",
+      "field_display_name": "Battle Trance",
+      "source_id": 95,
+      "ability_id": 5512
+    },
+    {
+      "target_type": "hero",
+      "target": "centaur",
+      "field": "centaur_double_edge",
+      "polarity": "neutral",
+      "raw": "Aghanim's Shard Buff duration decreased from 15s to 12s",
+      "target_display_name": "Centaur Warrunner",
+      "field_display_name": "Double Edge",
+      "source_id": 96,
+      "ability_id": 5515
+    },
+    {
+      "target_type": "hero",
+      "target": "centaur",
+      "field": "centaur_return",
+      "polarity": "nerf",
+      "raw": "Strength Return Damage decreased from 16/24/32/40% to 14/21/28/35%",
+      "target_display_name": "Centaur Warrunner",
+      "field_display_name": "Retaliate",
+      "source_id": 96,
+      "ability_id": 5516
+    },
+    {
+      "target_type": "hero",
+      "target": "magnataur",
+      "field": "magnataur_horn_toss",
+      "polarity": "buff",
+      "raw": "Damage increased from 300 to 325",
+      "target_display_name": "Magnus",
+      "field_display_name": "Horn Toss",
+      "source_id": 97,
+      "ability_id": 649
+    },
+    {
+      "target_type": "hero",
+      "target": "elder_titan",
+      "field": "elder_titan_momentum",
+      "polarity": "buff",
+      "raw": "Bonus Speed to Armor increased from 5% + 0.5% per level to 7% + 0.5% per level",
+      "target_display_name": "Elder Titan",
+      "field_display_name": "Momentum",
+      "source_id": 103,
+      "ability_id": 1393
+    },
+    {
+      "target_type": "hero",
+      "target": "elder_titan",
+      "field": "elder_titan_ancestral_spirit",
+      "polarity": "neutral",
+      "raw": "Return Astral Spirit and Move Astral Spirit sub-abilities no longer break Elder Titan's invisibility when used",
+      "target_display_name": "Elder Titan",
+      "field_display_name": "Astral Spirit",
+      "source_id": 103,
+      "ability_id": 1392
+    },
+    {
+      "target_type": "hero",
+      "target": "legion_commander",
+      "field": "base_strength",
+      "polarity": "neutral",
+      "raw": "Base Strength increased from 24 to 25",
+      "target_display_name": "Legion Commander",
+      "source_id": 104
+    },
+    {
+      "target_type": "hero",
+      "target": "legion_commander",
+      "field": "damage_at_level_1",
+      "polarity": "buff",
+      "raw": "Damage at level 1 increased from 57-61 to 58-62",
+      "target_display_name": "Legion Commander",
+      "source_id": 104
+    },
+    {
+      "target_type": "hero",
+      "target": "legion_commander",
+      "field": "strength_gain",
+      "polarity": "neutral",
+      "raw": "Strength gain decreased from 3.1 to 3.0",
+      "target_display_name": "Legion Commander",
+      "source_id": 104
+    },
+    {
+      "target_type": "hero",
+      "target": "legion_commander",
+      "field": "base_attack_speed",
+      "polarity": "buff",
+      "raw": "Base Attack Speed increased from 100 to 105",
+      "target_display_name": "Legion Commander",
+      "source_id": 104
+    },
+    {
+      "target_type": "hero",
+      "target": "legion_commander",
+      "field": "talent",
+      "polarity": "neutral",
+      "raw": "Level 25 Talent Duel Refreshes Cooldown On Victory replaced with Duel Advances Cooldown by 30s On Victory",
+      "target_display_name": "Legion Commander",
+      "source_id": 104
+    },
+    {
+      "target_type": "hero",
+      "target": "ember_spirit",
+      "field": "base_movement_speed",
+      "polarity": "nerf",
+      "raw": "Base Movement Speed decreased from 300 to 295",
+      "target_display_name": "Ember Spirit",
+      "source_id": 106
+    },
+    {
+      "target_type": "hero",
+      "target": "earth_spirit",
+      "field": "base_intelligence",
+      "polarity": "neutral",
+      "raw": "Base Intelligence decreased from 18 to 17",
+      "target_display_name": "Earth Spirit",
+      "source_id": 107
+    },
+    {
+      "target_type": "hero",
+      "target": "earth_spirit",
+      "field": "talent",
+      "polarity": "nerf",
+      "raw": "Level 20 Talent Magnetize Damage & Duration decreased from +30% to +25%",
+      "target_display_name": "Earth Spirit",
+      "source_id": 107
+    },
+    {
+      "target_type": "hero",
+      "target": "abyssal_underlord",
+      "field": "abyssal_underlord_dark_portal",
+      "polarity": "neutral",
+      "raw": "Gate channeling can now be interrupted by root",
+      "target_display_name": "Underlord",
+      "field_display_name": "Fiend's Gate",
+      "source_id": 108,
+      "ability_id": 865
+    },
+    {
+      "target_type": "hero",
+      "target": "oracle",
+      "field": "oracle_fates_edict",
+      "polarity": "neutral",
+      "raw": "Fate's Edict that was cast on Oracle or his ally is now dispellable by enemies",
+      "target_display_name": "Oracle",
+      "field_display_name": "Fate's Edict",
+      "source_id": 111,
+      "ability_id": 5638
+    },
+    {
+      "target_type": "hero",
+      "target": "oracle",
+      "field": "oracle_false_promise",
+      "polarity": "buff",
+      "raw": "Cast Range increased from 700/800/900 to 800/850/900",
+      "target_display_name": "Oracle",
+      "field_display_name": "False Promise",
+      "source_id": 111,
+      "ability_id": 5640
+    },
+    {
+      "target_type": "hero",
+      "target": "grimstroke",
+      "field": "grimstroke_dark_portrait",
+      "polarity": "neutral",
+      "raw": "No longer has illusion vision penalty",
+      "target_display_name": "Grimstroke",
+      "field_display_name": "Dark Portrait",
+      "source_id": 121,
+      "ability_id": 7852
+    },
+    {
+      "target_type": "hero",
+      "target": "hoodwink",
+      "field": "hoodwink_mistwoods_wayfarer",
+      "polarity": "neutral",
+      "raw": "Redirect Chance decreased from 14% + 1% per level to 14.25% + 0.75% per level",
+      "target_display_name": "Hoodwink",
+      "field_display_name": "Mistwoods Wayfarer",
+      "source_id": 123,
+      "ability_id": 1423
+    },
+    {
+      "target_type": "hero",
+      "target": "hoodwink",
+      "field": "hoodwink_sharpshooter",
+      "polarity": "nerf",
+      "raw": "Mana Cost increased from 100/150/200 to 150/200/250",
+      "target_display_name": "Hoodwink",
+      "field_display_name": "Sharpshooter",
+      "source_id": 123,
+      "ability_id": 8106
+    },
+    {
+      "target_type": "hero",
+      "target": "hoodwink",
+      "field": "hoodwink_hunters_boomerang",
+      "polarity": "nerf",
+      "raw": "Cooldown increased from 18s to 20s",
+      "target_display_name": "Hoodwink",
+      "field_display_name": "Hunter's Boomerang",
+      "source_id": 123,
+      "ability_id": 1422
+    },
+    {
+      "target_type": "hero",
+      "target": "snapfire",
+      "field": "talent",
+      "polarity": "neutral",
+      "raw": "Level 10 Talent Mortimer Kisses Burn DPS decreased from +35 to +30",
+      "target_display_name": "Snapfire",
+      "source_id": 128
+    },
+    {
+      "target_type": "hero",
+      "target": "snapfire",
+      "field": "talent",
+      "polarity": "neutral",
+      "raw": "Level 15 Talent -3s Firesnap Cookie Cooldown replaced with +125 Cast Range",
+      "target_display_name": "Snapfire",
+      "source_id": 128
+    },
+    {
+      "target_type": "hero",
+      "target": "snapfire",
+      "field": "talent",
+      "polarity": "neutral",
+      "raw": "Level 25 Talent Mortimer Kisses Launched decreased from +8 to +6",
+      "target_display_name": "Snapfire",
+      "source_id": 128
+    },
+    {
+      "target_type": "hero",
+      "target": "snapfire",
+      "field": "snapfire_scatterblast",
+      "polarity": "buff",
+      "raw": "Initial Blast Width is no longer increased by bonuses to AoE",
+      "target_display_name": "Snapfire",
+      "field_display_name": "Scatterblast",
+      "source_id": 128,
+      "ability_id": 6480
+    },
+    {
+      "target_type": "hero",
+      "target": "snapfire",
+      "field": "snapfire_scatterblast",
+      "polarity": "nerf",
+      "raw": "Point Blank Damage Bonus decreased from 30% to 25%",
+      "target_display_name": "Snapfire",
+      "field_display_name": "Scatterblast",
+      "source_id": 128,
+      "ability_id": 6480
+    },
+    {
+      "target_type": "hero",
+      "target": "snapfire",
+      "field": "snapfire_firesnap_cookie",
+      "polarity": "nerf",
+      "raw": "Impact Damage decreased from 75/150/225/300 to 60/130/200/270",
+      "target_display_name": "Snapfire",
+      "field_display_name": "Firesnap Cookie",
+      "source_id": 128,
+      "ability_id": 6483
+    },
+    {
+      "target_type": "hero",
+      "target": "snapfire",
+      "field": "snapfire_mortimer_kisses",
+      "polarity": "nerf",
+      "raw": "Damage per glob decreased from 180/270/360 to 170/250/330",
+      "target_display_name": "Snapfire",
+      "field_display_name": "Mortimer Kisses",
+      "source_id": 128,
+      "ability_id": 6482
+    },
+    {
+      "target_type": "hero",
+      "target": "mars",
+      "field": "intelligence_gain",
+      "polarity": "neutral",
+      "raw": "Intelligence gain increased from 2.2 to 2.4",
+      "target_display_name": "Mars",
+      "source_id": 129
+    },
+    {
+      "target_type": "hero",
+      "target": "ringmaster",
+      "field": "ringmaster_impalement",
+      "polarity": "neutral",
+      "raw": "Damage per Second (Creeps) rescaled from 85/90/95/100 to 60/75/90/105",
+      "target_display_name": "Ringmaster",
+      "field_display_name": "Impalement Arts",
+      "source_id": 131,
+      "ability_id": 386
+    },
+    {
+      "target_type": "hero",
+      "target": "muerta",
+      "field": "muerta_gunslinger",
+      "polarity": "neutral",
+      "raw": "Toggling on/off no longer breaks invisibility",
+      "target_display_name": "Muerta",
+      "field_display_name": "Gunslinger",
+      "source_id": 138,
+      "ability_id": 5753
+    },
+    {
+      "target_type": "hero",
+      "target": "1961",
+      "field": "base_armor",
+      "polarity": "nerf",
+      "raw": "Base Armor decreased by 1",
+      "target_display_name": "1961",
+      "source_id": 1961
+    },
+    {
+      "target_type": "hero",
+      "target": "1961",
+      "field": "lone_druid_spirit_bear_demolish",
+      "polarity": "nerf",
+      "raw": "Bonus Building Damage decreased from 30% to 20%",
+      "target_display_name": "1961",
+      "field_display_name": "Demolish",
+      "source_id": 1961,
+      "ability_id": 1348
+    }
+  ]
+}

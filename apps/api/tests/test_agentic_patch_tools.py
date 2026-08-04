@@ -11,7 +11,7 @@ def test_patch_get_records_reads_latest_patch() -> None:
     )
 
     assert result.status == "ok"
-    assert result.data["patch"] == "7.41d"
+    assert result.data["patch"] == "7.41e"
     assert result.data["change_count"] > 0
 
 

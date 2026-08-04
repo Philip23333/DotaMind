@@ -107,6 +107,50 @@ Within `evidence_graph`, registry minimum evidence is tracked by
 Only plain global missing-evidence kinds can trigger the single bounded Replan;
 per-call missing proof, tool/extractor failures and Critic failures remain terminal.
 
+## Streaming Controller Request
+
+```http
+POST /api/v1/plan/stream
+Content-Type: application/json
+Accept: application/x-ndjson
+```
+
+The request body is the same `PlanRequest` used by `/api/v1/plan`. Validation
+happens before the response starts, so malformed input still receives ordinary
+HTTP 422. A valid request returns `application/x-ndjson`; each UTF-8 line is one
+JSON object and the final line is exactly one `result` or `error` event:
+
+```json
+{"type":"phase","phase":"planning","attempt_index":0}
+{"type":"tool","tool_call_id":"call_1","tool":"stratz.hero_matchup_ranking","attempt_index":0,"status":"running","latency_ms":null,"reused":false,"failure_code":null}
+{"type":"answer_delta","delta":"新增文本","attempt_index":0,"provisional":true}
+{"type":"result","response":{"status":"ok","answer":{},"runtime":{}}}
+```
+
+- `phase` is emitted for planning, tool execution, answer synthesis and critic
+  review.
+- `tool.running` is emitted immediately before a validated tool enters its
+  handler. Reused calls, reference-resolution failures, pre-dispatch runtime
+  gates and handler failures emit only their safe terminal `ok`/`error` event.
+- `answer_delta` is emitted only for the natural-language synthesizer's real
+  upstream model stream. Direct replies and deterministic structured answers
+  wait for the final `result`; no typing simulation is used.
+- `result.response` has the same public response contract as `/api/v1/plan`,
+  including idempotency replay. Once the stream has started, conflicts,
+  SessionStore failures and execution failures use a terminal `error` event
+  because HTTP headers can no longer change.
+
+Events are an allowlist: they never contain tool parameters or results, history,
+prompts, model raw output, secrets, raw exceptions or internal dispatch state.
+Clients should discard provisional deltas unless the final `result.response.status`
+is `ok`; a Critic or execution failure makes the final public response authoritative.
+
+The route sends `Cache-Control: no-cache, no-transform` and
+`X-Accel-Buffering: no`. A reverse proxy in front of the service must also disable
+response buffering for this path, otherwise genuine upstream token deltas will be
+held until completion. This first version intentionally has no reconnect,
+heartbeat, background recovery or cross-page conversation restoration.
+
 ## Debug UI
 
 ```http

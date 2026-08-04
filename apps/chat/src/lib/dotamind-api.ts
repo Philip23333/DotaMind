@@ -2,7 +2,7 @@ import type { ThreadMessage } from "@assistant-ui/react";
 
 const DEFAULT_API_URL = "http://localhost:8001";
 
-type PlanStatus =
+export type PlanStatus =
   | "ok"
   | "clarification_required"
   | "insufficient_context"
@@ -12,10 +12,11 @@ type PlanStatus =
 
 type AnswerItem = Record<string, unknown>;
 
-type PlanResponse = {
+export type PlanResponse = {
   status?: PlanStatus;
   reason?: string;
   error_code?: string | null;
+  runtime?: { duration_ms?: number };
   answer?: {
     summary?: string;
     claims?: AnswerItem[];
@@ -23,6 +24,26 @@ type PlanResponse = {
     limitations?: AnswerItem[];
   } | null;
 };
+
+export type PlanStreamEvent =
+  | {
+      type: "phase";
+      phase: "planning" | "tool_execution" | "answering" | "reviewing";
+      attempt_index: number;
+    }
+  | {
+      type: "tool";
+      tool_call_id: string;
+      tool: string;
+      attempt_index: number;
+      status: "running" | "ok" | "error";
+      latency_ms: number | null;
+      reused: boolean | null;
+      failure_code: string | null;
+    }
+  | { type: "answer_delta"; delta: string; attempt_index: number; provisional: true }
+  | { type: "result"; response: PlanResponse }
+  | { type: "error"; error_code: string; reason: string };
 
 export function getApiUrl(): string {
   return (process.env.NEXT_PUBLIC_DOTAMIND_API_URL ?? DEFAULT_API_URL).replace(
@@ -101,12 +122,24 @@ export function formatPlanResponse(payload: PlanResponse): string {
   return "请求已完成，但服务没有返回可展示的回答。";
 }
 
-export async function askDotaMind(
+export function formatStreamError(errorCode: string, reason: string): string {
+  return `${reason || "请求未能完成，请稍后重试。"}\n\n错误代码：\`${errorCode}\``;
+}
+
+function parseEvent(line: string): PlanStreamEvent {
+  const parsed: unknown = JSON.parse(line);
+  if (!parsed || typeof parsed !== "object" || !("type" in parsed)) {
+    throw new Error("DotaMind API 返回了无效的流事件。");
+  }
+  return parsed as PlanStreamEvent;
+}
+
+export async function* streamDotaMind(
   query: string,
   sessionId: string,
   abortSignal: AbortSignal,
-): Promise<string> {
-  const response = await fetch(`${getApiUrl()}/api/v1/plan`, {
+): AsyncGenerator<PlanStreamEvent> {
+  const response = await fetch(`${getApiUrl()}/api/v1/plan/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -118,19 +151,37 @@ export async function askDotaMind(
     signal: abortSignal,
   });
 
-  let payload: PlanResponse;
-  try {
-    payload = (await response.json()) as PlanResponse;
-  } catch {
-    throw new Error(`DotaMind API 返回了无法解析的响应（HTTP ${response.status}）。`);
-  }
-
   if (!response.ok) {
-    throw new Error(
-      payload.reason?.trim() ||
-        `DotaMind API 请求失败（HTTP ${response.status}）。`,
-    );
+    let reason = `DotaMind API 请求失败（HTTP ${response.status}）。`;
+    try {
+      const payload = (await response.json()) as PlanResponse;
+      reason = payload.reason?.trim() || reason;
+    } catch {
+      // Preserve the safe HTTP-status fallback for non-JSON validation responses.
+    }
+    throw new Error(reason);
   }
 
-  return formatPlanResponse(payload);
+  if (!response.body) {
+    throw new Error("DotaMind API 未返回可读取的流响应。");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    buffer += decoder.decode(value, { stream: !done });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+
+    for (const line of lines) {
+      if (line.trim()) yield parseEvent(line.trim());
+    }
+
+    if (done) break;
+  }
+
+  if (buffer.trim()) yield parseEvent(buffer.trim());
 }

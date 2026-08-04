@@ -6,6 +6,7 @@ from app.agentic.nodes import attempt_finalize_node, response_node
 from app.agentic.nodes.run_finalize import run_finalize_node
 from app.agentic.nodes.run_init import run_init_node
 from app.agentic.runtime.clock import SystemClock
+from app.agentic.runtime.streaming import PhaseStreamEvent, publish_stream_event
 from app.agentic.state import AgentRunState
 from app.application.idempotency import IdempotencyConflictError
 from app.application.plan_service import PlanServiceResult
@@ -168,6 +169,51 @@ def test_plan_route_maps_session_store_error_to_503(monkeypatch) -> None:
 
     assert response.status_code == 503
     assert response.json()["error_code"] == "session_store_error"
+
+
+def test_plan_stream_emits_safe_runtime_events_then_result(monkeypatch) -> None:
+    from app.api.v1 import routes
+
+    class StreamingPlanService(FakePlanService):
+        async def run(self, query, game="dota2", session_id=None, request_id=None):
+            publish_stream_event(PhaseStreamEvent(phase="planning", attempt_index=0))
+            return await super().run(query, game, session_id, request_id)
+
+    monkeypatch.setattr(routes, "_plan_service", lambda _request: StreamingPlanService())
+
+    response = TestClient(app).post("/api/v1/plan/stream", json={"query": "hello"})
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/x-ndjson")
+    events = [line for line in response.text.splitlines() if line]
+    assert len(events) == 2
+    assert '"type":"phase"' in events[0]
+    assert '"phase":"planning"' in events[0]
+    assert '"type":"result"' in events[1]
+    assert '"status":"insufficient_tools"' in events[1]
+    assert "controller_raw_content" not in response.text
+
+
+def test_plan_stream_converts_post_start_conflict_to_error_event(monkeypatch) -> None:
+    from app.api.v1 import routes
+
+    class ConflictPlanService:
+        async def run(self, query, game, session_id, request_id):
+            raise IdempotencyConflictError(query=query, game=game, session_id=str(session_id))
+
+    monkeypatch.setattr(routes, "_plan_service", lambda _request: ConflictPlanService())
+    session_id = "12345678-1234-4234-8234-123456789abc"
+    request_id = "22345678-1234-4234-8234-123456789abc"
+
+    response = TestClient(app).post(
+        "/api/v1/plan/stream",
+        json={"query": "hello", "session_id": session_id, "request_id": request_id},
+    )
+
+    assert response.status_code == 200
+    assert response.text.count("\n") == 1
+    assert '"type":"error"' in response.text
+    assert '"error_code":"idempotency_conflict"' in response.text
 
 
 def test_removed_legacy_routes_return_404() -> None:

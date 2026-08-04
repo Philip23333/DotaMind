@@ -87,3 +87,59 @@
 - 本阶段不包含刷新后的消息恢复、会话列表、服务端流式响应、附件和用户认证；刷新页面
   会创建新会话。
 - `/debug/plan` 继续作为内部运行时调试界面；本轮未修改 V3.2 API 或 Agent Runtime 行为。
+
+## 21:47 — V3.3 真实流式输出与轻量运行信息
+
+### 已完成
+
+- 新增 `POST /api/v1/plan/stream`：同一 `PlanRequest` 通过 POST 返回 NDJSON 的阶段、工具、
+  自然语言回答增量和唯一终态事件；已有 `/api/v1/plan` 不绑定流发布器，保持原有响应行为。
+- 以请求级 `ContextVar` 在后台 `PlanService.run()` Task 创建前绑定安全事件发布器；Graph、
+  工具节点和自然语言答案节点只发布 allowlist 字段。工具仅在通过校验、实际进入 handler 前
+  显示运行中；复用、引用解析、预调度阻断和 handler 失败均提供安全终态。
+- OpenAI-compatible Provider 使用上游 SSE `stream: true` 逐增量读取并累计完整摘要供原有
+  Critic 流程使用；直接回答和确定性结构化回答不伪造 token 流。
+- 聊天前端将 LocalRuntime 适配器改为异步生成器，跨网络 chunk 解析 NDJSON 并累计临时正文；
+  收到正式 `result` 后以公开响应替换正文，失败、取消或未通过核验时不保留临时文本。
+- 新增每消息聚合运行卡：显示“分析问题 → 使用工具 → 整理回答 → 核验依据”、中文工具名与
+  状态；运行中展开，成功后自动折叠，失败或取消保持展开。
+- 更新 API、架构和聊天应用文档，明确 NDJSON 协议、事件隐私 allowlist、无重连等非目标和
+  反向代理必须关闭该路径响应缓冲的要求。
+
+### 已验证
+
+- `apps/api/.venv/Scripts/python.exe -m ruff check app tests`：通过。
+- `apps/api/.venv/Scripts/python.exe -m pytest tests/test_plan_route.py tests/test_agentic_answer.py tests/test_agentic_recovery.py tests/test_agentic_runtime.py -q`：`74 passed`。
+- `apps/api/.venv/Scripts/python.exe -m pytest -q`：`465 passed, 14 skipped`（另有既有的 FastAPI TestClient 弃用警告）。
+- `apps/chat`：`npm run lint` 与 `npm run build` 均通过。
+
+### 边界
+
+- 第一阶段不提供断线重连、心跳、后台恢复、跨页面会话历史或单独逐工具卡片。
+- 仅自然语言 synthesizer 可在 Critic 前以“生成中 · 待核验”展示真实增量；最终公开响应是唯一
+  正式答案，Critic 或执行失败会撤回临时正文。
+
+## 21:55 — 7.41e 官方补丁快照
+
+### 已完成
+
+- 通过现有离线同步脚本直接读取 Valve 官方 Dota 2 datafeed，新增
+  `apps/api/app/data/patches/7_41e.json`。
+- 生成的 schema v1 快照记录 7.41e 发布时间 `2026-07-30T07:00:00Z` 和 151 条变更：
+  2 条通用、31 条普通物品、5 条中立物品、3 条附魔、110 条英雄变更。
+- 同步脚本同时检查了官方英雄列表；仍为 127 个英雄，已提交的英雄快照没有实际差异。
+- 将补丁工具的 latest 版本断言从 7.41d 更新为 7.41e；运行时仍只读取已审查的本地快照，
+  不在请求链路访问官网。
+
+### 已验证
+
+- JSON 结构、必填变更字段、polarity 枚举和 151 条记录均通过断言；`load_patch("latest")`
+  正确返回 7.41e。
+- `uv run pytest tests/test_agentic_patch_tools.py -q`：`4 passed`。
+- `uv run ruff check tests/test_agentic_patch_tools.py scripts/sync_game_data.py app/integrations/patch_notes.py`：通过。
+
+### 边界
+
+- polarity 延续现有保守规则分类；方向不明确的官方文本保留为 `neutral`，未引入人工改写。
+- Valve 列表无法为部分中立物品/附魔 ID 和实体 `1961` 提供名称；与 7.41d 相同，快照保留
+  `neutral_<id>` 或数字 target 及官方原文，不用人工映射掩盖上游缺口。
