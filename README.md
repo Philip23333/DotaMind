@@ -25,6 +25,7 @@ and the [v2.5 architecture foundation](docs/design/versions/DotaMind_MVP_v2.5.md
 ```text
 apps/
   api/        FastAPI service, agentic workflow, tests, and `/debug/plan` UI
+  chat/       assistant-ui client for the public `/api/v1/plan` conversation path
 docs/
   design/     Version blueprints, architecture, tool designs, and roadmaps
   technical/  API, configuration, and provider reference material
@@ -40,15 +41,23 @@ python -m pip install -e ".[dev]"
 python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8001 --log-level info
 ```
 
-The API uses port `8001` and fails when the port is already occupied.
+The API uses port `8001` and fails when the port is already occupied. In a
+second terminal, start the minimal chat client:
+
+```bash
+cd apps/chat
+npm install
+npm run dev
+```
 
 Useful local pages:
 
 - `http://localhost:8001/docs`
 - `http://localhost:8001/debug/plan`
+- `http://localhost:3000` for the assistant-ui chat client
 
-There is no separate frontend application. Use `/debug/plan` as the internal
-query test UI.
+The chat client calls only `POST /api/v1/plan`; it does not host a model or a
+parallel Agent Runtime. Use `/debug/plan` for internal plan/runtime inspection.
 
 ## Current API
 

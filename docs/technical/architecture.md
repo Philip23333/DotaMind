@@ -220,9 +220,23 @@ durations and timeout observation use an injectable monotonic clock. V3.2-3
 blocks not-yet-started business nodes and handlers after deadline while allowing
 attempt/recovery/run/response closure.
 
+## Chat Frontend
+
+`apps/chat` is a minimal Next.js and assistant-ui client for the existing
+`POST /api/v1/plan` contract. Its custom LocalRuntime adapter sends only the
+latest user query with one page-scoped UUID v4 `session_id` and a fresh UUID v4
+`request_id`. The API remains responsible for conversation memory, planning,
+tool execution, evidence and answer generation.
+
+The frontend does not introduce another model endpoint, a fallback runtime, or
+a legacy compatibility route. It currently keeps assistant-ui message state in
+the browser for the lifetime of the page; durable thread listing/history,
+streaming and authentication remain outside this minimal slice.
+
 ## Debugging
 
 Use `http://localhost:8001/debug/plan`. It shows the Run, budget, one or two
 Attempts, Controller decision, final plan, required-evidence sources, tools,
 EvidenceGraph, answer, critic and timed trace.
-The legacy frontend has been deleted and must not be recreated.
+The legacy frontend remains deleted; `apps/chat` is the new V3.3 client for the
+single agentic API path, not a restored compatibility frontend.
