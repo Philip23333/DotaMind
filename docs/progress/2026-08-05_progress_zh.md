@@ -431,6 +431,23 @@
 
 - 后端已能独立完成 Run 创建、状态查询、事件观察和取消请求；观察连接不拥有任务生命周期；旧路径尚未删除，下一阶段切入前端 Run Store。
 
+## 23:59 — V3.3-2 D1 浏览器级 Run Store
+
+### 已完成
+
+- 新增 `chat-run-store.ts` reducer：以 `run_id` 为 Run 身份、以 `activeRunIdBySession` 快速索引 session active Run，处理 phase/tool/delta/result/status/heartbeat/recovery 事件。
+- 每次事件都校验 Run ID、session ID 和严格递增 sequence；迟到、重复、跨 session 事件直接丢弃。
+- 新增 `ChatRunProvider`、`useChatRun`、`useSessionLoader` 并接入根布局；session loader 会把 transcript 返回的 active Run 注册到全局 Store。
+
+### 已验证
+
+- `apps/chat`: `npm run lint`、`npm run build` 均通过。
+- `git diff --check`：通过。
+
+### 边界
+
+- D1 只建立状态层和恢复入口，未改变消息发送、订阅、切换竞争、停止按钮或旧 stateful API；这些属于 D2-D7。
+
 ## 16:39 — 避免会话切换空状态闪现
 
 - 右侧聊天 runtime 重新挂载后先渲染一次空消息状态，导致“新聊天”界面闪现；现由 `ChatSessionRuntime` 在挂载完成后通知父组件，再关闭右侧 loading 遮罩。

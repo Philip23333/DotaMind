@@ -380,6 +380,23 @@
 ### Stage C conclusion
 
 - The backend independently supports Run creation, state queries, event observation, and cancel requests; observer connections do not own task lifetime. The old path is not removed, and the next stage introduces the browser-level Run Store.
+
+## 23:59 — V3.3-2 D1 browser-level Run Store
+
+### Completed
+
+- Added `chat-run-store.ts` reducer: `run_id` is the Run identity and `activeRunIdBySession` indexes each session’s active Run; phase/tool/delta/result/status/heartbeat/recovery events are reduced into UI state.
+- Every event validates Run ID, session ID, and strictly increasing sequence; late, duplicate, and cross-session events are discarded.
+- Added `ChatRunProvider`, `useChatRun`, and `useSessionLoader`, wired into the root layout; the session loader registers transcript-provided active Runs in the global Store.
+
+### Verified
+
+- `apps/chat`: `npm run lint` and `npm run build` passed.
+- `git diff --check`: passed.
+
+### Boundary
+
+- D1 establishes state and recovery entry points only; message sending, subscriptions, switch races, stop controls, and the old stateful API remain for D2-D7.
 - A running FastAPI instance passed a real session CRUD smoke test: create, isolated list, rename,
   cross-browser 404 and delete.
 
