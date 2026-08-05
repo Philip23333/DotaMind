@@ -121,7 +121,7 @@ async def delete_session(
     if not x_dotamind_browser_id:
         return _error("browser_id_required", "browser identity is required", 422)
     try:
-        store = request.app.state.plan_service.session_store
+        store = request.app.state.session_store
         async with store.transaction(str(session_id)):
             # Validate that this task still owns the coordination lease before
             # touching PostgreSQL. The lock is released by normal context exit.

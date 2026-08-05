@@ -1,6 +1,6 @@
 from typing import Any, Literal
 
-from pydantic import UUID4, BaseModel, ConfigDict, Field, model_validator
+from pydantic import UUID4, BaseModel, ConfigDict, Field
 
 SupportedGame = Literal["dota2"]
 RuntimeStage = Literal[
@@ -17,19 +17,10 @@ RuntimeStage = Literal[
 
 
 class PlanRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     query: str = Field(min_length=1, max_length=2000)
     game: SupportedGame = "dota2"
-    # Provide a UUID v4 to enable multi-turn session memory.
-    # Omit (or pass null) for stateless single-turn mode.
-    session_id: UUID4 | None = None
-    # A request key is supported only for stateful requests in V3.2-4.
-    request_id: UUID4 | None = None
-
-    @model_validator(mode="after")
-    def require_session_for_request_id(self) -> "PlanRequest":
-        if self.request_id is not None and self.session_id is None:
-            raise ValueError("request_id requires session_id")
-        return self
 
 
 class StrictPublicModel(BaseModel):

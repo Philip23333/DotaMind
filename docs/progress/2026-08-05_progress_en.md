@@ -547,6 +547,28 @@
 - `uv run ruff check app tests`: passed.
 - `apps/chat`: `npm run lint` and `npm run build`: passed.
 
+## 23:59 — V3.3-2 D7 remove the old stateful `/plan` path
+
+### Completed
+
+- `PlanRequest` now accepts only `query` and `game`; public `/plan` and `/plan/stream` reject stateful fields such as `session_id` and `request_id`.
+- `/plan` and `/plan/stream` call only stateless `PlanService.run(query, game)`; route-level browser/session/idempotency error mapping and legacy call arguments were removed.
+- Removed the old PostgreSQL chat branch from `PlanService`; production multi-turn execution now goes through `ChatRunExecutor` via the Chat Run API, while SessionStore is mounted independently for chat-CRUD deletion coordination.
+- Updated plan-route regression tests to freeze the stateless-only input boundary and NDJSON debug stream behavior.
+
+### Verified
+
+- `uv run ruff check app tests`: passed.
+- `uv run pytest -q tests/test_plan_route.py tests/test_plan_service.py`: `18 passed`.
+- Full `uv run pytest -q`: `488 passed, 20 skipped, 1 warning` (the existing FastAPI TestClient deprecation warning).
+- `apps/chat`: `npm run lint` and `npm run build` passed.
+- `git diff --check`: passed.
+
+### Boundary
+
+- PlanService retains only the non-PostgreSQL in-memory unit-test helper; formal chat sending, recovery, cancellation and persistence no longer pass through `/plan`.
+- D8 will run the full backend/frontend regression and final multi-Run contract acceptance; E is not implemented.
+
 ## 16:39 — Preventing the empty-state flash on chat switching
 
 - The right chat runtime rendered one empty-message frame after remount, briefly showing the “new chat” state; `ChatSessionRuntime` now notifies the parent after mounting before the right-side loading overlay is removed.

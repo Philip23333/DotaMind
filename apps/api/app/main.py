@@ -77,10 +77,8 @@ async def lifespan(app: FastAPI):
 
     app.state.chat_repository = PostgresChatRepository(database.session_factory)
     app.state.chat_run_repository = PostgresChatRunRepository(database.session_factory)
-    app.state.plan_service = PlanService(
-        session_store=store,
-        chat_repository=app.state.chat_repository,
-    )
+    app.state.session_store = store
+    app.state.plan_service = PlanService()
     run_event_bus = None
     run_manager = None
     run_sweeper = None

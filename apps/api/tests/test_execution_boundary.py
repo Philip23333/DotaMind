@@ -175,7 +175,7 @@ def test_route_maps_unhandled_agent_error_to_safe_500() -> None:
 
     async def scenario():
         return await plan(
-            PlanRequest(query="query", session_id=uuid4(), request_id=uuid4()), request
+            PlanRequest(query="query"), request
         )
 
     response = asyncio.run(scenario())
@@ -195,7 +195,7 @@ def test_route_maps_plain_exception_to_the_same_safe_500() -> None:
     )
 
     response = asyncio.run(
-        plan(PlanRequest(query="query", session_id=uuid4(), request_id=uuid4()), request)
+        plan(PlanRequest(query="query"), request)
     )
 
     assert response.status_code == 500
@@ -216,7 +216,7 @@ def test_route_maps_public_response_validation_failure_to_safe_500() -> None:
     )
 
     response = asyncio.run(
-        plan(PlanRequest(query="query", session_id=uuid4(), request_id=uuid4()), request)
+        plan(PlanRequest(query="query"), request)
     )
 
     assert response.status_code == 500
@@ -234,7 +234,7 @@ def test_route_does_not_convert_cancellation_to_http_500() -> None:
 
     with pytest.raises(asyncio.CancelledError):
         asyncio.run(
-            plan(PlanRequest(query="query", session_id=uuid4(), request_id=uuid4()), request)
+            plan(PlanRequest(query="query"), request)
         )
 
 

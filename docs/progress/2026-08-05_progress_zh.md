@@ -572,3 +572,25 @@
 - PostgreSQL + Redis 专项测试：`3 passed`。
 - `uv run ruff check app tests`：通过。
 - `apps/chat`：`npm run lint` 与 `npm run build`：通过。
+
+## 23:59 — V3.3-2 D7 删除旧 stateful `/plan` 路径
+
+### 已完成
+
+- `PlanRequest` 现在只允许 `query` 与 `game`，`session_id`、`request_id` 等有状态字段由公开 `/plan`、`/plan/stream` 请求直接拒绝。
+- `/plan` 与 `/plan/stream` 只调用无状态 `PlanService.run(query, game)`；移除路由层 browser/session/idempotency 错误映射和旧 stateful 调用参数。
+- 删除 `PlanService` 旧 PostgreSQL chat branch；生产多轮运行统一由 `ChatRunExecutor` 通过 Chat Run API 执行，SessionStore 独立挂载给聊天 CRUD 删除协调使用。
+- 更新 plan route 回归，固定 stateless-only 输入边界和 NDJSON 调试流行为。
+
+### 已验证
+
+- `uv run ruff check app tests`：通过。
+- `uv run pytest -q tests/test_plan_route.py tests/test_plan_service.py`：`18 passed`。
+- 全量 `uv run pytest -q`：`488 passed, 20 skipped, 1 warning`（既有 FastAPI TestClient 弃用警告）。
+- `apps/chat`：`npm run lint`、`npm run build` 均通过。
+- `git diff --check`：通过。
+
+### 边界
+
+- PlanService 中仅保留无 PostgreSQL 的 in-memory unit-test helper；正式聊天发送、恢复、取消与持久化均不再经过 `/plan`。
+- D8 将进行全量后端/前端回归与最终多 Run 合同验收；E 尚未实现。
