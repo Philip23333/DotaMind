@@ -214,6 +214,24 @@
 - `uv run ruff check app tests`：通过。
 - `apps/chat`：`npm run lint` 与 `npm run build`：通过。
 
+## 18:58 — V3.3-2 B4 BackgroundRunManager
+
+### 已完成
+
+- 新增 `BackgroundRunManager`，以 `DOTAMIND_MAX_CONCURRENT_CHAT_RUNS` 对单个 API worker 的后台 Run 任务施加并发上限；不同 Run 使用独立 asyncio task，不共享执行状态。
+- 支持重复 Run 拒绝、worker 关闭后拒绝新提交、定向取消和统一 shutdown；shutdown 只通过回调通知持久化层收口，不直接改变 PostgreSQL 状态。
+- 任务异常被记录到 worker-local failure 账本，避免后台 task 异常丢失；数据库权威状态与跨 worker 协调留给后续 B5-B7。
+
+### 已验证
+
+- `uv run ruff check app tests`：通过。
+- `tests/test_background_run_manager.py`：`3 passed`，覆盖 per-worker 并发槽位、定向取消、shutdown 和重复提交。
+- `git diff --check`：通过。
+
+### 边界
+
+- B4 仅建立 worker-local 生命周期管理，尚未接入 Graph 执行、Run Repository、Redis cancel listener 或 HTTP API；这些属于 B5-B8。
+
 ## 16:39 — 避免会话切换空状态闪现
 
 - 右侧聊天 runtime 重新挂载后先渲染一次空消息状态，导致“新聊天”界面闪现；现由 `ChatSessionRuntime` 在挂载完成后通知父组件，再关闭右侧 loading 遮罩。

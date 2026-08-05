@@ -163,6 +163,24 @@
 - `uv run ruff check app tests`: passed.
 - `uv run pytest -q`: `465 passed, 15 skipped`; the existing FastAPI TestClient deprecation warning remains.
 - `apps/chat`: `npm run lint` and `npm run build` passed.
+
+## 18:58 — V3.3-2 B4 BackgroundRunManager
+
+### Completed
+
+- Added `BackgroundRunManager`, applying `DOTAMIND_MAX_CONCURRENT_CHAT_RUNS` as a per-API-worker cap; each Run owns an independent asyncio task and execution state.
+- Added duplicate Run rejection, shutdown admission control, targeted cancellation, and coordinated worker shutdown; shutdown only notifies the persistence layer through a callback and does not mutate PostgreSQL directly.
+- Background task failures are retained in a worker-local failure ledger so detached exceptions are not lost; durable state and cross-worker coordination remain for B5-B7.
+
+### Verified
+
+- `uv run ruff check app tests`: passed.
+- `tests/test_background_run_manager.py`: `3 passed`, covering per-worker concurrency slots, targeted cancellation, shutdown, and duplicate submission.
+- `git diff --check`: passed.
+
+### Boundary
+
+- B4 establishes worker-local lifecycle management only. Graph execution, the Run Repository, Redis cancellation listening, and HTTP APIs remain in B5-B8.
 - A running FastAPI instance passed a real session CRUD smoke test: create, isolated list, rename,
   cross-browser 404 and delete.
 

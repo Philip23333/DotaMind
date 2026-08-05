@@ -1,6 +1,6 @@
 # DotaMind V3.3-2：多聊天并行运行与断线恢复
 
-> 状态：阶段 A 已完成；B1-B3 已完成；B4-B8、C-E 尚未实现。
+> 状态：阶段 A 已完成；B1-B4 已完成；B5-B8、C-E 尚未实现。
 >
 > 本阶段建立在 V3.3-1 的 PostgreSQL 聊天记录、Redis SessionStore lease/fencing 和
 > V3.2 Run/Attempt/Budget 运行时之上。本文是本阶段实现的边界和验收合同。
