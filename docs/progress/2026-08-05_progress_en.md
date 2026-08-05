@@ -431,6 +431,23 @@
 ### Boundary
 
 - D3 does not yet handle selection-sequence races across simultaneous session switches, Stop/cancel, unread counts, or deletion of the old stateful path.
+
+## 23:59 — V3.3-2 D4 switch-race protection
+
+### Completed
+
+- `activateSession()` now owns `detailsAbortController`, `selectionSequence`, and `requestedSessionId`; a new selection aborts stale detail/Run metadata requests.
+- Every detail and active-Run response validates sequence, requested session, and AbortSignal before writing UI state, so late responses cannot overwrite the current chat.
+- Switching keeps the sidebar mounted with a right-side loading overlay and never cancels the backend Run.
+
+### Verified
+
+- `apps/chat`: `npm run lint` and `npm run build` passed without warnings.
+- `git diff --check`: passed.
+
+### Boundary
+
+- D4 protects detail-loading races; unified subscription abort, Stop/cancel, unread counts, and deletion of the old path remain in D5-D7.
 - A running FastAPI instance passed a real session CRUD smoke test: create, isolated list, rename,
   cross-browser 404 and delete.
 

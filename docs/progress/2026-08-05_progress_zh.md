@@ -482,6 +482,23 @@
 
 - D3 尚未处理同一时间多 session 切换的选择序列竞争、Stop/cancel、未读计数和旧 stateful 路径删除。
 
+## 23:59 — V3.3-2 D4 切换竞争保护
+
+### 已完成
+
+- `activateSession()` 增加 `detailsAbortController`、`selectionSequence` 和 `requestedSessionId`；新选择会 abort 旧详情/Run 元数据请求。
+- 所有详情和 active Run 响应在写入 UI 前校验 sequence、requested session 和 AbortSignal，迟到响应不会覆盖当前聊天。
+- 切换仍保持 sidebar 挂载和右侧局部 loading overlay，后端 Run 不因切换而取消。
+
+### 已验证
+
+- `apps/chat`: `npm run lint`、`npm run build` 均通过且无 warning。
+- `git diff --check`：通过。
+
+### 边界
+
+- D4 保护详情加载竞争；详细事件订阅的统一 abort、Stop/cancel、未读计数和旧路径删除继续由 D5-D7 完成。
+
 ## 16:39 — 避免会话切换空状态闪现
 
 - 右侧聊天 runtime 重新挂载后先渲染一次空消息状态，导致“新聊天”界面闪现；现由 `ChatSessionRuntime` 在挂载完成后通知父组件，再关闭右侧 loading 遮罩。

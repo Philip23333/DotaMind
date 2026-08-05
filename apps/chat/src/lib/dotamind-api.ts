@@ -167,9 +167,11 @@ export async function createChatSession(browserId: string): Promise<ChatSessionS
 export async function getChatSession(
   browserId: string,
   sessionId: string,
+  signal?: AbortSignal,
 ): Promise<ChatSessionResponse> {
   const response = await fetch(`${getApiUrl()}/api/v1/chat/sessions/${sessionId}`, {
     headers: browserHeaders(browserId),
+    signal,
   });
   if (!response.ok) throw await readResponseError(response);
   return (await response.json()) as ChatSessionResponse;

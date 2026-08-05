@@ -66,9 +66,14 @@ export async function createChatRun(
   return ((await response.json()) as ChatRunCreateResponse).run;
 }
 
-export async function getChatRun(browserId: string, runId: string): Promise<ChatRunSummary> {
+export async function getChatRun(
+  browserId: string,
+  runId: string,
+  signal?: AbortSignal,
+): Promise<ChatRunSummary> {
   const response = await fetch(`${apiUrl()}/api/v1/chat/runs/${runId}`, {
     headers: headers(browserId),
+    signal,
   });
   await ensureOk(response);
   return (await response.json()) as ChatRunSummary;

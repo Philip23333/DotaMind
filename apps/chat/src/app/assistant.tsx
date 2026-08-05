@@ -34,7 +34,15 @@ import {
   type ChatSessionSummary,
 } from "@/lib/dotamind-api";
 import { createChatRun, getChatRun, subscribeChatRun } from "@/lib/chat-run-api";
-import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import { MenuIcon } from "lucide-react";
 
 const finalRunStatus = (status: string | undefined): RuntimeInfo["status"] =>
@@ -54,19 +62,35 @@ export const Assistant = () => {
   const [loading, setLoading] = useState(true);
   const [sessionLoading, setSessionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const selectionSequence = useRef(0);
+  const detailsAbortController = useRef<AbortController | null>(null);
+  const requestedSessionId = useRef<string | null>(null);
   const { registerRun } = useChatRunStore();
 
   const activateSession = useCallback(
     async (sessionId: string) => {
+      const sequence = selectionSequence.current + 1;
+      selectionSequence.current = sequence;
+      requestedSessionId.current = sessionId;
+      detailsAbortController.current?.abort();
+      const controller = new AbortController();
+      detailsAbortController.current = controller;
       setSessionLoading(true);
       setError(null);
       setRuntimeRuns({});
       setRecoveredRun(null);
       try {
-        const session = await getChatSession(browserId, sessionId);
+        const session = await getChatSession(browserId, sessionId, controller.signal);
         const active = session.session.active_run
-          ? await getChatRun(browserId, session.session.active_run.run_id).catch(() => null)
+          ? await getChatRun(browserId, session.session.active_run.run_id, controller.signal).catch(() => null)
           : null;
+        if (
+          controller.signal.aborted ||
+          sequence !== selectionSequence.current ||
+          requestedSessionId.current !== sessionId
+        ) {
+          return;
+        }
         if (active) registerRun(active);
         setRecoveredRun(active);
         setInitialMessages([
@@ -76,8 +100,13 @@ export const Assistant = () => {
         setActiveSessionId(sessionId);
         storeActiveSessionId(sessionId);
       } catch (cause) {
+        if (controller.signal.aborted || sequence !== selectionSequence.current) return;
         setError(cause instanceof Error ? cause.message : "无法加载聊天记录。");
         setSessionLoading(false);
+      } finally {
+        if (sequence === selectionSequence.current && !controller.signal.aborted) {
+          setSessionLoading(false);
+        }
       }
     },
     [browserId, registerRun],
