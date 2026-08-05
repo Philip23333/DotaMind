@@ -10,6 +10,7 @@ from app.application.background_run_manager import (
     RunAlreadyManagedError,
     RunManagerClosedError,
 )
+from app.application.run_event_bus import RunCancelNotification
 
 
 def test_manager_enforces_per_worker_concurrency_and_preserves_distinct_runs() -> None:
@@ -86,6 +87,42 @@ def test_manager_rejects_duplicate_active_run() -> None:
             await manager.submit(run_id, release.wait)
         await manager.cancel(run_id)
         assert task.cancelled()
+
+    asyncio.run(scenario())
+
+
+def test_manager_cancel_listener_targets_only_matching_worker() -> None:
+    async def scenario() -> None:
+        notifications: asyncio.Queue[RunCancelNotification | None] = asyncio.Queue()
+
+        async def subscriber():
+            while True:
+                notification = await notifications.get()
+                if notification is None:
+                    return
+                yield notification
+
+        manager = BackgroundRunManager(
+            max_concurrent_runs=1,
+            worker_id="worker-a",
+            cancel_subscriber=subscriber,
+        )
+        run_id = uuid4()
+        release = asyncio.Event()
+        task = await manager.submit(run_id, release.wait)
+        await manager.start()
+        await notifications.put(
+            RunCancelNotification(run_id=run_id, target_worker_id="worker-b")
+        )
+        await asyncio.sleep(0.01)
+        assert not task.cancelled()
+        await notifications.put(
+            RunCancelNotification(run_id=run_id, target_worker_id="worker-a")
+        )
+        await asyncio.sleep(0.01)
+        await asyncio.gather(task, return_exceptions=True)
+        assert task.cancelled()
+        await manager.shutdown()
 
     asyncio.run(scenario())
 

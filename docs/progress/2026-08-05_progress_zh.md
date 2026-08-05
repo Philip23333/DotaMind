@@ -250,6 +250,23 @@
 
 - B5 提供后台 Graph 执行闭环，但尚未接入 Manager 的 cancel listener/heartbeat/reconciliation，也尚未开放 C 阶段 HTTP API。
 
+## 19:47 — V3.3-2 B6 取消和异常内部语义
+
+### 已完成
+
+- `BackgroundRunManager` 增加可选 Redis cancel listener：只处理目标为当前 worker 或无目标的通知，跨 worker 通过 Pub/Sub 加速本地 task.cancel()，不把 Redis 当作状态权威。
+- `ChatRunExecutor` 捕获任务取消后先尝试 `mark_cancelled()`；只有 PostgreSQL 已记录 `cancel_requested` 时进入 `cancelled`，否则按 worker 中断进入 `interrupted`。
+- Graph 未捕获异常进入 `failed` 并只写稳定 `execution_error`；后台 listener 异常被消费并记录，不产生内存 fallback。
+
+### 已验证
+
+- `uv run ruff check app tests`：通过。
+- `tests/test_background_run_manager.py tests/test_chat_run_executor.py`：`7 passed`，覆盖目标 worker 过滤、定向取消、取消/中断判定和失败收口。
+
+### 边界
+
+- B6 尚未加入 heartbeat 周期检查、stale sweeper、重启恢复和 C 阶段公开取消 API；这些属于 B7/C 阶段。
+
 ## 16:39 — 避免会话切换空状态闪现
 
 - 右侧聊天 runtime 重新挂载后先渲染一次空消息状态，导致“新聊天”界面闪现；现由 `ChatSessionRuntime` 在挂载完成后通知父组件，再关闭右侧 loading 遮罩。

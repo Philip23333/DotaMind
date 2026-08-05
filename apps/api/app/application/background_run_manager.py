@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from uuid import UUID, uuid4
+
+from app.application.run_event_bus import RunCancelNotification
 
 RunCallable = Callable[[], Awaitable[None]]
 ShutdownCallback = Callable[[UUID], Awaitable[None]]
+CancelSubscriber = Callable[[], AsyncIterator[RunCancelNotification]]
 
 
 class BackgroundRunManagerError(RuntimeError):
@@ -37,6 +40,7 @@ class BackgroundRunManager:
         max_concurrent_runs: int,
         worker_id: str | None = None,
         on_shutdown: ShutdownCallback | None = None,
+        cancel_subscriber: CancelSubscriber | None = None,
     ) -> None:
         if max_concurrent_runs < 1:
             raise ValueError("max_concurrent_runs must be at least 1")
@@ -44,8 +48,11 @@ class BackgroundRunManager:
         self.max_concurrent_runs = max_concurrent_runs
         self._semaphore = asyncio.Semaphore(max_concurrent_runs)
         self._on_shutdown = on_shutdown
+        self._cancel_subscriber = cancel_subscriber
         self._tasks: dict[UUID, asyncio.Task[None]] = {}
         self._failures: dict[UUID, BaseException] = {}
+        self._listener_failure: BaseException | None = None
+        self._listener_task: asyncio.Task[None] | None = None
         self._lock = asyncio.Lock()
         self._accepting = True
         self._logger = logging.getLogger(__name__)
@@ -65,6 +72,20 @@ class BackgroundRunManager:
     @property
     def failures(self) -> dict[UUID, BaseException]:
         return dict(self._failures)
+
+    @property
+    def listener_failure(self) -> BaseException | None:
+        return self._listener_failure
+
+    async def start(self) -> None:
+        """Start the optional Redis cancellation listener for this worker."""
+
+        if self._cancel_subscriber is None or self._listener_task is not None:
+            return
+        self._listener_task = asyncio.create_task(
+            self._listen_for_cancellations(),
+            name=f"run-cancel-listener:{self.worker_id}",
+        )
 
     async def submit(self, run_id: UUID, runner: RunCallable) -> asyncio.Task[None]:
         """Schedule one Run and return its task for optional observation."""
@@ -103,7 +124,14 @@ class BackgroundRunManager:
             for _, task in tasks:
                 task.cancel()
 
+            listener = self._listener_task
+            if listener is not None:
+                listener.cancel()
+
         await asyncio.gather(*(task for _, task in tasks), return_exceptions=True)
+        if listener is not None:
+            await asyncio.gather(listener, return_exceptions=True)
+            self._listener_task = None
         if self._on_shutdown is not None:
             await asyncio.gather(
                 *(self._on_shutdown(run_id) for run_id, _ in tasks),
@@ -131,6 +159,26 @@ class BackgroundRunManager:
                 "background Run failed",
                 extra={"run_id": str(run_id)},
                 exc_info=(type(failure), failure, failure.__traceback__),
+            )
+
+    async def _listen_for_cancellations(self) -> None:
+        assert self._cancel_subscriber is not None
+        try:
+            async for notification in self._cancel_subscriber():
+                if (
+                    notification.target_worker_id is not None
+                    and notification.target_worker_id != self.worker_id
+                ):
+                    continue
+                await self.cancel(notification.run_id)
+        except asyncio.CancelledError:
+            raise
+        except BaseException as exc:
+            self._listener_failure = exc
+            self._logger.error(
+                "background Run cancellation listener failed",
+                extra={"worker_id": self.worker_id},
+                exc_info=(type(exc), exc, exc.__traceback__),
             )
 
 

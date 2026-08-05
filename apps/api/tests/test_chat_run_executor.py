@@ -13,7 +13,7 @@ from app.application.chat_run_executor import (
     ChatRunExecutionRequest,
     ChatRunExecutor,
 )
-from app.application.chat_run_repository import ChatRunSummary
+from app.application.chat_run_repository import ChatRunRepositoryError, ChatRunSummary
 from app.application.run_event_bus import StoredRunEvent
 
 
@@ -101,6 +101,50 @@ def test_chat_run_executor_marks_failed_graph_without_writing_a_turn() -> None:
     asyncio.run(scenario())
 
 
+def test_chat_run_executor_maps_task_cancel_to_interrupted_without_cancel_request() -> None:
+    async def scenario() -> None:
+        run_id = uuid4()
+        session_id = uuid4()
+        calls: list[str] = []
+        runner = BlockingRunner()
+        run_repository = FakeRunRepository(
+            calls=calls,
+            run_id=run_id,
+            session_id=session_id,
+            cancel_requested=False,
+        )
+        executor = ChatRunExecutor(
+            runner=runner,
+            run_repository=run_repository,
+            chat_repository=FakeChatRepository(calls=calls),
+            session_store=FakeSessionStore(),
+            event_bus=FakeEventBus([], calls),
+            worker_id="worker-a",
+            history_limit=8,
+            build_turn=lambda state: Turn(query=state.query),
+            build_response=lambda state, sid: {},
+        )
+        task = asyncio.create_task(
+            executor.execute(
+                ChatRunExecutionRequest(
+                    run_id=run_id,
+                    browser_id="browser-a",
+                    session_id=session_id,
+                    request_id=uuid4(),
+                    query="cancel",
+                    game="dota2",
+                )
+            )
+        )
+        await runner.started.wait()
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        assert "interrupted" in calls
+        assert "cancelled" not in calls
+
+    asyncio.run(scenario())
+
+
 class FakeRunner:
     def __init__(self, *, calls: list[str], failure: Exception | None = None) -> None:
         self.calls = calls
@@ -115,6 +159,17 @@ class FakeRunner:
         state.response = {"answer": "done"}
         state.status = "ok"
         self.state_ids.append(state.internal_run_id)
+        return state
+
+
+class BlockingRunner(FakeRunner):
+    def __init__(self) -> None:
+        super().__init__(calls=[])
+        self.started = asyncio.Event()
+
+    async def run(self, state: AgentRunState) -> AgentRunState:
+        self.started.set()
+        await asyncio.Event().wait()
         return state
 
 
@@ -162,6 +217,7 @@ class FakeRunRepository:
     calls: list[str]
     run_id: object
     session_id: object
+    cancel_requested: bool = True
     completed: ChatRunSummary | None = None
 
     async def mark_running(self, **kwargs) -> ChatRunSummary:
@@ -180,6 +236,12 @@ class FakeRunRepository:
     async def mark_interrupted(self, **kwargs) -> ChatRunSummary:
         self.calls.append("interrupted")
         return self._summary("interrupted")
+
+    async def mark_cancelled(self, **kwargs) -> ChatRunSummary:
+        if not self.cancel_requested:
+            raise ChatRunRepositoryError("not_requested")
+        self.calls.append("cancelled")
+        return self._summary("cancelled")
 
     def _summary(self, status: str) -> ChatRunSummary:
         return ChatRunSummary(

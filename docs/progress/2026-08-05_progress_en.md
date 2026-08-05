@@ -199,6 +199,23 @@
 ### Boundary
 
 - B5 provides the background Graph execution loop but does not yet connect Manager cancellation listeners, heartbeat/reconciliation, or the C-stage HTTP API.
+
+## 19:47 — V3.3-2 B6 cancellation and failure semantics
+
+### Completed
+
+- `BackgroundRunManager` now supports an optional Redis cancellation listener: it handles only notifications targeted to the current worker (or broadcast notices), using Pub/Sub to accelerate local `task.cancel()` without treating Redis as the authority.
+- `ChatRunExecutor` handles task cancellation by attempting `mark_cancelled()` first; only a PostgreSQL `cancel_requested` state becomes `cancelled`, while other worker cancellation becomes `interrupted`.
+- Unhandled Graph exceptions become `failed` with stable `execution_error`; listener failures are consumed and recorded without an in-memory fallback.
+
+### Verified
+
+- `uv run ruff check app tests`: passed.
+- `tests/test_background_run_manager.py tests/test_chat_run_executor.py`: `7 passed`, covering worker-target filtering, targeted cancellation, cancellation/interruption mapping, and failure closure.
+
+### Boundary
+
+- B6 does not yet add periodic heartbeat checks, the stale sweeper, restart recovery, or the C-stage public cancel API; those remain in B7/C.
 - A running FastAPI instance passed a real session CRUD smoke test: create, isolated list, rename,
   cross-browser 404 and delete.
 

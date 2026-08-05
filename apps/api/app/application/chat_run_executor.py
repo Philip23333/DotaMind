@@ -18,6 +18,7 @@ from app.agentic.runtime.streaming import (
 from app.agentic.state import AgentRunState
 from app.application.chat_run_repository import (
     ChatRunRepository,
+    ChatRunRepositoryError,
     ChatRunSummary,
 )
 from app.application.postgres_chat_repository import PostgresChatRepository
@@ -124,8 +125,13 @@ class ChatRunExecutor:
                     publish_stream_event(ResultStreamEvent(response=public_response))
                     publish_stream_event(StatusStreamEvent(status="completed"))
                 except asyncio.CancelledError:
-                    await self._mark_interrupted(request.run_id)
-                    publish_stream_event(StatusStreamEvent(status="interrupted"))
+                    terminal = await self._mark_cancelled_or_interrupted(request.run_id)
+                    publish_stream_event(
+                        StatusStreamEvent(
+                            status=terminal,
+                            error_code="worker_cancelled" if terminal == "interrupted" else None,
+                        )
+                    )
                     raise
                 except RunEventBusError:
                     # A Redis/event failure must never turn an already committed
@@ -165,6 +171,19 @@ class ChatRunExecutor:
             )
         except Exception:
             return
+
+    async def _mark_cancelled_or_interrupted(
+        self, run_id: UUID
+    ) -> str:
+        try:
+            await self._run_repository.mark_cancelled(
+                run_id=run_id,
+                worker_id=self._worker_id,
+            )
+            return "cancelled"
+        except ChatRunRepositoryError:
+            await self._mark_interrupted(run_id)
+            return "interrupted"
 
 
 __all__ = [
