@@ -669,3 +669,17 @@
 ### 边界
 
 - 本次浏览器验收未提交真实用户消息，避免依赖外部 LLM/STRATZ 数据；双 Run 并行和 Redis 事件过期场景由 E3/后端合同测试覆盖，最终质量门禁和文档收口属于 E5-E6。
+
+## 23:59 — V3.3-2 E5 完整质量门禁
+
+### 已验证
+
+- 真实 PostgreSQL + Redis：全量 `uv run pytest -q`：`489 passed, 1 warning`（既有 FastAPI TestClient 弃用警告）。
+- `uv run alembic upgrade head`：通过；`uv run alembic check`：`No new upgrade operations detected`。
+- `uv run ruff check app tests`：通过。
+- `apps/chat`：`npm run test` 为 `1 file, 3 tests passed`；`npm run lint`、`npm run build` 均通过。
+- `git diff --check`：通过。
+
+### 边界
+
+- 当前质量门禁已覆盖迁移、后端单测/真实集成、前端 reducer、TypeScript 构建和仓库空白检查；E6 继续更新架构/API/README 文档并标记阶段收口。

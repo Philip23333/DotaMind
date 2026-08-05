@@ -644,6 +644,20 @@
 
 - No real user message was submitted during browser acceptance to avoid dependence on external LLM/STRATZ data; dual-Run concurrency and Redis-expiry behavior are covered by E3/backend contract tests, while final quality gates and documentation closeout remain E5-E6.
 
+## 23:59 — V3.3-2 E5 complete quality gate
+
+### Verified
+
+- Against real PostgreSQL + Redis, full `uv run pytest -q`: `489 passed, 1 warning` (the existing FastAPI TestClient deprecation warning).
+- `uv run alembic upgrade head`: passed; `uv run alembic check`: `No new upgrade operations detected`.
+- `uv run ruff check app tests`: passed.
+- `apps/chat`: `npm run test` reported `1 file, 3 tests passed`; `npm run lint` and `npm run build` passed.
+- `git diff --check`: passed.
+
+### Boundary
+
+- The quality gate now covers migrations, backend unit/real integration tests, frontend reducer tests, TypeScript production build and repository whitespace; E6 updates architecture/API/README docs and marks the phase closeout.
+
 ## 16:39 — Preventing the empty-state flash on chat switching
 
 - The right chat runtime rendered one empty-message frame after remount, briefly showing the “new chat” state; `ChatSessionRuntime` now notifies the parent after mounting before the right-side loading overlay is removed.
