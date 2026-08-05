@@ -735,3 +735,21 @@
 ### Boundary
 
 - Browser acceptance did not submit a real external LLM message to avoid dependence on external models and STRATZ data. FastAPI, Redis Event Bus, Run API and recovery semantics remain unchanged; backend contract/integration tests continue to cover real Run concurrency and disconnect scenarios.
+
+## 19:16 — assistant-ui first-message initialization race fix
+
+### Completed
+
+- Fixed the race where a new thread's `remoteId` had not reached the next React render before its first send, causing the model adapter to report that the chat session was not initialized.
+- `DotaMindModelAdapter` now explicitly awaits `aui.threadListItem.initialize()` before creating a Chat Run and uses the authoritative Session ID returned by that call instead of a stale `useAuiState`/`unstable_threadId` snapshot. assistant-ui continues to return the existing Session ID when an initialized thread calls it again.
+- Extracted a React-independent initialization-order helper and added a regression test proving that the Run API is not called before initialization resolves and that the first message creates exactly one Run with the newly created Session ID.
+
+### Verified
+
+- `apps/chat`: `npm run test`: `2 files, 4 tests passed`.
+- `apps/chat`: `npm run lint`: passed.
+- `apps/chat`: `npm run build`: passed.
+
+### Boundary
+
+- This change only fixes frontend ordering for the first send in a new assistant-ui thread. The FastAPI Session/Run APIs, Redis event stream and explicit-cancel semantics are unchanged.

@@ -721,3 +721,21 @@
 ### 边界
 
 - 浏览器验收未提交真实外部 LLM 消息，避免依赖外部模型和 STRATZ 数据；后端 FastAPI、Redis Event Bus、Run API 与恢复语义保持不变，真实 Run 并行/断线场景继续由后端合同与集成测试覆盖。
+
+## 19:16 — assistant-ui 首条消息初始化竞态修复
+
+### 已完成
+
+- 修复新线程首次发送时 `remoteId` 尚未进入 React render，模型适配器误报“聊天会话尚未初始化，请重试”的竞态。
+- `DotaMindModelAdapter` 现在在创建 Chat Run 前显式等待 `aui.threadListItem.initialize()`，直接使用其返回的权威 Session ID，不再依赖滞后的 `useAuiState`/`unstable_threadId` 快照；已有线程重复初始化仍由 assistant-ui 幂等返回原 Session ID。
+- 提取无 React 依赖的初始化时序 helper，并增加回归测试：初始化 Promise 未完成时不得调用 Run API，完成后首条消息必须使用新建 Session ID 创建且只创建一个 Run。
+
+### 已验证
+
+- `apps/chat`: `npm run test`：`2 files, 4 tests passed`。
+- `apps/chat`: `npm run lint`：通过。
+- `apps/chat`: `npm run build`：通过。
+
+### 边界
+
+- 本次只修复 assistant-ui 新线程首次发送的前端时序；FastAPI Session/Run API、Redis 事件流和显式取消语义未修改。
