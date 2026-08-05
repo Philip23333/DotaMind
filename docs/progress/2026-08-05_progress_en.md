@@ -448,6 +448,23 @@
 ### Boundary
 
 - D4 protects detail-loading races; unified subscription abort, Stop/cancel, unread counts, and deletion of the old path remain in D5-D7.
+
+## 23:59 — V3.3-2 D5 Stop and cancel
+
+### Completed
+
+- When assistant-ui Stop raises `AbortError`, the frontend calls `cancelChatRun()` if an `activeRunId` exists; the backend persists `cancel_requested` before waking the worker/publishing its notification.
+- The local UI immediately shows the cancelled message while the Run Store registers the backend response; a cancel request failure never fabricates a durable terminal state, and recovery reconciles later.
+- Recovery-subscription and switch-detail abort paths never call the cancel API, preserving “disconnecting observation is not cancellation.”
+
+### Verified
+
+- `apps/chat`: `npm run lint` and `npm run build` passed without warnings.
+- `git diff --check`: passed.
+
+### Boundary
+
+- D5 does not yet add session-level unread counts, a unified background subscription manager, deletion of the old stateful path, or final browser acceptance.
 - A running FastAPI instance passed a real session CRUD smoke test: create, isolated list, rename,
   cross-browser 404 and delete.
 

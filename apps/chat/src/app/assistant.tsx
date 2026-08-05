@@ -33,7 +33,7 @@ import {
   transcriptToInitialMessages,
   type ChatSessionSummary,
 } from "@/lib/dotamind-api";
-import { createChatRun, getChatRun, subscribeChatRun } from "@/lib/chat-run-api";
+import { cancelChatRun, createChatRun, getChatRun, subscribeChatRun } from "@/lib/chat-run-api";
 import {
   useCallback,
   useEffect,
@@ -373,11 +373,13 @@ const ChatSessionRuntime = ({
         if (!query) throw new Error("请输入问题后再发送。");
 
         const messageId = unstable_assistantMessageId ?? crypto.randomUUID();
+        let activeRunId: string | null = null;
         let provisionalText = "";
         let receivedTerminalEvent = false;
 
         try {
           const run = await createChatRun(browserId, sessionId, query);
+          activeRunId = run.run_id;
           registerRun(run);
           setRuntimeRuns((runs) => ({
             ...runs,
@@ -457,6 +459,15 @@ const ChatSessionRuntime = ({
           }
         } catch (cause) {
           if (cause instanceof Error && cause.name === "AbortError") {
+            if (activeRunId) {
+              try {
+                const cancelled = await cancelChatRun(browserId, activeRunId);
+                registerRun(cancelled);
+              } catch {
+                // The backend Run remains authoritative; the next recovery
+                // query will reconcile the durable state if this request fails.
+              }
+            }
             updateRuntimeRun(messageId, (run) => ({ ...run, status: "cancelled" }));
             yield { content: [{ type: "text", text: cancelledMessage }] };
             return;

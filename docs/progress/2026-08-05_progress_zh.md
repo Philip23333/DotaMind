@@ -499,6 +499,23 @@
 
 - D4 保护详情加载竞争；详细事件订阅的统一 abort、Stop/cancel、未读计数和旧路径删除继续由 D5-D7 完成。
 
+## 23:59 — V3.3-2 D5 Stop 与取消
+
+### 已完成
+
+- assistant-ui Stop 触发 AbortError 后，如果已有 `activeRunId`，前端调用 `cancelChatRun()`；后端先写 PostgreSQL `cancel_requested`，再唤醒 worker/发布通知。
+- 本地 UI 立即收口为 cancelled 文案，但 Run Store 仍注册后端返回状态；取消 API 失败不伪造持久化终态，后续恢复查询负责对账。
+- 恢复订阅/切换详情 abort 路径未调用 cancel API，保持“断开观察不等于取消执行”。
+
+### 已验证
+
+- `apps/chat`: `npm run lint`、`npm run build` 均通过且无 warning。
+- `git diff --check`：通过。
+
+### 边界
+
+- D5 尚未实现 session 级未读计数、后台订阅统一 manager、旧 stateful 路径删除和最终浏览器验收。
+
 ## 16:39 — 避免会话切换空状态闪现
 
 - 右侧聊天 runtime 重新挂载后先渲染一次空消息状态，导致“新聊天”界面闪现；现由 `ChatSessionRuntime` 在挂载完成后通知父组件，再关闭右侧 loading 遮罩。
