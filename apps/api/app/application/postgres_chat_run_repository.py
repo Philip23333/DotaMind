@@ -4,17 +4,19 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from datetime import UTC, datetime
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import and_, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.agentic.conversation.models import Turn
 from app.application.chat_run_repository import (
     ACTIVE_RUN_STATUSES,
     ChatRunActiveError,
     ChatRunCancelResult,
     ChatRunCreateResult,
+    ChatRunFencingLostError,
     ChatRunIdempotencyConflictError,
     ChatRunNotFoundError,
     ChatRunRepositoryError,
@@ -24,7 +26,7 @@ from app.application.chat_run_repository import (
     ChatRunTerminalError,
 )
 from app.application.postgres_chat_repository import browser_id_hash
-from app.persistence.models import ChatRunRow, ChatSessionRow
+from app.persistence.models import ChatRunRow, ChatSessionRow, ChatTurnRow
 
 
 def _summary(row: ChatRunRow) -> ChatRunSummary:
@@ -304,6 +306,82 @@ class PostgresChatRunRepository:
                     row.completed_at = completed_at
                     run_ids.append(row.id)
                 return run_ids
+        except SQLAlchemyError as exc:
+            raise ChatRunRepositoryError() from exc
+
+    async def complete_with_turn(
+        self,
+        *,
+        run_id: UUID,
+        worker_id: str,
+        fencing_token: int,
+        public_response: dict,
+        compact_turn: Turn,
+    ) -> ChatRunSummary:
+        """Commit the final Turn and Run terminal state in one transaction."""
+
+        try:
+            async with self._session_factory.begin() as session:
+                run = await session.scalar(
+                    select(ChatRunRow).where(ChatRunRow.id == run_id).with_for_update()
+                )
+                if run is None:
+                    raise ChatRunNotFoundError()
+                if run.worker_id != worker_id or run.fencing_token != fencing_token:
+                    raise ChatRunFencingLostError()
+                if run.status == "completed":
+                    return _summary(run)
+                if run.status == "cancel_requested":
+                    raise ChatRunStateError("cancel_requested")
+                if run.status != "running":
+                    raise ChatRunTerminalError()
+
+                session_row = await session.scalar(
+                    select(ChatSessionRow)
+                    .where(ChatSessionRow.id == run.session_id)
+                    .with_for_update()
+                )
+                if session_row is None:
+                    raise ChatRunNotFoundError()
+                if session_row.active_fencing_token != fencing_token:
+                    raise ChatRunFencingLostError()
+
+                turn_index = session_row.next_turn_index
+                stored_turn = compact_turn.model_copy(update={"turn_index": turn_index})
+                turn_id = uuid4()
+                session.add(
+                    ChatTurnRow(
+                        id=turn_id,
+                        session_id=run.session_id,
+                        request_id=run.request_id,
+                        payload_hash=run.payload_hash,
+                        turn_index=turn_index,
+                        user_query=run.user_query,
+                        public_response=dict(public_response),
+                        compact_turn=stored_turn.model_dump(mode="json"),
+                    )
+                )
+                session_row.next_turn_index += 1
+                session_row.updated_at = datetime.now(UTC)
+                if not session_row.title_is_custom and turn_index == 1:
+                    session_row.title = run.user_query.strip()[:80] or "新对话"
+
+                completed_at = datetime.now(UTC)
+                run.status = "completed"
+                run.result_turn_id = turn_id
+                run.completed_at = completed_at
+                run.heartbeat_at = completed_at
+                run.error_code = None
+                await session.flush()
+                return _summary(run)
+        except (
+            ChatRunFencingLostError,
+            ChatRunNotFoundError,
+            ChatRunRepositoryError,
+            ChatRunStateError,
+            ChatRunTerminalError,
+        ):
+            raise
         except SQLAlchemyError as exc:
             raise ChatRunRepositoryError() from exc
 

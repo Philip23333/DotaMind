@@ -50,6 +50,23 @@
 - A4 atomic `complete_with_turn()` is not implemented yet; A5 will complete the full Repository regression.
 - B-E are not implemented; the existing API and frontend execution paths remain in place.
 
+## 17:32 — V3.3-2 A4 atomic completion
+
+### Completed
+
+- `PostgresChatRunRepository.complete_with_turn()` now locks the Run and session in one PostgreSQL transaction, validates worker/fencing ownership, writes one Turn, updates title/index and closes the Run as `completed`.
+- Completion is rejected for `cancel_requested`, terminal Runs and stale fencing; repeating a completed Run returns the existing result without writing another Turn.
+- Extended PostgreSQL integration coverage for atomic commit, duplicate completion, Turn uniqueness and fencing rejection.
+
+### Verified
+
+- `uv run ruff check app tests/test_postgres_chat_run_repository.py`: passed.
+- `uv run pytest -q tests/test_postgres_chat_run_repository.py`: both tests followed the existing skip behavior because `DOTAMIND_TEST_DATABASE_URL` is not configured.
+
+### Boundary
+
+- A5 will complete the full Repository regression and close Stage A; B-E are not implemented.
+
 ## 12:06 — V3.3-1 PostgreSQL chat persistence and anonymous browser multi-chat
 
 ### Completed

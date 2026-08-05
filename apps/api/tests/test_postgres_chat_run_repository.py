@@ -9,8 +9,10 @@ from uuid import uuid4
 
 import pytest
 
+from app.agentic.conversation.models import Turn
 from app.application.chat_run_repository import (
     ChatRunActiveError,
+    ChatRunFencingLostError,
     ChatRunIdempotencyConflictError,
     ChatRunNotFoundError,
     ChatRunStateError,
@@ -136,6 +138,85 @@ def test_postgres_run_repository_enforces_lifecycle_and_ownership() -> None:
                 await chats.delete_session(browser_a, session_id)
             if second_session_id is not None:
                 await chats.delete_session(browser_a, second_session_id)
+            await close_database(resources)
+
+    asyncio.run(scenario())
+
+
+def test_postgres_run_completion_is_atomic_and_fenced() -> None:
+    async def scenario() -> None:
+        resources = create_database_resources(os.environ["DOTAMIND_TEST_DATABASE_URL"])
+        chats = PostgresChatRepository(resources.session_factory)
+        runs = PostgresChatRunRepository(resources.session_factory)
+        browser_id = str(uuid4())
+        session_id = None
+        try:
+            session_id = (await chats.create_session(browser_id)).session_id
+            run_id = uuid4()
+            created = await runs.create_or_get_run(
+                browser_id=browser_id,
+                session_id=session_id,
+                request_id=uuid4(),
+                payload_hash="payload-complete",
+                user_query="完成一个 Run",
+                run_id=run_id,
+            )
+            token = await chats.allocate_fencing_token(browser_id, session_id)
+            await runs.mark_running(
+                browser_id=browser_id,
+                run_id=created.run_id,
+                worker_id="worker-complete",
+                fencing_token=token,
+            )
+            completed = await runs.complete_with_turn(
+                run_id=run_id,
+                worker_id="worker-complete",
+                fencing_token=token,
+                public_response={"status": "ok", "answer": "完成"},
+                compact_turn=Turn(query="完成一个 Run", response_summary="完成"),
+            )
+            assert completed.status == "completed"
+            assert completed.result_turn_id is not None
+            assert completed.fencing_token == token
+
+            replay = await runs.complete_with_turn(
+                run_id=run_id,
+                worker_id="worker-complete",
+                fencing_token=token,
+                public_response={"status": "ok", "answer": "重复完成"},
+                compact_turn=Turn(query="完成一个 Run", response_summary="重复完成"),
+            )
+            assert replay.result_turn_id == completed.result_turn_id
+            snapshot = await chats.get_session(browser_id, session_id)
+            assert len(snapshot.turns) == 1
+            assert snapshot.turns[0].public_response["answer"] == "完成"
+
+            second_run = await runs.create_or_get_run(
+                browser_id=browser_id,
+                session_id=session_id,
+                request_id=uuid4(),
+                payload_hash="payload-fenced",
+                user_query="旧 fencing",
+                run_id=uuid4(),
+            )
+            newer_token = await chats.allocate_fencing_token(browser_id, session_id)
+            await runs.mark_running(
+                browser_id=browser_id,
+                run_id=second_run.run_id,
+                worker_id="worker-new",
+                fencing_token=newer_token,
+            )
+            with pytest.raises(ChatRunFencingLostError):
+                await runs.complete_with_turn(
+                    run_id=second_run.run_id,
+                    worker_id="worker-new",
+                    fencing_token=token,
+                    public_response={"status": "ok"},
+                    compact_turn=Turn(query="旧 fencing"),
+                )
+        finally:
+            if session_id is not None:
+                await chats.delete_session(browser_id, session_id)
             await close_database(resources)
 
     asyncio.run(scenario())

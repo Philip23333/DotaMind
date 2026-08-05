@@ -50,6 +50,23 @@
 - A4 的 `complete_with_turn()` 原子提交尚未实现；A5 将补齐完整 Repository 回归。
 - B-E 尚未实现；当前 API 和前端仍使用原有运行链路。
 
+## 17:32 — V3.3-2 A4 原子完成
+
+### 已完成
+
+- `PostgresChatRunRepository.complete_with_turn()` 在同一 PostgreSQL 事务中锁定 Run 和 session，校验 worker/fencing，写入唯一 Turn，更新标题/序号，并将 Run 收口为 `completed`。
+- `cancel_requested`、终态 Run 和过期 fencing 均拒绝完成；同一 completed Run 重复完成只返回已有结果，不重复写 Turn。
+- 扩展真实 PostgreSQL 集成测试，覆盖原子提交、重复完成、Turn 唯一性和 fencing 拒绝。
+
+### 已验证
+
+- `uv run ruff check app tests/test_postgres_chat_run_repository.py`：通过。
+- `uv run pytest -q tests/test_postgres_chat_run_repository.py`：未配置 `DOTAMIND_TEST_DATABASE_URL`，2 个测试按既有约定跳过。
+
+### 边界
+
+- A5 将补齐完整 Repository 回归和阶段 A 收口；B-E 尚未实现。
+
 ## 12:06 — V3.3-1 PostgreSQL 聊天持久化与匿名浏览器多聊天管理
 
 ### 已完成
