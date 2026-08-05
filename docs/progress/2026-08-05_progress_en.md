@@ -32,6 +32,24 @@
 
 - A3-A5 and B-E are not implemented; `/plan`, `/plan/stream` and frontend behavior remain unchanged.
 
+## 17:18 — V3.3-2 A3 Run Repository
+
+### Completed
+
+- Added the `ChatRunRepository` contract, stable errors, lifecycle DTOs and `PostgresChatRunRepository`.
+- Implemented Run creation/idempotent replay, browser ownership, active-Run conflicts, queued→running, heartbeats, cancel requests, terminal closure and stale-Run interruption.
+- Added PostgreSQL integration coverage for browser isolation, per-session activity uniqueness, idempotency conflicts, the cancel state machine and stale closure.
+
+### Verified
+
+- `uv run ruff check app`: passed.
+- `tests/test_postgres_chat_run_repository.py` is covered against real PostgreSQL and follows the existing skip behavior when `DOTAMIND_TEST_DATABASE_URL` is unset.
+
+### Boundary
+
+- A4 atomic `complete_with_turn()` is not implemented yet; A5 will complete the full Repository regression.
+- B-E are not implemented; the existing API and frontend execution paths remain in place.
+
 ## 12:06 — V3.3-1 PostgreSQL chat persistence and anonymous browser multi-chat
 
 ### Completed

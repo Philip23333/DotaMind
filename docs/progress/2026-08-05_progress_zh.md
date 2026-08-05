@@ -32,6 +32,24 @@
 
 - A3-A5、B-E 尚未实现；当前 `/plan`、`/plan/stream` 和前端行为保持不变。
 
+## 17:18 — V3.3-2 A3 Run Repository
+
+### 已完成
+
+- 新增 `ChatRunRepository` 合同、稳定错误码、状态 DTO 和 `PostgresChatRunRepository`。
+- 实现 Run 创建/幂等重放、browser ownership、active Run 冲突、queued→running、heartbeat、取消请求、终态收口和 stale Run 标记。
+- 新增 PostgreSQL 集成测试，覆盖跨浏览器隔离、同 session 活动唯一、幂等冲突、取消状态机和 stale 收口。
+
+### 已验证
+
+- `uv run ruff check app`：通过。
+- `tests/test_postgres_chat_run_repository.py` 已加入真实 PostgreSQL 测试；未配置 `DOTAMIND_TEST_DATABASE_URL` 时按既有约定跳过。
+
+### 边界
+
+- A4 的 `complete_with_turn()` 原子提交尚未实现；A5 将补齐完整 Repository 回归。
+- B-E 尚未实现；当前 API 和前端仍使用原有运行链路。
+
 ## 12:06 — V3.3-1 PostgreSQL 聊天持久化与匿名浏览器多聊天管理
 
 ### 已完成
