@@ -414,6 +414,23 @@
 ### Boundary
 
 - D2 does not yet recover pending Runs, resume subscriptions from cursors, protect switch races, call the cancel API from Stop, or delete the old stateful code; those remain in D3-D7.
+
+## 23:59 — V3.3-2 D3 pending Run recovery
+
+### Completed
+
+- Session activation reads `active_run`, fetches complete Run metadata, and creates stable `${runId}:user` / `${runId}:assistant` pending message IDs.
+- Recovery subscriptions always replay from `after=0`; the reducer rebuilds phase/tool/delta/status/cursor state, and closing the observer only aborts the subscription without cancellation.
+- Recovered runtime information is stored in the global Run Store and existing RuntimeInfoCard, so a refresh still shows an in-flight Run.
+
+### Verified
+
+- `apps/chat`: `npm run lint` and `npm run build` passed without warnings.
+- `git diff --check`: passed.
+
+### Boundary
+
+- D3 does not yet handle selection-sequence races across simultaneous session switches, Stop/cancel, unread counts, or deletion of the old stateful path.
 - A running FastAPI instance passed a real session CRUD smoke test: create, isolated list, rename,
   cross-browser 404 and delete.
 

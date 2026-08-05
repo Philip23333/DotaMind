@@ -25,6 +25,7 @@ import {
   getOrCreateBrowserId,
   getStoredActiveSessionId,
   latestUserText,
+  pendingRunToInitialMessages,
   listChatSessions,
   renameChatSession,
   setChatSessionPinned,
@@ -32,7 +33,7 @@ import {
   transcriptToInitialMessages,
   type ChatSessionSummary,
 } from "@/lib/dotamind-api";
-import { createChatRun, subscribeChatRun } from "@/lib/chat-run-api";
+import { createChatRun, getChatRun, subscribeChatRun } from "@/lib/chat-run-api";
 import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { MenuIcon } from "lucide-react";
 
@@ -47,6 +48,7 @@ export const Assistant = () => {
   const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [initialMessages, setInitialMessages] = useState<ThreadMessageLike[]>([]);
+  const [recoveredRun, setRecoveredRun] = useState<import("@/lib/dotamind-api").ChatRunSummary | null>(null);
   const [runtimeRuns, setRuntimeRuns] = useState<RuntimeInfoMap>({});
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -59,10 +61,18 @@ export const Assistant = () => {
       setSessionLoading(true);
       setError(null);
       setRuntimeRuns({});
+      setRecoveredRun(null);
       try {
         const session = await getChatSession(browserId, sessionId);
-        if (session.session.active_run) registerRun(session.session.active_run);
-        setInitialMessages(transcriptToInitialMessages(session));
+        const active = session.session.active_run
+          ? await getChatRun(browserId, session.session.active_run.run_id).catch(() => null)
+          : null;
+        if (active) registerRun(active);
+        setRecoveredRun(active);
+        setInitialMessages([
+          ...transcriptToInitialMessages(session),
+          ...(active ? pendingRunToInitialMessages(active) : []),
+        ]);
         setActiveSessionId(sessionId);
         storeActiveSessionId(sessionId);
       } catch (cause) {
@@ -234,6 +244,7 @@ export const Assistant = () => {
             browserId={browserId}
             sessionId={activeSessionId}
             initialMessages={initialMessages}
+            recoveredRun={recoveredRun}
             runtimeRuns={runtimeRuns}
             setRuntimeRuns={setRuntimeRuns}
             onSessionSummary={updateSessionSummary}
@@ -260,6 +271,7 @@ type ChatSessionRuntimeProps = {
   browserId: string;
   sessionId: string;
   initialMessages: ThreadMessageLike[];
+  recoveredRun: import("@/lib/dotamind-api").ChatRunSummary | null;
   runtimeRuns: RuntimeInfoMap;
   setRuntimeRuns: Dispatch<SetStateAction<RuntimeInfoMap>>;
   onSessionSummary: (summary: ChatSessionSummary) => void;
@@ -270,11 +282,13 @@ const ChatSessionRuntime = ({
   browserId,
   sessionId,
   initialMessages,
+  recoveredRun,
   runtimeRuns,
   setRuntimeRuns,
   onReady,
 }: ChatSessionRuntimeProps) => {
   const { registerRun, applyEvent } = useChatRunStore();
+
   useEffect(() => {
     onReady();
   }, [onReady, sessionId]);
@@ -288,6 +302,40 @@ const ChatSessionRuntime = ({
     },
     [setRuntimeRuns],
   );
+
+  useEffect(() => {
+    if (!recoveredRun) return;
+    const controller = new AbortController();
+    const messageId = `${recoveredRun.run_id}:assistant`;
+    setRuntimeRuns((runs) => ({
+      ...runs,
+      [messageId]: { messageId, phase: "planning", tools: [], status: "running" },
+    }));
+    void (async () => {
+      try {
+        for await (const item of subscribeChatRun(browserId, recoveredRun.run_id, 0, controller.signal)) {
+          applyEvent(item);
+          if ("sequence" in item) {
+            const event = item.event;
+            if (event.type !== "status") continue;
+            const terminal = !["queued", "running", "cancel_requested"].includes(event.status);
+            if (terminal) {
+              updateRuntimeRun(messageId, (run) => ({
+                ...run,
+                status: event.status === "cancelled" ? "cancelled" : "completed",
+              }));
+              return;
+            }
+          }
+        }
+      } catch (cause) {
+        if (!(cause instanceof Error && cause.name === "AbortError")) {
+          updateRuntimeRun(messageId, (run) => ({ ...run, status: "failed" }));
+        }
+      }
+    })();
+    return () => controller.abort();
+  }, [applyEvent, browserId, recoveredRun, setRuntimeRuns, updateRuntimeRun]);
 
   const adapter = useMemo<ChatModelAdapter>(
     () => ({

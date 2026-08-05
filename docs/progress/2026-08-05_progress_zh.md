@@ -465,6 +465,23 @@
 
 - D2 尚未实现 pending Run 启动恢复、断线 cursor 续订、切换竞争保护、Stop 调用 cancel API 和删除旧 stateful 代码；这些属于 D3-D7。
 
+## 23:59 — V3.3-2 D3 pending Run 恢复
+
+### 已完成
+
+- 激活 session 时读取 `active_run` 并补取完整 Run 元数据，构造 `${runId}:user` / `${runId}:assistant` 稳定 pending 消息 ID。
+- 恢复订阅始终从 `after=0` 重放事件，Reducer 重建 phase/tool/delta/status/cursor；恢复观察器关闭时只 abort 订阅，不触发取消。
+- 恢复运行信息写入全局 Run Store 和现有 RuntimeInfoCard，刷新页面后仍能看到正在执行的 Run 状态。
+
+### 已验证
+
+- `apps/chat`: `npm run lint`、`npm run build` 均通过且无 warning。
+- `git diff --check`：通过。
+
+### 边界
+
+- D3 尚未处理同一时间多 session 切换的选择序列竞争、Stop/cancel、未读计数和旧 stateful 路径删除。
+
 ## 16:39 — 避免会话切换空状态闪现
 
 - 右侧聊天 runtime 重新挂载后先渲染一次空消息状态，导致“新聊天”界面闪现；现由 `ChatSessionRuntime` 在挂载完成后通知父组件，再关闭右侧 loading 遮罩。

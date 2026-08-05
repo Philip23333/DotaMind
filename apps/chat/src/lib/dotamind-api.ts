@@ -231,6 +231,21 @@ export function transcriptToInitialMessages(
   ]);
 }
 
+export function pendingRunToInitialMessages(run: ChatRunSummary): ThreadMessageLike[] {
+  return [
+    {
+      id: `${run.run_id}:user`,
+      role: "user" as const,
+      content: [{ type: "text" as const, text: run.user_query }],
+    },
+    {
+      id: `${run.run_id}:assistant`,
+      role: "assistant" as const,
+      content: [{ type: "text" as const, text: "正在恢复分析运行…" }],
+    },
+  ];
+}
+
 export function latestUserText(messages: readonly ThreadMessage[]): string {
   const message = messages.findLast((item) => item.role === "user");
 
