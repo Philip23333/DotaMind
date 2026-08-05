@@ -393,7 +393,7 @@
 
 - C5 不直接伪造 `cancelled` 终态；由后台 Executor 根据 PostgreSQL 状态收口。C6/C7 继续处理旧 stateful 路径迁移准备和 API 全量回归。
 
-## 23:59 — V3.3-2 C6 stateful 路径迁移准备
+## 23:58 — V3.3-2 C6 stateful 路径迁移准备
 
 ### 已完成
 
@@ -410,6 +410,26 @@
 ### 边界
 
 - C6 只增加客户端和类型准备，不改变现有消息发送路径；旧 stateful 路径必须等 D 正式切换后再删除。
+
+## 23:59 — V3.3-2 C7 阶段 C API 回归收口
+
+### 已完成
+
+- 补齐创建、查询、active-run、事件重放/终态合成、取消、browser ownership、幂等和终态错误的 API focused tests。
+- 增加终态取消 `409 run_terminal` 回归；统一错误原因补齐 `not_found` 与非法 `after`。
+- 阶段 C 保持旧 `/plan`、`/plan/stream` stateful 路径和前端旧发送链路不变，满足 D 阶段原子切换前的可运行边界。
+
+### 已验证
+
+- API focused suite：`22 passed`（含既有 TestClient 弃用警告）。
+- 全量 `uv run pytest -q`：`491 passed, 20 skipped, 1 warning`。
+- `uv run ruff check app tests`：通过。
+- `apps/chat`：`npm run lint`、`npm run build` 均通过。
+- `git diff --check`：通过。
+
+### 阶段 C 结论
+
+- 后端已能独立完成 Run 创建、状态查询、事件观察和取消请求；观察连接不拥有任务生命周期；旧路径尚未删除，下一阶段切入前端 Run Store。
 
 ## 16:39 — 避免会话切换空状态闪现
 

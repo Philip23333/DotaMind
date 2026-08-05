@@ -343,7 +343,7 @@
 
 - C5 does not fabricate a `cancelled` terminal state; the background Executor closes it based on PostgreSQL state. C6/C7 continue stateful-path migration preparation and full API regression.
 
-## 23:59 — V3.3-2 C6 stateful-path migration preparation
+## 23:58 — V3.3-2 C6 stateful-path migration preparation
 
 ### Completed
 
@@ -360,6 +360,26 @@
 ### Boundary
 
 - C6 adds client/types preparation only and does not change the existing message-send path; the old stateful path is removed only after the D-stage cutover.
+
+## 23:59 — V3.3-2 C7 Stage C API regression closure
+
+### Completed
+
+- Completed focused API coverage for creation, query, active-Run, event replay/terminal synthesis, cancellation, browser ownership, idempotency, and terminal errors.
+- Added the terminal-cancel `409 run_terminal` regression and stable reasons for `not_found` and invalid `after`.
+- Stage C keeps the old stateful `/plan`, `/plan/stream`, and frontend send path intact, preserving a runnable boundary before the atomic D-stage cutover.
+
+### Verified
+
+- API focused suite: `22 passed` (including the existing TestClient deprecation warning).
+- Full `uv run pytest -q`: `491 passed, 20 skipped, 1 warning`.
+- `uv run ruff check app tests`: passed.
+- `apps/chat`: `npm run lint` and `npm run build` passed.
+- `git diff --check`: passed.
+
+### Stage C conclusion
+
+- The backend independently supports Run creation, state queries, event observation, and cancel requests; observer connections do not own task lifetime. The old path is not removed, and the next stage introduces the browser-level Run Store.
 - A running FastAPI instance passed a real session CRUD smoke test: create, isolated list, rename,
   cross-browser 404 and delete.
 

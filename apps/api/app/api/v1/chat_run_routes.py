@@ -41,6 +41,8 @@ _ERROR_REASONS = {
     "unavailable": "Run storage is temporarily unavailable",
     "browser_id_invalid": "X-DotaMind-Browser-Id must be a UUID v4",
     "dispatch_failed": "Run could not be scheduled",
+    "not_found": "Run was not found",
+    "invalid_after": "after must be a non-negative sequence",
 }
 
 
