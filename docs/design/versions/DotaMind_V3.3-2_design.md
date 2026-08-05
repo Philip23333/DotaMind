@@ -1,6 +1,6 @@
 # DotaMind V3.3-2：多聊天并行运行与断线恢复
 
-> 状态：A1 设计合同已冻结；A2-A5、B-E 尚未实现。
+> 状态：阶段 A（A1-A5）已完成；B-E 尚未实现。
 >
 > 本阶段建立在 V3.3-1 的 PostgreSQL 聊天记录、Redis SessionStore lease/fencing 和
 > V3.2 Run/Attempt/Budget 运行时之上。本文是本阶段实现的边界和验收合同。
@@ -267,10 +267,10 @@ A1 设计合同
 
 每个小阶段都必须通过对应验证并独立提交；未完成的小阶段不得被进度文档描述为已完成。
 
-## 14. A1 完成定义
+## 14. 阶段 A 完成定义
 
-- 本文档存在且状态明确为“仅 A1 完成”。
+- 本文档存在且状态明确为“阶段 A 已完成”。
 - Run 状态集合、转换、幂等、fencing、事件和所有权边界已冻结。
 - 明确 per-worker 并行上限和无 checkpoint 的重启语义。
-- 未修改 `/plan`、`/plan/stream`、PostgreSQL 模型或前端运行链路。
-
+- `chat_runs` ORM、migration、Repository lifecycle 和 atomic completion 已实现并有回归入口。
+- 未修改 `/plan`、`/plan/stream`、后台调度或前端运行链路。

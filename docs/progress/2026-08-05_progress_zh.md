@@ -67,6 +67,25 @@
 
 - A5 将补齐完整 Repository 回归和阶段 A 收口；B-E 尚未实现。
 
+## 17:46 — V3.3-2 A5 阶段 A 回归收口
+
+### 已完成
+
+- 新增纯合同测试，固定 active/terminal 状态集合互斥且闭合，防止后续 API 或 Manager 引入未知状态。
+- 阶段 A 设计文档状态更新为 A1-A5 已完成；B-E 继续明确为未实现。
+
+### 已验证
+
+- `uv run ruff check app tests`：通过。
+- `uv run pytest -q tests/test_chat_run_contract.py tests/test_postgres_chat_repository.py tests/test_postgres_chat_run_repository.py`：`1 passed, 3 skipped`（本机未设置 `DOTAMIND_TEST_DATABASE_URL`）。
+- `uv run alembic upgrade head`：通过；`uv run alembic check`：`No new upgrade operations detected`。
+- `git diff --check`：通过。
+
+### 阶段 A 结论
+
+- PostgreSQL `chat_runs` schema、状态 DTO、生命周期 Repository 和 Run/Session/Turn 原子完成合同已落地。
+- 未修改现有 `/plan`、`/plan/stream`、后台任务或前端运行路径；下一步进入 B1 预分配 Run ID。
+
 ## 12:06 — V3.3-1 PostgreSQL 聊天持久化与匿名浏览器多聊天管理
 
 ### 已完成

@@ -67,6 +67,25 @@
 
 - A5 will complete the full Repository regression and close Stage A; B-E are not implemented.
 
+## 17:46 — V3.3-2 A5 Stage A regression closure
+
+### Completed
+
+- Added a pure contract test fixing the closed, disjoint active/terminal status sets so later API or Manager code cannot introduce unknown states.
+- Updated the Stage A design status to A1-A5 complete; B-E remain explicitly unimplemented.
+
+### Verified
+
+- `uv run ruff check app tests`: passed.
+- `uv run pytest -q tests/test_chat_run_contract.py tests/test_postgres_chat_repository.py tests/test_postgres_chat_run_repository.py`: `1 passed, 3 skipped` because `DOTAMIND_TEST_DATABASE_URL` is not set locally.
+- `uv run alembic upgrade head`: passed; `uv run alembic check`: `No new upgrade operations detected`.
+- `git diff --check`: passed.
+
+### Stage A conclusion
+
+- The PostgreSQL `chat_runs` schema, status DTOs, lifecycle Repository and Run/Session/Turn atomic completion contract are implemented.
+- Existing `/plan`, `/plan/stream`, background tasks and frontend execution paths are unchanged; next is B1 preallocated Run IDs.
+
 ## 12:06 — V3.3-1 PostgreSQL chat persistence and anonymous browser multi-chat
 
 ### Completed
