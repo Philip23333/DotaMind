@@ -626,6 +626,24 @@
 
 - E3 proves the PostgreSQL/Redis persistence and event contracts; browser responsive acceptance and final documentation synchronization remain E4-E6.
 
+## 23:59 — V3.3-2 E4 browser responsive acceptance
+
+### Completed
+
+- Started local FastAPI and Next.js services and opened `http://localhost:3000` in the in-app browser; verified the chat list, active session, composer and Chat Run UI are reachable.
+- At `1280×800`, `768×1024`, `393×852` and `390×844`, checked `document.documentElement.scrollWidth === clientWidth`; no horizontal overflow was observed.
+- On the mobile viewport, confirmed the “open chat list” and “close chat list” controls are present and exercised the drawer open/Escape-close path without page errors.
+- `/health` and `/debug/plan` remained reachable locally; the debug UI and formal Chat Run page stay separate.
+
+### Verified
+
+- Browser DOM/visual checks: all four viewport widths matched and chat-list/composer controls were locatable.
+- Local services: FastAPI `/health` HTTP 200 and Next.js home HTTP 200.
+
+### Boundary
+
+- No real user message was submitted during browser acceptance to avoid dependence on external LLM/STRATZ data; dual-Run concurrency and Redis-expiry behavior are covered by E3/backend contract tests, while final quality gates and documentation closeout remain E5-E6.
+
 ## 16:39 — Preventing the empty-state flash on chat switching
 
 - The right chat runtime rendered one empty-message frame after remount, briefly showing the “new chat” state; `ChatSessionRuntime` now notifies the parent after mounting before the right-side loading overlay is removed.
