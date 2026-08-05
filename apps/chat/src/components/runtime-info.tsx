@@ -1,6 +1,8 @@
 "use client";
 
 import type { PlanStreamEvent } from "@/lib/dotamind-api";
+import type { DotaMindRuntimeInfo } from "@/lib/assistant-ui/run-event-converter";
+import { DOTAMIND_ASSISTANT_METADATA_KEY } from "@/lib/assistant-ui/migration-contract";
 import {
   CheckCircle2Icon,
   ChevronDownIcon,
@@ -8,30 +10,22 @@ import {
   LoaderCircleIcon,
   WrenchIcon,
 } from "lucide-react";
-import { createContext, useContext, useState, type FC, type ReactNode } from "react";
+import { useAuiState } from "@assistant-ui/react";
+import { useState, type FC } from "react";
 
 type RunStatus = "running" | "completed" | "failed" | "cancelled";
 
 export type RuntimeTool = Extract<PlanStreamEvent, { type: "tool" }>;
 
-export type RuntimeInfo = {
-  messageId: string;
-  phase: Extract<PlanStreamEvent, { type: "phase" }>["phase"];
-  tools: RuntimeTool[];
-  status: RunStatus;
-  durationMs?: number;
+export type RuntimeInfo = DotaMindRuntimeInfo;
+
+export const useRuntimeInfo = (messageId: string) => {
+  const custom = useAuiState((state) => state.message.metadata?.custom?.[DOTAMIND_ASSISTANT_METADATA_KEY]);
+  if (!messageId) return null;
+  if (!custom || typeof custom !== "object") return null;
+  const runtime = (custom as { runtime?: RuntimeInfo }).runtime;
+  return runtime ?? null;
 };
-
-export type RuntimeInfoMap = Record<string, RuntimeInfo>;
-
-const RuntimeInfoContext = createContext<RuntimeInfoMap>({});
-
-export const RuntimeInfoProvider: FC<{ value: RuntimeInfoMap; children: ReactNode }> = ({
-  value,
-  children,
-}) => <RuntimeInfoContext.Provider value={value}>{children}</RuntimeInfoContext.Provider>;
-
-export const useRuntimeInfo = (messageId: string) => useContext(RuntimeInfoContext)[messageId] ?? null;
 
 const phaseLabels: Record<RuntimeInfo["phase"], string> = {
   planning: "分析问题",
