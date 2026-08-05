@@ -19,9 +19,11 @@ import {
   CopyIcon,
   SquareIcon,
 } from "lucide-react";
-import type { FC } from "react";
+import { cancelChatRun } from "@/lib/chat-run-api";
+import { DOTAMIND_ASSISTANT_METADATA_KEY } from "@/lib/assistant-ui/migration-contract";
+import { useRef, useState, type FC } from "react";
 
-export const Thread: FC = () => {
+export const Thread: FC<{ browserId?: string }> = ({ browserId }) => {
   return (
     <ThreadPrimitive.Root className="flex h-full min-w-0 flex-col overflow-hidden bg-background">
       <ThreadPrimitive.Viewport className="relative flex min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto scroll-smooth">
@@ -49,7 +51,7 @@ export const Thread: FC = () => {
             >
               <ArrowDownIcon className="size-4" />
             </ThreadPrimitive.ScrollToBottom>
-            <Composer />
+            <Composer browserId={browserId} />
             <p className="mt-2 text-center text-xs text-muted-foreground">
               DotaMind 可能会出错，请结合证据判断。
             </p>
@@ -125,7 +127,7 @@ const AssistantMessage: FC = () => {
   );
 };
 
-const Composer: FC = () => (
+const Composer: FC<{ browserId?: string }> = ({ browserId }) => (
   <ComposerPrimitive.Root className="rounded-3xl border bg-background p-1.5 shadow-sm focus-within:ring-2 focus-within:ring-ring/30 sm:p-2">
     <ComposerPrimitive.Input
       placeholder="询问英雄、阵容、对线或版本数据…"
@@ -146,14 +148,47 @@ const Composer: FC = () => (
         </ComposerPrimitive.Send>
       </AuiIf>
       <AuiIf condition={(state) => state.thread.isRunning}>
-        <ComposerPrimitive.Cancel
-          render={
-            <Button size="icon" className="size-8 rounded-full" aria-label="停止生成" />
-          }
-        >
-          <SquareIcon className="size-3 fill-current" />
-        </ComposerPrimitive.Cancel>
+        <DotaMindStopButton browserId={browserId} />
       </AuiIf>
     </div>
   </ComposerPrimitive.Root>
 );
+
+const DotaMindStopButton: FC<{ browserId?: string }> = ({ browserId }) => {
+  const message = useAuiState((state) =>
+    state.thread.messages.findLast(
+      (candidate) => candidate.role === "assistant" && candidate.status?.type === "running",
+    ),
+  );
+  const [stopping, setStopping] = useState(false);
+  const requestedRunRef = useRef<string | null>(null);
+  const custom = message?.metadata?.custom?.[DOTAMIND_ASSISTANT_METADATA_KEY];
+  const runId =
+    custom && typeof custom === "object" && "runId" in custom && typeof custom.runId === "string"
+      ? custom.runId
+      : null;
+
+  const stop = async () => {
+    if (!browserId || !runId || stopping || requestedRunRef.current === runId) return;
+    requestedRunRef.current = runId;
+    setStopping(true);
+    try {
+      await cancelChatRun(browserId, runId);
+    } catch {
+      requestedRunRef.current = null;
+      setStopping(false);
+    }
+  };
+
+  return (
+    <Button
+      size="icon"
+      className="size-8 rounded-full"
+      aria-label="停止生成"
+      disabled={!runId || stopping}
+      onClick={() => void stop()}
+    >
+      <SquareIcon className="size-3 fill-current" />
+    </Button>
+  );
+};
