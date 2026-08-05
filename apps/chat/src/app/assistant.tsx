@@ -7,6 +7,7 @@ import {
   useLocalRuntime,
 } from "@assistant-ui/react";
 import { ChatSidebar } from "@/components/chat-sidebar";
+import { useChatRunStore } from "@/contexts/chat-run-provider";
 import { Button } from "@/components/ui/button";
 import {
   RuntimeInfoProvider,
@@ -28,10 +29,10 @@ import {
   renameChatSession,
   setChatSessionPinned,
   storeActiveSessionId,
-  streamDotaMind,
   transcriptToInitialMessages,
   type ChatSessionSummary,
 } from "@/lib/dotamind-api";
+import { createChatRun, subscribeChatRun } from "@/lib/chat-run-api";
 import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { MenuIcon } from "lucide-react";
 
@@ -51,6 +52,7 @@ export const Assistant = () => {
   const [loading, setLoading] = useState(true);
   const [sessionLoading, setSessionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { registerRun } = useChatRunStore();
 
   const activateSession = useCallback(
     async (sessionId: string) => {
@@ -59,6 +61,7 @@ export const Assistant = () => {
       setRuntimeRuns({});
       try {
         const session = await getChatSession(browserId, sessionId);
+        if (session.session.active_run) registerRun(session.session.active_run);
         setInitialMessages(transcriptToInitialMessages(session));
         setActiveSessionId(sessionId);
         storeActiveSessionId(sessionId);
@@ -67,7 +70,7 @@ export const Assistant = () => {
         setSessionLoading(false);
       }
     },
-    [browserId],
+    [browserId, registerRun],
   );
 
   useEffect(() => {
@@ -269,9 +272,9 @@ const ChatSessionRuntime = ({
   initialMessages,
   runtimeRuns,
   setRuntimeRuns,
-  onSessionSummary,
   onReady,
 }: ChatSessionRuntimeProps) => {
+  const { registerRun, applyEvent } = useChatRunStore();
   useEffect(() => {
     onReady();
   }, [onReady, sessionId]);
@@ -293,15 +296,30 @@ const ChatSessionRuntime = ({
         if (!query) throw new Error("请输入问题后再发送。");
 
         const messageId = unstable_assistantMessageId ?? crypto.randomUUID();
-        setRuntimeRuns((runs) => ({
-          ...runs,
-          [messageId]: { messageId, phase: "planning", tools: [], status: "running" },
-        }));
         let provisionalText = "";
         let receivedTerminalEvent = false;
 
         try {
-          for await (const event of streamDotaMind(query, sessionId, browserId, abortSignal)) {
+          const run = await createChatRun(browserId, sessionId, query);
+          registerRun(run);
+          setRuntimeRuns((runs) => ({
+            ...runs,
+            [messageId]: { messageId, phase: "planning", tools: [], status: "running" },
+          }));
+          for await (const item of subscribeChatRun(browserId, run.run_id, 0, abortSignal)) {
+            applyEvent(item);
+            if (!("sequence" in item)) {
+              if (item.type === "error") {
+                receivedTerminalEvent = true;
+                updateRuntimeRun(messageId, (current) => ({ ...current, status: "failed" }));
+                yield {
+                  content: [{ type: "text", text: formatStreamError(item.error_code, "Run 事件订阅失败。") }],
+                };
+                return;
+              }
+              continue;
+            }
+            const event = item.event;
             switch (event.type) {
               case "phase":
                 updateRuntimeRun(messageId, (run) => ({ ...run, phase: event.phase }));
@@ -318,7 +336,6 @@ const ChatSessionRuntime = ({
                 break;
               case "result":
                 receivedTerminalEvent = true;
-                if (event.session) onSessionSummary(event.session);
                 updateRuntimeRun(messageId, (run) => ({
                   ...run,
                   status: finalRunStatus(event.response.status),
@@ -332,6 +349,27 @@ const ChatSessionRuntime = ({
                 yield {
                   content: [{ type: "text", text: formatStreamError(event.error_code, event.reason) }],
                 };
+                return;
+              case "status":
+                if (event.status === "queued" || event.status === "running") break;
+                receivedTerminalEvent = true;
+                updateRuntimeRun(messageId, (current) => ({
+                  ...current,
+                  status: event.status === "completed" ? "completed" : "failed",
+                }));
+                if (event.status !== "completed") {
+                  yield {
+                    content: [
+                      {
+                        type: "text",
+                        text:
+                          event.status === "cancelled"
+                            ? cancelledMessage
+                            : formatStreamError(event.error_code ?? event.status, "Run 未能完成。"),
+                      },
+                    ],
+                  };
+                }
                 return;
             }
           }
@@ -351,7 +389,7 @@ const ChatSessionRuntime = ({
         }
       },
     }),
-    [browserId, onSessionSummary, sessionId, setRuntimeRuns, updateRuntimeRun],
+    [applyEvent, browserId, registerRun, sessionId, setRuntimeRuns, updateRuntimeRun],
   );
   const runtime = useLocalRuntime(adapter, { initialMessages });
 

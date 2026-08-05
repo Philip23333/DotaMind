@@ -397,6 +397,23 @@
 ### Boundary
 
 - D1 establishes state and recovery entry points only; message sending, subscriptions, switch races, stop controls, and the old stateful API remain for D2-D7.
+
+## 23:59 — V3.3-2 D2 switch sending to Chat Run API
+
+### Completed
+
+- `ChatSessionRuntime` now calls `createChatRun()` before creating runtime pending state, then consumes `subscribeChatRun()` events to produce assistant output.
+- Phase/tool/delta/result/status/error events continue mapping into the existing assistant-ui runtime; a failed Run creation leaves no fake runtime pending entry.
+- The old stateful `/plan/stream` is no longer the formal chat send entry point, but remains as a D-stage debug/compatibility boundary until final cutover.
+
+### Verified
+
+- `apps/chat`: `npm run lint` and `npm run build` passed without warnings.
+- `git diff --check`: passed.
+
+### Boundary
+
+- D2 does not yet recover pending Runs, resume subscriptions from cursors, protect switch races, call the cancel API from Stop, or delete the old stateful code; those remain in D3-D7.
 - A running FastAPI instance passed a real session CRUD smoke test: create, isolated list, rename,
   cross-browser 404 and delete.
 

@@ -448,6 +448,23 @@
 
 - D1 只建立状态层和恢复入口，未改变消息发送、订阅、切换竞争、停止按钮或旧 stateful API；这些属于 D2-D7。
 
+## 23:59 — V3.3-2 D2 发送流程切换到 Chat Run API
+
+### 已完成
+
+- `ChatSessionRuntime` 发送先调用 `createChatRun()`，成功后才创建 runtime pending 状态，再通过 `subscribeChatRun()` 消费 Run 事件生成回答。
+- phase/tool/delta/result/status/error 事件继续映射到现有 assistant-ui runtime；Run 创建失败不会遗留假的 runtime pending。
+- 旧 stateful `/plan/stream` 不再是正式聊天发送入口，但仍保留用于 D 阶段完成前的调试/兼容边界。
+
+### 已验证
+
+- `apps/chat`: `npm run lint`、`npm run build` 均通过且无 warning。
+- `git diff --check`：通过。
+
+### 边界
+
+- D2 尚未实现 pending Run 启动恢复、断线 cursor 续订、切换竞争保护、Stop 调用 cancel API 和删除旧 stateful 代码；这些属于 D3-D7。
+
 ## 16:39 — 避免会话切换空状态闪现
 
 - 右侧聊天 runtime 重新挂载后先渲染一次空消息状态，导致“新聊天”界面闪现；现由 `ChatSessionRuntime` 在挂载完成后通知父组件，再关闭右侧 loading 遮罩。
