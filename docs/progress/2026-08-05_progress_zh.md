@@ -320,6 +320,25 @@
 
 - C1 只冻结 API schema/ownership/error contract，尚未挂载 FastAPI endpoint、Manager 调度或 Redis 事件订阅。
 
+## 21:47 — V3.3-2 C2 创建 Chat Run
+
+### 已完成
+
+- 新增 `ChatRunRuntime`：预分配 UUID v4，按 payload hash 调用 `create_or_get_run()`，新 Run 持久化为 `queued` 后交给 `BackgroundRunManager`。
+- 创建路由挂载为 `POST /api/v1/chat/sessions/{session_id}/runs`，成功返回 `202`；幂等重放返回 `200`，同 session 活动冲突/幂等冲突使用稳定 `409`。
+- FastAPI lifespan 在配置 Redis 时构造 Run Repository、Redis Event Bus、Manager、Executor 和 stale sweeper；未配置 Redis 时 Run API 返回 `503 unavailable`，不降级内存事件总线。
+- 调度失败会把刚创建的 queued Run 收口为 `failed/dispatch_failed`，不留下永久 queued。
+
+### 已验证
+
+- `uv run ruff check app tests`：通过。
+- `tests/test_chat_run_runtime.py tests/test_plan_route.py`：`13 passed`（含既有 TestClient 弃用警告）。
+- `git diff --check`：通过。
+
+### 边界
+
+- C2 只完成创建和调度；Run 查询、active-run、事件重放/订阅和取消 API 属于 C3-C5，旧 stateful `/plan` 暂不删除。
+
 ## 16:39 — 避免会话切换空状态闪现
 
 - 右侧聊天 runtime 重新挂载后先渲染一次空消息状态，导致“新聊天”界面闪现；现由 `ChatSessionRuntime` 在挂载完成后通知父组件，再关闭右侧 loading 遮罩。

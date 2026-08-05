@@ -269,6 +269,25 @@
 ### Boundary
 
 - C1 freezes the API/schema/ownership/error contract only; FastAPI endpoint registration, Manager scheduling, and Redis event subscription remain for C2-C5.
+
+## 21:47 — V3.3-2 C2 create Chat Run
+
+### Completed
+
+- Added `ChatRunRuntime`: preallocates a UUID v4, calls `create_or_get_run()` with a payload hash, persists new Runs as `queued`, and submits them to `BackgroundRunManager`.
+- Registered `POST /api/v1/chat/sessions/{session_id}/runs`; new Runs return `202`, idempotent replays return `200`, and active/idempotency conflicts use stable `409` errors.
+- FastAPI lifespan now constructs the Run Repository, Redis Event Bus, Manager, Executor, and stale sweeper when Redis is configured; without Redis the Run API returns `503 unavailable` and never falls back to an in-memory event bus.
+- Dispatch failures close the newly created queued Run as `failed/dispatch_failed` instead of leaving it permanently queued.
+
+### Verified
+
+- `uv run ruff check app tests`: passed.
+- `tests/test_chat_run_runtime.py tests/test_plan_route.py`: `13 passed` (with the existing TestClient deprecation warning).
+- `git diff --check`: passed.
+
+### Boundary
+
+- C2 covers creation and dispatch only; Run query, active-Run, event replay/subscription, and cancel APIs are C3-C5. The old stateful `/plan` path is not removed yet.
 - A running FastAPI instance passed a real session CRUD smoke test: create, isolated list, rename,
   cross-browser 404 and delete.
 

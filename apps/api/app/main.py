@@ -2,6 +2,7 @@ import logging
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
+from uuid import uuid4
 
 from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,9 +10,16 @@ from fastapi.responses import FileResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from app.api.v1.chat_routes import router as chat_router
+from app.api.v1.chat_run_routes import router as chat_run_router
 from app.api.v1.routes import router as v1_router
+from app.application.background_run_manager import BackgroundRunManager
+from app.application.chat_run_executor import ChatRunExecutor
+from app.application.chat_run_runtime import ChatRunRuntime
 from app.application.postgres_chat_repository import PostgresChatRepository
+from app.application.postgres_chat_run_repository import PostgresChatRunRepository
+from app.application.redis_run_event_bus import RedisRunEventBus
 from app.application.redis_session_store import RedisSessionStore
+from app.application.run_recovery import RunStaleSweeper
 from app.application.session_store_factory import build_session_store
 from app.core.config import get_policy, get_settings
 from app.persistence.database import (
@@ -68,13 +76,75 @@ async def lifespan(app: FastAPI):
     from app.application.plan_service import PlanService
 
     app.state.chat_repository = PostgresChatRepository(database.session_factory)
+    app.state.chat_run_repository = PostgresChatRunRepository(database.session_factory)
     app.state.plan_service = PlanService(
         session_store=store,
         chat_repository=app.state.chat_repository,
     )
+    run_event_bus = None
+    run_manager = None
+    run_sweeper = None
+    if settings.redis_url:
+        run_event_bus = RedisRunEventBus(redis_url=settings.redis_url)
+        await run_event_bus.ping()
+        worker_id = str(uuid4())
+
+        async def mark_shutdown_interrupted(run_id):
+            try:
+                await app.state.chat_run_repository.mark_interrupted(
+                    run_id=run_id,
+                    error_code="worker_shutdown",
+                    worker_id=worker_id,
+                )
+            except Exception:
+                return
+
+        run_manager = BackgroundRunManager(
+            max_concurrent_runs=settings.max_concurrent_chat_runs,
+            worker_id=worker_id,
+            on_shutdown=mark_shutdown_interrupted,
+            cancel_subscriber=run_event_bus.subscribe_cancellations,
+        )
+        executor = ChatRunExecutor(
+            runner=app.state.plan_service.runner,
+            run_repository=app.state.chat_run_repository,
+            chat_repository=app.state.chat_repository,
+            session_store=store,
+            event_bus=run_event_bus,
+            worker_id=worker_id,
+            history_limit=app.state.plan_service._conv_policy.history_window,
+            build_turn=app.state.plan_service._build_turn,
+            build_response=lambda state, session_id: app.state.plan_service._public_response(
+                state,
+                session_id=session_id,
+            ),
+            heartbeat_interval_seconds=settings.run_heartbeat_seconds,
+        )
+        app.state.chat_run_runtime = ChatRunRuntime(
+            repository=app.state.chat_run_repository,
+            manager=run_manager,
+            executor=executor,
+        )
+        await run_manager.start()
+        run_sweeper = RunStaleSweeper(
+            repository=app.state.chat_run_repository,
+            stale_after_seconds=settings.run_stale_seconds,
+            interval_seconds=settings.run_sweeper_interval_seconds,
+        )
+        await run_sweeper.start()
+    else:
+        # The Run API is intentionally unavailable without Redis; no memory
+        # event-bus fallback is allowed by the V3.3-2 contract.
+        app.state.chat_run_runtime = None
     try:
         yield
     finally:
+        if run_sweeper is not None:
+            await run_sweeper.stop()
+        if run_manager is not None:
+            await run_manager.shutdown()
+        if run_event_bus is not None:
+            await run_event_bus.aclose()
         await store.aclose()
         await close_database(database)
 
@@ -96,6 +166,7 @@ app.add_middleware(
 
 app.include_router(v1_router, prefix=settings.api_v1_prefix)
 app.include_router(chat_router, prefix=settings.api_v1_prefix)
+app.include_router(chat_run_router, prefix=settings.api_v1_prefix)
 
 
 @app.get("/health", tags=["system"])
