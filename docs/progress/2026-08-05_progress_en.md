@@ -324,6 +324,24 @@
 ### Boundary
 
 - C4 does not yet expose the public cancel API; event subscription never owns the background task lifecycle, while C5 handles cancellation transitions and Redis notifications.
+
+## 23:52 — V3.3-2 C5 cancel API
+
+### Completed
+
+- Added `POST /api/v1/chat/runs/{run_id}/cancel`; it first calls PostgreSQL `request_cancel()`, then attempts to wake the local Manager and publish a Redis cancel notification.
+- Repeated `cancel_requested` requests remain idempotent `202`; terminal Runs return `409 run_terminal`; Redis notification failure never rolls back the durable cancel request, and heartbeat provides eventual discovery.
+- The cancel API shares browser UUID v4 ownership and stable error mapping with create/query/event routes.
+
+### Verified
+
+- `uv run ruff check app tests`: passed.
+- `tests/test_chat_run_cancel_routes.py tests/test_chat_run_runtime.py`: `5 passed`.
+- `git diff --check`: passed.
+
+### Boundary
+
+- C5 does not fabricate a `cancelled` terminal state; the background Executor closes it based on PostgreSQL state. C6/C7 continue stateful-path migration preparation and full API regression.
 - A running FastAPI instance passed a real session CRUD smoke test: create, isolated list, rename,
   cross-browser 404 and delete.
 

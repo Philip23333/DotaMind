@@ -12,6 +12,7 @@ from app.application.chat_run_executor import (
     ChatRunExecutor,
 )
 from app.application.chat_run_repository import (
+    ChatRunCancelResult,
     ChatRunCreateResult,
     ChatRunRepository,
     ChatRunRepositoryError,
@@ -34,10 +35,12 @@ class ChatRunRuntime:
         repository: ChatRunRepository,
         manager: BackgroundRunManager,
         executor: ChatRunExecutor,
+        event_bus=None,
     ) -> None:
         self._repository = repository
         self._manager = manager
         self._executor = executor
+        self._event_bus = event_bus
 
     async def create_run(
         self,
@@ -81,6 +84,24 @@ class ChatRunRuntime:
                 error_code="dispatch_failed",
             )
             raise ChatRunRepositoryError("dispatch_failed") from exc
+        return result
+
+    async def cancel_run(self, *, browser_id: str, run_id: UUID) -> ChatRunCancelResult:
+        result = await self._repository.request_cancel(
+            browser_id=browser_id,
+            run_id=run_id,
+        )
+        await self._manager.cancel(run_id)
+        if self._event_bus is not None:
+            try:
+                await self._event_bus.publish_cancel(
+                    run_id=run_id,
+                    target_worker_id=result.run.worker_id,
+                )
+            except Exception:
+                # PostgreSQL cancel_requested is authoritative; heartbeat will
+                # observe it even when the notification path is unavailable.
+                pass
         return result
 
 

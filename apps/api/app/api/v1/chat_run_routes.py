@@ -10,6 +10,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.api.v1.chat_run_schemas import (
+    ChatRunCancelResponse,
     ChatRunCreateRequest,
     ChatRunCreateResponse,
     ChatRunErrorResponse,
@@ -25,6 +26,7 @@ from app.application.chat_run_repository import (
     ChatRunNotFoundError,
     ChatRunRepositoryError,
     ChatRunSummary,
+    ChatRunTerminalError,
 )
 from app.application.chat_run_runtime import ChatRunRuntime
 from app.application.run_event_bus import RunEventBusError, StoredRunEvent
@@ -174,6 +176,25 @@ async def get_active_run(
     except ChatRunRepositoryError as exc:
         return run_error_response(exc.code, status_code=503)
     return run_response(summary) if summary is not None else None
+
+
+@router.post("/runs/{run_id}/cancel", response_model=ChatRunCancelResponse)
+async def cancel_run(run_id: UUID, request: Request) -> ChatRunCancelResponse | JSONResponse:
+    browser_id, error = _validated_browser_id(request)
+    if error is not None:
+        return error
+    runtime = _runtime(request)
+    if runtime is None:
+        return run_error_response("unavailable", status_code=503)
+    try:
+        result = await runtime.cancel_run(browser_id=browser_id, run_id=run_id)
+    except ChatRunNotFoundError:
+        return run_error_response("not_found", status_code=404)
+    except ChatRunTerminalError:
+        return run_error_response("run_terminal", status_code=409)
+    except ChatRunRepositoryError as exc:
+        return run_error_response(exc.code, status_code=503)
+    return ChatRunCancelResponse(run=run_response(result.run))
 
 
 @router.get("/runs/{run_id}/events", response_model=None)

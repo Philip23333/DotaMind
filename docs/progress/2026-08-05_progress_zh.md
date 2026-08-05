@@ -375,6 +375,24 @@
 
 - C4 尚未实现公开取消 API；事件订阅不改变后台任务生命周期，C5 负责取消状态转换和 Redis 通知。
 
+## 23:52 — V3.3-2 C5 取消 API
+
+### 已完成
+
+- 新增 `POST /api/v1/chat/runs/{run_id}/cancel`；先调用 PostgreSQL `request_cancel()`，再尝试唤醒本 worker Manager 并发布 Redis cancel notification。
+- `cancel_requested` 重复请求保持 `202` 幂等；终态 Run 返回 `409 run_terminal`；Redis 通知失败不回滚已持久化的取消请求，heartbeat 负责最终发现。
+- 取消 API 与创建/查询/事件路由共享 browser UUID v4 ownership 和稳定错误映射。
+
+### 已验证
+
+- `uv run ruff check app tests`：通过。
+- `tests/test_chat_run_cancel_routes.py tests/test_chat_run_runtime.py`：`5 passed`。
+- `git diff --check`：通过。
+
+### 边界
+
+- C5 不直接伪造 `cancelled` 终态；由后台 Executor 根据 PostgreSQL 状态收口。C6/C7 继续处理旧 stateful 路径迁移准备和 API 全量回归。
+
 ## 16:39 — 避免会话切换空状态闪现
 
 - 右侧聊天 runtime 重新挂载后先渲染一次空消息状态，导致“新聊天”界面闪现；现由 `ChatSessionRuntime` 在挂载完成后通知父组件，再关闭右侧 loading 遮罩。

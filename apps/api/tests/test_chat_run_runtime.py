@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 from app.api.v1.chat_run_routes import router
 from app.application.chat_run_repository import (
+    ChatRunCancelResult,
     ChatRunCreateResult,
     ChatRunSummary,
 )
@@ -60,6 +61,26 @@ def test_runtime_replay_does_not_dispatch_a_second_task() -> None:
     asyncio.run(scenario())
 
 
+def test_runtime_persists_cancel_before_local_wakeup_and_redis_notice() -> None:
+    async def scenario() -> None:
+        calls: list[str] = []
+        run_id = uuid4()
+        repository = FakeCancelRepository(calls, run_id)
+        manager = FakeCancelManager(calls)
+        bus = FakeCancelBus(calls)
+        runtime = ChatRunRuntime(
+            repository=repository,
+            manager=manager,
+            executor=object(),
+            event_bus=bus,
+        )
+        result = await runtime.cancel_run(browser_id=str(uuid4()), run_id=run_id)
+        assert result.action == "requested"
+        assert calls == ["request_cancel", "local_cancel", "publish_cancel"]
+
+    asyncio.run(scenario())
+
+
 def test_create_run_route_returns_202_and_validates_browser_uuid() -> None:
     api = FastAPI()
     api.include_router(router)
@@ -90,6 +111,36 @@ class FakeManager:
 
     async def submit(self, run_id, runner) -> None:
         self.submitted.append(run_id)
+
+
+class FakeCancelManager:
+    def __init__(self, calls: list[str]) -> None:
+        self.calls = calls
+
+    async def cancel(self, run_id) -> bool:
+        self.calls.append("local_cancel")
+        return True
+
+
+class FakeCancelRepository:
+    def __init__(self, calls: list[str], run_id) -> None:
+        self.calls = calls
+        self.run_id = run_id
+
+    async def request_cancel(self, **kwargs) -> ChatRunCancelResult:
+        self.calls.append("request_cancel")
+        return ChatRunCancelResult(
+            action="requested",
+            run=_summary(self.run_id, uuid4(), "created"),
+        )
+
+
+class FakeCancelBus:
+    def __init__(self, calls: list[str]) -> None:
+        self.calls = calls
+
+    async def publish_cancel(self, **kwargs) -> None:
+        self.calls.append("publish_cancel")
 
 
 class FakeRepository:

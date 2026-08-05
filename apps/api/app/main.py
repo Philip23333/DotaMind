@@ -124,6 +124,7 @@ async def lifespan(app: FastAPI):
             repository=app.state.chat_run_repository,
             manager=run_manager,
             executor=executor,
+            event_bus=run_event_bus,
         )
         await run_manager.start()
         run_sweeper = RunStaleSweeper(
