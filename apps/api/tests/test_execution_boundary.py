@@ -1,6 +1,5 @@
 import asyncio
 from types import SimpleNamespace
-from uuid import uuid4
 
 import pytest
 
@@ -14,10 +13,9 @@ from app.agentic.state import AgentRunState
 from app.api.v1.routes import plan
 from app.api.v1.schemas import PlanRequest
 from app.application.plan_service import PlanService
-from app.application.session_store import InMemorySessionStore
 from app.core.config import RuntimePolicy
 from app.main import metrics
-from app.observability import IDEMPOTENCY, RUNS
+from app.observability import RUNS
 
 
 def _completed_state(state: AgentRunState) -> AgentRunState:
@@ -33,38 +31,6 @@ def _completed_state(state: AgentRunState) -> AgentRunState:
 class ExplodingRunner:
     async def run(self, state: AgentRunState) -> AgentRunState:
         raise AgentExecutionError("tool_execution")
-
-
-class CompletingRunner:
-    def __init__(self) -> None:
-        self.calls = 0
-
-    async def run(self, state: AgentRunState) -> AgentRunState:
-        self.calls += 1
-        return _completed_state(state)
-
-
-class BlockingRunner:
-    def __init__(self) -> None:
-        self.started = asyncio.Event()
-
-    async def run(self, state: AgentRunState) -> AgentRunState:
-        self.started.set()
-        await asyncio.Event().wait()
-        return state
-
-
-class CompletionRaceStore(InMemorySessionStore):
-    def __init__(self) -> None:
-        super().__init__()
-        self.committed = asyncio.Event()
-        self.release = asyncio.Event()
-
-    async def complete_request_with_turn(self, *args, **kwargs):
-        result = await super().complete_request_with_turn(*args, **kwargs)
-        self.committed.set()
-        await self.release.wait()
-        return result
 
 
 class ReturningGraph:
@@ -89,88 +55,9 @@ def _graph_runner(graph) -> AgentGraphRunner:
     return runner
 
 
-def _service(store: InMemorySessionStore, runner) -> PlanService:
-    service = PlanService(session_store=store)
-    service.runner = runner  # type: ignore[assignment]
-    return service
-
-
-def test_unhandled_error_is_not_completed_and_request_id_can_retry_once() -> None:
-    store = InMemorySessionStore()
-    service = _service(store, ExplodingRunner())
-    session_id, request_id = uuid4(), uuid4()
-
-    async def scenario():
-        with pytest.raises(AgentExecutionError):
-            await service.run("query", session_id=session_id, request_id=request_id)
-        record = store._sessions[str(session_id)].request_records[str(request_id)]
-        service.runner = CompletingRunner()  # type: ignore[assignment]
-        result = await service.run("query", session_id=session_id, request_id=request_id)
-        return record, result, await store.get(str(session_id), limit=5)
-
-    record, result, turns = asyncio.run(scenario())
-
-    assert record.status == "failed"
-    assert result.idempotency_status == "executed"
-    assert len(turns) == 1
-
-
-def test_cancellation_after_atomic_completion_keeps_one_completed_turn() -> None:
-    store = CompletionRaceStore()
-    service = _service(store, CompletingRunner())
-    session_id, request_id = uuid4(), uuid4()
-
-    async def scenario():
-        task = asyncio.create_task(
-            service.run("query", session_id=session_id, request_id=request_id)
-        )
-        await store.committed.wait()
-        task.cancel()
-        with pytest.raises(asyncio.CancelledError):
-            await task
-        replay = await service.run("query", session_id=session_id, request_id=request_id)
-        return replay, await store.get(str(session_id), limit=5)
-
-    executed = IDEMPOTENCY.labels("memory", "executed")._value
-    cancelled = IDEMPOTENCY.labels("memory", "cancelled")._value
-    before = executed.get(), cancelled.get()
-    replay, turns = asyncio.run(scenario())
-
-    assert replay.idempotency_status == "replayed"
-    assert len(turns) == 1
-    assert executed.get() - before[0] == 1
-    assert cancelled.get() - before[1] == 0
-
-
-def test_cancellation_before_commit_fails_request_without_turn() -> None:
-    store = InMemorySessionStore()
-    runner = BlockingRunner()
-    service = _service(store, runner)
-    session_id, request_id = uuid4(), uuid4()
-    cancelled = IDEMPOTENCY.labels("memory", "cancelled")._value
-
-    async def scenario():
-        task = asyncio.create_task(
-            service.run("query", session_id=session_id, request_id=request_id)
-        )
-        await runner.started.wait()
-        task.cancel()
-        with pytest.raises(asyncio.CancelledError):
-            await task
-        record = store._sessions[str(session_id)].request_records[str(request_id)]
-        return record, await store.get(str(session_id), limit=5)
-
-    before = cancelled.get()
-    record, turns = asyncio.run(scenario())
-
-    assert record.status == "failed"
-    assert turns == []
-    assert cancelled.get() - before == 1
-
-
 def test_route_maps_unhandled_agent_error_to_safe_500() -> None:
-    store = InMemorySessionStore()
-    service = _service(store, ExplodingRunner())
+    service = PlanService()
+    service.runner = ExplodingRunner()  # type: ignore[assignment]
     request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(plan_service=service)))
 
     async def scenario():

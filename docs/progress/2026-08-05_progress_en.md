@@ -566,8 +566,31 @@
 
 ### Boundary
 
-- PlanService retains only the non-PostgreSQL in-memory unit-test helper; formal chat sending, recovery, cancellation and persistence no longer pass through `/plan`.
+- The repository-less helper left after D7 was removed in D8; formal chat sending, recovery, cancellation and persistence do not pass through `/plan`.
 - D8 will run the full backend/frontend regression and final multi-Run contract acceptance; E is not implemented.
+
+## 23:59 — V3.3-2 D8 frontend tests and Stage D closeout
+
+### Completed
+
+- Removed the old `streamDotaMind()` stateful `/plan/stream` request from `apps/chat/src/lib/dotamind-api.ts`; the chat application call surface now uses only the Chat Run API.
+- Reduced `PlanService` to `run(query, game)`, removing request-scoped session/idempotency and repository-less stateful branches; ChatRunExecutor remains the direct history/session/request/run_id execution contract.
+- Added a minimal Vitest setup and pure `chat-run-store` reducer tests for sequence deduplication, Run/session isolation, concurrent Runs, terminal unread state and session cleanup.
+- Retired obsolete PlanService stateful tests while retaining independent idempotency-hash, state-machine, execution-boundary and privacy regressions.
+
+### Verified
+
+- `uv run alembic upgrade head`: passed.
+- `uv run alembic check`: `No new upgrade operations detected`.
+- `uv run ruff check app tests`: passed.
+- Full `uv run pytest -q`: `469 passed, 20 skipped, 1 warning` (the existing FastAPI TestClient deprecation warning).
+- `apps/chat`: `npm run test`: `1 file, 3 tests passed`; `npm run lint` and `npm run build` passed.
+- `git diff --check`: passed.
+
+### Stage D conclusion
+
+- The browser-level multi-chat Run Store, switch/recovery/cancel/unread behavior and stateless debug boundary are complete; the old stateful chat execution path is removed.
+- Stage E still needs real restart/Redis-expiry recovery, browser acceptance matrix and final documentation acceptance.
 
 ## 16:39 — Preventing the empty-state flash on chat switching
 

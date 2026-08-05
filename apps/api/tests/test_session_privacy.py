@@ -4,31 +4,21 @@ Blocking-item guard: history injected into the planner prompt must NOT leak
 back to API clients through any public response field.
 """
 
-import asyncio
 import json
-from uuid import uuid4
 
-from app.agentic.conversation.models import Turn
 from app.agentic.models import ExecutionPlan, ToolCall
 from app.agentic.nodes.attempt_finalize import attempt_finalize_node
 from app.agentic.nodes.response import response_node
 from app.agentic.nodes.run_finalize import run_finalize_node
 from app.agentic.nodes.run_init import run_init_node
-from app.agentic.planning.controller import (
-    AgentController,
-    AgentControllerResult,
-    _redact_history_from_messages,
-)
+from app.agentic.planning.controller import AgentControllerResult, _redact_history_from_messages
 from app.agentic.planning.decisions import (
     CapabilityBoundaryDecision,
     ToolPlanDecision,
 )
 from app.agentic.runtime.clock import SystemClock
 from app.agentic.state import AgentRunState
-from app.agentic.tools.stratz_tools import build_default_tool_registry
-from app.application.plan_service import PlanService
-from app.application.session_store import InMemorySessionStore
-from app.core.config import RuntimePolicy, get_settings
+from app.core.config import RuntimePolicy
 
 SENTINEL = "SENTINEL_PRIVACY_ABC123"
 
@@ -89,11 +79,6 @@ def test_stateless_validation_failure_uses_redacted_public_envelope() -> None:
     assert SENTINEL not in json.dumps(response, ensure_ascii=False)
 
 
-async def _seed_turn(store: InMemorySessionStore, session_id: str, turn: Turn) -> None:
-    async with store.transaction(session_id):
-        await store.append(session_id, turn)
-
-
 # ---------------------------------------------------------------------------
 # Unit: redaction helper
 # ---------------------------------------------------------------------------
@@ -136,77 +121,7 @@ class TestRedactHelper:
         assert redacted[3]["content"] == "retry feedback"
 
 
-# ---------------------------------------------------------------------------
-# Integration: sentinel in turn 1 must not appear in turn 2 API response
-# ---------------------------------------------------------------------------
-
-
-class _FakeLLM:
-    """Always returns a capability boundary decision."""
-
-    async def complete(self, *args, **kwargs) -> str:
-        return ""
-
-    async def complete_json(self, messages, **kwargs) -> dict:
-        return {
-            "kind": "capability_boundary",
-            "intent": "unsupported",
-            "reason": "no tool",
-        }
-
-    async def complete_with_tools(self, *args, **kwargs):
-        return None
-
-
-def test_prior_turn_sentinel_absent_from_next_turn_response():
-    registry = build_default_tool_registry(get_settings())
-    planner = AgentController(registry, llm=_FakeLLM(), llm_enabled=True)
-    store = InMemorySessionStore()
-    service = PlanService(controller=planner, session_store=store)
-    sid = uuid4()
-
-    async def _scenario():
-        # Seed turn 1 with a sentinel in its answer summary.
-        await _seed_turn(
-            store,
-            str(sid),
-            Turn(
-                query="turn one",
-                status="ok",
-                intent="counter_pick",
-                response_summary=SENTINEL,
-            ),
-        )
-        # Turn 2: planner injects turn-1 history (with sentinel) then redacts it.
-        return await service.run("turn two", session_id=sid)
-
-    result = asyncio.run(_scenario())
-
-    # The full API-facing response must not contain the sentinel anywhere,
-    # including any public debug field.
-    response_json = json.dumps(result.public_response, ensure_ascii=False)
-    assert SENTINEL not in response_json, "history leaked into API response"
-
-
-def test_history_field_excluded_from_response():
-    """AgentRunState.history must not be serialised into the response dict."""
-    registry = build_default_tool_registry(get_settings())
-    planner = AgentController(registry, llm=_FakeLLM(), llm_enabled=True)
-    store = InMemorySessionStore()
-    service = PlanService(controller=planner, session_store=store)
-    sid = uuid4()
-
-    async def _scenario():
-        await _seed_turn(
-            store, str(sid), Turn(query="one", response_summary=SENTINEL)
-        )
-        return await service.run("two", session_id=sid)
-
-    result = asyncio.run(_scenario())
-    assert "history" not in result.public_response
-
-
-def test_stateful_validator_failure_uses_sentinel_free_public_envelope():
+def test_validator_failure_uses_sentinel_free_public_envelope():
     rejected_plan = ExecutionPlan(
         intent="bad",
         goal=SENTINEL,
@@ -240,57 +155,3 @@ def test_stateful_validator_failure_uses_sentinel_free_public_envelope():
     assert SENTINEL not in json.dumps(response, ensure_ascii=False)
     assert response["error_code"] == "decision_validation_error"
     assert response["plan"] is None
-
-
-def test_stateful_safe_failure_persists_only_stable_redacted_turn():
-    rejected_plan = ExecutionPlan(
-        intent="bad",
-        goal=SENTINEL,
-        output_contract="natural_language_answer",
-        tool_calls=[ToolCall(id="bad", tool="resolve_hero", args={"query": SENTINEL})],
-    )
-
-    class UnsafeRunner:
-        async def run(self, _input_state: AgentRunState) -> AgentRunState:
-            unsafe_state = AgentRunState(
-                query="current query",
-                game="dota2",
-                session_memory_enabled=True,
-                validation_failed=True,
-                status="error",
-                reason=SENTINEL,
-                errors=[SENTINEL],
-                plan=rejected_plan,
-                safe_failure_required=True,
-                controller_result=AgentControllerResult(
-                    status="decided",
-                    reason=SENTINEL,
-                    decision=ToolPlanDecision(kind="tool_plan", plan=rejected_plan),
-                    raw_content=SENTINEL,
-                    prompt_messages=[{"role": "user", "content": SENTINEL}],
-                ),
-            )
-            return _finalize_response(unsafe_state)
-
-    store = InMemorySessionStore()
-    service = PlanService(session_store=store)
-    service.runner = UnsafeRunner()  # type: ignore[assignment]
-    sid = uuid4()
-
-    async def _scenario():
-        result = await service.run("current query", session_id=sid)
-        turns = await store.get(str(sid), limit=5)
-        return result, turns
-
-    result, turns = asyncio.run(_scenario())
-
-    assert result.state is not None
-    assert result.state.response_type == "decision_validation_error"
-    assert len(turns) == 1
-    turn = turns[0]
-    assert turn.response_type == "session_request_failed"
-    assert turn.response_summary == "The session request could not be completed safely."
-    assert turn.intent is None
-    assert turn.context_scope == {}
-    assert turn.resolved_entities == []
-    assert SENTINEL not in turn.model_dump_json()

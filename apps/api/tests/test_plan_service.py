@@ -73,7 +73,7 @@ def test_plan_service_returns_insufficient_tools_without_execution() -> None:
     assert result.trace[-1].status == "completed"
     assert result.response
 
-
+# End of stateless PlanService tests.
 def test_plan_service_returns_error_when_planner_errors() -> None:
     service = PlanService(
         controller=FakeController(
@@ -238,104 +238,3 @@ def test_plan_service_rejects_unproducible_required_evidence() -> None:
     assert result.review is None
     assert any("not producible by selected tools" in item for item in result.errors)
     assert result.response
-
-
-# ---------------------------------------------------------------------------
-# Session memory wiring
-# ---------------------------------------------------------------------------
-
-from uuid import uuid4  # noqa: E402
-
-
-def _insufficient_service() -> PlanService:
-    return PlanService(
-        controller=FakeController(
-            AgentControllerResult(
-                status="decided",
-                reason="no tool",
-                decision=CapabilityBoundaryDecision(
-                    kind="capability_boundary",
-                    intent="unsupported",
-                    reason="no tool",
-                ),
-            )
-        )
-    )
-
-
-def test_runner_compiled_once_and_reused() -> None:
-    """Graph is compiled in __init__, not per request."""
-    service = _insufficient_service()
-    runner_before = service.runner
-    asyncio.run(service.run("q1"))
-    asyncio.run(service.run("q2"))
-    assert service.runner is runner_before  # same compiled graph instance
-
-
-def test_stateless_run_does_not_touch_store() -> None:
-    service = _insufficient_service()
-
-    async def _scenario():
-        await service.run("q1")  # no session_id
-        # Store must be empty: no session was created.
-        return await service.session_store.get("anything", limit=5)
-
-    assert asyncio.run(_scenario()) == []
-
-
-def test_session_run_writes_turn() -> None:
-    service = _insufficient_service()
-    sid = uuid4()
-
-    async def _scenario():
-        await service.run("first query", session_id=sid)
-        return await service.session_store.get(str(sid), limit=5)
-
-    turns = asyncio.run(_scenario())
-    assert len(turns) == 1
-    assert turns[0].turn_index == 1
-    assert turns[0].status == "insufficient_tools"
-
-
-def test_session_second_turn_reads_prior_history() -> None:
-    planner = FakeController(
-        AgentControllerResult(
-            status="decided",
-            reason="no tool",
-            decision=CapabilityBoundaryDecision(
-                kind="capability_boundary",
-                intent="unsupported",
-                reason="no tool",
-            ),
-        )
-    )
-    service = PlanService(controller=planner)
-    sid = uuid4()
-
-    async def _scenario():
-        await service.run("first query", session_id=sid)
-        await service.run("second query", session_id=sid)
-        return await service.session_store.get(str(sid), limit=5)
-
-    turns = asyncio.run(_scenario())
-    # Two turns stored with monotonic indices.
-    assert [t.turn_index for t in turns] == [1, 2]
-    # Planner saw exactly one prior turn on the second call.
-    assert len(planner.received_history) == 1
-    assert planner.received_history[0].query == "first query"
-
-
-def test_different_sessions_isolated() -> None:
-    service = _insufficient_service()
-    sid_a, sid_b = uuid4(), uuid4()
-
-    async def _scenario():
-        await service.run("query A", session_id=sid_a)
-        await service.run("query B", session_id=sid_b)
-        a = await service.session_store.get(str(sid_a), limit=5)
-        b = await service.session_store.get(str(sid_b), limit=5)
-        return a, b
-
-    a_turns, b_turns = asyncio.run(_scenario())
-    assert a_turns[0].query == "query A"
-    assert b_turns[0].query == "query B"

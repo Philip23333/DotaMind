@@ -1,12 +1,9 @@
 """PlanService: the stateless v2.5 LLM Controller use case.
 
 The public ``/plan`` debug endpoints call :meth:`run` without session metadata.
-Durable multi-turn execution belongs to ``ChatRunExecutor``; this service keeps
-the small in-memory session helper only for focused legacy unit contracts.
+Durable multi-turn execution belongs to ``ChatRunExecutor``.
 """
 
-import asyncio
-import logging
 from dataclasses import dataclass
 from typing import Any, Literal
 from uuid import UUID
@@ -20,16 +17,7 @@ from app.agentic.planning.contracts import validate_registry_contracts
 from app.agentic.planning.controller import AgentController
 from app.agentic.state import AgentRunState
 from app.agentic.tools.stratz_tools import build_default_tool_registry
-from app.application.chat_repository import ChatSessionSummary
-from app.application.idempotency import (
-    IdempotencyConflictError,
-    build_request_hash,
-)
-from app.application.session_store import InMemorySessionStore, SessionStore
 from app.core.config import get_policy, get_settings
-from app.observability import emit_event, record_idempotency
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -39,7 +27,6 @@ class PlanServiceResult:
     public_response: dict[str, Any]
     state: AgentRunState | None
     idempotency_status: Literal["disabled", "executed", "replayed"]
-    session_summary: ChatSessionSummary | None = None
 
 
 class PlanService:
@@ -48,7 +35,6 @@ class PlanService:
     def __init__(
         self,
         controller: AgentController | None = None,
-        session_store: SessionStore | None = None,
     ) -> None:
         settings = get_settings()
         policy = get_policy()
@@ -66,198 +52,17 @@ class PlanService:
             self.registry,
             runtime_policy=policy.planning.runtime,
         )
-        self.session_store: SessionStore = session_store or InMemorySessionStore(
-            max_sessions=policy.conversation.max_sessions,
-            max_turns_per_session=policy.conversation.max_turns_per_session,
-            request_record_ttl_seconds=policy.conversation.request_record_ttl_seconds,
-            max_request_records_per_session=(
-                policy.conversation.max_request_records_per_session
-            ),
-        )
         self._conv_policy = policy.conversation
 
-    async def run(
-        self,
-        query: str,
-        game: str = "dota2",
-        session_id: UUID | None = None,
-        request_id: UUID | None = None,
-        browser_id: str | None = None,
-    ) -> PlanServiceResult:
-        """Run one planning turn, optionally within a persistent session.
-
-        ``session_id`` is retained solely for focused in-memory unit contracts.
-        Production chat requests use ``ChatRunExecutor`` and never enter this
-        branch; the old PostgreSQL persistence path has been removed.
-        """
-        if request_id is not None and session_id is None:
-            raise ValueError("request_id requires session_id")
-
-        if session_id is None:
-            # Stateless path — 100% backward-compatible with pre-session API.
-            state = AgentRunState(query=query, game=game)
-            result = await self.runner.run(state)
-            return PlanServiceResult(
-                public_response=self._public_response(result, session_id=None),
-                state=result,
-                idempotency_status="disabled",
-            )
-
-        sid = str(session_id)
-        async with self.session_store.transaction(sid):
-            if request_id is not None:
-                request_begin = await self.session_store.begin_request(
-                    sid,
-                    request_id,
-                    build_request_hash(query=query, game=game),
-                )
-                if request_begin.action == "replay":
-                    assert request_begin.cached_public_response is not None
-                    record_idempotency(self.session_store.backend_name, "replayed")
-                    emit_event(
-                        logger,
-                        "request_replayed",
-                        status="completed",
-                        backend=self.session_store.backend_name,
-                    )
-                    return PlanServiceResult(
-                        public_response=request_begin.cached_public_response,
-                        state=None,
-                        idempotency_status="replayed",
-                    )
-                if request_begin.action == "conflict":
-                    record_idempotency(self.session_store.backend_name, "conflict")
-                    emit_event(
-                        logger,
-                        "request_conflict",
-                        status="error",
-                        failure_code="idempotency_conflict",
-                        backend=self.session_store.backend_name,
-                    )
-                    raise IdempotencyConflictError(
-                        query=query,
-                        game=game,
-                        session_id=sid,
-                    )
-                assert request_begin.owner_token is not None
-                claim_action = request_begin.claim_kind or "new"
-                record_idempotency(self.session_store.backend_name, claim_action)
-                if claim_action == "takeover":
-                    emit_event(
-                        logger,
-                        "request_takeover",
-                        status="started",
-                        backend=self.session_store.backend_name,
-                    )
-                return await self._execute_idempotent_stateful_request(
-                    sid=sid,
-                    session_id=session_id,
-                    request_id=request_id,
-                    owner_token=request_begin.owner_token,
-                    query=query,
-                    game=game,
-                )
-
-            return await self._execute_stateful_request(
-                sid=sid,
-                session_id=session_id,
-                query=query,
-                game=game,
-            )
-
-    async def _execute_stateful_request(
-        self,
-        *,
-        sid: str,
-        session_id: UUID,
-        query: str,
-        game: str,
-    ) -> PlanServiceResult:
-        history = await self.session_store.get(
-            sid, limit=self._conv_policy.history_window
-        )
-        state = AgentRunState(
-            query=query,
-            game=game,
-            history=history,
-            session_memory_enabled=True,
-            internal_session_id=session_id,
-        )
+    async def run(self, query: str, game: str = "dota2") -> PlanServiceResult:
+        """Run one stateless planning turn for the debug console."""
+        state = AgentRunState(query=query, game=game)
         result = await self.runner.run(state)
-        await self.session_store.append(sid, self._build_turn(result))
         return PlanServiceResult(
-            public_response=self._public_response(result, session_id=session_id),
+            public_response=self._public_response(result, session_id=None),
             state=result,
             idempotency_status="disabled",
         )
-
-    async def _execute_idempotent_stateful_request(
-        self,
-        *,
-        sid: str,
-        session_id: UUID,
-        request_id: UUID,
-        owner_token: UUID,
-        query: str,
-        game: str,
-    ) -> PlanServiceResult:
-        try:
-            history = await self.session_store.get(
-                sid, limit=self._conv_policy.history_window
-            )
-            state = AgentRunState(
-                query=query,
-                game=game,
-                history=history,
-                session_memory_enabled=True,
-                internal_session_id=session_id,
-                internal_request_id=request_id,
-            )
-            result = await self.runner.run(state)
-            public_response = self._public_response(result, session_id=session_id)
-            if result.run_context is None:
-                raise RuntimeError("idempotent request completed without a run context")
-            await self.session_store.complete_request_with_turn(
-                sid,
-                request_id,
-                owner_token,
-                self._build_turn(result),
-                public_response,
-                result.run_context.run_id,
-            )
-            return PlanServiceResult(
-                public_response=public_response,
-                state=result,
-                idempotency_status="executed",
-            )
-        except asyncio.CancelledError:
-            await self._fail_idempotent_request(sid, request_id, owner_token, "cancelled")
-            raise
-        except Exception:
-            await self._fail_idempotent_request(sid, request_id, owner_token, "failed")
-            raise
-
-    async def _fail_idempotent_request(
-        self,
-        sid: str,
-        request_id: UUID,
-        owner_token: UUID,
-        outcome: str,
-    ) -> None:
-        try:
-            action = await self.session_store.fail_request(sid, request_id, owner_token)
-        except Exception:
-            emit_event(
-                logger,
-                "request_commit_failed",
-                status="error",
-                failure_code="session_store_error",
-                backend=self.session_store.backend_name,
-                operation="fail_request",
-            )
-            return
-        if action == "failed":
-            record_idempotency(self.session_store.backend_name, outcome)
 
     def _build_turn(self, result: AgentRunState):
         if result.safe_failure_required:

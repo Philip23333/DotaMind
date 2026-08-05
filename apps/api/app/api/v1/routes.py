@@ -123,21 +123,7 @@ async def _run_stream_request(
     try:
         result = await service.run(request.query, request.game)
         response = mappers.plan_response(result.public_response).model_dump(mode="json")
-        session = result.session_summary
-        session_payload = (
-            {
-                "session_id": session.session_id,
-                "game": session.game,
-                "title": session.title,
-                "title_is_custom": session.title_is_custom,
-                "is_pinned": session.is_pinned,
-                "created_at": session.created_at,
-                "updated_at": session.updated_at,
-            }
-            if session is not None
-            else None
-        )
-        queue.put_nowait(ResultStreamEvent(response=response, session=session_payload))
+        queue.put_nowait(ResultStreamEvent(response=response, session=None))
     except asyncio.CancelledError:
         raise
     except AgentExecutionError:

@@ -592,5 +592,28 @@
 
 ### 边界
 
-- PlanService 中仅保留无 PostgreSQL 的 in-memory unit-test helper；正式聊天发送、恢复、取消与持久化均不再经过 `/plan`。
+- D7 后仍存在的 repository-less helper 已在 D8 移除；正式聊天发送、恢复、取消与持久化均不经过 `/plan`。
 - D8 将进行全量后端/前端回归与最终多 Run 合同验收；E 尚未实现。
+
+## 23:59 — V3.3-2 D8 前端测试与阶段 D 收口
+
+### 已完成
+
+- 从 `apps/chat/src/lib/dotamind-api.ts` 删除旧 `streamDotaMind()` 及其 stateful `/plan/stream` 请求体；聊天应用运行调用面现在只保留 Chat Run API。
+- `PlanService` 改为只暴露 `run(query, game)`，移除请求内 session/idempotency、repository-less stateful 分支；ChatRunExecutor 继续直接承载 history/session/request/run_id 执行合同。
+- 为前端增加最小 Vitest 配置和 `chat-run-store` 纯 reducer 测试，覆盖 sequence 去重、run/session 隔离、并行 Run、终态未读和 session 清理。
+- 清理不再适用的旧 PlanService stateful 测试，保留独立的 idempotency hash、状态机、执行边界和隐私回归。
+
+### 已验证
+
+- `uv run alembic upgrade head`：通过。
+- `uv run alembic check`：`No new upgrade operations detected`。
+- `uv run ruff check app tests`：通过。
+- 全量 `uv run pytest -q`：`469 passed, 20 skipped, 1 warning`（既有 FastAPI TestClient 弃用警告）。
+- `apps/chat`: `npm run test`：`1 file, 3 tests passed`；`npm run lint`、`npm run build` 均通过。
+- `git diff --check`：通过。
+
+### 阶段 D 结论
+
+- 前端多聊天 Run Store、切换/恢复/取消/未读状态与 stateless debug 边界已完成；旧 stateful 聊天执行路径已删除。
+- E 阶段仍需完成真实重启/Redis 过期恢复、浏览器矩阵和最终文档验收。
