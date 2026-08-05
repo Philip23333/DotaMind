@@ -267,6 +267,24 @@
 
 - B6 尚未加入 heartbeat 周期检查、stale sweeper、重启恢复和 C 阶段公开取消 API；这些属于 B7/C 阶段。
 
+## 20:15 — V3.3-2 B7 heartbeat 与 stale recovery
+
+### 已完成
+
+- 新增 `RunHeartbeat`：按配置周期更新 PostgreSQL `heartbeat_at`，发现权威状态为 `cancel_requested` 时只取消本地执行 task。
+- 新增 `RunStaleSweeper`：按 `DOTAMIND_RUN_STALE_SECONDS` 计算 cutoff，调用 Repository 的条件 stale 收口，将无心跳的 `queued/running/cancel_requested` 标记为 `interrupted`。
+- `ChatRunExecutor` 可为每个 Run 启动/停止 heartbeat；`Settings` 增加 per-worker 并发、heartbeat、stale 和 sweeper 周期配置，均使用 `DOTAMIND_` 前缀。
+
+### 已验证
+
+- `uv run ruff check app tests`：通过。
+- `tests/test_run_recovery.py tests/test_chat_run_executor.py tests/test_config.py`：`21 passed`。
+- `git diff --check`：通过。
+
+### 边界
+
+- B7 提供 heartbeat/sweeper 内部组件，但尚未在 FastAPI lifespan 启动 supervisor，也尚未实现 C 阶段 Run API；worker 重启后的调度接线留在 C/E 集成收口。
+
 ## 16:39 — 避免会话切换空状态闪现
 
 - 右侧聊天 runtime 重新挂载后先渲染一次空消息状态，导致“新聊天”界面闪现；现由 `ChatSessionRuntime` 在挂载完成后通知父组件，再关闭右侧 loading 遮罩。

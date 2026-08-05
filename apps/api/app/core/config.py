@@ -265,6 +265,10 @@ class Settings(BaseSettings):
     session_store_backend: Literal["memory", "redis"] = "memory"
     redis_url: str | None = None
     live_data_enabled: bool = False
+    max_concurrent_chat_runs: int = Field(default=2, ge=1)
+    run_heartbeat_seconds: float = Field(default=5.0, gt=0)
+    run_stale_seconds: int = Field(default=60, gt=0)
+    run_sweeper_interval_seconds: float = Field(default=15.0, gt=0)
 
     llm_provider: str = "deepseek"
     llm_api_key: str = ""

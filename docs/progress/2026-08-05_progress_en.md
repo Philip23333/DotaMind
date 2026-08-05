@@ -216,6 +216,24 @@
 ### Boundary
 
 - B6 does not yet add periodic heartbeat checks, the stale sweeper, restart recovery, or the C-stage public cancel API; those remain in B7/C.
+
+## 20:15 — V3.3-2 B7 heartbeat and stale recovery
+
+### Completed
+
+- Added `RunHeartbeat`, which refreshes PostgreSQL `heartbeat_at` on a configured interval and cancels only the local executor task when the authoritative status becomes `cancel_requested`.
+- Added `RunStaleSweeper`, computing a cutoff from `DOTAMIND_RUN_STALE_SECONDS` and using the Repository conditional sweep to interrupt heartbeat-expired `queued/running/cancel_requested` Runs.
+- `ChatRunExecutor` can start/stop a heartbeat per Run; `Settings` now exposes per-worker concurrency, heartbeat, stale, and sweeper intervals under the `DOTAMIND_` prefix.
+
+### Verified
+
+- `uv run ruff check app tests`: passed.
+- `tests/test_run_recovery.py tests/test_chat_run_executor.py tests/test_config.py`: `21 passed`.
+- `git diff --check`: passed.
+
+### Boundary
+
+- B7 provides heartbeat/sweeper internals but does not yet start a supervisor from FastAPI lifespan or implement the C-stage Run API; worker restart scheduling remains for C/E integration closure.
 - A running FastAPI instance passed a real session CRUD smoke test: create, isolated list, rename,
   cross-browser 404 and delete.
 

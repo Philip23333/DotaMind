@@ -29,6 +29,9 @@ def test_settings_use_dotamind_environment_prefix(monkeypatch: pytest.MonkeyPatc
 
     assert settings.app_name == "DotaMind Test API"
     assert settings.database_url == "postgresql://dotamind:dotamind@localhost:5432/dotamind"
+    assert settings.max_concurrent_chat_runs == 2
+    assert settings.run_heartbeat_seconds == 5.0
+    assert settings.run_stale_seconds == 60
 
 
 def test_redis_backend_requires_url() -> None:
