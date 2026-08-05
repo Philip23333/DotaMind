@@ -252,6 +252,23 @@
 ### Stage B conclusion
 
 - Background Runs continue after HTTP observers disappear; PostgreSQL is authoritative for state/Turns while Redis carries replayable events and cancellation notifications. Stage B does not change the existing `/plan` or frontend cutover boundary.
+
+## 21:08 — V3.3-2 C1 Chat Run API contract
+
+### Completed
+
+- Added `chat_run_schemas.py`, freezing create, query, active-Run, event, cancel, and stable-error response models; public responses exclude payload hashes, worker/fencing data, and internal Agent state.
+- Added the `chat_run_routes.py` namespace and shared helpers for `X-DotaMind-Browser-Id` parsing, Run DTO mapping, and error-code reasons; concrete endpoints are added in C2-C5.
+
+### Verified
+
+- `uv run ruff check app tests`: passed.
+- `tests/test_chat_run_api_contract.py`: `2 passed`.
+- `git diff --check`: passed.
+
+### Boundary
+
+- C1 freezes the API/schema/ownership/error contract only; FastAPI endpoint registration, Manager scheduling, and Redis event subscription remain for C2-C5.
 - A running FastAPI instance passed a real session CRUD smoke test: create, isolated list, rename,
   cross-browser 404 and delete.
 

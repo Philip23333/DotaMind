@@ -303,6 +303,23 @@
 
 - 后台 Run 能在脱离 HTTP 观察者后继续执行；PostgreSQL 负责状态/Turn 权威，Redis 负责可重放事件与取消通知；B 阶段不改变现有 `/plan` 和前端正式切换边界。
 
+## 21:08 — V3.3-2 C1 Chat Run API 合同
+
+### 已完成
+
+- 新增 `chat_run_schemas.py`，冻结创建、查询、active-run、事件、取消和稳定错误响应模型；公开响应不暴露 payload hash、worker、fencing 或内部 Agent state。
+- 新增 `chat_run_routes.py` 路由命名空间与公共 helper：统一解析 `X-DotaMind-Browser-Id`、Run DTO 映射和错误码原因；具体 endpoint 在 C2-C5 逐步接入。
+
+### 已验证
+
+- `uv run ruff check app tests`：通过。
+- `tests/test_chat_run_api_contract.py`：`2 passed`。
+- `git diff --check`：通过。
+
+### 边界
+
+- C1 只冻结 API schema/ownership/error contract，尚未挂载 FastAPI endpoint、Manager 调度或 Redis 事件订阅。
+
 ## 16:39 — 避免会话切换空状态闪现
 
 - 右侧聊天 runtime 重新挂载后先渲染一次空消息状态，导致“新聊天”界面闪现；现由 `ChatSessionRuntime` 在挂载完成后通知父组件，再关闭右侧 loading 遮罩。
