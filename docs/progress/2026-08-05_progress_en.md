@@ -102,6 +102,23 @@
 
 - B2-B8 are not implemented; `internal_run_id` is not yet wired into ChatRunExecutor or a public API.
 
+## 18:21 — V3.3-2 B2 Redis Run Event Bus
+
+### Completed
+
+- Added the `RunEventBus` contract and `RedisRunEventBus` with one Stream per Run, Lua-atomic sequences, TTL, sequence replay and Redis cancellation notifications.
+- Added the `status` runtime event model; stored events accept only the existing allowlist and never store query, history, prompt, tool arguments or raw exceptions.
+- Stream/sequence keys use a Run ID hash; the Event Bus accepts an injected Redis client for real integration tests and independent lifecycle management.
+
+### Verified
+
+- `uv run ruff check app tests`: passed.
+- Redis integration coverage is included and follows the existing skip behavior when `DOTAMIND_TEST_REDIS_URL` is unset.
+
+### Boundary
+
+- B3 Event Pump, B4 Manager, B5 Graph execution and B6-B8 failure closure are not implemented; the Event Bus is not yet used by an API or background task.
+
 ## 12:06 — V3.3-1 PostgreSQL chat persistence and anonymous browser multi-chat
 
 ### Completed

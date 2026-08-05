@@ -47,12 +47,28 @@ class ErrorStreamEvent(_StreamEvent):
     reason: str
 
 
+class StatusStreamEvent(_StreamEvent):
+    type: Literal["status"] = "status"
+    status: Literal[
+        "queued",
+        "running",
+        "cancel_requested",
+        "completed",
+        "failed",
+        "cancelled",
+        "interrupted",
+    ]
+    error_code: str | None = None
+    transcript_recovery: bool = False
+
+
 PlanStreamEvent: TypeAlias = (
     PhaseStreamEvent
     | ToolStreamEvent
     | AnswerDeltaStreamEvent
     | ResultStreamEvent
     | ErrorStreamEvent
+    | StatusStreamEvent
 )
 StreamEventPublisher: TypeAlias = Callable[[PlanStreamEvent], None]
 

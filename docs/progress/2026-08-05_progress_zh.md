@@ -102,6 +102,23 @@
 
 - B2-B8 尚未实现；`internal_run_id` 尚未接入 ChatRunExecutor 或公开 API。
 
+## 18:21 — V3.3-2 B2 Redis Run Event Bus
+
+### 已完成
+
+- 新增 `RunEventBus` 合同和 `RedisRunEventBus`，使用每 Run Stream、Lua 原子 sequence、TTL、按 sequence 重放和 Redis 取消通知。
+- 新增 `status` 运行事件模型；事件存储只接受现有 allowlist event，不写 query、history、prompt、工具参数或原始异常。
+- Run Stream/sequence key 使用 Run ID hash；Event Bus 支持注入 Redis client，便于真实集成测试和独立生命周期管理。
+
+### 已验证
+
+- `uv run ruff check app tests`：通过。
+- Redis 集成测试已加入；未设置 `DOTAMIND_TEST_REDIS_URL` 时按既有约定跳过。
+
+### 边界
+
+- B3 Event Pump、B4 Manager、B5 Graph 执行和 B6-B8 故障收口尚未实现；当前 Event Bus 尚未被 API 或后台任务调用。
+
 ## 12:06 — V3.3-1 PostgreSQL 聊天持久化与匿名浏览器多聊天管理
 
 ### 已完成
