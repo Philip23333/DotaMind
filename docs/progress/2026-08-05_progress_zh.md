@@ -1,5 +1,21 @@
 # DotaMind 进度快照 — 2026-08-05
 
+## 16:54 — V3.3-2 A1 设计合同冻结
+
+### 已完成
+
+- 新增 `docs/design/versions/DotaMind_V3.3-2_design.md`，冻结多聊天 Run 的 PostgreSQL/Redis 职责、`RunContext.run_id` 复用、Run 状态机、幂等与所有权、原子完成、事件 allowlist 和前端 Run Store 边界。
+- 明确 `DOTAMIND_MAX_CONCURRENT_CHAT_RUNS` 是每个 API worker 的并行上限；本阶段无独立队列，因此不承诺部署级全局上限。
+- 明确客户端断开只终止观察订阅，服务重启/stale recovery 标记 `interrupted`，不引入 LangGraph checkpoint 或自动续跑。
+
+### 已验证
+
+- A1 仅新增设计合同和本进度记录；未修改数据库模型、API、运行图或前端运行链路。
+
+### 边界
+
+- A2-A5、B-E 尚未实现；设计文档状态保持为“仅 A1 完成”。
+
 ## 12:06 — V3.3-1 PostgreSQL 聊天持久化与匿名浏览器多聊天管理
 
 ### 已完成

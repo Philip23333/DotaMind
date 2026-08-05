@@ -1,5 +1,21 @@
 # DotaMind Progress Snapshot — 2026-08-05
 
+## 16:54 — V3.3-2 A1 design contract frozen
+
+### Completed
+
+- Added `docs/design/versions/DotaMind_V3.3-2_design.md`, freezing PostgreSQL/Redis responsibilities, reuse of `RunContext.run_id`, the Run state machine, idempotency and ownership, atomic completion, event allowlists and the browser-level Run Store boundary.
+- Defined `DOTAMIND_MAX_CONCURRENT_CHAT_RUNS` as a per-API-worker concurrency limit; because this phase has no independent queue, it does not promise a deployment-wide global limit.
+- Defined client disconnect as observer cancellation only; service restart/stale recovery marks Runs `interrupted`, with no LangGraph checkpoint or automatic resume.
+
+### Verified
+
+- A1 only added the design contract and this progress entry; database models, APIs, runtime graph and frontend execution paths were not changed.
+
+### Boundary
+
+- A2-A5 and B-E are not implemented; the design document remains explicitly marked “A1 only”.
+
 ## 12:06 — V3.3-1 PostgreSQL chat persistence and anonymous browser multi-chat
 
 ### Completed
