@@ -465,6 +465,23 @@
 ### Boundary
 
 - D5 does not yet add session-level unread counts, a unified background subscription manager, deletion of the old stateful path, or final browser acceptance.
+
+## 23:59 — V3.3-2 D6 unread counts and polling
+
+### Completed
+
+- The Run Store now tracks `unreadRunCountBySession` with mark-read/mark-unread actions; terminal events in non-current sessions create unread counts that clear on activation.
+- ChatSidebar displays per-session unread Run badges; Assistant polls the session list every five seconds to detect background Runs disappearing from active state and mark them unread.
+- The current session’s stream still drives RuntimeInfo/Store directly; polling only discovers cross-session state and never replaces the Redis event cursor.
+
+### Verified
+
+- `apps/chat`: `npm run lint` and `npm run build` passed; lint has no warnings.
+- `git diff --check`: passed.
+
+### Boundary
+
+- D6 does not remove the old stateful `/plan` path or run the final browser multi-window/disconnect matrix; D7-D8/E close those boundaries.
 - A running FastAPI instance passed a real session CRUD smoke test: create, isolated list, rename,
   cross-browser 404 and delete.
 

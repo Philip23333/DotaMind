@@ -18,6 +18,7 @@ import { useEffect, useRef, useState } from "react";
 type ChatSidebarProps = {
   sessions: ChatSessionSummary[];
   activeSessionId: string;
+  unreadRunCountBySession?: Record<string, number>;
   disabled?: boolean;
   mobileOpen?: boolean;
   onClose?: () => void;
@@ -31,6 +32,7 @@ type ChatSidebarProps = {
 export function ChatSidebar({
   sessions,
   activeSessionId,
+  unreadRunCountBySession = {},
   disabled = false,
   mobileOpen = false,
   onClose,
@@ -200,6 +202,11 @@ export function ChatSidebar({
                         />
                       )}
                       <span className="min-w-0 truncate">{session.title}</span>
+                      {!!unreadRunCountBySession[session.session_id] && (
+                        <span className="ml-auto rounded-full bg-primary px-1.5 text-[10px] leading-5 text-primary-foreground">
+                          {unreadRunCountBySession[session.session_id]}
+                        </span>
+                      )}
                     </button>
                   )}
 

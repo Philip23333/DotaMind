@@ -516,6 +516,23 @@
 
 - D5 尚未实现 session 级未读计数、后台订阅统一 manager、旧 stateful 路径删除和最终浏览器验收。
 
+## 23:59 — V3.3-2 D6 未读计数与轮询
+
+### 已完成
+
+- Run Store 增加 `unreadRunCountBySession`、mark-read/mark-unread；终态事件在非当前 session 形成未读计数，进入 session 时清零。
+- ChatSidebar 显示每个 session 的未读 Run badge；Assistant 每 5 秒轮询 session list，检测后台 Run 从 active 消失并标记未读。
+- 当前 session 的事件流仍直接驱动 RuntimeInfo/Store，轮询只作为跨 session 状态发现，不取代 Redis 事件游标。
+
+### 已验证
+
+- `apps/chat`: `npm run lint`、`npm run build` 均通过；lint 无 warning。
+- `git diff --check`：通过。
+
+### 边界
+
+- D6 尚未删除旧 stateful `/plan` 路径，也未做最终浏览器多窗口/断线矩阵验收；D7-D8/E 继续收口。
+
 ## 16:39 — 避免会话切换空状态闪现
 
 - 右侧聊天 runtime 重新挂载后先渲染一次空消息状态，导致“新聊天”界面闪现；现由 `ChatSessionRuntime` 在挂载完成后通知父组件，再关闭右侧 loading 遮罩。

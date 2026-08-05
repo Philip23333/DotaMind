@@ -11,6 +11,8 @@ type ChatRunContextValue = ChatRunStoreState & {
   applyEvent: (item: ChatRunStreamItem) => void;
   removeRun: (runId: string) => void;
   clearSessionRuns: (sessionId: string) => void;
+  markSessionRead: (sessionId: string) => void;
+  markSessionUnread: (sessionId: string) => void;
 };
 
 const ChatRunContext = createContext<ChatRunContextValue | null>(null);
@@ -21,9 +23,11 @@ export function ChatRunProvider({ children }: { children: ReactNode }) {
   const applyEvent = useCallback((item: ChatRunStreamItem) => dispatch({ type: "event", item }), []);
   const removeRun = useCallback((runId: string) => dispatch({ type: "remove", runId }), []);
   const clearSessionRuns = useCallback((sessionId: string) => dispatch({ type: "clear_session", sessionId }), []);
+  const markSessionRead = useCallback((sessionId: string) => dispatch({ type: "mark_read", sessionId }), []);
+  const markSessionUnread = useCallback((sessionId: string) => dispatch({ type: "mark_unread", sessionId }), []);
   const value = useMemo(
-    () => ({ ...store, registerRun, applyEvent, removeRun, clearSessionRuns }),
-    [store, registerRun, applyEvent, removeRun, clearSessionRuns],
+    () => ({ ...store, registerRun, applyEvent, removeRun, clearSessionRuns, markSessionRead, markSessionUnread }),
+    [store, registerRun, applyEvent, removeRun, clearSessionRuns, markSessionRead, markSessionUnread],
   );
   return <ChatRunContext.Provider value={value}>{children}</ChatRunContext.Provider>;
 }

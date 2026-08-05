@@ -24,17 +24,21 @@ export type ChatRunUiState = {
 export type ChatRunStoreState = {
   runsById: Record<string, ChatRunUiState>;
   activeRunIdBySession: Record<string, string | undefined>;
+  unreadRunCountBySession: Record<string, number>;
 };
 
 export type ChatRunStoreAction =
   | { type: "register"; summary: ChatRunSummary }
   | { type: "event"; item: ChatRunStreamItem }
   | { type: "remove"; runId: string }
-  | { type: "clear_session"; sessionId: string };
+  | { type: "clear_session"; sessionId: string }
+  | { type: "mark_read"; sessionId: string }
+  | { type: "mark_unread"; sessionId: string };
 
 export const EMPTY_CHAT_RUN_STORE: ChatRunStoreState = {
   runsById: {},
   activeRunIdBySession: {},
+  unreadRunCountBySession: {},
 };
 
 const ACTIVE_STATUSES: ReadonlySet<ChatRunStatus> = new Set([
@@ -80,7 +84,9 @@ export function chatRunReducer(state: ChatRunStoreState, action: ChatRunStoreAct
     delete runs[action.runId];
     const active = { ...state.activeRunIdBySession };
     if (active[run.summary.session_id] === action.runId) delete active[run.summary.session_id];
-    return { runsById: runs, activeRunIdBySession: active };
+    const unread = { ...state.unreadRunCountBySession };
+    delete unread[run.summary.session_id];
+    return { runsById: runs, activeRunIdBySession: active, unreadRunCountBySession: unread };
   }
   if (action.type === "clear_session") {
     const runs = Object.fromEntries(
@@ -88,7 +94,24 @@ export function chatRunReducer(state: ChatRunStoreState, action: ChatRunStoreAct
     );
     const active = { ...state.activeRunIdBySession };
     delete active[action.sessionId];
-    return { runsById: runs, activeRunIdBySession: active };
+    const unread = { ...state.unreadRunCountBySession };
+    delete unread[action.sessionId];
+    return { runsById: runs, activeRunIdBySession: active, unreadRunCountBySession: unread };
+  }
+
+  if (action.type === "mark_read") {
+    const unread = { ...state.unreadRunCountBySession };
+    delete unread[action.sessionId];
+    return { ...state, unreadRunCountBySession: unread };
+  }
+  if (action.type === "mark_unread") {
+    return {
+      ...state,
+      unreadRunCountBySession: {
+        ...state.unreadRunCountBySession,
+        [action.sessionId]: (state.unreadRunCountBySession[action.sessionId] ?? 0) + 1,
+      },
+    };
   }
 
   const item = action.item;
@@ -102,7 +125,13 @@ export function chatRunReducer(state: ChatRunStoreState, action: ChatRunStoreAct
       summary: { ...run.summary, status: item.status, last_event_sequence: item.last_event_sequence },
       lastEventSequence: item.last_event_sequence,
     };
-    return withActiveIndex({ ...state, runsById: { ...state.runsById, [item.run_id]: next } }, next);
+    const nextState = withActiveIndex({ ...state, runsById: { ...state.runsById, [item.run_id]: next } }, next);
+    if (["completed", "failed", "cancelled", "interrupted"].includes(item.status)) {
+      const unread = { ...nextState.unreadRunCountBySession };
+      unread[item.session_id] = (unread[item.session_id] ?? 0) + 1;
+      return { ...nextState, unreadRunCountBySession: unread };
+    }
+    return nextState;
   }
   if (!("sequence" in item) && item.type === "error") {
     const run = state.runsById[item.run_id];
@@ -139,5 +168,11 @@ export function chatRunReducer(state: ChatRunStoreState, action: ChatRunStoreAct
     next.summary = { ...next.summary, status: event.status, error_code: event.error_code ?? null };
     next.errorCode = event.error_code ?? null;
   }
-  return withActiveIndex({ ...state, runsById: { ...state.runsById, [item.run_id]: next } }, next);
+  const nextState = withActiveIndex({ ...state, runsById: { ...state.runsById, [item.run_id]: next } }, next);
+  if (event.type === "status" && ["completed", "failed", "cancelled", "interrupted"].includes(event.status)) {
+    const unread = { ...nextState.unreadRunCountBySession };
+    unread[item.session_id] = (unread[item.session_id] ?? 0) + 1;
+    return { ...nextState, unreadRunCountBySession: unread };
+  }
+  return nextState;
 }

@@ -65,7 +65,8 @@ export const Assistant = () => {
   const selectionSequence = useRef(0);
   const detailsAbortController = useRef<AbortController | null>(null);
   const requestedSessionId = useRef<string | null>(null);
-  const { registerRun } = useChatRunStore();
+  const { registerRun, markSessionRead, markSessionUnread, unreadRunCountBySession } = useChatRunStore();
+  const polledActiveRuns = useRef<Record<string, string | null>>({});
 
   const activateSession = useCallback(
     async (sessionId: string) => {
@@ -99,6 +100,7 @@ export const Assistant = () => {
         ]);
         setActiveSessionId(sessionId);
         storeActiveSessionId(sessionId);
+        markSessionRead(sessionId);
       } catch (cause) {
         if (controller.signal.aborted || sequence !== selectionSequence.current) return;
         setError(cause instanceof Error ? cause.message : "无法加载聊天记录。");
@@ -109,8 +111,34 @@ export const Assistant = () => {
         }
       }
     },
-    [browserId, registerRun],
+    [browserId, markSessionRead, registerRun],
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const latest = await listChatSessions(browserId);
+        if (cancelled) return;
+        setSessions(sortSessions(latest));
+        for (const session of latest) {
+          const nextRunId = session.active_run?.run_id ?? null;
+          const previousRunId = polledActiveRuns.current[session.session_id];
+          if (previousRunId && !nextRunId && session.session_id !== activeSessionId) {
+            markSessionUnread(session.session_id);
+          }
+          polledActiveRuns.current[session.session_id] = nextRunId;
+        }
+      } catch {
+        // Polling is advisory; the active session stream remains authoritative.
+      }
+    };
+    const timer = window.setInterval(() => void poll(), 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [activeSessionId, browserId, markSessionUnread]);
 
   useEffect(() => {
     let cancelled = false;
@@ -122,6 +150,9 @@ export const Assistant = () => {
         }
         if (cancelled) return;
         setSessions(available);
+        for (const session of available) {
+          polledActiveRuns.current[session.session_id] = session.active_run?.run_id ?? null;
+        }
         const stored = getStoredActiveSessionId();
         const selected =
           (stored && available.some((session) => session.session_id === stored) && stored) ||
@@ -235,6 +266,7 @@ export const Assistant = () => {
       <ChatSidebar
         sessions={sessions}
         activeSessionId={activeSessionId}
+        unreadRunCountBySession={unreadRunCountBySession}
         disabled={sessionLoading}
         mobileOpen={mobileSidebarOpen}
         onClose={() => setMobileSidebarOpen(false)}
@@ -316,7 +348,7 @@ const ChatSessionRuntime = ({
   setRuntimeRuns,
   onReady,
 }: ChatSessionRuntimeProps) => {
-  const { registerRun, applyEvent } = useChatRunStore();
+  const { registerRun, applyEvent, markSessionRead } = useChatRunStore();
 
   useEffect(() => {
     onReady();
@@ -353,6 +385,7 @@ const ChatSessionRuntime = ({
                 ...run,
                 status: event.status === "cancelled" ? "cancelled" : "completed",
               }));
+              markSessionRead(sessionId);
               return;
             }
           }
@@ -364,7 +397,7 @@ const ChatSessionRuntime = ({
       }
     })();
     return () => controller.abort();
-  }, [applyEvent, browserId, recoveredRun, setRuntimeRuns, updateRuntimeRun]);
+  }, [applyEvent, browserId, markSessionRead, recoveredRun, sessionId, setRuntimeRuns, updateRuntimeRun]);
 
   const adapter = useMemo<ChatModelAdapter>(
     () => ({
@@ -390,6 +423,7 @@ const ChatSessionRuntime = ({
             if (!("sequence" in item)) {
               if (item.type === "error") {
                 receivedTerminalEvent = true;
+                markSessionRead(sessionId);
                 updateRuntimeRun(messageId, (current) => ({ ...current, status: "failed" }));
                 yield {
                   content: [{ type: "text", text: formatStreamError(item.error_code, "Run 事件订阅失败。") }],
@@ -415,6 +449,7 @@ const ChatSessionRuntime = ({
                 break;
               case "result":
                 receivedTerminalEvent = true;
+                markSessionRead(sessionId);
                 updateRuntimeRun(messageId, (run) => ({
                   ...run,
                   status: finalRunStatus(event.response.status),
@@ -432,6 +467,7 @@ const ChatSessionRuntime = ({
               case "status":
                 if (event.status === "queued" || event.status === "running") break;
                 receivedTerminalEvent = true;
+                markSessionRead(sessionId);
                 updateRuntimeRun(messageId, (current) => ({
                   ...current,
                   status: event.status === "completed" ? "completed" : "failed",
@@ -477,7 +513,7 @@ const ChatSessionRuntime = ({
         }
       },
     }),
-    [applyEvent, browserId, registerRun, sessionId, setRuntimeRuns, updateRuntimeRun],
+    [applyEvent, browserId, markSessionRead, registerRun, sessionId, setRuntimeRuns, updateRuntimeRun],
   );
   const runtime = useLocalRuntime(adapter, { initialMessages });
 
