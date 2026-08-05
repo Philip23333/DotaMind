@@ -393,6 +393,24 @@
 
 - C5 不直接伪造 `cancelled` 终态；由后台 Executor 根据 PostgreSQL 状态收口。C6/C7 继续处理旧 stateful 路径迁移准备和 API 全量回归。
 
+## 23:59 — V3.3-2 C6 stateful 路径迁移准备
+
+### 已完成
+
+- 新增 `apps/chat/src/lib/chat-run-api.ts`，提供 create/get/active/events/cancel 客户端和 NDJSON 事件解析，支持 AbortSignal 观察订阅。
+- 扩展前端共享类型：Run 状态、active Run、status/recovery/heartbeat 事件；session transcript/list 可承载 active Run 元数据。
+- 后端 C1-C5 API 已挂载但旧 stateful `/plan`、`/plan/stream` 和 PlanService PostgreSQL 分支保持不变，为 D 阶段原子前端切换保留可回滚边界。
+
+### 已验证
+
+- `apps/chat`: `npm run lint` 通过（无 warning），`npm run build` 通过。
+- `uv run ruff check app tests`：通过。
+- `git diff --check`：通过。
+
+### 边界
+
+- C6 只增加客户端和类型准备，不改变现有消息发送路径；旧 stateful 路径必须等 D 正式切换后再删除。
+
 ## 16:39 — 避免会话切换空状态闪现
 
 - 右侧聊天 runtime 重新挂载后先渲染一次空消息状态，导致“新聊天”界面闪现；现由 `ChatSessionRuntime` 在挂载完成后通知父组件，再关闭右侧 loading 遮罩。

@@ -342,6 +342,24 @@
 ### Boundary
 
 - C5 does not fabricate a `cancelled` terminal state; the background Executor closes it based on PostgreSQL state. C6/C7 continue stateful-path migration preparation and full API regression.
+
+## 23:59 — V3.3-2 C6 stateful-path migration preparation
+
+### Completed
+
+- Added `apps/chat/src/lib/chat-run-api.ts` with create/get/active/events/cancel clients and NDJSON event parsing using AbortSignal for observer subscriptions.
+- Extended shared frontend types for Run statuses, active Runs, status/recovery/heartbeat events, and active Run metadata on session transcript/list responses.
+- C1-C5 backend APIs are mounted while stateful `/plan`, `/plan/stream`, and the PlanService PostgreSQL branch remain unchanged, preserving an atomic D-stage cutover boundary.
+
+### Verified
+
+- `apps/chat`: `npm run lint` passed without warnings; `npm run build` passed.
+- `uv run ruff check app tests`: passed.
+- `git diff --check`: passed.
+
+### Boundary
+
+- C6 adds client/types preparation only and does not change the existing message-send path; the old stateful path is removed only after the D-stage cutover.
 - A running FastAPI instance passed a real session CRUD smoke test: create, isolated list, rename,
   cross-browser 404 and delete.
 

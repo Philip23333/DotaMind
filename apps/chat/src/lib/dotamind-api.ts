@@ -35,6 +35,32 @@ export type ChatSessionSummary = {
   is_pinned: boolean;
   created_at: string;
   updated_at: string;
+  active_run?: ChatRunSummary | null;
+};
+
+export type ChatRunStatus =
+  | "queued"
+  | "running"
+  | "cancel_requested"
+  | "completed"
+  | "failed"
+  | "cancelled"
+  | "interrupted";
+
+export type ChatRunSummary = {
+  run_id: string;
+  session_id: string;
+  request_id: string;
+  status: ChatRunStatus;
+  user_query: string;
+  last_event_sequence: number;
+  result_turn_id: string | null;
+  error_code: string | null;
+  created_at: string;
+  started_at: string | null;
+  heartbeat_at: string | null;
+  cancel_requested_at: string | null;
+  completed_at: string | null;
 };
 
 export type ChatTranscriptTurn = {
@@ -68,7 +94,13 @@ export type PlanStreamEvent =
     }
   | { type: "answer_delta"; delta: string; attempt_index: number; provisional: true }
   | { type: "result"; response: PlanResponse; session?: ChatSessionSummary | null }
-  | { type: "error"; error_code: string; reason: string };
+  | { type: "error"; error_code: string; reason: string }
+  | {
+      type: "status";
+      status: ChatRunStatus;
+      error_code?: string | null;
+      transcript_recovery?: boolean;
+    };
 
 export function getApiUrl(): string {
   return (process.env.NEXT_PUBLIC_DOTAMIND_API_URL ?? DEFAULT_API_URL).replace(
