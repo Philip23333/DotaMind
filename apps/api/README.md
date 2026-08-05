@@ -6,6 +6,9 @@ The old fixed report/query pipeline has been removed. The current API surface is
 
 - `GET /health`
 - `POST /api/v1/plan`
+- `POST /api/v1/plan/stream` (stateless debug only)
+- `/api/v1/chat/sessions` session CRUD
+- `/api/v1/chat/.../runs` create/query/active/events/cancel
 - `GET /debug/plan`
 
 ## Run
@@ -63,46 +66,29 @@ final plan, effective evidence obligations, tool results, evidence graph,
 answer, review, errors and trace. Conversation recall, clarification, missing
 context and capability boundaries skip the tool/evidence/critic path.
 
-## Multi-turn Sessions
+## Multi-chat Runs
 
-`POST /api/v1/plan` accepts an optional `session_id` (UUID v4). It is opt-in:
-
-- Omit it (or send `null`) for stateless single-turn behaviour. This is the
-  default, except the response always carries a `"session_id": null` field and
-  the Controller prompt includes a short
-  history-usage rule block even when no history exists.
-- Send a client-generated UUID v4 to enable session memory. The service reads
-  the most recent turns (see `conversation.history_window` in `policy.yaml`),
-  injects a compact summary into the Controller prompt so it can resolve pronouns
-  ("那他出什么装") and inherit scope, then stores a summary of the new turn.
+`/api/v1/plan` and `/api/v1/plan/stream` are stateless debug endpoints. Formal multi-turn
+chat uses PostgreSQL-backed sessions plus the detached Chat Run lifecycle:
 
 ```bash
-# Client generates and reuses the same UUID across turns.
-SID=$(python -c "import uuid; print(uuid.uuid4())")
-curl -s -X POST http://localhost:8001/api/v1/plan \
+BROWSER_ID=$(python -c "import uuid; print(uuid.uuid4())")
+SESSION_ID=$(curl -s -X POST http://localhost:8001/api/v1/chat/sessions \
+  -H "X-DotaMind-Browser-Id: $BROWSER_ID" | python -c "import json,sys; print(json.load(sys.stdin)['session_id'])")
+REQUEST_ID=$(python -c "import uuid; print(uuid.uuid4())")
+curl -s -X POST "http://localhost:8001/api/v1/chat/sessions/$SESSION_ID/runs" \
+  -H "X-DotaMind-Browser-Id: $BROWSER_ID" \
   -H "Content-Type: application/json" \
-  -d "{\"query\":\"对手选了 Lina 我选什么克制\",\"session_id\":\"$SID\"}"
-curl -s -X POST http://localhost:8001/api/v1/plan \
-  -H "Content-Type: application/json" \
-  -d "{\"query\":\"那他适合走几号位\",\"session_id\":\"$SID\"}"
+  -d "{\"request_id\":\"$REQUEST_ID\",\"query\":\"enemy picked Lina, what should I pick?\",\"game\":\"dota2\"}"
+curl -N "http://localhost:8001/api/v1/chat/runs/<RUN_ID>/events?after=0" \
+  -H "X-DotaMind-Browser-Id: $BROWSER_ID"
 ```
 
-Notes and SessionStore limits:
-
-- History is injected as *untrusted context* only, not evidence. Each turn
-  confirms hero/team/player identity through the current plan before a
-  downstream data tool can use its ID. Stateful responses never expose Controller
-  prompts or raw Controller output; stateful Controller failures return a stable,
-  redacted error envelope.
-- `DOTAMIND_SESSION_STORE_BACKEND=memory` is the default for local development.
-  `DOTAMIND_SESSION_STORE_BACKEND=redis` requires `DOTAMIND_REDIS_URL` and shares
-  sessions across workers. Redis startup failure stops the API; runtime failure returns
-  `session_store_error` and never falls back to memory. Redis retains compact Turns and
-  allowlisted completed responses, not prompts, raw model output, history render blocks or secrets.
-  API/worker rebuild recovery requires the same Redis data; Redis Server restart durability requires
-  AOF/RDB plus a persistent volume. Active or waiting in-memory sessions are never evicted;
-  `max_sessions` can be temporarily exceeded while every candidate is active. The `/debug/plan` console has a
-  `session_id` field with a "新建会话" button for manual multi-turn testing.
+The Run Repository owns status, fencing, idempotency and atomic Turn completion in PostgreSQL.
+Redis carries replayable allowlisted events and cancel notifications; it is not the final Turn
+authority. Closing the event stream only closes observation. Refreshing the browser reads the
+active Run from the session and replays events from sequence zero. Worker shutdown/stale
+recovery marks active Runs `interrupted`; it does not resume a model checkpoint.
 
 Current conditional LangGraph path:
 

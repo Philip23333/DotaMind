@@ -27,10 +27,9 @@ browser identity returns `422`.
 Session lists return `is_pinned` and order pinned sessions first, followed by the most recently
 updated unpinned sessions. Pinning does not change the conversation's `updated_at` activity time.
 
-Stateful `/plan` and `/plan/stream` calls use the same session ownership boundary and
-require `session_id`, `request_id`, and the browser header. PostgreSQL commits each
-completed turn and allocates a strictly increasing fencing token for the idempotent
-replay/conflict record; Redis only coordinates the short-lived lease for concurrent workers.
+Chat Run requests use the session ownership boundary and the browser header. PostgreSQL
+commits each completed Turn and Run state, allocates a strictly increasing fencing token,
+and Redis carries replayable events plus cancel notifications.
 If the delete lock cannot be acquired, deletion returns `409 chat_busy`. A successful
 PostgreSQL delete returns `204`; Redis cleanup is performed while the lock is held and a
 cleanup failure is logged without undoing the durable delete. Repeating a delete for a
@@ -51,51 +50,12 @@ POST /api/v1/plan
 ```json
 {
   "game": "dota2",
-  "query": "我上次问的是什么英雄来着",
-  "session_id": "optional UUID v4",
-  "request_id": "optional UUID v4; requires session_id"
+  "query": "enemy picked Lina, what should I pick?"
 }
 ```
 
-`session_id` is optional. Omitting it runs a stateless request. Reusing it
-enables compact `Turn` memory for the same user security subject.
-
-`request_id` is optional and currently supported only with `session_id`. It
-identifies one logical stateful request using `(session_id, request_id)`: replaying
-the same validated `query` and `game` returns the original public response,
-including the original `runtime.run_id`, without running the Graph or appending
-another Turn. Reusing the same key with different inputs returns HTTP 409:
-
-```json
-{
-  "query": "...",
-  "game": "dota2",
-  "session_id": "UUID v4",
-  "status": "error",
-  "reason": "request_id has already been used with different request inputs",
-  "response_type": "idempotency_conflict",
-  "error_code": "idempotency_conflict"
-}
-```
-
-This pre-execution conflict has no `runtime`; it does not create a Run, Attempt,
-or Session Turn. Supplying `request_id` without `session_id` is a 422 validation
-error. The memory-backend replay window is bounded by request-record TTL/capacity.
-When `DOTAMIND_SESSION_STORE_BACKEND=redis`, the same semantics are shared by Redis-backed
-workers; Redis Server restart durability still depends on the deployment's AOF/RDB and volume setup.
-
-When the configured SessionStore is unavailable, locked past its acquisition deadline, loses its
-lease, or detects invalid persisted data, `/plan` returns HTTP 503:
-
-```json
-{
-  "status": "error",
-  "response_type": "session_store_error",
-  "error_code": "session_store_error"
-}
-```
-
-This envelope has no `runtime`; Redis errors never fall back to stateless or memory execution.
+`PlanRequest` is intentionally stateless. Supplying `session_id`, `request_id` or another
+unknown field returns HTTP 422; durable multi-turn work must use the Chat Run endpoints below.
 
 Response fields include:
 
@@ -105,8 +65,7 @@ Response fields include:
   `conversation_context_missing`, `capability_boundary`, a tool answer
   contract, `tool_error`, `answer_error`, `execution_error`,
   `execution_budget_error`, `execution_timeout`, `planning_error`,
-  `decision_validation_error`, `insufficient_evidence`, `replan_exhausted`, or
-  `idempotency_conflict` for the 409 pre-execution envelope.
+  `decision_validation_error`, `insufficient_evidence`, or `replan_exhausted`.
 - `decision_kind` and `missing_fields`.
 - `plan` and `tool_results` for tool decisions.
 - `planner_required_evidence`, `effective_required_evidence`, and
@@ -118,21 +77,19 @@ Response fields include:
 
 The public attempt contains index, decision kind, status/failure stage,
 `recovery_code`, duration, tool call status/latency/`reused`, evidence summary, answer type/status/
-confidence, and critic pass/severity/issue count. It never contains plan goal
-or args, ToolResult data/error/source/metadata, internal dispatch records,
-answer text, critic reasons, history, session/request ids, prompts, Controller
-raw output, or validation/retry content. A stateful safe failure still includes
-runtime but reduces each attempt to index/status/failure stage/recovery code/duration.
+  confidence, and critic pass/severity/issue count. It never contains plan goal
+  or args, ToolResult data/error/source/metadata, internal dispatch records,
+  answer text, critic reasons, history, session/request ids, prompts, Controller
+  raw output, or validation/retry content.
 
 `recovery_code` is `null` for Attempt 0 and `missing_evidence` only for an
 Attempt 1 that was actually started by Recovery. The top-level plan/tool results/
 evidence/answer/review always come from the final Attempt; earlier Attempts expose
 only the allowlisted runtime summary.
 
-For session requests, internal history, the rendered history block, raw
-Controller output, retry feedback and validation details are not serialized.
-Invalid Controller/plan results use a redacted failure envelope and a redacted
-failure `Turn`.
+Internal history, the rendered history block, raw Controller output, retry feedback and
+validation details are not serialized. Invalid Controller/plan results use a redacted
+failure envelope.
 
 Within `evidence_graph`, registry minimum evidence is tracked by
 `mandatory_evidence_by_call`. Missing per-call proof is reported as
@@ -141,7 +98,7 @@ Within `evidence_graph`, registry minimum evidence is tracked by
 Only plain global missing-evidence kinds can trigger the single bounded Replan;
 per-call missing proof, tool/extractor failures and Critic failures remain terminal.
 
-## Streaming Controller Request
+## Stateless Debug Streaming
 
 ```http
 POST /api/v1/plan/stream
@@ -149,16 +106,15 @@ Content-Type: application/json
 Accept: application/x-ndjson
 ```
 
-The request body is the same `PlanRequest` used by `/api/v1/plan`. Validation
-happens before the response starts, so malformed input still receives ordinary
-HTTP 422. A valid request returns `application/x-ndjson`; each UTF-8 line is one
-JSON object and the final line is exactly one `result` or `error` event:
+The request body is the same stateless `PlanRequest` used by `/api/v1/plan`.
+Validation happens before the response starts, so stateful fields receive ordinary
+HTTP 422. This endpoint is for `/debug/plan` only; formal chat uses Chat Run events.
 
 ```json
 {"type":"phase","phase":"planning","attempt_index":0}
 {"type":"tool","tool_call_id":"call_1","tool":"stratz.hero_matchup_ranking","attempt_index":0,"status":"running","latency_ms":null,"reused":false,"failure_code":null}
 {"type":"answer_delta","delta":"新增文本","attempt_index":0,"provisional":true}
-{"type":"result","session":{"session_id":"UUID","title":"首轮问题","updated_at":"..."},"response":{"status":"ok","answer":{},"runtime":{}}}
+{"type":"result","session":null,"response":{"status":"ok","answer":{},"runtime":{}}}
 ```
 
 - `phase` is emitted for planning, tool execution, answer synthesis and critic
@@ -169,24 +125,44 @@ JSON object and the final line is exactly one `result` or `error` event:
 - `answer_delta` is emitted only for the natural-language synthesizer's real
   upstream model stream. Direct replies and deterministic structured answers
   wait for the final `result`; no typing simulation is used.
-- `result.response` has the same public response contract as `/api/v1/plan`,
-  including idempotency replay. Once the stream has started, conflicts,
-  SessionStore failures and execution failures use a terminal `error` event
+- `result.response` has the same public response contract as `/api/v1/plan`.
+  Once the stream has started, execution failures use a terminal `error` event
   because HTTP headers can no longer change.
-- A persistent stateful result may include `session` with the updated summary. The
-  first completed turn's automatic title can therefore update the client sidebar
-  without reloading the transcript; title synchronization is best-effort on the client.
 
 Events are an allowlist: they never contain tool parameters or results, history,
 prompts, model raw output, secrets, raw exceptions or internal dispatch state.
 Clients should discard provisional deltas unless the final `result.response.status`
 is `ok`; a Critic or execution failure makes the final public response authoritative.
 
-The route sends `Cache-Control: no-cache, no-transform` and
-`X-Accel-Buffering: no`. A reverse proxy in front of the service must also disable
-response buffering for this path, otherwise genuine upstream token deltas will be
-held until completion. This first version intentionally has no reconnect,
-heartbeat, background recovery or cross-page conversation restoration.
+The route sends `Cache-Control: no-cache, no-transform` and `X-Accel-Buffering: no`.
+It is not a durable chat execution path and does not provide Run recovery or cancellation.
+
+## Chat Run Lifecycle
+
+All formal browser chat execution uses these endpoints. Every request requires a UUID v4
+`X-DotaMind-Browser-Id`; ownership failures are intentionally indistinguishable from missing
+resources (`404 not_found`).
+
+```http
+POST /api/v1/chat/sessions/{session_id}/runs
+GET  /api/v1/chat/runs/{run_id}
+GET  /api/v1/chat/sessions/{session_id}/active-run
+GET  /api/v1/chat/runs/{run_id}/events?after=N
+POST /api/v1/chat/runs/{run_id}/cancel
+```
+
+Creation accepts `{ "request_id": "UUID v4", "query": "...", "game": "dota2" }` and
+returns `202` with a queued Run. Repeating the same request/payload returns the same Run;
+payload conflicts or another active Run in the same session return `409`.
+
+Run events are replayable NDJSON envelopes with `run_id`, `session_id`, monotonically increasing
+`sequence` and allowlisted phase/tool/delta/result/status data. `after=0` is the page-refresh
+recovery path. Heartbeats are not persisted. If Redis events are missing after PostgreSQL has
+reached a terminal state, the API emits a synthetic `transcript_recovery` status event.
+
+Cancel persists `cancel_requested` in PostgreSQL before local/Redis wake-up. A repeated cancel
+is `202`; terminal Runs return `409 run_terminal`. Disconnecting an event subscriber only closes
+the observer; it never cancels the detached background Run.
 
 ## Debug UI
 

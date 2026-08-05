@@ -658,6 +658,25 @@
 
 - The quality gate now covers migrations, backend unit/real integration tests, frontend reducer tests, TypeScript production build and repository whitespace; E6 updates architecture/API/README docs and marks the phase closeout.
 
+## 23:59 — V3.3-2 E6 documentation closeout and V3.3-2 complete
+
+### Completed
+
+- Updated `docs/technical/architecture.md` with the ChatRun Executor/Repository/Event Bus boundary, Run-versus-subscription lifetimes, PostgreSQL/Redis authority, per-worker concurrency, recovery and browser Run Store semantics.
+- Updated `docs/technical/api.md` to remove the old stateful `/plan` contract and document stateless debug plus Chat Run create/query/active/events/cancel, replay, heartbeat and cancel behavior.
+- Updated `apps/api/README.md` and `apps/chat/README.md` with the current API inventory, local multi-chat Run sequence, test commands and old-path boundary.
+- Aligned the Chinese/English daily progress snapshots and V3.3-2 design status with the implementation; every E substage is complete.
+
+### Verified
+
+- `git diff --check`: passed.
+- Documented endpoints, modules and commands were checked against the current code/scripts.
+
+### V3.3-2 conclusion
+
+- V3.3-2 multi-chat parallel Runs, disconnect observation recovery, cancellation, unread state, stale/restart closure, real PostgreSQL/Redis integration, browser responsive acceptance and documentation quality gates are complete.
+- PostgreSQL is authoritative for Run state/Turns and Redis carries only replayable events/cancel notifications; browser disconnect is not cancellation, and worker restart/stale recovery marks `interrupted` without resuming a model checkpoint.
+
 ## 16:39 — Preventing the empty-state flash on chat switching
 
 - The right chat runtime rendered one empty-message frame after remount, briefly showing the “new chat” state; `ChatSessionRuntime` now notifies the parent after mounting before the right-side loading overlay is removed.

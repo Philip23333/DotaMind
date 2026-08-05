@@ -683,3 +683,22 @@
 ### 边界
 
 - 当前质量门禁已覆盖迁移、后端单测/真实集成、前端 reducer、TypeScript 构建和仓库空白检查；E6 继续更新架构/API/README 文档并标记阶段收口。
+
+## 23:59 — V3.3-2 E6 文档收口与 V3.3-2 完成
+
+### 已完成
+
+- 更新 `docs/technical/architecture.md`：明确 Chat Run Executor/Repository/Event Bus、Run 与订阅生命周期分离、PostgreSQL/Redis 权威边界、per-worker 并行上限、恢复和前端 Run Store。
+- 更新 `docs/technical/api.md`：移除旧 stateful `/plan` 说明，补充 stateless debug 与 Chat Run 创建/查询/active/events/cancel、replay、heartbeat、cancel 语义。
+- 更新 `apps/api/README.md` 和 `apps/chat/README.md`：同步当前 API 清单、本地多聊天 Run 调用顺序、测试命令和旧路径边界。
+- 中英文当天 progress、V3.3-2 design status 与实际实现保持一致；E 阶段所有子阶段完成。
+
+### 已验证
+
+- `git diff --check`：通过。
+- 文档中的 endpoint、模块和命令均已对照当前代码/脚本存在性检查。
+
+### V3.3-2 结论
+
+- V3.3-2 多聊天并行运行、断线观察恢复、取消、未读、stale/restart 收口、真实 PostgreSQL/Redis 集成、浏览器响应式验收和文档质量门禁全部完成。
+- Run 状态/Turn 由 PostgreSQL 权威持久化，Redis 只承担事件重放与取消通知；浏览器断开不等于取消，worker 重启/stale 只标记 `interrupted`，不续跑模型 checkpoint。
