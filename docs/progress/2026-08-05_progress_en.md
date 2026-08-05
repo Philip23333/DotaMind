@@ -306,6 +306,24 @@
 ### Boundary
 
 - C3 does not yet implement Redis Stream subscription, terminal synthesis, or the cancel API; the old stateful `/plan` path remains.
+
+## 23:08 — V3.3-2 C4 Run event subscription
+
+### Completed
+
+- Added `GET /api/v1/chat/runs/{run_id}/events?after=N`: ownership is checked first, Redis Stream entries with `sequence > after` are replayed in sorted/deduplicated order, then `XREAD` waits for more events.
+- Each wait timeout emits a heartbeat outside Redis and re-reads PostgreSQL Run state; a terminal PostgreSQL Run with missing Stream entries produces a `transcript_recovery=true` terminal status event.
+- Redis event failures end the observer with a stable stream error; HTTP disconnect only exits the generator and never calls `Manager.cancel`.
+
+### Verified
+
+- `uv run ruff check app tests`: passed.
+- `tests/test_chat_run_event_routes.py`: `2 passed`, covering ordered replay/terminal close and missing-Redis-event recovery.
+- `git diff --check`: passed.
+
+### Boundary
+
+- C4 does not yet expose the public cancel API; event subscription never owns the background task lifecycle, while C5 handles cancellation transitions and Redis notifications.
 - A running FastAPI instance passed a real session CRUD smoke test: create, isolated list, rename,
   cross-browser 404 and delete.
 

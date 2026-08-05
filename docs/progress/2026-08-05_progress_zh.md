@@ -357,6 +357,24 @@
 
 - C3 尚未实现 Redis Stream 事件订阅、终态合成或取消 API；旧 stateful `/plan` 仍保留。
 
+## 23:08 — V3.3-2 C4 Run 事件订阅
+
+### 已完成
+
+- 新增 `GET /api/v1/chat/runs/{run_id}/events?after=N`：先按 ownership 校验，再从 Redis Stream 重放 `sequence > after`，排序去重后使用 `XREAD` 等待后续事件。
+- 订阅每次等待超时发送不写 Redis 的 heartbeat，并再次读取 PostgreSQL Run 状态；已终态但 Stream 缺事件时合成 `transcript_recovery=true` 的终态 status 事件。
+- Redis 事件故障以稳定 stream error 结束观察；HTTP disconnect 只退出生成器，不调用 Manager.cancel。
+
+### 已验证
+
+- `uv run ruff check app tests`：通过。
+- `tests/test_chat_run_event_routes.py`：`2 passed`，覆盖顺序重放/终态关闭与 Redis 缺事件恢复。
+- `git diff --check`：通过。
+
+### 边界
+
+- C4 尚未实现公开取消 API；事件订阅不改变后台任务生命周期，C5 负责取消状态转换和 Redis 通知。
+
 ## 16:39 — 避免会话切换空状态闪现
 
 - 右侧聊天 runtime 重新挂载后先渲染一次空消息状态，导致“新聊天”界面闪现；现由 `ChatSessionRuntime` 在挂载完成后通知父组件，再关闭右侧 loading 遮罩。

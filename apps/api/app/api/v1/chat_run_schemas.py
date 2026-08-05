@@ -56,6 +56,21 @@ class ChatRunEventResponse(BaseModel):
     event: dict[str, Any]
 
 
+class ChatRunHeartbeatResponse(BaseModel):
+    type: Literal["heartbeat"] = "heartbeat"
+    run_id: UUID
+    session_id: UUID
+    status: ChatRunStatus
+    last_event_sequence: int = Field(ge=0)
+
+
+class ChatRunStreamErrorResponse(BaseModel):
+    type: Literal["error"] = "error"
+    run_id: UUID
+    session_id: UUID
+    error_code: str
+
+
 class ChatRunCancelResponse(BaseModel):
     run: ChatRunResponse
 

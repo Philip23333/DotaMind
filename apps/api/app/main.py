@@ -136,6 +136,7 @@ async def lifespan(app: FastAPI):
         # The Run API is intentionally unavailable without Redis; no memory
         # event-bus fallback is allowed by the V3.3-2 contract.
         app.state.chat_run_runtime = None
+    app.state.chat_run_event_bus = run_event_bus
     try:
         yield
     finally:
