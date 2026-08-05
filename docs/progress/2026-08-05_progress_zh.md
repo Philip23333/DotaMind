@@ -78,6 +78,18 @@
 - `uv run ruff check app tests`：通过。
 - `apps/chat`：`npm run lint` 与 `npm run build`：通过。
 
+## 16:39 — 避免会话切换空状态闪现
+
+- 右侧聊天 runtime 重新挂载后先渲染一次空消息状态，导致“新聊天”界面闪现；现由 `ChatSessionRuntime` 在挂载完成后通知父组件，再关闭右侧 loading 遮罩。
+- 切换期间遮罩会覆盖 runtime 的初始化帧，避免空 Welcome 状态被用户看到；左侧侧栏继续保持挂载。
+- `apps/chat`：`npm run lint` 与 `npm run build`：通过。
+
+## 16:35 — 会话切换局部刷新
+
+- 切换会话不再触发整个聊天页面的全屏 loading；左侧 `ChatSidebar` 保持挂载，仅右侧 transcript/runtime 区域显示加载遮罩并在数据完成后重新挂载。
+- 首次页面初始化仍使用全屏 loading；切换期间暂时禁用侧栏操作，避免加载中的重复切换造成状态竞争。
+- `apps/chat`：`npm run lint` 与 `npm run build`：通过。
+
 ## 16:29 — 置顶会话视觉标识
 
 - 已置顶聊天在左侧标题前显示 Pin 图标，未置顶聊天不显示；标题截断、操作菜单和键盘焦点行为保持不变。

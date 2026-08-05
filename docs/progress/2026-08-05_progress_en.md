@@ -92,6 +92,18 @@
 - `uv run ruff check app tests`: passed.
 - `apps/chat`: `npm run lint` and `npm run build`: passed.
 
+## 16:39 — Preventing the empty-state flash on chat switching
+
+- The right chat runtime rendered one empty-message frame after remount, briefly showing the “new chat” state; `ChatSessionRuntime` now notifies the parent after mounting before the right-side loading overlay is removed.
+- The overlay covers the runtime initialization frame during switching, so the empty Welcome state is not exposed while the sidebar remains mounted.
+- `apps/chat`: `npm run lint` and `npm run build`: passed.
+
+## 16:35 — Partial refresh on chat switching
+
+- Switching sessions no longer replaces the whole chat page with a full-screen loading state; the left `ChatSidebar` stays mounted while only the right transcript/runtime area shows a loading overlay and remounts after the data arrives.
+- Initial page bootstrap still uses the full-screen loading state; sidebar actions are temporarily disabled during a switch to avoid competing in-flight selections.
+- `apps/chat`: `npm run lint` and `npm run build`: passed.
+
 ## 16:29 — Visual indicator for pinned chats
 
 - Pinned chats now show a Pin icon before the title in the left sidebar; unpinned chats do not. Title truncation, the action menu and keyboard focus behavior remain unchanged.

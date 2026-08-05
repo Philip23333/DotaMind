@@ -49,11 +49,12 @@ export const Assistant = () => {
   const [runtimeRuns, setRuntimeRuns] = useState<RuntimeInfoMap>({});
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [sessionLoading, setSessionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const activateSession = useCallback(
     async (sessionId: string) => {
-      setLoading(true);
+      setSessionLoading(true);
       setError(null);
       setRuntimeRuns({});
       try {
@@ -63,8 +64,7 @@ export const Assistant = () => {
         storeActiveSessionId(sessionId);
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : "无法加载聊天记录。");
-      } finally {
-        setLoading(false);
+        setSessionLoading(false);
       }
     },
     [browserId],
@@ -85,6 +85,7 @@ export const Assistant = () => {
           (stored && available.some((session) => session.session_id === stored) && stored) ||
           available[0].session_id;
         await activateSession(selected);
+        if (!cancelled) setLoading(false);
       } catch (cause) {
         if (!cancelled) {
           setError(cause instanceof Error ? cause.message : "无法初始化聊天。");
@@ -175,6 +176,10 @@ export const Assistant = () => {
     );
   }, []);
 
+  const markSessionRuntimeReady = useCallback(() => {
+    setSessionLoading(false);
+  }, []);
+
   if (!activeSessionId || loading) {
     return (
       <div className="flex h-dvh items-center justify-center bg-background text-sm text-muted-foreground">
@@ -188,6 +193,7 @@ export const Assistant = () => {
       <ChatSidebar
         sessions={sessions}
         activeSessionId={activeSessionId}
+        disabled={sessionLoading}
         mobileOpen={mobileSidebarOpen}
         onClose={() => setMobileSidebarOpen(false)}
         onNew={() => {
@@ -219,7 +225,7 @@ export const Assistant = () => {
           </div>
           {error && <div className="ml-auto truncate text-xs text-destructive">{error}</div>}
         </header>
-        <div className="min-h-0 flex-1">
+        <div className="relative min-h-0 flex-1">
           <ChatSessionRuntime
             key={activeSessionId}
             browserId={browserId}
@@ -228,7 +234,19 @@ export const Assistant = () => {
             runtimeRuns={runtimeRuns}
             setRuntimeRuns={setRuntimeRuns}
             onSessionSummary={updateSessionSummary}
+            onReady={markSessionRuntimeReady}
           />
+          {sessionLoading && (
+            <div
+              className="absolute inset-0 z-20 flex items-center justify-center bg-background/70 backdrop-blur-[1px]"
+              aria-live="polite"
+              aria-label="正在加载聊天记录"
+            >
+              <div className="rounded-lg border bg-background px-4 py-3 text-sm text-muted-foreground shadow-sm">
+                正在加载聊天记录…
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -242,6 +260,7 @@ type ChatSessionRuntimeProps = {
   runtimeRuns: RuntimeInfoMap;
   setRuntimeRuns: Dispatch<SetStateAction<RuntimeInfoMap>>;
   onSessionSummary: (summary: ChatSessionSummary) => void;
+  onReady: () => void;
 };
 
 const ChatSessionRuntime = ({
@@ -251,7 +270,12 @@ const ChatSessionRuntime = ({
   runtimeRuns,
   setRuntimeRuns,
   onSessionSummary,
+  onReady,
 }: ChatSessionRuntimeProps) => {
+  useEffect(() => {
+    onReady();
+  }, [onReady, sessionId]);
+
   const updateRuntimeRun = useCallback(
     (messageId: string, updater: (run: RuntimeInfo) => RuntimeInfo) => {
       setRuntimeRuns((runs) => {
