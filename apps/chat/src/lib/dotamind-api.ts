@@ -129,6 +129,12 @@ export function storeActiveSessionId(sessionId: string): void {
   }
 }
 
+export function clearStoredActiveSessionId(): void {
+  if (typeof window !== "undefined") {
+    window.localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
+  }
+}
+
 function browserHeaders(browserId: string, includeJson = false): HeadersInit {
   return {
     ...(includeJson ? { "Content-Type": "application/json" } : {}),
