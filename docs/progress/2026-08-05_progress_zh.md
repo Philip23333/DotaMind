@@ -86,6 +86,22 @@
 - PostgreSQL `chat_runs` schema、状态 DTO、生命周期 Repository 和 Run/Session/Turn 原子完成合同已落地。
 - 未修改现有 `/plan`、`/plan/stream`、后台任务或前端运行路径；下一步进入 B1 预分配 Run ID。
 
+## 18:02 — V3.3-2 B1 预分配 Run ID
+
+### 已完成
+
+- `AgentRunState` 新增内部 `internal_run_id`；`run_init_node` 优先复用预分配 ID，stateless 请求仍在未提供时生成 UUID v4。
+- 新增 B1 合同测试，确认 `RunContext.run_id` 与预分配 ID 完全一致。
+
+### 已验证
+
+- `uv run ruff check app tests`：通过。
+- `uv run pytest -q tests/test_run_init_preallocation.py`：通过。
+
+### 边界
+
+- B2-B8 尚未实现；`internal_run_id` 尚未接入 ChatRunExecutor 或公开 API。
+
 ## 12:06 — V3.3-1 PostgreSQL 聊天持久化与匿名浏览器多聊天管理
 
 ### 已完成

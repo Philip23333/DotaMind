@@ -86,6 +86,22 @@
 - The PostgreSQL `chat_runs` schema, status DTOs, lifecycle Repository and Run/Session/Turn atomic completion contract are implemented.
 - Existing `/plan`, `/plan/stream`, background tasks and frontend execution paths are unchanged; next is B1 preallocated Run IDs.
 
+## 18:02 — V3.3-2 B1 preallocated Run ID
+
+### Completed
+
+- Added internal `internal_run_id` to `AgentRunState`; `run_init_node` reuses it when supplied, while stateless requests still generate UUID v4 when it is absent.
+- Added the B1 contract test proving that `RunContext.run_id` exactly matches the preallocated ID.
+
+### Verified
+
+- `uv run ruff check app tests`: passed.
+- `uv run pytest -q tests/test_run_init_preallocation.py`: passed.
+
+### Boundary
+
+- B2-B8 are not implemented; `internal_run_id` is not yet wired into ChatRunExecutor or a public API.
+
 ## 12:06 — V3.3-1 PostgreSQL chat persistence and anonymous browser multi-chat
 
 ### Completed

@@ -57,6 +57,7 @@ class AgentRunState(BaseModel):
     session_memory_enabled: bool = False
     internal_session_id: UUID | None = None
     internal_request_id: UUID | None = None
+    internal_run_id: UUID | None = None
 
     run_context: RunContext | None = None
     run_budget: RunBudget | None = None
