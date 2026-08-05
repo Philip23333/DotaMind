@@ -24,6 +24,13 @@ class ChatSessionUpdateRequest(BaseModel):
         return self
 
 
+class ChatSessionActiveRunResponse(BaseModel):
+    run_id: UUID
+    status: Literal["queued", "running", "cancel_requested"]
+    last_event_sequence: int = Field(ge=0)
+    error_code: str | None = None
+
+
 class ChatSessionSummaryResponse(BaseModel):
     session_id: UUID
     game: Literal["dota2"]
@@ -32,6 +39,7 @@ class ChatSessionSummaryResponse(BaseModel):
     is_pinned: bool
     created_at: datetime
     updated_at: datetime
+    active_run: ChatSessionActiveRunResponse | None = None
 
 
 class ChatSessionListResponse(BaseModel):

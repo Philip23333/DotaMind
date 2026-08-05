@@ -7,6 +7,8 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
+from app.application.chat_run_repository import ChatRunStatus
+
 
 class ChatRepositoryError(RuntimeError):
     """Infrastructure failure while reading or writing durable chat data."""
@@ -32,6 +34,14 @@ class ChatFencingLostError(ChatRepositoryError):
 
 
 @dataclass(frozen=True)
+class ChatActiveRunSummary:
+    run_id: UUID
+    status: ChatRunStatus
+    last_event_sequence: int
+    error_code: str | None
+
+
+@dataclass(frozen=True)
 class ChatSessionSummary:
     session_id: UUID
     game: str
@@ -40,6 +50,7 @@ class ChatSessionSummary:
     is_pinned: bool
     created_at: datetime
     updated_at: datetime
+    active_run: ChatActiveRunSummary | None = None
 
 
 @dataclass(frozen=True)

@@ -288,6 +288,24 @@
 ### Boundary
 
 - C2 covers creation and dispatch only; Run query, active-Run, event replay/subscription, and cancel APIs are C3-C5. The old stateful `/plan` path is not removed yet.
+
+## 22:28 — V3.3-2 C3 Run query and active-Run
+
+### Completed
+
+- Added `GET /api/v1/chat/runs/{run_id}` and `GET /api/v1/chat/sessions/{session_id}/active-run`, enforcing browser ownership and returning `404 not_found` for Runs outside the current browser.
+- PostgreSQL chat session list/transcript queries now use an active-Run left join and expose `run_id/status/last_event_sequence/error_code` without N+1 queries.
+- Public Run/session DTOs continue to hide payload hashes, worker/fencing data, and internal Agent state.
+
+### Verified
+
+- `uv run ruff check app tests`: passed.
+- `tests/test_chat_run_query_routes.py tests/test_chat_run_runtime.py tests/test_postgres_chat_repository.py`: `4 passed, 1 skipped`.
+- `git diff --check`: passed.
+
+### Boundary
+
+- C3 does not yet implement Redis Stream subscription, terminal synthesis, or the cancel API; the old stateful `/plan` path remains.
 - A running FastAPI instance passed a real session CRUD smoke test: create, isolated list, rename,
   cross-browser 404 and delete.
 

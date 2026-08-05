@@ -339,6 +339,24 @@
 
 - C2 只完成创建和调度；Run 查询、active-run、事件重放/订阅和取消 API 属于 C3-C5，旧 stateful `/plan` 暂不删除。
 
+## 22:28 — V3.3-2 C3 Run 查询与 active-run
+
+### 已完成
+
+- 新增 `GET /api/v1/chat/runs/{run_id}` 与 `GET /api/v1/chat/sessions/{session_id}/active-run`，统一按 browser ownership 查询；不属于当前浏览器时返回 `404 not_found`。
+- Chat session list/transcript 的 PostgreSQL 查询增加活动 Run left join，返回 `run_id/status/last_event_sequence/error_code`，保持单次查询避免 N+1。
+- 公开 Run/session DTO 继续隐藏 payload hash、worker、fencing 和内部 Agent state。
+
+### 已验证
+
+- `uv run ruff check app tests`：通过。
+- `tests/test_chat_run_query_routes.py tests/test_chat_run_runtime.py tests/test_postgres_chat_repository.py`：`4 passed, 1 skipped`。
+- `git diff --check`：通过。
+
+### 边界
+
+- C3 尚未实现 Redis Stream 事件订阅、终态合成或取消 API；旧 stateful `/plan` 仍保留。
+
 ## 16:39 — 避免会话切换空状态闪现
 
 - 右侧聊天 runtime 重新挂载后先渲染一次空消息状态，导致“新聊天”界面闪现；现由 `ChatSessionRuntime` 在挂载完成后通知父组件，再关闭右侧 loading 遮罩。

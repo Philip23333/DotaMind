@@ -7,12 +7,13 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import delete, desc, select
+from sqlalchemy import and_, delete, desc, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.agentic.conversation.models import Turn
 from app.application.chat_repository import (
+    ChatActiveRunSummary,
     ChatCommitResult,
     ChatFencingLostError,
     ChatIdempotencyConflictError,
@@ -23,7 +24,8 @@ from app.application.chat_repository import (
     ChatSessionSummary,
     ChatTranscriptTurn,
 )
-from app.persistence.models import ChatSessionRow, ChatTurnRow
+from app.application.chat_run_repository import ACTIVE_RUN_STATUSES
+from app.persistence.models import ChatRunRow, ChatSessionRow, ChatTurnRow
 
 
 def browser_id_hash(browser_id: str) -> str:
@@ -54,8 +56,15 @@ class PostgresChatRepository:
     async def list_sessions(self, browser_id: str) -> list[ChatSessionSummary]:
         try:
             async with self._session_factory() as session:
-                result = await session.scalars(
-                    select(ChatSessionRow)
+                result = await session.execute(
+                    select(ChatSessionRow, ChatRunRow)
+                    .outerjoin(
+                        ChatRunRow,
+                        and_(
+                            ChatRunRow.session_id == ChatSessionRow.id,
+                            ChatRunRow.status.in_(ACTIVE_RUN_STATUSES),
+                        ),
+                    )
                     .where(ChatSessionRow.browser_id_hash == browser_id_hash(browser_id))
                     .order_by(
                         desc(ChatSessionRow.is_pinned),
@@ -66,17 +75,26 @@ class PostgresChatRepository:
                 rows = result.all()
         except SQLAlchemyError as exc:
             raise ChatRepositoryError() from exc
-        return [_summary(row) for row in rows]
+        return [_summary(session_row, active_row) for session_row, active_row in rows]
 
     async def get_session(self, browser_id: str, session_id: UUID) -> ChatSessionSnapshot:
         try:
             async with self._session_factory() as session:
-                row = await session.scalar(
-                    select(ChatSessionRow).where(
+                result = await session.execute(
+                    select(ChatSessionRow, ChatRunRow)
+                    .outerjoin(
+                        ChatRunRow,
+                        and_(
+                            ChatRunRow.session_id == ChatSessionRow.id,
+                            ChatRunRow.status.in_(ACTIVE_RUN_STATUSES),
+                        ),
+                    )
+                    .where(
                         ChatSessionRow.id == session_id,
                         ChatSessionRow.browser_id_hash == browser_id_hash(browser_id),
                     )
                 )
+                row = result.first()
                 if row is None:
                     raise ChatNotFoundError()
                 turns = await session.scalars(
@@ -90,7 +108,7 @@ class PostgresChatRepository:
         except SQLAlchemyError as exc:
             raise ChatRepositoryError() from exc
         return ChatSessionSnapshot(
-            summary=_summary(row),
+            summary=_summary(row[0], row[1]),
             turns=[_transcript_turn(turn) for turn in turn_rows],
         )
 
@@ -326,7 +344,10 @@ class PostgresChatRepository:
         )
 
 
-def _summary(row: ChatSessionRow) -> ChatSessionSummary:
+def _summary(
+    row: ChatSessionRow,
+    active_run: ChatRunRow | None = None,
+) -> ChatSessionSummary:
     return ChatSessionSummary(
         session_id=row.id,
         game=row.game,
@@ -335,6 +356,16 @@ def _summary(row: ChatSessionRow) -> ChatSessionSummary:
         is_pinned=row.is_pinned,
         created_at=row.created_at,
         updated_at=row.updated_at,
+        active_run=(
+            ChatActiveRunSummary(
+                run_id=active_run.id,
+                status=active_run.status,  # type: ignore[arg-type]
+                last_event_sequence=active_run.last_event_sequence,
+                error_code=active_run.error_code,
+            )
+            if active_run is not None
+            else None
+        ),
     )
 
 

@@ -44,6 +44,22 @@ def _runtime(request: Request) -> ChatRunRuntime | None:
     return getattr(request.app.state, "chat_run_runtime", None)
 
 
+def _run_repository(request: Request):
+    return getattr(request.app.state, "chat_run_repository", None)
+
+
+def _validated_browser_id(request: Request) -> tuple[str | None, JSONResponse | None]:
+    browser_id = browser_id_from_request(request)
+    if browser_id is None:
+        return None, run_error_response("browser_id_required", status_code=422)
+    try:
+        if UUID(browser_id).version != 4:
+            return None, run_error_response("browser_id_invalid", status_code=422)
+    except ValueError:
+        return None, run_error_response("browser_id_invalid", status_code=422)
+    return browser_id, None
+
+
 def run_response(summary: ChatRunSummary) -> ChatRunResponse:
     return ChatRunResponse(
         run_id=summary.run_id,
@@ -80,14 +96,10 @@ async def create_run(
     body: ChatRunCreateRequest,
     request: Request,
 ) -> ChatRunCreateResponse | JSONResponse:
-    browser_id = browser_id_from_request(request)
-    if browser_id is None:
-        return run_error_response("browser_id_required", status_code=422)
-    try:
-        if UUID(browser_id).version != 4:
-            return run_error_response("browser_id_invalid", status_code=422)
-    except ValueError:
-        return run_error_response("browser_id_invalid", status_code=422)
+    browser_id, error = _validated_browser_id(request)
+    if error is not None:
+        return error
+    assert browser_id is not None
     runtime = _runtime(request)
     if runtime is None:
         return run_error_response("unavailable", status_code=503)
@@ -111,6 +123,46 @@ async def create_run(
     if result.action == "replayed":
         return JSONResponse(status_code=200, content=payload.model_dump(mode="json"))
     return payload
+
+
+@router.get("/runs/{run_id}", response_model=ChatRunResponse)
+async def get_run(run_id: UUID, request: Request) -> ChatRunResponse | JSONResponse:
+    browser_id, error = _validated_browser_id(request)
+    if error is not None:
+        return error
+    repository = _run_repository(request)
+    if repository is None:
+        return run_error_response("unavailable", status_code=503)
+    try:
+        summary = await repository.get_run_for_browser(browser_id, run_id)
+    except ChatRunNotFoundError:
+        return run_error_response("not_found", status_code=404)
+    except ChatRunRepositoryError as exc:
+        return run_error_response(exc.code, status_code=503)
+    return run_response(summary)
+
+
+@router.get(
+    "/sessions/{session_id}/active-run",
+    response_model=ChatRunResponse | None,
+)
+async def get_active_run(
+    session_id: UUID,
+    request: Request,
+) -> ChatRunResponse | None | JSONResponse:
+    browser_id, error = _validated_browser_id(request)
+    if error is not None:
+        return error
+    repository = _run_repository(request)
+    if repository is None:
+        return run_error_response("unavailable", status_code=503)
+    try:
+        summary = await repository.get_active_run(browser_id, session_id)
+    except ChatRunNotFoundError:
+        return run_error_response("not_found", status_code=404)
+    except ChatRunRepositoryError as exc:
+        return run_error_response(exc.code, status_code=503)
+    return run_response(summary) if summary is not None else None
 
 
 __all__ = ["browser_id_from_request", "router", "run_error_response", "run_response"]

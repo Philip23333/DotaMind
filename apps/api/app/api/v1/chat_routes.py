@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.v1.chat_schemas import (
     ChatErrorResponse,
+    ChatSessionActiveRunResponse,
     ChatSessionCreateRequest,
     ChatSessionListResponse,
     ChatSessionResponse,
@@ -155,6 +156,16 @@ def _summary_response(summary) -> ChatSessionSummaryResponse:
         is_pinned=summary.is_pinned,
         created_at=summary.created_at,
         updated_at=summary.updated_at,
+        active_run=(
+            ChatSessionActiveRunResponse(
+                run_id=summary.active_run.run_id,
+                status=summary.active_run.status,
+                last_event_sequence=summary.active_run.last_event_sequence,
+                error_code=summary.active_run.error_code,
+            )
+            if summary.active_run is not None
+            else None
+        ),
     )
 
 
