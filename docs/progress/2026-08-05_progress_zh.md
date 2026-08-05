@@ -232,6 +232,24 @@
 
 - B4 仅建立 worker-local 生命周期管理，尚未接入 Graph 执行、Run Repository、Redis cancel listener 或 HTTP API；这些属于 B5-B8。
 
+## 19:22 — V3.3-2 B5 后台 Graph 执行器
+
+### 已完成
+
+- 新增 `ChatRunExecutor`，按 `SessionStore.transaction → PostgreSQL fencing → mark_running → history → AgentGraphRunner → complete_with_turn` 的顺序执行一个已创建 Run。
+- `ChatRunExecutionRequest.run_id` 注入 `AgentRunState.internal_run_id`，由 `run_init_node` 生成同一个 `RunContext.run_id`；Graph 事件在执行前绑定 Run-scoped Event Pump。
+- 最终 Turn 先在 PostgreSQL 原子提交，再发布 Redis `result`/`completed` 事件；Redis/Event Bus 故障不会回滚已提交 Turn。Graph 异常会写稳定 `execution_error`，取消暂按 `interrupted` 收口，后续 B6 再细化用户取消语义。
+
+### 已验证
+
+- `uv run ruff check app tests`：通过。
+- `tests/test_chat_run_executor.py`：`2 passed`，覆盖预分配 Run ID、fencing/history 顺序、原子完成先于终态事件和 Graph 失败收口。
+- `git diff --check`：通过。
+
+### 边界
+
+- B5 提供后台 Graph 执行闭环，但尚未接入 Manager 的 cancel listener/heartbeat/reconciliation，也尚未开放 C 阶段 HTTP API。
+
 ## 16:39 — 避免会话切换空状态闪现
 
 - 右侧聊天 runtime 重新挂载后先渲染一次空消息状态，导致“新聊天”界面闪现；现由 `ChatSessionRuntime` 在挂载完成后通知父组件，再关闭右侧 loading 遮罩。

@@ -1,0 +1,206 @@
+from __future__ import annotations
+
+import asyncio
+from contextlib import asynccontextmanager
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from uuid import uuid4
+
+from app.agentic.conversation.models import Turn
+from app.agentic.runtime.streaming import PlanStreamEvent
+from app.agentic.state import AgentRunState
+from app.application.chat_run_executor import (
+    ChatRunExecutionRequest,
+    ChatRunExecutor,
+)
+from app.application.chat_run_repository import ChatRunSummary
+from app.application.run_event_bus import StoredRunEvent
+
+
+def test_chat_run_executor_uses_preallocated_id_and_commits_before_terminal_events() -> None:
+    async def scenario() -> None:
+        run_id = uuid4()
+        session_id = uuid4()
+        request_id = uuid4()
+        events: list[StoredRunEvent] = []
+        calls: list[str] = []
+        run_repository = FakeRunRepository(calls=calls, run_id=run_id, session_id=session_id)
+        runner = FakeRunner(calls=calls)
+        executor = ChatRunExecutor(
+            runner=runner,
+            run_repository=run_repository,
+            chat_repository=FakeChatRepository(calls=calls),
+            session_store=FakeSessionStore(),
+            event_bus=FakeEventBus(events, calls),
+            worker_id="worker-a",
+            history_limit=8,
+            build_turn=lambda state: Turn(query=state.query),
+            build_response=lambda state, sid: {
+                "answer": state.response["answer"],
+                "session_id": str(sid),
+            },
+        )
+
+        result = await executor.execute(
+            ChatRunExecutionRequest(
+                run_id=run_id,
+                browser_id="browser-a",
+                session_id=session_id,
+                request_id=request_id,
+                query="how many?",
+                game="dota2",
+            )
+        )
+
+        assert runner.state_ids == [run_id]
+        assert result.run.status == "completed"
+        assert calls.index("complete") < calls.index("event:result")
+        assert [event.event.type for event in events] == ["status", "result", "status"]
+        assert events[-1].event.status == "completed"
+
+    asyncio.run(scenario())
+
+
+def test_chat_run_executor_marks_failed_graph_without_writing_a_turn() -> None:
+    async def scenario() -> None:
+        run_id = uuid4()
+        session_id = uuid4()
+        calls: list[str] = []
+        run_repository = FakeRunRepository(calls=calls, run_id=run_id, session_id=session_id)
+        executor = ChatRunExecutor(
+            runner=FakeRunner(calls=calls, failure=RuntimeError("boom")),
+            run_repository=run_repository,
+            chat_repository=FakeChatRepository(calls=calls),
+            session_store=FakeSessionStore(),
+            event_bus=FakeEventBus([], calls),
+            worker_id="worker-a",
+            history_limit=8,
+            build_turn=lambda state: Turn(query=state.query),
+            build_response=lambda state, sid: {},
+        )
+
+        try:
+            await executor.execute(
+                ChatRunExecutionRequest(
+                    run_id=run_id,
+                    browser_id="browser-a",
+                    session_id=session_id,
+                    request_id=uuid4(),
+                    query="fail",
+                    game="dota2",
+                )
+            )
+        except RuntimeError:
+            pass
+        else:
+            raise AssertionError("runner failure should propagate")
+
+        assert "failed" in calls
+        assert "complete" not in calls
+
+    asyncio.run(scenario())
+
+
+class FakeRunner:
+    def __init__(self, *, calls: list[str], failure: Exception | None = None) -> None:
+        self.calls = calls
+        self.failure = failure
+        self.state_ids: list = []
+
+    async def run(self, state: AgentRunState) -> AgentRunState:
+        self.calls.append("graph")
+        if self.failure is not None:
+            raise self.failure
+        assert state.internal_run_id is not None
+        state.response = {"answer": "done"}
+        state.status = "ok"
+        self.state_ids.append(state.internal_run_id)
+        return state
+
+
+class FakeEventBus:
+    def __init__(self, events: list[StoredRunEvent], calls: list[str]) -> None:
+        self.events = events
+        self.calls = calls
+
+    async def append(self, *, run_id, session_id, event: PlanStreamEvent) -> StoredRunEvent:
+        stored = StoredRunEvent(
+            run_id=run_id,
+            session_id=session_id,
+            sequence=len(self.events) + 1,
+            event=event,
+        )
+        self.events.append(stored)
+        self.calls.append(f"event:{event.type}")
+        return stored
+
+
+class FakeSessionStore:
+    @asynccontextmanager
+    async def transaction(self, session_id: str):
+        yield
+
+    def current_fencing_token(self, session_id: str) -> int:
+        return 1
+
+
+class FakeChatRepository:
+    def __init__(self, *, calls: list[str]) -> None:
+        self.calls = calls
+
+    async def allocate_fencing_token(self, browser_id: str, session_id) -> int:
+        self.calls.append("fencing")
+        return 7
+
+    async def get_history(self, browser_id: str, session_id, limit: int):
+        self.calls.append("history")
+        return []
+
+
+@dataclass
+class FakeRunRepository:
+    calls: list[str]
+    run_id: object
+    session_id: object
+    completed: ChatRunSummary | None = None
+
+    async def mark_running(self, **kwargs) -> ChatRunSummary:
+        self.calls.append("running")
+        return self._summary("running")
+
+    async def complete_with_turn(self, **kwargs) -> ChatRunSummary:
+        self.calls.append("complete")
+        self.completed = self._summary("completed")
+        return self.completed
+
+    async def mark_failed(self, **kwargs) -> ChatRunSummary:
+        self.calls.append("failed")
+        return self._summary("failed")
+
+    async def mark_interrupted(self, **kwargs) -> ChatRunSummary:
+        self.calls.append("interrupted")
+        return self._summary("interrupted")
+
+    def _summary(self, status: str) -> ChatRunSummary:
+        return ChatRunSummary(
+            run_id=self.run_id,
+            session_id=self.session_id,
+            request_id=uuid4(),
+            payload_hash="hash",
+            user_query="query",
+            status=status,
+            fencing_token=7,
+            worker_id="worker-a",
+            last_event_sequence=0,
+            result_turn_id=uuid4() if status == "completed" else None,
+            error_code=None,
+            created_at=datetime.now(UTC),
+            started_at=datetime.now(UTC),
+            heartbeat_at=datetime.now(UTC),
+            cancel_requested_at=None,
+            completed_at=(
+                datetime.now(UTC)
+                if status in {"completed", "failed", "interrupted"}
+                else None
+            ),
+        )

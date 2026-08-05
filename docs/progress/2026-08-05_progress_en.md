@@ -181,6 +181,24 @@
 ### Boundary
 
 - B4 establishes worker-local lifecycle management only. Graph execution, the Run Repository, Redis cancellation listening, and HTTP APIs remain in B5-B8.
+
+## 19:22 — V3.3-2 B5 background Graph executor
+
+### Completed
+
+- Added `ChatRunExecutor`, executing a pre-created Run in the order `SessionStore.transaction → PostgreSQL fencing → mark_running → history → AgentGraphRunner → complete_with_turn`.
+- `ChatRunExecutionRequest.run_id` is injected into `AgentRunState.internal_run_id`, so `run_init_node` produces the same `RunContext.run_id`; Graph events bind a Run-scoped Event Pump before execution.
+- The final Turn is committed atomically in PostgreSQL before Redis `result`/`completed` events are published; Redis/Event Bus failure cannot roll back a committed Turn. Graph errors record stable `execution_error`; cancellation currently closes as `interrupted`, with user-cancel semantics refined in B6.
+
+### Verified
+
+- `uv run ruff check app tests`: passed.
+- `tests/test_chat_run_executor.py`: `2 passed`, covering preallocated Run ID, fencing/history ordering, commit-before-terminal-event, and Graph failure closure.
+- `git diff --check`: passed.
+
+### Boundary
+
+- B5 provides the background Graph execution loop but does not yet connect Manager cancellation listeners, heartbeat/reconciliation, or the C-stage HTTP API.
 - A running FastAPI instance passed a real session CRUD smoke test: create, isolated list, rename,
   cross-browser 404 and delete.
 
