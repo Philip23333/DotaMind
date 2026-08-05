@@ -617,3 +617,20 @@
 
 - 前端多聊天 Run Store、切换/恢复/取消/未读状态与 stateless debug 边界已完成；旧 stateful 聊天执行路径已删除。
 - E 阶段仍需完成真实重启/Redis 过期恢复、浏览器矩阵和最终文档验收。
+
+## 23:59 — V3.3-2 E2 Chat Run 可观测性
+
+### 已完成
+
+- 新增低基数 Chat Run Prometheus 指标：终态计数/时延、事件发布/重放、事件总线错误、当前订阅数、取消结果和 stale interrupted 计数。
+- 在 `ChatRunExecutor`、`RunEventPump`、Chat Run 事件订阅、取消 Runtime 和 stale sweeper 接入指标；不使用 `run_id`、`session_id`、query 或用户文本作为 label。
+- 增加 observability 合同测试，固定指标 label 集合，避免后续把高基数身份泄漏进监控。
+
+### 已验证
+
+- `uv run ruff check app tests`：通过。
+- `tests/test_observability.py tests/test_run_recovery.py tests/test_run_event_pump.py tests/test_chat_run_executor.py`：`10 passed`。
+
+### 边界
+
+- E1 恢复组件和 worker lifespan 已具备；真实 PostgreSQL/Redis 矩阵、浏览器验收和最终文档收口属于 E3-E6。

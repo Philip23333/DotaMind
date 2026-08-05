@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass
+from time import monotonic
 from typing import Any
 from uuid import UUID
 
@@ -26,6 +27,10 @@ from app.application.run_event_bus import RunEventBusError
 from app.application.run_event_pump import bind_run_event_pump
 from app.application.run_recovery import RunHeartbeat
 from app.application.session_store import SessionStore
+from app.observability import (
+    record_chat_run,
+    record_chat_run_cancellation,
+)
 
 TurnBuilder = Callable[[AgentRunState], Turn]
 ResponseBuilder = Callable[[AgentRunState, UUID], dict[str, Any]]
@@ -79,28 +84,39 @@ class ChatRunExecutor:
     async def execute(self, request: ChatRunExecutionRequest) -> ChatRunExecutionResult:
         """Run Graph, atomically commit its Turn, then publish terminal events."""
 
+        started = monotonic()
         sid = str(request.session_id)
-        async with self._session_store.transaction(sid):
-            self._session_store.current_fencing_token(sid)
-            fencing_token = await self._chat_repository.allocate_fencing_token(
-                request.browser_id,
-                request.session_id,
-            )
-            await self._run_repository.mark_running(
-                browser_id=request.browser_id,
-                run_id=request.run_id,
-                worker_id=self._worker_id,
-                fencing_token=fencing_token,
-            )
-            heartbeat = await self._start_heartbeat(request)
-            try:
-                return await self._execute_running(
-                    request=request,
+        try:
+            async with self._session_store.transaction(sid):
+                self._session_store.current_fencing_token(sid)
+                fencing_token = await self._chat_repository.allocate_fencing_token(
+                    request.browser_id,
+                    request.session_id,
+                )
+                await self._run_repository.mark_running(
+                    browser_id=request.browser_id,
+                    run_id=request.run_id,
+                    worker_id=self._worker_id,
                     fencing_token=fencing_token,
                 )
-            finally:
-                if heartbeat is not None:
-                    await heartbeat.stop()
+                heartbeat = await self._start_heartbeat(request)
+                try:
+                    result = await self._execute_running(
+                        request=request,
+                        fencing_token=fencing_token,
+                    )
+                    record_chat_run(result.run.status, monotonic() - started)
+                    return result
+                finally:
+                    if heartbeat is not None:
+                        await heartbeat.stop()
+        except asyncio.CancelledError:
+            record_chat_run_cancellation("cancelled")
+            record_chat_run("cancelled", monotonic() - started)
+            raise
+        except Exception:
+            record_chat_run("failed", monotonic() - started)
+            raise
 
     async def _execute_running(
         self,
@@ -145,6 +161,7 @@ class ChatRunExecutor:
                 publish_stream_event(StatusStreamEvent(status="completed"))
             except asyncio.CancelledError:
                 terminal = await self._mark_cancelled_or_interrupted(request.run_id)
+                record_chat_run_cancellation(terminal)
                 publish_stream_event(
                     StatusStreamEvent(
                         status=terminal,

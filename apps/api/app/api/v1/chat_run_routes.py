@@ -30,6 +30,11 @@ from app.application.chat_run_repository import (
 )
 from app.application.chat_run_runtime import ChatRunRuntime
 from app.application.run_event_bus import RunEventBusError, StoredRunEvent
+from app.observability import (
+    CHAT_RUN_SUBSCRIPTIONS,
+    record_chat_run_event,
+    record_chat_run_event_bus_error,
+)
 
 router = APIRouter(prefix="/chat", tags=["chat-runs"])
 
@@ -222,42 +227,49 @@ async def stream_run_events(
         return run_error_response(exc.code, status_code=503)
 
     async def stream() -> AsyncIterator[bytes]:
+        CHAT_RUN_SUBSCRIPTIONS.inc()
         cursor = after
         session_id = initial_summary.session_id
-        while True:
-            try:
-                events = await event_bus.read_after(
-                    run_id=run_id,
-                    session_id=session_id,
-                    after=cursor,
-                )
-                for stored in sorted(events, key=lambda item: item.sequence):
-                    if stored.sequence <= cursor:
-                        continue
-                    cursor = stored.sequence
-                    yield _event_line(stored)
-                    if _is_terminal_event(stored):
-                        return
+        try:
+            while True:
+                try:
+                    events = await event_bus.read_after(
+                        run_id=run_id,
+                        session_id=session_id,
+                        after=cursor,
+                    )
+                    for stored in sorted(events, key=lambda item: item.sequence):
+                        if stored.sequence <= cursor:
+                            continue
+                        cursor = stored.sequence
+                        record_chat_run_event("replayed")
+                        yield _event_line(stored)
+                        if _is_terminal_event(stored):
+                            return
 
-                summary = await repository.get_run_for_browser(browser_id, run_id)
-                if summary.status in TERMINAL_RUN_STATUSES:
-                    yield _recovery_terminal_line(summary, cursor)
+                    summary = await repository.get_run_for_browser(browser_id, run_id)
+                    if summary.status in TERMINAL_RUN_STATUSES:
+                        record_chat_run_event("recovery_terminal")
+                        yield _recovery_terminal_line(summary, cursor)
+                        return
+                    events = await event_bus.wait_after(
+                        run_id=run_id,
+                        session_id=session_id,
+                        after=cursor,
+                        timeout_seconds=1,
+                    )
+                    if events:
+                        continue
+                    yield _heartbeat_line(summary)
+                except asyncio.CancelledError:
+                    # Disconnecting an observer must not cancel the detached Run.
+                    raise
+                except RunEventBusError as exc:
+                    record_chat_run_event_bus_error("subscribe")
+                    yield _stream_error_line(run_id, session_id, exc.code)
                     return
-                events = await event_bus.wait_after(
-                    run_id=run_id,
-                    session_id=session_id,
-                    after=cursor,
-                    timeout_seconds=1,
-                )
-                if events:
-                    continue
-                yield _heartbeat_line(summary)
-            except asyncio.CancelledError:
-                # Disconnecting an observer must not cancel the detached Run.
-                raise
-            except RunEventBusError as exc:
-                yield _stream_error_line(run_id, session_id, exc.code)
-                return
+        finally:
+            CHAT_RUN_SUBSCRIPTIONS.dec()
 
     return StreamingResponse(
         stream(),

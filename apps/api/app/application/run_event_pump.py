@@ -14,6 +14,7 @@ from app.agentic.runtime.streaming import (
     reset_stream_event_publisher,
 )
 from app.application.run_event_bus import RunEventBus, RunEventBusError
+from app.observability import record_chat_run_event, record_chat_run_event_bus_error
 
 
 class RunEventPump:
@@ -90,8 +91,10 @@ class RunEventPump:
                     event=event,
                 )
                 self._last_sequence = stored.sequence
+                record_chat_run_event("published")
             except RunEventBusError as exc:
                 self._failure = exc
+                record_chat_run_event_bus_error("publish")
             finally:
                 self._queue.task_done()
 

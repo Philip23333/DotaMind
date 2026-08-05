@@ -18,6 +18,7 @@ from app.application.chat_run_repository import (
     ChatRunRepositoryError,
 )
 from app.application.idempotency import build_request_hash
+from app.observability import record_chat_run_cancellation
 
 
 @dataclass(frozen=True)
@@ -91,6 +92,7 @@ class ChatRunRuntime:
             browser_id=browser_id,
             run_id=run_id,
         )
+        record_chat_run_cancellation(result.action)
         await self._manager.cancel(run_id)
         if self._event_bus is not None:
             try:

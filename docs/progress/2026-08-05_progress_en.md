@@ -592,6 +592,23 @@
 - The browser-level multi-chat Run Store, switch/recovery/cancel/unread behavior and stateless debug boundary are complete; the old stateful chat execution path is removed.
 - Stage E still needs real restart/Redis-expiry recovery, browser acceptance matrix and final documentation acceptance.
 
+## 23:59 — V3.3-2 E2 Chat Run observability
+
+### Completed
+
+- Added low-cardinality Chat Run Prometheus metrics for terminal count/duration, event publish/replay, event-bus errors, active subscriptions, cancellation outcomes and stale interruptions.
+- Wired metrics into `ChatRunExecutor`, `RunEventPump`, Chat Run event subscriptions, cancel Runtime and the stale sweeper; no `run_id`, `session_id`, query or user text is used as a label.
+- Added observability contract assertions that freeze the label sets and prevent high-cardinality identity leakage into monitoring.
+
+### Verified
+
+- `uv run ruff check app tests`: passed.
+- `tests/test_observability.py tests/test_run_recovery.py tests/test_run_event_pump.py tests/test_chat_run_executor.py`: `10 passed`.
+
+### Boundary
+
+- E1 recovery components and worker lifespan are present; real PostgreSQL/Redis matrices, browser acceptance and final documentation closeout remain E3-E6.
+
 ## 16:39 — Preventing the empty-state flash on chat switching
 
 - The right chat runtime rendered one empty-message frame after remount, briefly showing the “new chat” state; `ChatSessionRuntime` now notifies the parent after mounting before the right-side loading overlay is removed.

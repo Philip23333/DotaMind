@@ -6,6 +6,13 @@ import pytest
 from app.failure_codes import STABLE_FAILURE_CODES, normalize_failure_code
 from app.observability import (
     ATTEMPTS,
+    CHAT_RUN_CANCELLATIONS,
+    CHAT_RUN_DURATION,
+    CHAT_RUN_EVENT_BUS_ERRORS,
+    CHAT_RUN_EVENTS,
+    CHAT_RUN_STALE_INTERRUPTED,
+    CHAT_RUN_SUBSCRIPTIONS,
+    CHAT_RUNS,
     CONTROLLER_CALLS,
     EVIDENCE_COMPLETENESS,
     IDEMPOTENCY,
@@ -43,6 +50,13 @@ def test_prometheus_contract_has_exact_labels_and_latency_buckets() -> None:
     )
     assert LOCK_WAIT._labelnames == ("status",)
     assert IDEMPOTENCY._labelnames == ("backend", "action")
+    assert CHAT_RUNS._labelnames == ("status",)
+    assert CHAT_RUN_DURATION._labelnames == ("status",)
+    assert CHAT_RUN_EVENTS._labelnames == ("operation",)
+    assert CHAT_RUN_EVENT_BUS_ERRORS._labelnames == ("operation",)
+    assert CHAT_RUN_CANCELLATIONS._labelnames == ("outcome",)
+    assert CHAT_RUN_SUBSCRIPTIONS._labelnames == ()
+    assert CHAT_RUN_STALE_INTERRUPTED._labelnames == ()
     assert tuple(RUN_DURATION._upper_bounds[:-1]) == LATENCY_BUCKETS
     assert math.isinf(RUN_DURATION._upper_bounds[-1])
     assert tuple(EVIDENCE_COMPLETENESS._upper_bounds[:-1]) == (0, 0.25, 0.5, 0.75, 1)

@@ -2,7 +2,7 @@
 
 import logging
 
-from prometheus_client import Counter, Histogram
+from prometheus_client import Counter, Gauge, Histogram
 
 from app.failure_codes import normalize_failure_code
 
@@ -90,6 +90,40 @@ IDEMPOTENCY = Counter(
     "dotamind_idempotency_total",
     "Stateful request-id actions.",
     ("backend", "action"),
+)
+CHAT_RUNS = Counter(
+    "dotamind_chat_runs_total",
+    "Chat Runs by durable terminal status.",
+    ("status",),
+)
+CHAT_RUN_DURATION = Histogram(
+    "dotamind_chat_run_duration_seconds",
+    "Chat Run wall-clock duration.",
+    ("status",),
+    buckets=LATENCY_BUCKETS,
+)
+CHAT_RUN_EVENTS = Counter(
+    "dotamind_chat_run_events_total",
+    "Chat Run event bus operations.",
+    ("operation",),
+)
+CHAT_RUN_EVENT_BUS_ERRORS = Counter(
+    "dotamind_chat_run_event_bus_errors_total",
+    "Chat Run event bus failures by stable operation.",
+    ("operation",),
+)
+CHAT_RUN_SUBSCRIPTIONS = Gauge(
+    "dotamind_chat_run_subscriptions",
+    "Current Chat Run event subscriptions.",
+)
+CHAT_RUN_CANCELLATIONS = Counter(
+    "dotamind_chat_run_cancellations_total",
+    "Chat Run cancellation outcomes.",
+    ("outcome",),
+)
+CHAT_RUN_STALE_INTERRUPTED = Counter(
+    "dotamind_chat_run_stale_interrupted_total",
+    "Chat Runs interrupted by stale recovery.",
 )
 
 RUNTIME_EVENTS = frozenset(
@@ -247,3 +281,26 @@ def record_lock_wait(status: str, seconds: float) -> None:
 
 def record_idempotency(backend: str, action: str) -> None:
     IDEMPOTENCY.labels(backend, action).inc()
+
+
+def record_chat_run(status: str, duration_seconds: float) -> None:
+    """Record a terminal Chat Run without user/session identifiers."""
+    CHAT_RUNS.labels(status).inc()
+    CHAT_RUN_DURATION.labels(status).observe(max(0, duration_seconds))
+
+
+def record_chat_run_event(operation: str) -> None:
+    CHAT_RUN_EVENTS.labels(operation).inc()
+
+
+def record_chat_run_event_bus_error(operation: str) -> None:
+    CHAT_RUN_EVENT_BUS_ERRORS.labels(operation).inc()
+
+
+def record_chat_run_cancellation(outcome: str) -> None:
+    CHAT_RUN_CANCELLATIONS.labels(outcome).inc()
+
+
+def record_stale_chat_runs(count: int) -> None:
+    if count > 0:
+        CHAT_RUN_STALE_INTERRUPTED.inc(count)

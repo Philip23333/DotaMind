@@ -12,6 +12,7 @@ from app.application.chat_run_repository import (
     ChatRunRepositoryError,
     ChatRunTerminalError,
 )
+from app.observability import record_stale_chat_runs
 
 CancelCallback = Callable[[], Awaitable[None]]
 
@@ -109,10 +110,12 @@ class RunStaleSweeper:
     async def run_once(self, *, now: datetime | None = None) -> list[UUID]:
         reference = now or datetime.now(UTC)
         stale_before = reference - timedelta(seconds=self._stale_after)
-        return await self._repository.interrupt_stale_runs(
+        run_ids = await self._repository.interrupt_stale_runs(
             stale_before=stale_before,
             error_code=self._error_code,
         )
+        record_stale_chat_runs(len(run_ids))
+        return run_ids
 
     async def _run(self) -> None:
         try:
