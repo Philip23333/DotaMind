@@ -183,24 +183,32 @@ class RedisRunEventBus:
         if not result:
             return []
         events: list[StoredRunEvent] = []
-        for _, entries in result:
-            for _, fields in entries:
-                if isinstance(fields, list):
-                    fields = dict(zip(fields[::2], fields[1::2], strict=False))
-                try:
+        try:
+            for stream_record in result:
+                if not isinstance(stream_record, (list, tuple)) or len(stream_record) != 2:
+                    raise ValueError("invalid redis stream record")
+                _, entries = stream_record
+                for entry in entries:
+                    if not isinstance(entry, (list, tuple)) or len(entry) != 2:
+                        raise ValueError("invalid redis stream entry")
+                    _, fields = entry
+                    if isinstance(fields, list):
+                        fields = dict(zip(fields[::2], fields[1::2], strict=False))
                     sequence = int(fields["sequence"])
                     event_payload = json.loads(fields["event"])
                     parsed_event = _parse_event(event_payload)
-                except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
-                    raise RunEventBusError("data_invalid") from exc
-                events.append(
-                    StoredRunEvent(
-                        run_id=run_id,
-                        session_id=session_id,
-                        sequence=sequence,
-                        event=parsed_event,
+                    events.append(
+                        StoredRunEvent(
+                            run_id=run_id,
+                            session_id=session_id,
+                            sequence=sequence,
+                            event=parsed_event,
+                        )
                     )
-                )
+        except RunEventBusError:
+            raise
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise RunEventBusError("data_invalid") from exc
         return events
 
 

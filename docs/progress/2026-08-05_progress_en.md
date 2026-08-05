@@ -609,6 +609,23 @@
 
 - E1 recovery components and worker lifespan are present; real PostgreSQL/Redis matrices, browser acceptance and final documentation closeout remain E3-E6.
 
+## 23:59 — V3.3-2 E3 real PostgreSQL/Redis integration matrix
+
+### Completed
+
+- Ran the Chat Session/Run Repository, fencing, atomic completion and Redis Stream sequence/replay/corruption regressions against the current Docker PostgreSQL 16 and Redis 7 services.
+- Fixed malformed Redis Stream records so decoding consistently surfaces `data_invalid`; corrected real Repository tests to access the `ChatRunCreateResult.run` DTO.
+- Retained test cleanup so integration data does not remain in the shared database or Redis keyspace.
+
+### Verified
+
+- `DOTAMIND_TEST_DATABASE_URL=postgresql+asyncpg://dotamind:dotamind@localhost:5432/dotamind`, `DOTAMIND_TEST_REDIS_URL=redis://localhost:6379/0`.
+- `tests/test_postgres_chat_repository.py tests/test_postgres_chat_run_repository.py tests/test_persistent_fencing.py tests/test_redis_run_event_bus.py`: `6 passed`.
+
+### Boundary
+
+- E3 proves the PostgreSQL/Redis persistence and event contracts; browser responsive acceptance and final documentation synchronization remain E4-E6.
+
 ## 16:39 — Preventing the empty-state flash on chat switching
 
 - The right chat runtime rendered one empty-message frame after remount, briefly showing the “new chat” state; `ChatSessionRuntime` now notifies the parent after mounting before the right-side loading overlay is removed.

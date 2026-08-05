@@ -132,7 +132,7 @@ def test_postgres_run_repository_enforces_lifecycle_and_ownership() -> None:
                 stale_before=datetime.now(UTC) + timedelta(seconds=1),
                 error_code="worker_stale",
             )
-            assert other_run.run_id in stale
+            assert other_run.run.run_id in stale
         finally:
             if session_id is not None:
                 await chats.delete_session(browser_a, session_id)
@@ -164,7 +164,7 @@ def test_postgres_run_completion_is_atomic_and_fenced() -> None:
             token = await chats.allocate_fencing_token(browser_id, session_id)
             await runs.mark_running(
                 browser_id=browser_id,
-                run_id=created.run_id,
+                run_id=created.run.run_id,
                 worker_id="worker-complete",
                 fencing_token=token,
             )
@@ -202,13 +202,13 @@ def test_postgres_run_completion_is_atomic_and_fenced() -> None:
             newer_token = await chats.allocate_fencing_token(browser_id, session_id)
             await runs.mark_running(
                 browser_id=browser_id,
-                run_id=second_run.run_id,
+                run_id=second_run.run.run_id,
                 worker_id="worker-new",
                 fencing_token=newer_token,
             )
             with pytest.raises(ChatRunFencingLostError):
                 await runs.complete_with_turn(
-                    run_id=second_run.run_id,
+                    run_id=second_run.run.run_id,
                     worker_id="worker-new",
                     fencing_token=token,
                     public_response={"status": "ok"},

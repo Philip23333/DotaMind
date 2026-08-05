@@ -634,3 +634,20 @@
 ### 边界
 
 - E1 恢复组件和 worker lifespan 已具备；真实 PostgreSQL/Redis 矩阵、浏览器验收和最终文档收口属于 E3-E6。
+
+## 23:59 — V3.3-2 E3 真实 PostgreSQL/Redis 集成矩阵
+
+### 已完成
+
+- 使用当前 Docker PostgreSQL 16 与 Redis 7 实际执行 Chat Session/Run Repository、fencing、原子完成和 Redis Stream sequence/replay/corruption 回归。
+- 修复 Redis Stream malformed record 解码未统一映射为 `data_invalid` 的边界；补正真实 Repository 测试对 `ChatRunCreateResult.run` DTO 的访问。
+- 保留测试清理逻辑，真实集成数据不残留到共享数据库或 Redis keyspace。
+
+### 已验证
+
+- `DOTAMIND_TEST_DATABASE_URL=postgresql+asyncpg://dotamind:dotamind@localhost:5432/dotamind`、`DOTAMIND_TEST_REDIS_URL=redis://localhost:6379/0`。
+- `tests/test_postgres_chat_repository.py tests/test_postgres_chat_run_repository.py tests/test_persistent_fencing.py tests/test_redis_run_event_bus.py`：`6 passed`。
+
+### 边界
+
+- E3 已证明 PostgreSQL/Redis 核心持久化和事件合同；浏览器响应式验收与最终文档同步属于 E4-E6。
