@@ -119,6 +119,23 @@
 
 - B3 Event Pump、B4 Manager、B5 Graph 执行和 B6-B8 故障收口尚未实现；当前 Event Bus 尚未被 API 或后台任务调用。
 
+## 18:39 — V3.3-2 B3 Run Event Pump
+
+### 已完成
+
+- 新增 `RunEventPump` 和 `bind_run_event_pump()`：Graph 继续通过同步 `publish_stream_event()` 发事件，Run-scoped asyncio Queue 异步写入 Event Bus。
+- Event Pump 支持启动、flush、sequence cursor、queue 上限和稳定的 Event Bus failure 传播；退出前必须完成队列 flush。
+- 新增纯单测，验证事件顺序、sequence 和 Redis/Bus 故障不会静默吞掉。
+
+### 已验证
+
+- `uv run ruff check app tests`：通过。
+- `uv run pytest -q tests/test_run_event_pump.py`：通过。
+
+### 边界
+
+- B4 Manager、B5 Graph 执行接线和 B6-B8 故障收口尚未实现；Event Pump 目前仍由测试独立驱动。
+
 ## 12:06 — V3.3-1 PostgreSQL 聊天持久化与匿名浏览器多聊天管理
 
 ### 已完成

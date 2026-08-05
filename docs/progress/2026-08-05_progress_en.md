@@ -119,6 +119,23 @@
 
 - B3 Event Pump, B4 Manager, B5 Graph execution and B6-B8 failure closure are not implemented; the Event Bus is not yet used by an API or background task.
 
+## 18:39 — V3.3-2 B3 Run Event Pump
+
+### Completed
+
+- Added `RunEventPump` and `bind_run_event_pump()`: Graph nodes continue publishing synchronously while a Run-scoped asyncio queue writes to the Event Bus asynchronously.
+- The pump supports start, flush, sequence cursor, queue bounds and stable Event Bus failure propagation; the queue must flush before the pump exits.
+- Added pure unit coverage for event order, sequence values and non-silent Event Bus failures.
+
+### Verified
+
+- `uv run ruff check app tests`: passed.
+- `uv run pytest -q tests/test_run_event_pump.py`: passed.
+
+### Boundary
+
+- B4 Manager, B5 Graph wiring and B6-B8 failure closure are not implemented; the Event Pump is currently driven only by tests.
+
 ## 12:06 — V3.3-1 PostgreSQL chat persistence and anonymous browser multi-chat
 
 ### Completed
