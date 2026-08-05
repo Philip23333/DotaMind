@@ -285,6 +285,24 @@
 
 - B7 提供 heartbeat/sweeper 内部组件，但尚未在 FastAPI lifespan 启动 supervisor，也尚未实现 C 阶段 Run API；worker 重启后的调度接线留在 C/E 集成收口。
 
+## 20:42 — V3.3-2 B8 阶段 B 回归收口
+
+### 已完成
+
+- 增加 Redis Event Bus fail-fast 回归：Redis 不可用直接暴露 `unavailable`，不降级到内存事件总线。
+- 增加观察者消失回归：无 HTTP subscriber 时，后台 Run 的 Event Pump 仍能写入并 flush 完成。
+- 汇总预分配 Run ID、事件顺序/重放、并发上限、取消/异常、heartbeat/stale 组件的 focused tests，完成阶段 B 内部闭环验证。
+
+### 已验证
+
+- `uv run ruff check app tests`：通过。
+- B 阶段 focused suite：`14 passed, 1 skipped`；Redis integration 在未设置 `DOTAMIND_TEST_REDIS_URL` 时按既有约定跳过。
+- `git diff --check`：通过。
+
+### 阶段 B 结论
+
+- 后台 Run 能在脱离 HTTP 观察者后继续执行；PostgreSQL 负责状态/Turn 权威，Redis 负责可重放事件与取消通知；B 阶段不改变现有 `/plan` 和前端正式切换边界。
+
 ## 16:39 — 避免会话切换空状态闪现
 
 - 右侧聊天 runtime 重新挂载后先渲染一次空消息状态，导致“新聊天”界面闪现；现由 `ChatSessionRuntime` 在挂载完成后通知父组件，再关闭右侧 loading 遮罩。

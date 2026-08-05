@@ -234,6 +234,24 @@
 ### Boundary
 
 - B7 provides heartbeat/sweeper internals but does not yet start a supervisor from FastAPI lifespan or implement the C-stage Run API; worker restart scheduling remains for C/E integration closure.
+
+## 20:42 — V3.3-2 B8 Stage B regression closure
+
+### Completed
+
+- Added a Redis Event Bus fail-fast regression: Redis unavailability exposes `unavailable` directly and never falls back to an in-memory event bus.
+- Added an observer-disappearance regression: without an HTTP subscriber, the detached Run Event Pump still writes and flushes its events.
+- Consolidated focused coverage for preallocated Run IDs, event ordering/replay, concurrency caps, cancellation/failure, and heartbeat/stale components to close the Stage B internal loop.
+
+### Verified
+
+- `uv run ruff check app tests`: passed.
+- Stage B focused suite: `14 passed, 1 skipped`; the Redis integration test follows the existing convention and skips when `DOTAMIND_TEST_REDIS_URL` is unset.
+- `git diff --check`: passed.
+
+### Stage B conclusion
+
+- Background Runs continue after HTTP observers disappear; PostgreSQL is authoritative for state/Turns while Redis carries replayable events and cancellation notifications. Stage B does not change the existing `/plan` or frontend cutover boundary.
 - A running FastAPI instance passed a real session CRUD smoke test: create, isolated list, rename,
   cross-browser 404 and delete.
 
