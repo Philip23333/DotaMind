@@ -1,6 +1,8 @@
-import type { ThreadMessage } from "@assistant-ui/react";
+import type { ThreadMessage, ThreadMessageLike } from "@assistant-ui/react";
 
 const DEFAULT_API_URL = "http://localhost:8001";
+export const BROWSER_ID_STORAGE_KEY = "dotamind.browser_id.v1";
+export const ACTIVE_SESSION_STORAGE_KEY = "dotamind.active_session_id.v1";
 
 export type PlanStatus =
   | "ok"
@@ -25,6 +27,29 @@ export type PlanResponse = {
   } | null;
 };
 
+export type ChatSessionSummary = {
+  session_id: string;
+  game: "dota2";
+  title: string;
+  title_is_custom: boolean;
+  is_pinned: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ChatTranscriptTurn = {
+  turn_index: number;
+  request_id: string;
+  user_query: string;
+  public_response: PlanResponse;
+  created_at: string;
+};
+
+export type ChatSessionResponse = {
+  session: ChatSessionSummary;
+  turns: ChatTranscriptTurn[];
+};
+
 export type PlanStreamEvent =
   | {
       type: "phase";
@@ -42,7 +67,7 @@ export type PlanStreamEvent =
       failure_code: string | null;
     }
   | { type: "answer_delta"; delta: string; attempt_index: number; provisional: true }
-  | { type: "result"; response: PlanResponse }
+  | { type: "result"; response: PlanResponse; session?: ChatSessionSummary | null }
   | { type: "error"; error_code: string; reason: string };
 
 export function getApiUrl(): string {
@@ -50,6 +75,128 @@ export function getApiUrl(): string {
     /\/$/,
     "",
   );
+}
+
+export function getOrCreateBrowserId(): string {
+  if (typeof window === "undefined") return crypto.randomUUID();
+  const existing = window.localStorage.getItem(BROWSER_ID_STORAGE_KEY);
+  if (existing) return existing;
+  const created = crypto.randomUUID();
+  window.localStorage.setItem(BROWSER_ID_STORAGE_KEY, created);
+  return created;
+}
+
+export function getStoredActiveSessionId(): string | null {
+  if (typeof window === "undefined") return null;
+  return window.localStorage.getItem(ACTIVE_SESSION_STORAGE_KEY);
+}
+
+export function storeActiveSessionId(sessionId: string): void {
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(ACTIVE_SESSION_STORAGE_KEY, sessionId);
+  }
+}
+
+function browserHeaders(browserId: string, includeJson = false): HeadersInit {
+  return {
+    ...(includeJson ? { "Content-Type": "application/json" } : {}),
+    "X-DotaMind-Browser-Id": browserId,
+  };
+}
+
+async function readResponseError(response: Response): Promise<Error> {
+  try {
+    const payload = (await response.json()) as { reason?: string };
+    return new Error(payload.reason?.trim() || `DotaMind API 请求失败（HTTP ${response.status}）。`);
+  } catch {
+    return new Error(`DotaMind API 请求失败（HTTP ${response.status}）。`);
+  }
+}
+
+export async function listChatSessions(browserId: string): Promise<ChatSessionSummary[]> {
+  const response = await fetch(`${getApiUrl()}/api/v1/chat/sessions`, {
+    headers: browserHeaders(browserId),
+  });
+  if (!response.ok) throw await readResponseError(response);
+  const payload = (await response.json()) as { sessions: ChatSessionSummary[] };
+  return payload.sessions;
+}
+
+export async function createChatSession(browserId: string): Promise<ChatSessionSummary> {
+  const response = await fetch(`${getApiUrl()}/api/v1/chat/sessions`, {
+    method: "POST",
+    headers: browserHeaders(browserId, true),
+    body: JSON.stringify({ game: "dota2" }),
+  });
+  if (!response.ok) throw await readResponseError(response);
+  return (await response.json()) as ChatSessionSummary;
+}
+
+export async function getChatSession(
+  browserId: string,
+  sessionId: string,
+): Promise<ChatSessionResponse> {
+  const response = await fetch(`${getApiUrl()}/api/v1/chat/sessions/${sessionId}`, {
+    headers: browserHeaders(browserId),
+  });
+  if (!response.ok) throw await readResponseError(response);
+  return (await response.json()) as ChatSessionResponse;
+}
+
+export async function renameChatSession(
+  browserId: string,
+  sessionId: string,
+  title: string,
+): Promise<ChatSessionSummary> {
+  const response = await fetch(`${getApiUrl()}/api/v1/chat/sessions/${sessionId}`, {
+    method: "PATCH",
+    headers: browserHeaders(browserId, true),
+    body: JSON.stringify({ title }),
+  });
+  if (!response.ok) throw await readResponseError(response);
+  return (await response.json()) as ChatSessionSummary;
+}
+
+export async function setChatSessionPinned(
+  browserId: string,
+  sessionId: string,
+  isPinned: boolean,
+): Promise<ChatSessionSummary> {
+  const response = await fetch(`${getApiUrl()}/api/v1/chat/sessions/${sessionId}`, {
+    method: "PATCH",
+    headers: browserHeaders(browserId, true),
+    body: JSON.stringify({ is_pinned: isPinned }),
+  });
+  if (!response.ok) throw await readResponseError(response);
+  return (await response.json()) as ChatSessionSummary;
+}
+
+export async function deleteChatSession(browserId: string, sessionId: string): Promise<void> {
+  const response = await fetch(`${getApiUrl()}/api/v1/chat/sessions/${sessionId}`, {
+    method: "DELETE",
+    headers: browserHeaders(browserId),
+  });
+  if (!response.ok) throw await readResponseError(response);
+}
+
+export function transcriptToInitialMessages(
+  session: ChatSessionResponse,
+): ThreadMessageLike[] {
+  return session.turns.flatMap((turn) => [
+    {
+      id: `${session.session.session_id}:user:${turn.turn_index}`,
+      role: "user" as const,
+      content: [{ type: "text" as const, text: turn.user_query }],
+      createdAt: new Date(turn.created_at),
+    },
+    {
+      id: `${session.session.session_id}:assistant:${turn.turn_index}`,
+      role: "assistant" as const,
+      content: [{ type: "text" as const, text: formatPlanResponse(turn.public_response) }],
+      status: { type: "complete" as const, reason: "stop" as const },
+      createdAt: new Date(turn.created_at),
+    },
+  ]);
 }
 
 export function latestUserText(messages: readonly ThreadMessage[]): string {
@@ -137,11 +284,12 @@ function parseEvent(line: string): PlanStreamEvent {
 export async function* streamDotaMind(
   query: string,
   sessionId: string,
+  browserId: string,
   abortSignal: AbortSignal,
 ): AsyncGenerator<PlanStreamEvent> {
   const response = await fetch(`${getApiUrl()}/api/v1/plan/stream`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: browserHeaders(browserId, true),
     body: JSON.stringify({
       query,
       game: "dota2",

@@ -2,6 +2,40 @@
 
 Base URL: `http://localhost:8001`.
 
+## Anonymous Chat Sessions
+
+The browser chat client generates one UUID v4 and persists it locally. All session
+endpoints require `X-DotaMind-Browser-Id: <UUID v4>`; the server stores only a SHA-256
+hash and uses it as the ownership boundary. These endpoints manage the complete durable
+transcript in PostgreSQL:
+
+```http
+POST   /api/v1/chat/sessions
+GET    /api/v1/chat/sessions
+GET    /api/v1/chat/sessions/{session_id}
+PATCH  /api/v1/chat/sessions/{session_id}
+DELETE /api/v1/chat/sessions/{session_id}
+```
+
+`POST` creates an empty `dota2` session. `PATCH` accepts either `{ "title": "..." }`
+(1–80 characters) or `{ "is_pinned": true|false }`; the first completed turn automatically
+supplies a title unless it was customized. `GET /{session_id}` returns the ordered transcript, including the stored
+allowlisted public response and compact memory metadata. A session or transcript belonging
+to another browser is indistinguishable from missing and returns `404`; missing or invalid
+browser identity returns `422`.
+
+Session lists return `is_pinned` and order pinned sessions first, followed by the most recently
+updated unpinned sessions. Pinning does not change the conversation's `updated_at` activity time.
+
+Stateful `/plan` and `/plan/stream` calls use the same session ownership boundary and
+require `session_id`, `request_id`, and the browser header. PostgreSQL commits each
+completed turn and allocates a strictly increasing fencing token for the idempotent
+replay/conflict record; Redis only coordinates the short-lived lease for concurrent workers.
+If the delete lock cannot be acquired, deletion returns `409 chat_busy`. A successful
+PostgreSQL delete returns `204`; Redis cleanup is performed while the lock is held and a
+cleanup failure is logged without undoing the durable delete. Repeating a delete for a
+missing session returns the stable `404 chat_not_found` response.
+
 ## Health
 
 ```http
@@ -124,7 +158,7 @@ JSON object and the final line is exactly one `result` or `error` event:
 {"type":"phase","phase":"planning","attempt_index":0}
 {"type":"tool","tool_call_id":"call_1","tool":"stratz.hero_matchup_ranking","attempt_index":0,"status":"running","latency_ms":null,"reused":false,"failure_code":null}
 {"type":"answer_delta","delta":"新增文本","attempt_index":0,"provisional":true}
-{"type":"result","response":{"status":"ok","answer":{},"runtime":{}}}
+{"type":"result","session":{"session_id":"UUID","title":"首轮问题","updated_at":"..."},"response":{"status":"ok","answer":{},"runtime":{}}}
 ```
 
 - `phase` is emitted for planning, tool execution, answer synthesis and critic
@@ -139,6 +173,9 @@ JSON object and the final line is exactly one `result` or `error` event:
   including idempotency replay. Once the stream has started, conflicts,
   SessionStore failures and execution failures use a terminal `error` event
   because HTTP headers can no longer change.
+- A persistent stateful result may include `session` with the updated summary. The
+  first completed turn's automatic title can therefore update the client sidebar
+  without reloading the transcript; title synchronization is best-effort on the client.
 
 Events are an allowlist: they never contain tool parameters or results, history,
 prompts, model raw output, secrets, raw exceptions or internal dispatch state.

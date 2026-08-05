@@ -7,8 +7,9 @@ no compatibility fallback.
 
 ```text
 app/
-  api/v1/          /plan and /plan/stream routes, schemas, mapper
-  application/     PlanService and lease-aware SessionStore
+  api/v1/          /plan, /plan/stream and chat session routes, schemas, mapper
+  application/     PlanService, chat repository and lease-aware SessionStore
+  persistence/     async SQLAlchemy engine, PostgreSQL models and migrations
   agentic/
     graph.py       conditional LangGraph workflow
     state.py       AgentRunState and public-result state
@@ -119,6 +120,32 @@ lifespan selects `memory` or `redis` through configuration; Redis startup and ru
 surface as `session_store_error` and never fall back to a new in-memory session. API/worker
 rebuilds recover state by reconnecting to the same Redis data. Redis Server restart durability is
 a deployment concern: AOF/RDB and persistent volumes determine the allowed data-loss window.
+
+## PostgreSQL Chat Persistence and Anonymous Multi-Chat
+
+V3.3-1 adds `PostgresChatRepository` and the `chat_sessions` / `chat_turns` tables. A
+browser creates one UUID v4 in localStorage and sends it as `X-DotaMind-Browser-Id`;
+PostgreSQL stores only its SHA-256 hash. Session ownership is checked on every list,
+transcript, rename, delete and stateful plan operation.
+
+PostgreSQL is authoritative for complete transcript rows, compact `Turn` memory, pin state and the
+strictly increasing fencing token. The Redis `SessionStore` remains in the request path
+for the short-lived lease and coordinator metadata; the new path does not append chat turns
+or cache public responses in Redis. `PlanService` acquires the Redis lock, asks PostgreSQL
+to allocate the next fencing token, reads PostgreSQL history, runs the normal Graph, then
+commits the public response and compact turn under a locked PostgreSQL session row. A Redis
+flush, expiry or restart therefore cannot make a token regress. `(session_id, request_id,
+payload_hash)` preserves exactly-once replay/conflict semantics across API workers.
+
+Deletion follows the same coordinator lock: it never deletes another owner's lock key,
+deletes PostgreSQL first, clears only Redis data keys while the lock is held, and lets normal
+transaction exit release the lock. A coordinator cleanup failure is logged but does not turn
+an already committed PostgreSQL deletion into a false failure.
+
+`apps/chat` now lists and manages multiple local-browser sessions, restores a selected
+transcript from PostgreSQL, and sends the browser/session/request identifiers with the
+existing streaming endpoint. Login, cross-device sync, attachments, search, reconnect,
+message branching and LangGraph checkpointing remain outside this phase.
 
 ## Tool Plan Validation Order
 

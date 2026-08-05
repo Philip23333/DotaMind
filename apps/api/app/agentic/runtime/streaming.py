@@ -38,6 +38,7 @@ class AnswerDeltaStreamEvent(_StreamEvent):
 class ResultStreamEvent(_StreamEvent):
     type: Literal["result"] = "result"
     response: dict[str, Any]
+    session: dict[str, Any] | None = None
 
 
 class ErrorStreamEvent(_StreamEvent):

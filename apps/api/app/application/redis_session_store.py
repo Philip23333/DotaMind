@@ -272,6 +272,35 @@ class RedisSessionStore(SessionStore):
         except (OSError, RedisError) as exc:
             raise SessionStoreError("unavailable") from exc
 
+    def current_fencing_token(self, session_id: str) -> int:
+        return self._require_context(session_id).fencing_token
+
+    async def delete_session(self, session_id: str) -> None:
+        """Delete one session's coordinator data without removing an active lock."""
+
+        task = asyncio.current_task()
+        context = self._contexts.get(task, {}).get(session_id) if task else None
+        if context is not None:
+            await self.clear_session_data(session_id)
+            return
+        async with self.transaction(session_id):
+            await self.clear_session_data(session_id)
+
+    async def clear_session_data(self, session_id: str) -> None:
+        """Clear data keys while the transaction's lock key remains owned."""
+
+        context = self._require_context(session_id)
+        keys = self._keys_from_base(context.base)
+        try:
+            await self._redis.delete(
+                keys["meta"],
+                keys["turns"],
+                keys["requests"],
+                keys["request_gc"],
+            )
+        except (OSError, RedisError) as exc:
+            raise SessionStoreError("unavailable") from exc
+
     @_observe_session_operation("get")
     async def get(self, session_id: str, limit: int) -> list[Turn]:
         keys = self._keys(session_id)

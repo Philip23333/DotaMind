@@ -8,10 +8,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
+from app.api.v1.chat_routes import router as chat_router
 from app.api.v1.routes import router as v1_router
+from app.application.postgres_chat_repository import PostgresChatRepository
 from app.application.redis_session_store import RedisSessionStore
 from app.application.session_store_factory import build_session_store
 from app.core.config import get_policy, get_settings
+from app.persistence.database import (
+    close_database,
+    create_database_resources,
+    ping_database,
+)
 
 settings = get_settings()
 PLAN_CONSOLE_PATH = Path(__file__).parent / "resources" / "plan_console.html"
@@ -53,16 +60,23 @@ for handler in logging.getLogger().handlers:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    database = create_database_resources(settings.database_url)
+    await ping_database(database.engine)
     store = build_session_store(settings, get_policy())
     if isinstance(store, RedisSessionStore):
         await store.ping()
     from app.application.plan_service import PlanService
 
-    app.state.plan_service = PlanService(session_store=store)
+    app.state.chat_repository = PostgresChatRepository(database.session_factory)
+    app.state.plan_service = PlanService(
+        session_store=store,
+        chat_repository=app.state.chat_repository,
+    )
     try:
         yield
     finally:
         await store.aclose()
+        await close_database(database)
 
 
 app = FastAPI(
@@ -81,6 +95,7 @@ app.add_middleware(
 )
 
 app.include_router(v1_router, prefix=settings.api_v1_prefix)
+app.include_router(chat_router, prefix=settings.api_v1_prefix)
 
 
 @app.get("/health", tags=["system"])

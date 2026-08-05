@@ -127,6 +127,18 @@ class SessionStore(ABC):
     def transaction(self, session_id: str) -> AbstractAsyncContextManager[None]:
         """Serialize one complete get → run → append transaction."""
 
+    @abstractmethod
+    def current_fencing_token(self, session_id: str) -> int:
+        """Return the fencing token held by the current transaction owner."""
+
+    async def delete_session(self, session_id: str) -> None:
+        """Delete coordinator data for a session when no owner is active."""
+        return None
+
+    async def clear_session_data(self, session_id: str) -> None:
+        """Clear data keys while the current transaction still owns the lock."""
+        await self.delete_session(session_id)
+
 
 # ---------------------------------------------------------------------------
 # Phase 1: in-process LRU store
@@ -175,6 +187,8 @@ class InMemorySessionStore(SessionStore):
         # The task which currently owns each session lock.  A lease alone is
         # insufficient here: it can belong to a waiter which must not append.
         self._holders: dict[str, asyncio.Task[object]] = {}
+        self._fencing_counters: dict[str, int] = {}
+        self._fencing_tokens: dict[str, int] = {}
 
     # ------------------------------------------------------------------
     # SessionStore interface
@@ -332,16 +346,21 @@ class InMemorySessionStore(SessionStore):
             if current_task is None:  # pragma: no cover - asyncio guarantees a task.
                 raise RuntimeError("SessionStore.transaction() requires an asyncio task")
             self._holders[session_id] = current_task
+            token = self._fencing_counters.get(session_id, 0) + 1
+            self._fencing_counters[session_id] = token
+            self._fencing_tokens[session_id] = token
             yield
         finally:
             if acquired:
                 self._holders.pop(session_id, None)
+                self._fencing_tokens.pop(session_id, None)
                 lock.release()
             remaining = self._leases[session_id] - 1
             if remaining == 0:
                 self._leases.pop(session_id)
                 if session_id not in self._sessions:
                     self._locks.pop(session_id, None)
+                    self._fencing_counters.pop(session_id, None)
             else:
                 self._leases[session_id] = remaining
             self._evict_to_capacity()
@@ -365,6 +384,29 @@ class InMemorySessionStore(SessionStore):
             self._evict_to_capacity()
         self._sessions.move_to_end(session_id)
         return self._sessions[session_id]
+
+    def current_fencing_token(self, session_id: str) -> int:
+        token = self._fencing_tokens.get(session_id)
+        if token is None:
+            raise RuntimeError("SessionStore.current_fencing_token() requires a transaction")
+        return token
+
+    async def delete_session(self, session_id: str) -> None:
+        if self._holders.get(session_id) is asyncio.current_task():
+            await self.clear_session_data(session_id)
+            return
+        lock = self._locks.get(session_id)
+        if lock is not None and lock.locked():
+            raise RuntimeError("cannot delete a session while its transaction is active")
+        self._sessions.pop(session_id, None)
+        self._locks.pop(session_id, None)
+        self._leases.pop(session_id, None)
+        self._fencing_counters.pop(session_id, None)
+        self._fencing_tokens.pop(session_id, None)
+
+    async def clear_session_data(self, session_id: str) -> None:
+        self._require_holder(session_id, "clear_session_data")
+        self._sessions.pop(session_id, None)
 
     def _append_locked(self, session_id: str, turn: Turn) -> Turn:
         data = self._get_or_create_session(session_id)

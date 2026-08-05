@@ -17,16 +17,15 @@ import {
   ArrowUpIcon,
   CheckIcon,
   CopyIcon,
-  RefreshCwIcon,
   SquareIcon,
 } from "lucide-react";
 import type { FC } from "react";
 
 export const Thread: FC = () => {
   return (
-    <ThreadPrimitive.Root className="flex h-full flex-col bg-background">
-      <ThreadPrimitive.Viewport className="relative flex flex-1 flex-col overflow-y-auto scroll-smooth">
-        <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-4 pt-6 sm:px-6">
+    <ThreadPrimitive.Root className="flex h-full min-w-0 flex-col overflow-hidden bg-background">
+      <ThreadPrimitive.Viewport className="relative flex min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto scroll-smooth">
+        <div className="mx-auto flex w-full max-w-3xl min-w-0 flex-1 flex-col px-3 pt-4 sm:px-6 sm:pt-6">
           <AuiIf condition={(state) => state.thread.messages.length === 0}>
             <Welcome />
           </AuiIf>
@@ -37,7 +36,7 @@ export const Thread: FC = () => {
             </ThreadPrimitive.Messages>
           </div>
 
-          <ThreadPrimitive.ViewportFooter className="sticky bottom-0 mt-auto bg-background/95 pb-4 pt-2 backdrop-blur sm:pb-6">
+          <ThreadPrimitive.ViewportFooter className="sticky bottom-0 mt-auto bg-background/95 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur sm:pb-6">
             <ThreadPrimitive.ScrollToBottom
               render={
                 <Button
@@ -79,8 +78,8 @@ const ThreadMessage: FC = () => {
 };
 
 const UserMessage: FC = () => (
-  <MessagePrimitive.Root className="flex justify-end">
-    <div className="max-w-[85%] rounded-2xl bg-muted px-4 py-2.5 leading-relaxed wrap-break-word">
+    <MessagePrimitive.Root className="flex min-w-0 justify-end">
+    <div className="max-w-[90%] min-w-0 rounded-2xl bg-muted px-3 py-2.5 leading-relaxed wrap-break-word sm:max-w-[85%]">
       <MessagePrimitive.Parts />
     </div>
   </MessagePrimitive.Root>
@@ -91,7 +90,7 @@ const AssistantMessage: FC = () => {
   const runtimeInfo = useRuntimeInfo(messageId);
 
   return (
-    <MessagePrimitive.Root className="group relative pr-8">
+    <MessagePrimitive.Root className="group relative min-w-0 pr-2 sm:pr-8">
       <div className="min-w-0 leading-relaxed wrap-break-word">
         {runtimeInfo && <RuntimeInfoCard run={runtimeInfo} />}
         {runtimeInfo?.status === "running" && runtimeInfo.phase === "answering" && (
@@ -121,23 +120,16 @@ const AssistantMessage: FC = () => {
             <CopyIcon className="size-4" />
           </AuiIf>
         </ActionBarPrimitive.Copy>
-        <ActionBarPrimitive.Reload
-          render={
-            <Button variant="ghost" size="icon" className="size-8" aria-label="重新生成" />
-          }
-        >
-          <RefreshCwIcon className="size-4" />
-        </ActionBarPrimitive.Reload>
       </ActionBarPrimitive.Root>
     </MessagePrimitive.Root>
   );
 };
 
 const Composer: FC = () => (
-  <ComposerPrimitive.Root className="rounded-3xl border bg-background p-2 shadow-sm focus-within:ring-2 focus-within:ring-ring/30">
+  <ComposerPrimitive.Root className="rounded-3xl border bg-background p-1.5 shadow-sm focus-within:ring-2 focus-within:ring-ring/30 sm:p-2">
     <ComposerPrimitive.Input
       placeholder="询问英雄、阵容、对线或版本数据…"
-      className="max-h-40 min-h-12 w-full resize-none bg-transparent px-3 py-2 text-base outline-none placeholder:text-muted-foreground"
+      className="max-h-40 min-h-12 w-full min-w-0 resize-none bg-transparent px-3 py-2 text-base outline-none placeholder:text-muted-foreground"
       rows={1}
       autoFocus
       enterKeyHint="send"

@@ -1,7 +1,8 @@
 """PlanService: v2.5 LLM Controller use case.
 
-No fallback to legacy pipeline. Session memory is opt-in via session_id;
-omitting it preserves the original stateless single-turn behaviour.
+No fallback to the legacy pipeline. Stateless requests remain available when
+``session_id`` is omitted; the configured V3.3 chat path uses PostgreSQL for
+durable history and the SessionStore only for lease/fencing coordination.
 """
 
 import asyncio
@@ -19,10 +20,16 @@ from app.agentic.planning.contracts import validate_registry_contracts
 from app.agentic.planning.controller import AgentController
 from app.agentic.state import AgentRunState
 from app.agentic.tools.stratz_tools import build_default_tool_registry
+from app.application.chat_repository import (
+    ChatIdempotencyConflictError,
+    ChatRepositoryError,
+    ChatSessionSummary,
+)
 from app.application.idempotency import (
     IdempotencyConflictError,
     build_request_hash,
 )
+from app.application.postgres_chat_repository import PostgresChatRepository
 from app.application.session_store import InMemorySessionStore, SessionStore
 from app.core.config import get_policy, get_settings
 from app.observability import emit_event, record_idempotency
@@ -37,6 +44,7 @@ class PlanServiceResult:
     public_response: dict[str, Any]
     state: AgentRunState | None
     idempotency_status: Literal["disabled", "executed", "replayed"]
+    session_summary: ChatSessionSummary | None = None
 
 
 class PlanService:
@@ -46,6 +54,7 @@ class PlanService:
         self,
         controller: AgentController | None = None,
         session_store: SessionStore | None = None,
+        chat_repository: PostgresChatRepository | None = None,
     ) -> None:
         settings = get_settings()
         policy = get_policy()
@@ -72,6 +81,7 @@ class PlanService:
             ),
         )
         self._conv_policy = policy.conversation
+        self.chat_repository = chat_repository
 
     async def run(
         self,
@@ -79,20 +89,21 @@ class PlanService:
         game: str = "dota2",
         session_id: UUID | None = None,
         request_id: UUID | None = None,
+        browser_id: str | None = None,
     ) -> PlanServiceResult:
         """Run one planning turn, optionally within a persistent session.
 
         When session_id is None the service is stateless: no history is read
         or written, behaviour is identical to the original single-turn design.
 
-        When session_id is provided the service:
-        1. Acquires the per-session lock (serialises concurrent requests).
-        2. Reads the most-recent ``history_window`` turns from the store.
+        When the PostgreSQL chat repository is configured, a stateful request:
+        1. Acquires the SessionStore lease and claims its fencing token.
+        2. Reads the most-recent ``history_window`` turns from PostgreSQL.
         3. Runs the graph with history injected into AgentRunState.
-        4. Appends a compact turn summary back to the store.
+        4. Commits the public response and compact turn to PostgreSQL.
 
-        The InMemory backend's session lock is per-process only. Select the
-        Redis backend for multi-worker deployments.
+        The repository-less path remains for focused unit tests and local
+        compatibility; production startup always configures PostgreSQL.
         """
         if request_id is not None and session_id is None:
             raise ValueError("request_id requires session_id")
@@ -108,6 +119,17 @@ class PlanService:
             )
 
         sid = str(session_id)
+        if self.chat_repository is not None:
+            if browser_id is None:
+                raise ChatRepositoryError("browser_id_required")
+            return await self._run_persistent_chat(
+                query=query,
+                game=game,
+                session_id=session_id,
+                request_id=request_id,
+                browser_id=browser_id,
+            )
+
         async with self.session_store.transaction(sid):
             if request_id is not None:
                 request_begin = await self.session_store.begin_request(
@@ -194,6 +216,88 @@ class PlanService:
             state=result,
             idempotency_status="disabled",
         )
+
+    async def _run_persistent_chat(
+        self,
+        *,
+        query: str,
+        game: str,
+        session_id: UUID,
+        request_id: UUID | None,
+        browser_id: str,
+    ) -> PlanServiceResult:
+        if request_id is None:
+            raise ChatRepositoryError("request_id_required")
+        assert self.chat_repository is not None
+        sid = str(session_id)
+        async with self.session_store.transaction(sid):
+            # Redis/Memory only serialise the request. PostgreSQL allocates the
+            # durable fencing token so Redis loss cannot make it regress.
+            self.session_store.current_fencing_token(sid)
+            fencing_token = await self.chat_repository.allocate_fencing_token(
+                browser_id, session_id
+            )
+            payload_hash = build_request_hash(query=query, game=game)
+            try:
+                lookup = await self.chat_repository.lookup_request(
+                    browser_id,
+                    session_id,
+                    request_id,
+                    payload_hash,
+                )
+            except ChatIdempotencyConflictError as exc:
+                raise IdempotencyConflictError(
+                    query=query,
+                    game=game,
+                    session_id=sid,
+                ) from exc
+            if lookup.status == "replay":
+                assert lookup.public_response is not None
+                record_idempotency("postgres", "replayed")
+                return PlanServiceResult(
+                    public_response=lookup.public_response,
+                    state=None,
+                    idempotency_status="replayed",
+                )
+
+            history = await self.chat_repository.get_history(
+                browser_id,
+                session_id,
+                limit=self._conv_policy.history_window,
+            )
+            state = AgentRunState(
+                query=query,
+                game=game,
+                history=history,
+                session_memory_enabled=True,
+                internal_session_id=session_id,
+                internal_request_id=request_id,
+            )
+            result = await self.runner.run(state)
+            public_response = self._public_response(result, session_id=session_id)
+            try:
+                commit = await self.chat_repository.commit_turn(
+                    browser_id=browser_id,
+                    session_id=session_id,
+                    request_id=request_id,
+                    payload_hash=payload_hash,
+                    fencing_token=fencing_token,
+                    user_query=query,
+                    public_response=public_response,
+                    compact_turn=self._build_turn(result),
+                )
+            except ChatIdempotencyConflictError as exc:
+                raise IdempotencyConflictError(
+                    query=query,
+                    game=game,
+                    session_id=sid,
+                ) from exc
+            return PlanServiceResult(
+                public_response=commit.public_response,
+                state=result,
+                idempotency_status="replayed" if commit.status == "replay" else "executed",
+                session_summary=commit.session_summary,
+            )
 
     async def _execute_idempotent_stateful_request(
         self,
