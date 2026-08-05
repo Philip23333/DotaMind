@@ -12,6 +12,7 @@ import {
   type ChatRunStreamItem,
 } from "@/lib/chat-run-api";
 import { DOTAMIND_ASSISTANT_METADATA_KEY } from "./migration-contract";
+import { markDotaMindSessionUnread } from "./thread-unread";
 
 export type DotaMindRuntimeTool = Extract<PlanStreamEvent, { type: "tool" }>;
 
@@ -71,6 +72,7 @@ export async function* streamDotaMindRun(
 ): AsyncGenerator<ChatModelRunResult, void> {
   let provisionalText = "";
   let receivedTerminalEvent = false;
+  let markedUnread = false;
   let runtime: DotaMindRuntimeInfo = {
     messageId: options.messageId,
     phase: "planning",
@@ -82,6 +84,12 @@ export async function* streamDotaMindRun(
     ...result,
     metadata: metadata(options.runId, runtime),
   });
+
+  const markUnread = () => {
+    if (markedUnread) return;
+    markedUnread = true;
+    markDotaMindSessionUnread(options.sessionId);
+  };
 
   for await (const item of subscribeChatRun(
     options.browserId,
@@ -100,6 +108,7 @@ export async function* streamDotaMindRun(
             : terminalStatus(item.status),
         };
         if (runtime.status !== "running") receivedTerminalEvent = true;
+        if (receivedTerminalEvent) markUnread();
         yield update();
         if (receivedTerminalEvent) return;
         continue;
@@ -107,6 +116,7 @@ export async function* streamDotaMindRun(
 
       runtime = { ...runtime, status: "failed" };
       receivedTerminalEvent = true;
+      markUnread();
       yield update({
         content: [{ type: "text", text: formatStreamError(item.error_code, "Run 事件订阅失败。") }],
       });
@@ -136,11 +146,13 @@ export async function* streamDotaMindRun(
           durationMs: event.response.runtime?.duration_ms,
         };
         receivedTerminalEvent = true;
+        markUnread();
         yield update({ content: [{ type: "text", text: formatPlanResponse(event.response) }] });
         return;
       case "error":
         runtime = { ...runtime, status: "failed" };
         receivedTerminalEvent = true;
+        markUnread();
         yield update({ content: [{ type: "text", text: formatStreamError(event.error_code, event.reason) }] });
         return;
       case "status": {
@@ -156,6 +168,7 @@ export async function* streamDotaMindRun(
         }
 
         receivedTerminalEvent = true;
+        markUnread();
         if (event.status === "completed") {
           const response = await recoveredResponse(
             options.browserId,

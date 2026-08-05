@@ -21,7 +21,6 @@ import {
 import { Button } from "@/components/ui/button";
 
 type ChatSidebarProps = {
-  unreadRunCountBySession?: Record<string, number>;
   disabled?: boolean;
   mobileOpen?: boolean;
   onClose?: () => void;
@@ -32,7 +31,6 @@ type ChatSidebarProps = {
 };
 
 export function ChatSidebar({
-  unreadRunCountBySession = {},
   disabled = false,
   mobileOpen = false,
   onClose,
@@ -96,7 +94,11 @@ export function ChatSidebar({
                     remoteId={remoteId}
                     title={threadListItem.title ?? "新聊天"}
                     isPinned={threadListItem.custom?.isPinned === true}
-                    unreadCount={unreadRunCountBySession[remoteId] ?? 0}
+                    unreadCount={
+                      typeof threadListItem.custom?.unread === "number"
+                        ? threadListItem.custom.unread
+                        : 0
+                    }
                     disabled={disabled}
                     onClose={onClose}
                     onRename={onRename}

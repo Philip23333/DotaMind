@@ -131,11 +131,13 @@ deletes PostgreSQL first, clears only Redis data keys while the lock is held, an
 transaction exit release the lock. A coordinator cleanup failure is logged but does not turn
 an already committed PostgreSQL deletion into a false failure.
 
-`apps/chat` lists and manages multiple local-browser sessions, restores selected transcripts,
-and creates/observes/cancels Runs through `/api/v1/chat/...`. The browser-level Run Store is
-keyed by `run_id`, indexes active Runs per session, rejects stale/cross-session sequences and
-tracks background unread counts. Login, cross-device sync, attachments, search, message
-branching and LangGraph checkpointing remain outside this phase.
+`apps/chat` lists and manages multiple local-browser sessions through assistant-ui's
+`RemoteThreadListRuntime`; one assistant-ui thread maps to one DotaMind `session_id`. Each
+started thread owns a long-lived `LocalRuntime`, while `ThreadHistoryAdapter` loads PostgreSQL
+transcript and resumes an active Run from the Redis event stream. Run ID, phase, tool state and
+terminal display data live in assistant message metadata; there is no second browser-level Run
+Store. Login, cross-device sync, attachments, search, message branching and LangGraph
+checkpointing remain outside this phase.
 
 ## Tool Plan Validation Order
 
@@ -240,11 +242,12 @@ attempt/recovery/run/response closure.
 ## Chat Frontend
 
 `apps/chat` is a Next.js and assistant-ui client for the Chat Run API. Sending creates a
-durable Run with a client request UUID, registers it in the browser-level Store, and subscribes
-to `/api/v1/chat/runs/{run_id}/events`. The subscription replays from `after=0` on recovery;
-disconnecting the observer never cancels the detached Run. Stop calls the cancel endpoint,
-while navigation aborts only the observer. phase/tool/delta/result/status events map into the
-assistant-ui runtime and terminal results update transcript/title metadata.
+durable Run with a client request UUID and subscribes to
+`/api/v1/chat/runs/{run_id}/events`. The subscription replays from `after=0` on recovery;
+disconnecting the observer never cancels the detached Run. The explicit DotaMind Stop Action
+calls the cancel endpoint, while navigation or subscription abort only closes observation.
+phase/tool/delta/result/status events map into the assistant-ui runtime and terminal results
+update transcript/title metadata.
 
 The chat renders those events as one compact per-message run card: analysis,
 tool use, answer organization and evidence review. It is expanded while running,

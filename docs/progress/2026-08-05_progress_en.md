@@ -716,3 +716,22 @@
 - PostgreSQL + Redis focused tests: `3 passed`.
 - `uv run ruff check app tests`: passed.
 - `apps/chat`: `npm run lint` and `npm run build`: passed.
+
+## 18:58 — assistant-ui five-stage migration closeout
+
+### Completed
+
+- Completed the five frontend migration stages: froze the assistant-ui contract, added the `RemoteThreadListRuntime` adapter layer, connected `ThreadHistoryAdapter` and Chat Run event recovery, and moved thread listing, thread interaction and explicit stop to assistant-ui primitives.
+- An assistant-ui thread maps to a DotaMind session; each thread owns an independent `LocalRuntime`, while transcript, active-run metadata and event replay restore history and in-progress Runs. Switching threads does not cancel a background Run.
+- Removed the old `ChatRunProvider`, browser-global Run Store, session loader and keyed runtime. Abort only stops observation; explicit Stop is the sole path that calls cancel for the selected Run.
+- Unread counts now live in localStorage thread metadata rather than the old global Run Store; V3.3-2 design, architecture documentation and `apps/chat/README.md` were updated accordingly.
+
+### Verified
+
+- `apps/chat`: `npm run test`: `1 file, 3 tests passed`; `npm run lint` and `npm run build`: passed.
+- Browser default viewport checks covered new-chat creation, switching to an existing chat and transcript restoration; `390×844` covered mobile drawer open/close; a fresh page had no console errors.
+- `git diff --check`: passed.
+
+### Boundary
+
+- Browser acceptance did not submit a real external LLM message to avoid dependence on external models and STRATZ data. FastAPI, Redis Event Bus, Run API and recovery semantics remain unchanged; backend contract/integration tests continue to cover real Run concurrency and disconnect scenarios.

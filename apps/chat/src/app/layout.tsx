@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { ChatRunProvider } from "@/contexts/chat-run-provider";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -27,7 +26,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="flex min-h-full flex-col">
         <TooltipProvider>
-          <ChatRunProvider>{children}</ChatRunProvider>
+          {children}
         </TooltipProvider>
       </body>
     </html>

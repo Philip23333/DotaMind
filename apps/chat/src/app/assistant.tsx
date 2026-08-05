@@ -2,7 +2,7 @@
 
 import { useAui, useAuiState } from "@assistant-ui/react";
 import { MenuIcon } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { ChatSidebar } from "@/components/chat-sidebar";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,10 @@ import {
   getOrCreateBrowserId,
 } from "@/lib/dotamind-api";
 import { DotaMindRuntimeProvider } from "@/lib/assistant-ui/runtime-provider";
+import {
+  DOTAMIND_THREAD_METADATA_EVENT,
+  markDotaMindSessionRead,
+} from "@/lib/assistant-ui/thread-unread";
 
 export const Assistant = () => {
   const [browserId] = useState(() => getOrCreateBrowserId());
@@ -26,8 +30,19 @@ function DotaMindChatShell({ browserId }: { browserId: string }) {
   const aui = useAui();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const activeSessionId = useAuiState((state) => state.threadListItem.remoteId);
   const isLoading = useAuiState((state) => state.threads.isLoading);
   const isThreadLoading = useAuiState((state) => state.thread.isLoading);
+
+  useEffect(() => {
+    if (activeSessionId) markDotaMindSessionRead(activeSessionId);
+  }, [activeSessionId]);
+
+  useEffect(() => {
+    const reloadThreads = () => void aui.threads.reload();
+    window.addEventListener(DOTAMIND_THREAD_METADATA_EVENT, reloadThreads);
+    return () => window.removeEventListener(DOTAMIND_THREAD_METADATA_EVENT, reloadThreads);
+  }, [aui]);
 
   const runThreadAction = useCallback(async (action: () => Promise<void>, message: string) => {
     try {

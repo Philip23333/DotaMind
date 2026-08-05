@@ -702,3 +702,22 @@
 
 - V3.3-2 多聊天并行运行、断线观察恢复、取消、未读、stale/restart 收口、真实 PostgreSQL/Redis 集成、浏览器响应式验收和文档质量门禁全部完成。
 - Run 状态/Turn 由 PostgreSQL 权威持久化，Redis 只承担事件重放与取消通知；浏览器断开不等于取消，worker 重启/stale 只标记 `interrupted`，不续跑模型 checkpoint。
+
+## 18:58 — assistant-ui 五阶段迁移收口
+
+### 已完成
+
+- 完成前端五阶段迁移：冻结 assistant-ui 合同，建立 `RemoteThreadListRuntime` 适配层，接入 `ThreadHistoryAdapter` 与 Chat Run 事件恢复，并将线程列表、线程交互和显式停止切换到 assistant-ui primitives。
+- assistant-ui thread 对应 DotaMind session；每个线程使用独立 `LocalRuntime`，历史和进行中的 Run 通过 transcript、active-run 与事件重放恢复；切换线程不会取消后台 Run。
+- 删除旧 `ChatRunProvider`、浏览器全局 Run Store、session loader 与 keyed runtime；Abort 仅停止观察订阅，显式 Stop 才调用指定 Run 的 cancel API。
+- 未读计数改为线程 metadata 的 localStorage 状态，不再依赖旧全局 Run Store；同步更新 V3.3-2 design、架构文档和 `apps/chat/README.md`。
+
+### 已验证
+
+- `apps/chat`: `npm run test`：`1 file, 3 tests passed`；`npm run lint`、`npm run build`：通过。
+- 浏览器默认视口验证新建聊天、切换已有聊天和 transcript 恢复；`390×844` 验证移动端侧栏抽屉打开/关闭；新页面无 console error。
+- `git diff --check`：通过。
+
+### 边界
+
+- 浏览器验收未提交真实外部 LLM 消息，避免依赖外部模型和 STRATZ 数据；后端 FastAPI、Redis Event Bus、Run API 与恢复语义保持不变，真实 Run 并行/断线场景继续由后端合同与集成测试覆盖。

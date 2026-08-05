@@ -228,16 +228,23 @@ POST /api/v1/chat/runs/{run_id}/cancel
 
 ## 11. 前端边界
 
-运行状态位于浏览器级 Store，而不是 keyed `ChatSessionRuntime`：
+assistant-ui `RemoteThreadListRuntime` 是线程生命周期的唯一前端状态源：
 
 ```text
-runsById[run_id]
-activeRunIdBySession[session_id]
+assistant-ui thread == DotaMind session_id
+assistant-ui LocalRuntime == 一个 session 的消息/运行状态
+assistant-ui ThreadHistoryAdapter == PostgreSQL transcript + active Run resume
+assistant-ui assistant message metadata == Run ID、阶段、工具和终态展示数据
 ```
 
-事件必须同时校验 `run_id`、`session_id` 和递增 sequence。切换聊天只 Abort 旧订阅；用户
-停止必须单独调用 cancel API。pending 用户消息使用 `run_id` 派生的稳定 ID，刷新后可从
-active Run 恢复。
+每个已经启动的 thread runtime 在线程切换后继续挂载，因此切换只改变观察对象，不销毁原
+Run。事件转换器仍必须校验 `run_id`、`session_id` 和递增 sequence；恢复订阅从 `after=0`
+重放并由后端终态/ transcript 校准。订阅 Abort 只关闭 HTTP 观察，不调用 cancel API；只有
+显式 Stop Action 才对当前 assistant message metadata 中的 `run_id` 调用取消接口。
+
+新聊天使用 assistant-ui optimistic thread，首次发送时由 `RemoteThreadListAdapter.initialize()`
+创建 DotaMind session，避免生成从未发送消息的空会话。列表的 `custom` metadata 承载置顶、
+更新时间和活动 Run 摘要；不再维护独立的浏览器级 `runsById` Store。
 
 未读状态仍只保存于匿名浏览器 localStorage。进入聊天后更新 last-seen；后台完成的非当前
 聊天显示未读，不引入账号级通知。
