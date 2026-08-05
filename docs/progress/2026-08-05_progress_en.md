@@ -16,6 +16,22 @@
 
 - A2-A5 and B-E are not implemented; the design document remains explicitly marked “A1 only”.
 
+## 17:02 — V3.3-2 A2 chat_runs model and migration
+
+### Completed
+
+- Added `ChatRunRow` to the PostgreSQL ORM with Run ID, session/request idempotency, status, fencing, worker, event sequence, heartbeat, cancellation/terminal timestamps and final Turn linkage.
+- Added Alembic `20260805_03` with the status CHECK, session/request uniqueness, active-Run partial unique index, unique result-Turn index and lookup indexes.
+- Added the `chat_sessions.runs` relationship; deleting a session cascades Runs and deleting a result Turn nulls `result_turn_id`.
+
+### Verified
+
+- A2 code checks and `git diff --check` passed; the Repository and execution scheduler are not implemented yet.
+
+### Boundary
+
+- A3-A5 and B-E are not implemented; `/plan`, `/plan/stream` and frontend behavior remain unchanged.
+
 ## 12:06 — V3.3-1 PostgreSQL chat persistence and anonymous browser multi-chat
 
 ### Completed

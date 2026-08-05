@@ -16,6 +16,22 @@
 
 - A2-A5、B-E 尚未实现；设计文档状态保持为“仅 A1 完成”。
 
+## 17:02 — V3.3-2 A2 chat_runs 模型与迁移
+
+### 已完成
+
+- `ChatRunRow` 已加入 PostgreSQL ORM：Run ID、session/request 幂等、状态、fencing、worker、事件序号、heartbeat、取消/终态时间和最终 Turn 关联均有明确字段。
+- 新增 Alembic `20260805_03`，增加状态 CHECK、session/request 唯一约束、活动 Run partial unique index、result Turn 唯一索引和查询索引。
+- `chat_sessions` 增加 `runs` 关系；Run 删除随 session 级联，`result_turn_id` 在 Turn 删除时置空。
+
+### 已验证
+
+- A2 代码检查与 `git diff --check` 通过；尚未实现 Repository 或运行调度。
+
+### 边界
+
+- A3-A5、B-E 尚未实现；当前 `/plan`、`/plan/stream` 和前端行为保持不变。
+
 ## 12:06 — V3.3-1 PostgreSQL 聊天持久化与匿名浏览器多聊天管理
 
 ### 已完成

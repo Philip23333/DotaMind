@@ -8,12 +8,14 @@ from uuid import UUID, uuid4
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
@@ -51,6 +53,11 @@ class ChatSessionRow(Base):
         cascade="all, delete-orphan",
         order_by="ChatTurnRow.turn_index",
     )
+    runs: Mapped[list[ChatRunRow]] = relationship(
+        back_populates="session",
+        cascade="all, delete-orphan",
+        order_by="ChatRunRow.created_at",
+    )
 
     __table_args__ = (
         Index("ix_chat_sessions_browser_updated", "browser_id_hash", "updated_at"),
@@ -86,4 +93,75 @@ class ChatTurnRow(Base):
         UniqueConstraint("session_id", "request_id", name="uq_chat_turns_session_request"),
         UniqueConstraint("session_id", "turn_index", name="uq_chat_turns_session_index"),
         Index("ix_chat_turns_session_index", "session_id", "turn_index"),
+    )
+
+
+class ChatRunRow(Base):
+    """Durable lifecycle record for one background chat execution."""
+
+    __tablename__ = "chat_runs"
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    session_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("chat_sessions.id", ondelete="CASCADE"), nullable=False
+    )
+    request_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    payload_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    user_query: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    fencing_token: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    worker_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    last_event_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    result_turn_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("chat_turns.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    heartbeat_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    cancel_requested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    session: Mapped[ChatSessionRow] = relationship(back_populates="runs")
+    result_turn: Mapped[ChatTurnRow | None] = relationship(
+        foreign_keys=[result_turn_id],
+        uselist=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('queued', 'running', 'cancel_requested', 'completed', "
+            "'failed', 'cancelled', 'interrupted')",
+            name="ck_chat_runs_status",
+        ),
+        UniqueConstraint("session_id", "request_id", name="uq_chat_runs_session_request"),
+        Index("ix_chat_runs_session_status", "session_id", "status"),
+        Index("ix_chat_runs_status_heartbeat", "status", "heartbeat_at"),
+        Index("ix_chat_runs_worker_status", "worker_id", "status"),
+        Index(
+            "uq_chat_runs_active_session",
+            "session_id",
+            unique=True,
+            postgresql_where=text(
+                "status IN ('queued', 'running', 'cancel_requested')"
+            ),
+        ),
+        Index(
+            "uq_chat_runs_result_turn",
+            "result_turn_id",
+            unique=True,
+            postgresql_where=text("result_turn_id IS NOT NULL"),
+        ),
     )
