@@ -3,6 +3,7 @@ import type {
   ChatRunSummary,
   PlanStreamEvent,
 } from "./dotamind-api";
+import { createUuidV4 } from "./uuid";
 
 type ChatRunCreateResponse = { run: ChatRunSummary };
 type ChatRunCancelResponse = { run: ChatRunSummary };
@@ -55,7 +56,7 @@ export async function createChatRun(
   browserId: string,
   sessionId: string,
   query: string,
-  requestId = crypto.randomUUID(),
+  requestId = createUuidV4(),
 ): Promise<ChatRunSummary> {
   const response = await fetch(`${apiUrl()}/api/v1/chat/sessions/${sessionId}/runs`, {
     method: "POST",

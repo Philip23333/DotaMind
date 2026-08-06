@@ -1,5 +1,7 @@
 import type { ThreadMessage, ThreadMessageLike } from "@assistant-ui/react";
 
+import { createUuidV4 } from "./uuid";
+
 const DEFAULT_API_URL = "http://localhost:8001";
 export const BROWSER_ID_STORAGE_KEY = "dotamind.browser_id.v1";
 export const ACTIVE_SESSION_STORAGE_KEY = "dotamind.active_session_id.v1";
@@ -110,10 +112,10 @@ export function getApiUrl(): string {
 }
 
 export function getOrCreateBrowserId(): string {
-  if (typeof window === "undefined") return crypto.randomUUID();
+  if (typeof window === "undefined") return createUuidV4();
   const existing = window.localStorage.getItem(BROWSER_ID_STORAGE_KEY);
   if (existing) return existing;
-  const created = crypto.randomUUID();
+  const created = createUuidV4();
   window.localStorage.setItem(BROWSER_ID_STORAGE_KEY, created);
   return created;
 }

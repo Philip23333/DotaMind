@@ -142,6 +142,44 @@ session persistence, Prompt Registry, and observability. See the
 as item/skill/talent guidance remain documented but are deferred until the
 runtime foundation is complete. CAP/CROO integration remains parked.
 
+## Deploy with Docker Compose
+
+The production Compose stack runs PostgreSQL, Redis, FastAPI, Next.js, and an
+Nginx reverse proxy. Only Nginx port `80` is published; the application and data
+services remain on the internal Docker network.
+
+1. Copy the repository and a populated `.env` file to the server.
+2. Set `DOTAMIND_PUBLIC_ORIGIN` to the public HTTP origin when it differs from
+   the current Tencent Cloud target. Set `DOTAMIND_POSTGRES_PASSWORD` to replace
+   the internal single-node default before using the stack for durable data.
+3. Build and start the stack:
+
+   ```bash
+   docker compose -f compose.prod.yml up -d --build
+   ```
+
+4. Verify the public entry points and container state:
+
+   ```bash
+   curl http://<server-ip>/health
+   docker compose -f compose.prod.yml ps
+   docker compose -f compose.prod.yml logs --tail=100 api chat nginx
+   ```
+
+The API container runs `alembic upgrade head` before starting Uvicorn. The chat
+build uses a relative API URL, so Nginx keeps browser and API requests on the
+same origin. `apps/api/requirements.prod.txt` is generated from `uv.lock`; after
+changing API dependencies, regenerate it with:
+
+```bash
+cd apps/api
+uv export --frozen --no-dev --no-emit-project --no-hashes \
+  --output-file requirements.prod.txt
+```
+
+The current stack provides HTTP only. Add a domain and TLS termination before
+treating it as an Internet-facing production service.
+
 ## License
 
 MIT. See `LICENSE`.

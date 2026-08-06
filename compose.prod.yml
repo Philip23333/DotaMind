@@ -1,0 +1,72 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: dotamind
+      POSTGRES_USER: dotamind
+      POSTGRES_PASSWORD: ${DOTAMIND_POSTGRES_PASSWORD:-dotamind}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dotamind -d dotamind"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes --appendfsync everysec
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./apps/api
+      args:
+        PIP_INDEX_URL: http://mirrors.tencentyun.com/pypi/simple
+        PIP_TRUSTED_HOST: mirrors.tencentyun.com
+    env_file:
+      - .env
+    environment:
+      DOTAMIND_ENVIRONMENT: production
+      DOTAMIND_CORS_ORIGINS: '["${DOTAMIND_PUBLIC_ORIGIN:-http://159.75.78.201}"]'
+      DOTAMIND_DATABASE_URL: postgresql://dotamind:${DOTAMIND_POSTGRES_PASSWORD:-dotamind}@postgres:5432/dotamind
+      DOTAMIND_REDIS_URL: redis://redis:6379/0
+      DOTAMIND_SESSION_STORE_BACKEND: redis
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  chat:
+    build:
+      context: ./apps/chat
+      args:
+        NEXT_PUBLIC_DOTAMIND_API_URL: ""
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - api
+      - chat
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  redis-data:
