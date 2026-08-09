@@ -11,23 +11,42 @@ from __future__ import annotations
 import argparse
 import html
 import json
+import os
 import re
+import sys
+import tempfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
-from time import sleep
 from typing import Any
-from urllib.error import URLError
-from urllib.parse import urlencode
-from urllib.request import Request, urlopen
 
 import yaml
 
 API_ROOT = Path(__file__).resolve().parents[1]
+if str(API_ROOT) not in sys.path:
+    sys.path.insert(0, str(API_ROOT))
+
+from app.integrations.valve.catalog import (  # noqa: E402
+    CatalogBundle,
+    CatalogManifest,
+    CatalogValidationError,
+    RecipeEdge,
+    collect_talent_bonuses,
+    normalize_ability,
+    normalize_hero,
+    normalize_item,
+    validate_catalog,
+)
+from app.integrations.valve.datafeed import DATAFEED_ROOT, ValveDatafeedClient  # noqa: E402
+
 ALIASES_PATH = Path(__file__).with_name("hero_aliases_zh.yaml")
 HERO_OUTPUT = API_ROOT / "app" / "data" / "heroes" / "dota2_heroes.yaml"
 PATCH_OUTPUT_DIR = API_ROOT / "app" / "data" / "patches"
-DATAFEED_ROOT = "https://www.dota2.com/datafeed"
-USER_AGENT = "DotaMind offline data sync/1.0"
+CATALOG_OUTPUT_DIR = API_ROOT / "app" / "data" / "catalog"
+CATALOG_MANIFEST_OUTPUT = CATALOG_OUTPUT_DIR / "manifest.json"
+CATALOG_HERO_OUTPUT = CATALOG_OUTPUT_DIR / "dota2_heroes.json"
+CATALOG_ABILITY_OUTPUT = CATALOG_OUTPUT_DIR / "dota2_abilities.json"
+CATALOG_ITEM_OUTPUT = CATALOG_OUTPUT_DIR / "dota2_items.json"
 
 
 def main() -> None:
@@ -37,11 +56,22 @@ def main() -> None:
         default="latest",
         help="Patch version to sync, or 'latest' (default).",
     )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=8,
+        help="Concurrent detail requests for the offline sync (default: 8).",
+    )
     args = parser.parse_args()
+    if args.workers < 1 or args.workers > 16:
+        parser.error("--workers must be between 1 and 16")
 
-    patch = _latest_patch() if args.patch == "latest" else args.patch
-    heroes = _build_hero_constants()
-    patch_records = _build_patch_records(patch)
+    client = ValveDatafeedClient()
+    patch = _latest_patch(client) if args.patch == "latest" else args.patch
+    bundle = _build_catalog_snapshot(client, patch, workers=args.workers)
+    _write_catalog_snapshot(bundle)
+    heroes = _build_hero_constants(client)
+    patch_records = _build_patch_records(client, patch)
 
     HERO_OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     PATCH_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -57,27 +87,15 @@ def main() -> None:
 
     print(f"wrote {HERO_OUTPUT} ({len(heroes['heroes'])} heroes)")
     print(f"wrote {patch_path} ({len(patch_records['changes'])} changes)")
+    print(
+        f"wrote {CATALOG_OUTPUT_DIR} "
+        f"({len(bundle.heroes)} heroes, {len(bundle.abilities)} abilities, "
+        f"{len(bundle.items)} items)"
+    )
 
 
-def _fetch(endpoint: str, **params: str) -> dict[str, Any]:
-    query = urlencode(params)
-    url = f"{DATAFEED_ROOT}/{endpoint}"
-    if query:
-        url = f"{url}?{query}"
-    request = Request(url, headers={"User-Agent": USER_AGENT})
-    for attempt in range(3):
-        try:
-            with urlopen(request, timeout=60) as response:  # noqa: S310 - fixed HTTPS host
-                return json.load(response)
-        except (OSError, URLError):
-            if attempt == 2:
-                raise
-            sleep(1 + attempt)
-    raise AssertionError("unreachable")
-
-
-def _latest_patch() -> str:
-    payload = _fetch("patchnoteslist", language="english")
+def _latest_patch(client: ValveDatafeedClient) -> str:
+    payload = client.patchnoteslist("english")
     patches = payload.get("patches", [])
     if not patches:
         raise ValueError("Valve patchnoteslist returned no patches")
@@ -85,11 +103,11 @@ def _latest_patch() -> str:
     return str(latest["patch_number"])
 
 
-def _build_hero_constants() -> dict[str, Any]:
+def _build_hero_constants(client: ValveDatafeedClient) -> dict[str, Any]:
     english_url = f"{DATAFEED_ROOT}/herolist?language=english"
     chinese_url = f"{DATAFEED_ROOT}/herolist?language=schinese"
-    english = _result_data(_fetch("herolist", language="english"), "heroes")
-    chinese = _result_data(_fetch("herolist", language="schinese"), "heroes")
+    english = _result_data(client.herolist("english"), "heroes")
+    chinese = _result_data(client.herolist("schinese"), "heroes")
     chinese_by_id = {int(hero["id"]): str(hero["name_loc"]) for hero in chinese}
 
     alias_payload = yaml.safe_load(ALIASES_PATH.read_text(encoding="utf-8"))
@@ -119,15 +137,15 @@ def _build_hero_constants() -> dict[str, Any]:
     }
 
 
-def _build_patch_records(patch: str) -> dict[str, Any]:
-    payload = _fetch("patchnotes", version=patch, language="english")
+def _build_patch_records(client: ValveDatafeedClient, patch: str) -> dict[str, Any]:
+    payload = client.patchnotes(patch, "english")
     actual_patch = str(payload.get("patch_number") or "")
     if actual_patch != patch:
         raise ValueError(f"requested patch {patch!r}, Valve returned {actual_patch!r}")
 
-    heroes = _result_data(_fetch("herolist", language="english"), "heroes")
-    items = _result_data(_fetch("itemlist", language="english"), "itemabilities")
-    abilities = _result_data(_fetch("abilitylist", language="english"), "itemabilities")
+    heroes = _result_data(client.herolist("english"), "heroes")
+    items = _result_data(client.itemlist("english"), "itemabilities")
+    abilities = _result_data(client.abilitylist("english"), "itemabilities")
     hero_by_id = {int(item["id"]): item for item in heroes}
     item_by_id = {int(item["id"]): item for item in items}
     ability_by_id = {int(item["id"]): item for item in abilities}
@@ -154,6 +172,260 @@ def _build_patch_records(patch: str) -> dict[str, Any]:
         ),
         "changes": changes,
     }
+
+
+def _build_catalog_snapshot(
+    client: ValveDatafeedClient,
+    patch: str,
+    *,
+    workers: int = 8,
+    generated_at: datetime | None = None,
+) -> CatalogBundle:
+    """Fetch and normalize the complete static catalog in memory.
+
+    Hero detail responses contain the authoritative hero ability and talent
+    records, so the ability list is used as a bilingual ID/name consistency
+    manifest rather than issuing thousands of independent ability-detail calls.
+    Item details are fetched for every item-list ID because item-list records do
+    not contain descriptions or special values.
+    """
+
+    hero_en = _result_data(client.herolist("english"), "heroes")
+    hero_zh = _result_data(client.herolist("schinese"), "heroes")
+    _validate_summary_identity(hero_en, hero_zh, "hero")
+    hero_ids = [int(hero["id"]) for hero in hero_en]
+    hero_details_en = _parallel_details(
+        hero_ids,
+        lambda hero_id: _result_data(client.herodata(hero_id, "english"), "heroes")[0],
+        workers,
+    )
+    hero_details_zh = _parallel_details(
+        hero_ids,
+        lambda hero_id: _result_data(client.herodata(hero_id, "schinese"), "heroes")[0],
+        workers,
+    )
+
+    alias_payload = yaml.safe_load(ALIASES_PATH.read_text(encoding="utf-8"))
+    aliases_by_id = {
+        int(hero_id): [str(alias) for alias in aliases]
+        for hero_id, aliases in alias_payload.get("aliases", {}).items()
+    }
+    heroes = [
+        normalize_hero(
+            hero_details_en[hero_id],
+            hero_details_zh[hero_id],
+            aliases=aliases_by_id.get(hero_id, []),
+        )
+        for hero_id in sorted(hero_ids)
+    ]
+
+    ability_en_by_id: dict[int, dict[str, Any]] = {}
+    ability_zh_by_id: dict[int, dict[str, Any]] = {}
+    ability_hero_ids: dict[int, set[int]] = {}
+    talent_ids: set[int] = set()
+    all_ability_records_en: list[dict[str, Any]] = []
+    for hero_id in sorted(hero_ids):
+        details_en = hero_details_en[hero_id]
+        details_zh = hero_details_zh[hero_id]
+        en_records = [*(details_en.get("abilities") or []), *(details_en.get("talents") or [])]
+        zh_records = [*(details_zh.get("abilities") or []), *(details_zh.get("talents") or [])]
+        zh_by_id = _join_by_id(zh_records, "ability")
+        for record in en_records:
+            ability_id = int(record["id"])
+            counterpart = zh_by_id.get(ability_id)
+            if counterpart is None:
+                raise CatalogValidationError(
+                    f"hero {hero_id} ability {ability_id} has no Chinese detail record"
+                )
+            existing = ability_en_by_id.get(ability_id)
+            if existing is not None and str(existing["name"]) != str(record["name"]):
+                raise CatalogValidationError(
+                    f"ability {ability_id} internal name changed across heroes"
+                )
+            ability_en_by_id[ability_id] = record
+            ability_zh_by_id[ability_id] = counterpart
+            ability_hero_ids.setdefault(ability_id, set()).add(hero_id)
+            all_ability_records_en.append(record)
+        talent_ids.update(int(talent["id"]) for talent in details_en.get("talents") or [])
+
+    # Fetch both lists to verify every hero-owned ability/talent is a known
+    # Datafeed entity and that the two locale lists agree on internal names.
+    ability_list_en = _result_data(client.abilitylist("english"), "itemabilities")
+    ability_list_zh = _result_data(client.abilitylist("schinese"), "itemabilities")
+    _validate_summary_identity(ability_list_en, ability_list_zh, "ability")
+    ability_summary_ids = {int(item["id"]) for item in ability_list_en}
+    missing_summary_ids = sorted(set(ability_en_by_id) - ability_summary_ids)
+    if missing_summary_ids:
+        raise CatalogValidationError(
+            f"hero details reference abilities absent from abilitylist: {missing_summary_ids[:5]}"
+        )
+
+    talent_bonuses = collect_talent_bonuses(all_ability_records_en)
+    abilities = [
+        normalize_ability(
+            ability_en_by_id[ability_id],
+            ability_zh_by_id[ability_id],
+            hero_ids=ability_hero_ids[ability_id],
+            is_talent=ability_id in talent_ids,
+            talent_bonuses=talent_bonuses,
+        )
+        for ability_id in sorted(ability_en_by_id)
+    ]
+
+    item_en = _result_data(client.itemlist("english"), "itemabilities")
+    item_zh = _result_data(client.itemlist("schinese"), "itemabilities")
+    _validate_summary_identity(item_en, item_zh, "item")
+    item_ids = [int(item["id"]) for item in item_en]
+    item_details_en = _parallel_details(
+        item_ids,
+        lambda item_id: _result_data(client.itemdata(item_id, "english"), "items")[0],
+        workers,
+    )
+    item_details_zh = _parallel_details(
+        item_ids,
+        lambda item_id: _result_data(client.itemdata(item_id, "schinese"), "items")[0],
+        workers,
+    )
+    summary_by_id = {int(item["id"]): item for item in item_en}
+    components_by_target, upgrades_by_recipe, recipe_edges = _recipe_relations(summary_by_id)
+    items = [
+        normalize_item(
+            item_details_en[item_id],
+            item_details_zh[item_id],
+            recipe_component_ids=components_by_target.get(item_id, []),
+            upgrade_item_ids=upgrades_by_recipe.get(item_id, []),
+            is_recipe=bool(
+                str(summary_by_id[item_id].get("name") or "").startswith("item_recipe_")
+            ),
+            neutral_tier=summary_by_id[item_id].get("neutral_item_tier"),
+        )
+        for item_id in sorted(item_ids)
+    ]
+
+    generated_at = generated_at or datetime.now(timezone.utc)
+    manifest = CatalogManifest(
+        patch=patch,
+        generated_at=generated_at,
+        locales=["english", "schinese"],
+        sources=[
+            f"{DATAFEED_ROOT}/herolist",
+            f"{DATAFEED_ROOT}/herodata",
+            f"{DATAFEED_ROOT}/abilitylist",
+            f"{DATAFEED_ROOT}/itemlist",
+            f"{DATAFEED_ROOT}/itemdata",
+            f"{DATAFEED_ROOT}/patchnoteslist",
+        ],
+        entity_counts={"heroes": len(heroes), "abilities": len(abilities), "items": len(items)},
+    )
+    validate_catalog(manifest, heroes, abilities, items)
+    return CatalogBundle(
+        manifest=manifest,
+        heroes=heroes,
+        abilities=abilities,
+        items=items,
+        recipes=recipe_edges,
+    )
+
+
+def _write_catalog_snapshot(bundle: CatalogBundle) -> None:
+    """Validate again and atomically replace all four catalog files."""
+
+    validate_catalog(bundle.manifest, bundle.heroes, bundle.abilities, bundle.items)
+    CATALOG_OUTPUT_DIR.parent.mkdir(parents=True, exist_ok=True)
+    temporary_dir = Path(tempfile.mkdtemp(prefix=".catalog-", dir=CATALOG_OUTPUT_DIR.parent))
+    payloads = {
+        "manifest.json": bundle.manifest.model_dump(mode="json"),
+        "dota2_heroes.json": [item.model_dump(mode="json") for item in bundle.heroes],
+        "dota2_abilities.json": [item.model_dump(mode="json") for item in bundle.abilities],
+        "dota2_items.json": {
+            "items": [item.model_dump(mode="json") for item in bundle.items],
+            "recipes": [edge.model_dump(mode="json") for edge in bundle.recipes],
+        },
+    }
+    try:
+        for filename, payload in payloads.items():
+            path = temporary_dir / filename
+            path.write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+            )
+        for filename in payloads:
+            target = CATALOG_OUTPUT_DIR / filename
+            target.parent.mkdir(parents=True, exist_ok=True)
+            os.replace(temporary_dir / filename, target)
+    finally:
+        for child in temporary_dir.iterdir():
+            child.unlink()
+        temporary_dir.rmdir()
+
+
+def _parallel_details(
+    identifiers: list[int], fetch: Any, workers: int
+) -> dict[int, dict[str, Any]]:
+    output: dict[int, dict[str, Any]] = {}
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = {executor.submit(fetch, identifier): identifier for identifier in identifiers}
+        for future in as_completed(futures):
+            identifier = futures[future]
+            record = future.result()
+            if not isinstance(record, dict):
+                raise CatalogValidationError(f"Datafeed detail {identifier} is not an object")
+            output[identifier] = record
+    if set(output) != set(identifiers):
+        raise CatalogValidationError("Datafeed detail response set is incomplete")
+    return output
+
+
+def _join_by_id(records: list[dict[str, Any]], entity: str) -> dict[int, dict[str, Any]]:
+    output: dict[int, dict[str, Any]] = {}
+    for record in records:
+        identifier = int(record["id"])
+        if identifier in output:
+            raise CatalogValidationError(f"duplicate {entity} ID {identifier}")
+        output[identifier] = record
+    return output
+
+
+def _validate_summary_identity(
+    english: list[dict[str, Any]], chinese: list[dict[str, Any]], entity: str
+) -> None:
+    en_by_id = _join_by_id(english, entity)
+    zh_by_id = _join_by_id(chinese, entity)
+    if set(en_by_id) != set(zh_by_id):
+        raise CatalogValidationError(f"{entity} English/Chinese ID sets differ")
+    for identifier, record in en_by_id.items():
+        if str(record.get("name")) != str(zh_by_id[identifier].get("name")):
+            raise CatalogValidationError(f"{entity} {identifier} internal names differ")
+
+
+def _recipe_relations(
+    summaries: dict[int, dict[str, Any]],
+) -> tuple[dict[int, set[int]], dict[int, set[int]], list[RecipeEdge]]:
+    by_name = {str(item.get("name")): item_id for item_id, item in summaries.items()}
+    components_by_target: dict[int, set[int]] = {}
+    upgrades_by_recipe: dict[int, set[int]] = {}
+    edges: list[RecipeEdge] = []
+    for recipe_item_id, summary in summaries.items():
+        recipe_name = str(summary.get("name") or "")
+        if not recipe_name.startswith("item_recipe_"):
+            continue
+        target_name = recipe_name.replace("item_recipe_", "item_", 1)
+        target_id = by_name.get(target_name)
+        for recipe in summary.get("recipes") or []:
+            component_ids = {int(item_id) for item_id in recipe.get("items") or []}
+            if not component_ids:
+                raise CatalogValidationError(f"recipe {recipe_item_id} has no components")
+            if target_id is None:
+                raise CatalogValidationError(f"recipe {recipe_item_id} has no upgrade target")
+            components_by_target.setdefault(target_id, set()).update(component_ids)
+            upgrades_by_recipe.setdefault(recipe_item_id, set()).add(target_id)
+            edges.append(
+                RecipeEdge(
+                    recipe_item_id=recipe_item_id,
+                    component_item_ids=sorted(component_ids),
+                    upgrade_item_ids=[target_id],
+                )
+            )
+    return components_by_target, upgrades_by_recipe, edges
 
 
 def _append_general_changes(output: list[dict[str, Any]], sections: list[dict[str, Any]]) -> None:
