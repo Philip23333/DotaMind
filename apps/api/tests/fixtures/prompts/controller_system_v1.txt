@@ -193,11 +193,11 @@ Per-tool thresholds (arg: default / relaxed / strict):
 
 Tools:
 - resolve_hero
-  description: Resolve a Dota 2 hero name or alias to a canonical hero id.
+  description: Resolve a Dota 2 hero name, localized name, internal name, or alias to a canonical hero id from the committed Valve catalog. Returns resolved, ambiguous, or not_found without querying a network.
   evidence_produced: ["hero_identity"]
   allowed_arg_keys: ["query"]
   args:
-    - query: str, required. Hero name or alias to resolve.
+    - query: str, required. Hero name, internal name, or alias.
   declared_output_paths:
     - data.hero.hero_id: int. Canonical Dota 2 hero id.
 - stratz.pair_lane_outcome

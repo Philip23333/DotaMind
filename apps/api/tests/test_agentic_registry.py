@@ -3,12 +3,18 @@
 import pytest
 from pydantic import BaseModel, Field
 
+import app.agentic.tools.stratz_tools as stratz_tools
 from app.agentic.evidence import EvidenceItem
 from app.agentic.models import QueryContext, ToolCall, ToolResult, ToolSource
 from app.agentic.planning.controller import AgentController
 from app.agentic.tools import ToolDefinition, ToolExecutor, ToolRegistry
+from app.agentic.tools.dota_catalog_tools import ResolveHeroInput
 from app.agentic.tools.stratz_tools import build_default_tool_registry
 from app.core.config import Settings
+from app.integrations.valve.catalog_repository import (
+    CatalogSnapshotError,
+    DotaCatalogRepository,
+)
 
 
 class EchoInput(BaseModel):
@@ -217,6 +223,83 @@ def test_default_registry_matches_v32_frozen_tool_catalog() -> None:
         "patch.hero_changes",
         "patch.item_changes",
     }
+
+
+def test_default_registry_uses_unique_catalog_resolve_hero() -> None:
+    registry = build_default_tool_registry(
+        Settings(
+            opendota_base_url="https://api.opendota.test/api",
+            stratz_graphql_url="https://api.stratz.test/graphql",
+            stratz_token="token",
+        )
+    )
+
+    definitions = [
+        definition for definition in registry.list() if definition.name == "resolve_hero"
+    ]
+    assert len(definitions) == 1
+    definition = definitions[0]
+    result = definition.handler(ResolveHeroInput(query="火女"), QueryContext())
+
+    assert result["status"] == "resolved"
+    assert result["method"] == "exact"
+    assert result["hero"]["hero_id"] == 25
+    assert result["hero"]["name"] == "npc_dota_hero_lina"
+    assert result["snapshot"]["patch"] == "7.41e"
+    assert definition.source is not None
+    assert definition.source.kind == "official_snapshot"
+    assert definition.source.status == "committed_snapshot"
+    assert definition.input_model.__module__ == "app.agentic.tools.dota_catalog_tools"
+    assert definition.evidence_extractor is not None
+    assert definition.evidence_extractor.__module__ == "app.agentic.tools.dota_catalog_tools"
+    assert definition.metadata["snapshot"] is True
+    assert not hasattr(stratz_tools, "ResolveHeroInput")
+    assert not hasattr(stratz_tools, "resolve_hero_evidence")
+    assert not hasattr(stratz_tools, "_resolve_hero_handler")
+
+
+def test_default_registry_keeps_resolve_hero_reference_contracts() -> None:
+    registry = build_default_tool_registry(
+        Settings(
+            opendota_base_url="https://api.opendota.test/api",
+            stratz_graphql_url="https://api.stratz.test/graphql",
+            stratz_token="token",
+        )
+    )
+
+    pair_contract = registry.get("stratz.pair_lane_outcome").arg_contracts["hero_id"]
+    reference = pair_contract.accepts_refs[0]
+    assert reference.from_tool == "resolve_hero"
+    assert reference.path == "data.hero.hero_id"
+    assert reference.type == "int"
+    open_dota_contract = registry.get("opendota.team_recent_matches").arg_contracts[
+        "team_id"
+    ]
+    open_dota_reference = open_dota_contract.accepts_refs[0]
+    assert open_dota_reference.from_tool == "opendota.resolve_team"
+    assert open_dota_reference.path == "data.team.team_id"
+
+
+def test_stratz_hero_name_index_uses_catalog_english_names_and_fails_fast(
+    monkeypatch, tmp_path
+) -> None:
+    stratz_tools._hero_name_index.cache_clear()
+    names = stratz_tools._hero_name_index()
+    assert names[1] == "Anti-Mage"
+    assert names[25] == "Lina"
+    assert names[86] == "Rubick"
+
+    monkeypatch.setattr(
+        stratz_tools,
+        "load_default_catalog_repository",
+        lambda: DotaCatalogRepository(tmp_path),
+    )
+    stratz_tools._hero_name_index.cache_clear()
+    try:
+        with pytest.raises(CatalogSnapshotError, match="catalog file missing"):
+            stratz_tools._hero_name_index()
+    finally:
+        stratz_tools._hero_name_index.cache_clear()
 
 
 def test_default_registry_declares_primary_mandatory_evidence() -> None:

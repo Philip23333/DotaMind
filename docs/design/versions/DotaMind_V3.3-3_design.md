@@ -101,11 +101,12 @@ apps/api/app/data/catalog/
   dota2_heroes.json
   dota2_abilities.json
   dota2_items.json
+  sync_audit.json
 ```
 
-现有 `heroes/dota2_heroes.yaml` 在迁移期间由同一次同步生成。B 阶段确认新 Catalog 能完整
-承载 resolver 后，删除旧英雄主数据的重复加载路径；中文人工别名继续保留为独立 overlay，
-不写回 Valve 记录。
+旧 `heroes/dota2_heroes.yaml` 及其 resolver/生成路径在 Catalog 接管默认 registry 后删除，
+不保留第二套英雄主数据。中文人工别名继续保留为独立 overlay，在同步时写入 Catalog，
+但不写回 Valve 记录。
 
 ### 4.2 CatalogManifest
 
@@ -163,6 +164,18 @@ apps/api/app/data/catalog/
 - recipe component IDs、可合成目标 IDs；
 - `is_recipe`、`is_neutral`、`is_purchasable` 等规范化分类。
 
+### 4.6 CatalogSyncAudit
+
+`sync_audit.json` 是仅供开发者审查的同步产物，不由 Runtime Catalog 加载，也不进入工具输出。
+它至少保存与 manifest 一致的 patch、generated_at，以及被审核排除实体的：
+
+- entity type、数值 ID、内部名和 `legacy_or_unclassified` 分类；
+- 排除原因、官方状态证据及来源 endpoint；
+- 官方返回的原始双语描述和未解析 token。
+
+manifest 的 entity count 只统计可以向用户展示的运行时目录实体。审计条目不得同时存在于
+运行时目录；重复条目、patch/time 不一致或排除实体仍在运行时目录都使同步失败。
+
 ## 5. 规范化规则
 
 ### 5.1 双语合并
@@ -211,6 +224,15 @@ apps/api/app/data/catalog/
 - item list 中的 recipe 关系规范化为 component IDs 和 upgrade target IDs。
 - 所有引用 ID 必须存在；循环、悬空引用或重复边使同步失败。
 - 图纸项和最终物品是不同实体，resolver 默认优先最终物品，用户明确说“图纸”时才匹配图纸。
+
+### 5.6 已审核的当前目录排除
+
+当 Valve Datafeed 仍列出一个没有可用状态字段、无法完整渲染效果、且没有商店/中立等级/
+配方关系等当前获取路径的实体时，可以将其从默认运行时目录排除并写入 `sync_audit.json`。
+排除必须限定到已人工审核的精确数值 ID 和内部名，并校验双语身份、未解析 token、状态字段、
+special value 字段及配方关系的已知形状；任一上游形状发生变化都必须 fail-fast，要求重新审核，
+不得把该规则扩展成对其他英雄、技能或物品的通用猜测。审计记录保留原始描述和 token 供开发者
+查看，但 resolver、工具和 Answer 都不得向用户展示残缺效果。
 
 ## 6. Runtime Catalog 与 Resolver
 
@@ -359,7 +381,7 @@ confidence。本阶段不新增第二个 LLM reviewer，也不实现逐句 claim
 
 #### A4 — 快照生成
 
-- 扩展 `sync_game_data.py`，一次生成 manifest 和三个 catalog 文件。
+- 扩展 `sync_game_data.py`，一次生成 manifest、三个 catalog 文件和开发者同步审计文件。
 - 先完整生成到临时目录并校验，再替换目标文件。
 - 生成后审查结构和 diff；不在请求路径自动更新。
 
@@ -516,7 +538,8 @@ EvidenceGraph 或 committed snapshot 边界。
 
 V3.3-3 完成必须同时满足：
 
-- Valve Datafeed 能通过离线命令生成完整、双语、版本化且无未解析展示 token 的快照。
+- Valve Datafeed 能通过离线命令生成完整、双语、版本化且运行时目录无未解析展示 token 的快照；
+  已审核排除实体的原始 token 只允许存在于开发者同步审计文件。
 - 运行时静态查询不访问任何上游网络。
 - `resolve_hero` 只有一个注册位置且现有 STRATZ/OpenDota 引用兼容。
 - `resolve_item` 和四个目录查询工具具有完整 input/ref/output/evidence/source 合同。

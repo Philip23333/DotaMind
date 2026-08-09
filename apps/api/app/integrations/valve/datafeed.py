@@ -8,6 +8,7 @@ URL fetcher or use it from the request path.
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Callable, Mapping
 from enum import Enum
 from json import JSONDecodeError
@@ -123,8 +124,10 @@ class ValveDatafeedClient:
 
     def patchnotes(self, version: str, language: str = "english") -> dict[str, Any]:
         version = str(version).strip()
-        if not version or any(char not in "0123456789." for char in version):
-            raise ValueError("version must contain only digits and dots")
+        if not re.fullmatch(r"\d+(?:\.\d+)+(?:[a-z])?", version):
+            raise ValueError(
+                "version must be a dotted numeric patch with an optional letter suffix"
+            )
         return self.fetch(
             DatafeedEndpoint.PATCHNOTES,
             params={"version": version, "language": _language(language)},

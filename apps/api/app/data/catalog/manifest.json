@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "game": "dota2",
+  "patch": "7.41e",
+  "generated_at": "2026-08-09T19:05:36.363376Z",
+  "locales": [
+    "english",
+    "schinese"
+  ],
+  "sources": [
+    "https://www.dota2.com/datafeed/herolist",
+    "https://www.dota2.com/datafeed/herodata",
+    "https://www.dota2.com/datafeed/abilitylist",
+    "https://www.dota2.com/datafeed/abilitydata",
+    "https://www.dota2.com/datafeed/itemlist",
+    "https://www.dota2.com/datafeed/itemdata",
+    "https://www.dota2.com/datafeed/patchnoteslist"
+  ],
+  "entity_counts": {
+    "heroes": 127,
+    "abilities": 1707,
+    "items": 543
+  }
+}

@@ -11,14 +11,27 @@ from __future__ import annotations
 import html
 import re
 from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class CatalogValidationError(ValueError):
     """Raised when Valve records cannot form a closed catalog snapshot."""
+
+
+@dataclass(frozen=True)
+class TalentBonusCandidate:
+    source_ability_id: int
+    source_internal_name: str
+    field_name: str
+    value: Any
+    operation: int
+
+
+TalentBonusIndex = dict[tuple[str, str], tuple[TalentBonusCandidate, ...]]
 
 
 class CatalogModel(BaseModel):
@@ -206,12 +219,33 @@ class ItemCatalogRecord(CatalogModel):
     is_purchasable: bool = False
 
 
+class CatalogExcludedEntity(CatalogModel):
+    entity_type: Literal["hero", "ability", "item"]
+    entity_id: int = Field(gt=0)
+    internal_name: str = Field(min_length=1)
+    classification: Literal["legacy_or_unclassified"] = "legacy_or_unclassified"
+    reason: str = Field(min_length=1)
+    raw_description_en: str
+    raw_description_zh: str
+    unresolved_tokens_en: list[str]
+    unresolved_tokens_zh: list[str]
+    official_status_evidence: dict[str, Any]
+
+
+class CatalogSyncAudit(CatalogModel):
+    schema_version: int = Field(default=1, ge=1)
+    patch: str = Field(min_length=1)
+    generated_at: datetime
+    excluded_entities: list[CatalogExcludedEntity] = Field(default_factory=list)
+
+
 class CatalogBundle(CatalogModel):
     manifest: CatalogManifest
     heroes: list[HeroCatalogRecord]
     abilities: list[AbilityCatalogRecord]
     items: list[ItemCatalogRecord]
     recipes: list[RecipeEdge] = Field(default_factory=list)
+    sync_audit: CatalogSyncAudit | None = None
 
 
 _TOKEN_RE = re.compile(r"%([A-Za-z0-9_]+)%|\{s:([A-Za-z0-9_]+)\}")
@@ -233,6 +267,19 @@ def clean_text(value: Any) -> str:
     return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
 
 
+def extract_display_tokens(value: Any) -> list[str]:
+    """Return normalized Valve display-token names in deterministic order."""
+
+    text = str(value or "")
+    return sorted(
+        {
+            match.group(1) or match.group(2) or ""
+            for match in _TOKEN_RE.finditer(text)
+            if match.group(1) or match.group(2)
+        }
+    )
+
+
 def normalize_ability(
     english: Mapping[str, Any],
     chinese: Mapping[str, Any],
@@ -242,7 +289,21 @@ def normalize_ability(
     talent_bonuses: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> AbilityCatalogRecord:
     _assert_bilingual_identity(english, chinese, "ability")
+    notes_en, notes_zh = _localized_ability_notes(english, chinese)
+    has_scepter = bool(english.get("ability_has_scepter"))
+    has_shard = bool(english.get("ability_has_shard"))
     own_values = _value_map(english.get("special_values", []))
+    own_values = _apply_ability_base_replacement_exceptions(english, own_values)
+    scepter_values = (
+        _value_map(english.get("special_values", []), upgrade_key="values_scepter")
+        if has_scepter
+        else {}
+    )
+    shard_values = (
+        _value_map(english.get("special_values", []), upgrade_key="values_shard")
+        if has_shard
+        else {}
+    )
     current_talent_bonuses = {}
     if is_talent:
         talent_name = str(english.get("name") or "")
@@ -253,6 +314,8 @@ def normalize_ability(
     # Current ability/talent values take precedence over the cross-ability
     # talent bonus index, matching the sync contract's resolution order.
     replacements = {**bonus_values, **own_values}
+    scepter_replacements = {**bonus_values, **scepter_values}
+    shard_replacements = {**bonus_values, **shard_values}
     specials = _normalize_special_values(
         english.get("special_values", []), chinese.get("special_values", []), replacements
     )
@@ -265,12 +328,16 @@ def normalize_ability(
         description_zh=_render(chinese.get("desc_loc"), replacements),
         lore_en=_render(english.get("lore_loc"), replacements),
         lore_zh=_render(chinese.get("lore_loc"), replacements),
-        notes_en=[_render(item, replacements) for item in _clean_list(english.get("notes_loc"))],
-        notes_zh=[_render(item, replacements) for item in _clean_list(chinese.get("notes_loc"))],
-        scepter_en=_render(english.get("scepter_loc"), replacements),
-        scepter_zh=_render(chinese.get("scepter_loc"), replacements),
-        shard_en=_render(english.get("shard_loc"), replacements),
-        shard_zh=_render(chinese.get("shard_loc"), replacements),
+        notes_en=[_render(item, replacements) for item in notes_en],
+        notes_zh=[_render(item, replacements) for item in notes_zh],
+        scepter_en=(
+            _render(english.get("scepter_loc"), scepter_replacements) if has_scepter else ""
+        ),
+        scepter_zh=(
+            _render(chinese.get("scepter_loc"), scepter_replacements) if has_scepter else ""
+        ),
+        shard_en=_render(english.get("shard_loc"), shard_replacements) if has_shard else "",
+        shard_zh=_render(chinese.get("shard_loc"), shard_replacements) if has_shard else "",
         behavior=str(english.get("behavior") or ""),
         target_team=english.get("target_team"),
         target_type=english.get("target_type"),
@@ -291,8 +358,8 @@ def normalize_ability(
         special_values=specials,
         is_item=bool(english.get("is_item")),
         is_innate=bool(english.get("ability_is_innate")),
-        has_scepter=bool(english.get("ability_has_scepter")),
-        has_shard=bool(english.get("ability_has_shard")),
+        has_scepter=has_scepter,
+        has_shard=has_shard,
         granted_by_scepter=bool(english.get("ability_is_granted_by_scepter")),
         granted_by_shard=bool(english.get("ability_is_granted_by_shard")),
         is_talent=is_talent,
@@ -356,6 +423,7 @@ def normalize_item(
     neutral_tier: Any = None,
 ) -> ItemCatalogRecord:
     _assert_bilingual_identity(english, chinese, "item")
+    description_en, description_zh = _static_item_descriptions(english, chinese)
     replacements = _value_map(english.get("special_values", []))
     specials = _normalize_special_values(
         english.get("special_values", []), chinese.get("special_values", []), replacements
@@ -368,12 +436,16 @@ def normalize_item(
         name_en=clean_text(english.get("name_loc")),
         name_zh=clean_text(chinese.get("name_loc")),
         aliases=_unique(aliases),
-        description_en=_render(english.get("desc_loc"), replacements),
-        description_zh=_render(chinese.get("desc_loc"), replacements),
+        description_en=_render(description_en, replacements),
+        description_zh=_render(description_zh, replacements),
         lore_en=_render(english.get("lore_loc"), replacements),
         lore_zh=_render(chinese.get("lore_loc"), replacements),
-        notes_en=_clean_list(english.get("notes_loc")),
-        notes_zh=_clean_list(chinese.get("notes_loc")),
+        notes_en=[
+            _render(item, replacements) for item in _clean_list(english.get("notes_loc"))
+        ],
+        notes_zh=[
+            _render(item, replacements) for item in _clean_list(chinese.get("notes_loc"))
+        ],
         scepter_en=_render(english.get("scepter_loc"), replacements),
         scepter_zh=_render(chinese.get("scepter_loc"), replacements),
         shard_en=_render(english.get("shard_loc"), replacements),
@@ -404,17 +476,128 @@ def collect_talent_bonuses(
 ) -> dict[str, dict[str, Any]]:
     """Index Datafeed ``special_values[].bonuses`` by talent internal name."""
 
+    candidate_index = index_talent_bonus_candidates(ability_records)
     output: dict[str, dict[str, Any]] = {}
-    for ability in ability_records:
+    for (talent_name, field_name), candidates in sorted(candidate_index.items()):
+        candidate = _resolve_bonus_candidate(
+            talent_name, field_name, candidates, source_scope="ability records"
+        )
+        output.setdefault(talent_name, {})[field_name] = candidate.value
+    return output
+
+
+def index_talent_bonus_candidates(
+    ability_records: Iterable[Mapping[str, Any]],
+) -> TalentBonusIndex:
+    """Build an auditable bonus index while deduplicating repeated hero records."""
+
+    records = list(ability_records)
+    internal_names_by_id: dict[int, str] = {}
+    for ability in records:
+        ability_id = int(ability["id"])
+        internal_name = str(ability.get("name") or "")
+        existing_name = internal_names_by_id.setdefault(ability_id, internal_name)
+        if existing_name != internal_name:
+            raise CatalogValidationError(
+                f"ability {ability_id} has conflicting internal names while indexing talent bonuses"
+            )
+
+    mutable_index: dict[tuple[str, str], list[TalentBonusCandidate]] = {}
+    for ability in sorted(
+        records,
+        key=lambda item: (
+            int(item["id"]),
+            str(item.get("name") or ""),
+            repr(item.get("special_values") or []),
+        ),
+    ):
+        ability_id = int(ability["id"])
+        internal_name = str(ability.get("name") or "")
         for special in ability.get("special_values") or []:
             field_name = str(special.get("name") or "")
             if not field_name:
                 continue
             for bonus in special.get("bonuses") or []:
                 talent_name = str(bonus.get("name") or "")
-                if talent_name:
-                    output.setdefault(talent_name, {})[field_name] = bonus.get("value")
-    return output
+                if not talent_name:
+                    continue
+                candidate = TalentBonusCandidate(
+                    source_ability_id=ability_id,
+                    source_internal_name=internal_name,
+                    field_name=field_name,
+                    value=bonus.get("value"),
+                    operation=int(bonus.get("operation") or 0),
+                )
+                candidates = mutable_index.setdefault((talent_name, field_name), [])
+                if candidate not in candidates:
+                    candidates.append(candidate)
+
+    return {
+        key: tuple(
+            sorted(
+                candidates,
+                key=lambda item: (
+                    item.source_ability_id,
+                    item.source_internal_name,
+                    item.field_name,
+                    repr(item.value),
+                    item.operation,
+                ),
+            )
+        )
+        for key, candidates in mutable_index.items()
+    }
+
+
+def resolve_talent_bonus_requirements(
+    talent: Mapping[str, Any],
+    primary_index: TalentBonusIndex,
+    auxiliary_index: TalentBonusIndex,
+    *,
+    localized_talents: Iterable[Mapping[str, Any]] = (),
+) -> dict[str, dict[str, Any]]:
+    """Resolve display tokens from hero-owned bonuses, then official auxiliaries."""
+
+    talent_name = str(talent.get("name") or "")
+    if not talent_name:
+        raise CatalogValidationError("talent record is missing an internal name")
+
+    own_values = _value_map(talent.get("special_values", []))
+    resolved: dict[str, Any] = {}
+    required_tokens = {
+        token
+        for localized_talent in (talent, *localized_talents)
+        for token in _display_tokens(localized_talent)
+    }
+    for token in sorted(required_tokens):
+        if token in own_values:
+            continue
+        primary_candidates = _bonus_candidates_for_token(primary_index, talent_name, token)
+        if primary_candidates:
+            candidate = _resolve_bonus_candidate(
+                talent_name, token, primary_candidates, source_scope="hero abilities"
+            )
+        else:
+            auxiliary_candidates = _bonus_candidates_for_token(
+                auxiliary_index, talent_name, token
+            )
+            if not auxiliary_candidates:
+                raise CatalogValidationError(
+                    f"talent {talent_name!r} token {token!r} has no official bonus source"
+                )
+            candidate = _resolve_bonus_candidate(
+                talent_name,
+                token,
+                auxiliary_candidates,
+                source_scope="auxiliary abilities",
+            )
+        existing = resolved.get(candidate.field_name)
+        if existing is not None and existing != candidate.value:
+            raise CatalogValidationError(
+                f"talent {talent_name!r} field {candidate.field_name!r} resolved inconsistently"
+            )
+        resolved[candidate.field_name] = candidate.value
+    return {talent_name: resolved}
 
 
 def validate_catalog(
@@ -511,6 +694,33 @@ def validate_catalog(
         )
 
 
+def validate_sync_audit(
+    manifest: CatalogManifest,
+    audit: CatalogSyncAudit,
+    heroes: Sequence[HeroCatalogRecord],
+    abilities: Sequence[AbilityCatalogRecord],
+    items: Sequence[ItemCatalogRecord],
+) -> None:
+    if audit.patch != manifest.patch or audit.generated_at != manifest.generated_at:
+        raise CatalogValidationError("sync audit patch/generated_at do not match manifest")
+
+    runtime_ids = {
+        "hero": {record.hero_id for record in heroes},
+        "ability": {record.ability_id for record in abilities},
+        "item": {record.item_id for record in items},
+    }
+    excluded_keys: set[tuple[str, int]] = set()
+    for excluded in audit.excluded_entities:
+        key = (excluded.entity_type, excluded.entity_id)
+        if key in excluded_keys:
+            raise CatalogValidationError(f"duplicate sync audit exclusion {key!r}")
+        excluded_keys.add(key)
+        if excluded.entity_id in runtime_ids[excluded.entity_type]:
+            raise CatalogValidationError(
+                f"sync audit exclusion {key!r} is still present in runtime catalog"
+            )
+
+
 def _normalize_special_values(
     english_values: Sequence[Mapping[str, Any]],
     chinese_values: Sequence[Mapping[str, Any]],
@@ -560,13 +770,357 @@ def _special_values(value: Mapping[str, Any]) -> list[Any]:
     return []
 
 
-def _value_map(values: Sequence[Mapping[str, Any]]) -> dict[str, str]:
-    output: dict[str, str] = {}
+def _value_map(
+    values: Sequence[Mapping[str, Any]], *, upgrade_key: str | None = None
+) -> dict[str, str]:
+    selected: list[tuple[str, str]] = []
     for value in values:
         name = str(value.get("name") or "")
-        if name:
-            _store_value_aliases(output, name, _render_values(_special_values(value)))
+        if not name:
+            continue
+        selected_values = (
+            _upgrade_values(value, upgrade_key) if upgrade_key else _special_values(value)
+        )
+        selected.append((name, _render_values(selected_values)))
+
+    if upgrade_key:
+        return _upgrade_value_alias_map(selected, upgrade_key)
+
+    output: dict[str, str] = {}
+    for name, rendered in selected:
+        _store_value_aliases(output, name, rendered)
     return output
+
+
+def _upgrade_values(value: Mapping[str, Any], upgrade_key: str) -> list[Any]:
+    raw = value.get(upgrade_key)
+    if isinstance(raw, Sequence) and not isinstance(raw, (str, bytes)) and len(raw) > 0:
+        return [_number(item) for item in raw]
+    return _special_values(value)
+
+
+def _apply_ability_base_replacement_exceptions(
+    ability: Mapping[str, Any], replacements: Mapping[str, str]
+) -> dict[str, str]:
+    output = dict(replacements)
+    if (
+        int(ability["id"]) != 1342
+        or str(ability.get("name") or "") != "lone_druid_spirit_bear"
+    ):
+        return output
+
+    values_by_name: dict[str, str] = {}
+    for special in ability.get("special_values") or []:
+        field_name = str(special.get("name") or "")
+        if not field_name:
+            continue
+        rendered = _render_values(_special_values(special))
+        existing = values_by_name.get(field_name)
+        if existing is not None and existing != rendered:
+            raise CatalogValidationError(
+                f"ability 1342 field {field_name!r} has conflicting base values"
+            )
+        values_by_name[field_name] = rendered
+
+    exact = values_by_name.get("base_magic_resistance")
+    source = values_by_name.get("bear_magic_resistance")
+    if exact is not None:
+        if source is not None and exact != source:
+            raise CatalogValidationError(
+                "ability 1342 base_magic_resistance conflicts with "
+                f"bear_magic_resistance: {exact!r} != {source!r}"
+            )
+        return output
+    if not source:
+        return output
+
+    aliases: dict[str, str] = {}
+    _store_value_aliases(aliases, "base_magic_resistance", source)
+    for alias, value in aliases.items():
+        existing = output.get(alias)
+        if existing is not None and existing != value:
+            raise CatalogValidationError(
+                f"ability 1342 base replacement alias {alias!r} conflicts: "
+                f"{existing!r} != {value!r}"
+            )
+        output[alias] = value
+    return output
+
+
+def _localized_ability_notes(
+    english: Mapping[str, Any], chinese: Mapping[str, Any]
+) -> tuple[list[str], list[str]]:
+    notes_en = _clean_list(english.get("notes_loc"))
+    notes_zh = _clean_list(chinese.get("notes_loc"))
+    if (
+        int(english["id"]) != 5016
+        or str(english.get("name") or "") != "bloodseeker_blood_bath"
+    ):
+        return notes_en, notes_zh
+
+    expected_english = (
+        "Total time is a %delay% second delay plus a %abilitycastpoint% second cast time."
+    )
+    current_bad_chinese = (
+        "总时间为%delay%秒的施法时间加上%castpoint_tooltip%秒的生效延迟。"
+    )
+    reviewed_chinese = (
+        "总时间为%delay%秒的生效延迟，加上%abilitycastpoint%秒的施法时间。"
+    )
+    if notes_en != [expected_english]:
+        raise CatalogValidationError(
+            "ability 5016 authoritative English note drifted; reviewed translation is invalid"
+        )
+    if notes_zh != [current_bad_chinese]:
+        raise CatalogValidationError(
+            "ability 5016 target Chinese note drifted; reviewed translation was not applied"
+        )
+    return notes_en, [reviewed_chinese]
+
+
+def _static_item_descriptions(
+    english: Mapping[str, Any], chinese: Mapping[str, Any]
+) -> tuple[Any, Any]:
+    description_en = english.get("desc_loc")
+    description_zh = chinese.get("desc_loc")
+    if (
+        int(english["id"]) != 257
+        or str(english.get("name") or "") != "item_tome_of_knowledge"
+    ):
+        return description_en, description_zh
+
+    static_en = (
+        "<h1>Use: Enlighten</h1>Grants you %xp_bonus% experience plus %xp_per_use% "
+        "per tome consumed by your team after the first two."
+    )
+    static_zh = (
+        "<h1>使用：启迪</h1>直接获得%xp_bonus%点经验值，而且己方在前两本书后每消耗一本"
+        "知识之书，将额外获得%xp_per_use%点经验。"
+    )
+    dynamic_en = "<br><br>Tomes Used By Team: %customval_team_tomes_used%"
+    dynamic_zh = "<br><br>己方已使用本数：%customval_team_tomes_used%"
+    return (
+        _remove_reviewed_dynamic_suffix(
+            description_en,
+            expected_static=static_en,
+            dynamic_suffix=dynamic_en,
+            locale="English",
+        ),
+        _remove_reviewed_dynamic_suffix(
+            description_zh,
+            expected_static=static_zh,
+            dynamic_suffix=dynamic_zh,
+            locale="Chinese",
+        ),
+    )
+
+
+def _remove_reviewed_dynamic_suffix(
+    value: Any,
+    *,
+    expected_static: str,
+    dynamic_suffix: str,
+    locale: str,
+) -> str:
+    text = str(value or "")
+    target_count = text.count(dynamic_suffix)
+    if target_count != 1:
+        raise CatalogValidationError(
+            f"item 257 {locale} dynamic tome suffix count is {target_count}, expected 1"
+        )
+    if not text.endswith(dynamic_suffix):
+        raise CatalogValidationError(
+            f"item 257 {locale} dynamic tome segment is not the final suffix"
+        )
+    if text != f"{expected_static}{dynamic_suffix}":
+        raise CatalogValidationError(
+            f"item 257 {locale} static Enlighten description drifted"
+        )
+    return text[: -len(dynamic_suffix)]
+
+
+def _upgrade_value_alias_map(
+    selected: Sequence[tuple[str, str]], upgrade_key: str
+) -> dict[str, str]:
+    output: dict[str, str] = {}
+    sources: dict[str, str] = {}
+
+    # Real field names and their normal aliases take priority over aliases
+    # derived from a different field's ``bonus_`` spelling.
+    for field_name, rendered in selected:
+        _store_strict_value_aliases(
+            output,
+            sources,
+            field_name,
+            rendered,
+            source=f"exact field {field_name!r}",
+            upgrade_key=upgrade_key,
+        )
+
+    exact_aliases = set(output)
+    for field_name, rendered in selected:
+        derived_name = f"bonus_{field_name}"
+        derived_aliases: dict[str, str] = {}
+        _store_value_aliases(derived_aliases, derived_name, rendered)
+        for alias, value in derived_aliases.items():
+            if alias in exact_aliases:
+                continue
+            _store_strict_value_alias(
+                output,
+                sources,
+                alias,
+                value,
+                source=f"derived alias {derived_name!r} from {field_name!r}",
+                upgrade_key=upgrade_key,
+            )
+    return output
+
+
+def _store_strict_value_aliases(
+    output: dict[str, str],
+    sources: dict[str, str],
+    name: str,
+    value: str,
+    *,
+    source: str,
+    upgrade_key: str,
+) -> None:
+    aliases: dict[str, str] = {}
+    _store_value_aliases(aliases, name, value)
+    for alias, rendered in aliases.items():
+        _store_strict_value_alias(
+            output,
+            sources,
+            alias,
+            rendered,
+            source=source,
+            upgrade_key=upgrade_key,
+        )
+
+
+def _store_strict_value_alias(
+    output: dict[str, str],
+    sources: dict[str, str],
+    alias: str,
+    value: str,
+    *,
+    source: str,
+    upgrade_key: str,
+) -> None:
+    existing = output.get(alias)
+    if existing is not None and existing != value:
+        raise CatalogValidationError(
+            f"{upgrade_key} alias {alias!r} conflicts between "
+            f"{sources[alias]}={existing!r} and {source}={value!r}"
+        )
+    output[alias] = value
+    sources.setdefault(alias, source)
+
+
+def _display_tokens(ability: Mapping[str, Any]) -> list[str]:
+    values: list[Any] = [
+        ability.get("name_loc"),
+        ability.get("desc_loc"),
+        ability.get("lore_loc"),
+        *(ability.get("notes_loc") or []),
+    ]
+    if ability.get("ability_has_scepter"):
+        values.append(ability.get("scepter_loc"))
+    if ability.get("ability_has_shard"):
+        values.append(ability.get("shard_loc"))
+
+    tokens: set[str] = set()
+    for value in values:
+        text = clean_text(value)
+        tokens.update(match.group(1) or match.group(2) or "" for match in _TOKEN_RE.finditer(text))
+    tokens.discard("")
+    return sorted(tokens)
+
+
+def _bonus_candidates_for_token(
+    index: TalentBonusIndex, talent_name: str, token: str
+) -> tuple[TalentBonusCandidate, ...]:
+    candidates_by_rank: dict[int, list[TalentBonusCandidate]] = {}
+    for (indexed_talent, field_name), indexed_candidates in sorted(index.items()):
+        if indexed_talent != talent_name:
+            continue
+        rank = _bonus_token_match_rank(field_name, token)
+        if rank is None:
+            continue
+        candidates = candidates_by_rank.setdefault(rank, [])
+        for candidate in indexed_candidates:
+            if candidate not in candidates:
+                candidates.append(candidate)
+    if not candidates_by_rank:
+        return ()
+    return tuple(candidates_by_rank[min(candidates_by_rank)])
+
+
+def _bonus_token_match_rank(field_name: str, token: str) -> int | None:
+    if token == field_name:
+        return 0
+    if token == f"bonus_{field_name}":
+        return 1
+
+    direct_aliases: dict[str, str] = {}
+    _store_value_aliases(direct_aliases, field_name, "")
+    if token in direct_aliases:
+        return 2
+
+    bonus_aliases: dict[str, str] = {}
+    _store_value_aliases(bonus_aliases, f"bonus_{field_name}", "")
+    if token in bonus_aliases:
+        return 3
+    return None
+
+
+def _resolve_bonus_candidate(
+    talent_name: str,
+    token: str,
+    candidates: Sequence[TalentBonusCandidate],
+    *,
+    source_scope: str,
+) -> TalentBonusCandidate:
+    distinct_facts = {
+        (_canonical_bonus_value(candidate.value), candidate.operation)
+        for candidate in candidates
+    }
+    if len(candidates) == 0 or len(distinct_facts) != 1:
+        sources = [
+            (
+                candidate.source_ability_id,
+                candidate.source_internal_name,
+                candidate.field_name,
+                candidate.value,
+                candidate.operation,
+            )
+            for candidate in candidates
+        ]
+        raise CatalogValidationError(
+            f"talent {talent_name!r} token {token!r} has "
+            f"{len(distinct_facts)} conflicting facts from {len(candidates)} "
+            f"{source_scope} bonus sources: {sources!r}"
+        )
+    return candidates[0]
+
+
+def _canonical_bonus_value(value: Any) -> tuple[Any, ...]:
+    if isinstance(value, Mapping):
+        return (
+            "mapping",
+            tuple(
+                (str(key), _canonical_bonus_value(item))
+                for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
+            ),
+        )
+    if isinstance(value, (list, tuple)):
+        return ("sequence", tuple(_canonical_bonus_value(item) for item in value))
+    normalized = _number(value)
+    try:
+        hash(normalized)
+    except TypeError:
+        return (type(normalized).__name__, repr(normalized))
+    return (type(normalized).__name__, normalized)
 
 
 def _flatten_talent_bonuses(values: Mapping[str, Mapping[str, Any]]) -> dict[str, str]:

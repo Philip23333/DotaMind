@@ -15,7 +15,6 @@ from app.agentic.tools import (
     ToolDefinition,
     ToolRegistry,
 )
-from app.agentic.tools.hero_tools import load_default_hero_resolver
 from app.core.config import Settings, get_policy
 from app.integrations.stratz.brackets import (
     basic_to_bracket_ids,
@@ -26,6 +25,7 @@ from app.integrations.stratz.heroes import StratzHeroes
 from app.integrations.stratz.players import StratzPlayers
 from app.integrations.stratz.transport import StratzTransport
 from app.integrations.stratz.wilson import wilson_lower_bound
+from app.integrations.valve.catalog_repository import load_default_catalog_repository
 
 STRATZ_BRACKET_BASIC_DESCRIPTION = (
     "STRATZ RankBracketBasicEnum scope filter, set on plan.context.bracket. "
@@ -53,14 +53,7 @@ _WILSON_PROVENANCE_MATCH = (
 
 @lru_cache(maxsize=1)
 def _hero_name_index() -> dict[int, str]:
-    return {
-        hero.id: hero.localized_name
-        for hero in load_default_hero_resolver().heroes
-    }
-
-
-class ResolveHeroInput(BaseModel):
-    query: str = Field(min_length=1)
+    return load_default_catalog_repository().hero_name_index()
 
 
 class PairLaneOutcomeInput(BaseModel):
@@ -138,34 +131,6 @@ class PlayerHeroPerformanceInput(BaseModel):
 
 
 def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
-    registry.register(
-        ToolDefinition(
-            name="resolve_hero",
-            description="Resolve a Dota 2 hero name or alias to a canonical hero id.",
-            input_model=ResolveHeroInput,
-            handler=_resolve_hero_handler,
-            source=ToolSource(
-                name="Local Dota 2 hero constants",
-                kind="local_constants",
-                url=None,
-                status="live",
-            ),
-            evidence_extractor=resolve_hero_evidence,
-            evidence_kinds=("hero_identity",),
-            mandatory_evidence=("hero_identity",),
-            arg_contracts={
-                "query": ArgContract(description="Hero name or alias to resolve."),
-            },
-            output_paths={
-                "hero_id": OutputPathContract(
-                    path="data.hero.hero_id",
-                    type="int",
-                    description="Canonical Dota 2 hero id.",
-                ),
-            },
-            metadata={"game": "dota2", "domain": "hero_identity"},
-        )
-    )
     registry.register(
         ToolDefinition(
             name="stratz.pair_lane_outcome",
@@ -1334,44 +1299,16 @@ def _player_hero_performance_handler(settings: Settings):
 
 
 def build_default_tool_registry(settings: Settings) -> ToolRegistry:
+    from app.agentic.tools.dota_catalog_tools import register_dota_catalog_tools
     from app.agentic.tools.opendota_tools import register_opendota_tools
     from app.agentic.tools.patch_tools import register_patch_tools
 
     registry = ToolRegistry()
+    register_dota_catalog_tools(registry)
     register_stratz_tools(registry, settings)
     register_opendota_tools(registry, settings)
     register_patch_tools(registry)
     return registry
-
-
-def _resolve_hero_handler(args: ResolveHeroInput, context: QueryContext) -> dict[str, Any]:
-    return load_default_hero_resolver().resolve(args.query)
-
-
-def resolve_hero_evidence(result: ToolResult) -> list[EvidenceItem]:
-    data = result.data if isinstance(result.data, dict) else {}
-    if data.get("status") != "resolved" or not isinstance(data.get("hero"), dict):
-        return []
-
-    hero = data["hero"]
-    return [
-        EvidenceItem(
-            id=f"{result.tool_call_id}:hero_identity:{hero.get('hero_id')}",
-            kind="hero_identity",
-            subject=str(hero.get("localized_name") or hero.get("hero_id")),
-            value={
-                "hero_id": hero.get("hero_id"),
-                "name": hero.get("name"),
-                "localized_name": hero.get("localized_name"),
-                "aliases": hero.get("aliases", []),
-                "method": data.get("method"),
-                "query": data.get("query"),
-            },
-            source=result.source,
-            tool_call_id=result.tool_call_id,
-            tool=result.tool,
-        )
-    ]
 
 
 def pair_lane_outcome_evidence(result: ToolResult) -> list[EvidenceItem]:

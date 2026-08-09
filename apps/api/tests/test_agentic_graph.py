@@ -18,11 +18,11 @@ from app.agentic.tools import (
     ToolDefinition,
     ToolRegistry,
 )
+from app.agentic.tools.dota_catalog_tools import resolve_hero_evidence
 from app.agentic.tools.opendota_tools import resolve_team_evidence, team_recent_matches_evidence
 from app.agentic.tools.stratz_tools import (
     hero_matchup_ranking_evidence,
     pair_lane_outcome_evidence,
-    resolve_hero_evidence,
 )
 
 

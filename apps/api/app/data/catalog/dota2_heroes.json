@@ -1,0 +1,9542 @@
+[
+  {
+    "hero_id": 1,
+    "internal_name": "npc_dota_hero_antimage",
+    "name_en": "Anti-Mage",
+    "name_zh": "敌法师",
+    "aliases": [
+      "敌法",
+      "AM",
+      "敌法师"
+    ],
+    "primary_attribute": 1,
+    "complexity": 1,
+    "attack_capability": 1,
+    "role_levels": [
+      3,
+      0,
+      1,
+      0,
+      0,
+      0,
+      3,
+      0,
+      0
+    ],
+    "strength_base": 21,
+    "strength_gain": 1.6,
+    "agility_base": 25,
+    "agility_gain": 2.8,
+    "intelligence_base": 12,
+    "intelligence_gain": 1.8,
+    "damage_min": 54,
+    "damage_max": 58,
+    "attack_rate": 1.4,
+    "attack_range": 150,
+    "projectile_speed": 0,
+    "armor": 6.166667,
+    "magic_resistance": 25,
+    "movement_speed": 315,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 582,
+    "health_regen": 3.6000001,
+    "max_mana": 219,
+    "mana_regen": 0.6,
+    "ability_ids": [
+      5003,
+      5004,
+      7314,
+      1447,
+      5006
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6012,
+        "right_ability_id": 6353
+      },
+      {
+        "level": 15,
+        "left_ability_id": 6606,
+        "right_ability_id": 735
+      },
+      {
+        "level": 20,
+        "left_ability_id": 6800,
+        "right_ability_id": 665
+      },
+      {
+        "level": 25,
+        "left_ability_id": 1495,
+        "right_ability_id": 966
+      }
+    ]
+  },
+  {
+    "hero_id": 2,
+    "internal_name": "npc_dota_hero_axe",
+    "name_en": "Axe",
+    "name_zh": "斧王",
+    "aliases": [
+      "斧王"
+    ],
+    "primary_attribute": 0,
+    "complexity": 1,
+    "attack_capability": 1,
+    "role_levels": [
+      1,
+      0,
+      0,
+      2,
+      0,
+      3,
+      0,
+      0,
+      3
+    ],
+    "strength_base": 25,
+    "strength_gain": 2.7,
+    "agility_base": 18,
+    "agility_gain": 1.7,
+    "intelligence_base": 18,
+    "intelligence_gain": 1.6,
+    "damage_min": 56,
+    "damage_max": 60,
+    "attack_rate": 1.7,
+    "attack_range": 150,
+    "projectile_speed": 900,
+    "armor": 3,
+    "magic_resistance": 25,
+    "movement_speed": 315,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 670,
+    "health_regen": 4.5,
+    "max_mana": 291,
+    "mana_regen": 0.90000004,
+    "ability_ids": [
+      5007,
+      5008,
+      5009,
+      5010,
+      1166
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6608,
+        "right_ability_id": 562
+      },
+      {
+        "level": 15,
+        "left_ability_id": 6145,
+        "right_ability_id": 6991
+      },
+      {
+        "level": 20,
+        "left_ability_id": 6102,
+        "right_ability_id": 974
+      },
+      {
+        "level": 25,
+        "left_ability_id": 1189,
+        "right_ability_id": 9401
+      }
+    ]
+  },
+  {
+    "hero_id": 3,
+    "internal_name": "npc_dota_hero_bane",
+    "name_en": "Bane",
+    "name_zh": "祸乱之源",
+    "aliases": [
+      "痛苦之源",
+      "祸乱之源"
+    ],
+    "primary_attribute": 3,
+    "complexity": 2,
+    "attack_capability": 2,
+    "role_levels": [
+      0,
+      2,
+      1,
+      3,
+      0,
+      1,
+      0,
+      0,
+      0
+    ],
+    "strength_base": 23,
+    "strength_gain": 2.5,
+    "agility_base": 23,
+    "agility_gain": 2.5,
+    "intelligence_base": 23,
+    "intelligence_gain": 2.5,
+    "damage_min": 24,
+    "damage_max": 30,
+    "attack_rate": 1.7,
+    "attack_range": 425,
+    "projectile_speed": 900,
+    "armor": 4.8333335,
+    "magic_resistance": 25,
+    "movement_speed": 305,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 1200,
+    "max_health": 626,
+    "health_regen": 2.55,
+    "max_mana": 351,
+    "mana_regen": 1.15,
+    "ability_ids": [
+      5012,
+      5011,
+      5014,
+      5013,
+      1202
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6069,
+        "right_ability_id": 6609
+      },
+      {
+        "level": 15,
+        "left_ability_id": 476,
+        "right_ability_id": 6141
+      },
+      {
+        "level": 20,
+        "left_ability_id": 978,
+        "right_ability_id": 779
+      },
+      {
+        "level": 25,
+        "left_ability_id": 720,
+        "right_ability_id": 979
+      }
+    ]
+  },
+  {
+    "hero_id": 4,
+    "internal_name": "npc_dota_hero_bloodseeker",
+    "name_en": "Bloodseeker",
+    "name_zh": "血魔",
+    "aliases": [
+      "血魔",
+      "BS"
+    ],
+    "primary_attribute": 1,
+    "complexity": 1,
+    "attack_capability": 1,
+    "role_levels": [
+      1,
+      0,
+      1,
+      1,
+      0,
+      0,
+      0,
+      0,
+      1
+    ],
+    "strength_base": 24,
+    "strength_gain": 2.7,
+    "agility_base": 24,
+    "agility_gain": 3.1,
+    "intelligence_base": 17,
+    "intelligence_gain": 2,
+    "damage_min": 59,
+    "damage_max": 65,
+    "attack_rate": 1.7,
+    "attack_range": 150,
+    "projectile_speed": 900,
+    "armor": 6,
+    "magic_resistance": 25,
+    "movement_speed": 285,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 648,
+    "health_regen": 2.65,
+    "max_mana": 279,
+    "mana_regen": 0.85,
+    "ability_ids": [
+      5015,
+      5016,
+      5017,
+      1203,
+      5018
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 819,
+        "right_ability_id": 6809
+      },
+      {
+        "level": 15,
+        "left_ability_id": 6357,
+        "right_ability_id": 5929
+      },
+      {
+        "level": 20,
+        "left_ability_id": 6230,
+        "right_ability_id": 6356
+      },
+      {
+        "level": 25,
+        "left_ability_id": 5959,
+        "right_ability_id": 482
+      }
+    ]
+  },
+  {
+    "hero_id": 5,
+    "internal_name": "npc_dota_hero_crystal_maiden",
+    "name_en": "Crystal Maiden",
+    "name_zh": "水晶室女",
+    "aliases": [
+      "冰女",
+      "CM",
+      "水晶室女"
+    ],
+    "primary_attribute": 2,
+    "complexity": 1,
+    "attack_capability": 2,
+    "role_levels": [
+      0,
+      3,
+      2,
+      2,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "strength_base": 17,
+    "strength_gain": 2.2,
+    "agility_base": 16,
+    "agility_gain": 1.8,
+    "intelligence_base": 20,
+    "intelligence_gain": 3.3,
+    "damage_min": 48,
+    "damage_max": 54,
+    "attack_rate": 1.7,
+    "attack_range": 600,
+    "projectile_speed": 900,
+    "armor": 2.6666667,
+    "magic_resistance": 25,
+    "movement_speed": 280,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 494,
+    "health_regen": 1.95,
+    "max_mana": 315,
+    "mana_regen": 1,
+    "ability_ids": [
+      5126,
+      5127,
+      5128,
+      953,
+      1735,
+      5129
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6072,
+        "right_ability_id": 6234
+      },
+      {
+        "level": 15,
+        "left_ability_id": 1786,
+        "right_ability_id": 6520
+      },
+      {
+        "level": 20,
+        "left_ability_id": 956,
+        "right_ability_id": 7654
+      },
+      {
+        "level": 25,
+        "left_ability_id": 5959,
+        "right_ability_id": 5926
+      }
+    ]
+  },
+  {
+    "hero_id": 6,
+    "internal_name": "npc_dota_hero_drow_ranger",
+    "name_en": "Drow Ranger",
+    "name_zh": "卓尔游侠",
+    "aliases": [
+      "小黑",
+      "黑弓",
+      "DR",
+      "卓尔游侠"
+    ],
+    "primary_attribute": 1,
+    "complexity": 1,
+    "attack_capability": 2,
+    "role_levels": [
+      2,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      1,
+      0
+    ],
+    "strength_base": 16,
+    "strength_gain": 1.9,
+    "agility_base": 24,
+    "agility_gain": 2.8,
+    "intelligence_base": 15,
+    "intelligence_gain": 1.4,
+    "damage_min": 51,
+    "damage_max": 58,
+    "attack_rate": 1.7,
+    "attack_range": 625,
+    "projectile_speed": 1250,
+    "armor": 4,
+    "magic_resistance": 25,
+    "movement_speed": 310,
+    "turn_rate": 0.7,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 472,
+    "health_regen": 1.85,
+    "max_mana": 255,
+    "mana_regen": 0.75,
+    "ability_ids": [
+      5019,
+      5632,
+      343,
+      1121,
+      1205,
+      5022
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6280,
+        "right_ability_id": 739
+      },
+      {
+        "level": 15,
+        "left_ability_id": 1088,
+        "right_ability_id": 6202
+      },
+      {
+        "level": 20,
+        "left_ability_id": 6027,
+        "right_ability_id": 486
+      },
+      {
+        "level": 25,
+        "left_ability_id": 580,
+        "right_ability_id": 6209
+      }
+    ]
+  },
+  {
+    "hero_id": 7,
+    "internal_name": "npc_dota_hero_earthshaker",
+    "name_en": "Earthshaker",
+    "name_zh": "撼地者",
+    "aliases": [
+      "小牛",
+      "牛头",
+      "ES",
+      "撼地者"
+    ],
+    "primary_attribute": 0,
+    "complexity": 2,
+    "attack_capability": 1,
+    "role_levels": [
+      0,
+      1,
+      1,
+      2,
+      0,
+      0,
+      0,
+      0,
+      3
+    ],
+    "strength_base": 22,
+    "strength_gain": 3.7,
+    "agility_base": 12,
+    "agility_gain": 1.4,
+    "intelligence_base": 18,
+    "intelligence_gain": 2.1,
+    "damage_min": 49,
+    "damage_max": 59,
+    "attack_rate": 1.7,
+    "attack_range": 150,
+    "projectile_speed": 0,
+    "armor": 4,
+    "magic_resistance": 25,
+    "movement_speed": 315,
+    "turn_rate": 0.9,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 604,
+    "health_regen": 3.2,
+    "max_mana": 291,
+    "mana_regen": 1.1500001,
+    "ability_ids": [
+      5023,
+      5024,
+      5025,
+      5026,
+      1494
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 1208,
+        "right_ability_id": 6035
+      },
+      {
+        "level": 15,
+        "left_ability_id": 6425,
+        "right_ability_id": 918
+      },
+      {
+        "level": 20,
+        "left_ability_id": 6511,
+        "right_ability_id": 858
+      },
+      {
+        "level": 25,
+        "left_ability_id": 450,
+        "right_ability_id": 744
+      }
+    ]
+  },
+  {
+    "hero_id": 8,
+    "internal_name": "npc_dota_hero_juggernaut",
+    "name_en": "Juggernaut",
+    "name_zh": "主宰",
+    "aliases": [
+      "剑圣",
+      "Jugg",
+      "主宰"
+    ],
+    "primary_attribute": 1,
+    "complexity": 1,
+    "attack_capability": 1,
+    "role_levels": [
+      2,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      1,
+      0
+    ],
+    "strength_base": 20,
+    "strength_gain": 2,
+    "agility_base": 32,
+    "agility_gain": 2.8,
+    "intelligence_base": 14,
+    "intelligence_gain": 1.4,
+    "damage_min": 54,
+    "damage_max": 56,
+    "attack_rate": 1.4,
+    "attack_range": 150,
+    "projectile_speed": 0,
+    "armor": 5.3333335,
+    "magic_resistance": 25,
+    "movement_speed": 305,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 560,
+    "health_regen": 2.5,
+    "max_mana": 243,
+    "mana_regen": 0.7,
+    "ability_ids": [
+      5028,
+      5029,
+      5027,
+      419,
+      1210,
+      5030
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 1013,
+        "right_ability_id": 915
+      },
+      {
+        "level": 15,
+        "left_ability_id": 7394,
+        "right_ability_id": 6105
+      },
+      {
+        "level": 20,
+        "left_ability_id": 1787,
+        "right_ability_id": 1192
+      },
+      {
+        "level": 25,
+        "left_ability_id": 628,
+        "right_ability_id": 7021
+      }
+    ]
+  },
+  {
+    "hero_id": 9,
+    "internal_name": "npc_dota_hero_mirana",
+    "name_en": "Mirana",
+    "name_zh": "米拉娜",
+    "aliases": [
+      "白虎",
+      "月之女祭司",
+      "Pom",
+      "米拉娜"
+    ],
+    "primary_attribute": 1,
+    "complexity": 2,
+    "attack_capability": 2,
+    "role_levels": [
+      1,
+      1,
+      1,
+      1,
+      0,
+      0,
+      2,
+      0,
+      0
+    ],
+    "strength_base": 20,
+    "strength_gain": 2.2,
+    "agility_base": 26,
+    "agility_gain": 3.1,
+    "intelligence_base": 22,
+    "intelligence_gain": 1.9,
+    "damage_min": 48,
+    "damage_max": 54,
+    "attack_rate": 1.7,
+    "attack_range": 630,
+    "projectile_speed": 900,
+    "armor": 2.3333335,
+    "magic_resistance": 25,
+    "movement_speed": 285,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 560,
+    "health_regen": 2.25,
+    "max_mana": 339,
+    "mana_regen": 1.5,
+    "ability_ids": [
+      5051,
+      5048,
+      5050,
+      1739,
+      1213
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6242,
+        "right_ability_id": 6692
+      },
+      {
+        "level": 15,
+        "left_ability_id": 823,
+        "right_ability_id": 1788
+      },
+      {
+        "level": 20,
+        "left_ability_id": 702,
+        "right_ability_id": 6013
+      },
+      {
+        "level": 25,
+        "left_ability_id": 6397,
+        "right_ability_id": 817
+      }
+    ]
+  },
+  {
+    "hero_id": 10,
+    "internal_name": "npc_dota_hero_morphling",
+    "name_en": "Morphling",
+    "name_zh": "变体精灵",
+    "aliases": [
+      "水人",
+      "变体",
+      "变体精灵"
+    ],
+    "primary_attribute": 1,
+    "complexity": 3,
+    "attack_capability": 2,
+    "role_levels": [
+      3,
+      0,
+      1,
+      1,
+      0,
+      2,
+      3,
+      0,
+      0
+    ],
+    "strength_base": 16,
+    "strength_gain": 2.6,
+    "agility_base": 33,
+    "agility_gain": 4.2,
+    "intelligence_base": 19,
+    "intelligence_gain": 1.8,
+    "damage_min": 45,
+    "damage_max": 54,
+    "attack_rate": 1.5,
+    "attack_range": 350,
+    "projectile_speed": 1300,
+    "armor": 4.5,
+    "magic_resistance": 25,
+    "movement_speed": 285,
+    "turn_rate": 0.7,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 472,
+    "health_regen": 2.1,
+    "max_mana": 303,
+    "mana_regen": 0.95,
+    "ability_ids": [
+      5052,
+      5053,
+      5055,
+      5056,
+      5057,
+      1741
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6383,
+        "right_ability_id": 7135
+      },
+      {
+        "level": 15,
+        "left_ability_id": 7056,
+        "right_ability_id": 5929
+      },
+      {
+        "level": 20,
+        "left_ability_id": 6062,
+        "right_ability_id": 6027
+      },
+      {
+        "level": 25,
+        "left_ability_id": 6138,
+        "right_ability_id": 7060
+      }
+    ]
+  },
+  {
+    "hero_id": 11,
+    "internal_name": "npc_dota_hero_nevermore",
+    "name_en": "Shadow Fiend",
+    "name_zh": "影魔",
+    "aliases": [
+      "影魔",
+      "SF"
+    ],
+    "primary_attribute": 1,
+    "complexity": 2,
+    "attack_capability": 2,
+    "role_levels": [
+      2,
+      0,
+      3,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "strength_base": 19,
+    "strength_gain": 2.7,
+    "agility_base": 25,
+    "agility_gain": 3.6,
+    "intelligence_base": 16,
+    "intelligence_gain": 2.2,
+    "damage_min": 41,
+    "damage_max": 47,
+    "attack_rate": 1.6,
+    "attack_range": 525,
+    "projectile_speed": 1200,
+    "armor": 4.166667,
+    "magic_resistance": 25,
+    "movement_speed": 305,
+    "turn_rate": 0.9,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 538,
+    "health_regen": 2.15,
+    "max_mana": 267,
+    "mana_regen": 1.1,
+    "ability_ids": [
+      5059,
+      1216,
+      5063,
+      5064,
+      5062
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 1217,
+        "right_ability_id": 1072
+      },
+      {
+        "level": 15,
+        "left_ability_id": 6670,
+        "right_ability_id": 815
+      },
+      {
+        "level": 20,
+        "left_ability_id": 6875,
+        "right_ability_id": 1789
+      },
+      {
+        "level": 25,
+        "left_ability_id": 999,
+        "right_ability_id": 6876
+      }
+    ]
+  },
+  {
+    "hero_id": 12,
+    "internal_name": "npc_dota_hero_phantom_lancer",
+    "name_en": "Phantom Lancer",
+    "name_zh": "幻影长矛手",
+    "aliases": [
+      "猴子",
+      "PL",
+      "幻影长矛手"
+    ],
+    "primary_attribute": 1,
+    "complexity": 2,
+    "attack_capability": 1,
+    "role_levels": [
+      2,
+      0,
+      1,
+      0,
+      0,
+      0,
+      2,
+      1,
+      0
+    ],
+    "strength_base": 21,
+    "strength_gain": 2.2,
+    "agility_base": 26,
+    "agility_gain": 3.4,
+    "intelligence_base": 21,
+    "intelligence_gain": 1.8,
+    "damage_min": 52,
+    "damage_max": 62,
+    "attack_rate": 1.7,
+    "attack_range": 225,
+    "projectile_speed": 900,
+    "armor": 4.3333335,
+    "magic_resistance": 25,
+    "movement_speed": 285,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 582,
+    "health_regen": 4.1000004,
+    "max_mana": 327,
+    "mana_regen": 1.0500001,
+    "ability_ids": [
+      5065,
+      5066,
+      1221,
+      1449,
+      5067
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6850,
+        "right_ability_id": 1699
+      },
+      {
+        "level": 15,
+        "left_ability_id": 1056,
+        "right_ability_id": 1698
+      },
+      {
+        "level": 20,
+        "left_ability_id": 1696,
+        "right_ability_id": 1697
+      },
+      {
+        "level": 25,
+        "left_ability_id": 1536,
+        "right_ability_id": 1695
+      }
+    ]
+  },
+  {
+    "hero_id": 13,
+    "internal_name": "npc_dota_hero_puck",
+    "name_en": "Puck",
+    "name_zh": "帕克",
+    "aliases": [
+      "仙女龙",
+      "帕克"
+    ],
+    "primary_attribute": 2,
+    "complexity": 2,
+    "attack_capability": 2,
+    "role_levels": [
+      0,
+      0,
+      2,
+      3,
+      0,
+      0,
+      3,
+      0,
+      3
+    ],
+    "strength_base": 17,
+    "strength_gain": 2.4,
+    "agility_base": 14,
+    "agility_gain": 2.1,
+    "intelligence_base": 23,
+    "intelligence_gain": 3.8,
+    "damage_min": 45,
+    "damage_max": 53,
+    "attack_rate": 1.7,
+    "attack_range": 550,
+    "projectile_speed": 900,
+    "armor": 2.3333335,
+    "magic_resistance": 25,
+    "movement_speed": 290,
+    "turn_rate": 0.9,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 494,
+    "health_regen": 2.2,
+    "max_mana": 351,
+    "mana_regen": 1.65,
+    "ability_ids": [
+      5069,
+      5071,
+      5072,
+      1222,
+      5073
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6219,
+        "right_ability_id": 1129
+      },
+      {
+        "level": 15,
+        "left_ability_id": 6402,
+        "right_ability_id": 1058
+      },
+      {
+        "level": 20,
+        "left_ability_id": 348,
+        "right_ability_id": 407
+      },
+      {
+        "level": 25,
+        "left_ability_id": 1057,
+        "right_ability_id": 767
+      }
+    ]
+  },
+  {
+    "hero_id": 14,
+    "internal_name": "npc_dota_hero_pudge",
+    "name_en": "Pudge",
+    "name_zh": "帕吉",
+    "aliases": [
+      "屠夫",
+      "胖子",
+      "帕吉"
+    ],
+    "primary_attribute": 0,
+    "complexity": 2,
+    "attack_capability": 1,
+    "role_levels": [
+      0,
+      0,
+      1,
+      2,
+      0,
+      2,
+      0,
+      0,
+      2
+    ],
+    "strength_base": 25,
+    "strength_gain": 3,
+    "agility_base": 13,
+    "agility_gain": 1.4,
+    "intelligence_base": 16,
+    "intelligence_gain": 1.8,
+    "damage_min": 70,
+    "damage_max": 76,
+    "attack_rate": 1.7,
+    "attack_range": 175,
+    "projectile_speed": 0,
+    "armor": 2.1666667,
+    "magic_resistance": 25,
+    "movement_speed": 280,
+    "turn_rate": 0.7,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 670,
+    "health_regen": 5,
+    "max_mana": 267,
+    "mana_regen": 0.8,
+    "ability_ids": [
+      5075,
+      5076,
+      5074,
+      1223,
+      5077
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6506,
+        "right_ability_id": 6023
+      },
+      {
+        "level": 15,
+        "left_ability_id": 408,
+        "right_ability_id": 332
+      },
+      {
+        "level": 20,
+        "left_ability_id": 6565,
+        "right_ability_id": 507
+      },
+      {
+        "level": 25,
+        "left_ability_id": 5932,
+        "right_ability_id": 7142
+      }
+    ]
+  },
+  {
+    "hero_id": 15,
+    "internal_name": "npc_dota_hero_razor",
+    "name_en": "Razor",
+    "name_zh": "雷泽",
+    "aliases": [
+      "电魂",
+      "雷泽"
+    ],
+    "primary_attribute": 1,
+    "complexity": 1,
+    "attack_capability": 2,
+    "role_levels": [
+      2,
+      0,
+      1,
+      0,
+      0,
+      2,
+      0,
+      1,
+      0
+    ],
+    "strength_base": 22,
+    "strength_gain": 2.8,
+    "agility_base": 24,
+    "agility_gain": 2.8,
+    "intelligence_base": 21,
+    "intelligence_gain": 2.2,
+    "damage_min": 47,
+    "damage_max": 49,
+    "attack_rate": 1.7,
+    "attack_range": 475,
+    "projectile_speed": 2000,
+    "armor": 4,
+    "magic_resistance": 25,
+    "movement_speed": 280,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 604,
+    "health_regen": 3.2,
+    "max_mana": 327,
+    "mana_regen": 1.0500001,
+    "ability_ids": [
+      5082,
+      5083,
+      1224,
+      5084,
+      5085
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 1064,
+        "right_ability_id": 1065
+      },
+      {
+        "level": 15,
+        "left_ability_id": 1137,
+        "right_ability_id": 6408
+      },
+      {
+        "level": 20,
+        "left_ability_id": 6028,
+        "right_ability_id": 5928
+      },
+      {
+        "level": 25,
+        "left_ability_id": 6861,
+        "right_ability_id": 5931
+      }
+    ]
+  },
+  {
+    "hero_id": 16,
+    "internal_name": "npc_dota_hero_sand_king",
+    "name_en": "Sand King",
+    "name_zh": "沙王",
+    "aliases": [
+      "沙王",
+      "SK"
+    ],
+    "primary_attribute": 3,
+    "complexity": 2,
+    "attack_capability": 1,
+    "role_levels": [
+      0,
+      1,
+      2,
+      2,
+      0,
+      0,
+      2,
+      0,
+      3
+    ],
+    "strength_base": 23,
+    "strength_gain": 2.5,
+    "agility_base": 19,
+    "agility_gain": 2,
+    "intelligence_base": 17,
+    "intelligence_gain": 2,
+    "damage_min": 19,
+    "damage_max": 29,
+    "attack_rate": 1.7,
+    "attack_range": 150,
+    "projectile_speed": 900,
+    "armor": 4.166667,
+    "magic_resistance": 25,
+    "movement_speed": 290,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 626,
+    "health_regen": 2.55,
+    "max_mana": 279,
+    "mana_regen": 0.85,
+    "ability_ids": [
+      5102,
+      5103,
+      1229,
+      1226,
+      5105
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 1230,
+        "right_ability_id": 475
+      },
+      {
+        "level": 15,
+        "left_ability_id": 498,
+        "right_ability_id": 6207
+      },
+      {
+        "level": 20,
+        "left_ability_id": 6409,
+        "right_ability_id": 890
+      },
+      {
+        "level": 25,
+        "left_ability_id": 6530,
+        "right_ability_id": 1537
+      }
+    ]
+  },
+  {
+    "hero_id": 17,
+    "internal_name": "npc_dota_hero_storm_spirit",
+    "name_en": "Storm Spirit",
+    "name_zh": "风暴之灵",
+    "aliases": [
+      "蓝猫",
+      "风暴之灵"
+    ],
+    "primary_attribute": 2,
+    "complexity": 2,
+    "attack_capability": 2,
+    "role_levels": [
+      2,
+      0,
+      2,
+      1,
+      0,
+      0,
+      3,
+      0,
+      1
+    ],
+    "strength_base": 21,
+    "strength_gain": 2,
+    "agility_base": 22,
+    "agility_gain": 2.6,
+    "intelligence_base": 23,
+    "intelligence_gain": 3.7,
+    "damage_min": 47,
+    "damage_max": 57,
+    "attack_rate": 1.6,
+    "attack_range": 480,
+    "projectile_speed": 1100,
+    "armor": 4.666667,
+    "magic_resistance": 25,
+    "movement_speed": 285,
+    "turn_rate": 0.8,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 582,
+    "health_regen": 2.6000001,
+    "max_mana": 351,
+    "mana_regen": 1.15,
+    "ability_ids": [
+      5098,
+      5099,
+      5100,
+      5101,
+      1231
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 627,
+        "right_ability_id": 6908
+      },
+      {
+        "level": 15,
+        "left_ability_id": 6167,
+        "right_ability_id": 762
+      },
+      {
+        "level": 20,
+        "left_ability_id": 5903,
+        "right_ability_id": 6916
+      },
+      {
+        "level": 25,
+        "left_ability_id": 1187,
+        "right_ability_id": 7132
+      }
+    ]
+  },
+  {
+    "hero_id": 18,
+    "internal_name": "npc_dota_hero_sven",
+    "name_en": "Sven",
+    "name_zh": "斯温",
+    "aliases": [
+      "流浪剑客",
+      "流浪",
+      "斯温"
+    ],
+    "primary_attribute": 0,
+    "complexity": 1,
+    "attack_capability": 1,
+    "role_levels": [
+      2,
+      0,
+      1,
+      2,
+      0,
+      2,
+      0,
+      0,
+      2
+    ],
+    "strength_base": 24,
+    "strength_gain": 3.5,
+    "agility_base": 18,
+    "agility_gain": 2.2,
+    "intelligence_base": 16,
+    "intelligence_gain": 1.5,
+    "damage_min": 61,
+    "damage_max": 63,
+    "attack_rate": 1.9,
+    "attack_range": 150,
+    "projectile_speed": 0,
+    "armor": 3,
+    "magic_resistance": 25,
+    "movement_speed": 325,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 648,
+    "health_regen": 3.15,
+    "max_mana": 267,
+    "mana_regen": 0.8,
+    "ability_ids": [
+      5094,
+      5095,
+      5096,
+      5097,
+      1234
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6910,
+        "right_ability_id": 7112
+      },
+      {
+        "level": 15,
+        "left_ability_id": 1790,
+        "right_ability_id": 716
+      },
+      {
+        "level": 20,
+        "left_ability_id": 6911,
+        "right_ability_id": 763
+      },
+      {
+        "level": 25,
+        "left_ability_id": 673,
+        "right_ability_id": 1188
+      }
+    ]
+  },
+  {
+    "hero_id": 19,
+    "internal_name": "npc_dota_hero_tiny",
+    "name_en": "Tiny",
+    "name_zh": "小小",
+    "aliases": [
+      "山岭巨人",
+      "小小"
+    ],
+    "primary_attribute": 0,
+    "complexity": 2,
+    "attack_capability": 1,
+    "role_levels": [
+      3,
+      0,
+      2,
+      1,
+      0,
+      2,
+      0,
+      2,
+      2
+    ],
+    "strength_base": 30,
+    "strength_gain": 4.2,
+    "agility_base": 0,
+    "agility_gain": 0,
+    "intelligence_base": 17,
+    "intelligence_gain": 2.4,
+    "damage_min": 61,
+    "damage_max": 67,
+    "attack_rate": 1.7,
+    "attack_range": 150,
+    "projectile_speed": 900,
+    "armor": 0,
+    "magic_resistance": 25,
+    "movement_speed": 275,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 780,
+    "health_regen": 4,
+    "max_mana": 279,
+    "mana_regen": 0.85,
+    "ability_ids": [
+      5106,
+      5107,
+      5108,
+      7850,
+      1236,
+      5109,
+      6937
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6933,
+        "right_ability_id": 6932
+      },
+      {
+        "level": 15,
+        "left_ability_id": 718,
+        "right_ability_id": 7005
+      },
+      {
+        "level": 20,
+        "left_ability_id": 6137,
+        "right_ability_id": 6153
+      },
+      {
+        "level": 25,
+        "left_ability_id": 6934,
+        "right_ability_id": 558
+      }
+    ]
+  },
+  {
+    "hero_id": 20,
+    "internal_name": "npc_dota_hero_vengefulspirit",
+    "name_en": "Vengeful Spirit",
+    "name_zh": "复仇之魂",
+    "aliases": [
+      "复仇",
+      "VS",
+      "复仇之魂"
+    ],
+    "primary_attribute": 1,
+    "complexity": 1,
+    "attack_capability": 2,
+    "role_levels": [
+      0,
+      3,
+      1,
+      2,
+      0,
+      0,
+      1,
+      0,
+      2
+    ],
+    "strength_base": 20,
+    "strength_gain": 2.6,
+    "agility_base": 23,
+    "agility_gain": 3,
+    "intelligence_base": 19,
+    "intelligence_gain": 1.5,
+    "damage_min": 51,
+    "damage_max": 57,
+    "attack_rate": 1.5,
+    "attack_range": 400,
+    "projectile_speed": 1500,
+    "armor": 3.8333335,
+    "magic_resistance": 25,
+    "movement_speed": 300,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 560,
+    "health_regen": 2.75,
+    "max_mana": 303,
+    "mana_regen": 0.95,
+    "ability_ids": [
+      5122,
+      5124,
+      5123,
+      1238,
+      5125
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6237,
+        "right_ability_id": 790
+      },
+      {
+        "level": 15,
+        "left_ability_id": 1197,
+        "right_ability_id": 6978
+      },
+      {
+        "level": 20,
+        "left_ability_id": 6977,
+        "right_ability_id": 6310
+      },
+      {
+        "level": 25,
+        "left_ability_id": 1068,
+        "right_ability_id": 1067
+      }
+    ]
+  },
+  {
+    "hero_id": 21,
+    "internal_name": "npc_dota_hero_windrunner",
+    "name_en": "Windranger",
+    "name_zh": "风行者",
+    "aliases": [
+      "风行",
+      "WR",
+      "风行者"
+    ],
+    "primary_attribute": 3,
+    "complexity": 2,
+    "attack_capability": 2,
+    "role_levels": [
+      1,
+      1,
+      1,
+      1,
+      0,
+      0,
+      1,
+      0,
+      0
+    ],
+    "strength_base": 18,
+    "strength_gain": 2.6,
+    "agility_base": 20,
+    "agility_gain": 2.1,
+    "intelligence_base": 18,
+    "intelligence_gain": 3.2,
+    "damage_min": 24,
+    "damage_max": 36,
+    "attack_rate": 1.5,
+    "attack_range": 600,
+    "projectile_speed": 1250,
+    "armor": 3.3333335,
+    "magic_resistance": 25,
+    "movement_speed": 285,
+    "turn_rate": 0.8,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 516,
+    "health_regen": 2.5500002,
+    "max_mana": 291,
+    "mana_regen": 1.1500001,
+    "ability_ids": [
+      5130,
+      5131,
+      5132,
+      652,
+      5133,
+      1742
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 7888,
+        "right_ability_id": 6413
+      },
+      {
+        "level": 15,
+        "left_ability_id": 7062,
+        "right_ability_id": 7889
+      },
+      {
+        "level": 20,
+        "left_ability_id": 6993,
+        "right_ability_id": 6562
+      },
+      {
+        "level": 25,
+        "left_ability_id": 1195,
+        "right_ability_id": 6992
+      }
+    ]
+  },
+  {
+    "hero_id": 22,
+    "internal_name": "npc_dota_hero_zuus",
+    "name_en": "Zeus",
+    "name_zh": "宙斯",
+    "aliases": [
+      "雷神",
+      "宙斯"
+    ],
+    "primary_attribute": 2,
+    "complexity": 1,
+    "attack_capability": 2,
+    "role_levels": [
+      1,
+      0,
+      3,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "strength_base": 21,
+    "strength_gain": 2.1,
+    "agility_base": 11,
+    "agility_gain": 1.2,
+    "intelligence_base": 23,
+    "intelligence_gain": 3.3,
+    "damage_min": 53,
+    "damage_max": 63,
+    "attack_rate": 1.7,
+    "attack_range": 380,
+    "projectile_speed": 1100,
+    "armor": 2.8333335,
+    "magic_resistance": 25,
+    "movement_speed": 305,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 582,
+    "health_regen": 2.3500001,
+    "max_mana": 351,
+    "mana_regen": 1.15,
+    "ability_ids": [
+      5110,
+      5111,
+      641,
+      6325,
+      1110,
+      5113,
+      5112
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 8038,
+        "right_ability_id": 1791
+      },
+      {
+        "level": 15,
+        "left_ability_id": 6501,
+        "right_ability_id": 6518
+      },
+      {
+        "level": 20,
+        "left_ability_id": 611,
+        "right_ability_id": 1615
+      },
+      {
+        "level": 25,
+        "left_ability_id": 6157,
+        "right_ability_id": 5959
+      }
+    ]
+  },
+  {
+    "hero_id": 23,
+    "internal_name": "npc_dota_hero_kunkka",
+    "name_en": "Kunkka",
+    "name_zh": "昆卡",
+    "aliases": [
+      "船长",
+      "昆卡"
+    ],
+    "primary_attribute": 0,
+    "complexity": 2,
+    "attack_capability": 1,
+    "role_levels": [
+      2,
+      1,
+      1,
+      2,
+      0,
+      1,
+      0,
+      0,
+      2
+    ],
+    "strength_base": 24,
+    "strength_gain": 3.6,
+    "agility_base": 14,
+    "agility_gain": 1.6,
+    "intelligence_base": 18,
+    "intelligence_gain": 1.8,
+    "damage_min": 54,
+    "damage_max": 60,
+    "attack_rate": 1.7,
+    "attack_range": 150,
+    "projectile_speed": 900,
+    "armor": 4.3333335,
+    "magic_resistance": 25,
+    "movement_speed": 315,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 648,
+    "health_regen": 3.15,
+    "max_mana": 291,
+    "mana_regen": 0.90000004,
+    "ability_ids": [
+      5031,
+      5032,
+      5033,
+      1452,
+      605,
+      5035
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 1446,
+        "right_ability_id": 1793
+      },
+      {
+        "level": 15,
+        "left_ability_id": 1175,
+        "right_ability_id": 6667
+      },
+      {
+        "level": 20,
+        "left_ability_id": 766,
+        "right_ability_id": 6385
+      },
+      {
+        "level": 25,
+        "left_ability_id": 1792,
+        "right_ability_id": 1015
+      }
+    ]
+  },
+  {
+    "hero_id": 25,
+    "internal_name": "npc_dota_hero_lina",
+    "name_en": "Lina",
+    "name_zh": "莉娜",
+    "aliases": [
+      "火女",
+      "莉娜"
+    ],
+    "primary_attribute": 2,
+    "complexity": 1,
+    "attack_capability": 2,
+    "role_levels": [
+      1,
+      1,
+      3,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "strength_base": 20,
+    "strength_gain": 2.4,
+    "agility_base": 21,
+    "agility_gain": 2.4,
+    "intelligence_base": 30,
+    "intelligence_gain": 4,
+    "damage_min": 51,
+    "damage_max": 59,
+    "attack_rate": 1.6,
+    "attack_range": 670,
+    "projectile_speed": 1000,
+    "armor": 3.5,
+    "magic_resistance": 25,
+    "movement_speed": 290,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 560,
+    "health_regen": 2.25,
+    "max_mana": 435,
+    "mana_regen": 1.5,
+    "ability_ids": [
+      5040,
+      5041,
+      5042,
+      944,
+      1244,
+      5043
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 961,
+        "right_ability_id": 1442
+      },
+      {
+        "level": 15,
+        "left_ability_id": 844,
+        "right_ability_id": 6313
+      },
+      {
+        "level": 20,
+        "left_ability_id": 6509,
+        "right_ability_id": 6388
+      },
+      {
+        "level": 25,
+        "left_ability_id": 6009,
+        "right_ability_id": 6212
+      }
+    ]
+  },
+  {
+    "hero_id": 26,
+    "internal_name": "npc_dota_hero_lion",
+    "name_en": "Lion",
+    "name_zh": "莱恩",
+    "aliases": [
+      "恶魔巫师",
+      "莱恩"
+    ],
+    "primary_attribute": 2,
+    "complexity": 1,
+    "attack_capability": 2,
+    "role_levels": [
+      0,
+      2,
+      3,
+      3,
+      0,
+      0,
+      0,
+      0,
+      2
+    ],
+    "strength_base": 18,
+    "strength_gain": 2.4,
+    "agility_base": 15,
+    "agility_gain": 1.7,
+    "intelligence_base": 19,
+    "intelligence_gain": 3.5,
+    "damage_min": 48,
+    "damage_max": 54,
+    "attack_rate": 1.7,
+    "attack_range": 600,
+    "projectile_speed": 900,
+    "armor": 2.5,
+    "magic_resistance": 25,
+    "movement_speed": 290,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 516,
+    "health_regen": 2.3000002,
+    "max_mana": 303,
+    "mana_regen": 0.95,
+    "ability_ids": [
+      5044,
+      5045,
+      5046,
+      1249,
+      5047
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6678,
+        "right_ability_id": 6389
+      },
+      {
+        "level": 15,
+        "left_ability_id": 541,
+        "right_ability_id": 777
+      },
+      {
+        "level": 20,
+        "left_ability_id": 401,
+        "right_ability_id": 781
+      },
+      {
+        "level": 25,
+        "left_ability_id": 465,
+        "right_ability_id": 5918
+      }
+    ]
+  },
+  {
+    "hero_id": 27,
+    "internal_name": "npc_dota_hero_shadow_shaman",
+    "name_en": "Shadow Shaman",
+    "name_zh": "暗影萨满",
+    "aliases": [
+      "小Y",
+      "暗影萨满"
+    ],
+    "primary_attribute": 2,
+    "complexity": 1,
+    "attack_capability": 2,
+    "role_levels": [
+      0,
+      2,
+      2,
+      3,
+      0,
+      0,
+      0,
+      3,
+      1
+    ],
+    "strength_base": 20,
+    "strength_gain": 2.3,
+    "agility_base": 16,
+    "agility_gain": 1.6,
+    "intelligence_base": 23,
+    "intelligence_gain": 3.3,
+    "damage_min": 63,
+    "damage_max": 70,
+    "attack_rate": 1.7,
+    "attack_range": 400,
+    "projectile_speed": 900,
+    "armor": 4.666667,
+    "magic_resistance": 25,
+    "movement_speed": 285,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 560,
+    "health_regen": 3,
+    "max_mana": 351,
+    "mana_regen": 1.15,
+    "ability_ids": [
+      5078,
+      5079,
+      5080,
+      1250,
+      1743,
+      5081
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6502,
+        "right_ability_id": 6521
+      },
+      {
+        "level": 15,
+        "left_ability_id": 6295,
+        "right_ability_id": 6052
+      },
+      {
+        "level": 20,
+        "left_ability_id": 793,
+        "right_ability_id": 760
+      },
+      {
+        "level": 25,
+        "left_ability_id": 468,
+        "right_ability_id": 6926
+      }
+    ]
+  },
+  {
+    "hero_id": 28,
+    "internal_name": "npc_dota_hero_slardar",
+    "name_en": "Slardar",
+    "name_zh": "斯拉达",
+    "aliases": [
+      "大鱼人",
+      "鱼人守卫",
+      "斯拉达"
+    ],
+    "primary_attribute": 0,
+    "complexity": 1,
+    "attack_capability": 1,
+    "role_levels": [
+      2,
+      0,
+      0,
+      1,
+      0,
+      2,
+      1,
+      0,
+      2
+    ],
+    "strength_base": 21,
+    "strength_gain": 3.4,
+    "agility_base": 17,
+    "agility_gain": 2.1,
+    "intelligence_base": 15,
+    "intelligence_gain": 1.5,
+    "damage_min": 51,
+    "damage_max": 59,
+    "attack_rate": 1.7,
+    "attack_range": 150,
+    "projectile_speed": 0,
+    "armor": 4.8333335,
+    "magic_resistance": 25,
+    "movement_speed": 300,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 582,
+    "health_regen": 2.6000001,
+    "max_mana": 255,
+    "mana_regen": 0.75,
+    "ability_ids": [
+      5114,
+      5115,
+      5116,
+      1253,
+      5117
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 7871,
+        "right_ability_id": 6890
+      },
+      {
+        "level": 15,
+        "left_ability_id": 6211,
+        "right_ability_id": 695
+      },
+      {
+        "level": 20,
+        "left_ability_id": 5903,
+        "right_ability_id": 504
+      },
+      {
+        "level": 25,
+        "left_ability_id": 852,
+        "right_ability_id": 6889
+      }
+    ]
+  },
+  {
+    "hero_id": 29,
+    "internal_name": "npc_dota_hero_tidehunter",
+    "name_en": "Tidehunter",
+    "name_zh": "潮汐猎人",
+    "aliases": [
+      "潮汐",
+      "潮汐猎人"
+    ],
+    "primary_attribute": 0,
+    "complexity": 1,
+    "attack_capability": 1,
+    "role_levels": [
+      1,
+      0,
+      1,
+      2,
+      0,
+      3,
+      0,
+      0,
+      3
+    ],
+    "strength_base": 25,
+    "strength_gain": 3.7,
+    "agility_base": 15,
+    "agility_gain": 1.5,
+    "intelligence_base": 20,
+    "intelligence_gain": 1.7,
+    "damage_min": 50,
+    "damage_max": 56,
+    "attack_rate": 1.7,
+    "attack_range": 150,
+    "projectile_speed": 900,
+    "armor": 2.5,
+    "magic_resistance": 25,
+    "movement_speed": 300,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 670,
+    "health_regen": 2.75,
+    "max_mana": 315,
+    "mana_regen": 1,
+    "ability_ids": [
+      5118,
+      5119,
+      5120,
+      5407,
+      5121,
+      1746
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 7978,
+        "right_ability_id": 964
+      },
+      {
+        "level": 15,
+        "left_ability_id": 1701,
+        "right_ability_id": 6151
+      },
+      {
+        "level": 20,
+        "left_ability_id": 6945,
+        "right_ability_id": 1700
+      },
+      {
+        "level": 25,
+        "left_ability_id": 6946,
+        "right_ability_id": 754
+      }
+    ]
+  },
+  {
+    "hero_id": 30,
+    "internal_name": "npc_dota_hero_witch_doctor",
+    "name_en": "Witch Doctor",
+    "name_zh": "巫医",
+    "aliases": [
+      "WD",
+      "巫医"
+    ],
+    "primary_attribute": 2,
+    "complexity": 1,
+    "attack_capability": 2,
+    "role_levels": [
+      0,
+      3,
+      2,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "strength_base": 20,
+    "strength_gain": 2.1,
+    "agility_base": 13,
+    "agility_gain": 1.4,
+    "intelligence_base": 22,
+    "intelligence_gain": 3.1,
+    "damage_min": 48,
+    "damage_max": 58,
+    "attack_rate": 1.7,
+    "attack_range": 550,
+    "projectile_speed": 1200,
+    "armor": 2.1666667,
+    "magic_resistance": 25,
+    "movement_speed": 300,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 560,
+    "health_regen": 2.25,
+    "max_mana": 339,
+    "mana_regen": 1.1,
+    "ability_ids": [
+      5138,
+      5139,
+      5140,
+      632,
+      1257,
+      5141
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6524,
+        "right_ability_id": 6996
+      },
+      {
+        "level": 15,
+        "left_ability_id": 1794,
+        "right_ability_id": 6298
+      },
+      {
+        "level": 20,
+        "left_ability_id": 417,
+        "right_ability_id": 555
+      },
+      {
+        "level": 25,
+        "left_ability_id": 6995,
+        "right_ability_id": 5959
+      }
+    ]
+  },
+  {
+    "hero_id": 31,
+    "internal_name": "npc_dota_hero_lich",
+    "name_en": "Lich",
+    "name_zh": "巫妖",
+    "aliases": [
+      "巫妖"
+    ],
+    "primary_attribute": 2,
+    "complexity": 1,
+    "attack_capability": 2,
+    "role_levels": [
+      0,
+      3,
+      2,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "strength_base": 20,
+    "strength_gain": 2.1,
+    "agility_base": 17,
+    "agility_gain": 1.7,
+    "intelligence_base": 28,
+    "intelligence_gain": 3.4,
+    "damage_min": 52,
+    "damage_max": 61,
+    "attack_rate": 1.7,
+    "attack_range": 550,
+    "projectile_speed": 900,
+    "armor": 1.8333335,
+    "magic_resistance": 25,
+    "movement_speed": 290,
+    "turn_rate": 0.7,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 560,
+    "health_regen": 2.5,
+    "max_mana": 411,
+    "mana_regen": 0.39999998,
+    "ability_ids": [
+      5134,
+      5136,
+      7325,
+      8028,
+      1245,
+      5137
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6039,
+        "right_ability_id": 318
+      },
+      {
+        "level": 15,
+        "left_ability_id": 7360,
+        "right_ability_id": 531
+      },
+      {
+        "level": 20,
+        "left_ability_id": 6292,
+        "right_ability_id": 6387
+      },
+      {
+        "level": 25,
+        "left_ability_id": 775,
+        "right_ability_id": 530
+      }
+    ]
+  },
+  {
+    "hero_id": 32,
+    "internal_name": "npc_dota_hero_riki",
+    "name_en": "Riki",
+    "name_zh": "力丸",
+    "aliases": [
+      "隐刺",
+      "SA",
+      "力丸"
+    ],
+    "primary_attribute": 1,
+    "complexity": 1,
+    "attack_capability": 1,
+    "role_levels": [
+      2,
+      0,
+      0,
+      1,
+      0,
+      0,
+      2,
+      0,
+      0
+    ],
+    "strength_base": 18,
+    "strength_gain": 2,
+    "agility_base": 30,
+    "agility_gain": 2.4,
+    "intelligence_base": 14,
+    "intelligence_gain": 1.3,
+    "damage_min": 52,
+    "damage_max": 56,
+    "attack_rate": 1.7,
+    "attack_range": 150,
+    "projectile_speed": 900,
+    "armor": 5,
+    "magic_resistance": 25,
+    "movement_speed": 315,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 516,
+    "health_regen": 4.3,
+    "max_mana": 243,
+    "mana_regen": 0.7,
+    "ability_ids": [
+      5142,
+      5143,
+      5145,
+      1258,
+      5144
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 347,
+        "right_ability_id": 795
+      },
+      {
+        "level": 15,
+        "left_ability_id": 6330,
+        "right_ability_id": 6867
+      },
+      {
+        "level": 20,
+        "left_ability_id": 1702,
+        "right_ability_id": 6865
+      },
+      {
+        "level": 25,
+        "left_ability_id": 474,
+        "right_ability_id": 782
+      }
+    ]
+  },
+  {
+    "hero_id": 33,
+    "internal_name": "npc_dota_hero_enigma",
+    "name_en": "Enigma",
+    "name_zh": "谜团",
+    "aliases": [
+      "谜团"
+    ],
+    "primary_attribute": 3,
+    "complexity": 2,
+    "attack_capability": 2,
+    "role_levels": [
+      0,
+      0,
+      0,
+      2,
+      0,
+      0,
+      0,
+      2,
+      2
+    ],
+    "strength_base": 21,
+    "strength_gain": 2.5,
+    "agility_base": 14,
+    "agility_gain": 1,
+    "intelligence_base": 19,
+    "intelligence_gain": 3.6,
+    "damage_min": 19,
+    "damage_max": 25,
+    "attack_rate": 1.7,
+    "attack_range": 500,
+    "projectile_speed": 900,
+    "armor": 3.3333335,
+    "magic_resistance": 25,
+    "movement_speed": 280,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 582,
+    "health_regen": 2.3500001,
+    "max_mana": 303,
+    "mana_regen": 1.45,
+    "ability_ids": [
+      5146,
+      5147,
+      5148,
+      1261,
+      5149
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6510,
+        "right_ability_id": 6065
+      },
+      {
+        "level": 15,
+        "left_ability_id": 620,
+        "right_ability_id": 6649
+      },
+      {
+        "level": 20,
+        "left_ability_id": 5903,
+        "right_ability_id": 7658
+      },
+      {
+        "level": 25,
+        "left_ability_id": 346,
+        "right_ability_id": 461
+      }
+    ]
+  },
+  {
+    "hero_id": 34,
+    "internal_name": "npc_dota_hero_tinker",
+    "name_en": "Tinker",
+    "name_zh": "修补匠",
+    "aliases": [
+      "TK",
+      "修补匠"
+    ],
+    "primary_attribute": 2,
+    "complexity": 2,
+    "attack_capability": 2,
+    "role_levels": [
+      1,
+      0,
+      3,
+      0,
+      0,
+      0,
+      0,
+      2,
+      0
+    ],
+    "strength_base": 19,
+    "strength_gain": 2.3,
+    "agility_base": 17,
+    "agility_gain": 1.4,
+    "intelligence_base": 30,
+    "intelligence_gain": 3.3,
+    "damage_min": 52,
+    "damage_max": 58,
+    "attack_rate": 1.7,
+    "attack_range": 500,
+    "projectile_speed": 900,
+    "armor": 4.8333335,
+    "magic_resistance": 25,
+    "movement_speed": 305,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 538,
+    "health_regen": 2.4,
+    "max_mana": 435,
+    "mana_regen": 2,
+    "ability_ids": [
+      5150,
+      5152,
+      1744,
+      909,
+      5153,
+      1262
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 7898,
+        "right_ability_id": 1797
+      },
+      {
+        "level": 15,
+        "left_ability_id": 1796,
+        "right_ability_id": 413
+      },
+      {
+        "level": 20,
+        "left_ability_id": 1795,
+        "right_ability_id": 6152
+      },
+      {
+        "level": 25,
+        "left_ability_id": 1266,
+        "right_ability_id": 1675
+      }
+    ]
+  },
+  {
+    "hero_id": 35,
+    "internal_name": "npc_dota_hero_sniper",
+    "name_en": "Sniper",
+    "name_zh": "狙击手",
+    "aliases": [
+      "火枪",
+      "狙击手"
+    ],
+    "primary_attribute": 1,
+    "complexity": 1,
+    "attack_capability": 2,
+    "role_levels": [
+      3,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "strength_base": 19,
+    "strength_gain": 2,
+    "agility_base": 27,
+    "agility_gain": 3.2,
+    "intelligence_base": 15,
+    "intelligence_gain": 2.6,
+    "damage_min": 40,
+    "damage_max": 46,
+    "attack_rate": 1.7,
+    "attack_range": 550,
+    "projectile_speed": 3000,
+    "armor": 4.5,
+    "magic_resistance": 25,
+    "movement_speed": 285,
+    "turn_rate": 0.7,
+    "sight_range_day": 1800,
+    "sight_range_night": 1400,
+    "max_health": 538,
+    "health_regen": 2.15,
+    "max_mana": 255,
+    "mana_regen": 0.75,
+    "ability_ids": [
+      5154,
+      5155,
+      5156,
+      694,
+      1268,
+      5157
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6198,
+        "right_ability_id": 6896
+      },
+      {
+        "level": 15,
+        "left_ability_id": 6897,
+        "right_ability_id": 1455
+      },
+      {
+        "level": 20,
+        "left_ability_id": 7892,
+        "right_ability_id": 6305
+      },
+      {
+        "level": 25,
+        "left_ability_id": 7396,
+        "right_ability_id": 928
+      }
+    ]
+  },
+  {
+    "hero_id": 36,
+    "internal_name": "npc_dota_hero_necrolyte",
+    "name_en": "Necrophos",
+    "name_zh": "瘟疫法师",
+    "aliases": [
+      "死灵法师",
+      "瘟疫法师"
+    ],
+    "primary_attribute": 2,
+    "complexity": 1,
+    "attack_capability": 2,
+    "role_levels": [
+      1,
+      0,
+      2,
+      1,
+      0,
+      1,
+      0,
+      0,
+      0
+    ],
+    "strength_base": 18,
+    "strength_gain": 2.3,
+    "agility_base": 12,
+    "agility_gain": 1.3,
+    "intelligence_base": 23,
+    "intelligence_gain": 2.7,
+    "damage_min": 49,
+    "damage_max": 53,
+    "attack_rate": 1.7,
+    "attack_range": 500,
+    "projectile_speed": 1200,
+    "armor": 4,
+    "magic_resistance": 25,
+    "movement_speed": 280,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 516,
+    "health_regen": 2.0500002,
+    "max_mana": 351,
+    "mana_regen": 1.15,
+    "ability_ids": [
+      5158,
+      1270,
+      5159,
+      661,
+      5160,
+      5161
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 1798,
+        "right_ability_id": 6010
+      },
+      {
+        "level": 15,
+        "left_ability_id": 1445,
+        "right_ability_id": 350
+      },
+      {
+        "level": 20,
+        "left_ability_id": 7110,
+        "right_ability_id": 7111
+      },
+      {
+        "level": 25,
+        "left_ability_id": 820,
+        "right_ability_id": 1049
+      }
+    ]
+  },
+  {
+    "hero_id": 37,
+    "internal_name": "npc_dota_hero_warlock",
+    "name_en": "Warlock",
+    "name_zh": "术士",
+    "aliases": [
+      "术士"
+    ],
+    "primary_attribute": 2,
+    "complexity": 1,
+    "attack_capability": 2,
+    "role_levels": [
+      0,
+      1,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0,
+      2
+    ],
+    "strength_base": 22,
+    "strength_gain": 2.4,
+    "agility_base": 10,
+    "agility_gain": 1,
+    "intelligence_base": 25,
+    "intelligence_gain": 3.1,
+    "damage_min": 52,
+    "damage_max": 62,
+    "attack_rate": 1.7,
+    "attack_range": 600,
+    "projectile_speed": 1200,
+    "armor": 2.6666667,
+    "magic_resistance": 25,
+    "movement_speed": 300,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 604,
+    "health_regen": 2.45,
+    "max_mana": 375,
+    "mana_regen": 1.25,
+    "ability_ids": [
+      5162,
+      5163,
+      5164,
+      1274,
+      5165
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6505,
+        "right_ability_id": 1703
+      },
+      {
+        "level": 15,
+        "left_ability_id": 6053,
+        "right_ability_id": 6412
+      },
+      {
+        "level": 20,
+        "left_ability_id": 845,
+        "right_ability_id": 764
+      },
+      {
+        "level": 25,
+        "left_ability_id": 6982,
+        "right_ability_id": 1038
+      }
+    ]
+  },
+  {
+    "hero_id": 38,
+    "internal_name": "npc_dota_hero_beastmaster",
+    "name_en": "Beastmaster",
+    "name_zh": "兽王",
+    "aliases": [
+      "BM",
+      "兽王"
+    ],
+    "primary_attribute": 3,
+    "complexity": 2,
+    "attack_capability": 1,
+    "role_levels": [
+      0,
+      0,
+      1,
+      2,
+      0,
+      2,
+      0,
+      0,
+      2
+    ],
+    "strength_base": 24,
+    "strength_gain": 2.9,
+    "agility_base": 19,
+    "agility_gain": 2,
+    "intelligence_base": 16,
+    "intelligence_gain": 1.9,
+    "damage_min": 23,
+    "damage_max": 27,
+    "attack_rate": 1.7,
+    "attack_range": 150,
+    "projectile_speed": 0,
+    "armor": 2.1666667,
+    "magic_resistance": 25,
+    "movement_speed": 305,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 648,
+    "health_regen": 2.65,
+    "max_mana": 267,
+    "mana_regen": 0.8,
+    "ability_ids": [
+      5168,
+      7230,
+      7231,
+      5172,
+      1005,
+      5177
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 1007,
+        "right_ability_id": 722
+      },
+      {
+        "level": 15,
+        "left_ability_id": 6517,
+        "right_ability_id": 613
+      },
+      {
+        "level": 20,
+        "left_ability_id": 506,
+        "right_ability_id": 6612
+      },
+      {
+        "level": 25,
+        "left_ability_id": 5931,
+        "right_ability_id": 901
+      }
+    ]
+  },
+  {
+    "hero_id": 39,
+    "internal_name": "npc_dota_hero_queenofpain",
+    "name_en": "Queen of Pain",
+    "name_zh": "痛苦女王",
+    "aliases": [
+      "女王",
+      "QOP",
+      "痛苦女王"
+    ],
+    "primary_attribute": 2,
+    "complexity": 2,
+    "attack_capability": 2,
+    "role_levels": [
+      1,
+      0,
+      3,
+      0,
+      0,
+      0,
+      3,
+      0,
+      0
+    ],
+    "strength_base": 20,
+    "strength_gain": 2.4,
+    "agility_base": 20,
+    "agility_gain": 2.5,
+    "intelligence_base": 25,
+    "intelligence_gain": 3.4,
+    "damage_min": 51,
+    "damage_max": 57,
+    "attack_rate": 1.5,
+    "attack_range": 550,
+    "projectile_speed": 1500,
+    "armor": 3.3333335,
+    "magic_resistance": 25,
+    "movement_speed": 290,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 560,
+    "health_regen": 2.25,
+    "max_mana": 375,
+    "mana_regen": 1.25,
+    "ability_ids": [
+      5173,
+      5174,
+      5175,
+      1277,
+      5176
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 751,
+        "right_ability_id": 965
+      },
+      {
+        "level": 15,
+        "left_ability_id": 6856,
+        "right_ability_id": 590
+      },
+      {
+        "level": 20,
+        "left_ability_id": 629,
+        "right_ability_id": 5939
+      },
+      {
+        "level": 25,
+        "left_ability_id": 1279,
+        "right_ability_id": 6115
+      }
+    ]
+  },
+  {
+    "hero_id": 40,
+    "internal_name": "npc_dota_hero_venomancer",
+    "name_en": "Venomancer",
+    "name_zh": "剧毒术士",
+    "aliases": [
+      "剧毒",
+      "剧毒术士"
+    ],
+    "primary_attribute": 3,
+    "complexity": 1,
+    "attack_capability": 2,
+    "role_levels": [
+      0,
+      2,
+      1,
+      1,
+      0,
+      0,
+      0,
+      1,
+      1
+    ],
+    "strength_base": 19,
+    "strength_gain": 2.1,
+    "agility_base": 25,
+    "agility_gain": 2.8,
+    "intelligence_base": 19,
+    "intelligence_gain": 1.9,
+    "damage_min": 18,
+    "damage_max": 21,
+    "attack_rate": 1.7,
+    "attack_range": 450,
+    "projectile_speed": 900,
+    "armor": 4.166667,
+    "magic_resistance": 25,
+    "movement_speed": 280,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 538,
+    "health_regen": 2.15,
+    "max_mana": 303,
+    "mana_regen": 0.95,
+    "ability_ids": [
+      5178,
+      1749,
+      5180,
+      5179,
+      1105
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6981,
+        "right_ability_id": 6058
+      },
+      {
+        "level": 15,
+        "left_ability_id": 6980,
+        "right_ability_id": 811
+      },
+      {
+        "level": 20,
+        "left_ability_id": 1799,
+        "right_ability_id": 6532
+      },
+      {
+        "level": 25,
+        "left_ability_id": 6979,
+        "right_ability_id": 859
+      }
+    ]
+  },
+  {
+    "hero_id": 41,
+    "internal_name": "npc_dota_hero_faceless_void",
+    "name_en": "Faceless Void",
+    "name_zh": "虚空假面",
+    "aliases": [
+      "大虚空",
+      "FV",
+      "虚空假面"
+    ],
+    "primary_attribute": 1,
+    "complexity": 2,
+    "attack_capability": 1,
+    "role_levels": [
+      2,
+      0,
+      0,
+      2,
+      0,
+      1,
+      1,
+      0,
+      3
+    ],
+    "strength_base": 20,
+    "strength_gain": 2.6,
+    "agility_base": 24,
+    "agility_gain": 3.3,
+    "intelligence_base": 15,
+    "intelligence_gain": 1.5,
+    "damage_min": 58,
+    "damage_max": 64,
+    "attack_rate": 1.7,
+    "attack_range": 150,
+    "projectile_speed": 900,
+    "armor": 4,
+    "magic_resistance": 25,
+    "movement_speed": 300,
+    "turn_rate": 0.9,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 560,
+    "health_regen": 3,
+    "max_mana": 255,
+    "mana_regen": 0.75,
+    "ability_ids": [
+      5182,
+      5691,
+      5184,
+      8030,
+      1280,
+      5185
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 7001,
+        "right_ability_id": 6651
+      },
+      {
+        "level": 15,
+        "left_ability_id": 6128,
+        "right_ability_id": 7388
+      },
+      {
+        "level": 20,
+        "left_ability_id": 6807,
+        "right_ability_id": 868
+      },
+      {
+        "level": 25,
+        "left_ability_id": 856,
+        "right_ability_id": 867
+      }
+    ]
+  },
+  {
+    "hero_id": 42,
+    "internal_name": "npc_dota_hero_skeleton_king",
+    "name_en": "Wraith King",
+    "name_zh": "冥魂大帝",
+    "aliases": [
+      "骷髅王",
+      "骨王",
+      "WK",
+      "冥魂大帝"
+    ],
+    "primary_attribute": 0,
+    "complexity": 1,
+    "attack_capability": 1,
+    "role_levels": [
+      2,
+      1,
+      0,
+      2,
+      0,
+      3,
+      0,
+      0,
+      1
+    ],
+    "strength_base": 22,
+    "strength_gain": 2.8,
+    "agility_base": 16,
+    "agility_gain": 1.7,
+    "intelligence_base": 16,
+    "intelligence_gain": 1.4,
+    "damage_min": 62,
+    "damage_max": 64,
+    "attack_rate": 1.8,
+    "attack_range": 150,
+    "projectile_speed": 0,
+    "armor": 2.6666667,
+    "magic_resistance": 25,
+    "movement_speed": 310,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 604,
+    "health_regen": 2.7,
+    "max_mana": 267,
+    "mana_regen": 0.8,
+    "ability_ids": [
+      5086,
+      5087,
+      5088,
+      1283,
+      5089
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 741,
+        "right_ability_id": 6566
+      },
+      {
+        "level": 15,
+        "left_ability_id": 6020,
+        "right_ability_id": 1547
+      },
+      {
+        "level": 20,
+        "left_ability_id": 809,
+        "right_ability_id": 5993
+      },
+      {
+        "level": 25,
+        "left_ability_id": 6088,
+        "right_ability_id": 1545
+      }
+    ]
+  },
+  {
+    "hero_id": 43,
+    "internal_name": "npc_dota_hero_death_prophet",
+    "name_en": "Death Prophet",
+    "name_zh": "死亡先知",
+    "aliases": [
+      "DP",
+      "死亡先知"
+    ],
+    "primary_attribute": 3,
+    "complexity": 1,
+    "attack_capability": 2,
+    "role_levels": [
+      1,
+      0,
+      1,
+      1,
+      0,
+      0,
+      0,
+      3,
+      0
+    ],
+    "strength_base": 21,
+    "strength_gain": 2.9,
+    "agility_base": 17,
+    "agility_gain": 2.3,
+    "intelligence_base": 24,
+    "intelligence_gain": 3,
+    "damage_min": 22,
+    "damage_max": 32,
+    "attack_rate": 1.7,
+    "attack_range": 600,
+    "projectile_speed": 1000,
+    "armor": 3.8333335,
+    "magic_resistance": 25,
+    "movement_speed": 290,
+    "turn_rate": 0.8,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 582,
+    "health_regen": 2.3500001,
+    "max_mana": 363,
+    "mana_regen": 1.7,
+    "ability_ids": [
+      5090,
+      5091,
+      5685,
+      5092,
+      5093
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 698,
+        "right_ability_id": 1810
+      },
+      {
+        "level": 15,
+        "left_ability_id": 6191,
+        "right_ability_id": 6628
+      },
+      {
+        "level": 20,
+        "left_ability_id": 6020,
+        "right_ability_id": 6367
+      },
+      {
+        "level": 25,
+        "left_ability_id": 1458,
+        "right_ability_id": 5959
+      }
+    ]
+  },
+  {
+    "hero_id": 44,
+    "internal_name": "npc_dota_hero_phantom_assassin",
+    "name_en": "Phantom Assassin",
+    "name_zh": "幻影刺客",
+    "aliases": [
+      "幻刺",
+      "PA",
+      "幻影刺客"
+    ],
+    "primary_attribute": 1,
+    "complexity": 1,
+    "attack_capability": 1,
+    "role_levels": [
+      3,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0
+    ],
+    "strength_base": 19,
+    "strength_gain": 2.2,
+    "agility_base": 22,
+    "agility_gain": 3.4,
+    "intelligence_base": 15,
+    "intelligence_gain": 1.7,
+    "damage_min": 57,
+    "damage_max": 59,
+    "attack_rate": 1.7,
+    "attack_range": 150,
+    "projectile_speed": 900,
+    "armor": 4.666667,
+    "magic_resistance": 25,
+    "movement_speed": 310,
+    "turn_rate": 0.8,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 538,
+    "health_regen": 2.9,
+    "max_mana": 255,
+    "mana_regen": 0.75,
+    "ability_ids": [
+      5190,
+      5191,
+      5192,
+      662,
+      1287,
+      5193
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6847,
+        "right_ability_id": 6192
+      },
+      {
+        "level": 15,
+        "left_ability_id": 490,
+        "right_ability_id": 1074
+      },
+      {
+        "level": 20,
+        "left_ability_id": 6848,
+        "right_ability_id": 491
+      },
+      {
+        "level": 25,
+        "left_ability_id": 483,
+        "right_ability_id": 559
+      }
+    ]
+  },
+  {
+    "hero_id": 45,
+    "internal_name": "npc_dota_hero_pugna",
+    "name_en": "Pugna",
+    "name_zh": "帕格纳",
+    "aliases": [
+      "骨法",
+      "帕格纳"
+    ],
+    "primary_attribute": 2,
+    "complexity": 2,
+    "attack_capability": 2,
+    "role_levels": [
+      0,
+      0,
+      2,
+      0,
+      0,
+      0,
+      0,
+      2,
+      0
+    ],
+    "strength_base": 19,
+    "strength_gain": 2,
+    "agility_base": 21,
+    "agility_gain": 1.3,
+    "intelligence_base": 27,
+    "intelligence_gain": 5.2,
+    "damage_min": 48,
+    "damage_max": 55,
+    "attack_rate": 1.7,
+    "attack_range": 630,
+    "projectile_speed": 900,
+    "armor": 3.5,
+    "magic_resistance": 25,
+    "movement_speed": 325,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 538,
+    "health_regen": 2.15,
+    "max_mana": 399,
+    "mana_regen": 2.1,
+    "ability_ids": [
+      5186,
+      5187,
+      5188,
+      1288,
+      5189
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6238,
+        "right_ability_id": 6403
+      },
+      {
+        "level": 15,
+        "left_ability_id": 6220,
+        "right_ability_id": 6541
+      },
+      {
+        "level": 20,
+        "left_ability_id": 1191,
+        "right_ability_id": 5903
+      },
+      {
+        "level": 25,
+        "left_ability_id": 6448,
+        "right_ability_id": 6859
+      }
+    ]
+  },
+  {
+    "hero_id": 46,
+    "internal_name": "npc_dota_hero_templar_assassin",
+    "name_en": "Templar Assassin",
+    "name_zh": "圣堂刺客",
+    "aliases": [
+      "圣堂",
+      "TA",
+      "圣堂刺客"
+    ],
+    "primary_attribute": 1,
+    "complexity": 2,
+    "attack_capability": 2,
+    "role_levels": [
+      2,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0
+    ],
+    "strength_base": 21,
+    "strength_gain": 2.4,
+    "agility_base": 23,
+    "agility_gain": 3.4,
+    "intelligence_base": 20,
+    "intelligence_gain": 2,
+    "damage_min": 51,
+    "damage_max": 56,
+    "attack_rate": 1.6,
+    "attack_range": 250,
+    "projectile_speed": 1000,
+    "armor": 3.8333335,
+    "magic_resistance": 25,
+    "movement_speed": 315,
+    "turn_rate": 0.7,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 582,
+    "health_regen": 2.1000001,
+    "max_mana": 315,
+    "mana_regen": 1,
+    "ability_ids": [
+      5194,
+      5195,
+      5196,
+      7853,
+      5197,
+      1750
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 7371,
+        "right_ability_id": 6071
+      },
+      {
+        "level": 15,
+        "left_ability_id": 6939,
+        "right_ability_id": 757
+      },
+      {
+        "level": 20,
+        "left_ability_id": 1811,
+        "right_ability_id": 7058
+      },
+      {
+        "level": 25,
+        "left_ability_id": 1548,
+        "right_ability_id": 6938
+      }
+    ]
+  },
+  {
+    "hero_id": 47,
+    "internal_name": "npc_dota_hero_viper",
+    "name_en": "Viper",
+    "name_zh": "冥界亚龙",
+    "aliases": [
+      "毒龙",
+      "冥界亚龙"
+    ],
+    "primary_attribute": 1,
+    "complexity": 1,
+    "attack_capability": 2,
+    "role_levels": [
+      1,
+      0,
+      0,
+      1,
+      0,
+      2,
+      0,
+      0,
+      1
+    ],
+    "strength_base": 21,
+    "strength_gain": 2.4,
+    "agility_base": 21,
+    "agility_gain": 2.9,
+    "intelligence_base": 17,
+    "intelligence_gain": 2,
+    "damage_min": 48,
+    "damage_max": 50,
+    "attack_rate": 1.7,
+    "attack_range": 575,
+    "projectile_speed": 1200,
+    "armor": 1.5,
+    "magic_resistance": 25,
+    "movement_speed": 275,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 582,
+    "health_regen": 2.3500001,
+    "max_mana": 279,
+    "mana_regen": 0.85,
+    "ability_ids": [
+      5218,
+      5219,
+      5220,
+      983,
+      1461,
+      5221
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 1549,
+        "right_ability_id": 985
+      },
+      {
+        "level": 15,
+        "left_ability_id": 6165,
+        "right_ability_id": 1540
+      },
+      {
+        "level": 20,
+        "left_ability_id": 6819,
+        "right_ability_id": 984
+      },
+      {
+        "level": 25,
+        "left_ability_id": 6820,
+        "right_ability_id": 6156
+      }
+    ]
+  },
+  {
+    "hero_id": 48,
+    "internal_name": "npc_dota_hero_luna",
+    "name_en": "Luna",
+    "name_zh": "露娜",
+    "aliases": [
+      "月骑",
+      "露娜"
+    ],
+    "primary_attribute": 1,
+    "complexity": 1,
+    "attack_capability": 2,
+    "role_levels": [
+      2,
+      0,
+      2,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0
+    ],
+    "strength_base": 21,
+    "strength_gain": 2.2,
+    "agility_base": 24,
+    "agility_gain": 3.4,
+    "intelligence_base": 23,
+    "intelligence_gain": 1.9,
+    "damage_min": 50,
+    "damage_max": 56,
+    "attack_rate": 1.7,
+    "attack_range": 330,
+    "projectile_speed": 900,
+    "armor": 6,
+    "magic_resistance": 25,
+    "movement_speed": 325,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 582,
+    "health_regen": 2.6000001,
+    "max_mana": 351,
+    "mana_regen": 1.15,
+    "ability_ids": [
+      5222,
+      1462,
+      5223,
+      5224,
+      5225
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6682,
+        "right_ability_id": 7055
+      },
+      {
+        "level": 15,
+        "left_ability_id": 770,
+        "right_ability_id": 1812
+      },
+      {
+        "level": 20,
+        "left_ability_id": 323,
+        "right_ability_id": 6180
+      },
+      {
+        "level": 25,
+        "left_ability_id": 847,
+        "right_ability_id": 7047
+      }
+    ]
+  },
+  {
+    "hero_id": 49,
+    "internal_name": "npc_dota_hero_dragon_knight",
+    "name_en": "Dragon Knight",
+    "name_zh": "龙骑士",
+    "aliases": [
+      "龙骑",
+      "DK",
+      "龙骑士"
+    ],
+    "primary_attribute": 0,
+    "complexity": 1,
+    "attack_capability": 1,
+    "role_levels": [
+      2,
+      0,
+      1,
+      2,
+      0,
+      2,
+      0,
+      3,
+      1
+    ],
+    "strength_base": 21,
+    "strength_gain": 3.2,
+    "agility_base": 14,
+    "agility_gain": 2,
+    "intelligence_base": 18,
+    "intelligence_gain": 1.7,
+    "damage_min": 55,
+    "damage_max": 61,
+    "attack_rate": 1.6,
+    "attack_range": 150,
+    "projectile_speed": 900,
+    "armor": 2.3333335,
+    "magic_resistance": 25,
+    "movement_speed": 310,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 582,
+    "health_regen": 2.3500001,
+    "max_mana": 291,
+    "mana_regen": 0.90000004,
+    "ability_ids": [
+      5226,
+      5227,
+      1752,
+      660,
+      5228,
+      5229
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6090,
+        "right_ability_id": 1813
+      },
+      {
+        "level": 15,
+        "left_ability_id": 740,
+        "right_ability_id": 1043
+      },
+      {
+        "level": 20,
+        "left_ability_id": 6635,
+        "right_ability_id": 5993
+      },
+      {
+        "level": 25,
+        "left_ability_id": 5938,
+        "right_ability_id": 7113
+      }
+    ]
+  },
+  {
+    "hero_id": 50,
+    "internal_name": "npc_dota_hero_dazzle",
+    "name_en": "Dazzle",
+    "name_zh": "戴泽",
+    "aliases": [
+      "暗牧",
+      "戴泽"
+    ],
+    "primary_attribute": 3,
+    "complexity": 1,
+    "attack_capability": 2,
+    "role_levels": [
+      0,
+      3,
+      1,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "strength_base": 19,
+    "strength_gain": 2.3,
+    "agility_base": 20,
+    "agility_gain": 1.7,
+    "intelligence_base": 25,
+    "intelligence_gain": 3.5,
+    "damage_min": 19,
+    "damage_max": 25,
+    "attack_rate": 1.7,
+    "attack_range": 575,
+    "projectile_speed": 1200,
+    "armor": 3.3333335,
+    "magic_resistance": 25,
+    "movement_speed": 305,
+    "turn_rate": 0.7,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 538,
+    "health_regen": 2.15,
+    "max_mana": 375,
+    "mana_regen": 1.55,
+    "ability_ids": [
+      5233,
+      5234,
+      5235,
+      1293,
+      1550
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6049,
+        "right_ability_id": 6626
+      },
+      {
+        "level": 15,
+        "left_ability_id": 1552,
+        "right_ability_id": 6528
+      },
+      {
+        "level": 20,
+        "left_ability_id": 6232,
+        "right_ability_id": 1613
+      },
+      {
+        "level": 25,
+        "left_ability_id": 1018,
+        "right_ability_id": 6926
+      }
+    ]
+  },
+  {
+    "hero_id": 51,
+    "internal_name": "npc_dota_hero_rattletrap",
+    "name_en": "Clockwerk",
+    "name_zh": "发条技师",
+    "aliases": [
+      "发条",
+      "发条技师"
+    ],
+    "primary_attribute": 0,
+    "complexity": 2,
+    "attack_capability": 1,
+    "role_levels": [
+      0,
+      0,
+      1,
+      2,
+      0,
+      1,
+      0,
+      0,
+      3
+    ],
+    "strength_base": 26,
+    "strength_gain": 3.2,
+    "agility_base": 13,
+    "agility_gain": 2.3,
+    "intelligence_base": 18,
+    "intelligence_gain": 1.7,
+    "damage_min": 50,
+    "damage_max": 52,
+    "attack_rate": 1.7,
+    "attack_range": 150,
+    "projectile_speed": 900,
+    "armor": 3.1666667,
+    "magic_resistance": 25,
+    "movement_speed": 310,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 692,
+    "health_regen": 3.1000001,
+    "max_mana": 291,
+    "mana_regen": 0.90000004,
+    "ability_ids": [
+      5237,
+      5238,
+      5239,
+      321,
+      630,
+      5240,
+      1295
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 1814,
+        "right_ability_id": 5977
+      },
+      {
+        "level": 15,
+        "left_ability_id": 7028,
+        "right_ability_id": 6364
+      },
+      {
+        "level": 20,
+        "left_ability_id": 502,
+        "right_ability_id": 6512
+      },
+      {
+        "level": 25,
+        "left_ability_id": 7132,
+        "right_ability_id": 8290
+      }
+    ]
+  },
+  {
+    "hero_id": 52,
+    "internal_name": "npc_dota_hero_leshrac",
+    "name_en": "Leshrac",
+    "name_zh": "拉席克",
+    "aliases": [
+      "老鹿",
+      "拉席克"
+    ],
+    "primary_attribute": 2,
+    "complexity": 1,
+    "attack_capability": 2,
+    "role_levels": [
+      1,
+      1,
+      3,
+      1,
+      0,
+      0,
+      0,
+      3,
+      0
+    ],
+    "strength_base": 20,
+    "strength_gain": 2.5,
+    "agility_base": 17,
+    "agility_gain": 2.5,
+    "intelligence_base": 22,
+    "intelligence_gain": 3.5,
+    "damage_min": 49,
+    "damage_max": 53,
+    "attack_rate": 1.7,
+    "attack_range": 575,
+    "projectile_speed": 900,
+    "armor": 3.8333335,
+    "magic_resistance": 25,
+    "movement_speed": 325,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 560,
+    "health_regen": 2.25,
+    "max_mana": 339,
+    "mana_regen": 1.1,
+    "ability_ids": [
+      5241,
+      5242,
+      5243,
+      539,
+      1297,
+      5244
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6063,
+        "right_ability_id": 1145
+      },
+      {
+        "level": 15,
+        "left_ability_id": 9418,
+        "right_ability_id": 6672
+      },
+      {
+        "level": 20,
+        "left_ability_id": 516,
+        "right_ability_id": 7101
+      },
+      {
+        "level": 25,
+        "left_ability_id": 7132,
+        "right_ability_id": 5931
+      }
+    ]
+  },
+  {
+    "hero_id": 53,
+    "internal_name": "npc_dota_hero_furion",
+    "name_en": "Nature's Prophet",
+    "name_zh": "自然先知",
+    "aliases": [
+      "先知",
+      "NP",
+      "自然先知"
+    ],
+    "primary_attribute": 3,
+    "complexity": 2,
+    "attack_capability": 2,
+    "role_levels": [
+      1,
+      0,
+      1,
+      0,
+      0,
+      0,
+      1,
+      3,
+      0
+    ],
+    "strength_base": 19,
+    "strength_gain": 2.6,
+    "agility_base": 14,
+    "agility_gain": 2.6,
+    "intelligence_base": 22,
+    "intelligence_gain": 3.5,
+    "damage_min": 20,
+    "damage_max": 26,
+    "attack_rate": 1.5,
+    "attack_range": 600,
+    "projectile_speed": 1125,
+    "armor": 2.3333335,
+    "magic_resistance": 25,
+    "movement_speed": 295,
+    "turn_rate": 0.9,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 538,
+    "health_regen": 2.15,
+    "max_mana": 339,
+    "mana_regen": 1.1,
+    "ability_ids": [
+      5245,
+      5246,
+      5247,
+      997,
+      1298,
+      5248
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6539,
+        "right_ability_id": 6084
+      },
+      {
+        "level": 15,
+        "left_ability_id": 927,
+        "right_ability_id": 6702
+      },
+      {
+        "level": 20,
+        "left_ability_id": 6500,
+        "right_ability_id": 1300
+      },
+      {
+        "level": 25,
+        "left_ability_id": 926,
+        "right_ability_id": 470
+      }
+    ]
+  },
+  {
+    "hero_id": 54,
+    "internal_name": "npc_dota_hero_life_stealer",
+    "name_en": "Lifestealer",
+    "name_zh": "噬魂鬼",
+    "aliases": [
+      "小狗",
+      "噬魂鬼"
+    ],
+    "primary_attribute": 0,
+    "complexity": 2,
+    "attack_capability": 1,
+    "role_levels": [
+      2,
+      0,
+      0,
+      1,
+      0,
+      2,
+      1,
+      0,
+      0
+    ],
+    "strength_base": 23,
+    "strength_gain": 2.4,
+    "agility_base": 15,
+    "agility_gain": 1.9,
+    "intelligence_base": 15,
+    "intelligence_gain": 1.8,
+    "damage_min": 46,
+    "damage_max": 52,
+    "attack_rate": 1.7,
+    "attack_range": 150,
+    "projectile_speed": 900,
+    "armor": 3.5,
+    "magic_resistance": 25,
+    "movement_speed": 320,
+    "turn_rate": 0.9,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 626,
+    "health_regen": 2.55,
+    "max_mana": 255,
+    "mana_regen": 0.75,
+    "ability_ids": [
+      5249,
+      5251,
+      5250,
+      631,
+      5252
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 7012,
+        "right_ability_id": 6173
+      },
+      {
+        "level": 15,
+        "left_ability_id": 1034,
+        "right_ability_id": 709
+      },
+      {
+        "level": 20,
+        "left_ability_id": 1033,
+        "right_ability_id": 464
+      },
+      {
+        "level": 25,
+        "left_ability_id": 5920,
+        "right_ability_id": 5918
+      }
+    ]
+  },
+  {
+    "hero_id": 55,
+    "internal_name": "npc_dota_hero_dark_seer",
+    "name_en": "Dark Seer",
+    "name_zh": "黑暗贤者",
+    "aliases": [
+      "黑贤",
+      "DS",
+      "黑暗贤者"
+    ],
+    "primary_attribute": 2,
+    "complexity": 1,
+    "attack_capability": 1,
+    "role_levels": [
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      1,
+      0,
+      1
+    ],
+    "strength_base": 20,
+    "strength_gain": 2.6,
+    "agility_base": 19,
+    "agility_gain": 1.5,
+    "intelligence_base": 23,
+    "intelligence_gain": 2.7,
+    "damage_min": 54,
+    "damage_max": 60,
+    "attack_rate": 1.7,
+    "attack_range": 150,
+    "projectile_speed": 900,
+    "armor": 5.166667,
+    "magic_resistance": 25,
+    "movement_speed": 295,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 560,
+    "health_regen": 3.5,
+    "max_mana": 351,
+    "mana_regen": 1.15,
+    "ability_ids": [
+      5255,
+      5256,
+      5257,
+      687,
+      1553,
+      5258
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 954,
+        "right_ability_id": 6624
+      },
+      {
+        "level": 15,
+        "left_ability_id": 736,
+        "right_ability_id": 6047
+      },
+      {
+        "level": 20,
+        "left_ability_id": 6365,
+        "right_ability_id": 513
+      },
+      {
+        "level": 25,
+        "left_ability_id": 560,
+        "right_ability_id": 420
+      }
+    ]
+  },
+  {
+    "hero_id": 56,
+    "internal_name": "npc_dota_hero_clinkz",
+    "name_en": "Clinkz",
+    "name_zh": "克林克兹",
+    "aliases": [
+      "骨弓",
+      "克林克兹"
+    ],
+    "primary_attribute": 1,
+    "complexity": 2,
+    "attack_capability": 2,
+    "role_levels": [
+      2,
+      0,
+      0,
+      0,
+      0,
+      0,
+      3,
+      1,
+      0
+    ],
+    "strength_base": 18,
+    "strength_gain": 2,
+    "agility_base": 25,
+    "agility_gain": 2.7,
+    "intelligence_base": 21,
+    "intelligence_gain": 2.2,
+    "damage_min": 44,
+    "damage_max": 50,
+    "attack_rate": 1.7,
+    "attack_range": 600,
+    "projectile_speed": 900,
+    "armor": 4.166667,
+    "magic_resistance": 25,
+    "movement_speed": 285,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 516,
+    "health_regen": 2.0500002,
+    "max_mana": 327,
+    "mana_regen": 1.0500001,
+    "ability_ids": [
+      1120,
+      5260,
+      5262,
+      5259,
+      7319,
+      5261,
+      1678
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 7878,
+        "right_ability_id": 6620
+      },
+      {
+        "level": 15,
+        "left_ability_id": 494,
+        "right_ability_id": 495
+      },
+      {
+        "level": 20,
+        "left_ability_id": 5992,
+        "right_ability_id": 554
+      },
+      {
+        "level": 25,
+        "left_ability_id": 6104,
+        "right_ability_id": 523
+      }
+    ]
+  },
+  {
+    "hero_id": 57,
+    "internal_name": "npc_dota_hero_omniknight",
+    "name_en": "Omniknight",
+    "name_zh": "全能骑士",
+    "aliases": [
+      "全能",
+      "全能骑士"
+    ],
+    "primary_attribute": 0,
+    "complexity": 1,
+    "attack_capability": 1,
+    "role_levels": [
+      0,
+      2,
+      1,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0
+    ],
+    "strength_base": 22,
+    "strength_gain": 3.1,
+    "agility_base": 15,
+    "agility_gain": 1.7,
+    "intelligence_base": 18,
+    "intelligence_gain": 2.1,
+    "damage_min": 53,
+    "damage_max": 63,
+    "attack_rate": 1.7,
+    "attack_range": 150,
+    "projectile_speed": 900,
+    "armor": 4.5,
+    "magic_resistance": 25,
+    "movement_speed": 310,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 604,
+    "health_regen": 2.45,
+    "max_mana": 291,
+    "mana_regen": 0.90000004,
+    "ability_ids": [
+      5263,
+      895,
+      656,
+      5265,
+      5266
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 5981,
+        "right_ability_id": 7010
+      },
+      {
+        "level": 15,
+        "left_ability_id": 1815,
+        "right_ability_id": 472
+      },
+      {
+        "level": 20,
+        "left_ability_id": 6709,
+        "right_ability_id": 501
+      },
+      {
+        "level": 25,
+        "left_ability_id": 6300,
+        "right_ability_id": 7372
+      }
+    ]
+  },
+  {
+    "hero_id": 58,
+    "internal_name": "npc_dota_hero_enchantress",
+    "name_en": "Enchantress",
+    "name_zh": "魅惑魔女",
+    "aliases": [
+      "小鹿",
+      "魅惑魔女"
+    ],
+    "primary_attribute": 2,
+    "complexity": 2,
+    "attack_capability": 2,
+    "role_levels": [
+      0,
+      2,
+      0,
+      1,
+      0,
+      1,
+      0,
+      2,
+      0
+    ],
+    "strength_base": 17,
+    "strength_gain": 2,
+    "agility_base": 19,
+    "agility_gain": 2.1,
+    "intelligence_base": 22,
+    "intelligence_gain": 4,
+    "damage_min": 43,
+    "damage_max": 53,
+    "attack_rate": 1.7,
+    "attack_range": 575,
+    "projectile_speed": 900,
+    "armor": 4.166667,
+    "magic_resistance": 25,
+    "movement_speed": 320,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 494,
+    "health_regen": 1.95,
+    "max_mana": 339,
+    "mana_regen": 1.6,
+    "ability_ids": [
+      5270,
+      5268,
+      5269,
+      320,
+      981,
+      5267,
+      1464
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6515,
+        "right_ability_id": 6379
+      },
+      {
+        "level": 15,
+        "left_ability_id": 6086,
+        "right_ability_id": 1130
+      },
+      {
+        "level": 20,
+        "left_ability_id": 1541,
+        "right_ability_id": 6648
+      },
+      {
+        "level": 25,
+        "left_ability_id": 1174,
+        "right_ability_id": 8432
+      }
+    ]
+  },
+  {
+    "hero_id": 59,
+    "internal_name": "npc_dota_hero_huskar",
+    "name_en": "Huskar",
+    "name_zh": "哈斯卡",
+    "aliases": [
+      "神灵",
+      "哈斯卡"
+    ],
+    "primary_attribute": 0,
+    "complexity": 1,
+    "attack_capability": 2,
+    "role_levels": [
+      2,
+      0,
+      0,
+      0,
+      0,
+      2,
+      0,
+      0,
+      1
+    ],
+    "strength_base": 23,
+    "strength_gain": 3.3,
+    "agility_base": 10,
+    "agility_gain": 1.5,
+    "intelligence_base": 18,
+    "intelligence_gain": 0,
+    "damage_min": 44,
+    "damage_max": 49,
+    "attack_rate": 1.6,
+    "attack_range": 400,
+    "projectile_speed": 1400,
+    "armor": 2.6666667,
+    "magic_resistance": 25,
+    "movement_speed": 290,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 626,
+    "health_regen": 2.3,
+    "max_mana": 216,
+    "mana_regen": 0.90000004,
+    "ability_ids": [
+      7300,
+      5272,
+      5273,
+      1309,
+      5274
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 7143,
+        "right_ability_id": 6204
+      },
+      {
+        "level": 15,
+        "left_ability_id": 462,
+        "right_ability_id": 688
+      },
+      {
+        "level": 20,
+        "left_ability_id": 6380,
+        "right_ability_id": 433
+      },
+      {
+        "level": 25,
+        "left_ability_id": 6655,
+        "right_ability_id": 7140
+      }
+    ]
+  },
+  {
+    "hero_id": 60,
+    "internal_name": "npc_dota_hero_night_stalker",
+    "name_en": "Night Stalker",
+    "name_zh": "暗夜魔王",
+    "aliases": [
+      "夜魔",
+      "NS",
+      "暗夜魔王"
+    ],
+    "primary_attribute": 0,
+    "complexity": 1,
+    "attack_capability": 1,
+    "role_levels": [
+      1,
+      0,
+      1,
+      2,
+      0,
+      2,
+      0,
+      0,
+      2
+    ],
+    "strength_base": 23,
+    "strength_gain": 3,
+    "agility_base": 18,
+    "agility_gain": 2.2,
+    "intelligence_base": 15,
+    "intelligence_gain": 1.6,
+    "damage_min": 63,
+    "damage_max": 67,
+    "attack_rate": 1.7,
+    "attack_range": 150,
+    "projectile_speed": 900,
+    "armor": 5,
+    "magic_resistance": 25,
+    "movement_speed": 295,
+    "turn_rate": 0.6,
+    "sight_range_day": 800,
+    "sight_range_night": 1800,
+    "max_health": 626,
+    "health_regen": 2.55,
+    "max_mana": 255,
+    "mana_regen": 1,
+    "ability_ids": [
+      5275,
+      5276,
+      1753,
+      5277,
+      5278
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6704,
+        "right_ability_id": 6129
+      },
+      {
+        "level": 15,
+        "left_ability_id": 1816,
+        "right_ability_id": 6145
+      },
+      {
+        "level": 20,
+        "left_ability_id": 480,
+        "right_ability_id": 1048
+      },
+      {
+        "level": 25,
+        "left_ability_id": 505,
+        "right_ability_id": 1312
+      }
+    ]
+  },
+  {
+    "hero_id": 61,
+    "internal_name": "npc_dota_hero_broodmother",
+    "name_en": "Broodmother",
+    "name_zh": "育母蜘蛛",
+    "aliases": [
+      "蜘蛛",
+      "育母蜘蛛"
+    ],
+    "primary_attribute": 1,
+    "complexity": 2,
+    "attack_capability": 1,
+    "role_levels": [
+      1,
+      0,
+      1,
+      0,
+      0,
+      0,
+      3,
+      3,
+      0
+    ],
+    "strength_base": 18,
+    "strength_gain": 2.9,
+    "agility_base": 20,
+    "agility_gain": 3.4,
+    "intelligence_base": 18,
+    "intelligence_gain": 2,
+    "damage_min": 47,
+    "damage_max": 53,
+    "attack_rate": 1.7,
+    "attack_range": 175,
+    "projectile_speed": 900,
+    "armor": 2.3333335,
+    "magic_resistance": 25,
+    "movement_speed": 285,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 516,
+    "health_regen": 2.0500002,
+    "max_mana": 291,
+    "mana_regen": 0.90000004,
+    "ability_ids": [
+      5282,
+      5280,
+      5281,
+      873,
+      1313,
+      5279
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6257,
+        "right_ability_id": 1704
+      },
+      {
+        "level": 15,
+        "left_ability_id": 8033,
+        "right_ability_id": 6362
+      },
+      {
+        "level": 20,
+        "left_ability_id": 6258,
+        "right_ability_id": 1039
+      },
+      {
+        "level": 25,
+        "left_ability_id": 6361,
+        "right_ability_id": 900
+      }
+    ]
+  },
+  {
+    "hero_id": 62,
+    "internal_name": "npc_dota_hero_bounty_hunter",
+    "name_en": "Bounty Hunter",
+    "name_zh": "赏金猎人",
+    "aliases": [
+      "赏金",
+      "BH",
+      "赏金猎人"
+    ],
+    "primary_attribute": 1,
+    "complexity": 1,
+    "attack_capability": 1,
+    "role_levels": [
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      2,
+      0,
+      0
+    ],
+    "strength_base": 19,
+    "strength_gain": 2.5,
+    "agility_base": 21,
+    "agility_gain": 2.6,
+    "intelligence_base": 20,
+    "intelligence_gain": 1.9,
+    "damage_min": 54,
+    "damage_max": 62,
+    "attack_rate": 1.5,
+    "attack_range": 150,
+    "projectile_speed": 900,
+    "armor": 8.5,
+    "magic_resistance": 25,
+    "movement_speed": 325,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 1000,
+    "max_health": 538,
+    "health_regen": 2.65,
+    "max_mana": 315,
+    "mana_regen": 1.5,
+    "ability_ids": [
+      1314,
+      5286,
+      5287,
+      1136,
+      1316,
+      5288
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6358,
+        "right_ability_id": 1172
+      },
+      {
+        "level": 15,
+        "left_ability_id": 878,
+        "right_ability_id": 6018
+      },
+      {
+        "level": 20,
+        "left_ability_id": 959,
+        "right_ability_id": 7040
+      },
+      {
+        "level": 25,
+        "left_ability_id": 869,
+        "right_ability_id": 5939
+      }
+    ]
+  },
+  {
+    "hero_id": 63,
+    "internal_name": "npc_dota_hero_weaver",
+    "name_en": "Weaver",
+    "name_zh": "编织者",
+    "aliases": [
+      "蚂蚁",
+      "编织者"
+    ],
+    "primary_attribute": 1,
+    "complexity": 2,
+    "attack_capability": 2,
+    "role_levels": [
+      2,
+      0,
+      0,
+      0,
+      0,
+      0,
+      3,
+      0,
+      0
+    ],
+    "strength_base": 16,
+    "strength_gain": 2,
+    "agility_base": 17,
+    "agility_gain": 3.3,
+    "intelligence_base": 20,
+    "intelligence_gain": 2,
+    "damage_min": 54,
+    "damage_max": 60,
+    "attack_rate": 1.8,
+    "attack_range": 425,
+    "projectile_speed": 900,
+    "armor": 3.8333335,
+    "magic_resistance": 25,
+    "movement_speed": 275,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 472,
+    "health_regen": 2.85,
+    "max_mana": 315,
+    "mana_regen": 1.5,
+    "ability_ids": [
+      5289,
+      5290,
+      5291,
+      5292,
+      1754
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 796,
+        "right_ability_id": 6990
+      },
+      {
+        "level": 15,
+        "left_ability_id": 6131,
+        "right_ability_id": 6988
+      },
+      {
+        "level": 20,
+        "left_ability_id": 6200,
+        "right_ability_id": 6989
+      },
+      {
+        "level": 25,
+        "left_ability_id": 1817,
+        "right_ability_id": 6115
+      }
+    ]
+  },
+  {
+    "hero_id": 64,
+    "internal_name": "npc_dota_hero_jakiro",
+    "name_en": "Jakiro",
+    "name_zh": "杰奇洛",
+    "aliases": [
+      "双头龙",
+      "杰奇洛"
+    ],
+    "primary_attribute": 2,
+    "complexity": 1,
+    "attack_capability": 2,
+    "role_levels": [
+      0,
+      1,
+      2,
+      1,
+      0,
+      0,
+      0,
+      2,
+      0
+    ],
+    "strength_base": 25,
+    "strength_gain": 2.6,
+    "agility_base": 15,
+    "agility_gain": 1.2,
+    "intelligence_base": 26,
+    "intelligence_gain": 3.3,
+    "damage_min": 53,
+    "damage_max": 61,
+    "attack_rate": 1.7,
+    "attack_range": 400,
+    "projectile_speed": 1100,
+    "armor": 3.5,
+    "magic_resistance": 25,
+    "movement_speed": 290,
+    "turn_rate": 0.8,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 670,
+    "health_regen": 2.75,
+    "max_mana": 387,
+    "mana_regen": 1.3000001,
+    "ability_ids": [
+      5297,
+      5298,
+      5299,
+      1317,
+      1318,
+      5300
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6381,
+        "right_ability_id": 6538
+      },
+      {
+        "level": 15,
+        "left_ability_id": 6064,
+        "right_ability_id": 542
+      },
+      {
+        "level": 20,
+        "left_ability_id": 6186,
+        "right_ability_id": 303
+      },
+      {
+        "level": 25,
+        "left_ability_id": 6661,
+        "right_ability_id": 526
+      }
+    ]
+  },
+  {
+    "hero_id": 65,
+    "internal_name": "npc_dota_hero_batrider",
+    "name_en": "Batrider",
+    "name_zh": "蝙蝠骑士",
+    "aliases": [
+      "蝙蝠",
+      "蝙蝠骑士"
+    ],
+    "primary_attribute": 3,
+    "complexity": 2,
+    "attack_capability": 2,
+    "role_levels": [
+      0,
+      0,
+      0,
+      2,
+      0,
+      0,
+      1,
+      0,
+      3
+    ],
+    "strength_base": 23,
+    "strength_gain": 2.9,
+    "agility_base": 13,
+    "agility_gain": 2,
+    "intelligence_base": 22,
+    "intelligence_gain": 2.9,
+    "damage_min": 12,
+    "damage_max": 16,
+    "attack_rate": 1.7,
+    "attack_range": 400,
+    "projectile_speed": 900,
+    "armor": 3.1666667,
+    "magic_resistance": 25,
+    "movement_speed": 310,
+    "turn_rate": 0.9,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 626,
+    "health_regen": 3.55,
+    "max_mana": 339,
+    "mana_regen": 1.1,
+    "ability_ids": [
+      5320,
+      5321,
+      5322,
+      1319,
+      5323
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6087,
+        "right_ability_id": 6229
+      },
+      {
+        "level": 15,
+        "left_ability_id": 658,
+        "right_ability_id": 572
+      },
+      {
+        "level": 20,
+        "left_ability_id": 512,
+        "right_ability_id": 714
+      },
+      {
+        "level": 25,
+        "left_ability_id": 6610,
+        "right_ability_id": 1496
+      }
+    ]
+  },
+  {
+    "hero_id": 66,
+    "internal_name": "npc_dota_hero_chen",
+    "name_en": "Chen",
+    "name_zh": "陈",
+    "aliases": [
+      "陈"
+    ],
+    "primary_attribute": 2,
+    "complexity": 3,
+    "attack_capability": 2,
+    "role_levels": [
+      0,
+      2,
+      0,
+      0,
+      0,
+      0,
+      0,
+      2,
+      0
+    ],
+    "strength_base": 23,
+    "strength_gain": 2,
+    "agility_base": 15,
+    "agility_gain": 2.1,
+    "intelligence_base": 19,
+    "intelligence_gain": 3.2,
+    "damage_min": 48,
+    "damage_max": 58,
+    "attack_rate": 1.7,
+    "attack_range": 650,
+    "projectile_speed": 1100,
+    "armor": 1.5,
+    "magic_resistance": 25,
+    "movement_speed": 305,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 626,
+    "health_regen": 2.55,
+    "max_mana": 303,
+    "mana_regen": 1.45,
+    "ability_ids": [
+      5328,
+      5330,
+      7306,
+      1755,
+      5331
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 952,
+        "right_ability_id": 6260
+      },
+      {
+        "level": 15,
+        "left_ability_id": 1653,
+        "right_ability_id": 6535
+      },
+      {
+        "level": 20,
+        "left_ability_id": 7869,
+        "right_ability_id": 529
+      },
+      {
+        "level": 25,
+        "left_ability_id": 841,
+        "right_ability_id": 1818
+      }
+    ]
+  },
+  {
+    "hero_id": 67,
+    "internal_name": "npc_dota_hero_spectre",
+    "name_en": "Spectre",
+    "name_zh": "幽鬼",
+    "aliases": [
+      "幽鬼",
+      "SPE"
+    ],
+    "primary_attribute": 1,
+    "complexity": 2,
+    "attack_capability": 1,
+    "role_levels": [
+      3,
+      0,
+      0,
+      0,
+      0,
+      1,
+      1,
+      0,
+      0
+    ],
+    "strength_base": 22,
+    "strength_gain": 2.3,
+    "agility_base": 29,
+    "agility_gain": 2.3,
+    "intelligence_base": 16,
+    "intelligence_gain": 1.7,
+    "damage_min": 52,
+    "damage_max": 56,
+    "attack_rate": 1.8,
+    "attack_range": 150,
+    "projectile_speed": 900,
+    "armor": 4.8333335,
+    "magic_resistance": 25,
+    "movement_speed": 295,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 604,
+    "health_regen": 3.7,
+    "max_mana": 267,
+    "mana_regen": 0.8,
+    "ability_ids": [
+      5334,
+      1679,
+      5336,
+      5335,
+      5337
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6902,
+        "right_ability_id": 6903
+      },
+      {
+        "level": 15,
+        "left_ability_id": 5993,
+        "right_ability_id": 6901
+      },
+      {
+        "level": 20,
+        "left_ability_id": 1705,
+        "right_ability_id": 8040
+      },
+      {
+        "level": 25,
+        "left_ability_id": 6148,
+        "right_ability_id": 6900
+      }
+    ]
+  },
+  {
+    "hero_id": 68,
+    "internal_name": "npc_dota_hero_ancient_apparition",
+    "name_en": "Ancient Apparition",
+    "name_zh": "远古冰魄",
+    "aliases": [
+      "冰魂",
+      "AA",
+      "远古冰魄"
+    ],
+    "primary_attribute": 2,
+    "complexity": 2,
+    "attack_capability": 2,
+    "role_levels": [
+      0,
+      2,
+      1,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "strength_base": 20,
+    "strength_gain": 1.9,
+    "agility_base": 20,
+    "agility_gain": 2,
+    "intelligence_base": 23,
+    "intelligence_gain": 3.1,
+    "damage_min": 44,
+    "damage_max": 54,
+    "attack_rate": 1.7,
+    "attack_range": 675,
+    "projectile_speed": 1250,
+    "armor": 2.3333335,
+    "magic_resistance": 25,
+    "movement_speed": 285,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 560,
+    "health_regen": 2.25,
+    "max_mana": 351,
+    "mana_regen": 1.15,
+    "ability_ids": [
+      5345,
+      5346,
+      5347,
+      1756,
+      5348
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6214,
+        "right_ability_id": 6810
+      },
+      {
+        "level": 15,
+        "left_ability_id": 1141,
+        "right_ability_id": 6291
+      },
+      {
+        "level": 20,
+        "left_ability_id": 6352,
+        "right_ability_id": 1820
+      },
+      {
+        "level": 25,
+        "left_ability_id": 7652,
+        "right_ability_id": 1819
+      }
+    ]
+  },
+  {
+    "hero_id": 69,
+    "internal_name": "npc_dota_hero_doom_bringer",
+    "name_en": "Doom",
+    "name_zh": "末日使者",
+    "aliases": [
+      "末日",
+      "末日使者"
+    ],
+    "primary_attribute": 0,
+    "complexity": 2,
+    "attack_capability": 1,
+    "role_levels": [
+      1,
+      0,
+      1,
+      2,
+      0,
+      2,
+      0,
+      0,
+      2
+    ],
+    "strength_base": 24,
+    "strength_gain": 3.6,
+    "agility_base": 15,
+    "agility_gain": 1.5,
+    "intelligence_base": 15,
+    "intelligence_gain": 2.1,
+    "damage_min": 56,
+    "damage_max": 66,
+    "attack_rate": 1.9,
+    "attack_range": 175,
+    "projectile_speed": 900,
+    "armor": 3.5,
+    "magic_resistance": 25,
+    "movement_speed": 290,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 648,
+    "health_regen": 3.0600002,
+    "max_mana": 255,
+    "mana_regen": 0.75,
+    "ability_ids": [
+      5339,
+      5340,
+      5341,
+      5342,
+      1324
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 970,
+        "right_ability_id": 971
+      },
+      {
+        "level": 15,
+        "left_ability_id": 733,
+        "right_ability_id": 1676
+      },
+      {
+        "level": 20,
+        "left_ability_id": 7123,
+        "right_ability_id": 6073
+      },
+      {
+        "level": 25,
+        "left_ability_id": 5937,
+        "right_ability_id": 6370
+      }
+    ]
+  },
+  {
+    "hero_id": 70,
+    "internal_name": "npc_dota_hero_ursa",
+    "name_en": "Ursa",
+    "name_zh": "熊战士",
+    "aliases": [
+      "拍拍",
+      "熊战士"
+    ],
+    "primary_attribute": 1,
+    "complexity": 1,
+    "attack_capability": 1,
+    "role_levels": [
+      2,
+      0,
+      0,
+      1,
+      0,
+      1,
+      0,
+      0,
+      0
+    ],
+    "strength_base": 25,
+    "strength_gain": 2.4,
+    "agility_base": 18,
+    "agility_gain": 2.8,
+    "intelligence_base": 16,
+    "intelligence_gain": 1.5,
+    "damage_min": 42,
+    "damage_max": 46,
+    "attack_rate": 1.7,
+    "attack_range": 150,
+    "projectile_speed": 900,
+    "armor": 4,
+    "magic_resistance": 25,
+    "movement_speed": 310,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 670,
+    "health_regen": 3.5,
+    "max_mana": 267,
+    "mana_regen": 0.8,
+    "ability_ids": [
+      5357,
+      5358,
+      5359,
+      1327,
+      5360
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6974,
+        "right_ability_id": 424
+      },
+      {
+        "level": 15,
+        "left_ability_id": 6973,
+        "right_ability_id": 6132
+      },
+      {
+        "level": 20,
+        "left_ability_id": 1706,
+        "right_ability_id": 758
+      },
+      {
+        "level": 25,
+        "left_ability_id": 6975,
+        "right_ability_id": 6926
+      }
+    ]
+  },
+  {
+    "hero_id": 71,
+    "internal_name": "npc_dota_hero_spirit_breaker",
+    "name_en": "Spirit Breaker",
+    "name_zh": "裂魂人",
+    "aliases": [
+      "白牛",
+      "SB",
+      "裂魂人"
+    ],
+    "primary_attribute": 0,
+    "complexity": 1,
+    "attack_capability": 1,
+    "role_levels": [
+      1,
+      0,
+      0,
+      2,
+      0,
+      2,
+      1,
+      0,
+      2
+    ],
+    "strength_base": 28,
+    "strength_gain": 3.3,
+    "agility_base": 17,
+    "agility_gain": 1.7,
+    "intelligence_base": 14,
+    "intelligence_gain": 1.8,
+    "damage_min": 62,
+    "damage_max": 72,
+    "attack_rate": 1.9,
+    "attack_range": 170,
+    "projectile_speed": 900,
+    "armor": 3.8333335,
+    "magic_resistance": 25,
+    "movement_speed": 295,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 736,
+    "health_regen": 4.05,
+    "max_mana": 243,
+    "mana_regen": 1.2,
+    "ability_ids": [
+      5353,
+      7301,
+      5355,
+      987,
+      1757,
+      5356
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6543,
+        "right_ability_id": 830
+      },
+      {
+        "level": 15,
+        "left_ability_id": 1822,
+        "right_ability_id": 8254
+      },
+      {
+        "level": 20,
+        "left_ability_id": 6296,
+        "right_ability_id": 1821
+      },
+      {
+        "level": 25,
+        "left_ability_id": 7022,
+        "right_ability_id": 5931
+      }
+    ]
+  },
+  {
+    "hero_id": 72,
+    "internal_name": "npc_dota_hero_gyrocopter",
+    "name_en": "Gyrocopter",
+    "name_zh": "矮人直升机",
+    "aliases": [
+      "飞机",
+      "矮人直升机"
+    ],
+    "primary_attribute": 1,
+    "complexity": 1,
+    "attack_capability": 2,
+    "role_levels": [
+      3,
+      0,
+      1,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "strength_base": 22,
+    "strength_gain": 2.5,
+    "agility_base": 25,
+    "agility_gain": 3.4,
+    "intelligence_base": 21,
+    "intelligence_gain": 2.4,
+    "damage_min": 43,
+    "damage_max": 49,
+    "attack_rate": 1.7,
+    "attack_range": 365,
+    "projectile_speed": 3000,
+    "armor": 5.166667,
+    "magic_resistance": 25,
+    "movement_speed": 315,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 1000,
+    "max_health": 604,
+    "health_regen": 2.45,
+    "max_mana": 327,
+    "mana_regen": 1.0500001,
+    "ability_ids": [
+      5361,
+      5362,
+      5363,
+      1759,
+      1758,
+      5364
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6216,
+        "right_ability_id": 6654
+      },
+      {
+        "level": 15,
+        "left_ability_id": 6312,
+        "right_ability_id": 6652
+      },
+      {
+        "level": 20,
+        "left_ability_id": 7141,
+        "right_ability_id": 1012
+      },
+      {
+        "level": 25,
+        "left_ability_id": 1332,
+        "right_ability_id": 5902
+      }
+    ]
+  },
+  {
+    "hero_id": 73,
+    "internal_name": "npc_dota_hero_alchemist",
+    "name_en": "Alchemist",
+    "name_zh": "炼金术士",
+    "aliases": [
+      "炼金",
+      "炼金术士"
+    ],
+    "primary_attribute": 0,
+    "complexity": 1,
+    "attack_capability": 1,
+    "role_levels": [
+      2,
+      1,
+      1,
+      1,
+      0,
+      2,
+      0,
+      0,
+      1
+    ],
+    "strength_base": 23,
+    "strength_gain": 2.7,
+    "agility_base": 19,
+    "agility_gain": 1.5,
+    "intelligence_base": 25,
+    "intelligence_gain": 1.8,
+    "damage_min": 50,
+    "damage_max": 56,
+    "attack_rate": 1.7,
+    "attack_range": 150,
+    "projectile_speed": 900,
+    "armor": 3.1666667,
+    "magic_resistance": 25,
+    "movement_speed": 290,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 626,
+    "health_regen": 2.55,
+    "max_mana": 375,
+    "mana_regen": 1.25,
+    "ability_ids": [
+      5365,
+      5366,
+      1116,
+      642,
+      1333,
+      5369
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 351,
+        "right_ability_id": 7054
+      },
+      {
+        "level": 15,
+        "left_ability_id": 1003,
+        "right_ability_id": 6350
+      },
+      {
+        "level": 20,
+        "left_ability_id": 7144,
+        "right_ability_id": 1002
+      },
+      {
+        "level": 25,
+        "left_ability_id": 1823,
+        "right_ability_id": 6101
+      }
+    ]
+  },
+  {
+    "hero_id": 74,
+    "internal_name": "npc_dota_hero_invoker",
+    "name_en": "Invoker",
+    "name_zh": "祈求者",
+    "aliases": [
+      "卡尔",
+      "祈求者"
+    ],
+    "primary_attribute": 2,
+    "complexity": 3,
+    "attack_capability": 2,
+    "role_levels": [
+      1,
+      0,
+      3,
+      2,
+      0,
+      0,
+      1,
+      1,
+      0
+    ],
+    "strength_base": 19,
+    "strength_gain": 2.5,
+    "agility_base": 14,
+    "agility_gain": 2,
+    "intelligence_base": 22,
+    "intelligence_gain": 4,
+    "damage_min": 41,
+    "damage_max": 47,
+    "attack_rate": 1.7,
+    "attack_range": 600,
+    "projectile_speed": 900,
+    "armor": 1.3333335,
+    "magic_resistance": 25,
+    "movement_speed": 280,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 538,
+    "health_regen": 2.15,
+    "max_mana": 339,
+    "mana_regen": 1.1,
+    "ability_ids": [
+      5370,
+      5371,
+      5372,
+      5375,
+      5376,
+      5381,
+      5382,
+      5383,
+      5384,
+      5385,
+      5386,
+      5387,
+      5389,
+      5390
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6098,
+        "right_ability_id": 724
+      },
+      {
+        "level": 15,
+        "left_ability_id": 5762,
+        "right_ability_id": 1747
+      },
+      {
+        "level": 20,
+        "left_ability_id": 6657,
+        "right_ability_id": 7148
+      },
+      {
+        "level": 25,
+        "left_ability_id": 5761,
+        "right_ability_id": 6099
+      }
+    ]
+  },
+  {
+    "hero_id": 75,
+    "internal_name": "npc_dota_hero_silencer",
+    "name_en": "Silencer",
+    "name_zh": "沉默术士",
+    "aliases": [
+      "沉默",
+      "沉默术士"
+    ],
+    "primary_attribute": 2,
+    "complexity": 2,
+    "attack_capability": 2,
+    "role_levels": [
+      1,
+      1,
+      1,
+      2,
+      0,
+      0,
+      0,
+      0,
+      2
+    ],
+    "strength_base": 18,
+    "strength_gain": 2.2,
+    "agility_base": 22,
+    "agility_gain": 2.2,
+    "intelligence_base": 25,
+    "intelligence_gain": 2.9,
+    "damage_min": 43,
+    "damage_max": 57,
+    "attack_rate": 1.6,
+    "attack_range": 600,
+    "projectile_speed": 900,
+    "armor": 3.6666667,
+    "magic_resistance": 25,
+    "movement_speed": 300,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 516,
+    "health_regen": 2.0500002,
+    "max_mana": 375,
+    "mana_regen": 1.25,
+    "ability_ids": [
+      5377,
+      5378,
+      5379,
+      1335,
+      5380
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6879,
+        "right_ability_id": 1825
+      },
+      {
+        "level": 15,
+        "left_ability_id": 7048,
+        "right_ability_id": 6880
+      },
+      {
+        "level": 20,
+        "left_ability_id": 721,
+        "right_ability_id": 1467
+      },
+      {
+        "level": 25,
+        "left_ability_id": 6016,
+        "right_ability_id": 1824
+      }
+    ]
+  },
+  {
+    "hero_id": 76,
+    "internal_name": "npc_dota_hero_obsidian_destroyer",
+    "name_en": "Outworld Destroyer",
+    "name_zh": "殁境神蚀者",
+    "aliases": [
+      "黑鸟",
+      "OD",
+      "殁境神蚀者"
+    ],
+    "primary_attribute": 2,
+    "complexity": 2,
+    "attack_capability": 2,
+    "role_levels": [
+      2,
+      0,
+      2,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "strength_base": 21,
+    "strength_gain": 2.9,
+    "agility_base": 17,
+    "agility_gain": 1.6,
+    "intelligence_base": 30,
+    "intelligence_gain": 4.2,
+    "damage_min": 53,
+    "damage_max": 62,
+    "attack_rate": 1.9,
+    "attack_range": 450,
+    "projectile_speed": 900,
+    "armor": 2.8333335,
+    "magic_resistance": 25,
+    "movement_speed": 315,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 582,
+    "health_regen": 3.1000001,
+    "max_mana": 435,
+    "mana_regen": 1.5,
+    "ability_ids": [
+      5391,
+      5392,
+      1760,
+      5684,
+      5394
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6241,
+        "right_ability_id": 750
+      },
+      {
+        "level": 15,
+        "left_ability_id": 1827,
+        "right_ability_id": 7375
+      },
+      {
+        "level": 20,
+        "left_ability_id": 1826,
+        "right_ability_id": 6712
+      },
+      {
+        "level": 25,
+        "left_ability_id": 957,
+        "right_ability_id": 6094
+      }
+    ]
+  },
+  {
+    "hero_id": 77,
+    "internal_name": "npc_dota_hero_lycan",
+    "name_en": "Lycan",
+    "name_zh": "狼人",
+    "aliases": [
+      "狼人"
+    ],
+    "primary_attribute": 0,
+    "complexity": 2,
+    "attack_capability": 1,
+    "role_levels": [
+      2,
+      0,
+      0,
+      0,
+      0,
+      1,
+      1,
+      3,
+      0
+    ],
+    "strength_base": 28,
+    "strength_gain": 3.4,
+    "agility_base": 18,
+    "agility_gain": 1.7,
+    "intelligence_base": 23,
+    "intelligence_gain": 1.7,
+    "damage_min": 52,
+    "damage_max": 57,
+    "attack_rate": 1.7,
+    "attack_range": 150,
+    "projectile_speed": 900,
+    "armor": 3,
+    "magic_resistance": 25,
+    "movement_speed": 305,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 736,
+    "health_regen": 3.05,
+    "max_mana": 351,
+    "mana_regen": 1.15,
+    "ability_ids": [
+      5395,
+      5396,
+      5397,
+      333,
+      1339,
+      5398
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6685,
+        "right_ability_id": 6140
+      },
+      {
+        "level": 15,
+        "left_ability_id": 6134,
+        "right_ability_id": 6684
+      },
+      {
+        "level": 20,
+        "left_ability_id": 794,
+        "right_ability_id": 846
+      },
+      {
+        "level": 25,
+        "left_ability_id": 1152,
+        "right_ability_id": 6519
+      }
+    ]
+  },
+  {
+    "hero_id": 78,
+    "internal_name": "npc_dota_hero_brewmaster",
+    "name_en": "Brewmaster",
+    "name_zh": "酒仙",
+    "aliases": [
+      "熊猫",
+      "酒仙"
+    ],
+    "primary_attribute": 3,
+    "complexity": 3,
+    "attack_capability": 1,
+    "role_levels": [
+      1,
+      0,
+      1,
+      2,
+      0,
+      2,
+      0,
+      0,
+      3
+    ],
+    "strength_base": 24,
+    "strength_gain": 3.2,
+    "agility_base": 19,
+    "agility_gain": 2,
+    "intelligence_base": 17,
+    "intelligence_gain": 1.9,
+    "damage_min": 26,
+    "damage_max": 33,
+    "attack_rate": 1.7,
+    "attack_range": 150,
+    "projectile_speed": 900,
+    "armor": 4.166667,
+    "magic_resistance": 25,
+    "movement_speed": 310,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 648,
+    "health_regen": 2.9,
+    "max_mana": 279,
+    "mana_regen": 0.85,
+    "ability_ids": [
+      5400,
+      7310,
+      5402,
+      1681,
+      5403
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 1709,
+        "right_ability_id": 6614
+      },
+      {
+        "level": 15,
+        "left_ability_id": 1708,
+        "right_ability_id": 478
+      },
+      {
+        "level": 20,
+        "left_ability_id": 654,
+        "right_ability_id": 6082
+      },
+      {
+        "level": 25,
+        "left_ability_id": 6359,
+        "right_ability_id": 1707
+      }
+    ]
+  },
+  {
+    "hero_id": 79,
+    "internal_name": "npc_dota_hero_shadow_demon",
+    "name_en": "Shadow Demon",
+    "name_zh": "暗影恶魔",
+    "aliases": [
+      "毒狗",
+      "SD",
+      "暗影恶魔"
+    ],
+    "primary_attribute": 2,
+    "complexity": 2,
+    "attack_capability": 2,
+    "role_levels": [
+      0,
+      2,
+      1,
+      2,
+      0,
+      0,
+      0,
+      0,
+      1
+    ],
+    "strength_base": 23,
+    "strength_gain": 2.6,
+    "agility_base": 18,
+    "agility_gain": 2.2,
+    "intelligence_base": 22,
+    "intelligence_gain": 3.6,
+    "damage_min": 51,
+    "damage_max": 55,
+    "attack_rate": 1.7,
+    "attack_range": 500,
+    "projectile_speed": 900,
+    "armor": 3,
+    "magic_resistance": 25,
+    "movement_speed": 290,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 626,
+    "health_regen": 2.55,
+    "max_mana": 339,
+    "mana_regen": 1.1,
+    "ability_ids": [
+      5421,
+      1001,
+      5423,
+      916,
+      5425,
+      1341
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 1828,
+        "right_ability_id": 7118
+      },
+      {
+        "level": 15,
+        "left_ability_id": 1004,
+        "right_ability_id": 752
+      },
+      {
+        "level": 20,
+        "left_ability_id": 5918,
+        "right_ability_id": 6542
+      },
+      {
+        "level": 25,
+        "left_ability_id": 6873,
+        "right_ability_id": 5982
+      }
+    ]
+  },
+  {
+    "hero_id": 80,
+    "internal_name": "npc_dota_hero_lone_druid",
+    "name_en": "Lone Druid",
+    "name_zh": "独行德鲁伊",
+    "aliases": [
+      "熊德",
+      "LD",
+      "独行德鲁伊"
+    ],
+    "primary_attribute": 1,
+    "complexity": 3,
+    "attack_capability": 2,
+    "role_levels": [
+      2,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      3,
+      0
+    ],
+    "strength_base": 20,
+    "strength_gain": 2.5,
+    "agility_base": 22,
+    "agility_gain": 2.8,
+    "intelligence_base": 13,
+    "intelligence_gain": 1.4,
+    "damage_min": 44,
+    "damage_max": 48,
+    "attack_rate": 1.6,
+    "attack_range": 550,
+    "projectile_speed": 1125,
+    "armor": 3.6666667,
+    "magic_resistance": 25,
+    "movement_speed": 300,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 560,
+    "health_regen": 2.25,
+    "max_mana": 231,
+    "mana_regen": 0.65000004,
+    "ability_ids": [
+      1684,
+      7309,
+      5414,
+      1342,
+      5415
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6806,
+        "right_ability_id": 1710
+      },
+      {
+        "level": 15,
+        "left_ability_id": 1351,
+        "right_ability_id": 409
+      },
+      {
+        "level": 20,
+        "left_ability_id": 6268,
+        "right_ability_id": 7386
+      },
+      {
+        "level": 25,
+        "left_ability_id": 6262,
+        "right_ability_id": 6261
+      }
+    ]
+  },
+  {
+    "hero_id": 81,
+    "internal_name": "npc_dota_hero_chaos_knight",
+    "name_en": "Chaos Knight",
+    "name_zh": "混沌骑士",
+    "aliases": [
+      "混沌",
+      "CK",
+      "混沌骑士"
+    ],
+    "primary_attribute": 0,
+    "complexity": 1,
+    "attack_capability": 1,
+    "role_levels": [
+      3,
+      0,
+      0,
+      2,
+      0,
+      2,
+      0,
+      2,
+      1
+    ],
+    "strength_base": 24,
+    "strength_gain": 3.1,
+    "agility_base": 18,
+    "agility_gain": 1.8,
+    "intelligence_base": 18,
+    "intelligence_gain": 1.2,
+    "damage_min": 56,
+    "damage_max": 76,
+    "attack_rate": 1.7,
+    "attack_range": 150,
+    "projectile_speed": 900,
+    "armor": 5,
+    "magic_resistance": 25,
+    "movement_speed": 325,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 648,
+    "health_regen": 2.65,
+    "max_mana": 291,
+    "mana_regen": 0.90000004,
+    "ability_ids": [
+      5426,
+      5427,
+      5428,
+      1556,
+      5429
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 510,
+        "right_ability_id": 870
+      },
+      {
+        "level": 15,
+        "left_ability_id": 6619,
+        "right_ability_id": 6133
+      },
+      {
+        "level": 20,
+        "left_ability_id": 872,
+        "right_ability_id": 6137
+      },
+      {
+        "level": 25,
+        "left_ability_id": 871,
+        "right_ability_id": 6618
+      }
+    ]
+  },
+  {
+    "hero_id": 82,
+    "internal_name": "npc_dota_hero_meepo",
+    "name_en": "Meepo",
+    "name_zh": "米波",
+    "aliases": [
+      "地卜",
+      "狗头",
+      "米波"
+    ],
+    "primary_attribute": 1,
+    "complexity": 3,
+    "attack_capability": 1,
+    "role_levels": [
+      2,
+      0,
+      2,
+      1,
+      0,
+      0,
+      2,
+      1,
+      1
+    ],
+    "strength_base": 24,
+    "strength_gain": 2,
+    "agility_base": 17,
+    "agility_gain": 2.1,
+    "intelligence_base": 18,
+    "intelligence_gain": 1.9,
+    "damage_min": 46,
+    "damage_max": 52,
+    "attack_rate": 1.7,
+    "attack_range": 150,
+    "projectile_speed": 900,
+    "armor": 5.8333335,
+    "magic_resistance": 25,
+    "movement_speed": 310,
+    "turn_rate": 0.9,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 648,
+    "health_regen": 2.65,
+    "max_mana": 291,
+    "mana_regen": 1.1500001,
+    "ability_ids": [
+      5430,
+      5431,
+      7318,
+      547,
+      1109,
+      5433,
+      1763,
+      329
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 5976,
+        "right_ability_id": 1357
+      },
+      {
+        "level": 15,
+        "left_ability_id": 7102,
+        "right_ability_id": 618
+      },
+      {
+        "level": 20,
+        "left_ability_id": 5972,
+        "right_ability_id": 6689
+      },
+      {
+        "level": 25,
+        "left_ability_id": 6115,
+        "right_ability_id": 7027
+      }
+    ]
+  },
+  {
+    "hero_id": 83,
+    "internal_name": "npc_dota_hero_treant",
+    "name_en": "Treant Protector",
+    "name_zh": "树精卫士",
+    "aliases": [
+      "大树",
+      "TP",
+      "树精卫士"
+    ],
+    "primary_attribute": 0,
+    "complexity": 2,
+    "attack_capability": 1,
+    "role_levels": [
+      0,
+      3,
+      0,
+      1,
+      0,
+      1,
+      1,
+      0,
+      2
+    ],
+    "strength_base": 25,
+    "strength_gain": 3.4,
+    "agility_base": 15,
+    "agility_gain": 1.8,
+    "intelligence_base": 20,
+    "intelligence_gain": 1.8,
+    "damage_min": 85,
+    "damage_max": 93,
+    "attack_rate": 1.9,
+    "attack_range": 150,
+    "projectile_speed": 900,
+    "armor": 3.5,
+    "magic_resistance": 25,
+    "movement_speed": 280,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 670,
+    "health_regen": 2.75,
+    "max_mana": 315,
+    "mana_regen": 1.25,
+    "ability_ids": [
+      338,
+      5435,
+      5436,
+      5649,
+      5434,
+      5437
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 1131,
+        "right_ability_id": 7115
+      },
+      {
+        "level": 15,
+        "left_ability_id": 756,
+        "right_ability_id": 6531
+      },
+      {
+        "level": 20,
+        "left_ability_id": 6955,
+        "right_ability_id": 340
+      },
+      {
+        "level": 25,
+        "left_ability_id": 339,
+        "right_ability_id": 548
+      }
+    ]
+  },
+  {
+    "hero_id": 84,
+    "internal_name": "npc_dota_hero_ogre_magi",
+    "name_en": "Ogre Magi",
+    "name_zh": "食人魔魔法师",
+    "aliases": [
+      "蓝胖",
+      "Ogre",
+      "食人魔魔法师"
+    ],
+    "primary_attribute": 0,
+    "complexity": 1,
+    "attack_capability": 1,
+    "role_levels": [
+      0,
+      2,
+      2,
+      2,
+      0,
+      1,
+      0,
+      0,
+      1
+    ],
+    "strength_base": 26,
+    "strength_gain": 4,
+    "agility_base": 14,
+    "agility_gain": 1.5,
+    "intelligence_base": 0,
+    "intelligence_gain": 0,
+    "damage_min": 71,
+    "damage_max": 77,
+    "attack_rate": 1.7,
+    "attack_range": 150,
+    "projectile_speed": 900,
+    "armor": 6.3333335,
+    "magic_resistance": 25,
+    "movement_speed": 290,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 692,
+    "health_regen": 4.1000004,
+    "max_mana": 120,
+    "mana_regen": 0,
+    "ability_ids": [
+      5438,
+      5439,
+      5440,
+      5466,
+      648,
+      1115,
+      5441
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 7030,
+        "right_ability_id": 1829
+      },
+      {
+        "level": 15,
+        "left_ability_id": 6708,
+        "right_ability_id": 6707
+      },
+      {
+        "level": 20,
+        "left_ability_id": 442,
+        "right_ability_id": 6183
+      },
+      {
+        "level": 25,
+        "left_ability_id": 403,
+        "right_ability_id": 1181
+      }
+    ]
+  },
+  {
+    "hero_id": 85,
+    "internal_name": "npc_dota_hero_undying",
+    "name_en": "Undying",
+    "name_zh": "不朽尸王",
+    "aliases": [
+      "尸王",
+      "不朽尸王"
+    ],
+    "primary_attribute": 0,
+    "complexity": 1,
+    "attack_capability": 1,
+    "role_levels": [
+      0,
+      2,
+      1,
+      1,
+      0,
+      2,
+      0,
+      0,
+      0
+    ],
+    "strength_base": 22,
+    "strength_gain": 2.4,
+    "agility_base": 13,
+    "agility_gain": 1.2,
+    "intelligence_base": 27,
+    "intelligence_gain": 2.8,
+    "damage_min": 55,
+    "damage_max": 63,
+    "attack_rate": 1.7,
+    "attack_range": 150,
+    "projectile_speed": 900,
+    "armor": 2.1666667,
+    "magic_resistance": 25,
+    "movement_speed": 295,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 604,
+    "health_regen": 1.95,
+    "max_mana": 399,
+    "mana_regen": 1.85,
+    "ability_ids": [
+      5442,
+      5443,
+      5444,
+      1360,
+      5447
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6971,
+        "right_ability_id": 6546
+      },
+      {
+        "level": 15,
+        "left_ability_id": 6420,
+        "right_ability_id": 6972
+      },
+      {
+        "level": 20,
+        "left_ability_id": 616,
+        "right_ability_id": 6155
+      },
+      {
+        "level": 25,
+        "left_ability_id": 813,
+        "right_ability_id": 807
+      }
+    ]
+  },
+  {
+    "hero_id": 86,
+    "internal_name": "npc_dota_hero_rubick",
+    "name_en": "Rubick",
+    "name_zh": "拉比克",
+    "aliases": [
+      "拉比克"
+    ],
+    "primary_attribute": 2,
+    "complexity": 3,
+    "attack_capability": 2,
+    "role_levels": [
+      0,
+      2,
+      1,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "strength_base": 21,
+    "strength_gain": 2,
+    "agility_base": 23,
+    "agility_gain": 2.2,
+    "intelligence_base": 24,
+    "intelligence_gain": 3.7,
+    "damage_min": 49,
+    "damage_max": 55,
+    "attack_rate": 1.7,
+    "attack_range": 550,
+    "projectile_speed": 1125,
+    "armor": 4.8333335,
+    "magic_resistance": 25,
+    "movement_speed": 290,
+    "turn_rate": 0.7,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 582,
+    "health_regen": 2.3500001,
+    "max_mana": 363,
+    "mana_regen": 1.7,
+    "ability_ids": [
+      5448,
+      5450,
+      7320,
+      5452,
+      1765
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 1831,
+        "right_ability_id": 6870
+      },
+      {
+        "level": 15,
+        "left_ability_id": 1830,
+        "right_ability_id": 897
+      },
+      {
+        "level": 20,
+        "left_ability_id": 518,
+        "right_ability_id": 6863
+      },
+      {
+        "level": 25,
+        "left_ability_id": 6864,
+        "right_ability_id": 5959
+      }
+    ]
+  },
+  {
+    "hero_id": 87,
+    "internal_name": "npc_dota_hero_disruptor",
+    "name_en": "Disruptor",
+    "name_zh": "干扰者",
+    "aliases": [
+      "萨尔",
+      "干扰者"
+    ],
+    "primary_attribute": 2,
+    "complexity": 2,
+    "attack_capability": 2,
+    "role_levels": [
+      0,
+      2,
+      1,
+      2,
+      0,
+      0,
+      0,
+      0,
+      1
+    ],
+    "strength_base": 21,
+    "strength_gain": 2.4,
+    "agility_base": 15,
+    "agility_gain": 1.4,
+    "intelligence_base": 20,
+    "intelligence_gain": 2.9,
+    "damage_min": 47,
+    "damage_max": 51,
+    "attack_rate": 1.7,
+    "attack_range": 625,
+    "projectile_speed": 1200,
+    "armor": 2.5,
+    "magic_resistance": 25,
+    "movement_speed": 300,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 582,
+    "health_regen": 2.3500001,
+    "max_mana": 315,
+    "mana_regen": 1,
+    "ability_ids": [
+      5458,
+      5459,
+      5460,
+      1362,
+      1363,
+      5461
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6630,
+        "right_ability_id": 1832
+      },
+      {
+        "level": 15,
+        "left_ability_id": 6812,
+        "right_ability_id": 737
+      },
+      {
+        "level": 20,
+        "left_ability_id": 788,
+        "right_ability_id": 6215
+      },
+      {
+        "level": 25,
+        "left_ability_id": 5918,
+        "right_ability_id": 1142
+      }
+    ]
+  },
+  {
+    "hero_id": 88,
+    "internal_name": "npc_dota_hero_nyx_assassin",
+    "name_en": "Nyx Assassin",
+    "name_zh": "司夜刺客",
+    "aliases": [
+      "小强",
+      "NA",
+      "司夜刺客"
+    ],
+    "primary_attribute": 3,
+    "complexity": 2,
+    "attack_capability": 1,
+    "role_levels": [
+      0,
+      0,
+      2,
+      2,
+      0,
+      0,
+      1,
+      0,
+      2
+    ],
+    "strength_base": 17,
+    "strength_gain": 2.7,
+    "agility_base": 18,
+    "agility_gain": 2.9,
+    "intelligence_base": 21,
+    "intelligence_gain": 2.6,
+    "damage_min": 26,
+    "damage_max": 30,
+    "attack_rate": 1.7,
+    "attack_range": 150,
+    "projectile_speed": 900,
+    "armor": 4,
+    "magic_resistance": 25,
+    "movement_speed": 310,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 494,
+    "health_regen": 3.7,
+    "max_mana": 327,
+    "mana_regen": 1.0500001,
+    "ability_ids": [
+      5462,
+      1104,
+      5464,
+      5666,
+      1767,
+      5465
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6130,
+        "right_ability_id": 435
+      },
+      {
+        "level": 15,
+        "left_ability_id": 891,
+        "right_ability_id": 6399
+      },
+      {
+        "level": 20,
+        "left_ability_id": 1171,
+        "right_ability_id": 1368
+      },
+      {
+        "level": 25,
+        "left_ability_id": 402,
+        "right_ability_id": 6814
+      }
+    ]
+  },
+  {
+    "hero_id": 89,
+    "internal_name": "npc_dota_hero_naga_siren",
+    "name_en": "Naga Siren",
+    "name_zh": "娜迦海妖",
+    "aliases": [
+      "小娜迦",
+      "Naga",
+      "娜迦海妖"
+    ],
+    "primary_attribute": 1,
+    "complexity": 2,
+    "attack_capability": 1,
+    "role_levels": [
+      3,
+      1,
+      0,
+      2,
+      0,
+      0,
+      1,
+      2,
+      1
+    ],
+    "strength_base": 21,
+    "strength_gain": 2.4,
+    "agility_base": 22,
+    "agility_gain": 3.4,
+    "intelligence_base": 19,
+    "intelligence_gain": 2,
+    "damage_min": 45,
+    "damage_max": 47,
+    "attack_rate": 1.7,
+    "attack_range": 150,
+    "projectile_speed": 900,
+    "armor": 4.666667,
+    "magic_resistance": 25,
+    "movement_speed": 330,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 582,
+    "health_regen": 3.1000001,
+    "max_mana": 303,
+    "mana_regen": 0.95,
+    "ability_ids": [
+      5467,
+      5468,
+      5469,
+      1370,
+      5470
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 761,
+        "right_ability_id": 6150
+      },
+      {
+        "level": 15,
+        "left_ability_id": 601,
+        "right_ability_id": 6205
+      },
+      {
+        "level": 20,
+        "left_ability_id": 7029,
+        "right_ability_id": 6701
+      },
+      {
+        "level": 25,
+        "left_ability_id": 1557,
+        "right_ability_id": 6398
+      }
+    ]
+  },
+  {
+    "hero_id": 90,
+    "internal_name": "npc_dota_hero_keeper_of_the_light",
+    "name_en": "Keeper of the Light",
+    "name_zh": "光之守卫",
+    "aliases": [
+      "光法",
+      "KOTL",
+      "光之守卫"
+    ],
+    "primary_attribute": 2,
+    "complexity": 2,
+    "attack_capability": 2,
+    "role_levels": [
+      0,
+      3,
+      2,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "strength_base": 18,
+    "strength_gain": 2.3,
+    "agility_base": 15,
+    "agility_gain": 1.6,
+    "intelligence_base": 24,
+    "intelligence_gain": 3.3,
+    "damage_min": 44,
+    "damage_max": 51,
+    "attack_rate": 1.7,
+    "attack_range": 600,
+    "projectile_speed": 900,
+    "armor": 2.5,
+    "magic_resistance": 25,
+    "movement_speed": 310,
+    "turn_rate": 0.7,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 516,
+    "health_regen": 2.0500002,
+    "max_mana": 363,
+    "mana_regen": 1.2,
+    "ability_ids": [
+      5471,
+      5476,
+      5473,
+      1372,
+      7316,
+      5474,
+      1769
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 804,
+        "right_ability_id": 6217
+      },
+      {
+        "level": 15,
+        "left_ability_id": 6527,
+        "right_ability_id": 6665
+      },
+      {
+        "level": 20,
+        "left_ability_id": 664,
+        "right_ability_id": 421
+      },
+      {
+        "level": 25,
+        "left_ability_id": 657,
+        "right_ability_id": 1046
+      }
+    ]
+  },
+  {
+    "hero_id": 91,
+    "internal_name": "npc_dota_hero_wisp",
+    "name_en": "Io",
+    "name_zh": "艾欧",
+    "aliases": [
+      "小精灵",
+      "Wisp",
+      "艾欧"
+    ],
+    "primary_attribute": 3,
+    "complexity": 3,
+    "attack_capability": 2,
+    "role_levels": [
+      0,
+      3,
+      1,
+      0,
+      0,
+      0,
+      2,
+      0,
+      0
+    ],
+    "strength_base": 19,
+    "strength_gain": 3,
+    "agility_base": 14,
+    "agility_gain": 1.6,
+    "intelligence_base": 21,
+    "intelligence_gain": 1.7,
+    "damage_min": 21,
+    "damage_max": 27,
+    "attack_rate": 1.7,
+    "attack_range": 500,
+    "projectile_speed": 1200,
+    "armor": 3.3333335,
+    "magic_resistance": 25,
+    "movement_speed": 320,
+    "turn_rate": 0.7,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 538,
+    "health_regen": 2.15,
+    "max_mana": 327,
+    "mana_regen": 1.0500001,
+    "ability_ids": [
+      5485,
+      5486,
+      5487,
+      5490,
+      5493,
+      5488,
+      1770
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 1711,
+        "right_ability_id": 6808
+      },
+      {
+        "level": 15,
+        "left_ability_id": 7073,
+        "right_ability_id": 7070
+      },
+      {
+        "level": 20,
+        "left_ability_id": 6659,
+        "right_ability_id": 6265
+      },
+      {
+        "level": 25,
+        "left_ability_id": 1559,
+        "right_ability_id": 5982
+      }
+    ]
+  },
+  {
+    "hero_id": 92,
+    "internal_name": "npc_dota_hero_visage",
+    "name_en": "Visage",
+    "name_zh": "维萨吉",
+    "aliases": [
+      "死灵飞龙",
+      "维萨吉"
+    ],
+    "primary_attribute": 3,
+    "complexity": 3,
+    "attack_capability": 2,
+    "role_levels": [
+      0,
+      1,
+      2,
+      1,
+      0,
+      1,
+      0,
+      1,
+      0
+    ],
+    "strength_base": 22,
+    "strength_gain": 2.8,
+    "agility_base": 11,
+    "agility_gain": 1.3,
+    "intelligence_base": 22,
+    "intelligence_gain": 2.9,
+    "damage_min": 21,
+    "damage_max": 31,
+    "attack_rate": 1.7,
+    "attack_range": 600,
+    "projectile_speed": 1400,
+    "armor": 1.8333334,
+    "magic_resistance": 25,
+    "movement_speed": 285,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 604,
+    "health_regen": 2.45,
+    "max_mana": 339,
+    "mana_regen": 1.1,
+    "ability_ids": [
+      5480,
+      5481,
+      5482,
+      683,
+      5483
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 1712,
+        "right_ability_id": 6985
+      },
+      {
+        "level": 15,
+        "left_ability_id": 6983,
+        "right_ability_id": 6031
+      },
+      {
+        "level": 20,
+        "left_ability_id": 1148,
+        "right_ability_id": 6522
+      },
+      {
+        "level": 25,
+        "left_ability_id": 1833,
+        "right_ability_id": 626
+      }
+    ]
+  },
+  {
+    "hero_id": 93,
+    "internal_name": "npc_dota_hero_slark",
+    "name_en": "Slark",
+    "name_zh": "斯拉克",
+    "aliases": [
+      "小鱼人",
+      "斯拉克"
+    ],
+    "primary_attribute": 1,
+    "complexity": 2,
+    "attack_capability": 1,
+    "role_levels": [
+      2,
+      0,
+      1,
+      1,
+      0,
+      0,
+      3,
+      0,
+      0
+    ],
+    "strength_base": 20,
+    "strength_gain": 2.1,
+    "agility_base": 21,
+    "agility_gain": 1.5,
+    "intelligence_base": 16,
+    "intelligence_gain": 1.9,
+    "damage_min": 58,
+    "damage_max": 64,
+    "attack_rate": 1.7,
+    "attack_range": 150,
+    "projectile_speed": 0,
+    "armor": 3.5,
+    "magic_resistance": 25,
+    "movement_speed": 300,
+    "turn_rate": 0.7,
+    "sight_range_day": 1800,
+    "sight_range_night": 1800,
+    "max_health": 560,
+    "health_regen": 2.25,
+    "max_mana": 267,
+    "mana_regen": 0.8,
+    "ability_ids": [
+      5494,
+      5495,
+      1693,
+      729,
+      5496,
+      5497
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6893,
+        "right_ability_id": 814
+      },
+      {
+        "level": 15,
+        "left_ability_id": 6894,
+        "right_ability_id": 892
+      },
+      {
+        "level": 20,
+        "left_ability_id": 6892,
+        "right_ability_id": 921
+      },
+      {
+        "level": 25,
+        "left_ability_id": 821,
+        "right_ability_id": 6147
+      }
+    ]
+  },
+  {
+    "hero_id": 94,
+    "internal_name": "npc_dota_hero_medusa",
+    "name_en": "Medusa",
+    "name_zh": "美杜莎",
+    "aliases": [
+      "大娜迦",
+      "一姐",
+      "美杜莎"
+    ],
+    "primary_attribute": 1,
+    "complexity": 1,
+    "attack_capability": 2,
+    "role_levels": [
+      3,
+      0,
+      0,
+      1,
+      0,
+      1,
+      0,
+      0,
+      0
+    ],
+    "strength_base": 0,
+    "strength_gain": 0,
+    "agility_base": 22,
+    "agility_gain": 3.6,
+    "intelligence_base": 25,
+    "intelligence_gain": 3.6,
+    "damage_min": 48,
+    "damage_max": 54,
+    "attack_rate": 1.7,
+    "attack_range": 600,
+    "projectile_speed": 1200,
+    "armor": 2.6666667,
+    "magic_resistance": 25,
+    "movement_speed": 275,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 120,
+    "health_regen": 0.25,
+    "max_mana": 375,
+    "mana_regen": 1.25,
+    "ability_ids": [
+      5504,
+      5505,
+      1475,
+      701,
+      5506,
+      5507
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6182,
+        "right_ability_id": 1534
+      },
+      {
+        "level": 15,
+        "left_ability_id": 1376,
+        "right_ability_id": 6392
+      },
+      {
+        "level": 20,
+        "left_ability_id": 1574,
+        "right_ability_id": 7389
+      },
+      {
+        "level": 25,
+        "left_ability_id": 1561,
+        "right_ability_id": 1345
+      }
+    ]
+  },
+  {
+    "hero_id": 95,
+    "internal_name": "npc_dota_hero_troll_warlord",
+    "name_en": "Troll Warlord",
+    "name_zh": "巨魔战将",
+    "aliases": [
+      "巨魔",
+      "巨魔战将"
+    ],
+    "primary_attribute": 1,
+    "complexity": 2,
+    "attack_capability": 2,
+    "role_levels": [
+      3,
+      0,
+      0,
+      1,
+      0,
+      1,
+      0,
+      2,
+      0
+    ],
+    "strength_base": 21,
+    "strength_gain": 2.5,
+    "agility_base": 24,
+    "agility_gain": 3.3,
+    "intelligence_base": 13,
+    "intelligence_gain": 1,
+    "damage_min": 51,
+    "damage_max": 59,
+    "attack_rate": 1.7,
+    "attack_range": 500,
+    "projectile_speed": 1200,
+    "armor": 3,
+    "magic_resistance": 25,
+    "movement_speed": 290,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 582,
+    "health_regen": 2.3500001,
+    "max_mana": 231,
+    "mana_regen": 0.65000004,
+    "ability_ids": [
+      1478,
+      5509,
+      5510,
+      5511,
+      5508,
+      5512
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 988,
+        "right_ability_id": 6960
+      },
+      {
+        "level": 15,
+        "left_ability_id": 1011,
+        "right_ability_id": 6959
+      },
+      {
+        "level": 20,
+        "left_ability_id": 492,
+        "right_ability_id": 6154
+      },
+      {
+        "level": 25,
+        "left_ability_id": 1010,
+        "right_ability_id": 6958
+      }
+    ]
+  },
+  {
+    "hero_id": 96,
+    "internal_name": "npc_dota_hero_centaur",
+    "name_en": "Centaur Warrunner",
+    "name_zh": "半人马战行者",
+    "aliases": [
+      "人马",
+      "半人马战行者"
+    ],
+    "primary_attribute": 0,
+    "complexity": 1,
+    "attack_capability": 1,
+    "role_levels": [
+      0,
+      0,
+      1,
+      1,
+      0,
+      3,
+      1,
+      0,
+      3
+    ],
+    "strength_base": 28,
+    "strength_gain": 4.3,
+    "agility_base": 15,
+    "agility_gain": 1,
+    "intelligence_base": 15,
+    "intelligence_gain": 1.6,
+    "damage_min": 64,
+    "damage_max": 66,
+    "attack_rate": 1.7,
+    "attack_range": 150,
+    "projectile_speed": 900,
+    "armor": 0.5,
+    "magic_resistance": 25,
+    "movement_speed": 300,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 736,
+    "health_regen": 5.8,
+    "max_mana": 255,
+    "mana_regen": 0.75,
+    "ability_ids": [
+      5514,
+      5515,
+      5516,
+      1135,
+      5517,
+      1379
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6322,
+        "right_ability_id": 5988
+      },
+      {
+        "level": 15,
+        "left_ability_id": 6616,
+        "right_ability_id": 453
+      },
+      {
+        "level": 20,
+        "left_ability_id": 6137,
+        "right_ability_id": 6617
+      },
+      {
+        "level": 25,
+        "left_ability_id": 5909,
+        "right_ability_id": 5917
+      }
+    ]
+  },
+  {
+    "hero_id": 97,
+    "internal_name": "npc_dota_hero_magnataur",
+    "name_en": "Magnus",
+    "name_zh": "马格纳斯",
+    "aliases": [
+      "猛犸",
+      "马格纳斯"
+    ],
+    "primary_attribute": 3,
+    "complexity": 2,
+    "attack_capability": 1,
+    "role_levels": [
+      0,
+      0,
+      1,
+      2,
+      0,
+      0,
+      1,
+      0,
+      3
+    ],
+    "strength_base": 23,
+    "strength_gain": 3.1,
+    "agility_base": 14,
+    "agility_gain": 2.2,
+    "intelligence_base": 20,
+    "intelligence_gain": 2.1,
+    "damage_min": 31,
+    "damage_max": 39,
+    "attack_rate": 1.8,
+    "attack_range": 200,
+    "projectile_speed": 900,
+    "armor": 3.3333335,
+    "magic_resistance": 25,
+    "movement_speed": 305,
+    "turn_rate": 0.8,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 626,
+    "health_regen": 2.8,
+    "max_mana": 315,
+    "mana_regen": 1.5,
+    "ability_ids": [
+      5518,
+      5519,
+      5520,
+      649,
+      1382,
+      5521
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6390,
+        "right_ability_id": 6691
+      },
+      {
+        "level": 15,
+        "left_ability_id": 6199,
+        "right_ability_id": 1562
+      },
+      {
+        "level": 20,
+        "left_ability_id": 1037,
+        "right_ability_id": 712
+      },
+      {
+        "level": 25,
+        "left_ability_id": 7132,
+        "right_ability_id": 525
+      }
+    ]
+  },
+  {
+    "hero_id": 98,
+    "internal_name": "npc_dota_hero_shredder",
+    "name_en": "Timbersaw",
+    "name_zh": "伐木机",
+    "aliases": [
+      "伐木机"
+    ],
+    "primary_attribute": 0,
+    "complexity": 2,
+    "attack_capability": 1,
+    "role_levels": [
+      0,
+      0,
+      3,
+      0,
+      0,
+      2,
+      2,
+      0,
+      0
+    ],
+    "strength_base": 23,
+    "strength_gain": 3.6,
+    "agility_base": 16,
+    "agility_gain": 1.6,
+    "intelligence_base": 24,
+    "intelligence_gain": 2.7,
+    "damage_min": 48,
+    "damage_max": 52,
+    "attack_rate": 1.7,
+    "attack_range": 150,
+    "projectile_speed": 900,
+    "armor": 2.6666667,
+    "magic_resistance": 25,
+    "movement_speed": 280,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 626,
+    "health_regen": 2.55,
+    "max_mana": 363,
+    "mana_regen": 1.7,
+    "ability_ids": [
+      5524,
+      5525,
+      5526,
+      651,
+      5527,
+      1384
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6223,
+        "right_ability_id": 6949
+      },
+      {
+        "level": 15,
+        "left_ability_id": 1563,
+        "right_ability_id": 6951
+      },
+      {
+        "level": 20,
+        "left_ability_id": 8482,
+        "right_ability_id": 6948
+      },
+      {
+        "level": 25,
+        "left_ability_id": 1185,
+        "right_ability_id": 7132
+      }
+    ]
+  },
+  {
+    "hero_id": 99,
+    "internal_name": "npc_dota_hero_bristleback",
+    "name_en": "Bristleback",
+    "name_zh": "钢背兽",
+    "aliases": [
+      "钢背",
+      "BB",
+      "钢背兽"
+    ],
+    "primary_attribute": 0,
+    "complexity": 1,
+    "attack_capability": 1,
+    "role_levels": [
+      2,
+      0,
+      1,
+      0,
+      0,
+      3,
+      0,
+      0,
+      1
+    ],
+    "strength_base": 22,
+    "strength_gain": 2.8,
+    "agility_base": 17,
+    "agility_gain": 1.8,
+    "intelligence_base": 14,
+    "intelligence_gain": 2.8,
+    "damage_min": 53,
+    "damage_max": 59,
+    "attack_rate": 1.8,
+    "attack_range": 150,
+    "projectile_speed": 900,
+    "armor": 3.8333335,
+    "magic_resistance": 25,
+    "movement_speed": 295,
+    "turn_rate": 0.9,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 604,
+    "health_regen": 3.2,
+    "max_mana": 243,
+    "mana_regen": 1.1,
+    "ability_ids": [
+      5548,
+      5549,
+      5550,
+      643,
+      5551,
+      1479
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6083,
+        "right_ability_id": 6615
+      },
+      {
+        "level": 15,
+        "left_ability_id": 6308,
+        "right_ability_id": 6360
+      },
+      {
+        "level": 20,
+        "left_ability_id": 1078,
+        "right_ability_id": 1079
+      },
+      {
+        "level": 25,
+        "left_ability_id": 6016,
+        "right_ability_id": 7132
+      }
+    ]
+  },
+  {
+    "hero_id": 100,
+    "internal_name": "npc_dota_hero_tusk",
+    "name_en": "Tusk",
+    "name_zh": "巨牙海民",
+    "aliases": [
+      "海民",
+      "巨牙海民"
+    ],
+    "primary_attribute": 0,
+    "complexity": 1,
+    "attack_capability": 1,
+    "role_levels": [
+      0,
+      0,
+      1,
+      2,
+      0,
+      0,
+      0,
+      0,
+      2
+    ],
+    "strength_base": 23,
+    "strength_gain": 3.9,
+    "agility_base": 23,
+    "agility_gain": 1.9,
+    "intelligence_base": 18,
+    "intelligence_gain": 1.7,
+    "damage_min": 50,
+    "damage_max": 54,
+    "attack_rate": 1.7,
+    "attack_range": 150,
+    "projectile_speed": 900,
+    "armor": 4.8333335,
+    "magic_resistance": 25,
+    "movement_speed": 310,
+    "turn_rate": 0.7,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 626,
+    "health_regen": 3.3,
+    "max_mana": 291,
+    "mana_regen": 1.4000001,
+    "ability_ids": [
+      5565,
+      5566,
+      7322,
+      1385,
+      5672,
+      5568,
+      1386
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 1834,
+        "right_ability_id": 6962
+      },
+      {
+        "level": 15,
+        "left_ability_id": 7891,
+        "right_ability_id": 6194
+      },
+      {
+        "level": 20,
+        "left_ability_id": 6423,
+        "right_ability_id": 6411
+      },
+      {
+        "level": 25,
+        "left_ability_id": 6961,
+        "right_ability_id": 414
+      }
+    ]
+  },
+  {
+    "hero_id": 101,
+    "internal_name": "npc_dota_hero_skywrath_mage",
+    "name_en": "Skywrath Mage",
+    "name_zh": "天怒法师",
+    "aliases": [
+      "天怒",
+      "天怒法师"
+    ],
+    "primary_attribute": 2,
+    "complexity": 1,
+    "attack_capability": 2,
+    "role_levels": [
+      0,
+      2,
+      3,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "strength_base": 22,
+    "strength_gain": 2,
+    "agility_base": 13,
+    "agility_gain": 0.8,
+    "intelligence_base": 25,
+    "intelligence_gain": 4.1,
+    "damage_min": 41,
+    "damage_max": 51,
+    "attack_rate": 1.7,
+    "attack_range": 625,
+    "projectile_speed": 1000,
+    "armor": 0.16666675,
+    "magic_resistance": 25,
+    "movement_speed": 325,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 604,
+    "health_regen": 2.45,
+    "max_mana": 375,
+    "mana_regen": 1.75,
+    "ability_ids": [
+      5581,
+      5582,
+      5583,
+      833,
+      5584
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6884,
+        "right_ability_id": 6921
+      },
+      {
+        "level": 15,
+        "left_ability_id": 6886,
+        "right_ability_id": 6885
+      },
+      {
+        "level": 20,
+        "left_ability_id": 6181,
+        "right_ability_id": 1480
+      },
+      {
+        "level": 25,
+        "left_ability_id": 7132,
+        "right_ability_id": 411
+      }
+    ]
+  },
+  {
+    "hero_id": 102,
+    "internal_name": "npc_dota_hero_abaddon",
+    "name_en": "Abaddon",
+    "name_zh": "亚巴顿",
+    "aliases": [
+      "死骑",
+      "亚巴顿"
+    ],
+    "primary_attribute": 3,
+    "complexity": 1,
+    "attack_capability": 1,
+    "role_levels": [
+      1,
+      2,
+      0,
+      0,
+      0,
+      2,
+      0,
+      0,
+      0
+    ],
+    "strength_base": 21,
+    "strength_gain": 2.6,
+    "agility_base": 22,
+    "agility_gain": 1.5,
+    "intelligence_base": 19,
+    "intelligence_gain": 2,
+    "damage_min": 22,
+    "damage_max": 32,
+    "attack_rate": 1.5,
+    "attack_range": 150,
+    "projectile_speed": 900,
+    "armor": 2.6666667,
+    "magic_resistance": 25,
+    "movement_speed": 325,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 582,
+    "health_regen": 3.1000001,
+    "max_mana": 303,
+    "mana_regen": 0.95,
+    "ability_ids": [
+      5585,
+      5586,
+      5587,
+      1481,
+      5588
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6602,
+        "right_ability_id": 7335
+      },
+      {
+        "level": 15,
+        "left_ability_id": 6100,
+        "right_ability_id": 8251
+      },
+      {
+        "level": 20,
+        "left_ability_id": 1835,
+        "right_ability_id": 6601
+      },
+      {
+        "level": 25,
+        "left_ability_id": 7340,
+        "right_ability_id": 1165
+      }
+    ]
+  },
+  {
+    "hero_id": 103,
+    "internal_name": "npc_dota_hero_elder_titan",
+    "name_en": "Elder Titan",
+    "name_zh": "上古巨神",
+    "aliases": [
+      "大牛",
+      "ET",
+      "上古巨神"
+    ],
+    "primary_attribute": 0,
+    "complexity": 2,
+    "attack_capability": 1,
+    "role_levels": [
+      0,
+      0,
+      1,
+      1,
+      0,
+      1,
+      0,
+      0,
+      2
+    ],
+    "strength_base": 26,
+    "strength_gain": 3,
+    "agility_base": 16,
+    "agility_gain": 1.8,
+    "intelligence_base": 23,
+    "intelligence_gain": 1.6,
+    "damage_min": 49,
+    "damage_max": 59,
+    "attack_rate": 1.7,
+    "attack_range": 150,
+    "projectile_speed": 900,
+    "armor": 2.6666667,
+    "magic_resistance": 25,
+    "movement_speed": 305,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 692,
+    "health_regen": 3.3500001,
+    "max_mana": 351,
+    "mana_regen": 1.4,
+    "ability_ids": [
+      5589,
+      1392,
+      5593,
+      1393,
+      5594
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6720,
+        "right_ability_id": 6827
+      },
+      {
+        "level": 15,
+        "left_ability_id": 6171,
+        "right_ability_id": 1016
+      },
+      {
+        "level": 20,
+        "left_ability_id": 6378,
+        "right_ability_id": 1836
+      },
+      {
+        "level": 25,
+        "left_ability_id": 917,
+        "right_ability_id": 7350
+      }
+    ]
+  },
+  {
+    "hero_id": 104,
+    "internal_name": "npc_dota_hero_legion_commander",
+    "name_en": "Legion Commander",
+    "name_zh": "军团指挥官",
+    "aliases": [
+      "军团",
+      "LC",
+      "军团指挥官"
+    ],
+    "primary_attribute": 0,
+    "complexity": 1,
+    "attack_capability": 1,
+    "role_levels": [
+      1,
+      0,
+      1,
+      2,
+      0,
+      1,
+      0,
+      0,
+      1
+    ],
+    "strength_base": 25,
+    "strength_gain": 3,
+    "agility_base": 18,
+    "agility_gain": 1.7,
+    "intelligence_base": 20,
+    "intelligence_gain": 2.2,
+    "damage_min": 58,
+    "damage_max": 62,
+    "attack_rate": 1.7,
+    "attack_range": 150,
+    "projectile_speed": 900,
+    "armor": 2,
+    "magic_resistance": 25,
+    "movement_speed": 325,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 670,
+    "health_regen": 2.75,
+    "max_mana": 315,
+    "mana_regen": 1,
+    "ability_ids": [
+      5595,
+      5596,
+      5597,
+      1483,
+      5598
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 880,
+        "right_ability_id": 1839
+      },
+      {
+        "level": 15,
+        "left_ability_id": 1838,
+        "right_ability_id": 6526
+      },
+      {
+        "level": 20,
+        "left_ability_id": 463,
+        "right_ability_id": 6671
+      },
+      {
+        "level": 25,
+        "left_ability_id": 1113,
+        "right_ability_id": 1837
+      }
+    ]
+  },
+  {
+    "hero_id": 105,
+    "internal_name": "npc_dota_hero_techies",
+    "name_en": "Techies",
+    "name_zh": "工程师",
+    "aliases": [
+      "炸弹人",
+      "Techies",
+      "工程师"
+    ],
+    "primary_attribute": 3,
+    "complexity": 2,
+    "attack_capability": 2,
+    "role_levels": [
+      0,
+      0,
+      3,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "strength_base": 19,
+    "strength_gain": 2.6,
+    "agility_base": 16,
+    "agility_gain": 1.8,
+    "intelligence_base": 25,
+    "intelligence_gain": 2.7,
+    "damage_min": 20,
+    "damage_max": 22,
+    "attack_rate": 1.7,
+    "attack_range": 600,
+    "projectile_speed": 900,
+    "armor": 4.666667,
+    "magic_resistance": 25,
+    "movement_speed": 310,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 538,
+    "health_regen": 2.9,
+    "max_mana": 375,
+    "mana_regen": 1.75,
+    "ability_ids": [
+      879,
+      886,
+      5601,
+      1778,
+      5644,
+      5599
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 1724,
+        "right_ability_id": 6998
+      },
+      {
+        "level": 15,
+        "left_ability_id": 6552,
+        "right_ability_id": 412
+      },
+      {
+        "level": 20,
+        "left_ability_id": 6282,
+        "right_ability_id": 1841
+      },
+      {
+        "level": 25,
+        "left_ability_id": 6138,
+        "right_ability_id": 6997
+      }
+    ]
+  },
+  {
+    "hero_id": 106,
+    "internal_name": "npc_dota_hero_ember_spirit",
+    "name_en": "Ember Spirit",
+    "name_zh": "灰烬之灵",
+    "aliases": [
+      "火猫",
+      "灰烬之灵"
+    ],
+    "primary_attribute": 1,
+    "complexity": 2,
+    "attack_capability": 1,
+    "role_levels": [
+      2,
+      0,
+      1,
+      1,
+      0,
+      0,
+      3,
+      0,
+      1
+    ],
+    "strength_base": 21,
+    "strength_gain": 2.5,
+    "agility_base": 22,
+    "agility_gain": 3.2,
+    "intelligence_base": 20,
+    "intelligence_gain": 2.2,
+    "damage_min": 52,
+    "damage_max": 56,
+    "attack_rate": 1.7,
+    "attack_range": 150,
+    "projectile_speed": 900,
+    "armor": 3.6666667,
+    "magic_resistance": 25,
+    "movement_speed": 295,
+    "turn_rate": 0.8,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 582,
+    "health_regen": 2.6000001,
+    "max_mana": 315,
+    "mana_regen": 1,
+    "ability_ids": [
+      5603,
+      5604,
+      5605,
+      5607,
+      1484,
+      5606
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 7050,
+        "right_ability_id": 7051
+      },
+      {
+        "level": 15,
+        "left_ability_id": 353,
+        "right_ability_id": 1394
+      },
+      {
+        "level": 20,
+        "left_ability_id": 6647,
+        "right_ability_id": 6176
+      },
+      {
+        "level": 25,
+        "left_ability_id": 6159,
+        "right_ability_id": 6172
+      }
+    ]
+  },
+  {
+    "hero_id": 107,
+    "internal_name": "npc_dota_hero_earth_spirit",
+    "name_en": "Earth Spirit",
+    "name_zh": "大地之灵",
+    "aliases": [
+      "土猫",
+      "ES",
+      "大地之灵"
+    ],
+    "primary_attribute": 0,
+    "complexity": 3,
+    "attack_capability": 1,
+    "role_levels": [
+      0,
+      0,
+      2,
+      1,
+      0,
+      1,
+      2,
+      0,
+      1
+    ],
+    "strength_base": 23,
+    "strength_gain": 3.8,
+    "agility_base": 17,
+    "agility_gain": 2.4,
+    "intelligence_base": 17,
+    "intelligence_gain": 2.1,
+    "damage_min": 48,
+    "damage_max": 52,
+    "attack_rate": 1.7,
+    "attack_range": 150,
+    "projectile_speed": 900,
+    "armor": 2.8333335,
+    "magic_resistance": 25,
+    "movement_speed": 290,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 626,
+    "health_regen": 3.3,
+    "max_mana": 279,
+    "mana_regen": 0.85,
+    "ability_ids": [
+      5608,
+      5609,
+      5610,
+      1395,
+      5648,
+      5612
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6514,
+        "right_ability_id": 7657
+      },
+      {
+        "level": 15,
+        "left_ability_id": 977,
+        "right_ability_id": 6203
+      },
+      {
+        "level": 20,
+        "left_ability_id": 1713,
+        "right_ability_id": 7661
+      },
+      {
+        "level": 25,
+        "left_ability_id": 7662,
+        "right_ability_id": 324
+      }
+    ]
+  },
+  {
+    "hero_id": 108,
+    "internal_name": "npc_dota_hero_abyssal_underlord",
+    "name_en": "Underlord",
+    "name_zh": "孽主",
+    "aliases": [
+      "大屁股",
+      "深渊领主",
+      "孽主"
+    ],
+    "primary_attribute": 0,
+    "complexity": 2,
+    "attack_capability": 1,
+    "role_levels": [
+      0,
+      1,
+      1,
+      1,
+      0,
+      1,
+      2,
+      0,
+      0
+    ],
+    "strength_base": 25,
+    "strength_gain": 3.2,
+    "agility_base": 12,
+    "agility_gain": 1.6,
+    "intelligence_base": 18,
+    "intelligence_gain": 2.3,
+    "damage_min": 62,
+    "damage_max": 68,
+    "attack_rate": 1.7,
+    "attack_range": 200,
+    "projectile_speed": 900,
+    "armor": 5,
+    "magic_resistance": 25,
+    "movement_speed": 290,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 670,
+    "health_regen": 2.75,
+    "max_mana": 291,
+    "mana_regen": 0.90000004,
+    "ability_ids": [
+      5613,
+      5614,
+      5615,
+      1486,
+      865
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6019,
+        "right_ability_id": 805
+      },
+      {
+        "level": 15,
+        "left_ability_id": 6969,
+        "right_ability_id": 6968
+      },
+      {
+        "level": 20,
+        "left_ability_id": 557,
+        "right_ability_id": 556
+      },
+      {
+        "level": 25,
+        "left_ability_id": 663,
+        "right_ability_id": 710
+      }
+    ]
+  },
+  {
+    "hero_id": 109,
+    "internal_name": "npc_dota_hero_terrorblade",
+    "name_en": "Terrorblade",
+    "name_zh": "恐怖利刃",
+    "aliases": [
+      "魂守",
+      "TB",
+      "恐怖利刃"
+    ],
+    "primary_attribute": 1,
+    "complexity": 2,
+    "attack_capability": 1,
+    "role_levels": [
+      3,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0,
+      2,
+      0
+    ],
+    "strength_base": 18,
+    "strength_gain": 2,
+    "agility_base": 23,
+    "agility_gain": 4,
+    "intelligence_base": 19,
+    "intelligence_gain": 1.6,
+    "damage_min": 49,
+    "damage_max": 55,
+    "attack_rate": 1.5,
+    "attack_range": 150,
+    "projectile_speed": 900,
+    "armor": 9.833334,
+    "magic_resistance": 25,
+    "movement_speed": 315,
+    "turn_rate": 0.8,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 516,
+    "health_regen": 2.3000002,
+    "max_mana": 303,
+    "mana_regen": 0.95,
+    "ability_ids": [
+      5619,
+      5620,
+      5621,
+      699,
+      425,
+      5622,
+      1396
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6107,
+        "right_ability_id": 6943
+      },
+      {
+        "level": 15,
+        "left_ability_id": 6168,
+        "right_ability_id": 479
+      },
+      {
+        "level": 20,
+        "left_ability_id": 1186,
+        "right_ability_id": 1840
+      },
+      {
+        "level": 25,
+        "left_ability_id": 6942,
+        "right_ability_id": 7861
+      }
+    ]
+  },
+  {
+    "hero_id": 110,
+    "internal_name": "npc_dota_hero_phoenix",
+    "name_en": "Phoenix",
+    "name_zh": "凤凰",
+    "aliases": [
+      "凤凰"
+    ],
+    "primary_attribute": 0,
+    "complexity": 2,
+    "attack_capability": 2,
+    "role_levels": [
+      0,
+      2,
+      3,
+      1,
+      0,
+      0,
+      2,
+      0,
+      2
+    ],
+    "strength_base": 23,
+    "strength_gain": 3.3,
+    "agility_base": 12,
+    "agility_gain": 1.5,
+    "intelligence_base": 16,
+    "intelligence_gain": 1.8,
+    "damage_min": 44,
+    "damage_max": 54,
+    "attack_rate": 1.7,
+    "attack_range": 500,
+    "projectile_speed": 1100,
+    "armor": 1,
+    "magic_resistance": 25,
+    "movement_speed": 280,
+    "turn_rate": 0.9,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 626,
+    "health_regen": 4.3,
+    "max_mana": 267,
+    "mana_regen": 0.8,
+    "ability_ids": [
+      5623,
+      5625,
+      5626,
+      1397,
+      5630
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6227,
+        "right_ability_id": 6852
+      },
+      {
+        "level": 15,
+        "left_ability_id": 6915,
+        "right_ability_id": 6085
+      },
+      {
+        "level": 20,
+        "left_ability_id": 6401,
+        "right_ability_id": 6308
+      },
+      {
+        "level": 25,
+        "left_ability_id": 406,
+        "right_ability_id": 1775
+      }
+    ]
+  },
+  {
+    "hero_id": 111,
+    "internal_name": "npc_dota_hero_oracle",
+    "name_en": "Oracle",
+    "name_zh": "神谕者",
+    "aliases": [
+      "神谕",
+      "神谕者"
+    ],
+    "primary_attribute": 2,
+    "complexity": 3,
+    "attack_capability": 2,
+    "role_levels": [
+      0,
+      3,
+      3,
+      2,
+      0,
+      0,
+      1,
+      0,
+      0
+    ],
+    "strength_base": 20,
+    "strength_gain": 2.2,
+    "agility_base": 15,
+    "agility_gain": 1.7,
+    "intelligence_base": 26,
+    "intelligence_gain": 3.6,
+    "damage_min": 39,
+    "damage_max": 45,
+    "attack_rate": 1.7,
+    "attack_range": 625,
+    "projectile_speed": 900,
+    "armor": 3.5,
+    "magic_resistance": 25,
+    "movement_speed": 295,
+    "turn_rate": 0.7,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 560,
+    "health_regen": 2.25,
+    "max_mana": 387,
+    "mana_regen": 1.8000001,
+    "ability_ids": [
+      5637,
+      5638,
+      5639,
+      932,
+      5640,
+      1401
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 544,
+        "right_ability_id": 6206
+      },
+      {
+        "level": 15,
+        "left_ability_id": 471,
+        "right_ability_id": 405
+      },
+      {
+        "level": 20,
+        "left_ability_id": 6710,
+        "right_ability_id": 681
+      },
+      {
+        "level": 25,
+        "left_ability_id": 6540,
+        "right_ability_id": 791
+      }
+    ]
+  },
+  {
+    "hero_id": 112,
+    "internal_name": "npc_dota_hero_winter_wyvern",
+    "name_en": "Winter Wyvern",
+    "name_zh": "寒冬飞龙",
+    "aliases": [
+      "冰龙",
+      "WW",
+      "寒冬飞龙"
+    ],
+    "primary_attribute": 2,
+    "complexity": 2,
+    "attack_capability": 2,
+    "role_levels": [
+      0,
+      3,
+      1,
+      2,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "strength_base": 22,
+    "strength_gain": 2.5,
+    "agility_base": 16,
+    "agility_gain": 1.7,
+    "intelligence_base": 26,
+    "intelligence_gain": 3.6,
+    "damage_min": 42,
+    "damage_max": 49,
+    "attack_rate": 1.7,
+    "attack_range": 450,
+    "projectile_speed": 700,
+    "armor": 3.6666667,
+    "magic_resistance": 25,
+    "movement_speed": 285,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 1200,
+    "max_health": 604,
+    "health_regen": 2.45,
+    "max_mana": 387,
+    "mana_regen": 1.8000001,
+    "ability_ids": [
+      5651,
+      5652,
+      5653,
+      1779,
+      5654
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6523,
+        "right_ability_id": 6994
+      },
+      {
+        "level": 15,
+        "left_ability_id": 6106,
+        "right_ability_id": 719
+      },
+      {
+        "level": 20,
+        "left_ability_id": 684,
+        "right_ability_id": 6297
+      },
+      {
+        "level": 25,
+        "left_ability_id": 418,
+        "right_ability_id": 5939
+      }
+    ]
+  },
+  {
+    "hero_id": 113,
+    "internal_name": "npc_dota_hero_arc_warden",
+    "name_en": "Arc Warden",
+    "name_zh": "天穹守望者",
+    "aliases": [
+      "电狗",
+      "AW",
+      "天穹守望者"
+    ],
+    "primary_attribute": 3,
+    "complexity": 3,
+    "attack_capability": 2,
+    "role_levels": [
+      3,
+      0,
+      1,
+      0,
+      0,
+      0,
+      3,
+      0,
+      0
+    ],
+    "strength_base": 20,
+    "strength_gain": 2.2,
+    "agility_base": 22,
+    "agility_gain": 2.7,
+    "intelligence_base": 24,
+    "intelligence_gain": 2.6,
+    "damage_min": 23,
+    "damage_max": 29,
+    "attack_rate": 1.7,
+    "attack_range": 625,
+    "projectile_speed": 900,
+    "armor": 3.6666667,
+    "magic_resistance": 25,
+    "movement_speed": 300,
+    "turn_rate": 0.7,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 560,
+    "health_regen": 2.25,
+    "max_mana": 363,
+    "mana_regen": 1.2,
+    "ability_ids": [
+      5677,
+      5678,
+      5679,
+      1407,
+      5683
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 1111,
+        "right_ability_id": 6287
+      },
+      {
+        "level": 15,
+        "left_ability_id": 975,
+        "right_ability_id": 1112
+      },
+      {
+        "level": 20,
+        "left_ability_id": 7105,
+        "right_ability_id": 7104
+      },
+      {
+        "level": 25,
+        "left_ability_id": 7120,
+        "right_ability_id": 5959
+      }
+    ]
+  },
+  {
+    "hero_id": 114,
+    "internal_name": "npc_dota_hero_monkey_king",
+    "name_en": "Monkey King",
+    "name_zh": "齐天大圣",
+    "aliases": [
+      "猴王",
+      "大圣",
+      "MK",
+      "齐天大圣"
+    ],
+    "primary_attribute": 1,
+    "complexity": 2,
+    "attack_capability": 1,
+    "role_levels": [
+      2,
+      0,
+      0,
+      1,
+      0,
+      0,
+      2,
+      0,
+      1
+    ],
+    "strength_base": 19,
+    "strength_gain": 2.8,
+    "agility_base": 23,
+    "agility_gain": 3.7,
+    "intelligence_base": 20,
+    "intelligence_gain": 1.8,
+    "damage_min": 52,
+    "damage_max": 56,
+    "attack_rate": 1.6,
+    "attack_range": 300,
+    "projectile_speed": 900,
+    "armor": 4.8333335,
+    "magic_resistance": 25,
+    "movement_speed": 300,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 538,
+    "health_regen": 2.9,
+    "max_mana": 315,
+    "mana_regen": 1,
+    "ability_ids": [
+      5716,
+      5721,
+      5723,
+      5719,
+      5725,
+      1627
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 822,
+        "right_ability_id": 7025
+      },
+      {
+        "level": 15,
+        "left_ability_id": 6696,
+        "right_ability_id": 802
+      },
+      {
+        "level": 20,
+        "left_ability_id": 747,
+        "right_ability_id": 6421
+      },
+      {
+        "level": 25,
+        "left_ability_id": 7038,
+        "right_ability_id": 748
+      }
+    ]
+  },
+  {
+    "hero_id": 119,
+    "internal_name": "npc_dota_hero_dark_willow",
+    "name_en": "Dark Willow",
+    "name_zh": "邪影芳灵",
+    "aliases": [
+      "小仙女",
+      "邪影芳灵"
+    ],
+    "primary_attribute": 2,
+    "complexity": 2,
+    "attack_capability": 2,
+    "role_levels": [
+      0,
+      2,
+      2,
+      1,
+      0,
+      0,
+      2,
+      0,
+      0
+    ],
+    "strength_base": 20,
+    "strength_gain": 2,
+    "agility_base": 18,
+    "agility_gain": 1.6,
+    "intelligence_base": 22,
+    "intelligence_gain": 3.5,
+    "damage_min": 49,
+    "damage_max": 57,
+    "attack_rate": 1.5,
+    "attack_range": 475,
+    "projectile_speed": 1200,
+    "armor": 3,
+    "magic_resistance": 25,
+    "movement_speed": 290,
+    "turn_rate": 0.7,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 560,
+    "health_regen": 2.75,
+    "max_mana": 339,
+    "mana_regen": 1.1,
+    "ability_ids": [
+      6339,
+      6341,
+      6342,
+      6340,
+      1413,
+      8340
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 1133,
+        "right_ability_id": 6465
+      },
+      {
+        "level": 15,
+        "left_ability_id": 6464,
+        "right_ability_id": 7859
+      },
+      {
+        "level": 20,
+        "left_ability_id": 7655,
+        "right_ability_id": 780
+      },
+      {
+        "level": 25,
+        "left_ability_id": 515,
+        "right_ability_id": 5926
+      }
+    ]
+  },
+  {
+    "hero_id": 120,
+    "internal_name": "npc_dota_hero_pangolier",
+    "name_en": "Pangolier",
+    "name_zh": "石鳞剑士",
+    "aliases": [
+      "滚滚",
+      "穿山甲",
+      "石鳞剑士"
+    ],
+    "primary_attribute": 3,
+    "complexity": 2,
+    "attack_capability": 1,
+    "role_levels": [
+      2,
+      0,
+      2,
+      1,
+      0,
+      1,
+      2,
+      0,
+      2
+    ],
+    "strength_base": 20,
+    "strength_gain": 2.7,
+    "agility_base": 17,
+    "agility_gain": 3.2,
+    "intelligence_base": 16,
+    "intelligence_gain": 2.5,
+    "damage_min": 26,
+    "damage_max": 32,
+    "attack_rate": 1.7,
+    "attack_range": 150,
+    "projectile_speed": 900,
+    "armor": 3.8333335,
+    "magic_resistance": 25,
+    "movement_speed": 300,
+    "turn_rate": 0.9,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 560,
+    "health_regen": 2.25,
+    "max_mana": 267,
+    "mana_regen": 0.8,
+    "ability_ids": [
+      6344,
+      6461,
+      7307,
+      8027,
+      6343,
+      1412
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 9060,
+        "right_ability_id": 9062
+      },
+      {
+        "level": 15,
+        "left_ability_id": 9135,
+        "right_ability_id": 1694
+      },
+      {
+        "level": 20,
+        "left_ability_id": 9061,
+        "right_ability_id": 1053
+      },
+      {
+        "level": 25,
+        "left_ability_id": 1054,
+        "right_ability_id": 9063
+      }
+    ]
+  },
+  {
+    "hero_id": 121,
+    "internal_name": "npc_dota_hero_grimstroke",
+    "name_en": "Grimstroke",
+    "name_zh": "天涯墨客",
+    "aliases": [
+      "墨客",
+      "天涯墨客"
+    ],
+    "primary_attribute": 2,
+    "complexity": 2,
+    "attack_capability": 2,
+    "role_levels": [
+      0,
+      2,
+      2,
+      2,
+      0,
+      0,
+      1,
+      0,
+      0
+    ],
+    "strength_base": 21,
+    "strength_gain": 2.4,
+    "agility_base": 18,
+    "agility_gain": 1.9,
+    "intelligence_base": 25,
+    "intelligence_gain": 3.8,
+    "damage_min": 47,
+    "damage_max": 51,
+    "attack_rate": 1.7,
+    "attack_range": 600,
+    "projectile_speed": 900,
+    "armor": 3,
+    "magic_resistance": 25,
+    "movement_speed": 290,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 582,
+    "health_regen": 2.3500001,
+    "max_mana": 375,
+    "mana_regen": 1.25,
+    "ability_ids": [
+      8000,
+      8006,
+      8007,
+      7852,
+      6491,
+      1414
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 8001,
+        "right_ability_id": 8003
+      },
+      {
+        "level": 15,
+        "left_ability_id": 8002,
+        "right_ability_id": 8004
+      },
+      {
+        "level": 20,
+        "left_ability_id": 1019,
+        "right_ability_id": 508
+      },
+      {
+        "level": 25,
+        "left_ability_id": 774,
+        "right_ability_id": 705
+      }
+    ]
+  },
+  {
+    "hero_id": 123,
+    "internal_name": "npc_dota_hero_hoodwink",
+    "name_en": "Hoodwink",
+    "name_zh": "森海飞霞",
+    "aliases": [
+      "松鼠",
+      "森海飞霞"
+    ],
+    "primary_attribute": 1,
+    "complexity": 2,
+    "attack_capability": 2,
+    "role_levels": [
+      0,
+      2,
+      2,
+      1,
+      0,
+      0,
+      2,
+      0,
+      0
+    ],
+    "strength_base": 17,
+    "strength_gain": 2,
+    "agility_base": 22,
+    "agility_gain": 3.6,
+    "intelligence_base": 21,
+    "intelligence_gain": 2.9,
+    "damage_min": 47,
+    "damage_max": 54,
+    "attack_rate": 2,
+    "attack_range": 575,
+    "projectile_speed": 1800,
+    "armor": 3.6666667,
+    "magic_resistance": 25,
+    "movement_speed": 315,
+    "turn_rate": 0.9,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 494,
+    "health_regen": 1.95,
+    "max_mana": 327,
+    "mana_regen": 1.0500001,
+    "ability_ids": [
+      8429,
+      8158,
+      9501,
+      8107,
+      1422,
+      8106,
+      1423
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 1134,
+        "right_ability_id": 9509
+      },
+      {
+        "level": 15,
+        "left_ability_id": 1569,
+        "right_ability_id": 9513
+      },
+      {
+        "level": 20,
+        "left_ability_id": 1568,
+        "right_ability_id": 6029
+      },
+      {
+        "level": 25,
+        "left_ability_id": 9511,
+        "right_ability_id": 6034
+      }
+    ]
+  },
+  {
+    "hero_id": 126,
+    "internal_name": "npc_dota_hero_void_spirit",
+    "name_en": "Void Spirit",
+    "name_zh": "虚无之灵",
+    "aliases": [
+      "紫猫",
+      "虚无之灵"
+    ],
+    "primary_attribute": 3,
+    "complexity": 2,
+    "attack_capability": 1,
+    "role_levels": [
+      2,
+      0,
+      2,
+      1,
+      0,
+      0,
+      3,
+      0,
+      0
+    ],
+    "strength_base": 22,
+    "strength_gain": 2.6,
+    "agility_base": 21,
+    "agility_gain": 2.2,
+    "intelligence_base": 24,
+    "intelligence_gain": 3.1,
+    "damage_min": 18,
+    "damage_max": 22,
+    "attack_rate": 1.7,
+    "attack_range": 200,
+    "projectile_speed": 900,
+    "armor": 2.5,
+    "magic_resistance": 25,
+    "movement_speed": 290,
+    "turn_rate": 0.7,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 604,
+    "health_regen": 2.45,
+    "max_mana": 363,
+    "mana_regen": 1.2,
+    "ability_ids": [
+      7701,
+      6470,
+      7710,
+      1420,
+      7705
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 7714,
+        "right_ability_id": 7708
+      },
+      {
+        "level": 15,
+        "left_ability_id": 1070,
+        "right_ability_id": 7706
+      },
+      {
+        "level": 20,
+        "left_ability_id": 1657,
+        "right_ability_id": 7707
+      },
+      {
+        "level": 25,
+        "left_ability_id": 7132,
+        "right_ability_id": 7709
+      }
+    ]
+  },
+  {
+    "hero_id": 128,
+    "internal_name": "npc_dota_hero_snapfire",
+    "name_en": "Snapfire",
+    "name_zh": "电炎绝手",
+    "aliases": [
+      "老奶奶",
+      "奶奶",
+      "电炎绝手"
+    ],
+    "primary_attribute": 3,
+    "complexity": 1,
+    "attack_capability": 2,
+    "role_levels": [
+      0,
+      1,
+      3,
+      1,
+      0,
+      0,
+      1,
+      0,
+      0
+    ],
+    "strength_base": 21,
+    "strength_gain": 3.5,
+    "agility_base": 16,
+    "agility_gain": 1.9,
+    "intelligence_base": 21,
+    "intelligence_gain": 2.2,
+    "damage_min": 27,
+    "damage_max": 33,
+    "attack_rate": 1.8,
+    "attack_range": 400,
+    "projectile_speed": 1800,
+    "armor": 3.6666667,
+    "magic_resistance": 25,
+    "movement_speed": 300,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 582,
+    "health_regen": 2.8500001,
+    "max_mana": 327,
+    "mana_regen": 1.0500001,
+    "ability_ids": [
+      6480,
+      6483,
+      6488,
+      6484,
+      6486,
+      6482,
+      1782
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 382,
+        "right_ability_id": 6485
+      },
+      {
+        "level": 15,
+        "left_ability_id": 500,
+        "right_ability_id": 1628
+      },
+      {
+        "level": 20,
+        "left_ability_id": 6487,
+        "right_ability_id": 6197
+      },
+      {
+        "level": 25,
+        "left_ability_id": 384,
+        "right_ability_id": 6479
+      }
+    ]
+  },
+  {
+    "hero_id": 129,
+    "internal_name": "npc_dota_hero_mars",
+    "name_en": "Mars",
+    "name_zh": "玛尔斯",
+    "aliases": [
+      "马尔斯",
+      "玛尔斯"
+    ],
+    "primary_attribute": 0,
+    "complexity": 1,
+    "attack_capability": 1,
+    "role_levels": [
+      1,
+      0,
+      0,
+      2,
+      0,
+      3,
+      0,
+      0,
+      2
+    ],
+    "strength_base": 23,
+    "strength_gain": 3.7,
+    "agility_base": 18,
+    "agility_gain": 1.7,
+    "intelligence_base": 21,
+    "intelligence_gain": 2.4,
+    "damage_min": 49,
+    "damage_max": 57,
+    "attack_rate": 1.8,
+    "attack_range": 250,
+    "projectile_speed": 900,
+    "armor": 2,
+    "magic_resistance": 25,
+    "movement_speed": 310,
+    "turn_rate": 0.8,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 626,
+    "health_regen": 2.55,
+    "max_mana": 327,
+    "mana_regen": 1.5500001,
+    "ability_ids": [
+      6583,
+      6495,
+      6582,
+      1415,
+      1416
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 6756,
+        "right_ability_id": 1417
+      },
+      {
+        "level": 15,
+        "left_ability_id": 1842,
+        "right_ability_id": 6584
+      },
+      {
+        "level": 20,
+        "left_ability_id": 545,
+        "right_ability_id": 6759
+      },
+      {
+        "level": 25,
+        "left_ability_id": 1020,
+        "right_ability_id": 7132
+      }
+    ]
+  },
+  {
+    "hero_id": 131,
+    "internal_name": "npc_dota_hero_ringmaster",
+    "name_en": "Ringmaster",
+    "name_zh": "百戏大王",
+    "aliases": [
+      "马戏团",
+      "百戏大王"
+    ],
+    "primary_attribute": 2,
+    "complexity": 2,
+    "attack_capability": 2,
+    "role_levels": [
+      0,
+      2,
+      2,
+      1,
+      0,
+      0,
+      2,
+      0,
+      0
+    ],
+    "strength_base": 21,
+    "strength_gain": 2.1,
+    "agility_base": 11,
+    "agility_gain": 1.6,
+    "intelligence_base": 25,
+    "intelligence_gain": 3,
+    "damage_min": 48,
+    "damage_max": 58,
+    "attack_rate": 1.7,
+    "attack_range": 575,
+    "projectile_speed": 1200,
+    "armor": 2.8333335,
+    "magic_resistance": 25,
+    "movement_speed": 310,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 582,
+    "health_regen": 2.3500001,
+    "max_mana": 375,
+    "mana_regen": 1.25,
+    "ability_ids": [
+      352,
+      383,
+      386,
+      195,
+      385,
+      388,
+      389,
+      392,
+      390,
+      196
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 400,
+        "right_ability_id": 398
+      },
+      {
+        "level": 15,
+        "left_ability_id": 1493,
+        "right_ability_id": 399
+      },
+      {
+        "level": 20,
+        "left_ability_id": 1492,
+        "right_ability_id": 707
+      },
+      {
+        "level": 25,
+        "left_ability_id": 1846,
+        "right_ability_id": 396
+      }
+    ]
+  },
+  {
+    "hero_id": 135,
+    "internal_name": "npc_dota_hero_dawnbreaker",
+    "name_en": "Dawnbreaker",
+    "name_zh": "破晓辰星",
+    "aliases": [
+      "晨星",
+      "破晓",
+      "破晓辰星"
+    ],
+    "primary_attribute": 0,
+    "complexity": 1,
+    "attack_capability": 1,
+    "role_levels": [
+      1,
+      0,
+      0,
+      0,
+      0,
+      2,
+      0,
+      0,
+      0
+    ],
+    "strength_base": 25,
+    "strength_gain": 3.4,
+    "agility_base": 14,
+    "agility_gain": 1.7,
+    "intelligence_base": 20,
+    "intelligence_gain": 2,
+    "damage_min": 55,
+    "damage_max": 59,
+    "attack_rate": 1.7,
+    "attack_range": 150,
+    "projectile_speed": 900,
+    "armor": 4.3333335,
+    "magic_resistance": 25,
+    "movement_speed": 300,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 670,
+    "health_regen": 3,
+    "max_mana": 315,
+    "mana_regen": 1,
+    "ability_ids": [
+      7902,
+      7914,
+      7918,
+      1424,
+      7906
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 7931,
+        "right_ability_id": 7934
+      },
+      {
+        "level": 15,
+        "left_ability_id": 7930,
+        "right_ability_id": 7940
+      },
+      {
+        "level": 20,
+        "left_ability_id": 7933,
+        "right_ability_id": 7938
+      },
+      {
+        "level": 25,
+        "left_ability_id": 7937,
+        "right_ability_id": 1843
+      }
+    ]
+  },
+  {
+    "hero_id": 136,
+    "internal_name": "npc_dota_hero_marci",
+    "name_en": "Marci",
+    "name_zh": "玛西",
+    "aliases": [
+      "玛西"
+    ],
+    "primary_attribute": 3,
+    "complexity": 2,
+    "attack_capability": 1,
+    "role_levels": [
+      1,
+      1,
+      0,
+      1,
+      0,
+      0,
+      1,
+      0,
+      2
+    ],
+    "strength_base": 23,
+    "strength_gain": 3.2,
+    "agility_base": 20,
+    "agility_gain": 2.2,
+    "intelligence_base": 19,
+    "intelligence_gain": 1.9,
+    "damage_min": 29,
+    "damage_max": 33,
+    "attack_rate": 1.7,
+    "attack_range": 150,
+    "projectile_speed": 0,
+    "armor": 3.3333335,
+    "magic_resistance": 25,
+    "movement_speed": 315,
+    "turn_rate": 0.9,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 626,
+    "health_regen": 2.55,
+    "max_mana": 303,
+    "mana_regen": 0.95,
+    "ability_ids": [
+      8192,
+      8235,
+      1427,
+      1428,
+      8198
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 1430,
+        "right_ability_id": 1844
+      },
+      {
+        "level": 15,
+        "left_ability_id": 8238,
+        "right_ability_id": 1042
+      },
+      {
+        "level": 20,
+        "left_ability_id": 8246,
+        "right_ability_id": 1431
+      },
+      {
+        "level": 25,
+        "left_ability_id": 1572,
+        "right_ability_id": 1573
+      }
+    ]
+  },
+  {
+    "hero_id": 137,
+    "internal_name": "npc_dota_hero_primal_beast",
+    "name_en": "Primal Beast",
+    "name_zh": "獸",
+    "aliases": [
+      "大怪兽",
+      "獸"
+    ],
+    "primary_attribute": 0,
+    "complexity": 1,
+    "attack_capability": 1,
+    "role_levels": [
+      0,
+      0,
+      0,
+      2,
+      0,
+      3,
+      0,
+      0,
+      3
+    ],
+    "strength_base": 26,
+    "strength_gain": 4.3,
+    "agility_base": 15,
+    "agility_gain": 1,
+    "intelligence_base": 16,
+    "intelligence_gain": 1.7,
+    "damage_min": 62,
+    "damage_max": 64,
+    "attack_rate": 1.8,
+    "attack_range": 150,
+    "projectile_speed": 900,
+    "armor": 4.5,
+    "magic_resistance": 25,
+    "movement_speed": 305,
+    "turn_rate": 0.6,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 692,
+    "health_regen": 2.8500001,
+    "max_mana": 267,
+    "mana_regen": 0.8,
+    "ability_ids": [
+      992,
+      994,
+      995,
+      7739,
+      996,
+      1432
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 1845,
+        "right_ability_id": 7743
+      },
+      {
+        "level": 15,
+        "left_ability_id": 7742,
+        "right_ability_id": 7740
+      },
+      {
+        "level": 20,
+        "left_ability_id": 1082,
+        "right_ability_id": 7744
+      },
+      {
+        "level": 25,
+        "left_ability_id": 6009,
+        "right_ability_id": 1081
+      }
+    ]
+  },
+  {
+    "hero_id": 138,
+    "internal_name": "npc_dota_hero_muerta",
+    "name_en": "Muerta",
+    "name_zh": "琼英碧灵",
+    "aliases": [
+      "琼英碧灵"
+    ],
+    "primary_attribute": 2,
+    "complexity": 1,
+    "attack_capability": 2,
+    "role_levels": [
+      3,
+      0,
+      2,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "strength_base": 19,
+    "strength_gain": 2,
+    "agility_base": 21,
+    "agility_gain": 2.7,
+    "intelligence_base": 23,
+    "intelligence_gain": 3.6,
+    "damage_min": 47,
+    "damage_max": 55,
+    "attack_rate": 1.7,
+    "attack_range": 575,
+    "projectile_speed": 3000,
+    "armor": 3.5,
+    "magic_resistance": 25,
+    "movement_speed": 295,
+    "turn_rate": 0.7,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 538,
+    "health_regen": 2.15,
+    "max_mana": 351,
+    "mana_regen": 1.15,
+    "ability_ids": [
+      5751,
+      5752,
+      5753,
+      1785,
+      5754,
+      1436
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 5759,
+        "right_ability_id": 5755
+      },
+      {
+        "level": 15,
+        "left_ability_id": 1629,
+        "right_ability_id": 5758
+      },
+      {
+        "level": 20,
+        "left_ability_id": 1438,
+        "right_ability_id": 5991
+      },
+      {
+        "level": 25,
+        "left_ability_id": 5757,
+        "right_ability_id": 5906
+      }
+    ]
+  },
+  {
+    "hero_id": 145,
+    "internal_name": "npc_dota_hero_kez",
+    "name_en": "Kez",
+    "name_zh": "凯",
+    "aliases": [
+      "凯"
+    ],
+    "primary_attribute": 1,
+    "complexity": 3,
+    "attack_capability": 1,
+    "role_levels": [
+      3,
+      0,
+      0,
+      1,
+      0,
+      0,
+      2,
+      0,
+      0
+    ],
+    "strength_base": 20,
+    "strength_gain": 2.8,
+    "agility_base": 27,
+    "agility_gain": 3.5,
+    "intelligence_base": 20,
+    "intelligence_gain": 1.7,
+    "damage_min": 50,
+    "damage_max": 56,
+    "attack_rate": 1.9,
+    "attack_range": 225,
+    "projectile_speed": 900,
+    "armor": 5.5,
+    "magic_resistance": 25,
+    "movement_speed": 310,
+    "turn_rate": 1,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 560,
+    "health_regen": 3.5,
+    "max_mana": 315,
+    "mana_regen": 1.25,
+    "ability_ids": [
+      1498,
+      1499,
+      1500,
+      1497,
+      1501,
+      1502,
+      1503,
+      1504,
+      1506
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 1514,
+        "right_ability_id": 1513
+      },
+      {
+        "level": 15,
+        "left_ability_id": 1510,
+        "right_ability_id": 1714
+      },
+      {
+        "level": 20,
+        "left_ability_id": 1511,
+        "right_ability_id": 1655
+      },
+      {
+        "level": 25,
+        "left_ability_id": 1748,
+        "right_ability_id": 1509
+      }
+    ]
+  },
+  {
+    "hero_id": 155,
+    "internal_name": "npc_dota_hero_largo",
+    "name_en": "Largo",
+    "name_zh": "朗戈",
+    "aliases": [
+      "朗戈"
+    ],
+    "primary_attribute": 0,
+    "complexity": 2,
+    "attack_capability": 1,
+    "role_levels": [
+      0,
+      3,
+      0,
+      1,
+      0,
+      2,
+      0,
+      0,
+      0
+    ],
+    "strength_base": 24,
+    "strength_gain": 3.6,
+    "agility_base": 14,
+    "agility_gain": 1.3,
+    "intelligence_base": 21,
+    "intelligence_gain": 2.6,
+    "damage_min": 63,
+    "damage_max": 69,
+    "attack_rate": 1.7,
+    "attack_range": 150,
+    "projectile_speed": 0,
+    "armor": 4.3333335,
+    "magic_resistance": 25,
+    "movement_speed": 290,
+    "turn_rate": 0.7,
+    "sight_range_day": 1800,
+    "sight_range_night": 800,
+    "max_health": 648,
+    "health_regen": 2.65,
+    "max_mana": 327,
+    "mana_regen": 1.0500001,
+    "ability_ids": [
+      1659,
+      1660,
+      1661,
+      1666,
+      1662,
+      1663,
+      1664,
+      1665
+    ],
+    "talent_tiers": [
+      {
+        "level": 10,
+        "left_ability_id": 1673,
+        "right_ability_id": 1671
+      },
+      {
+        "level": 15,
+        "left_ability_id": 1674,
+        "right_ability_id": 1672
+      },
+      {
+        "level": 20,
+        "left_ability_id": 1669,
+        "right_ability_id": 1670
+      },
+      {
+        "level": 25,
+        "left_ability_id": 1667,
+        "right_ability_id": 1668
+      }
+    ]
+  }
+]

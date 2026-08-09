@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "patch": "7.41e",
+  "generated_at": "2026-08-09T19:05:36.363376Z",
+  "excluded_entities": [
+    {
+      "entity_type": "item",
+      "entity_id": 825,
+      "internal_name": "item_ascetic_cap",
+      "classification": "legacy_or_unclassified",
+      "reason": "Official Datafeed still lists a legacy/unclassified item whose bilingual effect description references three absent effect fields and whose acquisition/recipe status is inactive.",
+      "raw_description_en": "<h1>Passive: Endurance</h1>Whenever a debuff would be applied to the owner, grant %status_resistance%%% Status resistance and %slow_resistance%%% Slow Resistance for %duration% seconds.",
+      "raw_description_zh": "<h1>被动：坚韧不拔</h1>持有者被施加来自玩家控制单位的负面效果就会获得%status_resistance%%%状态抗性和%slow_resistance%%%减速抗性，持续%duration%秒。",
+      "unresolved_tokens_en": [
+        "duration",
+        "slow_resistance",
+        "status_resistance"
+      ],
+      "unresolved_tokens_zh": [
+        "duration",
+        "slow_resistance",
+        "status_resistance"
+      ],
+      "official_status_evidence": {
+        "summary": {
+          "neutral_item_tier": -1,
+          "is_pregame_suggested": false,
+          "is_earlygame_suggested": false,
+          "is_lategame_suggested": false,
+          "recipes": [],
+          "is_innate": false
+        },
+        "detail": {
+          "is_item": true,
+          "item_cost": 0,
+          "item_initial_charges": 0,
+          "item_neutral_tier": 4294967295,
+          "item_stock_max": 0,
+          "item_stock_time": 0,
+          "item_quality": 1
+        },
+        "special_value_names": [
+          "AbilityCooldown"
+        ],
+        "recipe_graph": {
+          "component_ids_if_upgrade_target": [],
+          "upgrade_ids_if_recipe": [],
+          "referencing_edges": []
+        },
+        "source_endpoints": [
+          "https://www.dota2.com/datafeed/itemlist",
+          "https://www.dota2.com/datafeed/itemdata"
+        ]
+      }
+    }
+  ]
+}

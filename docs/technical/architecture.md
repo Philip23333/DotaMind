@@ -27,6 +27,31 @@ app/
   resources/       /debug/plan asset
 ```
 
+## Valve Static Catalog
+
+V3.3-3 adds one committed, versioned static catalog under
+`apps/api/app/data/catalog/`: manifest, hero, ability and item runtime files plus
+the developer-only `sync_audit.json`. `scripts/sync_game_data.py` is the only
+networked maintenance path. It reads Valve Datafeed in English and Simplified
+Chinese, normalizes and validates the complete bundle, then atomically replaces
+the five reviewed files. Request-time code never calls Datafeed and has no
+third-party or legacy constants fallback.
+
+`DotaCatalogRepository` loads the manifest and three runtime entity files once,
+validates IDs, references, tokens and manifest counts, and serves immutable-copy
+lookups. The audit file is deliberately outside runtime resolution: reviewed
+`legacy_or_unclassified` entities retain raw official text and unresolved tokens
+for developers but are absent from resolver, tool evidence and Answer output.
+
+The default ToolRegistry has exactly one `resolve_hero`, registered by
+`dota_catalog_tools.py` with `official_snapshot` provenance. Chinese official
+names and the reviewed `hero_aliases_zh.yaml` overlay are indexed together, so
+aliases such as `火女` resolve exactly to Lina/25. Downstream STRATZ contracts
+continue to reference `data.hero.hero_id`, while OpenDota registrations remain
+unchanged; STRATZ also reads its English hero display-name index from the same Catalog repository. The former `hero_tools.py`
+resolver and `data/heroes/dota2_heroes.yaml` snapshot were deleted rather than
+kept as a parallel source.
+
 ## Controller and Graph
 
 Every request first produces one discriminated `ControllerDecision`:
