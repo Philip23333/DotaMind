@@ -155,3 +155,25 @@
 
 - 格式由唯一 Answer LLM 的明确系统规则约束，不引入第二套确定性渲染器；Catalog 原始结构字段继续保留在内部工具证据中供审计。
 - 本节改动尚未提交。
+
+## 21:30 — 物品配方数据与回答格式修复
+
+### 已完成
+
+- 审查并清理中断 diff：本次仅保留 Repository、`dota.item_info`、Answer 格式、对应测试及配方文档；多轮对话记忆相关改动全部移出本次修复。
+- `DotaCatalogRepository` 新增通过成品 ID 或图纸 ID 查询同一官方配方边的深拷贝接口；基础物品不会因为作为组件而被误判为合成装备。
+- `dota.item_info` 现在输出图纸、组件和真正的进一步升级目标定义，包含中英文名、价格、`special_values` 与可审计成本明细；成品自身只保留在原始 edge 的官方 target 中。
+- 以正式 7.41e 快照的希瓦的守护验收：图纸 118 为 1250 金币，组件 9/1847/1872 为 1400/950/900，计算总价 4500，与成品价格一致；未修改快照，也未增加英雄/物品硬编码特例。
+- Answer 规则固定合成物品的“组件（中文名（English））｜价格｜属性”表格并单列图纸；基础物品只显示双语名、价格和属性；存在图纸证据时不得声称无图纸，只有成本不一致时才提示异常。
+- 同步 V3.3-3 设计和当前架构中的配方 edge、图纸和成本证据说明。
+
+### 验证
+
+- Repository/Tool/Answer focused：`38 passed`。
+- 全量 API pytest：`552 passed, 20 skipped, 1 existing Starlette/httpx deprecation warning`。
+- Ruff、compileall 和 `git diff --check` 通过。
+
+### 当前边界
+
+- 本次不处理 compact Turn、多轮组件引用或历史实体记忆；“上面三个配方物品售价是多少”仍作为后续独立问题。
+- 不重新生成 Catalog 快照，不增加第三方或网络 fallback；全部改动尚未提交。

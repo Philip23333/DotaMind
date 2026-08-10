@@ -224,6 +224,9 @@ manifest 的 entity count 只统计可以向用户展示的运行时目录实体
 - item list 中的 recipe 关系规范化为 component IDs 和 upgrade target IDs。
 - 所有引用 ID 必须存在；循环、悬空引用或重复边使同步失败。
 - 图纸项和最终物品是不同实体，resolver 默认优先最终物品，用户明确说“图纸”时才匹配图纸。
+- Runtime repository 可以从图纸 ID 或 edge 的成品 ID 查询同一条配方边，并返回深拷贝。
+- `item_recipe` 保留图纸、组件和升级目标的双语身份、价格、可展示属性，以及组件、图纸、
+  计算总价与成品价格的一致性明细；不得用成品记录中缺少图纸 ID 推断“无图纸”。
 
 ### 5.6 已审核的当前目录排除
 
@@ -245,6 +248,7 @@ get_hero_abilities(hero_id)
 get_hero_talent_tree(hero_id)
 resolve_item(query)
 get_item(item_id)
+get_item_recipe_edges(item_id)
 ```
 
 要求：
@@ -351,6 +355,8 @@ V3.3-3 继续使用 `natural_language_answer`，不新增结构化前端卡片 c
 - 天赋按 10/15/20/25 级 left/right 展示；
 - 明确区分普通技能、先天技能、Scepter 和 Shard 效果；
 - 物品回答区分本体、图纸、组件和升级目标；
+- 合成物品用“组件（中文名（English））｜价格｜属性”表格展示组件和独立图纸行，并用
+  cost breakdown 校验总价；只有不一致时才用自然语言说明差异，不暴露内部字段名。
 - 披露目录 patch 和同步时间；
 - 不根据静态字段推断出装强度、技能加点优先级或天赋胜率。
 - 用户可见回答不得暴露 `has_shard`、`is_innate`、`special_bonus_*`、
@@ -445,7 +451,8 @@ confidence。本阶段不新增第二个 LLM reviewer，也不实现逐句 claim
 
 #### C4 — `dota.item_info`
 
-- 输出物品定义、属性、主动/被动效果和可选 recipe graph。
+- 输出物品定义、属性、主动/被动效果和可选 recipe graph；配方边包含图纸、组件、升级目标
+  的必要展示定义和可审计成本明细。
 - 无配方物品不伪造空配方证据。
 
 #### C5 — Evidence 与 registry 收口

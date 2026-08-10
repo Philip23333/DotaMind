@@ -784,7 +784,7 @@ def test_item_info_contract_fields_and_recipe_evidence() -> None:
 
     recipe_result = definition.handler(ItemInfoInput(item_id=115), QueryContext())
     assert recipe_result["item"]["is_recipe"] is True
-    assert recipe_result["recipe"]["component_item_ids"] == []
+    assert recipe_result["recipe"]["component_item_ids"] == [8, 21]
     assert recipe_result["recipe"]["upgrade_item_ids"] == [116]
 
 
@@ -849,6 +849,59 @@ def test_item_info_omits_recipe_evidence_without_graph_and_rejects_bad_ids() -> 
     assert error.status == "error"
     assert error.error == "CatalogLookupError: item not found: 999999"
     assert dispatch.error_code == "handler_error"
+
+
+def test_item_info_shivas_recipe_definitions_and_cost_breakdown_are_complete() -> None:
+    registry = build_default_tool_registry(
+        Settings(
+            opendota_base_url="https://api.opendota.test/api",
+            stratz_graphql_url="https://api.stratz.test/graphql",
+            stratz_token="token",
+        )
+    )
+    definition = registry.get("dota.item_info")
+
+    result = definition.handler(ItemInfoInput(item_id=119), QueryContext())
+    recipe = result["recipe"]
+
+    assert [(item["item_id"], item["price"]) for item in recipe["recipe_items"]] == [
+        (118, 1250)
+    ]
+    assert [
+        (item["item_id"], item["name_en"], item["name_zh"], item["price"])
+        for item in recipe["component_items"]
+    ] == [
+        (9, "Platemail", "板甲", 1400),
+        (1847, "Splintmail", "片甲", 950),
+        (1872, "Chasm Stone", "裂隙之石", 900),
+    ]
+    assert all("special_values" in item for item in recipe["recipe_items"])
+    assert all("special_values" in item for item in recipe["component_items"])
+    assert recipe["upgrade_items"] == []
+    assert [(item["item_id"], item["price"]) for item in recipe["edges"][0]["upgrade_items"]] == [
+        (119, 4500)
+    ]
+    breakdown = recipe["edges"][0]["cost_breakdown"]
+    assert breakdown == {
+        "component_price_total": 3250,
+        "recipe_price_total": 1250,
+        "calculated_total_price": 4500,
+        "finished_items": [{"item_id": 119, "price": 4500, "is_consistent": True}],
+    }
+
+    tool_result = ToolResult(
+        tool_call_id="shiva-info",
+        tool="dota.item_info",
+        status="ok",
+        data=result,
+        source=definition.source,
+        latency_ms=0,
+    )
+    assert definition.evidence_extractor is not None
+    evidence = definition.evidence_extractor(tool_result)
+    recipe_evidence = next(item for item in evidence if item.kind == "item_recipe")
+    assert recipe_evidence.value["recipe"]["recipe_items"][0]["item_id"] == 118
+    assert recipe_evidence.value["recipe"]["edges"][0]["cost_breakdown"] == breakdown
 
 
 def test_default_registry_keeps_resolve_hero_reference_contracts() -> None:

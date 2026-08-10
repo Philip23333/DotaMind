@@ -63,12 +63,18 @@ def _bundle() -> CatalogBundle:
         )
     ]
     items = [
-        ItemCatalogRecord(item_id=1, internal_name="item_component", name_en="Component"),
+        ItemCatalogRecord(
+            item_id=1,
+            internal_name="item_component",
+            name_en="Component",
+            price=80,
+        ),
         ItemCatalogRecord(
             item_id=2,
             internal_name="item_recipe_test_item",
             name_en="Test Item Recipe",
             name_zh="测试物品图纸",
+            price=20,
             is_recipe=True,
             upgrade_item_ids=[3],
         ),
@@ -135,6 +141,24 @@ def test_repository_loads_once_and_returns_deep_copies(tmp_path) -> None:
 
     with pytest.raises(CatalogLookupError, match="item not found"):
         repository.get_item(999)
+
+
+def test_repository_recipe_edges_cover_finished_and_recipe_items_with_deep_copies(
+    tmp_path,
+) -> None:
+    _write_bundle(tmp_path, _bundle())
+    repository = DotaCatalogRepository(tmp_path)
+
+    finished_edges = repository.get_item_recipe_edges(3)
+    recipe_edges = repository.get_item_recipe_edges(2)
+
+    assert finished_edges == recipe_edges
+    assert finished_edges[0].recipe_item_id == 2
+    assert finished_edges[0].component_item_ids == [1]
+    finished_edges[0].component_item_ids.append(999)
+    assert repository.get_item_recipe_edges(3)[0].component_item_ids == [1]
+    with pytest.raises(CatalogLookupError, match="item not found"):
+        repository.get_item_recipe_edges(999)
 
 
 def test_repository_resolvers_support_exact_fuzzy_and_recipe_scope(tmp_path) -> None:

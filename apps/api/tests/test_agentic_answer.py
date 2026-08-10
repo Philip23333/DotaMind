@@ -235,6 +235,13 @@ def test_natural_language_answer_receives_catalog_rules_and_real_evidence() -> N
     assert "final item from a recipe item" in system
     assert "snapshot patch and generated_at" in system
     assert "Never infer item-build strength" in system
+    assert "组件（中文名（English）） | 价格 | 属性" in system
+    assert "include the recipe scroll as an explicit row" in system
+    assert "Use cost_breakdown to verify and report the total price" in system
+    assert "explain a mismatch in natural language only when" in system
+    assert "row with no display attributes may say `无`" in system
+    assert "never claim that the item has no recipe scroll" in system
+    assert "For a basic item, show only" in system
     assert "must never expose internal schema or token names" in system
     assert "`has_shard = true`" in system
     assert "`special_bonus_*`" in system

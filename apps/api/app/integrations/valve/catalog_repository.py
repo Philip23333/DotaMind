@@ -259,6 +259,16 @@ class DotaCatalogRepository:
         self._abilities = {record.ability_id: record for record in abilities}
         self._items = {record.item_id: record for record in items}
         self._recipes = tuple(recipes)
+        recipe_edges_by_item_id: dict[int, list[RecipeEdge]] = {}
+        for edge in recipes:
+            related_ids = (edge.recipe_item_id, *edge.upgrade_item_ids)
+            for item_id in related_ids:
+                bucket = recipe_edges_by_item_id.setdefault(item_id, [])
+                if all(existing.recipe_item_id != edge.recipe_item_id for existing in bucket):
+                    bucket.append(edge)
+        self._recipe_edges_by_item_id = {
+            item_id: tuple(edges) for item_id, edges in recipe_edges_by_item_id.items()
+        }
         self._hero_resolver = _Resolver(heroes, entity="hero")
         self._item_resolver = _Resolver(items, entity="item")
 
@@ -283,6 +293,15 @@ class DotaCatalogRepository:
 
     def get_item(self, item_id: int) -> ItemCatalogRecord:
         return self._copy_or_raise(self._items, item_id, "item")
+
+    def get_item_recipe_edges(self, item_id: int) -> list[RecipeEdge]:
+        """Return recipe edges for a recipe scroll or one of its finished items."""
+
+        self.get_item(item_id)
+        return [
+            edge.model_copy(deep=True)
+            for edge in self._recipe_edges_by_item_id.get(int(item_id), ())
+        ]
 
     def get_hero_abilities(self, hero_id: int) -> list[AbilityCatalogRecord]:
         hero = self.get_hero(hero_id)

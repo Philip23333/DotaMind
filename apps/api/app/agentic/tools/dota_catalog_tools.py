@@ -508,18 +508,41 @@ def _item_info_handler(repository: DotaCatalogRepository):
             "item": _serialize_item(item),
             "snapshot": repository.snapshot_metadata(),
         }
-        if item.recipe_component_ids or item.upgrade_item_ids:
+        recipe_edges = repository.get_item_recipe_edges(args.item_id)
+        if recipe_edges:
+            serialized_edges = [
+                _serialize_recipe_edge(repository, edge) for edge in recipe_edges
+            ]
             payload["recipe"] = {
-                "component_item_ids": list(item.recipe_component_ids),
-                "upgrade_item_ids": list(item.upgrade_item_ids),
-                "component_items": [
-                    _serialize_item_identity(repository.get_item(item_id))
-                    for item_id in item.recipe_component_ids
-                ],
-                "upgrade_items": [
-                    _serialize_item_identity(repository.get_item(item_id))
-                    for item_id in item.upgrade_item_ids
-                ],
+                "recipe_item_ids": _ordered_unique(
+                    edge["recipe_item"]["item_id"] for edge in serialized_edges
+                ),
+                "component_item_ids": _ordered_unique(
+                    item["item_id"]
+                    for edge in serialized_edges
+                    for item in edge["component_items"]
+                ),
+                "upgrade_item_ids": _ordered_unique(
+                    item["item_id"]
+                    for edge in serialized_edges
+                    for item in edge["upgrade_items"]
+                    if item["item_id"] != args.item_id
+                ),
+                "recipe_items": _ordered_unique_items(
+                    edge["recipe_item"] for edge in serialized_edges
+                ),
+                "component_items": _ordered_unique_items(
+                    item
+                    for edge in serialized_edges
+                    for item in edge["component_items"]
+                ),
+                "upgrade_items": _ordered_unique_items(
+                    item
+                    for edge in serialized_edges
+                    for item in edge["upgrade_items"]
+                    if item["item_id"] != args.item_id
+                ),
+                "edges": serialized_edges,
             }
         return payload
 
@@ -570,6 +593,82 @@ def _serialize_item_identity(item: Any) -> dict[str, Any]:
         "name_zh": item.name_zh,
         "is_recipe": item.is_recipe,
     }
+
+
+def _serialize_item_recipe_definition(item: Any) -> dict[str, Any]:
+    return {
+        **_serialize_item_identity(item),
+        "price": item.price,
+        "special_values": [
+            special.model_dump(mode="json") for special in item.special_values
+        ],
+    }
+
+
+def _serialize_recipe_edge(repository: DotaCatalogRepository, edge: Any) -> dict[str, Any]:
+    recipe_item = _serialize_item_recipe_definition(
+        repository.get_item(edge.recipe_item_id)
+    )
+    component_items = [
+        _serialize_item_recipe_definition(repository.get_item(item_id))
+        for item_id in edge.component_item_ids
+    ]
+    upgrade_items = [
+        _serialize_item_recipe_definition(repository.get_item(item_id))
+        for item_id in edge.upgrade_item_ids
+    ]
+    component_total = _sum_known_prices(component_items)
+    recipe_total = _sum_known_prices([recipe_item])
+    calculated_total = (
+        component_total + recipe_total
+        if component_total is not None and recipe_total is not None
+        else None
+    )
+    finished_items = [
+        {
+            "item_id": item["item_id"],
+            "price": item["price"],
+            "is_consistent": (
+                calculated_total == item["price"]
+                if calculated_total is not None and _is_numeric_price(item["price"])
+                else None
+            ),
+        }
+        for item in upgrade_items
+    ]
+    return {
+        "recipe_item": recipe_item,
+        "component_items": component_items,
+        "upgrade_items": upgrade_items,
+        "cost_breakdown": {
+            "component_price_total": component_total,
+            "recipe_price_total": recipe_total,
+            "calculated_total_price": calculated_total,
+            "finished_items": finished_items,
+        },
+    }
+
+
+def _is_numeric_price(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _sum_known_prices(items: list[dict[str, Any]]) -> int | float | None:
+    prices = [item.get("price") for item in items]
+    if any(not _is_numeric_price(price) for price in prices):
+        return None
+    return sum(prices)
+
+
+def _ordered_unique(values: Any) -> list[int]:
+    return list(dict.fromkeys(int(value) for value in values))
+
+
+def _ordered_unique_items(items: Any) -> list[dict[str, Any]]:
+    by_id: dict[int, dict[str, Any]] = {}
+    for item in items:
+        by_id.setdefault(int(item["item_id"]), item)
+    return list(by_id.values())
 
 
 def resolve_hero_evidence(result: ToolResult) -> list[EvidenceItem]:

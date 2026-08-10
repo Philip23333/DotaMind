@@ -155,3 +155,25 @@
 
 - The single Answer LLM is constrained by explicit system rules rather than a second deterministic renderer. Original structured Catalog fields remain in internal tool evidence for audit.
 - The changes in this section are uncommitted.
+
+## 21:30 — Item recipe data and answer-format fix
+
+### Completed
+
+- Audited and cleaned the interrupted diff: this change keeps only Repository, `dota.item_info`, Answer formatting, related tests, and recipe documentation; all multi-turn conversation-memory changes were removed from this fix.
+- Added deep-copy recipe-edge lookup to `DotaCatalogRepository` by either finished-item ID or recipe-scroll ID; a basic item is not treated as a crafted item merely because it is used as a component.
+- `dota.item_info` now returns recipe-scroll, component, and true further-upgrade definitions with bilingual names, prices, `special_values`, and auditable cost details; the queried finished item remains only in the original official edge target.
+- Accepted against the formal 7.41e Shiva's Guard snapshot: recipe scroll 118 costs 1250, components 9/1847/1872 cost 1400/950/900, and the calculated total is 4500, matching the finished-item price. No snapshot regeneration or hero/item hardcoded exception was added.
+- Fixed Answer rules to render crafted items as a “Component (Chinese name (English)) | Price | Attributes” table with a separate scroll row; basic items show only bilingual name, price, and attributes. Answers must not claim there is no scroll when scroll evidence exists and only mention a mismatch when costs disagree.
+- Aligned the V3.3-3 design and current architecture with recipe-edge, scroll, and cost-evidence semantics.
+
+### Verification
+
+- Repository/Tool/Answer focused: `38 passed`.
+- Full API pytest: `552 passed, 20 skipped`, with one existing Starlette/httpx deprecation warning.
+- Ruff, compileall, and `git diff --check` passed.
+
+### Current boundary
+
+- This change does not address compact Turn, multi-turn component references, or historical entity memory; “prices of the three recipe components above” remains a separate follow-up issue.
+- No Catalog snapshot regeneration or third-party/network fallback was added; all changes remain uncommitted.
