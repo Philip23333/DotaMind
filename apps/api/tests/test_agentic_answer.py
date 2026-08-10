@@ -3,7 +3,8 @@ from typing import Any
 
 from app.agentic.answer import AnswerSynthesizer
 from app.agentic.evidence import build_evidence_graph
-from app.agentic.models import ExecutionPlan, ToolResult, ToolSource
+from app.agentic.models import ExecutionPlan, QueryContext, ToolCall, ToolResult, ToolSource
+from app.agentic.tools.dota_catalog_tools import HeroAttributesInput, ResolveHeroInput
 from app.agentic.tools.stratz_tools import build_default_tool_registry
 from app.core.config import Settings
 from app.llm.provider import ToolCallResult
@@ -170,6 +171,77 @@ def test_answer_synthesizer_streams_natural_language_deltas() -> None:
     assert answer.summary == "Grounded answer."
 
 
+def test_natural_language_answer_receives_catalog_rules_and_real_evidence() -> None:
+    registry = _registry()
+    resolve_definition = registry.get("resolve_hero")
+    attributes_definition = registry.get("dota.hero_attributes")
+    resolve_data = resolve_definition.handler(
+        ResolveHeroInput(query="Lina"), QueryContext()
+    )
+    attributes_data = attributes_definition.handler(
+        HeroAttributesInput(hero_id=25), QueryContext()
+    )
+    plan = ExecutionPlan(
+        intent="hero_attributes",
+        goal="Explain Lina's base attributes and gains.",
+        output_contract="natural_language_answer",
+        tool_calls=[
+            ToolCall(id="resolve", tool="resolve_hero", args={"query": "Lina"}),
+            ToolCall(
+                id="attributes",
+                tool="dota.hero_attributes",
+                args={"hero_id": "$resolve.data.hero.hero_id"},
+            ),
+        ],
+        required_evidence=["hero_identity", "hero_attributes"],
+    )
+    graph = build_evidence_graph(
+        plan,
+        [
+            ToolResult(
+                tool_call_id="resolve",
+                tool="resolve_hero",
+                status="ok",
+                data=resolve_data,
+                source=resolve_definition.source,
+                latency_ms=0,
+            ),
+            ToolResult(
+                tool_call_id="attributes",
+                tool="dota.hero_attributes",
+                status="ok",
+                data=attributes_data,
+                source=attributes_definition.source,
+                latency_ms=0,
+            ),
+        ],
+        registry,
+    )
+    llm = CapturingFakeLLM()
+
+    answer = asyncio.run(
+        AnswerSynthesizer(llm=llm, llm_enabled=True).synthesize(plan, graph)
+    )
+
+    assert answer.status == "ok"
+    assert len(llm.messages) == 1
+    system = llm.messages[0][0]["content"]
+    user = llm.messages[0][1]["content"]
+    assert "use only normalized text and values" in system
+    assert "base attribute values from per-level gains" in system
+    assert "ability level arrays" in system
+    assert "level 10/15/20/25 and left/right side" in system
+    assert "Scepter grants/upgrades" in system
+    assert "final item from a recipe item" in system
+    assert "snapshot patch and generated_at" in system
+    assert "Never infer item-build strength" in system
+    assert "'kind':'hero_attributes'" in user.replace(" ", "")
+    assert "'strength_base'" in user
+    assert "'strength_gain'" in user
+    assert "'patch':'7.41e'" in user.replace(" ", "")
+    assert "'generated_at'" in user
+
+
 def _synthesize(plan: ExecutionPlan, graph):
     return asyncio.run(AnswerSynthesizer(llm_enabled=False).synthesize(plan, graph))
 
@@ -217,6 +289,20 @@ class StreamingFakeLLM(FakeLLM):
     async def stream_complete(self, *args, **kwargs):
         yield "Grounded"
         yield " answer."
+
+
+class CapturingFakeLLM(FakeLLM):
+    def __init__(self) -> None:
+        self.messages: list[list[dict[str, str]]] = []
+
+    async def complete(
+        self,
+        messages: list[dict[str, str]],
+        temperature: float = 0.7,
+        max_tokens: int = 1000,
+    ) -> str:
+        self.messages.append([dict(message) for message in messages])
+        return "Grounded answer."
 
 
 def test_natural_language_prompt_asks_for_weekly_trend() -> None:

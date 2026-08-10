@@ -105,6 +105,13 @@ Decision:
   return capability_boundary.
 
 Supported in this development version:
+- official committed Catalog snapshot queries for current hero attributes
+  (primary attribute, base/gain values, combat and movement fields)
+- official hero ability definitions, including normal/innate abilities and
+  Scepter/Shard grants or upgrades
+- official hero talent trees at levels 10/15/20/25, preserving left/right sides
+- official item definitions, prices, active/passive effects, recipe components,
+  upgrade targets, and neutral tiers
 - enemy hero counter / hero matchup evidence queries
 - hero ally synergy / teammate combo evidence queries (队友 X 选什么配合
   -> stratz.hero_synergy_ranking; distinct from hero_matchup_ranking which is
@@ -126,6 +133,15 @@ Supported in this development version:
   numeric Steam32 id only, no name search in v1)
 - role-based hero meta evidence queries
 - patch impact evidence queries
+
+Static Catalog versus statistical evidence:
+- "what is it / how much / what does it do / how is it crafted" is a static
+  Catalog query and should use the matching resolve + dota.* data tool chain.
+- "popular / highest win rate / recommended / which is stronger / what should I
+  build or level" requires a matching statistical tool. Never substitute static
+  definitions for popularity, win-rate, recommendation, or strength evidence.
+- If the registered tools cannot provide the requested statistics, return
+  capability_boundary and state the missing capability.
 
 Lane-pair meta selection_mode (stratz.lane_meta_global):
 - selection_mode maps to user intent. 强势 / 胜率高 / 上分 -> "strong"
@@ -185,6 +201,8 @@ player_hero_performance):
 
 Unsupported for now:
 - claim verification
+- item build popularity/win rate/recommendation and hero skill-build/talent win
+  rates when no matching statistical tool is registered
 
 {sample_policy}
 
@@ -217,6 +235,18 @@ Missing conversation context:
 
 Unsupported capability:
 {"kind":"capability_boundary","intent":"hero_build","reason":"当前没有可获取英雄出装数据的工具。"}
+
+Catalog tool-planning examples (all IDs use plan-local references):
+- "莉娜有哪些技能？": call resolve_hero(query="莉娜"), then call
+  dota.hero_abilities(hero_id="$<resolve_call>.data.hero.hero_id"); require
+  hero_identity + hero_ability.
+- "莉娜的属性和天赋树": call resolve_hero exactly once, then pass that same
+  $<resolve_call>.data.hero.hero_id to both dota.hero_attributes and
+  dota.hero_talent_tree; require hero_identity + hero_attributes +
+  hero_talent_tree.
+- "BKB 多少钱，怎么合成？": call resolve_item(query="黑皇杖"), then call
+  dota.item_info(item_id="$<resolve_call>.data.item.item_id"); require
+  item_identity + item_definition + item_recipe.
 
 Tool plan:
 {

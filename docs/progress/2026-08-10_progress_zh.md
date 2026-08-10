@@ -71,3 +71,65 @@
 - A4 正式快照生成和 B2 `resolve_hero` 归位已经收口；运行时英雄解析不再依赖旧 YAML，也没有网络 fallback。
 - 当前 `dota_catalog_tools.py` 只注册已经完成迁移的 `resolve_hero`。英雄属性、技能、天赋树、物品 resolver/info 等后续 Catalog tools 仍按 V3.3-3 的 C 阶段顺序实现。
 - 本轮未提交、未暂存。
+
+## 13:00 — C1-C5 Catalog 查询工具与 EvidenceGraph 收口
+
+### 已完成
+
+- 在唯一的 `dota_catalog_tools` 注册路径中新增 `dota.hero_attributes`、`dota.hero_abilities`、`dota.hero_talent_tree`、`resolve_item` 和 `dota.item_info`；连同 `resolve_hero` 共六个 Catalog 工具。
+- 三个英雄数据工具的 `hero_id` 强制引用当前计划前序 `resolve_hero.data.hero.hero_id`；`dota.item_info.item_id` 强制引用前序 `resolve_item.data.item.item_id`。literal、错误工具/路径和前向引用均被拒绝。
+- 英雄属性工具输出身份、基础/成长属性、战斗和移动字段；技能工具按 hero ability IDs 原顺序输出非天赋技能及双语描述、等级数值、先天/Scepter/Shard 信息；天赋工具严格输出 10/15/20/25 四层左右分支。
+- 物品 resolver 保留 exact/fuzzy/ambiguous/not_found 和明确图纸 scope；物品详情输出完整双语定义，并仅在真实存在组件或升级目标时输出 recipe graph。
+- 六工具统一使用 `official_snapshot` source 和 snapshot metadata。Evidence kinds/mandatory 固定为 `hero_identity`、`hero_attributes`、`hero_ability`、`hero_talent_tree`、`item_identity`、`item_definition`；`item_recipe` 仅按实际关系可选产出。
+- 补齐 ToolRegistry、Controller catalog renderer、plan validation、plan-local reference execution、EvidenceGraph per-call mandatory 和 producibility 回归；没有新增 intent 固定路由、运行时 Datafeed HTTP 或第三方 fallback。
+
+### 验证
+
+- 主代理 Catalog/C5 focused：`119 passed`；全量 API pytest：`533 passed, 20 skipped`。
+- Ruff、compileall 和 `git diff --check` 通过。
+- 实际 evidence 链验证：英雄链产出 identity、attributes、有序 ability 和 8 条 talent 分支证据；BKB 产出 identity/definition/recipe；知识之书只产出 identity/definition，显式要求 recipe 时正确报告缺失。
+
+### 当前边界
+
+- C1-C5 已完成；尚未修改 D 阶段的 Controller Supported/Unsupported 描述、自然回答静态目录规则或完整 graph 自然回答回归。
+- 本节改动尚未提交。
+
+## 13:50 — D1-D3 Controller/Answer/Graph 与 E1 真实抽查
+
+### 已完成
+
+- Controller Supported/Unsupported 增加英雄属性、技能/先天/Scepter/Shard、四层天赋、物品定义/价格/效果/配方/中立等级，并明确热门、胜率、推荐和强弱判断必须由统计 evidence 支撑。
+- 增加莉娜技能、莉娜属性+天赋复用一次 resolver、BKB 价格+配方三个 plan-local reference 示例；没有增加 intent 专用路由。
+- 唯一 `natural_language_answer` 路径新增 Catalog evidence 规则：区分 base/gain、技能等级数组、天赋层与左右、普通/先天/Scepter/Shard、物品本体/图纸/组件/升级目标，并披露 patch/generated_at；禁止从静态定义推断推荐、热门度、加点或天赋胜率。
+- Graph 端到端覆盖英雄属性、技能、天赋、组合查询、BKB 定义+配方和无配方物品；成功路径均经过 Tool→Evidence→Answer→Critic，并覆盖 resolver ambiguity/not_found、坏引用、缺 recipe evidence 和 Answer LLM error。
+- E1 对正式 7.41e 快照完成人工抽查：Lina/25 的属性、普通技能、先天 Slow Burn、Scepter 授予 Flame Cloak、Shard 升级 Laguna Blade 和四层天赋完整；Blink Dagger 主动效果及 BKB 的 Mithril Hammer/Ogre Axe 组件关系完整。
+
+### 验证
+
+- 主代理 D focused：`73 passed`；D 阶段完成时全量 API pytest：`548 passed, 20 skipped`。
+- Ruff 和 `git diff --check` 通过。
+- 真实抽查只读取 committed Catalog snapshot，没有请求期 Valve/STRATZ/OpenDota 网络访问，也没有 mock Catalog 业务数据。
+
+### 当前边界
+
+- D1-D3 与 E1 已完成；保持单一自然回答路径、现有流式行为和 output contract，不新增卡片或第二 reviewer。
+- 尚待 E2 最终全量门禁、文档一致性检查和 Git 提交。
+
+## 13:51 — E2 质量门禁与 V3.3-3 阶段收口
+
+### 已完成
+
+- 对 C/D 新增的六个 Catalog 工具、Controller 能力边界、Answer 规则和 Graph 成功/失败路径执行最终全量回归。
+- 更新当前架构文档，记录唯一 Catalog 注册路径、plan-local resolver 引用、EvidenceGraph 义务、静态/统计边界和单一自然回答路径。
+- 中英文当日进度结构和事实保持一致；未修改前端，也未声明无关前端测试。
+
+### 验证
+
+- 全量 API pytest：`548 passed, 20 skipped`。
+- Ruff（app/tests/scripts）、compileall 和 `git diff --check` 通过。
+- 唯一非阻塞告警是既存 Starlette/httpx deprecation warning。
+
+### 阶段结论
+
+- V3.3-3 的 A-E 实施顺序已经闭合：正式 Valve 快照、Runtime Catalog/resolvers、六个查询工具、EvidenceGraph、Controller/Answer/Graph 回归及真实抽查均完成。
+- 当前改动已满足提交条件；不包含推送远端操作。

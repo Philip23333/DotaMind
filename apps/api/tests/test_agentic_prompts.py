@@ -90,6 +90,20 @@ def test_system_prompt_matches_utf8_lf_golden_fixture() -> None:
     ).hexdigest()
 
 
+def test_controller_prompt_declares_catalog_static_and_statistical_boundaries() -> None:
+    prompt = AgentController(_registry(), llm_enabled=False)._system_prompt()
+
+    assert "official committed Catalog snapshot queries for current hero attributes" in prompt
+    assert "official hero ability definitions" in prompt
+    assert "official hero talent trees at levels 10/15/20/25" in prompt
+    assert "official item definitions, prices" in prompt
+    assert "Never substitute static\n  definitions" in prompt
+    assert "return\n  capability_boundary" in prompt
+    assert 'dota.hero_abilities(hero_id="$<resolve_call>.data.hero.hero_id")' in prompt
+    assert "call resolve_hero exactly once" in prompt
+    assert 'dota.item_info(item_id="$<resolve_call>.data.item.item_id")' in prompt
+
+
 def test_prompt_hash_changes_with_rendered_catalog_contract_and_policy(monkeypatch) -> None:
     policy = get_policy()
     baseline = build_controller_prompt(_registry(), policy).prompt_versions[

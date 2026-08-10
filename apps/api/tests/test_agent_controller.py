@@ -174,6 +174,139 @@ def test_agent_controller_returns_capability_boundary() -> None:
     assert result.raw_output["kind"] == "capability_boundary"
 
 
+def test_agent_controller_accepts_catalog_static_query_plans() -> None:
+    cases = [
+        (
+            "莉娜有哪些技能？",
+            {
+                "kind": "tool_plan",
+                "plan": {
+                    "intent": "hero_abilities",
+                    "goal": "Return Lina's official ability definitions.",
+                    "output_contract": "natural_language_answer",
+                    "tool_calls": [
+                        {
+                            "id": "resolve_lina",
+                            "tool": "resolve_hero",
+                            "args": {"query": "莉娜"},
+                        },
+                        {
+                            "id": "abilities",
+                            "tool": "dota.hero_abilities",
+                            "args": {
+                                "hero_id": "$resolve_lina.data.hero.hero_id"
+                            },
+                        },
+                    ],
+                    "required_evidence": ["hero_identity", "hero_ability"],
+                },
+            },
+            ["resolve_hero", "dota.hero_abilities"],
+        ),
+        (
+            "莉娜的属性和天赋树",
+            {
+                "kind": "tool_plan",
+                "plan": {
+                    "intent": "hero_attributes_and_talents",
+                    "goal": "Return Lina's official attributes and talent tree.",
+                    "output_contract": "natural_language_answer",
+                    "tool_calls": [
+                        {
+                            "id": "resolve_lina",
+                            "tool": "resolve_hero",
+                            "args": {"query": "莉娜"},
+                        },
+                        {
+                            "id": "attributes",
+                            "tool": "dota.hero_attributes",
+                            "args": {
+                                "hero_id": "$resolve_lina.data.hero.hero_id"
+                            },
+                        },
+                        {
+                            "id": "talents",
+                            "tool": "dota.hero_talent_tree",
+                            "args": {
+                                "hero_id": "$resolve_lina.data.hero.hero_id"
+                            },
+                        },
+                    ],
+                    "required_evidence": [
+                        "hero_identity",
+                        "hero_attributes",
+                        "hero_talent_tree",
+                    ],
+                },
+            },
+            ["resolve_hero", "dota.hero_attributes", "dota.hero_talent_tree"],
+        ),
+        (
+            "黑皇杖多少钱，怎么合成？",
+            {
+                "kind": "tool_plan",
+                "plan": {
+                    "intent": "item_definition_and_recipe",
+                    "goal": "Return BKB's official price and recipe.",
+                    "output_contract": "natural_language_answer",
+                    "tool_calls": [
+                        {
+                            "id": "resolve_bkb",
+                            "tool": "resolve_item",
+                            "args": {"query": "黑皇杖"},
+                        },
+                        {
+                            "id": "item_info",
+                            "tool": "dota.item_info",
+                            "args": {
+                                "item_id": "$resolve_bkb.data.item.item_id"
+                            },
+                        },
+                    ],
+                    "required_evidence": [
+                        "item_identity",
+                        "item_definition",
+                        "item_recipe",
+                    ],
+                },
+            },
+            ["resolve_item", "dota.item_info"],
+        ),
+    ]
+
+    for query, payload, expected_tools in cases:
+        controller = AgentController(
+            _registry(),
+            llm=FakeLLM(payload),
+            llm_enabled=True,
+            planner_max_retries=0,
+        )
+        result = asyncio.run(controller.decide(query))
+
+        assert result.status == "decided"
+        assert [call.tool for call in _result_plan(result).tool_calls] == expected_tools
+
+
+def test_agent_controller_keeps_static_catalog_recommendation_boundary() -> None:
+    controller = AgentController(
+        _registry(),
+        llm=FakeLLM(
+            {
+                "kind": "capability_boundary",
+                "intent": "item_build_recommendation",
+                "reason": "No registered statistical item build tool is available.",
+            }
+        ),
+        llm_enabled=True,
+        planner_max_retries=0,
+    )
+
+    result = asyncio.run(controller.decide("莉娜应该出什么装备，哪个胜率最高？"))
+
+    assert result.status == "decided"
+    assert isinstance(result.decision, CapabilityBoundaryDecision)
+
+
 def test_agent_controller_rejects_unknown_decision_fields() -> None:
     controller = AgentController(
         _registry(),

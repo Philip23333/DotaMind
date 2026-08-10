@@ -43,14 +43,24 @@ lookups. The audit file is deliberately outside runtime resolution: reviewed
 `legacy_or_unclassified` entities retain raw official text and unresolved tokens
 for developers but are absent from resolver, tool evidence and Answer output.
 
-The default ToolRegistry has exactly one `resolve_hero`, registered by
-`dota_catalog_tools.py` with `official_snapshot` provenance. Chinese official
-names and the reviewed `hero_aliases_zh.yaml` overlay are indexed together, so
-aliases such as `火女` resolve exactly to Lina/25. Downstream STRATZ contracts
-continue to reference `data.hero.hero_id`, while OpenDota registrations remain
-unchanged; STRATZ also reads its English hero display-name index from the same Catalog repository. The former `hero_tools.py`
-resolver and `data/heroes/dota2_heroes.yaml` snapshot were deleted rather than
-kept as a parallel source.
+The default ToolRegistry registers six Catalog tools through
+`dota_catalog_tools.py`: `resolve_hero`, hero attributes, ordered abilities,
+talent tree, `resolve_item`, and item info. All use `official_snapshot`
+provenance, require plan-local resolver references for downstream numeric IDs,
+and emit call-owned EvidenceGraph items. Chinese official names and the reviewed
+`hero_aliases_zh.yaml` overlay are indexed together, so aliases such as `火女`
+resolve exactly to Lina/25. Item resolution distinguishes final-item and explicit
+recipe scope; item-recipe evidence exists only for real component or upgrade
+relations.
+
+Downstream STRATZ contracts continue to reference `data.hero.hero_id`, while
+OpenDota registrations remain unchanged. STRATZ reads its English hero display-
+name index from the same Catalog repository. The former `hero_tools.py` resolver
+and `data/heroes/dota2_heroes.yaml` snapshot were deleted rather than kept as a
+parallel source. Controller capability text distinguishes official static facts
+from statistical popularity, strength, and recommendation questions. Catalog
+answers stay on the single `natural_language_answer` path, disclose snapshot
+metadata, and may not infer recommendations from static definitions.
 
 ## Controller and Graph
 

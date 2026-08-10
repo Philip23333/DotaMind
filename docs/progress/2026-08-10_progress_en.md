@@ -71,3 +71,65 @@
 - A4 formal snapshot generation and B2 `resolve_hero` relocation are closed. Runtime hero resolution no longer depends on the old YAML and has no network fallback.
 - `dota_catalog_tools.py` currently registers only the migrated `resolve_hero`. Hero attributes, abilities, talent tree, item resolver/info, and the remaining Catalog tools still follow the V3.3-3 C-phase order.
 - This work remains unstaged and uncommitted.
+
+## 13:00 — C1-C5 Catalog query tools and EvidenceGraph closure
+
+### Completed
+
+- Added `dota.hero_attributes`, `dota.hero_abilities`, `dota.hero_talent_tree`, `resolve_item`, and `dota.item_info` through the single `dota_catalog_tools` registration path, for six Catalog tools including `resolve_hero`.
+- All three hero-data tools require `hero_id` to reference the current plan's preceding `resolve_hero.data.hero.hero_id`; `dota.item_info.item_id` requires a preceding `resolve_item.data.item.item_id`. Literals, wrong tools/paths, and forward references are rejected.
+- The attributes tool returns identity, base/growth attributes, and combat/movement fields. The abilities tool preserves hero ability-ID order while excluding talents and exposes bilingual descriptions, level values, innate/Scepter/Shard data. The talent tool emits exactly four 10/15/20/25 left/right tiers.
+- The item resolver preserves exact/fuzzy/ambiguous/not_found and explicit recipe scope. Item info exposes the complete bilingual definition and emits a recipe graph only when components or upgrade targets actually exist.
+- All six tools use `official_snapshot` provenance and snapshot metadata. Evidence kinds/mandatory obligations are fixed for `hero_identity`, `hero_attributes`, `hero_ability`, `hero_talent_tree`, `item_identity`, and `item_definition`; `item_recipe` is optional and produced only for real relations.
+- Closed ToolRegistry, Controller catalog rendering, plan validation, plan-local reference execution, EvidenceGraph per-call mandatory, and producibility regression coverage. No intent-specific routing, request-time Datafeed HTTP, or third-party fallback was added.
+
+### Verification
+
+- Primary-agent Catalog/C5 focused suite: `119 passed`; full API pytest: `533 passed, 20 skipped`.
+- Ruff, compileall, and `git diff --check` passed.
+- Actual evidence chains produced identity, attributes, ordered abilities, and eight talent-branch evidence items for heroes; BKB produced identity/definition/recipe; Tome of Knowledge produced identity/definition only and correctly reported missing evidence when recipe was explicitly required.
+
+### Current boundary
+
+- C1-C5 are complete. D-stage Controller Supported/Unsupported wording, static-catalog natural-answer rules, and full graph natural-answer regressions are not yet changed.
+- The changes in this section are uncommitted.
+
+## 13:50 — D1-D3 Controller/Answer/Graph and E1 live review
+
+### Completed
+
+- Expanded Controller Supported/Unsupported capability text for hero attributes, abilities/innates/Scepter/Shard, four-tier talents, and item definitions/prices/effects/recipes/neutral tiers, while requiring statistical evidence for popularity, win rate, recommendations, and strength judgments.
+- Added three plan-local reference examples for Lina abilities, shared-resolver Lina attributes plus talents, and BKB price plus recipe. No intent-specific routing was added.
+- Extended the single `natural_language_answer` path with Catalog evidence rules for base/gain values, ability level arrays, talent tier/side, normal/innate/Scepter/Shard distinctions, item/final recipe/component/upgrade distinctions, and patch/generated_at disclosure. Static definitions cannot support recommendation, popularity, skill-build, or talent-win-rate claims.
+- Added Graph end-to-end coverage for hero attributes, abilities, talents, combined queries, BKB definition plus recipe, and an item without a recipe. Every success path runs Tool→Evidence→Answer→Critic, with resolver ambiguity/not_found, bad references, missing recipe evidence, and Answer LLM errors covered.
+- Completed E1 manual review of the formal 7.41e snapshot: Lina/25 attributes, normal abilities, innate Slow Burn, Scepter-granted Flame Cloak, Shard-upgraded Laguna Blade, and all four talent tiers are complete; Blink Dagger's active effect and BKB's Mithril Hammer/Ogre Axe component relation are complete.
+
+### Verification
+
+- Primary-agent D focused suite: `73 passed`; full API pytest at D completion: `548 passed, 20 skipped`.
+- Ruff and `git diff --check` passed.
+- The live review read only the committed Catalog snapshot; it performed no request-time Valve/STRATZ/OpenDota network access and used no mock Catalog business data.
+
+### Current boundary
+
+- D1-D3 and E1 are complete. The single natural-answer path, existing streaming behavior, and output contract remain; no card or second reviewer was added.
+- E2 final full quality gates, documentation consistency review, and Git commit remain.
+
+## 13:51 — E2 quality gates and V3.3-3 phase closure
+
+### Completed
+
+- Ran the final full regression for the six Catalog tools, Controller capability boundary, Answer rules, and Graph success/failure paths added in C/D.
+- Updated the current architecture document for the single Catalog registration path, plan-local resolver references, EvidenceGraph obligations, static/statistical boundary, and single natural-answer path.
+- Kept the daily Chinese and English progress files structurally and factually aligned. No frontend code changed and no unrelated frontend test claim was made.
+
+### Verification
+
+- Full API pytest: `548 passed, 20 skipped`.
+- Ruff (app/tests/scripts), compileall, and `git diff --check` passed.
+- The only non-blocking warning is the existing Starlette/httpx deprecation warning.
+
+### Phase conclusion
+
+- The V3.3-3 A-E implementation order is closed: formal Valve snapshots, Runtime Catalog/resolvers, six query tools, EvidenceGraph, Controller/Answer/Graph regression, and live review are complete.
+- The current changes meet the commit gate; no remote push is included.
