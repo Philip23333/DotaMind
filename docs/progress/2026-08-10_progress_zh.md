@@ -133,3 +133,25 @@
 
 - V3.3-3 的 A-E 实施顺序已经闭合：正式 Valve 快照、Runtime Catalog/resolvers、六个查询工具、EvidenceGraph、Controller/Answer/Graph 回归及真实抽查均完成。
 - 当前改动已满足提交条件；不包含推送远端操作。
+
+## 14:15 — 英雄技能回答格式与查询粒度收口
+
+### 已完成
+
+- Controller 明确区分完整英雄技能查询与单技能查询：完整查询固定执行一次 `resolve_hero`，再执行 `dota.hero_abilities` 和 `dota.hero_talent_tree`；单技能查询只执行 resolver + abilities，除非用户同时询问天赋。
+- Answer 禁止向用户展示 `has_shard`、`has_scepter`、`is_innate`、`special_bonus_*`、`talent_internal_name`、`internal_name` 等内部 schema/token 名，改用“魔晶升级”“神杖升级”“先天技能”等自然标题。
+- 完整技能回答固定为英雄双语身份与快照、按 Catalog 顺序逐技能详情、末尾简洁天赋表；天赋表列为“等级｜左侧天赋（中文 / English）｜右侧天赋（中文 / English）”。
+- 完整技能回答不再生成重复的“技能分类汇总”和“相关天赋”章节，也不在数值后暴露 talent internal token。
+- 单技能回答只输出用户指定技能，不附其他技能、分类汇总、相关天赋或完整天赋树。
+- 保持唯一 `natural_language_answer` 路径和原 Catalog tool/evidence payload，不增加 deterministic formatter、卡片或第二回答实现。
+
+### 验证
+
+- Controller/Answer/Graph focused：`70 passed`；全量 API pytest：`550 passed, 20 skipped`。
+- Ruff、compileall 和 `git diff --check` 通过。
+- 使用正式 Monkey King Catalog evidence 的 Graph 回归确认完整查询包含 ability + talent evidence，单技能查询不包含 talent evidence；用户可见示例含天赋表且不含内部 token。
+
+### 当前边界
+
+- 格式由唯一 Answer LLM 的明确系统规则约束，不引入第二套确定性渲染器；Catalog 原始结构字段继续保留在内部工具证据中供审计。
+- 本节改动尚未提交。

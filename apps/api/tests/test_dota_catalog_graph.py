@@ -83,6 +83,27 @@ class FailingAnswerLLM(CatalogAnswerLLM):
         raise RuntimeError("answer unavailable")
 
 
+class FullAbilityFormattingLLM(CatalogAnswerLLM):
+    async def complete(
+        self,
+        messages: list[dict[str, str]],
+        temperature: float = 0.7,
+        max_tokens: int = 1000,
+    ) -> str:
+        self.messages.append([dict(message) for message in messages])
+        assert "'kind': 'hero_ability'" in messages[1]["content"]
+        assert "'kind': 'hero_talent_tree'" in messages[1]["content"]
+        return (
+            "齐天大圣 / Monkey King\n\n"
+            "快照：7.41e\n\n"
+            "### 棒击大地 / Boundless Strike\n\n"
+            "挥出伸长的金箍棒，击晕并伤害直线上的敌人。\n\n"
+            "| 等级 | 左侧天赋（中文 / English） | 右侧天赋（中文 / English） |\n"
+            "|---|---|---|\n"
+            "| 10 | 左侧 / Left | 右侧 / Right |"
+        )
+
+
 @pytest.fixture(autouse=True)
 def _forbid_valve_runtime_http(monkeypatch) -> None:
     def fail_fetch(*args, **kwargs):
@@ -162,6 +183,38 @@ def _item_plan(query: str, *, recipe: bool) -> ExecutionPlan:
     )
 
 
+def _monkey_king_ability_plan(*, complete: bool) -> ExecutionPlan:
+    calls = [
+        ToolCall(id="resolve", tool="resolve_hero", args={"query": "齐天大圣"}),
+        ToolCall(
+            id="abilities",
+            tool="dota.hero_abilities",
+            args={"hero_id": "$resolve.data.hero.hero_id"},
+        ),
+    ]
+    required_evidence = ["hero_identity", "hero_ability"]
+    if complete:
+        calls.append(
+            ToolCall(
+                id="talents",
+                tool="dota.hero_talent_tree",
+                args={"hero_id": "$resolve.data.hero.hero_id"},
+            )
+        )
+        required_evidence.append("hero_talent_tree")
+    return ExecutionPlan(
+        intent="complete_hero_abilities" if complete else "single_hero_ability",
+        goal=(
+            "列出齐天大圣的全部技能。"
+            if complete
+            else "棒击大地是什么，有哪些数值？"
+        ),
+        output_contract="natural_language_answer",
+        tool_calls=calls,
+        required_evidence=required_evidence,
+    )
+
+
 @pytest.mark.parametrize(
     ("plan", "expected_kinds"),
     [
@@ -202,6 +255,59 @@ def test_catalog_graph_success_runs_tool_evidence_answer_and_critic(
     assert isinstance(llm, CatalogAnswerLLM)
     assert len(llm.messages) == 1
     assert all(result.source.kind == "official_snapshot" for result in state.tool_results)
+
+
+def test_catalog_graph_distinguishes_complete_and_single_ability_evidence() -> None:
+    complete_state, _complete_llm = _run(_monkey_king_ability_plan(complete=True))
+    single_state, _single_llm = _run(_monkey_king_ability_plan(complete=False))
+
+    assert complete_state.status == "ok"
+    assert [result.tool for result in complete_state.tool_results] == [
+        "resolve_hero",
+        "dota.hero_abilities",
+        "dota.hero_talent_tree",
+    ]
+    assert complete_state.evidence_graph is not None
+    assert {
+        item.kind for item in complete_state.evidence_graph.evidence
+    } == {"hero_identity", "hero_ability", "hero_talent_tree"}
+
+    assert single_state.status == "ok"
+    assert [result.tool for result in single_state.tool_results] == [
+        "resolve_hero",
+        "dota.hero_abilities",
+    ]
+    assert single_state.evidence_graph is not None
+    single_evidence = single_state.evidence_graph.evidence
+    assert {item.kind for item in single_evidence} == {"hero_identity", "hero_ability"}
+    assert not any(item.kind == "hero_talent_tree" for item in single_evidence)
+    assert any(
+        item.kind == "hero_ability"
+        and item.value["ability"]["internal_name"]
+        == "monkey_king_boundless_strike"
+        for item in single_evidence
+    )
+
+
+def test_complete_ability_answer_example_uses_public_language_and_talent_table() -> None:
+    state, _llm = _run(
+        _monkey_king_ability_plan(complete=True),
+        llm=FullAbilityFormattingLLM(),
+    )
+
+    assert state.status == "ok"
+    assert state.answer is not None
+    rendered = state.answer.summary
+    assert "等级 | 左侧天赋（中文 / English） | 右侧天赋（中文 / English）" in rendered
+    for internal_name in (
+        "has_shard",
+        "has_scepter",
+        "is_innate",
+        "special_bonus_",
+        "talent_internal_name",
+        "internal_name",
+    ):
+        assert internal_name not in rendered
 
 
 @pytest.mark.parametrize("query", ["ES", "definitely_missing_hero"])

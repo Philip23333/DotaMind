@@ -197,6 +197,44 @@ def test_agent_controller_accepts_catalog_static_query_plans() -> None:
                                 "hero_id": "$resolve_lina.data.hero.hero_id"
                             },
                         },
+                        {
+                            "id": "talents",
+                            "tool": "dota.hero_talent_tree",
+                            "args": {
+                                "hero_id": "$resolve_lina.data.hero.hero_id"
+                            },
+                        },
+                    ],
+                    "required_evidence": [
+                        "hero_identity",
+                        "hero_ability",
+                        "hero_talent_tree",
+                    ],
+                },
+            },
+            ["resolve_hero", "dota.hero_abilities", "dota.hero_talent_tree"],
+        ),
+        (
+            "棒击大地是什么？",
+            {
+                "kind": "tool_plan",
+                "plan": {
+                    "intent": "single_hero_ability",
+                    "goal": "Return the official Boundless Strike definition.",
+                    "output_contract": "natural_language_answer",
+                    "tool_calls": [
+                        {
+                            "id": "resolve_monkey_king",
+                            "tool": "resolve_hero",
+                            "args": {"query": "齐天大圣"},
+                        },
+                        {
+                            "id": "abilities",
+                            "tool": "dota.hero_abilities",
+                            "args": {
+                                "hero_id": "$resolve_monkey_king.data.hero.hero_id"
+                            },
+                        },
                     ],
                     "required_evidence": ["hero_identity", "hero_ability"],
                 },

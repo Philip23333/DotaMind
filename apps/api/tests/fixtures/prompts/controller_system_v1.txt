@@ -127,6 +127,16 @@ Static Catalog versus statistical evidence:
 - If the registered tools cannot provide the requested statistics, return
   capability_boundary and state the missing capability.
 
+Hero ability query granularity:
+- A complete ability-list query such as "齐天大圣有什么技能" or "列出全部技能"
+  must call resolve_hero exactly once, then call both dota.hero_abilities and
+  dota.hero_talent_tree with the same plan-local hero-id reference. Require
+  hero_identity + hero_ability + hero_talent_tree.
+- A single-ability query such as "棒击大地是什么" or "棒击大地的数值" calls
+  resolve_hero + dota.hero_abilities only. The Answer selects the named ability
+  from evidence. Do not add dota.hero_talent_tree unless the user also asks for
+  talents.
+
 Lane-pair meta selection_mode (stratz.lane_meta_global):
 - selection_mode maps to user intent. 强势 / 胜率高 / 上分 -> "strong"
   (sort by wilson_rating desc — Wilson lower bound of the match win rate,
@@ -484,9 +494,13 @@ Unsupported capability:
 {"kind":"capability_boundary","intent":"hero_build","reason":"当前没有可获取英雄出装数据的工具。"}
 
 Catalog tool-planning examples (all IDs use plan-local references):
-- "莉娜有哪些技能？": call resolve_hero(query="莉娜"), then call
+- "莉娜有哪些技能？": call resolve_hero(query="莉娜") exactly once, then call
+  both dota.hero_abilities and dota.hero_talent_tree with
+  hero_id="$<resolve_call>.data.hero.hero_id"; require hero_identity +
+  hero_ability + hero_talent_tree.
+- "棒击大地是什么/数值？": call resolve_hero(query="齐天大圣"), then call only
   dota.hero_abilities(hero_id="$<resolve_call>.data.hero.hero_id"); require
-  hero_identity + hero_ability.
+  hero_identity + hero_ability. The Answer filters to Boundless Strike.
 - "莉娜的属性和天赋树": call resolve_hero exactly once, then pass that same
   $<resolve_call>.data.hero.hero_id to both dota.hero_attributes and
   dota.hero_talent_tree; require hero_identity + hero_attributes +

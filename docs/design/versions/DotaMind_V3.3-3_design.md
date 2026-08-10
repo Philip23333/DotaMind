@@ -322,6 +322,12 @@ Tool catalog renderer 自动公开 schema 和引用合同；Controller Prompt �
 “莉娜有哪些技能？”
   resolve_hero
   -> dota.hero_abilities
+  -> dota.hero_talent_tree
+  -> natural_language_answer
+
+“莉娜的龙破斩是什么技能？”
+  resolve_hero
+  -> dota.hero_abilities
   -> natural_language_answer
 
 “莉娜的属性和天赋树”
@@ -347,6 +353,11 @@ V3.3-3 继续使用 `natural_language_answer`，不新增结构化前端卡片 c
 - 物品回答区分本体、图纸、组件和升级目标；
 - 披露目录 patch 和同步时间；
 - 不根据静态字段推断出装强度、技能加点优先级或天赋胜率。
+- 用户可见回答不得暴露 `has_shard`、`is_innate`、`special_bonus_*`、
+  `talent_internal_name` 等内部 schema/token 名；只使用“魔晶升级”“先天技能”等自然标签。
+- 完整英雄技能查询按 Catalog 顺序展示技能，并在末尾附带 10/15/20/25 级左右天赋表；
+  不增加重复的技能分类汇总或“相关天赋”章节。
+- 单技能查询只输出命中的技能；除非用户同时询问天赋，否则不附其他技能或完整天赋树。
 
 ### 8.4 Critic 边界
 

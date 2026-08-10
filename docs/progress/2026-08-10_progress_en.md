@@ -133,3 +133,25 @@
 
 - The V3.3-3 A-E implementation order is closed: formal Valve snapshots, Runtime Catalog/resolvers, six query tools, EvidenceGraph, Controller/Answer/Graph regression, and live review are complete.
 - The current changes meet the commit gate; no remote push is included.
+
+## 14:15 — Hero-ability answer format and query granularity closure
+
+### Completed
+
+- Made Controller distinguish complete hero ability-list queries from single-ability queries. Complete queries run one `resolve_hero`, then `dota.hero_abilities` and `dota.hero_talent_tree`; single-ability queries run resolver plus abilities only unless talents are also requested.
+- Prevented Answer from exposing internal schema/token names such as `has_shard`, `has_scepter`, `is_innate`, `special_bonus_*`, `talent_internal_name`, and `internal_name`; it uses natural headings such as Shard upgrade, Scepter upgrade, and innate ability.
+- Fixed the complete-list answer shape to bilingual hero identity plus snapshot, ordered per-ability details, and a concise final talent table with “Level | Left talent (Chinese / English) | Right talent (Chinese / English)”.
+- Removed redundant ability-classification-summary and related-talents sections from complete answers, including talent internal-token suffixes beside values.
+- Single-ability answers output only the requested ability and omit other abilities, classification summaries, related talents, and the full talent tree.
+- Kept the single `natural_language_answer` path and existing Catalog tool/evidence payloads; no deterministic formatter, card, or second answer implementation was added.
+
+### Verification
+
+- Controller/Answer/Graph focused: `70 passed`; full API pytest: `550 passed, 20 skipped`.
+- Ruff, compileall, and `git diff --check` passed.
+- Graph regression with the formal Monkey King Catalog evidence confirms complete queries include ability plus talent evidence, single-ability queries omit talent evidence, and the user-visible example contains the talent table without internal tokens.
+
+### Current boundary
+
+- The single Answer LLM is constrained by explicit system rules rather than a second deterministic renderer. Original structured Catalog fields remain in internal tool evidence for audit.
+- The changes in this section are uncommitted.

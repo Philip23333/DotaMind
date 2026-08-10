@@ -235,6 +235,16 @@ def test_natural_language_answer_receives_catalog_rules_and_real_evidence() -> N
     assert "final item from a recipe item" in system
     assert "snapshot patch and generated_at" in system
     assert "Never infer item-build strength" in system
+    assert "must never expose internal schema or token names" in system
+    assert "`has_shard = true`" in system
+    assert "`special_bonus_*`" in system
+    assert "魔晶升级, 神杖升级, or 先天技能" in system
+    assert "must not create a separate 相关天赋 section" in system
+    assert "For a complete hero ability-list query" in system
+    assert "技能分类汇总 or 相关天赋" in system
+    assert "等级 | 左侧天赋（中文 / English） | 右侧天赋（中文 / English）" in system
+    assert "For a single-ability query, output only the one ability" in system
+    assert "full talent tree unless the user explicitly" in system
     assert "'kind':'hero_attributes'" in user.replace(" ", "")
     assert "'strength_base'" in user
     assert "'strength_gain'" in user

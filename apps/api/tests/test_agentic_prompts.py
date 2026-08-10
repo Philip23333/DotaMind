@@ -101,6 +101,11 @@ def test_controller_prompt_declares_catalog_static_and_statistical_boundaries() 
     assert "return\n  capability_boundary" in prompt
     assert 'dota.hero_abilities(hero_id="$<resolve_call>.data.hero.hero_id")' in prompt
     assert "call resolve_hero exactly once" in prompt
+    assert "Hero ability query granularity" in prompt
+    assert '"齐天大圣有什么技能"' in prompt
+    assert "hero_identity + hero_ability + hero_talent_tree" in prompt
+    assert '"棒击大地是什么"' in prompt
+    assert "Do not add dota.hero_talent_tree" in prompt
     assert 'dota.item_info(item_id="$<resolve_call>.data.item.item_id")' in prompt
 
 
