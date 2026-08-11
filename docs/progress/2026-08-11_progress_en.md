@@ -49,3 +49,66 @@
 ### Current Boundary
 
 - P1 storage, contract, failure isolation, and Graph state propagation are closed; the real model still does not satisfy the clarification acceptance criterion for unresolved member properties.
+
+## 17:01 — Historical Fact Reuse and Minimal Clarification
+
+### Completed
+
+- Added the `history_grounded_answer` direct-answer mode: the model may cite an injected assistant message to produce a concise answer; the validator checks basis existence, role, and content without adding domain-specific routing.
+- Replaced rigid clarification behavior with generic Controller Prompt principles: answer first; clarify only when ambiguity prevents an accurate, bounded, useful answer; combine interpretations that can be covered concisely; interpret the current input first as an answer to the latest unresolved clarification.
+- Historical facts are no longer hard-coded as automatically stale or automatically trusted. The model decides whether to reuse them using subject, property, scope, source, version, freshness, and conflict signals; current, latest, volatile, changed-version, or uncertain facts should trigger a new tool plan.
+- Added request-level `request_time`, Catalog patch, and snapshot generation time to the Controller runtime context so freshness judgment is not encoded as fixed domain rules.
+- Fixed the pre-PostgreSQL-commit event-bus failure boundary so `mark_failed()` is invoked; added regression coverage and configuration validation for `history_lookup_max_per_run + final Controller call`.
+- Synchronized the Conversation Memory, Controller, and overall architecture documents; the Session-level discourse graph, referents, groups, links, focus, and shows remain explicitly out of scope.
+
+### Verification
+
+- Full API pytest: `551 passed, 21 skipped`, with one pre-existing Starlette/httpx deprecation warning.
+- `ruff check app tests`: passed; `git diff --check`: passed.
+- Added coverage for history-grounded answers, runtime freshness context, pre-commit event failure, History Lookup budget, and configuration boundaries.
+
+### Current Boundary
+
+- This phase does not restore or extend structured referent memory and adds no hero, item, player, or team-specific state machine.
+- History-grounded answers still do not create an EvidenceGraph automatically; the model must use tools when currentness or provenance is insufficient.
+- The code and documentation changes from this phase are not committed yet.
+
+## 17:09 — Complete History-Grounded Answer Auditing
+
+- `history_grounded_answer` now uses an independent public `response_type` instead of being conflated with ordinary `direct_answer`.
+- The `conversation_answer` trace records the actual `turn_index/role` references; the public response continues to retain `conversation_basis`.
+- `ruff check app tests` passed; full pytest: `551 passed, 21 skipped`, with one pre-existing deprecation warning.
+
+## 17:11 — Complete Version and Configuration Documentation
+
+- Added the `history_grounded_answer`, answer-first, request-local freshness context, no-discourse-graph, and History Lookup final-Controller budget contracts to `DotaMind_MVP_v2.5.md` and `configuration.md`.
+- `compileall app` and `git diff --check` passed; this phase remains uncommitted.
+
+## 17:26 — Final Generic Prompt Priority and Model Boundary
+
+- Added one shared priority before `tool_plan`: inspect whether the latest assistant already contains the requested property; with the same patch and scope and no refresh trigger, prefer `history_grounded_answer` instead of re-querying merely because the topic is factual.
+- Corrected the runtime context field to `current_catalog_patch` so it matches the implementation plan and Prompt contract.
+- Final full pytest: `551 passed, 21 skipped`; `ruff check app tests`, `compileall app`, and `git diff --check` all passed.
+- Observation from three real DeepSeek full-sequence runs: the second turn never clarified but still chose a tool plan, while the third turn used direct history reuse once; a subsequent run exceeded the 60-second Run budget on its first turn. No domain-specific hard rule was added; reuse behavior remains model/provider-version dependent and should be observed continuously.
+
+## 18:27 — Converge History-First Decisions and the Post-Commit Event Boundary
+
+### Completed
+
+- Consolidated the Controller Prompt into one ordered decision flow: reconstruct the current request, determine whether assistant history provides a still-valid answer with matching version and scope, and consider clarification or tool planning only when history reuse does not apply.
+- Removed domain-specific history-answer examples such as Lycan; tool catalogs and planning rules now apply only after fresh evidence is required. No discourse graph or hero, ability, item, player, or team state machine was restored.
+- Added generic long-answer extraction and short-input inheritance rules: answer length is not a refresh trigger; a follow-up that supplies only an entity or option name inherits the prior property or action, and a history-grounded answer must not expand into unrequested attributes.
+- Added a final decision gate at the end of the Prompt so the long tool catalog cannot override history-first priority: when reusable history explicitly contains the answer, selecting `tool_plan` is invalid.
+- Added a post-PostgreSQL-commit event-bus fault-injection test. The exception may propagate, but the durable Run/Turn remains `completed` and `mark_failed()` is not called.
+
+### Verification
+
+- Full API pytest: `553 passed, 21 skipped`, with one pre-existing Starlette/httpx deprecation warning.
+- Focused Prompt and ChatRunExecutor tests: `18 passed`; `ruff check app tests`, `compileall app`, and `git diff --check` passed.
+- Ran three independent real DeepSeek three-turn sessions with the final Prompt: all three second turns for “what are the ability cooldowns” returned `history_grounded_answer` with zero tools and cited the turn-1 assistant message; each directly listed all cooldowns without clarification or duplicate querying.
+- On the third-turn subject selection, two sessions returned a history-grounded answer containing only the 105/95/85-second cooldown. In one session, consecutive model JSON outputs failed the existing decision contract and surfaced as `decision_validation_error`; it did not call tools incorrectly or mask the failure as success.
+
+### Current Boundary
+
+- The model continues to decide whether historical facts are reusable from generic version, scope, provenance, freshness, and conflict criteria; code does not hard-code domain fact routing.
+- The Controller provider can still emit contract-invalid JSON. Existing bounded retry exposes that failure explicitly; this phase does not add a domain fallback for provider formatting variance.

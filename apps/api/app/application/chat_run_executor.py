@@ -206,8 +206,11 @@ class ChatRunExecutor:
                 )
                 raise
             except RunEventBusError:
-                # A Redis/event failure must never turn an already committed
-                # PostgreSQL Turn back into a failed Run.
+                # Before the durable commit, the Run still needs a terminal
+                # failure state. After the commit, PostgreSQL remains completed
+                # even if terminal Redis/event delivery fails.
+                if not committed:
+                    await self._mark_failed(request.run_id)
                 raise
             except Exception:
                 if committed:

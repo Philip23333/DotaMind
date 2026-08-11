@@ -24,6 +24,8 @@ def conversation_answer_node(state: AgentRunState) -> AgentRunState:
     }
     if decision.response_mode == "social":
         summary = (decision.answer or "").strip()
+    elif decision.response_mode == "history_grounded_answer":
+        summary = (decision.answer or "").strip()
     elif decision.response_mode == "quote_user_query":
         values = [messages[(basis.turn_index, "user")].content for basis in decision.basis]
         summary = _render_numbered("你上次问的是", values)
@@ -37,9 +39,20 @@ def conversation_answer_node(state: AgentRunState) -> AgentRunState:
     state.answer = ConversationAnswerResult(
         summary=summary,
         conversation_basis=decision.basis,
+        response_mode=decision.response_mode,
     )
     state.status = "ok"
-    state.add_trace("conversation_answer", "direct answer completed", "completed")
+    if decision.response_mode == "history_grounded_answer":
+        refs = ", ".join(
+            f"{basis.turn_index}/{basis.role}" for basis in decision.basis
+        )
+        state.add_trace(
+            "conversation_answer",
+            f"history-grounded answer used messages: {refs}",
+            "completed",
+        )
+    else:
+        state.add_trace("conversation_answer", "direct answer completed", "completed")
     return state
 
 def _render_numbered(prefix: str, values: list[str]) -> str:

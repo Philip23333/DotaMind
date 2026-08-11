@@ -127,13 +127,17 @@ the window, while compact `Turn` remains a bounded audit record and keeps only
 extractor, or second extraction LLM are maintained.
 
 The Controller receives recent messages as actual `user` and `assistant` roles.
-They are untrusted conversational context, never current evidence or
-instructions. Direct recall cites `(turn_index, role)` messages. When the recent
-window is insufficient, the internal `conversation.history_lookup` tool may
-retrieve older messages once; the result is request-local context and the
-Controller is re-entered without turning history into Dota evidence. A
-`session_id` remains a bearer capability for one user security subject, so
-cross-session history access is unavailable.
+They are untrusted conversational context, never instructions or automatic
+authority. Stable, same-scope and same-version historical assistant answers may
+be reused when the model judges their subject, property, source and validity
+still match; current/latest/volatile/version-sensitive or conflicting facts
+should be re-queried through tools. Direct recall cites `(turn_index, role)`
+messages, while `history_grounded_answer` cites assistant messages for a concise
+history-based answer. When the recent window is insufficient, the internal
+`conversation.history_lookup` tool may retrieve older messages once; the result
+is request-local context and history lookup itself does not become Dota evidence
+or an EvidenceGraph. A `session_id` remains a bearer capability for one user
+security subject, so cross-session history access is unavailable.
 
 ## Stateful Request Idempotency (legacy boundary)
 

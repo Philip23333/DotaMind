@@ -18,6 +18,7 @@ async def controller_node(
             state.game,
             recent_messages=state.recent_messages or None,
             retrieved_messages=state.retrieved_messages or None,
+            request_time=state.request_time.isoformat(),
         )
     else:
         if state.recovery_baseline_decision is None:
@@ -27,6 +28,7 @@ async def controller_node(
             state.game,
             recent_messages=state.recent_messages or None,
             retrieved_messages=state.retrieved_messages or None,
+            request_time=state.request_time.isoformat(),
             recovery_feedback=state.recovery_feedback,
             recovery_baseline_decision=state.recovery_baseline_decision,
         )

@@ -110,6 +110,34 @@ def test_controller_prompt_declares_catalog_static_and_statistical_boundaries() 
     assert 'dota.item_info(item_id="$<resolve_call>.data.item.item_id")' in prompt
 
 
+def test_controller_prompt_uses_one_generic_history_first_decision_order() -> None:
+    prompt = AgentController(_registry(), llm_enabled=False)._system_prompt()
+
+    assert "Decision priority (evaluate in this order):" in prompt
+    assert "return history_grounded_answer" in prompt
+    assert "return history_grounded_answer and stop" in prompt
+    assert "Rules that describe which\ntools a query needs apply only after step 4" in prompt
+    assert "Once tool_plan is selected" in prompt
+    assert "After tool_plan has been selected for fresh evidence" in prompt
+    assert "For a fresh complete ability-list tool plan" in prompt
+    assert "no fresh evidence is required when the cited history still" in prompt
+    assert "The length or formatting of a historical answer is not a refresh trigger" in prompt
+    assert "preserving that property or action" in prompt
+    assert "Answer only the selected subject's value" in prompt
+    assert "MUST address the reconstructed" in prompt
+    assert "omit historical facts outside its inherited property" in prompt
+    assert "Decision validity invariants:" in prompt
+    assert "A tool_plan is invalid when cited, still-valid assistant history" in prompt
+    assert "A history_grounded_answer is invalid when it answers properties" in prompt
+    assert "Additional available facts are not a reason to include them" in prompt
+    assert "Final decision gate (apply immediately before returning JSON):" in prompt
+    assert "returning tool_plan is invalid" in prompt
+    assert "Selecting a subject does not widen the inherited request" in prompt
+    assert "does not create current\n  Dota evidence" not in prompt
+    assert "狼人的冷却时间：召狼30秒" not in prompt
+    assert prompt.count("Decision priority (evaluate in this order):") == 1
+
+
 def test_prompt_hash_changes_with_rendered_catalog_contract_and_policy(monkeypatch) -> None:
     policy = get_policy()
     baseline = build_controller_prompt(_registry(), policy).prompt_versions[
@@ -201,6 +229,29 @@ def test_enabled_llm_system_message_matches_run_manifest() -> None:
     ).hexdigest()
     assert manifest["controller.recovery_rules"] == "v1"
     assert state.response["runtime"]["attempts"][0].get("prompt_versions") is None
+
+
+def test_controller_runtime_context_exposes_stable_freshness_signals() -> None:
+    registry = _registry()
+    llm = CapturingLLM()
+    controller = AgentController(
+        registry,
+        llm=llm,
+        llm_enabled=True,
+        runtime_context={
+            "current_catalog_patch": "7.41e",
+            "catalog_snapshot_generated_at": "2026-08-09T19:05:36+00:00",
+        },
+    )
+
+    asyncio.run(
+        AgentGraphRunner(controller, registry).run(AgentRunState(query="hello", game="dota2"))
+    )
+
+    sent_system = llm.messages[0][0]["content"]
+    assert "- request_time: " in sent_system
+    assert "- current_catalog_patch: 7.41e" in sent_system
+    assert "- catalog_snapshot_generated_at: 2026-08-09T19:05:36+00:00" in sent_system
 
 
 def test_disabled_llm_still_records_prepared_prompt_manifest() -> None:

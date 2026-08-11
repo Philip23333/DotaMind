@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Literal
 from uuid import UUID
 
@@ -53,6 +53,7 @@ class AgentTraceEvent(BaseModel):
 class AgentRunState(BaseModel):
     query: str
     game: str
+    request_time: datetime = Field(default_factory=lambda: datetime.now(UTC))
     recent_messages: list[ConversationMessage] = Field(default_factory=list)
     retrieved_messages: list[ConversationMessage] = Field(default_factory=list)
     next_turn_index: int = Field(default=1, ge=1)

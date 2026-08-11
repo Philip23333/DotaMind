@@ -36,16 +36,19 @@ LLM JSON
 
 ## 会话回忆
 
+会话相关的 direct answer 分为两类：
+
+- `recall_referent` / `quote_user_query` / `recall_assistant_summary` 用于确定性回忆，答案由节点按 basis 读取，不让模型自由改写。
+- `history_grounded_answer` 用于历史依据回答，要求至少引用一条已注入的 assistant 消息；模型可以在该消息范围内生成简洁答案，但不得把它伪装成当前工具证据。
+
 direct recall 只引用真实对话消息：
 
 - `ConversationBasis(turn_index, role)` 的 role 必须与引用模式一致。
 - `quote_user_query` 只能引用 `user` 消息。
 - `recall_assistant_summary` 只能引用 `assistant` 消息。
-- basis 必须能在本次注入的 recent/retrieved messages 中定位；历史事实仍不能
-  替代当前工具证据。
+- basis 必须能在本次注入的 recent/retrieved messages 中定位。
 
-“这些技能”“第二个技能”等指称由模型阅读真实上下文后解释；无法唯一判断时返回
-`clarification`，而不是依赖固定实体、集合或关系枚举。
+历史事实既不自动失效，也不自动可信。模型应根据主题、属性、范围、来源、版本和时效判断：稳定且版本与范围一致的事实可以用 `history_grounded_answer` 复用；当前、最新、易变、版本已变、来源不明或存在冲突时，应生成 `tool_plan` 重新验证。只有歧义阻止有用且准确的回答时才返回 `clarification`；可由短答案覆盖的多个解释应合并回答。所有这些判断基于真实对话上下文，不依赖固定实体、集合或关系枚举。
 
 校验成功后，`conversation_answer_node` 用确定性模板读取字段。模型给出的
 自由回答不能覆盖 recall 结果。social 允许自由文本，但 basis 必须为空。
@@ -88,9 +91,12 @@ sequenceDiagram
 
 clarification 的 `missing_fields` 使用受约束的开放 snake_case 字段名，问题文本可由
 Controller 生成；字段名不是路由键。模型应结合最近 assistant 的澄清和当前输入判断
-是否已补齐缺失信息，不应重复已经回答的澄清。
+是否已补齐缺失信息，不应重复已经回答的澄清。默认先回答；只有无法给出准确、有界且有用
+的答案时才澄清。
 Turn 保存 `query + response_summary + missing_fields`，供下一轮理解补充内容。
-后续工具计划仍需重新调用当前轮 resolver，不得复用历史对象 ID 或历史事实。
+后续工具计划仍需根据当前问题重新规划；稳定、同版本且范围一致的历史事实可以由模型复用，
+但当前性、易变性、版本或来源不确定时必须重新调用工具。历史依据不会自动写入
+EvidenceGraph。
 
 ## 隐私边界
 

@@ -19,6 +19,7 @@ ConversationRole = Literal["user", "assistant"]
 DirectResponseMode = Literal[
     "quote_user_query",
     "recall_assistant_summary",
+    "history_grounded_answer",
     "social",
 ]
 
@@ -79,6 +80,7 @@ class ConversationAnswerResult(BaseModel):
     status: Literal["ok"] = "ok"
     summary: str
     conversation_basis: list[ConversationBasis] = Field(default_factory=list)
+    response_mode: DirectResponseMode | None = None
 
 
 class RequiredEvidenceResolution(BaseModel):
@@ -143,7 +145,7 @@ def normalize_controller_decision(decision: ControllerDecision) -> ControllerDec
         keys = sorted(unique, key=lambda item: (item[0], item[1]))
         basis = [unique[key] for key in keys]
         updates = {"basis": basis}
-        if decision.response_mode != "social":
+        if decision.response_mode not in {"social", "history_grounded_answer"}:
             updates["answer"] = None
         return decision.model_copy(update=updates)
     if isinstance(decision, ClarificationDecision):
@@ -204,6 +206,25 @@ def _validate_direct_answer(
             errors.append("social direct answer must not reference conversation context")
         if not decision.answer or not decision.answer.strip():
             errors.append("social direct answer requires answer text")
+        return errors
+
+    if decision.response_mode == "history_grounded_answer":
+        if not decision.answer or not decision.answer.strip():
+            errors.append("history-grounded answer requires answer text")
+        if not decision.basis:
+            errors.append("history-grounded answer requires conversation basis")
+            return errors
+        if not any(basis.role == "assistant" for basis in decision.basis):
+            errors.append("history-grounded answer requires an assistant basis")
+        messages = {(message.turn_index, message.role): message for message in history}
+        for basis in decision.basis:
+            message = messages.get((basis.turn_index, basis.role))
+            if message is None:
+                errors.append(
+                    f"conversation message is unavailable: {basis.turn_index}/{basis.role}"
+                )
+            elif not message.content:
+                errors.append(f"conversation message {basis.turn_index}/{basis.role} is empty")
         return errors
 
     if decision.answer is not None:

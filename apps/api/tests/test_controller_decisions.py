@@ -70,6 +70,50 @@ def test_recall_assistant_summary_uses_validated_assistant_message() -> None:
     assert state.answer.summary == "我当时的回答摘要是：Lina 有四个技能。"
 
 
+def test_history_grounded_answer_reuses_assistant_context_without_tools() -> None:
+    messages = [
+        ConversationMessage(turn_index=1, role="user", content="狼人有什么技能？"),
+        ConversationMessage(
+            turn_index=1,
+            role="assistant",
+            content="召狼的冷却时间是30秒（7.41e）。",
+        ),
+    ]
+    decision = DirectAnswerDecision(
+        kind="direct_answer",
+        intent="hero_ability",
+        response_mode="history_grounded_answer",
+        basis=[{"turn_index": 1, "role": "assistant"}],
+        answer="沿用上一轮 7.41e 数据，召狼的冷却时间是30秒。",
+    )
+
+    state = _run(decision, messages, query="它还是30秒吗？")
+
+    assert state.answer is not None
+    assert state.answer.summary == "沿用上一轮 7.41e 数据，召狼的冷却时间是30秒。"
+    assert state.tool_results == []
+    assert state.response_type == "history_grounded_answer"
+    assert any("1/assistant" in event.action for event in state.trace)
+
+
+def test_history_grounded_answer_requires_assistant_basis() -> None:
+    decision = DirectAnswerDecision(
+        kind="direct_answer",
+        intent="hero_ability",
+        response_mode="history_grounded_answer",
+        basis=[{"turn_index": 1, "role": "user"}],
+        answer="30秒。",
+    )
+
+    errors = validate_controller_decision(
+        decision,
+        [ConversationMessage(turn_index=1, role="user", content="它是多少？")],
+        ToolRegistry(),
+    )
+
+    assert any("assistant basis" in error for error in errors)
+
+
 def test_clarification_and_context_missing_skip_tools() -> None:
     clarification = ClarificationDecision(
         kind="clarification",

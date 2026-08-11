@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from app.agentic.conversation.models import Turn
-from app.agentic.runtime.streaming import PlanStreamEvent
+from app.agentic.runtime.streaming import PlanStreamEvent, StatusStreamEvent, publish_stream_event
 from app.agentic.state import AgentRunState
 from app.application.chat_run_executor import (
     ChatRunExecutionRequest,
@@ -15,7 +15,7 @@ from app.application.chat_run_executor import (
 )
 from app.application.chat_run_repository import ChatRunRepositoryError, ChatRunSummary
 from app.application.plan_service import TurnBuildResult
-from app.application.run_event_bus import StoredRunEvent
+from app.application.run_event_bus import RunEventBusError, StoredRunEvent
 from app.application.session_store import SessionStoreError
 
 
@@ -99,6 +99,87 @@ def test_chat_run_executor_marks_failed_graph_without_writing_a_turn() -> None:
 
         assert "failed" in calls
         assert "complete" not in calls
+
+    asyncio.run(scenario())
+
+
+def test_event_bus_failure_before_commit_marks_run_failed() -> None:
+    async def scenario() -> None:
+        run_id = uuid4()
+        session_id = uuid4()
+        calls: list[str] = []
+        run_repository = FakeRunRepository(calls=calls, run_id=run_id, session_id=session_id)
+        executor = ChatRunExecutor(
+            runner=EventPublishingRunner(calls=calls),
+            run_repository=run_repository,
+            chat_repository=FakeChatRepository(calls=calls),
+            session_store=FakeSessionStore(),
+            memory_service=FakeMemoryService(calls=calls),
+            event_bus=FailingEventBus(),
+            worker_id="worker-a",
+            build_turn=lambda state: _build_turn(state),
+            build_response=lambda state, sid: {"answer": "done"},
+        )
+
+        try:
+            await executor.execute(
+                ChatRunExecutionRequest(
+                    run_id=run_id,
+                    browser_id="browser-a",
+                    session_id=session_id,
+                    request_id=uuid4(),
+                    query="event failure",
+                    game="dota2",
+                )
+            )
+        except RunEventBusError:
+            pass
+        else:
+            raise AssertionError("event bus failure should propagate")
+
+        assert run_repository.completed is None
+        assert "failed" in calls
+
+    asyncio.run(scenario())
+
+
+def test_event_bus_failure_after_commit_preserves_completed_run() -> None:
+    async def scenario() -> None:
+        run_id = uuid4()
+        session_id = uuid4()
+        calls: list[str] = []
+        run_repository = FakeRunRepository(calls=calls, run_id=run_id, session_id=session_id)
+        executor = ChatRunExecutor(
+            runner=FakeRunner(calls=calls),
+            run_repository=run_repository,
+            chat_repository=FakeChatRepository(calls=calls),
+            session_store=FakeSessionStore(),
+            memory_service=FakeMemoryService(calls=calls),
+            event_bus=FailingEventBus(),
+            worker_id="worker-a",
+            build_turn=lambda state: _build_turn(state),
+            build_response=lambda state, sid: {"answer": "done"},
+        )
+
+        try:
+            await executor.execute(
+                ChatRunExecutionRequest(
+                    run_id=run_id,
+                    browser_id="browser-a",
+                    session_id=session_id,
+                    request_id=uuid4(),
+                    query="post-commit event failure",
+                    game="dota2",
+                )
+            )
+        except RunEventBusError:
+            pass
+        else:
+            raise AssertionError("event bus failure should propagate")
+
+        assert run_repository.completed is not None
+        assert run_repository.completed.status == "completed"
+        assert "failed" not in calls
 
     asyncio.run(scenario())
 
@@ -281,6 +362,21 @@ class FakeEventBus:
         self.events.append(stored)
         self.calls.append(f"event:{event.type}")
         return stored
+
+
+class FailingEventBus:
+    async def append(self, **kwargs):
+        raise RunEventBusError("unavailable")
+
+
+class EventPublishingRunner(FakeRunner):
+    async def run(self, state: AgentRunState) -> AgentRunState:
+        self.calls.append("graph")
+        await asyncio.sleep(0.01)
+        publish_stream_event(StatusStreamEvent(status="running"))
+        state.response = {"answer": "done"}
+        state.status = "ok"
+        return state
 
 
 class FakeSessionStore:

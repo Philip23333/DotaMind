@@ -131,6 +131,15 @@ All fields have defaults, so a `policy.yaml` without a `conversation` section
 still loads. PostgreSQL is the complete conversation source; Redis only caches
 recent messages and coordinates the stateful Run. A request without `session_id`
 remains stateless.
+History is supplied as real user/assistant messages. It is neither an
+automatically valid fact cache nor automatically stale; the Controller decides
+whether a stable, same-version answer can be reused and when a tool must refresh
+it. No discourse graph or entity-specific memory is configured. The internal
+History Lookup budget must leave one Controller call for the final decision:
+`planning.runtime.max_controller_calls >= conversation.history_lookup_max_per_run + 1`.
+The Controller also receives request-local game, request time, Catalog patch, and
+snapshot generation time; these freshness signals are not stored in Session or
+Redis history.
 Active and waiting sessions are never evicted, and the store converges back to
 `max_sessions` after transactions release.
 

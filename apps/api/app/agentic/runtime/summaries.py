@@ -88,6 +88,14 @@ def resolve_terminal_outcome(state: AgentRunState) -> TerminalOutcome:
             state.reason,
         )
     if isinstance(state.answer, ConversationAnswerResult):
+        if state.answer.response_mode == "history_grounded_answer":
+            return _outcome(
+                "ok",
+                "history_grounded_answer",
+                "conversation_answer",
+                None,
+                state.reason,
+            )
         return _outcome("ok", "direct_answer", "conversation_answer", None, state.reason)
     if state.status == "error":
         return _outcome("error", "execution_error", "execution", "execution")

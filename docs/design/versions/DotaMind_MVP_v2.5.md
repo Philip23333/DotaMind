@@ -817,8 +817,14 @@ ControllerDecision
 - direct recall 只能引用当前 `state.recent_messages` 或本次
   `state.retrieved_messages` 中经过校验的 `(turn_index, role)` 消息，并由服务端
   确定性模板生成；不从全局 SessionStore 按模型索引取值。
+- `history_grounded_answer` 可以引用已注入的 assistant 消息生成简洁回答；它要求
+  非空 assistant basis，公开响应保留 `conversation_basis`，但不创建 EvidenceGraph。
+- 历史事实既不自动失效，也不自动权威；模型根据主题、属性、范围、来源、版本和时效
+  判断是否复用。当前、最新、易变、版本变化或来源不确定时重新规划工具。
+- Controller 默认优先回答，只有歧义阻止准确、有界且有用的回答时才澄清；不引入
+  领域专用的集合/实体澄清规则或 discourse graph。
 - clarification 保存受 snake_case 格式和数量约束的开放 `missing_fields`；后续工具计划仍须在当前轮
-  重新执行 resolver，不得复用历史实体 ID。
+  重新规划；历史稳定事实是否复用由模型判断，不能把历史回答自动写入 EvidenceGraph。
 - contract 与 plan evidence 继续按全局 kind 校验；所选工具的
   `mandatory_evidence` 按每个成功 `tool_call_id` 校验，不能跨调用借用。
 - effective required evidence 仍公开为所有 evidence kind 的并集，不修改
@@ -827,6 +833,8 @@ ControllerDecision
 - 工具失败优先于 evidence missing；Answer LLM 失败优先于 Critic quality failure。
 - 所有 LLM-facing decision/basis model 禁止未知字段；引用解析失败生成失败的
   ToolResult 并映射为 tool_error，未分类运行时错误映射为 execution_error。
+- 当前请求可将 `game`、`request_time`、Catalog patch 和 snapshot 生成时间作为
+  Controller runtime context；这些信息不写入 Session、Redis 历史或结构化实体记忆。
 - 不引入原始消息存储、checkpointer、第二次 LLM 审核、兼容 endpoint 或并行旧链路。
 
 当前运行图、公开状态和隐私边界以

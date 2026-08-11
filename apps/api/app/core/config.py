@@ -241,6 +241,16 @@ class AppPolicy(StrictPolicyModel):
     # Optional: existing policy.yaml files without this section use defaults.
     conversation: ConversationPolicy = Field(default_factory=ConversationPolicy)
 
+    @model_validator(mode="after")
+    def validate_history_lookup_budget(self) -> "AppPolicy":
+        required_controller_calls = self.conversation.history_lookup_max_per_run + 1
+        if self.planning.runtime.max_controller_calls < required_controller_calls:
+            raise ValueError(
+                "planning.runtime.max_controller_calls must be at least "
+                "conversation.history_lookup_max_per_run + 1"
+            )
+        return self
+
 
 class Settings(BaseSettings):
     app_name: str = "DotaMind API"

@@ -49,3 +49,66 @@
 ### 当前边界
 
 - P1 的存储、合同、失败隔离和 Graph 状态传递已闭合；真实模型对“集合属性追问是否先澄清”的行为仍未满足验收标准。
+
+## 17:01 — 历史事实复用与最小澄清策略
+
+### 已完成
+
+- 新增 `history_grounded_answer` direct-answer 模式：模型可以引用已注入的 assistant 历史回答生成简洁答案；validator 只校验 basis 存在、角色和内容，不建立领域专用路由。
+- Controller Prompt 改为通用原则：默认优先回答；只有歧义会阻止准确、有界且有用的回答时才澄清；可由短答案覆盖的多个解释直接合并回答；当前输入优先理解为最近未完成澄清的回答。
+- 历史事实不再被硬性标记为自动失效或自动可信。模型根据主题、属性、范围、来源、版本、时效和冲突情况决定复用；当前、最新、易变、版本变化或来源不确定时重新规划工具。
+- 为 Controller 注入请求级 `request_time`、Catalog patch 和 snapshot 生成时间，避免把动态时效判断写成固定领域规则。
+- 修复 PostgreSQL 提交前事件总线失败未调用 `mark_failed()` 的边界；补充 `history_lookup_max_per_run + 最终 Controller 调用` 配置校验和回归测试。
+- 同步 Conversation Memory、Controller 和总架构文档；继续明确不维护 Session 级 discourse graph、referent、group、link、focus 或 shows。
+
+### 验证
+
+- API 全量 pytest：`551 passed, 21 skipped`，1 个既有 Starlette/httpx deprecation warning。
+- `ruff check app tests`：通过；`git diff --check`：通过。
+- 新增历史依据回答、运行时 freshness context、提交前事件失败、History Lookup 预算和配置边界测试。
+
+### 当前边界
+
+- 本阶段不恢复或扩展结构化指称记忆，不添加英雄、物品、选手或战队专用状态机。
+- 历史依据回答仍不会自动生成 EvidenceGraph；模型判断当前性或来源不足时必须使用工具。
+- 本阶段代码与文档变更尚未提交。
+
+## 17:09 — 完善历史依据回答审计
+
+- `history_grounded_answer` 现在使用独立的公开 `response_type`，不再与普通 `direct_answer` 混淆。
+- `conversation_answer` trace 记录实际引用的 `turn_index/role`；公开响应继续保留 `conversation_basis`。
+- `ruff check app tests` 通过；全量 pytest：`551 passed, 21 skipped`，1 个既有弃用警告。
+
+## 17:11 — 完成版本与配置文档同步
+
+- 在 `DotaMind_MVP_v2.5.md` 与 `configuration.md` 补充 `history_grounded_answer`、answer-first、请求级 freshness context、无 discourse graph，以及 History Lookup 必须为最终 Controller 预留预算的合同说明。
+- `compileall app` 与 `git diff --check` 通过；本次变更仍未提交。
+
+## 17:26 — 最终通用 Prompt 优先级与模型边界
+
+- 在 `tool_plan` 前增加统一优先级：先检查最近 assistant 是否已经包含当前请求的属性；同 patch、同范围且无刷新触发时优先 `history_grounded_answer`，不因“这是事实问题”而重复查询。
+- 修正 runtime context 字段为 `current_catalog_patch`，与实施计划和 Prompt 合同一致。
+- 最后一次全量 pytest：`551 passed, 21 skipped`；`ruff check app tests`、`compileall app` 和 `git diff --check` 均通过。
+- 真实 DeepSeek 三次完整序列的模型观察：第二轮均未澄清但仍选择工具计划，第三轮有一次直接历史复用；随后一次运行首轮超过 60 秒 Run budget。代码不增加领域专用硬规则，模型复用行为仍需按模型/供应商版本持续观察。
+
+## 18:27 — 收敛历史优先决策与提交后事件边界
+
+### 已完成
+
+- Controller Prompt 收敛为统一的顺序决策：先重建当前请求，再判断 assistant 历史能否提供同版本、同范围且仍有效的答案，只有未命中历史复用时才进入澄清或工具规划。
+- 删除狼人等领域专用的历史回答示例；工具目录与工具规划规则明确只在需要新证据后生效，未恢复 discourse graph，也未增加英雄、技能、物品、选手或战队专用状态机。
+- 增加通用的长回答抽取和短输入继承规则：历史答案的长度不是刷新理由；只提供实体或选项名的追问继承上一轮属性或动作，历史依据回答不得扩展到未请求的属性。
+- 在 Prompt 末尾增加最终决策门，避免长工具目录覆盖 history-first 优先级：可复用历史已明确包含答案时，`tool_plan` 为无效选择。
+- 增加 PostgreSQL commit 后事件总线抛错的故障注入测试，确认异常可以上抛，但 durable Run/Turn 保持 `completed`，且不会调用 `mark_failed()`。
+
+### 验证
+
+- API 全量 pytest：`553 passed, 21 skipped`，1 个既有 Starlette/httpx deprecation warning。
+- 定向 Prompt 与 ChatRunExecutor 测试：`18 passed`；`ruff check app tests`、`compileall app` 和 `git diff --check` 通过。
+- 使用最终 Prompt 运行三组独立真实 DeepSeek 三轮会话：三组第二轮“技能 CD 是多少”均返回 `history_grounded_answer`、0 工具，并引用第 1 轮 assistant；回答直接列出全部技能 CD，不再澄清或重复查询。
+- 第三轮“变身”有两组返回只包含 105/95/85 秒的历史依据回答；一组连续生成的 JSON 未通过既有决策合同，最终暴露为 `decision_validation_error`，没有错误调用工具或伪造成功结果。
+
+### 当前边界
+
+- 历史事实是否可复用继续由模型按照版本、范围、来源、时效和冲突等通用标准判断，代码不硬编码领域事实路由。
+- Controller 供应商仍可能产生合同不合法的 JSON；现有 bounded retry 会显式暴露失败。本阶段不为该模型格式波动增加领域 fallback。

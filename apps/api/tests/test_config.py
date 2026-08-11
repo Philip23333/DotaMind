@@ -217,3 +217,11 @@ def test_conversation_policy_rejects_invalid_lookup_budget(tmp_path: Path) -> No
     }
     with pytest.raises(ValidationError, match="recent_dialogue_max_chars"):
         load_policy(_write_policy(tmp_path / "policy.yaml", data))
+
+
+def test_policy_rejects_lookup_budget_without_final_controller_call(tmp_path: Path) -> None:
+    data = deepcopy(_policy_data())
+    data["conversation"]["history_lookup_max_per_run"] = 2
+
+    with pytest.raises(ValidationError, match="max_controller_calls"):
+        load_policy(_write_policy(tmp_path / "policy.yaml", data))

@@ -16,6 +16,7 @@ from app.agentic.tools.conversation_tools import (
     register_conversation_tools,
 )
 from app.application.history_lookup import HistoryLookupContext, bind_history_lookup_context
+from app.core.config import RuntimePolicy
 
 
 class _Repository:
@@ -177,5 +178,42 @@ def test_history_lookup_limit_blocks_second_execution_before_tool_handler() -> N
         assert repository.calls == 1
         assert state.status == "error"
         assert len(controller.seen_retrieved) == 2
+
+    asyncio.run(scenario())
+
+
+def test_history_lookup_budget_allows_final_controller_after_two_lookups() -> None:
+    async def scenario() -> None:
+        repository = _Repository()
+        controller = _SequenceController(
+            [
+                _history_plan(),
+                _history_plan(),
+                ContextMissingDecision(
+                    kind="context_missing",
+                    intent="conversation_recall",
+                    reason="未找到更早对话。",
+                ),
+            ]
+        )
+        registry = ToolRegistry()
+        register_conversation_tools(registry)
+        runner = AgentGraphRunner(
+            controller,
+            registry,
+            runtime_policy=RuntimePolicy(max_controller_calls=3),
+            history_lookup_max_per_run=2,
+        )
+        context = HistoryLookupContext(
+            chat_repository=repository,  # type: ignore[arg-type]
+            browser_id="browser",
+            session_id=uuid4(),
+        )
+        with bind_history_lookup_context(context):
+            state = await runner.run(AgentRunState(query="查两次", game="dota2"))
+
+        assert state.history_lookup_count == 2
+        assert len(controller.seen_retrieved) == 3
+        assert state.status == "insufficient_context"
 
     asyncio.run(scenario())

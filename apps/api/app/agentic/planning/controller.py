@@ -1,5 +1,7 @@
 import json
 import logging
+from collections.abc import Mapping
+from datetime import UTC, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, TypeAdapter, ValidationError
@@ -59,6 +61,7 @@ class AgentController:
         llm: LLMProvider | None = None,
         llm_enabled: bool | None = None,
         planner_max_retries: int | None = None,
+        runtime_context: Mapping[str, str] | None = None,
     ) -> None:
         self.registry = registry
         self.registry.freeze()
@@ -70,6 +73,8 @@ class AgentController:
         settings = get_settings()
         self.llm_enabled = settings.llm_enabled if llm_enabled is None else llm_enabled
         self.llm = llm
+        self.runtime_context = dict(runtime_context or {})
+        self._default_request_time = datetime.now(UTC).isoformat()
         if self.llm is None and self.llm_enabled:
             self.llm = get_llm_provider()
         self.planner_max_retries = (
@@ -87,6 +92,7 @@ class AgentController:
         retrieved_messages: list[ConversationMessage] | None = None,
         recovery_feedback: RecoveryFeedback | None = None,
         recovery_baseline_decision: ToolPlanDecision | None = None,
+        request_time: str | None = None,
     ) -> AgentControllerResult:
         if (recovery_feedback is None) != (recovery_baseline_decision is None):
             raise ValueError(
@@ -113,6 +119,8 @@ class AgentController:
                 "content": render_controller_system_prompt(
                     self._prompt_bundle.system_prompt,
                     game,
+                    self.runtime_context,
+                    request_time or self._default_request_time,
                 ),
             },
             *conversation_messages,
