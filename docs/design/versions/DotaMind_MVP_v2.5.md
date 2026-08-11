@@ -814,11 +814,9 @@ ControllerDecision
 - 其他决策不创建 EvidenceGraph，也不运行 Critic。
 - `tool_plan` 候选在首次 catalog/contract validation 前只执行一次
   `apply_sample_policy()`；Graph 后续只重复校验最终计划，不再修改计划。
-- direct recall 只能引用当前 `state.recent_messages` 或本次
-  `state.retrieved_messages` 中经过校验的 `(turn_index, role)` 消息，并由服务端
-  确定性模板生成；不从全局 SessionStore 按模型索引取值。
-- `history_grounded_answer` 可以引用已注入的 assistant 消息生成简洁回答；它要求
-  非空 assistant basis，公开响应保留 `conversation_basis`，但不创建 EvidenceGraph。
+- `direct_answer` 由 Controller 结合当前请求与已注入的真实 user/assistant 消息直接
+  生成非空 answer；不要求 response mode、turn-index basis 或服务端确定性回忆模板，
+  也不创建 EvidenceGraph。
 - 历史事实既不自动失效，也不自动权威；模型根据主题、属性、范围、来源、版本和时效
   判断是否复用。当前、最新、易变、版本变化或来源不确定时重新规划工具。
 - Controller 默认优先回答，只有歧义阻止准确、有界且有用的回答时才澄清；不引入

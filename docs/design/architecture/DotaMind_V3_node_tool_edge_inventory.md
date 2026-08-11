@@ -74,8 +74,8 @@ future reset nodes delegate to the centralized pure reset function.
 |---|---|---|
 | `run_init_node` | Fail fast on an existing run, then create UUID4/UTC/monotonic run and attempt state. | Initializes observing-only budget; no business call. |
 | `controller_node` | Ask the LLM for one discriminated `ControllerDecision`; apply sample policy to a tool plan before first deterministic plan validation. | No tool execution. |
-| `decision_validate_node` | Repeat shared deterministic decision/basis/plan validation without mutating the decision. | Recomputes and refreshes authoritative evidence obligations in state. |
-| `conversation_answer_node` | Read validated real-message basis and render deterministic recall, history-grounded, or approved social answers. | Never creates EvidenceGraph. |
+| `decision_validate_node` | Repeat shared deterministic decision/plan validation without mutating the decision. | Recomputes and refreshes authoritative evidence obligations in state. |
+| `conversation_answer_node` | Accept the validated Controller-authored direct answer. | Never creates EvidenceGraph. |
 | `validate_plan_node` | Validate final args, references, contract and effective evidence producibility. | Never applies policy or modifies evidence. |
 | `tool_executor_node` | Resolve references, reuse Run-local fingerprints and execute registered tools. | Business tools proceed to Evidence; isolated history lookup merges request-local messages and returns to Controller. |
 | `evidence_node` | Run tool-owned extractors and compute missing effective evidence and data quality. | Missing effective evidence routes to finalize before Answer. |
@@ -91,19 +91,17 @@ future reset nodes delegate to the centralized pure reset function.
 
 | `decision.kind` | Meaning | Terminal mapping |
 |---|---|---|
-| `direct_answer` | Deterministic recall, history-grounded answer, or social response. | `ok/direct_answer` or `ok/history_grounded_answer` |
+| `direct_answer` | Controller-authored answer from the current request and available conversation. | `ok/direct_answer` |
 | `clarification` | Required user input is missing; `missing_fields` uses bounded open snake_case names. | `clarification_required/clarification` |
 | `context_missing` | Requested conversation context is unavailable. | `insufficient_context/conversation_context_missing` |
 | `capability_boundary` | Registered tools cannot satisfy the request. | `insufficient_tools/capability_boundary` |
 | `tool_plan` | At least one registered tool call is required. | Full evidence pipeline or explicit error/insufficient evidence. |
 
-`DirectAnswerDecision` quote modes use `ConversationBasis(turn_index, role)`
-pointing to an injected real `ConversationMessage`. `quote_user_query` requires
-the `user` role and `recall_assistant_summary` requires `assistant`. Older
-messages may be added to the request-local context by the internal
-`conversation.history_lookup` tool, but historical messages are never current
-tool evidence and are never used as routing keys. A still-valid assistant message
-may instead support `history_grounded_answer` with an explicit assistant basis.
+`DirectAnswerDecision` contains a non-empty Controller-authored `answer` and no
+history citation mode. The model interprets the injected real `ConversationMessage`
+context; older messages may be added to the request-local context by the internal
+`conversation.history_lookup` tool. Historical messages are never current tool
+evidence and are never used as routing keys.
 
 ## Tool Contract Inventory
 
@@ -188,7 +186,7 @@ green unless the authoritative design is changed first.
 
 | Frozen invariant | Characterization coverage |
 |---|---|
-| All five `ControllerDecision` branches and non-tool isolation | `test_controller_decisions.py::test_quote_user_query_uses_validated_turn_and_no_tool_pipeline`, `test_controller_decisions.py::test_social_answer_and_non_tool_decisions_skip_evidence_and_critic`, `test_agentic_graph.py::test_graph_stops_when_tools_are_insufficient`, `test_agentic_graph.py::test_graph_success_reaches_answer_review_and_response` |
+| All five `ControllerDecision` branches and non-tool isolation | `test_controller_decisions.py::test_direct_answer_uses_controller_text_and_no_tool_pipeline`, `test_controller_decisions.py::test_clarification_and_context_missing_skip_tools`, `test_agentic_graph.py::test_graph_stops_when_tools_are_insufficient`, `test_agentic_graph.py::test_graph_success_reaches_answer_review_and_response` |
 | Current graph stops on invalid plans and tool errors, and reaches Answer/Critic only on the valid tool path | `test_agentic_graph.py::test_graph_validation_error_stops_before_tools`, `test_agentic_graph.py::test_graph_tool_error_stops_before_evidence`, `test_agentic_graph.py::test_graph_success_reaches_answer_review_and_response` |
 | Terminal error precedence and complete runtime mapping | `test_agentic_nodes.py::test_response_node_prioritizes_tool_error_over_missing_evidence`, `test_agentic_nodes.py::test_response_node_prioritizes_answer_error_over_critic_failure`, `test_agentic_nodes.py::test_response_node_maps_unclassified_runtime_error_to_execution_error`, `test_agentic_runtime.py::test_terminal_outcome_table` (the characterization names remain, but the first three now call `resolve_terminal_outcome`) |
 | Session history and Controller internals do not cross the public response boundary | `test_session_privacy.py::test_prior_turn_sentinel_absent_from_next_turn_response`, `test_session_privacy.py::test_history_field_excluded_from_response`, `test_session_privacy.py::test_stateful_safe_failure_persists_only_stable_redacted_turn` |

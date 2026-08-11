@@ -1,5 +1,8 @@
 import asyncio
 
+import pytest
+from pydantic import ValidationError
+
 from app.agentic.conversation.models import ConversationMessage
 from app.agentic.graph import AgentGraphRunner
 from app.agentic.models import ExecutionPlan, ToolCall
@@ -9,7 +12,6 @@ from app.agentic.planning.decisions import (
     ContextMissingDecision,
     DirectAnswerDecision,
     ToolPlanDecision,
-    normalize_controller_decision,
     validate_controller_decision,
 )
 from app.agentic.state import AgentRunState
@@ -43,34 +45,20 @@ def _run(decision, messages=None, query="follow-up") -> AgentRunState:
     )
 
 
-def test_quote_user_query_uses_validated_message_and_no_tool_pipeline() -> None:
-    messages = [ConversationMessage(turn_index=1, role="user", content="选什么英雄克制 Lina？")]
+def test_direct_answer_uses_controller_text_and_no_tool_pipeline() -> None:
     decision = DirectAnswerDecision(
         kind="direct_answer",
         intent="conversation_recall",
-        response_mode="quote_user_query",
-        basis=[{"turn_index": 1, "role": "user"}],
+        answer="你上一轮是在问选什么英雄克制 Lina。",
     )
-    state = _run(decision, messages)
+    state = _run(decision)
     assert state.answer is not None
-    assert state.answer.summary == "你上次问的是：选什么英雄克制 Lina？"
+    assert state.answer.summary == "你上一轮是在问选什么英雄克制 Lina。"
     assert state.tool_results == []
+    assert state.response_type == "direct_answer"
 
 
-def test_recall_assistant_summary_uses_validated_assistant_message() -> None:
-    messages = [ConversationMessage(turn_index=1, role="assistant", content="Lina 有四个技能。")]
-    decision = DirectAnswerDecision(
-        kind="direct_answer",
-        intent="conversation_recall",
-        response_mode="recall_assistant_summary",
-        basis=[{"turn_index": 1, "role": "assistant"}],
-    )
-    state = _run(decision, messages, query="刚才怎么说的？")
-    assert state.answer is not None
-    assert state.answer.summary == "我当时的回答摘要是：Lina 有四个技能。"
-
-
-def test_history_grounded_answer_reuses_assistant_context_without_tools() -> None:
+def test_direct_answer_can_reuse_conversation_without_basis_or_tools() -> None:
     messages = [
         ConversationMessage(turn_index=1, role="user", content="狼人有什么技能？"),
         ConversationMessage(
@@ -82,8 +70,6 @@ def test_history_grounded_answer_reuses_assistant_context_without_tools() -> Non
     decision = DirectAnswerDecision(
         kind="direct_answer",
         intent="hero_ability",
-        response_mode="history_grounded_answer",
-        basis=[{"turn_index": 1, "role": "assistant"}],
         answer="沿用上一轮 7.41e 数据，召狼的冷却时间是30秒。",
     )
 
@@ -92,26 +78,8 @@ def test_history_grounded_answer_reuses_assistant_context_without_tools() -> Non
     assert state.answer is not None
     assert state.answer.summary == "沿用上一轮 7.41e 数据，召狼的冷却时间是30秒。"
     assert state.tool_results == []
-    assert state.response_type == "history_grounded_answer"
-    assert any("1/assistant" in event.action for event in state.trace)
-
-
-def test_history_grounded_answer_requires_assistant_basis() -> None:
-    decision = DirectAnswerDecision(
-        kind="direct_answer",
-        intent="hero_ability",
-        response_mode="history_grounded_answer",
-        basis=[{"turn_index": 1, "role": "user"}],
-        answer="30秒。",
-    )
-
-    errors = validate_controller_decision(
-        decision,
-        [ConversationMessage(turn_index=1, role="user", content="它是多少？")],
-        ToolRegistry(),
-    )
-
-    assert any("assistant basis" in error for error in errors)
+    assert state.response_type == "direct_answer"
+    assert any("direct answer completed" in event.action for event in state.trace)
 
 
 def test_clarification_and_context_missing_skip_tools() -> None:
@@ -130,36 +98,23 @@ def test_clarification_and_context_missing_skip_tools() -> None:
     assert _run(missing).status == "insufficient_context"
 
 
-def test_normalization_is_deterministic_and_clears_free_recall_text() -> None:
+def test_direct_answer_has_no_legacy_mode_or_basis_fields() -> None:
+    with pytest.raises(ValidationError):
+        DirectAnswerDecision(
+            kind="direct_answer",
+            intent="conversation_recall",
+            answer="回答",
+            response_mode="history_grounded_answer",
+        )
+
+
+def test_direct_answer_validation_does_not_route_on_history() -> None:
     decision = DirectAnswerDecision(
         kind="direct_answer",
         intent="conversation_recall",
-        response_mode="quote_user_query",
-        basis=[
-            {"turn_index": 2, "role": "user"},
-            {"turn_index": 1, "role": "user"},
-            {"turn_index": 2, "role": "user"},
-        ],
-        answer="do not use",
+        answer="回答",
     )
-    normalized = normalize_controller_decision(decision)
-    assert [item.turn_index for item in normalized.basis] == [1, 2]
-    assert normalized.answer is None
-
-
-def test_recall_basis_requires_existing_message_and_role() -> None:
-    decision = DirectAnswerDecision(
-        kind="direct_answer",
-        intent="conversation_recall",
-        response_mode="recall_assistant_summary",
-        basis=[{"turn_index": 1, "role": "assistant"}],
-    )
-    errors = validate_controller_decision(
-        decision,
-        [ConversationMessage(turn_index=1, role="user", content="上次")],
-        ToolRegistry(),
-    )
-    assert any("message is unavailable" in error for error in errors)
+    assert validate_controller_decision(decision, [], ToolRegistry()) == []
 
 
 def test_clarification_accepts_open_snake_case_missing_field_names() -> None:

@@ -149,3 +149,38 @@
 ### 验证
 
 - 此次只修改维护规则和双语进度文档，未运行 API pytest 或前端 lint/build。
+
+## 21:12 — 增加修改重量与冗余度原则
+
+### 已完成
+
+- 在 `AGENTS.md` 顶部增加项目级修改原则：解决问题前先权衡代码、合同和维护重量与已验证需求、潜在冗余，优先采用能闭合已证明根因的最小一致修改。
+- 当重量与冗余度的取舍确实不确定且会实质影响范围或架构时，先询问用户，不默认选择更重的设计。
+- 本次只更新协作规则与双语进度文档，没有修改业务代码。
+
+### 验证
+
+- 人工核对中英文新增章节的结构和事实顺序一致；未运行 API pytest 或前端 lint/build。
+
+## 21:31 — 统一 Direct Answer，删除历史回忆模式与 basis
+
+### 已完成
+
+- `DirectAnswerDecision` 收敛为 `kind`、语义 `intent` 和非空 `answer`；删除 `DirectResponseMode`、`response_mode`、`ConversationBasis`、`basis` 与 `conversation_basis`。
+- `conversation_answer_node` 直接使用 Controller 生成的答案；所有新的直接回答统一为 `response_type=direct_answer`，不再使用确定性回忆模板或 `history_grounded_answer` 分支。
+- Controller Prompt 保留真实 user/assistant 对话、短追问语义继承、历史 freshness 和 History Lookup；删除 turn-index 身份清单、basis 引用规则和旧回忆模式。
+- `context_missing` 仍由模型决定，没有新增历史存在性兜底；Conversation Memory、Redis、PostgreSQL、History Lookup 存储合同和 Graph 拓扑未改动。
+- 新增 `docs/design/versions/DotaMind_V3.3-4_design.md`，同步当前 Controller、Conversation Memory、整体架构、节点清单、API、MVP v2.5 和 SessionStore 复习文档。
+- 更新 Controller、Prompt、Runtime、Graph 决策测试与 golden prompt fixture。
+
+### 验证
+
+- 定向 Controller/Prompt/Runtime 测试：`86 passed`。
+- API 全量 pytest：`551 passed, 21 skipped`，1 个既有 Starlette/httpx deprecation warning。
+- `ruff check app tests`：通过；`compileall app`：通过；`git diff --check`：通过。
+- 使用真实 DeepSeek、PostgreSQL 中原会话前 6 轮做 Controller-only 重放：最终返回 `direct_answer`，不生成旧 mode/basis，也未调用工具；模型恢复了“兽王呢”继承的分路问题。一次供应商 JSON 重试仍被现有 bounded retry 显式记录，未改变成功结果。
+
+### 当前边界
+
+- 模型仍可能在“我上一轮问了什么”这类回忆问题中附带历史回答细节；本阶段不增加确定性截断或领域专用回答模板。
+- 旧 PostgreSQL `public_response` 历史 JSON 不迁移；新 Run 不再生成旧 `history_grounded_answer`、`response_mode` 或 `conversation_basis` 字段。

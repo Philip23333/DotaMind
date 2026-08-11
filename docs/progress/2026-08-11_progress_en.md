@@ -149,3 +149,38 @@
 ### Verification
 
 - This update changed maintenance rules and bilingual progress documentation only; API pytest and frontend lint/build were not run.
+
+## 21:12 — Add the Change-Weight and Redundancy Principle
+
+### Completed
+
+- Added a project-level rule at the top of `AGENTS.md`: before solving a problem, weigh code, contract, and maintenance weight against the verified need and likely redundancy, and prefer the smallest coherent change that closes the demonstrated root cause.
+- When the weight-versus-redundancy trade-off is genuinely uncertain and would materially affect scope or architecture, ask the user instead of defaulting to a heavier design.
+- This update changed collaboration rules and bilingual progress documentation only; it did not modify application code.
+
+### Verification
+
+- Manually checked that the new Chinese and English sections have aligned structure and facts; API pytest and frontend lint/build were not run.
+
+## 21:31 — Unify Direct Answer and Remove History Modes and Basis
+
+### Completed
+
+- `DirectAnswerDecision` now contains only `kind`, semantic `intent`, and a non-empty `answer`; removed `DirectResponseMode`, `response_mode`, `ConversationBasis`, `basis`, and `conversation_basis`.
+- `conversation_answer_node` now uses the Controller-authored answer directly; all new direct answers use `response_type=direct_answer`, with no deterministic recall template or `history_grounded_answer` branch.
+- The Controller Prompt retains real user/assistant dialogue, short-follow-up semantic inheritance, history freshness, and History Lookup; removed turn-index identity manifests, basis citation rules, and legacy recall modes.
+- `context_missing` remains a model decision with no history-existence fallback; Conversation Memory, Redis, PostgreSQL, History Lookup storage contracts, and Graph topology remain unchanged.
+- Added `docs/design/versions/DotaMind_V3.3-4_design.md` and synchronized the current Controller, Conversation Memory, overall architecture, node inventory, API, MVP v2.5, and SessionStore review documents.
+- Updated Controller, Prompt, Runtime, Graph decision tests, and the golden prompt fixture.
+
+### Verification
+
+- Focused Controller/Prompt/Runtime tests: `86 passed`.
+- Full API pytest: `551 passed, 21 skipped`, with one pre-existing Starlette/httpx deprecation warning.
+- `ruff check app tests` passed; `compileall app` passed; `git diff --check` passed.
+- A Controller-only replay using the first six turns from the real PostgreSQL session and DeepSeek ended with `direct_answer`, no legacy mode/basis, and no tool calls; the model recovered the position question inherited by “兽王呢”. One provider JSON retry was recorded by the existing bounded retry and did not change the successful result.
+
+### Current Boundary
+
+- The model may still include extra historical answer details in a question such as “what did I ask last turn”; this phase does not add deterministic truncation or domain-specific answer templates.
+- Historical PostgreSQL `public_response` JSON is not migrated; new Runs no longer generate `history_grounded_answer`, `response_mode`, or `conversation_basis` fields.

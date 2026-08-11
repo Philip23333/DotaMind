@@ -62,7 +62,7 @@ Response fields include:
 
 - `status`: `ok`, `clarification_required`, `insufficient_context`,
   `insufficient_tools`, `insufficient_evidence`, or `error`.
-- `response_type`: `direct_answer`, `history_grounded_answer`, `clarification`,
+- `response_type`: `direct_answer`, `clarification`,
   `conversation_context_missing`, `capability_boundary`, a tool answer
   contract, `tool_error`, `answer_error`, `execution_error`,
   `execution_budget_error`, `execution_timeout`, `planning_error`,

@@ -15,12 +15,9 @@ ClarificationField = Annotated[
     str,
     StringConstraints(pattern=r"^[a-z][a-z0-9_]{0,63}$"),
 ]
-ConversationRole = Literal["user", "assistant"]
-DirectResponseMode = Literal[
-    "quote_user_query",
-    "recall_assistant_summary",
-    "history_grounded_answer",
-    "social",
+NonEmptyAnswer = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=1000),
 ]
 
 
@@ -28,17 +25,10 @@ class StrictDecisionModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-class ConversationBasis(StrictDecisionModel):
-    turn_index: int = Field(ge=1)
-    role: ConversationRole
-
-
 class DirectAnswerDecision(StrictDecisionModel):
     kind: Literal["direct_answer"]
     intent: str = Field(min_length=1)
-    response_mode: DirectResponseMode
-    basis: list[ConversationBasis] = Field(default_factory=list)
-    answer: str | None = Field(default=None, max_length=1000)
+    answer: NonEmptyAnswer
 
 
 class ClarificationDecision(StrictDecisionModel):
@@ -75,12 +65,10 @@ ControllerDecision = Annotated[
 ]
 
 
-class ConversationAnswerResult(BaseModel):
+class DirectAnswerResult(BaseModel):
     answer_type: Literal["direct_answer"] = "direct_answer"
     status: Literal["ok"] = "ok"
     summary: str
-    conversation_basis: list[ConversationBasis] = Field(default_factory=list)
-    response_mode: DirectResponseMode | None = None
 
 
 class RequiredEvidenceResolution(BaseModel):
@@ -140,14 +128,6 @@ def resolve_required_evidence(
 
 def normalize_controller_decision(decision: ControllerDecision) -> ControllerDecision:
     """Return a deterministic copy for stable validation, rendering, and debug."""
-    if isinstance(decision, DirectAnswerDecision):
-        unique = {(basis.turn_index, basis.role): basis for basis in decision.basis}
-        keys = sorted(unique, key=lambda item: (item[0], item[1]))
-        basis = [unique[key] for key in keys]
-        updates = {"basis": basis}
-        if decision.response_mode not in {"social", "history_grounded_answer"}:
-            updates["answer"] = None
-        return decision.model_copy(update=updates)
     if isinstance(decision, ClarificationDecision):
         return decision.model_copy(
             update={
@@ -159,12 +139,12 @@ def normalize_controller_decision(decision: ControllerDecision) -> ControllerDec
 
 def validate_controller_decision(
     decision: ControllerDecision,
-    history: list[ConversationMessage],
+    _history: list[ConversationMessage],
     registry: ToolRegistry,
     evidence: RequiredEvidenceResolution | None = None,
 ) -> list[str]:
     if isinstance(decision, DirectAnswerDecision):
-        return _validate_direct_answer(decision, history)
+        return []
     if isinstance(decision, ClarificationDecision):
         if not decision.missing_fields:
             return ["clarification requires at least one missing field"]
@@ -194,65 +174,3 @@ def validate_controller_decision(
             required_evidence=required.effective_required_evidence,
         )
     return []
-
-
-def _validate_direct_answer(
-    decision: DirectAnswerDecision,
-    history: list[ConversationMessage],
-) -> list[str]:
-    errors: list[str] = []
-    if decision.response_mode == "social":
-        if decision.basis:
-            errors.append("social direct answer must not reference conversation context")
-        if not decision.answer or not decision.answer.strip():
-            errors.append("social direct answer requires answer text")
-        return errors
-
-    if decision.response_mode == "history_grounded_answer":
-        if not decision.answer or not decision.answer.strip():
-            errors.append("history-grounded answer requires answer text")
-        if not decision.basis:
-            errors.append("history-grounded answer requires conversation basis")
-            return errors
-        if not any(basis.role == "assistant" for basis in decision.basis):
-            errors.append("history-grounded answer requires an assistant basis")
-        messages = {(message.turn_index, message.role): message for message in history}
-        for basis in decision.basis:
-            message = messages.get((basis.turn_index, basis.role))
-            if message is None:
-                errors.append(
-                    f"conversation message is unavailable: {basis.turn_index}/{basis.role}"
-                )
-            elif not message.content:
-                errors.append(f"conversation message {basis.turn_index}/{basis.role} is empty")
-        return errors
-
-    if decision.answer is not None:
-        errors.append(
-            'For conversation recall, set "answer" to JSON null; '
-            "the server renders the final answer from the validated basis"
-        )
-    if not decision.basis:
-        errors.append(f"{decision.response_mode} requires conversation basis")
-        return errors
-
-    expected_role = {
-        "quote_user_query": "user",
-        "recall_assistant_summary": "assistant",
-    }[decision.response_mode]
-    messages = {(message.turn_index, message.role): message for message in history}
-    for basis in decision.basis:
-        if basis.role != expected_role:
-            errors.append(
-                f"{decision.response_mode} basis must reference role {expected_role}"
-            )
-            continue
-        message = messages.get((basis.turn_index, basis.role))
-        if message is None:
-            errors.append(
-                f"conversation message is unavailable: {basis.turn_index}/{basis.role}"
-            )
-            continue
-        if not message.content:
-            errors.append(f"conversation message {basis.turn_index}/{basis.role} is empty")
-    return errors

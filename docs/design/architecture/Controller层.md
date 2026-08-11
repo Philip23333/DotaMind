@@ -3,8 +3,8 @@
 Controller 是无状态 `/api/v1/plan` 与正式 Chat Run 共用的唯一 LLM 控制入口。
 它不要求每轮都生成 `ExecutionPlan`，而是返回一个带 discriminator 的
 `ControllerDecision`。
-所有 LLM-facing decision/basis model 都使用 `extra="forbid"`，混合结构和
-未知字段会进入结构化 retry，而不会被静默丢弃。
+所有 LLM-facing decision model 都使用 `extra="forbid"`，混合结构和未知
+字段会进入结构化 retry，而不会被静默丢弃。
 
 ## 决策契约
 
@@ -24,7 +24,7 @@ intent，直接读取 `plan.intent`。
 ```text
 LLM JSON
   -> Pydantic ControllerDecision parse
-  -> normalize basis / missing_fields
+  -> normalize missing_fields
   -> tool_plan: apply_sample_policy(plan) exactly once
   -> resolve effective required evidence
   -> shared decision validation
@@ -37,22 +37,20 @@ LLM JSON
 
 ## 会话回忆
 
-会话相关的 direct answer 分为两类：
+`direct_answer` 是统一的无工具回答合同。模型可以结合当前请求和真实的
+`user/assistant` 对话上下文，理解短追问、继承属性和历史事实，并直接生成
+非空 `answer`。不再区分 quote、assistant summary 或 history-grounded mode，
+也不要求模型输出 turn-index basis；模型负责语义理解，代码只负责决策结构
+和 Graph 边界。
 
-- `quote_user_query` / `recall_assistant_summary` 用于确定性回忆，答案由节点按 basis 读取，不让模型自由改写。
-- `history_grounded_answer` 用于历史依据回答，要求至少引用一条已注入的 assistant 消息；模型可以在该消息范围内生成简洁答案，但不得把它伪装成当前工具证据。
+历史事实既不自动失效，也不自动可信。模型应根据主题、属性、范围、来源、版本
+和时效判断：稳定且版本与范围一致的历史内容可以由 `direct_answer` 复用；当前、
+最新、易变、版本已变、来源不明或存在冲突时，应生成 `tool_plan` 重新验证。只有
+歧义阻止有用且准确的回答时才返回 `clarification`；可由短答案覆盖的多个解释应
+合并回答。所有这些判断基于真实对话上下文，不依赖固定实体、集合或关系枚举。
 
-direct recall 只引用真实对话消息：
-
-- `ConversationBasis(turn_index, role)` 的 role 必须与引用模式一致。
-- `quote_user_query` 只能引用 `user` 消息。
-- `recall_assistant_summary` 只能引用 `assistant` 消息。
-- basis 必须能在本次注入的 recent/retrieved messages 中定位。
-
-历史事实既不自动失效，也不自动可信。模型应根据主题、属性、范围、来源、版本和时效判断：稳定且版本与范围一致的事实可以用 `history_grounded_answer` 复用；当前、最新、易变、版本已变、来源不明或存在冲突时，应生成 `tool_plan` 重新验证。只有歧义阻止有用且准确的回答时才返回 `clarification`；可由短答案覆盖的多个解释应合并回答。所有这些判断基于真实对话上下文，不依赖固定实体、集合或关系枚举。
-
-校验成功后，`conversation_answer_node` 用确定性模板读取字段。模型给出的
-自由回答不能覆盖 recall 结果。social 允许自由文本，但 basis 必须为空。
+校验成功后，`conversation_answer_node` 直接使用 Controller 生成的 answer，
+不再读取消息字段或套用确定性回忆模板。direct answer 不创建 EvidenceGraph。
 
 ### 请求与会话上下文
 

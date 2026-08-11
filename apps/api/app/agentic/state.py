@@ -12,7 +12,7 @@ from app.agentic.models import ExecutionPlan, ToolResult
 from app.agentic.planning.controller import AgentControllerResult
 from app.agentic.planning.decisions import (
     ControllerDecision,
-    ConversationAnswerResult,
+    DirectAnswerResult,
     ToolPlanDecision,
 )
 from app.agentic.runtime.clock import current_node_timing
@@ -93,7 +93,7 @@ class AgentRunState(BaseModel):
     tool_results: list[ToolResult] = Field(default_factory=list)
     tool_dispatch_records: list[ToolDispatchRecord] = Field(default_factory=list)
     evidence_graph: EvidenceGraph | None = None
-    answer: AnswerSynthesisResult | ConversationAnswerResult | None = None
+    answer: AnswerSynthesisResult | DirectAnswerResult | None = None
     review: AgenticCriticReview | None = None
     status: AgentRunStatus = "error"
     reason: str = ""

@@ -40,6 +40,8 @@
   已完成的 detached Chat Run、事件恢复与 assistant-ui 前端蓝图。
 - [`DotaMind_V3.3-3_design.md`](./versions/DotaMind_V3.3-3_design.md) —
   已完成的 Valve committed Catalog 与静态查询工具蓝图。
+- [`DotaMind_V3.3-4_design.md`](./versions/DotaMind_V3.3-4_design.md) —
+  统一 direct answer、删除历史回忆模式与 basis 合同的轻量收敛蓝图。
 
 版本蓝图负责回答“这个版本要到哪里”，但当前实现状态仍以最新进度快照和工作树为准。
 

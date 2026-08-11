@@ -21,7 +21,7 @@ from app.agentic.nodes import (
 from app.agentic.planning.controller import AgentControllerResult
 from app.agentic.planning.decisions import (
     CapabilityBoundaryDecision,
-    ConversationAnswerResult,
+    DirectAnswerResult,
     ToolPlanDecision,
     resolve_required_evidence,
 )
@@ -647,7 +647,7 @@ def _answer_graph_runner(*, answer_status: str, confidence: float) -> AgentGraph
 def _terminal_state(case: str) -> AgentRunState:
     state = AgentRunState(query="q", game="dota2", status="ok", reason="reason")
     if case == "conversation":
-        state.answer = ConversationAnswerResult(summary="social")
+        state.answer = DirectAnswerResult(summary="social")
     elif case == "clarification":
         state.status = "clarification_required"
     elif case == "context":

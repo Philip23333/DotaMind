@@ -3,8 +3,9 @@
 > 历史说明：本文主要复盘 V3.2 compact Turn/RequestRecord SessionStore 设计，其中
 > `resolved_entities`、`response_summary` 默认历史和 stateful `/plan` 等内容不是当前正式
 > Chat Run 合同。当前实现以 PostgreSQL 完整 user/assistant transcript、Redis
-> `RecentDialogueWindow`、请求级 `conversation.history_lookup` 和
-> `history_grounded_answer` 为准。参见
+> `RecentDialogueWindow`、请求级 `conversation.history_lookup` 和统一的
+> `direct_answer` 为准。当前 direct answer 由模型结合真实 user/assistant
+> 历史直接生成，不要求 response mode 或 turn-index basis。参见
 > [`../design/architecture/ConversationMemory层.md`](../design/architecture/ConversationMemory层.md)。
 
 > 面试复习主题：per-session lock、同 key 串行化、LRU 生命周期、锁对象稳定性、

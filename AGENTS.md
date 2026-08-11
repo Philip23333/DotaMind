@@ -1,3 +1,11 @@
+# Change Weight and Redundancy
+
+- Before implementing a fix, weigh its code, contract, and maintenance weight
+  against the verified need and likely redundancy. Prefer the smallest coherent
+  change that resolves the demonstrated root cause. When that trade-off is
+  genuinely uncertain and would materially affect scope or architecture, ask
+  the user instead of defaulting to a heavier design.
+
 # Local File Inspection
 
 - Prefer the FastCtx MCP tools for local repository inspection:

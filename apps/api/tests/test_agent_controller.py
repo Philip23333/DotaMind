@@ -683,10 +683,8 @@ def test_agentic_planner_prompt_contains_team_recent_catalog_example() -> None:
     assert "allowed_arg_keys" in prompt
     assert "Do not invent aliases or synonyms" in prompt
     assert "recent_matches, do not" in prompt
-    assert "All recall answers MUST set answer to JSON null" in prompt
-    assert "The server renders the final" in prompt
-    assert "server renders the final" in prompt
-    assert "For social, basis MUST be empty" in prompt
+    assert "answer` MUST be a concise, non-empty answer" in prompt
+    assert "This direct answer does not create an EvidenceGraph" in prompt
     assert "- is_with: bool, required" in prompt
     assert "$<previous_call_id>.data.hero.hero_id" in prompt
     assert "DIVINE_IMMORTAL" in prompt
@@ -698,15 +696,13 @@ def test_agentic_planner_prompt_contains_team_recent_catalog_example() -> None:
     assert '"matches": "$get_matches.data.matches"' not in prompt
 
 
-def test_recall_answer_is_discarded_without_retry_and_rendered_from_turn() -> None:
+def test_direct_answer_uses_model_answer_without_retry() -> None:
     registry = _registry()
     llm = FakeLLM(
         {
             "kind": "direct_answer",
             "intent": "conversation_recall",
-            "response_mode": "recall_assistant_summary",
-            "basis": [{"turn_index": 1, "role": "assistant"}],
-            "answer": None,
+            "answer": "用户之前提到想练 Lina。",
         }
     )
     controller = AgentController(
@@ -736,19 +732,17 @@ def test_recall_answer_is_discarded_without_retry_and_rendered_from_turn() -> No
     assert llm.calls == 1
     assert state.status == "ok"
     assert isinstance(state.decision, DirectAnswerDecision)
-    assert state.decision.answer is None
+    assert state.decision.answer == "用户之前提到想练 Lina。"
     assert state.answer is not None
-    assert state.answer.summary == "我当时的回答摘要是：记录了用户想练 Lina。"
+    assert state.answer.summary == "用户之前提到想练 Lina。"
 
 
-def test_malformed_recall_answers_remain_decision_shape_errors() -> None:
+def test_malformed_direct_answers_remain_decision_shape_errors() -> None:
     for invalid_answer in ({"text": "错误类型"}, "x" * 1001):
         llm = FakeLLM(
             {
                 "kind": "direct_answer",
                 "intent": "conversation_recall",
-                "response_mode": "quote_user_query",
-                "basis": [{"turn_index": 1, "role": "user"}],
                 "answer": invalid_answer,
             }
         )

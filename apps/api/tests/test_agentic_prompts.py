@@ -47,8 +47,6 @@ class CapturingLLM:
         return {
             "kind": "direct_answer",
             "intent": "social",
-            "response_mode": "social",
-            "basis": [],
             "answer": "hello",
         }
 
@@ -114,25 +112,27 @@ def test_controller_prompt_uses_one_generic_history_first_decision_order() -> No
     prompt = AgentController(_registry(), llm_enabled=False)._system_prompt()
 
     assert "Decision priority (evaluate in this order):" in prompt
-    assert "return history_grounded_answer" in prompt
-    assert "return history_grounded_answer and stop" in prompt
+    assert "return direct_answer" in prompt
+    assert "return direct_answer and stop" in prompt
     assert "Rules that describe which\ntools a query needs apply only after step 4" in prompt
     assert "Once tool_plan is selected" in prompt
     assert "After tool_plan has been selected for fresh evidence" in prompt
     assert "For a fresh complete ability-list tool plan" in prompt
-    assert "no fresh evidence is required when the cited history still" in prompt
+    assert "This direct answer does not create an EvidenceGraph" in prompt
     assert "The length or formatting of a historical answer is not a refresh trigger" in prompt
     assert "preserving that property or action" in prompt
+    assert "full historical\n  answer unless they ask for it" in prompt
     assert "Answer only the selected subject's value" in prompt
-    assert "MUST address the reconstructed" in prompt
-    assert "omit historical facts outside its inherited property" in prompt
+    assert "A direct_answer must address the reconstructed current request only" in prompt
     assert "Decision validity invariants:" in prompt
-    assert "A tool_plan is invalid when cited, still-valid assistant history" in prompt
-    assert "A history_grounded_answer is invalid when it answers properties" in prompt
-    assert "Additional available facts are not a reason to include them" in prompt
+    assert "A tool_plan is invalid when the available conversation explicitly" in prompt
+    assert "A direct_answer must address the reconstructed current request only" in prompt
     assert "Final decision gate (apply immediately before returning JSON):" in prompt
     assert "returning tool_plan is invalid" in prompt
     assert "Selecting a subject does not widen the inherited request" in prompt
+    assert "history_grounded_answer" not in prompt
+    assert "quote_user_query" not in prompt
+    assert "recall_assistant_summary" not in prompt
     assert "does not create current\n  Dota evidence" not in prompt
     assert "狼人的冷却时间：召狼30秒" not in prompt
     assert prompt.count("Decision priority (evaluate in this order):") == 1

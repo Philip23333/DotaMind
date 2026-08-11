@@ -1,12 +1,9 @@
-from app.agentic.planning.decisions import (
-    ConversationAnswerResult,
-    DirectAnswerDecision,
-)
+from app.agentic.planning.decisions import DirectAnswerDecision, DirectAnswerResult
 from app.agentic.state import AgentRunState
 
 
 def conversation_answer_node(state: AgentRunState) -> AgentRunState:
-    """Render validated conversation recall without another model call."""
+    """Accept the Controller-authored direct answer without another model call."""
     state.add_trace("conversation_answer", "render direct answer", "planned")
     decision = state.decision
     if not isinstance(decision, DirectAnswerDecision):
@@ -18,45 +15,7 @@ def conversation_answer_node(state: AgentRunState) -> AgentRunState:
         state.add_trace("conversation_answer", "invalid decision", "failed")
         return state
 
-    messages = {
-        (message.turn_index, message.role): message
-        for message in [*state.retrieved_messages, *state.recent_messages]
-    }
-    if decision.response_mode == "social":
-        summary = (decision.answer or "").strip()
-    elif decision.response_mode == "history_grounded_answer":
-        summary = (decision.answer or "").strip()
-    elif decision.response_mode == "quote_user_query":
-        values = [messages[(basis.turn_index, "user")].content for basis in decision.basis]
-        summary = _render_numbered("你上次问的是", values)
-    elif decision.response_mode == "recall_assistant_summary":
-        values = [
-            messages[(basis.turn_index, "assistant")].content
-            for basis in decision.basis
-        ]
-        summary = _render_numbered("我当时的回答摘要是", values)
-
-    state.answer = ConversationAnswerResult(
-        summary=summary,
-        conversation_basis=decision.basis,
-        response_mode=decision.response_mode,
-    )
+    state.answer = DirectAnswerResult(summary=decision.answer)
     state.status = "ok"
-    if decision.response_mode == "history_grounded_answer":
-        refs = ", ".join(
-            f"{basis.turn_index}/{basis.role}" for basis in decision.basis
-        )
-        state.add_trace(
-            "conversation_answer",
-            f"history-grounded answer used messages: {refs}",
-            "completed",
-        )
-    else:
-        state.add_trace("conversation_answer", "direct answer completed", "completed")
+    state.add_trace("conversation_answer", "direct answer completed", "completed")
     return state
-
-def _render_numbered(prefix: str, values: list[str]) -> str:
-    if len(values) == 1:
-        return f"{prefix}：{values[0]}"
-    lines = "\n".join(f"{index}. {value}" for index, value in enumerate(values, 1))
-    return f"{prefix}：\n{lines}"
