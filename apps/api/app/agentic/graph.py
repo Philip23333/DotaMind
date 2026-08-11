@@ -4,6 +4,7 @@ import logging
 from langgraph.graph import END, START, StateGraph
 
 from app.agentic.answer import AnswerSynthesizer
+from app.agentic.conversation.models import ConversationMessage
 from app.agentic.critic import AgenticCritic
 from app.agentic.nodes import (
     answer_node,
@@ -39,7 +40,7 @@ from app.agentic.runtime.models import FailureStage
 from app.agentic.runtime.streaming import PhaseStreamEvent, publish_stream_event
 from app.agentic.state import AgentRunState
 from app.agentic.tools import ToolExecutor, ToolRegistry
-from app.core.config import RuntimePolicy
+from app.core.config import RuntimePolicy, get_policy
 from app.observability import emit_event, id_prefix, record_run
 
 logger = logging.getLogger(__name__)
@@ -52,6 +53,7 @@ class AgentGraphRunner:
         registry: ToolRegistry,
         runtime_policy: RuntimePolicy | None = None,
         clock: Clock | None = None,
+        history_lookup_max_per_run: int | None = None,
     ) -> None:
         self.controller = controller
         self.registry = registry
@@ -60,6 +62,11 @@ class AgentGraphRunner:
         self.critic = AgenticCritic()
         self.runtime_policy = runtime_policy or RuntimePolicy()
         self.clock = clock or SystemClock()
+        self.history_lookup_max_per_run = (
+            history_lookup_max_per_run
+            if history_lookup_max_per_run is not None
+            else get_policy().conversation.history_lookup_max_per_run
+        )
         self.graph = self._compile_graph()
 
     async def run(self, state: AgentRunState) -> AgentRunState:
@@ -185,6 +192,7 @@ class AgentGraphRunner:
         graph.add_node("conversation_answer", self._conversation_answer)
         graph.add_node("validate", self._validate)
         graph.add_node("tools", self._tools)
+        graph.add_node("history_lookup", self._history_lookup)
         graph.add_node("evidence", self._evidence)
         graph.add_node("answer", self._answer)
         graph.add_node("critic", self._critic)
@@ -225,7 +233,20 @@ class AgentGraphRunner:
         graph.add_conditional_edges(
             "tools",
             _route_after_tools,
-            {"evidence": "evidence", "response": "attempt_finalize"},
+            {
+                "controller": "controller",
+                "history_lookup": "history_lookup",
+                "evidence": "evidence",
+                "response": "attempt_finalize",
+            },
+        )
+        graph.add_conditional_edges(
+            "history_lookup",
+            _route_after_history_lookup,
+            {
+                "controller": "controller",
+                "response": "attempt_finalize",
+            },
         )
         graph.add_conditional_edges(
             "evidence",
@@ -285,6 +306,15 @@ class AgentGraphRunner:
     async def _tools(self, state: AgentRunState) -> AgentRunState:
         if self._guard(state):
             return state
+        if (
+            state.plan is not None
+            and _is_history_lookup_plan(state.plan)
+            and state.history_lookup_count >= self.history_lookup_max_per_run
+        ):
+            state.status = "error"
+            state.reason = "conversation history lookup limit reached"
+            state.errors.append(state.reason)
+            return state
         publish_stream_event(
             PhaseStreamEvent(phase="tool_execution", attempt_index=state.attempt_index)
         )
@@ -294,6 +324,16 @@ class AgentGraphRunner:
             self.executor,
             self.clock,
             node="tools",
+            failure_stage="tool_execution",
+        )
+
+    def _history_lookup(self, state: AgentRunState) -> AgentRunState:
+        if self._guard(state):
+            return state
+        return self._timed_sync(
+            state,
+            _apply_history_lookup,
+            node="history_lookup",
             failure_stage="tool_execution",
         )
 
@@ -499,7 +539,62 @@ def _route_after_validate(state: AgentRunState) -> str:
 def _route_after_tools(state: AgentRunState) -> str:
     if state.status == "error":
         return "response"
+    if state.plan is not None and _is_history_lookup_plan(state.plan):
+        return "history_lookup"
     return "evidence"
+
+
+def _is_history_lookup_plan(plan) -> bool:
+    return bool(
+        plan.tool_calls
+        and all(call.tool == "conversation.history_lookup" for call in plan.tool_calls)
+    )
+
+
+def _apply_history_lookup(state: AgentRunState) -> AgentRunState:
+    result = state.tool_results[-1] if state.tool_results else None
+    data = result.data if result is not None and isinstance(result.data, dict) else {}
+    raw_messages = data.get("messages", [])
+    try:
+        retrieved = [
+            ConversationMessage.model_validate(message) for message in raw_messages
+        ]
+        messages_by_key = {
+            (message.turn_index, message.role): message
+            for message in state.retrieved_messages
+        }
+        messages_by_key.update(
+            {(message.turn_index, message.role): message for message in retrieved}
+        )
+        role_order = {"user": 0, "assistant": 1}
+        state.retrieved_messages = sorted(
+            messages_by_key.values(),
+            key=lambda message: (message.turn_index, role_order[message.role]),
+        )
+    except Exception:
+        state.status = "error"
+        state.reason = "conversation history lookup returned invalid messages"
+        state.errors.append(state.reason)
+        return state
+    state.history_lookup_count += 1
+    state.status = "ok"
+    state.reason = ""
+    state.errors.clear()
+    state.controller_result = None
+    state.decision = None
+    state.decision_kind = None
+    state.plan = None
+    state.validation_failed = False
+    state.safe_failure_required = False
+    state.tool_results.clear()
+    state.tool_dispatch_records.clear()
+    state.evidence_graph = None
+    state.answer = None
+    return state
+
+
+def _route_after_history_lookup(state: AgentRunState) -> str:
+    return "response" if state.status == "error" else "controller"
 
 
 def _route_after_evidence(state: AgentRunState) -> str:

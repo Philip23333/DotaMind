@@ -84,7 +84,7 @@ future reset nodes delegate to the centralized pure reset function.
 | `recovery_node` | Classify a missing-evidence terminal without an LLM call. | Either terminates or records one Replan and feedback. |
 | `attempt_reset_node` | Start Attempt 1 through the centralized reset function. | Rechecks deadline before the only back edge. |
 | `run_finalize_node` | Resolve final public state and seal Run duration. | Never creates or mutates Attempt records. |
-| `response_node` | Require finalized state, apply safe-failure allowlist and serialize public schemas. | Does not recompute terminal priority or serialize `state.history`. |
+| `response_node` | Require finalized state, apply safe-failure allowlist and serialize public schemas. | Does not recompute terminal priority or serialize recent/retrieved messages. |
 
 ## Decision Inventory
 
@@ -96,9 +96,12 @@ future reset nodes delegate to the centralized pure reset function.
 | `capability_boundary` | Registered tools cannot satisfy the request. | `insufficient_tools/capability_boundary` |
 | `tool_plan` | At least one registered tool call is required. | Full evidence pipeline or explicit error/insufficient evidence. |
 
-`DirectAnswerDecision` recall modes use `ConversationBasis` pointing to a
-current-session `Turn.query`, successful `resolved_entities`, or a non-redacted
-`response_summary`. Historical IDs are never accepted as current tool evidence.
+`DirectAnswerDecision` quote modes use `ConversationBasis(turn_index, role)`
+pointing to an injected real `ConversationMessage`. `quote_user_query` requires
+the `user` role and `recall_assistant_summary` requires `assistant`. Older
+messages may be added to the request-local context by the internal
+`conversation.history_lookup` tool, but historical messages are never current
+tool evidence and are never used as routing keys.
 
 ## Tool Contract Inventory
 

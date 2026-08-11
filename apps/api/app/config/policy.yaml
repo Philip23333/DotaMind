@@ -61,13 +61,15 @@ llm:
     max_tokens: 4000
 
 conversation:
-  # Multi-turn session memory (Phase 1: single-process in-memory store).
-  history_window: 5              # turns injected into planner prompt
-  max_turns_per_session: 50      # turns retained per session
+  # Redis-backed recent dialogue window; PostgreSQL stores the full source.
+  recent_dialogue_max_chars: 24000
+  history_lookup_max_turns: 8
+  history_lookup_max_chars: 12000
+  history_lookup_max_per_run: 1
+  max_turns_per_session: 50      # compact audit Turns retained per session
   max_sessions: 1000             # LRU eviction threshold
   answer_summary_max_chars: 300  # per-turn answer summary cap
   turn_query_max_chars: 200      # per-turn query cap stored in history
-  history_max_chars: 2000        # hard budget for the rendered history block
   request_record_ttl_seconds: 3600       # completed request-idempotency replay window
   max_request_records_per_session: 200   # bounded completed/failed request records
   session_ttl_seconds: 86400             # Redis session data retention window

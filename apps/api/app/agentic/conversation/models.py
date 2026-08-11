@@ -1,39 +1,50 @@
-"""Conversation history data models.
-
-Intentionally free of imports from the rest of the agentic pipeline so this
-module can be used by both the agentic layer (summary extraction) and the
-application layer (session store / service) without circular dependencies.
-These models are also the unit of Redis serialisation in V3.2-5.
-"""
+"""Conversation memory contracts shared by the agentic and application layers."""
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
-class ResolvedEntity(BaseModel):
-    """A named game entity resolved during a turn."""
+class ConversationMessage(BaseModel):
+    """One real user or assistant message available to the Controller."""
 
-    type: Literal["hero", "team", "player"]
-    name: str
-    id: int | str | None = None
+    model_config = ConfigDict(extra="forbid")
+
+    turn_index: int = Field(ge=1)
+    role: Literal["user", "assistant"]
+    content: str
+
+
+class DialogueTurn(BaseModel):
+    """A complete user/assistant exchange kept together in the recent window."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    turn_index: int = Field(ge=1)
+    user_message: str
+    assistant_message: str
+
+
+class RecentDialogueWindow(BaseModel):
+    """Bounded, reconstructible Redis cache of complete recent turns."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal[1] = 1
+    through_turn_index: int = Field(ge=0)
+    truncated_before: bool = False
+    turns: list[DialogueTurn] = Field(default_factory=list)
 
 
 class Turn(BaseModel):
-    """Compact summary of one completed planning turn.
+    """Lossy audit record; it is not the Controller's default conversation input."""
 
-    Stored in the session history and rendered into the Controller prompt as
-    *untrusted context data*, not as instructions or evidence.
-    """
+    model_config = ConfigDict(extra="forbid")
 
-    # Monotonic index assigned by SessionStore.append(); placeholder 0 before
-    # storage.
-    turn_index: int = 0
-    # Raw user query, truncated to turn_query_max_chars at extraction time.
+    turn_index: int = Field(default=0, ge=0)
     query: str
-    # Mirrors AgentRunState.status so downstream renderers can warn on errors.
     status: Literal[
         "ok",
         "clarification_required",
@@ -42,15 +53,11 @@ class Turn(BaseModel):
         "insufficient_evidence",
         "error",
     ] = "ok"
-    # Mirrors AgentRunState.response_type.
     response_type: str | None = None
-    # Semantic intent from the decision; never used as a routing key.
     intent: str | None = None
-    # Game entities resolved during the turn (hero/team/player).
-    resolved_entities: list[ResolvedEntity] = Field(default_factory=list)
-    # Cross-cutting scope filters from ExecutionPlan.context, JSON-safe dict.
-    context_scope: dict[str, Any] = Field(default_factory=dict)
-    # Minimal continuation state for a clarification turn.
+    context_scope: dict = Field(default_factory=dict)
     missing_fields: list[str] = Field(default_factory=list)
-    # Human-readable answer summary (truncated) or state.reason on failure.
     response_summary: str = ""
+
+
+__all__ = ["ConversationMessage", "DialogueTurn", "RecentDialogueWindow", "Turn"]

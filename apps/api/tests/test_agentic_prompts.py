@@ -10,13 +10,14 @@ from pathlib import Path
 from pydantic import BaseModel
 
 import app.agentic.prompts.controller as controller_prompts
+from app.agentic.conversation.models import ConversationMessage
 from app.agentic.graph import AgentGraphRunner
 from app.agentic.planning.contracts import CONTRACT_REGISTRY
 from app.agentic.planning.controller import AgentController
 from app.agentic.planning.decisions import ToolPlanDecision
 from app.agentic.prompts.controller import (
     build_controller_prompt,
-    render_controller_user_message,
+    render_controller_messages,
 )
 from app.agentic.prompts.feedback import (
     render_recovery_feedback,
@@ -169,11 +170,11 @@ def test_dynamic_user_and_retry_messages_do_not_change_prompt_manifest() -> None
     controller = AgentController(_registry(), llm_enabled=False)
     before = controller.prompt_versions
 
-    first = render_controller_user_message(
-        "first query", "dota2", [], history_max_chars=100
-    )
-    second = render_controller_user_message(
-        "second query", "other-game", [], history_max_chars=1
+    first = render_controller_messages("first query", "dota2", [])
+    second = render_controller_messages(
+        "second query",
+        "other-game",
+        [ConversationMessage(turn_index=1, role="user", content="older")],
     )
     assert first != second
     assert render_validation_retry_feedback(["first error"]) != render_validation_retry_feedback(
@@ -193,9 +194,11 @@ def test_enabled_llm_system_message_matches_run_manifest() -> None:
 
     sent_system = llm.messages[0][0]["content"]
     manifest = state.run_context.prompt_versions
-    assert hashlib.sha256(sent_system.encode("utf-8")).hexdigest() == manifest[
-        "controller.system.sha256"
-    ]
+    assert sent_system.startswith(controller._system_prompt())
+    assert "Runtime context:\n- game: dota2" in sent_system
+    assert manifest["controller.system.sha256"] == hashlib.sha256(
+        controller._system_prompt().encode("utf-8")
+    ).hexdigest()
     assert manifest["controller.recovery_rules"] == "v1"
     assert state.response["runtime"]["attempts"][0].get("prompt_versions") is None
 

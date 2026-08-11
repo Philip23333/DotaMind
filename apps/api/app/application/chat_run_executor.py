@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from time import monotonic
 from typing import Any
 from uuid import UUID
 
-from app.agentic.conversation.models import Turn
+from app.agentic.conversation.models import DialogueTurn
 from app.agentic.graph import AgentGraphRunner
 from app.agentic.runtime.streaming import (
     ResultStreamEvent,
@@ -22,17 +22,20 @@ from app.application.chat_run_repository import (
     ChatRunRepositoryError,
     ChatRunSummary,
 )
+from app.application.conversation_memory import ConversationMemoryService
+from app.application.history_lookup import HistoryLookupContext, bind_history_lookup_context
+from app.application.plan_service import TurnBuildResult
 from app.application.postgres_chat_repository import PostgresChatRepository
 from app.application.run_event_bus import RunEventBusError
 from app.application.run_event_pump import bind_run_event_pump
 from app.application.run_recovery import RunHeartbeat
-from app.application.session_store import SessionStore
+from app.application.session_store import SessionStore, SessionStoreError
 from app.observability import (
     record_chat_run,
     record_chat_run_cancellation,
 )
 
-TurnBuilder = Callable[[AgentRunState], Turn]
+TurnBuilder = Callable[[AgentRunState], Awaitable[TurnBuildResult]]
 ResponseBuilder = Callable[[AgentRunState, UUID], dict[str, Any]]
 
 
@@ -63,9 +66,11 @@ class ChatRunExecutor:
         run_repository: ChatRunRepository,
         chat_repository: PostgresChatRepository,
         session_store: SessionStore,
+        memory_service: ConversationMemoryService,
         event_bus,
         worker_id: str,
-        history_limit: int,
+        history_lookup_max_turns: int = 8,
+        history_lookup_max_chars: int = 12_000,
         build_turn: TurnBuilder,
         build_response: ResponseBuilder,
         heartbeat_interval_seconds: float = 0,
@@ -74,9 +79,11 @@ class ChatRunExecutor:
         self._run_repository = run_repository
         self._chat_repository = chat_repository
         self._session_store = session_store
+        self._memory_service = memory_service
         self._event_bus = event_bus
         self._worker_id = worker_id
-        self._history_limit = history_limit
+        self._history_lookup_max_turns = history_lookup_max_turns
+        self._history_lookup_max_chars = history_lookup_max_chars
         self._build_turn = build_turn
         self._build_response = build_response
         self._heartbeat_interval_seconds = heartbeat_interval_seconds
@@ -124,22 +131,22 @@ class ChatRunExecutor:
         request: ChatRunExecutionRequest,
         fencing_token: int,
     ) -> ChatRunExecutionResult:
-        history = await self._chat_repository.get_history(
+        recent_messages, next_turn_index = await self._memory_service.load_recent_messages(
             request.browser_id,
             request.session_id,
-            limit=self._history_limit,
         )
         state = AgentRunState(
             query=request.query,
             game=request.game,
-            history=history,
-            session_memory_enabled=True,
+            recent_messages=recent_messages,
+            next_turn_index=next_turn_index,
             internal_session_id=request.session_id,
             internal_request_id=request.request_id,
             internal_run_id=request.run_id,
         )
 
         completed: ChatRunSummary | None = None
+        committed = False
         async with bind_run_event_pump(
             bus=self._event_bus,
             run_id=request.run_id,
@@ -147,19 +154,48 @@ class ChatRunExecutor:
         ) as pump:
             try:
                 publish_stream_event(StatusStreamEvent(status="running"))
-                state = await self._runner.run(state)
+                with bind_history_lookup_context(
+                    HistoryLookupContext(
+                        chat_repository=self._chat_repository,
+                        browser_id=request.browser_id,
+                        session_id=request.session_id,
+                        max_turns=self._history_lookup_max_turns,
+                        max_chars=self._history_lookup_max_chars,
+                    )
+                ):
+                    state = await self._runner.run(state)
                 public_response = self._build_response(state, request.session_id)
+                turn_result = await self._build_turn(state)
                 completed = await self._run_repository.complete_with_turn(
                     run_id=request.run_id,
                     worker_id=self._worker_id,
                     fencing_token=fencing_token,
                     public_response=public_response,
-                    compact_turn=self._build_turn(state),
+                    assistant_message=turn_result.assistant_message,
+                    compact_turn=turn_result.turn,
+                    expected_next_turn_index=state.next_turn_index,
                 )
+                committed = True
+                try:
+                    await self._memory_service.record_committed_turn(
+                        request.browser_id,
+                        request.session_id,
+                        DialogueTurn(
+                            turn_index=state.next_turn_index,
+                            user_message=request.query,
+                            assistant_message=turn_result.assistant_message,
+                        ),
+                    )
+                except SessionStoreError:
+                    # PostgreSQL is authoritative; a cache failure must not turn a
+                    # committed Run into a failed Run.
+                    pass
                 # PostgreSQL is committed before the terminal Redis events.
                 publish_stream_event(ResultStreamEvent(response=public_response))
                 publish_stream_event(StatusStreamEvent(status="completed"))
             except asyncio.CancelledError:
+                if committed:
+                    raise
                 terminal = await self._mark_cancelled_or_interrupted(request.run_id)
                 record_chat_run_cancellation(terminal)
                 publish_stream_event(
@@ -174,6 +210,8 @@ class ChatRunExecutor:
                 # PostgreSQL Turn back into a failed Run.
                 raise
             except Exception:
+                if committed:
+                    raise
                 await self._mark_failed(request.run_id)
                 publish_stream_event(
                     StatusStreamEvent(status="failed", error_code="execution_error")

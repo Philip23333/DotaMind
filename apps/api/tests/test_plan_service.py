@@ -22,9 +22,9 @@ class FakeController:
         return {}
 
     async def decide(
-        self, query: str, game: str = "dota2", history=None
+        self, query: str, game: str = "dota2", recent_messages=None, **kwargs
     ) -> AgentControllerResult:
-        self.received_history = list(history or [])
+        self.received_history = list(recent_messages or [])
         return self.result
 
 

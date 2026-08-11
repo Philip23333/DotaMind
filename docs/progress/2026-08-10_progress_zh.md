@@ -177,3 +177,29 @@
 
 - 本次不处理 compact Turn、多轮组件引用或历史实体记忆；“上面三个配方物品售价是多少”仍作为后续独立问题。
 - 不重新生成 Catalog 快照，不增加第三方或网络 fallback；全部改动尚未提交。
+
+## 22:38 — 通用 discourse graph 会话记忆
+
+### 已完成
+
+- 用通用 `DiscourseState` 替换 Turn 中领域专用的 `resolved_entities`：支持开放字符串 kind/label、referent、ordered group、link、focus 和 grounding；拓扑、ref、状态和数量边界由模型与 `ConversationPolicy` 校验。
+- 新增异步 `DiscourseExtractor`，只接收上一份 available discourse、当前完整 query、当前完整 answer 和结构边界；不读取或反解析 300 字符的 `response_summary`，不保存 ID、价格、属性、胜率或其他事实值。
+- 抽取失败允许一次确定性校验反馈重试；第二次失败写入 `unavailable` 空图并记录低基数 discourse 指标。业务回答成功时不会因记忆抽取失败而改写状态，后续依赖该记忆时由 Controller 暴露 `context_missing`。
+- `PlanService._build_turn()` 改为异步，safe failure 不运行抽取；clarification 可继承上一份 discourse 并将当前 query/澄清问题交给抽取器；`ChatRunExecutor` 在 PostgreSQL Turn 提交前 await compact Turn 构建。
+- Controller history 渲染为转义后的对象/集合/关系/焦点数据；直接回忆改为 `recall_referent` + `discourse ref`，服务端确定性返回 referent 名称或 group 成员名称。kind/label 不参与固定路由，当前事实仍须当前轮工具调用与证据确认。
+- Redis Turn 严格升级到 `schema_version=2` discourse DTO；只写 v2，不从旧 `response_summary` 重建，旧 session key 可失效。PostgreSQL 旧 JSONB Turn 缺少 discourse 时按默认 empty 加载。
+- 新增 Conversation Memory 设计说明并同步当前架构、Controller 设计、V3.2 设计引用和 Controller golden prompt。
+
+### 验证
+
+- discourse/summary/render/decision/Redis focused：`110 passed`。
+- 全量 API pytest：`561 passed, 20 skipped, 1 existing Starlette/httpx deprecation warning`。
+- 启用本机真实 Redis（`DOTAMIND_TEST_REDIS_URL=redis://127.0.0.1:6379/15`）时，Redis 集成 `14 passed`，完整 API pytest `576 passed, 5 skipped`；warning 不变。
+- Ruff focused、完整 API Ruff、compileall 和 `git diff --check` 在最终门禁中执行。
+- 覆盖 Lina 集合与顺序指代、希瓦式多个组件关系、开放 `guide` kind、多个 group、非法 ref/拓扑、超限、grounding 失败、抽取器不可用、失败轮不可复用、历史非证据和 Redis v2 round-trip。
+
+### 当前边界
+
+- discourse 是指代和集合选择记忆，不是 EvidenceGraph、事实缓存或当前轮证据；历史名称和 ID 不能直接写入下游工具参数。
+- `response_summary` 仍保持现有 300 字符回答摘录合同；本轮没有通过增加其长度解决多轮引用。
+- 当前改动尚未提交；本轮真实 Redis 验证使用随机测试前缀并清理精确测试 key。

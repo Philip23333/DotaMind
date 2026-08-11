@@ -4,7 +4,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, TypeAdapter, ValidationError
 
-from app.agentic.conversation.models import Turn
+from app.agentic.conversation.models import ConversationMessage
 from app.agentic.planning.decisions import (
     ControllerDecision,
     RequiredEvidenceResolution,
@@ -18,7 +18,8 @@ from app.agentic.planning.sample_policy import apply_sample_policy
 from app.agentic.prompts.controller import (
     ControllerPromptBundle,
     build_controller_prompt,
-    render_controller_user_message,
+    render_controller_messages,
+    render_controller_system_prompt,
 )
 from app.agentic.prompts.feedback import (
     render_recovery_feedback,
@@ -81,8 +82,9 @@ class AgentController:
         self,
         query: str,
         game: str = "dota2",
-        history: list[Turn] | None = None,
+        recent_messages: list[ConversationMessage] | None = None,
         *,
+        retrieved_messages: list[ConversationMessage] | None = None,
         recovery_feedback: RecoveryFeedback | None = None,
         recovery_baseline_decision: ToolPlanDecision | None = None,
     ) -> AgentControllerResult:
@@ -98,17 +100,24 @@ class AgentController:
                 errors=["DOTAMIND_LLM_ENABLED must be true for /api/v1/plan"],
             )
 
-        history_block, user_content = render_controller_user_message(
+        conversation_messages = render_controller_messages(
             query,
             game,
-            history or [],
-            history_max_chars=self.policy.conversation.history_max_chars,
+            recent_messages or [],
+            retrieved_messages,
         )
 
         messages: list[dict[str, str]] = [
-            {"role": "system", "content": self._prompt_bundle.system_prompt},
-            {"role": "user", "content": user_content},
+            {
+                "role": "system",
+                "content": render_controller_system_prompt(
+                    self._prompt_bundle.system_prompt,
+                    game,
+                ),
+            },
+            *conversation_messages,
         ]
+        history_message_count = len(conversation_messages) - 1
         if recovery_feedback is not None and recovery_baseline_decision is not None:
             messages.extend(
                 [
@@ -162,7 +171,7 @@ class AgentController:
                     errors=[f"{type(exc).__name__}: {exc}"],
                     raw_content=exc.raw_content,
                     finish_reason=exc.finish_reason,
-                    prompt_messages=_redact_history_from_messages(messages, history_block),
+                    prompt_messages=_redact_history_from_messages(messages, history_message_count),
                 )
                 continue
             except Exception as exc:
@@ -179,7 +188,7 @@ class AgentController:
                     reason="LLM controller call failed",
                     failure_type="planning_error",
                     errors=[f"{type(exc).__name__}: {exc}"],
-                    prompt_messages=_redact_history_from_messages(messages, history_block),
+                    prompt_messages=_redact_history_from_messages(messages, history_message_count),
                 )
 
             try:
@@ -206,7 +215,7 @@ class AgentController:
                     failure_type="decision_validation_error",
                     errors=[f"ValidationError: {exc}"],
                     raw_output=raw,
-                    prompt_messages=_redact_history_from_messages(messages, history_block),
+                    prompt_messages=_redact_history_from_messages(messages, history_message_count),
                 )
                 continue
 
@@ -225,7 +234,10 @@ class AgentController:
 
             validation_errors = validate_controller_decision(
                 decision,
-                history or [],
+                [
+                    *list(retrieved_messages or []),
+                    *list(recent_messages or []),
+                ],
                 self.registry,
                 evidence,
             )
@@ -251,7 +263,7 @@ class AgentController:
                     decision=decision,
                     evidence_resolution=evidence,
                     raw_output=raw,
-                    prompt_messages=_redact_history_from_messages(messages, history_block),
+                    prompt_messages=_redact_history_from_messages(messages, history_message_count),
                 )
 
             record_controller("error", "decision_validation_error")
@@ -275,7 +287,7 @@ class AgentController:
                 failure_type="decision_validation_error",
                 errors=validation_errors,
                 raw_output=raw,
-                prompt_messages=_redact_history_from_messages(messages, history_block),
+                prompt_messages=_redact_history_from_messages(messages, history_message_count),
             )
 
         # Retries exhausted. Every non-returning iteration assigned `last`.
@@ -291,29 +303,27 @@ class AgentController:
 
 def _redact_history_from_messages(
     messages: list[dict[str, str]],
-    history_block: str,
+    history_message_count: int,
 ) -> list[dict[str, str]]:
-    """Replace the injected history block in the first user message with metadata.
+    """Replace injected prior messages with metadata before public persistence.
 
     The full conversation history must not be returned to API clients
     (privacy + response-size).  The controller still used it for its decision;
     this only affects the stored ``prompt_messages`` field in the response.
     """
-    if not history_block:
+    if history_message_count <= 0:
         return list(messages)
     result = list(messages)
-    # The initial user message is always at index 1 (after the system message).
-    if len(result) > 1 and result[1]["role"] == "user":
-        content = result[1]["content"]
-        if content.startswith(history_block):
-            tail = content[len(history_block):].lstrip("\n")
-            n_turns = history_block.count("[第")
-            result[1] = {
-                "role": "user",
-                "content": (
-                    f"[conversation_history_redacted: {n_turns} turns injected]\n{tail}"
-                ),
-            }
+    start = 1
+    end = min(start + history_message_count, len(result) - 1)
+    result[start:end] = [
+        {
+            "role": "user",
+            "content": (
+                f"[conversation_history_redacted: {history_message_count} messages injected]"
+            ),
+        }
+    ]
     return result
 
 

@@ -173,7 +173,9 @@ def test_postgres_run_completion_is_atomic_and_fenced() -> None:
                 worker_id="worker-complete",
                 fencing_token=token,
                 public_response={"status": "ok", "answer": "完成"},
+                assistant_message="完成",
                 compact_turn=Turn(query="完成一个 Run", response_summary="完成"),
+                expected_next_turn_index=1,
             )
             assert completed.status == "completed"
             assert completed.result_turn_id is not None
@@ -184,12 +186,16 @@ def test_postgres_run_completion_is_atomic_and_fenced() -> None:
                 worker_id="worker-complete",
                 fencing_token=token,
                 public_response={"status": "ok", "answer": "重复完成"},
+                assistant_message="重复完成",
                 compact_turn=Turn(query="完成一个 Run", response_summary="重复完成"),
             )
             assert replay.result_turn_id == completed.result_turn_id
             snapshot = await chats.get_session(browser_id, session_id)
             assert len(snapshot.turns) == 1
             assert snapshot.turns[0].public_response["answer"] == "完成"
+            context = await chats.get_conversation_context(browser_id, session_id, limit=5)
+            assert context.next_turn_index == 2
+            assert context.recent_messages[-1].content == "完成"
 
             second_run = await runs.create_or_get_run(
                 browser_id=browser_id,
@@ -212,6 +218,7 @@ def test_postgres_run_completion_is_atomic_and_fenced() -> None:
                     worker_id="worker-new",
                     fencing_token=token,
                     public_response={"status": "ok"},
+                    assistant_message="旧 fencing",
                     compact_turn=Turn(query="旧 fencing"),
                 )
         finally:

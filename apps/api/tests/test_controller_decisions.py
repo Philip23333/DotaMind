@@ -1,265 +1,178 @@
 import asyncio
 
-from app.agentic.conversation.models import ResolvedEntity, Turn
+from app.agentic.conversation.models import ConversationMessage
 from app.agentic.graph import AgentGraphRunner
+from app.agentic.models import ExecutionPlan, ToolCall
 from app.agentic.planning.controller import AgentControllerResult
 from app.agentic.planning.decisions import (
     ClarificationDecision,
     ContextMissingDecision,
     DirectAnswerDecision,
+    ToolPlanDecision,
     normalize_controller_decision,
     validate_controller_decision,
 )
 from app.agentic.state import AgentRunState
 from app.agentic.tools import ToolRegistry
+from app.agentic.tools.conversation_tools import register_conversation_tools
 
 
 class FakeController:
     def __init__(self, decision) -> None:
         self._result = AgentControllerResult(
-            status="decided",
-            reason="decision accepted",
-            decision=decision,
+            status="decided", reason="decision accepted", decision=decision
         )
 
     @property
     def prompt_versions(self) -> dict[str, str]:
         return {}
 
-    async def decide(self, query: str, game: str = "dota2", history=None):
+    async def decide(self, *args, **kwargs):
         return self._result
 
 
-def _run(decision, history: list[Turn] | None = None) -> AgentRunState:
+def _run(decision, messages=None, query="follow-up") -> AgentRunState:
     return asyncio.run(
         AgentGraphRunner(FakeController(decision), ToolRegistry()).run(
-            AgentRunState(query="follow-up", game="dota2", history=history or [])
+            AgentRunState(
+                query=query,
+                game="dota2",
+                recent_messages=messages or [],
+            )
         )
     )
 
 
-def test_quote_user_query_uses_validated_turn_and_no_tool_pipeline() -> None:
-    history = [
-        Turn(
-            turn_index=1,
-            query="选什么英雄克制 Lina？",
-            status="ok",
-            response_type="natural_language_answer",
-            response_summary="推荐了几个对位英雄。",
-        )
-    ]
+def test_quote_user_query_uses_validated_message_and_no_tool_pipeline() -> None:
+    messages = [ConversationMessage(turn_index=1, role="user", content="选什么英雄克制 Lina？")]
     decision = DirectAnswerDecision(
         kind="direct_answer",
         intent="conversation_recall",
         response_mode="quote_user_query",
-        basis=[{"turn_index": 1, "field": "query"}],
+        basis=[{"turn_index": 1, "role": "user"}],
     )
-
-    state = _run(decision, history)
-
-    assert state.status == "ok"
-    assert state.response_type == "direct_answer"
+    state = _run(decision, messages)
     assert state.answer is not None
     assert state.answer.summary == "你上次问的是：选什么英雄克制 Lina？"
     assert state.tool_results == []
-    assert state.evidence_graph is None
-    assert state.review is None
 
 
-def test_recall_entity_filters_entity_type_and_deduplicates_names() -> None:
-    history = [
-        Turn(
-            turn_index=2,
-            query="选什么英雄克制 Lina？",
-            status="ok",
-            resolved_entities=[
-                ResolvedEntity(type="hero", name="Lina", id=25),
-                ResolvedEntity(type="hero", name="Lina", id=25),
-                ResolvedEntity(type="team", name="Liquid", id=2163),
-            ],
-            response_summary="推荐了几个对位英雄。",
-        )
-    ]
+def test_recall_assistant_summary_uses_validated_assistant_message() -> None:
+    messages = [ConversationMessage(turn_index=1, role="assistant", content="Lina 有四个技能。")]
     decision = DirectAnswerDecision(
         kind="direct_answer",
         intent="conversation_recall",
-        response_mode="recall_entity",
-        basis=[
-            {
-                "turn_index": 2,
-                "field": "resolved_entities",
-                "entity_type": "hero",
-            }
-        ],
-        answer="你上次提到的是影魔。",
+        response_mode="recall_assistant_summary",
+        basis=[{"turn_index": 1, "role": "assistant"}],
     )
-
-    state = _run(decision, history)
-
+    state = _run(decision, messages, query="刚才怎么说的？")
     assert state.answer is not None
-    assert state.answer.summary == "你上次提到的是 Lina。"
-    assert isinstance(state.decision, DirectAnswerDecision)
-    assert state.decision.answer is None
+    assert state.answer.summary == "我当时的回答摘要是：Lina 有四个技能。"
 
 
-def test_invalid_recall_basis_returns_redactable_validation_error() -> None:
-    decision = DirectAnswerDecision(
-        kind="direct_answer",
-        intent="conversation_recall",
-        response_mode="quote_user_query",
-        basis=[{"turn_index": 99, "field": "query"}],
-    )
-
-    state = _run(decision)
-
-    assert state.status == "error"
-    assert state.response_type == "decision_validation_error"
-    assert state.safe_failure_required is True
-    assert state.answer is None
-    assert state.evidence_graph is None
-
-
-def test_failed_turn_cannot_supply_entity_or_assistant_summary_recall() -> None:
-    history = [
-        Turn(
-            turn_index=1,
-            query="bad turn",
-            status="error",
-            response_type="session_request_failed",
-            resolved_entities=[ResolvedEntity(type="hero", name="Lina", id=25)],
-            response_summary="The session request could not be completed safely.",
-        )
-    ]
-    for mode, field in (
-        ("recall_entity", "resolved_entities"),
-        ("recall_assistant_summary", "response_summary"),
-    ):
-        decision = DirectAnswerDecision(
-            kind="direct_answer",
-            intent="conversation_recall",
-            response_mode=mode,
-            basis=[{"turn_index": 1, "field": field}],
-        )
-        assert _run(decision, history).response_type == "decision_validation_error"
-
-
-def test_social_answer_and_non_tool_decisions_skip_evidence_and_critic() -> None:
-    social = DirectAnswerDecision(
-        kind="direct_answer",
-        intent="social",
-        response_mode="social",
-        answer="你好！",
-    )
+def test_clarification_and_context_missing_skip_tools() -> None:
     clarification = ClarificationDecision(
         kind="clarification",
-        intent="position_filtered_recommendation",
+        intent="clarify",
         question="你说的是四号位还是五号位？",
         missing_fields=["position_ids"],
     )
-    context_missing = ContextMissingDecision(
+    missing = ContextMissingDecision(
         kind="context_missing",
         intent="conversation_recall",
         reason="当前会话中没有可回忆的历史。",
     )
-
-    social_state = _run(social)
-    clarification_state = _run(clarification)
-    missing_state = _run(context_missing)
-
-    assert social_state.answer is not None
-    assert social_state.answer.summary == "你好！"
-    assert clarification_state.status == "clarification_required"
-    assert clarification_state.response_type == "clarification"
-    assert clarification_state.missing_fields == ["position_ids"]
-    assert missing_state.status == "insufficient_context"
-    assert missing_state.response_type == "conversation_context_missing"
-    for state in (social_state, clarification_state, missing_state):
-        assert state.tool_results == []
-        assert state.evidence_graph is None
-        assert state.review is None
+    assert _run(clarification).status == "clarification_required"
+    assert _run(missing).status == "insufficient_context"
 
 
-def test_decision_normalization_sorts_and_deduplicates_public_lists() -> None:
-    clarification = ClarificationDecision(
-        kind="clarification",
-        intent="clarify",
-        question="请补充信息。",
-        missing_fields=["role", "hero_query", "role"],
-    )
-    direct = DirectAnswerDecision(
-        kind="direct_answer",
-        intent="conversation_recall",
-        response_mode="quote_user_query",
-        basis=[
-            {"turn_index": 2, "field": "query"},
-            {"turn_index": 1, "field": "query"},
-            {"turn_index": 2, "field": "query"},
-        ],
-        answer="模型自由复述的历史内容",
-    )
-
-    normalized_clarification = normalize_controller_decision(clarification)
-    normalized_direct = normalize_controller_decision(direct)
-    normalized_twice = normalize_controller_decision(normalized_direct)
-
-    assert normalized_clarification.missing_fields == ["hero_query", "role"]
-    assert [basis.turn_index for basis in normalized_direct.basis] == [1, 2]
-    assert normalized_direct.answer is None
-    assert normalized_twice == normalized_direct
-
-
-def test_normalization_clears_all_recall_answers_and_preserves_social() -> None:
-    recall_cases = (
-        ("quote_user_query", "query", None),
-        ("recall_entity", "resolved_entities", "hero"),
-        ("recall_assistant_summary", "response_summary", None),
-    )
-    for mode, field, entity_type in recall_cases:
-        decision = DirectAnswerDecision(
-            kind="direct_answer",
-            intent="conversation_recall",
-            response_mode=mode,
-            basis=[
-                {
-                    "turn_index": 1,
-                    "field": field,
-                    "entity_type": entity_type,
-                }
-            ],
-            answer="不应被使用的自由回答",
-        )
-        assert normalize_controller_decision(decision).answer is None
-
-    social = DirectAnswerDecision(
-        kind="direct_answer",
-        intent="social",
-        response_mode="social",
-        basis=[],
-        answer="你好！",
-    )
-    assert normalize_controller_decision(social).answer == "你好！"
-
-
-def test_unnormalized_recall_answer_validation_feedback_is_actionable() -> None:
+def test_normalization_is_deterministic_and_clears_free_recall_text() -> None:
     decision = DirectAnswerDecision(
         kind="direct_answer",
         intent="conversation_recall",
         response_mode="quote_user_query",
-        basis=[{"turn_index": 1, "field": "query"}],
-        answer="自由回答",
+        basis=[
+            {"turn_index": 2, "role": "user"},
+            {"turn_index": 1, "role": "user"},
+            {"turn_index": 2, "role": "user"},
+        ],
+        answer="do not use",
     )
-    history = [
-        Turn(
-            turn_index=1,
-            query="我上次问了什么？",
-            status="ok",
-            response_type="direct_answer",
+    normalized = normalize_controller_decision(decision)
+    assert [item.turn_index for item in normalized.basis] == [1, 2]
+    assert normalized.answer is None
+
+
+def test_recall_basis_requires_existing_message_and_role() -> None:
+    decision = DirectAnswerDecision(
+        kind="direct_answer",
+        intent="conversation_recall",
+        response_mode="recall_assistant_summary",
+        basis=[{"turn_index": 1, "role": "assistant"}],
+    )
+    errors = validate_controller_decision(
+        decision,
+        [ConversationMessage(turn_index=1, role="user", content="上次")],
+        ToolRegistry(),
+    )
+    assert any("message is unavailable" in error for error in errors)
+
+
+def test_clarification_accepts_open_snake_case_missing_field_names() -> None:
+    decision = ClarificationDecision(
+        kind="clarification",
+        intent="hero_ability",
+        question="请说明英雄名称。",
+        missing_fields=["hero_name", "ability_name"],
+    )
+
+    assert decision.missing_fields == ["hero_name", "ability_name"]
+
+
+def test_history_lookup_plan_must_be_single_tool_without_evidence() -> None:
+    registry = ToolRegistry()
+    register_conversation_tools(registry)
+    valid_plan = ExecutionPlan(
+        intent="conversation_recall",
+        goal="Find the earlier clarification.",
+        output_contract="natural_language_answer",
+        tool_calls=[
+            ToolCall(
+                id="history",
+                tool="conversation.history_lookup",
+                args={"query_text": "技能冷却"},
+            )
+        ],
+        required_evidence=[],
+    )
+    mixed_plan = valid_plan.model_copy(
+        update={
+            "tool_calls": [
+                *valid_plan.tool_calls,
+                ToolCall(id="hero", tool="resolve_hero", args={"query": "狼人"}),
+            ]
+        }
+    )
+    evidence_plan = valid_plan.model_copy(update={"required_evidence": ["history"]})
+
+    assert validate_controller_decision(
+        ToolPlanDecision(kind="tool_plan", plan=valid_plan),
+        [],
+        registry,
+    ) == []
+    assert any(
+        "only tool call" in error
+        for error in validate_controller_decision(
+            ToolPlanDecision(kind="tool_plan", plan=mixed_plan),
+            [],
+            registry,
         )
-    ]
-
-    errors = validate_controller_decision(decision, history, ToolRegistry())
-
-    assert errors == [
-        'For conversation recall, set "answer" to JSON null; '
-        "the server renders the final answer from the validated basis"
-    ]
+    )
+    assert any(
+        "required_evidence" in error
+        for error in validate_controller_decision(
+            ToolPlanDecision(kind="tool_plan", plan=evidence_plan),
+            [],
+            registry,
+        )
+    )

@@ -164,12 +164,14 @@ def test_runtime_policy_rejects_more_than_one_replan(tmp_path: Path) -> None:
 def test_conversation_policy_loads_from_yaml() -> None:
     policy = load_policy(DEFAULT_POLICY_PATH)
 
-    assert policy.conversation.history_window == 5
+    assert policy.conversation.recent_dialogue_max_chars == 24000
+    assert policy.conversation.history_lookup_max_turns == 8
+    assert policy.conversation.history_lookup_max_chars == 12000
+    assert policy.conversation.history_lookup_max_per_run == 1
     assert policy.conversation.max_turns_per_session == 50
     assert policy.conversation.max_sessions == 1000
     assert policy.conversation.answer_summary_max_chars == 300
     assert policy.conversation.turn_query_max_chars == 200
-    assert policy.conversation.history_max_chars == 2000
 
 
 def test_conversation_policy_has_defaults_without_yaml_section(tmp_path: Path) -> None:
@@ -179,35 +181,39 @@ def test_conversation_policy_has_defaults_without_yaml_section(tmp_path: Path) -
     policy = load_policy(_write_policy(tmp_path / "policy.yaml", data))
 
     # Defaults from ConversationPolicy field declarations
-    assert policy.conversation.history_window == 5
+    assert policy.conversation.recent_dialogue_max_chars == 24000
     assert policy.conversation.max_turns_per_session == 50
 
 
 def test_conversation_policy_explicit_override(tmp_path: Path) -> None:
     data = deepcopy(_policy_data())
     data["conversation"] = {
-        "history_window": 3,
+        "recent_dialogue_max_chars": 10000,
+        "history_lookup_max_turns": 4,
+        "history_lookup_max_chars": 5000,
+        "history_lookup_max_per_run": 1,
         "max_turns_per_session": 20,
         "max_sessions": 500,
         "answer_summary_max_chars": 150,
         "turn_query_max_chars": 100,
-        "history_max_chars": 1000,
     }
     policy = load_policy(_write_policy(tmp_path / "policy.yaml", data))
 
-    assert policy.conversation.history_window == 3
-    assert policy.conversation.history_max_chars == 1000
+    assert policy.conversation.recent_dialogue_max_chars == 10000
+    assert policy.conversation.history_lookup_max_turns == 4
 
 
-def test_conversation_policy_rejects_window_exceeding_max_turns(tmp_path: Path) -> None:
+def test_conversation_policy_rejects_invalid_lookup_budget(tmp_path: Path) -> None:
     data = deepcopy(_policy_data())
     data["conversation"] = {
-        "history_window": 30,        # exceeds max_turns_per_session
+        "recent_dialogue_max_chars": 30,
+        "history_lookup_max_turns": 8,
+        "history_lookup_max_chars": 12000,
+        "history_lookup_max_per_run": 1,
         "max_turns_per_session": 10,
         "max_sessions": 1000,
         "answer_summary_max_chars": 300,
         "turn_query_max_chars": 200,
-        "history_max_chars": 2000,
     }
-    with pytest.raises(ValidationError, match="history_window"):
+    with pytest.raises(ValidationError, match="recent_dialogue_max_chars"):
         load_policy(_write_policy(tmp_path / "policy.yaml", data))

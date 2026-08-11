@@ -8,7 +8,12 @@ defensively via getattr().
 from types import SimpleNamespace
 
 from app.agentic.conversation.models import Turn
-from app.agentic.conversation.summary import build_turn_summary
+from app.agentic.conversation.summary import (
+    SESSION_REQUEST_FAILED_REASON,
+    build_session_failure_turn,
+    build_turn_summary,
+    render_assistant_message,
+)
 from app.agentic.planning.decisions import ClarificationDecision
 
 # ---------------------------------------------------------------------------
@@ -42,7 +47,6 @@ def _state(
     response_type="natural_language_answer",
     plan=None,
     answer=None,
-    evidence_graph=None,
     reason="",
     decision=None,
 ):
@@ -52,7 +56,6 @@ def _state(
         response_type=response_type,
         plan=plan,
         answer=answer,
-        evidence_graph=evidence_graph,
         reason=reason,
         decision=decision,
     )
@@ -165,60 +168,60 @@ class TestResponseSummary:
         assert turn.missing_fields == ["position_ids"]
 
 
-class TestResolvedEntities:
-    def test_hero_identity_extracted(self):
-        items = [_evidence_item("hero_identity", "Lina", {"localized_name": "Lina", "hero_id": 25})]
-        turn = build_turn_summary(_state(evidence_graph=_evidence_graph(items)))
-        assert len(turn.resolved_entities) == 1
-        e = turn.resolved_entities[0]
-        assert e.type == "hero"
-        assert e.name == "Lina"
-        assert e.id == 25
+def test_assistant_message_uses_the_same_visible_text_for_answer_clarification_and_boundary():
+    cases = [
+        (
+            SimpleNamespace(
+                safe_failure_required=False,
+                answer=_answer("自然回答"),
+                decision=None,
+                reason="private answer reason",
+            ),
+            "自然回答",
+        ),
+        (
+            SimpleNamespace(
+                safe_failure_required=False,
+                answer=None,
+                decision=SimpleNamespace(question="请说明英雄名称"),
+                reason="private clarification reason",
+            ),
+            "请说明英雄名称",
+        ),
+        (
+            SimpleNamespace(
+                safe_failure_required=False,
+                answer=None,
+                decision=SimpleNamespace(reason="当前没有该能力"),
+                reason="private boundary reason",
+            ),
+            "当前没有该能力",
+        ),
+    ]
 
-    def test_hero_uses_subject_when_no_localized_name(self):
-        items = [_evidence_item("hero_identity", "Subject Hero", {"hero_id": 10})]
-        turn = build_turn_summary(_state(evidence_graph=_evidence_graph(items)))
-        assert turn.resolved_entities[0].name == "Subject Hero"
+    for state, expected in cases:
+        assert render_assistant_message(state) == expected
+        assert build_turn_summary(state).response_summary == expected
 
-    def test_team_identity_extracted(self):
-        items = [_evidence_item("team_identity", "XG", {"team_id": 999})]
-        turn = build_turn_summary(_state(evidence_graph=_evidence_graph(items)))
-        e = turn.resolved_entities[0]
-        assert e.type == "team"
-        assert e.name == "XG"
-        assert e.id == 999
 
-    def test_player_identity_extracted(self):
-        items = [_evidence_item("player_identity", "SomePlayer", {"steam_account_id": 853634884})]
-        turn = build_turn_summary(_state(evidence_graph=_evidence_graph(items)))
-        e = turn.resolved_entities[0]
-        assert e.type == "player"
-        assert e.id == 853634884
+def test_safe_failure_uses_public_sentinel_instead_of_private_state_reason():
+    state = SimpleNamespace(
+        safe_failure_required=True,
+        query="query",
+        status="error",
+        answer=_answer("PRIVATE_ANSWER"),
+        decision=SimpleNamespace(reason="PRIVATE_DECISION_REASON"),
+        reason="PRIVATE_INTERNAL_REASON",
+    )
 
-    def test_unknown_evidence_kind_ignored(self):
-        items = [_evidence_item("matchup_ranking_row", "x", {})]
-        turn = build_turn_summary(_state(evidence_graph=_evidence_graph(items)))
-        assert turn.resolved_entities == []
-
-    def test_multiple_entity_kinds(self):
-        items = [
-            _evidence_item("hero_identity", "Lina", {"hero_id": 25}),
-            _evidence_item("team_identity", "XG", {"team_id": 1}),
-        ]
-        turn = build_turn_summary(_state(evidence_graph=_evidence_graph(items)))
-        types = {e.type for e in turn.resolved_entities}
-        assert types == {"hero", "team"}
+    assert render_assistant_message(state) == SESSION_REQUEST_FAILED_REASON
+    assert build_session_failure_turn(state).response_summary == SESSION_REQUEST_FAILED_REASON
 
 
 class TestErrorState:
     def test_no_exception_when_plan_is_none(self):
         """A failed turn where plan/evidence/answer are all None must not raise."""
-        state = _state(status="error", plan=None, evidence_graph=None, answer=None)
+        state = _state(status="error", plan=None, answer=None)
         turn = build_turn_summary(state)
         assert turn.status == "error"
         assert turn.intent is None
-        assert turn.resolved_entities == []
-
-    def test_no_exception_when_evidence_graph_is_none(self):
-        turn = build_turn_summary(_state(evidence_graph=None))
-        assert turn.resolved_entities == []

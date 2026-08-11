@@ -51,6 +51,7 @@ def test_postgres_repository_persists_and_isolates_browser_chats() -> None:
                 payload_hash="payload-a",
                 fencing_token=1,
                 user_query="查一下幻影刺客",
+                assistant_message="已完成查询",
                 public_response={"status": "ok", "answer": "结果"},
                 compact_turn=compact_turn,
             )
@@ -74,6 +75,10 @@ def test_postgres_repository_persists_and_isolates_browser_chats() -> None:
             assert snapshot.turns[0].user_query == "查一下幻影刺客"
             history = await repository.get_history(browser_a, session_id, limit=10)
             assert history == [compact_turn.model_copy(update={"turn_index": 1})]
+            context = await repository.get_conversation_context(browser_a, session_id, limit=10)
+            assert context.next_turn_index == 2
+            assert [message.role for message in context.recent_messages] == ["user", "assistant"]
+            assert context.recent_messages[1].content == "已完成查询"
 
             recovered_token = await repository.allocate_fencing_token(browser_a, session_id)
             assert recovered_token > first_token
@@ -85,6 +90,7 @@ def test_postgres_repository_persists_and_isolates_browser_chats() -> None:
                     payload_hash="stale-owner",
                     fencing_token=first_token,
                     user_query="旧 owner",
+                    assistant_message="旧回答",
                     public_response={"status": "ok"},
                     compact_turn=Turn(query="旧 owner"),
                 )

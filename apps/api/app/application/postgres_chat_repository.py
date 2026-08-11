@@ -7,14 +7,15 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import and_, delete, desc, select
+from sqlalchemy import and_, delete, desc, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.agentic.conversation.models import Turn
+from app.agentic.conversation.models import ConversationMessage, DialogueTurn, Turn
 from app.application.chat_repository import (
     ChatActiveRunSummary,
     ChatCommitResult,
+    ChatConversationContext,
     ChatFencingLostError,
     ChatIdempotencyConflictError,
     ChatNotFoundError,
@@ -240,6 +241,159 @@ class PostgresChatRepository:
             raise ChatRepositoryError() from exc
         return [Turn.model_validate(row.compact_turn) for row in reversed(rows)]
 
+    async def get_all_dialogue_turns(
+        self,
+        browser_id: str,
+        session_id: UUID,
+    ) -> tuple[list[DialogueTurn], int]:
+        """Load the authoritative full dialogue for rebuilding the Redis window."""
+
+        try:
+            async with self._session_factory() as session:
+                row = await session.scalar(
+                    select(ChatSessionRow).where(
+                        ChatSessionRow.id == session_id,
+                        ChatSessionRow.browser_id_hash == browser_id_hash(browser_id),
+                    )
+                )
+                if row is None:
+                    raise ChatNotFoundError()
+                result = await session.scalars(
+                    select(ChatTurnRow)
+                    .where(ChatTurnRow.session_id == session_id)
+                    .order_by(ChatTurnRow.turn_index)
+                )
+                turns = [
+                    DialogueTurn(
+                        turn_index=item.turn_index,
+                        user_message=item.user_query,
+                        assistant_message=item.assistant_message,
+                    )
+                    for item in result.all()
+                ]
+        except ChatNotFoundError:
+            raise
+        except SQLAlchemyError as exc:
+            raise ChatRepositoryError() from exc
+        return turns, row.next_turn_index
+
+    async def get_next_turn_index(self, browser_id: str, session_id: UUID) -> int:
+        """Read the durable session counter without loading message bodies."""
+
+        try:
+            async with self._session_factory() as session:
+                row = await session.scalar(
+                    select(ChatSessionRow.next_turn_index).where(
+                        ChatSessionRow.id == session_id,
+                        ChatSessionRow.browser_id_hash == browser_id_hash(browser_id),
+                    )
+                )
+                if row is None:
+                    raise ChatNotFoundError()
+        except ChatNotFoundError:
+            raise
+        except SQLAlchemyError as exc:
+            raise ChatRepositoryError() from exc
+        return int(row)
+
+    async def lookup_dialogue(
+        self,
+        browser_id: str,
+        session_id: UUID,
+        *,
+        query_text: str | None = None,
+        turn_indexes: list[int] | None = None,
+        before_turn_index: int | None = None,
+        limit: int = 8,
+    ) -> list[DialogueTurn]:
+        """Load selected older turns for the request-local history lookup."""
+
+        try:
+            async with self._session_factory() as session:
+                owner = await session.scalar(
+                    select(ChatSessionRow.id).where(
+                        ChatSessionRow.id == session_id,
+                        ChatSessionRow.browser_id_hash == browser_id_hash(browser_id),
+                    )
+                )
+                if owner is None:
+                    raise ChatNotFoundError()
+                statement = select(ChatTurnRow).where(ChatTurnRow.session_id == session_id)
+                if turn_indexes:
+                    statement = statement.where(ChatTurnRow.turn_index.in_(turn_indexes))
+                if before_turn_index is not None:
+                    statement = statement.where(ChatTurnRow.turn_index < before_turn_index)
+                if query_text:
+                    pattern = f"%{query_text}%"
+                    statement = statement.where(
+                        or_(
+                            ChatTurnRow.user_query.ilike(pattern),
+                            ChatTurnRow.assistant_message.ilike(pattern),
+                        )
+                    )
+                statement = statement.order_by(ChatTurnRow.turn_index.desc()).limit(limit)
+                result = await session.scalars(statement)
+                rows = list(result.all())
+        except ChatNotFoundError:
+            raise
+        except SQLAlchemyError as exc:
+            raise ChatRepositoryError() from exc
+        return [
+            DialogueTurn(
+                turn_index=item.turn_index,
+                user_message=item.user_query,
+                assistant_message=item.assistant_message,
+            )
+            for item in reversed(rows)
+        ]
+
+    async def get_conversation_context(
+        self,
+        browser_id: str,
+        session_id: UUID,
+        limit: int,
+    ) -> ChatConversationContext:
+        try:
+            async with self._session_factory() as session:
+                row = await session.scalar(
+                    select(ChatSessionRow).where(
+                        ChatSessionRow.id == session_id,
+                        ChatSessionRow.browser_id_hash == browser_id_hash(browser_id),
+                    )
+                )
+                if row is None:
+                    raise ChatNotFoundError()
+                result = await session.scalars(
+                    select(ChatTurnRow)
+                    .where(ChatTurnRow.session_id == session_id)
+                    .order_by(ChatTurnRow.turn_index.desc())
+                    .limit(limit)
+                )
+                rows = list(result.all())
+        except ChatNotFoundError:
+            raise
+        except SQLAlchemyError as exc:
+            raise ChatRepositoryError() from exc
+        return ChatConversationContext(
+            recent_messages=[
+                message
+                for item in reversed(rows)
+                for message in (
+                    ConversationMessage(
+                        turn_index=item.turn_index,
+                        role="user",
+                        content=item.user_query,
+                    ),
+                    ConversationMessage(
+                        turn_index=item.turn_index,
+                        role="assistant",
+                        content=item.assistant_message,
+                    ),
+                )
+            ],
+            next_turn_index=row.next_turn_index,
+        )
+
     async def lookup_request(
         self,
         browser_id: str,
@@ -282,6 +436,7 @@ class PostgresChatRepository:
         payload_hash: str,
         fencing_token: int,
         user_query: str,
+        assistant_message: str,
         public_response: dict[str, Any],
         compact_turn: Turn,
     ) -> ChatCommitResult:
@@ -328,6 +483,7 @@ class PostgresChatRepository:
                         payload_hash=payload_hash,
                         turn_index=turn_index,
                         user_query=user_query,
+                        assistant_message=assistant_message,
                         public_response=dict(public_response),
                         compact_turn=stored_turn.model_dump(mode="json"),
                     )

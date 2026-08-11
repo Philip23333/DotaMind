@@ -184,7 +184,7 @@ def test_missing_evidence_replan_reuses_success_and_completes() -> None:
     assert state.response["runtime"]["attempts"][1]["tool_call_statuses"][0][
         "reused"
     ]
-    assert controller.calls[0] == {}
+    assert controller.calls[0]["recent_messages"] is None
     assert controller.calls[1]["recovery_feedback"].missing_evidence == [
         "sample_size"
     ]

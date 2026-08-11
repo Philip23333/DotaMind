@@ -147,5 +147,7 @@ class ChatRunRepository(Protocol):
         worker_id: str,
         fencing_token: int,
         public_response: dict[str, Any],
+        assistant_message: str,
         compact_turn: Turn,
+        expected_next_turn_index: int | None = None,
     ) -> ChatRunSummary: ...

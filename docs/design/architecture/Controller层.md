@@ -36,42 +36,48 @@ LLM JSON
 
 ## 会话回忆
 
-direct recall 只能通过 `ConversationBasis` 引用当前 `state.history`：
+direct recall 只引用真实对话消息：
 
-- `query`：用户当时问了什么；任何状态 Turn 都可引用。
-- `resolved_entities`：只允许 `status=ok` 且过滤后非空。
-- `response_summary`：不得引用脱敏失败 Turn 或空摘要。
+- `ConversationBasis(turn_index, role)` 的 role 必须与引用模式一致。
+- `quote_user_query` 只能引用 `user` 消息。
+- `recall_assistant_summary` 只能引用 `assistant` 消息。
+- basis 必须能在本次注入的 recent/retrieved messages 中定位；历史事实仍不能
+  替代当前工具证据。
+
+“这些技能”“第二个技能”等指称由模型阅读真实上下文后解释；无法唯一判断时返回
+`clarification`，而不是依赖固定实体、集合或关系枚举。
 
 校验成功后，`conversation_answer_node` 用确定性模板读取字段。模型给出的
 自由回答不能覆盖 recall 结果。social 允许自由文本，但 basis 必须为空。
 
 ### 请求与会话上下文
 
-Controller 不直接访问全局 SessionStore。`PlanService` 在进入 Graph 前取得当前
-session 的 compact Turn 快照，并通过 `state.history` 注入；无 `session_id` 的请求
-保持无状态。
+Controller 不直接访问全局 SessionStore。持久化 Chat Run 在进入 Graph 前取得 Redis
+recent dialogue window；cache miss/stale 时由 ConversationMemoryService 从
+PostgreSQL 重建。消息通过 `state.recent_messages` 注入，旧消息查找结果只存在于本次
+Run 的 `state.retrieved_messages`，并由 `conversation.history_lookup` 最多取得一次。
 
 ```mermaid
 sequenceDiagram
     participant Client
     participant Service as PlanService
-    participant Store as InMemorySessionStore
+    participant Store as PostgreSQL ChatRepository
     participant Graph as AgentGraphRunner
     participant Controller
 
     Client->>Service: query + optional session_id
     alt stateful request
-        Service->>Store: acquire transaction and read compact Turns
-        Store-->>Service: history snapshot
-        Service->>Graph: AgentRunState(history, internal_session_id)
+        Service->>Store: read recent dialogue window + next index
+        Store-->>Service: user/assistant messages + next index
+        Service->>Graph: AgentRunState(recent_messages, next_turn_index)
     else stateless request
         Service->>Graph: AgentRunState(no history)
     end
-    Graph->>Controller: query + rendered validated history
+    Graph->>Controller: query + recent/retrieved role messages
     Controller-->>Graph: ControllerDecision
     Graph-->>Service: finalized response
     opt stateful request
-        Service->>Store: append sanitized Turn summary
+        Service->>Store: atomically commit assistant_message + compact Turn
     end
     Service-->>Client: PlanResponse
 ```
@@ -80,13 +86,15 @@ sequenceDiagram
 
 ## clarification
 
-clarification 使用固定 missing-field 枚举，问题文本可由 Controller 生成。
+clarification 的 `missing_fields` 使用受约束的开放 snake_case 字段名，问题文本可由
+Controller 生成；字段名不是路由键。模型应结合最近 assistant 的澄清和当前输入判断
+是否已补齐缺失信息，不应重复已经回答的澄清。
 Turn 保存 `query + response_summary + missing_fields`，供下一轮理解补充内容。
-后续工具计划仍需重新调用当前轮 resolver，不得复用历史实体 ID。
+后续工具计划仍需重新调用当前轮 resolver，不得复用历史对象 ID 或历史事实。
 
 ## 隐私边界
 
-服务端不序列化 `state.history`、完整历史渲染块、Controller prompt、retry
+服务端不序列化 `state.recent_messages`、`state.retrieved_messages`、完整历史渲染块、Controller prompt、retry
 feedback、raw Controller output 或未脱敏 validation error。每个 session
 对应一个用户安全主体；`session_id` 在无独立认证层时视为 bearer capability。
 

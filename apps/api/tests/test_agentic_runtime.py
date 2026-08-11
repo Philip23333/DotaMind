@@ -6,7 +6,7 @@ import pytest
 from pydantic import BaseModel, ValidationError
 
 from app.agentic.answer import AnswerSynthesisResult
-from app.agentic.conversation.models import Turn
+from app.agentic.conversation.models import ConversationMessage
 from app.agentic.critic import AgenticCriticReview
 from app.agentic.evidence import EvidenceDataQuality, EvidenceGraph
 from app.agentic.graph import AgentGraphRunner, _route_after_evidence
@@ -113,8 +113,7 @@ def test_reset_attempt_state_is_pure_clears_work_and_detaches_mutables() -> None
     state = AgentRunState(
         query="keep query",
         game="dota2",
-        history=[Turn(query="keep history")],
-        session_memory_enabled=True,
+        recent_messages=[ConversationMessage(turn_index=1, role="user", content="keep history")],
         internal_session_id=uuid4(),
         decision_kind="tool_plan",
         missing_fields=["hero_query"],
@@ -161,7 +160,7 @@ def test_reset_attempt_state_is_pure_clears_work_and_detaches_mutables() -> None
     assert state == original
     assert reset.query == state.query
     assert reset.game == state.game
-    assert reset.session_memory_enabled is True
+    assert reset.recent_messages == state.recent_messages
     assert reset.internal_session_id == state.internal_session_id
     assert reset.run_started_monotonic == state.run_started_monotonic
     assert reset.attempt_index == 1
@@ -191,15 +190,17 @@ def test_reset_attempt_state_is_pure_clears_work_and_detaches_mutables() -> None
     assert reset.recovery_baseline_decision is not state.recovery_baseline_decision
 
     assert reset.run_budget is not state.run_budget
-    assert reset.history is not state.history
+    assert reset.recent_messages is not state.recent_messages
     assert reset.attempts is not state.attempts
     assert reset.trace is not state.trace
     assert reset.run_budget is not None and state.run_budget is not None
     reset.run_budget.record_tool_call()
-    reset.history.append(Turn(query="new"))
+    reset.recent_messages.append(
+        ConversationMessage(turn_index=1, role="assistant", content="new")
+    )
     reset.trace.append(AgentTraceEvent(node="new", action="new", status="planned"))
     assert state.run_budget.tool_calls_used == 0
-    assert len(state.history) == 1
+    assert len(state.recent_messages) == 1
     assert len(state.trace) == 3
 
 
@@ -480,7 +481,7 @@ def test_graph_trace_has_two_events_per_node_and_injected_timing() -> None:
         def prompt_versions(self) -> dict[str, str]:
             return {}
 
-        async def decide(self, query: str, game: str = "dota2", history=None):
+        async def decide(self, query: str, game: str = "dota2", history=None, **kwargs):
             clock.advance(0.25)
             return AgentControllerResult(
                 status="decided",
@@ -621,7 +622,7 @@ def _answer_graph_runner(*, answer_status: str, confidence: float) -> AgentGraph
         def prompt_versions(self) -> dict[str, str]:
             return {}
 
-        async def decide(self, query: str, game: str = "dota2", history=None):
+        async def decide(self, query: str, game: str = "dota2", history=None, **kwargs):
             return AgentControllerResult(
                 status="decided",
                 reason="test plan",

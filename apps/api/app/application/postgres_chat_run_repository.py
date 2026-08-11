@@ -316,7 +316,9 @@ class PostgresChatRunRepository:
         worker_id: str,
         fencing_token: int,
         public_response: dict,
+        assistant_message: str,
         compact_turn: Turn,
+        expected_next_turn_index: int | None = None,
     ) -> ChatRunSummary:
         """Commit the final Turn and Run terminal state in one transaction."""
 
@@ -347,6 +349,11 @@ class PostgresChatRunRepository:
                     raise ChatRunFencingLostError()
 
                 turn_index = session_row.next_turn_index
+                if (
+                    expected_next_turn_index is not None
+                    and turn_index != expected_next_turn_index
+                ):
+                    raise ChatRunStateError("stale_turn_index")
                 stored_turn = compact_turn.model_copy(update={"turn_index": turn_index})
                 turn_id = uuid4()
                 session.add(
@@ -357,6 +364,7 @@ class PostgresChatRunRepository:
                         payload_hash=run.payload_hash,
                         turn_index=turn_index,
                         user_query=run.user_query,
+                        assistant_message=assistant_message,
                         public_response=dict(public_response),
                         compact_turn=stored_turn.model_dump(mode="json"),
                     )

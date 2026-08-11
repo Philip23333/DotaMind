@@ -6,6 +6,11 @@ back to API clients through any public response field.
 
 import json
 
+from app.agentic.conversation.summary import (
+    SESSION_REQUEST_FAILED_REASON,
+    build_session_failure_turn,
+    render_assistant_message,
+)
 from app.agentic.models import ExecutionPlan, ToolCall
 from app.agentic.nodes.attempt_finalize import attempt_finalize_node
 from app.agentic.nodes.response import response_node
@@ -86,39 +91,41 @@ def test_stateless_validation_failure_uses_redacted_public_envelope() -> None:
 
 class TestRedactHelper:
     def test_removes_history_block_from_first_user_message(self):
-        history_block = f"## 对话历史\n[第1轮] 用户: 'x'\n  回答: {SENTINEL}"
         messages = [
             {"role": "system", "content": "system prompt"},
-            {"role": "user", "content": f"{history_block}\n\ngame=dota2\nquery=next"},
+            {"role": "user", "content": SENTINEL},
+            {"role": "assistant", "content": "old answer"},
+            {"role": "user", "content": "next"},
         ]
-        redacted = _redact_history_from_messages(messages, history_block)
+        redacted = _redact_history_from_messages(messages, 2)
         joined = json.dumps(redacted, ensure_ascii=False)
         assert SENTINEL not in joined
         # The actual current query must survive.
-        assert "query=next" in joined
+        assert '"content": "next"' in joined
         assert "redacted" in redacted[1]["content"]
 
     def test_no_history_block_is_noop(self):
         messages = [
             {"role": "system", "content": "s"},
-            {"role": "user", "content": "game=dota2\nquery=q"},
+            {"role": "user", "content": "q"},
         ]
-        redacted = _redact_history_from_messages(messages, "")
+        redacted = _redact_history_from_messages(messages, 0)
         assert redacted == messages
 
     def test_retry_feedback_messages_preserved(self):
-        history_block = f"## 对话历史\n[第1轮] 回答: {SENTINEL}"
         messages = [
             {"role": "system", "content": "s"},
-            {"role": "user", "content": f"{history_block}\n\ngame=dota2\nquery=q"},
+            {"role": "user", "content": SENTINEL},
+            {"role": "assistant", "content": "old answer"},
+            {"role": "user", "content": "q"},
             {"role": "assistant", "content": "prev bad json"},
             {"role": "user", "content": "retry feedback"},
         ]
-        redacted = _redact_history_from_messages(messages, history_block)
+        redacted = _redact_history_from_messages(messages, 2)
         assert SENTINEL not in json.dumps(redacted, ensure_ascii=False)
         # Retry turns untouched.
-        assert redacted[2]["content"] == "prev bad json"
-        assert redacted[3]["content"] == "retry feedback"
+        assert redacted[3]["content"] == "prev bad json"
+        assert redacted[4]["content"] == "retry feedback"
 
 
 def test_validator_failure_uses_sentinel_free_public_envelope():
@@ -131,7 +138,6 @@ def test_validator_failure_uses_sentinel_free_public_envelope():
     state = AgentRunState(
         query="current query",
         game="dota2",
-        session_memory_enabled=True,
         validation_failed=True,
         status="error",
         reason=SENTINEL,
@@ -155,3 +161,22 @@ def test_validator_failure_uses_sentinel_free_public_envelope():
     assert SENTINEL not in json.dumps(response, ensure_ascii=False)
     assert response["error_code"] == "decision_validation_error"
     assert response["plan"] is None
+
+
+def test_safe_failure_text_is_consistent_across_public_response_and_persistence() -> None:
+    state = AgentRunState(
+        query="current query",
+        game="dota2",
+        status="error",
+        validation_failed=True,
+        safe_failure_required=True,
+        reason=SENTINEL,
+        errors=[SENTINEL],
+    )
+
+    response = _finalize_response(state).response
+    assert response is not None
+    assert response["reason"] == SESSION_REQUEST_FAILED_REASON
+    assert render_assistant_message(state) == SESSION_REQUEST_FAILED_REASON
+    assert build_session_failure_turn(state).response_summary == SESSION_REQUEST_FAILED_REASON
+    assert SENTINEL not in json.dumps(response, ensure_ascii=False)

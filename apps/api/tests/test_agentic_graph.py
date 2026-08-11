@@ -59,7 +59,7 @@ class FakeController:
         return {}
 
     async def decide(
-        self, query: str, game: str = "dota2", history=None
+        self, query: str, game: str = "dota2", history=None, **kwargs
     ) -> AgentControllerResult:
         return self.result
 

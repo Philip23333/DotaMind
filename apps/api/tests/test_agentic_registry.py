@@ -236,6 +236,7 @@ def test_default_registry_matches_v32_frozen_tool_catalog() -> None:
         "patch.get_records",
         "patch.hero_changes",
         "patch.item_changes",
+        "conversation.history_lookup",
     }
 
 

@@ -1,24 +1,31 @@
-"""Extract a compact Turn summary from a completed AgentRunState.
-
-The summary is intentionally lossy: only the fields the Controller needs for
-pronoun resolution and context inheritance are preserved.  Full tool results,
-evidence, traces, and raw Controller messages are NOT stored.
-"""
+"""Build compact audit records and complete assistant messages."""
 
 from __future__ import annotations
 
-from app.agentic.conversation.models import ResolvedEntity, Turn
+from app.agentic.conversation.models import Turn
 
 SESSION_REQUEST_FAILED_REASON = "The session request could not be completed safely."
 
-# Evidence kinds that represent resolvable game entities.
-# tuple: (entity_type, name_value_key_or_None, id_value_key)
-# When name_value_key is None, item.subject is used as the name.
-_ENTITY_EVIDENCE_KINDS: dict[str, tuple[str, str | None, str]] = {
-    "hero_identity": ("hero", "localized_name", "hero_id"),
-    "team_identity": ("team", None, "team_id"),
-    "player_identity": ("player", None, "steam_account_id"),
-}
+
+def render_assistant_message(state: object) -> str:
+    """Return the complete assistant text that was shown for a run."""
+
+    if getattr(state, "safe_failure_required", False):
+        return SESSION_REQUEST_FAILED_REASON
+    answer = getattr(state, "answer", None)
+    if answer is not None:
+        summary = getattr(answer, "summary", None)
+        if summary:
+            return str(summary)
+    decision = getattr(state, "decision", None)
+    if decision is not None:
+        question = getattr(decision, "question", None)
+        if question:
+            return str(question)
+        reason = getattr(decision, "reason", None)
+        if reason:
+            return str(reason)
+    return str(getattr(state, "reason", "") or "")
 
 
 def build_turn_summary(
@@ -27,69 +34,34 @@ def build_turn_summary(
     max_summary_chars: int = 300,
     max_query_chars: int = 200,
 ) -> Turn:
-    """Build a Turn from a completed AgentRunState.
+    """Build a bounded audit summary from a completed AgentRunState."""
 
-    Uses ``object`` type hint to avoid importing AgentRunState here (which
-    would create a cross-layer import); callers pass an AgentRunState instance.
-    All attribute accesses are guarded so a partial/error state never raises.
-    """
     query = _safe_str(getattr(state, "query", ""), max_query_chars)
     status = getattr(state, "status", "error")
     response_type = getattr(state, "response_type", None)
-
     decision = getattr(state, "decision", None)
-
     plan = getattr(state, "plan", None)
-    if plan is not None:
-        intent: str | None = getattr(plan, "intent", None)
-    else:
-        intent = getattr(decision, "intent", None) if decision is not None else None
+    intent = getattr(plan, "intent", None) if plan is not None else (
+        getattr(decision, "intent", None) if decision is not None else None
+    )
     context_scope: dict = {}
     if plan is not None:
-        ctx = getattr(plan, "context", None)
-        if ctx is not None:
+        context = getattr(plan, "context", None)
+        if context is not None:
             try:
-                context_scope = ctx.model_dump(mode="json", exclude_none=True)
+                context_scope = context.model_dump(mode="json", exclude_none=True)
             except Exception:
                 context_scope = {}
 
-    answer = getattr(state, "answer", None)
-    if answer is not None and getattr(answer, "summary", None):
-        response_summary = _safe_str(answer.summary, max_summary_chars)
-    elif decision is not None and getattr(decision, "question", None):
-        response_summary = _safe_str(decision.question, max_summary_chars)
-    elif decision is not None and getattr(decision, "reason", None):
-        response_summary = _safe_str(decision.reason, max_summary_chars)
-    else:
-        response_summary = _safe_str(getattr(state, "reason", "") or "", max_summary_chars)
-
-    resolved_entities: list[ResolvedEntity] = []
-    evidence_graph = getattr(state, "evidence_graph", None)
-    if evidence_graph is not None:
-        for item in getattr(evidence_graph, "evidence", []):
-            kind = getattr(item, "kind", "")
-            if kind not in _ENTITY_EVIDENCE_KINDS:
-                continue
-            entity_type, name_key, id_key = _ENTITY_EVIDENCE_KINDS[kind]
-            value: dict = getattr(item, "value", {}) or {}
-            subject: str = getattr(item, "subject", "") or ""
-            name = str(value.get(name_key) or subject) if name_key else subject
-            id_ = value.get(id_key)
-            resolved_entities.append(
-                ResolvedEntity(type=entity_type, name=name, id=id_)  # type: ignore[arg-type]
-            )
-
     return Turn(
-        # turn_index is placeholder 0; SessionStore.append() assigns the real index.
         turn_index=0,
         query=query,
         status=status,  # type: ignore[arg-type]
         response_type=response_type,
         intent=intent,
-        resolved_entities=resolved_entities,
         context_scope=context_scope,
         missing_fields=list(getattr(decision, "missing_fields", []) or []),
-        response_summary=response_summary,
+        response_summary=_safe_str(render_assistant_message(state), max_summary_chars),
     )
 
 
@@ -98,13 +70,8 @@ def build_session_failure_turn(
     *,
     max_query_chars: int = 200,
 ) -> Turn:
-    """Build the only session record allowed for a redacted public failure.
+    """Build the redacted audit record for a safely hidden runtime failure."""
 
-    Controller errors can contain untrusted model text, rejected plans, or a
-    Pydantic echo of historical input.  None of that may become future session
-    context, so this deliberately ignores every field except the current query
-    and coarse status.
-    """
     return Turn(
         turn_index=0,
         query=_safe_str(getattr(state, "query", ""), max_query_chars),
@@ -116,3 +83,11 @@ def build_session_failure_turn(
 
 def _safe_str(value: str, max_chars: int) -> str:
     return value[:max_chars] if value else ""
+
+
+__all__ = [
+    "SESSION_REQUEST_FAILED_REASON",
+    "build_session_failure_turn",
+    "build_turn_summary",
+    "render_assistant_message",
+]

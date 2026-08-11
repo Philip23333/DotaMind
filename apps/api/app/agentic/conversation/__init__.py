@@ -1,7 +1,17 @@
-"""Conversation history module for multi-turn session support."""
+"""Conversation message and compact audit contracts."""
 
-from app.agentic.conversation.models import ResolvedEntity, Turn
-from app.agentic.conversation.render import render_history
+from app.agentic.conversation.models import (
+    ConversationMessage,
+    DialogueTurn,
+    RecentDialogueWindow,
+    Turn,
+)
 from app.agentic.conversation.summary import build_turn_summary
 
-__all__ = ["ResolvedEntity", "Turn", "render_history", "build_turn_summary"]
+__all__ = [
+    "ConversationMessage",
+    "DialogueTurn",
+    "RecentDialogueWindow",
+    "Turn",
+    "build_turn_summary",
+]

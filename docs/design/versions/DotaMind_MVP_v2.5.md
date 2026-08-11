@@ -814,9 +814,10 @@ ControllerDecision
 - 其他决策不创建 EvidenceGraph，也不运行 Critic。
 - `tool_plan` 候选在首次 catalog/contract validation 前只执行一次
   `apply_sample_policy()`；Graph 后续只重复校验最终计划，不再修改计划。
-- direct recall 只能引用当前 `state.history` 中经过校验的 `Turn` 字段，并由
-  服务端确定性模板生成；不从全局 SessionStore 按模型索引取值。
-- clarification 保存固定枚举的 `missing_fields`；后续工具计划仍须在当前轮
+- direct recall 只能引用当前 `state.recent_messages` 或本次
+  `state.retrieved_messages` 中经过校验的 `(turn_index, role)` 消息，并由服务端
+  确定性模板生成；不从全局 SessionStore 按模型索引取值。
+- clarification 保存受 snake_case 格式和数量约束的开放 `missing_fields`；后续工具计划仍须在当前轮
   重新执行 resolver，不得复用历史实体 ID。
 - contract 与 plan evidence 继续按全局 kind 校验；所选工具的
   `mandatory_evidence` 按每个成功 `tool_call_id` 校验，不能跨调用借用。

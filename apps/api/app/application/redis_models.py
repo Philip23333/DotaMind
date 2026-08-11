@@ -1,4 +1,4 @@
-"""Strict Redis persistence DTOs for SessionStore schema v1."""
+"""Strict Redis persistence DTOs for recent dialogue and request state."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.agentic.conversation.models import ResolvedEntity, Turn
+from app.agentic.conversation.models import RecentDialogueWindow, Turn
 from app.application.idempotency import RequestRecord
 
 
@@ -17,13 +17,7 @@ class _StrictRedisModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
-class StoredResolvedEntityV1(_StrictRedisModel):
-    type: Literal["hero", "team", "player"]
-    name: str
-    id: int | str | None = None
-
-
-class StoredTurnDataV1(_StrictRedisModel):
+class StoredTurnDataV2(_StrictRedisModel):
     turn_index: int = Field(ge=0)
     query: str
     status: Literal[
@@ -36,15 +30,14 @@ class StoredTurnDataV1(_StrictRedisModel):
     ]
     response_type: str | None = None
     intent: str | None = None
-    resolved_entities: list[StoredResolvedEntityV1]
     context_scope: dict[str, Any]
     missing_fields: list[str]
     response_summary: str
 
 
-class StoredTurnV1(_StrictRedisModel):
-    schema_version: Literal[1] = 1
-    data: StoredTurnDataV1
+class StoredTurnV2(_StrictRedisModel):
+    schema_version: Literal[2] = 2
+    data: StoredTurnDataV2
 
 
 class StoredRequestRecordDataV1(_StrictRedisModel):
@@ -66,33 +59,30 @@ class StoredRequestRecordV1(_StrictRedisModel):
 
 
 def canonical_json(value: BaseModel | dict[str, Any]) -> str:
-    """Serialize a strict persistence DTO using stable UTF-8 JSON."""
-
     payload = value.model_dump(mode="json") if isinstance(value, BaseModel) else value
     return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
 def serialize_turn(turn: Turn) -> str:
-    data = StoredTurnDataV1(
-        turn_index=turn.turn_index,
-        query=turn.query,
-        status=turn.status,
-        response_type=turn.response_type,
-        intent=turn.intent,
-        resolved_entities=[
-            StoredResolvedEntityV1.model_validate(entity.model_dump())
-            for entity in turn.resolved_entities
-        ],
-        context_scope=turn.context_scope,
-        missing_fields=turn.missing_fields,
-        response_summary=turn.response_summary,
+    return canonical_json(
+        StoredTurnV2(
+            data=StoredTurnDataV2(
+                turn_index=turn.turn_index,
+                query=turn.query,
+                status=turn.status,
+                response_type=turn.response_type,
+                intent=turn.intent,
+                context_scope=turn.context_scope,
+                missing_fields=turn.missing_fields,
+                response_summary=turn.response_summary,
+            )
+        )
     )
-    return canonical_json(StoredTurnV1(data=data))
 
 
 def deserialize_turn(payload: str) -> Turn:
     try:
-        stored = StoredTurnV1.model_validate(json.loads(payload))
+        stored = StoredTurnV2.model_validate(json.loads(payload))
     except (TypeError, ValueError) as exc:
         raise ValueError("invalid stored turn") from exc
     return Turn(
@@ -101,14 +91,27 @@ def deserialize_turn(payload: str) -> Turn:
         status=stored.data.status,
         response_type=stored.data.response_type,
         intent=stored.data.intent,
-        resolved_entities=[
-            ResolvedEntity.model_validate(entity.model_dump())
-            for entity in stored.data.resolved_entities
-        ],
         context_scope=stored.data.context_scope,
         missing_fields=stored.data.missing_fields,
         response_summary=stored.data.response_summary,
     )
+
+
+class StoredRecentDialogueWindowV1(_StrictRedisModel):
+    schema_version: Literal[1] = 1
+    data: RecentDialogueWindow
+
+
+def serialize_recent_dialogue(window: RecentDialogueWindow) -> str:
+    return canonical_json(StoredRecentDialogueWindowV1(data=window))
+
+
+def deserialize_recent_dialogue(payload: str) -> RecentDialogueWindow:
+    try:
+        stored = StoredRecentDialogueWindowV1.model_validate(json.loads(payload))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("invalid stored recent dialogue") from exc
+    return stored.data
 
 
 def serialize_request_record(record: RequestRecord) -> str:

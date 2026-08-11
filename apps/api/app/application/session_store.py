@@ -24,7 +24,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
-from app.agentic.conversation.models import Turn
+from app.agentic.conversation.models import RecentDialogueWindow, Turn
 from app.application.idempotency import RequestBeginResult, RequestFailAction, RequestRecord
 from app.observability import (
     emit_event,
@@ -53,6 +53,7 @@ class _SessionData:
     """Per-session state managed by InMemorySessionStore."""
 
     turns: list[Turn] = field(default_factory=list)
+    recent_dialogue: RecentDialogueWindow | None = None
     # Monotonically increasing counter; never reset even after turn eviction.
     next_turn_index: int = 1
     request_records: OrderedDict[str, RequestRecord] = field(default_factory=OrderedDict)
@@ -67,6 +68,22 @@ class SessionStore(ABC):
     """Abstract session store.  All methods are async."""
 
     backend_name: Literal["memory", "redis"]
+
+    @abstractmethod
+    async def get_recent_dialogue(
+        self, session_id: str
+    ) -> RecentDialogueWindow | None:
+        """Return the cached recent dialogue window, if present."""
+
+    @abstractmethod
+    async def replace_recent_dialogue(
+        self, session_id: str, window: RecentDialogueWindow
+    ) -> None:
+        """Replace the cached window inside the current session transaction."""
+
+    @abstractmethod
+    async def invalidate_recent_dialogue(self, session_id: str) -> None:
+        """Remove the cached window inside the current session transaction."""
 
     @abstractmethod
     async def get(self, session_id: str, limit: int) -> list[Turn]:
@@ -193,6 +210,25 @@ class InMemorySessionStore(SessionStore):
     # ------------------------------------------------------------------
     # SessionStore interface
     # ------------------------------------------------------------------
+
+    async def get_recent_dialogue(
+        self, session_id: str
+    ) -> RecentDialogueWindow | None:
+        data = self._sessions.get(session_id)
+        return data.recent_dialogue.model_copy(deep=True) if data and data.recent_dialogue else None
+
+    async def replace_recent_dialogue(
+        self, session_id: str, window: RecentDialogueWindow
+    ) -> None:
+        self._require_holder(session_id, "replace_recent_dialogue")
+        data = self._get_or_create_session(session_id)
+        data.recent_dialogue = window.model_copy(deep=True)
+
+    async def invalidate_recent_dialogue(self, session_id: str) -> None:
+        self._require_holder(session_id, "invalidate_recent_dialogue")
+        data = self._sessions.get(session_id)
+        if data is not None:
+            data.recent_dialogue = None
 
     async def get(self, session_id: str, limit: int) -> list[Turn]:
         if session_id not in self._sessions:

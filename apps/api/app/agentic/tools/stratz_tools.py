@@ -1299,6 +1299,7 @@ def _player_hero_performance_handler(settings: Settings):
 
 
 def build_default_tool_registry(settings: Settings) -> ToolRegistry:
+    from app.agentic.tools.conversation_tools import register_conversation_tools
     from app.agentic.tools.dota_catalog_tools import register_dota_catalog_tools
     from app.agentic.tools.opendota_tools import register_opendota_tools
     from app.agentic.tools.patch_tools import register_patch_tools
@@ -1308,6 +1309,7 @@ def build_default_tool_registry(settings: Settings) -> ToolRegistry:
     register_stratz_tools(registry, settings)
     register_opendota_tools(registry, settings)
     register_patch_tools(registry)
+    register_conversation_tools(registry)
     return registry
 
 

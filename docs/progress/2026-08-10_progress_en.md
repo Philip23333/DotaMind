@@ -177,3 +177,29 @@
 
 - This change does not address compact Turn, multi-turn component references, or historical entity memory; “prices of the three recipe components above” remains a separate follow-up issue.
 - No Catalog snapshot regeneration or third-party/network fallback was added; all changes remain uncommitted.
+
+## 22:38 — Generic discourse-graph conversation memory
+
+### Completed
+
+- Replaced the domain-specific Turn `resolved_entities` field with generic `DiscourseState`: open-string kinds/labels, referents, ordered groups, links, focus, and grounding, with model and `ConversationPolicy` checks for topology, refs, status, and limits.
+- Added asynchronous `DiscourseExtractor`. Its input is only the prior available discourse, the current full query, the current full answer, and structural limits. It does not read or parse the 300-character `response_summary`, and stores no IDs, prices, attributes, win rates, or other factual values.
+- Extraction allows one deterministic validation-feedback retry. A second failure writes an `unavailable` empty graph and records a low-cardinality discourse metric. A successful business answer keeps its status when extraction fails; a later Controller exposes `context_missing` when that memory is required.
+- Changed `PlanService._build_turn()` to async, skipped extraction for safe failures, allowed clarification turns to inherit prior discourse while extracting the current query/clarification question, and made `ChatRunExecutor` await compact Turn construction before PostgreSQL commit.
+- Rendered Controller history as escaped object/group/link/focus data. Direct recall now uses `recall_referent` plus a discourse ref, with deterministic server rendering of referent names or group member names. Kinds/labels are not routing keys; current facts still require current-turn tools and evidence.
+- Upgraded Redis Turns to strict `schema_version=2` discourse DTOs. Only v2 is written, old `response_summary` is never used to rebuild memory, and old session keys may expire. Older PostgreSQL JSONB Turns missing discourse load with the default empty state.
+- Added the Conversation Memory design note and synchronized the current architecture, Controller design, V3.2 design reference, and Controller golden prompt.
+
+### Verification
+
+- Discourse/summary/render/decision/Redis focused tests: `110 passed`.
+- Full API pytest: `561 passed, 20 skipped, 1 existing Starlette/httpx deprecation warning`.
+- With local Redis enabled (`DOTAMIND_TEST_REDIS_URL=redis://127.0.0.1:6379/15`), Redis integration passed `14 tests` and the full API suite passed `576 passed, 5 skipped`; the warning was unchanged.
+- Focused Ruff, full API Ruff, compileall, and `git diff --check` were run in the final gate.
+- Coverage includes Lina groups and ordered references, Shiva-style multi-component relations, open `guide` kinds, multiple groups, invalid refs/topology, limits, grounding failure, extractor unavailability, failed-turn non-reuse, historical non-evidence, and Redis v2 round-trips.
+
+### Current boundary
+
+- Discourse is referent and collection-selection memory, not an EvidenceGraph, factual cache, or current-turn evidence; historical names and IDs cannot be copied into downstream tool arguments.
+- `response_summary` keeps the existing 300-character answer-excerpt contract; this change does not solve multi-turn reference by increasing its length.
+- The changes remain uncommitted; this real-Redis validation used a random test prefix and deleted only exact test keys.

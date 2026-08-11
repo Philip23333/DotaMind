@@ -24,9 +24,12 @@ Controller
 ```
 
 Session memory 也已通过自建 `SessionStore` 接入：客户端复用 `session_id`，
-`PlanService` 在同一会话事务中完成 `get -> graph run -> append`，将 compact
-`Turn` 注入下一轮 `state.history`。这解决了多轮上下文问题，但系统运行时仍有
-以下缺口：
+`ChatRunExecutor` 在同一会话事务中完成 recent-message load -> graph run ->
+PostgreSQL commit。完整用户/助手消息保存在 PostgreSQL，Redis 只保存受限
+`RecentDialogueWindow`；下一轮 Controller 读取真实 role messages，而不是
+结构化 referent/group/relation 状态。更早的对话可由内部
+`conversation.history_lookup` 最多查找一次，并只在当前 Run 中生效。该扩展不改变
+本文件定义的 Tool Calling、EvidenceGraph、Answer、Critic 和 SessionStore 边界。
 
 1. 一次请求只有一组 `plan/tool_results/evidence/answer/review`，无法表达多次
    尝试，也无法安全实现 replan。
@@ -60,7 +63,8 @@ V3.2 将这些问题视为同一个目标：建立受预算约束、可恢复、
 - 不做无限 replan，不引入开放式 autonomous loop。
 - 不让 LLM 修改工具 registry、拼接 URL、GraphQL 或 SQL。
 - 不对 tool transport error 做静默 fallback 或换源掩盖。
-- 不引入原始消息存储或 LangGraph checkpointer。
+- 不引入 LangGraph checkpointer；完整对话消息只由 PostgreSQL transcript 持久化，
+  不写入 Redis prompt block 或 Controller raw output。
 - 不持久化原始 Controller output、完整 Prompt、完整 history block 或 secret。
 - 不增加第二个 LLM reviewer；Critic 继续 rule-first。
 - 不在 V3.2 处理登录、付费、用户账号或跨用户共享会话。

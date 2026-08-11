@@ -125,7 +125,6 @@ CHAT_RUN_STALE_INTERRUPTED = Counter(
     "dotamind_chat_run_stale_interrupted_total",
     "Chat Runs interrupted by stale recovery.",
 )
-
 RUNTIME_EVENTS = frozenset(
     {
         "agent_run_started",

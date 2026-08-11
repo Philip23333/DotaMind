@@ -13,7 +13,9 @@ def reset_attempt_working_state(
 ) -> AgentRunState:
     """Return a new state with only attempt-local working data reset."""
     updates = {
-        "history": deepcopy(state.history),
+        "recent_messages": deepcopy(state.recent_messages),
+        "retrieved_messages": deepcopy(state.retrieved_messages),
+        "next_turn_index": state.next_turn_index,
         "run_context": state.run_context.model_copy(deep=True) if state.run_context else None,
         "run_budget": state.run_budget.model_copy(deep=True) if state.run_budget else None,
         "attempts": deepcopy(state.attempts),

@@ -51,6 +51,7 @@ def test_postgres_fencing_recovers_after_redis_state_loss_and_expiry() -> None:
                     payload_hash="one",
                     fencing_token=token_one,
                     user_query="第一轮",
+                    assistant_message="一",
                     public_response={"status": "ok", "answer": "一"},
                     compact_turn=Turn(query="第一轮"),
                 )

@@ -4,31 +4,20 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
-from app.agentic.conversation.models import Turn
+from app.agentic.conversation.models import ConversationMessage
 from app.agentic.models import ExecutionPlan
 from app.agentic.planning.contracts import get_contract, validate_plan_against_catalog
 from app.agentic.tools import ToolRegistry
 
-ClarificationField = Literal[
-    "hero_query",
-    "partner_hero_query",
-    "team_query",
-    "steam_account_id",
-    "position_ids",
-    "role",
-    "patch",
-    "bracket",
-    "weeks_back",
-    "region_ids",
-    "game_mode_ids",
+ClarificationField = Annotated[
+    str,
+    StringConstraints(pattern=r"^[a-z][a-z0-9_]{0,63}$"),
 ]
-ConversationField = Literal["query", "response_summary", "resolved_entities"]
-ConversationEntityType = Literal["hero", "team", "player"]
+ConversationRole = Literal["user", "assistant"]
 DirectResponseMode = Literal[
     "quote_user_query",
-    "recall_entity",
     "recall_assistant_summary",
     "social",
 ]
@@ -40,8 +29,7 @@ class StrictDecisionModel(BaseModel):
 
 class ConversationBasis(StrictDecisionModel):
     turn_index: int = Field(ge=1)
-    field: ConversationField
-    entity_type: ConversationEntityType | None = None
+    role: ConversationRole
 
 
 class DirectAnswerDecision(StrictDecisionModel):
@@ -56,7 +44,7 @@ class ClarificationDecision(StrictDecisionModel):
     kind: Literal["clarification"]
     intent: str = Field(min_length=1)
     question: str = Field(min_length=1, max_length=1000)
-    missing_fields: list[ClarificationField] = Field(min_length=1)
+    missing_fields: list[ClarificationField] = Field(min_length=1, max_length=8)
 
 
 class ContextMissingDecision(StrictDecisionModel):
@@ -151,24 +139,25 @@ def resolve_required_evidence(
 def normalize_controller_decision(decision: ControllerDecision) -> ControllerDecision:
     """Return a deterministic copy for stable validation, rendering, and debug."""
     if isinstance(decision, DirectAnswerDecision):
-        unique = {
-            (basis.turn_index, basis.field, basis.entity_type): basis
-            for basis in decision.basis
-        }
-        keys = sorted(unique, key=lambda item: (item[0], item[1], item[2] or ""))
+        unique = {(basis.turn_index, basis.role): basis for basis in decision.basis}
+        keys = sorted(unique, key=lambda item: (item[0], item[1]))
         basis = [unique[key] for key in keys]
         updates = {"basis": basis}
         if decision.response_mode != "social":
             updates["answer"] = None
         return decision.model_copy(update=updates)
     if isinstance(decision, ClarificationDecision):
-        return decision.model_copy(update={"missing_fields": sorted(set(decision.missing_fields))})
+        return decision.model_copy(
+            update={
+                "missing_fields": sorted(set(decision.missing_fields)),
+            }
+        )
     return decision
 
 
 def validate_controller_decision(
     decision: ControllerDecision,
-    history: list[Turn],
+    history: list[ConversationMessage],
     registry: ToolRegistry,
     evidence: RequiredEvidenceResolution | None = None,
 ) -> list[str]:
@@ -181,6 +170,21 @@ def validate_controller_decision(
     if isinstance(decision, ToolPlanDecision):
         if not decision.plan.tool_calls:
             return ["tool_plan requires at least one tool call"]
+        history_lookup_calls = [
+            call for call in decision.plan.tool_calls if call.tool == "conversation.history_lookup"
+        ]
+        if history_lookup_calls:
+            errors: list[str] = []
+            if len(decision.plan.tool_calls) != 1:
+                errors.append(
+                    "conversation.history_lookup must be the only tool call in its plan"
+                )
+            if decision.plan.required_evidence:
+                errors.append(
+                    "conversation.history_lookup plans must not request required_evidence"
+                )
+            if errors:
+                return errors
         required = evidence or resolve_required_evidence(decision.plan, registry)
         return validate_plan_against_catalog(
             decision.plan,
@@ -192,12 +196,12 @@ def validate_controller_decision(
 
 def _validate_direct_answer(
     decision: DirectAnswerDecision,
-    history: list[Turn],
+    history: list[ConversationMessage],
 ) -> list[str]:
     errors: list[str] = []
     if decision.response_mode == "social":
         if decision.basis:
-            errors.append("social direct answer must not reference conversation basis")
+            errors.append("social direct answer must not reference conversation context")
         if not decision.answer or not decision.answer.strip():
             errors.append("social direct answer requires answer text")
         return errors
@@ -211,48 +215,23 @@ def _validate_direct_answer(
         errors.append(f"{decision.response_mode} requires conversation basis")
         return errors
 
-    expected_field = {
-        "quote_user_query": "query",
-        "recall_entity": "resolved_entities",
-        "recall_assistant_summary": "response_summary",
+    expected_role = {
+        "quote_user_query": "user",
+        "recall_assistant_summary": "assistant",
     }[decision.response_mode]
-    turns = {turn.turn_index: turn for turn in history}
+    messages = {(message.turn_index, message.role): message for message in history}
     for basis in decision.basis:
-        if basis.field != expected_field:
+        if basis.role != expected_role:
             errors.append(
-                f"{decision.response_mode} basis must reference {expected_field}"
+                f"{decision.response_mode} basis must reference role {expected_role}"
             )
             continue
-        if basis.field != "resolved_entities" and basis.entity_type is not None:
-            errors.append("entity_type is only valid for resolved_entities basis")
-        turn = turns.get(basis.turn_index)
-        if turn is None:
-            errors.append(f"conversation turn is unavailable: {basis.turn_index}")
+        message = messages.get((basis.turn_index, basis.role))
+        if message is None:
+            errors.append(
+                f"conversation message is unavailable: {basis.turn_index}/{basis.role}"
+            )
             continue
-        if basis.field == "query" and not turn.query:
-            errors.append(f"conversation turn {basis.turn_index} has empty query")
-        elif basis.field == "response_summary":
-            if turn.response_type == "session_request_failed":
-                errors.append(
-                    f"conversation turn {basis.turn_index} is a redacted failure"
-                )
-            elif not turn.response_summary:
-                errors.append(
-                    f"conversation turn {basis.turn_index} has empty response summary"
-                )
-        elif basis.field == "resolved_entities":
-            if turn.status != "ok":
-                errors.append(
-                    f"conversation turn {basis.turn_index} is not eligible for entity recall"
-                )
-                continue
-            entities = [
-                entity
-                for entity in turn.resolved_entities
-                if basis.entity_type is None or entity.type == basis.entity_type
-            ]
-            if not entities:
-                errors.append(
-                    f"conversation turn {basis.turn_index} has no matching entities"
-                )
+        if not message.content:
+            errors.append(f"conversation message {basis.turn_index}/{basis.role} is empty")
     return errors

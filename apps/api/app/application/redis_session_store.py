@@ -17,11 +17,13 @@ from uuid import UUID, uuid4
 from redis.asyncio import Redis
 from redis.exceptions import RedisError, ResponseError
 
-from app.agentic.conversation.models import Turn
+from app.agentic.conversation.models import RecentDialogueWindow, Turn
 from app.application.idempotency import RequestBeginResult, RequestFailAction, RequestRecord
 from app.application.redis_models import (
+    deserialize_recent_dialogue,
     deserialize_request_record,
     deserialize_turn,
+    serialize_recent_dialogue,
     serialize_request_record,
     serialize_turn,
 )
@@ -33,7 +35,7 @@ from app.observability import (
     record_session_operation,
 )
 
-_SCHEMA_VERSION = "1"
+_SCHEMA_VERSION = "2"
 logger = logging.getLogger(__name__)
 
 
@@ -297,6 +299,7 @@ class RedisSessionStore(SessionStore):
                 keys["turns"],
                 keys["requests"],
                 keys["request_gc"],
+                keys["recent_dialogue"],
             )
         except (OSError, RedisError) as exc:
             raise SessionStoreError("unavailable") from exc
@@ -322,6 +325,46 @@ class RedisSessionStore(SessionStore):
         except ValueError as exc:
             raise SessionStoreError("data_invalid") from exc
         return sorted(turns, key=lambda turn: turn.turn_index)
+
+    @_observe_session_operation("get_recent_dialogue")
+    async def get_recent_dialogue(
+        self, session_id: str
+    ) -> RecentDialogueWindow | None:
+        context = self._require_context(session_id)
+        try:
+            raw = await self._redis.get(self._keys_from_base(context.base)["recent_dialogue"])
+        except (OSError, RedisError) as exc:
+            raise SessionStoreError("unavailable") from exc
+        if raw is None:
+            return None
+        try:
+            return deserialize_recent_dialogue(str(raw))
+        except ValueError as exc:
+            raise SessionStoreError("data_invalid") from exc
+
+    @_observe_session_operation("replace_recent_dialogue")
+    async def replace_recent_dialogue(
+        self, session_id: str, window: RecentDialogueWindow
+    ) -> None:
+        context = self._require_context(session_id)
+        try:
+            await self._redis.set(
+                self._keys_from_base(context.base)["recent_dialogue"],
+                serialize_recent_dialogue(window),
+                ex=self._session_ttl,
+            )
+        except (OSError, RedisError) as exc:
+            raise SessionStoreError("unavailable") from exc
+
+    @_observe_session_operation("invalidate_recent_dialogue")
+    async def invalidate_recent_dialogue(self, session_id: str) -> None:
+        context = self._require_context(session_id)
+        try:
+            await self._redis.delete(
+                self._keys_from_base(context.base)["recent_dialogue"]
+            )
+        except (OSError, RedisError) as exc:
+            raise SessionStoreError("unavailable") from exc
 
     @_observe_session_operation("append")
     async def append(self, session_id: str, turn: Turn) -> Turn:
@@ -743,9 +786,17 @@ class RedisSessionStore(SessionStore):
             "turns": f"{base}:turns",
             "requests": f"{base}:requests",
             "request_gc": f"{base}:request_gc",
+            "recent_dialogue": f"{base}:recent_dialogue",
             "lock": f"{base}:lock",
         }
 
     def _data_keys(self, base: str) -> list[str]:
         keys = self._keys_from_base(base)
-        return [keys["lock"], keys["meta"], keys["turns"], keys["requests"], keys["request_gc"]]
+        return [
+            keys["lock"],
+            keys["meta"],
+            keys["turns"],
+            keys["requests"],
+            keys["request_gc"],
+            keys["recent_dialogue"],
+        ]

@@ -13,7 +13,7 @@ from uuid import uuid4
 import pytest
 from redis.asyncio import Redis
 
-from app.agentic.conversation.models import Turn
+from app.agentic.conversation.models import DialogueTurn, RecentDialogueWindow, Turn
 from app.api.v1.schemas import PlanResponse
 from app.application.redis_session_store import (
     _COMPLETE_LUA,
@@ -269,6 +269,33 @@ def test_active_transaction_renews_before_short_session_ttl_expires() -> None:
     assert first.turn_index == 1
     assert [turn.query for turn in history] == ["first"]
     assert second.turn_index == 2
+
+
+def test_recent_dialogue_window_round_trips_inside_the_session_transaction() -> None:
+    harness = RedisHarness(os.environ["DOTAMIND_TEST_REDIS_URL"])
+    expected = RecentDialogueWindow(
+        through_turn_index=1,
+        turns=[
+            DialogueTurn(
+                turn_index=1,
+                user_message="狼人有什么技能",
+                assistant_message="召狼、嗥叫、变身。",
+            )
+        ],
+    )
+
+    async def scenario():
+        await harness.open()
+        store = harness.store()
+        session_id = harness.session()
+        async with store.transaction(session_id):
+            assert await store.get_recent_dialogue(session_id) is None
+            await store.replace_recent_dialogue(session_id, expected)
+            stored = await store.get_recent_dialogue(session_id)
+        await harness.close()
+        return stored
+
+    assert _run(scenario()) == expected
 
 
 def test_begin_request_rejects_unknown_request_record_schema() -> None:

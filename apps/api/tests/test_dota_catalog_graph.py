@@ -33,6 +33,7 @@ class CatalogController:
         history=None,
         recovery_feedback=None,
         recovery_baseline_decision=None,
+        **kwargs,
     ) -> AgentControllerResult:
         return AgentControllerResult(
             status="decided",

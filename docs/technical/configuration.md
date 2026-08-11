@@ -114,21 +114,23 @@ input-model defaults.
 
 ### Conversation Policy
 
-`conversation` controls opt-in multi-turn session memory (Phase 1, in-memory
-single-process store). Fields:
+`conversation` controls the Redis recent-message window and bounded audit memory. Fields:
 
-- `history_window`: prior turns injected into the planner prompt.
+- `recent_dialogue_max_chars`: character budget for the Redis recent dialogue window.
+- `history_lookup_max_turns`: maximum older turns returned by one internal lookup.
+- `history_lookup_max_chars`: character budget for retrieved older messages.
+- `history_lookup_max_per_run`: maximum history lookups in one Run.
 - `max_turns_per_session`: turns retained per session (oldest evicted; the
   monotonic turn counter is never reset).
 - `max_sessions`: inactive-session LRU capacity target. It may be temporarily
   exceeded when every candidate has an active or waiting transaction lease.
 - `answer_summary_max_chars`: per-turn answer summary cap.
 - `turn_query_max_chars`: per-turn stored query cap.
-- `history_max_chars`: hard budget for the entire rendered history block.
 
 All fields have defaults, so a `policy.yaml` without a `conversation` section
-still loads. The validator enforces `history_window <= max_turns_per_session`.
-Session memory is opt-in per request via `session_id`; omitting it is stateless.
+still loads. PostgreSQL is the complete conversation source; Redis only caches
+recent messages and coordinates the stateful Run. A request without `session_id`
+remains stateless.
 Active and waiting sessions are never evicted, and the store converges back to
 `max_sessions` after transactions release.
 

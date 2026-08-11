@@ -14,7 +14,9 @@ from app.application.chat_run_executor import (
     ChatRunExecutor,
 )
 from app.application.chat_run_repository import ChatRunRepositoryError, ChatRunSummary
+from app.application.plan_service import TurnBuildResult
 from app.application.run_event_bus import StoredRunEvent
+from app.application.session_store import SessionStoreError
 
 
 def test_chat_run_executor_uses_preallocated_id_and_commits_before_terminal_events() -> None:
@@ -31,10 +33,10 @@ def test_chat_run_executor_uses_preallocated_id_and_commits_before_terminal_even
             run_repository=run_repository,
             chat_repository=FakeChatRepository(calls=calls),
             session_store=FakeSessionStore(),
+            memory_service=FakeMemoryService(calls=calls),
             event_bus=FakeEventBus(events, calls),
             worker_id="worker-a",
-            history_limit=8,
-            build_turn=lambda state: Turn(query=state.query),
+            build_turn=lambda state: _build_turn(state),
             build_response=lambda state, sid: {
                 "answer": state.response["answer"],
                 "session_id": str(sid),
@@ -72,10 +74,10 @@ def test_chat_run_executor_marks_failed_graph_without_writing_a_turn() -> None:
             run_repository=run_repository,
             chat_repository=FakeChatRepository(calls=calls),
             session_store=FakeSessionStore(),
+            memory_service=FakeMemoryService(calls=[]),
             event_bus=FakeEventBus([], calls),
             worker_id="worker-a",
-            history_limit=8,
-            build_turn=lambda state: Turn(query=state.query),
+            build_turn=lambda state: _build_turn(state),
             build_response=lambda state, sid: {},
         )
 
@@ -101,6 +103,90 @@ def test_chat_run_executor_marks_failed_graph_without_writing_a_turn() -> None:
     asyncio.run(scenario())
 
 
+def test_cache_failure_after_commit_does_not_mark_durable_run_failed() -> None:
+    async def scenario() -> None:
+        run_id = uuid4()
+        session_id = uuid4()
+        calls: list[str] = []
+        run_repository = FakeRunRepository(calls=calls, run_id=run_id, session_id=session_id)
+        executor = ChatRunExecutor(
+            runner=FakeRunner(calls=calls),
+            run_repository=run_repository,
+            chat_repository=FakeChatRepository(calls=calls),
+            session_store=FakeSessionStore(),
+            memory_service=FakeMemoryService(
+                calls=calls,
+                record_error=SessionStoreError("unavailable"),
+            ),
+            event_bus=FakeEventBus([], calls),
+            worker_id="worker-a",
+            build_turn=lambda state: _build_turn(state),
+            build_response=lambda state, sid: {"answer": "done"},
+        )
+
+        result = await executor.execute(
+            ChatRunExecutionRequest(
+                run_id=run_id,
+                browser_id="browser-a",
+                session_id=session_id,
+                request_id=uuid4(),
+                query="cache failure",
+                game="dota2",
+            )
+        )
+
+        assert result.run.status == "completed"
+        assert run_repository.completed is not None
+        assert run_repository.completed.status == "completed"
+        assert "failed" not in calls
+
+    asyncio.run(scenario())
+
+
+def test_non_cache_exception_after_commit_does_not_mark_durable_run_failed() -> None:
+    async def scenario() -> None:
+        run_id = uuid4()
+        session_id = uuid4()
+        calls: list[str] = []
+        run_repository = FakeRunRepository(calls=calls, run_id=run_id, session_id=session_id)
+        executor = ChatRunExecutor(
+            runner=FakeRunner(calls=calls),
+            run_repository=run_repository,
+            chat_repository=FakeChatRepository(calls=calls),
+            session_store=FakeSessionStore(),
+            memory_service=FakeMemoryService(
+                calls=calls,
+                record_error=RuntimeError("unexpected cache adapter failure"),
+            ),
+            event_bus=FakeEventBus([], calls),
+            worker_id="worker-a",
+            build_turn=lambda state: _build_turn(state),
+            build_response=lambda state, sid: {"answer": "done"},
+        )
+
+        try:
+            await executor.execute(
+                ChatRunExecutionRequest(
+                    run_id=run_id,
+                    browser_id="browser-a",
+                    session_id=session_id,
+                    request_id=uuid4(),
+                    query="post-commit failure",
+                    game="dota2",
+                )
+            )
+        except RuntimeError as exc:
+            assert "unexpected cache adapter failure" in str(exc)
+        else:
+            raise AssertionError("post-commit infrastructure failure should propagate")
+
+        assert run_repository.completed is not None
+        assert run_repository.completed.status == "completed"
+        assert "failed" not in calls
+
+    asyncio.run(scenario())
+
+
 def test_chat_run_executor_maps_task_cancel_to_interrupted_without_cancel_request() -> None:
     async def scenario() -> None:
         run_id = uuid4()
@@ -118,10 +204,10 @@ def test_chat_run_executor_maps_task_cancel_to_interrupted_without_cancel_reques
             run_repository=run_repository,
             chat_repository=FakeChatRepository(calls=calls),
             session_store=FakeSessionStore(),
+            memory_service=FakeMemoryService(calls=calls),
             event_bus=FakeEventBus([], calls),
             worker_id="worker-a",
-            history_limit=8,
-            build_turn=lambda state: Turn(query=state.query),
+            build_turn=lambda state: _build_turn(state),
             build_response=lambda state, sid: {},
         )
         task = asyncio.create_task(
@@ -143,6 +229,13 @@ def test_chat_run_executor_maps_task_cancel_to_interrupted_without_cancel_reques
         assert "cancelled" not in calls
 
     asyncio.run(scenario())
+
+
+async def _build_turn(state: AgentRunState) -> TurnBuildResult:
+    return TurnBuildResult(
+        turn=Turn(query=state.query),
+        assistant_message="done",
+    )
 
 
 class FakeRunner:
@@ -207,9 +300,21 @@ class FakeChatRepository:
         self.calls.append("fencing")
         return 7
 
-    async def get_history(self, browser_id: str, session_id, limit: int):
+
+
+class FakeMemoryService:
+    def __init__(self, *, calls: list[str], record_error: Exception | None = None) -> None:
+        self.calls = calls
+        self.record_error = record_error
+
+    async def load_recent_messages(self, browser_id: str, session_id):
         self.calls.append("history")
-        return []
+        return [], 1
+
+    async def record_committed_turn(self, browser_id: str, session_id, turn) -> None:
+        self.calls.append("recent_dialogue")
+        if self.record_error is not None:
+            raise self.record_error
 
 
 @dataclass

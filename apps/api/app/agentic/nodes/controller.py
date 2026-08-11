@@ -16,7 +16,8 @@ async def controller_node(
         result = await controller.decide(
             state.query,
             state.game,
-            history=state.history or None,
+            recent_messages=state.recent_messages or None,
+            retrieved_messages=state.retrieved_messages or None,
         )
     else:
         if state.recovery_baseline_decision is None:
@@ -24,7 +25,8 @@ async def controller_node(
         result = await controller.decide(
             state.query,
             state.game,
-            history=state.history or None,
+            recent_messages=state.recent_messages or None,
+            retrieved_messages=state.retrieved_messages or None,
             recovery_feedback=state.recovery_feedback,
             recovery_baseline_decision=state.recovery_baseline_decision,
         )

@@ -39,7 +39,7 @@ def decision_validate_node(
     )
     errors = validate_controller_decision(
         decision,
-        state.history,
+        [*state.retrieved_messages, *state.recent_messages],
         registry,
         evidence,
     )

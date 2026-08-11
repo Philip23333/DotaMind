@@ -81,6 +81,7 @@ class ChatTurnRow(Base):
     payload_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     turn_index: Mapped[int] = mapped_column(BigInteger, nullable=False)
     user_query: Mapped[str] = mapped_column(Text, nullable=False)
+    assistant_message: Mapped[str] = mapped_column(Text, nullable=False)
     public_response: Mapped[dict] = mapped_column(JSONB, nullable=False)
     compact_turn: Mapped[dict] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime] = mapped_column(

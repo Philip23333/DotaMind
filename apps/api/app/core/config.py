@@ -201,14 +201,18 @@ class PlanningPolicy(StrictPolicyModel):
 
 
 class ConversationPolicy(StrictPolicyModel):
-    """Policy for multi-turn session memory (Phase 1: in-memory store).
+    """Policy for recent dialogue cache and compact audit memory.
 
     All fields have defaults so an existing policy.yaml without a
     ``conversation`` section still loads without validation errors.
     """
 
-    # Number of prior turns injected into the planner prompt.
-    history_window: int = Field(default=5, ge=1, le=20)
+    # Character budget for the Redis-backed recent dialogue window.
+    recent_dialogue_max_chars: int = Field(default=24_000, ge=1000, le=100_000)
+    # Maximum number of older turns returned by one request-local lookup.
+    history_lookup_max_turns: int = Field(default=8, ge=1, le=20)
+    history_lookup_max_chars: int = Field(default=12_000, ge=1000, le=50_000)
+    history_lookup_max_per_run: int = Field(default=1, ge=1, le=3)
     # Maximum turns retained per session (excess oldest turns are evicted).
     max_turns_per_session: int = Field(default=50, ge=1, le=500)
     # Maximum number of live sessions (LRU eviction above this threshold).
@@ -217,24 +221,12 @@ class ConversationPolicy(StrictPolicyModel):
     answer_summary_max_chars: int = Field(default=300, ge=50, le=2000)
     # Hard cap on the query string stored per turn.
     turn_query_max_chars: int = Field(default=200, ge=20, le=1000)
-    # Hard budget for the entire rendered history block injected into the prompt.
-    history_max_chars: int = Field(default=2000, ge=200, le=10_000)
     # Completed request-idempotency records retained per active session.
     request_record_ttl_seconds: int = Field(default=3600, ge=1, le=86_400)
     max_request_records_per_session: int = Field(default=200, ge=1, le=10_000)
     session_ttl_seconds: int = Field(default=86_400, ge=1, le=2_592_000)
     lock_lease_seconds: int = Field(default=90, ge=1, le=600)
     lock_acquire_timeout_seconds: int = Field(default=60, ge=1, le=600)
-
-    @model_validator(mode="after")
-    def validate_window_vs_max(self) -> "ConversationPolicy":
-        if self.history_window > self.max_turns_per_session:
-            raise ValueError(
-                f"history_window ({self.history_window}) cannot exceed "
-                f"max_turns_per_session ({self.max_turns_per_session})"
-            )
-        return self
-
 
 class AppPolicy(StrictPolicyModel):
     version: Literal[1]

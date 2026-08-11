@@ -15,6 +15,7 @@ from app.api.v1.routes import router as v1_router
 from app.application.background_run_manager import BackgroundRunManager
 from app.application.chat_run_executor import ChatRunExecutor
 from app.application.chat_run_runtime import ChatRunRuntime
+from app.application.conversation_memory import ConversationMemoryService
 from app.application.postgres_chat_repository import PostgresChatRepository
 from app.application.postgres_chat_run_repository import PostgresChatRunRepository
 from app.application.redis_run_event_bus import RedisRunEventBus
@@ -78,6 +79,11 @@ async def lifespan(app: FastAPI):
     app.state.chat_repository = PostgresChatRepository(database.session_factory)
     app.state.chat_run_repository = PostgresChatRunRepository(database.session_factory)
     app.state.session_store = store
+    app.state.conversation_memory = ConversationMemoryService(
+        chat_repository=app.state.chat_repository,
+        session_store=store,
+        max_chars=get_policy().conversation.recent_dialogue_max_chars,
+    )
     app.state.plan_service = PlanService()
     run_event_bus = None
     run_manager = None
@@ -108,9 +114,11 @@ async def lifespan(app: FastAPI):
             run_repository=app.state.chat_run_repository,
             chat_repository=app.state.chat_repository,
             session_store=store,
+            memory_service=app.state.conversation_memory,
             event_bus=run_event_bus,
             worker_id=worker_id,
-            history_limit=app.state.plan_service._conv_policy.history_window,
+            history_lookup_max_turns=get_policy().conversation.history_lookup_max_turns,
+            history_lookup_max_chars=get_policy().conversation.history_lookup_max_chars,
             build_turn=app.state.plan_service._build_turn,
             build_response=lambda state, session_id: app.state.plan_service._public_response(
                 state,

@@ -8,9 +8,11 @@ from dataclasses import dataclass
 from typing import Any, Literal
 from uuid import UUID
 
+from app.agentic.conversation.models import Turn
 from app.agentic.conversation.summary import (
     build_session_failure_turn,
     build_turn_summary,
+    render_assistant_message,
 )
 from app.agentic.graph import AgentGraphRunner
 from app.agentic.planning.contracts import validate_registry_contracts
@@ -27,6 +29,12 @@ class PlanServiceResult:
     public_response: dict[str, Any]
     state: AgentRunState | None
     idempotency_status: Literal["disabled", "executed", "replayed"]
+
+
+@dataclass(frozen=True)
+class TurnBuildResult:
+    turn: Turn
+    assistant_message: str
 
 
 class PlanService:
@@ -51,6 +59,7 @@ class PlanService:
             self.controller,
             self.registry,
             runtime_policy=policy.planning.runtime,
+            history_lookup_max_per_run=policy.conversation.history_lookup_max_per_run,
         )
         self._conv_policy = policy.conversation
 
@@ -64,16 +73,23 @@ class PlanService:
             idempotency_status="disabled",
         )
 
-    def _build_turn(self, result: AgentRunState):
+    async def _build_turn(self, result: AgentRunState) -> TurnBuildResult:
         if result.safe_failure_required:
-            return build_session_failure_turn(
-                result,
-                max_query_chars=self._conv_policy.turn_query_max_chars,
+            return TurnBuildResult(
+                turn=build_session_failure_turn(
+                    result,
+                    max_query_chars=self._conv_policy.turn_query_max_chars,
+                ),
+                assistant_message=render_assistant_message(result),
             )
-        return build_turn_summary(
-            result,
-            max_summary_chars=self._conv_policy.answer_summary_max_chars,
-            max_query_chars=self._conv_policy.turn_query_max_chars,
+        assistant_message = render_assistant_message(result)
+        return TurnBuildResult(
+            turn=build_turn_summary(
+                result,
+                max_summary_chars=self._conv_policy.answer_summary_max_chars,
+                max_query_chars=self._conv_policy.turn_query_max_chars,
+            ),
+            assistant_message=assistant_message,
         )
 
     @staticmethod

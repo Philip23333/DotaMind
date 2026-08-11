@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
+from app.agentic.conversation.models import ConversationMessage
 from app.application.chat_run_repository import ChatRunStatus
 
 
@@ -66,6 +67,12 @@ class ChatTranscriptTurn:
 class ChatSessionSnapshot:
     summary: ChatSessionSummary
     turns: list[ChatTranscriptTurn]
+
+
+@dataclass(frozen=True)
+class ChatConversationContext:
+    recent_messages: list[ConversationMessage]
+    next_turn_index: int
 
 
 @dataclass(frozen=True)
