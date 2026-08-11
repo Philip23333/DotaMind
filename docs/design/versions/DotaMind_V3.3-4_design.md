@@ -1,7 +1,8 @@
 # DotaMind V3.3-4：统一 Direct Answer 轻量收敛
 
-> 状态：本阶段实现蓝图。目标是删除历史回忆的程序化 response mode 与消息 basis
-> 合同，让 Controller 直接基于真实对话生成答案。
+> 状态：已于 2026-08-11 完成实现，并于 2026-08-12 完成验收。历史回忆的
+> 程序化 response mode 与消息 basis 合同已经删除，Controller 直接基于真实对话
+> 生成答案；API 全量测试、静态检查和真实 DeepSeek 重放均通过。
 
 ## 目标
 

@@ -41,7 +41,7 @@
 - [`DotaMind_V3.3-3_design.md`](./versions/DotaMind_V3.3-3_design.md) —
   已完成的 Valve committed Catalog 与静态查询工具蓝图。
 - [`DotaMind_V3.3-4_design.md`](./versions/DotaMind_V3.3-4_design.md) —
-  统一 direct answer、删除历史回忆模式与 basis 合同的轻量收敛蓝图。
+  已完成的统一 direct answer、删除历史回忆模式与 basis 合同轻量收敛蓝图。
 
 版本蓝图负责回答“这个版本要到哪里”，但当前实现状态仍以最新进度快照和工作树为准。
 
@@ -95,7 +95,7 @@ STRATZ GraphQL 的实测 operation/schema inventory 仍放在 `docs/technical/`�
 
 ## 当前基线
 
-V3.2-1 至 V3.2-6 均已完成；V3.3-1 至 V3.3-3 的后端能力也已完成并继续演化。
+V3.2-1 至 V3.2-6 均已完成；V3.3-1 至 V3.3-4 的能力也已完成并继续演化。
 当前正式多轮合同是 PostgreSQL 完整消息 + Redis `RecentDialogueWindow` + Chat Run，
 而不是 V3.2 早期 compact Turn history。阅读历史蓝图时必须先看其
 顶部 supersession 说明，再以当前 architecture/technical 文档校正。

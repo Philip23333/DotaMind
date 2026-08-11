@@ -40,6 +40,8 @@ Next.js/assistant-ui client for Chat Session and Chat Run APIs.
   and frontend changes are called out in those documents.
 - [`design/versions/DotaMind_V3.3-3_design.md`](./design/versions/DotaMind_V3.3-3_design.md)
   — completed committed Valve Catalog implementation blueprint.
+- [`design/versions/DotaMind_V3.3-4_design.md`](./design/versions/DotaMind_V3.3-4_design.md)
+  — completed unified direct-answer and conversation-contract simplification blueprint.
 - [`design/versions/DotaMind_V3.0_design.md`](./design/versions/DotaMind_V3.0_design.md) — primary
   product and capability design.
 - [`design/versions/DotaMind_MVP_v2.5.md`](./design/versions/DotaMind_MVP_v2.5.md) — primary
