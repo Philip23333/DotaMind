@@ -6,16 +6,13 @@
 ## 阅读顺序
 
 1. 先读最新 [`../progress/`](../progress/) 中英文进度快照。
-2. 读 [`versions/DotaMind_V3.2_design.md`](./versions/DotaMind_V3.2_design.md)
-   了解当前 Agent Runtime Foundation 总体目标。
-3. 读最近完成阶段蓝图
-   [`versions/DotaMind_V3.2-5_design.md`](./versions/DotaMind_V3.2-5_design.md)，
-   再回看已完成的 V3.2-4 请求幂等边界，并按进度快照确认下一阶段。
-4. 读 [`versions/DotaMind_V3.0_design.md`](./versions/DotaMind_V3.0_design.md)
-   了解已实现业务能力。
-5. 读 [`versions/DotaMind_MVP_v2.5.md`](./versions/DotaMind_MVP_v2.5.md)
+2. 读 [`../technical/architecture.md`](../technical/architecture.md) 和
+   [`architecture/整体架构.md`](./architecture/整体架构.md) 了解当前实现。
+3. 读 [`versions/DotaMind_MVP_v2.5.md`](./versions/DotaMind_MVP_v2.5.md)
    了解 constrained tool calling 不变量。
-6. 再按任务选择 `architecture/`、`tools/` 或 `roadmaps/` 下的专项文档。
+4. 按任务阅读 [`architecture/Controller层.md`](./architecture/Controller层.md)、
+   [`architecture/ConversationMemory层.md`](./architecture/ConversationMemory层.md) 或其他分层文档。
+5. 只有需要阶段背景与验收历史时，再读 V3.2/V3.3 `versions/` 蓝图。
 
 ## `versions/`：版本设计蓝图
 
@@ -37,6 +34,12 @@
   stateful request idempotency 阶段实施蓝图。
 - [`DotaMind_V3.2-5_design.md`](./versions/DotaMind_V3.2-5_design.md) —
   Redis Session Store、分布式 lease 与 fencing 阶段实施蓝图。
+- [`DotaMind_V3.3-1_design.md`](./versions/DotaMind_V3.3-1_design.md) —
+  PostgreSQL 聊天持久化历史蓝图；当前消息窗口合同以后续覆盖说明为准。
+- [`DotaMind_V3.3-2_design.md`](./versions/DotaMind_V3.3-2_design.md) —
+  已完成的 detached Chat Run、事件恢复与 assistant-ui 前端蓝图。
+- [`DotaMind_V3.3-3_design.md`](./versions/DotaMind_V3.3-3_design.md) —
+  已完成的 Valve committed Catalog 与静态查询工具蓝图。
 
 版本蓝图负责回答“这个版本要到哪里”，但当前实现状态仍以最新进度快照和工作树为准。
 
@@ -73,7 +76,7 @@ STRATZ GraphQL 的实测 operation/schema inventory 仍放在 `docs/technical/`�
 - [`V3.0_功能闭环缺口盘点.md`](./roadmaps/V3.0_功能闭环缺口盘点.md)
 - [`agent_basic_tool_priorities.md`](./roadmaps/agent_basic_tool_priorities.md)
 
-V3.2 完成前业务工具目录保持冻结，因此这些路线图当前是延后输入，不是活跃实现顺序。
+这些路线图是能力输入，不是当前实现顺序；实现状态必须对照最新进度与工作树。
 
 ## 分类规则
 
@@ -88,14 +91,9 @@ V3.2 完成前业务工具目录保持冻结，因此这些路线图当前是延
 移动文档时必须同步更新当前入口、代码注释和有效交叉链接。历史进度快照保持原始记录，
 通过新的当日追加章节说明迁移后的规范路径。
 
-## 当前 V3.2 阅读顺序
+## 当前基线
 
-V3.2-4 stateful request idempotency 与 V3.2-5 Redis Session Store 已完成；下一阶段为
-V3.2-6 观测与故障注入。先阅读 [`versions/DotaMind_V3.2-5_design.md`](./versions/DotaMind_V3.2-5_design.md)
-确认 key/schema、lease/fencing、生命周期与真实 Redis 验收边界，再回看
-[`versions/DotaMind_V3.2-4_design.md`](./versions/DotaMind_V3.2-4_design.md)，并阅读
-[`versions/DotaMind_V3.2-3_design.md`](./versions/DotaMind_V3.2-3_design.md)，并回看
-[`versions/DotaMind_V3.2-2_design.md`](./versions/DotaMind_V3.2-2_design.md) 确认 Prompt
-manifest 与冻结 catalog 边界，并回看
-[`versions/DotaMind_V3.2-1_design.md`](./versions/DotaMind_V3.2-1_design.md) 的
-Run/Attempt/Budget 基线。
+V3.2-1 至 V3.2-6 均已完成；V3.3-1 至 V3.3-3 的后端能力也已完成并继续演化。
+当前正式多轮合同是 PostgreSQL 完整消息 + Redis `RecentDialogueWindow` + Chat Run，
+而不是 V3.2 早期 compact Turn history。阅读历史蓝图时必须先看其
+顶部 supersession 说明，再以当前 architecture/technical 文档校正。

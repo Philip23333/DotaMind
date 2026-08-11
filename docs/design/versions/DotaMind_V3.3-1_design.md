@@ -1,5 +1,10 @@
 # DotaMind V3.3-1：PostgreSQL 聊天持久化与匿名浏览器多聊天管理
 
+> 状态：后端阶段已完成，本文保留原始实施蓝图。后续 V3.3-2 与 2026-08-11
+> Conversation Memory 改造已覆盖两点：正式执行使用 detached Chat Run API，而不是
+> stateful `/plan`；`chat_turns` 额外持久化非空 `assistant_message`，Controller 使用
+> PostgreSQL 完整消息与 Redis `RecentDialogueWindow`，compact Turn 仅作受限审计。
+
 ## 目标与边界
 
 本阶段把 PostgreSQL 定义为聊天记录与会话记忆的权威存储，并在不引入用户登录的前提下支持同一浏览器的多个聊天会话。浏览器通过一个本地生成并持久化的 UUID v4 作为匿名身份；后端只保存其 SHA-256，不保存原始浏览器标识。

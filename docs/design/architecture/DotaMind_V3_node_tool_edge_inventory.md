@@ -19,7 +19,8 @@ flowchart TD
     Conversation --> AttemptFinalize
     Validate -->|"valid"| Tools["tool_executor_node"]
     Validate -->|"invalid"| AttemptFinalize
-    Tools -->|"success"| Evidence["evidence_node"]
+    Tools -->|"history lookup"| Controller
+    Tools -->|"business tools success"| Evidence["evidence_node"]
     Tools -->|"tool error"| AttemptFinalize
     Evidence -->|"complete"| Answer["answer_node"]
     Evidence -->|"missing"| AttemptFinalize
@@ -74,9 +75,9 @@ future reset nodes delegate to the centralized pure reset function.
 | `run_init_node` | Fail fast on an existing run, then create UUID4/UTC/monotonic run and attempt state. | Initializes observing-only budget; no business call. |
 | `controller_node` | Ask the LLM for one discriminated `ControllerDecision`; apply sample policy to a tool plan before first deterministic plan validation. | No tool execution. |
 | `decision_validate_node` | Repeat shared deterministic decision/basis/plan validation without mutating the decision. | Recomputes and refreshes authoritative evidence obligations in state. |
-| `conversation_answer_node` | Read only validated `Turn` basis and render recall templates or an approved social answer. | Never creates EvidenceGraph. |
+| `conversation_answer_node` | Read validated real-message basis and render deterministic recall, history-grounded, or approved social answers. | Never creates EvidenceGraph. |
 | `validate_plan_node` | Validate final args, references, contract and effective evidence producibility. | Never applies policy or modifies evidence. |
-| `tool_executor_node` | Resolve references, reuse Run-local fingerprints and execute registered tools. | Same-id results are reused; changed-id duplicates and per-handler budget/deadline failures are blocked. |
+| `tool_executor_node` | Resolve references, reuse Run-local fingerprints and execute registered tools. | Business tools proceed to Evidence; isolated history lookup merges request-local messages and returns to Controller. |
 | `evidence_node` | Run tool-owned extractors and compute missing effective evidence and data quality. | Missing effective evidence routes to finalize before Answer. |
 | `answer_node` | Produce structured or natural-language answers from EvidenceGraph. | Tool-plan branch only. |
 | `critic_node` | Review missing/quality/mock/confidence constraints. | Tool-plan branch only. |
@@ -90,8 +91,8 @@ future reset nodes delegate to the centralized pure reset function.
 
 | `decision.kind` | Meaning | Terminal mapping |
 |---|---|---|
-| `direct_answer` | Conversation recall or social response. | `ok/direct_answer` |
-| `clarification` | Fixed-enum user input is missing. | `clarification_required/clarification` |
+| `direct_answer` | Deterministic recall, history-grounded answer, or social response. | `ok/direct_answer` or `ok/history_grounded_answer` |
+| `clarification` | Required user input is missing; `missing_fields` uses bounded open snake_case names. | `clarification_required/clarification` |
 | `context_missing` | Requested conversation context is unavailable. | `insufficient_context/conversation_context_missing` |
 | `capability_boundary` | Registered tools cannot satisfy the request. | `insufficient_tools/capability_boundary` |
 | `tool_plan` | At least one registered tool call is required. | Full evidence pipeline or explicit error/insufficient evidence. |
@@ -101,7 +102,8 @@ pointing to an injected real `ConversationMessage`. `quote_user_query` requires
 the `user` role and `recall_assistant_summary` requires `assistant`. Older
 messages may be added to the request-local context by the internal
 `conversation.history_lookup` tool, but historical messages are never current
-tool evidence and are never used as routing keys.
+tool evidence and are never used as routing keys. A still-valid assistant message
+may instead support `history_grounded_answer` with an explicit assistant basis.
 
 ## Tool Contract Inventory
 
@@ -117,6 +119,11 @@ cannot borrow one another's primary evidence.
 | Tool | Mandatory evidence |
 |---|---|
 | `resolve_hero` | `hero_identity` |
+| `dota.hero_attributes` | `hero_attributes` |
+| `dota.hero_abilities` | `hero_ability` |
+| `dota.hero_talent_tree` | `hero_talent_tree` |
+| `resolve_item` | `item_identity` |
+| `dota.item_info` | `item_definition` |
 | `stratz.pair_lane_outcome` | `pair_lane_winrate` |
 | `stratz.hero_matchup_ranking` | `matchup_ranking_row` |
 | `stratz.hero_synergy_ranking` | `hero_synergy_ranking_row` |
@@ -135,6 +142,7 @@ cannot borrow one another's primary evidence.
 | `patch.get_records` | `patch_records` |
 | `patch.hero_changes` | `hero_patch_changes` |
 | `patch.item_changes` | `item_patch_changes` |
+| `conversation.history_lookup` | none; request-local context only |
 
 `sample_size` remains a normally extracted quality signal, not a universal
 mandatory kind in this release.

@@ -3,6 +3,11 @@
 > 状态：已完成（2026-08-01）。本文把 V3.2-4 的 stateful request idempotency 迁移到 Redis，
 > 以支持多 worker、API/worker 重建后的会话恢复；Redis Server 自身的持久化能力取决于
 > 部署时启用的 AOF/RDB 与持久卷。
+>
+> 当前覆盖说明（2026-08-11）：本文的 compact Turn/RequestRecord 描述是 V3.2
+> stateful `/plan` 历史合同。正式 Chat Run 以 PostgreSQL 为 Run/Turn 权威源，Redis
+> 保留 lease、事件、取消通知和可重建 `RecentDialogueWindow`；当前多轮链路不从 Redis
+> compact Turn list 构造 Controller 历史。
 
 ## 1. 目标与边界
 

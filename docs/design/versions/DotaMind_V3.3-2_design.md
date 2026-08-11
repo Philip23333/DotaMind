@@ -4,6 +4,11 @@
 >
 > 本阶段建立在 V3.3-1 的 PostgreSQL 聊天记录、Redis SessionStore lease/fencing 和
 > V3.2 Run/Attempt/Budget 运行时之上。本文是本阶段实现的边界和验收合同。
+>
+> 当前覆盖说明（2026-08-11）：Chat Run、事件、取消、恢复和 PostgreSQL 权威边界仍然
+> 有效；后续 Conversation Memory 改造将 Controller 历史切换为 PostgreSQL 完整消息与
+> Redis `RecentDialogueWindow`。`apps/chat` 继续使用本文的 Chat Run API，不使用 stateful
+> `/plan`。
 
 ## 1. 目标与范围
 

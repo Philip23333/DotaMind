@@ -1,7 +1,8 @@
 # DotaMind V3.3-3：Valve 静态游戏目录与查询工具
 
-> 状态：设计合同已冻结；A1-A5 代码与测试合同已完成，B-E 尚未实现。真实目录快照仍受
-> Valve 当前缺失展示占位符阻塞，按 E1 真实同步验收处理，不引入猜值或 fallback。
+> 状态：A-E 已完成并于 2026-08-10 收口。正式 committed Catalog、Runtime
+> Repository/resolver、六个查询工具、EvidenceGraph、Controller/Answer 规则和真实
+> 快照验收均已实现；请求期不访问 Valve，也没有旧 YAML 或第三方 fallback。
 >
 > 本阶段建立在 V2.5 constrained tool calling、V3.2 Agent Runtime 和 V3.3-2
 > Chat Run 之上。它新增的是可审计的官方静态游戏数据能力，不改变 Graph 路由语义、
@@ -11,7 +12,7 @@
 
 ## 1. 背景
 
-当前仓库已经通过 `scripts/sync_game_data.py` 离线读取 Valve Dota 2 Datafeed，生成：
+设计启动时，仓库通过 `scripts/sync_game_data.py` 离线读取 Valve Dota 2 Datafeed，仅生成：
 
 - `app/data/heroes/dota2_heroes.yaml`：英雄 ID、内部名、中英文名和中文别名；
 - `app/data/patches/*.json`：版本、英雄、技能和物品改动记录。
@@ -550,7 +551,8 @@ EvidenceGraph 或 committed snapshot 边界。
 4. “莉娜最强天赋”在没有统计工具时不把静态天赋列表伪装成强度结论。
 5. missing evidence 继续按 V3.2 规则最多 replan 一次。
 6. Answer/Tool/validation 错误保持现有终态优先级。
-7. Stateful Chat Run 只持久化公开响应和 compact Turn，不持久化完整 catalog payload。
+7. Stateful Chat Run 持久化公开响应、完整 assistant message 和 compact Turn 审计记录，
+   不持久化完整 catalog payload。
 
 ## 12. 完成定义
 

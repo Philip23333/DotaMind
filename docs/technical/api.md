@@ -4,7 +4,7 @@ Base URL: `http://localhost:8001`.
 
 ## Anonymous Chat Sessions
 
-The browser chat client generates one UUID v4 and persists it locally. All session
+An anonymous client generates one UUID v4 and persists it locally. All session
 endpoints require `X-DotaMind-Browser-Id: <UUID v4>`; the server stores only a SHA-256
 hash and uses it as the ownership boundary. These endpoints manage the complete durable
 transcript in PostgreSQL:
@@ -20,7 +20,8 @@ DELETE /api/v1/chat/sessions/{session_id}
 `POST` creates an empty `dota2` session. `PATCH` accepts either `{ "title": "..." }`
 (1–80 characters) or `{ "is_pinned": true|false }`; the first completed turn automatically
 supplies a title unless it was customized. `GET /{session_id}` returns the ordered transcript, including the stored
-allowlisted public response and compact memory metadata. A session or transcript belonging
+allowlisted public response and compact audit metadata. Full user and assistant
+messages come from PostgreSQL transcript columns, not from the compact summary. A session or transcript belonging
 to another browser is indistinguishable from missing and returns `404`; missing or invalid
 browser identity returns `422`.
 
@@ -61,7 +62,7 @@ Response fields include:
 
 - `status`: `ok`, `clarification_required`, `insufficient_context`,
   `insufficient_tools`, `insufficient_evidence`, or `error`.
-- `response_type`: `direct_answer`, `clarification`,
+- `response_type`: `direct_answer`, `history_grounded_answer`, `clarification`,
   `conversation_context_missing`, `capability_boundary`, a tool answer
   contract, `tool_error`, `answer_error`, `execution_error`,
   `execution_budget_error`, `execution_timeout`, `planning_error`,

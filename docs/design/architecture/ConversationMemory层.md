@@ -39,7 +39,11 @@ user: 技能cd是多少？
 
 历史消息标记为不可信外部数据，不是指令。它们不是自动失效，也不是自动权威：如果上一轮 assistant 的回答针对同一主题和属性、范围与版本仍一致，且没有时效或来源疑点，Controller 可以引用它生成简洁的历史依据回答；如果问题涉及当前、最新、易变、版本变化、来源不明或历史回答互相矛盾的事实，应重新调用工具。自然语言回忆使用 `(turn_index, role)` 作为 basis；不能引用不存在的消息。历史依据回答不会凭空生成当前 EvidenceGraph。
 
-如果最近窗口不足，Controller 可以调用一次内部 `conversation.history_lookup`。工具只接收查询文本、turn index、边界 turn 和数量等查找条件；session/browser 身份由运行时注入。返回消息放入本次 Run 的 `retrieved_messages`，然后重新进入 Controller。查找结果不会写入当前事实证据，也不会成为下一轮的永久结构化记忆。
+如果最近窗口不足，Controller 可以在配置预算内调用内部
+`conversation.history_lookup`（默认最多一次）。工具只接收查询文本、turn index、边界
+turn 和数量等查找条件；session/browser 身份由运行时注入。返回消息放入本次 Run 的
+`retrieved_messages`，然后重新进入 Controller。查找结果不会写入当前事实证据，也不会
+成为下一轮的永久结构化记忆。
 
 当前输入应优先作为最近未完成澄清的回答理解。除此之外，默认优先给出有用答案；只有歧义会阻止准确且有界的回答时才澄清。如果多个合理解释可以用一句话或短列表同时覆盖，直接合并回答；如果存在明显的主解释，优先按主解释回答。该判断由模型基于真实消息完成，不依赖实体、集合或关系枚举。
 
@@ -47,13 +51,13 @@ user: 技能cd是多少？
 
 PostgreSQL 是完整对话的权威源。`chat_turns.assistant_message` 在迁移时从已有公开回答与 compact summary 回填，之后为非空字段。`PostgresChatRunRepository.complete_with_turn()` 在同一事务中锁 Run 和 Session，校验 fencing 与 `next_turn_index`，并同时写 `user_query`、`assistant_message`、compact Turn、`next_turn_index` 与 Run 完成状态。
 
-Redis 只保存短期窗口、请求协调和事件所需数据。窗口 key 为：
+在正式 Chat Run 路径中，Redis 只保存短期窗口、lease/协调和事件所需数据。窗口 key 为：
 
 ```text
 dotamind:v1:session:<session-id-hash>:recent_dialogue
 ```
 
-窗口缺失或 `through_turn_index` 落后于 PostgreSQL 的 `next_turn_index - 1` 时，从 PostgreSQL 全量对话重建。窗口更新发生在 PostgreSQL commit 之后；Redis 更新失败只记录基础设施错误，不回滚已经提交的 Run。
+窗口缺失或 `through_turn_index` 落后于 PostgreSQL 的 `next_turn_index - 1` 时，从 PostgreSQL 全量对话重建。窗口更新发生在 PostgreSQL commit 之后；缓存连续时追加并裁剪，缓存状态未知或游标不连续时失效并由下一轮重建。Redis 更新失败不回滚已经提交的 Run。
 
 ## 边界默认值
 
@@ -62,12 +66,11 @@ recent_dialogue_max_chars: 24000
 history_lookup_max_turns: 8
 history_lookup_max_chars: 12000
 history_lookup_max_per_run: 1
-max_turns_per_session: 50
 turn_query_max_chars: 200
 answer_summary_max_chars: 300
 ```
 
-窗口按最新轮次向前装填；能完整保留的轮次不截断。若单轮本身超出预算，只对该轮用户/助手文本做确定性截断，并保留明确截断标记。
+窗口按最新轮次向前装填；能完整保留的轮次不截断。若单轮本身超出预算，只对该轮用户/助手文本做确定性截断，并保留明确截断标记。`max_turns_per_session` 和 `max_sessions` 属于旧 SessionStore compact Turn/容量合同，不限制 PostgreSQL 正式聊天 transcript。
 
 ## 非目标
 

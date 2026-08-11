@@ -63,8 +63,9 @@ curl -X POST http://localhost:8001/api/v1/plan \
 
 The response exposes the Controller decision kind and, when applicable, the
 final plan, effective evidence obligations, tool results, evidence graph,
-answer, review, errors and trace. Conversation recall, clarification, missing
-context and capability boundaries skip the tool/evidence/critic path.
+answer, review, errors and trace. Conversation recall, history-grounded answers,
+clarification, missing context and capability boundaries skip the business
+tool/evidence/critic path.
 
 ## Multi-chat Runs
 
@@ -95,10 +96,12 @@ Current conditional LangGraph path:
 ```text
 controller_node
   -> decision_validate_node
-      -> direct_answer -> conversation_answer_node -> response_node
-      -> clarification/context_missing/capability_boundary -> response_node
+      -> direct_answer -> conversation_answer_node -> attempt_finalize_node
+      -> clarification/context_missing/capability_boundary -> attempt_finalize_node
       -> tool_plan -> validate_plan_node -> tool_executor_node
-                   -> evidence_node -> answer_node -> critic_node -> response_node
+                   -> conversation.history_lookup -> controller_node
+                   -> evidence_node -> answer_node -> critic_node
+  -> attempt_finalize_node -> recovery_node -> run_finalize_node -> response_node
 ```
 
 ## Output Contracts
@@ -112,9 +115,17 @@ The contract registry in `app/agentic/planning/contracts.py` is authoritative.
 
 ## Registered Tools
 
-Local hero constants and STRATZ:
+Committed Valve Catalog:
 
 - `resolve_hero`
+- `dota.hero_attributes`
+- `dota.hero_abilities`
+- `dota.hero_talent_tree`
+- `resolve_item`
+- `dota.item_info`
+
+STRATZ:
+
 - `stratz.pair_lane_outcome`
 - `stratz.hero_matchup_ranking`
 - `stratz.hero_synergy_ranking`
@@ -139,6 +150,10 @@ Local patch records:
 - `patch.get_records`
 - `patch.hero_changes`
 - `patch.item_changes`
+
+Request-local conversation context:
+
+- `conversation.history_lookup`
 
 The `ToolRegistry` definitions are authoritative for arguments, output paths,
 reference contracts, and evidence kinds.

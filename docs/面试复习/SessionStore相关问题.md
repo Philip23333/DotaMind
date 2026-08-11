@@ -1,5 +1,12 @@
 # Session Store 问题复习：并发淘汰与会话回忆契约
 
+> 历史说明：本文主要复盘 V3.2 compact Turn/RequestRecord SessionStore 设计，其中
+> `resolved_entities`、`response_summary` 默认历史和 stateful `/plan` 等内容不是当前正式
+> Chat Run 合同。当前实现以 PostgreSQL 完整 user/assistant transcript、Redis
+> `RecentDialogueWindow`、请求级 `conversation.history_lookup` 和
+> `history_grounded_answer` 为准。参见
+> [`../design/architecture/ConversationMemory层.md`](../design/architecture/ConversationMemory层.md)。
+
 > 面试复习主题：per-session lock、同 key 串行化、LRU 生命周期、锁对象稳定性、
 > 单进程与分布式并发边界，以及基于历史 Turn 的会话回忆契约。
 

@@ -795,7 +795,7 @@ Formatter 输出推荐
 
 > v2.5 的核心不是“更多 Agent”，而是把 Orchestrator 从服务选择器升级为受约束工具规划器：LLM 负责决定需要哪些证据，代码负责安全、可测地获取证据，Critic 负责确认这些证据足够支撑回答。
 
-# 2026-07 Controller 决策层补充（当前实现权威说明）
+# 2026-08 Controller 与 Conversation Memory 补充（当前实现权威说明）
 
 v2.5 的 constrained tool calling 现由轻量 Controller 决策层承载。以下
 规则覆盖本文后续仍使用 “Planner 必须返回 ExecutionPlan” 的历史描述：
@@ -835,7 +835,11 @@ ControllerDecision
   ToolResult 并映射为 tool_error，未分类运行时错误映射为 execution_error。
 - 当前请求可将 `game`、`request_time`、Catalog patch 和 snapshot 生成时间作为
   Controller runtime context；这些信息不写入 Session、Redis 历史或结构化实体记忆。
-- 不引入原始消息存储、checkpointer、第二次 LLM 审核、兼容 endpoint 或并行旧链路。
+- PostgreSQL 保存正式 Chat Run 的完整 user/assistant transcript；Redis 只缓存受字符预算
+  限制的 `RecentDialogueWindow`，compact Turn 只作受限审计。缓存缺失或落后时从
+  PostgreSQL 重建。
+- 不把完整消息写入 Redis compact Turn/history block，不引入 checkpointer、第二次 LLM
+  审核、兼容 endpoint 或并行旧链路。
 
 当前运行图、公开状态和隐私边界以
 `docs/technical/architecture.md` 与 `docs/technical/api.md` 为准。

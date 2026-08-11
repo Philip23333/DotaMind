@@ -24,14 +24,20 @@ At the start of every new session in this repository, before analyzing or editin
    matters.
 2. **Read the canonical design docs** under `docs/design/` and
    `docs/technical/` that are relevant to the task at hand. In particular:
-   - `docs/design/versions/DotaMind_V3.2_design.md` — current Agent Runtime
-     Foundation target and phase order.
+   - `docs/design/versions/DotaMind_V3.2_design.md` — completed Agent Runtime
+     Foundation baseline and historical phase order.
    - `docs/design/versions/DotaMind_V3.2-1_design.md` — completed Run / Attempt / Budget
      implementation blueprint and compatibility boundary.
    - `docs/design/versions/DotaMind_V3.2-2_design.md` — completed Prompt Registry
      implementation blueprint and audit/frozen-catalog boundary.
    - `docs/design/versions/DotaMind_V3.2-5_design.md` — completed Redis Session Store,
      lease/fencing, and API/worker recovery boundary.
+   - `docs/design/versions/DotaMind_V3.3-1_design.md` and
+     `docs/design/versions/DotaMind_V3.3-2_design.md` — completed PostgreSQL Chat
+     and detached Chat Run blueprints; read their supersession notes before using
+     historical frontend or compact-history details.
+   - `docs/design/versions/DotaMind_V3.3-3_design.md` — completed committed Valve
+     Catalog, resolver, tool, evidence, and answer blueprint.
    - `docs/design/versions/DotaMind_MVP_v2.5.md` — primary architecture direction
      (v2.5 constrained tool calling). Treat this as the authority when
      discussing plan/graph/contract structure.
@@ -78,6 +84,57 @@ At the start of every new session in this repository, before analyzing or editin
 - Do not create new `YYYY-MM-DD_HH-mm_progress_*.md` files. Existing timestamped
   snapshots are legacy history and must not be renamed, consolidated, or deleted
   unless the user explicitly requests a migration.
+
+## Documentation Maintenance After Code Changes
+
+After every completed code change, perform a documentation-impact review before
+finishing the task. Update the aligned Chinese/English daily progress pair for
+the change, then update every current document whose facts or contracts changed.
+Do not touch unrelated documents merely to create documentation churn.
+
+Use this maintenance matrix:
+
+- **Always:** append the implementation, boundaries, verified tests, and known
+  limitations to the current `docs/progress/YYYY-MM-DD_progress_zh.md` and
+  `_progress_en.md` pair.
+- **Project entry and developer workflow:** update root `README.md` for visible
+  capabilities, startup, repository layout, or deployment changes;
+  `apps/api/README.md` for API development, Graph, or registered-tool changes;
+  and `apps/chat/README.md` for client setup or behavior changes.
+- **Current technical facts:** update `docs/technical/architecture.md` for
+  runtime, persistence, memory, module, or lifecycle changes;
+  `docs/technical/api.md` for endpoint and request/response changes; and
+  `docs/technical/configuration.md` plus `.env.example` for settings, Policy,
+  data-path, or environment-variable changes.
+- **Architecture contracts:** update `docs/design/architecture/整体架构.md` for
+  cross-layer flow or authority changes, and the affected layer document such as
+  `Controller层.md`, `ConversationMemory层.md`, `Validator层.md`, `Tool层.md`,
+  `Evidence层.md`, `Answer层.md`, or `Critic层.md`. Update
+  `DotaMind_V3_node_tool_edge_inventory.md` when nodes, edges, tools, decisions,
+  or mandatory evidence change.
+- **Tools, providers, and runtime data:** update the relevant
+  `docs/design/tools/` or `docs/technical/` provider inventory when tool inputs,
+  declared outputs, upstream operations, normalization, evidence extraction, or
+  committed Catalog/patch contracts change. Keep ToolRegistry and code as the
+  source of truth for the current tool list.
+- **Frontend and deployment:** update the root/app README, `.env.example`, and
+  deployment configuration documentation when ports, browser/API boundaries,
+  Docker/Compose/Nginx behavior, or public environment variables change.
+- **Documentation navigation and process:** update `docs/README.md` and
+  `docs/design/README.md` only when authority, reading order, status, or document
+  organization changes. Update `AGENTS.md` only when repository collaboration or
+  maintenance rules change.
+- **Version and historical documents:** change
+  `docs/design/versions/DotaMind_MVP_v2.5.md` only when constrained-tool-calling
+  invariants change. Create or update a V3.x blueprint when phase goals,
+  implementation contracts, or acceptance criteria change. Do not rewrite
+  completed blueprints, roadmaps, audits, archived documents, or historical
+  progress to match current code; add a short supersession note pointing to the
+  current architecture when an old document would otherwise mislead readers.
+
+Before completion, verify updated relative links, terminology, tool counts,
+configuration names, and Chinese/English progress alignment. Report only tests
+and documentation checks that actually ran.
 
 ## Git Commit Message Reference
 

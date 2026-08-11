@@ -1,5 +1,10 @@
 # Agent 基础完整体验工具优先级
 
+> 状态说明（2026-08-11）：本文是历史优先级输入，不声明当前已实现或未实现能力。
+> 执行前必须对照 `ToolRegistry`、最新 progress 和 `docs/technical/architecture.md`；已完成
+> 的 Catalog、synergy、position、trend、player 与 Conversation Memory 能力不应按本文
+> 旧顺序重复实施。
+
 ## 目标
 
 本文定义 Dota 自然语言 Agent 的基础工具补齐顺序。这里的“基础但完整体验”指：

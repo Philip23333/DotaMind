@@ -8,7 +8,7 @@ no compatibility fallback.
 ```text
 app/
   api/v1/          /plan, /plan/stream and chat session routes, schemas, mapper
-  application/     PlanService, chat repository and lease-aware SessionStore
+  application/     PlanService, Chat Run executor/repositories, memory service and SessionStore
   persistence/     async SQLAlchemy engine, PostgreSQL models and migrations
   agentic/
     graph.py       conditional LangGraph workflow
@@ -24,7 +24,7 @@ app/
     critic/        rule-first evidence quality review
   integrations/    upstream API clients and deterministic helpers
   config/          policy.yaml business policy
-  resources/       /debug/plan asset
+  resources/       /debug/plan assets
 ```
 
 ## Valve Static Catalog
@@ -88,7 +88,7 @@ START
       -> tool_plan
            -> validate_plan_node
            -> tool_executor_node
-              -> conversation.history_lookup -> controller_node (once)
+              -> conversation.history_lookup -> controller_node (bounded; default once)
               -> evidence_node -> answer_node -> critic_node
            -> attempt_finalize_node
   -> recovery_node
@@ -121,9 +121,10 @@ under a changed id.
 Session memory stores real alternating messages through one generic contract:
 `ConversationMessage(turn_index, role, content)`. PostgreSQL is the complete
 conversation source; Redis keeps a bounded `RecentDialogueWindow` for prompt
-construction. `DialogueTurn` is the durable user/assistant pair used to rebuild
-the window, while compact `Turn` remains a bounded audit record and keeps only
-`response_summary` for diagnostics. No entity referents, groups, links, discourse
+construction. `DialogueTurn` is the user/assistant pair used to build and rebuild
+the window, while compact `Turn` remains a bounded audit record with query,
+status, response metadata, scope, missing fields, and a limited summary. It is
+not the Controller's default history. No entity referents, groups, links, discourse
 extractor, or second extraction LLM are maintained.
 
 The Controller receives recent messages as actual `user` and `assistant` roles.
@@ -134,7 +135,8 @@ still match; current/latest/volatile/version-sensitive or conflicting facts
 should be re-queried through tools. Direct recall cites `(turn_index, role)`
 messages, while `history_grounded_answer` cites assistant messages for a concise
 history-based answer. When the recent window is insufficient, the internal
-`conversation.history_lookup` tool may retrieve older messages once; the result
+`conversation.history_lookup` tool may retrieve older messages within the
+configured budget (once by default); the result
 is request-local context and history lookup itself does not become Dota evidence
 or an EvidenceGraph. A `session_id` remains a bearer capability for one user
 security subject, so cross-session history access is unavailable.
@@ -146,23 +148,27 @@ The public `/plan` and `/plan/stream` contracts are stateless debug contracts:
 components remain as isolated coordination and compatibility modules, but no
 public chat request enters their old request-in-process Graph path.
 
-## Redis Session Store
+## Redis Session Store and Recent Dialogue Cache
 
-V3.2-5 adds `RedisSessionStore` behind the same `SessionStore` interface. It uses hashed
-session/request identifiers, strict schema-v2 compact Turn envelopes, a separate v1
-`RecentDialogueWindow` and RequestRecord envelope, a per-session Redis lease and
-fencing counter, plus atomic Lua operations for Turn append and RequestRecord completion. The API
-lifespan selects `memory` or `redis` through configuration; Redis startup and runtime failures
-surface as `session_store_error` and never fall back to a new in-memory session. API/worker
-rebuilds recover state by reconnecting to the same Redis data. Redis Server restart durability is
-a deployment concern: AOF/RDB and persistent volumes determine the allowed data-loss window.
+V3.2-5 introduced `RedisSessionStore`, compact Turn/RequestRecord envelopes, per-session
+lease/fencing, and atomic Lua operations for the earlier stateful `/plan` design. Those methods
+remain isolated coordination/compatibility modules, but formal Chat Runs do not read their
+compact Turn list as Controller history and do not use Redis RequestRecord as the durable Run
+authority.
+
+The current Chat Run path uses the same lease boundary plus a separate v1
+`RecentDialogueWindow`. The API lifespan selects `memory` or `redis` through configuration;
+Redis startup failures do not silently create a new in-memory session. Recent dialogue and
+committed Run/Turn state are reconstructible from PostgreSQL. Redis events are short-lived and
+are not reconstructed event by event after expiry or data loss. Redis Server persistence therefore
+controls the event/cache loss window, not the durability of committed Chat Turns.
 
 ## PostgreSQL Chat Persistence and Anonymous Multi-Chat
 
 V3.3-1 adds `PostgresChatRepository` and the `chat_sessions` / `chat_turns` tables. A
 browser creates one UUID v4 in localStorage and sends it as `X-DotaMind-Browser-Id`;
 PostgreSQL stores only its SHA-256 hash. Session ownership is checked on every list,
-transcript, rename, delete and stateful plan operation.
+transcript, rename, delete and Chat Run operation.
 
 PostgreSQL is authoritative for complete transcript rows, `assistant_message`, compact
 `Turn` audit data, pin state, Run state and the strictly increasing fencing token.
@@ -178,13 +184,11 @@ deletes PostgreSQL first, clears only Redis data keys while the lock is held, an
 transaction exit release the lock. A coordinator cleanup failure is logged but does not turn
 an already committed PostgreSQL deletion into a false failure.
 
-`apps/chat` lists and manages multiple local-browser sessions through assistant-ui's
-`RemoteThreadListRuntime`; one assistant-ui thread maps to one DotaMind `session_id`. Each
-started thread owns a long-lived `LocalRuntime`, while `ThreadHistoryAdapter` loads PostgreSQL
-transcript and resumes an active Run from the Redis event stream. Run ID, phase, tool state and
-terminal display data live in assistant message metadata; there is no second browser-level Run
-Store. Login, cross-device sync, attachments, search, message branching and LangGraph
-checkpointing remain outside this phase.
+`apps/chat` maps assistant-ui threads to browser-owned sessions, loads PostgreSQL transcript,
+creates detached Chat Runs, and observes replayable Redis events. Each started thread keeps an
+independent `LocalRuntime`; there is no second model or browser-global Run authority. Login,
+cross-device sync, attachments, search, message branching and LangGraph checkpointing remain
+outside the current boundary.
 
 ## Tool Plan Validation Order
 
@@ -278,38 +282,32 @@ stable failure reason.
 `response_node` only accepts a finalized state with one or two contiguous Attempts,
 applies the safe-failure
 allowlist, and serializes the response. It does not contain a legacy terminal
-reduction path. Missing-evidence Recovery can produce Attempt 1 once; unhandled
-exceptions, cancellation, and process exit are deferred to V3.2-6.
+reduction path. Missing-evidence Recovery can produce Attempt 1 once. Chat Run
+cancellation, worker shutdown, stale-run recovery, and post-commit cache/event
+failures are handled at the application/repository boundary.
 
 Wall-clock UTC timestamps provide audit fields such as `deadline_at`; all
 durations and timeout observation use an injectable monotonic clock. V3.2-3
 blocks not-yet-started business nodes and handlers after deadline while allowing
 attempt/recovery/run/response closure.
 
-## Chat Frontend
+## Chat Client Boundary
 
-`apps/chat` is a Next.js and assistant-ui client for the Chat Run API. Sending creates a
-durable Run with a client request UUID and subscribes to
-`/api/v1/chat/runs/{run_id}/events`. The subscription replays from `after=0` on recovery;
-disconnecting the observer never cancels the detached Run. The explicit DotaMind Stop Action
-calls the cancel endpoint, while navigation or subscription abort only closes observation.
-phase/tool/delta/result/status events map into the assistant-ui runtime and terminal results
-update transcript/title metadata.
+Formal clients create a durable Run with a request UUID and may subscribe to
+`/api/v1/chat/runs/{run_id}/events`. Replaying from `after=0` restores observable
+events; disconnecting only closes observation and never cancels the detached Run.
+Only the cancel endpoint requests cancellation. Provisional answer deltas are not
+authoritative unless followed by a successful final result. `/plan` and
+`/plan/stream` remain stateless debug surfaces.
 
-The chat renders those events as one compact per-message run card: analysis,
-tool use, answer organization and evidence review. It is expanded while running,
-folds after a successful final result, and stays open on failure or cancellation.
-Provisional prose is explicitly marked as pending review and is discarded when
-the stream terminates in error or the final status is not `ok`. The frontend does
-not introduce another model endpoint, a fallback runtime or a legacy
-compatibility route. `/plan` and `/plan/stream` remain stateless debug surfaces only;
-durable thread listing/history, heartbeat and Run recovery are provided by the Chat Run
-Repository/Event Bus boundary.
+The in-repository `apps/chat` Next.js/assistant-ui client uses that boundary. It
+maps one thread to one DotaMind session, restores transcript through
+`ThreadHistoryAdapter`, and treats subscription Abort as observation-only;
+explicit Stop is the only UI action that calls cancel.
 
 ## Debugging
 
 Use `http://localhost:8001/debug/plan`. It shows the Run, budget, one or two
 Attempts, Controller decision, final plan, required-evidence sources, tools,
 EvidenceGraph, answer, critic and timed trace.
-The legacy frontend remains deleted; `apps/chat` is the new V3.3 client for the
-single agentic API path, not a restored compatibility frontend.
+The legacy `apps/web` frontend remains deleted; `apps/chat` is the current client.

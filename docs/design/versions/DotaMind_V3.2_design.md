@@ -8,6 +8,13 @@
 
 更新日期：2026-08-02
 
+> 当前覆盖说明（2026-08-11）：本文第 7-8 节记录 V3.2 当时的 stateful `/plan`
+> RequestRecord 与 compact Turn SessionStore 基线。正式多轮现已迁移到 PostgreSQL
+> Chat Session/Run/Turn；Controller 默认读取 Redis `RecentDialogueWindow` 中的真实
+> role messages，cache miss 时从 PostgreSQL 重建。当前合同见
+> [`../architecture/ConversationMemory层.md`](../architecture/ConversationMemory层.md) 和
+> [`../../technical/architecture.md`](../../technical/architecture.md)。
+
 ## 1. 背景
 
 DotaMind 当前已经具备一条统一 Agentic 路径：
@@ -346,7 +353,7 @@ RequestRecord
   迟到写入。
 - 只有最终 owner 可以把 RequestRecord 标记为 completed 并 append Turn。
 
-## 8. RedisSessionStore
+## 8. RedisSessionStore（V3.2 历史基线）
 
 ### 8.1 目标
 

@@ -112,3 +112,40 @@
 
 - 历史事实是否可复用继续由模型按照版本、范围、来源、时效和冲突等通用标准判断，代码不硬编码领域事实路由。
 - Controller 供应商仍可能产生合同不合法的 JSON；现有 bounded retry 会显式暴露失败。本阶段不为该模型格式波动增加领域 fallback。
+
+## 19:06 — 统一当前文档、历史蓝图与实现事实
+
+### 已完成
+
+- 重构根 README、`docs/README.md` 与 `docs/design/README.md` 的阅读顺序和状态说明：最新 progress 与当前 technical/architecture 文档是实现事实入口；V3.2/V3.3 version 文档保留阶段设计与验收历史。
+- 将整体架构统一为两类入口共用一个 Graph：无状态 `/plan` 调试入口，以及 PostgreSQL 权威、Redis 协调/缓存的 Chat Session/Run 正式多轮入口。
+- 统一 Conversation Memory 口径：PostgreSQL 保存完整 user/assistant transcript；Redis `RecentDialogueWindow` 是可重建缓存；compact Turn 只作受限审计；History Lookup 是受预算限制的请求级上下文，不创建 EvidenceGraph。
+- 同步 Controller、Node/Tool/Edge inventory、API 与配置文档：补齐 `history_grounded_answer`、开放 `missing_fields`、History Lookup 回边、25 个当前注册工具、Valve Catalog 五文件和 PostgreSQL/Redis/Chat Run 配置。
+- 为 V3.0、V3.2、V3.2-5、V3.3-1、V3.3-2、V3.3-3、STRATZ 审计、V3.0 路线图和 SessionStore 面试复习文档增加当前覆盖或历史快照说明；不重写历史 progress 与 archive。
+- 核实 `apps/chat` 仍是当前 Next.js/assistant-ui Chat Run 客户端；只有旧 `apps/web` 被删除。根 README、技术架构、Compose 部署说明和 V3.3-2 蓝图按实际前端边界校正。
+- 根 `.env.example` 删除已经无人读取的旧前端变量，统一为 `NEXT_PUBLIC_DOTAMIND_API_URL=http://localhost:8001`，并补齐 Chat Run 并发、heartbeat、stale 与 sweeper 配置入口。
+
+### 验证
+
+- 只读构造默认 `ToolRegistry`：确认当前为 `25` 个工具，包含 6 个 Valve Catalog 工具和 `conversation.history_lookup`。
+- 检查根入口、应用 README 及所有非 progress/archive Markdown 共 `38` 个文件：相对链接 `0` 个断链；同时修复 STRATZ 审计中的 5 个源码行链接。
+- `git diff --check`：通过。此次只修改文档与环境变量模板，没有运行 API pytest 或前端 lint/build。
+
+### 当前文档权威顺序
+
+1. 最新中英文 progress 快照和当前工作树。
+2. `docs/technical/architecture.md`、`api.md`、`configuration.md`。
+3. `docs/design/architecture/` 当前分层文档与 `DotaMind_MVP_v2.5.md` 架构不变量。
+4. V3.0/V3.2/V3.3 version、tools audit、roadmaps 和面试复习作为带覆盖说明的历史设计输入。
+
+## 20:14 — 固化代码变更后的文档维护矩阵
+
+### 已完成
+
+- 在 `AGENTS.md` 中新增代码修改后的文档影响审查规则：每次完成代码变更都必须同步当天中英文 progress，并按实际影响维护入口 README、technical、architecture、工具/provider、前端/部署和文档导航。
+- 明确当前事实文档与历史设计的边界：`DotaMind_MVP_v2.5.md` 只在 constrained tool calling 不变量变化时更新；已完成蓝图、路线图、审计、archive 和历史 progress 不随当前代码重写，必要时只增加 supersession 说明。
+- 增加完成前校验要求：检查相对链接、术语、工具数量、配置名称和中英文 progress 对齐，只报告实际运行的验证。
+
+### 验证
+
+- 此次只修改维护规则和双语进度文档，未运行 API pytest 或前端 lint/build。

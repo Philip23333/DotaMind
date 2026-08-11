@@ -9,29 +9,37 @@ Read documents in this order:
 
 1. The latest daily cumulative Chinese progress snapshot under
    [`progress/`](./progress/), with the matching English snapshot when needed.
-2. [`design/versions/DotaMind_V3.2_design.md`](./design/versions/DotaMind_V3.2_design.md) for the
-   target Agent Runtime Foundation and architecture-stabilization sequence.
-3. [`design/versions/DotaMind_V3.2-1_design.md`](./design/versions/DotaMind_V3.2-1_design.md)
-   for the active Run / Attempt / Budget implementation blueprint.
-4. [`design/versions/DotaMind_V3.0_design.md`](./design/versions/DotaMind_V3.0_design.md) for the
-   implemented capability map and V3 product roadmap.
-5. [`design/versions/DotaMind_MVP_v2.5.md`](./design/versions/DotaMind_MVP_v2.5.md) for the
-   constrained Tool Calling architecture boundaries that V3 must preserve.
-6. [`technical/architecture.md`](./technical/architecture.md) for the current
-   code and runtime map.
+2. [`technical/architecture.md`](./technical/architecture.md) for the current
+   code, persistence, memory, and runtime map.
+3. [`design/versions/DotaMind_MVP_v2.5.md`](./design/versions/DotaMind_MVP_v2.5.md)
+   for the constrained Tool Calling architecture boundaries that V3 preserves.
+4. [`design/architecture/整体架构.md`](./design/architecture/整体架构.md),
+   [`design/architecture/Controller层.md`](./design/architecture/Controller层.md), and
+   [`design/architecture/ConversationMemory层.md`](./design/architecture/ConversationMemory层.md)
+   for current design details.
+5. Version blueprints under [`design/versions/`](./design/versions/) when
+   historical phase intent or acceptance boundaries matter.
 
-The current runtime has one business API, `POST /api/v1/plan`, backed by the
-LangGraph agentic path. The internal query UI is `GET /debug/plan`.
+The current runtime has one LangGraph business path exposed through stateless
+`POST /api/v1/plan` debug requests and durable PostgreSQL-backed Chat Runs. The
+internal inspection UI is `GET /debug/plan`; `apps/chat` is the formal
+Next.js/assistant-ui client for Chat Session and Chat Run APIs.
 
 ## Document Status
 
 ### Version blueprints
 
-- [`design/versions/DotaMind_V3.2_design.md`](./design/versions/DotaMind_V3.2_design.md) — target
-  runtime architecture: attempts, bounded recovery, idempotency, Redis, Prompt
-  Registry, and observability. Items remain target design until implemented.
+- [`design/versions/DotaMind_V3.2_design.md`](./design/versions/DotaMind_V3.2_design.md) — completed
+  runtime-foundation baseline. Its original SessionStore sections are historical;
+  current formal chat persistence is documented separately.
 - [`design/versions/DotaMind_V3.2-1_design.md`](./design/versions/DotaMind_V3.2-1_design.md)
-  — active single-attempt Run / Attempt / Budget design blueprint.
+  — completed Run / Attempt / Budget implementation blueprint.
+- [`design/versions/DotaMind_V3.3-1_design.md`](./design/versions/DotaMind_V3.3-1_design.md)
+  and [`design/versions/DotaMind_V3.3-2_design.md`](./design/versions/DotaMind_V3.3-2_design.md)
+  — PostgreSQL Chat and detached Chat Run historical blueprints; later memory
+  and frontend changes are called out in those documents.
+- [`design/versions/DotaMind_V3.3-3_design.md`](./design/versions/DotaMind_V3.3-3_design.md)
+  — completed committed Valve Catalog implementation blueprint.
 - [`design/versions/DotaMind_V3.0_design.md`](./design/versions/DotaMind_V3.0_design.md) — primary
   product and capability design.
 - [`design/versions/DotaMind_MVP_v2.5.md`](./design/versions/DotaMind_MVP_v2.5.md) — primary
@@ -40,6 +48,7 @@ LangGraph agentic path. The internal query UI is `GET /debug/plan`.
 ### Architecture design
 
 - [`design/architecture/Controller层.md`](./design/architecture/Controller层.md),
+  [`design/architecture/ConversationMemory层.md`](./design/architecture/ConversationMemory层.md),
   [`design/architecture/Validator层.md`](./design/architecture/Validator层.md),
   [`design/architecture/Tool层.md`](./design/architecture/Tool层.md),
   [`design/architecture/Evidence层.md`](./design/architecture/Evidence层.md), and

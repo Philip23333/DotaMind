@@ -5,27 +5,26 @@ tool calls, retrieves structured data, builds an `EvidenceGraph`, synthesizes an
 answer, and runs a rule-first critic before returning a response.
 
 This repository is in active development. The old fixed report pipeline and its
-public endpoints have been removed. The implemented product capabilities are
-described by V3.0, while the V3.2 target freezes tool expansion to strengthen the
-Agent Runtime Foundation. Both preserve the v2.5 constrained Tool Calling
-architecture:
+public endpoints have been removed. V3.2 completed the bounded Agent Runtime
+Foundation; V3.3 added durable PostgreSQL Chat Runs and the committed Valve
+Catalog. All current work preserves the v2.5 constrained Tool Calling boundary:
 
 ```text
-Planner -> Validate -> Tools -> Evidence -> Answer -> Critic -> Response
+Controller -> Decision Validation -> Tools -> Evidence -> Answer -> Critic -> Response
 ```
 
-Start with the [documentation index](docs/README.md), then read the
-[DotaMind V3.2 runtime design](docs/design/versions/DotaMind_V3.2_design.md), the
-[V3.2-1 implementation blueprint](docs/design/versions/DotaMind_V3.2-1_design.md),
-the [DotaMind V3.0 capability design](docs/design/versions/DotaMind_V3.0_design.md),
-and the [v2.5 architecture foundation](docs/design/versions/DotaMind_MVP_v2.5.md).
+Start with the [documentation index](docs/README.md), the current
+[technical architecture](docs/technical/architecture.md), and the
+[v2.5 architecture foundation](docs/design/versions/DotaMind_MVP_v2.5.md).
+Version blueprints are retained as implementation history; the latest progress
+snapshot and current code decide implementation status.
 
 ## Repository Layout
 
 ```text
 apps/
   api/        FastAPI service, agentic workflow, tests, and `/debug/plan` UI
-  chat/       assistant-ui client for the public `/api/v1/plan` conversation path
+  chat/       Next.js/assistant-ui client for Chat Session and Chat Run APIs
 docs/
   design/     Version blueprints, architecture, tool designs, and roadmaps
   technical/  API, configuration, and provider reference material
@@ -42,7 +41,7 @@ python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8001 --log-level
 ```
 
 The API uses port `8001` and fails when the port is already occupied. In a
-second terminal, start the minimal chat client:
+second terminal, start the chat client:
 
 ```bash
 cd apps/chat
@@ -56,8 +55,9 @@ Useful local pages:
 - `http://localhost:8001/debug/plan`
 - `http://localhost:3000` for the assistant-ui chat client
 
-The chat client calls only `POST /api/v1/plan`; it does not host a model or a
-parallel Agent Runtime. Use `/debug/plan` for internal plan/runtime inspection.
+The chat client uses the PostgreSQL-backed Chat Session and detached Chat Run
+APIs; it does not host a model or parallel Agent Runtime. `/debug/plan` remains
+the internal plan/runtime inspection UI.
 
 ## Current API
 
@@ -71,6 +71,9 @@ Active endpoints:
 
 - `GET /health`
 - `POST /api/v1/plan`
+- `POST /api/v1/plan/stream`
+- `/api/v1/chat/sessions` session CRUD
+- `/api/v1/chat/.../runs` create/query/active/events/cancel
 - `GET /debug/plan`
 
 Removed endpoints are intentionally not redirected or wrapped:
@@ -85,16 +88,17 @@ Removed endpoints are intentionally not redirected or wrapped:
 
 ## Agentic Runtime
 
-`POST /api/v1/plan` runs a LangGraph `StateGraph(AgentRunState)`:
+Both stateless debug requests and durable Chat Runs execute the same LangGraph
+`StateGraph(AgentRunState)`:
 
 ```text
-planner_node
-  -> validate_plan_node
-  -> tool_executor_node
-  -> evidence_node
-  -> answer_node
-  -> critic_node
-  -> response_node
+controller_node
+  -> decision_validate_node
+      -> direct_answer / clarification / context_missing / capability_boundary
+      -> tool_plan -> validate_plan_node -> tool_executor_node
+                   -> conversation.history_lookup -> controller_node
+                   -> evidence_node -> answer_node -> critic_node
+  -> attempt_finalize_node -> recovery_node -> run_finalize_node -> response_node
 ```
 
 Missing tools, validation errors, tool failures, and insufficient evidence are
@@ -107,10 +111,10 @@ Current output contracts:
 - `role_meta_report`
 - `team_recent_report`
 
-The current registry exposes 19 deterministic tools across local hero constants,
-STRATZ hero/player analysis, OpenDota team/role data, and local patch records.
-See the [V3 tool inventory](docs/design/versions/DotaMind_V3.0_design.md#8-当前工具列表)
-for the complete list.
+The current registry exposes 25 deterministic tools across the committed Valve
+Catalog, STRATZ hero/player analysis, OpenDota team/role data, local patch
+records, and request-local conversation history lookup. Registry definitions,
+not a copied documentation list, are authoritative.
 
 ## Configuration
 
@@ -126,59 +130,35 @@ DOTAMIND_POLICY_PATH=
 ```
 
 The policy covers OpenDota and STRATZ transport boundaries, team/hero/patch
-report rules, critic quality gates, LLM call settings, and planner sample policy.
+report rules, critic quality gates, LLM call settings, planner sample policy,
+and conversation memory budgets.
 Restart the API after editing it.
 
-## Current V3 Focus
+## Current Architecture
 
-Completed capability slices include hero matchup, synergy, position filtering,
-daily trends, player profile/recent-performance queries, team reports, and patch
-records.
-
-The active V3.2 architecture-stabilization target freezes new business tools
-while adding run/attempt state, bounded recovery, request idempotency, Redis
-session persistence, Prompt Registry, and observability. See the
-[V3.2 design](docs/design/versions/DotaMind_V3.2_design.md). Product capability gaps such
-as item/skill/talent guidance remain documented but are deferred until the
-runtime foundation is complete. CAP/CROO integration remains parked.
+The current backend includes bounded Run/Attempt/Budget execution, one bounded
+missing-evidence replan, PostgreSQL-authoritative Chat Runs, a Redis recent
+dialogue cache and event/coordinator boundary, history-grounded answers, and six
+official Catalog tools for hero, ability, talent, and item facts. It does not
+maintain a discourse graph or use LangGraph checkpointing for conversation
+memory. CAP/CROO integration remains parked.
 
 ## Deploy with Docker Compose
 
 The production Compose stack runs PostgreSQL, Redis, FastAPI, Next.js, and an
-Nginx reverse proxy. Only Nginx port `80` is published; the application and data
+Nginx reverse proxy. Only Nginx port `80` is published; application and data
 services remain on the internal Docker network.
 
-1. Copy the repository and a populated `.env` file to the server.
-2. Set `DOTAMIND_PUBLIC_ORIGIN` to the public HTTP origin when it differs from
-   the current Tencent Cloud target. Set `DOTAMIND_POSTGRES_PASSWORD` to replace
-   the internal single-node default before using the stack for durable data.
-3. Build and start the stack:
-
-   ```bash
-   docker compose -f compose.prod.yml up -d --build
-   ```
-
-4. Verify the public entry points and container state:
-
-   ```bash
-   curl http://<server-ip>/health
-   docker compose -f compose.prod.yml ps
-   docker compose -f compose.prod.yml logs --tail=100 api chat nginx
-   ```
-
-The API container runs `alembic upgrade head` before starting Uvicorn. The chat
-build uses a relative API URL, so Nginx keeps browser and API requests on the
-same origin. `apps/api/requirements.prod.txt` is generated from `uv.lock`; after
-changing API dependencies, regenerate it with:
-
 ```bash
-cd apps/api
-uv export --frozen --no-dev --no-emit-project --no-hashes \
-  --output-file requirements.prod.txt
+docker compose -f compose.prod.yml up -d --build
+curl http://<server-ip>/health
+docker compose -f compose.prod.yml ps
 ```
 
-The current stack provides HTTP only. Add a domain and TLS termination before
-treating it as an Internet-facing production service.
+The API container runs `alembic upgrade head` before Uvicorn. Configure
+`DOTAMIND_PUBLIC_ORIGIN` and replace the default PostgreSQL password before a
+durable deployment. The current stack provides HTTP only; add a domain and TLS
+termination before exposing it to the Internet.
 
 ## License
 

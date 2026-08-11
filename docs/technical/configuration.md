@@ -6,9 +6,10 @@
 .env                            environment, secrets, URLs, and feature flags
 apps/api/app/config/policy.yaml business policy and tunable thresholds
 apps/api/app/core/config.py     strict Pydantic settings and policy models
-apps/api/app/data/heroes/       committed hero ID/name/alias snapshot
+apps/api/app/data/catalog/      committed Valve hero/ability/item Catalog bundle
 apps/api/app/data/patches/      patch fact data
-apps/api/app/resources/         prompt and debug UI resources
+apps/api/app/agentic/prompts/   Controller prompt renderers and versions
+apps/api/app/resources/         debug UI resources
 ```
 
 Do not put API keys, database credentials, tokens, or deployment URLs in
@@ -27,6 +28,10 @@ Important settings include:
 | `DOTAMIND_ENVIRONMENT` | Environment label. |
 | `DOTAMIND_API_V1_PREFIX` | API prefix, normally `/api/v1`. |
 | `DOTAMIND_CORS_ORIGINS` | Allowed browser origins. |
+| `DOTAMIND_DATABASE_URL` | PostgreSQL URL for durable Chat Sessions, Runs, and Turns. |
+| `DOTAMIND_SESSION_STORE_BACKEND` / `DOTAMIND_REDIS_URL` | Session lease/cache backend and Redis connection. |
+| `DOTAMIND_MAX_CONCURRENT_CHAT_RUNS` | Per-worker detached Chat Run concurrency. |
+| `DOTAMIND_RUN_HEARTBEAT_SECONDS` / `DOTAMIND_RUN_STALE_SECONDS` / `DOTAMIND_RUN_SWEEPER_INTERVAL_SECONDS` | Chat Run liveness and stale-run recovery timing. |
 | `DOTAMIND_LIVE_DATA_ENABLED` | Enables live provider calls. |
 | `DOTAMIND_OPENDOTA_API_KEY` / `DOTAMIND_OPENDOTA_BASE_URL` | OpenDota access. |
 | `DOTAMIND_STRATZ_TOKEN` / `DOTAMIND_STRATZ_GRAPHQL_URL` | STRATZ access. |
@@ -60,21 +65,21 @@ YAML or changing the override path.
 
 ## Local Game Data
 
-Hero constants and patch records are committed runtime snapshots, not local
-cache files. Regenerate both from Valve's public Dota 2 datafeed with:
+The Valve Catalog and patch records are committed runtime snapshots, not local
+cache files. Regenerate them from Valve's public Dota 2 Datafeed with:
 
 ```powershell
 cd apps/api
 uv run python scripts/sync_game_data.py --patch latest
 ```
 
-The command writes `app/data/heroes/dota2_heroes.yaml` and the selected
-`app/data/patches/<version>.json`. Official English and Simplified Chinese hero
-names come from Valve; community aliases are reviewed separately in
+The command atomically writes `app/data/catalog/manifest.json`, bilingual hero,
+ability and item JSON files, developer-only `sync_audit.json`, and the selected
+`app/data/patches/<version>.json`. Official English and Simplified Chinese names
+come from Valve; community hero aliases are reviewed separately in
 `scripts/hero_aliases_zh.yaml`. Patch polarity is classified conservatively and
 left `neutral` when the direction is unclear. Review generated diffs before
-committing them; the API never downloads or generates these files at request
-time.
+committing them; request-time code never downloads or generates these files.
 
 ## Policy Sections
 
@@ -89,7 +94,7 @@ time.
 | `critic` | Evidence, mock, confidence, freshness, and team sample-quality gates. |
 | `llm.orchestrator` | Planner temperature, token limit, and retry model defaults. |
 | `planning.sample_policy` | Per-tool relaxed/default/strict sample thresholds and target argument names. |
-| `conversation` | Multi-turn session memory: history window, per-session/turn caps, and prompt-injection character budgets. |
+| `conversation` | Recent dialogue cache, older-history lookup, compact audit, and legacy SessionStore capacity limits. |
 
 ### STRATZ Window Policy
 
@@ -120,10 +125,9 @@ input-model defaults.
 - `history_lookup_max_turns`: maximum older turns returned by one internal lookup.
 - `history_lookup_max_chars`: character budget for retrieved older messages.
 - `history_lookup_max_per_run`: maximum history lookups in one Run.
-- `max_turns_per_session`: turns retained per session (oldest evicted; the
-  monotonic turn counter is never reset).
-- `max_sessions`: inactive-session LRU capacity target. It may be temporarily
-  exceeded when every candidate has an active or waiting transaction lease.
+- `max_turns_per_session`: compact Turns retained by the legacy SessionStore list;
+  it does not cap PostgreSQL Chat transcript retention.
+- `max_sessions`: legacy InMemorySessionStore inactive-session LRU capacity target.
 - `answer_summary_max_chars`: per-turn answer summary cap.
 - `turn_query_max_chars`: per-turn stored query cap.
 
@@ -140,8 +144,8 @@ History Lookup budget must leave one Controller call for the final decision:
 The Controller also receives request-local game, request time, Catalog patch, and
 snapshot generation time; these freshness signals are not stored in Session or
 Redis history.
-Active and waiting sessions are never evicted, and the store converges back to
-`max_sessions` after transactions release.
+Legacy InMemorySessionStore transactions preserve active/waiting entries while
+converging to `max_sessions`; this does not define PostgreSQL Chat retention.
 
 ## Removed Configuration Sources
 
@@ -155,7 +159,8 @@ boundary is deliberately redesigned.
 - 修改 OpenDota/STRATZ 边界、采样阈值、报告规则、Critic、LLM 或 Planner
   Sample Policy：编辑 `apps/api/app/config/policy.yaml`。
 - 更新版本事实：增加或修改 `apps/api/app/data/patches/*.json`。
-- 更新英雄 ID、名称、中文名或俗称：运行离线同步脚本，并审查
-  `apps/api/scripts/hero_aliases_zh.yaml` 与生成文件的差异。
-- 修改 Prompt 或调试页面资源：编辑 `apps/api/app/resources/` 下的对应文件。
+- 更新英雄、技能、物品或中文名：运行离线同步脚本，并审查 Catalog 五个文件、
+  patch 文件与 `apps/api/scripts/hero_aliases_zh.yaml` 的差异。
+- 修改 Controller Prompt：编辑 `apps/api/app/agentic/prompts/`；修改调试页面资源：
+  编辑 `apps/api/app/resources/`。
 - YAML 修改后需要重启 API；配置错误会在服务初始化时直接失败。

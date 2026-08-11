@@ -112,3 +112,40 @@
 
 - The model continues to decide whether historical facts are reusable from generic version, scope, provenance, freshness, and conflict criteria; code does not hard-code domain fact routing.
 - The Controller provider can still emit contract-invalid JSON. Existing bounded retry exposes that failure explicitly; this phase does not add a domain fallback for provider formatting variance.
+
+## 19:06 — Align Current Documentation, Historical Blueprints, and Implementation Facts
+
+### Completed
+
+- Reworked the reading order and status guidance in the root README, `docs/README.md`, and `docs/design/README.md`: the latest progress snapshot and current technical/architecture documents are the implementation entry points, while V3.2/V3.3 version documents retain phase design and acceptance history.
+- Unified the overall architecture around two entry types sharing one Graph: stateless `/plan` debugging and the formal PostgreSQL-authoritative, Redis-coordinated/cached Chat Session and Chat Run path.
+- Unified the Conversation Memory contract: PostgreSQL stores the complete user/assistant transcript; Redis `RecentDialogueWindow` is a reconstructible cache; compact Turn is bounded audit data only; History Lookup is budgeted request-local context and does not create an EvidenceGraph.
+- Synchronized the Controller, Node/Tool/Edge inventory, API, and configuration references with `history_grounded_answer`, open `missing_fields`, the History Lookup back edge, the current 25 registered tools, the five-file Valve Catalog bundle, and PostgreSQL/Redis/Chat Run settings.
+- Added current-overrides or historical-snapshot notes to V3.0, V3.2, V3.2-5, V3.3-1, V3.3-2, V3.3-3, the STRATZ audit, V3.0 roadmaps, and the SessionStore interview notes. Historical progress and archive files were not rewritten.
+- Verified that `apps/chat` remains the current Next.js/assistant-ui Chat Run client; only the old `apps/web` frontend was deleted. Corrected the root README, technical architecture, Compose deployment guidance, and V3.3-2 blueprint to match that frontend boundary.
+- Removed unused legacy frontend variables from the root `.env.example`, standardized it on `NEXT_PUBLIC_DOTAMIND_API_URL=http://localhost:8001`, and added the Chat Run concurrency, heartbeat, stale, and sweeper settings.
+
+### Verification
+
+- Constructed the default `ToolRegistry` read-only and confirmed `25` tools, including six Valve Catalog tools and `conversation.history_lookup`.
+- Checked the root entry points, application READMEs, and all non-progress/non-archive Markdown: `38` files with `0` broken relative links; also repaired five source-line links in the STRATZ audit.
+- `git diff --check` passed. This changed documentation and the environment template only, so API pytest and frontend lint/build were not run.
+
+### Current Documentation Authority Order
+
+1. Latest bilingual progress snapshot and current working tree.
+2. `docs/technical/architecture.md`, `api.md`, and `configuration.md`.
+3. Current layer documents under `docs/design/architecture/` plus the architectural invariants in `DotaMind_MVP_v2.5.md`.
+4. V3.0/V3.2/V3.3 version documents, tool audits, roadmaps, and interview notes as historical design inputs with explicit override notes.
+
+## 20:14 — Codify the Documentation Maintenance Matrix After Code Changes
+
+### Completed
+
+- Added a documentation-impact review rule to `AGENTS.md`: every completed code change must update the aligned daily Chinese/English progress pair and maintain the affected entry READMEs, technical, architecture, tool/provider, frontend/deployment, and documentation-navigation files.
+- Clarified the boundary between current facts and historical design: update `DotaMind_MVP_v2.5.md` only when constrained-tool-calling invariants change; do not rewrite completed blueprints, roadmaps, audits, archives, or historical progress to match current code, and add only a supersession note when needed.
+- Added completion checks for relative links, terminology, tool counts, configuration names, and bilingual progress alignment, while reporting only verification that actually ran.
+
+### Verification
+
+- This update changed maintenance rules and bilingual progress documentation only; API pytest and frontend lint/build were not run.

@@ -1,7 +1,8 @@
 # Controller 层
 
-Controller 是 `/api/v1/plan` 唯一的 LLM 控制入口。它不要求每轮都生成
-`ExecutionPlan`，而是返回一个带 discriminator 的 `ControllerDecision`。
+Controller 是无状态 `/api/v1/plan` 与正式 Chat Run 共用的唯一 LLM 控制入口。
+它不要求每轮都生成 `ExecutionPlan`，而是返回一个带 discriminator 的
+`ControllerDecision`。
 所有 LLM-facing decision/basis model 都使用 `extra="forbid"`，混合结构和
 未知字段会进入结构化 retry，而不会被静默丢弃。
 
@@ -38,7 +39,7 @@ LLM JSON
 
 会话相关的 direct answer 分为两类：
 
-- `recall_referent` / `quote_user_query` / `recall_assistant_summary` 用于确定性回忆，答案由节点按 basis 读取，不让模型自由改写。
+- `quote_user_query` / `recall_assistant_summary` 用于确定性回忆，答案由节点按 basis 读取，不让模型自由改写。
 - `history_grounded_answer` 用于历史依据回答，要求至少引用一条已注入的 assistant 消息；模型可以在该消息范围内生成简洁答案，但不得把它伪装成当前工具证据。
 
 direct recall 只引用真实对话消息：
@@ -55,34 +56,37 @@ direct recall 只引用真实对话消息：
 
 ### 请求与会话上下文
 
-Controller 不直接访问全局 SessionStore。持久化 Chat Run 在进入 Graph 前取得 Redis
-recent dialogue window；cache miss/stale 时由 ConversationMemoryService 从
+Controller 不直接访问全局 SessionStore。持久化 Chat Run 在进入 Graph 前由
+`ConversationMemoryService` 取得 Redis recent dialogue window；cache miss/stale 时从
 PostgreSQL 重建。消息通过 `state.recent_messages` 注入，旧消息查找结果只存在于本次
-Run 的 `state.retrieved_messages`，并由 `conversation.history_lookup` 最多取得一次。
+Run 的 `state.retrieved_messages`，并由 `conversation.history_lookup` 在配置预算内取得
+（默认最多一次）。
 
 ```mermaid
 sequenceDiagram
     participant Client
-    participant Service as PlanService
-    participant Store as PostgreSQL ChatRepository
+    participant Executor as ChatRunExecutor
+    participant Memory as ConversationMemoryService
+    participant Redis
+    participant PG as PostgreSQL
     participant Graph as AgentGraphRunner
     participant Controller
 
-    Client->>Service: query + optional session_id
-    alt stateful request
-        Service->>Store: read recent dialogue window + next index
-        Store-->>Service: user/assistant messages + next index
-        Service->>Graph: AgentRunState(recent_messages, next_turn_index)
-    else stateless request
-        Service->>Graph: AgentRunState(no history)
+    Client->>Executor: session/run query
+    Executor->>Memory: load_recent_messages
+    Memory->>Redis: get recent_dialogue
+    opt cache miss or stale
+        Memory->>PG: load complete dialogue
+        Memory->>Redis: replace bounded window
     end
+    Memory-->>Executor: recent messages + next index
+    Executor->>Graph: AgentRunState(recent_messages, next_turn_index)
     Graph->>Controller: query + recent/retrieved role messages
     Controller-->>Graph: ControllerDecision
-    Graph-->>Service: finalized response
-    opt stateful request
-        Service->>Store: atomically commit assistant_message + compact Turn
-    end
-    Service-->>Client: PlanResponse
+    Graph-->>Executor: finalized response
+    Executor->>PG: atomically commit assistant_message + compact Turn + completed Run
+    Executor->>Redis: append/trim or invalidate recent window
+    Executor-->>Client: durable Chat Run result/events
 ```
 
 完整请求边界和 Runtime 关系见 [`整体架构.md`](./整体架构.md)。
@@ -93,8 +97,9 @@ clarification 的 `missing_fields` 使用受约束的开放 snake_case 字段名
 Controller 生成；字段名不是路由键。模型应结合最近 assistant 的澄清和当前输入判断
 是否已补齐缺失信息，不应重复已经回答的澄清。默认先回答；只有无法给出准确、有界且有用
 的答案时才澄清。
-Turn 保存 `query + response_summary + missing_fields`，供下一轮理解补充内容。
-后续工具计划仍需根据当前问题重新规划；稳定、同版本且范围一致的历史事实可以由模型复用，
+下一轮理解补充内容依赖真实 `user/assistant` 消息，而不是 compact Turn 的
+`response_summary`。compact Turn 仍保存限长的 query/summary/missing fields 等审计字段，
+但不是默认 Prompt 历史。后续工具计划仍需根据当前问题重新规划；稳定、同版本且范围一致的历史事实可以由模型复用，
 但当前性、易变性、版本或来源不确定时必须重新调用工具。历史依据不会自动写入
 EvidenceGraph。
 
@@ -109,4 +114,5 @@ feedback、raw Controller output 或未脱敏 validation error。每个 session
 Controller 在构造时封存 ToolRegistry，并缓存由静态规则、catalog、contract 和 sample
 policy 组成的 Prompt bundle。每个 Run 在调用前记录 renderer 版本和完整 system prompt
 的 SHA-256；它表示 configured/prepared Prompt，不表示网络发送成功。历史与用户消息
-renderer 只通过版本覆盖动态内容。recovery rules 仍未接线，不进入当前 Prompt 或 manifest。
+renderer 只通过版本覆盖动态内容。recovery rules 使用独立 renderer/version，不改变
+system Prompt hash。

@@ -3,6 +3,11 @@
 > 本文是 DotaMind V3.0 的当前主设计入口。自 2026-07-18 起，产品展示、
 > 代码文案、环境变量、包元数据和文档文件名统一使用 `DotaMind` / `DOTAMIND_*`
 > 命名。v2.5 仍表示受约束 Tool Calling 架构版本，不是独立产品品牌。
+>
+> 当前覆盖说明（2026-08-11）：本文保留 V3.0 产品能力蓝图，不是当前工具数量、
+> Session/Chat Run 或 Conversation Memory 的事实源。当前实现见
+> [`../../technical/architecture.md`](../../technical/architecture.md)，工具名称与合同以
+> `ToolRegistry` 为准。
 
 更新日期：2026-07-08
 

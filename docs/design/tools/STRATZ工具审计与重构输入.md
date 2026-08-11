@@ -7,6 +7,11 @@
 > schema 来源：`docs/technical/stratz_schema_introspection.json`（官方
 > introspection，~2.1MB）与 `stratz_schema_reference.md`。可用
 > `apps/api/scripts/stratz_schema_docs.py` 重新抓取。
+>
+> 状态说明（2026-08-11）：本文是重构前的审计快照，不是当前工具能力清单。
+> synergy、daily trends、position win rate 等后续项已实现；当前工具、参数、evidence 与
+> provider 行为必须以 `ToolRegistry`、现有代码和最新 progress 为准。本文保留用于解释
+> 当时发现的问题与重构动机。
 
 ## 1. 范围与涉及代码
 
@@ -29,7 +34,7 @@
 
 ### 2.1 `laneOutcome`（pair_lane_outcome + lane_meta_global 共用）
 
-**GraphQL 操作** `HeroLaneOutcome`（[heroes.py:52](../../../apps/api/app/integrations/stratz/heroes.py:52)）
+**GraphQL 操作** `HeroLaneOutcome`（[heroes.py:52](../../../apps/api/app/integrations/stratz/heroes.py#L52)）
 参数：`heroId`、`isWith`、`week`、`bracketBasicIds`、`positionIds`。
 
 **请求字段**：`heroId1, heroId2, position, matchCount, winCount, lossCount, drawCount, matchWinCount`
@@ -52,7 +57,7 @@
 | `stompLossCount` | Long | ❌ | **未用**：碾压输 |
 | `csCount` | Long | ❌ | **未用**：对线补刀 |
 
-**集成层派生**（[`_normalize_lane_outcome`](../../../apps/api/app/integrations/stratz/heroes.py:216)）：
+**集成层派生**（[`_normalize_lane_outcome`](../../../apps/api/app/integrations/stratz/heroes.py#L216)）：
 `match_win_rate = matchWinCount / matchCount`（match 级，4 位小数）；同时原样保留 lane 级 `win_count/loss_count/draw_count`。
 
 **agentic 层变换**：
@@ -65,7 +70,7 @@
 
 ### 2.2 `heroVsHeroMatchup`（hero_matchup_ranking）
 
-**GraphQL 操作** `HeroVsHeroMatchup`（[heroes.py:5](../../../apps/api/app/integrations/stratz/heroes.py:5)）
+**GraphQL 操作** `HeroVsHeroMatchup`（[heroes.py:5](../../../apps/api/app/integrations/stratz/heroes.py#L5)）
 参数：`heroId, take, week, bracketBasicIds, matchLimit`。
 
 **请求字段**：`advantage/disadvantage → { heroId, matchCountVs, vs { heroId1, heroId2, matchCount, winCount, synergy, winRateHeroId1, winRateHeroId2 } }`
@@ -86,7 +91,7 @@
 我们只取 `heroId1, heroId2, matchCount, winCount, synergy, winRateHeroId1, winRateHeroId2`。
 **未取**：`kills, deaths, assists, networth, duration, firstBloodTime, cs, dn, goldEarned, xp, heroDamage, towerDamage, heroHealing, level, winsAverage`。
 
-**集成层派生**（[`_normalize_matchup_side`](../../../apps/api/app/integrations/stratz/heroes.py:187)）：
+**集成层派生**（[`_normalize_matchup_side`](../../../apps/api/app/integrations/stratz/heroes.py#L187)）：
 - `hero_id=heroId2`, `target_hero_id=heroId1`
 - 本地 `win_rate = winCount / matchCount`（这里的 `winCount` 是 **matchup 级**，语义不同于 lane 的 match 级）
 - 重命名 `winRateHeroId1→target_win_rate`、`winRateHeroId2→hero_win_rate`
@@ -102,7 +107,7 @@
 
 ### 2.3 `stats`（hero_position_stats）
 
-**GraphQL 操作** `HeroPositionStats`（[heroes.py:81](../../../apps/api/app/integrations/stratz/heroes.py:81)）
+**GraphQL 操作** `HeroPositionStats`（[heroes.py:81](../../../apps/api/app/integrations/stratz/heroes.py#L81)）
 参数：`heroIds, bracketBasicIds, positionIds, week` + 固定 `groupByPosition: true`。
 
 **请求字段**：仅 `heroId, position, matchCount`。
