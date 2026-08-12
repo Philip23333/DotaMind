@@ -23,7 +23,7 @@ from app.core.config import Settings
 
 DEFAULT_EVIDENCE_KINDS = {
     "hero_identity",
-    "pair_lane_winrate",
+    "pair_lane_outcome",
     "matchup_ranking_row",
     "lane_meta_row",
     "position_stat",
@@ -165,7 +165,7 @@ def test_contract_catalog_accepts_any_previous_declared_reference_call_id() -> N
                 },
             ),
         ],
-        required_evidence=["hero_identity", "pair_lane_winrate", "sample_size"],
+        required_evidence=["hero_identity", "pair_lane_outcome", "sample_size"],
     )
 
     assert validate_plan_against_catalog(plan, _registry()) == []
@@ -231,7 +231,7 @@ def test_contract_catalog_rejects_missing_required_tool_arg() -> None:
                 },
             ),
         ],
-        required_evidence=["hero_identity", "pair_lane_winrate", "sample_size"],
+        required_evidence=["hero_identity", "pair_lane_outcome", "sample_size"],
     )
 
     errors = validate_plan_against_catalog(plan, _registry())
@@ -265,7 +265,7 @@ def test_contract_catalog_rejects_future_reference() -> None:
                 args={"query": "冰魂"},
             ),
         ],
-        required_evidence=["hero_identity", "pair_lane_winrate", "sample_size"],
+        required_evidence=["hero_identity", "pair_lane_outcome", "sample_size"],
     )
 
     errors = validate_plan_against_catalog(plan, _registry())
@@ -291,7 +291,7 @@ def test_contract_catalog_rejects_undeclared_reference_path() -> None:
                 },
             ),
         ],
-        required_evidence=["hero_identity", "pair_lane_winrate", "sample_size"],
+        required_evidence=["hero_identity", "pair_lane_outcome", "sample_size"],
     )
 
     errors = validate_plan_against_catalog(plan, _registry())
@@ -307,12 +307,12 @@ def test_contract_catalog_rejects_unproducible_required_evidence() -> None:
         tool_calls=[
             ToolCall(id="resolve_sk", tool="resolve_hero", args={"query": "骷髅王"}),
         ],
-        required_evidence=["hero_identity", "pair_lane_winrate"],
+        required_evidence=["hero_identity", "pair_lane_outcome"],
     )
 
     errors = validate_plan_against_catalog(plan, _registry())
 
-    assert any("not producible by selected tools: pair_lane_winrate" in item for item in errors)
+    assert any("not producible by selected tools: pair_lane_outcome" in item for item in errors)
 
 
 def test_contract_runtime_accepts_dummy_declared_reference() -> None:

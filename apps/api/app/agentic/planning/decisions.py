@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
@@ -142,8 +143,21 @@ def validate_controller_decision(
     _history: list[ConversationMessage],
     registry: ToolRegistry,
     evidence: RequiredEvidenceResolution | None = None,
+    *,
+    current_query: str | None = None,
 ) -> list[str]:
     if isinstance(decision, DirectAnswerDecision):
+        if current_query:
+            missing_metrics = missing_historical_statistical_metrics(
+                current_query,
+                _history,
+            )
+            if missing_metrics:
+                return [
+                    "direct_answer is incomplete: historical conversation is missing "
+                    f"requested metric(s): {', '.join(missing_metrics)}; choose tool_plan "
+                    "and fetch them in the same decision"
+                ]
         return []
     if isinstance(decision, ClarificationDecision):
         if not decision.missing_fields:
@@ -174,3 +188,68 @@ def validate_controller_decision(
             required_evidence=required.effective_required_evidence,
         )
     return []
+
+
+_STATISTICAL_METRIC_TERMS = (
+    "对线胜率",
+    "整局胜率",
+    "比赛胜率",
+    "胜率",
+    "负率",
+    "平局率",
+    "样本量",
+    "出场率",
+    "趋势",
+    "lane win rate",
+    "match win rate",
+    "win rate",
+    "loss rate",
+    "draw rate",
+    "sample size",
+    "trend",
+)
+_STATISTICAL_VALUE_PATTERN = re.compile(
+    r"(?:\d+(?:\.\d+)?\s*[％%]|\b\d+(?:\.\d+)?\b)"
+)
+
+
+def missing_historical_statistical_metrics(
+    current_query: str,
+    history: list[ConversationMessage],
+) -> list[str]:
+    """Return requested metric labels absent from history with an explicit value.
+
+    This is a generic direct-answer completeness guard, not an intent router: it
+    only rejects a direct answer when the current request names a statistical
+    metric that the available conversation does not state numerically.
+    """
+
+    requested = _longest_metric_terms(current_query)
+    if not requested or not history:
+        return []
+    historical_text = "\n".join(message.content for message in history)
+    missing: list[str] = []
+    for metric in requested:
+        if metric.lower() not in historical_text.lower():
+            missing.append(metric)
+            continue
+        metric_lines = [
+            line
+            for line in historical_text.splitlines()
+            if metric.lower() in line.lower()
+        ]
+        if not any(_STATISTICAL_VALUE_PATTERN.search(line) for line in metric_lines):
+            missing.append(metric)
+    return missing
+
+
+def _longest_metric_terms(text: str) -> list[str]:
+    found = [term for term in _STATISTICAL_METRIC_TERMS if term.lower() in text.lower()]
+    return [
+        term
+        for term in found
+        if not any(
+            term != other and term.lower() in other.lower()
+            for other in found
+        )
+    ]

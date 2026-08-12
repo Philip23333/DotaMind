@@ -250,6 +250,11 @@ successful `tool_call_id`; one call cannot satisfy another call's obligation.
 Registry metadata is validated once at service startup; plan-specific
 producibility is validated for each tool plan.
 
+The current STRATZ pair-lane contract is `pair_lane_outcome`. It carries both
+the five-category lane outcome rates and the separate match win rate. Lane scope
+comes from `filters.position_ids`; the provider row's `position` field is not a
+reliable echo of the requested position and is not exposed as pair evidence.
+
 The first release mandates primary result evidence only. `sample_size` remains
 available through sample-policy parameters, extraction, data-quality metadata,
 answer disclosure and explicit contract/model requirements, but is not a

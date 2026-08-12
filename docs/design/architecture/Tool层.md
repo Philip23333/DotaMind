@@ -218,6 +218,10 @@ STRATZ 特别规则：
 - 每个 epoch 单独调用底层 STRATZ client。
 - 返回 per-week bucket，并在 filters/evidence 中标注完整周口径。
 
+`stratz.pair_lane_outcome` 的 Evidence kind 为 `pair_lane_outcome`，同时透传
+五类对线计数派生的 lane win/draw/loss rates 与独立的 match win rate。其位置
+范围以 `filters.position_ids` 为准；STRATZ row 的 `position` 不作为请求位置回显。
+
 ## 8. 底层 integration 与 agentic tool 的边界
 
 底层 integration 负责 provider-native API：

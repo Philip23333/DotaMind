@@ -371,19 +371,41 @@ class StratzHeroes:
     @classmethod
     def _normalize_lane_outcome(cls, record: dict[str, Any]) -> dict[str, Any]:
         match_count = int(record.get("matchCount") or 0)
+        win_count = int(record.get("winCount") or 0)
+        loss_count = int(record.get("lossCount") or 0)
+        draw_count = int(record.get("drawCount") or 0)
+        stomp_win_count = int(record.get("stompWinCount") or 0)
+        stomp_loss_count = int(record.get("stompLossCount") or 0)
+        lane_win_count = win_count + stomp_win_count
+        lane_loss_count = loss_count + stomp_loss_count
+        lane_draw_count = draw_count
+        if match_count > 0 and (
+            lane_win_count + lane_loss_count + lane_draw_count != match_count
+        ):
+            raise ValueError(
+                "STRATZ lane outcome counts do not reconcile: "
+                f"win={win_count}, loss={loss_count}, draw={draw_count}, "
+                f"stomp_win={stomp_win_count}, stomp_loss={stomp_loss_count}, "
+                f"match_count={match_count}"
+            )
         match_win_count = int(record.get("matchWinCount") or 0)
         return {
             "hero_id": record.get("heroId2"),
             "target_hero_id": record.get("heroId1"),
-            "position": record.get("position"),
             "match_count": match_count,
-            "win_count": int(record.get("winCount") or 0),
-            "loss_count": int(record.get("lossCount") or 0),
-            "draw_count": int(record.get("drawCount") or 0),
+            "win_count": win_count,
+            "loss_count": loss_count,
+            "draw_count": draw_count,
+            "stomp_win_count": stomp_win_count,
+            "stomp_loss_count": stomp_loss_count,
+            "lane_win_count": lane_win_count,
+            "lane_loss_count": lane_loss_count,
+            "lane_draw_count": lane_draw_count,
+            "lane_win_rate": cls._rate(lane_win_count, match_count),
+            "lane_loss_rate": cls._rate(lane_loss_count, match_count),
+            "lane_draw_rate": cls._rate(lane_draw_count, match_count),
             "match_win_count": match_win_count,
             "match_win_rate": cls._rate(match_win_count, match_count),
-            "stomp_win_count": int(record.get("stompWinCount") or 0),
-            "stomp_loss_count": int(record.get("stompLossCount") or 0),
             "cs_count": int(record.get("csCount") or 0),
         }
 

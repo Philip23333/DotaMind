@@ -47,25 +47,29 @@
 | `heroId2` | `Short!` | ✅ | 映射为 `hero_id` |
 | `week` | `Int!` | ❌ | 已由 args 决定 |
 | `bracketBasicIds` | enum | ❌ | 已由 args 决定 |
-| `position` | enum | ✅ | lane_meta 会 `pop` 掉 |
+| `position` | enum | ✅ | provider 返回字段；不作为请求位置语义，下游不暴露 |
 | `matchCount` | Long | ✅ | 样本数 |
 | `winCount` | Long | ✅ | **lane 级**胜场（对线胜负） |
 | `lossCount` | Long | ✅ | lane 级负场 |
 | `drawCount` | Long | ✅ | lane 级平 |
 | `matchWinCount` | Long | ✅ | **match 级**胜场（整局胜负） |
-| `stompWinCount` | Long | ❌ | **未用**：碾压赢 |
-| `stompLossCount` | Long | ❌ | **未用**：碾压输 |
-| `csCount` | Long | ❌ | **未用**：对线补刀 |
+| `stompWinCount` | Long | ✅ | 对线赢分类组成部分 |
+| `stompLossCount` | Long | ✅ | 对线输分类组成部分 |
+| `csCount` | Long | ✅ | 对线补刀证据 |
 
 **集成层派生**（[`_normalize_lane_outcome`](../../../apps/api/app/integrations/stratz/heroes.py#L216)）：
-`match_win_rate = matchWinCount / matchCount`（match 级，4 位小数）；同时原样保留 lane 级 `win_count/loss_count/draw_count`。
+`lane_win_count = winCount + stompWinCount`、`lane_loss_count = lossCount + stompLossCount`、
+`lane_draw_count = drawCount`，并分别除以 `matchCount` 得到三项对线率；
+`match_win_rate = matchWinCount / matchCount`（整局率，4 位小数）。五类计数不守恒时显式失败。
+`row.position` 不进入 normalized pair 结果，查询位置以 `filters.position_ids` 为准。
 
 **agentic 层变换**：
 - `pair_lane_outcome`：按 partner 过滤到 1 行。
 - `lane_meta_global`：`_dedupe_pair_rows` 镜像折叠（按 `match_count` 取较大方向）→ `min_sample_size` 过滤 → 按 `selection_mode` 排序（strong=`match_win_rate` desc，popular=`match_count` desc）→ `highlight_top` 截断。
 
 **歧义/风险**：
-- ⚠️ **同一 record 里 match 级与 lane 级计数混存**：`match_win_rate` 用 match 级，但 `win_count/loss_count/draw_count` 是 lane 级。下游若把 `win_count/match_count` 当胜率会得到「对线胜率」而非「比赛胜率」。见 memory `lane-match-win-rate-derivation`。
+- ⚠️ **同一 record 里 match 级与 lane 级计数混存**：`match_win_rate` 用 match 级，五类 lane 计数用于派生对线赢/平/输。Evidence kind `pair_lane_outcome` 同时携带两套口径，禁止用 `match_win_rate` 命名对线率。
+- ⚠️ STRATZ 返回的 `position` 在不同 `positionIds` 请求下可能固定为 `POSITION_1`；它不是可靠的请求位置回显，必须使用 `filters.position_ids`。
 - ⚠️ `heroId1: Int!` 与 `heroId2: Short!` 类型不对称（STRATZ schema 怪癖），代码统一按 int 处理，目前无碍。
 
 ### 2.2 `heroVsHeroMatchup`（hero_matchup_ranking）

@@ -248,6 +248,7 @@ class AgentController:
                 ],
                 self.registry,
                 evidence,
+                current_query=query,
             )
             if (
                 recovery_feedback is not None

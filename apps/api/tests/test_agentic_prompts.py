@@ -108,6 +108,13 @@ def test_controller_prompt_declares_catalog_static_and_statistical_boundaries() 
     assert 'dota.item_info(item_id="$<resolve_call>.data.item.item_id")' in prompt
 
 
+def test_controller_prompt_uses_decision_kind_for_unsupported_scope() -> None:
+    prompt = AgentController(_registry(), llm_enabled=False)._system_prompt()
+
+    assert "return\n  capability_boundary and state the filter is unavailable" in prompt
+    assert "return\n  insufficient_tools and state the filter is unavailable" not in prompt
+
+
 def test_controller_prompt_uses_one_generic_history_first_decision_order() -> None:
     prompt = AgentController(_registry(), llm_enabled=False)._system_prompt()
 
@@ -120,6 +127,11 @@ def test_controller_prompt_uses_one_generic_history_first_decision_order() -> No
     assert "For a fresh complete ability-list tool plan" in prompt
     assert "This direct answer does not create an EvidenceGraph" in prompt
     assert "The length or formatting of a historical answer is not a refresh trigger" in prompt
+    assert "every\n  statistical metric and value requested" in prompt
+    assert "If even one requested metric is\n  absent, choose tool_plan" in prompt
+    assert "a further query would be needed" in prompt
+    assert "perform that\n  query through tool_plan instead" in prompt
+    assert "Completeness example:" in prompt
     assert "preserving that property or action" in prompt
     assert "full historical\n  answer unless they ask for it" in prompt
     assert "Answer only the selected subject's value" in prompt

@@ -964,7 +964,7 @@ def test_default_registry_declares_primary_mandatory_evidence() -> None:
         "dota.hero_talent_tree": ("hero_talent_tree",),
         "resolve_item": ("item_identity",),
         "dota.item_info": ("item_definition",),
-        "stratz.pair_lane_outcome": ("pair_lane_winrate",),
+        "stratz.pair_lane_outcome": ("pair_lane_outcome",),
         "stratz.hero_matchup_ranking": ("matchup_ranking_row",),
         "stratz.hero_synergy_ranking": ("hero_synergy_ranking_row",),
         "stratz.lane_meta_global": ("lane_meta_row",),

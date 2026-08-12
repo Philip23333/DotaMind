@@ -26,7 +26,13 @@ _NATURAL_LANGUAGE_SYSTEM_PROMPT = (
     "and Shard grants/upgrades from their explicit flags and text. For items, "
     "distinguish the final item from a recipe item, components, and upgrade "
     "targets. Disclose the Catalog snapshot patch and generated_at carried by "
-    "the evidence. Never infer item-build strength, skill leveling priority, "
+    "the evidence. When the user is asking for Catalog-backed hero, ability, "
+    "talent, or item definitions, disclose the Catalog snapshot patch and "
+    "generated_at carried by that Catalog evidence. Do not disclose Catalog "
+    "patch/generated_at in an answer whose requested facts are STRATZ statistics, "
+    "even when hero_identity Catalog evidence is also present. Catalog metadata "
+    "must never be labeled as a STRATZ patch, statistics snapshot, or statistics "
+    "version. Never infer item-build strength, skill leveling priority, "
     "talent win rate, popularity, or recommendations from static definitions. "
     "For a crafted item, render a Markdown table with columns `组件（中文名（English）） "
     "| 价格 | 属性`. Include every component and include the recipe scroll as an "
@@ -61,7 +67,23 @@ _NATURAL_LANGUAGE_SYSTEM_PROMPT = (
     "When evidence items carry week_index/week_epoch (per-week STRATZ buckets), "
     "compare across weeks and state the trend (rising/falling/stable). "
     "If any requested week returned no sample (missing_week_epochs), say so "
-    "explicitly. "
+    "explicitly. The default one-week STRATZ query is only the current query "
+    "window, not a system limitation: say that multiple completed weeks can be "
+    "queried when no cross-week comparison was requested. "
+    "For pair_lane_outcome evidence, distinguish lane outcome from match outcome. "
+    "Report lane_win_rate, lane_draw_rate, and lane_loss_rate using the supplied "
+    "five-category lane counts, and report match_win_rate separately from "
+    "match_win_count/match_count. When a pair lane query is present, include both "
+    "the lane result and the match result by default. Use filters.position_ids "
+    "as the only position scope; null means the query was not position-scoped. "
+    "Never expose or interpret a raw response-row position as the requested lane. "
+    "Catalog patch/generated_at metadata describes only Catalog snapshots and "
+    "must not be presented as STRATZ statistics patch or snapshot metadata. "
+    "Do not infer gameplay causes, comeback ability, mid-game strength, late-game "
+    "strength, or causal explanations solely because match_win_rate differs from "
+    "lane_win_rate. Report the statistical difference directly. If offering an "
+    "interpretation not supported by explicit evidence, label it clearly as a "
+    "hypothesis and do not present it as a conclusion. "
     "Hero recommendations are ranked by `wilson_rating` — the Wilson lower "
     "bound of the win rate (z=1.96, confidence-aware; STRATZ documents this as "
     "its trends rating method, z assumed 95% CI). Treat it as the primary "
@@ -368,13 +390,14 @@ class NaturalLanguageAnswerSynthesizer:
                     chunks.append(delta)
                     on_delta(delta)
                 summary = "".join(chunks)
+            summary = _enforce_pair_lane_boundaries(summary.strip(), graph)
             return AnswerSynthesisResult(
                 answer_type=plan.output_contract,
                 status="ok",
-                summary=summary.strip(),
+                summary=summary,
                 limitations=missing_limitations(graph),
                 data_notes=data_notes(graph),
-                confidence=confidence(graph, has_output=bool(summary.strip())),
+                confidence=confidence(graph, has_output=bool(summary)),
             )
         except Exception:
             return AnswerSynthesisResult(
@@ -455,6 +478,63 @@ def missing_limitations(graph: EvidenceGraph) -> list[AnswerLimitation]:
         )
         for missing in graph.missing
     ]
+
+
+def _enforce_pair_lane_boundaries(summary: str, graph: EvidenceGraph) -> str:
+    """Remove unsupported metadata/causal claims from pair-lane answers.
+
+    Prompt rules are the primary control. This deterministic postcondition keeps
+    a stochastic answer provider from leaking Catalog snapshot metadata or
+    turning a lane/match rate difference into a gameplay conclusion.
+    """
+
+    if not items(graph, "pair_lane_outcome"):
+        return summary
+
+    catalog_values: set[str] = set()
+    for item in items(graph, "hero_identity"):
+        snapshot = item.value.get("snapshot")
+        if not isinstance(snapshot, dict):
+            continue
+        for key in ("patch", "generated_at"):
+            value = snapshot.get(key)
+            if value:
+                catalog_values.add(str(value))
+
+    causal_markers = (
+        "中后期",
+        "中期",
+        "后期",
+        "翻盘",
+        "mid-game",
+        "late-game",
+        "comeback",
+        "causal explanation",
+    )
+    metadata_markers = tuple(catalog_values) + (
+        "快照版本",
+        "Catalog snapshot",
+        "statistics snapshot",
+        "statistics version",
+    )
+    removed_causal = False
+    kept: list[str] = []
+    for line in summary.splitlines():
+        if any(marker.lower() in line.lower() for marker in causal_markers):
+            removed_causal = True
+            continue
+        if any(marker.lower() in line.lower() for marker in metadata_markers):
+            continue
+        kept.append(line)
+
+    result = "\n".join(kept).strip()
+    if removed_causal:
+        result = (
+            f"{result}\n\n"
+            "当前汇总数据只能说明对线结果与整局胜率存在差异，"
+            "不能据此判断具体比赛阶段或后续表现。"
+        ).strip()
+    return result
 
 
 def data_notes(graph: EvidenceGraph) -> list[AnswerDataNote]:

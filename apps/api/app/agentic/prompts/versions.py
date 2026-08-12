@@ -7,8 +7,8 @@ import hashlib
 RECOVERY_RULES_VERSION = "v1"
 
 _COMPONENT_VERSIONS = {
-    "controller.base": "v1",
-    "controller.conversation_rules": "v1",
+    "controller.base": "v3",
+    "controller.conversation_rules": "v3",
     "controller.catalog_renderer": "v1",
     "controller.contract_renderer": "v1",
     "controller.sample_policy_renderer": "v1",

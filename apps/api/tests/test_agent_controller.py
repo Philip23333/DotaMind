@@ -118,6 +118,51 @@ def _valid_plan_payload() -> dict[str, Any]:
     }
 
 
+def _pair_lane_mid_plan_payload() -> dict[str, Any]:
+    return {
+        "kind": "tool_plan",
+        "plan": {
+            "intent": "pair_lane_outcome",
+            "goal": "Compare Storm Spirit and Lina lane and match outcomes.",
+            "output_contract": "natural_language_answer",
+            "context": {
+                "bracket": ["DIVINE_IMMORTAL"],
+                "weeks_back": None,
+                "position_ids": ["POSITION_2"],
+                "region_ids": None,
+                "game_mode_ids": None,
+            },
+            "tool_calls": [
+                {
+                    "id": "resolve_storm",
+                    "tool": "resolve_hero",
+                    "args": {"query": "蓝猫"},
+                },
+                {
+                    "id": "resolve_lina",
+                    "tool": "resolve_hero",
+                    "args": {"query": "火女"},
+                },
+                {
+                    "id": "pair_lane",
+                    "tool": "stratz.pair_lane_outcome",
+                    "args": {
+                        "hero_id": "$resolve_storm.data.hero.hero_id",
+                        "partner_hero_id": "$resolve_lina.data.hero.hero_id",
+                        "is_with": False,
+                    },
+                },
+            ],
+            "required_evidence": [
+                "hero_identity",
+                "pair_lane_outcome",
+                "sample_size",
+            ],
+            "constraints": {"max_tool_calls": 6, "allow_mock": False},
+        },
+    }
+
+
 def _controller_payload(payload: dict[str, Any]) -> dict[str, Any]:
     """Keep the catalog-validation fixtures compact while using the new contract."""
     if payload.get("status") == "planned":
@@ -435,7 +480,7 @@ def test_agentic_planner_accepts_pair_lane_outcome_reference_from_any_previous_c
     payload["plan"]["output_contract"] = "natural_language_answer"
     payload["plan"]["required_evidence"] = [
         "hero_identity",
-        "pair_lane_winrate",
+        "pair_lane_outcome",
         "sample_size",
     ]
     planner = AgentController(
@@ -464,7 +509,7 @@ def test_agentic_planner_rejects_pair_lane_outcome_missing_is_with() -> None:
     payload["plan"]["output_contract"] = "natural_language_answer"
     payload["plan"]["required_evidence"] = [
         "hero_identity",
-        "pair_lane_winrate",
+        "pair_lane_outcome",
         "sample_size",
     ]
     planner = AgentController(
@@ -735,6 +780,78 @@ def test_direct_answer_uses_model_answer_without_retry() -> None:
     assert state.decision.answer == "用户之前提到想练 Lina。"
     assert state.answer is not None
     assert state.answer.summary == "用户之前提到想练 Lina。"
+
+
+def test_controller_accepts_tool_plan_when_history_lacks_requested_lane_metric() -> None:
+    history = [
+        ConversationMessage(
+            turn_index=1,
+            role="user",
+            content="冠绝分段，中路蓝猫对火女的胜率怎么样？",
+        ),
+        ConversationMessage(
+            turn_index=2,
+            role="assistant",
+            content="蓝猫对火女的整局胜率是46.25%。",
+        ),
+    ]
+    controller = AgentController(
+        _registry(),
+        llm=FakeLLM(_pair_lane_mid_plan_payload()),
+        llm_enabled=True,
+        planner_max_retries=0,
+    )
+
+    result = asyncio.run(
+        controller.decide(
+            "对线胜率与整局胜率分别是多少？",
+            recent_messages=history,
+        )
+    )
+
+    assert result.status == "decided"
+    plan = _result_plan(result)
+    assert plan.context.bracket == ["DIVINE_IMMORTAL"]
+    assert plan.context.position_ids == ["POSITION_2"]
+    assert [call.tool for call in plan.tool_calls] == [
+        "resolve_hero",
+        "resolve_hero",
+        "stratz.pair_lane_outcome",
+    ]
+    assert "pair_lane_outcome" in plan.required_evidence
+
+
+def test_controller_accepts_direct_answer_when_history_contains_all_metrics() -> None:
+    history = [
+        ConversationMessage(
+            turn_index=1,
+            role="assistant",
+            content="冠绝分段，中路蓝猫对火女的对线胜率是11.70%，整局胜率是46.25%。",
+        )
+    ]
+    controller = AgentController(
+        _registry(),
+        llm=FakeLLM(
+            {
+                "kind": "direct_answer",
+                "intent": "pair_lane_outcome",
+                "answer": "对线胜率11.70%，整局胜率46.25%。",
+            }
+        ),
+        llm_enabled=True,
+        planner_max_retries=0,
+    )
+
+    result = asyncio.run(
+        controller.decide(
+            "对线胜率与整局胜率分别是多少？",
+            recent_messages=history,
+        )
+    )
+
+    assert result.status == "decided"
+    assert isinstance(result.decision, DirectAnswerDecision)
+    assert result.decision.answer == "对线胜率11.70%，整局胜率46.25%。"
 
 
 def test_malformed_direct_answers_remain_decision_shape_errors() -> None:

@@ -111,6 +111,14 @@ user:
 - 如果 evidence 不足，说明缺什么。
 - 当 evidence 带 `week_index/week_epoch` 时，跨周比较并说明趋势。
 - 如果某个请求周没有样本，明确说明。
+- 对 `pair_lane_outcome`，分别说明对线赢/平/输率与整局胜率；默认一周只代表
+  当前查询窗口，不代表系统只能查询一周。位置以 evidence 的
+  `filters.position_ids` 为准，不能解释 provider row 的 `position`。
+- 只有用户请求 Catalog-backed 的英雄、技能、天赋或物品定义时，才披露 Catalog
+  evidence 携带的 patch/generated_at。STRATZ 统计回答即使同时有 hero_identity
+  Catalog evidence，也不得披露或把 Catalog 元数据标为统计补丁、统计快照或统计版本。
+- 不得仅因整局胜率与对线胜率不同，就推断中后期强势、翻盘能力或比赛阶段的因果解释；
+  无明确证据时只报告统计差异，任何解释必须明确标为假设。
 
 LLM 的输出只填入 `summary`；结构化的 `claims` 和 `recommendations` 当前不从自然语言输出中反解析。
 

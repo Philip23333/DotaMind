@@ -135,13 +135,14 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
         ToolDefinition(
             name="stratz.pair_lane_outcome",
             description=(
-                "Return the lane win rate for a specific pair of heroes "
-                "(target hero + partner). Fetches the target hero's lane "
-                "outcome and filters to the partner. Emits 0 rows if the "
-                "partner pair has no recorded sample; the critic then "
-                "flags insufficient evidence. Also returns stomp_win_count/"
-                "stomp_loss_count/cs_count as lane dominance / cs evidence "
-                "(win_count/loss_count/draw_count are lane-level; match_win_rate is match-level)."
+                "Return lane outcome categories and match win rate for a "
+                "specific pair of heroes (target hero + partner). Fetches the "
+                "target hero's lane outcome and filters to the partner. Emits "
+                "0 rows if the partner pair has no recorded sample; the critic "
+                "then flags insufficient evidence. Lane win/loss rates include "
+                "stomp_win_count/stomp_loss_count; match_win_rate is the "
+                "separate match-level rate. Also returns cs_count as lane "
+                "evidence."
             ),
             input_model=PairLaneOutcomeInput,
             handler=_pair_lane_outcome_handler(settings),
@@ -152,8 +153,8 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
                 status="live",
             ),
             evidence_extractor=pair_lane_outcome_evidence,
-            evidence_kinds=("pair_lane_winrate", "sample_size"),
-            mandatory_evidence=("pair_lane_winrate",),
+            evidence_kinds=("pair_lane_outcome", "sample_size"),
+            mandatory_evidence=("pair_lane_outcome",),
             arg_contracts={
                 "hero_id": ArgContract(
                     description="Target hero id.",
@@ -1343,21 +1344,37 @@ def pair_lane_outcome_evidence(result: ToolResult) -> list[EvidenceItem]:
         evidence.append(
             EvidenceItem(
                 id=(
-                    f"{result.tool_call_id}:pair_lane_winrate:"
+                    f"{result.tool_call_id}:pair_lane_outcome:"
                     f"{hero_id}-{partner_hero_id}:{week_epoch}"
                 ),
-                kind="pair_lane_winrate",
-                subject=f"{hero_label} paired with {partner_label} ({window_label})",
+                kind="pair_lane_outcome",
+                subject=(
+                    f"{hero_label} {'with' if data.get('is_with') else 'against'} "
+                    f"{partner_label} ({window_label})"
+                ),
                 value={
                     "hero_id": hero_id,
                     "hero_name": hero_name,
                     "partner_hero_id": partner_hero_id,
                     "partner_hero_name": partner_hero_name,
                     "is_with": data.get("is_with"),
-                    "position": pair.get("position"),
                     "match_count": match_count,
+                    "lane_win_count": pair.get("lane_win_count"),
+                    "lane_loss_count": pair.get("lane_loss_count"),
+                    "lane_draw_count": pair.get("lane_draw_count"),
+                    "lane_win_rate": pair.get("lane_win_rate"),
+                    "lane_loss_rate": pair.get("lane_loss_rate"),
+                    "lane_draw_rate": pair.get("lane_draw_rate"),
                     "match_win_rate": pair.get("match_win_rate"),
-                    "win_rate_basis": "match: matchWinCount/matchCount",
+                    "match_win_count": pair.get("match_win_count"),
+                    "lane_win_rate_basis": (
+                        "(win_count + stomp_win_count) / match_count"
+                    ),
+                    "lane_loss_rate_basis": (
+                        "(loss_count + stomp_loss_count) / match_count"
+                    ),
+                    "lane_draw_rate_basis": "draw_count / match_count",
+                    "match_win_rate_basis": "match_win_count / match_count",
                     "win_count": pair.get("win_count"),
                     "loss_count": pair.get("loss_count"),
                     "draw_count": pair.get("draw_count"),
@@ -1369,7 +1386,14 @@ def pair_lane_outcome_evidence(result: ToolResult) -> list[EvidenceItem]:
                     "window_label": window_label,
                     "filters": {
                         **filters,
-                        "win_rate_basis": "match: matchWinCount/matchCount",
+                        "lane_win_rate_basis": (
+                            "(win_count + stomp_win_count) / match_count"
+                        ),
+                        "lane_loss_rate_basis": (
+                            "(loss_count + stomp_loss_count) / match_count"
+                        ),
+                        "lane_draw_rate_basis": "draw_count / match_count",
+                        "match_win_rate_basis": "match_win_count / match_count",
                     },
                 },
                 source=result.source,

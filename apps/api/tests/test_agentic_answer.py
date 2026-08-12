@@ -234,6 +234,16 @@ def test_natural_language_answer_receives_catalog_rules_and_real_evidence() -> N
     assert "Scepter grants/upgrades" in system
     assert "final item from a recipe item" in system
     assert "snapshot patch and generated_at" in system
+    assert (
+        "When the user is asking for Catalog-backed hero, ability, talent, or item definitions"
+        in system
+    )
+    assert (
+        "Do not disclose Catalog patch/generated_at in an answer whose requested facts are "
+        "STRATZ statistics"
+        in system
+    )
+    assert "must never be labeled as a STRATZ patch" in system
     assert "Never infer item-build strength" in system
     assert "组件（中文名（English）） | 价格 | 属性" in system
     assert "include the recipe scroll as an explicit row" in system
@@ -257,6 +267,177 @@ def test_natural_language_answer_receives_catalog_rules_and_real_evidence() -> N
     assert "'strength_gain'" in user
     assert "'patch':'7.41e'" in user.replace(" ", "")
     assert "'generated_at'" in user
+
+
+def test_natural_language_prompt_separates_catalog_metadata_from_stratz_lane_stats() -> None:
+    registry = _registry()
+    resolve_definition = registry.get("resolve_hero")
+    pair_definition = registry.get("stratz.pair_lane_outcome")
+    resolve_data = resolve_definition.handler(
+        ResolveHeroInput(query="Lina"), QueryContext()
+    )
+    plan = ExecutionPlan(
+        intent="pair_lane_outcome",
+        goal="Compare Storm Spirit and Lina lane and match outcomes.",
+        output_contract="natural_language_answer",
+        context=QueryContext(
+            bracket=["DIVINE_IMMORTAL"],
+            position_ids=["POSITION_2"],
+        ),
+        required_evidence=["hero_identity", "pair_lane_outcome", "sample_size"],
+    )
+    graph = build_evidence_graph(
+        plan,
+        [
+            ToolResult(
+                tool_call_id="resolve_lina",
+                tool="resolve_hero",
+                status="ok",
+                data=resolve_data,
+                source=resolve_definition.source,
+                latency_ms=0,
+            ),
+            ToolResult(
+                tool_call_id="pair_lane",
+                tool="stratz.pair_lane_outcome",
+                status="ok",
+                source=pair_definition.source,
+                latency_ms=0,
+                data={
+                    "hero_id": 17,
+                    "partner_hero_id": 25,
+                    "is_with": False,
+                    "filters": {
+                        "bracket_basic_ids": ["DIVINE_IMMORTAL"],
+                        "position_ids": ["POSITION_2"],
+                        "weeks_back": 1,
+                    },
+                    "weekly_buckets": [
+                        {
+                            "week_epoch": 1785369600,
+                            "week_index": 1,
+                            "window_label": "latest_completed_week",
+                            "rows": [
+                                {
+                                    "match_count": 1479,
+                                    "win_count": 159,
+                                    "loss_count": 799,
+                                    "draw_count": 362,
+                                    "stomp_win_count": 14,
+                                    "stomp_loss_count": 145,
+                                    "lane_win_count": 173,
+                                    "lane_loss_count": 944,
+                                    "lane_draw_count": 362,
+                                    "lane_win_rate": 0.117,
+                                    "lane_loss_rate": 0.6383,
+                                    "lane_draw_rate": 0.2448,
+                                    "match_win_count": 684,
+                                    "match_win_rate": 0.4625,
+                                    "cs_count": 78118,
+                                }
+                            ],
+                        }
+                    ],
+                },
+            ),
+        ],
+        registry,
+    )
+    llm = CapturingFakeLLM()
+
+    answer = asyncio.run(
+        AnswerSynthesizer(llm=llm, llm_enabled=True).synthesize(plan, graph)
+    )
+
+    assert answer.status == "ok"
+    system = llm.messages[0][0]["content"]
+    user = llm.messages[0][1]["content"]
+    assert (
+        "Do not disclose Catalog patch/generated_at in an answer whose requested facts are "
+        "STRATZ statistics"
+        in system
+    )
+    assert (
+        "Do not infer gameplay causes, comeback ability, mid-game strength, late-game strength"
+        in system
+    )
+    assert "pair_lane_outcome" in user
+    assert "7.41e" in user
+    assert "generated_at" in user
+
+
+def test_pair_lane_answer_removes_catalog_metadata_and_unsupported_causal_claim() -> None:
+    registry = _registry()
+    resolve_definition = registry.get("resolve_hero")
+    pair_definition = registry.get("stratz.pair_lane_outcome")
+    resolve_data = resolve_definition.handler(
+        ResolveHeroInput(query="Lina"), QueryContext()
+    )
+    plan = ExecutionPlan(
+        intent="pair_lane_outcome",
+        goal="Compare Storm Spirit and Lina lane and match outcomes.",
+        output_contract="natural_language_answer",
+        required_evidence=["hero_identity", "pair_lane_outcome"],
+    )
+    graph = build_evidence_graph(
+        plan,
+        [
+            ToolResult(
+                tool_call_id="resolve_lina",
+                tool="resolve_hero",
+                status="ok",
+                data=resolve_data,
+                source=resolve_definition.source,
+                latency_ms=0,
+            ),
+            ToolResult(
+                tool_call_id="pair_lane",
+                tool="stratz.pair_lane_outcome",
+                status="ok",
+                source=pair_definition.source,
+                latency_ms=0,
+                data={
+                    "hero_id": 17,
+                    "partner_hero_id": 25,
+                    "is_with": False,
+                    "filters": {"position_ids": ["POSITION_2"]},
+                    "weekly_buckets": [
+                        {
+                            "week_epoch": 1785369600,
+                            "week_index": 1,
+                            "window_label": "latest_completed_week",
+                            "rows": [
+                                {
+                                    "match_count": 100,
+                                    "lane_win_count": 12,
+                                    "lane_loss_count": 60,
+                                    "lane_draw_count": 28,
+                                    "lane_win_rate": 0.12,
+                                    "lane_loss_rate": 0.6,
+                                    "lane_draw_rate": 0.28,
+                                    "match_win_count": 46,
+                                    "match_win_rate": 0.46,
+                                }
+                            ],
+                        }
+                    ],
+                },
+            ),
+        ],
+        registry,
+    )
+    llm = UnsafeCapturingFakeLLM()
+
+    answer = asyncio.run(
+        AnswerSynthesizer(llm=llm, llm_enabled=True).synthesize(plan, graph)
+    )
+
+    assert answer.status == "ok"
+    assert "7.41e" not in answer.summary
+    assert "2026-08-09" not in answer.summary
+    assert "中后期" not in answer.summary
+    assert "翻盘能力" not in answer.summary
+    assert "不能据此判断具体比赛阶段或后续表现" in answer.summary
 
 
 def _synthesize(plan: ExecutionPlan, graph):
@@ -322,6 +503,20 @@ class CapturingFakeLLM(FakeLLM):
         return "Grounded answer."
 
 
+class UnsafeCapturingFakeLLM(CapturingFakeLLM):
+    async def complete(
+        self,
+        messages: list[dict[str, str]],
+        temperature: float = 0.7,
+        max_tokens: int = 1000,
+    ) -> str:
+        self.messages.append([dict(message) for message in messages])
+        return (
+            "根据 Catalog 快照版本 7.41e（2026-08-09T19:05:36.363376+00:00），"
+            "蓝猫对线劣势但说明中后期有较强的翻盘能力。"
+        )
+
+
 def test_natural_language_prompt_asks_for_weekly_trend() -> None:
     from app.agentic.answer.synthesizer import _NATURAL_LANGUAGE_SYSTEM_PROMPT
 
@@ -330,3 +525,8 @@ def test_natural_language_prompt_asks_for_weekly_trend() -> None:
     assert "week_epoch" in prompt
     assert "trend" in prompt
     assert "missing_week_epochs" in prompt
+    assert "pair_lane_outcome" in prompt
+    assert "lane_win_rate" in prompt
+    assert "match_win_rate" in prompt
+    assert "filters.position_ids" in prompt
+    assert "multiple completed weeks" in prompt

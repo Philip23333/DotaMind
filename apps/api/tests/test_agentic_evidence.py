@@ -305,7 +305,7 @@ def test_evidence_graph_aggregates_lane_outcome() -> None:
         intent="pair_lane_outcome",
         goal="Collect pair lane evidence.",
         output_contract="tool_results",
-        required_evidence=["pair_lane_winrate", "sample_size"],
+        required_evidence=["pair_lane_outcome", "sample_size"],
     )
     result = ToolResult(
         tool_call_id="pair",
@@ -337,6 +337,18 @@ def test_evidence_graph_aggregates_lane_outcome() -> None:
                             "target_hero_id": 104,
                             "position": "POSITION_4",
                             "match_count": 25,
+                            "win_count": 5,
+                            "loss_count": 5,
+                            "draw_count": 7,
+                            "stomp_win_count": 5,
+                            "stomp_loss_count": 3,
+                            "lane_win_count": 10,
+                            "lane_loss_count": 8,
+                            "lane_draw_count": 7,
+                            "lane_win_rate": 0.4,
+                            "lane_loss_rate": 0.32,
+                            "lane_draw_rate": 0.28,
+                            "match_win_count": 15,
                             "match_win_rate": 0.6,
                         }
                     ],
@@ -351,14 +363,17 @@ def test_evidence_graph_aggregates_lane_outcome() -> None:
 
     assert graph.missing == []
     assert graph.data_quality.min_sample_size == 25
-    assert [item.kind for item in graph.evidence] == ["pair_lane_winrate", "sample_size"]
+    assert [item.kind for item in graph.evidence] == ["pair_lane_outcome", "sample_size"]
     assert graph.evidence[0].value["filters"]["bracket_basic_ids"] == [
         "DIVINE_IMMORTAL"
     ]
     assert graph.evidence[0].value["hero_name"] == "Legion Commander"
     assert graph.evidence[0].value["partner_hero_name"] == "Rubick"
+    assert graph.evidence[0].value["lane_win_rate"] == 0.4
+    assert graph.evidence[0].value["match_win_rate"] == 0.6
+    assert "position" not in graph.evidence[0].value
     assert graph.evidence[0].subject == (
-        "Legion Commander paired with Rubick (latest_completed_week)"
+        "Legion Commander with Rubick (latest_completed_week)"
     )
     assert graph.evidence[1].value["filters"]["position_ids"] == ["POSITION_4"]
     assert graph.evidence[1].value["hero_name"] == "Legion Commander"
