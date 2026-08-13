@@ -221,11 +221,9 @@ and message renderer. ToolDefinition descriptions are dynamically rendered into
 that bundle and are the prompt-level source for each tool's scope support,
 arguments, and ranking semantics; the Controller keeps only cross-tool context
 conventions and a generic instruction to consult the rendered tool catalog and
-sample policy. For player queries, the rendered catalog distinguishes current
-DotaMind v1 support from the upstream STRATZ schema: STRATZ accepts numeric
-region and game-mode filters, but the current string-valued QueryContext has no
-numeric mapping or player-request passthrough, so the capability remains
-unexposed and validation continues to reject it.
+sample policy. Current DotaMind v1 player tools do not support region or
+game-mode filters; this capability boundary is returned only when the user
+explicitly requires either filter.
 Natural-language Answer prompt text and its fixed message shape live in
 `agentic/prompts/answer.py`; `answer/synthesizer.py` only invokes that renderer
 and handles LLM results. Prompt content changes are identified by the prepared

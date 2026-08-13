@@ -141,8 +141,9 @@ def test_controller_prompt_uses_one_generic_history_first_decision_order() -> No
     assert "Map 强势 / 胜率高 / 上分 to 'strong'" in prompt
     assert "Keep STRATZ `synergy` as the primary ranking" in prompt
     assert "Player evidence queries (stratz.player_profile" not in prompt
-    assert "Current DotaMind v1 does not expose region_ids/game_mode_ids for player tools" in prompt
-    assert "STRATZ accepts numeric regionIds/gameModeIds here" in prompt
+    assert "Current DotaMind v1 player tools do not support region_ids/game_mode_ids" in prompt
+    assert "return capability_boundary only when the user explicitly requires either filter" in prompt
+    assert "STRATZ accepts numeric regionIds/gameModeIds here" not in prompt
     assert "match_take=N (NOT take)" in prompt
     assert "Completeness example:" in prompt
     assert "preserving that property or action" in prompt

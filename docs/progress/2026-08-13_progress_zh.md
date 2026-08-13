@@ -90,3 +90,16 @@
 - `tests/test_agentic_prompts.py::test_system_prompt_matches_utf8_lf_golden_fixture` 与 `::test_controller_prompt_uses_one_generic_history_first_decision_order`：2 passed。
 - `git diff --check`：通过。
 - Controller prompt：37,855 字符、537 行、SHA-256 `15a30518728547d268c0f1db90dc68921605be4b518191666ea119dfed5dde0d`。
+
+## 04:15 — 收窄玩家过滤能力边界披露
+
+### 已完成
+
+- 玩家工具 prompt 只声明当前 DotaMind v1 不支持地区/游戏模式过滤；删除不必要的上游 STRATZ 数值类型、映射和透传实现细节。
+- 只有用户明确要求地区或游戏模式过滤时，Controller 才应返回该能力边界，不应在普通玩家查询中主动披露。
+
+### 验证
+
+- `tests/test_agentic_prompts.py::test_system_prompt_matches_utf8_lf_golden_fixture` 与 `::test_controller_prompt_uses_one_generic_history_first_decision_order`：2 passed。
+- `git diff --check`：通过。
+- Controller prompt：37,781 字符、537 行、SHA-256 `3888cccbd0f4da92a49d6fd03c7f24b68fa20fbe828da440814b5072d216fce3`。

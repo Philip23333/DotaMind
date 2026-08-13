@@ -125,6 +125,5 @@ system Prompt hash。
 并继续组合 ToolRegistry、Contract Registry 与 sample policy 的动态内容。工具的 scope
 支持性、参数与排序语义由动态渲染的 `ToolDefinition.description` 提示；Controller 只保留
 跨工具 context 放置、枚举解释及查询工具目录/样本策略的通用规则，不重复列举具体工具特例。
-玩家 STRATZ 上游请求虽接受数值 `regionIds`/`gameModeIds`，当前 DotaMind 的字符串
-QueryContext 尚无到数值 ID 的映射或透传，因此工具目录应表述为“当前 v1 未暴露”，而非
-“上游不支持”。当前该边界仅影响 prompt 指引，不新增 Validator 合同或运行时拒绝规则。
+当前 DotaMind v1 玩家工具不支持地区或游戏模式过滤；仅当用户明确要求该过滤时才返回
+能力边界。当前该边界仅影响 prompt 指引，不新增 Validator 合同或运行时拒绝规则。

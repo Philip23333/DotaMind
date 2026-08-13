@@ -73,7 +73,7 @@
 
 ### 批次 5：Controller scope 说明迁入工具目录（已完成，2026-08-13）
 
-- 将 STRATZ 工具的 bracket、weeks_back、position、region 和 game mode scope 语义写入各 `ToolDefinition.description`。玩家 STRATZ 上游请求也接受 region/game mode，但其数值类型与当前 `QueryContext` 字符串枚举不兼容，DotaMind v1 尚未暴露该过滤。
+- 将 STRATZ 工具的 bracket、weeks_back、position、region 和 game mode scope 语义写入各 `ToolDefinition.description`。当前 DotaMind v1 玩家工具不支持地区或游戏模式过滤。
 - Controller 保留通用 context 放置、位置别名和周窗口语义；删除 region/mode、pair-lane、lane-meta 与 player 的全局工具特例。
 - 不新增 scope metadata、Validator 规则或运行时拒绝；若后续出现工具静默忽略 scope 的实测失败，再单独决定是否强化合同。
 - 定向 Controller prompt 回归：2 passed；`git diff --check` 通过。
@@ -90,7 +90,7 @@
 
 - 删除 Controller 中 Steam32、profile 前置、近期战绩/英雄表现用途及 `match_take` / `take` / `days` / `min_match_count` 的玩家工具特例。
 - 三个玩家 ToolDefinition description 与参数合同承接身份解析、必须引用 confirmed Steam32、各查询用途及参数映射。
-- 修正上游能力表述：实际 STRATZ schema 与带过滤请求均接受玩家 `regionIds: [Int]`、`gameModeIds: [Byte]`；当前 DotaMind v1 因未定义字符串 context 到数值 ID 的映射和透传而未暴露该能力。
+- 玩家地区/模式过滤仅作为当前 DotaMind v1 的能力边界；只有用户明确要求时才披露该边界。
 - 不改变 Validator 的当前拒绝、玩家 handler、QueryContext、EvidenceGraph 或 API 行为。
 - 定向 Controller prompt 回归：2 passed；`git diff --check` 通过。
 

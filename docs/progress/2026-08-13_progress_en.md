@@ -90,3 +90,16 @@
 - `tests/test_agentic_prompts.py::test_system_prompt_matches_utf8_lf_golden_fixture` and `::test_controller_prompt_uses_one_generic_history_first_decision_order`: 2 passed.
 - `git diff --check`: passed.
 - Controller prompt: 37,855 characters, 537 lines, SHA-256 `15a30518728547d268c0f1db90dc68921605be4b518191666ea119dfed5dde0d`.
+
+## 04:15 — Narrowed Disclosure of the Player-Filter Capability Boundary
+
+### Completed
+
+- Player-tool prompt text now states only that current DotaMind v1 does not support region or game-mode filters; it removes unnecessary upstream STRATZ numeric-type, mapping, and passthrough implementation details.
+- Controller should disclose the capability boundary only when the user explicitly requires a region or game-mode filter, never proactively for ordinary player queries.
+
+### Verification
+
+- `tests/test_agentic_prompts.py::test_system_prompt_matches_utf8_lf_golden_fixture` and `::test_controller_prompt_uses_one_generic_history_first_decision_order`: 2 passed.
+- `git diff --check`: passed.
+- Controller prompt: 37,781 characters, 537 lines, SHA-256 `3888cccbd0f4da92a49d6fd03c7f24b68fa20fbe828da440814b5072d216fce3`.
