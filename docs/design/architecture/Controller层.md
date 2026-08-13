@@ -123,7 +123,8 @@ system Prompt hash。
 源码职责上，`agentic/prompts/controller_rules.py` 只保存 Controller 静态行为规则；
 `agentic/prompts/controller.py` 是唯一的 Controller bundle/system/message renderer，
 并继续组合 ToolRegistry、Contract Registry 与 sample policy 的动态内容。工具的 scope
-支持性、参数与排序语义由动态渲染的 `ToolDefinition.description` 提示；Controller 只保留
-跨工具 context 放置、枚举解释及查询工具目录/样本策略的通用规则，不重复列举具体工具特例。
+支持性、参数、排序语义与 Catalog 工具链由动态渲染的 `ToolDefinition.description` 提示；
+Controller 只保留跨工具 context 放置、枚举解释及查询工具目录/样本策略的通用规则，不重复
+列举具体工具特例。
 当前 DotaMind v1 玩家工具不支持地区或游戏模式过滤；仅当用户明确要求该过滤时才返回
 能力边界。当前该边界仅影响 prompt 指引，不新增 Validator 合同或运行时拒绝规则。

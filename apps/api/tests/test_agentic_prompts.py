@@ -98,14 +98,22 @@ def test_controller_prompt_declares_catalog_static_and_statistical_boundaries() 
     assert "official item definitions, prices" in prompt
     assert "Never substitute static\n  definitions" in prompt
     assert "return\n  capability_boundary" in prompt
-    assert 'dota.hero_abilities(hero_id="$<resolve_call>.data.hero.hero_id")' in prompt
-    assert "call resolve_hero exactly once" in prompt
-    assert "Hero ability query granularity" in prompt
-    assert '"齐天大圣有什么技能"' in prompt
-    assert "hero_identity + hero_ability + hero_talent_tree" in prompt
-    assert '"棒击大地是什么"' in prompt
-    assert "Do not add dota.hero_talent_tree" in prompt
-    assert 'dota.item_info(item_id="$<resolve_call>.data.item.item_id")' in prompt
+    assert "Returns resolved, ambiguous, or not_found without querying a network" in prompt
+    assert "For every fresh hero Catalog query, call once first" not in prompt
+    assert "Return a hero's ordered non-talent ability definitions" in prompt
+    assert "For a complete ability-list request, also call dota.hero_talent_tree" not in prompt
+    assert "hero_identity + hero_ability + hero_talent_tree" not in prompt
+    assert "For one named ability, call this alone after resolve_hero" not in prompt
+    assert "Return a hero's official static attributes and combat fields" in prompt
+    assert "For an attributes-and-talents request, pair this with dota.hero_talent_tree" not in prompt
+    assert "Return a hero's ordered level 10/15/20/25 talent tree" in prompt
+    assert "Pair with dota.hero_abilities for a complete ability-list request" not in prompt
+    assert "Explicit recipe wording selects recipe scope" in prompt
+    assert "For every fresh item definition, price, or recipe request" not in prompt
+    assert "Recipe evidence is produced only when the resolved item has" in prompt
+    assert "For price or recipe questions, require item_identity" not in prompt
+    assert "Hero ability query granularity" not in prompt
+    assert "Catalog tool-planning examples" not in prompt
 
 
 def test_controller_prompt_uses_decision_kind_for_unsupported_scope() -> None:

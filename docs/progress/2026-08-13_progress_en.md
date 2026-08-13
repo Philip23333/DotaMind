@@ -30,6 +30,7 @@
 - `tests/test_agentic_answer.py`: 11 passed.
 - `ruff check app tests`: passed.
 - `git diff --check`: passed.
+
 - Answer prompt: 6,011 characters, SHA-256 `db8b98dbe3ce6d89b25e298cfa4b1cd4e9f63b781e0748eb19bee71fa2b1c29c`.
 
 ## 02:35 — P-08 Answer Ranking-Semantics Narrowing
@@ -44,6 +45,7 @@
 
 - `tests/test_agentic_answer.py::test_natural_language_answer_receives_catalog_rules_and_real_evidence`: 1 passed.
 - `git diff --check`: passed.
+
 - Answer prompt: 5,723 characters, SHA-256 `1e185c1e0c964ac4d515467b9a70826b3883567358d2c1e7cbe06b37e918b5c1`.
 
 ## 03:05 — P-04 Scope Tool Exceptions Moved to ToolRegistry Descriptions
@@ -103,3 +105,103 @@
 - `tests/test_agentic_prompts.py::test_system_prompt_matches_utf8_lf_golden_fixture` and `::test_controller_prompt_uses_one_generic_history_first_decision_order`: 2 passed.
 - `git diff --check`: passed.
 - Controller prompt: 37,781 characters, 537 lines, SHA-256 `3888cccbd0f4da92a49d6fd03c7f24b68fa20fbe828da440814b5072d216fce3`.
+
+## 04:35 — P-03 Catalog Tool-Chain Exceptions Moved to ToolRegistry Descriptions
+
+### Completed
+
+- Removed Controller-specific Catalog tool-chain rules and fixed-query examples for complete/single abilities, attributes/talents, and item definitions/recipes.
+- ToolDefinition descriptions for `resolve_hero`, hero attributes/abilities/talents, `resolve_item`, and item info now carry the applicable tool-chain, resolution-reference, and required-evidence semantics.
+- Controller retains the cross-tool boundary that static definitions cannot substitute for statistical evidence, and obtains Catalog tool chains from the rendered tool catalog.
+- Did not add intent routing or a fixed pipeline, and did not modify Catalog handlers, ArgContracts, EvidenceGraph, Answer, or API behavior.
+
+### Verification
+
+- `tests/test_agentic_prompts.py::test_system_prompt_matches_utf8_lf_golden_fixture` and `::test_controller_prompt_declares_catalog_static_and_statistical_boundaries`: 2 passed.
+- `git diff --check`: passed.
+- Controller prompt: 37,516 characters, 510 lines, SHA-256 `f5c99b431247ce203a1963f76f0fec3916cacd2942497022aeabb5c3798712cc`.
+
+## 15:43 — Recorded P-14 Catalog Tool-Description De-orchestration Target
+
+### Completed
+
+- Added P-14 to the prompt-responsibility review: the six Catalog ToolDefinition descriptions left by P-03 still duplicate call ordering, tool pairing, reference syntax, and cross-tool evidence requirements.
+- The follow-up will narrow descriptions to capability, data scope, and local output conditions; `ArgContract` / `AcceptedRef` / `OutputPathContract` will remain the sole dependency source from which the model plans.
+- If focused evaluation proves an example necessary, retain only one representative non-fixed-pipeline planning example; presentation scope such as abilities versus talents belongs to P-10/P-11.
+- This update changes only the refactoring plan and progress documentation, not prompts or runtime behavior.
+
+### Verification
+
+- `git diff --check`: passed.
+
+## 16:27 — P-14 Item 1: Narrowed the `resolve_hero` Tool Description
+
+### Completed
+
+- Removed `call once first`, downstream `dota.hero_*` instructions, and concrete plan-local reference syntax from the `resolve_hero` description; it now states only the hero-name resolution capability, Valve Catalog source, and three resolution states.
+- The hero-id output path and downstream reference requirements remain expressed by `OutputPathContract`, `AcceptedRef`, and `requires_reference`; handlers, argument contracts, EvidenceGraph, and API behavior are unchanged.
+- The remaining nine tools with clear P-14 over-orchestration have not yet been modified and will be reviewed individually.
+
+### Verification
+
+- `tests/test_agentic_prompts.py::test_system_prompt_matches_utf8_lf_golden_fixture` and `::test_controller_prompt_declares_catalog_static_and_statistical_boundaries`: 2 passed.
+
+## 16:31 — P-14 Item 2: Narrowed the `dota.hero_attributes` Tool Description
+
+### Completed
+
+- Removed `Use after resolve_hero`, talent-tool pairing, and cross-tool required evidence from the `dota.hero_attributes` description; it now states only its official static attribute and combat-field capability.
+- The hero-id dependency remains enforced by `ArgContract` / `AcceptedRef`; tool handlers, argument contracts, evidence production, and API behavior are unchanged.
+- The remaining eight tools with clear P-14 over-orchestration have not yet been modified.
+
+### Verification
+
+- Two focused Controller prompt tests: 2 passed.
+
+## 16:35 — P-14 Item 3: Narrowed the `dota.hero_abilities` Tool Description
+
+### Completed
+
+- Removed resolver ordering, mandatory talent-tree pairing for complete ability requests, single-ability call instructions, and cross-tool required evidence from the `dota.hero_abilities` description; it now states only its ordered non-talent ability-definition capability.
+- Retained `non-talent` as a real data-scope boundary; whether talents are queried or presented is determined by the user request and later presentation scope.
+- Reference contracts, tool handlers, evidence production, and API behavior are unchanged; the remaining seven tools with clear P-14 over-orchestration have not yet been modified.
+
+### Verification
+
+- Two focused Controller prompt tests: 2 passed.
+
+## 16:46 — P-14 Item 4: Narrowed the `dota.hero_talent_tree` Tool Description
+
+### Completed
+
+- Removed resolver ordering, ability/attribute tool pairing, and shared-reference instructions from the `dota.hero_talent_tree` description; it now states only its ordered level 10/15/20/25 talent-tree capability.
+- The hero-id dependency remains expressed by structured argument contracts; the model chooses whether to combine ability, attribute, and talent tools from the current request.
+- Tool handlers, evidence production, and API behavior are unchanged; the remaining six tools with clear P-14 over-orchestration have not yet been modified.
+
+### Verification
+
+- Two focused Controller prompt tests: 2 passed.
+
+## 16:49 — P-14 Item 5: Narrowed the `resolve_item` Tool Description
+
+### Completed
+
+- Removed fixed call ordering, downstream `dota.item_info` instructions, and concrete plan-local reference syntax from the `resolve_item` description.
+- Retained the statement that explicit recipe wording selects recipe scope because it describes the resolver's real local handling of `recipe` / `图纸` / `配方` input.
+- Structured reference contracts, the resolver handler, and API behavior are unchanged; the remaining five tools with clear P-14 over-orchestration have not yet been modified.
+
+### Verification
+
+- Two focused Controller prompt tests: 2 passed.
+
+## 16:51 — P-14 Item 6: Narrowed the `dota.item_info` Tool Description
+
+### Completed
+
+- Removed resolver ordering and the cross-tool required-evidence combination for price/recipe questions from the `dota.item_info` description.
+- Retained and rephrased conditional recipe-evidence production: recipe evidence exists only for items with component or upgrade relationships; price remains part of the item definition and does not require recipe evidence.
+- Reference contracts, tool handlers, the evidence extractor, and API behavior are unchanged; the remaining four tools with clear P-14 over-orchestration have not yet been modified.
+
+### Verification
+
+- Two focused Controller prompt tests: 2 passed.

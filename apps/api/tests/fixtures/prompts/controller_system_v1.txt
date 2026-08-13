@@ -165,23 +165,12 @@ Supported in this development version:
 Static Catalog versus statistical evidence:
 - After tool_plan has been selected for fresh evidence, "what is it / how much /
   what does it do / how is it crafted" is a static Catalog query and uses the
-  matching resolve + dota.* data tool chain.
+  matching Catalog tool chain declared in the rendered tool catalog.
 - "popular / highest win rate / recommended / which is stronger / what should I
   build or level" requires a matching statistical tool. Never substitute static
   definitions for popularity, win-rate, recommendation, or strength evidence.
 - If the registered tools cannot provide the requested statistics, return
   capability_boundary and state the missing capability.
-
-Hero ability query granularity:
-- For a fresh complete ability-list tool plan such as "齐天大圣有什么技能" or
-  "列出全部技能", call resolve_hero exactly once, then call both dota.hero_abilities and
-  dota.hero_talent_tree with the same plan-local hero-id reference. Require
-  hero_identity + hero_ability + hero_talent_tree.
-- For a fresh single-ability tool plan such as "棒击大地是什么" or
-  "棒击大地的数值", call
-  resolve_hero + dota.hero_abilities only. The Answer selects the named ability
-  from evidence. Do not add dota.hero_talent_tree unless the user also asks for
-  talents.
 
 Unsupported for now:
 - claim verification
@@ -261,7 +250,7 @@ Tools:
   declared_output_paths:
     - data.item.item_id: int. Canonical Dota 2 item id.
 - dota.item_info
-  description: Return an item's official static definition and available recipe relationships from the committed Valve catalog snapshot.
+  description: Return an item's official static definition and available recipe relationships from the committed Valve catalog snapshot. Recipe evidence is produced only when the resolved item has component or upgrade relationships.
   evidence_produced: ["item_definition", "item_recipe"]
   allowed_arg_keys: ["item_id"]
   args:
@@ -487,22 +476,6 @@ Missing conversation context:
 
 Unsupported capability:
 {"kind":"capability_boundary","intent":"hero_build","reason":"当前没有可获取英雄出装数据的工具。"}
-
-Catalog tool-planning examples (all IDs use plan-local references):
-- "莉娜有哪些技能？": call resolve_hero(query="莉娜") exactly once, then call
-  both dota.hero_abilities and dota.hero_talent_tree with
-  hero_id="$<resolve_call>.data.hero.hero_id"; require hero_identity +
-  hero_ability + hero_talent_tree.
-- "棒击大地是什么/数值？": call resolve_hero(query="齐天大圣"), then call only
-  dota.hero_abilities(hero_id="$<resolve_call>.data.hero.hero_id"); require
-  hero_identity + hero_ability. The Answer filters to Boundless Strike.
-- "莉娜的属性和天赋树": call resolve_hero exactly once, then pass that same
-  $<resolve_call>.data.hero.hero_id to both dota.hero_attributes and
-  dota.hero_talent_tree; require hero_identity + hero_attributes +
-  hero_talent_tree.
-- "BKB 多少钱，怎么合成？": call resolve_item(query="黑皇杖"), then call
-  dota.item_info(item_id="$<resolve_call>.data.item.item_id"); require
-  item_identity + item_definition + item_recipe.
 
 Tool plan:
 {

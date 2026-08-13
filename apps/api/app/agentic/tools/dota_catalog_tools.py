@@ -276,7 +276,9 @@ def register_dota_catalog_tools(
             name="dota.item_info",
             description=(
                 "Return an item's official static definition and available recipe "
-                "relationships from the committed Valve catalog snapshot."
+                "relationships from the committed Valve catalog snapshot. Recipe "
+                "evidence is produced only when the resolved item has component or "
+                "upgrade relationships."
             ),
             input_model=ItemInfoInput,
             handler=_item_info_handler(catalog),

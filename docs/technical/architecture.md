@@ -219,9 +219,9 @@ Static Controller behavior rules live in `agentic/prompts/controller_rules.py`,
 while `agentic/prompts/controller.py` remains the sole Controller prompt bundle
 and message renderer. ToolDefinition descriptions are dynamically rendered into
 that bundle and are the prompt-level source for each tool's scope support,
-arguments, and ranking semantics; the Controller keeps only cross-tool context
-conventions and a generic instruction to consult the rendered tool catalog and
-sample policy. Current DotaMind v1 player tools do not support region or
+arguments, ranking semantics, and Catalog tool-chain requirements; the Controller
+keeps only cross-tool context conventions and a generic instruction to consult
+the rendered tool catalog and sample policy. Current DotaMind v1 player tools do not support region or
 game-mode filters; this capability boundary is returned only when the user
 explicitly requires either filter.
 Natural-language Answer prompt text and its fixed message shape live in

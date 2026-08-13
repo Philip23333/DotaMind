@@ -30,6 +30,7 @@
 - `tests/test_agentic_answer.py`：11 passed。
 - `ruff check app tests`：通过。
 - `git diff --check`：通过。
+
 - Answer prompt：6,011 字符、SHA-256 `db8b98dbe3ce6d89b25e298cfa4b1cd4e9f63b781e0748eb19bee71fa2b1c29c`。
 
 ## 02:35 — P-08 Answer 排序口径收敛
@@ -44,6 +45,7 @@
 
 - `tests/test_agentic_answer.py::test_natural_language_answer_receives_catalog_rules_and_real_evidence`：1 passed。
 - `git diff --check`：通过。
+
 - Answer prompt：5,723 字符、SHA-256 `1e185c1e0c964ac4d515467b9a70826b3883567358d2c1e7cbe06b37e918b5c1`。
 
 ## 03:05 — P-04 scope 工具特例迁入 ToolRegistry 描述
@@ -103,3 +105,103 @@
 - `tests/test_agentic_prompts.py::test_system_prompt_matches_utf8_lf_golden_fixture` 与 `::test_controller_prompt_uses_one_generic_history_first_decision_order`：2 passed。
 - `git diff --check`：通过。
 - Controller prompt：37,781 字符、537 行、SHA-256 `3888cccbd0f4da92a49d6fd03c7f24b68fa20fbe828da440814b5072d216fce3`。
+
+## 04:35 — P-03 Catalog 工具链特例迁入 ToolRegistry 描述
+
+### 已完成
+
+- 删除 Controller 中完整/单项技能、属性/天赋、物品定义/配方的 Catalog 工具链规则与固定问句示例。
+- `resolve_hero`、hero attributes/abilities/talent、`resolve_item` 与 item info 的 ToolDefinition description 承接对应工具链、解析引用和 required evidence 语义。
+- Controller 保留静态定义不能替代统计证据的跨工具边界，并从渲染工具目录获取 Catalog 工具链。
+- 未新增 intent 路由或固定 pipeline，未修改 Catalog handler、ArgContract、EvidenceGraph、Answer 或 API 行为。
+
+### 验证
+
+- `tests/test_agentic_prompts.py::test_system_prompt_matches_utf8_lf_golden_fixture` 与 `::test_controller_prompt_declares_catalog_static_and_statistical_boundaries`：2 passed。
+- `git diff --check`：通过。
+- Controller prompt：37,516 字符、510 行、SHA-256 `f5c99b431247ce203a1963f76f0fec3916cacd2942497022aeabb5c3798712cc`。
+
+## 15:43 — 记录 P-14 Catalog 工具说明去编排化目标
+
+### 已完成
+
+- 在 Prompt 职责边界复盘中新增 P-14：识别 P-03 迁移后的 6 个 Catalog ToolDefinition description 仍重复规定调用顺序、工具组合、引用写法和跨工具 evidence。
+- 后续将 description 收窄为能力、数据范围和本工具局部产出条件；依赖关系以 `ArgContract` / `AcceptedRef` / `OutputPathContract` 为唯一来源，并由模型据此规划。
+- 若定向评估证明需要示范，仅保留一个非固定 pipeline 的代表性规划案例；技能/天赋等展示范围归 P-10/P-11。
+- 本次只更新重构计划与进度文档，未修改 Prompt 或运行时行为。
+
+### 验证
+
+- `git diff --check`：通过。
+
+## 16:27 — P-14 第 1 项：收窄 `resolve_hero` 工具说明
+
+### 已完成
+
+- `resolve_hero` description 删除 `call once first`、下游 `dota.hero_*` 工具指令和具体 plan-local 引用写法，只保留英雄名称解析能力、Valve Catalog 数据来源与三种解析状态。
+- 英雄 ID 的输出路径以及下游工具必须接受该引用的约束仍由 `OutputPathContract`、`AcceptedRef` 和 `requires_reference` 表达；未修改 handler、参数合同、EvidenceGraph 或 API 行为。
+- P-14 其余 9 个明确过度编排的工具尚未修改，将逐项审阅。
+
+### 验证
+
+- `tests/test_agentic_prompts.py::test_system_prompt_matches_utf8_lf_golden_fixture` 与 `::test_controller_prompt_declares_catalog_static_and_statistical_boundaries`：2 passed。
+
+## 16:31 — P-14 第 2 项：收窄 `dota.hero_attributes` 工具说明
+
+### 已完成
+
+- `dota.hero_attributes` description 删除 `Use after resolve_hero`、与天赋工具配对及跨工具 required evidence，只保留官方静态属性和战斗字段的数据能力。
+- 英雄 ID 引用依赖继续由 `ArgContract` / `AcceptedRef` 强制；未修改工具 handler、参数合同、证据产出或 API 行为。
+- P-14 其余 8 个明确过度编排的工具尚未修改。
+
+### 验证
+
+- 两条相关 Controller prompt 测试：2 passed。
+
+## 16:35 — P-14 第 3 项：收窄 `dota.hero_abilities` 工具说明
+
+### 已完成
+
+- `dota.hero_abilities` description 删除 resolver 顺序、完整技能强制配对天赋树、单技能调用指令及跨工具 required evidence，只保留按顺序返回非天赋技能定义的数据能力。
+- 保留 `non-talent` 作为真实数据范围；是否同时查询或展示天赋由用户请求及后续 presentation scope 决定。
+- 未修改引用合同、工具 handler、证据产出或 API 行为；P-14 其余 7 个明确过度编排的工具尚未修改。
+
+### 验证
+
+- 两条相关 Controller prompt 测试：2 passed。
+
+## 16:46 — P-14 第 4 项：收窄 `dota.hero_talent_tree` 工具说明
+
+### 已完成
+
+- `dota.hero_talent_tree` description 删除 resolver 顺序、与技能/属性工具配对及共享引用的自然语言指令，只保留按 10/15/20/25 级返回天赋树的数据能力。
+- 英雄 ID 引用依赖继续由结构化参数合同表达；是否组合技能、属性和天赋工具由模型根据当前请求规划。
+- 未修改工具 handler、证据产出或 API 行为；P-14 其余 6 个明确过度编排的工具尚未修改。
+
+### 验证
+
+- 两条相关 Controller prompt 测试：2 passed。
+
+## 16:49 — P-14 第 5 项：收窄 `resolve_item` 工具说明
+
+### 已完成
+
+- `resolve_item` description 删除固定调用顺序、下游 `dota.item_info` 指令和具体 plan-local 引用写法。
+- 保留“明确配方措辞选择 recipe scope”，因为这是 resolver 对 `recipe` / `图纸` / `配方` 输入的真实局部解析行为。
+- 未修改结构化引用合同、resolver handler 或 API 行为；P-14 其余 5 个明确过度编排的工具尚未修改。
+
+### 验证
+
+- 两条相关 Controller prompt 测试：2 passed。
+
+## 16:51 — P-14 第 6 项：收窄 `dota.item_info` 工具说明
+
+### 已完成
+
+- `dota.item_info` description 删除 resolver 顺序以及价格/配方问题的跨工具 required evidence 组合。
+- 保留并改写配方证据的条件性产出：只有物品存在组件或升级关系时才产生 recipe evidence；价格仍属于物品定义，不强制要求配方证据。
+- 未修改引用合同、工具 handler、evidence extractor 或 API 行为；P-14 其余 4 个明确过度编排的工具尚未修改。
+
+### 验证
+
+- 两条相关 Controller prompt 测试：2 passed。
