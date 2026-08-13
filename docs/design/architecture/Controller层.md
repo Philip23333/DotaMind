@@ -119,3 +119,12 @@ policy 组成的 Prompt bundle。每个 Run 在调用前记录 renderer 版本�
 的 SHA-256；它表示 configured/prepared Prompt，不表示网络发送成功。历史与用户消息
 renderer 只通过版本覆盖动态内容。recovery rules 使用独立 renderer/version，不改变
 system Prompt hash。
+
+源码职责上，`agentic/prompts/controller_rules.py` 只保存 Controller 静态行为规则；
+`agentic/prompts/controller.py` 是唯一的 Controller bundle/system/message renderer，
+并继续组合 ToolRegistry、Contract Registry 与 sample policy 的动态内容。工具的 scope
+支持性、参数与排序语义由动态渲染的 `ToolDefinition.description` 提示；Controller 只保留
+跨工具 context 放置、枚举解释及查询工具目录/样本策略的通用规则，不重复列举具体工具特例。
+玩家 STRATZ 上游请求虽接受数值 `regionIds`/`gameModeIds`，当前 DotaMind 的字符串
+QueryContext 尚无到数值 ID 的映射或透传，因此工具目录应表述为“当前 v1 未暴露”，而非
+“上游不支持”。当前该边界仅影响 prompt 指引，不新增 Validator 合同或运行时拒绝规则。

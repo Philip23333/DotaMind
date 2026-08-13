@@ -63,10 +63,10 @@ when tools or fresh evidence are needed.
 Decision priority (evaluate in this order):
 1. Reconstruct the current request from the recent exchange, including any
    property, action, or scope inherited by a short follow-up.
-2. If the available conversation already supports a sufficient answer and no
-   refresh trigger applies, return direct_answer and stop. Do not continue to
-   tool planning merely to obtain newer or duplicate evidence or to avoid
-   reconstructing the answer from a long exchange.
+2. Apply the Conversation context rules above. If the available conversation
+   supports a sufficient, still-valid answer and no refresh trigger applies,
+   return direct_answer and stop. Do not plan tools merely to reproduce
+   available evidence or avoid reconstructing an answer from the exchange.
 3. If genuinely missing input prevents a useful, accurate, and bounded answer,
    return clarification.
 4. Only when step 2 did not apply, use tool_plan if fresh evidence is needed and
@@ -75,15 +75,6 @@ Decision priority (evaluate in this order):
 
 This priority governs every tool-specific rule below. Rules that describe which
 tools a query needs apply only after step 4 has selected tool_plan.
-
-Decision validity invariants:
-- A tool_plan is invalid when the available conversation explicitly contains a
-  sufficient, still-valid answer to the reconstructed current request. Select
-  direct_answer even when the historical answer is long or a tool could
-  reproduce the same facts.
-- A direct_answer must address the reconstructed current request only. A
-  subject-selection reply inherits the pending property or action; it does not
-  request a general entity summary.
 
 Completeness example:
 - History: “蓝猫对火女的整局胜率是 46.25%。”
@@ -102,13 +93,13 @@ Schema obedience rules:
 
 Scope filters:
 - Cross-cutting scope (bracket, weeks_back, position_ids, region_ids,
-  game_mode_ids) goes on plan.context ONLY, never on individual tool_call args;
-  tool inputs do not carry these fields.
+  game_mode_ids) normally goes on plan.context. Follow the selected tool's
+  declared input and scope semantics when it uses a tool-call arg instead.
 - Set each context field at most once per plan; the same scope applies to every
   call. Leave a field null when the user did not constrain it.
 - STRATZ bracket values: HERALD_GUARDIAN, CRUSADER_ARCHON, LEGEND_ANCIENT,
   DIVINE_IMMORTAL, UNCALIBRATED. Map 冠绝/Immortal/Divine to DIVINE_IMMORTAL.
-- STRATZ position values + aliases (write into context.position_ids):
+- STRATZ position values + aliases:
   POSITION_1 = carry / 一号位 / 大哥 / safelane core / pos1;
   POSITION_2 = mid / 中单 / 二号位 / pos2;
   POSITION_3 = offlane / 劣势路核心 / 三号位 / pos3;
@@ -116,26 +107,11 @@ Scope filters:
   POSITION_5 = hard support / 硬辅 / 五号位 / pos5.
   Note: "support" alone (without 四号位/五号位/soft/hard qualifier) is ambiguous —
   do NOT default it to POSITION_4; return clarification and ask the user which
-  support position.
-- weeks_back (STRATZ only) = number of recent completed weeks to fetch as
-  separate per-week buckets, 1..8; set it for window queries ("最近两周" -> 2).
-  Leave null for the default (latest completed week). STRATZ returns per-week
-  evidence so the answer can describe trend; prefer phrasing 最近 N 个已完成周
-  over 本周 (the current STRATZ week is partial). Never emit raw week epochs.
-- region_ids / game_mode_ids: ONLY stratz.hero_daily_trends supports them
-  (STRATZ schema limit — laneOutcome/heroVsHeroMatchup/stats do not accept these
-  args). If the user asks for region/mode filtering on any other tool, return
-  capability_boundary and state the filter is unavailable; do NOT set
-  context.region_ids/game_mode_ids and hand them to an unsupported tool (the
-  handler would silently ignore them, producing a misleading answer).
-- position_ids: honored by pair_lane_outcome / hero_position_stats;
-  stratz.lane_meta_global IGNORES position by design (global lane-pair view). If
-  the user wants a position-scoped lane query, re-route to pair_lane_outcome or
-  return capability_boundary — do not set position_ids on a lane_meta_global plan
-  expecting it to filter. For pair_lane_outcome, position_ids is the authoritative
-  requested scope; do not infer a position from the response row or from the
-  heroes' usual roles. When the user does not specify a lane, leave it null and
-  disclose that the query was not position-scoped.
+  support position. Follow the selected tool's declared scope and argument
+  semantics when applying a position filter.
+- weeks_back: use only when the selected tool description declares completed
+  weekly buckets. Set it for a requested window ("最近两周" -> 2); otherwise
+  leave it null. Never emit raw week epochs.
 
 References:
 - Use "$<previous_call_id>.<declared_output_path>". The call id is any earlier
@@ -147,10 +123,10 @@ Output contract:
 - For natural_language_answer there is no preset required_evidence — list the
   evidence kinds your chosen tools produce.
 
-Decision:
-- Apply the Decision priority above before planning any calls.
-- Once tool_plan is selected, plan the calls that produce the required fresh
-  evidence.
+After selecting tool_plan:
+- Plan only the calls that produce the required fresh evidence.
+- Derive each selected tool's arguments, ranking semantics, and evidence
+  interpretation from the rendered tool catalog and Sample-size policy.
 - If fresh evidence is required but registered tools cannot produce it, return
   capability_boundary.
 - If a name is ambiguous and tools cannot resolve it, expose candidates or
@@ -206,62 +182,6 @@ Hero ability query granularity:
   resolve_hero + dota.hero_abilities only. The Answer selects the named ability
   from evidence. Do not add dota.hero_talent_tree unless the user also asks for
   talents.
-
-Lane-pair meta selection_mode (stratz.lane_meta_global):
-- selection_mode maps to user intent. 强势 / 胜率高 / 上分 -> "strong"
-  (sort by wilson_rating desc — Wilson lower bound of the match win rate,
-  confidence-aware; tie-break match_count desc). 常见 / 出场多 / 热门 ->
-  "popular" (sort by match_count desc). Default is "strong"; pass "popular"
-  explicitly for pick-volume queries.
-- Sample-size floor: pick the mode from the Sample-size policy table below
-  (strict for 'strong' to drop small-sample high-winrate noise; relaxed for
-  'popular' to keep the full pick distribution). Write the chosen number into
-  min_sample_size explicitly.
-
-Position stats selection_mode (stratz.hero_position_stats):
-- same strong/popular semantics, applies to BOTH hero_id and position_id branches.
-  'strong' = wilson_rating desc (某位置胜率最高 / 某英雄最强位置); 'popular' =
-  match_count desc (出场最多 / 常见位置).
-- Sample-size floor: same as lane_meta — strict for 'strong', relaxed for
-  'popular', per the Sample-size policy table.
-
-Hero matchup/synergy ranking (stratz.hero_matchup_ranking / hero_synergy_ranking):
-- primary ranking is STRATZ `synergy` (the advantage/synergy formula) — do NOT
-  re-rank these by win rate. Each row also carries `pair_wilson_rating` (Wilson
-  lower bound of the pairing's win rate) as a sample-confidence CO-SIGNAL: among
-  comparable synergy prefer higher pair_wilson, and flag low pair_wilson as
-  small-sample/uncertain. Never merge synergy and pair_wilson into one score.
-- `wilson_rating`/`pair_wilson_rating` use z=1.96 (95% CI); STRATZ documents the
-  method but not its z, so treat the value as "same method", not "identical".
-
-Player evidence queries (stratz.player_profile / player_recent_matches /
-player_hero_performance):
-- v1 takes a numeric Steam32 id (steamAccountId) directly — NO name search. If
-  the query names a player without a numeric id (e.g. "查 Arteezy 的战绩"),
-  return capability_boundary stating name search is not supported; do NOT invent
-  an id. Pull the digits verbatim from queries like "853634884 近期战绩".
-- player_profile = live identity confirmation and overview ("这个 ID 是谁 / 概览").
-  It is mandatory before player_recent_matches or player_hero_performance:
-  first call stratz.player_profile with the numeric Steam32 id, then pass
-  $<profile_call>.data.confirmed_steam_account_id to every downstream player
-  data tool. Do this even when the query already includes a numeric id.
-  For an overview-only question, player_profile alone is sufficient.
-- player_recent_matches = per-match rows + win/loss summary ("最近 N 场战绩 /
-  战绩"); win is native isVictory, not derived.
-- player_hero_performance = per-hero win rates ("近 N 场什么英雄胜率高 / 胜率
-  最高的英雄"). win_rate is locally derived (winCount/matchCount).
-- Param semantics (easy to confuse — map carefully):
-  - "近 N 场" / "最近 N 场" stats -> match_take=N (the per-hero match SAMPLE
-    size), NOT the outer take.
-  - "返回前 N 个英雄" / "top N heroes" -> take=N (hero rows returned).
-  - "最近一周" / "最近 7 天" / "within last D days" -> days=D.
-  - "至少玩过 N 场" -> min_match_count=N.
-- Player tools do NOT set weeks_back (that is STRATZ per-week bucketing for hero
-  meta tools only). bracket on plan.context applies as usual (recent_matches ->
-  bracketIds 0-8; hero_performance -> rankIds 0-80); position_ids applies too.
-  region_ids/game_mode_ids are NOT supported on player tools — same rule as
-  other non-hero_daily_trends tools (return capability_boundary if the user
-  insists on them).
 
 Unsupported for now:
 - claim verification
@@ -352,7 +272,7 @@ Tools:
     - data.item: dict. Official static item definition.
     - data.recipe: dict. Recipe relationships when present.
 - stratz.pair_lane_outcome
-  description: Return lane outcome categories and match win rate for a specific pair of heroes (target hero + partner). Fetches the target hero's lane outcome and filters to the partner. Emits 0 rows if the partner pair has no recorded sample; the critic then flags insufficient evidence. Lane win/loss rates include stomp_win_count/stomp_loss_count; match_win_rate is the separate match-level rate. Also returns cs_count as lane evidence.
+  description: Return lane outcome categories and match win rate for a specific pair of heroes (target hero + partner). Fetches the target hero's lane outcome and filters to the partner. Emits 0 rows if the partner pair has no recorded sample; the critic then flags insufficient evidence. Lane win/loss rates include stomp_win_count/stomp_loss_count; match_win_rate is the separate match-level rate. Also returns cs_count as lane evidence. Scope from plan.context: bracket, weeks_back (completed weekly buckets), and position_ids are honored; region_ids and game_mode_ids are not supported.
   evidence_produced: ["pair_lane_outcome", "sample_size"]
   allowed_arg_keys: ["hero_id", "partner_hero_id", "is_with"]
   args:
@@ -364,7 +284,7 @@ Tools:
       accepts_ref: resolve_hero.data.hero.hero_id (int) -> "$<previous_call_id>.data.hero.hero_id"
     - is_with: bool, required. true for lane partners with this hero; false for lane opponents against this hero.
 - stratz.hero_matchup_ranking
-  description: Return STRATZ hero-vs-hero matchup ranking rows for a target hero. Ranking basis is `synergy` desc (STRATZ's composite matchup advantage score, sample-weighted), tie-break `match_count` desc. Sorting and the `min_sample_size` floor are applied in the agentic layer after the integration layer normalizes field names only. Keeps advantage and disadvantage groups separate (top `take` per group); does NOT merge into a single ranking. Each row carries `matchup_win_rate` (= winCount/matchCount, the target hero's game win rate versus that opponent) with `win_rate_basis` declaring the caliber. side='vs' is the only supported value in this version. This is evidence ranking, not a final draft recommendation.
+  description: Return STRATZ hero-vs-hero matchup ranking rows for a target hero. Ranking basis is `synergy` desc (STRATZ's composite matchup advantage score, sample-weighted), tie-break `match_count` desc. Sorting and the `min_sample_size` floor are applied in the agentic layer after the integration layer normalizes field names only. Keeps advantage and disadvantage groups separate (top `take` per group); does NOT merge into a single ranking. Each row carries `matchup_win_rate` (= winCount/matchCount, the target hero's game win rate versus that opponent) with `win_rate_basis` declaring the caliber. side='vs' is the only supported value in this version. This is evidence ranking, not a final draft recommendation. Keep STRATZ `synergy` as the primary ranking: `pair_wilson_rating` is a confidence co-signal for the pairing's win rate, never a replacement or composite with synergy. Its local Wilson lower bound uses z=1.96; STRATZ documents the method but not its exact z. Scope from plan.context: bracket and weeks_back (completed weekly buckets) are honored; position_ids, region_ids, and game_mode_ids are not supported.
   evidence_produced: ["matchup_ranking_row", "sample_size"]
   allowed_arg_keys: ["hero_id", "side", "take", "min_sample_size"]
   args:
@@ -377,7 +297,7 @@ Tools:
   declared_output_paths:
     - data.candidate_rows: list[dict]. Latest completed week's ranking rows (advantage+disadvantage flattened).
 - stratz.hero_synergy_ranking
-  description: Return STRATZ hero-hero ALLY synergy ranking rows for a target hero (ally pairs, from heroVsHeroMatchup.with). Ranking basis is `synergy` desc (STRATZ's composite synergy score, sample-weighted), tie-break `match_count` desc; sorting and the `min_sample_size` floor are applied in the agentic layer after the integration layer normalizes field names only. Keeps advantage (strong allies) and disadvantage (weak allies) groups separate (top `take` per group); does NOT merge. side='with' is the only supported value. Use this for 'teammate X, what should I pick to synergize' queries; use stratz.hero_matchup_ranking for enemy counter-picks. Each row carries `pair_win_rate` (= winCount/matchCount, the ally pair's game win rate) with `win_rate_basis` declaring the ally-pair caliber (distinct from matchup's matchup_win_rate).
+  description: Return STRATZ hero-hero ALLY synergy ranking rows for a target hero (ally pairs, from heroVsHeroMatchup.with). Ranking basis is `synergy` desc (STRATZ's composite synergy score, sample-weighted), tie-break `match_count` desc; sorting and the `min_sample_size` floor are applied in the agentic layer after the integration layer normalizes field names only. Keeps advantage (strong allies) and disadvantage (weak allies) groups separate (top `take` per group); does NOT merge. side='with' is the only supported value. Use this for 'teammate X, what should I pick to synergize' queries; use stratz.hero_matchup_ranking for enemy counter-picks. Each row carries `pair_win_rate` (= winCount/matchCount, the ally pair's game win rate) with `win_rate_basis` declaring the ally-pair caliber (distinct from matchup's matchup_win_rate). Keep STRATZ `synergy` as the primary ranking: `pair_wilson_rating` is a confidence co-signal for the pairing's win rate, never a replacement or composite with synergy. Its local Wilson lower bound uses z=1.96; STRATZ documents the method but not its exact z. Scope from plan.context: bracket and weeks_back (completed weekly buckets) are honored; position_ids, region_ids, and game_mode_ids are not supported.
   evidence_produced: ["hero_synergy_ranking_row", "sample_size"]
   allowed_arg_keys: ["hero_id", "side", "take", "min_sample_size"]
   args:
@@ -390,7 +310,7 @@ Tools:
   declared_output_paths:
     - data.candidate_rows: list[dict]. Latest completed week's ranking rows (advantage+disadvantage flattened).
 - stratz.lane_meta_global
-  description: Return high-sample lane pair rows from the global lane outcome distribution (no hero filter). STRATZ returns two mirror rows per ally pair; this tool collapses them to one row per pair, keeping the direction with the larger match_count. After dropping rows below `min_sample_size`, `selection_mode` picks the ranking basis: 'strong' ranks by wilson_rating desc (Wilson lower bound of the match win rate, z=1.96, confidence-aware; tie-break match_count desc) — the strongest, most reliable pairs; 'popular' ranks by match_count desc — the most-played pairs. `match_win_rate` is match-level (matchWinCount/matchCount, the pair's game win rate), NOT lane-level (winCount/lossCount track lane outcome instead). Each row also carries stomp_win_count/stomp_loss_count/cs_count as lane dominance / cs evidence, and `win_rate_basis` declaring the win-rate caliber. Global view: this tool IGNORES context.position_ids (laneOutcome positionIds are dropped by design to keep the global pair perspective); for a specific hero+partner lane query use stratz.pair_lane_outcome. Returns the top `highlight_top` rows per completed week.
+  description: Return high-sample lane pair rows from the global lane outcome distribution (no hero filter). STRATZ returns two mirror rows per ally pair; this tool collapses them to one row per pair, keeping the direction with the larger match_count. After dropping rows below `min_sample_size`, `selection_mode` picks the ranking basis: 'strong' ranks by wilson_rating desc (Wilson lower bound of the match win rate, z=1.96, confidence-aware; tie-break match_count desc) — the strongest, most reliable pairs; 'popular' ranks by match_count desc — the most-played pairs. `match_win_rate` is match-level (matchWinCount/matchCount, the pair's game win rate), NOT lane-level (winCount/lossCount track lane outcome instead). Each row also carries stomp_win_count/stomp_loss_count/cs_count as lane dominance / cs evidence, and `win_rate_basis` declaring the win-rate caliber. Global view: this tool IGNORES context.position_ids (laneOutcome positionIds are dropped by design to keep the global pair perspective); for a specific hero+partner lane query use stratz.pair_lane_outcome. Returns the top `highlight_top` rows per completed week. Map 强势 / 胜率高 / 上分 to 'strong' and 常见 / 出场多 / 热门 to 'popular'; set selection_mode explicitly for pick-volume queries. For the sample floor, use the rendered Sample-size policy: prefer strict for strong/robust reads and relaxed for popular/broad-distribution reads. Scope from plan.context: bracket and weeks_back are honored; region_ids and game_mode_ids are not supported.
   evidence_produced: ["lane_meta_row", "sample_size"]
   allowed_arg_keys: ["is_with", "min_sample_size", "highlight_top", "selection_mode"]
   args:
@@ -399,7 +319,7 @@ Tools:
     - highlight_top: int, optional. Cap on rows emitted as evidence.
     - selection_mode: Literal, optional. Ranking basis after the min_sample_size floor. 'strong' = 强势/胜率高 (sort by wilson_rating desc (Wilson lower bound of match win rate, z=1.96), tie-break match_count desc); 'popular' = 常见/出场多 (sort by match_count desc). Default 'strong'.
 - stratz.hero_position_stats
-  description: Return hero position stats (matchCount + winCount -> match_win_rate) from heroStats.stats. Exactly one of hero_id or position_id is required. selection_mode/min_sample_size apply to BOTH branches: 'strong' = wilson_rating desc (Wilson lower bound of match win rate, z=1.96, confidence-aware; tie-break match_count desc) — answers 某位置胜率最高 / 某英雄最强位置; 'popular' = match_count desc — answers 出场最多. hero_id returns the hero's position rows ranked but NOT truncated (full distribution); position_id returns top `take` heroes in that position (take truncates only this branch). win_rate_basis declares match-level caliber (winCount/matchCount).
+  description: Return hero position stats (matchCount + winCount -> match_win_rate) from heroStats.stats. Exactly one of hero_id or position_id is required. selection_mode/min_sample_size apply to BOTH branches: 'strong' = wilson_rating desc (Wilson lower bound of match win rate, z=1.96, confidence-aware; tie-break match_count desc) — answers 某位置胜率最高 / 某英雄最强位置; 'popular' = match_count desc — answers 出场最多. hero_id returns the hero's position rows ranked but NOT truncated (full distribution); position_id returns top `take` heroes in that position (take truncates only this branch). win_rate_basis declares match-level caliber (winCount/matchCount). Map strongest / highest win rate to 'strong' and most-played / common position to 'popular'; use the rendered Sample-size policy's strict floor for strong/robust reads and relaxed floor for popular/broad-distribution reads. Scope from plan.context: bracket and weeks_back (completed weekly buckets) are honored. Use the position_id tool argument, not context.position_ids, to filter this tool; region_ids and game_mode_ids are not supported.
   evidence_produced: ["position_stat", "sample_size"]
   allowed_arg_keys: ["hero_id", "position_id", "take", "min_sample_size", "selection_mode"]
   args:
@@ -430,7 +350,7 @@ Tools:
     - position_id: str, required. Position to filter by (POSITION_1 .. POSITION_5).
     - min_position_match_count: int, optional. Drop heroes below this match_count at the position.
 - stratz.player_profile
-  description: Return a player's STRATZ profile (name/avatar/seasonRank + global matchCount/winCount/imp/lastMatchDate) by steamAccountId (Steam32). v1: steamAccountId direct, no name search — non-numeric queries should return insufficient_tools. Use for 'who is this player / player overview'; pair with player_recent_matches or player_hero_performance for match questions.
+  description: Return a player's STRATZ profile (name/avatar/seasonRank + global matchCount/winCount/imp/lastMatchDate) by steamAccountId (Steam32). v1: steamAccountId direct, no name search — non-numeric queries should return capability_boundary; do not invent an id. Use for 'who is this player / player overview'. For any match or hero performance query, call this first and pass its confirmed_steam_account_id reference to the downstream player tool, even when the user supplied the numeric id.
   evidence_produced: ["player_identity"]
   allowed_arg_keys: ["steam_account_id"]
   args:
@@ -438,27 +358,27 @@ Tools:
   declared_output_paths:
     - data.confirmed_steam_account_id: int. Steam32 id confirmed by a live player profile.
 - stratz.player_recent_matches
-  description: Return a player's recent matches by steamAccountId. Win is native MatchPlayerType.isVictory (not derived). Scope filters (bracket, position_ids) come from plan.context; v1 does NOT support region_ids/game_mode_ids. Args: take=count cap (1-50, default 20); days=date window (within last N days, newest first, capped at take). Emits per-match player_recent_match rows + a player_recent_summary (wins/losses/match_count, deterministic counts) + sample_size.
+  description: Return a player's recent matches by steamAccountId. Win is native MatchPlayerType.isVictory (not derived). Scope filters (bracket, position_ids) come from plan.context. Current DotaMind v1 does not expose region_ids/game_mode_ids for player tools: STRATZ accepts numeric regionIds/gameModeIds here, but DotaMind has no numeric scope mapping or passthrough yet. Requires confirmed_steam_account_id from stratz.player_profile. Args: take=count cap (1-50, default 20); days=date window (最近一周 / 最近 7 天 -> days=7; newest first, capped at take). Emits per-match player_recent_match rows + a player_recent_summary (wins/losses/match_count, deterministic counts) + sample_size.
   evidence_produced: ["player_recent_match", "player_recent_summary", "sample_size"]
   allowed_arg_keys: ["steam_account_id", "take", "days"]
   args:
-    - steam_account_id: int, required. Player Steam32 account id.
+    - steam_account_id: int, required. Confirmed Player Steam32 account id from stratz.player_profile; must use that reference even when the query includes digits.
       must_reference: true
       accepts_ref: stratz.player_profile.data.confirmed_steam_account_id (int) -> "$<previous_call_id>.data.confirmed_steam_account_id"
-    - take: int, optional. Max matches to return (1-50).
+    - take: int, optional. Max matches to return (1-50), not a hero-ranking row count.
     - days: int | None, optional. Date window in days (within last N days). Optional.
 - stratz.player_hero_performance
-  description: Return a player's per-hero performance (winCount/matchCount/avg stats) by steamAccountId. win_rate is locally derived (winCount/matchCount; STRATZ has no native winRate). Scope filters (bracket->rankIds 0-80, position_ids) come from plan.context; v1 does NOT support region_ids/game_mode_ids. Three independent knobs: take=output hero rows (1-50, default 15); match_take=match sample size contributing to each hero's stats (the recent N matches); days=date window. selection_mode: 'strong' over-fetches then ranks by win_rate (min_match_count floor); 'popular' ranks by games played. Use for 'which heroes does this player win with lately'. Param mapping — '近N场什么英雄胜率高' -> match_take=N (NOT take); '返回前N个英雄' -> take=N; '最近一周' -> days=7.
+  description: Return a player's per-hero performance (winCount/matchCount/avg stats) by steamAccountId. win_rate is locally derived (winCount/matchCount; STRATZ has no native winRate). Scope filters (bracket->rankIds 0-80, position_ids) come from plan.context. Current DotaMind v1 does not expose region_ids/game_mode_ids for player tools: STRATZ accepts numeric regionIds/gameModeIds here, but DotaMind has no numeric scope mapping or passthrough yet. Requires confirmed_steam_account_id from stratz.player_profile. Three independent knobs: take=output hero rows (1-50, default 15); match_take=match sample size contributing to each hero's stats (the recent N matches); days=date window. selection_mode: 'strong' over-fetches then ranks by win_rate (min_match_count floor); 'popular' ranks by games played. Use for 'which heroes does this player win with lately'. Param mapping — '近N场什么英雄胜率高' -> match_take=N (NOT take); '返回前N个英雄' -> take=N; '最近一周' / '最近 7 天' -> days=7; '至少玩过 N 场' -> min_match_count=N.
   evidence_produced: ["player_hero_performance", "sample_size"]
   allowed_arg_keys: ["steam_account_id", "take", "days", "match_take", "min_match_count", "selection_mode"]
   args:
-    - steam_account_id: int, required. Player Steam32 account id.
+    - steam_account_id: int, required. Confirmed Player Steam32 account id from stratz.player_profile; must use that reference even when the query includes digits.
       must_reference: true
       accepts_ref: stratz.player_profile.data.confirmed_steam_account_id (int) -> "$<previous_call_id>.data.confirmed_steam_account_id"
-    - take: int, optional. Number of hero rows to return (1-50).
-    - days: int | None, optional. Date window in days (within last N days). Optional.
+    - take: int, optional. Number of hero rows to return (1-50): use for 'top N heroes'.
+    - days: int | None, optional. Date window in days: 最近一周 / 最近 7 天 -> days=7.
     - match_take: int | None, optional. Match sample size per hero (recent N matches). Use this for '近 N 场'. Optional — omit to use STRATZ default.
-    - min_match_count: int, optional. Floor on games played; heroes below this are dropped (filters small-sample noise in strong mode).
+    - min_match_count: int, optional. Floor on games played; heroes below this are dropped (filters small-sample noise in strong mode). Map '至少玩过 N 场' to min_match_count=N.
     - selection_mode: Literal, optional. 'strong' (rank by win_rate) or 'popular' (by games).
 - opendota.resolve_team
   description: Resolve a Dota 2 pro team query to OpenDota team candidates.
@@ -553,11 +473,7 @@ Return JSON in one of these shapes.
 Direct-answer rules:
 - `answer` MUST be a concise, non-empty answer to the reconstructed current
   request.
-- Use the available conversation as context when it supplies the subject,
-  property, action, scope, or a stable factual answer. Interpret short
-  follow-ups semantically instead of merely repeating an isolated fragment.
-- This direct answer does not create an EvidenceGraph. Use tool_plan when
-  freshness, provenance, or external evidence is materially uncertain.
+- This direct answer does not create an EvidenceGraph.
 
 Direct answer:
 {"kind":"direct_answer","intent":"<semantic_intent>",
@@ -616,11 +532,5 @@ Tool plan:
   }
 }
 
-Final decision gate (apply immediately before returning JSON):
-1. Reconstruct the current request, including inherited property, action, and
-   scope from the latest exchange.
-2. Check the available conversation before considering tools. If it explicitly
-   contains a sufficient, still-valid answer, you MUST return direct_answer;
-   returning tool_plan is invalid.
-3. In direct_answer, output only what the reconstructed request asks for.
-   Selecting a subject does not widen the inherited request.
+Before returning JSON, validate that the selected decision follows the
+Decision priority and the required JSON shape above.

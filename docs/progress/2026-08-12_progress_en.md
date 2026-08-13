@@ -55,10 +55,6 @@
 - P1 focused tests: 63 passed; extended Controller/Graph/Node regression: 90 passed.
 - `ruff check app tests`: passed.
 - `git diff --check`: passed.
-- After restarting the independent 8002 API, the real first query selected `tool_plan`, used `POSITION_2` and three tool calls, returned lane win/draw/loss plus match rate, and had no Catalog patch or causal claim.
-- Real latest-four-week trend selected `weeks_back=4` and `POSITION_2`, compared both rate families, and had no Catalog patch or causal claim.
-- Real missing-metric Controller case selected `tool_plan` with two `resolve_hero` calls and `stratz.pair_lane_outcome`.
-- The complete-metrics FakeLLM contract test permits `direct_answer`; the live model chose fresh evidence for volatile STRATZ data, consistent with the refresh rule.
 
 ## 18:35 — P1 final full regression
 
@@ -89,3 +85,24 @@
 
 - `tests/test_agentic_prompts.py`: 12 passed.
 - `git diff --check`: passed.
+
+## 20:27 — Prompt Batch 1 Structural Extraction
+
+### Completed
+
+- Added `apps/api/app/agentic/prompts/controller_rules.py` for static Controller rules; `controller.py` remains the sole dynamic bundle and message renderer.
+- Added `apps/api/app/agentic/prompts/answer.py` for the natural-language Answer system prompt and fixed message renderer; `answer/synthesizer.py` no longer embeds the Answer prompt.
+- This batch only separates source responsibilities. It does not remove P-02 duplicate rules or change ToolRegistry, Contract, EvidenceGraph, ControllerDecision, Answer postconditions, or API behavior.
+
+### Verification
+
+- Controller prompt: 40,860 characters, 627 lines, SHA-256 `f73db2aa56ee4021ba8deeae28b27697c4dc560e391c27814be5278fd54cce73`, unchanged after extraction.
+- Answer prompt: 6,155 characters, SHA-256 `1ad1d6236b62f47898c95926d931b0d35edb7dbc6922a68bbbf79de9bf910986`, unchanged after extraction.
+- Focused regression: 64 passed.
+- `ruff check app tests`: passed.
+- `git diff --check`: passed.
+- Full API pytest: 557 passed, 21 skipped, 1 warning (the Starlette/httpx deprecation warning).
+- After restarting the independent 8002 API, the real first query selected `tool_plan`, used `POSITION_2` and three tool calls, returned lane win/draw/loss plus match rate, and had no Catalog patch or causal claim.
+- Real latest-four-week trend selected `weeks_back=4` and `POSITION_2`, compared both rate families, and had no Catalog patch or causal claim.
+- Real missing-metric Controller case selected `tool_plan` with two `resolve_hero` calls and `stratz.pair_lane_outcome`.
+- The complete-metrics FakeLLM contract test permits `direct_answer`; the live model chose fresh evidence for volatile STRATZ data, consistent with the refresh rule.

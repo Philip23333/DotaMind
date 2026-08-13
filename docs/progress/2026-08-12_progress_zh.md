@@ -55,10 +55,6 @@
 - P1 定向测试：63 passed；扩展 Controller/Graph/Node 回归：90 passed。
 - `ruff check app tests`：通过。
 - `git diff --check`：通过。
-- 重启独立 8002 API 后真实首问：`tool_plan`、`POSITION_2`、3 个工具调用，同时返回对线赢/平/输率与整局率，无 Catalog patch、无因果结论。
-- 真实最近 4 周趋势：`weeks_back=4`、`POSITION_2`，同时比较两类胜率；无 Catalog patch、无因果结论。
-- 真实历史缺指标 Controller：选择 `tool_plan`，调用两个 `resolve_hero` 和 `stratz.pair_lane_outcome`。
-- 历史完整指标的 FakeLLM 合同测试允许 `direct_answer`；真实模型在易变 STRATZ 场景选择重新取证，符合刷新规则。
 
 ## 18:35 — P1 最终全量回归
 
@@ -89,3 +85,24 @@
 
 - `tests/test_agentic_prompts.py`：12 passed。
 - `git diff --check`：通过。
+
+## 20:27 — Prompt 批次 1 结构拆分
+
+### 已完成
+
+- 新增 `apps/api/app/agentic/prompts/controller_rules.py`，将 Controller 静态规则从 renderer 中移出；`controller.py` 保留唯一动态组装和消息渲染入口。
+- 新增 `apps/api/app/agentic/prompts/answer.py`，承载自然语言 Answer system prompt 与固定消息 renderer；`answer/synthesizer.py` 不再内嵌 Answer prompt。
+- 本批次只做源码职责拆分，不删除 P-02 重复规则，不改变 ToolRegistry、Contract、EvidenceGraph、ControllerDecision、Answer 后置边界或 API 行为。
+
+### 验证
+
+- Controller prompt：40,860 字符、627 行、SHA-256 `f73db2aa56ee4021ba8deeae28b27697c4dc560e391c27814be5278fd54cce73`，与拆分前一致。
+- Answer prompt：6,155 字符、SHA-256 `1ad1d6236b62f47898c95926d931b0d35edb7dbc6922a68bbbf79de9bf910986`，与拆分前一致。
+- 定向回归：64 passed。
+- `ruff check app tests`：通过。
+- `git diff --check`：通过。
+- API 全量 pytest：557 passed、21 skipped、1 warning（Starlette/httpx 弃用警告）。
+- 重启独立 8002 API 后真实首问：`tool_plan`、`POSITION_2`、3 个工具调用，同时返回对线赢/平/输率与整局率，无 Catalog patch、无因果结论。
+- 真实最近 4 周趋势：`weeks_back=4`、`POSITION_2`，同时比较两类胜率；无 Catalog patch、无因果结论。
+- 真实历史缺指标 Controller：选择 `tool_plan`，调用两个 `resolve_hero` 和 `stratz.pair_lane_outcome`。
+- 历史完整指标的 FakeLLM 合同测试允许 `direct_answer`；真实模型在易变 STRATZ 场景选择重新取证，符合刷新规则。

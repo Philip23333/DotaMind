@@ -9,7 +9,7 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-import app.agentic.prompts.controller as controller_prompts
+import app.agentic.prompts.controller_rules as controller_rules
 from app.agentic.conversation.models import ConversationMessage
 from app.agentic.graph import AgentGraphRunner
 from app.agentic.planning.contracts import CONTRACT_REGISTRY
@@ -122,7 +122,7 @@ def test_controller_prompt_uses_one_generic_history_first_decision_order() -> No
     assert "return direct_answer" in prompt
     assert "return direct_answer and stop" in prompt
     assert "Rules that describe which\ntools a query needs apply only after step 4" in prompt
-    assert "Once tool_plan is selected" in prompt
+    assert "After selecting tool_plan:" in prompt
     assert "After tool_plan has been selected for fresh evidence" in prompt
     assert "For a fresh complete ability-list tool plan" in prompt
     assert "This direct answer does not create an EvidenceGraph" in prompt
@@ -131,17 +131,29 @@ def test_controller_prompt_uses_one_generic_history_first_decision_order() -> No
     assert "If even one requested metric is\n  absent, choose tool_plan" in prompt
     assert "a further query would be needed" in prompt
     assert "perform that\n  query through tool_plan instead" in prompt
+    assert "Follow the selected tool's declared scope and argument\n  semantics" in prompt
+    assert "context.region_ids/game_mode_ids are only supported by" not in prompt
+    assert "Use the position_id tool argument, not context.position_ids" in prompt
+    assert "Derive each selected tool's arguments, ranking semantics, and evidence" in prompt
+    assert "Lane-pair meta selection_mode" not in prompt
+    assert "Position stats selection_mode" not in prompt
+    assert "Hero matchup/synergy ranking" not in prompt
+    assert "Map 强势 / 胜率高 / 上分 to 'strong'" in prompt
+    assert "Keep STRATZ `synergy` as the primary ranking" in prompt
+    assert "Player evidence queries (stratz.player_profile" not in prompt
+    assert "Current DotaMind v1 does not expose region_ids/game_mode_ids for player tools" in prompt
+    assert "STRATZ accepts numeric regionIds/gameModeIds here" in prompt
+    assert "match_take=N (NOT take)" in prompt
     assert "Completeness example:" in prompt
     assert "preserving that property or action" in prompt
     assert "full historical\n  answer unless they ask for it" in prompt
     assert "Answer only the selected subject's value" in prompt
-    assert "A direct_answer must address the reconstructed current request only" in prompt
-    assert "Decision validity invariants:" in prompt
-    assert "A tool_plan is invalid when the available conversation explicitly" in prompt
-    assert "A direct_answer must address the reconstructed current request only" in prompt
-    assert "Final decision gate (apply immediately before returning JSON):" in prompt
-    assert "returning tool_plan is invalid" in prompt
-    assert "Selecting a subject does not widen the inherited request" in prompt
+    assert "After selecting tool_plan:" in prompt
+    assert "Plan only the calls that produce the required fresh evidence." in prompt
+    assert "Decision validity invariants:" not in prompt
+    assert "Final decision gate (apply immediately before returning JSON):" not in prompt
+    assert "Before returning JSON, validate that the selected decision follows the" in prompt
+    assert "returning tool_plan is invalid" not in prompt
     assert "history_grounded_answer" not in prompt
     assert "quote_user_query" not in prompt
     assert "recall_assistant_summary" not in prompt
@@ -158,9 +170,9 @@ def test_prompt_hash_changes_with_rendered_catalog_contract_and_policy(monkeypat
 
     with monkeypatch.context() as scoped:
         scoped.setattr(
-            controller_prompts,
-            "_PLANNER_SYSTEM_PROMPT",
-            controller_prompts._PLANNER_SYSTEM_PROMPT + "\nstatic change",
+            controller_rules,
+            "PLANNER_SYSTEM_PROMPT",
+            controller_rules.PLANNER_SYSTEM_PROMPT + "\nstatic change",
         )
         assert build_controller_prompt(_registry(), policy).prompt_versions[
             "controller.system.sha256"

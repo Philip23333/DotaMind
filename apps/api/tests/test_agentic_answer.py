@@ -244,6 +244,7 @@ def test_natural_language_answer_receives_catalog_rules_and_real_evidence() -> N
         in system
     )
     assert "must never be labeled as a STRATZ patch" in system
+    assert "Catalog patch/generated_at metadata describes only Catalog snapshots" not in system
     assert "Never infer item-build strength" in system
     assert "组件（中文名（English）） | 价格 | 属性" in system
     assert "include the recipe scroll as an explicit row" in system
@@ -262,6 +263,9 @@ def test_natural_language_answer_receives_catalog_rules_and_real_evidence() -> N
     assert "等级 | 左侧天赋（中文 / English） | 右侧天赋（中文 / English）" in system
     assert "For a single-ability query, output only the one ability" in system
     assert "full talent tree unless the user explicitly" in system
+    assert "Hero recommendations are ranked by `wilson_rating`" not in system
+    assert "When lane_meta_row/position_stat evidence carries filters.selection_mode" in system
+    assert "the PRIMARY ranking is STRATZ `synergy`" in system
     assert "'kind':'hero_attributes'" in user.replace(" ", "")
     assert "'strength_base'" in user
     assert "'strength_gain'" in user
@@ -518,9 +522,9 @@ class UnsafeCapturingFakeLLM(CapturingFakeLLM):
 
 
 def test_natural_language_prompt_asks_for_weekly_trend() -> None:
-    from app.agentic.answer.synthesizer import _NATURAL_LANGUAGE_SYSTEM_PROMPT
+    from app.agentic.prompts.answer import NATURAL_LANGUAGE_SYSTEM_PROMPT
 
-    prompt = _NATURAL_LANGUAGE_SYSTEM_PROMPT
+    prompt = NATURAL_LANGUAGE_SYSTEM_PROMPT
     assert "week_index" in prompt
     assert "week_epoch" in prompt
     assert "trend" in prompt

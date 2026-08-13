@@ -106,6 +106,11 @@ user:
   evidence_graph=<graph JSON>
 ```
 
+自然语言 Answer 的静态 system prompt 和上述固定消息形状由
+`agentic/prompts/answer.py` 的 renderer 负责；`answer/synthesizer.py` 负责选择
+LLM、执行同步/流式调用和包装结果，不再内嵌 prompt 文本。首批拆分不改变发送给
+LLM 的 system/user 内容。
+
 当前系统提示还要求：
 
 - 如果 evidence 不足，说明缺什么。

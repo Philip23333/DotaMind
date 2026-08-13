@@ -16,7 +16,7 @@ app/
     runtime/       Run/Attempt/Budget models, clocks, summaries, stream events and flat-state reset
     conversation/  message/Turn contracts and bounded answer summaries
     planning/      ControllerDecision, Controller, contracts, sample policy
-    prompts/       Controller prompt bundle, feedback renderers and audit versions
+    prompts/       Controller/Answer prompt renderers, static Controller rules, feedback renderers and audit versions
     nodes/         controller, decision validation, conversation/tool paths
     tools/         registry, executor, OpenDota, STRATZ, patch and local tools
     evidence/      EvidenceGraph and extraction helpers
@@ -214,6 +214,22 @@ rendering are versioned without hashing request content. Prompt text, retry feed
 validation errors and raw model output stay out of public and persistent DTOs.
 `controller.recovery_rules=v1` versions the separate dynamic Recovery renderer;
 it does not change the system Prompt hash.
+
+Static Controller behavior rules live in `agentic/prompts/controller_rules.py`,
+while `agentic/prompts/controller.py` remains the sole Controller prompt bundle
+and message renderer. ToolDefinition descriptions are dynamically rendered into
+that bundle and are the prompt-level source for each tool's scope support,
+arguments, and ranking semantics; the Controller keeps only cross-tool context
+conventions and a generic instruction to consult the rendered tool catalog and
+sample policy. For player queries, the rendered catalog distinguishes current
+DotaMind v1 support from the upstream STRATZ schema: STRATZ accepts numeric
+region and game-mode filters, but the current string-valued QueryContext has no
+numeric mapping or player-request passthrough, so the capability remains
+unexposed and validation continues to reject it.
+Natural-language Answer prompt text and its fixed message shape live in
+`agentic/prompts/answer.py`; `answer/synthesizer.py` only invokes that renderer
+and handles LLM results. Prompt content changes are identified by the prepared
+prompt hash recorded in the Run manifest.
 
 Graph validation repeats deterministic checks but never mutates tool args,
 metadata, or evidence obligations. Therefore state, debug output and execution
