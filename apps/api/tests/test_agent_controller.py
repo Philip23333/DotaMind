@@ -1056,6 +1056,10 @@ def test_agentic_planner_retries_on_validation_error_then_succeeds() -> None:
         "assistant",
         "user",
     ]
+    assert "Never fix an invalid plan by dropping or weakening" in result.prompt_messages[-1][
+        "content"
+    ]
+    assert "return capability_boundary" in result.prompt_messages[-1]["content"]
 
 
 def test_agentic_planner_retries_on_missing_plan_then_succeeds() -> None:
@@ -1293,7 +1297,7 @@ def _player_hero_performance_payload() -> dict[str, Any]:
     }
 
 
-def test_agentic_planner_prompt_contains_player_routing() -> None:
+def test_agentic_planner_prompt_contains_player_capabilities() -> None:
     planner = AgentController(
         _registry(), llm=FakeLLM(_valid_plan_payload()), llm_enabled=True, planner_max_retries=0
     )
@@ -1304,13 +1308,13 @@ def test_agentic_planner_prompt_contains_player_routing() -> None:
     assert "stratz.player_profile" in prompt
     assert "stratz.player_recent_matches" in prompt
     assert "stratz.player_hero_performance" in prompt
-    # routing + param-semantics guidance is present
-    assert "Player evidence queries" in prompt
-    assert "match_take=N" in prompt
-    assert "NO name search" in prompt
-    assert "numeric Steam32 id" in prompt
-    assert "It is mandatory before player_recent_matches or player_hero_performance" in prompt
-    assert "$<profile_call>.data.confirmed_steam_account_id" in prompt
+    # capability and parameter semantics are rendered without fixed call ordering
+    assert "confirmed Steam32 account id" in prompt
+    assert "player-name lookup is not supported" in prompt
+    assert "Recent match sample size contributing to each hero's statistics" in prompt
+    assert "Ranking basis: 'strong' by win_rate, or 'popular' by games played" in prompt
+    assert "for numeric\n  Steam32 ids; player-name search is not supported" in prompt
+    assert "call this first and pass its confirmed_steam_account_id" not in prompt
 
 
 def test_agentic_planner_accepts_player_hero_performance_plan() -> None:

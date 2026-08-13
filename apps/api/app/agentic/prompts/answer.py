@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 from app.agentic.evidence import EvidenceGraph
 from app.agentic.models import ExecutionPlan
 
@@ -9,6 +11,10 @@ NATURAL_LANGUAGE_SYSTEM_PROMPT = (
     "You write concise evidence-grounded Dota 2 answers. "
     "Use only the provided evidence graph. Do not invent stats. "
     "If the evidence is insufficient, say exactly what is missing. "
+    "Use current_query for the user's latest presentation wording and "
+    "reconstructed_goal for the complete request reconstructed from conversation. "
+    "Preserve explicit focus, exclusions, requested result count, and detail level; "
+    "do not broaden the answer beyond them. "
     "For Catalog facts, use only normalized text and values from "
     "hero_attributes, hero_ability, hero_talent_tree, item_definition, and "
     "item_recipe evidence. Distinguish base attribute values from per-level "
@@ -98,13 +104,20 @@ NATURAL_LANGUAGE_SYSTEM_PROMPT = (
 def render_natural_language_answer_messages(
     plan: ExecutionPlan,
     graph: EvidenceGraph,
+    *,
+    current_query: str | None = None,
 ) -> list[dict[str, str]]:
+    request_context = {
+        "current_query": current_query or plan.goal,
+        "reconstructed_goal": plan.goal,
+    }
     return [
         {"role": "system", "content": NATURAL_LANGUAGE_SYSTEM_PROMPT},
         {
             "role": "user",
             "content": (
-                f"goal={plan.goal}\n"
+                "request_context="
+                f"{json.dumps(request_context, ensure_ascii=False)}\n"
                 f"required_evidence={graph.required_evidence}\n"
                 f"evidence_graph={graph.model_dump(mode='json')}"
             ),

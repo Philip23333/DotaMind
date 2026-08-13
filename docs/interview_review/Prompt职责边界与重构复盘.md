@@ -36,10 +36,10 @@
 | P-08 | P2 | Synthesizer 的 Wilson 规则过度泛化 | 曾先称“Hero recommendations”均按 `wilson_rating`，随后又规定 lane/position 按 `selection_mode`，matchup/synergy 则以 `synergy` 为主。 | 已删除泛化 Wilson 句；现有 evidence-kind 专属规则保持不变。动态生成 presentation constraints 留待 P-10。 | 已完成（2026-08-13） |
 | P-09 | P2 | Synthesizer 存在重复元数据规则 | Catalog metadata 不得作为 STRATZ statistics metadata 的限制曾在 Catalog 段与 pair-lane 段重复出现。 | 通用 Catalog/STRATZ 边界保留在 Catalog 段；pair-lane 段只保留对线与整局分别报告。 | 已完成（2026-08-13） |
 | P-10 | P2 | 单一总 Answer prompt 混入不相关格式细则 | 物品合成表、完整技能清单、单技能、天赋表、周趋势、对线结果、推荐排序规则每次请求都会一并发送。 | 依据 `plan` / evidence kinds 渲染请求专属 presentation constraints；稳定 Catalog 表格优先做确定性 renderer。 | 待处理 |
-| P-11 | P2 | Answer 无法可靠判断部分查询粒度 | prompt 需要区分“完整技能列表”和“单技能”，但 Answer 输入只有 `plan.goal`、required evidence 和 EvidenceGraph，没有原始 query。 | 在计划或输出合同中显式携带 answer/presentation scope，或确保规范化 goal 是足够的合同字段。 | 待讨论 |
+| P-11 | P2 | Answer 无法可靠判断部分查询粒度 | Answer 曾只有 `plan.goal`、required evidence 和 EvidenceGraph，无法直接看到“只回答棒击大地”“不要天赋”等当前措辞。 | 不新增固定 presentation 枚举；Answer 同时接收 `current_query` 与 Controller 的 `reconstructed_goal`，前者保留最新展示要求，后者承接多轮重建。Controller goal 必须保留具名焦点、排除项、数量和细节级别。 | 已完成（2026-08-13） |
 | P-12 | P2 | “仅用证据”与“可给无证据 hypothesis”边界含混 | prompt 一方面要求只用 EvidenceGraph，另一方面允许无明确证据的解释作为 hypothesis。 | 决定是否支持策略性推演；若支持，明确其触发条件与标签，且不得混同统计结论。 | 待讨论 |
 | P-13 | P2 | prompt 规模已经影响维护性 | 当前默认 Registry（25 个工具）渲染的 Controller system prompt 约 40,859 字符、627 行；Synthesizer static prompt 约 6,155 字符。 | 以职责收敛为主，修改后记录 prompt size 与回归结果，不设脱离效果的硬性压缩指标。 | 待处理 |
-| P-14 | P1 | ToolDefinition description 仍在规定调用编排 | P-03 将 Catalog 特例迁出 Controller 后，进一步审查发现 Catalog、STRATZ ranking、候选过滤和玩家工具的 description 仍包含调用顺序、工具配对、具体引用写法、路由提示或跨工具 evidence；其中 10 个工具存在明确的过度编排。 | description 只保留工具能力、数据范围和本工具局部产出条件；引用依赖交给结构化合同，具体选工具与组合由模型根据请求和合同推理。若定向评估表明确需示范，只在 Controller sample policy 保留一个代表性、非固定 pipeline 的规划案例；回答展示范围归 P-10/P-11。 | 待处理 |
+| P-14 | P1 | ToolDefinition description 仍在规定调用编排 | 默认 Registry 的过度编排说明已收窄；真实规划评估进一步发现玩家 top-N 被误作内部 over-fetch、校验重试会静默删除不支持的 scope，以及 Controller `Supported` 清单仍残留固定工具路由。 | description 只保留工具能力、数据范围和本工具局部产出条件；参数合同明确最终输出语义；Controller 通用规则保留用户约束，能力不足时返回边界，并仅列能力而不列固定路由。 | 已完成（2026-08-13） |
 
 ### 批次 1：结构拆分（已完成，2026-08-12）
 
@@ -120,6 +120,40 @@
 - `candidate_rows` 增加 `requires_reference=True`，合法来源仍限定为两个 ranking 工具的 `data.candidate_rows`；这是数据完整性合同，不规定某类 intent 必须走固定 pipeline。
 - 保留 handler 的单周 STRATZ 位置统计 join、`role_filtered_candidate_row` evidence 和 API 行为；不提供旧工具名兼容别名。
 
+### P-14 玩家工具说明去编排化（已完成，2026-08-13）
+
+- `stratz.player_profile` description 已删除 `capability_boundary` 决策、固定问题路由、前置调用顺序及下游引用写法。
+- 当前只声明玩家档案字段、confirmed Steam32 输出、仅接受数字 Steam32 和不支持名称查询的能力边界；下游依赖仍由玩家工具的 `requires_reference` / `AcceptedRef` 表达。
+- `stratz.player_recent_matches` 已删除 Controller 决策、profile 依赖和重复参数映射；保留近期比赛/确定性汇总、时间顺序、原生胜负口径与 scope 能力边界。
+- `stratz.player_hero_performance` 已删除 Controller 决策、profile 依赖、固定问题路由和自然语言参数映射；总说明只保留分英雄表现、胜率计算口径与 scope 边界，各 ArgContract 只描述自身参数语义。
+- 至此，P-14 初审确认的 10 个明显过度编排工具已全部处理；下一阶段审阅 6 个“能力说明基本有效但夹杂跨层或命令式句子”的部分越界工具。
+
+### P-14 部分越界工具统一收窄（已完成，2026-08-13）
+
+- `stratz.pair_lane_outcome` 删除对 Critic 后续行为的描述，只保留无样本时不返回行的工具事实。
+- matchup/synergy ranking 将 `Keep` / `never` 命令改为排序事实：`synergy` 是实际排名分数，`pair_wilson_rating` 只是输出的置信度辅助且不参与排名分数；synergy 工具删除固定队友/敌人问题路由。
+- `stratz.lane_meta_global` 删除指向 pair 工具的路由、自然语言到 `selection_mode` 的重复映射及读取 Sample-size policy 的跨区块指令；真实去重、排序、指标与 scope 语义保持不变。
+- `stratz.hero_position_stats` 删除“answers 某问题”、重复 selection 映射和 Sample-size 指令；将位置输入边界改为事实陈述：消费 `position_id` 参数，不消费 `context.position_ids`。
+- `stratz.hero_daily_trends` 删除固定趋势问句，只保留日粒度、窗口、枚举扩展和 scope 事实。
+- `conversation.history_lookup` 的近期窗口调用条件继续保留，因为它是内部会话检索安全/预算边界，不是领域工具路由。
+- 至此，默认 Registry 的 ToolDefinition description 审查完成；未修改上述 6 个工具的 handler、排序、evidence 或 API 行为。
+
+### P-14 真实规划评估与修正（已完成，2026-08-13）
+
+- 初次真实 Controller 评估中，Catalog resolver 引用、玩家 profile 引用、matchup/synergy、位置过滤、lane meta、position stats 与日趋势均可由模型从能力和结构化合同自行推导；临时从内存移除静态 `Supported` 路由区块后，7 个代表用例仍全部形成合法工具链，因此不需要新增 few-shot 固定 pipeline。
+- 评估发现三项稳定缺陷：玩家“最近 20 场中前 5 个英雄”连续生成 `take=50`；玩家地区/游戏模式过滤在首次校验失败后被重试静默删除；四号位克制请求的 goal 无依据补充“敌方中单”。
+- `player_hero_performance.take` 参数合同现明确为过滤后的最终 top-N，内部 over-fetch 由工具实现；Controller 通用规则要求 goal 不得增加未声明角色/位置/范围，并禁止初次或重试计划删除、弱化显式 scope，工具不能满足时返回 `capability_boundary`。
+- validation retry renderer 升级为 `v2` 并重复上述约束；Controller `Supported` 清单删除箭头、具体工具名、引用写法与固定问句路由，只保留可用能力类别。
+- 修正后真实 Controller 复测 4 类用例各 3 次：top-N 参数、地区边界、模式边界与 goal 保真均 12/12 通过；未执行 STRATZ 上游数据查询。
+
+### P-11 Answer 请求粒度输入补全（已完成，2026-08-13）
+
+- 未新增 `presentation_scope` 枚举或按 intent 固定 Answer 路由。`answer_node` 现将当前 `state.query` 传入自然语言 Answer；renderer 以结构化 `request_context` 同时提供 `current_query` 与 `reconstructed_goal`。
+- `current_query` 用于保留用户最新的具名焦点、排除项、数量与细节措辞；`reconstructed_goal` 用于承接 Controller 从多轮会话恢复后的完整主体、动作和 scope。Answer 仍只能使用 EvidenceGraph 形成事实。
+- Controller goal 保真规则扩展到 named focus、exclusions 和 detail level，避免 Answer 收到已被上游泛化的目标。
+- 真实 Answer 使用同一份齐天大圣技能 evidence 验证：完整普通技能请求列出全部普通技能且不含天赋；“只回答棒击大地”仅输出该技能，没有扩展其他技能或天赋。
+- 本批只补 Answer 输入语义，不拆分总 Answer prompt；按 evidence kinds 选择 presentation constraints 留给 P-10。
+
 ## 已确认的保留原则
 
 - `intent` 是语义标签，不能变回固定 pipeline 路由键。
@@ -130,9 +164,9 @@
 
 ## 推荐修改顺序
 
-1. **P-14**：先逐个收窄明确存在过度编排的 ToolDefinition description，让结构化引用合同成为依赖关系的唯一来源；仅在评估证明有必要时保留一个代表性规划案例。
-2. **P-07 / P-10 / P-11**：设计 answer presentation scope 与稳定 renderer 边界，避免一次性重写所有自然语言回答。
-3. **P-05 / P-06 / P-12**：涉及历史事实 provenance、回答结构和产品能力边界，先形成小设计决策，再实现。
+1. **P-10**：按 `current_query` / `reconstructed_goal` 与 evidence kinds 动态渲染请求相关的 Answer 规则。
+2. **P-07**：基于新的展示边界收敛 pair-lane 字符串后处理与重复 prompt 规则。
+3. **P-12 / P-06 / P-05**：依次确定 hypothesis 边界、claim/evidence 绑定和历史事实 provenance。
 
 ## 每项修改的验收模板
 

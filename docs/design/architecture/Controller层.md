@@ -123,8 +123,11 @@ system Prompt hash。
 源码职责上，`agentic/prompts/controller_rules.py` 只保存 Controller 静态行为规则；
 `agentic/prompts/controller.py` 是唯一的 Controller bundle/system/message renderer，
 并继续组合 ToolRegistry、Contract Registry 与 sample policy 的动态内容。工具的 scope
-支持性、参数、排序语义与 Catalog 工具链由动态渲染的 `ToolDefinition.description` 提示；
-Controller 只保留跨工具 context 放置、枚举解释及查询工具目录/样本策略的通用规则，不重复
-列举具体工具特例。
+支持性、数据口径与自身行为由动态渲染的 `ToolDefinition.description` 提示；参数语义由
+`ArgContract` 表达，跨工具依赖由 `requires_reference`、`AcceptedRef` 与
+`OutputPathContract` 表达并校验。Controller 只保留跨工具 context 放置、枚举解释及查询
+工具目录/样本策略的通用规则，不重复列举具体工具调用顺序或固定问句路由。
 当前 DotaMind v1 玩家工具不支持地区或游戏模式过滤；仅当用户明确要求该过滤时才返回
-能力边界。当前该边界仅影响 prompt 指引，不新增 Validator 合同或运行时拒绝规则。
+能力边界。Validator 会拒绝把该 scope 与不支持的工具组合；validation retry `v2` 禁止通过
+删除或弱化用户显式约束来绕过拒绝，并要求能力不足时返回 `capability_boundary`。Controller
+还要求 plan goal 保留用户明确的主体、角色、位置、数量和 scope，不补充未声明范围。

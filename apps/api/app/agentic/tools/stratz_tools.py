@@ -137,9 +137,8 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
             description=(
                 "Return lane outcome categories and match win rate for a "
                 "specific pair of heroes (target hero + partner). Fetches the "
-                "target hero's lane outcome and filters to the partner. Emits "
-                "0 rows if the partner pair has no recorded sample; the critic "
-                "then flags insufficient evidence. Lane win/loss rates include "
+                "target hero's lane outcome and filters to the partner. Emits no "
+                "rows if the pair has no recorded sample. Lane win/loss rates include "
                 "stomp_win_count/stomp_loss_count; match_win_rate is the "
                 "separate match-level rate. Also returns cs_count as lane "
                 "evidence. Scope from plan.context: bracket, weeks_back (completed "
@@ -206,10 +205,10 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
                 "the target hero's game win rate versus that opponent) with "
                 "`win_rate_basis` declaring the caliber. "
                 "side='vs' is the only supported value in this version. "
-                "This is evidence ranking, not a final draft recommendation. Keep "
-                "STRATZ `synergy` as the primary ranking: `pair_wilson_rating` is a "
-                "confidence co-signal for the pairing's win rate, never a replacement "
-                "or composite with synergy. Its local Wilson lower bound uses z=1.96; "
+                "This is evidence ranking, not a final draft recommendation. "
+                "`pair_wilson_rating` is emitted as a confidence co-signal for the "
+                "pairing's win rate and is not part of the ranking score. Its local "
+                "Wilson lower bound uses z=1.96; "
                 "STRATZ documents the method but not its exact z. Scope "
                 "from plan.context: bracket and weeks_back (completed weekly buckets) "
                 "are honored; position_ids, region_ids, and game_mode_ids are not "
@@ -270,14 +269,13 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
                 "are applied in the agentic layer after the integration layer normalizes "
                 "field names only. Keeps advantage (strong allies) and disadvantage "
                 "(weak allies) groups separate (top `take` per group); does NOT merge. "
-                "side='with' is the only supported value. Use this for 'teammate X, what "
-                "should I pick to synergize' queries; use stratz.hero_matchup_ranking for "
-                "enemy counter-picks. Each row carries `pair_win_rate` (= winCount/matchCount, "
+                "side='with' is the only supported value. Each row carries "
+                "`pair_win_rate` (= winCount/matchCount, "
                 "the ally pair's game win rate) with `win_rate_basis` declaring the ally-pair "
-                "caliber (distinct from matchup's matchup_win_rate). Keep STRATZ "
-                "`synergy` as the primary ranking: `pair_wilson_rating` is a confidence "
-                "co-signal for the pairing's win rate, never a replacement or composite "
-                "with synergy. Its local Wilson lower bound uses z=1.96; STRATZ documents "
+                "caliber (distinct from matchup's matchup_win_rate). "
+                "`pair_wilson_rating` is emitted as a confidence co-signal for the "
+                "pairing's win rate and is not part of the ranking score. Its local "
+                "Wilson lower bound uses z=1.96; STRATZ documents "
                 "the method but not its exact z. Scope from "
                 "plan.context: bracket and weeks_back (completed weekly buckets) are "
                 "honored; position_ids, region_ids, and game_mode_ids are not supported."
@@ -346,13 +344,8 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
                 "as lane dominance / cs evidence, and `win_rate_basis` declaring "
                 "the win-rate caliber. Global view: this tool IGNORES "
                 "context.position_ids (laneOutcome positionIds are dropped by design "
-                "to keep the global pair perspective); for a specific hero+partner "
-                "lane query use stratz.pair_lane_outcome. Returns the top "
-                "`highlight_top` rows per completed week. Map 强势 / 胜率高 / 上分 to "
-                "'strong' and 常见 / 出场多 / 热门 to 'popular'; set selection_mode "
-                "explicitly for pick-volume queries. For the sample floor, use the "
-                "rendered Sample-size policy: prefer strict for strong/robust reads "
-                "and relaxed for popular/broad-distribution reads. Scope from plan.context: "
+                "to keep the global pair perspective). Returns the top "
+                "`highlight_top` rows per completed week. Scope from plan.context: "
                 "bracket and weeks_back are honored; region_ids and game_mode_ids are "
                 "not supported."
             ),
@@ -398,18 +391,14 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
                 "from heroStats.stats. Exactly one of hero_id or position_id is required. "
                 "selection_mode/min_sample_size apply to BOTH branches: 'strong' = "
                 "wilson_rating desc (Wilson lower bound of match win rate, z=1.96, "
-                "confidence-aware; tie-break match_count desc) — answers 某位置胜率最高 / "
-                "某英雄最强位置; 'popular' = match_count desc — answers 出场最多. hero_id "
+                "confidence-aware; tie-break match_count desc); 'popular' = "
+                "match_count desc. hero_id "
                 "returns the hero's position rows ranked but NOT truncated (full "
                 "distribution); position_id returns top `take` heroes in that position "
                 "(take truncates only this branch). win_rate_basis declares match-level "
-                "caliber (winCount/matchCount). Map strongest / highest win rate to "
-                "'strong' and most-played / common position to 'popular'; use the "
-                "rendered Sample-size policy's strict floor for strong/robust reads "
-                "and relaxed floor for popular/broad-distribution reads. Scope from "
-                "plan.context: bracket and "
+                "caliber (winCount/matchCount). Scope from plan.context: bracket and "
                 "weeks_back (completed weekly buckets) are honored. Use the position_id "
-                "tool argument, not context.position_ids, to filter this tool; "
+                "tool argument to filter this tool; context.position_ids is not consumed. "
                 "region_ids and game_mode_ids are not supported."
             ),
             input_model=HeroPositionStatsInput,
@@ -471,9 +460,7 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
                 "most recent days, newest first). bracket on context.bracket is "
                 "expanded from RankBracketBasicEnum to RankBracket (winDay only "
                 "accepts the full enum); region_ids/game_mode_ids/position_ids on "
-                "context are honored. Use for 'is Lina rising/falling recently / "
-                "still worth practicing' questions. win_rate_basis declares the "
-                "day-level caliber."
+                "context are honored. win_rate_basis declares the day-level caliber."
             ),
             input_model=HeroDailyTrendsInput,
             handler=_hero_daily_trends_handler(settings),
@@ -554,14 +541,10 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
         ToolDefinition(
             name="stratz.player_profile",
             description=(
-                "Return a player's STRATZ profile (name/avatar/seasonRank + "
-                "global matchCount/winCount/imp/lastMatchDate) by steamAccountId "
-                "(Steam32). v1: steamAccountId direct, no name search — non-numeric "
-                "queries should return capability_boundary; do not invent an id. Use "
-                "for 'who is this player / player overview'. For any match or hero "
-                "performance query, call this first and pass its confirmed_steam_account_id "
-                "reference to the downstream player tool, even when the user supplied "
-                "the numeric id."
+                "Return a player's STRATZ profile (name, avatar, season rank, global "
+                "match and win counts, IMP, and last match date) together with a "
+                "confirmed Steam32 account id. Accepts numeric Steam32 account ids "
+                "only; player-name lookup is not supported."
             ),
             input_model=PlayerProfileInput,
             handler=_player_profile_handler(settings),
@@ -593,16 +576,11 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
         ToolDefinition(
             name="stratz.player_recent_matches",
             description=(
-                "Return a player's recent matches by steamAccountId. Win is native "
-                "MatchPlayerType.isVictory (not derived). Scope filters (bracket, "
-                "position_ids) come from plan.context. Current DotaMind v1 player "
-                "tools do not support region_ids/game_mode_ids; return capability_boundary "
-                "only when the user explicitly requires either filter. Requires "
-                "confirmed_steam_account_id from "
-                "stratz.player_profile. Args: take=count cap (1-50, default 20); "
-                "days=date window (最近一周 / 最近 7 天 -> days=7; newest first, capped at take). "
-                "Emits per-match player_recent_match rows + a player_recent_summary "
-                "(wins/losses/match_count, deterministic counts) + sample_size."
+                "Return a player's recent STRATZ matches and a deterministic "
+                "wins/losses summary, ordered newest first and capped by `take`. "
+                "Victory comes from native MatchPlayerType.isVictory. Uses bracket "
+                "and position filters from plan.context; region and game-mode filters "
+                "are not supported."
             ),
             input_model=PlayerRecentMatchesInput,
             handler=_player_recent_matches_handler(settings),
@@ -621,10 +599,7 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
             mandatory_evidence=("player_recent_summary",),
             arg_contracts={
                 "steam_account_id": ArgContract(
-                    description=(
-                        "Confirmed Player Steam32 account id from stratz.player_profile; "
-                        "must use that reference even when the query includes digits."
-                    ),
+                    description="Confirmed player Steam32 account id.",
                     accepts_refs=(
                         AcceptedRef(
                             from_tool="stratz.player_profile",
@@ -648,22 +623,10 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
         ToolDefinition(
             name="stratz.player_hero_performance",
             description=(
-                "Return a player's per-hero performance (winCount/matchCount/avg "
-                "stats) by steamAccountId. win_rate is locally derived "
-                "(winCount/matchCount; STRATZ has no native winRate). Scope filters "
-                "(bracket->rankIds 0-80, position_ids) come from plan.context. Current "
-                "DotaMind v1 player tools do not support region_ids/game_mode_ids; return "
-                "capability_boundary only when the user explicitly requires either filter. "
-                "Requires confirmed_steam_account_id "
-                "from stratz.player_profile. Three independent knobs: "
-                "take=output hero rows (1-50, default 15); match_take=match sample "
-                "size contributing to each hero's stats (the recent N matches); "
-                "days=date window. selection_mode: 'strong' over-fetches then ranks "
-                "by win_rate (min_match_count floor); 'popular' ranks by games "
-                "played. Use for 'which heroes does this player win with lately'. "
-                "Param mapping — '近N场什么英雄胜率高' -> match_take=N (NOT take); "
-                "'返回前N个英雄' -> take=N; '最近一周' / '最近 7 天' -> days=7; "
-                "'至少玩过 N 场' -> min_match_count=N."
+                "Return a player's per-hero STRATZ performance with match and win "
+                "counts and average statistics. `win_rate` is locally derived as "
+                "win_count / match_count. Uses bracket and position filters from "
+                "plan.context; region and game-mode filters are not supported."
             ),
             input_model=PlayerHeroPerformanceInput,
             handler=_player_hero_performance_handler(settings),
@@ -681,10 +644,7 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
             mandatory_evidence=("player_hero_performance",),
             arg_contracts={
                 "steam_account_id": ArgContract(
-                    description=(
-                        "Confirmed Player Steam32 account id from stratz.player_profile; "
-                        "must use that reference even when the query includes digits."
-                    ),
+                    description="Confirmed player Steam32 account id.",
                     accepts_refs=(
                         AcceptedRef(
                             from_tool="stratz.player_profile",
@@ -695,26 +655,28 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
                     requires_reference=True,
                 ),
                 "take": ArgContract(
-                    description="Number of hero rows to return (1-50): use for 'top N heroes'."
+                    description=(
+                        "Final number of hero rows to return after filtering (1-50); "
+                        "set to the user's requested top-N count. Internal over-fetching "
+                        "is handled by the tool."
+                    )
                 ),
                 "match_take": ArgContract(
                     description=(
-                        "Match sample size per hero (recent N matches). Use this for "
-                        "'近 N 场'. Optional — omit to use STRATZ default."
+                        "Recent match sample size contributing to each hero's "
+                        "statistics. Optional."
                     )
                 ),
                 "days": ArgContract(
-                    description="Date window in days: 最近一周 / 最近 7 天 -> days=7."
+                    description="Date window in days. Optional."
                 ),
                 "min_match_count": ArgContract(
-                    description=(
-                        "Floor on games played; heroes below this are dropped "
-                        "(filters small-sample noise in strong mode). Map '至少玩过 N 场' "
-                        "to min_match_count=N."
-                    )
+                    description="Drop heroes below this games-played threshold."
                 ),
                 "selection_mode": ArgContract(
-                    description="'strong' (rank by win_rate) or 'popular' (by games)."
+                    description=(
+                        "Ranking basis: 'strong' by win_rate, or 'popular' by games played."
+                    )
                 ),
             },
             metadata={"game": "dota2", "domain": "player_hero_performance"},

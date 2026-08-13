@@ -221,3 +221,92 @@
 - 定向 registry、contract、STRATZ tool、sample policy、config 与 prompt 测试：12 passed。
 - 覆盖合法 ranking ref、拒绝字面 candidate list、单周位置 join、原始排名字段/Wilson 透传、策略键与 golden prompt。
 - `git diff --check`：通过。
+
+## 17:38 — P-14 第 8 项：收窄 `stratz.player_profile` 工具说明
+
+### 已完成
+
+- description 只保留玩家档案字段、confirmed Steam32 输出、仅接受数字 Steam32 和不支持玩家名称查询的能力边界。
+- 删除由工具说明直接指定 `capability_boundary`、固定玩家概览路由、profile 前置调用顺序和下游引用写法；下游引用依赖继续由结构化合同强制。
+- 修正一条仍要求已删除 Catalog 编排语句存在的陈旧 prompt 测试断言；未修改 player profile handler、证据或 API 行为。
+- P-14 剩余两个明确过度编排的玩家工具尚未修改。
+
+### 验证
+
+- golden prompt、通用决策规则与玩家能力 prompt 测试：3 passed。
+
+## 17:44 — P-14 第 9 项：收窄 `stratz.player_recent_matches` 工具说明
+
+### 已完成
+
+- 总 description 保留近期 STRATZ 比赛、确定性胜负汇总、newest-first/`take` 边界、原生 `isVictory` 口径以及 bracket/position 支持与 region/game-mode 不支持事实。
+- 删除由工具说明指定 `capability_boundary`、profile 前置依赖和重复的 `take` / `days` 映射；`steam_account_id` 参数说明收窄为已确认 Steam32，引用来源继续由结构化合同强制。
+- 未修改 player recent handler、参数 schema、证据或 API 行为；P-14 最后一个明确过度编排工具 `stratz.player_hero_performance` 尚未修改。
+
+### 验证
+
+- golden prompt、通用决策规则与玩家能力 prompt 测试：3 passed。
+
+## 17:49 — P-14 第 10 项：收窄 `stratz.player_hero_performance` 工具说明
+
+### 已完成
+
+- 总 description 只保留分英雄 STRATZ 表现、`win_count / match_count` 胜率口径、bracket/position 支持和 region/game-mode 不支持事实。
+- 删除 `capability_boundary` 决策、profile 前置依赖、固定问题路由、三参数总览及四个中文问法映射。
+- `steam_account_id`、`take`、`match_take`、`days`、`min_match_count` 与 `selection_mode` 的 ArgContract 分别收窄为自身语义；结构化引用与参数 schema 保持不变。
+- P-14 初审确认的 10 个明显过度编排工具已全部处理；未修改 player performance handler、排序、证据或 API 行为。
+
+### 验证
+
+- golden prompt、通用决策规则与玩家能力 prompt 测试：3 passed。
+- `git diff --check`：通过。
+
+## 17:56 — P-14 部分越界工具统一收窄并完成审查
+
+### 已完成
+
+- `pair_lane_outcome` 删除 Critic 行为；matchup/synergy 将命令式排名约束改为实际排序事实，并删除固定队友/敌人问题路由。
+- `lane_meta_global` 删除跨工具路由、重复自然语言 selection 映射和 Sample-size policy 指令；`hero_position_stats` 删除固定问句、重复映射和跨区块策略指令，保留参数/上下文消费边界。
+- `hero_daily_trends` 删除固定趋势问句，保留日粒度、窗口、枚举转换和 scope 能力。
+- `conversation.history_lookup` 的近期窗口条件作为内部上下文安全/预算边界保留；默认 Registry description 审查至此完成。
+- 未修改 6 个工具的 handler、实际排序、参数 schema、EvidenceGraph 或 API 行为。
+
+### 验证
+
+- 完整 Controller prompt 测试文件与玩家能力 prompt 定向测试：13 passed。
+- `git diff --check`：通过。
+- Controller prompt：33,523 字符、511 行、SHA-256 `dd4a62bf8545b6d8d67281ff06d9afd9c88b5acbce4442d4cccf361e443d62de`。
+
+## 21:36 — P-14 真实规划评估缺陷修正
+
+### 已完成
+
+- 真实 `deepseek-chat` Controller 评估确认 description 去编排后仍可自行推导 Catalog resolver、玩家 profile 引用、matchup/synergy、位置过滤、lane meta、position stats 与日趋势工具链；内存移除静态 `Supported` 路由后 7 个代表用例仍通过，未新增 few-shot 固定 pipeline。
+- 修正玩家英雄表现 top-N：`take` 参数合同明确为过滤后的最终返回行数，内部 over-fetch 由 handler 自行完成。
+- Controller 新增通用保真规则：plan goal 不得添加用户未声明的角色、位置、分路或 scope；初次计划与 validation retry 均不得删除或弱化显式过滤条件，工具不支持时返回 `capability_boundary`。
+- validation retry renderer 升级至 `v2`；`Supported` 清单删除箭头、具体工具名、引用写法和固定问句路由，只保留能力类别。
+
+### 验证
+
+- `tests/test_agentic_prompts.py` 与 `tests/test_agent_controller.py`：53 passed。
+- 相关文件 Ruff：通过。
+- 真实 Controller 复测：top-N、地区边界、模式边界、四号位 goal 保真各 3 次，12/12 通过；未执行 STRATZ 上游查询。
+- Controller prompt：33,644 字符、511 行、SHA-256 `a9e7c258c993e23a6787740c48d48764138cf0ef01c111d9bd668c73be7b0c76`。
+
+## 23:31 — P-11 补全自然语言 Answer 的请求粒度输入
+
+### 已完成
+
+- 未新增固定 presentation schema；`answer_node` 将 `state.query` 传给自然语言 Answer，renderer 以 `request_context` 同时提供 `current_query` 和 `reconstructed_goal`。
+- 当前原话保留具名焦点、排除项、数量和细节措辞；Controller 重建目标承接多轮主体、动作和 scope。Answer 仍只允许使用 EvidenceGraph 中的事实。
+- Controller goal 保真规则补充 named focus、exclusions 与 detail level；Structured Answer 行为不变。
+- 本批只解决 P-11 输入不足，未开始 P-10 的 evidence-specific prompt 动态渲染。
+
+### 验证
+
+- Answer、runtime、recovery 与 prompt 定向测试：79 passed。
+- 相关文件 Ruff：通过。
+- 真实 `deepseek-chat` Answer：同一份本地 Catalog 技能证据下，完整普通技能请求正确列出全部普通技能且不含天赋；单技能请求只回答“棒击大地”，未扩展其他技能或天赋。
+- 未访问 STRATZ 上游。
+- Answer static prompt：5,983 字符、SHA-256 `d1311c8382fce4205413eac9fb55e564784538a81424ebf5aa4e5889e26790ad`。
+- Controller prompt：33,696 字符、512 行、SHA-256 `bc7d1fbe35a913241ce0a2f562b531aec5edfa77dce14452a5c07e20f5c9896c`。

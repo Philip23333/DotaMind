@@ -213,21 +213,36 @@ prepared system prompt, not delivery or model success. Dynamic history and user-
 rendering are versioned without hashing request content. Prompt text, retry feedback,
 validation errors and raw model output stay out of public and persistent DTOs.
 `controller.recovery_rules=v1` versions the separate dynamic Recovery renderer;
-it does not change the system Prompt hash.
+it does not change the system Prompt hash. `controller.validation_retry=v2`
+requires corrected decisions to preserve explicit subjects, requested result
+counts, and scope constraints; an unsupported required scope must become a
+capability boundary instead of being removed during retry.
 
 Static Controller behavior rules live in `agentic/prompts/controller_rules.py`,
 while `agentic/prompts/controller.py` remains the sole Controller prompt bundle
 and message renderer. ToolDefinition descriptions are dynamically rendered into
-that bundle and are the prompt-level source for each tool's scope support,
-arguments, ranking semantics, and Catalog tool-chain requirements; the Controller
-keeps only cross-tool context conventions and a generic instruction to consult
-the rendered tool catalog and sample policy. Current DotaMind v1 player tools do not support region or
+that bundle and describe each tool's capability, data semantics, local behavior,
+and scope support. `ArgContract` describes argument semantics, while
+`requires_reference`, `AcceptedRef`, and `OutputPathContract` declare and validate
+cross-tool dependencies. The Controller keeps only cross-tool context conventions
+and a generic instruction to consult the rendered tool catalog and sample policy.
+Current DotaMind v1 player tools do not support region or
 game-mode filters; this capability boundary is returned only when the user
-explicitly requires either filter.
+explicitly requires either filter. Deterministic plan validation rejects those
+scopes on unsupported tool plans, while Controller rules prohibit silently
+weakening them and prohibit adding unstated role, position, lane, or scope to the
+plan goal. The player-performance `take` argument is the final returned top-N;
+the handler owns any internal over-fetching required for strong-mode ranking.
 Natural-language Answer prompt text and its fixed message shape live in
 `agentic/prompts/answer.py`; `answer/synthesizer.py` only invokes that renderer
 and handles LLM results. Prompt content changes are identified by the prepared
-prompt hash recorded in the Run manifest.
+prompt hash recorded in the Run manifest. For natural-language answers,
+`answer_node` passes the current user query alongside the plan and EvidenceGraph;
+the renderer sends both `current_query` and the Controller's reconstructed
+`plan.goal` as request context. This preserves explicit focus, exclusions, result
+count, and detail wording without adding a fixed presentation enum or intent route.
+The full Controller/tool/evidence/query-bypass flow is illustrated in
+[Answer + Critic layer](../design/architecture/Answer+Critic层.md) §2.
 
 Graph validation repeats deterministic checks but never mutates tool args,
 metadata, or evidence obligations. Therefore state, debug output and execution

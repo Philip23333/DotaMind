@@ -18,10 +18,41 @@ Answer 负责生成回答，Critic 负责审查回答是否被证据充分支撑
 
 ## 2. Answer 输入与输出
 
+Controller 与 Natural Language Answer 是两次独立的 LLM 调用。工具执行和 EvidenceGraph
+构建位于两次调用之间；当前用户原话同时通过一条旁路直接传给 Answer，避免 Controller
+在重建 `plan.goal` 时压缩掉“只回答某项”“不要天赋”“返回前 N 个”等展示要求：
+
+```text
+用户请求
+   │
+   ├────────────────────────────────────────────┐
+   ▼                                            │
+Controller LLM                                  │ 原文 current_query 旁路保留
+   │                                            │
+   ▼                                            │
+ControllerDecision / ExecutionPlan              │
+   │                  │                         │
+   │                  └── reconstructed_goal ─┐ │
+   ▼                                          │ │
+ToolExecutor（非 LLM）                          │ │
+   │                                          │ │
+   ▼                                          │ │
+EvidenceGraph ──────────────────────────────┐  │ │
+                                            ▼  ▼ ▼
+                                          Answer LLM
+                                              │
+                                              ▼
+                                           最终回答
+```
+
+这条旁路只补充请求的展示语义，不绕过 Controller 决策，也不扩大 EvidenceGraph 的事实
+边界。如果 Controller 返回 `direct_answer`，流程会直接结束，不调用工具或 Answer LLM。
+
 Answer 输入：
 
 - `ExecutionPlan`
 - `EvidenceGraph`
+- 当前用户原话 `state.query`（仅自然语言 Answer）
 
 Answer 输出：
 
@@ -38,7 +69,9 @@ AnswerSynthesisResult(
 )
 ```
 
-`answer_node` 不直接解释工具结果；它只调用 `AnswerSynthesizer.synthesize(plan, graph)` 并把结果写入 `state.answer`。
+`answer_node` 不直接解释工具结果；它调用
+`AnswerSynthesizer.synthesize(plan, graph, current_query=state.query)` 并把结果写入
+`state.answer`。Structured Answer 不消费该字段；自然语言 Answer 用它恢复最新展示措辞。
 
 ## 3. Answer 路由
 
@@ -94,22 +127,28 @@ Structured answer 的优点是稳定、可测；缺点是每个 contract 都需�
 
 ## 5. Natural Language Answer 链路
 
-Natural language answer 调用 LLM，但只给它 EvidenceGraph：
+Natural language answer 调用 LLM，并同时提供请求语义与 EvidenceGraph：
 
 ```text
 system:
   Use only the provided evidence graph. Do not invent stats.
 
 user:
-  goal=<plan.goal>
+  request_context={
+    current_query: <当前用户原话>,
+    reconstructed_goal: <plan.goal>
+  }
   required_evidence=<plan.required_evidence>
   evidence_graph=<graph JSON>
 ```
 
-自然语言 Answer 的静态 system prompt 和上述固定消息形状由
+`current_query` 保留当前消息中的具名焦点、排除项、数量和细节要求；
+`reconstructed_goal` 承接 Controller 从多轮会话恢复的完整请求。两者只影响展示范围，
+不得扩大 EvidenceGraph 中可陈述的事实。该方案不新增固定 presentation 枚举或 intent 路由。
+
+自然语言 Answer 的静态 system prompt 和上述消息形状由
 `agentic/prompts/answer.py` 的 renderer 负责；`answer/synthesizer.py` 负责选择
-LLM、执行同步/流式调用和包装结果，不再内嵌 prompt 文本。首批拆分不改变发送给
-LLM 的 system/user 内容。
+LLM、执行同步/流式调用和包装结果，不内嵌 prompt 文本。
 
 当前系统提示还要求：
 

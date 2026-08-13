@@ -220,13 +220,23 @@ def test_natural_language_answer_receives_catalog_rules_and_real_evidence() -> N
     llm = CapturingFakeLLM()
 
     answer = asyncio.run(
-        AnswerSynthesizer(llm=llm, llm_enabled=True).synthesize(plan, graph)
+        AnswerSynthesizer(llm=llm, llm_enabled=True).synthesize(
+            plan,
+            graph,
+            current_query="莉娜的基础属性是什么？",
+        )
     )
 
     assert answer.status == "ok"
     assert len(llm.messages) == 1
     system = llm.messages[0][0]["content"]
     user = llm.messages[0][1]["content"]
+    assert "Use current_query for the user's latest presentation wording" in system
+    assert "reconstructed_goal for the complete request" in system
+    assert "Preserve explicit focus, exclusions, requested result count" in system
+    assert '"current_query": "莉娜的基础属性是什么？"' in user
+    assert '"reconstructed_goal": "Explain Lina\'s base attributes and gains."' in user
+    assert "goal=Explain Lina's base attributes and gains." not in user
     assert "use only normalized text and values" in system
     assert "base attribute values from per-level gains" in system
     assert "ability level arrays" in system

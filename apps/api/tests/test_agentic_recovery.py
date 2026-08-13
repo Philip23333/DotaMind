@@ -57,7 +57,7 @@ class SequenceController:
 
 
 class FixedAnswerSynthesizer:
-    async def synthesize(self, plan, graph):
+    async def synthesize(self, plan, graph, *, current_query=None):
         return AnswerSynthesisResult(
             answer_type=plan.output_contract,
             status="ok",

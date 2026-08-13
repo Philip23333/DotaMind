@@ -24,12 +24,17 @@ async def answer_node(
         state.answer = await synthesizer.synthesize(
             state.plan,
             state.evidence_graph,
+            current_query=state.query,
             on_delta=lambda delta: publish_stream_event(
                 AnswerDeltaStreamEvent(delta=delta, attempt_index=state.attempt_index)
             ),
         )
     else:
-        state.answer = await synthesizer.synthesize(state.plan, state.evidence_graph)
+        state.answer = await synthesizer.synthesize(
+            state.plan,
+            state.evidence_graph,
+            current_query=state.query,
+        )
     trace_status = (
         "failed"
         if state.answer.status in {"error", "insufficient_evidence"}

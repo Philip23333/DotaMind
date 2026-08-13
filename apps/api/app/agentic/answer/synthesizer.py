@@ -79,6 +79,7 @@ class AnswerSynthesizer:
         plan: ExecutionPlan,
         graph: EvidenceGraph,
         *,
+        current_query: str | None = None,
         on_delta: Callable[[str], None] | None = None,
     ) -> AnswerSynthesisResult:
         structured = plan.output_contract in STRUCTURED_OUTPUT_CONTRACTS
@@ -86,7 +87,12 @@ class AnswerSynthesizer:
         if structured:
             return self.structured.synthesize(plan, graph)
         if contract is not None and contract.name == NATURAL_LANGUAGE_CONTRACT:
-            return await self.natural.synthesize(plan, graph, on_delta=on_delta)
+            return await self.natural.synthesize(
+                plan,
+                graph,
+                current_query=current_query,
+                on_delta=on_delta,
+            )
         return unsupported_contract(plan, graph)
 
 
@@ -252,6 +258,7 @@ class NaturalLanguageAnswerSynthesizer:
         plan: ExecutionPlan,
         graph: EvidenceGraph,
         *,
+        current_query: str | None = None,
         on_delta: Callable[[str], None] | None = None,
     ) -> AnswerSynthesisResult:
         if not self.llm_enabled or self.llm is None:
@@ -270,7 +277,11 @@ class NaturalLanguageAnswerSynthesizer:
             )
 
         try:
-            messages = render_natural_language_answer_messages(plan, graph)
+            messages = render_natural_language_answer_messages(
+                plan,
+                graph,
+                current_query=current_query,
+            )
             if on_delta is None:
                 summary = await self.llm.complete(
                     messages,

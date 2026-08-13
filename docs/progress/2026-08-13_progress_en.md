@@ -221,3 +221,92 @@
 - Focused registry, contract, STRATZ tool, sample-policy, config, and prompt tests: 12 passed.
 - Covered a valid ranking reference, rejection of a literal candidate list, the single-week position join, preservation of original ranking fields/Wilson values, the policy key, and the golden prompt.
 - `git diff --check`: passed.
+
+## 17:38 — P-14 Item 8: Narrowed the `stratz.player_profile` Tool Description
+
+### Completed
+
+- The description now states only the player-profile fields, confirmed Steam32 output, numeric-Steam32-only input, and unsupported player-name lookup boundary.
+- Removed direct `capability_boundary` decisions, fixed player-overview routing, profile-first call ordering, and downstream reference syntax from the tool description; structured contracts continue to enforce downstream references.
+- Corrected one stale prompt assertion that still required a removed Catalog orchestration sentence; player-profile handlers, evidence, and API behavior are unchanged.
+- The final two player tools with clear P-14 over-orchestration have not yet been modified.
+
+### Verification
+
+- Golden prompt, generic decision-rule, and player-capability prompt tests: 3 passed.
+
+## 17:44 — P-14 Item 9: Narrowed the `stratz.player_recent_matches` Tool Description
+
+### Completed
+
+- The top-level description retains recent STRATZ matches, the deterministic wins/losses summary, newest-first/`take` boundaries, native `isVictory` semantics, bracket/position support, and unsupported region/game-mode facts.
+- Removed direct `capability_boundary` decisions, the profile prerequisite, and duplicated `take` / `days` mappings; narrowed the `steam_account_id` argument description to a confirmed Steam32 id while structured contracts continue to enforce its source.
+- Player-recent handlers, argument schemas, evidence, and API behavior are unchanged; the final tool with clear P-14 over-orchestration, `stratz.player_hero_performance`, has not yet been modified.
+
+### Verification
+
+- Golden prompt, generic decision-rule, and player-capability prompt tests: 3 passed.
+
+## 17:49 — P-14 Item 10: Narrowed the `stratz.player_hero_performance` Tool Description
+
+### Completed
+
+- The top-level description now states only per-hero STRATZ performance, the `win_count / match_count` win-rate basis, bracket/position support, and unsupported region/game-mode facts.
+- Removed direct `capability_boundary` decisions, the profile prerequisite, fixed-query routing, the three-parameter overview, and four Chinese query-to-argument mappings.
+- Narrowed the `steam_account_id`, `take`, `match_take`, `days`, `min_match_count`, and `selection_mode` ArgContracts to their own semantics; structured references and argument schemas are unchanged.
+- All ten tools identified by the initial P-14 review as clearly over-orchestrated are now handled; player-performance handlers, ranking, evidence, and API behavior are unchanged.
+
+### Verification
+
+- Golden prompt, generic decision-rule, and player-capability prompt tests: 3 passed.
+- `git diff --check`: passed.
+
+## 17:56 — Completed the P-14 Review by Narrowing Partially Overreaching Tools
+
+### Completed
+
+- Removed Critic behavior from `pair_lane_outcome`; rewrote matchup/synergy ranking commands as actual sorting facts and removed fixed teammate/enemy query routing.
+- Removed cross-tool routing, duplicated natural-language selection mappings, and Sample-size-policy instructions from `lane_meta_global`; removed fixed queries, duplicated mappings, and cross-section policy instructions from `hero_position_stats` while retaining argument/context consumption boundaries.
+- Removed the fixed trend query from `hero_daily_trends` while retaining day grain, window, enum conversion, and scope capabilities.
+- Retained the recent-window condition on `conversation.history_lookup` as an internal context safety/budget boundary; the default Registry description review is now complete.
+- Handlers, actual ranking, argument schemas, EvidenceGraph, and API behavior for the six tools are unchanged.
+
+### Verification
+
+- Full Controller prompt test file plus the focused player-capability prompt test: 13 passed.
+- `git diff --check`: passed.
+- Controller prompt: 33,523 characters, 511 lines, SHA-256 `dd4a62bf8545b6d8d67281ff06d9afd9c88b5acbce4442d4cccf361e443d62de`.
+
+## 21:36 — Fixed Defects Found by P-14 Live Planning Evaluation
+
+### Completed
+
+- Live `deepseek-chat` Controller evaluation confirmed that the model still derives Catalog resolver, player-profile reference, matchup/synergy, position-filter, lane-meta, position-stat, and daily-trend chains after description de-orchestration. Seven representative cases also passed with the static `Supported` routing block removed in memory, so no fixed-pipeline few-shot was added.
+- Corrected player hero-performance top-N semantics: the `take` argument contract now means final rows returned after filtering; the handler owns internal over-fetching.
+- Added generic Controller fidelity rules: plan goals cannot add unstated roles, positions, lanes, or scopes; neither initial planning nor validation retry may drop or weaken explicit filters, and unsupported required scope returns `capability_boundary`.
+- Upgraded the validation retry renderer to `v2`; removed arrows, concrete tool names, reference syntax, and fixed-query routing from the `Supported` list, leaving capability categories only.
+
+### Verification
+
+- `tests/test_agentic_prompts.py` and `tests/test_agent_controller.py`: 53 passed.
+- Ruff on the affected files: passed.
+- Live Controller retest: top-N, region boundary, game-mode boundary, and position-4 goal fidelity each ran three times, 12/12 passed; STRATZ upstream execution was not run.
+- Controller prompt: 33,644 characters, 511 lines, SHA-256 `a9e7c258c993e23a6787740c48d48764138cf0ef01c111d9bd668c73be7b0c76`.
+
+## 23:31 — Completed Natural-Language Answer Request-Granularity Input (P-11)
+
+### Completed
+
+- Did not add a fixed presentation schema. `answer_node` now passes `state.query` to natural-language Answer, and the renderer supplies both `current_query` and `reconstructed_goal` in `request_context`.
+- The current wording preserves named focus, exclusions, result count, and detail wording; the Controller-reconstructed goal carries multi-turn subject, action, and scope. Answer remains limited to facts in the EvidenceGraph.
+- Extended Controller goal fidelity to named focus, exclusions, and detail level. Structured Answer behavior is unchanged.
+- This batch fixes the P-11 input gap only; P-10 evidence-specific prompt rendering has not started.
+
+### Verification
+
+- Focused Answer, runtime, recovery, and prompt tests: 79 passed.
+- Ruff on affected files: passed.
+- Live `deepseek-chat` Answer: with the same local Catalog ability evidence, a complete normal-ability request listed all normal abilities without talents, while a single-ability request answered only Boundless Strike without other abilities or talents.
+- STRATZ upstream was not accessed.
+- Answer static prompt: 5,983 characters, SHA-256 `d1311c8382fce4205413eac9fb55e564784538a81424ebf5aa4e5889e26790ad`.
+- Controller prompt: 33,696 characters, 512 lines, SHA-256 `bc7d1fbe35a913241ce0a2f562b531aec5edfa77dce14452a5c07e20f5c9896c`.

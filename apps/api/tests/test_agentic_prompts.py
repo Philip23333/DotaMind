@@ -105,7 +105,10 @@ def test_controller_prompt_declares_catalog_static_and_statistical_boundaries() 
     assert "hero_identity + hero_ability + hero_talent_tree" not in prompt
     assert "For one named ability, call this alone after resolve_hero" not in prompt
     assert "Return a hero's official static attributes and combat fields" in prompt
-    assert "For an attributes-and-talents request, pair this with dota.hero_talent_tree" not in prompt
+    assert (
+        "For an attributes-and-talents request, pair this with dota.hero_talent_tree"
+        not in prompt
+    )
     assert "Return a hero's ordered level 10/15/20/25 talent tree" in prompt
     assert "Pair with dota.hero_abilities for a complete ability-list request" not in prompt
     assert "Explicit recipe wording selects recipe scope" in prompt
@@ -119,7 +122,13 @@ def test_controller_prompt_declares_catalog_static_and_statistical_boundaries() 
 def test_controller_prompt_uses_decision_kind_for_unsupported_scope() -> None:
     prompt = AgentController(_registry(), llm_enabled=False)._system_prompt()
 
-    assert "return\n  capability_boundary and state the filter is unavailable" in prompt
+    assert "Use capability_boundary only when the required capability is unavailable" in prompt
+    assert "Never\n  omit or weaken a requested filter to make a plan valid" in prompt
+    assert (
+        "If registered tools cannot honor a required scope, return\n  capability_boundary"
+        in prompt
+    )
+    assert "return\n  capability_boundary and state the filter is unavailable" not in prompt
     assert "return\n  insufficient_tools and state the filter is unavailable" not in prompt
 
 
@@ -132,7 +141,7 @@ def test_controller_prompt_uses_one_generic_history_first_decision_order() -> No
     assert "Rules that describe which\ntools a query needs apply only after step 4" in prompt
     assert "After selecting tool_plan:" in prompt
     assert "After tool_plan has been selected for fresh evidence" in prompt
-    assert "For a fresh complete ability-list tool plan" in prompt
+    assert "For a fresh complete ability-list tool plan" not in prompt
     assert "This direct answer does not create an EvidenceGraph" in prompt
     assert "The length or formatting of a historical answer is not a refresh trigger" in prompt
     assert "every\n  statistical metric and value requested" in prompt
@@ -141,18 +150,42 @@ def test_controller_prompt_uses_one_generic_history_first_decision_order() -> No
     assert "perform that\n  query through tool_plan instead" in prompt
     assert "Follow the selected tool's declared scope and argument\n  semantics" in prompt
     assert "context.region_ids/game_mode_ids are only supported by" not in prompt
-    assert "Use the position_id tool argument, not context.position_ids" in prompt
+    assert "context.position_ids is not consumed" in prompt
     assert "Derive each selected tool's arguments, ranking semantics, and evidence" in prompt
+    assert "The plan goal must preserve the user's stated subject, role, position, lane" in prompt
+    assert "Do not add or\n  broaden any of these when the current request" in prompt
     assert "Lane-pair meta selection_mode" not in prompt
     assert "Position stats selection_mode" not in prompt
     assert "Hero matchup/synergy ranking" not in prompt
-    assert "Map 强势 / 胜率高 / 上分 to 'strong'" in prompt
-    assert "Keep STRATZ `synergy` as the primary ranking" in prompt
+    assert "Map 强势 / 胜率高 / 上分 to 'strong'" not in prompt
+    assert "Keep STRATZ `synergy` as the primary ranking" not in prompt
+    assert "is not part of the ranking score" in prompt
+    assert "the critic then flags insufficient evidence" not in prompt
+    assert "Use this for 'teammate X" not in prompt
+    assert "rendered Sample-size policy" not in prompt
+    assert "still worth practicing" not in prompt
     assert "Player evidence queries (stratz.player_profile" not in prompt
-    assert "Current DotaMind v1 player tools do not support region_ids/game_mode_ids" in prompt
-    assert "return capability_boundary only when the user explicitly requires either filter" in prompt
+    assert "player-name lookup is not supported" in prompt
+    assert "non-numeric queries should return capability_boundary" not in prompt
+    assert "call this first and pass its confirmed_steam_account_id" not in prompt
+    assert "Return a player's recent STRATZ matches and a deterministic" in prompt
+    assert "Victory comes from native MatchPlayerType.isVictory" in prompt
+    assert "Confirmed player Steam32 account id" in prompt
+    assert "Requires confirmed_steam_account_id from stratz.player_profile. Args:" not in prompt
+    assert "region and game-mode filters are not supported" in prompt
+    assert (
+        "return capability_boundary only when the user explicitly requires either filter"
+        not in prompt
+    )
     assert "STRATZ accepts numeric regionIds/gameModeIds here" not in prompt
-    assert "match_take=N (NOT take)" in prompt
+    assert "Final number of hero rows to return after filtering (1-50)" in prompt
+    assert "Internal over-fetching is handled by the tool" in prompt
+    assert "Recent match sample size contributing to each hero's statistics" in prompt
+    assert "match_take=N (NOT take)" not in prompt
+    assert "队友 X 选什么配合" not in prompt
+    assert "4 号位克制 Lina" not in prompt
+    assert "$<rank>.data.candidate_rows" not in prompt
+    assert "查某玩家战绩" not in prompt
     assert "Completeness example:" in prompt
     assert "preserving that property or action" in prompt
     assert "full historical\n  answer unless they ask for it" in prompt
@@ -298,7 +331,7 @@ def test_disabled_llm_still_records_prepared_prompt_manifest() -> None:
 
     assert llm.calls == 0
     assert state.run_context.prompt_versions == controller.prompt_versions
-    assert state.run_context.prompt_versions["controller.validation_retry"] == "v1"
+    assert state.run_context.prompt_versions["controller.validation_retry"] == "v2"
 
 
 def test_recovery_rules_are_versioned_but_not_in_system_prompt() -> None:
@@ -307,11 +340,15 @@ def test_recovery_rules_are_versioned_but_not_in_system_prompt() -> None:
     assert RECOVERY_RULES_VERSION == "v1"
     assert render_recovery_rules() not in controller._system_prompt()
     assert controller.prompt_versions["controller.recovery_rules"] == "v1"
-    assert controller.prompt_versions["controller.validation_retry"] == "v1"
+    assert controller.prompt_versions["controller.validation_retry"] == "v2"
     assert render_validation_retry_feedback(["bad field"]) == (
         "Your previous response was rejected. Return the FULL corrected "
         "ControllerDecision JSON again, fixing every issue:\n"
-        "- bad field\nDo not explain; only return the corrected JSON."
+        "- bad field\nPreserve every explicit subject, requested result count, and scope "
+        "constraint from the current request. Never fix an invalid plan by "
+        "dropping or weakening a user requirement; return capability_boundary "
+        "if the registered tools cannot honor it.\n"
+        "Do not explain; only return the corrected JSON."
     )
     recovery_rules = render_recovery_rules()
     for clause in (

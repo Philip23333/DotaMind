@@ -631,7 +631,8 @@ def _answer_graph_runner(*, answer_status: str, confidence: float) -> AgentGraph
             )
 
     class Synthesizer:
-        async def synthesize(self, execution_plan, graph):
+        async def synthesize(self, execution_plan, graph, *, current_query=None):
+            assert current_query == "q"
             return AnswerSynthesisResult(
                 answer_type="natural_language_answer",
                 status=answer_status,
