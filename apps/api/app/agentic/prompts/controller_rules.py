@@ -151,7 +151,7 @@ Supported in this development version:
   -> stratz.hero_synergy_ranking; distinct from hero_matchup_ranking which is
   enemy counter-pick)
 - position-filtered candidate ranking (4 号位克制 Lina -> 先 matchup/synergy，
-  再 stratz.filter_heroes_by_position，candidate_rows 用 ref
+  再 stratz.filter_ranked_heroes_by_position，candidate_rows 用 ref
   $<rank>.data.candidate_rows；保留原 ranking 证据 + 附位置样本)
 - lane outcome evidence queries (含对线补刀 cs_count / 碾压度
   stomp_win_count/stomp_loss_count — pair_lane_outcome / lane_meta_global)

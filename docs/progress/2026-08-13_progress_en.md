@@ -205,3 +205,19 @@
 ### Verification
 
 - Two focused Controller prompt tests: 2 passed.
+
+## 17:29 — Corrected the Ranked-Candidate Position-Filter Tool Contract
+
+### Completed
+
+- Renamed `stratz.filter_heroes_by_position` to `stratz.filter_ranked_heroes_by_position`, making clear that it handles matchup/synergy ranking candidates rather than acting as a generic filter over heterogeneous results.
+- Narrowed the description to position-sample filtering, preservation of the original ranking, appended position match count/win rate, and the absence of reranking/composite scoring; removed concrete reference syntax and fixed-query routing.
+- Added `requires_reference=True` to `candidate_rows`, which accepts only `data.candidate_rows` from the two ranking tools; Validator now rejects Planner-constructed candidate lists.
+- Updated sample policy, the Controller tool name, tests, golden fixture, API README, Tool-layer documentation, and the node/tool/edge inventory; historical blueprints, roadmaps, and old progress snapshots retain the old name as historical records.
+- The STRATZ join handler, `role_filtered_candidate_row` evidence, ranking semantics, and API behavior are unchanged; no compatibility alias is retained for the old tool name.
+
+### Verification
+
+- Focused registry, contract, STRATZ tool, sample-policy, config, and prompt tests: 12 passed.
+- Covered a valid ranking reference, rejection of a literal candidate list, the single-week position join, preservation of original ranking fields/Wilson values, the policy key, and the golden prompt.
+- `git diff --check`: passed.

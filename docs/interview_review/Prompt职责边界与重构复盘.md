@@ -112,6 +112,14 @@
 - 如定向规划评估显示仅靠结构化合同仍不稳定，只增加一个简短代表性案例，展示名称解析和 plan-local 引用；案例用于提示推理方式，不成为按 intent 路由的固定 pipeline，也不在每个工具 description 重复。
 - 验收重点：最终 Controller prompt 仍清晰渲染 `must_reference`、`accepts_ref`、输出路径和 evidence kinds；6 个 Catalog description 不再包含调用顺序或工具组合指令；不修改 handler、实际数据、EvidenceGraph 或 API 行为。
 
+### P-14 工具合同修正：排名候选位置过滤（已完成，2026-08-13）
+
+- 未将位置过滤扩张为通用结果集筛选器：matchup、synergy、lane meta、position stats 与 player performance 的行结构和证据语义不同，统一动态筛选合同会引入不必要的 schema 联合与表达式复杂度。
+- 工具由 `stratz.filter_heroes_by_position` 更名为 `stratz.filter_ranked_heroes_by_position`，明确其输入仅是 matchup/synergy 已排名候选，而不是任意英雄列表。
+- description 只陈述位置样本过滤、保留原排名、附加位置场次/胜率以及不重排/不生成复合评分的行为；删除具体 `$ref` 写法和固定问句路由。
+- `candidate_rows` 增加 `requires_reference=True`，合法来源仍限定为两个 ranking 工具的 `data.candidate_rows`；这是数据完整性合同，不规定某类 intent 必须走固定 pipeline。
+- 保留 handler 的单周 STRATZ 位置统计 join、`role_filtered_candidate_row` evidence 和 API 行为；不提供旧工具名兼容别名。
+
 ## 已确认的保留原则
 
 - `intent` 是语义标签，不能变回固定 pipeline 路由键。

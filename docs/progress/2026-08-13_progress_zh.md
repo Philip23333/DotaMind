@@ -205,3 +205,19 @@
 ### 验证
 
 - 两条相关 Controller prompt 测试：2 passed。
+
+## 17:29 — 排名候选位置过滤工具合同修正
+
+### 已完成
+
+- 将 `stratz.filter_heroes_by_position` 更名为 `stratz.filter_ranked_heroes_by_position`，明确只处理 matchup/synergy ranking 的候选行，不扩张为跨异构结果的通用筛选器。
+- description 收窄为位置样本过滤、保留原排名、附加位置场次/胜率及不重排/不生成复合评分；删除具体引用写法和固定问题路由。
+- `candidate_rows` 增加 `requires_reference=True`，仅接受两个 ranking 工具的 `data.candidate_rows`；Validator 现在拒绝 Planner 直接构造候选列表。
+- 同步 sample policy、Controller 工具名、测试、golden fixture、API README、Tool 层和 node/tool/edge inventory；历史蓝图、roadmap 与旧进度快照保留原名作为历史记录。
+- 未修改 STRATZ join handler、`role_filtered_candidate_row` evidence、排序口径或 API 行为；不保留旧工具名兼容别名。
+
+### 验证
+
+- 定向 registry、contract、STRATZ tool、sample policy、config 与 prompt 测试：12 passed。
+- 覆盖合法 ranking ref、拒绝字面 candidate list、单周位置 join、原始排名字段/Wilson 透传、策略键与 golden prompt。
+- `git diff --check`：通过。

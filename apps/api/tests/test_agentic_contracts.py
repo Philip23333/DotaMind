@@ -641,7 +641,7 @@ def test_validate_context_scope_allows_region_with_daily_trends_only() -> None:
 def test_validate_plan_accepts_list_dict_ref_without_min_length_error() -> None:
     """A list arg with min_length, populated via $ref, must not fail validation
     on an empty placeholder — the real value comes from the ref target at run
-    time. Guards the filter_heroes_by_position candidate_rows contract."""
+    time. Guards the filter_ranked_heroes_by_position candidate_rows contract."""
     from app.agentic.models import QueryContext, ToolCall
     from app.agentic.planning.contracts import validate_plan_against_catalog
     from app.agentic.tools.stratz_tools import build_default_tool_registry
@@ -662,7 +662,7 @@ def test_validate_plan_accepts_list_dict_ref_without_min_length_error() -> None:
             ),
             ToolCall(
                 id="filter",
-                tool="stratz.filter_heroes_by_position",
+                tool="stratz.filter_ranked_heroes_by_position",
                 args={
                     "candidate_rows": "$matchup.data.candidate_rows",
                     "position_id": "POSITION_4",
@@ -677,3 +677,17 @@ def test_validate_plan_accepts_list_dict_ref_without_min_length_error() -> None:
     )
     errors = validate_plan_against_catalog(plan, registry)
     assert not any("too_short" in e or "candidate_rows" in e for e in errors)
+
+    candidate_contract = registry.get(
+        "stratz.filter_ranked_heroes_by_position"
+    ).arg_contracts["candidate_rows"]
+    assert candidate_contract.requires_reference is True
+
+    literal_plan = plan.model_copy(deep=True)
+    literal_plan.tool_calls[2].args["candidate_rows"] = [{"hero_id": 1}]
+    literal_errors = validate_plan_against_catalog(literal_plan, registry)
+    assert (
+        "stratz.filter_ranked_heroes_by_position.candidate_rows must reference "
+        "a previous current-plan tool result"
+        in literal_errors
+    )

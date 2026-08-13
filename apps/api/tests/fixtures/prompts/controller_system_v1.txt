@@ -145,7 +145,7 @@ Supported in this development version:
   -> stratz.hero_synergy_ranking; distinct from hero_matchup_ranking which is
   enemy counter-pick)
 - position-filtered candidate ranking (4 号位克制 Lina -> 先 matchup/synergy，
-  再 stratz.filter_heroes_by_position，candidate_rows 用 ref
+  再 stratz.filter_ranked_heroes_by_position，candidate_rows 用 ref
   $<rank>.data.candidate_rows；保留原 ranking 证据 + 附位置样本)
 - lane outcome evidence queries (含对线补刀 cs_count / 碾压度
   stomp_win_count/stomp_loss_count — pair_lane_outcome / lane_meta_global)
@@ -196,7 +196,7 @@ Per-tool thresholds (arg: default / relaxed / strict):
 - stratz.hero_synergy_ranking.min_sample_size: default=2000 relaxed=500 strict=5000
 - stratz.lane_meta_global.min_sample_size: default=1000 relaxed=300 strict=3000
 - stratz.hero_position_stats.min_sample_size: default=1000 relaxed=300 strict=3000
-- stratz.filter_heroes_by_position.min_position_match_count: default=1000 relaxed=300 strict=3000
+- stratz.filter_ranked_heroes_by_position.min_position_match_count: default=1000 relaxed=300 strict=3000
 
 Tools:
 - resolve_hero
@@ -328,12 +328,13 @@ Tools:
       must_reference: true
       accepts_ref: resolve_hero.data.hero.hero_id (int) -> "$<previous_call_id>.data.hero.hero_id"
     - take: int, optional. Number of recent days (1..12, default 12).
-- stratz.filter_heroes_by_position
-  description: Filter ranking candidates (from stratz.hero_matchup_ranking or stratz.hero_synergy_ranking) down to heroes that have a position sample at `position_id`. candidate_rows is a $ref to $<rank_call>.data.candidate_rows (list[dict]; preserves original source_side/synergy/win_rate/sample). Joins hero_position_stats at the position; keeps heroes with position match_count >= min_position_match_count. Output role_filtered_candidate_row evidence carries the ORIGINAL ranking row + position sample — no invented composite score (thin relay). Use for '4 号位克制 Lina' (matchup Lina -> filter by POSITION_4).
+- stratz.filter_ranked_heroes_by_position
+  description: Filter matchup or synergy ranking rows to heroes with sufficient STRATZ samples at a specified position. Preserves the original ranking fields and adds position match count and win rate without reranking or computing a composite score.
   evidence_produced: ["role_filtered_candidate_row"]
   allowed_arg_keys: ["candidate_rows", "position_id", "min_position_match_count"]
   args:
-    - candidate_rows: list[dict[str, Any]], required. Ranking rows from matchup/synergy. Use ref $<rank_call>.data.candidate_rows.
+    - candidate_rows: list[dict[str, Any]], required. Matchup or synergy ranking candidate rows.
+      must_reference: true
       accepts_ref: stratz.hero_matchup_ranking.data.candidate_rows (list[dict]) -> "$<previous_call_id>.data.candidate_rows"
       accepts_ref: stratz.hero_synergy_ranking.data.candidate_rows (list[dict]) -> "$<previous_call_id>.data.candidate_rows"
     - position_id: str, required. Position to filter by (POSITION_1 .. POSITION_5).

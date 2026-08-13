@@ -110,9 +110,9 @@ def test_apply_skips_tool_not_enrolled_in_policy() -> None:
 
 
 def test_apply_handles_filter_tool_uses_min_position_match_count_arg() -> None:
-    # Generic over `arg`: filter_heroes_by_position uses min_position_match_count.
+    # Generic over `arg`: filter_ranked_heroes_by_position uses min_position_match_count.
     plan = _plan(
-        "stratz.filter_heroes_by_position",
+        "stratz.filter_ranked_heroes_by_position",
         {"candidate_rows": [{"hero_id": 1}], "position_id": "POSITION_4"},
     )
     apply_sample_policy(plan, _policy())
@@ -198,7 +198,7 @@ def test_render_contains_per_tool_table_and_four_modes() -> None:
         "default=1000 relaxed=300 strict=3000"
     ) in rendered
     assert (
-        "- stratz.filter_heroes_by_position.min_position_match_count: "
+        "- stratz.filter_ranked_heroes_by_position.min_position_match_count: "
         "default=1000 relaxed=300 strict=3000"
     ) in rendered
 
@@ -259,10 +259,10 @@ def test_policy_yaml_sample_policy_loads_expected_defaults() -> None:
         "stratz.hero_synergy_ranking",
         "stratz.lane_meta_global",
         "stratz.hero_position_stats",
-        "stratz.filter_heroes_by_position",
+        "stratz.filter_ranked_heroes_by_position",
     }
     assert tools["stratz.hero_matchup_ranking"].default == 2000
     assert tools["stratz.hero_matchup_ranking"].relaxed == 500
     assert tools["stratz.hero_matchup_ranking"].strict == 5000
-    assert tools["stratz.filter_heroes_by_position"].arg == "min_position_match_count"
+    assert tools["stratz.filter_ranked_heroes_by_position"].arg == "min_position_match_count"
     assert tools["stratz.lane_meta_global"].default == 1000

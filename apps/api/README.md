@@ -132,7 +132,7 @@ STRATZ:
 - `stratz.lane_meta_global`
 - `stratz.hero_position_stats`
 - `stratz.hero_daily_trends`
-- `stratz.filter_heroes_by_position`
+- `stratz.filter_ranked_heroes_by_position`
 - `stratz.player_profile`
 - `stratz.player_recent_matches`
 - `stratz.player_hero_performance`

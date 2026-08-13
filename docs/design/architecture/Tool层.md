@@ -222,6 +222,13 @@ STRATZ 特别规则：
 五类对线计数派生的 lane win/draw/loss rates 与独立的 match win rate。其位置
 范围以 `filters.position_ids` 为准；STRATZ row 的 `position` 不作为请求位置回显。
 
+`stratz.filter_ranked_heroes_by_position` 是排名候选的专用位置资格过滤工具，
+只接收 `stratz.hero_matchup_ranking` 或 `stratz.hero_synergy_ranking` 暴露的
+`data.candidate_rows` 引用。它查询指定位置的 STRATZ 样本，按
+`min_position_match_count` 过滤并附加位置场次和胜率；保留原排名字段与顺序，
+不生成复合评分。`candidate_rows` 由 `requires_reference` 强制为当前计划的前序引用，
+不能由 Planner 直接构造。
+
 ## 8. 底层 integration 与 agentic tool 的边界
 
 底层 integration 负责 provider-native API：

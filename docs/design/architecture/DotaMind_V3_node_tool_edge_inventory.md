@@ -128,7 +128,7 @@ cannot borrow one another's primary evidence.
 | `stratz.lane_meta_global` | `lane_meta_row` |
 | `stratz.hero_position_stats` | `position_stat` |
 | `stratz.hero_daily_trends` | `hero_daily_trend` |
-| `stratz.filter_heroes_by_position` | `role_filtered_candidate_row` |
+| `stratz.filter_ranked_heroes_by_position` | `role_filtered_candidate_row` |
 | `stratz.player_profile` | `player_identity` |
 | `stratz.player_recent_matches` | `player_recent_summary` |
 | `stratz.player_hero_performance` | `player_hero_performance` |

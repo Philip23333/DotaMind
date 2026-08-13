@@ -505,36 +505,27 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
     )
     registry.register(
         ToolDefinition(
-            name="stratz.filter_heroes_by_position",
+            name="stratz.filter_ranked_heroes_by_position",
             description=(
-                "Filter ranking candidates (from stratz.hero_matchup_ranking or "
-                "stratz.hero_synergy_ranking) down to heroes that have a position "
-                "sample at `position_id`. candidate_rows is a $ref to "
-                "$<rank_call>.data.candidate_rows (list[dict]; preserves original "
-                "source_side/synergy/win_rate/sample). Joins hero_position_stats at "
-                "the position; keeps heroes with position match_count >= "
-                "min_position_match_count. Output role_filtered_candidate_row "
-                "evidence carries the ORIGINAL ranking row + position sample — no "
-                "invented composite score (thin relay). Use for '4 号位克制 Lina' "
-                "(matchup Lina -> filter by POSITION_4)."
+                "Filter matchup or synergy ranking rows to heroes with sufficient "
+                "STRATZ samples at a specified position. Preserves the original "
+                "ranking fields and adds position match count and win rate without "
+                "reranking or computing a composite score."
             ),
-            input_model=FilterHeroesByPositionInput,
-            handler=_filter_heroes_by_position_handler(settings),
+            input_model=FilterRankedHeroesByPositionInput,
+            handler=_filter_ranked_heroes_by_position_handler(settings),
             source=ToolSource(
                 name="STRATZ",
                 kind="public_graphql_api",
                 url=settings.stratz_graphql_url,
                 status="live",
             ),
-            evidence_extractor=filter_heroes_by_position_evidence,
+            evidence_extractor=filter_ranked_heroes_by_position_evidence,
             evidence_kinds=("role_filtered_candidate_row",),
             mandatory_evidence=("role_filtered_candidate_row",),
             arg_contracts={
                 "candidate_rows": ArgContract(
-                    description=(
-                        "Ranking rows from matchup/synergy. Use ref "
-                        "$<rank_call>.data.candidate_rows."
-                    ),
+                    description="Matchup or synergy ranking candidate rows.",
                     accepts_refs=(
                         AcceptedRef(
                             from_tool="stratz.hero_matchup_ranking",
@@ -547,6 +538,7 @@ def register_stratz_tools(registry: ToolRegistry, settings: Settings) -> None:
                             type="list[dict]",
                         ),
                     ),
+                    requires_reference=True,
                 ),
                 "position_id": ArgContract(
                     description="Position to filter by (POSITION_1 .. POSITION_5)."
@@ -819,15 +811,15 @@ def _hero_daily_trends_handler(settings: Settings):
     return handle
 
 
-class FilterHeroesByPositionInput(BaseModel):
+class FilterRankedHeroesByPositionInput(BaseModel):
     candidate_rows: list[dict[str, Any]] = Field(min_length=1)
     position_id: str
     # keep in sync with policy.yaml planning.sample_policy
-    # .tools[stratz.filter_heroes_by_position].default
+    # .tools[stratz.filter_ranked_heroes_by_position].default
     min_position_match_count: int = Field(default=1000, ge=0)
 
 
-def filter_heroes_by_position_evidence(result: ToolResult) -> list[EvidenceItem]:
+def filter_ranked_heroes_by_position_evidence(result: ToolResult) -> list[EvidenceItem]:
     data = result.data if isinstance(result.data, dict) else {}
     filters = data.get("filters") if isinstance(data.get("filters"), dict) else {}
     filtered = data.get("filtered_rows")
@@ -877,9 +869,9 @@ def filter_heroes_by_position_evidence(result: ToolResult) -> list[EvidenceItem]
     return evidence
 
 
-def _filter_heroes_by_position_handler(settings: Settings):
+def _filter_ranked_heroes_by_position_handler(settings: Settings):
     async def handle(
-        args: FilterHeroesByPositionInput,
+        args: FilterRankedHeroesByPositionInput,
         context: QueryContext,
     ) -> dict[str, Any]:
         if not settings.stratz_token:

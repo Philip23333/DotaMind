@@ -73,7 +73,7 @@ def test_policy_yaml_loads_all_report_sections() -> None:
     assert policy.llm.orchestrator.max_tokens == 4000
     assert policy.planning.sample_policy.tools["stratz.hero_matchup_ranking"].default == 2000
     assert (
-        policy.planning.sample_policy.tools["stratz.filter_heroes_by_position"].arg
+        policy.planning.sample_policy.tools["stratz.filter_ranked_heroes_by_position"].arg
         == "min_position_match_count"
     )
     assert policy.planning.sample_policy.tools["stratz.lane_meta_global"].strict == 3000
