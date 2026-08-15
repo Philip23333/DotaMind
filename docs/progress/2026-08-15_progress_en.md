@@ -81,3 +81,31 @@
 
 - All test sessions were deleted. The temporary port-8002 API was stopped, its listener closed, and its temporary log directory removed; the existing port-8001 service was untouched.
 - P-15 remains an open P0. The next step is to revisit the decision contract and model behavior rather than assume the Prompt simplification solved the issue.
+
+## 14:10 — First-phase match tools and PandaScore free-plan inventory
+
+### Completed
+
+- Used the temporary PandaScore token only in a process environment: `/dota2/series`, `/dota2/tournaments`, and upcoming/running/past Fixture lists returned 200; TI 2026 is Series 10828 and Group Stage is Tournament 21545.
+- Added the PandaScore transport, competition/Fixture/Game normalization models, and the OpenDota single-match integration; registered `pandascore.resolve_competition`, `pandascore.list_matches`, `pandascore.resolve_match_game`, `opendota.match_summary`, and `opendota.match_draft`.
+- Added Bearer authentication, page-size limits, short caching, rate-limit header capture, 401/403/429/non-JSON/timeout mapping, and `DOTAMIND_PANDASCORE_TOKEN` configuration. The token was not written to the repository.
+- Added match evidence extraction and Answer source-boundary rules: PandaScore Fixture facts and OpenDota Valve/Replay facts remain separately attributed; `detailed_stats` is not `has_parsed`; an empty draft produces no evidence.
+- Updated the Controller golden fixture, registry catalog, Tool/architecture/node inventories, READMEs, configuration documentation, and the PandaScore API inventory.
+- With the five tools added, the current Controller system prompt is 37,163 characters and 571 lines, with SHA-256 `dbba108230c07fc322e2be582c324b9ac2729c0e0e1e92b2df0c3e8e986b4675`.
+
+### Verified boundaries
+
+- Known sample `pandascore_match_id=1631694` and game one `pandascore_game_id=738652` resolve from the free Fixture data; team order is irrelevant and a multi-game series without a game number is ambiguous.
+- A Game row's `match_id` is the PandaScore parent Match ID, not Valve `match_id`; `GET /dota2/games/738652` returned 403. `resolve_match_game` therefore returns `pending_valve_match_id` without fabricating a mapping, scraping a page, or bypassing plan access.
+- OpenDota `8943244303` was live-checked with ten players, parse version 22, and 24 draft rows; normalization returns result, scoreboard, parse coverage, and draft.
+
+### Verification
+
+- `tests/test_pandascore_transport.py tests/test_pandascore_domains.py tests/test_agentic_pandascore_tools.py tests/test_agentic_opendota_match_tools.py`: 17 passed.
+- `tests/test_agentic_registry.py tests/test_agentic_contracts.py tests/test_agentic_evidence.py tests/test_agentic_prompts.py`: 75 passed.
+- `uv run ruff check app tests`: passed.
+
+### Known limitations
+
+- The free PandaScore Fixture cannot currently map a PandaScore Game to a Valve match ID. A user-supplied Valve ID or permissioned upstream data is required; the first phase does not hide this gap behind a successful result.
+- This phase adds no endpoint, structured match output contract, timeline/event/log data, STRATZ fallback, database synchronization, or frontend.

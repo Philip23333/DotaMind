@@ -416,6 +416,63 @@ Tools:
   args:
     - role: str, required. Role name to filter.
     - min_pub_pick: int, optional. Minimum public pick count.
+- pandascore.resolve_competition
+  description: Resolve a Dota 2 competition or series using PandaScore fixture metadata.
+  evidence_produced: ["competition_identity", "tournament_stage"]
+  allowed_arg_keys: ["query"]
+  args:
+    - query: str, required. Competition or series name.
+  declared_output_paths:
+    - data.competition.series_id: int. PandaScore series id.
+- pandascore.list_matches
+  description: List upcoming, running, and past PandaScore fixtures for a resolved series.
+  evidence_produced: ["match_schedule", "match_state", "series_score"]
+  allowed_arg_keys: ["series_id", "date_from", "date_to", "statuses", "limit"]
+  args:
+    - series_id: int, required. PandaScore series id from resolve_competition.
+      must_reference: true
+      accepts_ref: pandascore.resolve_competition.data.competition.series_id (int) -> "$<previous_call_id>.data.competition.series_id"
+    - date_from: datetime | None, optional. Inclusive UTC lower bound.
+    - date_to: datetime | None, optional. Inclusive UTC upper bound.
+    - statuses: list[Literal] | None, optional. PandaScore fixture statuses.
+    - limit: int, optional. Maximum returned fixtures.
+  declared_output_paths:
+    - data.matches: list[dict]. Normalized fixture rows.
+- pandascore.resolve_match_game
+  description: Resolve teams and an optional game number to PandaScore and Valve match identities.
+  evidence_produced: ["match_identity", "series_context", "valve_match_identity"]
+  allowed_arg_keys: ["series_id", "team_queries", "game_number", "scheduled_date"]
+  args:
+    - series_id: int, required. PandaScore series id from resolve_competition.
+      must_reference: true
+      accepts_ref: pandascore.resolve_competition.data.competition.series_id (int) -> "$<previous_call_id>.data.competition.series_id"
+    - team_queries: list[str], required. Two team names, order independent.
+    - game_number: int | None, optional. 1-based game position inside the series.
+    - scheduled_date: date | None, optional. Optional UTC calendar date for disambiguation.
+  declared_output_paths:
+    - data.match.pandascore_match_id: int. PandaScore match id.
+    - data.game.pandascore_game_id: int. PandaScore game id.
+    - data.game.valve_match_id: int. Valve match id when exposed.
+- opendota.match_summary
+  description: Return the OpenDota result and ten-player scoreboard for a Valve match id.
+  evidence_produced: ["match_result", "player_scoreboard", "match_parse_status"]
+  allowed_arg_keys: ["valve_match_id"]
+  args:
+    - valve_match_id: int, required. Valve match id, literal or PandaScore resolver output.
+      accepts_ref: pandascore.resolve_match_game.data.game.valve_match_id (int) -> "$<previous_call_id>.data.game.valve_match_id"
+  declared_output_paths:
+    - data.match.valve_match_id: int. Valve match id.
+- opendota.match_draft
+  description: Return OpenDota picks and bans for a Valve match id.
+  evidence_produced: ["match_draft"]
+  allowed_arg_keys: ["valve_match_id"]
+  args:
+    - valve_match_id: int, required. Valve match id from a PandaScore resolver or OpenDota summary.
+      must_reference: true
+      accepts_ref: pandascore.resolve_match_game.data.game.valve_match_id (int) -> "$<previous_call_id>.data.game.valve_match_id"
+      accepts_ref: opendota.match_summary.data.match.valve_match_id (int) -> "$<previous_call_id>.data.match.valve_match_id"
+  declared_output_paths:
+    - data.match.valve_match_id: int. Valve match id.
 - patch.get_records
   description: Return local Dota 2 patch records from app/data/patches.
   evidence_produced: ["patch_records", "patch_buff_count", "patch_nerf_count"]

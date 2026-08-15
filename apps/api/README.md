@@ -144,6 +144,18 @@ OpenDota:
 - `opendota.team_players`
 - `opendota.team_heroes`
 - `opendota.hero_stats_by_role`
+- `opendota.match_summary`
+- `opendota.match_draft`
+
+PandaScore Dota 2 Fixture:
+
+- `pandascore.resolve_competition`
+- `pandascore.list_matches`
+- `pandascore.resolve_match_game`
+
+PandaScore Fixture IDs and Valve match IDs are distinct. The free Fixture
+response currently does not expose the Valve ID; `resolve_match_game` reports a
+pending mapping instead of guessing it or using a paid endpoint.
 
 Local patch records:
 
@@ -167,6 +179,8 @@ Pydantic at startup.
 ```text
 DOTAMIND_LIVE_DATA_ENABLED=false
 DOTAMIND_OPENDOTA_API_KEY=
+DOTAMIND_PANDASCORE_TOKEN=
+DOTAMIND_PANDASCORE_BASE_URL=https://api.pandascore.co
 DOTAMIND_STRATZ_TOKEN=
 DOTAMIND_LLM_ENABLED=false
 DOTAMIND_LLM_PROVIDER=deepseek

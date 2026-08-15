@@ -93,6 +93,8 @@ Graph result routing / EvidenceGraph
 ToolRegistry()
   -> register_stratz_tools
   -> register_opendota_tools
+  -> register_pandascore_tools
+  -> register_opendota_match_tools
   -> register_patch_tools
 ```
 
@@ -108,6 +110,18 @@ V3.2-2 中，默认 `PlanService` 装配会把同一 Registry 实例传给这些
 装配的注册集合，不会深度冻结 ToolDefinition 内部映射，也不校验任意注入对象的身份。
 
 因此默认路径中 Planner、Validator 与 Executor 都从同一已关闭注册期的 Registry 读取工具目录。
+
+第一阶段比赛工具的引用边界如下：
+
+- `pandascore.resolve_competition` 输出 `data.competition.series_id`。
+- `pandascore.list_matches` 和 `pandascore.resolve_match_game` 只能引用该 Series。
+- `resolve_match_game` 输出明确命名的 PandaScore Match/Game ID；免费 Fixture 未提供
+  Valve ID 时输出 `pending_valve_match_id`，不调用付费详情接口兜底。
+- `opendota.match_summary` 可接受用户字面量 Valve ID 或 PandaScore resolver 的明确引用。
+- `opendota.match_draft` 只能引用 PandaScore resolver 或 OpenDota summary 的 Valve ID。
+
+PandaScore 赛事 Fixture 事实与 OpenDota Valve/Replay 事实分别进入 EvidenceGraph；
+`detailed_stats` 不是 `has_parsed`，空 BP 不产生 `match_draft` 证据。
 
 ## 4. ToolExecutor Node 链路
 

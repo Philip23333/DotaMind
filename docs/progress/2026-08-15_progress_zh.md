@@ -81,3 +81,31 @@
 
 - 所有测试会话均已删除。临时 8002 API 已停止，端口关闭，临时日志目录已删除；现有 8001 服务未修改。
 - P-15 仍是未关闭的 P0。下一步需要重新讨论 decision 合同与模型判断，而不是继续假设本次 Prompt 简化已经解决问题。
+
+## 14:10 — 第一阶段比赛数据工具与 PandaScore 免费能力核验
+
+### 已完成
+
+- 使用临时 PandaScore token 做进程级实测：`/dota2/series`、`/dota2/tournaments`、upcoming/running/past Fixture 列表均返回 200；TI 2026 Series 为 10828，Group Stage 为 Tournament 21545。
+- 新增 PandaScore transport、赛事/Fixture/Game 归一化模型和 OpenDota 单场 integration；注册 `pandascore.resolve_competition`、`pandascore.list_matches`、`pandascore.resolve_match_game`、`opendota.match_summary`、`opendota.match_draft` 五个工具。
+- 新增 Bearer 认证、分页上限、短缓存、限流头读取、401/403/429/非 JSON/超时错误映射，以及 `DOTAMIND_PANDASCORE_TOKEN` 配置；token 未写入仓库。
+- 新增比赛证据提取和 Answer source boundary：PandaScore Fixture 与 OpenDota Valve/Replay 事实分开归因，`detailed_stats` 不解释为 `has_parsed`，空 BP 不产生证据。
+- 更新 Controller golden fixture、工具注册目录、Tool 层/架构/节点清单、README、配置文档和 PandaScore API inventory。
+- 加入五个工具后的当前 Controller system prompt 为 37,163 字符、571 行，SHA-256 为 `dbba108230c07fc322e2be582c324b9ac2729c0e0e1e92b2df0c3e8e986b4675`。
+
+### 已验证边界
+
+- 已知样本 `pandascore_match_id=1631694`、第一局 `pandascore_game_id=738652` 可由免费 Fixture 定位；双方战队顺序不影响匹配，未指定多局序号时返回 ambiguous。
+- Game 行的 `match_id` 是 PandaScore 父 Match ID，不是 Valve `match_id`；`GET /dota2/games/738652` 返回 403。`resolve_match_game` 因此返回 `pending_valve_match_id`，不伪造映射、不抓网页、不绕过套餐。
+- OpenDota `8943244303` 实测返回 10 名选手、parse version 22 和 24 条 BP；归一化输出包含赛果、面板、parse coverage 和 draft。
+
+### 验证
+
+- `tests/test_pandascore_transport.py tests/test_pandascore_domains.py tests/test_agentic_pandascore_tools.py tests/test_agentic_opendota_match_tools.py`：17 passed。
+- `tests/test_agentic_registry.py tests/test_agentic_contracts.py tests/test_agentic_evidence.py tests/test_agentic_prompts.py`：75 passed。
+- `uv run ruff check app tests`：通过。
+
+### 已知限制
+
+- 当前免费 PandaScore Fixture 无法把 PandaScore Game 映射到 Valve match ID；需要用户提供 Valve ID 或可用的受权限 API 数据，第一阶段不会把该缺口隐藏成成功。
+- 本阶段没有新增 endpoint、结构化比赛 output contract、时间线/事件/日志、STRATZ fallback、数据库同步或前端。

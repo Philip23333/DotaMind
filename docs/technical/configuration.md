@@ -34,6 +34,7 @@ Important settings include:
 | `DOTAMIND_RUN_HEARTBEAT_SECONDS` / `DOTAMIND_RUN_STALE_SECONDS` / `DOTAMIND_RUN_SWEEPER_INTERVAL_SECONDS` | Chat Run liveness and stale-run recovery timing. |
 | `DOTAMIND_LIVE_DATA_ENABLED` | Enables live provider calls. |
 | `DOTAMIND_OPENDOTA_API_KEY` / `DOTAMIND_OPENDOTA_BASE_URL` | OpenDota access. |
+| `DOTAMIND_PANDASCORE_TOKEN` / `DOTAMIND_PANDASCORE_BASE_URL` | PandaScore Dota 2 fixture access. The token is never logged or committed. |
 | `DOTAMIND_STRATZ_TOKEN` / `DOTAMIND_STRATZ_GRAPHQL_URL` | STRATZ access. |
 | `DOTAMIND_LLM_ENABLED` | Enables planner/answer LLM calls. |
 | `DOTAMIND_LLM_PROVIDER` / `DOTAMIND_LLM_API_KEY` | LLM provider selection and secret. |
@@ -62,6 +63,11 @@ DOTAMIND_POLICY_PATH=C:/absolute/path/policy.yaml
 
 Policy is cached for the process lifetime. Restart the API after editing the
 YAML or changing the override path.
+
+The `pandascore` policy controls the fixture transport timeout, short-lived
+cache TTL, and maximum upstream page size. A missing
+`DOTAMIND_PANDASCORE_TOKEN` only affects PandaScore tool execution; it does not
+prevent unrelated tools or the application from starting.
 
 ## Local Game Data
 

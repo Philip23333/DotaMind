@@ -111,8 +111,9 @@ Current output contracts:
 - `role_meta_report`
 - `team_recent_report`
 
-The current registry exposes 25 deterministic tools across the committed Valve
-Catalog, STRATZ hero/player analysis, OpenDota team/role data, local patch
+The current registry exposes 30 deterministic tools across the committed Valve
+Catalog, STRATZ hero/player analysis, PandaScore Dota 2 Fixture schedules and
+identity resolution, OpenDota team/role and single-match data, local patch
 records, and request-local conversation history lookup. Registry definitions,
 not a copied documentation list, are authoritative.
 
@@ -123,15 +124,18 @@ policy lives in `apps/api/app/config/policy.yaml` and is validated on startup.
 
 ```text
 DOTAMIND_LIVE_DATA_ENABLED=false
+DOTAMIND_PANDASCORE_TOKEN=
+DOTAMIND_PANDASCORE_BASE_URL=https://api.pandascore.co
 DOTAMIND_STRATZ_TOKEN=
 DOTAMIND_LLM_ENABLED=false
 DOTAMIND_LLM_API_KEY=
 DOTAMIND_POLICY_PATH=
 ```
 
-The policy covers OpenDota and STRATZ transport boundaries, team/hero/patch
-report rules, critic quality gates, LLM call settings, planner sample policy,
-and conversation memory budgets.
+The policy covers OpenDota, PandaScore, and STRATZ transport boundaries,
+team/hero/patch report rules, critic quality gates, LLM call settings, planner
+sample policy, and conversation memory budgets. The free PandaScore Fixture
+boundary does not infer Valve match IDs from PandaScore IDs.
 Restart the API after editing it.
 
 ## Current Architecture

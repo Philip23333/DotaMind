@@ -90,6 +90,17 @@ STRATZ_METADATA_BOUNDARY_RULES = (
     "statistics, attribute each source's metadata locally to the relevant section."
 )
 
+MATCH_SOURCE_BOUNDARY_RULES = (
+    "For competition and match evidence, attribute schedule, stage, team, status, "
+    "score, and PandaScore Match/Game identifiers to PandaScore Fixture data. "
+    "PandaScore `pandascore_match_id` and `pandascore_game_id` are provider ids; "
+    "they are not Valve `valve_match_id`. Attribute result, player scoreboard, "
+    "parse coverage, and picks/bans to OpenDota's Valve match and replay parsing. "
+    "Do not treat PandaScore detailed_stats as OpenDota has_parsed. If OpenDota "
+    "parse coverage or draft evidence is absent, say that the match is not parsed "
+    "or the BP is unavailable; never claim a completed draft from an empty list."
+)
+
 WEEKLY_TREND_RULES = (
     "When evidence items carry week_index/week_epoch (per-week STRATZ buckets), "
     "compare across weeks and state the trend (rising/falling/stable). If any "
@@ -158,6 +169,22 @@ WEEKLY_STRATZ_KINDS = frozenset(
         "hero_synergy_ranking_row",
     }
 )
+MATCH_EVIDENCE_KINDS = frozenset(
+    {
+        "competition_identity",
+        "tournament_stage",
+        "match_schedule",
+        "match_state",
+        "series_score",
+        "match_identity",
+        "series_context",
+        "valve_match_identity",
+        "match_result",
+        "player_scoreboard",
+        "match_parse_status",
+        "match_draft",
+    }
+)
 
 
 def _active_evidence_kinds(graph: EvidenceGraph) -> set[str]:
@@ -168,6 +195,15 @@ def _has_stratz_source(graph: EvidenceGraph) -> bool:
     sources = [item.source for item in graph.evidence]
     sources.extend(result.source for result in graph.tool_results)
     return any(source is not None and source.name == "STRATZ" for source in sources)
+
+
+def _has_match_source(graph: EvidenceGraph) -> bool:
+    sources = [item.source for item in graph.evidence]
+    sources.extend(result.source for result in graph.tool_results)
+    return any(
+        source is not None and source.name in {"PandaScore", "OpenDota"}
+        for source in sources
+    )
 
 
 def render_natural_language_system_prompt(graph: EvidenceGraph) -> str:
@@ -190,6 +226,8 @@ def render_natural_language_system_prompt(graph: EvidenceGraph) -> str:
         sections.append(ITEM_RECIPE_RULES)
     if _has_stratz_source(graph):
         sections.append(STRATZ_METADATA_BOUNDARY_RULES)
+    if kinds & MATCH_EVIDENCE_KINDS or _has_match_source(graph):
+        sections.append(MATCH_SOURCE_BOUNDARY_RULES)
     if kinds & WEEKLY_STRATZ_KINDS:
         sections.append(WEEKLY_TREND_RULES)
     if "pair_lane_outcome" in kinds:

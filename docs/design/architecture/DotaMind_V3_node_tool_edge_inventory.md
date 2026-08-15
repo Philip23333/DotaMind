@@ -142,6 +142,11 @@ cannot borrow one another's primary evidence.
 | `opendota.team_players` | `current_players` |
 | `opendota.team_heroes` | `team_hero_usage` |
 | `opendota.hero_stats_by_role` | `hero_stats` |
+| `pandascore.resolve_competition` | `competition_identity` |
+| `pandascore.list_matches` | `match_schedule` |
+| `pandascore.resolve_match_game` | `match_identity`, `valve_match_identity` |
+| `opendota.match_summary` | `match_result`, `player_scoreboard` |
+| `opendota.match_draft` | `match_draft` |
 | `patch.get_records` | `patch_records` |
 | `patch.hero_changes` | `hero_patch_changes` |
 | `patch.item_changes` | `item_patch_changes` |

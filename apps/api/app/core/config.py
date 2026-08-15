@@ -21,6 +21,12 @@ class OpenDotaPolicy(StrictPolicyModel):
     default_cache_ttl_seconds: int = Field(gt=0)
 
 
+class PandaScorePolicy(StrictPolicyModel):
+    request_timeout_seconds: float = Field(default=20, gt=0)
+    default_cache_ttl_seconds: int = Field(default=60, gt=0)
+    max_page_size: int = Field(default=100, ge=1, le=100)
+
+
 class StratzPolicy(StrictPolicyModel):
     # STRATZ `weeks_back` resolution. A STRATZ week is 604800s-aligned; the
     # in-progress current week is always skipped (it is partial). Default 1 =
@@ -231,6 +237,7 @@ class ConversationPolicy(StrictPolicyModel):
 class AppPolicy(StrictPolicyModel):
     version: Literal[1]
     opendota: OpenDotaPolicy
+    pandascore: PandaScorePolicy = Field(default_factory=PandaScorePolicy)
     stratz: StratzPolicy
     team_report: TeamReportPolicy
     hero_report: HeroReportPolicy
@@ -260,6 +267,8 @@ class Settings(BaseSettings):
     policy_path: str | None = None
     opendota_base_url: str = "https://api.opendota.com/api"
     opendota_api_key: str | None = None
+    pandascore_base_url: str = "https://api.pandascore.co"
+    pandascore_token: str | None = None
     stratz_graphql_url: str = "https://api.stratz.com/graphql"
     stratz_token: str | None = None
     openai_api_key: str | None = None

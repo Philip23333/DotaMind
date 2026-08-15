@@ -1,0 +1,21 @@
+{
+  "id": 1631694,
+  "name": "Round 2: NGX vs OG",
+  "status": "finished",
+  "scheduled_at": "2026-08-13T09:30:00Z",
+  "begin_at": "2026-08-13T09:34:25Z",
+  "end_at": "2026-08-13T12:25:00Z",
+  "serie_id": 10828,
+  "tournament_id": 21545,
+  "number_of_games": 3,
+  "opponents": [
+    {"type": "Team", "opponent": {"id": 129609, "name": "Nigma Galaxy", "acronym": "NGX"}},
+    {"type": "Team", "opponent": {"id": 1654, "name": "OG", "acronym": "OG"}}
+  ],
+  "results": [{"score": 2, "team_id": 129609}, {"score": 0, "team_id": 1654}],
+  "streams_list": [],
+  "games": [
+    {"id": 738652, "position": 1, "status": "finished", "length": 3227, "match_id": 1631694},
+    {"id": 738653, "position": 2, "status": "finished", "length": 4461, "match_id": 1631694}
+  ]
+}

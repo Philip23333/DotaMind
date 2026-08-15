@@ -58,7 +58,14 @@ component and upgrade-target definitions with prices and displayable special
 values, plus an auditable component/scroll/calculated/final-price comparison.
 
 Downstream STRATZ contracts continue to reference `data.hero.hero_id`, while
-OpenDota registrations remain unchanged. STRATZ reads its English hero display-
+the existing OpenDota team registrations remain unchanged. The first competition
+slice adds three PandaScore Fixture tools and two OpenDota single-match tools:
+PandaScore resolves series and lists upcoming/running/past fixtures, then resolves
+PandaScore Match/Game IDs; OpenDota consumes an explicit Valve `match_id` for the
+result, ten-player scoreboard, parse coverage, and draft. The free PandaScore
+Fixture response does not currently expose Valve IDs, so the resolver reports
+`pending_valve_match_id` rather than guessing or calling a 403 Game detail route.
+STRATZ reads its English hero display-
 name index from the same Catalog repository. The former `hero_tools.py` resolver
 and `data/heroes/dota2_heroes.yaml` snapshot were deleted rather than kept as a
 parallel source. Controller capability text distinguishes official static facts
