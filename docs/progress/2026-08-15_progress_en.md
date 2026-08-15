@@ -159,3 +159,34 @@
 - No new API endpoint, timeline/event/log data, STRATZ fallback, automatic replay
   parsing, database mapping table, webpage scraping, paid PandaScore detail call, or
   intent routing was added.
+
+## 19:05 — P-13 Controller capability source consolidation
+
+### Completed
+
+- Removed the fixed `Supported in this development version` capability list from
+  the Controller system prompt. It duplicated the dynamic ToolRegistry catalog and
+  had not been updated for the new PandaScore/OpenDota competition and match tools.
+- `Direct-answer rules` now require capability questions to derive capabilities
+  from the currently rendered tool catalog and summarize them by user-facing task
+  area. Internal tool names are listed only when explicitly requested, and
+  unregistered capabilities must not be claimed.
+- Added one Chinese capability-summary example for presentation style only. It is
+  not a fixed capability catalog or intent route; its content remains subordinate
+  to the current ToolRegistry.
+- The default Controller system prompt is now 38,169 characters and 578 lines,
+  SHA-256
+  `6aeddc428335bc04b516eb8c91ea28b4173a44a437e74652eb09ae0c98518f50`.
+- Recorded P-05 as deferred because no stable failure is currently reproduced;
+  P-15 remains open but further changes are paused.
+
+### Verification
+
+- `tests/test_agentic_prompts.py -q`: 14 passed.
+- `ruff check app/agentic/prompts/controller_rules.py tests/test_agentic_prompts.py`:
+  passed.
+
+### Unchanged boundaries
+
+- No ToolDefinition, tool-call ordering, ControllerDecision schema, Answer Prompt,
+  EvidenceGraph, API behavior, or intent routing changed.

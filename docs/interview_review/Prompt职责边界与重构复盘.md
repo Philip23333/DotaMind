@@ -30,7 +30,7 @@
 | P-02 | P1 | Controller 决策优先级重复 | history rules、Decision priority、Decision invariants、Direct-answer rules、Final decision gate 多次重复 direct answer/tool plan 的判断。 | 保留一处可读的决策优先级；删除或合并重复提醒。 | 已完成（2026-08-13） |
 | P-03 | P1 | 全局 Controller prompt 承担过多工具特例 | 除动态渲染的工具名、参数、引用、证据之外，prompt 曾手写 Catalog/STRATZ 工具链、玩家参数语义和 ranking 语义。 | ToolRegistry description / ArgContract 为工具语义来源；Controller 只保留跨工具的规划原则。 | 已完成（2026-08-13） |
 | P-04 | P1 | Controller 将 scope 工具特例写在全局 prompt | region/mode、位置和周窗口等工具特例曾集中写在 Controller；部分 scope 已有 validator，但本批不扩展验证合同。 | 各 ToolDefinition description 声明所消费、忽略或不支持的 scope；Controller 只保留通用 context 放置和枚举语义。静默忽略的强制拒绝留待出现实测失败再单独处理。 | 已完成（2026-08-13） |
-| P-05 | P1 | 历史统计复用 guard 只检查指标词和数字 | `missing_historical_statistical_metrics()` 未比对主体、分段、位置、时间窗、来源；例如历史“斧王对线胜率 55%”与当前“Lina 对线胜率？”会通过该 guard。 | 不要扩张脆弱文本正则；保留模型语义判断并用 e2e 评估覆盖错配，若需硬保证则引入结构化 fact provenance。 | 待处理 |
+| P-05 | P1 | 历史统计复用 guard 只检查指标词和数字 | `missing_historical_statistical_metrics()` 未比对主体、分段、位置、时间窗、来源；但当前尚未出现稳定可复现的错配。 | 不扩张脆弱文本正则或 provenance 合同；保留模型语义判断，只在真实失败稳定出现后重开。 | 暂不处理（未稳定复现，2026-08-15） |
 | P-06 | P1 | 自然语言 Answer 不提供逐句证据绑定 | LLM 最终输出 `summary` 文本；自然语言 `claims` / `recommendations` 不含逐项 evidence refs，Critic 不逐句复核数字与证据。当前没有真实评估表明模型在获得明确 EvidenceGraph 后会稳定抄错数据。 | 接受该模型能力边界，不增加结构化 claims、二次 LLM Critic 或 evidence-kind 字段核验。若以后出现可稳定复现的转述错误，优先评估模型、Prompt 长度、证据结构和生成参数，再决定是否重开合同级审计。 | 不处理（接受风险，2026-08-14） |
 | P-07 | P1 | pair-lane 规则在 prompt 与字符串后处理间分裂 | prompt 禁止来源混淆和无证据因果推断；`_enforce_pair_lane_boundaries()` 曾按“中后期”“翻盘”及 Catalog 值等关键词删除整行，误删否定表述和混合回答中的合法 Catalog 段，且无法撤回已流式发送的 delta。 | 删除关键词后处理；保留 P-10 按 evidence 加载的 pair-lane 与跨来源元数据规则。自然语言事实审计留给 P-12/P-06，不继续扩张字符串规则。 | 已完成（2026-08-14） |
 | P-08 | P2 | Synthesizer 的 Wilson 规则过度泛化 | 曾先称“Hero recommendations”均按 `wilson_rating`，随后又规定 lane/position 按 `selection_mode`，matchup/synergy 则以 `synergy` 为主。 | 已删除泛化 Wilson 句；现有 evidence-kind 专属规则保持不变。动态生成 presentation constraints 留待 P-10。 | 已完成（2026-08-13） |
@@ -38,7 +38,7 @@
 | P-10 | P2 | 单一总 Answer prompt 混入不相关格式细则 | 物品合成表、技能、天赋、周趋势、对线结果和推荐排序规则曾在每次请求中一并发送。 | renderer 依据 required/actual evidence kinds 与证据来源只组装相关规则；请求粒度仍由 `current_query` / `reconstructed_goal` 表达，不新增 intent 路由或确定性 Catalog Renderer。 | 已完成（2026-08-14） |
 | P-11 | P2 | Answer 无法可靠判断部分查询粒度 | Answer 曾只有 `plan.goal`、required evidence 和 EvidenceGraph，无法直接看到“只回答棒击大地”“不要天赋”等当前措辞。 | 不新增固定 presentation 枚举；Answer 同时接收 `current_query` 与 Controller 的 `reconstructed_goal`，前者保留最新展示要求，后者承接多轮重建。Controller goal 必须保留具名焦点、排除项、数量和细节级别。 | 已完成（2026-08-13） |
 | P-12 | P2 | “仅用证据”与“可给无证据 hypothesis”边界含混 | prompt 一方面要求只用 EvidenceGraph，另一方面曾允许无明确证据的解释作为 hypothesis；当前 Critic 不能逐句审计该标签。 | 当前自然语言 Answer 不支持无证据 hypothesis；只有 EvidenceGraph 明确支持时才允许玩法或因果解释，并要求归属到相关证据。策略推演若以后需要，应另设明确合同。 | 已完成（2026-08-14） |
-| P-13 | P2 | prompt 规模已经影响维护性 | Controller prompt 已通过职责收敛缩减；Answer 不再存在固定总 prompt，P-10 后代表性单领域 system prompt 为 432–2,446 字符。 | 继续以职责收敛为主并记录代表性 prompt size，不设脱离效果的硬性压缩指标。 | 待处理 |
+| P-13 | P2 | prompt 规模已经影响维护性 | Controller 中的固定 `Supported` 能力清单与动态 ToolRegistry 目录重复，且未跟随新增赛事/比赛工具更新；P-14 真实规划评估已验证移除该清单不影响代表性规划。 | 删除固定能力清单，具体能力只从渲染的工具目录得出；`Direct-answer rules` 只规定能力类问题按任务领域概括的表达形态。 | 已完成（2026-08-15） |
 | P-14 | P1 | ToolDefinition description 仍在规定调用编排 | 默认 Registry 的过度编排说明已收窄；真实规划评估进一步发现玩家 top-N 被误作内部 over-fetch、校验重试会静默删除不支持的 scope，以及 Controller `Supported` 清单仍残留固定工具路由。 | description 只保留工具能力、数据范围和本工具局部产出条件；参数合同明确最终输出语义；Controller 通用规则保留用户约束，能力不足时返回边界，并仅列能力而不列固定路由。 | 已完成（2026-08-13） |
 | P-15 | P0 | Controller 对元会话回忆误判 `context_missing` | 真实持久化 Chat Run 已确认近期历史正常加载；另发现 history lookup 空结果在清空 `tool_results` 后没有任何状态进入下一次 Controller 输入，导致模型无法区分“未查”和“已查但未命中”。 | 将三处会话职责压缩为“已供应消息可用、lookup 补充旧消息且不是 Dota evidence、context_missing 需考虑已供应消息和已完成 lookup”；空结果保留最小执行摘要；由 `ToolDefinition.result_destination` 决定结果进入 Controller context 或 EvidenceGraph，不增加关键词路由或确定性回忆模板。 | 结构修复已完成，但真实复测 0/12；P0 未关闭（2026-08-15） |
 
@@ -190,6 +190,19 @@
 - 若后续真实评估发现稳定错误，优先更换或升级模型、缩短 Prompt、整理 EvidenceGraph 字段和调整生成参数；只有这些措施仍不足时，才重新评估合同级审计。
 - 本项只记录设计决策，不修改 Answer、Critic、schema、API 或测试。
 
+### P-13 Controller 能力事实源收敛（已完成，2026-08-15）
+
+- 删除 Controller 中固定维护的 `Supported in this development version`
+  能力清单。该清单与动态 `Tools: {tools}` 重复，且在新增
+  PandaScore/OpenDota 赛事与比赛工具后已经滞后。
+- 工具名、能力、参数、输出路径和 evidence kinds 继续只由渲染后的
+  ToolRegistry 目录提供；保留 Catalog 定义不能替代统计证据的跨工具边界。
+- `Direct-answer rules` 增加能力类元问题的展示规则：按用户任务领域概括，
+  只在用户明确询问工具名时列出内部名称，且不宣称未注册能力。
+- 增加一个仅用于表达风格的中文能力概括案例；案例内容仍必须以当前渲染工具目录为准，不构成固定能力清单或 intent 路由。
+- 本项不修改 ToolDefinition、调用顺序、Answer Prompt、ControllerDecision
+  schema、EvidenceGraph 或 API 行为。
+
 ### P-15 Controller 会话回忆示例去偏（部分改善，2026-08-15）
 
 - 真实持久化 Chat Run 先确认：第三轮执行前 recent history 完整包含前两轮 `user/assistant` 消息，因此问题不在 PostgreSQL、Redis、SessionStore 或消息注入。
@@ -244,8 +257,9 @@
 
 ## 推荐修改顺序
 
-1. **P-15**：基于本次 0/12 结果重新讨论决策合同；重点解释模型为何看见历史甚至复述历史后仍选择 `context_missing`，以及空 lookup 后重复规划应如何终止。不增加关键词或固定 intent 路由。
-2. **P-05**：评估历史统计事实复用是否存在可稳定复现的主体、范围、时窗或来源错配；没有实测问题则不扩张文本正则或 provenance 合同。
+- **P-15** 暂停：元会话回忆仍可能误判 `context_missing`，但当前不继续增加同义 Prompt 提醒或固定路由。
+- **P-05** 暂停：尚无稳定可复现的历史统计错配，不扩张文本正则或 provenance 合同。
+- 其余已列 Prompt 重构项均已完成或明确接受风险；后续只在新的稳定失败出现时增加项目。
 
 ## 每项修改的验收模板
 

@@ -153,3 +153,28 @@
 
 - 本阶段没有新增 API endpoint、时间线/事件/日志、STRATZ fallback、Replay 自动解析、
   数据库 mapping 表、网页抓取、付费 PandaScore 详情调用或 intent 路由。
+
+## 19:05 — P-13 Controller 能力事实源收敛
+
+### 已完成
+
+- 删除 Controller system prompt 中与动态 ToolRegistry 目录重复的
+  `Supported in this development version` 固定能力清单。该清单未跟随新增
+  PandaScore/OpenDota 赛事与比赛工具更新。
+- `Direct-answer rules` 现要求能力类问题从当前渲染的工具目录得出能力，
+  按用户任务领域概括；用户未明确询问工具名时不列内部名称，不宣称未注册能力。
+- 增加一个仅限表达风格的中文能力概括案例；案例不是固定能力清单或
+  intent 路由，具体内容仍以 ToolRegistry 为准。
+- 默认 Controller system prompt 现为 38,169 字符、578 行，SHA-256 为
+  `6aeddc428335bc04b516eb8c91ea28b4173a44a437e74652eb09ae0c98518f50`。
+- P-05 按当前决策记录为“未稳定复现，暂不处理”；P-15 保持未关闭但暂停继续修改。
+
+### 验证
+
+- `tests/test_agentic_prompts.py -q`：14 passed。
+- `ruff check app/agentic/prompts/controller_rules.py tests/test_agentic_prompts.py`：通过。
+
+### 未改变的边界
+
+- 未修改 ToolDefinition、工具调用顺序、ControllerDecision schema、Answer Prompt、
+  EvidenceGraph、API 或 intent 路由。

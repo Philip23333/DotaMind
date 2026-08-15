@@ -95,10 +95,7 @@ def test_system_prompt_matches_utf8_lf_golden_fixture() -> None:
 def test_controller_prompt_declares_catalog_static_and_statistical_boundaries() -> None:
     prompt = AgentController(_registry(), llm_enabled=False)._system_prompt()
 
-    assert "official committed Catalog snapshot queries for current hero attributes" in prompt
-    assert "official hero ability definitions" in prompt
-    assert "official hero talent trees at levels 10/15/20/25" in prompt
-    assert "official item definitions, prices" in prompt
+    assert "Supported in this development version:" not in prompt
     assert "Never substitute static\n  definitions" in prompt
     assert "return\n  capability_boundary" in prompt
     assert "Returns resolved, ambiguous, or not_found without querying a network" in prompt
@@ -120,6 +117,17 @@ def test_controller_prompt_declares_catalog_static_and_statistical_boundaries() 
     assert "For price or recipe questions, require item_identity" not in prompt
     assert "Hero ability query granularity" not in prompt
     assert "Catalog tool-planning examples" not in prompt
+
+
+def test_controller_prompt_derives_capability_answers_from_rendered_tools() -> None:
+    prompt = AgentController(_registry(), llm_enabled=False)._system_prompt()
+
+    assert "For user-facing capability questions" in prompt
+    assert "summarize capabilities from the rendered\n  tool catalog by task area" in prompt
+    assert "Do not list internal tool names unless the user\n  explicitly asks for them" in prompt
+    assert "do not claim unregistered capabilities" in prompt
+    assert "Capability-summary reference style" in prompt
+    assert "赛事与比赛详情以及补丁改动" in prompt
 
 
 def test_controller_prompt_uses_decision_kind_for_unsupported_scope() -> None:
