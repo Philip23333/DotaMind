@@ -214,3 +214,36 @@
 
 - 未修改 ToolDefinition、工具调用顺序、ControllerDecision schema、Answer Prompt、
   EvidenceGraph、API 或 intent 路由。
+
+## 20:15 — P-16 Controller 新 Dota 事实来源边界
+
+### 问题与修复
+
+- LunaMax 实测确认：简单英雄介绍、完整技能和具名技能可返回
+  `direct_answer` 且 `tool_results=[]`。工具目录已包含 Catalog 能力，故障发生在
+  Controller 是否选择 `tool_plan`，而非 Catalog 工具链或 Answer。
+- Controller 现明确：模型自身知识不是 `direct_answer` 的 Dota 事实证据；
+  所需事实不在当前消息/可复用历史中且注册工具可提供时，必须选择
+  `tool_plan`。
+- “不要仅因为话题是事实就重查”收窄为仅适用于已明确存在且可复用的
+  当前/历史事实。`Direct-answer rules` 同步声明分支合法性。
+- 增加基于真实失败的 fresh-fact 反例，仅强调新英雄/技能事实需要
+  `tool_plan`，不指定 Catalog 工具名、参数、调用顺序或 intent 路由。
+- 默认 Controller system prompt 现为 39,037 字符、592 行，SHA-256 为
+  `fc2b55d016225b9da2d53c47bef23822c3e7225169afb3b3acff6c18f75e22a3`。
+
+### 验证
+
+- `tests/test_agentic_prompts.py -q`：14 passed。
+- `ruff check app/agentic/prompts/controller_rules.py tests/test_agentic_prompts.py`：通过。
+- 使用加载当前工作树的临时 8002 API 隔离复测：“兽王是什么英雄”3/3
+  选择 `tool_plan`，工具为 `resolve_hero` + `dota.hero_attributes` +
+  `dota.hero_abilities`；“齐天大圣有什么技能”和具名“棒击大地”各复测1次，
+  均使用 `resolve_hero` + `dota.hero_abilities`。
+- 临时 8002 已停止。现有 8001 进程未稳定热加载当前 Prompt，其旧 Prompt
+  结果未计入最终验收。
+
+### 未改变的边界
+
+- 未修改 ToolDefinition、ArgContract、Validator、ControllerDecision schema、
+  Catalog handler、EvidenceGraph、Answer Prompt、API 或数据。

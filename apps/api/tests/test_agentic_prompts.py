@@ -154,7 +154,17 @@ def test_controller_prompt_uses_one_generic_history_first_decision_order() -> No
     assert "After tool_plan has been selected for fresh evidence" in prompt
     assert "For a fresh complete ability-list tool plan" not in prompt
     assert "This direct answer does not create an EvidenceGraph" in prompt
+    assert "direct_answer is valid only when every requested\n  fact is explicit" in prompt
+    assert "Do not fill\n  missing facts from model knowledge" in prompt
     assert "The length or formatting of a historical answer is not a refresh trigger" in prompt
+    assert (
+        "only facts explicitly present in the current\n"
+        "   message or reusable conversation"
+    ) in prompt
+    assert "the model's\n   own knowledge is not factual evidence" in prompt
+    assert "requested facts are absent from\n   that context" in prompt
+    assert "registered tools can provide them, choose tool_plan" in prompt
+    assert "required facts are already explicit and reusable" in prompt
     assert "every\n  statistical metric and value requested" in prompt
     assert "If even one requested metric is\n  absent, choose tool_plan" in prompt
     assert "a further query would be needed" in prompt
@@ -198,6 +208,10 @@ def test_controller_prompt_uses_one_generic_history_first_decision_order() -> No
     assert "$<rank>.data.candidate_rows" not in prompt
     assert "查某玩家战绩" not in prompt
     assert "Completeness example:" in prompt
+    assert "Fresh-fact example:" in prompt
+    assert "兽王是什么英雄" in prompt
+    assert "Available conversation: no matching hero or ability facts" in prompt
+    assert "A direct_answer from model knowledge is invalid" in prompt
     assert "preserving that property or action" in prompt
     assert "full historical\n  answer unless they ask for it" in prompt
     assert "Context unavailable:" in prompt

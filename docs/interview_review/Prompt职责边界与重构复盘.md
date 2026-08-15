@@ -41,6 +41,7 @@
 | P-13 | P2 | prompt 规模已经影响维护性 | Controller 中的固定 `Supported` 能力清单与动态 ToolRegistry 目录重复，且未跟随新增赛事/比赛工具更新；P-14 真实规划评估已验证移除该清单不影响代表性规划。 | 删除固定能力清单，具体能力只从渲染的工具目录得出；`Direct-answer rules` 只规定能力类问题按任务领域概括的表达形态。 | 已完成（2026-08-15） |
 | P-14 | P1 | ToolDefinition description 仍在规定调用编排 | 默认 Registry 的过度编排说明已收窄；真实规划评估进一步发现玩家 top-N 被误作内部 over-fetch、校验重试会静默删除不支持的 scope，以及 Controller `Supported` 清单仍残留固定工具路由。 | description 只保留工具能力、数据范围和本工具局部产出条件；参数合同明确最终输出语义；Controller 通用规则保留用户约束，能力不足时返回边界，并仅列能力而不列固定路由。 | 已完成（2026-08-13） |
 | P-15 | P0 | Controller 对元会话回忆误判 `context_missing` | 真实持久化 Chat Run 已确认近期历史正常加载；另发现 history lookup 空结果在清空 `tool_results` 后没有任何状态进入下一次 Controller 输入，导致模型无法区分“未查”和“已查但未命中”。 | 将三处会话职责压缩为“已供应消息可用、lookup 补充旧消息且不是 Dota evidence、context_missing 需考虑已供应消息和已完成 lookup”；空结果保留最小执行摘要；由 `ToolDefinition.result_destination` 决定结果进入 Controller context 或 EvidenceGraph，不增加关键词路由或确定性回忆模板。 | 结构修复已完成，但真实复测 0/12；P0 未关闭（2026-08-15） |
+| P-16 | P0 | Controller 用模型知识直接回答新的 Dota 静态事实 | 真实评估中“兽王是什么英雄”、完整技能与具名技能多次返回 `direct_answer` 且 `tool_results=[]`；Catalog 工具已注册，故障发生在是否进入 `tool_plan`，而非工具链推导。 | Controller 明确模型自身知识不是 `direct_answer` 事实证据；新事实不在当前消息/可复用历史且注册工具可提供时选择 `tool_plan`。保留 ToolRegistry 自行表达工具依赖，不恢复固定 Catalog 路由。 | 已完成（2026-08-15） |
 
 ### 批次 1：结构拆分（已完成，2026-08-12）
 
@@ -202,6 +203,24 @@
 - 增加一个仅用于表达风格的中文能力概括案例；案例内容仍必须以当前渲染工具目录为准，不构成固定能力清单或 intent 路由。
 - 本项不修改 ToolDefinition、调用顺序、Answer Prompt、ControllerDecision
   schema、EvidenceGraph 或 API 行为。
+
+### P-16 Controller 新事实来源边界（已完成，2026-08-15）
+
+- LunaMax 真实测试确认：“兽王是什么英雄”、“齐天大圣有什么技能”和
+  “棒击大地是什么”可稳定或高频返回 `direct_answer`，且
+  `tool_results=[]`。Catalog 工具已完整注册，一旦进入 `tool_plan`即能
+  正确推导 resolve/reference 链，因此根因是决策层将模型知识误作可用事实。
+- `Decision priority` 明确：Dota 事实直答只能使用当前消息或可复用历史中
+  已明确存在的事实；模型自身知识不是事实证据。所需事实缺失且注册工具
+  可提供时，必须选择 `tool_plan`。
+- 原“不要仅因问题是事实就重查”收窄为：只有当事实已在当前消息或可复用
+  历史中明确存在时才不重查，避免将该句泛化为“静态事实不需要工具”。
+- `Direct-answer rules` 以分支合法性再明确一次事实来源；新增一个基于真实
+  失败的 fresh-fact 反例，只要求 `tool_plan`，不指定工具名、参数、调用顺序
+  或 intent 路由。
+- 加载当前工作树的隔离 8002 API 复测：“兽王是什么英雄”3/3进入
+  `resolve_hero + dota.hero_attributes + dota.hero_abilities`；完整技能与具名技能均进入
+  `resolve_hero + dota.hero_abilities`。现有 8001 服务未热加载当前 Prompt，其结果不用于最终验收。
 
 ### P-15 Controller 会话回忆示例去偏（部分改善，2026-08-15）
 

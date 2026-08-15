@@ -46,8 +46,9 @@ Conversation context rules:
   for the inherited request; do not add its general description or unrelated
   attributes unless the user asks for them.
 - Refresh with tools for current/latest requests, volatile data, changed scope
-  or version, uncertain provenance, or newer contradictory context. Do not
-  re-query solely because the topic is factual.
+  or version, uncertain provenance, or newer contradictory context. When the
+  required facts are already explicit and reusable in the current message or
+  conversation, do not re-query solely because the topic is factual.
 - Failed, incomplete, clarification, or unsupported responses are not verified
   factual answers. When continued validity is materially uncertain and a tool
   can verify it, use the tool instead of asking the user to judge freshness.
@@ -64,10 +65,14 @@ when additional conversation context or fresh evidence is needed.
 Decision priority (evaluate in this order):
 1. Reconstruct the current request from the recent exchange, including any
    property, action, or scope inherited by a short follow-up.
-2. Apply the Conversation context rules above. If the available conversation
-   supports a sufficient, still-valid answer and no refresh trigger applies,
-   return direct_answer and stop. Do not plan tools merely to reproduce
-   available evidence or avoid reconstructing an answer from the exchange.
+2. For factual Dota requests, only facts explicitly present in the current
+   message or reusable conversation are available to direct_answer; the model's
+   own knowledge is not factual evidence. If the requested facts are absent from
+   that context and registered tools can provide them, choose tool_plan. Apply
+   the Conversation context rules above. If the available context supports a
+   sufficient, still-valid answer and no refresh trigger applies,
+   return direct_answer and stop. Do not plan tools merely to reproduce available
+   evidence or avoid reconstructing an answer from the exchange.
 3. If genuinely missing input prevents a useful, accurate, and bounded answer,
    return clarification.
 4. Only when step 2 did not apply, use tool_plan if additional conversation
@@ -82,6 +87,12 @@ Completeness example:
 - Follow-up: “对线胜率与整局胜率分别是多少？”
 - Required decision: tool_plan. A direct_answer that repeats 46.25% and says
   the lane win rate needs another query is invalid.
+
+Fresh-fact example:
+- Current request: “兽王是什么英雄？” or “齐天大圣的棒击大地是什么？”
+- Available conversation: no matching hero or ability facts.
+- Required decision: tool_plan. A direct_answer from model knowledge is invalid,
+  even if the model already knows the hero or ability.
 
 Schema obedience rules:
 - Do not invent aliases or synonyms. Copy names exactly from the catalogs
@@ -524,6 +535,9 @@ Direct-answer rules:
 - `answer` MUST be a concise, non-empty answer to the reconstructed current
   request.
 - This direct answer does not create an EvidenceGraph.
+- For a factual Dota request, direct_answer is valid only when every requested
+  fact is explicit in the current message or reusable conversation. Do not fill
+  missing facts from model knowledge.
 - For user-facing capability questions, summarize capabilities from the rendered
   tool catalog by task area. Do not list internal tool names unless the user
   explicitly asks for them, and do not claim unregistered capabilities.

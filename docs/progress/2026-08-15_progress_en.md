@@ -235,3 +235,44 @@
 
 - No ToolDefinition, tool-call ordering, ControllerDecision schema, Answer Prompt,
   EvidenceGraph, API behavior, or intent routing changed.
+
+## 20:15 — P-16 Controller source boundary for new Dota facts
+
+### Problem and fix
+
+- LunaMax live testing confirmed that simple hero descriptions, complete ability
+  lists, and named-ability questions could return `direct_answer` with
+  `tool_results=[]`. Catalog capabilities were registered, so the failure was in
+  Controller selection of `tool_plan`, not the Catalog chain or Answer.
+- The Controller now states that model knowledge is not factual evidence for a
+  Dota `direct_answer`. When the requested facts are absent from the current
+  message/reusable conversation and registered tools can provide them, the
+  decision must be `tool_plan`.
+- Narrowed “do not re-query solely because the topic is factual” to facts already
+  explicit and reusable in the current message or conversation. The same source
+  validity is stated under `Direct-answer rules`.
+- Added one fresh-fact counterexample based on the reproduced hero/ability
+  failures. It requires `tool_plan` without prescribing Catalog tool names,
+  arguments, call order, or intent routing.
+- The default Controller system prompt is now 39,037 characters and 592 lines,
+  SHA-256
+  `fc2b55d016225b9da2d53c47bef23822c3e7225169afb3b3acff6c18f75e22a3`.
+
+### Verification
+
+- `tests/test_agentic_prompts.py -q`: 14 passed.
+- `ruff check app/agentic/prompts/controller_rules.py tests/test_agentic_prompts.py`:
+  passed.
+- Against an isolated temporary port-8002 API loaded from the current working
+  tree, “what kind of hero is Beastmaster” selected `tool_plan` 3/3 with
+  `resolve_hero` + `dota.hero_attributes` + `dota.hero_abilities`. One complete
+  Monkey King ability-list query and one named Boundless Strike query both used
+  `resolve_hero` + `dota.hero_abilities`.
+- The temporary port-8002 API was stopped. The existing port-8001 process did not
+  reliably hot-reload the current Prompt, so its old-Prompt results were excluded
+  from final acceptance.
+
+### Unchanged boundaries
+
+- No ToolDefinition, ArgContract, Validator, ControllerDecision schema, Catalog
+  handler, EvidenceGraph, Answer Prompt, API behavior, or runtime data changed.
