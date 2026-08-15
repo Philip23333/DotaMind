@@ -11,6 +11,7 @@ from app.integrations.match_resolution.models import (
     CrossSourceMapping,
     CrossSourceResolution,
     ResolvedValveMatch,
+    TeamLeagueResolution,
 )
 from app.integrations.opendota.leagues import (
     OpenDotaLeague,
@@ -73,6 +74,7 @@ class ValveMatchResolver:
             )
         team_rows = await self.teams.get_all()
         resolved_team_rows: list[dict[str, Any]] = []
+        used_league_participation = False
         for panda_team in panda_teams:
             if not isinstance(panda_team, dict):
                 return CrossSourceResolution(
@@ -93,17 +95,51 @@ class ValveMatchResolver:
                     ],
                 )
             if resolution.status == "ambiguous":
-                return CrossSourceResolution(
-                    status="ambiguous_team",
-                    league=league.model_dump(mode="json"),
-                    teams=[
-                        {
-                            "query": query,
-                            "pandascore_team_id": panda_team.get("pandascore_team_id"),
-                            "candidates": resolution.candidates,
-                        }
-                    ],
+                league_resolution = await self._resolve_ambiguous_team_by_league(
+                    panda_team=panda_team,
+                    candidates=resolution.candidates,
+                    league=league,
                 )
+                if league_resolution.status == "ambiguous":
+                    return CrossSourceResolution(
+                        status="ambiguous_team",
+                        league=league.model_dump(mode="json"),
+                        teams=[
+                            {
+                                "query": query,
+                                "pandascore_team_id": panda_team.get("pandascore_team_id"),
+                                "reason": league_resolution.reason,
+                                "target_league_id": league.opendota_league_id,
+                                "candidates": resolution.candidates,
+                                "diagnostics": league_resolution.diagnostics,
+                            }
+                        ],
+                    )
+                selected_team = league_resolution.team
+                if not selected_team or not isinstance(selected_team.get("team_id"), int):
+                    raise ValueError("league participation resolved without a team id")
+                resolved_team_rows.append(
+                    {
+                        "pandascore_team_id": panda_team.get("pandascore_team_id"),
+                        "opendota_team_id": selected_team["team_id"],
+                        "name": selected_team.get("name"),
+                        "tag": selected_team.get("tag"),
+                        "resolution_method": "league_participation",
+                        "target_league_id": league.opendota_league_id,
+                        "league_match_count": next(
+                            item["league_match_count"]
+                            for item in league_resolution.diagnostics
+                            if item.get("team_id") == selected_team["team_id"]
+                        ),
+                        "sample_match_ids": next(
+                            item["sample_match_ids"]
+                            for item in league_resolution.diagnostics
+                            if item.get("team_id") == selected_team["team_id"]
+                        ),
+                    }
+                )
+                used_league_participation = True
+                continue
             if not resolution.team or not isinstance(resolution.team.get("team_id"), int):
                 return CrossSourceResolution(
                     status="team_not_found",
@@ -115,6 +151,7 @@ class ValveMatchResolver:
                     "opendota_team_id": resolution.team["team_id"],
                     "name": resolution.team.get("name"),
                     "tag": resolution.team.get("tag"),
+                    "resolution_method": "global_team_identity",
                 }
             )
 
@@ -174,7 +211,10 @@ class ValveMatchResolver:
         candidate = candidates[0]
         delta_start = abs(int(candidate.start_time or 0) - target_start)
         delta_duration = abs(int(candidate.duration or 0) - target_duration)
-        matched_on = ["league", "team_ids", "start_time", "duration", "game_position"]
+        matched_on = ["league"]
+        if used_league_participation:
+            matched_on.append("team_league_participation")
+        matched_on.extend(["team_ids", "start_time", "duration", "game_position"])
         winner_team_id = _winner_opendota_team_id(game_context, resolved_team_rows)
         if winner_team_id is not None:
             matched_on.append("winner")
@@ -198,6 +238,83 @@ class ValveMatchResolver:
                 opendota_series_id=candidate.opendota_series_id,
             ),
             mapping=mapping,
+        )
+
+    async def _resolve_ambiguous_team_by_league(
+        self,
+        *,
+        panda_team: dict[str, Any],
+        candidates: list[dict[str, Any]],
+        league: OpenDotaLeague,
+    ) -> TeamLeagueResolution:
+        diagnostics: list[dict[str, Any]] = []
+        pandascore_team_id = panda_team.get("pandascore_team_id")
+        for candidate in candidates:
+            team_id = _as_int(candidate.get("team_id"))
+            if team_id is None or team_id <= 0:
+                diagnostics.append(
+                    {
+                        "team_id": candidate.get("team_id"),
+                        "pandascore_team_id": pandascore_team_id,
+                        "name": candidate.get("name"),
+                        "tag": candidate.get("tag"),
+                        "target_league_id": league.opendota_league_id,
+                        "league_match_count": 0,
+                        "sample_match_ids": [],
+                    }
+                )
+                continue
+            matches = await self.teams.get_matches(team_id)
+            if not isinstance(matches, list):
+                raise ValueError("OpenDota team matches response must be a list")
+            league_matches = [
+                match
+                for match in matches
+                if isinstance(match, dict)
+                and _as_int(match.get("leagueid")) == league.opendota_league_id
+            ]
+            sample_match_ids = [
+                match_id
+                for match in league_matches
+                if (match_id := _as_int(match.get("match_id"))) is not None and match_id > 0
+            ][:5]
+            diagnostics.append(
+                {
+                    "team_id": team_id,
+                    "pandascore_team_id": pandascore_team_id,
+                    "name": candidate.get("name"),
+                    "tag": candidate.get("tag"),
+                    "target_league_id": league.opendota_league_id,
+                    "league_match_count": len(league_matches),
+                    "sample_match_ids": sample_match_ids,
+                }
+            )
+
+        matching = [
+            item
+            for item in diagnostics
+            if item["league_match_count"] > 0
+        ]
+        if len(matching) != 1:
+            return TeamLeagueResolution(
+                status="ambiguous",
+                reason=(
+                    "no_candidate_in_target_league"
+                    if not matching
+                    else "multiple_candidates_in_target_league"
+                ),
+                diagnostics=diagnostics,
+            )
+        selected_id = matching[0]["team_id"]
+        selected = next(
+            candidate
+            for candidate in candidates
+            if _as_int(candidate.get("team_id")) == selected_id
+        )
+        return TeamLeagueResolution(
+            status="resolved",
+            team=selected,
+            diagnostics=diagnostics,
         )
 
     def _matches_signals(

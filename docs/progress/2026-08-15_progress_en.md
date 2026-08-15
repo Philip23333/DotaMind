@@ -160,6 +160,51 @@
   parsing, database mapping table, webpage scraping, paid PandaScore detail call, or
   intent routing was added.
 
+## 19:12 — P2.1 league-participation disambiguation for duplicate teams
+
+### Completed
+
+- Kept the public `resolve_team()` semantics unchanged. Only the cross-source
+  `ValveMatchResolver` now queries the existing
+  `OpenDotaTeams.get_matches(team_id)` for globally ambiguous candidates.
+- Team Matches are filtered by exact `leagueid == target OpenDota league ID`;
+  `league_name` is diagnostic-only and never participates in the authoritative
+  decision.
+- Exactly one candidate participating in the target league resolves with
+  `league_participation`; zero returns `no_candidate_in_target_league`, and more
+  than one returns `multiple_candidates_in_target_league`. Both remain
+  `ambiguous_team`; no rating, activity, match-count, or candidate-order guess is used.
+- Team audit fields are uniform: direct resolution records
+  `global_team_identity`; league disambiguation records `target_league_id`,
+  `league_match_count`, and up to five `sample_match_ids`. Successful mappings add
+  `team_league_participation` without changing tools, output paths, or evidence kinds.
+
+### Live sample smoke test
+
+- Using the current PandaScore-normalized Series 10828 / Match 1631694 / Game 738652
+  and live OpenDota: Nigma candidate 10136357 has eight exact `leagueid=19719`
+  records, 7554697 has none, and OG resolves uniquely to 2586976.
+- Actual result: `resolved`, Valve `8943244303`, OpenDota league `19719`, series
+  `1130066`; start-time delta 115 seconds, duration delta 0, candidate_count 1.
+
+### Verification
+
+- `test_cross_source_match_resolution.py`: 14 passed, covering the duplicate-directory
+  topology, zero/multiple candidates, similar league names with the wrong leagueid,
+  no Team Matches call for a unique team, upstream error propagation, and final-match
+  uniqueness.
+- Removed one stale Controller test assertion that contradicted the already-committed
+  P-13 dynamic capability catalog; no Controller Prompt or golden fixture was changed.
+  The P2.1 full suite is 602 passed, 21 skipped, 1 warning; Ruff passed.
+
+### Boundaries
+
+- Team Matches only disambiguates team identity; it cannot become the final Valve
+  match. The final ID still requires unique unordered teams, time, duration, game
+  position, and winner hard filters from league matches.
+- No webpage scraping, scoring selection, manual Valve mapping, fallback, or new tool
+  was introduced.
+
 ## 19:05 — P-13 Controller capability source consolidation
 
 ### Completed

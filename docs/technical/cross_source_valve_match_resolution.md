@@ -32,8 +32,11 @@ described as a native PandaScore Valve field.
 
 1. Normalize spacing, punctuation, and case; match competition name plus exact
    year to one OpenDota league.
-2. Resolve both teams through the existing OpenDota team resolver. Any team
-   ambiguity is returned as `ambiguous_team`; no implicit choice is made.
+2. Resolve both teams through the existing OpenDota team resolver. If a name is
+   ambiguous, query each candidate's `/teams/{team_id}/matches` records and use
+   exact `leagueid == target league id` participation as the only disambiguator.
+   Exactly one participating candidate resolves with `league_participation`;
+   zero or multiple participating candidates remain `ambiguous_team`.
 3. Fetch `/leagues/{league_id}/matches` through `OpenDotaTransport` and require
    unordered team-ID equality, start delta at most 1800 seconds, duration delta
    at most 5 seconds, series position by sorted start time, and winner
@@ -53,11 +56,13 @@ The resolver can return `resolved`, `league_not_found`, `ambiguous_league`,
 `cross_source_match_mapping` and `valve_match_identity` evidence. Downstream
 OpenDota summary/draft tools may then consume the declared Valve ID reference.
 
-## Known sample and live limitation
+## Known sample and live verification
 
 For PandaScore Series 10828 / Match 1631694 / Game 738652, the known OpenDota
 candidate is Valve `8943244303` (league `19719`, series `1130066`). The current
 OpenDota team catalogue returns two equally scored `Nigma Galaxy` candidates,
-so strict ambiguity policy currently returns `ambiguous_team` for the live
-sample rather than silently selecting one. Tests use a unique sanitized team
-fixture to verify the resolved path.
+but only team `10136357` has Team Matches with exact `leagueid=19719`; team
+`7554697` has no participation in that league. The live resolver therefore
+returns `resolved`, with `resolution_method=league_participation`, eight league
+matches for team `10136357`, and `team_league_participation` in `matched_on`.
+The final Valve ID still comes from the complete league-match hard filters.

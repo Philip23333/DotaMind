@@ -68,10 +68,12 @@ Fixture response does not currently expose Valve IDs, so the resolver reports
 Phase 2 adds `dota.resolve_valve_match`: it consumes the resolved PandaScore
 competition and explicit Game context, resolves the unique OpenDota league and
 teams, then applies exact unordered team IDs, hard start-time/duration tolerances,
-series game position, and winner consistency. A single match yields an auditable
-`inferred_cross_source` mapping; zero or multiple candidates and team/league
-ambiguity remain explicit statuses. The mapping is inferred, never presented as
-a native PandaScore Valve ID, and the summary/draft tools accept its declared
+series game position, and winner consistency. A globally ambiguous team is
+resolved only when exactly one candidate has an exact `leagueid` participation
+record in the target league; zero or multiple participating candidates remain
+explicit `ambiguous_team` status. A single match yields an auditable
+`inferred_cross_source` mapping. The mapping is inferred, never presented as a
+native PandaScore Valve ID, and the summary/draft tools accept its declared
 Valve output reference.
 STRATZ reads its English hero display-
 name index from the same Catalog repository. The former `hero_tools.py` resolver

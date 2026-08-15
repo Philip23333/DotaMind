@@ -75,4 +75,6 @@ PandaScore series/match/game
 不声称 PandaScore 原生提供了 Valve ID。联赛、战队或比赛存在歧义时保持
 `ambiguous_*` 状态；没有唯一候选时不使用 closest/weighted fallback。已知
 样本的 OpenDota 侧为 league `19719`、series `1130066`、Valve match
-`8943244303`，但样本映射仍属于推断而非 PandaScore 原生字段。
+`8943244303`；同名 Nigma 候选通过 `/teams/{team_id}/matches` 的精确
+`leagueid=19719` 参赛记录唯一消歧为 `10136357`。样本映射仍属于推断而非
+PandaScore 原生字段。

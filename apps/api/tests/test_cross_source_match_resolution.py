@@ -19,11 +19,24 @@ class FakeLeagues:
 
 
 class FakeTeams:
-    def __init__(self, teams: list[dict]):
+    def __init__(
+        self,
+        teams: list[dict],
+        matches_by_team_id: dict[int, list[dict] | Exception] | None = None,
+    ):
         self.teams = teams
+        self.matches_by_team_id = matches_by_team_id or {}
+        self.match_calls: list[int] = []
 
     async def get_all(self) -> list[dict]:
         return self.teams
+
+    async def get_matches(self, team_id: int) -> list[dict]:
+        self.match_calls.append(team_id)
+        value = self.matches_by_team_id.get(team_id, [])
+        if isinstance(value, Exception):
+            raise value
+        return value
 
 
 def _competition(**overrides):
@@ -53,7 +66,11 @@ def _game(**overrides):
     return value
 
 
-def _resolver(matches: list[OpenDotaLeagueMatch] | None = None, teams=None):
+def _resolver(
+    matches: list[OpenDotaLeagueMatch] | None = None,
+    teams=None,
+    matches_by_team_id: dict[int, list[dict] | Exception] | None = None,
+):
     league = OpenDotaLeague(opendota_league_id=19719, name="The International 2026")
     rows = matches or [
         OpenDotaLeagueMatch(
@@ -81,7 +98,25 @@ def _resolver(matches: list[OpenDotaLeagueMatch] | None = None, teams=None):
         {"team_id": 10136357, "name": "Nigma Galaxy", "tag": "NGX"},
         {"team_id": 2586976, "name": "OG", "tag": "OG"},
     ]
-    return ValveMatchResolver(FakeLeagues([league], rows), FakeTeams(team_rows))
+    return ValveMatchResolver(
+        FakeLeagues([league], rows),
+        FakeTeams(team_rows, matches_by_team_id),
+    )
+
+
+def _duplicate_team_rows() -> list[dict]:
+    return [
+        {"team_id": 10136357, "name": "Nigma Galaxy", "tag": "NGX"},
+        {"team_id": 7554697, "name": "Nigma Galaxy", "tag": "NGX"},
+        {"team_id": 2586976, "name": "OG", "tag": "OG"},
+    ]
+
+
+def _team_match(league_id: int, match_id: int, league_name: str | None = None) -> dict:
+    row = {"leagueid": league_id, "match_id": match_id}
+    if league_name is not None:
+        row["league_name"] = league_name
+    return row
 
 
 @pytest.mark.anyio
@@ -93,6 +128,91 @@ async def test_resolves_known_game_with_reversed_team_order_support() -> None:
     assert result.mapping is not None
     assert result.mapping.method == "inferred_cross_source"
     assert result.mapping.matched_on[-1] == "winner"
+
+
+@pytest.mark.anyio
+async def test_league_participation_resolves_duplicate_team_and_audits_mapping() -> None:
+    resolver = _resolver(
+        teams=_duplicate_team_rows(),
+        matches_by_team_id={
+            10136357: [_team_match(19719, 8943244303)],
+            7554697: [_team_match(19656, 8940000000)],
+        },
+    )
+    result = await resolver.resolve(_competition(), _game())
+    assert result.status == "resolved"
+    assert result.match is not None and result.match.valve_match_id == 8943244303
+    assert result.mapping is not None
+    assert "team_league_participation" in result.mapping.matched_on
+    assert result.teams[0]["opendota_team_id"] == 10136357
+    assert result.teams[0]["resolution_method"] == "league_participation"
+    assert result.teams[0]["target_league_id"] == 19719
+    assert result.teams[0]["league_match_count"] == 1
+    assert result.teams[0]["sample_match_ids"] == [8943244303]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("matches_by_team_id", "reason"),
+    [
+        (
+            {
+                10136357: [_team_match(19656, 8940000001)],
+                7554697: [_team_match(19656, 8940000002)],
+            },
+            "no_candidate_in_target_league",
+        ),
+        (
+            {
+                10136357: [_team_match(19719, 8940000003)],
+                7554697: [_team_match(19719, 8940000004)],
+            },
+            "multiple_candidates_in_target_league",
+        ),
+        (
+            {
+                10136357: [
+                    _team_match(
+                        19892,
+                        8940000005,
+                        "The International 2026 - Regional Qualifier Europe",
+                    )
+                ],
+                7554697: [],
+            },
+            "no_candidate_in_target_league",
+        ),
+    ],
+)
+async def test_duplicate_team_league_participation_remains_explicit(
+    matches_by_team_id, reason
+) -> None:
+    resolver = _resolver(
+        teams=_duplicate_team_rows(),
+        matches_by_team_id=matches_by_team_id,
+    )
+    result = await resolver.resolve(_competition(), _game())
+    assert result.status == "ambiguous_team"
+    assert result.teams[0]["reason"] == reason
+    assert result.teams[0]["target_league_id"] == 19719
+
+
+@pytest.mark.anyio
+async def test_unique_team_does_not_fetch_team_matches() -> None:
+    resolver = _resolver()
+    result = await resolver.resolve(_competition(), _game())
+    assert result.status == "resolved"
+    assert resolver.teams.match_calls == []
+
+
+@pytest.mark.anyio
+async def test_team_matches_upstream_error_is_not_converted_to_ambiguity() -> None:
+    resolver = _resolver(
+        teams=_duplicate_team_rows(),
+        matches_by_team_id={10136357: RuntimeError("upstream failed")},
+    )
+    with pytest.raises(RuntimeError, match="upstream failed"):
+        await resolver.resolve(_competition(), _game())
 
 
 @pytest.mark.anyio
@@ -135,10 +255,5 @@ async def test_ambiguous_league_and_team_are_not_silently_selected() -> None:
     ).resolve(_competition(), _game())
     assert result.status == "ambiguous_league"
 
-    ambiguous_teams = [
-        {"team_id": 10136357, "name": "Nigma Galaxy", "tag": "NGX"},
-        {"team_id": 7554697, "name": "Nigma Galaxy", "tag": "NGX"},
-        {"team_id": 2586976, "name": "OG", "tag": "OG"},
-    ]
-    result = await _resolver(teams=ambiguous_teams).resolve(_competition(), _game())
+    result = await _resolver(teams=_duplicate_team_rows()).resolve(_competition(), _game())
     assert result.status == "ambiguous_team"

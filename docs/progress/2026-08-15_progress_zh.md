@@ -154,6 +154,42 @@
 - 本阶段没有新增 API endpoint、时间线/事件/日志、STRATZ fallback、Replay 自动解析、
   数据库 mapping 表、网页抓取、付费 PandaScore 详情调用或 intent 路由。
 
+## 19:12 — P2.1 按 League 参赛记录消解同名战队
+
+### 已完成
+
+- 不修改公共 `resolve_team()` 语义；仅在 `ValveMatchResolver` 的跨源上下文中，
+  对全局同名候选调用既有 `OpenDotaTeams.get_matches(team_id)`。
+- 只使用 Team Matches 的精确 `leagueid == target OpenDota league ID` 判断参赛，
+  `league_name` 仅保留在诊断数据中，不参与唯一判断。
+- 恰好一个候选参加目标 League 时返回 `league_participation`；零个返回
+  `no_candidate_in_target_league`，多个返回 `multiple_candidates_in_target_league`，
+  均继续保持 `ambiguous_team`，不按评分、活跃度、数量或候选顺序猜测。
+- 统一战队审计字段：直接解析记录 `global_team_identity`；League 消歧记录
+  `target_league_id`、`league_match_count`、最多五个 `sample_match_ids`。成功 mapping
+  增加 `team_league_participation`，未新增工具、output path 或 evidence kind。
+
+### 真实样本 Smoke Test
+
+- 使用当前 PandaScore 标准化 Series 10828 / Match 1631694 / Game 738652 与实时
+  OpenDota API：Nigma 候选 10136357 有 8 场 `leagueid=19719` 记录，7554697 无目标
+  League 记录；OG 唯一解析为 2586976。
+- 真实结果：`resolved`，Valve `8943244303`，OpenDota league `19719`、series
+  `1130066`；开始时间差 115 秒、时长差 0 秒、candidate_count 1。
+
+### 验证
+
+- `test_cross_source_match_resolution.py`：14 passed，覆盖真实重复目录拓扑、零/多候选、
+  相似 league_name 错 leagueid、唯一战队不请求 Team Matches、上游异常透传和最终比赛唯一性。
+- 清理一个与已提交 P-13 动态能力目录不一致的旧 Controller 测试断言；未修改
+  Controller Prompt 或其 golden fixture。P2.1 改动后的全量：602 passed、21 skipped、1 warning；Ruff 通过。
+
+### 边界
+
+- Team Matches 只用于消解战队身份，不能直接作为最终 Valve match；最终 ID 仍由
+  league matches 的无序战队、时间、时长、局序和胜者硬过滤唯一确定。
+- 未引入网页抓取、评分选择、手工 Valve 映射、fallback 或新工具。
+
 ## 19:05 — P-13 Controller 能力事实源收敛
 
 ### 已完成

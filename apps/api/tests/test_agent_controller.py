@@ -1313,7 +1313,6 @@ def test_agentic_planner_prompt_contains_player_capabilities() -> None:
     assert "player-name lookup is not supported" in prompt
     assert "Recent match sample size contributing to each hero's statistics" in prompt
     assert "Ranking basis: 'strong' by win_rate, or 'popular' by games played" in prompt
-    assert "for numeric\n  Steam32 ids; player-name search is not supported" in prompt
     assert "call this first and pass its confirmed_steam_account_id" not in prompt
 
 

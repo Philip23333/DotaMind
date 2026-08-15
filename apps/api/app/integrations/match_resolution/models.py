@@ -37,6 +37,13 @@ class ResolvedValveMatch(BaseModel):
     opendota_series_id: int | None = None
 
 
+class TeamLeagueResolution(BaseModel):
+    status: Literal["resolved", "ambiguous"]
+    team: dict[str, Any] | None = None
+    reason: str | None = None
+    diagnostics: list[dict[str, Any]] = Field(default_factory=list)
+
+
 class CrossSourceResolution(BaseModel):
     status: ResolutionStatus
     match: ResolvedValveMatch | None = None
