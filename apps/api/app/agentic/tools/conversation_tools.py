@@ -54,13 +54,12 @@ def register_conversation_tools(registry: ToolRegistry) -> None:
         ToolDefinition(
             name="conversation.history_lookup",
             description=(
-                "Retrieve older user/assistant messages from the current conversation. "
-                "Use only when the recent dialogue window does not contain the needed "
-                "context; the runtime policy bounds lookup count, and this is "
-                "conversational context, not Dota evidence."
+                "Retrieve additional older user/assistant messages from the current "
+                "conversation."
             ),
             input_model=ConversationHistoryLookupInput,
             handler=_history_lookup_handler,
+            result_destination="controller_context",
             metadata={"internal": True},
         )
     )

@@ -17,6 +17,16 @@ class ConversationMessage(BaseModel):
     content: str
 
 
+class ControllerContextExecutionSummary(BaseModel):
+    """Minimal completed-tool metadata retained for the next Controller call."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    tool: str = Field(min_length=1)
+    status: Literal["completed"] = "completed"
+    matched_turns: int = Field(ge=0)
+
+
 class DialogueTurn(BaseModel):
     """A complete user/assistant exchange kept together in the recent window."""
 
@@ -60,4 +70,10 @@ class Turn(BaseModel):
     response_summary: str = ""
 
 
-__all__ = ["ConversationMessage", "DialogueTurn", "RecentDialogueWindow", "Turn"]
+__all__ = [
+    "ConversationMessage",
+    "ControllerContextExecutionSummary",
+    "DialogueTurn",
+    "RecentDialogueWindow",
+    "Turn",
+]

@@ -298,7 +298,7 @@ class NaturalLanguageAnswerSynthesizer:
                     chunks.append(delta)
                     on_delta(delta)
                 summary = "".join(chunks)
-            summary = _enforce_pair_lane_boundaries(summary.strip(), graph)
+            summary = summary.strip()
             return AnswerSynthesisResult(
                 answer_type=plan.output_contract,
                 status="ok",
@@ -386,63 +386,6 @@ def missing_limitations(graph: EvidenceGraph) -> list[AnswerLimitation]:
         )
         for missing in graph.missing
     ]
-
-
-def _enforce_pair_lane_boundaries(summary: str, graph: EvidenceGraph) -> str:
-    """Remove unsupported metadata/causal claims from pair-lane answers.
-
-    Prompt rules are the primary control. This deterministic postcondition keeps
-    a stochastic answer provider from leaking Catalog snapshot metadata or
-    turning a lane/match rate difference into a gameplay conclusion.
-    """
-
-    if not items(graph, "pair_lane_outcome"):
-        return summary
-
-    catalog_values: set[str] = set()
-    for item in items(graph, "hero_identity"):
-        snapshot = item.value.get("snapshot")
-        if not isinstance(snapshot, dict):
-            continue
-        for key in ("patch", "generated_at"):
-            value = snapshot.get(key)
-            if value:
-                catalog_values.add(str(value))
-
-    causal_markers = (
-        "中后期",
-        "中期",
-        "后期",
-        "翻盘",
-        "mid-game",
-        "late-game",
-        "comeback",
-        "causal explanation",
-    )
-    metadata_markers = tuple(catalog_values) + (
-        "快照版本",
-        "Catalog snapshot",
-        "statistics snapshot",
-        "statistics version",
-    )
-    removed_causal = False
-    kept: list[str] = []
-    for line in summary.splitlines():
-        if any(marker.lower() in line.lower() for marker in causal_markers):
-            removed_causal = True
-            continue
-        if any(marker.lower() in line.lower() for marker in metadata_markers):
-            continue
-        kept.append(line)
-
-    result = "\n".join(kept).strip()
-    if removed_causal:
-        result = (
-            f"{result}\n\n"
-            "当前汇总数据只能说明对线结果与整局胜率存在差异，"
-            "不能据此判断具体比赛阶段或后续表现。"
-        ).strip()
-    return result
 
 
 def data_notes(graph: EvidenceGraph) -> list[AnswerDataNote]:

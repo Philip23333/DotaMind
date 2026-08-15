@@ -63,7 +63,10 @@ Controller 不直接访问全局 SessionStore。持久化 Chat Run 在进入 Gra
 `ConversationMemoryService` 取得 Redis recent dialogue window；cache miss/stale 时从
 PostgreSQL 重建。消息通过 `state.recent_messages` 注入，旧消息查找结果只存在于本次
 Run 的 `state.retrieved_messages`，并由 `conversation.history_lookup` 在配置预算内取得
-（默认最多一次）。
+（默认最多一次）。已完成的上下文工具另以 `state.controller_context_summaries` 向下一次
+Controller 调用提供最小状态；空结果明确表示为
+`{"tool":"conversation.history_lookup","status":"completed","matched_turns":0}`，因此
+不会因 `retrieved_messages` 为空而丢失“已经查过”的事实。
 
 ```mermaid
 sequenceDiagram
@@ -84,7 +87,7 @@ sequenceDiagram
     end
     Memory-->>Executor: recent messages + next index
     Executor->>Graph: AgentRunState(recent_messages, next_turn_index)
-    Graph->>Controller: query + recent/retrieved role messages
+    Graph->>Controller: query + recent/retrieved messages + context summaries
     Controller-->>Graph: ControllerDecision
     Graph-->>Executor: finalized response
     Executor->>PG: atomically commit assistant_message + compact Turn + completed Run
@@ -108,8 +111,9 @@ EvidenceGraph。
 
 ## 隐私边界
 
-服务端不序列化 `state.recent_messages`、`state.retrieved_messages`、完整历史渲染块、Controller prompt、retry
-feedback、raw Controller output 或未脱敏 validation error。每个 session
+服务端不序列化 `state.recent_messages`、`state.retrieved_messages`、上下文工具执行摘要、
+完整历史渲染块、Controller prompt、retry feedback、raw Controller output 或未脱敏
+validation error。每个 session
 对应一个用户安全主体；`session_id` 在无独立认证层时视为 bearer capability。
 
 ## Prompt Registry（V3.2-2）
@@ -123,8 +127,9 @@ system Prompt hash。
 源码职责上，`agentic/prompts/controller_rules.py` 只保存 Controller 静态行为规则；
 `agentic/prompts/controller.py` 是唯一的 Controller bundle/system/message renderer，
 并继续组合 ToolRegistry、Contract Registry 与 sample policy 的动态内容。工具的 scope
-支持性、数据口径与自身行为由动态渲染的 `ToolDefinition.description` 提示；参数语义由
-`ArgContract` 表达，跨工具依赖由 `requires_reference`、`AcceptedRef` 与
+支持性、数据口径与自身行为由动态渲染的 `ToolDefinition.description` 提示；工具结果进入
+EvidenceGraph 还是重新进入 Controller 由不渲染的 `ToolDefinition.result_destination`
+确定。参数语义由 `ArgContract` 表达，跨工具依赖由 `requires_reference`、`AcceptedRef` 与
 `OutputPathContract` 表达并校验。Controller 只保留跨工具 context 放置、枚举解释及查询
 工具目录/样本策略的通用规则，不重复列举具体工具调用顺序或固定问句路由。
 当前 DotaMind v1 玩家工具不支持地区或游戏模式过滤；仅当用户明确要求该过滤时才返回

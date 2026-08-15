@@ -15,6 +15,9 @@ def reset_attempt_working_state(
     updates = {
         "recent_messages": deepcopy(state.recent_messages),
         "retrieved_messages": deepcopy(state.retrieved_messages),
+        "controller_context_summaries": deepcopy(
+            state.controller_context_summaries
+        ),
         "next_turn_index": state.next_turn_index,
         "run_context": state.run_context.model_copy(deep=True) if state.run_context else None,
         "run_budget": state.run_budget.model_copy(deep=True) if state.run_budget else None,

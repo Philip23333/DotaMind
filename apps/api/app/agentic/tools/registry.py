@@ -1,6 +1,6 @@
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel
 
@@ -8,6 +8,7 @@ from app.agentic.models import QueryContext, ToolResult, ToolSource
 
 ToolHandler = Callable[[BaseModel, QueryContext], Any | Awaitable[Any]]
 EvidenceExtractor = Callable[[ToolResult], list[Any]]
+ToolResultDestination = Literal["evidence", "controller_context"]
 
 
 @dataclass(frozen=True)
@@ -37,6 +38,7 @@ class ToolDefinition:
     description: str
     input_model: type[BaseModel]
     handler: ToolHandler
+    result_destination: ToolResultDestination = "evidence"
     source: ToolSource | None = None
     evidence_extractor: EvidenceExtractor | None = None
     evidence_kinds: tuple[str, ...] = ()

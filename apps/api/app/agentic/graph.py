@@ -4,8 +4,12 @@ import logging
 from langgraph.graph import END, START, StateGraph
 
 from app.agentic.answer import AnswerSynthesizer
-from app.agentic.conversation.models import ConversationMessage
+from app.agentic.conversation.models import (
+    ControllerContextExecutionSummary,
+    ConversationMessage,
+)
 from app.agentic.critic import AgenticCritic
+from app.agentic.models import ExecutionPlan
 from app.agentic.nodes import (
     answer_node,
     attempt_finalize_node,
@@ -192,7 +196,7 @@ class AgentGraphRunner:
         graph.add_node("conversation_answer", self._conversation_answer)
         graph.add_node("validate", self._validate)
         graph.add_node("tools", self._tools)
-        graph.add_node("history_lookup", self._history_lookup)
+        graph.add_node("controller_context", self._controller_context)
         graph.add_node("evidence", self._evidence)
         graph.add_node("answer", self._answer)
         graph.add_node("critic", self._critic)
@@ -232,17 +236,17 @@ class AgentGraphRunner:
         )
         graph.add_conditional_edges(
             "tools",
-            _route_after_tools,
+            self._route_after_tools,
             {
                 "controller": "controller",
-                "history_lookup": "history_lookup",
+                "controller_context": "controller_context",
                 "evidence": "evidence",
                 "response": "attempt_finalize",
             },
         )
         graph.add_conditional_edges(
-            "history_lookup",
-            _route_after_history_lookup,
+            "controller_context",
+            _route_after_controller_context,
             {
                 "controller": "controller",
                 "response": "attempt_finalize",
@@ -308,11 +312,12 @@ class AgentGraphRunner:
             return state
         if (
             state.plan is not None
-            and _is_history_lookup_plan(state.plan)
-            and state.history_lookup_count >= self.history_lookup_max_per_run
+            and _is_controller_context_plan(state.plan, self.registry)
+            and state.controller_context_tool_count + len(state.plan.tool_calls)
+            > self.history_lookup_max_per_run
         ):
             state.status = "error"
-            state.reason = "conversation history lookup limit reached"
+            state.reason = "conversation context tool limit reached"
             state.errors.append(state.reason)
             return state
         publish_stream_event(
@@ -327,15 +332,24 @@ class AgentGraphRunner:
             failure_stage="tool_execution",
         )
 
-    def _history_lookup(self, state: AgentRunState) -> AgentRunState:
+    def _controller_context(self, state: AgentRunState) -> AgentRunState:
         if self._guard(state):
             return state
         return self._timed_sync(
             state,
-            _apply_history_lookup,
-            node="history_lookup",
+            _apply_controller_context_results,
+            node="controller_context",
             failure_stage="tool_execution",
         )
+
+    def _route_after_tools(self, state: AgentRunState) -> str:
+        if state.status == "error":
+            return "response"
+        if state.plan is not None and _is_controller_context_plan(
+            state.plan, self.registry
+        ):
+            return "controller_context"
+        return "evidence"
 
     def _validate(self, state: AgentRunState) -> AgentRunState:
         if self._guard(state):
@@ -536,29 +550,40 @@ def _route_after_validate(state: AgentRunState) -> str:
     return "tools"
 
 
-def _route_after_tools(state: AgentRunState) -> str:
-    if state.status == "error":
-        return "response"
-    if state.plan is not None and _is_history_lookup_plan(state.plan):
-        return "history_lookup"
-    return "evidence"
-
-
-def _is_history_lookup_plan(plan) -> bool:
-    return bool(
-        plan.tool_calls
-        and all(call.tool == "conversation.history_lookup" for call in plan.tool_calls)
-    )
-
-
-def _apply_history_lookup(state: AgentRunState) -> AgentRunState:
-    result = state.tool_results[-1] if state.tool_results else None
-    data = result.data if result is not None and isinstance(result.data, dict) else {}
-    raw_messages = data.get("messages", [])
+def _is_controller_context_plan(
+    plan: ExecutionPlan,
+    registry: ToolRegistry,
+) -> bool:
+    if not plan.tool_calls:
+        return False
     try:
-        retrieved = [
-            ConversationMessage.model_validate(message) for message in raw_messages
-        ]
+        return all(
+            registry.get(call.tool).result_destination == "controller_context"
+            for call in plan.tool_calls
+        )
+    except KeyError:
+        return False
+
+
+def _apply_controller_context_results(state: AgentRunState) -> AgentRunState:
+    retrieved: list[ConversationMessage] = []
+    summaries: list[ControllerContextExecutionSummary] = []
+    try:
+        for result in state.tool_results:
+            data = result.data if isinstance(result.data, dict) else {}
+            result_messages = [
+                ConversationMessage.model_validate(message)
+                for message in data.get("messages", [])
+            ]
+            retrieved.extend(result_messages)
+            summaries.append(
+                ControllerContextExecutionSummary(
+                    tool=result.tool,
+                    matched_turns=len(
+                        {message.turn_index for message in result_messages}
+                    ),
+                )
+            )
         messages_by_key = {
             (message.turn_index, message.role): message
             for message in state.retrieved_messages
@@ -573,10 +598,11 @@ def _apply_history_lookup(state: AgentRunState) -> AgentRunState:
         )
     except Exception:
         state.status = "error"
-        state.reason = "conversation history lookup returned invalid messages"
+        state.reason = "controller context tool returned invalid messages"
         state.errors.append(state.reason)
         return state
-    state.history_lookup_count += 1
+    state.controller_context_summaries.extend(summaries)
+    state.controller_context_tool_count += len(summaries)
     state.status = "ok"
     state.reason = ""
     state.errors.clear()
@@ -593,7 +619,7 @@ def _apply_history_lookup(state: AgentRunState) -> AgentRunState:
     return state
 
 
-def _route_after_history_lookup(state: AgentRunState) -> str:
+def _route_after_controller_context(state: AgentRunState) -> str:
     return "response" if state.status == "error" else "controller"
 
 
