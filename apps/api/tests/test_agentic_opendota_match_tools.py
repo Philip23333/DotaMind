@@ -49,6 +49,7 @@ def _raw_match() -> dict:
 def test_match_summary_normalization_and_evidence_require_ten_players() -> None:
     data = normalize_match_summary(_raw_match(), 8943244303)
     assert data["valve_match_id"] == 8943244303
+    assert data["match_id"] == 8943244303
     assert len(data["players"]) == 10
     result = ToolResult(
         tool_call_id="s1",
@@ -77,6 +78,7 @@ def test_empty_draft_is_ok_data_but_produces_no_evidence() -> None:
         latency_ms=1,
     )
     assert data["draft"] == []
+    assert data["match"]["match_id"] == 8943244303
     assert match_draft_evidence(result) == []
 
 

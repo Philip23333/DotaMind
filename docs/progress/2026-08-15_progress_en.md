@@ -109,3 +109,53 @@
 
 - The free PandaScore Fixture cannot currently map a PandaScore Game to a Valve match ID. A user-supplied Valve ID or permissioned upstream data is required; the first phase does not hide this gap behind a successful result.
 - This phase adds no endpoint, structured match output contract, timeline/event/log data, STRATZ fallback, database synchronization, or frontend.
+
+## 18:21 — Phase 2 cross-source Valve single-match mapping
+
+### Completed
+
+- Added `dota.resolve_valve_match` and the declared chain
+  `pandascore.resolve_competition -> pandascore.resolve_match_game ->
+  dota.resolve_valve_match -> opendota.match_summary/match_draft`.
+- Added OpenDota `/leagues` and `/leagues/{league_id}/matches` integration,
+  `CrossSourceMatchResolutionPolicy` (default 1,800-second start tolerance and
+  5-second duration tolerance), and the `inferred_cross_source` mapping model.
+- The resolver uniquely matches league name plus year, reuses the existing team
+  resolver, and applies hard unordered team-ID, start-time, duration, series-game
+  position, and winner-consistency filters. Zero/multiple candidates, league/team
+  ambiguity, and missing signals remain explicit statuses; no weighted or closest
+  fallback is used.
+- Changed `resolve_match_game` mandatory evidence to
+  `match_identity` plus `pandascore_game_identity`; added `data.resolution_input`
+  without an inferred Valve ID. OpenDota summary/draft accept resolver references
+  and expose `data.match.match_id` as a compatibility alias.
+- Added cross-source mapping/league/tool tests and technical documentation; updated
+  the Controller catalog, Answer attribution rules, Tool/node inventories, READMEs,
+  and configuration documentation.
+
+### Live boundaries
+
+- With the current `.env` token: TI 2026 is Series 10828 / Tournament 21545;
+  Match 1631694 / Game 738652 still has native PandaScore `valve_match_id=null`.
+- OpenDota live data contains league 19719, series 1130066, and Valve match
+  8943244303, but `/teams` returns two equally scored “Nigma Galaxy” candidates
+  (10136357 and 7554697). Under the strict `ambiguous_team` rule, the live chain
+  does not silently select 10136357.
+- Consequently, the known sample's unique `resolved` live smoke did not pass because
+  of upstream team-catalog ambiguity. A sanitized unique-team fixture verifies the
+  resolved path. No manual Valve table, plan bypass, or page scraping was added.
+
+### Verification
+
+- Focused cross-source/tool/OpenDota/PandaScore/registry/contract/evidence/prompt
+  collection: 92 passed.
+- `uv run --project apps/api pytest apps/api/tests -q`: 595 passed, 21 skipped, 1 warning.
+- `uv run --project apps/api ruff check apps/api/app apps/api/tests`: passed.
+- Git-tracked files were scanned; the PandaScore token does not appear in source,
+  fixtures, documentation, or test output.
+
+### Explicit non-goals
+
+- No new API endpoint, timeline/event/log data, STRATZ fallback, automatic replay
+  parsing, database mapping table, webpage scraping, paid PandaScore detail call, or
+  intent routing was added.

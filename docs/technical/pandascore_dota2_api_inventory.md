@@ -54,3 +54,25 @@ TI 样本中强行制造。
 - `detailed_stats=true` 表示 PandaScore Fixture 侧数据可用，不等于 OpenDota
   的 `has_parsed=true`，两者在 Answer 中必须分开归因。
 - 赛程实时数量、比分、直播流和进行中状态会变化；代码和文档不固定这些数量。
+
+## 第二阶段跨源映射边界
+
+PandaScore 免费 Fixture 仍不返回 Valve ID。第二阶段的
+`dota.resolve_valve_match` 是显式的跨源推断：
+
+```text
+PandaScore series/match/game
+  -> OpenDota league name + year
+  -> OpenDota team ids
+  -> start time <= 1800s
+  -> duration <= 5s
+  -> sorted series game position
+  -> winner consistency
+  -> unique Valve match_id
+```
+
+它输出 `method=inferred_cross_source`、候选数量、匹配信号和时间/时长差，
+不声称 PandaScore 原生提供了 Valve ID。联赛、战队或比赛存在歧义时保持
+`ambiguous_*` 状态；没有唯一候选时不使用 closest/weighted fallback。已知
+样本的 OpenDota 侧为 league `19719`、series `1130066`、Valve match
+`8943244303`，但样本映射仍属于推断而非 PandaScore 原生字段。

@@ -69,6 +69,11 @@ cache TTL, and maximum upstream page size. A missing
 `DOTAMIND_PANDASCORE_TOKEN` only affects PandaScore tool execution; it does not
 prevent unrelated tools or the application from starting.
 
+The `cross_source_match_resolution` policy controls deterministic PandaScore
+Game to OpenDota/Valve matching. `start_time_tolerance_seconds` defaults to
+1800 and `duration_tolerance_seconds` defaults to 5. These are hard filters,
+not weights or closest-match scoring.
+
 ## Local Game Data
 
 The Valve Catalog and patch records are committed runtime snapshots, not local
@@ -94,6 +99,7 @@ committing them; request-time code never downloads or generates these files.
 | `version` | Policy schema version; currently `1`. |
 | `opendota` | Request timeout and default transport cache TTL. |
 | `stratz` | Default and maximum completed-week fan-out. |
+| `cross_source_match_resolution` | Hard start-time and duration tolerances for inferred Valve match mappings. |
 | `team_report` | Time range, team resolution, match-detail sampling, concurrency, and cache. |
 | `hero_report` | Result limits, sample gates, evidence thresholds, and normalization ranges. |
 | `patch_report` | Default patch, result count, neutral score, and change delta. |

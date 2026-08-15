@@ -38,6 +38,7 @@ def normalize_match_summary(match: dict[str, Any], valve_match_id: int) -> dict[
     ]
     return {
         "valve_match_id": valve_match_id,
+        "match_id": valve_match_id,
         "start_time": match.get("start_time"),
         "duration": match.get("duration"),
         "radiant_win": match.get("radiant_win"),
@@ -75,7 +76,7 @@ def normalize_match_draft(match: dict[str, Any], valve_match_id: int) -> dict[st
             )
     timings = match.get("picks_bans_timing")
     return {
-        "match": {"valve_match_id": valve_match_id},
+        "match": {"valve_match_id": valve_match_id, "match_id": valve_match_id},
         "draft": draft,
         "draft_timings": timings if isinstance(timings, list) else [],
         "coverage": normalize_parse_coverage(match),

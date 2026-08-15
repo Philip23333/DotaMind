@@ -19,7 +19,7 @@ def test_registry_declares_three_pandascore_tools_and_contracts() -> None:
     assert resolve.output_paths["series_id"].path == "data.competition.series_id"
     assert listing.arg_contracts["series_id"].requires_reference is True
     assert resolver.arg_contracts["series_id"].requires_reference is True
-    assert resolver.mandatory_evidence == ("match_identity", "valve_match_identity")
+    assert resolver.mandatory_evidence == ("match_identity", "pandascore_game_identity")
 
 
 def test_ambiguous_and_malformed_results_do_not_create_identity_evidence() -> None:
@@ -67,6 +67,7 @@ def test_schedule_and_match_evidence_are_scoped_to_call() -> None:
     )
     assert {item.kind for item in match_game_evidence(pending)} == {
         "match_identity",
+        "pandascore_game_identity",
         "series_context",
     }
 

@@ -109,3 +109,47 @@
 
 - 当前免费 PandaScore Fixture 无法把 PandaScore Game 映射到 Valve match ID；需要用户提供 Valve ID 或可用的受权限 API 数据，第一阶段不会把该缺口隐藏成成功。
 - 本阶段没有新增 endpoint、结构化比赛 output contract、时间线/事件/日志、STRATZ fallback、数据库同步或前端。
+
+## 18:21 — 第二阶段跨源 Valve 单局映射
+
+### 已完成
+
+- 新增 `dota.resolve_valve_match`，建立
+  `pandascore.resolve_competition → pandascore.resolve_match_game →
+  dota.resolve_valve_match → opendota.match_summary/match_draft` 的声明引用链。
+- 新增 OpenDota `/leagues` 与 `/leagues/{league_id}/matches` integration、
+  `CrossSourceMatchResolutionPolicy`（默认开始时间容差 1800 秒、时长容差 5 秒）
+  和 `inferred_cross_source` 归一化映射模型。
+- 解析器按赛事名称+年份唯一匹配联赛、复用现有战队解析器，并使用无序战队 ID、
+  开始时间、时长、系列局序和胜者一致性硬过滤；零/多候选、联赛/战队歧义和信号缺失
+  保持显式状态，不使用加权或 closest fallback。
+- `resolve_match_game` 的 mandatory evidence 收敛为
+  `match_identity` + `pandascore_game_identity`；新增 `data.resolution_input`，
+  不把推断 Valve ID 写入 PandaScore 原生上下文。OpenDota summary/draft 接受
+  resolver 引用，并提供 `data.match.match_id` 兼容别名。
+- 新增跨源 mapping/league/tool 测试和技术文档，更新 Controller catalog、Answer
+  归因规则、Tool/节点清单、README 与配置说明。
+
+### 实测边界
+
+- 当前 `.env` token 进程实测：TI 2026 Series 10828、Tournament 21545；
+  Match 1631694 / Game 738652 的 PandaScore 原生 `valve_match_id` 为 `null`。
+- OpenDota 实测存在 league 19719、series 1130066、Valve match 8943244303，
+  但 `/teams` 对 “Nigma Galaxy” 返回两个同分候选（10136357、7554697）；
+  按严格 `ambiguous_team` 规则，真实链路当前不会静默选择 10136357。
+- 因此已知样本的“唯一 resolved”live smoke 未通过，原因是上游战队目录歧义；
+  测试使用脱敏且唯一的战队 fixture 验证 resolved 路径。没有写入手工 Valve 映射表，
+  也没有绕过套餐或抓网页。
+
+### 验证
+
+- `test_cross_source_match_resolution.py`、`test_agentic_match_resolution_tools.py`、
+  OpenDota/PandaScore/registry/contract/evidence/prompt 定向集合：92 passed。
+- `uv run --project apps/api pytest apps/api/tests -q`：595 passed，21 skipped，1 warning。
+- `uv run --project apps/api ruff check apps/api/app apps/api/tests`：通过。
+- 已扫描 Git 跟踪文件，PandaScore token 未出现在源码、fixture、文档或测试输出中。
+
+### 明确不做
+
+- 本阶段没有新增 API endpoint、时间线/事件/日志、STRATZ fallback、Replay 自动解析、
+  数据库 mapping 表、网页抓取、付费 PandaScore 详情调用或 intent 路由。

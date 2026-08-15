@@ -65,6 +65,14 @@ PandaScore Match/Game IDs; OpenDota consumes an explicit Valve `match_id` for th
 result, ten-player scoreboard, parse coverage, and draft. The free PandaScore
 Fixture response does not currently expose Valve IDs, so the resolver reports
 `pending_valve_match_id` rather than guessing or calling a 403 Game detail route.
+Phase 2 adds `dota.resolve_valve_match`: it consumes the resolved PandaScore
+competition and explicit Game context, resolves the unique OpenDota league and
+teams, then applies exact unordered team IDs, hard start-time/duration tolerances,
+series game position, and winner consistency. A single match yields an auditable
+`inferred_cross_source` mapping; zero or multiple candidates and team/league
+ambiguity remain explicit statuses. The mapping is inferred, never presented as
+a native PandaScore Valve ID, and the summary/draft tools accept its declared
+Valve output reference.
 STRATZ reads its English hero display-
 name index from the same Catalog repository. The former `hero_tools.py` resolver
 and `data/heroes/dota2_heroes.yaml` snapshot were deleted rather than kept as a

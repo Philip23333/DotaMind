@@ -27,6 +27,11 @@ class PandaScorePolicy(StrictPolicyModel):
     max_page_size: int = Field(default=100, ge=1, le=100)
 
 
+class CrossSourceMatchResolutionPolicy(StrictPolicyModel):
+    start_time_tolerance_seconds: int = Field(default=1800, ge=0)
+    duration_tolerance_seconds: int = Field(default=5, ge=0)
+
+
 class StratzPolicy(StrictPolicyModel):
     # STRATZ `weeks_back` resolution. A STRATZ week is 604800s-aligned; the
     # in-progress current week is always skipped (it is partial). Default 1 =
@@ -238,6 +243,9 @@ class AppPolicy(StrictPolicyModel):
     version: Literal[1]
     opendota: OpenDotaPolicy
     pandascore: PandaScorePolicy = Field(default_factory=PandaScorePolicy)
+    cross_source_match_resolution: CrossSourceMatchResolutionPolicy = Field(
+        default_factory=CrossSourceMatchResolutionPolicy
+    )
     stratz: StratzPolicy
     team_report: TeamReportPolicy
     hero_report: HeroReportPolicy

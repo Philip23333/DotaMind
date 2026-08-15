@@ -153,9 +153,20 @@ PandaScore Dota 2 Fixture:
 - `pandascore.list_matches`
 - `pandascore.resolve_match_game`
 
+Cross-source match resolution:
+
+- `dota.resolve_valve_match`
+
+`dota.resolve_valve_match` consumes the two PandaScore resolver outputs and
+matches a unique OpenDota league match using team IDs, hard time/duration
+tolerances, series game position, and winner consistency. Its Valve ID is an
+auditable inference, not a native PandaScore field. Ambiguous or missing
+signals remain explicit statuses.
+
 PandaScore Fixture IDs and Valve match IDs are distinct. The free Fixture
 response currently does not expose the Valve ID; `resolve_match_game` reports a
-pending mapping instead of guessing it or using a paid endpoint.
+pending mapping, while `dota.resolve_valve_match` performs the separately
+declared cross-source inference without guessing or using a paid endpoint.
 
 Local patch records:
 

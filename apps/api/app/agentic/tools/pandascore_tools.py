@@ -64,6 +64,11 @@ def register_pandascore_tools(registry: ToolRegistry, settings: Settings) -> Non
             mandatory_evidence=("competition_identity",),
             arg_contracts={"query": ArgContract(description="Competition or series name.")},
             output_paths={
+                "competition": OutputPathContract(
+                    path="data.competition",
+                    type="dict",
+                    description="Resolved PandaScore competition context.",
+                ),
                 "series_id": OutputPathContract(
                     path="data.competition.series_id",
                     type="int",
@@ -121,8 +126,13 @@ def register_pandascore_tools(registry: ToolRegistry, settings: Settings) -> Non
             handler=_resolve_match_game_handler(settings, policy),
             source=source,
             evidence_extractor=match_game_evidence,
-            evidence_kinds=("match_identity", "series_context", "valve_match_identity"),
-            mandatory_evidence=("match_identity", "valve_match_identity"),
+            evidence_kinds=(
+                "match_identity",
+                "pandascore_game_identity",
+                "series_context",
+                "valve_match_identity",
+            ),
+            mandatory_evidence=("match_identity", "pandascore_game_identity"),
             arg_contracts={
                 "series_id": ArgContract(
                     description="PandaScore series id from resolve_competition.",
@@ -142,6 +152,11 @@ def register_pandascore_tools(registry: ToolRegistry, settings: Settings) -> Non
                 ),
             },
             output_paths={
+                "resolution_input": OutputPathContract(
+                    path="data.resolution_input",
+                    type="dict",
+                    description="Deterministic cross-source match resolution input.",
+                ),
                 "pandascore_match_id": OutputPathContract(
                     path="data.match.pandascore_match_id",
                     type="int",
@@ -261,6 +276,9 @@ def _resolve_match_game_handler(settings: Settings, policy: Any):
                 result["match"] = _fixture_data(resolved.match)
             if resolved.game is not None:
                 result["game"] = resolved.game.model_dump(mode="json")
+                result["resolution_input"] = _resolution_input(
+                    resolved.match, resolved.game
+                )
             return result
         finally:
             await transport.aclose()
@@ -374,6 +392,15 @@ def match_game_evidence(result: ToolResult) -> list[EvidenceItem]:
             tool=result.tool,
         ),
         EvidenceItem(
+            id=f"{call_id}:pandascore_game_identity",
+            kind="pandascore_game_identity",
+            subject=str(game.get("pandascore_game_id")),
+            value=game,
+            source=result.source,
+            tool_call_id=call_id,
+            tool=result.tool,
+        ),
+        EvidenceItem(
             id=f"{call_id}:series_context",
             kind="series_context",
             subject=str(match.get("name") or match.get("pandascore_match_id")),
@@ -408,6 +435,19 @@ def match_game_evidence(result: ToolResult) -> list[EvidenceItem]:
 def _competition_data(row: Any) -> dict[str, Any]:
     data = row.model_dump(mode="json")
     data["series_id"] = data["pandascore_series_id"]
+    data["series_name"] = data["name"]
+    stages = data.get("tournaments") or []
+    if stages:
+        stage = stages[0]
+        data["tournament_id"] = stage.get("pandascore_tournament_id")
+        data["tournament_name"] = stage.get("name")
+        data["begin_at"] = stage.get("begin_at")
+        data["end_at"] = stage.get("end_at")
+    else:
+        data["tournament_id"] = None
+        data["tournament_name"] = None
+        data["begin_at"] = None
+        data["end_at"] = None
     return data
 
 
@@ -424,6 +464,40 @@ def _competition_labels(row: Any) -> set[str]:
 
 def _fixture_data(fixture: PandaMatchFixture) -> dict[str, Any]:
     return fixture.model_dump(mode="json")
+
+
+def _resolution_input(match: PandaMatchFixture | None, game: Any) -> dict[str, Any]:
+    if match is None:
+        return {}
+    teams: list[dict[str, Any]] = []
+    for opponent in match.opponents:
+        team = opponent.get("opponent") if isinstance(opponent, dict) else None
+        if not isinstance(team, dict) or team.get("id") is None:
+            continue
+        teams.append(
+            {
+                "pandascore_team_id": team.get("id"),
+                "name": team.get("name"),
+                "acronym": team.get("acronym"),
+            }
+        )
+    return {
+        "pandascore_series_id": match.pandascore_series_id,
+        "pandascore_tournament_id": match.pandascore_tournament_id,
+        "pandascore_match_id": match.pandascore_match_id,
+        "pandascore_game_id": game.pandascore_game_id,
+        "game_position": game.position,
+        "game_begin_at": _isoformat(game.begin_at),
+        "match_begin_at": _isoformat(match.begin_at),
+        "scheduled_at": _isoformat(match.scheduled_at),
+        "length_seconds": game.length_seconds,
+        "teams": teams,
+        "winner_pandascore_team_id": game.winner_team_id,
+    }
+
+
+def _isoformat(value: Any) -> str | None:
+    return value.isoformat() if isinstance(value, (datetime, date)) else value
 
 
 def _date_filter(

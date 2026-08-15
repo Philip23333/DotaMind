@@ -144,7 +144,8 @@ cannot borrow one another's primary evidence.
 | `opendota.hero_stats_by_role` | `hero_stats` |
 | `pandascore.resolve_competition` | `competition_identity` |
 | `pandascore.list_matches` | `match_schedule` |
-| `pandascore.resolve_match_game` | `match_identity`, `valve_match_identity` |
+| `pandascore.resolve_match_game` | `match_identity`, `pandascore_game_identity` |
+| `dota.resolve_valve_match` | `cross_source_match_mapping`, `valve_match_identity` |
 | `opendota.match_summary` | `match_result`, `player_scoreboard` |
 | `opendota.match_draft` | `match_draft` |
 | `patch.get_records` | `patch_records` |

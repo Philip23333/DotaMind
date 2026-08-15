@@ -96,6 +96,10 @@ MATCH_SOURCE_BOUNDARY_RULES = (
     "PandaScore `pandascore_match_id` and `pandascore_game_id` are provider ids; "
     "they are not Valve `valve_match_id`. Attribute result, player scoreboard, "
     "parse coverage, and picks/bans to OpenDota's Valve match and replay parsing. "
+    "When cross_source_match_mapping evidence is present, describe the PandaScore "
+    "Game-to-Valve mapping as an inferred match across OpenDota league, teams, "
+    "start time, duration, game position, and winner signals; it is not a native "
+    "PandaScore Valve id. Never say that PandaScore itself returned that Valve id. "
     "Do not treat PandaScore detailed_stats as OpenDota has_parsed. If OpenDota "
     "parse coverage or draft evidence is absent, say that the match is not parsed "
     "or the BP is unavailable; never claim a completed draft from an empty list."
@@ -179,6 +183,7 @@ MATCH_EVIDENCE_KINDS = frozenset(
         "match_identity",
         "series_context",
         "valve_match_identity",
+        "cross_source_match_mapping",
         "match_result",
         "player_scoreboard",
         "match_parse_status",
@@ -201,7 +206,8 @@ def _has_match_source(graph: EvidenceGraph) -> bool:
     sources = [item.source for item in graph.evidence]
     sources.extend(result.source for result in graph.tool_results)
     return any(
-        source is not None and source.name in {"PandaScore", "OpenDota"}
+        source is not None
+        and source.name in {"PandaScore", "OpenDota", "PandaScore + OpenDota"}
         for source in sources
     )
 

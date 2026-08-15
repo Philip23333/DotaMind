@@ -10,6 +10,10 @@ pandascore:
   default_cache_ttl_seconds: 60
   max_page_size: 100
 
+cross_source_match_resolution:
+  start_time_tolerance_seconds: 1800
+  duration_tolerance_seconds: 5
+
 stratz:
   weeks_back_default: 1   # null weeks_back -> latest completed STRATZ week
   weeks_back_max: 8       # guardrail: N weeks = N STRATZ calls per tool

@@ -94,6 +94,7 @@ ToolRegistry()
   -> register_stratz_tools
   -> register_opendota_tools
   -> register_pandascore_tools
+  -> register_match_resolution_tools
   -> register_opendota_match_tools
   -> register_patch_tools
 ```
@@ -120,7 +121,15 @@ V3.2-2 中，默认 `PlanService` 装配会把同一 Registry 实例传给这些
 - `opendota.match_summary` 可接受用户字面量 Valve ID 或 PandaScore resolver 的明确引用。
 - `opendota.match_draft` 只能引用 PandaScore resolver 或 OpenDota summary 的 Valve ID。
 
-PandaScore 赛事 Fixture 事实与 OpenDota Valve/Replay 事实分别进入 EvidenceGraph；
+第二阶段增加 `dota.resolve_valve_match`，只接受
+`pandascore.resolve_competition.data.competition` 与
+`pandascore.resolve_match_game.data.resolution_input` 两个声明引用。它通过
+OpenDota league/team/league-matches API 做硬条件唯一匹配，输出
+`data.match.valve_match_id`、OpenDota league/series IDs 及
+`data.mapping`。`match_summary` 和 `match_draft` 可引用该 Valve ID；
+`match_summary.data.match.match_id` 是兼容别名，明确仍表示 Valve ID。
+
+PandaScore 赛事 Fixture 事实、跨源推断映射与 OpenDota Valve/Replay 事实分别进入 EvidenceGraph；
 `detailed_stats` 不是 `has_parsed`，空 BP 不产生 `match_draft` 证据。
 
 ## 4. ToolExecutor Node 链路

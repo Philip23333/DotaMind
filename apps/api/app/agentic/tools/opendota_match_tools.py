@@ -60,13 +60,23 @@ def register_opendota_match_tools(registry: ToolRegistry, settings: Settings) ->
                             path="data.game.valve_match_id",
                             type="int",
                         ),
+                        AcceptedRef(
+                            from_tool="dota.resolve_valve_match",
+                            path="data.match.valve_match_id",
+                            type="int",
+                        ),
                     ),
                 )
             },
             output_paths={
                 "valve_match_id": OutputPathContract(
                     path="data.match.valve_match_id", type="int", description="Valve match id."
-                )
+                ),
+                "match_id": OutputPathContract(
+                    path="data.match.match_id",
+                    type="int",
+                    description="Valve match id compatibility alias.",
+                ),
             },
             metadata={"game": "dota2", "domain": "match_summary"},
         )
@@ -91,8 +101,18 @@ def register_opendota_match_tools(registry: ToolRegistry, settings: Settings) ->
                             type="int",
                         ),
                         AcceptedRef(
+                            from_tool="dota.resolve_valve_match",
+                            path="data.match.valve_match_id",
+                            type="int",
+                        ),
+                        AcceptedRef(
                             from_tool="opendota.match_summary",
                             path="data.match.valve_match_id",
+                            type="int",
+                        ),
+                        AcceptedRef(
+                            from_tool="opendota.match_summary",
+                            path="data.match.match_id",
                             type="int",
                         ),
                     ),
@@ -102,7 +122,12 @@ def register_opendota_match_tools(registry: ToolRegistry, settings: Settings) ->
             output_paths={
                 "valve_match_id": OutputPathContract(
                     path="data.match.valve_match_id", type="int", description="Valve match id."
-                )
+                ),
+                "match_id": OutputPathContract(
+                    path="data.match.match_id",
+                    type="int",
+                    description="Valve match id compatibility alias.",
+                ),
             },
             metadata={"game": "dota2", "domain": "match_draft"},
         )
