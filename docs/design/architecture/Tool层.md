@@ -12,9 +12,7 @@ validate_plan_node
   -> ToolExecutor
   -> ToolDefinition.handler
   -> ToolResult[]
-  -> result_destination routing
-      -> evidence_node
-      -> controller_context -> controller_node
+  -> evidence_node
 ```
 
 它的职责是执行经过校验的 `tool_calls`，但不负责最终解释结果。
@@ -29,11 +27,8 @@ flowchart LR
     Executor --> Handler["Registered Handler"]
     Handler --> Integration["Provider Integration"]
     Integration --> Result["ToolResult"]
-    Result --> Destination{"ToolDefinition.result_destination"}
-    Destination -->|"evidence"| Extractor["Tool-owned Evidence Extractor"]
+    Result --> Extractor["Tool-owned Evidence Extractor"]
     Extractor --> Evidence["EvidenceGraph"]
-    Destination -->|"controller_context"| Context["Messages + execution summary"]
-    Context --> Controller
 ```
 
 Planner、Validator、Executor 和 Evidence 层消费同一份 `ToolDefinition`，但只有
@@ -49,7 +44,6 @@ ToolDefinition(
     description="...",
     input_model=HeroMatchupRankingInput,
     handler=_hero_matchup_ranking_handler(settings),
-    result_destination="evidence",
     source=ToolSource(...),
     evidence_extractor=hero_matchup_ranking_evidence,
     evidence_kinds=("matchup_ranking_row", "sample_size"),
@@ -65,8 +59,6 @@ ToolDefinition(
 - `description`: Planner 用来理解能力边界的文字。
 - `input_model`: 参数 schema，由 Pydantic 校验。
 - `handler`: 实际执行函数。
-- `result_destination`: 结果进入 `evidence` 或 `controller_context`；默认是
-  `evidence`，Graph 与 Validator 按该字段处理，不按工具名分支。
 - `source`: 数据来源。
 - `evidence_extractor`: ToolResult -> EvidenceItem 的转换器。
 - `evidence_kinds`: 该工具能产出的证据类型。
@@ -74,13 +66,12 @@ ToolDefinition(
 - `output_paths`: 后续工具可引用的稳定输出路径。
 - `metadata`: trace 和结果附加元信息。
 
-ToolDefinition 同时服务四层：
+ToolDefinition 同时服务三层：
 
 ```text
 Planner prompt renderer
 Validator
-ToolExecutor
-Graph result routing / EvidenceGraph
+ToolExecutor / EvidenceGraph
 ```
 
 因此它是工具契约的单一事实源。
@@ -126,9 +117,7 @@ for call in plan.tool_calls:
   previous_results[call.id] = result
 ```
 
-执行顺序就是 `tool_calls` 数组顺序。全部调用完成后，Graph 根据所选工具统一声明的
-`result_destination` 处理结果：`evidence` 进入 EvidenceGraph；`controller_context` 合并
-请求级消息与最小执行摘要后再次调用 Controller。两种 destination 不允许出现在同一计划。
+执行顺序就是 `tool_calls` 数组顺序。
 
 如果某个调用的引用解析失败：
 

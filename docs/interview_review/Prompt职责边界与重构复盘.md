@@ -31,16 +31,15 @@
 | P-03 | P1 | 全局 Controller prompt 承担过多工具特例 | 除动态渲染的工具名、参数、引用、证据之外，prompt 曾手写 Catalog/STRATZ 工具链、玩家参数语义和 ranking 语义。 | ToolRegistry description / ArgContract 为工具语义来源；Controller 只保留跨工具的规划原则。 | 已完成（2026-08-13） |
 | P-04 | P1 | Controller 将 scope 工具特例写在全局 prompt | region/mode、位置和周窗口等工具特例曾集中写在 Controller；部分 scope 已有 validator，但本批不扩展验证合同。 | 各 ToolDefinition description 声明所消费、忽略或不支持的 scope；Controller 只保留通用 context 放置和枚举语义。静默忽略的强制拒绝留待出现实测失败再单独处理。 | 已完成（2026-08-13） |
 | P-05 | P1 | 历史统计复用 guard 只检查指标词和数字 | `missing_historical_statistical_metrics()` 未比对主体、分段、位置、时间窗、来源；例如历史“斧王对线胜率 55%”与当前“Lina 对线胜率？”会通过该 guard。 | 不要扩张脆弱文本正则；保留模型语义判断并用 e2e 评估覆盖错配，若需硬保证则引入结构化 fact provenance。 | 待处理 |
-| P-06 | P1 | 自然语言 Answer 不提供逐句证据绑定 | LLM 最终输出 `summary` 文本；自然语言 `claims` / `recommendations` 不含逐项 evidence refs，Critic 不逐句复核数字与证据。当前没有真实评估表明模型在获得明确 EvidenceGraph 后会稳定抄错数据。 | 接受该模型能力边界，不增加结构化 claims、二次 LLM Critic 或 evidence-kind 字段核验。若以后出现可稳定复现的转述错误，优先评估模型、Prompt 长度、证据结构和生成参数，再决定是否重开合同级审计。 | 不处理（接受风险，2026-08-14） |
-| P-07 | P1 | pair-lane 规则在 prompt 与字符串后处理间分裂 | prompt 禁止来源混淆和无证据因果推断；`_enforce_pair_lane_boundaries()` 曾按“中后期”“翻盘”及 Catalog 值等关键词删除整行，误删否定表述和混合回答中的合法 Catalog 段，且无法撤回已流式发送的 delta。 | 删除关键词后处理；保留 P-10 按 evidence 加载的 pair-lane 与跨来源元数据规则。自然语言事实审计留给 P-12/P-06，不继续扩张字符串规则。 | 已完成（2026-08-14） |
+| P-06 | P1 | 自然语言 Answer 的证据绑定不可审计 | LLM 最终只输出 `summary` 文本；自然语言 `claims` / `recommendations` 不含逐项 evidence refs，Critic 也未校验文本事实与证据的一致性。 | 评估结构化 claim + evidence refs 输出，或至少增加按 evidence kind 的确定性覆盖检查。 | 待讨论 |
+| P-07 | P1 | pair-lane 规则在 prompt 与字符串后处理间分裂 | prompt 禁止 Catalog 元数据泄漏和无证据因果推断；`_enforce_pair_lane_boundaries()` 又按关键词删除行并补说明。 | 将稳定、可判定的展示/元数据规则下沉到 renderer 或 typed answer；保留 prompt 的一般证据约束。 | 待处理 |
 | P-08 | P2 | Synthesizer 的 Wilson 规则过度泛化 | 曾先称“Hero recommendations”均按 `wilson_rating`，随后又规定 lane/position 按 `selection_mode`，matchup/synergy 则以 `synergy` 为主。 | 已删除泛化 Wilson 句；现有 evidence-kind 专属规则保持不变。动态生成 presentation constraints 留待 P-10。 | 已完成（2026-08-13） |
 | P-09 | P2 | Synthesizer 存在重复元数据规则 | Catalog metadata 不得作为 STRATZ statistics metadata 的限制曾在 Catalog 段与 pair-lane 段重复出现。 | 通用 Catalog/STRATZ 边界保留在 Catalog 段；pair-lane 段只保留对线与整局分别报告。 | 已完成（2026-08-13） |
-| P-10 | P2 | 单一总 Answer prompt 混入不相关格式细则 | 物品合成表、技能、天赋、周趋势、对线结果和推荐排序规则曾在每次请求中一并发送。 | renderer 依据 required/actual evidence kinds 与证据来源只组装相关规则；请求粒度仍由 `current_query` / `reconstructed_goal` 表达，不新增 intent 路由或确定性 Catalog Renderer。 | 已完成（2026-08-14） |
+| P-10 | P2 | 单一总 Answer prompt 混入不相关格式细则 | 物品合成表、完整技能清单、单技能、天赋表、周趋势、对线结果、推荐排序规则每次请求都会一并发送。 | 依据 `plan` / evidence kinds 渲染请求专属 presentation constraints；稳定 Catalog 表格优先做确定性 renderer。 | 待处理 |
 | P-11 | P2 | Answer 无法可靠判断部分查询粒度 | Answer 曾只有 `plan.goal`、required evidence 和 EvidenceGraph，无法直接看到“只回答棒击大地”“不要天赋”等当前措辞。 | 不新增固定 presentation 枚举；Answer 同时接收 `current_query` 与 Controller 的 `reconstructed_goal`，前者保留最新展示要求，后者承接多轮重建。Controller goal 必须保留具名焦点、排除项、数量和细节级别。 | 已完成（2026-08-13） |
-| P-12 | P2 | “仅用证据”与“可给无证据 hypothesis”边界含混 | prompt 一方面要求只用 EvidenceGraph，另一方面曾允许无明确证据的解释作为 hypothesis；当前 Critic 不能逐句审计该标签。 | 当前自然语言 Answer 不支持无证据 hypothesis；只有 EvidenceGraph 明确支持时才允许玩法或因果解释，并要求归属到相关证据。策略推演若以后需要，应另设明确合同。 | 已完成（2026-08-14） |
-| P-13 | P2 | prompt 规模已经影响维护性 | Controller prompt 已通过职责收敛缩减；Answer 不再存在固定总 prompt，P-10 后代表性单领域 system prompt 为 432–2,446 字符。 | 继续以职责收敛为主并记录代表性 prompt size，不设脱离效果的硬性压缩指标。 | 待处理 |
+| P-12 | P2 | “仅用证据”与“可给无证据 hypothesis”边界含混 | prompt 一方面要求只用 EvidenceGraph，另一方面允许无明确证据的解释作为 hypothesis。 | 决定是否支持策略性推演；若支持，明确其触发条件与标签，且不得混同统计结论。 | 待讨论 |
+| P-13 | P2 | prompt 规模已经影响维护性 | 当前默认 Registry（25 个工具）渲染的 Controller system prompt 约 40,859 字符、627 行；Synthesizer static prompt 约 6,155 字符。 | 以职责收敛为主，修改后记录 prompt size 与回归结果，不设脱离效果的硬性压缩指标。 | 待处理 |
 | P-14 | P1 | ToolDefinition description 仍在规定调用编排 | 默认 Registry 的过度编排说明已收窄；真实规划评估进一步发现玩家 top-N 被误作内部 over-fetch、校验重试会静默删除不支持的 scope，以及 Controller `Supported` 清单仍残留固定工具路由。 | description 只保留工具能力、数据范围和本工具局部产出条件；参数合同明确最终输出语义；Controller 通用规则保留用户约束，能力不足时返回边界，并仅列能力而不列固定路由。 | 已完成（2026-08-13） |
-| P-15 | P0 | Controller 对元会话回忆误判 `context_missing` | 真实持久化 Chat Run 已确认近期历史正常加载；另发现 history lookup 空结果在清空 `tool_results` 后没有任何状态进入下一次 Controller 输入，导致模型无法区分“未查”和“已查但未命中”。 | 将三处会话职责压缩为“已供应消息可用、lookup 补充旧消息且不是 Dota evidence、context_missing 需考虑已供应消息和已完成 lookup”；空结果保留最小执行摘要；由 `ToolDefinition.result_destination` 决定结果进入 Controller context 或 EvidenceGraph，不增加关键词路由或确定性回忆模板。 | 结构修复已完成，但真实复测 0/12；P0 未关闭（2026-08-15） |
 
 ### 批次 1：结构拆分（已完成，2026-08-12）
 
@@ -109,7 +108,7 @@
 - `resolve_hero` / `resolve_item` description 删除 `call once first`、后续工具名和具体引用字符串，只说明名称解析能力、数据来源及解析结果。
 - hero attributes/abilities/talent 与 item info description 删除 `Use after`、`pair with`、`call alone` 和跨工具 required evidence，只保留各自返回的数据、必要的范围差异（如 abilities 不含天赋）及本工具局部产出条件（如配方关系为条件性产出）。
 - `requires_reference`、可接受的来源工具/路径/类型继续由 `ArgContract` / `AcceptedRef` 表达并由 Validator 强制校验；模型据此自行推导 resolve → Catalog 数据工具的依赖关系。
-- 不把“完整技能必须附带天赋”等产品展示偏好伪装成工具能力；请求粒度由 P-11 的 `current_query` / `reconstructed_goal` 表达，P-10 只按 evidence 选择相关展示规则。
+- 不把“完整技能必须附带天赋”等产品展示偏好伪装成工具能力；需要稳定输出模式时，在 P-10/P-11 的 presentation scope / output contract 中表达。
 - 如定向规划评估显示仅靠结构化合同仍不稳定，只增加一个简短代表性案例，展示名称解析和 plan-local 引用；案例用于提示推理方式，不成为按 intent 路由的固定 pipeline，也不在每个工具 description 重复。
 - 验收重点：最终 Controller prompt 仍清晰渲染 `must_reference`、`accepts_ref`、输出路径和 evidence kinds；6 个 Catalog description 不再包含调用顺序或工具组合指令；不修改 handler、实际数据、EvidenceGraph 或 API 行为。
 
@@ -155,85 +154,6 @@
 - 真实 Answer 使用同一份齐天大圣技能 evidence 验证：完整普通技能请求列出全部普通技能且不含天赋；“只回答棒击大地”仅输出该技能，没有扩展其他技能或天赋。
 - 本批只补 Answer 输入语义，不拆分总 Answer prompt；按 evidence kinds 选择 presentation constraints 留给 P-10。
 
-### P-10 Answer presentation rules 动态组装（已完成，2026-08-14）
-
-- 将自然语言 Answer 的单一总 system prompt 拆为通用证据规则及 Catalog 属性、技能、天赋、物品、STRATZ 元数据边界、周趋势、pair-lane、排名和日趋势规则片段。
-- renderer 取 `graph.required_evidence` 与实际 `graph.evidence[].kind` 的并集；按 evidence kind 选择领域规则，并依据 EvidenceGraph / ToolResult 的 STRATZ source 加载跨来源元数据边界。不读取 `intent`、工具名或自然语言关键词来选择固定路线。
-- `hero_ability` 规则同时说明完整技能与具名单技能的展示原则，具体粒度继续由模型结合 `current_query` / `reconstructed_goal` 判断；`hero_talent_tree` 不存在时不再注入天赋表规则。
-- Catalog 与 STRATZ 混合回答要求把各自元数据局部归属到相关事实；仅统计查询中，身份解析携带的 Catalog patch/generated_at 不得作为统计版本披露。
-- 未新增 `presentation_scope`、output contract、intent 分支或确定性 Catalog Renderer；未修改 Answer 节点、Synthesizer 接口、EvidenceGraph、工具或 API 行为。
-- 代表性 system prompt：core 432 字符、属性 891、技能 2,065、技能+天赋 2,446、物品配方 1,741；含 STRATZ 来源边界的 pair-lane 2,249、synergy 1,766、日趋势 1,251 字符。
-- `tests/test_agentic_answer.py`：16 passed；prompt/runtime/recovery 定向回归：68 passed；相关 Ruff 通过。
-
-### P-07 删除 pair-lane 关键词后处理（已完成，2026-08-14）
-
-- 删除 `NaturalLanguageAnswerSynthesizer` 对 `_enforce_pair_lane_boundaries()` 的调用及整个关键词删行函数；LLM 完成后的文本现在只做首尾空白清理。
-- 保留 P-10 的 `PAIR_LANE_RULES`、`STRATZ_METADATA_BOUNDARY_RULES` 和混合来源局部归属规则，因此对线/整局分离、位置范围、来源边界及禁止无证据因果结论仍在相关 system prompt 中。
-- 原后处理无法理解否定语义，会删除“不能证明中后期更强”等正确句子；混合 Catalog + STRATZ 回答中也可能因出现合法 Catalog patch 而误删定义段。流式路径还会先发送未经处理的 delta，导致用户所见内容与最终 `summary` 不一致。
-- 定向测试改为验证包含“中后期”“翻盘能力”的否定表述保持原样，不再用脆弱关键词修改模型输出；现有流式测试继续验证 delta 拼接结果等于最终 summary。
-- 未修改 EvidenceGraph、Answer prompt 选择、工具、Controller、Critic、输出 schema 或 API 行为。自然语言 claim/evidence 审计仍由后续 P-12/P-06 决定。
-- Answer/runtime/recovery 定向回归：72 passed；相关 Ruff 通过。
-
-### P-12 统一 EvidenceGraph 事实边界（已完成，2026-08-14）
-
-- 删除 pair-lane 规则中“缺少明确证据时仍可标记为 hypothesis”的例外；`Use only the provided evidence graph` 现在是自然语言 Answer 的统一事实边界。
-- 新规则要求直接报告对线与整局统计差异，不添加无证据的玩法解释或假设；只有 EvidenceGraph 明确支持时才允许因果/玩法解释，并要求将其归属到相关证据。
-- 当前不增加 hypothesis schema、presentation scope、Critic 文本分类或字符串过滤。若未来需要策略推演，应通过独立且可验证的输入/输出合同表达，而不是在统计回答中混入自由推测。
-- 本批只收紧 Prompt 合同，尚未解决自然语言 `summary` 的逐项 evidence refs；该可审计性问题进入 P-06。
-- Answer/prompt/runtime/recovery 定向回归：84 passed；相关 Ruff 通过。
-
-### P-06 自然语言逐句证据审计（不实施，2026-08-14）
-
-- 当前系统能够保证工具结果进入 EvidenceGraph、所需 evidence 完整性及 Answer 只接收当前相关证据，但不形式化证明最终 `summary` 中每个数字、主体和来源均被正确转述。
-- 目前没有稳定复现的转述错误，模型在明确数据下偶发抄错被视为低概率模型质量风险；为此引入结构化 claims/evidence refs、二次 LLM Critic、领域字段解析及流式兼容层，投入与维护重量不成比例。
-- 当前接受这一边界，不把“缺少逐句形式证明”等同于实现缺陷，也不对外宣称现有 Critic 会审计自然语言中的每项事实。
-- 若后续真实评估发现稳定错误，优先更换或升级模型、缩短 Prompt、整理 EvidenceGraph 字段和调整生成参数；只有这些措施仍不足时，才重新评估合同级审计。
-- 本项只记录设计决策，不修改 Answer、Critic、schema、API 或测试。
-
-### P-15 Controller 会话回忆示例去偏（部分改善，2026-08-15）
-
-- 真实持久化 Chat Run 先确认：第三轮执行前 recent history 完整包含前两轮 `user/assistant` 消息，因此问题不在 PostgreSQL、Redis、SessionStore 或消息注入。
-- 修改前 6 类 × 3 次矩阵中只有 4/18 返回 `direct_answer`；工具/功能元会话后的四类用户问题回忆均为 0/3，双英雄回忆为 3/3。
-- Controller prompt 原先虽然要求“历史存在时回答请求的 exchange 部分”，但唯一具体 `conversation_recall` JSON 示例固定映射到 `context_missing`，并提供可照抄的中文失败原因。
-- 当前删除该语义绑定和固定失败文案，只保留中性的 `context_missing` 字段结构；未增加正则 guard、validator、关键词分类或确定性回复。
-- 加载当前源码的独立 API 复测提升到 14/18 `direct_answer`：明确上一问、助手回答回忆和双英雄回忆均 3/3；泛化“我刚才问了什么”为 1/3，两种“两问”表达均为 2/3。
-- 该修改方向有效但不足以完全关闭 P0；后续若继续处理，应只增加最小的正向决策区分，并用同一真实矩阵验证，而不是把自然语言表达写成代码分支。
-- 后续显式增加“已注入消息就是可用会话；命中时 `context_missing` 无效且无需 history lookup”的规则，使用 7 类 × 3 次真实矩阵复测。两种泛化“刚才问了什么”均 0/3，明确上一问 2/3，哪两个问题 0/3；三个较具体场景仍为 3/3。
-- 与前一矩阵相同的 18 个场景从 14/18 降至 11/18，未证明新增提醒有效。该规则及对应断言/golden 变更已撤回，避免继续累积同义 Prompt；P-15 保持部分改善状态。
-
-### P-15 会话上下文结果去向与空 lookup 状态（已实现，2026-08-15）
-
-- Conversation Prompt 不再从不同位置重复解释近期消息、lookup 和
-  `context_missing`，统一为三条定义：请求中已供应的 user/assistant 消息是可用上下文；
-  `conversation.history_lookup` 只补充更早消息且不是 Dota evidence；只有综合已供应消息和
-  已完成 lookup 后仍不可用，才是 `context_missing`。
-- `ToolDefinition` 新增 `result_destination = evidence | controller_context`。Graph、决策校验和
-  Registry 一致性检查按 destination 工作，不再比较 `conversation.history_lookup` 工具名；
-  两类 destination 不允许混在同一计划。
-- `controller_context` 结果中的消息进入 `retrieved_messages`，同时保留请求级最小执行摘要。
-  空 lookup 明确进入下一次 Controller system input：
-  `{"tool":"conversation.history_lookup","status":"completed","matched_turns":0}`。
-- 上述 destination 是运行时契约，不额外渲染到每个工具的 Prompt 条目；lookup description
-  只说明检索能力，不规定模型的固定调用条件或调用顺序。
-- 针对 history/context、Controller decision 和 Prompt 的定向测试为 29 passed，Registry/
-  contract 测试为 52 passed，相关 Ruff 检查通过。
-
-### P-15 结构修复后的真实复测（失败，2026-08-15）
-
-- 使用加载当前工作树的临时 8002 API 和独立持久化 Chat Run 会话复测。工具清单后的
-  “我刚才问的什么”“我刚才问了什么”“我上一个问题是什么”分别为 0/3；工具清单与
-  功能两个问题后的“我刚才问过哪两个问题”为 0/3。合计 0/12 `direct_answer`、12/12
-  `context_missing`，所有失败都只调用一次 Controller 且没有执行 history lookup。
-- 第一条样本的公开 transcript 明确保存了上一轮 user/assistant 消息；双问题样本中还有一次
-  failure reason 主动复述了“询问可用工具与功能”两条历史，却仍选择 `context_missing`。
-  因此本轮失败不是消息持久化缺失，也不能由空 lookup 摘要修复。
-- 另用显式 lookup 请求验证空结果链路两次：均完成一次
-  `conversation.history_lookup` 并进入第二次 Controller，但模型再次规划 lookup，随后触发
-  单次预算上限并映射为 `execution_error`。这说明最小摘要已解决“第二次 Controller 不知道
-  lookup 已完成”的状态缺口，但当前模型没有稳定遵循该状态语义，且预算终态映射还暴露出
-  一个次级问题。
-- 测试会话均已删除；临时 API、8002 监听和临时日志目录均已清理。现有 8001 服务未修改。
-
 ## 已确认的保留原则
 
 - `intent` 是语义标签，不能变回固定 pipeline 路由键。
@@ -244,8 +164,9 @@
 
 ## 推荐修改顺序
 
-1. **P-15**：基于本次 0/12 结果重新讨论决策合同；重点解释模型为何看见历史甚至复述历史后仍选择 `context_missing`，以及空 lookup 后重复规划应如何终止。不增加关键词或固定 intent 路由。
-2. **P-05**：评估历史统计事实复用是否存在可稳定复现的主体、范围、时窗或来源错配；没有实测问题则不扩张文本正则或 provenance 合同。
+1. **P-10**：按 `current_query` / `reconstructed_goal` 与 evidence kinds 动态渲染请求相关的 Answer 规则。
+2. **P-07**：基于新的展示边界收敛 pair-lane 字符串后处理与重复 prompt 规则。
+3. **P-12 / P-06 / P-05**：依次确定 hypothesis 边界、claim/evidence 绑定和历史事实 provenance。
 
 ## 每项修改的验收模板
 

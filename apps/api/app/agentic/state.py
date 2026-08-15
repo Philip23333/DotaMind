@@ -5,10 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 from app.agentic.answer import AnswerSynthesisResult
-from app.agentic.conversation.models import (
-    ControllerContextExecutionSummary,
-    ConversationMessage,
-)
+from app.agentic.conversation.models import ConversationMessage
 from app.agentic.critic import AgenticCriticReview
 from app.agentic.evidence import EvidenceGraph
 from app.agentic.models import ExecutionPlan, ToolResult
@@ -59,11 +56,8 @@ class AgentRunState(BaseModel):
     request_time: datetime = Field(default_factory=lambda: datetime.now(UTC))
     recent_messages: list[ConversationMessage] = Field(default_factory=list)
     retrieved_messages: list[ConversationMessage] = Field(default_factory=list)
-    controller_context_summaries: list[ControllerContextExecutionSummary] = Field(
-        default_factory=list
-    )
     next_turn_index: int = Field(default=1, ge=1)
-    controller_context_tool_count: int = Field(default=0, ge=0)
+    history_lookup_count: int = Field(default=0, ge=0)
     internal_session_id: UUID | None = None
     internal_request_id: UUID | None = None
     internal_run_id: UUID | None = None

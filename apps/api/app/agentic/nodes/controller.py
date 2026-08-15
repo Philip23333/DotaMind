@@ -18,7 +18,6 @@ async def controller_node(
             state.game,
             recent_messages=state.recent_messages or None,
             retrieved_messages=state.retrieved_messages or None,
-            controller_context_summaries=state.controller_context_summaries or None,
             request_time=state.request_time.isoformat(),
         )
     else:
@@ -29,7 +28,6 @@ async def controller_node(
             state.game,
             recent_messages=state.recent_messages or None,
             retrieved_messages=state.retrieved_messages or None,
-            controller_context_summaries=state.controller_context_summaries or None,
             request_time=state.request_time.isoformat(),
             recovery_feedback=state.recovery_feedback,
             recovery_baseline_decision=state.recovery_baseline_decision,

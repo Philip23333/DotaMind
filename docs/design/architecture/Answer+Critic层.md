@@ -131,8 +131,7 @@ Natural language answer 调用 LLM，并同时提供请求语义与 EvidenceGrap
 
 ```text
 system:
-  <core evidence rules>
-  <only the presentation rules selected for this EvidenceGraph>
+  Use only the provided evidence graph. Do not invent stats.
 
 user:
   request_context={
@@ -147,17 +146,9 @@ user:
 `reconstructed_goal` 承接 Controller 从多轮会话恢复的完整请求。两者只影响展示范围，
 不得扩大 EvidenceGraph 中可陈述的事实。该方案不新增固定 presentation 枚举或 intent 路由。
 
-自然语言 Answer 的 system prompt 和上述消息形状由
+自然语言 Answer 的静态 system prompt 和上述消息形状由
 `agentic/prompts/answer.py` 的 renderer 负责；`answer/synthesizer.py` 负责选择
-LLM、执行同步/流式调用和包装结果，不内嵌 prompt 文本。system prompt 不再是固定总规则：
-renderer 合并 `required_evidence` 与实际 evidence kinds，只注入 Catalog 属性、技能、天赋、
-物品、STRATZ 周趋势、pair-lane、排名或日趋势中与当前 EvidenceGraph 相关的片段；
-STRATZ 跨来源元数据边界还依据 evidence/tool result 的 source 加载。
-
-规则选择不读取 `intent`、工具名或自然语言关键词，不形成固定回答路线。完整技能与具名单技能
-等粒度仍由 Answer LLM 结合 `current_query` / `reconstructed_goal` 判断；只有存在或要求
-`hero_talent_tree` 时才注入天赋表规则。当前没有确定性 Catalog Renderer，Catalog 自然语言
-回答仍由 Answer LLM 生成。
+LLM、执行同步/流式调用和包装结果，不内嵌 prompt 文本。
 
 当前系统提示还要求：
 
@@ -169,25 +160,11 @@ STRATZ 跨来源元数据边界还依据 evidence/tool result 的 source 加载�
   `filters.position_ids` 为准，不能解释 provider row 的 `position`。
 - 只有用户请求 Catalog-backed 的英雄、技能、天赋或物品定义时，才披露 Catalog
   evidence 携带的 patch/generated_at。STRATZ 统计回答即使同时有 hero_identity
-  Catalog evidence，也不得把 Catalog 元数据标为统计补丁、统计快照或统计版本；混合回答
-  必须把 Catalog 与 STRATZ 的来源元数据局部归属到各自事实。
+  Catalog evidence，也不得披露或把 Catalog 元数据标为统计补丁、统计快照或统计版本。
 - 不得仅因整局胜率与对线胜率不同，就推断中后期强势、翻盘能力或比赛阶段的因果解释；
-  无明确证据时只报告统计差异，不添加玩法假设。只有 EvidenceGraph 明确支持时才允许因果或
-  玩法解释，并必须归属到相关证据。
+  无明确证据时只报告统计差异，任何解释必须明确标为假设。
 
 LLM 的输出只填入 `summary`；结构化的 `claims` 和 `recommendations` 当前不从自然语言输出中反解析。
-Synthesizer 只对模型文本执行首尾空白清理，不再按“中后期”“翻盘”或 Catalog 值等关键词
-删除整行。Pair-lane 与来源归属边界由上面的 evidence-specific system prompt 表达；流式 delta
-拼接结果与最终 `summary` 不再经过不同的文本改写路径。自然语言事实与证据的可审计绑定仍是
-后续职责，不由字符串过滤器近似实现。
-
-当前自然语言 Answer 不支持“无证据但标为 hypothesis”的例外；策略推演若以后成为产品能力，
-应使用独立、可验证的输入/输出合同，而不是混入统计事实回答。
-
-自然语言 `summary` 当前不提供逐句 claims/evidence refs 形式证明，Critic 也不声称逐项复核其中
-的数字、主体和来源。这是当前接受的模型能力边界：没有稳定转述错误前，不增加结构化 claims、
-二次 LLM Critic 或 evidence-kind 专属文本解析。若以后真实评估出现稳定错误，优先评估模型、
-Prompt 长度、EvidenceGraph 结构和生成参数，再决定是否引入合同级审计。
 
 ## 6. Answer Data Notes
 

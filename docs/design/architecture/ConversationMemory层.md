@@ -42,15 +42,8 @@ user: 技能cd是多少？
 如果最近窗口不足，Controller 可以在配置预算内调用内部
 `conversation.history_lookup`（默认最多一次）。工具只接收查询文本、turn index、边界
 turn 和数量等查找条件；session/browser 身份由运行时注入。返回消息放入本次 Run 的
-`retrieved_messages`，然后重新进入 Controller。无论是否命中消息，运行时都会保留一条
-仅含工具名、完成状态和命中轮次数的 `controller_context_summaries`；空结果为：
-
-```json
-{"tool":"conversation.history_lookup","status":"completed","matched_turns":0}
-```
-
-因此下一次 Controller 能区分“尚未查询”和“已查询但没有命中”。消息与执行摘要都只属于
-本次请求的会话上下文，不会写入当前事实证据或成为下一轮的永久结构化记忆。
+`retrieved_messages`，然后重新进入 Controller。查找结果不会写入当前事实证据，也不会
+成为下一轮的永久结构化记忆。
 
 当前输入应优先作为最近未完成澄清的回答理解。除此之外，默认优先给出有用答案；只有歧义会阻止准确且有界的回答时才澄清。如果多个合理解释可以用一句话或短列表同时覆盖，直接合并回答；如果存在明显的主解释，优先按主解释回答。该判断由模型基于真实消息完成，不依赖实体、集合或关系枚举。
 

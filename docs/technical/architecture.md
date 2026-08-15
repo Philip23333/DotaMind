@@ -88,8 +88,8 @@ START
       -> tool_plan
            -> validate_plan_node
            -> tool_executor_node
-              -> result_destination=controller_context -> controller_node
-              -> result_destination=evidence -> evidence_node -> answer_node -> critic_node
+              -> conversation.history_lookup -> controller_node (bounded; default once)
+              -> evidence_node -> answer_node -> critic_node
            -> attempt_finalize_node
   -> recovery_node
       -> terminal -> run_finalize_node -> response_node -> END
@@ -134,14 +134,10 @@ when the model judges their subject, property, source and validity still match;
 current/latest/volatile/version-sensitive or conflicting facts should be
 re-queried through tools. A direct answer is always authored by the Controller
 from the current request and available conversation; the server does not require
-turn-index citations or deterministic recall templates. Tool-result flow is
-declared by `ToolDefinition.result_destination`, not by a tool-name branch.
-When the recent window is insufficient, the internal
-`conversation.history_lookup` tool may retrieve older messages within the
-configured budget (once by default). Its messages are request-local context,
-and every completed call also leaves a minimal summary containing the tool name,
-`status=completed`, and `matched_turns`; an empty lookup therefore reaches the
-next Controller call as `matched_turns=0`. Neither form becomes Dota evidence or
+turn-index citations or deterministic recall templates. When the recent window
+is insufficient, the internal `conversation.history_lookup` tool may retrieve
+older messages within the configured budget (once by default); the result is
+request-local context and history lookup itself does not become Dota evidence or
 an EvidenceGraph. A `session_id` remains a bearer capability for one user
 security subject, so cross-session history access is unavailable.
 
@@ -237,33 +233,16 @@ scopes on unsupported tool plans, while Controller rules prohibit silently
 weakening them and prohibit adding unstated role, position, lane, or scope to the
 plan goal. The player-performance `take` argument is the final returned top-N;
 the handler owns any internal over-fetching required for strong-mode ranking.
-Natural-language Answer prompt rules and message rendering live in
+Natural-language Answer prompt text and its fixed message shape live in
 `agentic/prompts/answer.py`; `answer/synthesizer.py` only invokes that renderer
-and handles LLM results. The renderer combines required and actual evidence kinds
-and includes only the relevant Catalog or STRATZ presentation sections. STRATZ
-source metadata also activates the cross-source attribution boundary. This
-selection never uses `intent`, tool names, or query-keyword routing, and no
-deterministic Catalog answer renderer is present. Prompt content changes are
-identified by the prepared prompt hash recorded in the Run manifest. For
-natural-language answers,
+and handles LLM results. Prompt content changes are identified by the prepared
+prompt hash recorded in the Run manifest. For natural-language answers,
 `answer_node` passes the current user query alongside the plan and EvidenceGraph;
 the renderer sends both `current_query` and the Controller's reconstructed
 `plan.goal` as request context. This preserves explicit focus, exclusions, result
 count, and detail wording without adding a fixed presentation enum or intent route.
 The full Controller/tool/evidence/query-bypass flow is illustrated in
 [Answer + Critic layer](../design/architecture/Answer+Critic层.md) §2.
-Natural-language summaries are trimmed but not rewritten by domain keyword
-filters. Pair-lane causal and Catalog/STRATZ attribution boundaries are carried
-by the evidence-specific Answer prompt, so streamed deltas and the stored final
-summary do not diverge through a post-generation line-deletion pass.
-Natural-language answers do not permit unsupported interpretations merely because
-they are labeled as hypotheses. Gameplay or causal explanations require explicit
-EvidenceGraph support and must be attributed to that evidence; any future strategy
-simulation capability would need a separate contract.
-The current Critic does not claim sentence-level verification of natural-language
-summaries. DotaMind accepts that model-quality boundary unless reproducible
-transcription errors appear; it does not add structured claims, a second LLM
-critic, or evidence-kind-specific text parsing without demonstrated need.
 
 Graph validation repeats deterministic checks but never mutates tool args,
 metadata, or evidence obligations. Therefore state, debug output and execution

@@ -1,7 +1,7 @@
 import asyncio
 
 import pytest
-from pydantic import BaseModel, ValidationError
+from pydantic import ValidationError
 
 from app.agentic.conversation.models import ConversationMessage
 from app.agentic.graph import AgentGraphRunner
@@ -15,7 +15,7 @@ from app.agentic.planning.decisions import (
     validate_controller_decision,
 )
 from app.agentic.state import AgentRunState
-from app.agentic.tools import ToolDefinition, ToolRegistry
+from app.agentic.tools import ToolRegistry
 from app.agentic.tools.conversation_tools import register_conversation_tools
 
 
@@ -128,21 +128,9 @@ def test_clarification_accepts_open_snake_case_missing_field_names() -> None:
     assert decision.missing_fields == ["hero_name", "ability_name"]
 
 
-class _NoArgs(BaseModel):
-    pass
-
-
-def test_controller_context_plan_cannot_mix_destinations_or_request_evidence() -> None:
+def test_history_lookup_plan_must_be_single_tool_without_evidence() -> None:
     registry = ToolRegistry()
     register_conversation_tools(registry)
-    registry.register(
-        ToolDefinition(
-            name="debug.evidence",
-            description="Return evidence-routed debug data.",
-            input_model=_NoArgs,
-            handler=lambda args, context: {},
-        )
-    )
     valid_plan = ExecutionPlan(
         intent="conversation_recall",
         goal="Find the earlier clarification.",
@@ -160,7 +148,7 @@ def test_controller_context_plan_cannot_mix_destinations_or_request_evidence() -
         update={
             "tool_calls": [
                 *valid_plan.tool_calls,
-                ToolCall(id="debug", tool="debug.evidence", args={}),
+                ToolCall(id="hero", tool="resolve_hero", args={"query": "狼人"}),
             ]
         }
     )
@@ -172,7 +160,7 @@ def test_controller_context_plan_cannot_mix_destinations_or_request_evidence() -
         registry,
     ) == []
     assert any(
-        "must not be mixed with evidence tools" in error
+        "only tool call" in error
         for error in validate_controller_decision(
             ToolPlanDecision(kind="tool_plan", plan=mixed_plan),
             [],

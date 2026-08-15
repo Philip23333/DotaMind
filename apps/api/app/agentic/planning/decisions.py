@@ -166,22 +166,18 @@ def validate_controller_decision(
     if isinstance(decision, ToolPlanDecision):
         if not decision.plan.tool_calls:
             return ["tool_plan requires at least one tool call"]
-        registered = {definition.name for definition in registry.list()}
-        destinations = {
-            registry.get(call.tool).result_destination
-            for call in decision.plan.tool_calls
-            if call.tool in registered
-        }
-        if "controller_context" in destinations:
+        history_lookup_calls = [
+            call for call in decision.plan.tool_calls if call.tool == "conversation.history_lookup"
+        ]
+        if history_lookup_calls:
             errors: list[str] = []
-            if destinations != {"controller_context"}:
+            if len(decision.plan.tool_calls) != 1:
                 errors.append(
-                    "controller_context tools must not be mixed with evidence tools "
-                    "in the same plan"
+                    "conversation.history_lookup must be the only tool call in its plan"
                 )
             if decision.plan.required_evidence:
                 errors.append(
-                    "controller_context tool plans must not request required_evidence"
+                    "conversation.history_lookup plans must not request required_evidence"
                 )
             if errors:
                 return errors

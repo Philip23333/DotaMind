@@ -19,9 +19,8 @@ flowchart TD
     Conversation --> AttemptFinalize
     Validate -->|"valid"| Tools["tool_executor_node"]
     Validate -->|"invalid"| AttemptFinalize
-    Tools -->|"controller_context"| Context["controller_context node"]
-    Context --> Controller
-    Tools -->|"evidence"| Evidence["evidence_node"]
+    Tools -->|"history lookup"| Controller
+    Tools -->|"business tools success"| Evidence["evidence_node"]
     Tools -->|"tool error"| AttemptFinalize
     Evidence -->|"complete"| Answer["answer_node"]
     Evidence -->|"missing"| AttemptFinalize
@@ -36,9 +35,8 @@ flowchart TD
     Response --> End["END"]
 ```
 
-No node routes on `intent`. Only `decision.kind`, validated `tool_calls`, each
-tool's `result_destination`, the output contract, effective evidence and runtime
-status influence execution.
+No node routes on `intent`. Only `decision.kind`, validated `tool_calls`, the
+output contract, effective evidence and runtime status influence execution.
 
 ## V3.2 Runtime Nodes
 
@@ -79,7 +77,7 @@ future reset nodes delegate to the centralized pure reset function.
 | `decision_validate_node` | Repeat shared deterministic decision/plan validation without mutating the decision. | Recomputes and refreshes authoritative evidence obligations in state. |
 | `conversation_answer_node` | Accept the validated Controller-authored direct answer. | Never creates EvidenceGraph. |
 | `validate_plan_node` | Validate final args, references, contract and effective evidence producibility. | Never applies policy or modifies evidence. |
-| `tool_executor_node` | Resolve references, reuse Run-local fingerprints and execute registered tools. | `result_destination=evidence` proceeds to Evidence; `controller_context` merges request-local messages and a minimal execution summary, then returns to Controller. |
+| `tool_executor_node` | Resolve references, reuse Run-local fingerprints and execute registered tools. | Business tools proceed to Evidence; isolated history lookup merges request-local messages and returns to Controller. |
 | `evidence_node` | Run tool-owned extractors and compute missing effective evidence and data quality. | Missing effective evidence routes to finalize before Answer. |
 | `answer_node` | Produce structured or natural-language answers from EvidenceGraph. | Tool-plan branch only. |
 | `critic_node` | Review missing/quality/mock/confidence constraints. | Tool-plan branch only. |
@@ -102,17 +100,14 @@ future reset nodes delegate to the centralized pure reset function.
 `DirectAnswerDecision` contains a non-empty Controller-authored `answer` and no
 history citation mode. The model interprets the injected real `ConversationMessage`
 context; older messages may be added to the request-local context by the internal
-`conversation.history_lookup` tool. A completed empty lookup is retained as
-`{"tool":"conversation.history_lookup","status":"completed","matched_turns":0}`
-for the next Controller call. Historical messages and this summary are never
-current tool evidence or routing keys.
+`conversation.history_lookup` tool. Historical messages are never current tool
+evidence and are never used as routing keys.
 
 ## Tool Contract Inventory
 
-Every `ToolDefinition` declares its result destination, input schema, accepted
-references, output paths, source, evidence extractor, producible evidence kinds
-and primary mandatory evidence. Startup validation rejects inconsistent registry
-metadata, including evidence declarations on a `controller_context` tool.
+Every `ToolDefinition` declares input schema, accepted references, output paths,
+source, evidence extractor, producible evidence kinds and primary mandatory
+evidence. Startup validation rejects inconsistent registry metadata.
 
 Contract and model-requested evidence remain global kind obligations. Registry
 mandatory evidence is an obligation for each successful `tool_call_id`. The
@@ -145,7 +140,7 @@ cannot borrow one another's primary evidence.
 | `patch.get_records` | `patch_records` |
 | `patch.hero_changes` | `hero_patch_changes` |
 | `patch.item_changes` | `item_patch_changes` |
-| `conversation.history_lookup` | none; `result_destination=controller_context` |
+| `conversation.history_lookup` | none; request-local context only |
 
 `sample_size` remains a normally extracted quality signal, not a universal
 mandatory kind in this release.

@@ -2,7 +2,6 @@ import asyncio
 from uuid import uuid4
 
 import pytest
-from pydantic import BaseModel
 
 from app.agentic.conversation.models import DialogueTurn
 from app.agentic.graph import AgentGraphRunner
@@ -10,7 +9,7 @@ from app.agentic.models import ExecutionPlan, QueryContext, ToolCall
 from app.agentic.planning.controller import AgentControllerResult
 from app.agentic.planning.decisions import ContextMissingDecision, ToolPlanDecision
 from app.agentic.state import AgentRunState
-from app.agentic.tools import ToolDefinition, ToolRegistry
+from app.agentic.tools import ToolRegistry
 from app.agentic.tools.conversation_tools import (
     ConversationHistoryLookupInput,
     _history_lookup_handler,
@@ -96,17 +95,9 @@ class _SequenceController:
     def __init__(self, decisions) -> None:
         self.decisions = list(decisions)
         self.seen_retrieved: list[list] = []
-        self.seen_context_summaries: list[list] = []
 
-    async def decide(
-        self,
-        *args,
-        retrieved_messages=None,
-        controller_context_summaries=None,
-        **kwargs,
-    ):
+    async def decide(self, *args, retrieved_messages=None, **kwargs):
         self.seen_retrieved.append(list(retrieved_messages or []))
-        self.seen_context_summaries.append(list(controller_context_summaries or []))
         return AgentControllerResult(
             status="decided",
             reason="decision accepted",
@@ -163,12 +154,7 @@ def test_history_lookup_messages_reach_the_next_controller_call() -> None:
             "狼人有什么技能",
             "召狼、嗥叫、变身。",
         ]
-        assert state.controller_context_tool_count == 1
-        assert controller.seen_context_summaries[1][0].model_dump() == {
-            "tool": "conversation.history_lookup",
-            "status": "completed",
-            "matched_turns": 1,
-        }
+        assert state.history_lookup_count == 1
 
     asyncio.run(scenario())
 
@@ -188,7 +174,7 @@ def test_history_lookup_limit_blocks_second_execution_before_tool_handler() -> N
         with bind_history_lookup_context(context):
             state = await runner.run(AgentRunState(query="再查一次", game="dota2"))
 
-        assert state.controller_context_tool_count == 1
+        assert state.history_lookup_count == 1
         assert repository.calls == 1
         assert state.status == "error"
         assert len(controller.seen_retrieved) == 2
@@ -226,100 +212,8 @@ def test_history_lookup_budget_allows_final_controller_after_two_lookups() -> No
         with bind_history_lookup_context(context):
             state = await runner.run(AgentRunState(query="查两次", game="dota2"))
 
-        assert state.controller_context_tool_count == 2
+        assert state.history_lookup_count == 2
         assert len(controller.seen_retrieved) == 3
         assert state.status == "insufficient_context"
-
-    asyncio.run(scenario())
-
-
-def test_empty_history_lookup_is_visible_to_the_next_controller_call() -> None:
-    class _EmptyRepository:
-        async def lookup_dialogue(self, *args, **kwargs):
-            return []
-
-    async def scenario() -> None:
-        controller = _SequenceController(
-            [
-                _history_plan(),
-                ContextMissingDecision(
-                    kind="context_missing",
-                    intent="conversation_recall",
-                    reason="未找到更早对话。",
-                ),
-            ]
-        )
-        registry = ToolRegistry()
-        register_conversation_tools(registry)
-        runner = AgentGraphRunner(controller, registry)
-        context = HistoryLookupContext(
-            chat_repository=_EmptyRepository(),  # type: ignore[arg-type]
-            browser_id="browser",
-            session_id=uuid4(),
-        )
-
-        with bind_history_lookup_context(context):
-            state = await runner.run(AgentRunState(query="我刚才问了什么？", game="dota2"))
-
-        assert controller.seen_retrieved[1] == []
-        assert controller.seen_context_summaries[1][0].model_dump() == {
-            "tool": "conversation.history_lookup",
-            "status": "completed",
-            "matched_turns": 0,
-        }
-        assert state.status == "insufficient_context"
-
-    asyncio.run(scenario())
-
-
-class _NoArgs(BaseModel):
-    pass
-
-
-def test_controller_context_routing_uses_tool_definition_destination() -> None:
-    async def scenario() -> None:
-        context_plan = ToolPlanDecision(
-            kind="tool_plan",
-            plan=ExecutionPlan(
-                intent="conversation_recall",
-                goal="Retrieve controller context.",
-                output_contract="natural_language_answer",
-                tool_calls=[
-                    ToolCall(id="context", tool="debug.context", args={})
-                ],
-                required_evidence=[],
-            ),
-        )
-        controller = _SequenceController(
-            [
-                context_plan,
-                ContextMissingDecision(
-                    kind="context_missing",
-                    intent="conversation_recall",
-                    reason="没有匹配上下文。",
-                ),
-            ]
-        )
-        registry = ToolRegistry()
-        registry.register(
-            ToolDefinition(
-                name="debug.context",
-                description="Return controller context.",
-                input_model=_NoArgs,
-                handler=lambda args, context: {"messages": []},
-                result_destination="controller_context",
-            )
-        )
-
-        state = await AgentGraphRunner(controller, registry).run(
-            AgentRunState(query="回忆一下", game="dota2")
-        )
-
-        assert state.status == "insufficient_context"
-        assert controller.seen_context_summaries[1][0].model_dump() == {
-            "tool": "debug.context",
-            "status": "completed",
-            "matched_turns": 0,
-        }
 
     asyncio.run(scenario())

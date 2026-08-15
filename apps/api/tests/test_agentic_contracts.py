@@ -474,30 +474,6 @@ def test_registry_contracts_fail_fast_on_invalid_evidence_declarations() -> None
     assert any("contract patch_impact_report requires unknown evidence" in item for item in errors)
 
 
-def test_controller_context_destination_rejects_evidence_declarations() -> None:
-    class DummyInput(BaseModel):
-        query: str
-
-    registry = ToolRegistry()
-    registry.register(
-        ToolDefinition(
-            name="dummy.context",
-            description="Invalid context metadata.",
-            input_model=DummyInput,
-            handler=lambda args, context: {"messages": []},
-            result_destination="controller_context",
-            evidence_kinds=("invalid_context_evidence",),
-        )
-    )
-
-    errors = validate_registry_contracts(registry)
-
-    assert any(
-        "routes results to controller_context" in item
-        for item in errors
-    )
-
-
 def test_render_controller_contracts_contains_team_recent_fields() -> None:
     rendered = render_controller_contracts(_registry())
 
