@@ -1,0 +1,83 @@
+# 2026-08-15 进度快照
+
+## 11:10 — P-15 Controller 会话回忆示例去偏
+
+### 已完成
+
+- 将 Controller prompt 中固定的 `conversation_recall -> context_missing` JSON 示例改为中性 `context_missing` 字段结构；删除可直接照抄的“当前会话中没有足够的历史信息”失败文案。
+- 保留 `ContextMissingDecision` 的 `kind`、`intent`、`reason` 输出形态，没有新增关键词路由、固定意图分支、确定性回忆模板或 validator。
+- 更新 Controller golden prompt fixture，并增加断言，防止固定 `conversation_recall` 映射和中文失败文案重新进入 system prompt。
+- 当前默认 Controller system prompt 为 33,718 字符、512 行，SHA-256 为 `b8b6f18f1bd2a51076af73d6c789e004fe3796523630d8fa049254ac7606d427`。
+
+### 验证
+
+- `tests/test_agentic_prompts.py`：12 passed；相关 Ruff：通过。
+- 使用独立持久化 Chat Run 会话完成 6 类 × 3 次、共 18 个真实样本，并在加载当前源码的临时 8002 API 实例上复测；每个会话均以 HTTP 204 删除，临时 API 已停止且端口已关闭。
+- 修改前：4/18 `direct_answer`、14/18 `context_missing`；修改后：14/18 `direct_answer`、4/18 `context_missing`。
+- 修改后，“我上一个问题是什么”“你刚才回答了什么”“我刚才问过哪两个英雄”均为 3/3 成功；“我刚才问了什么”为 1/3，“我刚才问过哪两个问题”和“把我刚才的两个问题列出来”均为 2/3。
+
+### 已知边界
+
+- 删除误导示例显著改善了元会话回忆，但没有完全关闭问题；泛化的用户问题回忆仍可能错误返回 `context_missing`。
+- P-15 当前标记为部分改善，后续应基于同一真实矩阵评估最小的正向判定提示，不引入基于中文关键词的确定性分支。
+
+## 11:36 — P-15 显式 recent-conversation 规则实验与撤回
+
+### 实验
+
+- 在会话规则中临时增加一条显式约束：system 与当前用户消息之间已经出现的消息属于可用会话；所需内容出现时 `context_missing` 无效且无需 `conversation.history_lookup`。
+- 使用加载实验源码的临时 8002 API，运行 7 类 × 3 次、共 21 个独立持久化 Chat Run；新增覆盖真实失败原话“我刚才问的什么”。
+
+### 结果
+
+- 两种泛化表达“我刚才问了什么”和“我刚才问的什么”均为 0/3；“我上一个问题是什么”为 2/3；“我刚才问过哪两个问题”为 0/3。
+- “把我刚才的两个问题列出来”“你刚才回答了什么”“我刚才问过哪两个英雄”均为 3/3。
+- 与上一轮相同的 18 个场景仅 11/18 返回 `direct_answer`，低于删除负向示例后的 14/18；新增真实原话场景另为 0/3。
+
+### 决策与验证
+
+- 该规则没有产生可验证收益，且增加了与现有历史规则重复的 Prompt 文本，因此已从源码、测试断言和 golden fixture 撤回；最终代码仍只保留 11:10 的中性 `context_missing` 结构修改。
+- 撤回后 `tests/test_agentic_prompts.py`：12 passed；临时会话均 HTTP 204 删除，临时 API 已停止，8002 端口已关闭。
+- 后续不应继续叠加同义的历史可用性提醒；需重新评估 `context_missing` / `conversation.history_lookup` 的职责表达或模型决策边界。
+
+## 12:10 — P-15 会话上下文结果去向与空 lookup 摘要
+
+### 已完成
+
+- 将 Controller 中近期消息、`conversation.history_lookup` 与 `context_missing` 的职责收敛为三条定义：请求内已供应消息是可用会话上下文；lookup 只补充更早消息且不是 Dota evidence；只有综合已供应消息和已完成 lookup 后仍不可用，才返回 `context_missing`。
+- `ToolDefinition` 新增 `result_destination`，取值为 `evidence` 或 `controller_context`。Graph 路由、ControllerDecision 校验和 Registry 一致性检查按该字段工作，已删除按 `conversation.history_lookup` 工具名判断的分支。
+- `controller_context` 工具成功后，将消息合并到请求级 `retrieved_messages`，并保留最小 `controller_context_summaries`。空 lookup 在下一次 Controller system input 中明确显示为 `{"tool":"conversation.history_lookup","status":"completed","matched_turns":0}`。
+- lookup 的 ToolDefinition description 收窄为检索能力说明；`result_destination` 仅作为运行时契约，不为每个工具增加 Prompt 文本。
+- 更新 Controller golden fixture、当前架构/Controller/Conversation Memory/Tool/节点清单及 Prompt 重构复盘文档。当前默认 Controller system prompt 为 33,734 字符、514 行，SHA-256 为 `0b24cc98e928e6db22006aacfef36b95b1432f6677f87d1ec8bbfac5c8fbf6e2`。
+
+### 验证
+
+- `tests/test_history_lookup.py tests/test_controller_decisions.py tests/test_agentic_prompts.py -q`：29 passed。
+- `tests/test_agentic_contracts.py tests/test_agentic_registry.py -q`：52 passed。
+- 相关 Ruff 检查：通过；`git diff --check`：通过（仅现有 CRLF 转换提示）。
+
+### 已知边界
+
+- 本次只完成 Prompt 与上下文结果流的结构修复，没有运行真实 LLM 持久化 Chat Run 矩阵；P-15 的模型层稳定性仍需按同一场景集复测。
+- 当前仅 `conversation.history_lookup` 声明 `controller_context` destination；预算配置名仍是 `history_lookup_max_per_run`。
+
+## 12:22 — P-15 结构修复后的真实复测
+
+### 结果
+
+- 使用加载当前工作树的临时 8002 API，通过独立持久化 Chat Run 会话复测此前失败场景。
+- “你有什么工具可用”之后：`我刚才问的什么` 0/3、`我刚才问了什么` 0/3、`我上一个问题是什么` 0/3。
+- “你有什么工具可用”与“你有什么功能”之后：`我刚才问过哪两个问题` 0/3。
+- 合计 0/12 `direct_answer`、12/12 `context_missing`；每次回忆请求都只调用一次 Controller，未执行 history lookup。
+- 第一条样本的公开 transcript 明确包含前一轮完整 user/assistant 消息。双问题样本中有一次 failure reason 已准确提到“询问可用工具与功能”两条历史，却仍返回 `context_missing`。
+
+### 空 lookup 链路
+
+- 另两次显式要求 `conversation.history_lookup` 查询不存在的更早内容：工具均成功执行，随后进入第二次 Controller。
+- 第二次 Controller 均再次生成 lookup `tool_plan`，触发 `history_lookup_max_per_run=1`，最终公开结果为 `execution_error`，而不是预期的 `context_missing`。
+- 因此，空结果摘要解决了运行时状态丢失，但没有让当前模型稳定采用正确终态；重复 lookup 的预算终态映射也是新暴露的次级问题。
+
+### 清理与结论
+
+- 所有测试会话均已删除。临时 8002 API 已停止，端口关闭，临时日志目录已删除；现有 8001 服务未修改。
+- P-15 仍是未关闭的 P0。下一步需要重新讨论 decision 合同与模型判断，而不是继续假设本次 Prompt 简化已经解决问题。

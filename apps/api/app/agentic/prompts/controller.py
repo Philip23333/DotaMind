@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from app.agentic.conversation.models import ConversationMessage
+from app.agentic.conversation.models import (
+    ControllerContextExecutionSummary,
+    ConversationMessage,
+)
 from app.agentic.planning.contracts import render_controller_contracts, render_controller_tools
 from app.agentic.planning.sample_policy import render_sample_policy
 from app.agentic.prompts import controller_rules
@@ -45,6 +49,7 @@ def render_controller_system_prompt(
     game: str,
     runtime_context: Mapping[str, str] | None = None,
     request_time: str | None = None,
+    controller_context_summaries: list[ControllerContextExecutionSummary] | None = None,
 ) -> str:
     """Append request-scoped game metadata without wrapping the user query."""
 
@@ -56,6 +61,16 @@ def render_controller_system_prompt(
     ]
     for key, value in (runtime_context or {}).items():
         lines.append(f"- {key}: {value}")
+    if controller_context_summaries:
+        lines.extend(["", "Completed conversation-context tool results:"])
+        lines.extend(
+            json.dumps(
+                summary.model_dump(mode="json"),
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+            for summary in controller_context_summaries
+        )
     return f"{system_prompt}\n" + "\n".join(lines)
 
 

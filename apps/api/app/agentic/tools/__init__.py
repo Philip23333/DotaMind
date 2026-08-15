@@ -5,6 +5,7 @@ from app.agentic.tools.registry import (
     OutputPathContract,
     ToolDefinition,
     ToolRegistry,
+    ToolResultDestination,
 )
 
 __all__ = [
@@ -12,6 +13,7 @@ __all__ = [
     "ArgContract",
     "OutputPathContract",
     "ToolDefinition",
+    "ToolResultDestination",
     "ToolExecutor",
     "ToolRegistry",
 ]

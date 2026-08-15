@@ -6,7 +6,10 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, TypeAdapter, ValidationError
 
-from app.agentic.conversation.models import ConversationMessage
+from app.agentic.conversation.models import (
+    ControllerContextExecutionSummary,
+    ConversationMessage,
+)
 from app.agentic.planning.decisions import (
     ControllerDecision,
     RequiredEvidenceResolution,
@@ -90,6 +93,9 @@ class AgentController:
         recent_messages: list[ConversationMessage] | None = None,
         *,
         retrieved_messages: list[ConversationMessage] | None = None,
+        controller_context_summaries: list[
+            ControllerContextExecutionSummary
+        ] | None = None,
         recovery_feedback: RecoveryFeedback | None = None,
         recovery_baseline_decision: ToolPlanDecision | None = None,
         request_time: str | None = None,
@@ -121,6 +127,7 @@ class AgentController:
                     game,
                     self.runtime_context,
                     request_time or self._default_request_time,
+                    controller_context_summaries,
                 ),
             },
             *conversation_messages,

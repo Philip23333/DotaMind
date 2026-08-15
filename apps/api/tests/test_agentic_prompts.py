@@ -10,7 +10,10 @@ from pathlib import Path
 from pydantic import BaseModel
 
 import app.agentic.prompts.controller_rules as controller_rules
-from app.agentic.conversation.models import ConversationMessage
+from app.agentic.conversation.models import (
+    ControllerContextExecutionSummary,
+    ConversationMessage,
+)
 from app.agentic.graph import AgentGraphRunner
 from app.agentic.planning.contracts import CONTRACT_REGISTRY
 from app.agentic.planning.controller import AgentController
@@ -189,9 +192,24 @@ def test_controller_prompt_uses_one_generic_history_first_decision_order() -> No
     assert "Completeness example:" in prompt
     assert "preserving that property or action" in prompt
     assert "full historical\n  answer unless they ask for it" in prompt
+    assert "Context unavailable:" in prompt
+    assert (
+        "Earlier user/assistant messages in this request are available conversation\n"
+        "  context."
+    ) in prompt
+    assert (
+        "context_missing means the requested conversation content is unavailable after\n"
+        "  considering the supplied messages and any completed history lookup result."
+    ) in prompt
+    assert '"kind":"context_missing","intent":"<semantic_intent>"' in prompt
+    assert '"intent":"conversation_recall"' not in prompt
+    assert "当前会话中没有足够的历史信息。" not in prompt
     assert "Answer only the selected subject's value" in prompt
     assert "After selecting tool_plan:" in prompt
-    assert "Plan only the calls that produce the required fresh evidence." in prompt
+    assert (
+        "Plan only the calls needed to obtain the missing conversation context or\n"
+        "  required fresh evidence."
+    ) in prompt
     assert "Decision validity invariants:" not in prompt
     assert "Final decision gate (apply immediately before returning JSON):" not in prompt
     assert "Before returning JSON, validate that the selected decision follows the" in prompt
@@ -318,6 +336,31 @@ def test_controller_runtime_context_exposes_stable_freshness_signals() -> None:
     assert "- request_time: " in sent_system
     assert "- current_catalog_patch: 7.41e" in sent_system
     assert "- catalog_snapshot_generated_at: 2026-08-09T19:05:36+00:00" in sent_system
+
+
+def test_controller_receives_completed_context_tool_summary() -> None:
+    registry = _registry()
+    llm = CapturingLLM()
+    controller = AgentController(registry, llm=llm, llm_enabled=True)
+
+    asyncio.run(
+        controller.decide(
+            "我刚才问了什么？",
+            controller_context_summaries=[
+                ControllerContextExecutionSummary(
+                    tool="conversation.history_lookup",
+                    matched_turns=0,
+                )
+            ],
+        )
+    )
+
+    sent_system = llm.messages[0][0]["content"]
+    assert "Completed conversation-context tool results:" in sent_system
+    assert (
+        '{"tool":"conversation.history_lookup","status":"completed",'
+        '"matched_turns":0}'
+    ) in sent_system
 
 
 def test_disabled_llm_still_records_prepared_prompt_manifest() -> None:
