@@ -138,6 +138,8 @@ team/hero/patch report rules, critic quality gates, LLM call settings, planner
 sample policy, and conversation memory budgets. The free PandaScore Fixture
 boundary does not natively expose Valve match IDs; the explicit resolver can
 infer a mapping only from a unique OpenDota match and reports ambiguity.
+赛事 resolver 缺省年份时根据 PandaScore Fixture 时间确定最近一届，显式年份保持
+优先；公共 runtime 和 Chat UI 会区分工具尚未进入 handler 与执行后失败。
 Restart the API after editing it.
 
 ## Current Architecture

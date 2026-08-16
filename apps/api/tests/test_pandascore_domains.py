@@ -4,7 +4,7 @@ from datetime import date
 
 import pytest
 
-from app.integrations.pandascore.competitions import normalize_competition
+from app.integrations.pandascore.competitions import PandaScoreCompetitions, normalize_competition
 from app.integrations.pandascore.matches import PandaScoreMatches, normalize_match
 
 SAMPLE_MATCH = {
@@ -36,9 +36,11 @@ class FakeTransport:
 
     def __init__(self, rows: dict[str, list[dict]]) -> None:
         self.rows = rows
+        self.calls: list[tuple[str, dict]] = []
 
     async def get(self, path: str, *, params=None, cache_ttl_seconds=None):
         endpoint = path.rsplit("/", 1)[-1]
+        self.calls.append((path, params or {}))
         return self.rows.get(endpoint, [])
 
 
@@ -100,3 +102,15 @@ def test_match_normalization_does_not_mislabel_games_match_id() -> None:
     row = normalize_match(SAMPLE_MATCH)
     assert row.games[0].pandascore_match_id == 1631694
     assert row.games[0].valve_match_id is None
+
+
+@pytest.mark.anyio
+async def test_series_listing_pushes_year_filter_only_when_requested() -> None:
+    transport = FakeTransport({"series": []})
+    client = PandaScoreCompetitions(transport)
+
+    await client.list_series(year=2025)
+    assert transport.calls[-1][1]["filter[year]"] == 2025
+
+    await client.list_series()
+    assert "filter[year]" not in transport.calls[-1][1]

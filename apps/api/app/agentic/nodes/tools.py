@@ -25,6 +25,17 @@ class _RuntimeGateBlocked(RuntimeError):
         super().__init__(code)
 
 
+def _public_tool_failure_code(error_code: str | None, status: str) -> str | None:
+    if status != "error":
+        return None
+    return {
+        "reference_resolution_error": "reference_resolution_error",
+        "input_validation_error": "validation_error",
+        "handler_error": "handler_error",
+        "tool_not_registered": "tool_error",
+    }.get(error_code, "tool_error")
+
+
 async def tool_executor_node(
     state: AgentRunState,
     executor: ToolExecutor,
@@ -87,6 +98,8 @@ async def tool_executor_node(
                 latency_ms=0,
                 reused=False,
                 failure_code="reference_resolution_error",
+                handler_entered=False,
+                dispatch_stage="reference_resolution",
                 )
             )
             continue
@@ -149,7 +162,9 @@ async def tool_executor_node(
                     status=result.status,
                     latency_ms=0,
                     reused=True,
-                    failure_code="tool_error" if result.status == "error" else None,
+                    failure_code=_public_tool_failure_code(dispatch.error_code, result.status),
+                    handler_entered=dispatch.handler_entered,
+                    dispatch_stage=dispatch.stage,
                 )
             )
             continue
@@ -172,6 +187,8 @@ async def tool_executor_node(
                     attempt_index=attempt_index,
                     status="running",
                     reused=False,
+                    handler_entered=True,
+                    dispatch_stage="handler",
                 )
             )
 
@@ -192,6 +209,8 @@ async def tool_executor_node(
                     latency_ms=0,
                     reused=False,
                     failure_code=exc.code,
+                    handler_entered=False,
+                    dispatch_stage="pre_dispatch",
                 )
             )
             apply_runtime_failure(state, exc.code)
@@ -230,7 +249,9 @@ async def tool_executor_node(
                 status=result.status,
                 latency_ms=result.latency_ms,
                 reused=False,
-                failure_code="tool_error" if result.status == "error" else None,
+                failure_code=_public_tool_failure_code(dispatch.error_code, result.status),
+                handler_entered=dispatch.handler_entered,
+                dispatch_stage=dispatch.stage,
             )
         )
         if result.status == "error":

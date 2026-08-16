@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, date, datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.agentic.evidence import EvidenceItem
 from app.agentic.models import QueryContext, ToolResult, ToolSource
@@ -19,12 +20,24 @@ from app.agentic.tools import (
 from app.core.config import Settings, get_policy
 from app.integrations.pandascore.competitions import PandaScoreCompetitions
 from app.integrations.pandascore.matches import PandaScoreMatches
-from app.integrations.pandascore.models import PandaMatchFixture
+from app.integrations.pandascore.models import (
+    CompetitionSelection,
+    PandaCompetition,
+    PandaMatchFixture,
+)
 from app.integrations.pandascore.transport import PandaScoreTransport
 
 
 class PandaScoreResolveCompetitionInput(BaseModel):
     query: str = Field(min_length=1)
+    year: int | None = Field(default=None, ge=2011, le=2100)
+
+    @model_validator(mode="after")
+    def reject_year_conflict(self) -> PandaScoreResolveCompetitionInput:
+        _query, query_year = _extract_explicit_year(self.query)
+        if query_year is not None and self.year is not None and query_year != self.year:
+            raise ValueError("year conflicts with the year in query")
+        return self
 
 
 class PandaScoreListMatchesInput(BaseModel):
@@ -55,14 +68,23 @@ def register_pandascore_tools(registry: ToolRegistry, settings: Settings) -> Non
     registry.register(
         ToolDefinition(
             name="pandascore.resolve_competition",
-            description="Resolve a Dota 2 competition or series using PandaScore fixture metadata.",
+            description=(
+                "Resolve a named recurring Dota 2 competition. When the competition is named "
+                "but no edition year is supplied, omit `year` so the resolver selects the latest "
+                "edition. Do not request clarification solely for a missing edition year."
+            ),
             input_model=PandaScoreResolveCompetitionInput,
             handler=_resolve_competition_handler(settings, policy),
             source=source,
             evidence_extractor=competition_evidence,
             evidence_kinds=("competition_identity", "tournament_stage"),
             mandatory_evidence=("competition_identity",),
-            arg_contracts={"query": ArgContract(description="Competition or series name.")},
+            arg_contracts={
+                "query": ArgContract(description="Competition family or series name."),
+                "year": ArgContract(
+                    description="Explicit edition year; omit it to resolve the latest edition."
+                ),
+            },
             output_paths={
                 "competition": OutputPathContract(
                     path="data.competition",
@@ -198,30 +220,41 @@ def _resolve_competition_handler(settings: Settings, policy: Any):
     ) -> dict[str, Any]:
         transport, competitions, _matches = _clients(settings, policy)
         try:
-            rows = await competitions.list_series()
-            query = args.query.strip().casefold()
-            exact = [
+            query, year_from_query = _extract_explicit_year(args.query)
+            requested_year = args.year if args.year is not None else year_from_query
+            rows = await competitions.list_series(year=requested_year)
+            eligible_rows = [
                 row
                 for row in rows
-                if query in _competition_labels(row)
+                if requested_year is None or row.year == requested_year
             ]
-            candidates = exact or [
-                row
-                for row in rows
-                if any(query in label for label in _competition_labels(row))
+            ranked = [
+                (row, _competition_match_rank(row, query))
+                for row in eligible_rows
+                if _competition_match_rank(row, query) > 0
             ]
-            if len(candidates) == 1:
-                row = candidates[0]
+            best_rank = max((rank for _row, rank in ranked), default=0)
+            candidates = [row for row, rank in ranked if rank == best_rank]
+            selection = select_latest_competition(
+                candidates,
+                now=datetime.now(UTC),
+                requested_year=requested_year,
+                match_rank=best_rank or None,
+            )
+            if selection.status == "resolved" and selection.selected is not None:
+                row = selection.selected
                 return {
                     "status": "resolved",
                     "query": args.query,
                     "competition": _competition_data(row),
                     "tournaments": row.tournaments,
+                    "selection": _selection_data(selection),
                 }
             return {
-                "status": "ambiguous" if candidates else "not_found",
+                "status": selection.status,
                 "query": args.query,
-                "candidates": [_competition_data(row) for row in candidates[:10]],
+                "candidates": [_competition_data(row) for row in selection.candidates[:10]],
+                "selection": _selection_data(selection),
             }
         finally:
             await transport.aclose()
@@ -299,7 +332,7 @@ def competition_evidence(result: ToolResult) -> list[EvidenceItem]:
             id=f"{result.tool_call_id}:competition_identity",
             kind="competition_identity",
             subject=str(competition.get("full_name") or competition.get("name")),
-            value=competition,
+            value={**competition, "selection": data.get("selection")},
             source=result.source,
             tool_call_id=result.tool_call_id,
             tool=result.tool,
@@ -449,6 +482,216 @@ def _competition_data(row: Any) -> dict[str, Any]:
         data["begin_at"] = None
         data["end_at"] = None
     return data
+
+
+def _extract_explicit_year(query: str) -> tuple[str, int | None]:
+    """Remove one standalone edition year while preserving the competition name."""
+
+    match = re.search(r"(?<!\d)(20\d{2})(?!\d)", query)
+    if match is None:
+        return " ".join(query.split()), None
+    base = f"{query[:match.start()]} {query[match.end():]}"
+    return " ".join(base.split()), int(match.group(1))
+
+
+def _normalize_label(value: Any) -> str:
+    return " ".join(str(value or "").casefold().split())
+
+
+def _competition_match_rank(row: PandaCompetition, query: str) -> int:
+    needle = _normalize_label(query)
+    if not needle:
+        return 0
+    name = _normalize_label(row.name)
+    full_name = _normalize_label(row.full_name)
+    league_name = _normalize_label(row.league.get("name") if row.league else None)
+    combined = _normalize_label(
+        f"{row.league.get('name', '') if row.league else ''} {row.full_name or ''}"
+    )
+    if needle in {name, full_name, combined}:
+        return 3
+    if league_name and needle == league_name:
+        return 2
+    labels = {name, full_name, league_name, combined}
+    if any(needle in label for label in labels if label):
+        return 1
+    return 0
+
+
+def select_latest_competition(
+    candidates: list[PandaCompetition],
+    *,
+    now: datetime,
+    requested_year: int | None = None,
+    match_rank: int | None = None,
+) -> CompetitionSelection:
+    """Choose a latest edition without depending on API array order or IDs."""
+
+    mode = "explicit_year" if requested_year is not None else "latest_edition"
+    candidate_count = len(candidates)
+    if requested_year is not None:
+        if len(candidates) != 1:
+            return CompetitionSelection(
+                status="ambiguous" if candidates else "not_found",
+                mode=mode,
+                requested_year=requested_year,
+                match_rank=match_rank,
+                candidate_count_before_selection=len(candidates),
+                candidates=_stable_candidates(candidates),
+            )
+        selected = candidates[0]
+        return CompetitionSelection(
+            status="resolved",
+            mode=mode,
+            requested_year=requested_year,
+            selected_year=selected.year,
+            match_rank=match_rank,
+            candidate_count_before_selection=len(candidates),
+            selected=selected,
+            candidates=[selected],
+        )
+
+    now_utc = _as_utc(now)
+    active = [row for row in candidates if _competition_is_active(row, now_utc)]
+    if active:
+        return _select_temporal_candidates(
+            active,
+            mode,
+            requested_year,
+            match_rank,
+            reverse=True,
+            candidate_count=candidate_count,
+            prefer_end=False,
+        )
+
+    historical = [row for row in candidates if _competition_is_historical(row, now_utc)]
+    if historical:
+        return _select_temporal_candidates(
+            historical,
+            mode,
+            requested_year,
+            match_rank,
+            reverse=True,
+            candidate_count=candidate_count,
+            prefer_end=True,
+        )
+
+    upcoming = [row for row in candidates if _competition_begin(row) is not None]
+    if upcoming:
+        return _select_temporal_candidates(
+            upcoming,
+            mode,
+            requested_year,
+            match_rank,
+            reverse=False,
+            candidate_count=candidate_count,
+            prefer_end=False,
+        )
+
+    return CompetitionSelection(
+        status="resolved" if len(candidates) == 1 else ("ambiguous" if candidates else "not_found"),
+        mode=mode,
+        requested_year=requested_year,
+        selected=candidates[0] if len(candidates) == 1 else None,
+        selected_year=candidates[0].year if len(candidates) == 1 else None,
+        match_rank=match_rank,
+        candidate_count_before_selection=len(candidates),
+        candidates=_stable_candidates(candidates),
+    )
+
+
+def _select_temporal_candidates(
+    candidates: list[PandaCompetition],
+    mode: Literal["latest_edition", "explicit_year"],
+    requested_year: int | None,
+    match_rank: int | None,
+    *,
+    reverse: bool,
+    candidate_count: int,
+    prefer_end: bool,
+) -> CompetitionSelection:
+    keyed = []
+    for row in candidates:
+        value = (
+            _competition_end(row) or _competition_begin(row)
+            if prefer_end
+            else _competition_begin(row) or _competition_end(row)
+        )
+        keyed.append((value, row))
+    keyed = [(value, row) for value, row in keyed if value is not None]
+    if not keyed:
+        return CompetitionSelection(
+            status="ambiguous" if len(candidates) > 1 else "not_found",
+            mode=mode,
+            requested_year=requested_year,
+            match_rank=match_rank,
+            candidate_count_before_selection=candidate_count,
+            candidates=_stable_candidates(candidates),
+        )
+    target = (max if reverse else min)(value for value, _row in keyed)
+    tied = [row for value, row in keyed if value == target]
+    selected = tied[0] if len(tied) == 1 else None
+    return CompetitionSelection(
+        status="resolved" if selected is not None else "ambiguous",
+        mode=mode,
+        requested_year=requested_year,
+        selected_year=selected.year if selected is not None else None,
+        match_rank=match_rank,
+        candidate_count_before_selection=candidate_count,
+        selected=selected,
+        candidates=_stable_candidates(tied if len(tied) > 1 else [selected]),
+    )
+
+
+def _competition_times(row: PandaCompetition) -> tuple[datetime | None, datetime | None]:
+    begins = [_parse_datetime(stage.get("begin_at")) for stage in row.tournaments]
+    ends = [_parse_datetime(stage.get("end_at")) for stage in row.tournaments]
+    begins = [value for value in begins if value is not None]
+    ends = [value for value in ends if value is not None]
+    return (min(begins) if begins else None, max(ends) if ends else None)
+
+
+def _competition_begin(row: PandaCompetition) -> datetime | None:
+    return _competition_times(row)[0]
+
+
+def _competition_end(row: PandaCompetition) -> datetime | None:
+    return _competition_times(row)[1]
+
+
+def _competition_is_active(row: PandaCompetition, now: datetime) -> bool:
+    begin, end = _competition_times(row)
+    return begin is not None and begin <= now and (end is None or end >= now)
+
+
+def _competition_is_historical(row: PandaCompetition, now: datetime) -> bool:
+    begin, end = _competition_times(row)
+    return (end is not None and end < now) or (begin is not None and begin <= now)
+
+
+def _parse_datetime(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        return _as_utc(value)
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        return _as_utc(datetime.fromisoformat(value.replace("Z", "+00:00")))
+    except ValueError:
+        return None
+
+
+def _stable_candidates(candidates: list[PandaCompetition]) -> list[PandaCompetition]:
+    return sorted(candidates, key=lambda row: row.pandascore_series_id)
+
+
+def _selection_data(selection: CompetitionSelection) -> dict[str, Any]:
+    return {
+        "mode": selection.mode,
+        "requested_year": selection.requested_year,
+        "selected_year": selection.selected_year,
+        "match_rank": selection.match_rank,
+        "candidate_count_before_selection": selection.candidate_count_before_selection,
+    }
 
 
 def _competition_labels(row: Any) -> set[str]:

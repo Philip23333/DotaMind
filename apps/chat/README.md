@@ -49,3 +49,7 @@ npm run build
 
 前端回归覆盖迁移契约、session/thread 映射、稳定 pending message id，以及“订阅断开不取消、
 显式停止才取消”的行为边界。
+
+Runtime 卡片会显示 PandaScore/OpenDota 工具的中文名称。失败调用依据公共 runtime
+的 `handler_entered`、`dispatch_stage` 和稳定 `failure_code` 区分“未执行”和“执行后失败”，
+并使用安全的中文原因，不展示原始异常、完整引用路径或认证信息。

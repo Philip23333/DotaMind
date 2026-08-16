@@ -78,3 +78,22 @@ PandaScore series/match/game
 `8943244303`；同名 Nigma 候选通过 `/teams/{team_id}/matches` 的精确
 `leagueid=19719` 参赛记录唯一消歧为 `10136357`。样本映射仍属于推断而非
 PandaScore 原生字段。
+
+## P2.2 赛事届次解析
+
+`pandascore.resolve_competition` 不依赖 `/dota2/series` 返回顺序。查询中的独立
+四位年份会被解析为显式届次；`year` 参数与查询年份冲突时由输入校验拒绝。
+名称匹配按 series name/full label、parent league exact、label substring 分为
+3/2/1 级，只保留最高级候选。没有显式年份时按当前时间优先选择进行中、最近
+已开始/结束、最近即将开始的届次；同一时间仍无法唯一确定则返回 `ambiguous`。
+响应的 `selection` 元数据记录模式、请求/选中年份、匹配等级和选择前候选数量。
+这些是 DotaMind 的确定性选择语义，不是 PandaScore 原生的 `latest` 字段。
+
+## P2.2.1 年份过滤下推
+
+当用户显式给出年份（query 中提取或输入 `year`）时，
+`PandaScoreCompetitions.list_series(year=...)` 将其发送为
+`filter[year]`；缺省年份不发送该参数。Resolver 先取得该年份的 eligible rows，
+再执行名称匹配等级，避免默认第一页中的其他年份候选把历史届次排除。显式年份
+不存在时保持 `not_found`，不会回退到最新届；无年份仍使用 active → latest
+historical → nearest future 选择。

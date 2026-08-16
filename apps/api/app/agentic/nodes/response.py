@@ -2,6 +2,17 @@ from app.agentic.conversation.summary import SESSION_REQUEST_FAILED_REASON
 from app.agentic.state import AgentRunState
 
 
+def _public_tool_failure_code(error_code: str | None, status: str) -> str | None:
+    if status != "error":
+        return None
+    return {
+        "reference_resolution_error": "reference_resolution_error",
+        "input_validation_error": "validation_error",
+        "handler_error": "handler_error",
+        "tool_not_registered": "tool_error",
+    }.get(error_code, "tool_error")
+
+
 def response_node(state: AgentRunState) -> AgentRunState:
     if (
         state.run_context is None
@@ -102,6 +113,9 @@ def _public_runtime(state: AgentRunState, *, safe_failure: bool) -> dict:
                     "status": call.status,
                     "latency_ms": call.latency_ms,
                     "reused": call.reused,
+                    "handler_entered": call.handler_entered,
+                    "dispatch_stage": call.dispatch_stage,
+                    "failure_code": _public_tool_failure_code(call.error_code, call.status),
                 }
                 for call in attempt.tool_calls
             ]

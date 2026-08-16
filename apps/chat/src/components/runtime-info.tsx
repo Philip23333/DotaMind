@@ -3,6 +3,7 @@
 import type { PlanStreamEvent } from "@/lib/dotamind-api";
 import type { DotaMindRuntimeInfo } from "@/lib/assistant-ui/run-event-converter";
 import { DOTAMIND_ASSISTANT_METADATA_KEY } from "@/lib/assistant-ui/migration-contract";
+import { formatToolFailure } from "@/lib/runtime-failure";
 import {
   CheckCircle2Icon,
   ChevronDownIcon,
@@ -54,6 +55,12 @@ const toolLabels: Record<string, string> = {
   "opendota.team_players": "查询战队阵容",
   "opendota.team_heroes": "查询战队英雄池",
   "opendota.hero_stats_by_role": "查询位置英雄数据",
+  "pandascore.resolve_competition": "识别赛事",
+  "pandascore.list_matches": "查询赛程与战况",
+  "pandascore.resolve_match_game": "定位系列赛单局",
+  "dota.resolve_valve_match": "关联 Valve 比赛",
+  "opendota.match_summary": "查询单局数据",
+  "opendota.match_draft": "查询单局 BP",
 };
 
 const statusLabel: Record<RunStatus, string> = {
@@ -105,7 +112,7 @@ export const RuntimeInfoCard: FC<{ run: RuntimeInfo }> = ({ run }) => {
         {run.tools.length > 0 && (
           <div className="mt-3 border-t pt-2.5">
             <div className="mb-1.5 flex items-center gap-1.5 font-medium text-foreground">
-              <WrenchIcon className="size-3.5" /> 已使用工具
+              <WrenchIcon className="size-3.5" /> 工具调用
             </div>
             <ul className="space-y-1 text-muted-foreground">
               {run.tools.map((tool) => (
@@ -113,7 +120,14 @@ export const RuntimeInfoCard: FC<{ run: RuntimeInfo }> = ({ run }) => {
                   {tool.status === "running" ? "●" : tool.status === "ok" ? "✓" : "!"}{" "}
                   {toolLabels[tool.tool] ?? tool.tool}
                   {tool.status === "running" ? "…" : ""}
-                  {tool.latency_ms != null ? ` · ${tool.latency_ms}ms` : ""}
+                  {tool.status === "error" && tool.handler_entered === false
+                    ? " · 未执行"
+                    : tool.latency_ms != null
+                      ? ` · ${tool.latency_ms}ms`
+                      : ""}
+                  {tool.status === "error" && tool.failure_code && (
+                    <span className="block pl-4 text-xs">{formatToolFailure(tool.failure_code)}</span>
+                  )}
                 </li>
               ))}
             </ul>

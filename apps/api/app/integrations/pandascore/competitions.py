@@ -12,8 +12,14 @@ class PandaScoreCompetitions:
     def __init__(self, transport: PandaScoreTransport) -> None:
         self.transport = transport
 
-    async def list_series(self, query: str | None = None) -> list[PandaCompetition]:
+    async def list_series(
+        self,
+        query: str | None = None,
+        year: int | None = None,
+    ) -> list[PandaCompetition]:
         params: dict[str, Any] = {"page[size]": self.transport.max_page_size}
+        if year is not None:
+            params["filter[year]"] = year
         rows = await self.transport.get("/dota2/series", params=params)
         normalized = [normalize_competition(row) for row in rows if isinstance(row, dict)]
         if not query:

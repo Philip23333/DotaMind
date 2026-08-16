@@ -1,6 +1,7 @@
 import type { ThreadMessage, ThreadMessageLike } from "@assistant-ui/react";
 
 import { createUuidV4 } from "./uuid";
+import { formatToolFailure, isToolFailureCode } from "./runtime-failure";
 
 const DEFAULT_API_URL = "http://localhost:8001";
 export const BROWSER_ID_STORAGE_KEY = "dotamind.browser_id.v1";
@@ -16,11 +17,26 @@ export type PlanStatus =
 
 type AnswerItem = Record<string, unknown>;
 
+export type RuntimeToolCallStatus = {
+  tool_call_id: string;
+  tool: string;
+  status: "ok" | "error";
+  latency_ms: number;
+  reused: boolean;
+  handler_entered: boolean;
+  dispatch_stage: string;
+  failure_code: string | null;
+};
+
+type RuntimeAttempt = {
+  tool_call_statuses?: RuntimeToolCallStatus[];
+};
+
 export type PlanResponse = {
   status?: PlanStatus;
   reason?: string;
   error_code?: string | null;
-  runtime?: { duration_ms?: number };
+  runtime?: { duration_ms?: number; attempts?: RuntimeAttempt[] };
   answer?: {
     summary?: string;
     claims?: AnswerItem[];
@@ -93,6 +109,8 @@ export type PlanStreamEvent =
       latency_ms: number | null;
       reused: boolean | null;
       failure_code: string | null;
+      handler_entered?: boolean | null;
+      dispatch_stage?: string | null;
     }
   | { type: "answer_delta"; delta: string; attempt_index: number; provisional: true }
   | { type: "result"; response: PlanResponse; session?: ChatSessionSummary | null }
@@ -310,6 +328,15 @@ function formatLimitations(items: AnswerItem[] | undefined): string | null {
 }
 
 export function formatPlanResponse(payload: PlanResponse): string {
+  const runtimeFailure = payload.runtime?.attempts
+    ?.flatMap((attempt) => attempt.tool_call_statuses ?? [])
+    .find((tool) => tool.status === "error" && tool.failure_code)?.failure_code;
+  const reason = payload.reason?.trim();
+  const shouldUseRuntimeFailure = Boolean(
+    runtimeFailure &&
+      !payload.answer?.summary?.trim() &&
+      (!reason || ["tool execution failed", "execution failed"].includes(reason)),
+  );
   const sections = [
     payload.answer?.summary?.trim() || payload.reason?.trim(),
     formatRecommendations(payload.answer?.recommendations),
@@ -317,15 +344,23 @@ export function formatPlanResponse(payload: PlanResponse): string {
     formatLimitations(payload.answer?.limitations),
   ].filter((section): section is string => Boolean(section));
 
-  if (sections.length) return sections.join("\n\n");
+  if (sections.length && !shouldUseRuntimeFailure) return sections.join("\n\n");
+
+  if (shouldUseRuntimeFailure && isToolFailureCode(runtimeFailure)) {
+    return formatToolFailure(runtimeFailure);
+  }
 
   if (payload.error_code) {
-    return `请求未能完成（${payload.error_code}），请稍后重试。`;
+    if (isToolFailureCode(payload.error_code)) return formatToolFailure(payload.error_code);
+    return reason || `请求未能完成（${payload.error_code}），请稍后重试。`;
   }
 
   return "请求已完成，但服务没有返回可展示的回答。";
 }
 
 export function formatStreamError(errorCode: string, reason: string): string {
-  return `${reason || "请求未能完成，请稍后重试。"}\n\n错误代码：\`${errorCode}\``;
+  const message = isToolFailureCode(errorCode)
+    ? formatToolFailure(errorCode)
+    : reason || "请求未能完成，请稍后重试。";
+  return `${message}\n\n错误代码：\`${errorCode}\``;
 }

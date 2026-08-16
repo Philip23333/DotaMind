@@ -141,3 +141,16 @@ EvidenceGraph 还是重新进入 Controller 由不渲染的 `ToolDefinition.resu
 能力边界。Validator 会拒绝把该 scope 与不支持的工具组合；validation retry `v2` 禁止通过
 删除或弱化用户显式约束来绕过拒绝，并要求能力不足时返回 `capability_boundary`。Controller
 还要求 plan goal 保留用户明确的主体、角色、位置、数量和 scope，不补充未声明范围。
+
+## 赛事范围与届次
+
+对当前/最新赛事事实，Controller 只判断请求是否已有赛事、战队、选手或近期对话
+中的明确指代；真正缺少范围时返回 `clarification`。命名的周期性赛事即使没有
+年份也已经具备足够身份，年份留给 `pandascore.resolve_competition` 根据实时
+Fixture 时间确定。用户明确写出的年份必须保留，不能在 Controller 或 Graph 中
+硬编码当前年份或固定赛事 ID。赛事候选仍由工具的 `selection` 元数据和
+`competition_identity` evidence 审计。
+
+显式年份由 Controller 保留并交给 resolver；resolver 会先按年份限制 PandaScore
+Series 候选，再做赛事名称消歧。Controller 不根据自身知识推断届次时间，也不把
+历史年份缺失改写成最新届。

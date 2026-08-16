@@ -331,6 +331,18 @@ missing token / config
 
 项目偏好是暴露错误，而不是用 mock 或 fallback 掩盖缺口。
 
+### 公开运行时失败状态
+
+内部 dispatch 记录不会进入 `ToolResult`，但最终公共 runtime allowlist 会为每个
+工具调用提供 `handler_entered`、`dispatch_stage` 和安全的 `failure_code`。引用解析、
+参数校验、handler 执行和超时分别映射为稳定类别；原始异常、完整引用路径、上游
+正文和认证信息始终留在服务端。前端据此区分“未执行”和“执行后失败”，不把
+`0ms` 当作真实 handler 耗时。
+
+PandaScore Series provider 的年份参数是可选的：`year=None` 时保持原有列表请求，
+显式年份时发送 `filter[year]`。Resolver 在 provider 返回的目标年份集合内进行
+名称等级匹配，确保历史届次不会被默认第一页中的高等级候选提前淘汰。
+
 ## 11. 层边界
 
 Tool 层负责：

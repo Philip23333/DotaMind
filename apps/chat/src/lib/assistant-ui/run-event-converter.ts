@@ -6,6 +6,7 @@ import {
   getChatSession,
   type ChatRunStatus,
   type PlanStreamEvent,
+  type PlanResponse,
 } from "@/lib/dotamind-api";
 import {
   subscribeChatRun,
@@ -55,6 +56,30 @@ function updateTool(tools: DotaMindRuntimeTool[], incoming: DotaMindRuntimeTool)
   const index = tools.findIndex((tool) => tool.tool_call_id === incoming.tool_call_id);
   if (index === -1) return [...tools, incoming];
   return tools.map((tool, toolIndex) => (toolIndex === index ? incoming : tool));
+}
+
+function responseTools(response: PlanResponse): DotaMindRuntimeTool[] {
+  return (response.runtime?.attempts ?? []).flatMap((attempt, attemptIndex) =>
+    (attempt.tool_call_statuses ?? []).map((tool) => ({
+      type: "tool" as const,
+      tool_call_id: tool.tool_call_id,
+      tool: tool.tool,
+      attempt_index: attemptIndex,
+      status: tool.status,
+      latency_ms: tool.latency_ms,
+      reused: tool.reused,
+      failure_code: tool.failure_code,
+      handler_entered: tool.handler_entered,
+      dispatch_stage: tool.dispatch_stage,
+    })),
+  );
+}
+
+function mergeResponseTools(
+  tools: DotaMindRuntimeTool[],
+  response: PlanResponse,
+): DotaMindRuntimeTool[] {
+  return responseTools(response).reduce(updateTool, tools);
 }
 
 async function recoveredResponse(
@@ -140,6 +165,7 @@ export async function* streamDotaMindRun(
       case "result":
         runtime = {
           ...runtime,
+          tools: mergeResponseTools(runtime.tools, event.response),
           status: event.response.status === "error" || event.response.status === "insufficient_evidence"
             ? "failed"
             : "completed",
@@ -176,6 +202,7 @@ export async function* streamDotaMindRun(
             options.requestId,
             options.abortSignal,
           ).catch(() => undefined);
+          if (response) runtime = { ...runtime, tools: mergeResponseTools(runtime.tools, response) };
           yield update({
             content: [
               {

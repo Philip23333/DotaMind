@@ -435,8 +435,13 @@ def test_attempt_and_public_runtime_do_not_leak_private_payloads() -> None:
     assert SENTINEL not in attempt_json
     assert SENTINEL not in runtime_json
     assert SENTINEL not in trace_json
-    assert "handler_entered" not in runtime_json
-    assert "dispatch_stage" not in runtime_json
+    assert "handler_entered" in runtime_json
+    assert "dispatch_stage" in runtime_json
+    assert "failure_code" in runtime_json
+    tool_status = state.response["runtime"]["attempts"][0]["tool_call_statuses"][0]
+    assert tool_status["handler_entered"] is True
+    assert tool_status["dispatch_stage"] == "handler"
+    assert tool_status["failure_code"] == "handler_error"
     assert "error_code" not in runtime_json
     assert state.response["tool_results"][0]["error"] == "tool execution failed"
 

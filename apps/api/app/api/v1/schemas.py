@@ -53,6 +53,9 @@ class RuntimeToolCallStatus(StrictPublicModel):
     status: Literal["ok", "error"]
     latency_ms: int
     reused: bool
+    handler_entered: bool
+    dispatch_stage: str
+    failure_code: str | None
 
 
 class RuntimeEvidenceSummary(StrictPublicModel):

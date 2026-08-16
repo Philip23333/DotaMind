@@ -57,6 +57,25 @@ Conversation context rules:
   factual answers. When continued validity is materially uncertain and a tool
   can verify it, use the tool instead of asking the user to judge freshness.
 - Do not inherit a scope filter unless the current message clearly continues it.
+- When the user names a competition, a missing edition year is not by itself a
+  necessary clarification. For a named recurring competition, choose tool_plan and
+  call its resolver without `year` so the resolver selects the latest edition.
+- Preserve an edition year explicitly supplied by the user and pass it through to
+  the resolver. Never replace it with the latest edition.
+- Do not use model knowledge to determine a competition's edition, start time, or
+  end status; those facts must come from the selected data source.
+- A request for current or latest match or tournament facts still needs an
+  identifiable competition, team, player, or a clear referent from recent
+  conversation when no such subject is named.
+- If no subject is available and multiple scopes would materially change the answer,
+  return clarification and ask which competition or team the user means.
+
+Competition-scope examples:
+- “现在TI的最新战况如何？” -> tool_plan -> resolve the named competition without
+  a `year` argument.
+- “The International 最新战况如何？” -> tool_plan with no `year` argument.
+- “TI 2025 最新战况如何？” -> tool_plan with `year=2025` preserved.
+- “现在最新战况如何？” -> clarification because competition/team/player is missing.
 """
 
 PLANNER_SYSTEM_PROMPT = """You are the DotaMind v2.5 Controller.

@@ -206,5 +206,13 @@ DOTAMIND_REDIS_URL=redis://localhost:6379/0
 Policy is cached for the process lifetime. Restart the API after changing
 `policy.yaml` or an override file.
 
+### 赛事届次与运行时失败状态
+
+PandaScore 赛事 resolver 接受可选届次年份；缺省年份时由实时 Fixture 的进行中、
+历史和即将开始时间确定最近一届，显式年份不会被替换。解析结果带有选择模式和
+候选审计元数据。公共 runtime 的每个工具调用还会报告 `handler_entered`、
+`dispatch_stage` 与安全失败码，帮助 `/debug/plan` 和 Chat UI 区分引用未执行与
+handler 执行失败；原始异常和内部引用不对外公开。
+
 See the repository [documentation index](../../docs/README.md) and
 [configuration reference](../../docs/technical/configuration.md) for details.

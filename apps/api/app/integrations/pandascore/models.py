@@ -18,6 +18,19 @@ class PandaCompetition(BaseModel):
     tournaments: list[dict[str, Any]] = Field(default_factory=list)
 
 
+class CompetitionSelection(BaseModel):
+    """Auditable result of choosing one competition from matching series."""
+
+    status: Literal["resolved", "ambiguous", "not_found"]
+    mode: Literal["latest_edition", "explicit_year"]
+    requested_year: int | None = None
+    selected_year: int | None = None
+    match_rank: int | None = None
+    candidate_count_before_selection: int = Field(ge=0)
+    selected: PandaCompetition | None = None
+    candidates: list[PandaCompetition] = Field(default_factory=list)
+
+
 class PandaTournamentStage(BaseModel):
     pandascore_tournament_id: int
     pandascore_series_id: int

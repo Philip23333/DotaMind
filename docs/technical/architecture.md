@@ -129,7 +129,9 @@ validation occur before handler entry and do not consume tool budget. A
 synchronous guard checks monotonic deadline and remaining tool budget after
 pre-dispatch validation, then a callback records budget immediately before the handler, so
 both successful and failed handler entries count exactly once. Dispatch stage
-and stable internal error codes never modify the public `ToolResult`. Within a
+and stable internal error codes never modify the public `ToolResult`. The public
+runtime summary exposes only `handler_entered`, `dispatch_stage`, and a mapped
+stable tool failure code; raw dispatch error text remains private. Within a
 Run, canonical fingerprints reuse same-id results and reject an equivalent call
 under a changed id.
 

@@ -216,3 +216,13 @@ win rates or match counts.
 - freshness or universal sample-size policy;
 - fixed intent pipelines or a legacy/fallback graph;
 - compatibility endpoints or a separate frontend.
+
+## P2.2 Match-data edge updates
+
+`pandascore.resolve_competition` now has a nullable explicit `year` input and a
+deterministic latest-edition selector. It emits selection metadata while keeping
+`competition_identity` as its only mandatory evidence; `list_matches` continues to
+consume only the declared `data.competition.series_id` reference. Public response
+runtime summaries additionally expose safe per-call dispatch state
+(`handler_entered`, `dispatch_stage`, mapped `failure_code`) without changing Graph
+routing or adding an `intent` branch.

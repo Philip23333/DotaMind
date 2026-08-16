@@ -26,6 +26,8 @@ class ToolStreamEvent(_StreamEvent):
     latency_ms: int | None = None
     reused: bool | None = None
     failure_code: str | None = None
+    handler_entered: bool | None = None
+    dispatch_stage: str | None = None
 
 
 class AnswerDeltaStreamEvent(_StreamEvent):

@@ -77,16 +77,26 @@ Response fields include:
   usage, plus one or two sanitized attempt summaries.
 
 The public attempt contains index, decision kind, status/failure stage,
-`recovery_code`, duration, tool call status/latency/`reused`, evidence summary, answer type/status/
+`recovery_code`, duration, tool call status/latency/`reused`, `handler_entered`,
+`dispatch_stage`, and a stable tool `failure_code`, evidence summary, answer type/status/
   confidence, and critic pass/severity/issue count. It never contains plan goal
   or args, ToolResult data/error/source/metadata, internal dispatch records,
   answer text, critic reasons, history, session/request ids, prompts, Controller
-  raw output, or validation/retry content.
+  raw output, or validation/retry content. Public tool failure codes are limited to
+  safe categories such as `reference_resolution_error`, `validation_error`,
+  `handler_error`, `tool_error`, and `execution_timeout`; raw exceptions and reference
+  paths are never serialized.
 
 `recovery_code` is `null` for Attempt 0 and `missing_evidence` only for an
 Attempt 1 that was actually started by Recovery. The top-level plan/tool results/
 evidence/answer/review always come from the final Attempt; earlier Attempts expose
 only the allowlisted runtime summary.
+
+For a named recurring competition, the Controller may omit the edition year and let
+the PandaScore resolver select the latest edition. When a year is explicit, the
+resolver forwards it to PandaScore Series as `filter[year]` before name ranking; a
+missing historical edition remains `not_found` rather than falling back to another
+year.
 
 Internal history, the rendered history block, raw Controller output, retry feedback and
 validation details are not serialized. Invalid Controller/plan results use a redacted
@@ -123,6 +133,9 @@ HTTP 422. This endpoint is for `/debug/plan` only; formal chat uses Chat Run eve
 - `tool.running` is emitted immediately before a validated tool enters its
   handler. Reused calls, reference-resolution failures, pre-dispatch runtime
   gates and handler failures emit only their safe terminal `ok`/`error` event.
+- Terminal tool events may include `handler_entered` and `dispatch_stage`; clients
+  should display an error with `handler_entered=false` as “未执行” rather than a
+  misleading zero-millisecond handler duration.
 - `answer_delta` is emitted only for the natural-language synthesizer's real
   upstream model stream. Direct replies and deterministic structured answers
   wait for the final `result`; no typing simulation is used.
