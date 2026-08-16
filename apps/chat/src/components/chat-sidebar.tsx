@@ -50,12 +50,12 @@ export function ChatSidebar({
         />
       )}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-[min(86vw,18rem)] shrink-0 flex-col border-r bg-background shadow-xl transition-transform md:static md:z-auto md:w-72 md:translate-x-0 md:bg-muted/20 md:shadow-none ${
+        className={`chat-sidebar-surface fixed inset-y-0 left-0 z-50 flex w-[min(86vw,18rem)] shrink-0 flex-col transition-transform md:static md:z-auto md:w-72 md:translate-x-0 ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         }`}
         aria-label="聊天列表"
       >
-        <div className="flex items-center justify-between border-b px-3 py-3">
+        <div className="chat-sidebar__header flex items-center justify-between px-3 py-3">
           <div className="flex items-center gap-2 text-sm font-semibold">
             <MessageSquareIcon className="size-4" />
             <span>聊天记录</span>
@@ -82,7 +82,7 @@ export function ChatSidebar({
           </div>
         </div>
 
-        <ThreadListPrimitive.Root className="min-h-0 flex-1 overflow-y-auto p-2">
+        <ThreadListPrimitive.Root className="thread-list-scrollbar min-h-0 flex-1 overflow-y-auto p-2">
           <div className="flex flex-col gap-1">
             <ThreadListPrimitive.Items>
               {({ threadListItem }) => {

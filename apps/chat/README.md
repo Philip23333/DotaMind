@@ -3,6 +3,16 @@
 基于 Next.js 与 assistant-ui 的多聊天前端。它不运行模型，也不复制
 DotaMind 的 Agent Runtime；正式聊天通过 Chat Run API 创建、订阅和取消后台 Run。
 
+## 启动动效
+
+首次渲染会在聊天 UI 上方显示约 1.4 秒的 DotaMind 启动覆盖层。它使用
+`simple-icons` 的 Dota 2 单色矢量路径，文字仅显示 “DotaMind”；动画不触发 Chat Run 或 API 请求。用户可按 `Esc` 立即关闭，
+`prefers-reduced-motion` 用户只会看到瞬时过渡。
+
+## 视觉主题
+
+聊天界面使用浅灰侧栏、近白顶部与浅灰白主消息区的三层表面；选中、主操作与焦点使用灰度，Dota 红仅保留在启动页图标/进度线和低对比度的中央 Dota 2 矢量水印。
+
 ## 本地启动
 
 先启动仓库中的 FastAPI 服务（默认 `http://localhost:8001`），然后：

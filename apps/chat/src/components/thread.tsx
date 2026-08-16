@@ -19,14 +19,20 @@ import {
   CopyIcon,
   SquareIcon,
 } from "lucide-react";
+import { siDota2 } from "simple-icons";
 import { cancelChatRun } from "@/lib/chat-run-api";
 import { DOTAMIND_ASSISTANT_METADATA_KEY } from "@/lib/assistant-ui/migration-contract";
 import { useRef, useState, type FC } from "react";
 
 export const Thread: FC<{ browserId?: string }> = ({ browserId }) => {
   return (
-    <ThreadPrimitive.Root className="flex h-full min-w-0 flex-col overflow-hidden bg-background">
-      <ThreadPrimitive.Viewport className="relative flex min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto scroll-smooth">
+    <ThreadPrimitive.Root className="chat-main-surface relative flex h-full min-w-0 flex-col overflow-hidden bg-card">
+      <div className="chat-main-surface__mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24">
+          <path d={siDota2.path} />
+        </svg>
+      </div>
+      <ThreadPrimitive.Viewport className="relative z-10 flex min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto scroll-smooth">
         <div className="mx-auto flex w-full max-w-3xl min-w-0 flex-1 flex-col px-3 pt-4 sm:px-6 sm:pt-6">
           <AuiIf condition={(state) => state.thread.messages.length === 0}>
             <Welcome />
@@ -38,13 +44,13 @@ export const Thread: FC<{ browserId?: string }> = ({ browserId }) => {
             </ThreadPrimitive.Messages>
           </div>
 
-          <ThreadPrimitive.ViewportFooter className="sticky bottom-0 mt-auto bg-background/95 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur sm:pb-6">
+          <ThreadPrimitive.ViewportFooter className="sticky bottom-0 mt-auto bg-card/95 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur sm:pb-6">
             <ThreadPrimitive.ScrollToBottom
               render={
                 <Button
                   variant="outline"
                   size="icon"
-                  className="absolute -top-11 left-1/2 size-8 -translate-x-1/2 rounded-full bg-background disabled:invisible"
+                  className="absolute -top-11 left-1/2 size-8 -translate-x-1/2 rounded-full bg-card disabled:invisible"
                   aria-label="滚动到底部"
                 />
               }
@@ -128,7 +134,7 @@ const AssistantMessage: FC = () => {
 };
 
 const Composer: FC<{ browserId?: string }> = ({ browserId }) => (
-  <ComposerPrimitive.Root className="rounded-3xl border bg-background p-1.5 shadow-sm focus-within:ring-2 focus-within:ring-ring/30 sm:p-2">
+  <ComposerPrimitive.Root className="rounded-3xl border bg-popover p-1.5 shadow-sm focus-within:ring-2 focus-within:ring-ring/30 sm:p-2">
     <ComposerPrimitive.Input
       placeholder="询问英雄、阵容、对线或版本数据…"
       className="max-h-40 min-h-12 w-full min-w-0 resize-none bg-transparent px-3 py-2 text-base outline-none placeholder:text-muted-foreground"

@@ -5,6 +5,7 @@ import { MenuIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { ChatSidebar } from "@/components/chat-sidebar";
+import { StartupOverlay } from "@/components/startup-overlay";
 import { Button } from "@/components/ui/button";
 import { Thread } from "@/components/thread";
 import {
@@ -21,6 +22,7 @@ export const Assistant = () => {
 
   return (
     <DotaMindRuntimeProvider browserId={browserId}>
+      <StartupOverlay />
       <DotaMindChatShell browserId={browserId} />
     </DotaMindRuntimeProvider>
   );
@@ -54,7 +56,7 @@ function DotaMindChatShell({ browserId }: { browserId: string }) {
   }, [aui]);
 
   return (
-    <div className="flex h-dvh bg-background">
+    <div className="chat-shell flex h-dvh bg-background">
       <ChatSidebar
         disabled={isLoading || isThreadLoading}
         mobileOpen={mobileSidebarOpen}
@@ -91,7 +93,7 @@ function DotaMindChatShell({ browserId }: { browserId: string }) {
         }
       />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <header className="flex min-h-14 shrink-0 items-center gap-2 border-b px-3 sm:px-6">
+        <header className="chat-shell__header flex h-[65px] shrink-0 items-center gap-2 px-3 sm:px-6">
           <Button
             variant="ghost"
             size="icon"
