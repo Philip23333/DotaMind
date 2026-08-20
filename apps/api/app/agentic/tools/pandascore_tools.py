@@ -291,9 +291,7 @@ def _resolve_match_games_handler(settings: Settings, policy: Any):
             )
             result: dict[str, Any] = {
                 "status": resolved.status,
-                "coverage": resolved.coverage.model_dump(mode="json")
-                if resolved.coverage
-                else None,
+                "coverage": [item.model_dump(mode="json") for item in resolved.coverage],
                 "candidates": [_fixture_data(item) for item in resolved.candidates],
             }
             if resolved.match is not None:

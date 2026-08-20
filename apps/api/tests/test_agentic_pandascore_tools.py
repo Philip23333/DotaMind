@@ -8,9 +8,11 @@ from app.agentic.models import ExecutionPlan, ToolCall, ToolResult
 from app.agentic.planning.contracts import validate_references, validate_required_references
 from app.agentic.tools.pandascore_tools import (
     PandaScoreResolveCompetitionInput,
+    PandaScoreResolveMatchGamesInput,
     _competition_match_rank,
     _extract_explicit_year,
     _resolve_competition_handler,
+    _resolve_match_games_handler,
     competition_evidence,
     match_games_evidence,
     match_schedule_evidence,
@@ -18,7 +20,13 @@ from app.agentic.tools.pandascore_tools import (
 )
 from app.agentic.tools.stratz_tools import build_default_tool_registry
 from app.core.config import Settings
-from app.integrations.pandascore.models import PandaCompetition
+from app.integrations.pandascore.models import (
+    PandaCompetition,
+    PandaCoverage,
+    PandaGameReference,
+    PandaMatchFixture,
+    ResolvedMatchGames,
+)
 
 
 def test_registry_declares_three_pandascore_tools_and_contracts() -> None:
@@ -240,3 +248,56 @@ async def test_resolver_pushes_explicit_year_before_name_ranking(monkeypatch) ->
     assert competitions.requested_year == 2025
     assert result["status"] == "resolved"
     assert result["competition"]["series_id"] == 9555
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("coverage_count", [0, 2])
+async def test_resolve_match_games_serializes_coverage_as_a_list(
+    monkeypatch, coverage_count: int
+) -> None:
+    games = [
+        PandaGameReference(pandascore_game_id=101, pandascore_match_id=55, position=1),
+        PandaGameReference(pandascore_game_id=102, pandascore_match_id=55, position=2),
+    ]
+    fixture = PandaMatchFixture(
+        pandascore_match_id=55,
+        pandascore_series_id=42,
+        name="Alpha vs Beta",
+        status="finished",
+        games=games,
+    )
+    resolved = ResolvedMatchGames(
+        status="resolved",
+        match=fixture,
+        games=games,
+        coverage=[PandaCoverage(fixture_available=True) for _ in range(coverage_count)],
+    )
+
+    class FakeTransport:
+        closed = False
+
+        async def aclose(self) -> None:
+            self.closed = True
+
+    class FakeMatches:
+        async def resolve_games(self, *args, **kwargs):
+            return resolved
+
+    transport = FakeTransport()
+    monkeypatch.setattr(
+        "app.agentic.tools.pandascore_tools._clients",
+        lambda _settings, _policy: (transport, object(), FakeMatches()),
+    )
+
+    handler = _resolve_match_games_handler(Settings(_env_file=None), object())
+    result = await handler(
+        PandaScoreResolveMatchGamesInput(series_id=42, team_queries=["Alpha", "Beta"]),
+        None,
+    )
+
+    assert result["status"] == "resolved"
+    assert len(result["games"]) == 2
+    assert len(result["coverage"]) == coverage_count
+    assert all(isinstance(item, dict) for item in result["coverage"])
+    assert len(result["resolution_inputs"]) == 2
+    assert transport.closed is True
