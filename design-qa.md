@@ -15,9 +15,10 @@ No actionable P0, P1, or P2 differences against the current grayscale interface 
 - Colors and visual tokens: the shell, selection state, primary actions, and focus use grayscale. Dota red is reserved only for the startup icon/progress treatment and the low-opacity central watermark.
 - Separation: sidebar and header divider borders remain absent; contrast comes from the grayscale surface hierarchy and soft shadows.
 - Watermark: the real `simple-icons` Dota 2 path is centered behind the content at 70% of the main panel height, with a low-opacity red treatment that preserves content legibility.
-- Layout: the main header and sidebar header are both 65 px high, so the main content and the thread-list records begin on the same baseline.
+- Layout: the sidebar header retains its “聊天记录” label and 65 px height. The desktop main area has no header, allowing chat content to use the full available height; mobile-only controls float above content.
 - Scroll treatment: the sidebar thread list remains scrollable but hides its visual scrollbar.
 - Asset fidelity: no cat sprites or background silhouettes remain in the rendered overlay. The Dota 2 mark is the actual monochrome `simple-icons` path, not an approximate generated logo.
+- Empty state: a new chat uses the same real Dota 2 mark in a 150 × 150 px red tile instead of the former `DM` letter badge.
 - Copy and controls: `DotaMind` is the only startup copy; the visible skip control has been intentionally removed while `Esc` dismissal remains available.
 
 ## Focused interaction check

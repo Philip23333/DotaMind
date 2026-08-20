@@ -11,7 +11,7 @@ DotaMind 的 Agent Runtime；正式聊天通过 Chat Run API 创建、订阅和�
 
 ## 视觉主题
 
-聊天界面使用浅灰侧栏、近白顶部与浅灰白主消息区的三层表面；选中、主操作与焦点使用灰度，Dota 红仅保留在启动页图标/进度线和低对比度的中央 Dota 2 矢量水印。
+聊天界面使用浅灰侧栏与浅灰白主消息区的分层表面；桌面端主区域没有顶部栏，全部高度用于聊天内容。选中、主操作与焦点使用灰度，Dota 红仅保留在启动页图标/进度线、150 px 新聊天图标和低对比度的中央 Dota 2 矢量水印。
 
 ## 本地启动
 
@@ -32,10 +32,9 @@ NEXT_PUBLIC_DOTAMIND_API_URL=http://localhost:8001
 ```
 
 当前版本在首次打开页面时生成并保存一个浏览器 UUID，并由 assistant-ui
-`RemoteThreadListRuntime` 将一个 thread 映射到一个 DotaMind `session_id`。新聊天先使用
+`RemoteThreadListRuntime` 将一个 thread 映射到一个 DotaMind `session_id`。每次重新进入聊天页都会从新的空白聊天开始，不恢复上次选中的 session；新聊天先使用
 assistant-ui optimistic thread，首次发送时才调用后端创建 session；重命名、删除和置顶仍由
-DotaMind Session API 完成。置顶状态和 transcript 保存在 PostgreSQL，选中的 `session_id`
-保存在 localStorage。每个已启动 thread 保持独立 `LocalRuntime`，发送时先调用
+DotaMind Session API 完成。置顶状态和 transcript 保存在 PostgreSQL。每个已启动 thread 保持独立 `LocalRuntime`，发送时先调用
 `POST /api/v1/chat/sessions/{session_id}/runs`，再从
 `GET /api/v1/chat/runs/{run_id}/events?after=0` 读取可重放 NDJSON。
 

@@ -93,23 +93,21 @@ function DotaMindChatShell({ browserId }: { browserId: string }) {
         }
       />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <header className="chat-shell__header flex h-[65px] shrink-0 items-center gap-2 px-3 sm:px-6">
+        <div className="relative min-h-0 flex-1">
           <Button
             variant="ghost"
             size="icon"
-            className="size-10 md:hidden"
+            className="absolute left-3 top-3 z-20 size-10 bg-card/80 shadow-sm backdrop-blur md:hidden"
             onClick={() => setMobileSidebarOpen(true)}
             aria-label="打开聊天列表"
           >
             <MenuIcon className="size-5" />
           </Button>
-          <div className="min-w-0">
-            <div className="text-sm font-semibold tracking-tight">DotaMind</div>
-            <div className="text-xs text-muted-foreground">Dota 2 智能分析助手</div>
-          </div>
-          {error && <div className="ml-auto truncate text-xs text-destructive">{error}</div>}
-        </header>
-        <div className="relative min-h-0 flex-1">
+          {error && (
+            <div className="absolute right-3 top-3 z-20 max-w-[calc(100%-1.5rem)] truncate rounded-md bg-card/90 px-3 py-2 text-xs text-destructive shadow-sm backdrop-blur sm:right-6 sm:top-6">
+              {error}
+            </div>
+          )}
           <Thread browserId={browserId} />
         </div>
       </div>

@@ -7,11 +7,6 @@ import {
 } from "@assistant-ui/react";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 
-import {
-  clearStoredActiveSessionId,
-  getStoredActiveSessionId,
-  storeActiveSessionId,
-} from "@/lib/dotamind-api";
 import { useDotaMindHistoryAdapter } from "./dotamind-history-adapter";
 import { useDotaMindModelAdapter } from "./dotamind-model-adapter";
 import { createDotaMindThreadListAdapter } from "./dotamind-thread-list-adapter";
@@ -32,7 +27,7 @@ export function DotaMindRuntimeProvider({
   children: ReactNode;
 }) {
   const adapter = useMemo(() => createDotaMindThreadListAdapter(browserId), [browserId]);
-  const [threadId, setThreadId] = useState<string | undefined>(() => getStoredActiveSessionId() ?? undefined);
+  const [threadId, setThreadId] = useState<string | undefined>();
   const runtimeHook = useCallback(
     function useDotaMindThreadRuntimeHook() {
       return useDotaMindThreadRuntime(browserId);
@@ -41,8 +36,6 @@ export function DotaMindRuntimeProvider({
   );
   const onThreadIdChange = useCallback((nextThreadId: string | undefined) => {
     setThreadId(nextThreadId);
-    if (nextThreadId) storeActiveSessionId(nextThreadId);
-    else clearStoredActiveSessionId();
   }, []);
   const runtime = useRemoteThreadListRuntime({
     runtimeHook,

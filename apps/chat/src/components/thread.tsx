@@ -70,8 +70,10 @@ export const Thread: FC<{ browserId?: string }> = ({ browserId }) => {
 
 const Welcome: FC = () => (
   <div className="flex flex-1 flex-col items-center justify-center pb-24 text-center">
-    <div className="mb-4 flex size-11 items-center justify-center rounded-2xl bg-primary text-sm font-bold text-primary-foreground">
-      DM
+    <div className="mb-6 flex size-[150px] items-center justify-center rounded-[2rem] bg-[#b92d1e] text-[#fff4e1] shadow-[0_16px_36px_rgb(115_31_24_/_24%)]">
+      <svg className="size-24" viewBox="0 0 24 24" aria-hidden="true">
+        <path fill="currentColor" d={siDota2.path} />
+      </svg>
     </div>
     <h1 className="text-2xl font-semibold tracking-tight">今天想分析什么？</h1>
     <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
