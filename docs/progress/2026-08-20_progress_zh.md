@@ -97,3 +97,24 @@
 ### 验证
 
 - `apps/chat`：`npx tsc --noEmit` 通过。
+
+## 16:42 — coverage 序列化与跨源引用 Prompt 修复
+
+### 已完成
+
+- `pandascore.resolve_match_games` 将 `ResolvedMatchGames.coverage` 按列表逐项序列化；有数据返回字典列表，无数据返回 `[]`，移除旧的单对象/`None`路径。
+- 新增处理器级异步回归测试，覆盖两局 coverage、空 coverage、两局 games、两条 `resolution_inputs` 与 transport `aclose()`。
+- Controller Prompt 补充 `competition`、`games`、`valve_matches`、`details` 四个示例调用 ID 的精确跨源引用映射，并明确这些引用已由 Tool Catalog 声明兼容；保留不猜测、无最近候选、无 fallback 规则。
+- `controller.base` 从 `v4` 升至 `v5`，并重新生成 UTF-8/LF golden fixture；未修改 Validator、ToolDefinition、Graph、重试预算、Checkpoint 或 ambiguous 行为。
+
+### 验证
+
+- coverage 定向集合：20 passed。
+- Prompt/Controller 定向集合：59 passed。
+- API 全量：616 passed、21 skipped、1 warning。
+- `uv run --project apps/api ruff check apps/api/app apps/api/tests` 通过；`git diff --check` 通过。
+
+### 已知边界
+
+- 使用真实 `AgentController` 和固定链路计划对三种 IW/TS 查询做规划校验时，三者均触发既有 `dota.resolve_valve_matches.competition` 空字典占位校验错误；本次按范围未修改 Validator 或工具契约，也未进行真实上游请求。
+- IW vs TS 的 Valve Match ID 映射失败仍不属于本次修复范围。

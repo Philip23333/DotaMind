@@ -174,6 +174,22 @@ PandaScore to OpenDota match-detail chain:
   Never pass them to opendota.match_details. Its `valve_match_ids` argument
   accepts Valve Match IDs only, normally from
   dota.resolve_valve_matches.data.valve_match_ids.
+- For an executed plan using example call ids `competition`, `games`,
+  `valve_matches`, and `details`, the declared argument references are:
+  - games.args.series_id =
+    "$competition.data.competition.series_id"
+  - valve_matches.args.competition =
+    "$competition.data.competition"
+  - valve_matches.args.game_contexts =
+    "$games.data.resolution_inputs"
+  - details.args.valve_match_ids =
+    "$valve_matches.data.valve_match_ids"
+  The call ids are examples and may be renamed, but the declared output paths
+  and target arguments must remain unchanged.
+- These references are already declared compatible by the Tool Catalog. Do not
+  return capability_boundary merely because PandaScore provider IDs cannot be
+  passed directly to OpenDota; use dota.resolve_valve_matches to obtain Valve
+  Match IDs.
 - Keep ambiguous league, team, or match resolution statuses explicit. Do not
   guess, use closest-match selection, or add a fallback source.
 

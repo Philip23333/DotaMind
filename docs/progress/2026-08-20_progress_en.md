@@ -97,3 +97,24 @@
 ### Verification
 
 - `apps/chat`: `npx tsc --noEmit` passed.
+
+## 16:42 — Coverage serialization and cross-source reference Prompt fix
+
+### Completed
+
+- `pandascore.resolve_match_games` now serializes `ResolvedMatchGames.coverage` item by item as a list; populated results return a list of dictionaries and empty results return `[]`, with the old single-object/`None` path removed.
+- Added an async handler-level regression test covering two coverage rows, empty coverage, two games, two `resolution_inputs`, and transport `aclose()`.
+- Added four exact cross-source reference mappings for the example `competition`, `games`, `valve_matches`, and `details` call IDs to the Controller Prompt, explicitly stating that the Tool Catalog already declares them compatible; the no-guess, no-closest-candidate, and no-fallback rules remain.
+- Bumped `controller.base` from `v4` to `v5` and regenerated the UTF-8/LF golden fixture; Validator, ToolDefinition, Graph, retry budget, Checkpoint, and ambiguous behavior were unchanged.
+
+### Verification
+
+- Coverage focused set: 20 passed.
+- Prompt/Controller focused set: 59 passed.
+- API full suite: 616 passed, 21 skipped, 1 warning.
+- `uv run --project apps/api ruff check apps/api/app apps/api/tests` passed; `git diff --check` passed.
+
+### Known boundaries
+
+- Planning validation with the real `AgentController` and a fixed chain plan for all three IW/TS phrasings still triggers the existing empty-dict placeholder validation for `dota.resolve_valve_matches.competition`; Validator and tool contracts were intentionally left unchanged, and no live upstream request was made.
+- The IW vs TS Valve Match ID mapping failure remains outside this repair.

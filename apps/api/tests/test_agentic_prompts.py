@@ -119,6 +119,20 @@ def test_controller_prompt_declares_catalog_static_and_statistical_boundaries() 
     assert "Catalog tool-planning examples" not in prompt
 
 
+def test_controller_prompt_declares_cross_source_reference_mapping() -> None:
+    prompt = AgentController(_registry(), llm_enabled=False)._system_prompt()
+
+    for reference in (
+        "$competition.data.competition.series_id",
+        "$competition.data.competition",
+        "$games.data.resolution_inputs",
+        "$valve_matches.data.valve_match_ids",
+    ):
+        assert reference in prompt
+    assert "The call ids are examples" in prompt
+    assert "already declared compatible by the Tool Catalog" in prompt
+
+
 def test_controller_prompt_derives_capability_answers_from_rendered_tools() -> None:
     prompt = AgentController(_registry(), llm_enabled=False)._system_prompt()
 
