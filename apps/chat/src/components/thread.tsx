@@ -10,6 +10,7 @@ import {
   ErrorPrimitive,
   MessagePrimitive,
   ThreadPrimitive,
+  useAui,
   useAuiState,
 } from "@assistant-ui/react";
 import {
@@ -18,6 +19,7 @@ import {
   CheckIcon,
   CopyIcon,
   SquareIcon,
+  SparklesIcon,
 } from "lucide-react";
 import { siDota2 } from "simple-icons";
 import { cancelChatRun } from "@/lib/chat-run-api";
@@ -38,7 +40,7 @@ export const Thread: FC<{ browserId?: string }> = ({ browserId }) => {
             <Welcome />
           </AuiIf>
 
-          <div className="flex flex-col gap-7 pb-8 empty:hidden">
+          <div className="flex flex-col gap-10 pb-16 empty:hidden">
             <ThreadPrimitive.Messages>
               {() => <ThreadMessage />}
             </ThreadPrimitive.Messages>
@@ -58,9 +60,14 @@ export const Thread: FC<{ browserId?: string }> = ({ browserId }) => {
               <ArrowDownIcon className="size-4" />
             </ThreadPrimitive.ScrollToBottom>
             <Composer browserId={browserId} />
-            <p className="mt-2 text-center text-xs text-muted-foreground">
-              DotaMind 可能会出错，请结合证据判断。
-            </p>
+            <a
+              href="https://beian.miit.gov.cn/"
+              target="_blank"
+              rel="noreferrer"
+              className="mt-2 block text-center text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+            >
+              鄂ICP备2026044062号-1
+            </a>
           </ThreadPrimitive.ViewportFooter>
         </div>
       </ThreadPrimitive.Viewport>
@@ -115,8 +122,7 @@ const AssistantMessage: FC = () => {
       </div>
       <ActionBarPrimitive.Root
         hideWhenRunning
-        autohide="not-last"
-        className="mt-2 flex items-center gap-1 text-muted-foreground"
+        className="absolute left-0 top-full mt-2 flex items-center gap-1 text-muted-foreground"
       >
         <ActionBarPrimitive.Copy
           render={
@@ -135,32 +141,64 @@ const AssistantMessage: FC = () => {
   );
 };
 
-const Composer: FC<{ browserId?: string }> = ({ browserId }) => (
-  <ComposerPrimitive.Root className="rounded-3xl border bg-popover p-1.5 shadow-sm focus-within:ring-2 focus-within:ring-ring/30 sm:p-2">
-    <ComposerPrimitive.Input
-      placeholder="询问英雄、阵容、对线或版本数据…"
-      className="max-h-40 min-h-12 w-full min-w-0 resize-none bg-transparent px-3 py-2 text-base outline-none placeholder:text-muted-foreground"
-      rows={1}
-      autoFocus
-      enterKeyHint="send"
-      aria-label="消息输入框"
-    />
-    <div className="flex justify-end px-1 pb-1">
-      <AuiIf condition={(state) => !state.thread.isRunning}>
-        <ComposerPrimitive.Send
-          render={
-            <Button size="icon" className="size-8 rounded-full" aria-label="发送消息" />
-          }
-        >
-          <ArrowUpIcon className="size-4" />
-        </ComposerPrimitive.Send>
-      </AuiIf>
-      <AuiIf condition={(state) => state.thread.isRunning}>
-        <DotaMindStopButton browserId={browserId} />
-      </AuiIf>
+const Composer: FC<{ browserId?: string }> = ({ browserId }) => {
+  const aui = useAui();
+  const [isFocused, setIsFocused] = useState(false);
+  const isRunning = useAuiState((state) => state.thread.isRunning);
+  const isNewThread = useAuiState((state) => state.thread.messages.length === 0);
+
+  const sendTiUpdatePrompt = () => {
+    if (isRunning) return;
+    aui.composer.setText("本届TI最新战况");
+    aui.composer.send();
+  };
+
+  return (
+    <div className="relative">
+      {isNewThread && isFocused && !isRunning && (
+        <div className="absolute bottom-full left-0 mb-3">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="rounded-full bg-card shadow-sm"
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={sendTiUpdatePrompt}
+          >
+            <SparklesIcon className="size-3.5" />
+            本届TI最新战况
+          </Button>
+        </div>
+      )}
+      <ComposerPrimitive.Root className="rounded-3xl border bg-popover p-1.5 shadow-sm focus-within:ring-2 focus-within:ring-ring/30 sm:p-2">
+        <ComposerPrimitive.Input
+          placeholder="询问英雄、阵容、对线或版本数据…"
+          className="max-h-40 min-h-12 w-full min-w-0 resize-none bg-transparent px-3 py-2 text-base outline-none placeholder:text-muted-foreground"
+          rows={1}
+          autoFocus
+          enterKeyHint="send"
+          aria-label="消息输入框"
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
+        />
+        <div className="flex justify-end px-1 pb-1">
+          <AuiIf condition={(state) => !state.thread.isRunning}>
+            <ComposerPrimitive.Send
+              render={
+                <Button size="icon" className="size-8 rounded-full" aria-label="发送消息" />
+              }
+            >
+              <ArrowUpIcon className="size-4" />
+            </ComposerPrimitive.Send>
+          </AuiIf>
+          <AuiIf condition={(state) => state.thread.isRunning}>
+            <DotaMindStopButton browserId={browserId} />
+          </AuiIf>
+        </div>
+      </ComposerPrimitive.Root>
     </div>
-  </ComposerPrimitive.Root>
-);
+  );
+};
 
 const DotaMindStopButton: FC<{ browserId?: string }> = ({ browserId }) => {
   const message = useAuiState((state) =>

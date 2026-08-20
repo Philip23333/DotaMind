@@ -20,6 +20,9 @@ No actionable P0, P1, or P2 differences against the current grayscale interface 
 - Asset fidelity: no cat sprites or background silhouettes remain in the rendered overlay. The Dota 2 mark is the actual monochrome `simple-icons` path, not an approximate generated logo.
 - Empty state: a new chat uses the same real Dota 2 mark in a 150 × 150 px red tile instead of the former `DM` letter badge.
 - Copy and controls: `DotaMind` is the only startup copy; the visible skip control has been intentionally removed while `Esc` dismissal remains available.
+- Answer actions: completed AI answers keep the copy button visible in the fixed gap below their text; it is positioned outside document flow so hover does not change the answer layout.
+- Latest-answer spacing: the message-list end padding leaves a full line of separation between the final copy action and the fixed composer.
+- Composer quick prompt: only a new, empty chat reveals one compact “本届TI最新战况” button when the input is focused. It uses the existing composer submission path and hides after the first message or while a response is running.
 
 ## Focused interaction check
 
