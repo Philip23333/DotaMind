@@ -2,29 +2,29 @@
 
 ## Scope
 
-Phase 2 maps one resolved PandaScore Game to one OpenDota/Valve match. It does
-not add a database mapping table, scrape webpages, call paid PandaScore detail
-routes, or provide STRATZ fallback.
+The current match-detail chain maps all actual PandaScore Games in one uniquely
+identified series to their OpenDota/Valve matches. It does not add a database
+mapping table, scrape webpages, call paid PandaScore detail routes, or provide
+STRATZ fallback.
 
 ## Inputs and outputs
 
-`dota.resolve_valve_match` accepts only these declared references:
+`dota.resolve_valve_matches` accepts only these declared references:
 
 ```text
 pandascore.resolve_competition.data.competition
-pandascore.resolve_match_game.data.resolution_input
+pandascore.resolve_match_games.data.resolution_inputs
 ```
 
 The result exposes explicit IDs:
 
 ```text
-data.match.valve_match_id
-data.match.opendota_league_id
-data.match.opendota_series_id
-data.mapping
+data.valve_match_ids
+data.matches
+data.mappings
 ```
 
-`data.mapping.method` is `inferred_cross_source`; it records
+Each `data.mappings[*].method` is `inferred_cross_source`; it records
 `candidate_count`, `matched_on`, and start/duration deltas. It must not be
 described as a native PandaScore Valve field.
 
@@ -54,7 +54,8 @@ The resolver can return `resolved`, `league_not_found`, `ambiguous_league`,
 `team_not_found`, `ambiguous_team`, `insufficient_signals`, `not_found`, or
 `ambiguous_match`. Only `resolved` with positive IDs emits the mandatory
 `cross_source_match_mapping` and `valve_match_identity` evidence. Downstream
-OpenDota summary/draft tools may then consume the declared Valve ID reference.
+`opendota.match_details` then consumes the declared Valve ID list and returns
+summary, scoreboard, parse coverage, and draft data for each selected game.
 
 ## Known sample and live verification
 

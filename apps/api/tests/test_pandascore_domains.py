@@ -63,24 +63,24 @@ async def test_fixture_listing_merges_and_deduplicates_endpoints() -> None:
 
 
 @pytest.mark.anyio
-async def test_team_order_independent_resolution_and_pending_valve_id() -> None:
+async def test_team_order_independent_resolution_returns_selected_game() -> None:
     transport = FakeTransport({"past": [SAMPLE_MATCH], "upcoming": [], "running": []})
     client = PandaScoreMatches(transport, object())
-    result = await client.resolve_game(
+    result = await client.resolve_games(
         10828, ["OG", "Nigma"], game_number=1, scheduled_date=date(2026, 8, 13)
     )
-    assert result.status == "pending_valve_match_id"
+    assert result.status == "resolved"
     assert result.match is not None
-    assert result.game is not None
-    assert result.game.pandascore_game_id == 738652
-    assert result.game.valve_match_id is None
+    assert [game.pandascore_game_id for game in result.games] == [738652]
+    assert result.games[0].valve_match_id is None
 
 
 @pytest.mark.anyio
-async def test_missing_game_number_is_ambiguous_for_multi_game_series() -> None:
+async def test_missing_game_number_returns_all_games_in_series() -> None:
     transport = FakeTransport({"past": [SAMPLE_MATCH], "upcoming": [], "running": []})
-    result = await PandaScoreMatches(transport, object()).resolve_game(10828, ["NGX", "OG"])
-    assert result.status == "ambiguous"
+    result = await PandaScoreMatches(transport, object()).resolve_games(10828, ["NGX", "OG"])
+    assert result.status == "resolved"
+    assert [game.position for game in result.games] == [1, 2]
 
 
 def test_competition_normalization_keeps_provider_ids_explicit() -> None:

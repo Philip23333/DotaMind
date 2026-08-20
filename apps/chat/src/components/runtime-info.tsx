@@ -57,10 +57,9 @@ const toolLabels: Record<string, string> = {
   "opendota.hero_stats_by_role": "查询位置英雄数据",
   "pandascore.resolve_competition": "识别赛事",
   "pandascore.list_matches": "查询赛程与战况",
-  "pandascore.resolve_match_game": "定位系列赛单局",
-  "dota.resolve_valve_match": "关联 Valve 比赛",
-  "opendota.match_summary": "查询单局数据",
-  "opendota.match_draft": "查询单局 BP",
+  "pandascore.resolve_match_games": "定位系列赛对局",
+  "dota.resolve_valve_matches": "关联 Valve 比赛",
+  "opendota.match_details": "查询单局详情与 BP",
 };
 
 const statusLabel: Record<RunStatus, string> = {

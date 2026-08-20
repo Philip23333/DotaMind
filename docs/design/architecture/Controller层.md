@@ -137,6 +137,9 @@ EvidenceGraph 还是重新进入 Controller 由不渲染的 `ToolDefinition.resu
 确定。参数语义由 `ArgContract` 表达，跨工具依赖由 `requires_reference`、`AcceptedRef` 与
 `OutputPathContract` 表达并校验。Controller 只保留跨工具 context 放置、枚举解释及查询
 工具目录/样本策略的通用规则，不重复列举具体工具调用顺序或固定问句路由。
+跨源比赛身份是例外的契约边界：Prompt 会明确 PandaScore competition/game
+context 必须先经过 Valve Match ID 映射，再进入 OpenDota match-detail 工具；
+这不构成按 intent 固定路由。
 当前 DotaMind v1 玩家工具不支持地区或游戏模式过滤；仅当用户明确要求该过滤时才返回
 能力边界。Validator 会拒绝把该 scope 与不支持的工具组合；validation retry `v2` 禁止通过
 删除或弱化用户显式约束来绕过拒绝，并要求能力不足时返回 `capability_boundary`。Controller

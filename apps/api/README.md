@@ -144,29 +144,30 @@ OpenDota:
 - `opendota.team_players`
 - `opendota.team_heroes`
 - `opendota.hero_stats_by_role`
-- `opendota.match_summary`
-- `opendota.match_draft`
+- `opendota.match_details`
 
 PandaScore Dota 2 Fixture:
 
 - `pandascore.resolve_competition`
 - `pandascore.list_matches`
-- `pandascore.resolve_match_game`
+- `pandascore.resolve_match_games`
 
 Cross-source match resolution:
 
-- `dota.resolve_valve_match`
+- `dota.resolve_valve_matches`
 
-`dota.resolve_valve_match` consumes the two PandaScore resolver outputs and
-matches a unique OpenDota league match using team IDs, hard time/duration
-tolerances, series game position, and winner consistency. Its Valve ID is an
-auditable inference, not a native PandaScore field. Ambiguous or missing
-signals remain explicit statuses.
+`pandascore.resolve_match_games` returns all provider-exposed games when no game
+number is supplied. `dota.resolve_valve_matches` consumes the competition and
+game-context lists, then matches each game to a unique OpenDota league match
+using team IDs, hard time/duration tolerances, series game position, and winner
+consistency. Its Valve IDs are auditable inferences, not native PandaScore
+fields. Ambiguous or missing signals remain explicit statuses.
 
 PandaScore Fixture IDs and Valve match IDs are distinct. The free Fixture
-response currently does not expose the Valve ID; `resolve_match_game` reports a
-pending mapping, while `dota.resolve_valve_match` performs the separately
-declared cross-source inference without guessing or using a paid endpoint.
+response currently does not expose the Valve ID. `opendota.match_details`
+accepts Valve Match IDs only, normally from the separately declared cross-source
+inference; it must not receive PandaScore Series, Match, or Game IDs. No guessing
+or paid endpoint is used.
 
 Local patch records:
 

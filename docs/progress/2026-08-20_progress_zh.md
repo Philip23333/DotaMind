@@ -40,6 +40,27 @@
 
 - `apps/chat`：`npx tsc --noEmit` 通过。
 
+## 15:10 — 系列赛全对局详情与跨源 Valve ID 链路
+
+### 已完成
+
+- `pandascore.resolve_match_games` 在未指定局号时返回唯一系列赛中 PandaScore Fixture 实际提供的全部对局；指定局号时仍只返回该局，不创建未出现的对局。
+- `dota.resolve_valve_matches` 批量消费 PandaScore competition/game context，按局执行严格的 OpenDota 联赛、战队、时间、时长、局序和胜者匹配，输出 Valve Match ID 列表与逐局映射证据。
+- `opendota.match_details` 合并赛果、十人面板、解析覆盖和 BP 查询，只接受 Valve Match ID 列表；PandaScore Series/Match/Game ID 不再声明为可直接引用的下游路径。
+- Controller Prompt 和 Tool Catalog 明确 `PandaScore → Valve Match ID → OpenDota` 调用链；真实 `ambiguous_*` / `not_found` / `insufficient_signals` 状态继续保留，不加入 Checkpoint、重试、最近匹配或其他数据源兜底。
+- 运行时 `max_tool_calls_total` 从 8 提升至 16；批量工具将最多五局的完整详情收敛到固定工具链中。
+
+### 验证
+
+- API 定向集合：90 passed；API 全量：613 passed、21 skipped、1 warning。
+- `uv run --project apps/api ruff check apps/api/app apps/api/tests` 通过；`git diff --check` 通过。
+- `apps/chat`：`npm test` 10 passed；`npm run lint` 通过；`npm run build` 通过。
+
+### 已知边界
+
+- 联赛、战队或比赛跨源解析仍保持显式歧义；Checkpoint 用户澄清未在本阶段接入。
+- OpenDota 详情批量工具最多接受五个 Valve Match ID；上游缺失 BP 或解析数据时只报告实际覆盖，不伪造 evidence。
+
 ## 14:15 — 最新回答底部留白
 
 ### 已完成

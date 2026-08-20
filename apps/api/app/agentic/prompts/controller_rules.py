@@ -162,6 +162,21 @@ References:
 - Use "$<previous_call_id>.<declared_output_path>". The call id is any earlier
   tool call id you chose; the path must be a declared_output_path of that call.
 
+PandaScore to OpenDota match-detail chain:
+- When match details are requested from PandaScore competition or team context,
+  use this identity chain: pandascore.resolve_competition ->
+  pandascore.resolve_match_games -> dota.resolve_valve_matches ->
+  opendota.match_details.
+- If no game number is specified, pandascore.resolve_match_games returns all
+  provider-exposed games in the uniquely identified series. Do not invent
+  unplayed games.
+- PandaScore series, match, and game ids are provider ids, not Valve Match IDs.
+  Never pass them to opendota.match_details. Its `valve_match_ids` argument
+  accepts Valve Match IDs only, normally from
+  dota.resolve_valve_matches.data.valve_match_ids.
+- Keep ambiguous league, team, or match resolution statuses explicit. Do not
+  guess, use closest-match selection, or add a fallback source.
+
 Output contract:
 - output_contract must be one of the contracts listed below; do not invent
   values like meta_list or tool_results.

@@ -50,7 +50,7 @@ class PandaScoreListMatchesInput(BaseModel):
     limit: int = Field(default=20, ge=1, le=100)
 
 
-class PandaScoreResolveMatchGameInput(BaseModel):
+class PandaScoreResolveMatchGamesInput(BaseModel):
     series_id: int = Field(gt=0)
     team_queries: list[str] = Field(min_length=2, max_length=2)
     game_number: int | None = Field(default=None, ge=1)
@@ -139,20 +139,19 @@ def register_pandascore_tools(registry: ToolRegistry, settings: Settings) -> Non
     )
     registry.register(
         ToolDefinition(
-            name="pandascore.resolve_match_game",
+            name="pandascore.resolve_match_games",
             description=(
-                "Resolve teams and an optional game number to PandaScore and Valve "
-                "match identities."
+                "Resolve one uniquely identified PandaScore series and return all "
+                "provider-exposed games when no game number is supplied."
             ),
-            input_model=PandaScoreResolveMatchGameInput,
-            handler=_resolve_match_game_handler(settings, policy),
+            input_model=PandaScoreResolveMatchGamesInput,
+            handler=_resolve_match_games_handler(settings, policy),
             source=source,
-            evidence_extractor=match_game_evidence,
+            evidence_extractor=match_games_evidence,
             evidence_kinds=(
                 "match_identity",
                 "pandascore_game_identity",
                 "series_context",
-                "valve_match_identity",
             ),
             mandatory_evidence=("match_identity", "pandascore_game_identity"),
             arg_contracts={
@@ -168,31 +167,23 @@ def register_pandascore_tools(registry: ToolRegistry, settings: Settings) -> Non
                     requires_reference=True,
                 ),
                 "team_queries": ArgContract(description="Two team names, order independent."),
-                "game_number": ArgContract(description="1-based game position inside the series."),
+                "game_number": ArgContract(
+                    description="Optional 1-based game position; omit to return all actual games."
+                ),
                 "scheduled_date": ArgContract(
                     description="Optional UTC calendar date for disambiguation."
                 ),
             },
             output_paths={
-                "resolution_input": OutputPathContract(
-                    path="data.resolution_input",
-                    type="dict",
-                    description="Deterministic cross-source match resolution input.",
+                "resolution_inputs": OutputPathContract(
+                    path="data.resolution_inputs",
+                    type="list[dict]",
+                    description="Deterministic cross-source inputs for all selected games.",
                 ),
-                "pandascore_match_id": OutputPathContract(
-                    path="data.match.pandascore_match_id",
-                    type="int",
-                    description="PandaScore match id.",
-                ),
-                "pandascore_game_id": OutputPathContract(
-                    path="data.game.pandascore_game_id",
-                    type="int",
-                    description="PandaScore game id.",
-                ),
-                "valve_match_id": OutputPathContract(
-                    path="data.game.valve_match_id",
-                    type="int",
-                    description="Valve match id when exposed.",
+                "games": OutputPathContract(
+                    path="data.games",
+                    type="list[dict]",
+                    description="Selected PandaScore game rows.",
                 ),
             },
             metadata={"game": "dota2", "domain": "match_identity"},
@@ -286,13 +277,13 @@ def _list_matches_handler(settings: Settings, policy: Any):
     return handle
 
 
-def _resolve_match_game_handler(settings: Settings, policy: Any):
+def _resolve_match_games_handler(settings: Settings, policy: Any):
     async def handle(
-        args: PandaScoreResolveMatchGameInput, context: QueryContext
+        args: PandaScoreResolveMatchGamesInput, context: QueryContext
     ) -> dict[str, Any]:
         transport, _competitions, matches_client = _clients(settings, policy)
         try:
-            resolved = await matches_client.resolve_game(
+            resolved = await matches_client.resolve_games(
                 args.series_id,
                 args.team_queries,
                 game_number=args.game_number,
@@ -307,11 +298,10 @@ def _resolve_match_game_handler(settings: Settings, policy: Any):
             }
             if resolved.match is not None:
                 result["match"] = _fixture_data(resolved.match)
-            if resolved.game is not None:
-                result["game"] = resolved.game.model_dump(mode="json")
-                result["resolution_input"] = _resolution_input(
-                    resolved.match, resolved.game
-                )
+            result["games"] = [game.model_dump(mode="json") for game in resolved.games]
+            result["resolution_inputs"] = [
+                _resolution_input(resolved.match, game) for game in resolved.games
+            ]
             return result
         finally:
             await transport.aclose()
@@ -407,11 +397,11 @@ def match_schedule_evidence(result: ToolResult) -> list[EvidenceItem]:
     return items
 
 
-def match_game_evidence(result: ToolResult) -> list[EvidenceItem]:
+def match_games_evidence(result: ToolResult) -> list[EvidenceItem]:
     data = result.data if isinstance(result.data, dict) else {}
     match = data.get("match")
-    game = data.get("game")
-    if not isinstance(match, dict) or not isinstance(game, dict):
+    games = data.get("games")
+    if not isinstance(match, dict) or not isinstance(games, list) or not games:
         return []
     call_id = result.tool_call_id
     items = [
@@ -420,15 +410,6 @@ def match_game_evidence(result: ToolResult) -> list[EvidenceItem]:
             kind="match_identity",
             subject=str(match.get("name") or match.get("pandascore_match_id")),
             value=match,
-            source=result.source,
-            tool_call_id=call_id,
-            tool=result.tool,
-        ),
-        EvidenceItem(
-            id=f"{call_id}:pandascore_game_identity",
-            kind="pandascore_game_identity",
-            subject=str(game.get("pandascore_game_id")),
-            value=game,
             source=result.source,
             tool_call_id=call_id,
             tool=result.tool,
@@ -446,17 +427,15 @@ def match_game_evidence(result: ToolResult) -> list[EvidenceItem]:
             tool=result.tool,
         ),
     ]
-    valve_id = game.get("valve_match_id")
-    if isinstance(valve_id, int) and valve_id > 0:
+    for game in games:
+        if not isinstance(game, dict):
+            continue
         items.append(
             EvidenceItem(
-                id=f"{call_id}:valve_match_identity",
-                kind="valve_match_identity",
-                subject=f"Valve match {valve_id}",
-                value={
-                    "valve_match_id": valve_id,
-                    "pandascore_game_id": game.get("pandascore_game_id"),
-                },
+                id=f"{call_id}:pandascore_game_identity:{game.get('pandascore_game_id')}",
+                kind="pandascore_game_identity",
+                subject=str(game.get("pandascore_game_id")),
+                value=game,
                 source=result.source,
                 tool_call_id=call_id,
                 tool=result.tool,

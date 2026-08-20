@@ -39,8 +39,8 @@ Fixture API 能力，不把网页抓取或付费接口当作备用数据源。
 重要边界：在当前免费 Fixture 响应中，`games[*].match_id` 是父级
 PandaScore Match ID（例如 1631694），不是 Valve `match_id`；响应没有提供
 Valve match ID。付费 Game 详情请求返回 403，因此第一阶段不会伪造或绕过
-PandaScore → Valve 映射。`pandascore.resolve_match_game` 会返回
-`pending_valve_match_id`，下游 OpenDota 工具只能接受明确的 Valve ID。
+PandaScore → Valve 映射。当前批量解析工具保留 PandaScore Game context，
+下游 OpenDota 工具只接受跨源解析得到的明确 Valve ID。
 
 速率响应包含 `X-Rate-Limit-Remaining`；Transport 只保留数值，不记录认证 Header。
 时间字段为带 `Z` 的 ISO 8601 UTC 字符串。实测状态至少包含
@@ -57,8 +57,9 @@ TI 样本中强行制造。
 
 ## 第二阶段跨源映射边界
 
-PandaScore 免费 Fixture 仍不返回 Valve ID。第二阶段的
-`dota.resolve_valve_match` 是显式的跨源推断：
+PandaScore 免费 Fixture 仍不返回 Valve ID。当前的
+`dota.resolve_valve_matches` 是显式的跨源推断，接收
+`pandascore.resolve_match_games` 返回的全部实际 Game context：
 
 ```text
 PandaScore series/match/game
@@ -71,7 +72,7 @@ PandaScore series/match/game
   -> unique Valve match_id
 ```
 
-它输出 `method=inferred_cross_source`、候选数量、匹配信号和时间/时长差，
+它按局输出 `method=inferred_cross_source`、候选数量、匹配信号和时间/时长差，
 不声称 PandaScore 原生提供了 Valve ID。联赛、战队或比赛存在歧义时保持
 `ambiguous_*` 状态；没有唯一候选时不使用 closest/weighted fallback。已知
 样本的 OpenDota 侧为 league `19719`、series `1130066`、Valve match

@@ -112,25 +112,21 @@ V3.2-2 中，默认 `PlanService` 装配会把同一 Registry 实例传给这些
 
 因此默认路径中 Planner、Validator 与 Executor 都从同一已关闭注册期的 Registry 读取工具目录。
 
-第一阶段比赛工具的引用边界如下：
+比赛工具的引用边界如下：
 
 - `pandascore.resolve_competition` 输出 `data.competition.series_id`。
-- `pandascore.list_matches` 和 `pandascore.resolve_match_game` 只能引用该 Series。
-- `resolve_match_game` 输出明确命名的 PandaScore Match/Game ID；免费 Fixture 未提供
-  Valve ID 时输出 `pending_valve_match_id`，不调用付费详情接口兜底。
-- `opendota.match_summary` 可接受用户字面量 Valve ID 或 PandaScore resolver 的明确引用。
-- `opendota.match_draft` 只能引用 PandaScore resolver 或 OpenDota summary 的 Valve ID。
-
-第二阶段增加 `dota.resolve_valve_match`，只接受
-`pandascore.resolve_competition.data.competition` 与
-`pandascore.resolve_match_game.data.resolution_input` 两个声明引用。它通过
-OpenDota league/team/league-matches API 做硬条件唯一匹配，输出
-`data.match.valve_match_id`、OpenDota league/series IDs 及
-`data.mapping`。`match_summary` 和 `match_draft` 可引用该 Valve ID；
-`match_summary.data.match.match_id` 是兼容别名，明确仍表示 Valve ID。
+- `pandascore.list_matches` 和 `pandascore.resolve_match_games` 只能引用该 Series。
+- `resolve_match_games` 在没有局号时返回该 Fixture 实际存在的全部 Game context；
+  PandaScore Series/Match/Game ID 仍不是 Valve Match ID。
+- `dota.resolve_valve_matches` 只接受 Competition 与 Game context 列表引用，
+  通过 OpenDota league/team/league-matches API 做硬条件唯一匹配，输出按局排列的
+  `data.valve_match_ids`、`data.matches` 与 `data.mappings`。
+- `opendota.match_details` 只接受 Valve Match ID 列表，正常来源是
+  `dota.resolve_valve_matches.data.valve_match_ids`；不得把 PandaScore ID 直接传入。
 
 PandaScore 赛事 Fixture 事实、跨源推断映射与 OpenDota Valve/Replay 事实分别进入 EvidenceGraph；
-`detailed_stats` 不是 `has_parsed`，空 BP 不产生 `match_draft` 证据。
+`detailed_stats` 不是 `has_parsed`，空 BP 不产生 `match_draft` 证据。未指定局号时，
+批量工具保持最多五个实际 Game 的顺序，不创建未出现的对局。
 
 ## 4. ToolExecutor Node 链路
 

@@ -156,6 +156,21 @@ References:
 - Use "$<previous_call_id>.<declared_output_path>". The call id is any earlier
   tool call id you chose; the path must be a declared_output_path of that call.
 
+PandaScore to OpenDota match-detail chain:
+- When match details are requested from PandaScore competition or team context,
+  use this identity chain: pandascore.resolve_competition ->
+  pandascore.resolve_match_games -> dota.resolve_valve_matches ->
+  opendota.match_details.
+- If no game number is specified, pandascore.resolve_match_games returns all
+  provider-exposed games in the uniquely identified series. Do not invent
+  unplayed games.
+- PandaScore series, match, and game ids are provider ids, not Valve Match IDs.
+  Never pass them to opendota.match_details. Its `valve_match_ids` argument
+  accepts Valve Match IDs only, normally from
+  dota.resolve_valve_matches.data.valve_match_ids.
+- Keep ambiguous league, team, or match resolution statuses explicit. Do not
+  guess, use closest-match selection, or add a fallback source.
+
 Output contract:
 - output_contract must be one of the contracts listed below; do not invent
   values like meta_list or tool_results.
@@ -447,63 +462,45 @@ Tools:
     - limit: int, optional. Maximum returned fixtures.
   declared_output_paths:
     - data.matches: list[dict]. Normalized fixture rows.
-- pandascore.resolve_match_game
-  description: Resolve teams and an optional game number to PandaScore and Valve match identities.
-  evidence_produced: ["match_identity", "pandascore_game_identity", "series_context", "valve_match_identity"]
+- pandascore.resolve_match_games
+  description: Resolve one uniquely identified PandaScore series and return all provider-exposed games when no game number is supplied.
+  evidence_produced: ["match_identity", "pandascore_game_identity", "series_context"]
   allowed_arg_keys: ["series_id", "team_queries", "game_number", "scheduled_date"]
   args:
     - series_id: int, required. PandaScore series id from resolve_competition.
       must_reference: true
       accepts_ref: pandascore.resolve_competition.data.competition.series_id (int) -> "$<previous_call_id>.data.competition.series_id"
     - team_queries: list[str], required. Two team names, order independent.
-    - game_number: int | None, optional. 1-based game position inside the series.
+    - game_number: int | None, optional. Optional 1-based game position; omit to return all actual games.
     - scheduled_date: date | None, optional. Optional UTC calendar date for disambiguation.
   declared_output_paths:
-    - data.resolution_input: dict. Deterministic cross-source match resolution input.
-    - data.match.pandascore_match_id: int. PandaScore match id.
-    - data.game.pandascore_game_id: int. PandaScore game id.
-    - data.game.valve_match_id: int. Valve match id when exposed.
-- dota.resolve_valve_match
-  description: Deterministically infer a Valve match id from PandaScore competition and game context using OpenDota league, teams, time, duration, game position, and winner signals.
+    - data.resolution_inputs: list[dict]. Deterministic cross-source inputs for all selected games.
+    - data.games: list[dict]. Selected PandaScore game rows.
+- dota.resolve_valve_matches
+  description: Deterministically infer Valve match ids for PandaScore game contexts using OpenDota league, teams, time, duration, game position, and winner signals.
   evidence_produced: ["cross_source_match_mapping", "valve_match_identity"]
-  allowed_arg_keys: ["competition", "game_context"]
+  allowed_arg_keys: ["competition", "game_contexts"]
   args:
     - competition: dict[str, Any], required. Resolved PandaScore competition context.
       must_reference: true
       accepts_ref: pandascore.resolve_competition.data.competition (dict) -> "$<previous_call_id>.data.competition"
-    - game_context: dict[str, Any], required. Unique PandaScore game context.
+    - game_contexts: list[dict[str, Any]], required. Unique PandaScore game contexts.
       must_reference: true
-      accepts_ref: pandascore.resolve_match_game.data.resolution_input (dict) -> "$<previous_call_id>.data.resolution_input"
+      accepts_ref: pandascore.resolve_match_games.data.resolution_inputs (list[dict]) -> "$<previous_call_id>.data.resolution_inputs"
   declared_output_paths:
-    - data.match.valve_match_id: int. Inferred Valve match id.
-    - data.match.opendota_league_id: int. OpenDota league id used for matching.
-    - data.match.opendota_series_id: int. OpenDota series id used for matching.
-    - data.mapping: dict. Auditable cross-source matching evidence.
-- opendota.match_summary
-  description: Return the OpenDota result and ten-player scoreboard for a Valve match id.
-  evidence_produced: ["match_result", "player_scoreboard", "match_parse_status"]
-  allowed_arg_keys: ["valve_match_id"]
+    - data.valve_match_ids: list[int]. Inferred Valve match ids in game order.
+    - data.matches: list[dict]. Resolved Valve match rows in game order.
+    - data.mappings: list[dict]. Auditable cross-source matching evidence in game order.
+- opendota.match_details
+  description: Return result, ten-player scoreboard, parse coverage, and picks/bans for up to five Valve match ids. Inputs must be Valve match ids, not PandaScore series, match, or game ids.
+  evidence_produced: ["match_result", "player_scoreboard", "match_parse_status", "match_draft"]
+  allowed_arg_keys: ["valve_match_ids"]
   args:
-    - valve_match_id: int, required. Valve match id, literal or PandaScore resolver output.
-      accepts_ref: pandascore.resolve_match_game.data.game.valve_match_id (int) -> "$<previous_call_id>.data.game.valve_match_id"
-      accepts_ref: dota.resolve_valve_match.data.match.valve_match_id (int) -> "$<previous_call_id>.data.match.valve_match_id"
+    - valve_match_ids: list[int], required. Valve Match IDs only; use the cross-source resolver output.
+      accepts_ref: dota.resolve_valve_matches.data.valve_match_ids (list[int]) -> "$<previous_call_id>.data.valve_match_ids"
   declared_output_paths:
-    - data.match.valve_match_id: int. Valve match id.
-    - data.match.match_id: int. Valve match id compatibility alias.
-- opendota.match_draft
-  description: Return OpenDota picks and bans for a Valve match id.
-  evidence_produced: ["match_draft"]
-  allowed_arg_keys: ["valve_match_id"]
-  args:
-    - valve_match_id: int, required. Valve match id from a PandaScore resolver or OpenDota summary.
-      must_reference: true
-      accepts_ref: pandascore.resolve_match_game.data.game.valve_match_id (int) -> "$<previous_call_id>.data.game.valve_match_id"
-      accepts_ref: dota.resolve_valve_match.data.match.valve_match_id (int) -> "$<previous_call_id>.data.match.valve_match_id"
-      accepts_ref: opendota.match_summary.data.match.valve_match_id (int) -> "$<previous_call_id>.data.match.valve_match_id"
-      accepts_ref: opendota.match_summary.data.match.match_id (int) -> "$<previous_call_id>.data.match.match_id"
-  declared_output_paths:
-    - data.match.valve_match_id: int. Valve match id.
-    - data.match.match_id: int. Valve match id compatibility alias.
+    - data.matches: list[dict]. OpenDota details in Valve match id order.
+    - data.valve_match_ids: list[int]. Valve match ids returned by the detail lookup.
 - patch.get_records
   description: Return local Dota 2 patch records from app/data/patches.
   evidence_produced: ["patch_records", "patch_buff_count", "patch_nerf_count"]

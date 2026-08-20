@@ -12,7 +12,7 @@ from app.agentic.tools.pandascore_tools import (
     _extract_explicit_year,
     _resolve_competition_handler,
     competition_evidence,
-    match_game_evidence,
+    match_games_evidence,
     match_schedule_evidence,
     select_latest_competition,
 )
@@ -25,7 +25,7 @@ def test_registry_declares_three_pandascore_tools_and_contracts() -> None:
     registry = build_default_tool_registry(Settings(_env_file=None))
     resolve = registry.get("pandascore.resolve_competition")
     listing = registry.get("pandascore.list_matches")
-    resolver = registry.get("pandascore.resolve_match_game")
+    resolver = registry.get("pandascore.resolve_match_games")
     assert resolve.output_paths["series_id"].path == "data.competition.series_id"
     assert listing.arg_contracts["series_id"].requires_reference is True
     assert resolver.arg_contracts["series_id"].requires_reference is True
@@ -64,18 +64,20 @@ def test_schedule_and_match_evidence_are_scoped_to_call() -> None:
     assert {item.kind for item in evidence} == {"match_schedule", "match_state", "series_score"}
     assert all(item.tool_call_id == "c2" for item in evidence)
 
-    pending = ToolResult(
+    resolved = ToolResult(
         tool_call_id="c3",
-        tool="pandascore.resolve_match_game",
+        tool="pandascore.resolve_match_games",
         status="ok",
         data={
-            "status": "pending_valve_match_id",
+            "status": "resolved",
             "match": {"pandascore_match_id": 1631694, "pandascore_series_id": 10828},
-            "game": {"pandascore_game_id": 738652, "valve_match_id": None},
+            "games": [
+                {"pandascore_game_id": 738652, "position": 1, "valve_match_id": None}
+            ],
         },
         latency_ms=1,
     )
-    assert {item.kind for item in match_game_evidence(pending)} == {
+    assert {item.kind for item in match_games_evidence(resolved)} == {
         "match_identity",
         "pandascore_game_identity",
         "series_context",
@@ -114,15 +116,19 @@ def test_reference_contracts_reject_literals_and_accept_declared_paths() -> None
     assert validate_required_references(valid_plan, registry) == []
     assert validate_references(valid_plan, registry) == []
 
-    draft_literal = ExecutionPlan(
+    details_literal = ExecutionPlan(
         intent="draft",
         goal="draft",
         output_contract="natural_language_answer",
         tool_calls=[
-            ToolCall(id="d1", tool="opendota.match_draft", args={"valve_match_id": 8943244303})
+            ToolCall(
+                id="d1",
+                tool="opendota.match_details",
+                args={"valve_match_ids": [8943244303]},
+            )
         ],
     )
-    assert validate_required_references(draft_literal, registry)
+    assert validate_required_references(details_literal, registry) == []
 
 
 def _competition(series_id: int, year: int, begin: str, end: str | None) -> PandaCompetition:

@@ -40,6 +40,27 @@
 
 - `apps/chat`: `npx tsc --noEmit` passed.
 
+## 15:10 — Series-wide game details and cross-source Valve ID chain
+
+### Completed
+
+- `pandascore.resolve_match_games` returns every game actually exposed by the PandaScore Fixture for a uniquely identified series when no game number is supplied; an explicit game number still selects one game, and unexposed games are not fabricated.
+- `dota.resolve_valve_matches` batch-consumes the PandaScore competition/game contexts and applies strict OpenDota league, team, time, duration, game-position, and winner matching per game, returning Valve Match IDs and per-game mapping evidence.
+- `opendota.match_details` combines result, ten-player scoreboard, parse coverage, and draft lookup and accepts Valve Match ID lists only; PandaScore Series/Match/Game IDs are no longer declared as directly referenceable downstream paths.
+- The Controller Prompt and Tool Catalog explicitly state the `PandaScore → Valve Match ID → OpenDota` chain. Genuine `ambiguous_*`, `not_found`, and `insufficient_signals` statuses remain explicit; no Checkpoint, retry, closest-match selection, or alternate-source fallback was added.
+- Runtime `max_tool_calls_total` increased from 8 to 16; batch tools keep up to five games within a fixed tool chain.
+
+### Verification
+
+- API focused set: 90 passed; API full suite: 613 passed, 21 skipped, 1 warning.
+- `uv run --project apps/api ruff check apps/api/app apps/api/tests` passed; `git diff --check` passed.
+- `apps/chat`: `npm test` 10 passed; `npm run lint` passed; `npm run build` passed.
+
+### Known boundaries
+
+- Cross-source league, team, and match ambiguity remains explicit; Checkpoint-based user clarification is not included in this phase.
+- The OpenDota detail batch accepts at most five Valve Match IDs; missing BP or parse data reports actual coverage and never fabricates evidence.
+
 ## 14:15 — Latest-answer bottom spacing
 
 ### Completed

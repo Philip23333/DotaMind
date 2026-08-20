@@ -11,7 +11,7 @@ from app.integrations.pandascore.models import (
     PandaCoverage,
     PandaGameReference,
     PandaMatchFixture,
-    ResolvedMatchGame,
+    ResolvedMatchGames,
 )
 from app.integrations.pandascore.transport import PandaScoreTransport
 
@@ -45,14 +45,14 @@ class PandaScoreMatches:
             key=lambda item: item.scheduled_at or item.begin_at or datetime.max,
         )
 
-    async def resolve_game(
+    async def resolve_games(
         self,
         series_id: int,
         team_queries: list[str],
         *,
         game_number: int | None = None,
         scheduled_date: date | None = None,
-    ) -> ResolvedMatchGame:
+    ) -> ResolvedMatchGames:
         fixtures = await self.list_matches(series_id)
         matching = [fixture for fixture in fixtures if _teams_match(fixture, team_queries)]
         if scheduled_date is not None:
@@ -63,25 +63,30 @@ class PandaScoreMatches:
                 and (fixture.scheduled_at or fixture.begin_at).date() == scheduled_date
             ]
         if not matching:
-            return ResolvedMatchGame(status="not_found")
+            return ResolvedMatchGames(status="not_found")
         if len(matching) > 1:
-            return ResolvedMatchGame(status="ambiguous", candidates=matching)
+            return ResolvedMatchGames(status="ambiguous", candidates=matching)
         fixture = matching[0]
         games = fixture.games
         if game_number is not None:
             games = [game for game in games if game.position == game_number]
-        elif len(games) != 1:
-            return ResolvedMatchGame(status="ambiguous", match=fixture, candidates=[fixture])
-        if len(games) != 1:
-            return ResolvedMatchGame(status="not_found", match=fixture)
-        game = games[0]
-        coverage = PandaCoverage(
-            fixture_available=True,
-            detailed_stats=None,
-            valve_match_id_available=game.valve_match_id is not None,
+        if not games:
+            return ResolvedMatchGames(status="not_found", match=fixture)
+        games = sorted(games, key=lambda game: (game.position is None, game.position or 0))
+        coverage = [
+            PandaCoverage(
+                fixture_available=True,
+                detailed_stats=None,
+                valve_match_id_available=game.valve_match_id is not None,
+            )
+            for game in games
+        ]
+        return ResolvedMatchGames(
+            status="resolved",
+            match=fixture,
+            games=games,
+            coverage=coverage,
         )
-        status = "resolved" if game.valve_match_id is not None else "pending_valve_match_id"
-        return ResolvedMatchGame(status=status, match=fixture, game=game, coverage=coverage)
 
 
 def normalize_match(row: dict[str, Any], *, series_id: int | None = None) -> PandaMatchFixture:

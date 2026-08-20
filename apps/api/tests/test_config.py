@@ -141,7 +141,7 @@ def test_runtime_policy_loads_strict_v32_1_defaults() -> None:
 
     assert runtime.model_dump() == {
         "max_replans": 1,
-        "max_tool_calls_total": 8,
+        "max_tool_calls_total": 16,
         "max_controller_calls": 2,
         "max_answer_calls": 2,
         "max_elapsed_seconds": 60,

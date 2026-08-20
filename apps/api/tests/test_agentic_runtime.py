@@ -61,7 +61,7 @@ def test_run_context_budget_and_fake_clock_contracts() -> None:
     assert state.run_context.deadline_at == UTC_START + timedelta(seconds=60)
     assert state.run_context.prompt_versions == {}
     assert state.run_budget is not None
-    assert state.run_budget.remaining("tools") == 8
+    assert state.run_budget.remaining("tools") == 16
     assert not state.run_budget.deadline_exceeded(clock.monotonic() - 10.0)
     with pytest.raises(RuntimeError, match="run context already exists"):
         run_init_node(state, RuntimePolicy(), clock)

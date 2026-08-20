@@ -80,9 +80,9 @@ class PandaCoverage(BaseModel):
     source: str = "PandaScore Fixture API"
 
 
-class ResolvedMatchGame(BaseModel):
-    status: Literal["resolved", "ambiguous", "not_found", "pending_valve_match_id"]
+class ResolvedMatchGames(BaseModel):
+    status: Literal["resolved", "ambiguous", "not_found"]
     match: PandaMatchFixture | None = None
-    game: PandaGameReference | None = None
+    games: list[PandaGameReference] = Field(default_factory=list)
     candidates: list[PandaMatchFixture] = Field(default_factory=list)
-    coverage: PandaCoverage | None = None
+    coverage: list[PandaCoverage] = Field(default_factory=list)

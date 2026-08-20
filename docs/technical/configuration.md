@@ -74,6 +74,9 @@ Game to OpenDota/Valve matching. `start_time_tolerance_seconds` defaults to
 1800 and `duration_tolerance_seconds` defaults to 5. These are hard filters,
 not weights or closest-match scoring.
 
+`planning.runtime.max_tool_calls_total` is 16. Batch match-detail tools keep a
+series query within this Run budget while still querying each actual game.
+
 ## Local Game Data
 
 The Valve Catalog and patch records are committed runtime snapshots, not local
