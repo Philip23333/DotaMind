@@ -225,3 +225,13 @@ consume only the declared `data.competition.series_id` reference. Public respons
 runtime summaries additionally expose safe per-call dispatch state
 (`handler_entered`, `dispatch_stage`, mapped `failure_code`) without changing Graph
 routing or adding an `intent` branch.
+
+## OpenDota match-detail optional player evidence
+
+`opendota.match_details` keeps `match_result`, `player_scoreboard`,
+`match_parse_status` and `match_draft` as its mandatory/conditional existing
+evidence boundary. For a parsed match, non-empty normalized player fields can
+add the optional evidence kinds `player_purchase_timeline`, `player_skill_build`
+and `player_talent_selection`. These evidence items are grouped by player and
+Valve match, preserve purchase order and level-indexed upgrades, and do not
+change the mandatory evidence requirements or Answer contract.

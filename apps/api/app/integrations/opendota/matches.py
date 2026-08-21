@@ -107,10 +107,14 @@ def _normalize_player(player: dict[str, Any], catalog: DotaCatalogRepository) ->
         "item_1": player.get("backpack_1"),
         "item_2": player.get("backpack_2"),
     }
+    ability_upgrade_sequence = _normalize_ability_upgrades(
+        player.get("ability_upgrades_arr"), catalog
+    )
     return {
         "player_slot": player.get("player_slot"),
         "account_id": player.get("account_id"),
         "name": player.get("name", player.get("personaname")),
+        "personaname": player.get("personaname", player.get("name")),
         "hero_id": player.get("hero_id"),
         **_hero_catalog_fields(player.get("hero_id"), catalog),
         "kills": player.get("kills"),
@@ -131,6 +135,190 @@ def _normalize_player(player: dict[str, Any], catalog: DotaCatalogRepository) ->
         "backpack_item_details": _item_catalog_details(backpack, catalog),
         "neutral_item": player.get("item_neutral"),
         "neutral_item_detail": _item_catalog_field(player.get("item_neutral"), catalog),
+        "purchase_timeline": _normalize_purchase_timeline(player.get("purchase_log"), catalog),
+        "inventory": _normalize_inventory(player, catalog),
+        "ability_upgrade_sequence": ability_upgrade_sequence,
+        "talent_selections": _normalize_talent_selections(ability_upgrade_sequence),
+    }
+
+
+def _normalize_purchase_timeline(
+    purchase_log: Any, catalog: DotaCatalogRepository
+) -> list[dict[str, Any]]:
+    if not isinstance(purchase_log, list):
+        return []
+    timeline: list[dict[str, Any]] = []
+    for row in purchase_log:
+        if not isinstance(row, dict):
+            continue
+        raw_key = row.get("key")
+        item = _item_reference(raw_key, catalog)
+        event = {
+            "time_seconds": row.get("time"),
+            "item_key": raw_key,
+            "item_id": item.get("item_id") if item else None,
+            "item_name_en": item.get("item_name_en") if item else None,
+            "item_name_zh": item.get("item_name_zh") if item else None,
+            "item_catalog_status": item.get("item_catalog_status")
+            if item
+            else "not_found",
+            "item_image_path": item.get("item_image_path") if item else None,
+        }
+        if "charges" in row:
+            event["charges"] = row.get("charges")
+        timeline.append(event)
+    return timeline
+
+
+def _normalize_inventory(
+    player: dict[str, Any], catalog: DotaCatalogRepository
+) -> dict[str, Any]:
+    return {
+        "main": [
+            _item_reference(player.get(f"item_{index}"), catalog) for index in range(6)
+        ],
+        "backpack": [
+            _item_reference(player.get(f"backpack_{index}"), catalog) for index in range(3)
+        ],
+        "neutral": {
+            "item": _item_reference(player.get("item_neutral"), catalog),
+            "enhancement": _item_reference(
+                player.get("item_neutral2", player.get("item_neutral_enhancement")),
+                catalog,
+            ),
+        },
+        "neutral_history": _normalize_neutral_history(
+            player.get("neutral_item_history"), catalog
+        ),
+    }
+
+
+def _normalize_neutral_history(
+    history: Any, catalog: DotaCatalogRepository
+) -> list[dict[str, Any]]:
+    if not isinstance(history, list):
+        return []
+    normalized: list[dict[str, Any]] = []
+    for row in history:
+        if not isinstance(row, dict):
+            continue
+        normalized.append(
+            {
+                "time_seconds": row.get("time", row.get("time_seconds")),
+                "item": _item_reference(
+                    row.get("item_neutral", row.get("item")), catalog
+                ),
+                "enhancement": _item_reference(
+                    row.get(
+                        "item_neutral2",
+                        row.get("item_neutral_enhancement", row.get("enhancement")),
+                    ),
+                    catalog,
+                ),
+            }
+        )
+    return normalized
+
+
+def _normalize_ability_upgrades(
+    upgrades: Any, catalog: DotaCatalogRepository
+) -> list[dict[str, Any]]:
+    if not isinstance(upgrades, list):
+        return []
+    sequence: list[dict[str, Any]] = []
+    for level, raw in enumerate(upgrades, start=1):
+        ability_id = raw.get("ability_id", raw.get("id")) if isinstance(raw, dict) else raw
+        raw_internal_name = raw.get("internal_name") if isinstance(raw, dict) else None
+        sequence.append(
+            _ability_reference(
+                ability_id,
+                catalog,
+                level=level,
+                raw_internal_name=raw_internal_name,
+            )
+        )
+    return sequence
+
+
+def _normalize_talent_selections(
+    upgrades: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "level_taken": row["level"],
+            "ability_id": row["ability_id"],
+            "internal_name": row["internal_name"],
+            "name_en": row["name_en"],
+            "name_zh": row["name_zh"],
+            "catalog_status": row["catalog_status"],
+        }
+        for row in upgrades
+        if row["kind"] == "talent"
+    ]
+
+
+def _ability_reference(
+    ability_id: Any,
+    catalog: DotaCatalogRepository,
+    *,
+    level: int,
+    raw_internal_name: str | None = None,
+) -> dict[str, Any]:
+    identifier = _positive_int(ability_id)
+    ability = None
+    if identifier is not None:
+        try:
+            ability = catalog.get_ability(identifier)
+        except CatalogLookupError:
+            pass
+    internal_name = ability.internal_name if ability is not None else raw_internal_name
+    kind = "ability"
+    if internal_name == "special_bonus_attributes":
+        kind = "attribute_bonus"
+    elif internal_name is not None and internal_name.startswith("special_bonus_"):
+        kind = "talent"
+    return {
+        "level": level,
+        "ability_id": identifier,
+        "internal_name": internal_name,
+        "name_en": ability.name_en if ability is not None else None,
+        "name_zh": ability.name_zh if ability is not None else None,
+        "kind": kind,
+        "catalog_status": "resolved" if ability is not None else "not_found",
+    }
+
+
+def _item_reference(value: Any, catalog: DotaCatalogRepository) -> dict[str, Any] | None:
+    if value is None or value == "":
+        return None
+    if (identifier := _positive_int(value)) is not None:
+        detail = _item_catalog_field(identifier, catalog)
+        if detail is None:
+            return None
+        try:
+            item = catalog.get_item(identifier)
+        except CatalogLookupError:
+            return {"item_key": None, **detail}
+        return {"item_key": item.internal_name, **detail}
+    raw_key = str(value)
+    try:
+        item = catalog.get_item_by_internal_name(raw_key)
+    except CatalogLookupError:
+        return {
+            "item_key": raw_key,
+            "item_id": None,
+            "item_name_en": None,
+            "item_name_zh": None,
+            "item_catalog_status": "not_found",
+            "item_image_path": None,
+        }
+    return {
+        "item_key": raw_key,
+        "item_id": item.item_id,
+        "item_name_en": item.name_en,
+        "item_name_zh": item.name_zh,
+        "item_catalog_status": "resolved",
+        "item_image_path": f"/api/v1/assets/dota/items/{item.item_id}.png",
     }
 
 

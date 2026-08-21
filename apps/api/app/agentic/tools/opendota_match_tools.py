@@ -47,8 +47,10 @@ def register_opendota_match_tools(registry: ToolRegistry, settings: Settings) ->
             name="opendota.match_details",
             description=(
                 "Return result, ten-player scoreboard, parse coverage, and picks/bans "
-                "for up to five Valve match ids. Inputs must be Valve match ids, not "
-                "PandaScore series, match, or game ids."
+                "for up to five Valve match ids. For parsed matches it also returns each "
+                "player's complete purchase timeline, inventory/backpack/neutral history, "
+                "ability upgrade sequence, and mechanically identified talent selections. "
+                "Inputs must be Valve match ids, not PandaScore series, match, or game ids."
             ),
             input_model=OpenDotaMatchDetailsInput,
             handler=_details_handler(settings),
@@ -59,6 +61,9 @@ def register_opendota_match_tools(registry: ToolRegistry, settings: Settings) ->
                 "player_scoreboard",
                 "match_parse_status",
                 "match_draft",
+                "player_purchase_timeline",
+                "player_skill_build",
+                "player_talent_selection",
             ),
             mandatory_evidence=("match_result", "player_scoreboard"),
             arg_contracts={
@@ -190,6 +195,40 @@ def match_details_evidence(result: ToolResult) -> list[EvidenceItem]:
                     tool=result.tool,
                 )
             )
+        if isinstance(coverage, dict) and coverage.get("has_parsed") is True:
+            for kind, field, label in (
+                (
+                    "player_purchase_timeline",
+                    "purchase_timeline",
+                    "player purchase timeline",
+                ),
+                ("player_skill_build", "ability_upgrade_sequence", "player skill builds"),
+                (
+                    "player_talent_selection",
+                    "talent_selections",
+                    "player talent selections",
+                ),
+            ):
+                rows = [
+                    row
+                    for row in players
+                    if isinstance(row, dict) and row.get(field)
+                ]
+                if rows:
+                    items.append(
+                        EvidenceItem(
+                            id=f"{result.tool_call_id}:{kind}:{match_id}",
+                            kind=kind,
+                            subject=f"Valve match {match_id} {label}",
+                            value={
+                                "players": rows,
+                                "catalog_snapshot": summary.get("catalog_snapshot"),
+                            },
+                            source=result.source,
+                            tool_call_id=result.tool_call_id,
+                            tool=result.tool,
+                        )
+                    )
         draft = draft_data.get("draft") if isinstance(draft_data, dict) else None
         if not isinstance(draft, list):
             continue

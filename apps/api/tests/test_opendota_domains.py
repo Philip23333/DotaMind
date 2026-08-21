@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from unittest.mock import AsyncMock
 
 from app.integrations.opendota.heroes import OpenDotaHeroes
+from app.integrations.opendota.matches import normalize_match_summary
 from app.integrations.opendota.teams import OpenDotaTeams
 from app.integrations.opendota.transport import OpenDotaTransport
 
@@ -208,3 +209,26 @@ def test_team_domain_limits_match_detail_concurrency() -> None:
     )
 
     assert max_active == 2
+
+
+def test_match_domain_preserves_parsed_player_progress_fields() -> None:
+    summary = normalize_match_summary(
+        {
+            "version": 22,
+            "players": [
+                {
+                    "purchase_log": [{"time": -89, "key": "tango"}],
+                    "ability_upgrades_arr": [5154],
+                    "neutral_item_history": [
+                        {"time": 526, "item_neutral": "item_tango"}
+                    ],
+                }
+            ],
+        },
+        8943244303,
+    )
+    player = summary["players"][0]
+
+    assert player["purchase_timeline"][0]["time_seconds"] == -89
+    assert player["ability_upgrade_sequence"][0]["level"] == 1
+    assert player["inventory"]["neutral_history"][0]["time_seconds"] == 526

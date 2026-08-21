@@ -513,8 +513,8 @@ Tools:
     - data.matches: list[dict]. Resolved Valve match rows in game order.
     - data.mappings: list[dict]. Auditable cross-source matching evidence in game order.
 - opendota.match_details
-  description: Return result, ten-player scoreboard, parse coverage, and picks/bans for up to five Valve match ids. Inputs must be Valve match ids, not PandaScore series, match, or game ids.
-  evidence_produced: ["match_result", "player_scoreboard", "match_parse_status", "match_draft"]
+  description: Return result, ten-player scoreboard, parse coverage, and picks/bans for up to five Valve match ids. For parsed matches it also returns each player's complete purchase timeline, inventory/backpack/neutral history, ability upgrade sequence, and mechanically identified talent selections. Inputs must be Valve match ids, not PandaScore series, match, or game ids.
+  evidence_produced: ["match_result", "player_scoreboard", "match_parse_status", "match_draft", "player_purchase_timeline", "player_skill_build", "player_talent_selection"]
   allowed_arg_keys: ["valve_match_ids"]
   args:
     - valve_match_ids: list[int], required. Valve Match IDs only; use the cross-source resolver output.

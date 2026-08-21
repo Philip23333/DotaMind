@@ -178,6 +178,132 @@ def test_empty_draft_is_ok_data_but_produces_no_evidence() -> None:
     assert "match_draft" not in {item.kind for item in match_details_evidence(result)}
 
 
+def test_player_progress_and_inventory_are_normalized_without_reordering() -> None:
+    raw = _raw_match()
+    raw["players"][0].update(
+        {
+            "purchase_log": [
+                {"time": -89, "key": "tango", "charges": 3},
+                {"time": 0, "key": "item_clarity"},
+                {"time": 0, "key": "unknown_item"},
+            ],
+            "item_0": 44,
+            "item_neutral": "item_tango",
+            "item_neutral2": "item_clarity",
+            "neutral_item_history": [
+                {
+                    "time": 526,
+                    "item_neutral": "item_tango",
+                    "item_neutral_enhancement": "item_clarity",
+                }
+            ],
+            "ability_upgrades_arr": [
+                5154,
+                {"ability_id": 303},
+                {"ability_id": 999999, "internal_name": "special_bonus_attributes"},
+            ],
+        }
+    )
+
+    summary = normalize_match_summary(raw, 8943244303)
+    player = summary["players"][0]
+
+    assert [event["time_seconds"] for event in player["purchase_timeline"]] == [-89, 0, 0]
+    assert [event["item_key"] for event in player["purchase_timeline"]] == [
+        "tango",
+        "item_clarity",
+        "unknown_item",
+    ]
+    assert player["purchase_timeline"][0]["item_id"] == 44
+    assert player["purchase_timeline"][0]["charges"] == 3
+    assert player["purchase_timeline"][2]["item_catalog_status"] == "not_found"
+    assert player["inventory"]["main"][0]["item_id"] == 44
+    assert player["inventory"]["main"][1:] == [None] * 5
+    assert player["inventory"]["neutral"]["item"]["item_id"] == 44
+    assert player["inventory"]["neutral"]["enhancement"]["item_catalog_status"] == (
+        "resolved"
+    )
+    assert player["inventory"]["neutral_history"][0]["time_seconds"] == 526
+    assert player["inventory"]["neutral_history"][0]["item"]["item_id"] == 44
+    assert [row["level"] for row in player["ability_upgrade_sequence"]] == [1, 2, 3]
+    assert [row["kind"] for row in player["ability_upgrade_sequence"]] == [
+        "ability",
+        "talent",
+        "attribute_bonus",
+    ]
+    assert [row["level_taken"] for row in player["talent_selections"]] == [2]
+
+    result = ToolResult(
+        tool_call_id="progress",
+        tool="opendota.match_details",
+        status="ok",
+        data={
+            "valve_match_ids": [8943244303],
+            "matches": [
+                {
+                    "valve_match_id": 8943244303,
+                    "summary": summary,
+                    "draft": normalize_match_draft(raw, 8943244303),
+                }
+            ],
+        },
+        latency_ms=1,
+    )
+    assert {
+        item.kind for item in match_details_evidence(result)
+    } == {
+        "match_result",
+        "player_scoreboard",
+        "match_parse_status",
+        "match_draft",
+        "player_purchase_timeline",
+        "player_skill_build",
+        "player_talent_selection",
+    }
+
+
+def test_unparsed_match_does_not_emit_player_progress_evidence() -> None:
+    raw = _raw_match()
+    raw["version"] = None
+    raw["players"][0]["purchase_log"] = [{"time": 1, "key": "tango"}]
+    raw["players"][0]["ability_upgrades_arr"] = [5154]
+    summary = normalize_match_summary(raw, 8943244303)
+    result = ToolResult(
+        tool_call_id="unparsed",
+        tool="opendota.match_details",
+        status="ok",
+        data={
+            "valve_match_ids": [8943244303],
+            "matches": [
+                {
+                    "valve_match_id": 8943244303,
+                    "summary": summary,
+                    "draft": normalize_match_draft(raw, 8943244303),
+                }
+            ],
+        },
+        latency_ms=1,
+    )
+
+    kinds = {item.kind for item in match_details_evidence(result)}
+    assert "player_purchase_timeline" not in kinds
+    assert "player_skill_build" not in kinds
+    assert "player_talent_selection" not in kinds
+
+
+def test_catalog_internal_name_lookup_is_exact_and_accepts_item_prefix() -> None:
+    catalog = load_default_catalog_repository()
+    assert catalog.get_item_by_internal_name("tango").item_id == 44
+    assert catalog.get_item_by_internal_name("item_tango").item_id == 44
+
+    try:
+        catalog.get_item_by_internal_name("tang")
+    except LookupError:
+        pass
+    else:
+        raise AssertionError("internal-name lookup must not use fuzzy matching")
+
+
 def test_draft_evidence_accepts_non_fixed_length_pick_ban_rows() -> None:
     draft = normalize_match_draft(_raw_match(), 8943244303)
     result = ToolResult(

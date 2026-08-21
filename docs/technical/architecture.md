@@ -82,8 +82,11 @@ game yields an auditable `inferred_cross_source` mapping, never presented as a
 native PandaScore Valve ID. Match-detail player and BP evidence preserves
 OpenDota's raw hero/item IDs and deterministically adds display names and
 origin-relative `hero_image_path` / `item_image_path` values from the committed Valve
-Catalog snapshot; absent or unknown IDs retain `null` image paths, and the Answer layer
-must not infer names or image URLs from IDs.
+Catalog snapshot; parsed-player data also preserves purchase events, inventory and
+neutral history, level-indexed ability upgrades and mechanically identified talents.
+Unknown item keys retain their raw key with `not_found` status; absent or unknown IDs
+retain `null` image paths, and the Answer layer must not infer names, talent branches,
+purchase timing, or image URLs from IDs.
 STRATZ reads its English hero display-
 name index from the same Catalog repository. The former `hero_tools.py` resolver
 and `data/heroes/dota2_heroes.yaml` snapshot were deleted rather than kept as a

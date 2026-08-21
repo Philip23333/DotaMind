@@ -417,3 +417,45 @@
 
 - 当前仍只适配 `pandascore.resolve_match_games` 的比赛详情歧义；选项 ID 仅在已解析 Series
   和两队匹配的 Fixture 集合内生效，不是 Valve Match ID。
+
+## 22:30 — OpenDota 比赛选手购买与加点数据透传
+
+### 已完成
+
+- `opendota.match_details` 的选手标准化现在保留完整 `purchase_log` 顺序（包括负数开局前
+  时间、消耗品、同秒事件），并生成主栏、背包、当前中立物品、中立强化和中立更换历史。
+- 从 `ability_upgrades_arr` 生成按英雄等级位置编号的加点序列；`special_bonus_*` 机械归类为
+  天赋，`special_bonus_attributes` 单独标为属性加点，并生成 `talent_selections`。
+- Catalog 新增严格的 `get_item_by_internal_name()`，只接受原始内部名及 `item_` 前缀变体；
+  未命中保留原始 key 和 `not_found`，不走模糊匹配。
+- `opendota.match_details` 新增三个可选 Evidence kind：
+  `player_purchase_timeline`、`player_skill_build`、`player_talent_selection`；仅在比赛已解析
+  且对应数据非空时产生，旧 `player_scoreboard` 与装备字段保持不变。
+- 不改前端、Answer Prompt、输出格式、历史 Catalog、天赋左右分支推断或技能时间轴。
+
+### 验证
+
+- OpenDota match details 与 Registry 定向测试：33 passed。
+- 变更 Python 文件 Ruff 检查通过。
+
+### 已知边界
+
+- OpenDota 只提供“第几级选择了什么”，没有技能选择时刻；当前 Catalog 不能可靠还原历史
+  天赋左右分支或层级，因此这些事实不会被补造。
+
+## 22:45 — OpenDota 选手进度数据最终验证
+
+### 验证
+
+- Controller golden fixture 已按动态工具目录重新生成，保持 UTF-8、无 BOM、LF。
+- OpenDota、Registry、Prompt 定向测试：49 passed。
+- API 全量：653 passed、21 skipped、1 warning。
+- 本次涉及的 OpenDota、Catalog、工具和测试文件 Ruff 检查通过。
+- 全仓 `ruff check apps/api` 仍有 25 个既有 migration 风格诊断，未在本阶段修改。
+
+## 23:00 — OpenDota 选手进度数据收尾
+
+### 验证
+
+- 补充 `test_opendota_domains.py` 的标准化回归后，OpenDota/Registry 定向测试：39 passed。
+- 最终 API 全量：654 passed、21 skipped、1 warning。

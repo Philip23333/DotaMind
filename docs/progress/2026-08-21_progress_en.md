@@ -433,3 +433,51 @@
 - The adapter still covers only match-detail ambiguity from `pandascore.resolve_match_games`. The
   option ID is effective only within the resolved Series and matching-team Fixture set; it is not a
   Valve Match ID.
+
+## 22:30 — OpenDota player purchase and skill-build passthrough
+
+### Completed
+
+- `opendota.match_details` player normalization now preserves the complete `purchase_log` order,
+  including negative pre-game times, consumables and same-second events, and produces main-slot,
+  backpack, current-neutral, neutral-enhancement and neutral replacement history data.
+- `ability_upgrades_arr` now becomes a level-indexed skill sequence. `special_bonus_*` entries are
+  mechanically classified as talents, while `special_bonus_attributes` is kept as an attribute bonus;
+  `talent_selections` is derived from the same sequence.
+- Added strict `get_item_by_internal_name()`, accepting only raw internal names and `item_` prefix
+  variants. A miss retains the raw key with `not_found` status and never uses fuzzy matching.
+- `opendota.match_details` declares three optional evidence kinds:
+  `player_purchase_timeline`, `player_skill_build` and `player_talent_selection`. They are emitted
+  only for parsed matches with non-empty corresponding data; existing `player_scoreboard` and item
+  fields remain unchanged.
+- No frontend, Answer Prompt, output-format, historical-Catalog or talent-branch inference changes.
+
+### Verification
+
+- OpenDota match-details and Registry targeted tests: 33 passed.
+- Ruff passed for the changed Python files.
+
+### Known boundaries
+
+- OpenDota supplies only “which ability at which level,” not the selection timestamp. The current
+  Catalog cannot reliably recover historical left/right talent branches or tiers, so those facts are
+  not synthesized.
+
+## 22:45 — Final validation for OpenDota player progress data
+
+### Verification
+
+- Regenerated the Controller golden fixture from the dynamic tool catalog as UTF-8, no BOM, LF.
+- OpenDota, Registry and Prompt targeted tests: 49 passed.
+- Full API suite: 653 passed, 21 skipped, 1 warning.
+- Ruff passed for the OpenDota, Catalog, tool and test files changed in this stage.
+- Repository-wide `ruff check apps/api` still reports 25 pre-existing migration style diagnostics;
+  those unrelated migrations were not changed in this stage.
+
+## 23:00 — OpenDota player progress data wrap-up
+
+### Verification
+
+- After adding the normalization regression in `test_opendota_domains.py`, OpenDota/Registry
+  targeted tests: 39 passed.
+- Final full API suite: 654 passed, 21 skipped, 1 warning.

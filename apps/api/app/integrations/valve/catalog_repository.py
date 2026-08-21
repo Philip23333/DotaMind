@@ -301,6 +301,23 @@ class DotaCatalogRepository:
     def get_item(self, item_id: int) -> ItemCatalogRecord:
         return self._copy_or_raise(self._items, item_id, "item")
 
+    def get_item_by_internal_name(self, name: str) -> ItemCatalogRecord:
+        """Return an item by exact internal name, accepting ``item_`` variants."""
+
+        normalized = normalize_catalog_key(name)
+        if not normalized:
+            raise CatalogLookupError(f"item not found: {name}")
+        candidates = {normalized}
+        if normalized.startswith("item "):
+            candidates.add(normalized.removeprefix("item "))
+        else:
+            candidates.add(f"item {normalized}")
+        for record in self._items.values():
+            internal_name = normalize_catalog_key(record.internal_name)
+            if internal_name in candidates:
+                return record.model_copy(deep=True)
+        raise CatalogLookupError(f"item not found: {name}")
+
     def get_item_recipe_edges(self, item_id: int) -> list[RecipeEdge]:
         """Return recipe edges for a recipe scroll or one of its finished items."""
 
