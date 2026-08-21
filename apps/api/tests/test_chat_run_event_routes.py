@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.agentic.runtime.streaming import PhaseStreamEvent, StatusStreamEvent
-from app.api.v1.chat_run_routes import router
+from app.api.v1.chat_run_routes import _is_terminal_event, router
 from app.application.chat_run_repository import ChatRunSummary
 from app.application.run_event_bus import StoredRunEvent
 
@@ -70,6 +70,17 @@ def test_events_synthesize_terminal_status_when_redis_stream_is_missing() -> Non
     payload = json.loads(response.text)
     assert payload["event"]["status"] == "completed"
     assert payload["event"]["transcript_recovery"] is True
+
+
+def test_waiting_input_status_closes_current_stream_segment() -> None:
+    event = StoredRunEvent(
+        run_id=uuid4(),
+        session_id=uuid4(),
+        sequence=1,
+        event=StatusStreamEvent(status="waiting_input"),
+    )
+
+    assert _is_terminal_event(event) is True
 
 
 class FakeRepository:

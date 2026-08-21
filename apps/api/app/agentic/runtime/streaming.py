@@ -42,6 +42,11 @@ class ObserverStreamEvent(_StreamEvent):
     payload: dict[str, Any]
 
 
+class CheckpointStreamEvent(_StreamEvent):
+    type: Literal["checkpoint"] = "checkpoint"
+    checkpoint: dict[str, Any]
+
+
 class AnswerDeltaStreamEvent(_StreamEvent):
     type: Literal["answer_delta"] = "answer_delta"
     delta: str
@@ -81,6 +86,7 @@ PlanStreamEvent: TypeAlias = (
     PhaseStreamEvent
     | ToolStreamEvent
     | ObserverStreamEvent
+    | CheckpointStreamEvent
     | AnswerDeltaStreamEvent
     | ResultStreamEvent
     | ErrorStreamEvent

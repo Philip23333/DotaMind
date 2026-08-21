@@ -250,3 +250,25 @@
 ### 已知边界
 
 - 阶段 0 尚未接入 `resolve_match_games` ambiguous 适配器、Graph 暂停出口、同一 Run 恢复执行、Checkpoint 事件或前端卡片。
+
+## 18:00 — ChatRun Checkpoint 阶段 1 动态暂停与恢复骨架
+
+### 已完成
+
+- Graph 的 `tools` 节点现在可进入 Checkpoint 终点；`waiting_input` 不经过 evidence、Answer、Critic、response 或 assistant Turn 提交。
+- Executor 在 Graph 返回等待状态后先持久化最小快照，再发布 `checkpoint` 与 `status=waiting_input`，停止 heartbeat 并释放 Worker lease。
+- 新增 `POST /api/v1/chat/runs/{run_id}/resume`；服务端只接受并校验 Checkpoint 类型与 option id，然后将同一 `run_id` 重新排队。
+- 恢复时重建最小 Agent 状态，从快照声明的 `resume_node` 进入 Graph；阶段 1 的 `tools` 恢复路径跳过 Controller，并保留计划、工具结果、证据义务、预算与 fingerprint cache。
+- Redis event parser 支持 Checkpoint 事件；等待状态结束当前事件流片段，客户端可用同一 Run 的新 sequence 继续订阅。
+
+### 验证
+
+- 阶段 1 定向测试：28 passed、1 warning。
+- API 全量：641 passed、21 skipped、1 warning。
+- 变更 Python 文件 Ruff 检查通过。
+- Alembic head 为 `20260821_01`；Checkpoint migration offline SQL 生成通过。
+
+### 已知边界
+
+- 阶段 1 还没有生成领域 Checkpoint；`resolve_match_games` ambiguous 适配器、候选选项和 `scheduled_date` patch 留到阶段 2。
+- 前端尚未渲染 CheckpointCard；当前阶段只完成后端事件与恢复契约。

@@ -215,10 +215,15 @@ The V3.4-1 Checkpoint pilot adds a nullable `chat_runs.checkpoint_state` JSONB f
 the active `waiting_input` status. A waiting Run remains the session's active Run but
 releases worker ownership and is excluded from stale-heartbeat recovery. The persisted
 snapshot is limited to the Checkpoint, plan, prior tool results/dispatch records, budget,
-attempt metadata and fingerprint cache; prompts, raw model output, history and Answer
-content remain outside the snapshot. The stage-0 contract does not yet change Graph or
-Executor control flow; the match-selection producer and same-Run resume path are staged
-for V3.4-1 follow-up work.
+attempt metadata, evidence obligations and fingerprint cache; prompts, raw model output,
+history and Answer content remain outside the snapshot.
+
+The stage-1 runtime exits the Graph at a Checkpoint without running evidence, Answer, Critic
+or response finalization. The detached Worker then persists the snapshot, publishes a
+Checkpoint/status event pair and releases its lease. `POST /chat/runs/{run_id}/resume` validates
+the server-owned option, queues the same Run, reconstructs the minimal Agent state, skips the
+Controller and enters the Graph at the persisted `resume_node`. The match-selection producer
+and its deterministic argument patch remain the next stage.
 
 Deletion follows the same coordinator lock: it never deletes another owner's lock key,
 deletes PostgreSQL first, clears only Redis data keys while the lock is held, and lets normal

@@ -1,4 +1,7 @@
 import asyncio
+from datetime import UTC, datetime, timedelta
+from time import monotonic
+from uuid import uuid4
 
 from pydantic import BaseModel
 
@@ -10,6 +13,7 @@ from app.agentic.planning.decisions import (
     ToolPlanDecision,
     resolve_required_evidence,
 )
+from app.agentic.runtime.models import RunBudget, RunContext
 from app.agentic.state import AgentRunState
 from app.agentic.tools import (
     AcceptedRef,
@@ -193,6 +197,65 @@ def test_decision_validation_refreshes_runtime_evidence_obligations() -> None:
     }
     assert state.evidence_graph is not None
     assert state.evidence_graph.missing == []
+
+
+def test_graph_resume_from_checkpoint_enters_tools_without_controller() -> None:
+    plan = ExecutionPlan(
+        intent="hero_identity",
+        goal="Resolve Lina.",
+        output_contract="natural_language_answer",
+        tool_calls=[
+            ToolCall(id="resolve_target", tool="resolve_hero", args={"query": "Lina"})
+        ],
+        required_evidence=["hero_identity"],
+    )
+
+    class NoController(FakeController):
+        async def decide(self, *args, **kwargs):
+            raise AssertionError("resume must not call Controller")
+
+    started_at = datetime.now(UTC)
+    state = AgentRunState(
+        query="resolve Lina",
+        game="dota2",
+        internal_run_id=uuid4(),
+        run_context=RunContext(
+            run_id=uuid4(),
+            started_at=started_at,
+            deadline_at=started_at + timedelta(minutes=5),
+        ),
+        run_budget=RunBudget(),
+        run_started_monotonic=monotonic(),
+        attempt_started_at=started_at,
+        attempt_started_monotonic=monotonic(),
+        plan=plan,
+        decision_kind="tool_plan",
+        effective_required_evidence=["hero_identity"],
+        mandatory_evidence_by_call={"resolve_target": ["hero_identity"]},
+        resume_node="tools",
+        status="ok",
+    )
+
+    resumed = asyncio.run(
+        AgentGraphRunner(
+            NoController(
+                AgentControllerResult(
+                    status="decided",
+                    reason="unused",
+                    decision=CapabilityBoundaryDecision(
+                        kind="capability_boundary",
+                        intent="unused",
+                        reason="unused",
+                    ),
+                )
+            ),
+            _registry(),
+        ).run(state)
+    )
+
+    assert resumed.status == "ok"
+    assert resumed.evidence_graph is not None
+    assert resumed.answer is not None
 
 
 def test_graph_team_evidence_reaches_unsupported_answer_response() -> None:

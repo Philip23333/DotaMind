@@ -11,6 +11,7 @@ from app.api.v1.chat_run_routes import router
 from app.application.chat_run_repository import (
     ChatRunCancelResult,
     ChatRunCreateResult,
+    ChatRunResumeResult,
     ChatRunSummary,
 )
 from app.application.chat_run_runtime import ChatRunRuntime
@@ -81,6 +82,34 @@ def test_runtime_persists_cancel_before_local_wakeup_and_redis_notice() -> None:
     asyncio.run(scenario())
 
 
+def test_runtime_resumes_same_run_after_checkpoint_validation() -> None:
+    async def scenario() -> None:
+        run_id = uuid4()
+        repository = FakeResumeRepository(run_id)
+        manager = FakeManager()
+        runtime = ChatRunRuntime(
+            repository=repository,
+            manager=manager,
+            executor=object(),
+        )
+
+        result = await runtime.resume_run(
+            browser_id=str(uuid4()),
+            run_id=run_id,
+            checkpoint_type="pandascore_match_selection",
+            option_id="playoffs_2026_08_20",
+        )
+
+        assert result.run.run_id == run_id
+        assert manager.submitted == [run_id]
+        assert repository.args == {
+            "checkpoint_type": "pandascore_match_selection",
+            "option_id": "playoffs_2026_08_20",
+        }
+
+    asyncio.run(scenario())
+
+
 def test_create_run_route_returns_202_and_validates_browser_uuid() -> None:
     api = FastAPI()
     api.include_router(router)
@@ -141,6 +170,22 @@ class FakeCancelBus:
 
     async def publish_cancel(self, **kwargs) -> None:
         self.calls.append("publish_cancel")
+
+
+class FakeResumeRepository:
+    def __init__(self, run_id) -> None:
+        self.run_id = run_id
+        self.args = None
+
+    async def resume_checkpoint(self, **kwargs) -> ChatRunResumeResult:
+        self.args = {
+            "checkpoint_type": kwargs["checkpoint_type"],
+            "option_id": kwargs["option_id"],
+        }
+        return ChatRunResumeResult(
+            action="queued",
+            run=_summary(self.run_id, uuid4(), "created"),
+        )
 
 
 class FakeRepository:

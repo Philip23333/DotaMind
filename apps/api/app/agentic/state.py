@@ -71,6 +71,7 @@ class AgentRunState(BaseModel):
 
     run_context: RunContext | None = None
     run_budget: RunBudget | None = None
+    resume_node: Literal["controller", "tools"] | None = None
     run_started_monotonic: float | None = None
     attempt_index: int = 0
     attempt_started_at: datetime | None = None

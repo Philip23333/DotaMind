@@ -55,6 +55,11 @@ class CheckpointSnapshot(BaseModel):
     attempts: list[AttemptRecord] = Field(default_factory=list)
     executed_call_fingerprints: dict[str, CachedToolCall] = Field(default_factory=dict)
     selected_option_id: str | None = None
+    planner_required_evidence: list[str] = Field(default_factory=list)
+    global_required_evidence: list[str] = Field(default_factory=list)
+    effective_required_evidence: list[str] = Field(default_factory=list)
+    required_evidence_sources: dict[str, list[str]] = Field(default_factory=dict)
+    mandatory_evidence_by_call: dict[str, list[str]] = Field(default_factory=dict)
 
 
 __all__ = ["Checkpoint", "CheckpointOption", "CheckpointSnapshot"]

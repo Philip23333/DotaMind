@@ -16,6 +16,7 @@ from app.application.chat_run_repository import (
     ChatRunCreateResult,
     ChatRunRepository,
     ChatRunRepositoryError,
+    ChatRunResumeResult,
 )
 from app.application.idempotency import build_request_hash
 from app.observability import record_chat_run_cancellation
@@ -104,6 +105,43 @@ class ChatRunRuntime:
                 # PostgreSQL cancel_requested is authoritative; heartbeat will
                 # observe it even when the notification path is unavailable.
                 pass
+        return result
+
+    async def resume_run(
+        self,
+        *,
+        browser_id: str,
+        run_id: UUID,
+        checkpoint_type: str,
+        option_id: str,
+    ) -> ChatRunResumeResult:
+        result = await self._repository.resume_checkpoint(
+            browser_id=browser_id,
+            run_id=run_id,
+            checkpoint_type=checkpoint_type,
+            option_id=option_id,
+        )
+        run = result.run
+        execution_request = ChatRunExecutionRequest(
+            run_id=run.run_id,
+            browser_id=browser_id,
+            session_id=run.session_id,
+            request_id=run.request_id,
+            query=run.user_query,
+            game="dota2",
+            resume=True,
+        )
+        try:
+            await self._manager.submit(
+                run.run_id,
+                lambda: self._executor.execute(execution_request),
+            )
+        except Exception as exc:
+            await self._repository.mark_failed(
+                run_id=run.run_id,
+                error_code="dispatch_failed",
+            )
+            raise ChatRunRepositoryError("dispatch_failed") from exc
         return result
 
 

@@ -17,11 +17,14 @@ from app.api.v1.chat_run_schemas import (
     ChatRunEventResponse,
     ChatRunHeartbeatResponse,
     ChatRunResponse,
+    ChatRunResumeRequest,
+    ChatRunResumeResponse,
     ChatRunStreamErrorResponse,
 )
 from app.application.chat_run_repository import (
     TERMINAL_RUN_STATUSES,
     ChatRunActiveError,
+    ChatRunCheckpointError,
     ChatRunIdempotencyConflictError,
     ChatRunNotFoundError,
     ChatRunRepositoryError,
@@ -48,6 +51,10 @@ _ERROR_REASONS = {
     "dispatch_failed": "Run could not be scheduled",
     "not_found": "Run was not found",
     "invalid_after": "after must be a non-negative sequence",
+    "checkpoint_not_waiting": "Run is not waiting for Checkpoint input",
+    "checkpoint_type_mismatch": "Checkpoint type does not match the current Run",
+    "checkpoint_option_invalid": "Checkpoint option is invalid",
+    "checkpoint_invalid": "Checkpoint selection is invalid",
 }
 
 
@@ -204,6 +211,39 @@ async def cancel_run(run_id: UUID, request: Request) -> ChatRunCancelResponse | 
     return ChatRunCancelResponse(run=run_response(result.run))
 
 
+@router.post(
+    "/runs/{run_id}/resume",
+    response_model=ChatRunResumeResponse,
+    status_code=202,
+)
+async def resume_run(
+    run_id: UUID,
+    body: ChatRunResumeRequest,
+    request: Request,
+) -> ChatRunResumeResponse | JSONResponse:
+    browser_id, error = _validated_browser_id(request)
+    if error is not None:
+        return error
+    runtime = _runtime(request)
+    if runtime is None:
+        return run_error_response("unavailable", status_code=503)
+    try:
+        result = await runtime.resume_run(
+            browser_id=browser_id,
+            run_id=run_id,
+            checkpoint_type=body.checkpoint_type,
+            option_id=body.option_id,
+        )
+    except ChatRunCheckpointError as exc:
+        status_code = 409 if exc.code == "checkpoint_not_waiting" else 422
+        return run_error_response(exc.code, status_code=status_code)
+    except ChatRunNotFoundError:
+        return run_error_response("not_found", status_code=404)
+    except ChatRunRepositoryError as exc:
+        return run_error_response(exc.code, status_code=503)
+    return ChatRunResumeResponse(run=run_response(result.run))
+
+
 @router.get("/runs/{run_id}/events", response_model=None)
 async def stream_run_events(
     run_id: UUID,
@@ -323,7 +363,9 @@ def _stream_error_line(run_id: UUID, session_id: UUID, error_code: str) -> bytes
 
 
 def _is_terminal_event(event: StoredRunEvent) -> bool:
-    return event.event.type == "status" and event.event.status in TERMINAL_RUN_STATUSES
+    return event.event.type == "status" and (
+        event.event.status in TERMINAL_RUN_STATUSES or event.event.status == "waiting_input"
+    )
 
 
 __all__ = ["browser_id_from_request", "router", "run_error_response", "run_response"]

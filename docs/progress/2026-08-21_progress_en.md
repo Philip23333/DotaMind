@@ -250,3 +250,25 @@
 ### Known boundaries
 
 - Stage 0 does not yet connect the `resolve_match_games` ambiguous adapter, Graph pause exit, same-Run execution resume, Checkpoint events, or the frontend card.
+
+## 18:00 — ChatRun Checkpoint Stage 1 dynamic pause and resume skeleton
+
+### Completed
+
+- The Graph `tools` node can now route to a Checkpoint terminal; `waiting_input` skips evidence, Answer, Critic, response, and assistant Turn commit.
+- The Executor persists the minimal snapshot first, publishes `checkpoint` and `status=waiting_input`, stops heartbeat, and releases the Worker lease.
+- Added `POST /api/v1/chat/runs/{run_id}/resume`; the server accepts and validates only the Checkpoint type and option id, then queues the same `run_id`.
+- Resume reconstructs the minimal Agent state and enters the Graph at the snapshot's `resume_node`; the stage-1 tools path skips Controller and preserves the plan, tool results, evidence obligations, budget, and fingerprint cache.
+- Redis event parsing supports Checkpoint events; `waiting_input` closes the current event-stream segment so the client can continue with a new sequence on the same Run.
+
+### Verification
+
+- Stage-1 targeted tests: 28 passed, 1 warning.
+- Full API suite: 641 passed, 21 skipped, 1 warning.
+- Ruff passed for the changed Python files.
+- Alembic head is `20260821_01`; Checkpoint migration offline SQL generation passed.
+
+### Known boundaries
+
+- Stage 1 does not generate a domain Checkpoint yet; the `resolve_match_games` ambiguous adapter, candidate options, and `scheduled_date` patch remain Stage 2.
+- The frontend does not render a CheckpointCard yet; this stage covers backend events and resume contracts only.

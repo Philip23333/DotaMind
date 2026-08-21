@@ -218,6 +218,7 @@ def _parse_event(payload: dict) -> PlanStreamEvent:
         return StatusStreamEvent.model_validate(payload)
     from app.agentic.runtime.streaming import (
         AnswerDeltaStreamEvent,
+        CheckpointStreamEvent,
         ErrorStreamEvent,
         ObserverStreamEvent,
         PhaseStreamEvent,
@@ -227,6 +228,7 @@ def _parse_event(payload: dict) -> PlanStreamEvent:
 
     event_types = {
         "answer_delta": AnswerDeltaStreamEvent,
+        "checkpoint": CheckpointStreamEvent,
         "error": ErrorStreamEvent,
         "observer": ObserverStreamEvent,
         "phase": PhaseStreamEvent,

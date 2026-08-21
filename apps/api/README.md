@@ -83,13 +83,19 @@ curl -s -X POST "http://localhost:8001/api/v1/chat/sessions/$SESSION_ID/runs" \
   -d "{\"request_id\":\"$REQUEST_ID\",\"query\":\"enemy picked Lina, what should I pick?\",\"game\":\"dota2\"}"
 curl -N "http://localhost:8001/api/v1/chat/runs/<RUN_ID>/events?after=0" \
   -H "X-DotaMind-Browser-Id: $BROWSER_ID"
+# After a Checkpoint event, select a server-provided option on the same Run:
+curl -s -X POST "http://localhost:8001/api/v1/chat/runs/<RUN_ID>/resume" \
+  -H "X-DotaMind-Browser-Id: $BROWSER_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"checkpoint_type":"pandascore_match_selection","option_id":"<OPTION_ID>"}'
 ```
 
 The Run Repository owns status, fencing, idempotency and atomic Turn completion in PostgreSQL.
 Redis carries replayable allowlisted events and cancel notifications; it is not the final Turn
 authority. Closing the event stream only closes observation. Refreshing the browser reads the
 active Run from the session and replays events from sequence zero. Worker shutdown/stale
-recovery marks active Runs `interrupted`; it does not resume a model checkpoint.
+recovery marks leased active Runs `interrupted`; `waiting_input` Runs are persisted
+Checkpoints without a Worker lease and are resumed through the same `run_id`.
 
 Current conditional LangGraph path:
 
@@ -101,6 +107,7 @@ controller_node
       -> tool_plan -> validate_plan_node -> tool_executor_node
                    -> conversation.history_lookup -> controller_node
                    -> evidence_node -> answer_node -> critic_node
+                   -> waiting_input -> Checkpoint/status events -> POST /resume -> tools
   -> attempt_finalize_node -> recovery_node -> run_finalize_node -> response_node
 ```
 

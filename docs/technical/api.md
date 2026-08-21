@@ -189,6 +189,7 @@ GET  /api/v1/chat/runs/{run_id}
 GET  /api/v1/chat/sessions/{session_id}/active-run
 GET  /api/v1/chat/runs/{run_id}/events?after=N
 POST /api/v1/chat/runs/{run_id}/cancel
+POST /api/v1/chat/runs/{run_id}/resume
 ```
 
 Creation accepts `{ "request_id": "UUID v4", "query": "...", "game": "dota2" }` and
@@ -201,11 +202,13 @@ when explicitly enabled. `after=0` is the page-refresh
 recovery path. Heartbeats are not persisted. If Redis events are missing after PostgreSQL has
 reached a terminal state, the API emits a synthetic `transcript_recovery` status event.
 
-The durable Run status set also reserves `waiting_input` for the Checkpoint pilot. It is an
-active session Run with a persisted `chat_runs.checkpoint_state` snapshot, but it has no live
-Worker heartbeat and is not treated as a stale execution. The stage-0 schema accepts only
-`checkpoint_type` and `option_id` for a future resume request; the public resume route and
-event handling are implemented in the subsequent dynamic-execution stage.
+The durable Run status set includes `waiting_input` for the Checkpoint pilot. It is an active
+session Run with a persisted `chat_runs.checkpoint_state` snapshot, but it has no live Worker
+heartbeat and is not treated as a stale execution. `POST /resume` accepts only
+`checkpoint_type` and `option_id`; the server validates both against the persisted Checkpoint,
+queues the same `run_id`, and resumes from the persisted Graph node. A waiting status closes the
+current event-stream segment after the Checkpoint and status events; the resumed Run is observed
+with a new `after` cursor on the same stream.
 
 Cancel persists `cancel_requested` in PostgreSQL before local/Redis wake-up. A repeated cancel
 is `202`; terminal Runs return `409 run_terminal`. Disconnecting an event subscriber only closes

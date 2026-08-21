@@ -128,6 +128,16 @@ class AgentGraphRunner:
         completed = AgentRunState.model_validate(result)
         duration_ms = self._elapsed_ms(started_monotonic)
         completed.run_duration_ms = duration_ms
+        if completed.status == "waiting_input":
+            emit_event(
+                logger,
+                "agent_run_waiting_input",
+                status="waiting_input",
+                run_id_prefix=self._run_id_prefix(completed),
+                duration_ms=duration_ms,
+            )
+            self._emit_attempts(completed)
+            return completed
         if completed.response is not None and isinstance(completed.response.get("runtime"), dict):
             completed.response["runtime"]["duration_ms"] = duration_ms
         record_run(completed, duration_ms=duration_ms)
@@ -191,6 +201,7 @@ class AgentGraphRunner:
     def _compile_graph(self):
         graph = StateGraph(AgentRunState)
         graph.add_node("run_init", self._run_init)
+        graph.add_node("checkpoint", self._checkpoint)
         graph.add_node("controller", self._controller)
         graph.add_node("decision_validate", self._decision_validate)
         graph.add_node("conversation_answer", self._conversation_answer)
@@ -207,7 +218,11 @@ class AgentGraphRunner:
         graph.add_node("response", self._response)
 
         graph.add_edge(START, "run_init")
-        graph.add_edge("run_init", "controller")
+        graph.add_conditional_edges(
+            "run_init",
+            _route_after_run_init,
+            {"controller": "controller", "tools": "tools"},
+        )
         graph.add_conditional_edges(
             "controller",
             _route_after_controller,
@@ -241,6 +256,7 @@ class AgentGraphRunner:
                 "controller": "controller",
                 "controller_context": "controller_context",
                 "evidence": "evidence",
+                "checkpoint": "checkpoint",
                 "response": "attempt_finalize",
             },
         )
@@ -282,6 +298,7 @@ class AgentGraphRunner:
         )
         graph.add_edge("run_finalize", "response")
         graph.add_edge("response", END)
+        graph.add_edge("checkpoint", END)
         return graph.compile()
 
     async def _controller(self, state: AgentRunState) -> AgentRunState:
@@ -343,6 +360,8 @@ class AgentGraphRunner:
         )
 
     def _route_after_tools(self, state: AgentRunState) -> str:
+        if state.status == "waiting_input":
+            return "checkpoint"
         if state.status == "error":
             return "response"
         if state.plan is not None and _is_controller_context_plan(
@@ -394,6 +413,11 @@ class AgentGraphRunner:
         )
 
     def _run_init(self, state: AgentRunState) -> AgentRunState:
+        if state.resume_node is not None:
+            if state.run_context is None or state.run_budget is None:
+                raise RuntimeError("checkpoint resume requires initialized run context")
+            state.add_trace("run_init", "resume persisted execution", "completed")
+            return state
         return self._timed_sync(
             state,
             run_init_node,
@@ -402,6 +426,12 @@ class AgentGraphRunner:
             node="run_init",
             failure_stage="execution",
         )
+
+    def _checkpoint(self, state: AgentRunState) -> AgentRunState:
+        if state.status != "waiting_input" or state.checkpoint is None:
+            raise RuntimeError("checkpoint node requires a waiting Checkpoint")
+        state.add_trace("checkpoint", "pause Run for user input", "completed")
+        return state
 
     def _conversation_answer(self, state: AgentRunState) -> AgentRunState:
         if self._guard(state):
@@ -532,6 +562,10 @@ def _route_after_controller(state: AgentRunState) -> str:
     if state.status == "error":
         return "response"
     return "decision_validate"
+
+
+def _route_after_run_init(state: AgentRunState) -> str:
+    return state.resume_node or "controller"
 
 
 def _route_after_decision(state: AgentRunState) -> str:

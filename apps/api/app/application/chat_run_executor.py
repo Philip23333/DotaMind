@@ -5,13 +5,17 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from time import monotonic
 from typing import Any
 from uuid import UUID
 
 from app.agentic.conversation.models import DialogueTurn
 from app.agentic.graph import AgentGraphRunner
+from app.agentic.runtime.checkpoint import CheckpointSnapshot
+from app.agentic.runtime.models import RunContext
 from app.agentic.runtime.streaming import (
+    CheckpointStreamEvent,
     ResultStreamEvent,
     StatusStreamEvent,
     publish_stream_event,
@@ -47,6 +51,7 @@ class ChatRunExecutionRequest:
     request_id: UUID
     query: str
     game: str
+    resume: bool = False
 
 
 @dataclass(frozen=True)
@@ -100,7 +105,7 @@ class ChatRunExecutor:
                     request.browser_id,
                     request.session_id,
                 )
-                await self._run_repository.mark_running(
+                running = await self._run_repository.mark_running(
                     browser_id=request.browser_id,
                     run_id=request.run_id,
                     worker_id=self._worker_id,
@@ -111,6 +116,7 @@ class ChatRunExecutor:
                     result = await self._execute_running(
                         request=request,
                         fencing_token=fencing_token,
+                        running=running,
                     )
                     record_chat_run(result.run.status, monotonic() - started)
                     return result
@@ -130,23 +136,34 @@ class ChatRunExecutor:
         *,
         request: ChatRunExecutionRequest,
         fencing_token: int,
+        running: ChatRunSummary,
     ) -> ChatRunExecutionResult:
         recent_messages, next_turn_index = await self._memory_service.load_recent_messages(
             request.browser_id,
             request.session_id,
         )
-        state = AgentRunState(
-            query=request.query,
-            game=request.game,
-            recent_messages=recent_messages,
-            next_turn_index=next_turn_index,
-            internal_session_id=request.session_id,
-            internal_request_id=request.request_id,
-            internal_run_id=request.run_id,
+        state = (
+            self._state_from_checkpoint(
+                request=request,
+                running=running,
+                recent_messages=recent_messages,
+                next_turn_index=next_turn_index,
+            )
+            if request.resume
+            else AgentRunState(
+                query=request.query,
+                game=request.game,
+                recent_messages=recent_messages,
+                next_turn_index=next_turn_index,
+                internal_session_id=request.session_id,
+                internal_request_id=request.request_id,
+                internal_run_id=request.run_id,
+            )
         )
 
         completed: ChatRunSummary | None = None
         committed = False
+        paused_persisted = False
         async with bind_run_event_pump(
             bus=self._event_bus,
             run_id=request.run_id,
@@ -164,6 +181,29 @@ class ChatRunExecutor:
                     )
                 ):
                     state = await self._runner.run(state)
+                if state.status == "waiting_input":
+                    if state.checkpoint is None:
+                        raise ChatRunRepositoryError("checkpoint_missing")
+                    snapshot = self._checkpoint_snapshot(state)
+                    paused = await self._run_repository.mark_waiting_input(
+                        run_id=request.run_id,
+                        worker_id=self._worker_id,
+                        fencing_token=fencing_token,
+                        checkpoint_state=snapshot.model_dump(mode="json"),
+                    )
+                    paused_persisted = True
+                    publish_stream_event(
+                        CheckpointStreamEvent(
+                            checkpoint=state.checkpoint.model_dump(mode="json")
+                        )
+                    )
+                    publish_stream_event(StatusStreamEvent(status="waiting_input"))
+                    await pump.flush()
+                    return ChatRunExecutionResult(
+                        run=paused,
+                        state=state,
+                        public_response={},
+                    )
                 public_response = self._build_response(state, request.session_id)
                 turn_result = await self._build_turn(state)
                 completed = await self._run_repository.complete_with_turn(
@@ -209,11 +249,11 @@ class ChatRunExecutor:
                 # Before the durable commit, the Run still needs a terminal
                 # failure state. After the commit, PostgreSQL remains completed
                 # even if terminal Redis/event delivery fails.
-                if not committed:
+                if not committed and not paused_persisted:
                     await self._mark_failed(request.run_id)
                 raise
             except Exception:
-                if committed:
+                if committed or paused_persisted:
                     raise
                 await self._mark_failed(request.run_id)
                 publish_stream_event(
@@ -227,6 +267,75 @@ class ChatRunExecutor:
             run=completed,
             state=state,
             public_response=public_response,
+        )
+
+    def _state_from_checkpoint(
+        self,
+        *,
+        request: ChatRunExecutionRequest,
+        running: ChatRunSummary,
+        recent_messages: list,
+        next_turn_index: int,
+    ) -> AgentRunState:
+        if running.checkpoint_state is None:
+            raise ChatRunRepositoryError("checkpoint_missing")
+        snapshot = CheckpointSnapshot.model_validate(running.checkpoint_state)
+        started_at = running.started_at or datetime.now(UTC)
+        run_context = RunContext(
+            run_id=request.run_id,
+            request_id=request.request_id,
+            session_id=request.session_id,
+            started_at=started_at,
+            deadline_at=started_at
+            + timedelta(seconds=self._runner.runtime_policy.max_elapsed_seconds),
+        )
+        return AgentRunState(
+            query=request.query,
+            game=request.game,
+            recent_messages=recent_messages,
+            next_turn_index=next_turn_index,
+            internal_session_id=request.session_id,
+            internal_request_id=request.request_id,
+            internal_run_id=request.run_id,
+            run_context=run_context,
+            run_budget=snapshot.run_budget,
+            run_started_monotonic=self._runner.clock.monotonic(),
+            attempt_index=snapshot.attempt_index,
+            attempt_started_at=started_at,
+            attempt_started_monotonic=self._runner.clock.monotonic(),
+            attempts=snapshot.attempts,
+            executed_call_fingerprints=snapshot.executed_call_fingerprints,
+            plan=snapshot.plan,
+            planner_required_evidence=snapshot.planner_required_evidence,
+            global_required_evidence=snapshot.global_required_evidence,
+            effective_required_evidence=snapshot.effective_required_evidence,
+            required_evidence_sources=snapshot.required_evidence_sources,
+            mandatory_evidence_by_call=snapshot.mandatory_evidence_by_call,
+            tool_results=snapshot.tool_results,
+            tool_dispatch_records=snapshot.tool_dispatch_records,
+            decision_kind="tool_plan",
+            resume_node=snapshot.checkpoint.resume_node,
+            status="ok",
+        )
+
+    @staticmethod
+    def _checkpoint_snapshot(state: AgentRunState) -> CheckpointSnapshot:
+        if state.checkpoint is None or state.plan is None or state.run_budget is None:
+            raise ChatRunRepositoryError("checkpoint_snapshot_incomplete")
+        return CheckpointSnapshot(
+            checkpoint=state.checkpoint,
+            plan=state.plan,
+            tool_results=state.tool_results,
+            tool_dispatch_records=state.tool_dispatch_records,
+            run_budget=state.run_budget,
+            attempt_index=state.attempt_index,
+            attempts=state.attempts,
+            executed_call_fingerprints=state.executed_call_fingerprints,
+            planner_required_evidence=state.planner_required_evidence,
+            global_required_evidence=state.global_required_evidence,
+            effective_required_evidence=state.effective_required_evidence,
+            required_evidence_sources=state.required_evidence_sources,
+            mandatory_evidence_by_call=state.mandatory_evidence_by_call,
         )
 
     async def _start_heartbeat(
