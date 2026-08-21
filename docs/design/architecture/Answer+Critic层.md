@@ -151,8 +151,10 @@ user:
 `agentic/prompts/answer.py` 的 renderer 负责；`answer/synthesizer.py` 负责选择
 LLM、执行同步/流式调用和包装结果，不内嵌 prompt 文本。system prompt 不再是固定总规则：
 renderer 合并 `required_evidence` 与实际 evidence kinds，只注入 Catalog 属性、技能、天赋、
-物品、STRATZ 周趋势、pair-lane、排名或日趋势中与当前 EvidenceGraph 相关的片段；
-STRATZ 跨来源元数据边界还依据 evidence/tool result 的 source 加载。
+物品、赛事/比赛、STRATZ 周趋势、pair-lane、排名或日趋势中与当前 EvidenceGraph 相关的片段；
+STRATZ 与赛事跨来源元数据边界还依据 evidence/tool result 的 source 加载。赛事/比赛 evidence
+会额外注入 TI 最新战况的 Markdown 版式示例；该示例只约束章节顺序和表格列，不提供可复用事实，
+其中队伍、比分、时间、阶段、赛制和来源声明仍必须由当前 EvidenceGraph 支撑。
 
 规则选择不读取 `intent`、工具名或自然语言关键词，不形成固定回答路线。完整技能与具名单技能
 等粒度仍由 Answer LLM 结合 `current_query` / `reconstructed_goal` 判断；只有存在或要求

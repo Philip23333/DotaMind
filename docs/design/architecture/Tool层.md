@@ -115,7 +115,8 @@ V3.2-2 中，默认 `PlanService` 装配会把同一 Registry 实例传给这些
 比赛工具的引用边界如下：
 
 - `pandascore.resolve_competition` 输出 `data.competition.series_id`。
-- `pandascore.list_matches` 和 `pandascore.resolve_match_games` 只能引用该 Series。
+- `pandascore.list_matches` 和 `pandascore.resolve_match_games` 只能引用该 Series；
+  前者默认返回最新的 20 个 Fixture，并以 `scheduled_at` 降序排列。
 - `resolve_match_games` 在没有局号时返回该 Fixture 实际存在的全部 Game context；
   PandaScore Series/Match/Game ID 仍不是 Valve Match ID。
 - `dota.resolve_valve_matches` 只接受 Competition 与 Game context 列表引用，

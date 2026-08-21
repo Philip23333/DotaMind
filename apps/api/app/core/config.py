@@ -294,6 +294,7 @@ class Settings(BaseSettings):
     llm_base_url: str = "https://api.deepseek.com"
     llm_model: str = "deepseek-chat"
     llm_enabled: bool = True
+    test_observer_enabled: bool = False
 
     model_config = SettingsConfigDict(
         env_file=DEFAULT_ENV_PATH,

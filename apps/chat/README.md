@@ -31,7 +31,14 @@ npm run dev
 
 ```text
 NEXT_PUBLIC_DOTAMIND_API_URL=http://localhost:8001
+NEXT_PUBLIC_DOTAMIND_TEST_OBSERVER_ENABLED=false
 ```
+
+测试时可同时设置 API 的 `DOTAMIND_TEST_OBSERVER_ENABLED=true` 和前端的
+`NEXT_PUBLIC_DOTAMIND_TEST_OBSERVER_ENABLED=true`。聊天主区域右侧会出现测试观测器入口，
+抽屉按模型 Prompt、工具输入/输出和模型输出展示当前页面订阅到的完整结构化 Run 事件。
+每条记录以可独立折叠的 JSON 卡片展示，Prompt、工具输入、工具输出和模型输出数据块均可一键复制格式化 JSON。
+该功能默认关闭，调试载荷不写入 PostgreSQL transcript；刷新后不保证恢复已结束 Run 的观测数据。
 
 当前版本在首次打开页面时生成并保存一个浏览器 UUID，并由 assistant-ui
 `RemoteThreadListRuntime` 将一个 thread 映射到一个 DotaMind `session_id`。每次重新进入聊天页都会从新的空白聊天开始，不恢复上次选中的 session；新聊天先使用

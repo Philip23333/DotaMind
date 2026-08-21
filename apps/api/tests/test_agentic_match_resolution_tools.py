@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 from app.agentic.models import ExecutionPlan, ToolCall, ToolResult
-from app.agentic.planning.contracts import validate_references, validate_required_references
+from app.agentic.planning.contracts import (
+    validate_plan_against_catalog,
+    validate_references,
+    validate_required_references,
+)
 from app.agentic.tools.match_resolution_tools import valve_match_evidence
 from app.agentic.tools.stratz_tools import build_default_tool_registry
 from app.core.config import Settings
@@ -55,6 +59,7 @@ def test_resolver_tool_contract_and_declared_refs() -> None:
     )
     assert validate_required_references(plan, registry) == []
     assert validate_references(plan, registry) == []
+    assert validate_plan_against_catalog(plan, registry) == []
 
 
 def test_resolver_evidence_requires_resolved_complete_mapping() -> None:

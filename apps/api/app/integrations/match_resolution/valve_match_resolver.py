@@ -157,14 +157,11 @@ class ValveMatchResolver:
 
         target_start = _epoch_from_value(game_context.get("game_begin_at"))
         target_duration = _as_int(game_context.get("length_seconds"))
-        target_position = _as_int(game_context.get("game_position"))
         missing_signals = []
         if target_start is None:
             missing_signals.append("game_begin_at")
         if target_duration is None:
             missing_signals.append("length_seconds")
-        if target_position is None:
-            missing_signals.append("game_position")
         if missing_signals:
             return CrossSourceResolution(
                 status="insufficient_signals",
@@ -186,12 +183,10 @@ class ValveMatchResolver:
                 target_team_ids=target_team_ids,
                 target_start=target_start,
                 target_duration=target_duration,
-                target_position=target_position,
                 target_winner_team_id=_winner_opendota_team_id(
                     game_context,
                     resolved_team_rows,
                 ),
-                all_matches=league_matches,
             )
         ]
         if not candidates:
@@ -214,7 +209,7 @@ class ValveMatchResolver:
         matched_on = ["league"]
         if used_league_participation:
             matched_on.append("team_league_participation")
-        matched_on.extend(["team_ids", "start_time", "duration", "game_position"])
+        matched_on.extend(["team_ids", "start_time", "duration"])
         winner_team_id = _winner_opendota_team_id(game_context, resolved_team_rows)
         if winner_team_id is not None:
             matched_on.append("winner")
@@ -324,9 +319,7 @@ class ValveMatchResolver:
         target_team_ids: set[int],
         target_start: int,
         target_duration: int,
-        target_position: int,
         target_winner_team_id: int | None,
-        all_matches: list[OpenDotaLeagueMatch],
     ) -> bool:
         match_team_ids = {
             value
@@ -344,8 +337,6 @@ class ValveMatchResolver:
             match.duration is None
             or abs(match.duration - target_duration) > self.duration_tolerance_seconds
         ):
-            return False
-        if _series_position(match, all_matches) != target_position:
             return False
         if target_winner_team_id is not None and match.radiant_win is not None:
             expected_winner = (
@@ -366,24 +357,6 @@ def _find_league_candidates(
 ) -> list[OpenDotaLeague]:
     query = _normalize_text(f"{series_name} {year}")
     return [league for league in leagues if _normalize_text(league.name) == query]
-
-
-def _series_position(
-    match: OpenDotaLeagueMatch, all_matches: list[OpenDotaLeagueMatch]
-) -> int | None:
-    if match.opendota_series_id is None or match.start_time is None:
-        return None
-    series_matches = [
-        candidate
-        for candidate in all_matches
-        if candidate.opendota_series_id == match.opendota_series_id
-        and candidate.start_time is not None
-    ]
-    series_matches.sort(key=lambda candidate: (candidate.start_time, candidate.valve_match_id))
-    for index, candidate in enumerate(series_matches, start=1):
-        if candidate.valve_match_id == match.valve_match_id:
-            return index
-    return None
 
 
 def _winner_opendota_team_id(

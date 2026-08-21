@@ -39,6 +39,8 @@ Important settings include:
 | `DOTAMIND_LLM_ENABLED` | Enables planner/answer LLM calls. |
 | `DOTAMIND_LLM_PROVIDER` / `DOTAMIND_LLM_API_KEY` | LLM provider selection and secret. |
 | `DOTAMIND_LLM_BASE_URL` / `DOTAMIND_LLM_MODEL` | OpenAI-compatible endpoint and model. |
+| `DOTAMIND_TEST_OBSERVER_ENABLED` | Local-test-only full Prompt/model/tool I/O Run events. Disabled by default; never enable in a public environment. |
+| `NEXT_PUBLIC_DOTAMIND_TEST_OBSERVER_ENABLED` | Shows the chat right-side test observer drawer. Enable together with the API flag. |
 | `DOTAMIND_POLICY_PATH` | Optional absolute policy YAML override. |
 
 Use `.env.example` as the environment template. Never commit populated secrets.

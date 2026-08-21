@@ -4,6 +4,13 @@ from typing import Any
 from app.agentic.answer import AnswerSynthesizer
 from app.agentic.evidence import EvidenceDataQuality, EvidenceGraph, build_evidence_graph
 from app.agentic.models import ExecutionPlan, QueryContext, ToolCall, ToolResult, ToolSource
+from app.agentic.runtime.streaming import (
+    ObserverStreamEvent,
+    bind_observer_attempt_index,
+    bind_stream_event_publisher,
+    reset_observer_attempt_index,
+    reset_stream_event_publisher,
+)
 from app.agentic.tools.dota_catalog_tools import HeroAttributesInput, ResolveHeroInput
 from app.agentic.tools.stratz_tools import build_default_tool_registry
 from app.core.config import Settings
@@ -169,6 +176,40 @@ def test_answer_synthesizer_streams_natural_language_deltas() -> None:
 
     assert deltas == ["Grounded", " answer."]
     assert answer.summary == "Grounded answer."
+
+
+def test_answer_synthesizer_publishes_full_test_observer_exchange(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.core.config.get_settings",
+        lambda: Settings(test_observer_enabled=True),
+    )
+    plan = ExecutionPlan(
+        intent="freeform",
+        goal="Answer from evidence.",
+        output_contract="natural_language_answer",
+    )
+    graph = build_evidence_graph(plan, [], _registry())
+    events: list[ObserverStreamEvent] = []
+    token = bind_stream_event_publisher(events.append)
+    attempt_token = bind_observer_attempt_index(1)
+    try:
+        answer = asyncio.run(
+            AnswerSynthesizer(llm=FakeLLM(), llm_enabled=True).synthesize(
+                plan,
+                graph,
+                current_query="question",
+            )
+        )
+    finally:
+        reset_observer_attempt_index(attempt_token)
+        reset_stream_event_publisher(token)
+
+    assert answer.summary == "Grounded answer."
+    assert [event.kind for event in events] == ["model_prompt", "model_output"]
+    assert events[0].stage == "answer"
+    assert events[0].attempt_index == 1
+    assert events[0].payload["messages"][-1]["content"]
+    assert events[1].payload == {"format": "text", "content": "Grounded answer."}
 
 
 def test_natural_language_answer_receives_catalog_rules_and_real_evidence() -> None:
@@ -645,3 +686,35 @@ def test_natural_language_prompt_selects_ranking_and_daily_rules_independently()
     assert "do not invent week buckets" in daily_prompt
     assert "pair_wilson_rating" not in daily_prompt
     assert "week_index" not in daily_prompt
+
+
+def test_natural_language_prompt_adds_aligned_ti_status_example_for_match_evidence() -> None:
+    from app.agentic.prompts.answer import render_natural_language_system_prompt
+
+    match_prompt = render_natural_language_system_prompt(
+        EvidenceGraph(
+            intent="competition_latest_status",
+            required_evidence=[
+                "competition_identity",
+                "tournament_stage",
+                "match_schedule",
+                "match_state",
+                "series_score",
+            ],
+            data_quality=EvidenceDataQuality(completeness=1.0),
+        )
+    )
+    hero_prompt = render_natural_language_system_prompt(
+        EvidenceGraph(
+            intent="hero_attributes",
+            required_evidence=["hero_attributes"],
+            data_quality=EvidenceDataQuality(completeness=1.0),
+        )
+    )
+
+    assert "presentation-only" in match_prompt
+    assert "# 2026年国际邀请赛（TI）最新战况" in match_prompt
+    assert "| Team Falcons vs Vici Gaming | 2–0 | FLC 晋级 |" in match_prompt
+    assert "| Team Falcons 2:0 Vici Gaming | FLC 晋级 |" not in match_prompt
+    assert "omit the ordinal instead of outputting a literal X" in match_prompt
+    assert "# 2026年国际邀请赛（TI）最新战况" not in hero_prompt

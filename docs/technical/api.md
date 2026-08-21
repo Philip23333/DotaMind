@@ -143,8 +143,13 @@ HTTP 422. This endpoint is for `/debug/plan` only; formal chat uses Chat Run eve
   Once the stream has started, execution failures use a terminal `error` event
   because HTTP headers can no longer change.
 
-Events are an allowlist: they never contain tool parameters or results, history,
-prompts, model raw output, secrets, raw exceptions or internal dispatch state.
+Events are an allowlist. By default they never contain tool parameters or results,
+history, prompts, model output, secrets, raw exceptions or internal dispatch state.
+When the local-test-only `DOTAMIND_TEST_OBSERVER_ENABLED=true` flag is set, an
+additional `observer` event carries complete Controller/Answer message arrays and
+model output plus planned/resolved tool args and ToolResult output. These events
+remain in the short-lived Run event stream and are not added to the public result
+or PostgreSQL transcript; the flag must not be enabled in a public environment.
 Clients should discard provisional deltas unless the final `result.response.status`
 is `ok`; a Critic or execution failure makes the final public response authoritative.
 
@@ -170,7 +175,8 @@ returns `202` with a queued Run. Repeating the same request/payload returns the 
 payload conflicts or another active Run in the same session return `409`.
 
 Run events are replayable NDJSON envelopes with `run_id`, `session_id`, monotonically increasing
-`sequence` and allowlisted phase/tool/delta/result/status data. `after=0` is the page-refresh
+`sequence` and allowlisted phase/tool/delta/result/status data, plus test-only `observer` data
+when explicitly enabled. `after=0` is the page-refresh
 recovery path. Heartbeats are not persisted. If Redis events are missing after PostgreSQL has
 reached a terminal state, the API emits a synthetic `transcript_recovery` status event.
 

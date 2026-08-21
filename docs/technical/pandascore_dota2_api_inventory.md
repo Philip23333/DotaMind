@@ -5,7 +5,9 @@ Fixture API 能力，不把网页抓取或付费接口当作备用数据源。
 
 ## 官方文档声明
 
-- Dota 2 资源位于 `/dota2` 命名空间，列表请求支持 `page[size]` 和资源过滤器。
+- Dota 2 资源位于 `/dota2` 命名空间，列表请求支持 `page[size]`、资源过滤器和
+  `sort`；排序字段前的 `-` 表示降序。因此 Match List 使用
+  `sort=-scheduled_at` 获取最新赛程优先的结果。
 - Bearer token 通过 `Authorization: Bearer <token>` 发送。
 - Match Fixture 可以包含 `opponents`、`results`、`streams_list` 和 `games`。
 - 具体套餐可用资源、字段和速率限制以 PandaScore 账户计划为准。
@@ -24,6 +26,7 @@ Fixture API 能力，不把网页抓取或付费接口当作备用数据源。
 | `GET /dota2/matches/past?filter[serie_id]=10828&page[size]=100` | 200，TI 2026 过去赛程 |
 | `GET /dota2/matches/upcoming?filter[serie_id]=10828&page[size]=100` | 200，TI 2026 后续赛程 |
 | `GET /dota2/matches/running?filter[serie_id]=10828&page[size]=100` | 200，TI 2026 进行中赛程 |
+| `GET /dota2/matches/past?filter[serie_id]=10828&sort=-scheduled_at&page[size]=20` | 200，首条 `2026-08-20T13:25:00Z`，确认最新已结束 Fixture 优先 |
 | `GET /dota2/tournaments?filter[serie_id]=10828&page[size]=10` | 200，阶段 `Group Stage`（PandaScore tournament 21545） |
 | `GET /dota2/matches/past?filter[id]=1631694&page[size]=10` | 200，已知 NGX vs OG Fixture |
 | `GET /dota2/series/10828` | 404，当前计划不使用资源详情路径 |
@@ -67,13 +70,14 @@ PandaScore series/match/game
   -> OpenDota team ids
   -> start time <= 1800s
   -> duration <= 5s
-  -> sorted series game position
   -> winner consistency
   -> unique Valve match_id
 ```
 
-它按局输出 `method=inferred_cross_source`、候选数量、匹配信号和时间/时长差，
-不声称 PandaScore 原生提供了 Valve ID。联赛、战队或比赛存在歧义时保持
+OpenDota `series_id` / 由其推导的局号不作为硬条件，因为联赛 Match feed 可能缺失
+该字段；其余硬信号存在多个候选时仍不放宽为最近项。它按局输出
+`method=inferred_cross_source`、候选数量、匹配信号和时间/时长差，不声称
+PandaScore 原生提供了 Valve ID。联赛、战队或比赛存在歧义时保持
 `ambiguous_*` 状态；没有唯一候选时不使用 closest/weighted fallback。已知
 样本的 OpenDota 侧为 league `19719`、series `1130066`、Valve match
 `8943244303`；同名 Nigma 候选通过 `/teams/{team_id}/matches` 的精确
@@ -98,3 +102,10 @@ PandaScore 原生字段。
 再执行名称匹配等级，避免默认第一页中的其他年份候选把历史届次排除。显式年份
 不存在时保持 `not_found`，不会回退到最新届；无年份仍使用 active → latest
 historical → nearest future 选择。
+
+## Match List 默认排序
+
+`pandascore.list_matches` 默认返回最新的 20 个 Fixture。Provider 请求对
+`upcoming`、`running`、`past` 三个状态端点均下推 `sort=-scheduled_at` 与
+`page[size]=20`，合并去重后仍按 `scheduled_at`（缺失时 `begin_at`）降序排序，
+再应用调用方 `limit`。因此不会因上游默认升序第一页而优先返回最早的小组赛。

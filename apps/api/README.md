@@ -199,6 +199,7 @@ DOTAMIND_LLM_PROVIDER=deepseek
 DOTAMIND_LLM_API_KEY=
 DOTAMIND_LLM_BASE_URL=https://api.deepseek.com
 DOTAMIND_LLM_MODEL=deepseek-chat
+DOTAMIND_TEST_OBSERVER_ENABLED=false
 DOTAMIND_POLICY_PATH=
 DOTAMIND_SESSION_STORE_BACKEND=memory
 DOTAMIND_REDIS_URL=redis://localhost:6379/0
@@ -206,6 +207,11 @@ DOTAMIND_REDIS_URL=redis://localhost:6379/0
 
 Policy is cached for the process lifetime. Restart the API after changing
 `policy.yaml` or an override file.
+
+`DOTAMIND_TEST_OBSERVER_ENABLED=true` adds full Controller/Answer prompts, model
+outputs, and resolved tool inputs/outputs to the short-lived Run event stream.
+It is disabled by default and must only be enabled in a local test environment;
+the observation payload is not written to the PostgreSQL transcript.
 
 ### 赛事届次与运行时失败状态
 

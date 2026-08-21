@@ -104,7 +104,8 @@ def register_pandascore_tools(registry: ToolRegistry, settings: Settings) -> Non
         ToolDefinition(
             name="pandascore.list_matches",
             description=(
-                "List upcoming, running, and past PandaScore fixtures for a resolved series."
+                "List the newest PandaScore fixtures first across upcoming, running, and past "
+                "fixtures for a resolved series. Defaults to the newest 20 fixtures."
             ),
             input_model=PandaScoreListMatchesInput,
             handler=_list_matches_handler(settings, policy),
@@ -257,7 +258,7 @@ def _list_matches_handler(settings: Settings, policy: Any):
     async def handle(args: PandaScoreListMatchesInput, context: QueryContext) -> dict[str, Any]:
         transport, _competitions, matches_client = _clients(settings, policy)
         try:
-            fixtures = await matches_client.list_matches(args.series_id)
+            fixtures = await matches_client.list_matches(args.series_id, limit=args.limit)
             fixtures = [
                 fixture
                 for fixture in fixtures

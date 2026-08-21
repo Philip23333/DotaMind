@@ -112,6 +112,15 @@ export type PlanStreamEvent =
       handler_entered?: boolean | null;
       dispatch_stage?: string | null;
     }
+  | {
+      type: "observer";
+      kind: "model_prompt" | "model_output" | "tool_input" | "tool_output";
+      stage: "controller" | "answer" | "tool";
+      call_id: string;
+      name: string;
+      attempt_index: number;
+      payload: Record<string, unknown>;
+    }
   | { type: "answer_delta"; delta: string; attempt_index: number; provisional: true }
   | { type: "result"; response: PlanResponse; session?: ChatSessionSummary | null }
   | { type: "error"; error_code: string; reason: string }

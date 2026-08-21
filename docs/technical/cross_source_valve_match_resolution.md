@@ -39,14 +39,16 @@ described as a native PandaScore Valve field.
    zero or multiple participating candidates remain `ambiguous_team`.
 3. Fetch `/leagues/{league_id}/matches` through `OpenDotaTransport` and require
    unordered team-ID equality, start delta at most 1800 seconds, duration delta
-   at most 5 seconds, series position by sorted start time, and winner
-   consistency when a winner is available.
+   at most 5 seconds, and winner consistency when a winner is available.
+   OpenDota `series_id` and the derived game position are not hard conditions,
+   because either field can be missing or incomplete in the league-match feed.
 4. Return `resolved` only for exactly one candidate. Zero candidates returns
    `not_found`; multiple candidates returns `ambiguous_match`.
 
 The tolerances are configured by
 `policy.cross_source_match_resolution` and are hard filters, not weighted
-scoring or closest-match fallback.
+scoring or closest-match fallback. If those remaining hard signals identify
+multiple records, the resolver still returns `ambiguous_match`.
 
 ## Statuses and evidence
 
@@ -56,6 +58,9 @@ The resolver can return `resolved`, `league_not_found`, `ambiguous_league`,
 `cross_source_match_mapping` and `valve_match_identity` evidence. Downstream
 `opendota.match_details` then consumes the declared Valve ID list and returns
 summary, scoreboard, parse coverage, and draft data for each selected game.
+OpenDota remains the source of player statistics and raw hero/item IDs; names
+are deterministically enriched from the committed Valve Catalog snapshot and
+retain their separate Catalog provenance.
 
 ## Known sample and live verification
 

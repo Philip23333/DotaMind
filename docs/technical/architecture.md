@@ -63,14 +63,18 @@ uses PandaScore Fixture discovery plus batch game resolution, cross-source Valve
 mapping, and a combined OpenDota match-detail tool. When no game number is given,
 PandaScore returns all provider-exposed games in the uniquely identified series;
 the cross-source resolver maps each game using exact unordered team IDs, hard
-start-time/duration tolerances, series game position, and winner consistency.
+start-time/duration tolerances, and winner consistency. OpenDota `series_id` /
+derived game position is deliberately not a hard condition because the league
+feed can omit it; ambiguity is still surfaced rather than resolved by proximity.
 The free PandaScore Fixture response does not currently expose Valve IDs, so
 OpenDota receives only the explicit Valve ID list emitted by the resolver. A
 globally ambiguous team is resolved only when exactly one candidate has an exact
 `leagueid` participation record in the target league; zero or multiple
 participating candidates remain explicit `ambiguous_team` status. Each successful
 game yields an auditable `inferred_cross_source` mapping, never presented as a
-native PandaScore Valve ID.
+native PandaScore Valve ID. Match-detail player and BP evidence preserves
+OpenDota's raw hero/item IDs and deterministically adds display names from the
+committed Valve Catalog snapshot; the Answer layer must not infer names from IDs.
 STRATZ reads its English hero display-
 name index from the same Catalog repository. The former `hero_tools.py` resolver
 and `data/heroes/dota2_heroes.yaml` snapshot were deleted rather than kept as a
@@ -230,7 +234,10 @@ GraphRunner with that registry. `controller_node` copies the bundle manifest to
 `RunContext.prompt_versions` before the LLM call. Its SHA-256 identifies the configured/
 prepared system prompt, not delivery or model success. Dynamic history and user-message
 rendering are versioned without hashing request content. Prompt text, retry feedback,
-validation errors and raw model output stay out of public and persistent DTOs.
+validation errors and model output stay out of public and persistent DTOs. The explicit
+local-test-only observer may mirror full Controller/Answer exchanges and tool I/O into
+short-lived Run events; it is disabled by default and does not change PostgreSQL transcript
+or public result persistence.
 `controller.recovery_rules=v1` versions the separate dynamic Recovery renderer;
 it does not change the system Prompt hash. `controller.validation_retry=v2`
 requires corrected decisions to preserve explicit subjects, requested result
@@ -369,6 +376,11 @@ events; disconnecting only closes observation and never cancels the detached Run
 Only the cancel endpoint requests cancellation. Provisional answer deltas are not
 authoritative unless followed by a successful final result. `/plan` and
 `/plan/stream` remain stateless debug surfaces.
+
+With both local test flags enabled, `apps/chat` exposes a right-side observer drawer
+for the current subscribed Run. It groups full model prompts, model outputs and
+planned/resolved tool input plus ToolResult output. The drawer reads assistant-message
+metadata populated from Redis Run events and does not create a second browser Run store.
 
 The in-repository `apps/chat` Next.js/assistant-ui client uses that boundary. It
 maps one thread to one DotaMind session, restores transcript through

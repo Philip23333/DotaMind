@@ -16,11 +16,13 @@ import { DOTAMIND_ASSISTANT_METADATA_KEY } from "./migration-contract";
 import { markDotaMindSessionUnread } from "./thread-unread";
 
 export type DotaMindRuntimeTool = Extract<PlanStreamEvent, { type: "tool" }>;
+export type DotaMindObservation = Extract<PlanStreamEvent, { type: "observer" }>;
 
 export type DotaMindRuntimeInfo = {
   messageId: string;
   phase: Extract<PlanStreamEvent, { type: "phase" }>["phase"];
   tools: DotaMindRuntimeTool[];
+  observations: DotaMindObservation[];
   status: "running" | "completed" | "failed" | "cancelled";
   durationMs?: number;
 };
@@ -56,6 +58,23 @@ function updateTool(tools: DotaMindRuntimeTool[], incoming: DotaMindRuntimeTool)
   const index = tools.findIndex((tool) => tool.tool_call_id === incoming.tool_call_id);
   if (index === -1) return [...tools, incoming];
   return tools.map((tool, toolIndex) => (toolIndex === index ? incoming : tool));
+}
+
+function updateObservation(
+  observations: DotaMindObservation[],
+  incoming: DotaMindObservation,
+) {
+  const index = observations.findIndex(
+    (item) =>
+      item.attempt_index === incoming.attempt_index &&
+      item.stage === incoming.stage &&
+      item.call_id === incoming.call_id &&
+      item.kind === incoming.kind,
+  );
+  if (index === -1) return [...observations, incoming];
+  return observations.map((item, itemIndex) =>
+    itemIndex === index ? incoming : item,
+  );
 }
 
 function responseTools(response: PlanResponse): DotaMindRuntimeTool[] {
@@ -102,6 +121,7 @@ export async function* streamDotaMindRun(
     messageId: options.messageId,
     phase: "planning",
     tools: [],
+    observations: [],
     status: "running",
   };
 
@@ -156,6 +176,13 @@ export async function* streamDotaMindRun(
         break;
       case "tool":
         runtime = { ...runtime, tools: updateTool(runtime.tools, event) };
+        yield update();
+        break;
+      case "observer":
+        runtime = {
+          ...runtime,
+          observations: updateObservation(runtime.observations, event),
+        };
         yield update();
         break;
       case "answer_delta":

@@ -1,5 +1,5 @@
 import logging
-from typing import Any
+from typing import Any, Literal
 
 from app.agentic.models import ToolCall, ToolResult
 from app.agentic.references import lookup_path, parse_reference
@@ -11,7 +11,13 @@ from app.agentic.runtime.models import (
     ToolDispatchRecord,
 )
 from app.agentic.runtime.recovery import tool_call_fingerprint
-from app.agentic.runtime.streaming import ToolStreamEvent, publish_stream_event
+from app.agentic.runtime.streaming import (
+    ObserverStreamEvent,
+    ToolStreamEvent,
+    observer_events_enabled,
+    publish_observer_event,
+    publish_stream_event,
+)
 from app.agentic.state import AgentRunState
 from app.agentic.tools.executor import ToolExecutor
 from app.observability import emit_event
@@ -51,6 +57,16 @@ async def tool_executor_node(
     results_by_id: dict[str, ToolResult] = {}
     for call in state.plan.tool_calls:
         resolved_args, resolve_errors = _resolve_args(call.args, results_by_id)
+        _publish_tool_observation(
+            state,
+            call,
+            "tool_input",
+            {
+                "planned_args": call.args,
+                "resolved_args": resolved_args,
+                "resolution_errors": resolve_errors,
+            },
+        )
         if resolve_errors:
             error = "; ".join(resolve_errors)
             result = ToolResult(
@@ -93,14 +109,20 @@ async def tool_executor_node(
                 ToolStreamEvent(
                     tool_call_id=call.id,
                     tool=call.tool,
-                attempt_index=state.attempt_index,
-                status="error",
-                latency_ms=0,
-                reused=False,
-                failure_code="reference_resolution_error",
-                handler_entered=False,
-                dispatch_stage="reference_resolution",
+                    attempt_index=state.attempt_index,
+                    status="error",
+                    latency_ms=0,
+                    reused=False,
+                    failure_code="reference_resolution_error",
+                    handler_entered=False,
+                    dispatch_stage="reference_resolution",
                 )
+            )
+            _publish_tool_observation(
+                state,
+                call,
+                "tool_output",
+                {"result": result.model_dump(mode="json")},
             )
             continue
 
@@ -167,6 +189,12 @@ async def tool_executor_node(
                     dispatch_stage=dispatch.stage,
                 )
             )
+            _publish_tool_observation(
+                state,
+                call,
+                "tool_output",
+                {"result": result.model_dump(mode="json"), "reused": True},
+            )
             continue
 
         def check_handler_gate() -> None:
@@ -213,6 +241,16 @@ async def tool_executor_node(
                     dispatch_stage="pre_dispatch",
                 )
             )
+            _publish_tool_observation(
+                state,
+                call,
+                "tool_output",
+                {
+                    "result": None,
+                    "failure_code": exc.code,
+                    "dispatch_stage": "pre_dispatch",
+                },
+            )
             apply_runtime_failure(state, exc.code)
             break
         state.tool_results.append(result)
@@ -254,6 +292,16 @@ async def tool_executor_node(
                 dispatch_stage=dispatch.stage,
             )
         )
+        _publish_tool_observation(
+            state,
+            call,
+            "tool_output",
+            {
+                "result": result.model_dump(mode="json"),
+                "reused": False,
+                "dispatch": dispatch.model_dump(mode="json"),
+            },
+        )
         if result.status == "error":
             state.errors.append(f"{call.id}: {result.error or 'tool execution failed'}")
 
@@ -265,6 +313,26 @@ async def tool_executor_node(
     state.status = "ok"
     state.add_trace("tools", "tool execution completed", "completed")
     return state
+
+
+def _publish_tool_observation(
+    state: AgentRunState,
+    call: ToolCall,
+    kind: Literal["tool_input", "tool_output"],
+    payload: dict[str, Any],
+) -> None:
+    if not observer_events_enabled():
+        return
+    publish_observer_event(
+        ObserverStreamEvent(
+            kind=kind,
+            stage="tool",
+            call_id=call.id,
+            name=call.tool,
+            attempt_index=state.attempt_index,
+            payload=payload,
+        )
+    )
 
 
 def _resolve_args(

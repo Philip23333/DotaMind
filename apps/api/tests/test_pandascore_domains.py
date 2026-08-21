@@ -60,6 +60,21 @@ async def test_fixture_listing_merges_and_deduplicates_endpoints() -> None:
     assert rows[0].games[0].pandascore_game_id == 738652
     assert rows[0].games[0].pandascore_match_id == 1631694
     assert rows[0].games[0].valve_match_id is None
+    assert all(params["sort"] == "-scheduled_at" for _path, params in transport.calls)
+    assert all(params["page[size]"] == 100 for _path, params in transport.calls)
+
+
+@pytest.mark.anyio
+async def test_fixture_listing_returns_newest_first_and_pushes_requested_limit() -> None:
+    oldest = {**SAMPLE_MATCH, "id": 1, "scheduled_at": "2026-08-13T09:30:00Z"}
+    newest = {**SAMPLE_MATCH, "id": 2, "scheduled_at": "2026-08-20T13:25:00Z"}
+    transport = FakeTransport({"past": [oldest], "upcoming": [newest], "running": []})
+
+    rows = await PandaScoreMatches(transport, object()).list_matches(10828, limit=20)
+
+    assert [row.pandascore_match_id for row in rows] == [2, 1]
+    assert all(params["sort"] == "-scheduled_at" for _path, params in transport.calls)
+    assert all(params["page[size]"] == 20 for _path, params in transport.calls)
 
 
 @pytest.mark.anyio

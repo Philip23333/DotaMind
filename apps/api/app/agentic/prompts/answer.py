@@ -103,7 +103,65 @@ MATCH_SOURCE_BOUNDARY_RULES = (
     "Do not treat PandaScore detailed_stats as OpenDota has_parsed. If OpenDota "
     "parse coverage or draft evidence is absent, say that the match is not parsed "
     "or the BP is unavailable; never claim a completed draft from an empty list."
+    " For player scoreboards and picks/bans, render hero and item names only from "
+    "evidence fields ending in `_name_en` or `_name_zh`. Never infer, translate, "
+    "or map a `hero_id` or `item_id` using model knowledge. If a Catalog name is "
+    "absent, show the ID or say that the Catalog name is unavailable."
 )
+
+TI_TOURNAMENT_STATUS_OUTPUT_EXAMPLE = """For a The International schedule or
+latest-status overview, use the following Markdown presentation as the style and
+section-order example. This example is presentation-only: never reuse its teams,
+scores, dates, times, stages, region, series format, or source claims unless the
+current EvidenceGraph supports them. `第X届` is a layout placeholder; replace it
+with evidence or omit the ordinal instead of outputting a literal X. Do not invent
+content to fill an example section.
+
+# 2026年国际邀请赛（TI）最新战况
+
+## 赛事概况
+
+- **赛事**：The International 2026（第X届国际邀请赛）
+- **阶段**：目前处于**淘汰赛阶段**（Playoffs），8月20日开赛，8月23日结束
+- **赛区**：亚洲
+
+## 当前进行中的比赛
+
+### 胜者组四分之一决赛（进行中）
+
+| 对阵 | 状态 | 比分 |
+| --- | --- | --- |
+| **Team Spirit (TS)** vs Iron Wing (IW) | ✅ 已结束 | **TS 2** - 0 IW |
+| **TEAM VISION (VSN)** vs BoomBoys (BB) | 🔴 进行中 | VSN 1 - 1 BB（决胜局进行中） |
+| Team Liquid vs Team Yandex (TY) | ⏳ 未开始 | 10:30 UTC 开赛 |
+| Nigma Galaxy (NGX) vs Team Falcons (FLC) | ⏳ 未开始 | 11:00 UTC 开赛 |
+
+## 已结束的关键比赛
+
+### 胜者组四分之一决赛
+
+- **Team Spirit 2:0 战胜 Iron Wing**（晋级胜者组半决赛）
+
+### 淘汰赛阶段（8月16日）
+
+| 对阵 | 比分 | 结果 |
+| --- | --- | --- |
+| Team Falcons vs Vici Gaming | 2–0 | FLC 晋级 |
+| BoomBoys vs Aurora | 2–0 | BB 晋级 |
+| Team Spirit vs Team Resilience | 2–1 | TS 晋级 |
+| Iron Wing vs GamerLegion | 2–0 | IW 晋级 |
+| Team Yandex vs LGD Gaming | 2–1 | TY 晋级 |
+
+## 后续赛程
+
+- **败者组第一轮**：8月21日 02:00 UTC（Iron Wing vs TBD）
+- **胜者组四分之一决赛剩余场次**：今日稍后进行
+
+## 数据说明
+
+以上赛程、比分和状态均来自 PandaScore 赛事数据。所有比赛均为 BO3
+赛制。目前尚无 Valve 官方比赛 ID 的映射数据，如需查看具体比赛详情或录像，
+建议关注官方直播渠道。"""
 
 WEEKLY_TREND_RULES = (
     "When evidence items carry week_index/week_epoch (per-week STRATZ buckets), "
@@ -234,6 +292,7 @@ def render_natural_language_system_prompt(graph: EvidenceGraph) -> str:
         sections.append(STRATZ_METADATA_BOUNDARY_RULES)
     if kinds & MATCH_EVIDENCE_KINDS or _has_match_source(graph):
         sections.append(MATCH_SOURCE_BOUNDARY_RULES)
+        sections.append(TI_TOURNAMENT_STATUS_OUTPUT_EXAMPLE)
     if kinds & WEEKLY_STRATZ_KINDS:
         sections.append(WEEKLY_TREND_RULES)
     if "pair_lane_outcome" in kinds:

@@ -25,14 +25,18 @@ class PandaScoreMatches:
         self.transport = transport
         self.competitions = competitions
 
-    async def list_matches(self, series_id: int) -> list[PandaMatchFixture]:
+    async def list_matches(
+        self, series_id: int, *, limit: int | None = None
+    ) -> list[PandaMatchFixture]:
+        page_size = min(limit or self.transport.max_page_size, self.transport.max_page_size)
         all_rows: dict[int, PandaMatchFixture] = {}
         for endpoint in ("upcoming", "running", "past"):
             rows = await self.transport.get(
                 f"/dota2/matches/{endpoint}",
                 params={
                     "filter[serie_id]": series_id,
-                    "page[size]": self.transport.max_page_size,
+                    "sort": "-scheduled_at",
+                    "page[size]": page_size,
                 },
             )
             for row in rows if isinstance(rows, list) else []:
@@ -43,6 +47,7 @@ class PandaScoreMatches:
         return sorted(
             all_rows.values(),
             key=lambda item: item.scheduled_at or item.begin_at or datetime.max,
+            reverse=True,
         )
 
     async def resolve_games(

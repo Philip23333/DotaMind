@@ -219,6 +219,7 @@ def _parse_event(payload: dict) -> PlanStreamEvent:
     from app.agentic.runtime.streaming import (
         AnswerDeltaStreamEvent,
         ErrorStreamEvent,
+        ObserverStreamEvent,
         PhaseStreamEvent,
         ResultStreamEvent,
         ToolStreamEvent,
@@ -227,6 +228,7 @@ def _parse_event(payload: dict) -> PlanStreamEvent:
     event_types = {
         "answer_delta": AnswerDeltaStreamEvent,
         "error": ErrorStreamEvent,
+        "observer": ObserverStreamEvent,
         "phase": PhaseStreamEvent,
         "result": ResultStreamEvent,
         "tool": ToolStreamEvent,

@@ -118,3 +118,41 @@
 
 - 使用真实 `AgentController` 和固定链路计划对三种 IW/TS 查询做规划校验时，三者均触发既有 `dota.resolve_valve_matches.competition` 空字典占位校验错误；本次按范围未修改 Validator 或工具契约，也未进行真实上游请求。
 - IW vs TS 的 Valve Match ID 映射失败仍不属于本次修复范围。
+
+## 17:15 — 测试观测器与右侧结构化抽屉
+
+### 已完成
+
+- 新增默认关闭的 `DOTAMIND_TEST_OBSERVER_ENABLED`，在 Controller、Answer 和工具执行边界向当前 Chat Run 事件流发布结构化 `observer` 事件。
+- 模型观测记录每次调用的完整拼装后 `messages`、调用参数与完整模型内容；工具观测同时记录计划参数、引用解析后的实际参数、解析错误和完整 `ToolResult`。
+- Chat 新增由 `NEXT_PUBLIC_DOTAMIND_TEST_OBSERVER_ENABLED` 控制的右侧测试抽屉，按“模型 Prompt / 工具 I/O / 模型输出”三类展示，并按 attempt、stage 与 call ID 标识和配对记录。
+- 观测数据复用 assistant message metadata，不创建第二套前端 Run Store；正式聊天 transcript 与公开 `PlanResponse` 不保存完整 Prompt 或工具结果。
+
+### 验证
+
+- API 全量：621 passed、21 skipped、1 warning；`uv run --project apps/api ruff check apps/api/app apps/api/tests` 通过。
+- `apps/chat`：`npm test -- --run` 为 11 passed（6 files）；`npm run lint`、`npx tsc --noEmit`、`npm run build` 均通过。
+- 本地浏览器使用真实 Chat Run 验证右侧抽屉：收到 3 份模型 Prompt、2 组工具 I/O、3 份模型输出；确认 `$ref` 计划参数与解析后的实际参数并列展示，最终 Answer 全文可见。
+
+### 已知边界
+
+- 两个显式开关均需启用才展示完整观测数据；默认关闭时不会产生或展示这些敏感调试内容。
+- 抽屉仅展示当前页面实际订阅并收到的短期 Run 事件；刷新页面或打开历史聊天不会从 PostgreSQL transcript 恢复观测数据。
+
+## 17:55 — 观测卡片折叠、JSON 复制与结构化展示
+
+### 已完成
+
+- 模型 Prompt、模型输出和工具 I/O 记录改为可独立展开/折叠的原生 disclosure 卡片；每个分类默认只展开第一条，长 Prompt 不再同时铺满抽屉。
+- 每个卡片带有明确的 JSON 类型标记；Prompt、工具输入、工具输出和模型输出数据块继续使用格式化 JSON 展示。
+- 每个已有数据的结构化区块新增“复制 JSON”操作，直接复制完整格式化 JSON，并在成功后显示“已复制”。
+- 新增结构化序列化单元测试；未修改后端 observer 事件契约、Run Store 或持久化边界。
+
+### 验证
+
+- `apps/chat`：`npm test -- --run` 为 12 passed（6 files）；`npm run lint`、`npx tsc --noEmit`、`npm run build` 均通过。
+- 本地浏览器使用真实 Chat Run 验证：Prompt 分类初始展开状态为 `[true, false, false]`，工具分类为 `[true, false]`；第二张卡片可独立展开，一键复制得到 45,875 字符且可解析为 JSON 的完整 Prompt 载荷。
+
+### 已知边界
+
+- “已复制”状态保留到该分类重新渲染；再次点击仍会重新写入剪贴板。

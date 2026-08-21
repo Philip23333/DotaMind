@@ -11,6 +11,12 @@ from app.agentic.planning.contracts import (
     get_contract,
 )
 from app.agentic.prompts.answer import render_natural_language_answer_messages
+from app.agentic.runtime.streaming import (
+    ObserverStreamEvent,
+    current_observer_attempt_index,
+    observer_events_enabled,
+    publish_observer_event,
+)
 from app.core.config import get_policy, get_settings
 from app.llm.provider import LLMProvider, get_llm_provider
 
@@ -282,6 +288,24 @@ class NaturalLanguageAnswerSynthesizer:
                 graph,
                 current_query=current_query,
             )
+            if observer_events_enabled():
+                publish_observer_event(
+                    ObserverStreamEvent(
+                        kind="model_prompt",
+                        stage="answer",
+                        call_id="answer:0",
+                        name="answer",
+                        attempt_index=current_observer_attempt_index(),
+                        payload={
+                            "messages": [dict(message) for message in messages],
+                            "temperature": self.policy.llm.orchestrator.temperature,
+                            "max_tokens": max(
+                                self.policy.llm.orchestrator.max_tokens,
+                                1200,
+                            ),
+                        },
+                    )
+                )
             if on_delta is None:
                 summary = await self.llm.complete(
                     messages,
@@ -299,6 +323,16 @@ class NaturalLanguageAnswerSynthesizer:
                     on_delta(delta)
                 summary = "".join(chunks)
             summary = summary.strip()
+            publish_observer_event(
+                ObserverStreamEvent(
+                    kind="model_output",
+                    stage="answer",
+                    call_id="answer:0",
+                    name="answer",
+                    attempt_index=current_observer_attempt_index(),
+                    payload={"format": "text", "content": summary},
+                )
+            )
             return AnswerSynthesisResult(
                 answer_type=plan.output_contract,
                 status="ok",
@@ -307,7 +341,21 @@ class NaturalLanguageAnswerSynthesizer:
                 data_notes=data_notes(graph),
                 confidence=confidence(graph, has_output=bool(summary)),
             )
-        except Exception:
+        except Exception as exc:
+            publish_observer_event(
+                ObserverStreamEvent(
+                    kind="model_output",
+                    stage="answer",
+                    call_id="answer:0",
+                    name="answer",
+                    attempt_index=current_observer_attempt_index(),
+                    payload={
+                        "format": "error",
+                        "content": None,
+                        "error": f"{type(exc).__name__}: {exc}",
+                    },
+                )
+            )
             return AnswerSynthesisResult(
                 answer_type=plan.output_contract,
                 status="error",

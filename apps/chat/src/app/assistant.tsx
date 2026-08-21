@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { ChatSidebar } from "@/components/chat-sidebar";
 import { StartupOverlay } from "@/components/startup-overlay";
+import { TestObserverDrawer } from "@/components/test-observer-drawer";
 import { Button } from "@/components/ui/button";
 import { Thread } from "@/components/thread";
 import {
@@ -56,7 +57,7 @@ function DotaMindChatShell({ browserId }: { browserId: string }) {
   }, [aui]);
 
   return (
-    <div className="chat-shell flex h-dvh bg-background">
+    <div className="chat-shell relative flex h-dvh bg-background">
       <ChatSidebar
         disabled={isLoading || isThreadLoading}
         mobileOpen={mobileSidebarOpen}
@@ -111,6 +112,7 @@ function DotaMindChatShell({ browserId }: { browserId: string }) {
           <Thread browserId={browserId} />
         </div>
       </div>
+      <TestObserverDrawer />
     </div>
   );
 }

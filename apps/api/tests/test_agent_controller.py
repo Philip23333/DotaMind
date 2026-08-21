@@ -10,6 +10,13 @@ from app.agentic.planning.decisions import (
     DirectAnswerDecision,
     ToolPlanDecision,
 )
+from app.agentic.runtime.streaming import (
+    ObserverStreamEvent,
+    bind_observer_attempt_index,
+    bind_stream_event_publisher,
+    reset_observer_attempt_index,
+    reset_stream_event_publisher,
+)
 from app.agentic.state import AgentRunState
 from app.agentic.tools.stratz_tools import build_default_tool_registry
 from app.core.config import Settings
@@ -196,6 +203,36 @@ def test_agent_controller_accepts_valid_counter_pick_plan() -> None:
     assert result.raw_output == _valid_plan_payload()
     assert [message["role"] for message in result.prompt_messages] == ["system", "user"]
     assert "Schema obedience rules" in result.prompt_messages[0]["content"]
+
+
+def test_agent_controller_publishes_full_test_observer_model_exchange(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.core.config.get_settings",
+        lambda: Settings(test_observer_enabled=True),
+    )
+    events: list[ObserverStreamEvent] = []
+    token = bind_stream_event_publisher(events.append)
+    attempt_token = bind_observer_attempt_index(2)
+    try:
+        result = asyncio.run(
+            AgentController(
+                _registry(),
+                llm=FakeLLM(_valid_plan_payload()),
+                llm_enabled=True,
+                planner_max_retries=0,
+            ).decide("enemy picked Lina, what should I pick?")
+        )
+    finally:
+        reset_observer_attempt_index(attempt_token)
+        reset_stream_event_publisher(token)
+
+    assert result.status == "decided"
+    assert [event.kind for event in events] == ["model_prompt", "model_output"]
+    assert events[0].attempt_index == 2
+    assert events[0].payload["messages"][-1]["content"] == (
+        "enemy picked Lina, what should I pick?"
+    )
+    assert events[1].payload["content"] == _valid_plan_payload()
 
 
 def test_agent_controller_returns_capability_boundary() -> None:

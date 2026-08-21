@@ -235,12 +235,49 @@ async def test_resolves_when_pandascore_team_order_is_reversed() -> None:
         ({"series_name": "Unknown", "year": 2026}, _game(), "league_not_found"),
         (_competition(), _game(game_begin_at=None), "insufficient_signals"),
         (_competition(), _game(length_seconds=100), "not_found"),
-        (_competition(), _game(game_position=2), "not_found"),
+        (_competition(), _game(game_position=2), "resolved"),
         (_competition(), _game(winner_pandascore_team_id=121771), "not_found"),
     ],
 )
 async def test_resolution_statuses_are_explicit(competition, game, expected) -> None:
     assert (await _resolver().resolve(competition, game)).status == expected
+
+
+@pytest.mark.anyio
+async def test_resolves_when_opendota_series_id_is_missing() -> None:
+    rows = [
+        OpenDotaLeagueMatch(
+            valve_match_id=8955197224,
+            opendota_league_id=19719,
+            opendota_series_id=None,
+            start_time=1787193389,
+            duration=3744,
+            radiant_team_id=7119388,
+            dire_team_id=10150413,
+            radiant_win=True,
+        )
+    ]
+    teams = [
+        {"team_id": 10150413, "name": "Iron Wing", "tag": "IW"},
+        {"team_id": 7119388, "name": "Team Spirit", "tag": "TSpirit"},
+    ]
+    game = _game(
+        game_position=1,
+        game_begin_at="2026-08-20T02:29:30+00:00",
+        length_seconds=3744,
+        teams=[
+            {"pandascore_team_id": 138994, "name": "Iron Wing", "acronym": "IW"},
+            {"pandascore_team_id": 1669, "name": "Team Spirit", "acronym": "TS"},
+        ],
+        winner_pandascore_team_id=1669,
+    )
+
+    result = await _resolver(matches=rows, teams=teams).resolve(_competition(), game)
+
+    assert result.status == "resolved"
+    assert result.match is not None and result.match.valve_match_id == 8955197224
+    assert result.mapping is not None
+    assert "game_position" not in result.mapping.matched_on
 
 
 @pytest.mark.anyio

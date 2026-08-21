@@ -1,5 +1,9 @@
 from app.agentic.planning.controller import AgentController
 from app.agentic.planning.decisions import ToolPlanDecision
+from app.agentic.runtime.streaming import (
+    bind_observer_attempt_index,
+    reset_observer_attempt_index,
+)
 from app.agentic.state import AgentRunState
 
 
@@ -12,28 +16,32 @@ async def controller_node(
     if state.run_context is not None:
         state.run_context.prompt_versions = controller.prompt_versions
     state.add_trace("controller", "create controller decision", "planned")
-    if state.recovery_feedback is None:
-        result = await controller.decide(
-            state.query,
-            state.game,
-            recent_messages=state.recent_messages or None,
-            retrieved_messages=state.retrieved_messages or None,
-            controller_context_summaries=state.controller_context_summaries or None,
-            request_time=state.request_time.isoformat(),
-        )
-    else:
-        if state.recovery_baseline_decision is None:
-            raise RuntimeError("recovery baseline decision is missing")
-        result = await controller.decide(
-            state.query,
-            state.game,
-            recent_messages=state.recent_messages or None,
-            retrieved_messages=state.retrieved_messages or None,
-            controller_context_summaries=state.controller_context_summaries or None,
-            request_time=state.request_time.isoformat(),
-            recovery_feedback=state.recovery_feedback,
-            recovery_baseline_decision=state.recovery_baseline_decision,
-        )
+    observer_token = bind_observer_attempt_index(state.attempt_index)
+    try:
+        if state.recovery_feedback is None:
+            result = await controller.decide(
+                state.query,
+                state.game,
+                recent_messages=state.recent_messages or None,
+                retrieved_messages=state.retrieved_messages or None,
+                controller_context_summaries=state.controller_context_summaries or None,
+                request_time=state.request_time.isoformat(),
+            )
+        else:
+            if state.recovery_baseline_decision is None:
+                raise RuntimeError("recovery baseline decision is missing")
+            result = await controller.decide(
+                state.query,
+                state.game,
+                recent_messages=state.recent_messages or None,
+                retrieved_messages=state.retrieved_messages or None,
+                controller_context_summaries=state.controller_context_summaries or None,
+                request_time=state.request_time.isoformat(),
+                recovery_feedback=state.recovery_feedback,
+                recovery_baseline_decision=state.recovery_baseline_decision,
+            )
+    finally:
+        reset_observer_attempt_index(observer_token)
     state.controller_result = result
     state.reason = result.reason
     if result.status != "decided" or result.decision is None:

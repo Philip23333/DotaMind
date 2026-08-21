@@ -118,3 +118,41 @@
 
 - Planning validation with the real `AgentController` and a fixed chain plan for all three IW/TS phrasings still triggers the existing empty-dict placeholder validation for `dota.resolve_valve_matches.competition`; Validator and tool contracts were intentionally left unchanged, and no live upstream request was made.
 - The IW vs TS Valve Match ID mapping failure remains outside this repair.
+
+## 17:15 — Test observer and structured right drawer
+
+### Completed
+
+- Added the default-off `DOTAMIND_TEST_OBSERVER_ENABLED` setting, which publishes structured `observer` events to the current Chat Run event stream at the Controller, Answer, and tool-execution boundaries.
+- Model observations record the complete assembled `messages`, call settings, and full model content for every invocation; tool observations record planned arguments, reference-resolved actual arguments, resolution errors, and the complete `ToolResult`.
+- Added a right-side Chat test drawer controlled by `NEXT_PUBLIC_DOTAMIND_TEST_OBSERVER_ENABLED`, grouped into Model Prompt, Tool I/O, and Model Output views and identified by attempt, stage, and call ID.
+- Observation data reuses assistant-message metadata instead of adding a second frontend Run Store; the official chat transcript and public `PlanResponse` do not persist full prompts or tool results.
+
+### Verification
+
+- API full suite: 621 passed, 21 skipped, 1 warning; `uv run --project apps/api ruff check apps/api/app apps/api/tests` passed.
+- `apps/chat`: `npm test -- --run` passed 11 tests in 6 files; `npm run lint`, `npx tsc --noEmit`, and `npm run build` all passed.
+- A live local Chat Run verified the right drawer with 3 model prompts, 2 tool I/O groups, and 3 model outputs; planned `$ref` arguments and resolved actual arguments were shown side by side, and the full final Answer was visible.
+
+### Known boundaries
+
+- Both explicit flags must be enabled to display full observation data; the sensitive debugging content is neither emitted nor shown by default.
+- The drawer only shows short-lived Run events actually received by the current page subscription; reloading or opening chat history does not reconstruct observations from the PostgreSQL transcript.
+
+## 17:55 — Observation folding, JSON copy, and structured presentation
+
+### Completed
+
+- Model Prompt, model output, and tool I/O records now use independently expandable native disclosure cards; only the first record in each category is expanded by default so long prompts no longer fill the drawer at once.
+- Every card has an explicit JSON type badge, while Prompt, tool input, tool output, and model output blocks continue to render formatted JSON.
+- Every populated structured block now has a Copy JSON action that copies the complete formatted JSON and changes to Copied after success.
+- Added a structured-serialization unit test; the backend observer event contract, Run Store, and persistence boundary are unchanged.
+
+### Verification
+
+- `apps/chat`: `npm test -- --run` passed 12 tests in 6 files; `npm run lint`, `npx tsc --noEmit`, and `npm run build` all passed.
+- A live local Chat Run verified initial Prompt expansion states of `[true, false, false]` and tool expansion states of `[true, false]`; the second card expanded independently, and one-click copy produced a complete JSON Prompt payload of 45,875 characters.
+
+### Known boundaries
+
+- The Copied state remains until that category rerenders; clicking again still writes the payload to the clipboard again.
