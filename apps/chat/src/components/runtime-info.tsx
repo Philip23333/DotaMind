@@ -14,7 +14,7 @@ import {
 import { useAuiState } from "@assistant-ui/react";
 import { useState, type FC } from "react";
 
-type RunStatus = "running" | "completed" | "failed" | "cancelled";
+type RunStatus = "running" | "waiting_input" | "completed" | "failed" | "cancelled";
 
 export type RuntimeTool = Extract<PlanStreamEvent, { type: "tool" }>;
 
@@ -64,6 +64,7 @@ const toolLabels: Record<string, string> = {
 
 const statusLabel: Record<RunStatus, string> = {
   running: "进行中",
+  waiting_input: "等待选择",
   completed: "已完成",
   failed: "未完成",
   cancelled: "已取消",
@@ -84,6 +85,8 @@ export const RuntimeInfoCard: FC<{ run: RuntimeInfo }> = ({ run }) => {
       <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-muted-foreground">
         {isRunning ? (
           <LoaderCircleIcon className="size-4 animate-spin" />
+        ) : run.status === "waiting_input" ? (
+          <CircleAlertIcon className="size-4 text-sky-600" />
         ) : run.status === "completed" ? (
           <CheckCircle2Icon className="size-4 text-emerald-600" />
         ) : (

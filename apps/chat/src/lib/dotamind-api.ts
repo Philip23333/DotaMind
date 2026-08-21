@@ -71,10 +71,25 @@ export type ChatRunStatus =
   | "queued"
   | "running"
   | "cancel_requested"
+  | "waiting_input"
   | "completed"
   | "failed"
   | "cancelled"
   | "interrupted";
+
+export type ChatRunCheckpointOption = {
+  id: string;
+  label: string;
+  value: Record<string, unknown>;
+};
+
+export type ChatRunCheckpoint = {
+  checkpoint_type: string;
+  question: string;
+  options: ChatRunCheckpointOption[];
+  source_tool_call_id: string;
+  resume_node: "controller" | "tools";
+};
 
 export type ChatRunSummary = {
   run_id: string;
@@ -135,6 +150,7 @@ export type PlanStreamEvent =
   | { type: "answer_delta"; delta: string; attempt_index: number; provisional: true }
   | { type: "result"; response: PlanResponse; session?: ChatSessionSummary | null }
   | { type: "error"; error_code: string; reason: string }
+  | { type: "checkpoint"; checkpoint: ChatRunCheckpoint }
   | {
       type: "status";
       status: ChatRunStatus;

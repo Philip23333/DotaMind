@@ -4,6 +4,7 @@ import {
   formatPlanResponse,
   formatStreamError,
   getChatSession,
+  type ChatRunCheckpoint,
   type ChatRunStatus,
   type PlanStreamEvent,
   type PlanResponse,
@@ -20,10 +21,15 @@ export type DotaMindObservation = Extract<PlanStreamEvent, { type: "observer" }>
 
 export type DotaMindRuntimeInfo = {
   messageId: string;
+  runId: string;
+  sessionId: string;
+  requestId: string;
+  lastSequence?: number;
   phase: Extract<PlanStreamEvent, { type: "phase" }>["phase"];
   tools: DotaMindRuntimeTool[];
   observations: DotaMindObservation[];
-  status: "running" | "completed" | "failed" | "cancelled";
+  status: "running" | "waiting_input" | "completed" | "failed" | "cancelled";
+  checkpoint?: ChatRunCheckpoint;
   durationMs?: number;
 };
 
@@ -39,6 +45,7 @@ type StreamChatRunOptions = {
 
 function terminalStatus(status: ChatRunStatus): DotaMindRuntimeInfo["status"] {
   if (status === "cancelled") return "cancelled";
+  if (status === "waiting_input") return "waiting_input";
   if (status === "completed") return "completed";
   return "failed";
 }
@@ -119,6 +126,9 @@ export async function* streamDotaMindRun(
   let markedUnread = false;
   let runtime: DotaMindRuntimeInfo = {
     messageId: options.messageId,
+    runId: options.runId,
+    sessionId: options.sessionId,
+    requestId: options.requestId,
     phase: "planning",
     tools: [],
     observations: [],
@@ -144,6 +154,10 @@ export async function* streamDotaMindRun(
   )) {
     if (options.abortSignal.aborted) return;
 
+    if ("sequence" in item) {
+      runtime = { ...runtime, lastSequence: item.sequence };
+    }
+
     if (!("sequence" in item)) {
       if (item.type === "heartbeat") {
         runtime = {
@@ -153,7 +167,7 @@ export async function* streamDotaMindRun(
             : terminalStatus(item.status),
         };
         if (runtime.status !== "running") receivedTerminalEvent = true;
-        if (receivedTerminalEvent) markUnread();
+        if (receivedTerminalEvent && runtime.status !== "waiting_input") markUnread();
         yield update();
         if (receivedTerminalEvent) return;
         continue;
@@ -182,6 +196,14 @@ export async function* streamDotaMindRun(
         runtime = {
           ...runtime,
           observations: updateObservation(runtime.observations, event),
+        };
+        yield update();
+        break;
+      case "checkpoint":
+        runtime = {
+          ...runtime,
+          checkpoint: event.checkpoint,
+          status: "waiting_input",
         };
         yield update();
         break;
@@ -220,6 +242,12 @@ export async function* streamDotaMindRun(
           break;
         }
 
+        if (event.status === "waiting_input") {
+          receivedTerminalEvent = true;
+          yield update();
+          return;
+        }
+
         receivedTerminalEvent = true;
         markUnread();
         if (event.status === "completed") {
@@ -250,7 +278,7 @@ export async function* streamDotaMindRun(
     }
   }
 
-  if (!receivedTerminalEvent && !options.abortSignal.aborted) {
+  if (!receivedTerminalEvent && runtime.status !== "waiting_input" && !options.abortSignal.aborted) {
     runtime = { ...runtime, status: "failed" };
     yield update({ content: [{ type: "text", text: incompleteMessage }] });
   }

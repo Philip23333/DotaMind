@@ -1,6 +1,7 @@
 "use client";
 
 import { MarkdownText } from "@/components/markdown-text";
+import { CheckpointCard } from "@/components/checkpoint-card";
 import { RuntimeInfoCard, useRuntimeInfo } from "@/components/runtime-info";
 import { Button } from "@/components/ui/button";
 import {
@@ -42,7 +43,7 @@ export const Thread: FC<{ browserId?: string }> = ({ browserId }) => {
 
           <div className="flex flex-col gap-10 pb-16 empty:hidden">
             <ThreadPrimitive.Messages>
-              {() => <ThreadMessage />}
+              {() => <ThreadMessage browserId={browserId} />}
             </ThreadPrimitive.Messages>
           </div>
 
@@ -89,9 +90,9 @@ const Welcome: FC = () => (
   </div>
 );
 
-const ThreadMessage: FC = () => {
+const ThreadMessage: FC<{ browserId?: string }> = ({ browserId }) => {
   const role = useAuiState((state) => state.message.role);
-  return role === "user" ? <UserMessage /> : <AssistantMessage />;
+  return role === "user" ? <UserMessage /> : <AssistantMessage browserId={browserId} />;
 };
 
 const UserMessage: FC = () => (
@@ -102,7 +103,7 @@ const UserMessage: FC = () => (
   </MessagePrimitive.Root>
 );
 
-const AssistantMessage: FC = () => {
+const AssistantMessage: FC<{ browserId?: string }> = ({ browserId }) => {
   const messageId = useAuiState((state) => state.message.id);
   const runtimeInfo = useRuntimeInfo(messageId);
 
@@ -110,6 +111,13 @@ const AssistantMessage: FC = () => {
     <MessagePrimitive.Root className="group relative min-w-0 pr-2 sm:pr-8">
       <div className="min-w-0 leading-relaxed wrap-break-word">
         {runtimeInfo && <RuntimeInfoCard run={runtimeInfo} />}
+        {runtimeInfo?.status === "waiting_input" && runtimeInfo.checkpoint && (
+          <CheckpointCard
+            browserId={browserId}
+            checkpoint={runtimeInfo.checkpoint}
+            runtime={runtimeInfo}
+          />
+        )}
         {runtimeInfo?.status === "running" && runtimeInfo.phase === "answering" && (
           <p className="mb-2 text-xs text-muted-foreground">生成中 · 待核验</p>
         )}

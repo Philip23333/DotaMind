@@ -53,6 +53,11 @@ DotaMind Session API 完成。置顶状态和 transcript 保存在 PostgreSQL。
 assistant message metadata，不再维护独立的浏览器级 Run Store。移动端使用抽屉式聊天列表，
 聊天管理操作通过“更多”菜单提供，不依赖 hover。
 
+当 ChatRun 发布 `checkpoint` 并进入 `waiting_input` 时，assistant message 会显示
+`CheckpointCard`。卡片只提交服务端提供的 `checkpoint_type` 与 `option_id`；选择成功后在同一
+`run_id` 上调用 resume，并从保存的事件 sequence 继续订阅。刷新页面沿用活动 Run 的 replay
+恢复卡片；等待选择期间不会自动取消或猜测候选。
+
 `/api/v1/plan` 与 `/api/v1/plan/stream` 只保留 `/debug/plan` 的 stateless 调试用途；生产
 聊天不再调用它们。Chat Run 事件包含 Redis Stream 的重放 cursor 和 heartbeat，最终 Turn
 由 PostgreSQL 原子提交。附件、跨设备同步和用户认证均不属于这个阶段。

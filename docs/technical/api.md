@@ -216,6 +216,11 @@ The current domain adapter is limited to `pandascore.resolve_match_games` with
 patches the original lookup during resume; clients cannot supply that date directly,
 and no downstream Valve/OpenDota call is made before the selection.
 
+`apps/chat` renders the replayed `checkpoint` as a `CheckpointCard`. The card submits only the
+checkpoint type and option id, then resumes the same Run and subscribes with the saved sequence
+cursor. A refresh replays the active waiting Run from `after=0`; the waiting segment is not treated
+as a failure or cancellation.
+
 Cancel persists `cancel_requested` in PostgreSQL before local/Redis wake-up. A repeated cancel
 is `202`; terminal Runs return `409 run_terminal`. Disconnecting an event subscriber only closes
 the observer; it never cancels the detached background Run.

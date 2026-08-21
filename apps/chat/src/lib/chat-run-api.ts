@@ -7,6 +7,7 @@ import { createUuidV4 } from "./uuid";
 
 type ChatRunCreateResponse = { run: ChatRunSummary };
 type ChatRunCancelResponse = { run: ChatRunSummary };
+type ChatRunResumeResponse = { run: ChatRunSummary };
 type ChatRunEventEnvelope = {
   run_id: string;
   session_id: string;
@@ -101,6 +102,21 @@ export async function cancelChatRun(
   });
   await ensureOk(response);
   return ((await response.json()) as ChatRunCancelResponse).run;
+}
+
+export async function resumeChatRun(
+  browserId: string,
+  runId: string,
+  checkpointType: string,
+  optionId: string,
+): Promise<ChatRunSummary> {
+  const response = await fetch(`${apiUrl()}/api/v1/chat/runs/${runId}/resume`, {
+    method: "POST",
+    headers: headers(browserId, true),
+    body: JSON.stringify({ checkpoint_type: checkpointType, option_id: optionId }),
+  });
+  await ensureOk(response);
+  return ((await response.json()) as ChatRunResumeResponse).run;
 }
 
 export async function* subscribeChatRun(
