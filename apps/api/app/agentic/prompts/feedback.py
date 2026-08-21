@@ -11,6 +11,10 @@ def render_validation_retry_feedback(errors: Sequence[str]) -> str:
         "Your previous response was rejected. Return the FULL corrected "
         "ControllerDecision JSON again, fixing every issue:\n"
         + "\n".join(f"- {error}" for error in errors)
+        + "\nPreserve every explicit subject, requested result count, and scope "
+        "constraint from the current request. Never fix an invalid plan by "
+        "dropping or weakening a user requirement; return capability_boundary "
+        "if the registered tools cannot honor it."
         + "\nDo not explain; only return the corrected JSON."
     )
 

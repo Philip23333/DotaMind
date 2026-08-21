@@ -95,7 +95,7 @@ class RunContext(StrictRuntimeModel):
 
 class RunBudget(StrictRuntimeModel):
     max_replans: int = Field(default=1, ge=1)
-    max_tool_calls_total: int = Field(default=8, ge=1)
+    max_tool_calls_total: int = Field(default=16, ge=1)
     max_controller_calls: int = Field(default=2, ge=1)
     max_answer_calls: int = Field(default=2, ge=1)
     max_elapsed_seconds: int = Field(default=60, ge=1)

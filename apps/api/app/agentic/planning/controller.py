@@ -6,7 +6,10 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, TypeAdapter, ValidationError
 
-from app.agentic.conversation.models import ConversationMessage
+from app.agentic.conversation.models import (
+    ControllerContextExecutionSummary,
+    ConversationMessage,
+)
 from app.agentic.planning.decisions import (
     ControllerDecision,
     RequiredEvidenceResolution,
@@ -28,6 +31,12 @@ from app.agentic.prompts.feedback import (
     render_validation_retry_feedback,
 )
 from app.agentic.runtime.models import RecoveryFeedback
+from app.agentic.runtime.streaming import (
+    ObserverStreamEvent,
+    current_observer_attempt_index,
+    observer_events_enabled,
+    publish_observer_event,
+)
 from app.agentic.tools import ToolRegistry
 from app.core.config import get_policy, get_settings
 from app.llm.provider import LLMJSONDecodeError, LLMProvider, get_llm_provider
@@ -90,6 +99,9 @@ class AgentController:
         recent_messages: list[ConversationMessage] | None = None,
         *,
         retrieved_messages: list[ConversationMessage] | None = None,
+        controller_context_summaries: list[
+            ControllerContextExecutionSummary
+        ] | None = None,
         recovery_feedback: RecoveryFeedback | None = None,
         recovery_baseline_decision: ToolPlanDecision | None = None,
         request_time: str | None = None,
@@ -121,6 +133,7 @@ class AgentController:
                     game,
                     self.runtime_context,
                     request_time or self._default_request_time,
+                    controller_context_summaries,
                 ),
             },
             *conversation_messages,
@@ -152,11 +165,42 @@ class AgentController:
 
         for attempt in range(max_attempts):
             is_last_attempt = attempt == max_attempts - 1
+            observation_call_id = f"controller:{attempt}"
+            if observer_events_enabled():
+                publish_observer_event(
+                    ObserverStreamEvent(
+                        kind="model_prompt",
+                        stage="controller",
+                        call_id=observation_call_id,
+                        name="controller",
+                        attempt_index=current_observer_attempt_index(),
+                        payload={
+                            "messages": [dict(message) for message in messages],
+                            "temperature": temperature,
+                            "max_tokens": max_tokens,
+                        },
+                    )
+                )
             try:
                 raw = await self.llm.complete_json(
                     messages, temperature=temperature, max_tokens=max_tokens
                 )
             except LLMJSONDecodeError as exc:
+                publish_observer_event(
+                    ObserverStreamEvent(
+                        kind="model_output",
+                        stage="controller",
+                        call_id=observation_call_id,
+                        name="controller",
+                        attempt_index=current_observer_attempt_index(),
+                        payload={
+                            "format": "text",
+                            "content": exc.raw_content,
+                            "finish_reason": exc.finish_reason,
+                            "error": f"{type(exc).__name__}: {exc}",
+                        },
+                    )
+                )
                 record_controller("error", "planning_error")
                 emit_event(
                     logger,
@@ -184,6 +228,20 @@ class AgentController:
                 continue
             except Exception as exc:
                 # Unexpected transport/runtime error: terminal, do not retry.
+                publish_observer_event(
+                    ObserverStreamEvent(
+                        kind="model_output",
+                        stage="controller",
+                        call_id=observation_call_id,
+                        name="controller",
+                        attempt_index=current_observer_attempt_index(),
+                        payload={
+                            "format": "error",
+                            "content": None,
+                            "error": f"{type(exc).__name__}: {exc}",
+                        },
+                    )
+                )
                 record_controller("error", "planning_error")
                 emit_event(
                     logger,
@@ -199,6 +257,16 @@ class AgentController:
                     prompt_messages=_redact_history_from_messages(messages, history_message_count),
                 )
 
+            publish_observer_event(
+                ObserverStreamEvent(
+                    kind="model_output",
+                    stage="controller",
+                    call_id=observation_call_id,
+                    name="controller",
+                    attempt_index=current_observer_attempt_index(),
+                    payload={"format": "json", "content": raw},
+                )
+            )
             try:
                 decision = adapter.validate_python(raw)
             except ValidationError as exc:
@@ -248,6 +316,7 @@ class AgentController:
                 ],
                 self.registry,
                 evidence,
+                current_query=query,
             )
             if (
                 recovery_feedback is not None

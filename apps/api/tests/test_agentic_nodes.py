@@ -16,6 +16,11 @@ from app.agentic.nodes import (
     validate_plan_node,
 )
 from app.agentic.runtime.clock import SystemClock
+from app.agentic.runtime.streaming import (
+    ObserverStreamEvent,
+    bind_stream_event_publisher,
+    reset_stream_event_publisher,
+)
 from app.agentic.runtime.summaries import resolve_terminal_outcome
 from app.agentic.state import AgentRunState
 from app.agentic.tools import (
@@ -26,7 +31,7 @@ from app.agentic.tools import (
     ToolExecutor,
     ToolRegistry,
 )
-from app.core.config import RuntimePolicy
+from app.core.config import RuntimePolicy, Settings
 
 
 def _finalize_response(state: AgentRunState) -> AgentRunState:
@@ -106,6 +111,32 @@ def test_tool_executor_node_executes_tools_and_resolves_references() -> None:
         "get_matchups",
     ]
     assert result.tool_results[1].data == {"hero_id": 25, "take": 5}
+
+
+def test_tool_executor_node_publishes_resolved_test_observer_io(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.core.config.get_settings",
+        lambda: Settings(test_observer_enabled=True),
+    )
+    state = AgentRunState(query="debug", game="dota2", plan=_debug_plan())
+    events: list[ObserverStreamEvent] = []
+    token = bind_stream_event_publisher(events.append)
+    try:
+        result = _execute_tools(state, _registry())
+    finally:
+        reset_stream_event_publisher(token)
+
+    assert result.status == "ok"
+    tool_events = [event for event in events if isinstance(event, ObserverStreamEvent)]
+    assert [event.kind for event in tool_events] == [
+        "tool_input",
+        "tool_output",
+        "tool_input",
+        "tool_output",
+    ]
+    assert tool_events[2].payload["planned_args"]["hero_id"].startswith("$")
+    assert tool_events[2].payload["resolved_args"]["hero_id"] == 25
+    assert tool_events[3].payload["result"]["data"] == {"hero_id": 25, "take": 5}
 
 
 def test_tool_executor_node_returns_error_for_missing_reference_path() -> None:

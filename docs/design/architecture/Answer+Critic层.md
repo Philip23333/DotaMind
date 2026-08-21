@@ -18,10 +18,41 @@ Answer 负责生成回答，Critic 负责审查回答是否被证据充分支撑
 
 ## 2. Answer 输入与输出
 
+Controller 与 Natural Language Answer 是两次独立的 LLM 调用。工具执行和 EvidenceGraph
+构建位于两次调用之间；当前用户原话同时通过一条旁路直接传给 Answer，避免 Controller
+在重建 `plan.goal` 时压缩掉“只回答某项”“不要天赋”“返回前 N 个”等展示要求：
+
+```text
+用户请求
+   │
+   ├────────────────────────────────────────────┐
+   ▼                                            │
+Controller LLM                                  │ 原文 current_query 旁路保留
+   │                                            │
+   ▼                                            │
+ControllerDecision / ExecutionPlan              │
+   │                  │                         │
+   │                  └── reconstructed_goal ─┐ │
+   ▼                                          │ │
+ToolExecutor（非 LLM）                          │ │
+   │                                          │ │
+   ▼                                          │ │
+EvidenceGraph ──────────────────────────────┐  │ │
+                                            ▼  ▼ ▼
+                                          Answer LLM
+                                              │
+                                              ▼
+                                           最终回答
+```
+
+这条旁路只补充请求的展示语义，不绕过 Controller 决策，也不扩大 EvidenceGraph 的事实
+边界。如果 Controller 返回 `direct_answer`，流程会直接结束，不调用工具或 Answer LLM。
+
 Answer 输入：
 
 - `ExecutionPlan`
 - `EvidenceGraph`
+- 当前用户原话 `state.query`（仅自然语言 Answer）
 
 Answer 输出：
 
@@ -38,7 +69,9 @@ AnswerSynthesisResult(
 )
 ```
 
-`answer_node` 不直接解释工具结果；它只调用 `AnswerSynthesizer.synthesize(plan, graph)` 并把结果写入 `state.answer`。
+`answer_node` 不直接解释工具结果；它调用
+`AnswerSynthesizer.synthesize(plan, graph, current_query=state.query)` 并把结果写入
+`state.answer`。Structured Answer 不消费该字段；自然语言 Answer 用它恢复最新展示措辞。
 
 ## 3. Answer 路由
 
@@ -94,25 +127,71 @@ Structured answer 的优点是稳定、可测；缺点是每个 contract 都需�
 
 ## 5. Natural Language Answer 链路
 
-Natural language answer 调用 LLM，但只给它 EvidenceGraph：
+Natural language answer 调用 LLM，并同时提供请求语义与 EvidenceGraph：
 
 ```text
 system:
-  Use only the provided evidence graph. Do not invent stats.
+  <core evidence rules>
+  <only the presentation rules selected for this EvidenceGraph>
 
 user:
-  goal=<plan.goal>
+  request_context={
+    current_query: <当前用户原话>,
+    reconstructed_goal: <plan.goal>
+  }
   required_evidence=<plan.required_evidence>
   evidence_graph=<graph JSON>
 ```
+
+`current_query` 保留当前消息中的具名焦点、排除项、数量和细节要求；
+`reconstructed_goal` 承接 Controller 从多轮会话恢复的完整请求。两者只影响展示范围，
+不得扩大 EvidenceGraph 中可陈述的事实。该方案不新增固定 presentation 枚举或 intent 路由。
+
+自然语言 Answer 的 system prompt 和上述消息形状由
+`agentic/prompts/answer.py` 的 renderer 负责；`answer/synthesizer.py` 负责选择
+LLM、执行同步/流式调用和包装结果，不内嵌 prompt 文本。system prompt 不再是固定总规则：
+renderer 合并 `required_evidence` 与实际 evidence kinds，只注入 Catalog 属性、技能、天赋、
+物品、赛事/比赛、STRATZ 周趋势、pair-lane、排名或日趋势中与当前 EvidenceGraph 相关的片段；
+STRATZ 与赛事跨来源元数据边界还依据 evidence/tool result 的 source 加载。赛事状态 evidence
+会额外注入 TI 最新战况的 Markdown 版式示例；比赛详情 evidence 则注入逐局“摘要 → 双方独立
+BP 表 → 选手数据”的版式示例，数据说明以纯 Markdown blockquote 作为次级视觉内容。两类示例
+只约束展示顺序和表格列，不提供可复用事实；其中队伍、比分、时间、阶段、赛制、BP、Valve ID
+和来源声明仍必须由当前 EvidenceGraph 支撑。
+
+规则选择不读取 `intent`、工具名或自然语言关键词，不形成固定回答路线。完整技能与具名单技能
+等粒度仍由 Answer LLM 结合 `current_query` / `reconstructed_goal` 判断；只有存在或要求
+`hero_talent_tree` 时才注入天赋表规则。当前没有确定性 Catalog Renderer，Catalog 自然语言
+回答仍由 Answer LLM 生成。
 
 当前系统提示还要求：
 
 - 如果 evidence 不足，说明缺什么。
 - 当 evidence 带 `week_index/week_epoch` 时，跨周比较并说明趋势。
 - 如果某个请求周没有样本，明确说明。
+- 对 `pair_lane_outcome`，分别说明对线赢/平/输率与整局胜率；默认一周只代表
+  当前查询窗口，不代表系统只能查询一周。位置以 evidence 的
+  `filters.position_ids` 为准，不能解释 provider row 的 `position`。
+- 只有用户请求 Catalog-backed 的英雄、技能、天赋或物品定义时，才披露 Catalog
+  evidence 携带的 patch/generated_at。STRATZ 统计回答即使同时有 hero_identity
+  Catalog evidence，也不得把 Catalog 元数据标为统计补丁、统计快照或统计版本；混合回答
+  必须把 Catalog 与 STRATZ 的来源元数据局部归属到各自事实。
+- 不得仅因整局胜率与对线胜率不同，就推断中后期强势、翻盘能力或比赛阶段的因果解释；
+  无明确证据时只报告统计差异，不添加玩法假设。只有 EvidenceGraph 明确支持时才允许因果或
+  玩法解释，并必须归属到相关证据。
 
 LLM 的输出只填入 `summary`；结构化的 `claims` 和 `recommendations` 当前不从自然语言输出中反解析。
+Synthesizer 只对模型文本执行首尾空白清理，不再按“中后期”“翻盘”或 Catalog 值等关键词
+删除整行。Pair-lane 与来源归属边界由上面的 evidence-specific system prompt 表达；流式 delta
+拼接结果与最终 `summary` 不再经过不同的文本改写路径。自然语言事实与证据的可审计绑定仍是
+后续职责，不由字符串过滤器近似实现。
+
+当前自然语言 Answer 不支持“无证据但标为 hypothesis”的例外；策略推演若以后成为产品能力，
+应使用独立、可验证的输入/输出合同，而不是混入统计事实回答。
+
+自然语言 `summary` 当前不提供逐句 claims/evidence refs 形式证明，Critic 也不声称逐项复核其中
+的数字、主体和来源。这是当前接受的模型能力边界：没有稳定转述错误前，不增加结构化 claims、
+二次 LLM Critic 或 evidence-kind 专属文本解析。若以后真实评估出现稳定错误，优先评估模型、
+Prompt 长度、EvidenceGraph 结构和生成参数，再决定是否引入合同级审计。
 
 ## 6. Answer Data Notes
 

@@ -186,6 +186,10 @@ Evidence 层不跨周聚合，也不重排多周统计。它只把每周 bucket 
 
 对于无样本周，推荐保留 empty bucket 或 `missing_week_epochs` 信息，使 Answer 能明确说明“该完整周无样本”，而不是静默消失。
 
+对 `stratz.pair_lane_outcome`，Evidence kind 使用 `pair_lane_outcome`。单条
+evidence 同时保留五类对线计数派生的赢/平/输率和独立的整局胜率；位置范围
+只读取 `filters.position_ids`，不能使用 STRATZ row 的 `position` 字段推断。
+
 ## 8. 与 Answer 层的关系
 
 Answer 层收到的是整个 EvidenceGraph：

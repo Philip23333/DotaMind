@@ -1,6 +1,7 @@
 import type { ThreadMessage, ThreadMessageLike } from "@assistant-ui/react";
 
 import { createUuidV4 } from "./uuid";
+import { formatToolFailure, isToolFailureCode } from "./runtime-failure";
 
 const DEFAULT_API_URL = "http://localhost:8001";
 export const BROWSER_ID_STORAGE_KEY = "dotamind.browser_id.v1";
@@ -15,12 +16,38 @@ export type PlanStatus =
   | "error";
 
 type AnswerItem = Record<string, unknown>;
+type ToolResultPayload = {
+  data?: unknown;
+};
+
+export type CatalogVisualEntity = {
+  kind: "hero" | "item";
+  imagePath: string;
+  label: string;
+  names: string[];
+};
+
+export type RuntimeToolCallStatus = {
+  tool_call_id: string;
+  tool: string;
+  status: "ok" | "error";
+  latency_ms: number;
+  reused: boolean;
+  handler_entered: boolean;
+  dispatch_stage: string;
+  failure_code: string | null;
+};
+
+type RuntimeAttempt = {
+  tool_call_statuses?: RuntimeToolCallStatus[];
+};
 
 export type PlanResponse = {
   status?: PlanStatus;
   reason?: string;
   error_code?: string | null;
-  runtime?: { duration_ms?: number };
+  runtime?: { duration_ms?: number; attempts?: RuntimeAttempt[] };
+  tool_results?: ToolResultPayload[];
   answer?: {
     summary?: string;
     claims?: AnswerItem[];
@@ -93,6 +120,17 @@ export type PlanStreamEvent =
       latency_ms: number | null;
       reused: boolean | null;
       failure_code: string | null;
+      handler_entered?: boolean | null;
+      dispatch_stage?: string | null;
+    }
+  | {
+      type: "observer";
+      kind: "model_prompt" | "model_output" | "tool_input" | "tool_output";
+      stage: "controller" | "answer" | "tool";
+      call_id: string;
+      name: string;
+      attempt_index: number;
+      payload: Record<string, unknown>;
     }
   | { type: "answer_delta"; delta: string; attempt_index: number; provisional: true }
   | { type: "result"; response: PlanResponse; session?: ChatSessionSummary | null }
@@ -309,23 +347,374 @@ function formatLimitations(items: AnswerItem[] | undefined): string | null {
   return lines.length ? `### 注意\n\n${lines.join("\n")}` : null;
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+const CATALOG_IMAGE_PREFIX = "/api/v1/assets/dota/";
+
+function catalogImagePath(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.startsWith(CATALOG_IMAGE_PREFIX) &&
+    value.endsWith(".png")
+  );
+}
+
+function catalogKindFromPath(imagePath: string): "hero" | "item" | null {
+  if (imagePath.includes("/heroes/")) return "hero";
+  if (imagePath.includes("/items/")) return "item";
+  return null;
+}
+
+function nonEmptyStrings(values: unknown[]): string[] {
+  return Array.from(
+    new Set(
+      values
+        .filter((value): value is string => typeof value === "string")
+        .map((value) => value.trim())
+        .filter(Boolean),
+    ),
+  );
+}
+
+function collectFieldNames(
+  record: Record<string, unknown>,
+  kind: "hero" | "item" | null,
+  includeGenericNames = false,
+): { names: string[]; label: string | null } {
+  const fields = [
+    kind === "hero"
+      ? "hero_name_zh"
+      : kind === "item"
+        ? "item_name_zh"
+        : "name_zh",
+    kind === "hero"
+      ? "hero_name_en"
+      : kind === "item"
+        ? "item_name_en"
+        : "name_en",
+    ...(includeGenericNames ? ["name_zh", "name_en", "name"] : []),
+  ];
+  const names = nonEmptyStrings(fields.map((field) => record[field]));
+  return { names, label: names[0] ?? null };
+}
+
+export function extractCatalogVisualEntities(
+  payload: PlanResponse,
+): CatalogVisualEntity[] {
+  const byImagePath = new Map<string, CatalogVisualEntity>();
+  const labelRank = new Map<string, number>();
+
+  const addEntity = (
+    imagePath: string,
+    kind: "hero" | "item",
+    names: string[],
+    label: string | null,
+    rank: number,
+  ) => {
+    if (!names.length) return;
+    const existing = byImagePath.get(imagePath);
+    if (!existing) {
+      byImagePath.set(imagePath, {
+        kind,
+        imagePath,
+        label: label ?? (kind === "hero" ? "英雄" : "物品"),
+        names: [...names].sort((left, right) => right.length - left.length),
+      });
+      labelRank.set(imagePath, rank);
+      return;
+    }
+    existing.names = nonEmptyStrings([...existing.names, ...names]).sort(
+      (left, right) => right.length - left.length,
+    );
+    if (label && rank < (labelRank.get(imagePath) ?? Number.MAX_SAFE_INTEGER)) {
+      existing.label = label;
+      labelRank.set(imagePath, rank);
+    }
+  };
+
+  const visit = (value: unknown, keyHint?: string) => {
+    if (Array.isArray(value)) {
+      value.forEach((item) => visit(item, keyHint));
+      return;
+    }
+    const record = asRecord(value);
+    if (!record) return;
+
+    const heroImagePath = catalogImagePath(record.hero_image_path)
+      ? record.hero_image_path
+      : null;
+    const itemImagePath = catalogImagePath(record.item_image_path)
+      ? record.item_image_path
+      : null;
+    if (heroImagePath) {
+      const { names, label } = collectFieldNames(record, "hero");
+      addEntity(heroImagePath, "hero", names, label, 0);
+    }
+    if (itemImagePath) {
+      const { names, label } = collectFieldNames(record, "item");
+      addEntity(itemImagePath, "item", names, label, 0);
+    }
+
+    if (catalogImagePath(record.image_path)) {
+      const kind = catalogKindFromPath(record.image_path);
+      const { names, label } = collectFieldNames(record, kind, true);
+      addEntity(record.image_path, kind ?? (keyHint === "item" ? "item" : "hero"), names, label, 1);
+    }
+
+    Object.entries(record).forEach(([key, child]) => visit(child, key));
+  };
+
+  (payload.tool_results ?? []).forEach((toolResult) => visit(toolResult.data));
+  return [...byImagePath.values()];
+}
+
+type TextRange = [start: number, end: number];
+
+function protectedMarkdownRanges(line: string): TextRange[] {
+  const ranges: TextRange[] = [];
+  const addMatches = (pattern: RegExp) => {
+    for (const match of line.matchAll(pattern)) {
+      const start = match.index ?? 0;
+      ranges.push([start, start + match[0].length]);
+    }
+  };
+  addMatches(/`+[^`]*`+/g);
+  addMatches(/!?\[[^\]]*\]\([^)]*\)/g);
+  return ranges.sort((left, right) => left[0] - right[0]);
+}
+
+function rangeAt(ranges: TextRange[], index: number): TextRange | null {
+  return ranges.find(([start, end]) => index >= start && index < end) ?? null;
+}
+
+function isTableSeparator(line: string): boolean {
+  return /^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line);
+}
+
+function isTableRow(line: string): boolean {
+  return /^\s*\|.*\|\s*$/.test(line) && !isTableSeparator(line);
+}
+
+function smallHeading(line: string): boolean {
+  return /(?:\bbp\b|\bpick\b|\bban\b|阵容)/i.test(line);
+}
+
+function hasCatalogImageBefore(line: string, index: number): boolean {
+  return /!\[[^\]]*\]\([^)]*\/api\/v1\/assets\/dota\/[^)]*#dota-size=(?:sm|md|lg)\)\s*$/.test(
+    line.slice(0, index),
+  );
+}
+
+function catalogImageMarkdown(
+  entity: CatalogVisualEntity,
+  size: "sm" | "md" | "lg",
+): string {
+  return `![${entity.label}](${getApiUrl()}${entity.imagePath}#dota-size=${size})`;
+}
+
+function decorateCatalogLine(
+  line: string,
+  entities: CatalogVisualEntity[],
+  size: "sm" | "md" | "lg",
+): string {
+  if (!entities.length || isTableSeparator(line)) return line;
+  const ranges = protectedMarkdownRanges(line);
+  const replacements: Array<{ index: number; name: string; entity: CatalogVisualEntity }> = [];
+  let index = 0;
+  let previous: { entity: CatalogVisualEntity; end: number } | null = null;
+
+  while (index < line.length) {
+    const protectedRange = rangeAt(ranges, index);
+    if (protectedRange) {
+      index = protectedRange[1];
+      continue;
+    }
+    const matches = entities.flatMap((entity) =>
+      entity.names
+        .filter((name) => line.startsWith(name, index))
+        .map((name) => ({ entity, name })),
+    );
+    const match = matches.sort((left, right) => right.name.length - left.name.length)[0];
+    if (!match) {
+      index += 1;
+      continue;
+    }
+    const aliasSeparator =
+      previous?.entity.imagePath === match.entity.imagePath &&
+      /^[\s（）()［］\[\]{}:：,，./·—–\-]*$/u.test(line.slice(previous.end, index));
+    if (!aliasSeparator && !hasCatalogImageBefore(line, index)) {
+      replacements.push({ index, name: match.name, entity: match.entity });
+      previous = { entity: match.entity, end: index + match.name.length };
+    }
+    index += match.name.length;
+  }
+
+  return replacements
+    .reverse()
+    .reduce((result, replacement) => {
+      return `${result.slice(0, replacement.index)}${catalogImageMarkdown(replacement.entity, size)}${result.slice(replacement.index)}`;
+    }, line);
+}
+
+function markdownTableCells(line: string): string[] | null {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith("|") || !trimmed.endsWith("|")) return null;
+  return trimmed
+    .slice(1, -1)
+    .split("|")
+    .map((cell) => cell.trim());
+}
+
+function renderMarkdownTableCells(cells: string[]): string {
+  return `| ${cells.join(" | ")} |`;
+}
+
+function equipmentColumnIndex(cells: string[]): number | null {
+  const index = cells.findIndex((cell) => /(?:核心)?装备/.test(cell));
+  return index === -1 ? null : index;
+}
+
+function replaceEquipmentItemNames(
+  value: string,
+  items: CatalogVisualEntity[],
+): string {
+  if (!items.length) return value;
+  const replacements: Array<{ index: number; name: string; entity: CatalogVisualEntity }> = [];
+  let index = 0;
+  while (index < value.length) {
+    const matches = items.flatMap((entity) =>
+      entity.names
+        .filter((name) => value.startsWith(name, index))
+        .map((name) => ({ entity, name })),
+    );
+    const match = matches.sort((left, right) => right.name.length - left.name.length)[0];
+    if (!match) {
+      index += 1;
+      continue;
+    }
+    replacements.push({ index, name: match.name, entity: match.entity });
+    index += match.name.length;
+  }
+  if (!replacements.length) return value;
+
+  let output = "";
+  let cursor = 0;
+  for (const replacement of replacements) {
+    const between = value.slice(cursor, replacement.index);
+    if (!/^[\s,，、/·]*$/u.test(between)) output += between;
+    output += catalogImageMarkdown(replacement.entity, "md");
+    cursor = replacement.index + replacement.name.length;
+  }
+  const tail = value.slice(cursor);
+  if (!/^[\s,，、/·]*$/u.test(tail)) output += tail;
+  return output;
+}
+
+export function decorateCatalogMentions(
+  markdown: string | null | undefined,
+  entities: CatalogVisualEntity[],
+): string | null {
+  if (!markdown || !entities.length) return markdown ?? null;
+  const lines = markdown.split("\n");
+  let inFence = false;
+  let compactHeadingLevel: number | null = null;
+  let activeEquipmentColumn: number | null = null;
+  return lines
+    .map((line) => {
+      if (/^\s*(```|~~~)/.test(line)) {
+        inFence = !inFence;
+        return line;
+      }
+      if (inFence) return line;
+      if (isTableSeparator(line)) return line;
+      if (isTableRow(line)) {
+        const cells = markdownTableCells(line);
+        const headerEquipmentColumn = cells ? equipmentColumnIndex(cells) : null;
+        if (headerEquipmentColumn !== null) {
+          activeEquipmentColumn = headerEquipmentColumn;
+          return line;
+        }
+        if (cells && activeEquipmentColumn !== null && activeEquipmentColumn < cells.length) {
+          const heroEntities = entities.filter((entity) => entity.kind === "hero");
+          const decoratedCells = markdownTableCells(
+            decorateCatalogLine(line, heroEntities, "sm"),
+          );
+          if (!decoratedCells) return line;
+          decoratedCells[activeEquipmentColumn] = replaceEquipmentItemNames(
+            decoratedCells[activeEquipmentColumn],
+            entities.filter((entity) => entity.kind === "item"),
+          );
+          return renderMarkdownTableCells(decoratedCells);
+        }
+        return decorateCatalogLine(line, entities, "sm");
+      }
+      activeEquipmentColumn = null;
+      const heading = line.match(/^(#{1,6})\s+/);
+      if (heading) {
+        const level = heading[1].length;
+        if (smallHeading(line)) {
+          compactHeadingLevel = level;
+        } else if (compactHeadingLevel !== null && level <= compactHeadingLevel) {
+          compactHeadingLevel = null;
+        }
+      }
+      const inCompactHeading = compactHeadingLevel !== null;
+      const size = heading?.[1] === "#"
+          ? inCompactHeading
+            ? "sm"
+            : "lg"
+          : inCompactHeading
+            ? "sm"
+            : "md";
+      return decorateCatalogLine(line, entities, size);
+    })
+    .join("\n");
+}
+
 export function formatPlanResponse(payload: PlanResponse): string {
+  const runtimeFailure = payload.runtime?.attempts
+    ?.flatMap((attempt) => attempt.tool_call_statuses ?? [])
+    .find((tool) => tool.status === "error" && tool.failure_code)?.failure_code;
+  const reason = payload.reason?.trim();
+  const shouldUseRuntimeFailure = Boolean(
+    runtimeFailure &&
+      !payload.answer?.summary?.trim() &&
+      (!reason || ["tool execution failed", "execution failed"].includes(reason)),
+  );
+  const summaryOrReason = payload.answer?.summary?.trim() || payload.reason?.trim();
   const sections = [
-    payload.answer?.summary?.trim() || payload.reason?.trim(),
+    summaryOrReason,
     formatRecommendations(payload.answer?.recommendations),
     formatClaims(payload.answer?.claims),
     formatLimitations(payload.answer?.limitations),
   ].filter((section): section is string => Boolean(section));
+  const answerText = sections.join("\n\n");
+  const formattedAnswer =
+    payload.status === "ok"
+      ? decorateCatalogMentions(answerText, extractCatalogVisualEntities(payload))
+      : answerText;
 
-  if (sections.length) return sections.join("\n\n");
+  if (formattedAnswer && !shouldUseRuntimeFailure) return formattedAnswer;
+
+  if (shouldUseRuntimeFailure && isToolFailureCode(runtimeFailure)) {
+    return formatToolFailure(runtimeFailure);
+  }
 
   if (payload.error_code) {
-    return `请求未能完成（${payload.error_code}），请稍后重试。`;
+    if (isToolFailureCode(payload.error_code)) return formatToolFailure(payload.error_code);
+    return reason || `请求未能完成（${payload.error_code}），请稍后重试。`;
   }
 
   return "请求已完成，但服务没有返回可展示的回答。";
 }
 
 export function formatStreamError(errorCode: string, reason: string): string {
-  return `${reason || "请求未能完成，请稍后重试。"}\n\n错误代码：\`${errorCode}\``;
+  const message = isToolFailureCode(errorCode)
+    ? formatToolFailure(errorCode)
+    : reason || "请求未能完成，请稍后重试。";
+  return `${message}\n\n错误代码：\`${errorCode}\``;
 }

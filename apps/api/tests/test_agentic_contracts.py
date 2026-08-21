@@ -23,7 +23,7 @@ from app.core.config import Settings
 
 DEFAULT_EVIDENCE_KINDS = {
     "hero_identity",
-    "pair_lane_winrate",
+    "pair_lane_outcome",
     "matchup_ranking_row",
     "lane_meta_row",
     "position_stat",
@@ -165,7 +165,7 @@ def test_contract_catalog_accepts_any_previous_declared_reference_call_id() -> N
                 },
             ),
         ],
-        required_evidence=["hero_identity", "pair_lane_winrate", "sample_size"],
+        required_evidence=["hero_identity", "pair_lane_outcome", "sample_size"],
     )
 
     assert validate_plan_against_catalog(plan, _registry()) == []
@@ -231,7 +231,7 @@ def test_contract_catalog_rejects_missing_required_tool_arg() -> None:
                 },
             ),
         ],
-        required_evidence=["hero_identity", "pair_lane_winrate", "sample_size"],
+        required_evidence=["hero_identity", "pair_lane_outcome", "sample_size"],
     )
 
     errors = validate_plan_against_catalog(plan, _registry())
@@ -265,7 +265,7 @@ def test_contract_catalog_rejects_future_reference() -> None:
                 args={"query": "冰魂"},
             ),
         ],
-        required_evidence=["hero_identity", "pair_lane_winrate", "sample_size"],
+        required_evidence=["hero_identity", "pair_lane_outcome", "sample_size"],
     )
 
     errors = validate_plan_against_catalog(plan, _registry())
@@ -291,7 +291,7 @@ def test_contract_catalog_rejects_undeclared_reference_path() -> None:
                 },
             ),
         ],
-        required_evidence=["hero_identity", "pair_lane_winrate", "sample_size"],
+        required_evidence=["hero_identity", "pair_lane_outcome", "sample_size"],
     )
 
     errors = validate_plan_against_catalog(plan, _registry())
@@ -307,12 +307,12 @@ def test_contract_catalog_rejects_unproducible_required_evidence() -> None:
         tool_calls=[
             ToolCall(id="resolve_sk", tool="resolve_hero", args={"query": "骷髅王"}),
         ],
-        required_evidence=["hero_identity", "pair_lane_winrate"],
+        required_evidence=["hero_identity", "pair_lane_outcome"],
     )
 
     errors = validate_plan_against_catalog(plan, _registry())
 
-    assert any("not producible by selected tools: pair_lane_winrate" in item for item in errors)
+    assert any("not producible by selected tools: pair_lane_outcome" in item for item in errors)
 
 
 def test_contract_runtime_accepts_dummy_declared_reference() -> None:
@@ -472,6 +472,30 @@ def test_registry_contracts_fail_fast_on_invalid_evidence_declarations() -> None
     assert any("without an evidence_extractor" in item for item in errors)
     assert any("produces evidence without declaring source" in item for item in errors)
     assert any("contract patch_impact_report requires unknown evidence" in item for item in errors)
+
+
+def test_controller_context_destination_rejects_evidence_declarations() -> None:
+    class DummyInput(BaseModel):
+        query: str
+
+    registry = ToolRegistry()
+    registry.register(
+        ToolDefinition(
+            name="dummy.context",
+            description="Invalid context metadata.",
+            input_model=DummyInput,
+            handler=lambda args, context: {"messages": []},
+            result_destination="controller_context",
+            evidence_kinds=("invalid_context_evidence",),
+        )
+    )
+
+    errors = validate_registry_contracts(registry)
+
+    assert any(
+        "routes results to controller_context" in item
+        for item in errors
+    )
 
 
 def test_render_controller_contracts_contains_team_recent_fields() -> None:
@@ -641,7 +665,7 @@ def test_validate_context_scope_allows_region_with_daily_trends_only() -> None:
 def test_validate_plan_accepts_list_dict_ref_without_min_length_error() -> None:
     """A list arg with min_length, populated via $ref, must not fail validation
     on an empty placeholder — the real value comes from the ref target at run
-    time. Guards the filter_heroes_by_position candidate_rows contract."""
+    time. Guards the filter_ranked_heroes_by_position candidate_rows contract."""
     from app.agentic.models import QueryContext, ToolCall
     from app.agentic.planning.contracts import validate_plan_against_catalog
     from app.agentic.tools.stratz_tools import build_default_tool_registry
@@ -662,7 +686,7 @@ def test_validate_plan_accepts_list_dict_ref_without_min_length_error() -> None:
             ),
             ToolCall(
                 id="filter",
-                tool="stratz.filter_heroes_by_position",
+                tool="stratz.filter_ranked_heroes_by_position",
                 args={
                     "candidate_rows": "$matchup.data.candidate_rows",
                     "position_id": "POSITION_4",
@@ -677,3 +701,17 @@ def test_validate_plan_accepts_list_dict_ref_without_min_length_error() -> None:
     )
     errors = validate_plan_against_catalog(plan, registry)
     assert not any("too_short" in e or "candidate_rows" in e for e in errors)
+
+    candidate_contract = registry.get(
+        "stratz.filter_ranked_heroes_by_position"
+    ).arg_contracts["candidate_rows"]
+    assert candidate_contract.requires_reference is True
+
+    literal_plan = plan.model_copy(deep=True)
+    literal_plan.tool_calls[2].args["candidate_rows"] = [{"hero_id": 1}]
+    literal_errors = validate_plan_against_catalog(literal_plan, registry)
+    assert (
+        "stratz.filter_ranked_heroes_by_position.candidate_rows must reference "
+        "a previous current-plan tool result"
+        in literal_errors
+    )

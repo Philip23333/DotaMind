@@ -42,6 +42,7 @@ def decision_validate_node(
         [*state.retrieved_messages, *state.recent_messages],
         registry,
         evidence,
+        current_query=state.query,
     )
     if errors:
         state.status = "error"

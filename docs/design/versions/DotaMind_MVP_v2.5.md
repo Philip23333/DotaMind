@@ -516,7 +516,7 @@ reanalyze
 
 ```text
 max_replans = 1
-max_tool_calls_total = 8
+max_tool_calls_total = 16
 same_tool_same_args 不允许重复执行超过 1 次
 ```
 

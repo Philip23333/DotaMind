@@ -12,7 +12,9 @@ validate_plan_node
   -> ToolExecutor
   -> ToolDefinition.handler
   -> ToolResult[]
-  -> evidence_node
+  -> result_destination routing
+      -> evidence_node
+      -> controller_context -> controller_node
 ```
 
 它的职责是执行经过校验的 `tool_calls`，但不负责最终解释结果。
@@ -27,8 +29,11 @@ flowchart LR
     Executor --> Handler["Registered Handler"]
     Handler --> Integration["Provider Integration"]
     Integration --> Result["ToolResult"]
-    Result --> Extractor["Tool-owned Evidence Extractor"]
+    Result --> Destination{"ToolDefinition.result_destination"}
+    Destination -->|"evidence"| Extractor["Tool-owned Evidence Extractor"]
     Extractor --> Evidence["EvidenceGraph"]
+    Destination -->|"controller_context"| Context["Messages + execution summary"]
+    Context --> Controller
 ```
 
 Planner、Validator、Executor 和 Evidence 层消费同一份 `ToolDefinition`，但只有
@@ -44,6 +49,7 @@ ToolDefinition(
     description="...",
     input_model=HeroMatchupRankingInput,
     handler=_hero_matchup_ranking_handler(settings),
+    result_destination="evidence",
     source=ToolSource(...),
     evidence_extractor=hero_matchup_ranking_evidence,
     evidence_kinds=("matchup_ranking_row", "sample_size"),
@@ -59,6 +65,8 @@ ToolDefinition(
 - `description`: Planner 用来理解能力边界的文字。
 - `input_model`: 参数 schema，由 Pydantic 校验。
 - `handler`: 实际执行函数。
+- `result_destination`: 结果进入 `evidence` 或 `controller_context`；默认是
+  `evidence`，Graph 与 Validator 按该字段处理，不按工具名分支。
 - `source`: 数据来源。
 - `evidence_extractor`: ToolResult -> EvidenceItem 的转换器。
 - `evidence_kinds`: 该工具能产出的证据类型。
@@ -66,12 +74,13 @@ ToolDefinition(
 - `output_paths`: 后续工具可引用的稳定输出路径。
 - `metadata`: trace 和结果附加元信息。
 
-ToolDefinition 同时服务三层：
+ToolDefinition 同时服务四层：
 
 ```text
 Planner prompt renderer
 Validator
-ToolExecutor / EvidenceGraph
+ToolExecutor
+Graph result routing / EvidenceGraph
 ```
 
 因此它是工具契约的单一事实源。
@@ -84,6 +93,9 @@ ToolExecutor / EvidenceGraph
 ToolRegistry()
   -> register_stratz_tools
   -> register_opendota_tools
+  -> register_pandascore_tools
+  -> register_match_resolution_tools
+  -> register_opendota_match_tools
   -> register_patch_tools
 ```
 
@@ -99,6 +111,23 @@ V3.2-2 中，默认 `PlanService` 装配会把同一 Registry 实例传给这些
 装配的注册集合，不会深度冻结 ToolDefinition 内部映射，也不校验任意注入对象的身份。
 
 因此默认路径中 Planner、Validator 与 Executor 都从同一已关闭注册期的 Registry 读取工具目录。
+
+比赛工具的引用边界如下：
+
+- `pandascore.resolve_competition` 输出 `data.competition.series_id`。
+- `pandascore.list_matches` 和 `pandascore.resolve_match_games` 只能引用该 Series；
+  前者默认返回最新的 20 个 Fixture，并以 `scheduled_at` 降序排列。
+- `resolve_match_games` 在没有局号时返回该 Fixture 实际存在的全部 Game context；
+  PandaScore Series/Match/Game ID 仍不是 Valve Match ID。
+- `dota.resolve_valve_matches` 只接受 Competition 与 Game context 列表引用，
+  通过 OpenDota league/team/league-matches API 做硬条件唯一匹配，输出按局排列的
+  `data.valve_match_ids`、`data.matches` 与 `data.mappings`。
+- `opendota.match_details` 只接受 Valve Match ID 列表，正常来源是
+  `dota.resolve_valve_matches.data.valve_match_ids`；不得把 PandaScore ID 直接传入。
+
+PandaScore 赛事 Fixture 事实、跨源推断映射与 OpenDota Valve/Replay 事实分别进入 EvidenceGraph；
+`detailed_stats` 不是 `has_parsed`，空 BP 不产生 `match_draft` 证据。未指定局号时，
+批量工具保持最多五个实际 Game 的顺序，不创建未出现的对局。
 
 ## 4. ToolExecutor Node 链路
 
@@ -117,7 +146,9 @@ for call in plan.tool_calls:
   previous_results[call.id] = result
 ```
 
-执行顺序就是 `tool_calls` 数组顺序。
+执行顺序就是 `tool_calls` 数组顺序。全部调用完成后，Graph 根据所选工具统一声明的
+`result_destination` 处理结果：`evidence` 进入 EvidenceGraph；`controller_context` 合并
+请求级消息与最小执行摘要后再次调用 Controller。两种 destination 不允许出现在同一计划。
 
 如果某个调用的引用解析失败：
 
@@ -218,6 +249,17 @@ STRATZ 特别规则：
 - 每个 epoch 单独调用底层 STRATZ client。
 - 返回 per-week bucket，并在 filters/evidence 中标注完整周口径。
 
+`stratz.pair_lane_outcome` 的 Evidence kind 为 `pair_lane_outcome`，同时透传
+五类对线计数派生的 lane win/draw/loss rates 与独立的 match win rate。其位置
+范围以 `filters.position_ids` 为准；STRATZ row 的 `position` 不作为请求位置回显。
+
+`stratz.filter_ranked_heroes_by_position` 是排名候选的专用位置资格过滤工具，
+只接收 `stratz.hero_matchup_ranking` 或 `stratz.hero_synergy_ranking` 暴露的
+`data.candidate_rows` 引用。它查询指定位置的 STRATZ 样本，按
+`min_position_match_count` 过滤并附加位置场次和胜率；保留原排名字段与顺序，
+不生成复合评分。`candidate_rows` 由 `requires_reference` 强制为当前计划的前序引用，
+不能由 Planner 直接构造。
+
 ## 8. 底层 integration 与 agentic tool 的边界
 
 底层 integration 负责 provider-native API：
@@ -285,6 +327,18 @@ missing token / config
 ```
 
 项目偏好是暴露错误，而不是用 mock 或 fallback 掩盖缺口。
+
+### 公开运行时失败状态
+
+内部 dispatch 记录不会进入 `ToolResult`，但最终公共 runtime allowlist 会为每个
+工具调用提供 `handler_entered`、`dispatch_stage` 和安全的 `failure_code`。引用解析、
+参数校验、handler 执行和超时分别映射为稳定类别；原始异常、完整引用路径、上游
+正文和认证信息始终留在服务端。前端据此区分“未执行”和“执行后失败”，不把
+`0ms` 当作真实 handler 耗时。
+
+PandaScore Series provider 的年份参数是可选的：`year=None` 时保持原有列表请求，
+显式年份时发送 `filter[year]`。Resolver 在 provider 返回的目标年份集合内进行
+名称等级匹配，确保历史届次不会被默认第一页中的高等级候选提前淘汰。
 
 ## 11. 层边界
 

@@ -19,8 +19,9 @@ flowchart TD
     Conversation --> AttemptFinalize
     Validate -->|"valid"| Tools["tool_executor_node"]
     Validate -->|"invalid"| AttemptFinalize
-    Tools -->|"history lookup"| Controller
-    Tools -->|"business tools success"| Evidence["evidence_node"]
+    Tools -->|"controller_context"| Context["controller_context node"]
+    Context --> Controller
+    Tools -->|"evidence"| Evidence["evidence_node"]
     Tools -->|"tool error"| AttemptFinalize
     Evidence -->|"complete"| Answer["answer_node"]
     Evidence -->|"missing"| AttemptFinalize
@@ -35,8 +36,9 @@ flowchart TD
     Response --> End["END"]
 ```
 
-No node routes on `intent`. Only `decision.kind`, validated `tool_calls`, the
-output contract, effective evidence and runtime status influence execution.
+No node routes on `intent`. Only `decision.kind`, validated `tool_calls`, each
+tool's `result_destination`, the output contract, effective evidence and runtime
+status influence execution.
 
 ## V3.2 Runtime Nodes
 
@@ -77,7 +79,7 @@ future reset nodes delegate to the centralized pure reset function.
 | `decision_validate_node` | Repeat shared deterministic decision/plan validation without mutating the decision. | Recomputes and refreshes authoritative evidence obligations in state. |
 | `conversation_answer_node` | Accept the validated Controller-authored direct answer. | Never creates EvidenceGraph. |
 | `validate_plan_node` | Validate final args, references, contract and effective evidence producibility. | Never applies policy or modifies evidence. |
-| `tool_executor_node` | Resolve references, reuse Run-local fingerprints and execute registered tools. | Business tools proceed to Evidence; isolated history lookup merges request-local messages and returns to Controller. |
+| `tool_executor_node` | Resolve references, reuse Run-local fingerprints and execute registered tools. | `result_destination=evidence` proceeds to Evidence; `controller_context` merges request-local messages and a minimal execution summary, then returns to Controller. |
 | `evidence_node` | Run tool-owned extractors and compute missing effective evidence and data quality. | Missing effective evidence routes to finalize before Answer. |
 | `answer_node` | Produce structured or natural-language answers from EvidenceGraph. | Tool-plan branch only. |
 | `critic_node` | Review missing/quality/mock/confidence constraints. | Tool-plan branch only. |
@@ -100,14 +102,17 @@ future reset nodes delegate to the centralized pure reset function.
 `DirectAnswerDecision` contains a non-empty Controller-authored `answer` and no
 history citation mode. The model interprets the injected real `ConversationMessage`
 context; older messages may be added to the request-local context by the internal
-`conversation.history_lookup` tool. Historical messages are never current tool
-evidence and are never used as routing keys.
+`conversation.history_lookup` tool. A completed empty lookup is retained as
+`{"tool":"conversation.history_lookup","status":"completed","matched_turns":0}`
+for the next Controller call. Historical messages and this summary are never
+current tool evidence or routing keys.
 
 ## Tool Contract Inventory
 
-Every `ToolDefinition` declares input schema, accepted references, output paths,
-source, evidence extractor, producible evidence kinds and primary mandatory
-evidence. Startup validation rejects inconsistent registry metadata.
+Every `ToolDefinition` declares its result destination, input schema, accepted
+references, output paths, source, evidence extractor, producible evidence kinds
+and primary mandatory evidence. Startup validation rejects inconsistent registry
+metadata, including evidence declarations on a `controller_context` tool.
 
 Contract and model-requested evidence remain global kind obligations. Registry
 mandatory evidence is an obligation for each successful `tool_call_id`. The
@@ -122,13 +127,13 @@ cannot borrow one another's primary evidence.
 | `dota.hero_talent_tree` | `hero_talent_tree` |
 | `resolve_item` | `item_identity` |
 | `dota.item_info` | `item_definition` |
-| `stratz.pair_lane_outcome` | `pair_lane_winrate` |
+| `stratz.pair_lane_outcome` | `pair_lane_outcome` |
 | `stratz.hero_matchup_ranking` | `matchup_ranking_row` |
 | `stratz.hero_synergy_ranking` | `hero_synergy_ranking_row` |
 | `stratz.lane_meta_global` | `lane_meta_row` |
 | `stratz.hero_position_stats` | `position_stat` |
 | `stratz.hero_daily_trends` | `hero_daily_trend` |
-| `stratz.filter_heroes_by_position` | `role_filtered_candidate_row` |
+| `stratz.filter_ranked_heroes_by_position` | `role_filtered_candidate_row` |
 | `stratz.player_profile` | `player_identity` |
 | `stratz.player_recent_matches` | `player_recent_summary` |
 | `stratz.player_hero_performance` | `player_hero_performance` |
@@ -137,10 +142,15 @@ cannot borrow one another's primary evidence.
 | `opendota.team_players` | `current_players` |
 | `opendota.team_heroes` | `team_hero_usage` |
 | `opendota.hero_stats_by_role` | `hero_stats` |
+| `pandascore.resolve_competition` | `competition_identity` |
+| `pandascore.list_matches` | `match_schedule` |
+| `pandascore.resolve_match_games` | `match_identity`, `pandascore_game_identity` |
+| `dota.resolve_valve_matches` | `cross_source_match_mapping`, `valve_match_identity` |
+| `opendota.match_details` | `match_result`, `player_scoreboard`, `match_parse_status`, `match_draft` |
 | `patch.get_records` | `patch_records` |
 | `patch.hero_changes` | `hero_patch_changes` |
 | `patch.item_changes` | `item_patch_changes` |
-| `conversation.history_lookup` | none; request-local context only |
+| `conversation.history_lookup` | none; `result_destination=controller_context` |
 
 `sample_size` remains a normally extracted quality signal, not a universal
 mandatory kind in this release.
@@ -205,3 +215,13 @@ win rates or match counts.
 - freshness or universal sample-size policy;
 - fixed intent pipelines or a legacy/fallback graph;
 - compatibility endpoints or a separate frontend.
+
+## P2.2 Match-data edge updates
+
+`pandascore.resolve_competition` now has a nullable explicit `year` input and a
+deterministic latest-edition selector. It emits selection metadata while keeping
+`competition_identity` as its only mandatory evidence; `list_matches` continues to
+consume only the declared `data.competition.series_id` reference. Public response
+runtime summaries additionally expose safe per-call dispatch state
+(`handler_entered`, `dispatch_stage`, mapped `failure_code`) without changing Graph
+routing or adding an `intent` branch.

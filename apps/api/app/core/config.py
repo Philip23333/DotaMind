@@ -21,6 +21,17 @@ class OpenDotaPolicy(StrictPolicyModel):
     default_cache_ttl_seconds: int = Field(gt=0)
 
 
+class PandaScorePolicy(StrictPolicyModel):
+    request_timeout_seconds: float = Field(default=20, gt=0)
+    default_cache_ttl_seconds: int = Field(default=60, gt=0)
+    max_page_size: int = Field(default=100, ge=1, le=100)
+
+
+class CrossSourceMatchResolutionPolicy(StrictPolicyModel):
+    start_time_tolerance_seconds: int = Field(default=1800, ge=0)
+    duration_tolerance_seconds: int = Field(default=5, ge=0)
+
+
 class StratzPolicy(StrictPolicyModel):
     # STRATZ `weeks_back` resolution. A STRATZ week is 604800s-aligned; the
     # in-progress current week is always skipped (it is partial). Default 1 =
@@ -182,7 +193,7 @@ class SamplePolicyConfig(StrictPolicyModel):
 
 class RuntimePolicy(StrictPolicyModel):
     max_replans: int = Field(default=1, ge=1)
-    max_tool_calls_total: int = Field(default=8, ge=1)
+    max_tool_calls_total: int = Field(default=16, ge=1)
     max_controller_calls: int = Field(default=2, ge=1)
     max_answer_calls: int = Field(default=2, ge=1)
     max_elapsed_seconds: int = Field(default=60, ge=1)
@@ -231,6 +242,10 @@ class ConversationPolicy(StrictPolicyModel):
 class AppPolicy(StrictPolicyModel):
     version: Literal[1]
     opendota: OpenDotaPolicy
+    pandascore: PandaScorePolicy = Field(default_factory=PandaScorePolicy)
+    cross_source_match_resolution: CrossSourceMatchResolutionPolicy = Field(
+        default_factory=CrossSourceMatchResolutionPolicy
+    )
     stratz: StratzPolicy
     team_report: TeamReportPolicy
     hero_report: HeroReportPolicy
@@ -260,6 +275,8 @@ class Settings(BaseSettings):
     policy_path: str | None = None
     opendota_base_url: str = "https://api.opendota.com/api"
     opendota_api_key: str | None = None
+    pandascore_base_url: str = "https://api.pandascore.co"
+    pandascore_token: str | None = None
     stratz_graphql_url: str = "https://api.stratz.com/graphql"
     stratz_token: str | None = None
     openai_api_key: str | None = None
@@ -277,6 +294,7 @@ class Settings(BaseSettings):
     llm_base_url: str = "https://api.deepseek.com"
     llm_model: str = "deepseek-chat"
     llm_enabled: bool = True
+    test_observer_enabled: bool = False
 
     model_config = SettingsConfigDict(
         env_file=DEFAULT_ENV_PATH,

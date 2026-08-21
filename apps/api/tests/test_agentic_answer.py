@@ -2,8 +2,15 @@
 from typing import Any
 
 from app.agentic.answer import AnswerSynthesizer
-from app.agentic.evidence import build_evidence_graph
+from app.agentic.evidence import EvidenceDataQuality, EvidenceGraph, build_evidence_graph
 from app.agentic.models import ExecutionPlan, QueryContext, ToolCall, ToolResult, ToolSource
+from app.agentic.runtime.streaming import (
+    ObserverStreamEvent,
+    bind_observer_attempt_index,
+    bind_stream_event_publisher,
+    reset_observer_attempt_index,
+    reset_stream_event_publisher,
+)
 from app.agentic.tools.dota_catalog_tools import HeroAttributesInput, ResolveHeroInput
 from app.agentic.tools.stratz_tools import build_default_tool_registry
 from app.core.config import Settings
@@ -171,6 +178,40 @@ def test_answer_synthesizer_streams_natural_language_deltas() -> None:
     assert answer.summary == "Grounded answer."
 
 
+def test_answer_synthesizer_publishes_full_test_observer_exchange(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.core.config.get_settings",
+        lambda: Settings(test_observer_enabled=True),
+    )
+    plan = ExecutionPlan(
+        intent="freeform",
+        goal="Answer from evidence.",
+        output_contract="natural_language_answer",
+    )
+    graph = build_evidence_graph(plan, [], _registry())
+    events: list[ObserverStreamEvent] = []
+    token = bind_stream_event_publisher(events.append)
+    attempt_token = bind_observer_attempt_index(1)
+    try:
+        answer = asyncio.run(
+            AnswerSynthesizer(llm=FakeLLM(), llm_enabled=True).synthesize(
+                plan,
+                graph,
+                current_query="question",
+            )
+        )
+    finally:
+        reset_observer_attempt_index(attempt_token)
+        reset_stream_event_publisher(token)
+
+    assert answer.summary == "Grounded answer."
+    assert [event.kind for event in events] == ["model_prompt", "model_output"]
+    assert events[0].stage == "answer"
+    assert events[0].attempt_index == 1
+    assert events[0].payload["messages"][-1]["content"]
+    assert events[1].payload == {"format": "text", "content": "Grounded answer."}
+
+
 def test_natural_language_answer_receives_catalog_rules_and_real_evidence() -> None:
     registry = _registry()
     resolve_definition = registry.get("resolve_hero")
@@ -220,43 +261,211 @@ def test_natural_language_answer_receives_catalog_rules_and_real_evidence() -> N
     llm = CapturingFakeLLM()
 
     answer = asyncio.run(
-        AnswerSynthesizer(llm=llm, llm_enabled=True).synthesize(plan, graph)
+        AnswerSynthesizer(llm=llm, llm_enabled=True).synthesize(
+            plan,
+            graph,
+            current_query="莉娜的基础属性是什么？",
+        )
     )
 
     assert answer.status == "ok"
     assert len(llm.messages) == 1
     system = llm.messages[0][0]["content"]
     user = llm.messages[0][1]["content"]
+    assert "Use current_query for the user's latest presentation wording" in system
+    assert "reconstructed_goal for the complete request" in system
+    assert "Preserve explicit focus, exclusions, requested result count" in system
+    assert '"current_query": "莉娜的基础属性是什么？"' in user
+    assert '"reconstructed_goal": "Explain Lina\'s base attributes and gains."' in user
+    assert "goal=Explain Lina's base attributes and gains." not in user
     assert "use only normalized text and values" in system
     assert "base attribute values from per-level gains" in system
-    assert "ability level arrays" in system
-    assert "level 10/15/20/25 and left/right side" in system
-    assert "Scepter grants/upgrades" in system
-    assert "final item from a recipe item" in system
     assert "snapshot patch and generated_at" in system
-    assert "Never infer item-build strength" in system
-    assert "组件（中文名（English）） | 价格 | 属性" in system
-    assert "include the recipe scroll as an explicit row" in system
-    assert "Use cost_breakdown to verify and report the total price" in system
-    assert "explain a mismatch in natural language only when" in system
-    assert "row with no display attributes may say `无`" in system
-    assert "never claim that the item has no recipe scroll" in system
-    assert "For a basic item, show only" in system
-    assert "must never expose internal schema or token names" in system
-    assert "`has_shard = true`" in system
-    assert "`special_bonus_*`" in system
-    assert "魔晶升级, 神杖升级, or 先天技能" in system
-    assert "must not create a separate 相关天赋 section" in system
-    assert "For a complete hero ability-list query" in system
-    assert "技能分类汇总 or 相关天赋" in system
-    assert "等级 | 左侧天赋（中文 / English） | 右侧天赋（中文 / English）" in system
-    assert "For a single-ability query, output only the one ability" in system
-    assert "full talent tree unless the user explicitly" in system
+    assert "internal_name values" in system
+    assert "Never infer item-build strength" not in system
+    assert "`has_shard = true`" not in system
+    assert "`special_bonus_*`" not in system
+    assert "ability level arrays" not in system
+    assert "level 10/15/20/25 and left/right side" not in system
+    assert "组件（中文名（English）） | 价格 | 属性" not in system
+    assert "pair_lane_outcome" not in system
+    assert "filters.selection_mode" not in system
+    assert "STRATZ `synergy`" not in system
+    assert "calendar days" not in system
     assert "'kind':'hero_attributes'" in user.replace(" ", "")
     assert "'strength_base'" in user
     assert "'strength_gain'" in user
     assert "'patch':'7.41e'" in user.replace(" ", "")
     assert "'generated_at'" in user
+
+
+def test_natural_language_prompt_separates_catalog_metadata_from_stratz_lane_stats() -> None:
+    registry = _registry()
+    resolve_definition = registry.get("resolve_hero")
+    pair_definition = registry.get("stratz.pair_lane_outcome")
+    resolve_data = resolve_definition.handler(
+        ResolveHeroInput(query="Lina"), QueryContext()
+    )
+    plan = ExecutionPlan(
+        intent="pair_lane_outcome",
+        goal="Compare Storm Spirit and Lina lane and match outcomes.",
+        output_contract="natural_language_answer",
+        context=QueryContext(
+            bracket=["DIVINE_IMMORTAL"],
+            position_ids=["POSITION_2"],
+        ),
+        required_evidence=["hero_identity", "pair_lane_outcome", "sample_size"],
+    )
+    graph = build_evidence_graph(
+        plan,
+        [
+            ToolResult(
+                tool_call_id="resolve_lina",
+                tool="resolve_hero",
+                status="ok",
+                data=resolve_data,
+                source=resolve_definition.source,
+                latency_ms=0,
+            ),
+            ToolResult(
+                tool_call_id="pair_lane",
+                tool="stratz.pair_lane_outcome",
+                status="ok",
+                source=pair_definition.source,
+                latency_ms=0,
+                data={
+                    "hero_id": 17,
+                    "partner_hero_id": 25,
+                    "is_with": False,
+                    "filters": {
+                        "bracket_basic_ids": ["DIVINE_IMMORTAL"],
+                        "position_ids": ["POSITION_2"],
+                        "weeks_back": 1,
+                    },
+                    "weekly_buckets": [
+                        {
+                            "week_epoch": 1785369600,
+                            "week_index": 1,
+                            "window_label": "latest_completed_week",
+                            "rows": [
+                                {
+                                    "match_count": 1479,
+                                    "win_count": 159,
+                                    "loss_count": 799,
+                                    "draw_count": 362,
+                                    "stomp_win_count": 14,
+                                    "stomp_loss_count": 145,
+                                    "lane_win_count": 173,
+                                    "lane_loss_count": 944,
+                                    "lane_draw_count": 362,
+                                    "lane_win_rate": 0.117,
+                                    "lane_loss_rate": 0.6383,
+                                    "lane_draw_rate": 0.2448,
+                                    "match_win_count": 684,
+                                    "match_win_rate": 0.4625,
+                                    "cs_count": 78118,
+                                }
+                            ],
+                        }
+                    ],
+                },
+            ),
+        ],
+        registry,
+    )
+    llm = CapturingFakeLLM()
+
+    answer = asyncio.run(
+        AnswerSynthesizer(llm=llm, llm_enabled=True).synthesize(plan, graph)
+    )
+
+    assert answer.status == "ok"
+    system = llm.messages[0][0]["content"]
+    user = llm.messages[0][1]["content"]
+    assert "requested facts are solely STRATZ statistics" in system
+    assert "attribute each source's metadata locally" in system
+    assert (
+        "Do not infer gameplay causes, comeback ability, mid-game strength, late-game strength"
+        in system
+    )
+    assert "组件（中文名（English）） | 价格 | 属性" not in system
+    assert "For a complete hero ability-list query" not in system
+    assert "pair_lane_outcome" in user
+    assert "7.41e" in user
+    assert "generated_at" in user
+
+
+def test_pair_lane_answer_preserves_llm_wording_without_keyword_rewrite() -> None:
+    registry = _registry()
+    resolve_definition = registry.get("resolve_hero")
+    pair_definition = registry.get("stratz.pair_lane_outcome")
+    resolve_data = resolve_definition.handler(
+        ResolveHeroInput(query="Lina"), QueryContext()
+    )
+    plan = ExecutionPlan(
+        intent="pair_lane_outcome",
+        goal="Compare Storm Spirit and Lina lane and match outcomes.",
+        output_contract="natural_language_answer",
+        required_evidence=["hero_identity", "pair_lane_outcome"],
+    )
+    graph = build_evidence_graph(
+        plan,
+        [
+            ToolResult(
+                tool_call_id="resolve_lina",
+                tool="resolve_hero",
+                status="ok",
+                data=resolve_data,
+                source=resolve_definition.source,
+                latency_ms=0,
+            ),
+            ToolResult(
+                tool_call_id="pair_lane",
+                tool="stratz.pair_lane_outcome",
+                status="ok",
+                source=pair_definition.source,
+                latency_ms=0,
+                data={
+                    "hero_id": 17,
+                    "partner_hero_id": 25,
+                    "is_with": False,
+                    "filters": {"position_ids": ["POSITION_2"]},
+                    "weekly_buckets": [
+                        {
+                            "week_epoch": 1785369600,
+                            "week_index": 1,
+                            "window_label": "latest_completed_week",
+                            "rows": [
+                                {
+                                    "match_count": 100,
+                                    "lane_win_count": 12,
+                                    "lane_loss_count": 60,
+                                    "lane_draw_count": 28,
+                                    "lane_win_rate": 0.12,
+                                    "lane_loss_rate": 0.6,
+                                    "lane_draw_rate": 0.28,
+                                    "match_win_count": 46,
+                                    "match_win_rate": 0.46,
+                                }
+                            ],
+                        }
+                    ],
+                },
+            ),
+        ],
+        registry,
+    )
+    llm = BoundaryPhraseCapturingFakeLLM()
+
+    answer = asyncio.run(
+        AnswerSynthesizer(llm=llm, llm_enabled=True).synthesize(plan, graph)
+    )
+
+    assert answer.status == "ok"
+    assert answer.summary == (
+        "蓝猫的对线胜率与整局胜率存在差异。\n"
+        "这个差异不能证明其中后期更强，也不能证明其具有翻盘能力。"
+    )
 
 
 def _synthesize(plan: ExecutionPlan, graph):
@@ -322,11 +531,224 @@ class CapturingFakeLLM(FakeLLM):
         return "Grounded answer."
 
 
-def test_natural_language_prompt_asks_for_weekly_trend() -> None:
-    from app.agentic.answer.synthesizer import _NATURAL_LANGUAGE_SYSTEM_PROMPT
+class BoundaryPhraseCapturingFakeLLM(CapturingFakeLLM):
+    async def complete(
+        self,
+        messages: list[dict[str, str]],
+        temperature: float = 0.7,
+        max_tokens: int = 1000,
+    ) -> str:
+        self.messages.append([dict(message) for message in messages])
+        return (
+            "蓝猫的对线胜率与整局胜率存在差异。\n"
+            "这个差异不能证明其中后期更强，也不能证明其具有翻盘能力。"
+        )
 
-    prompt = _NATURAL_LANGUAGE_SYSTEM_PROMPT
+
+def test_natural_language_prompt_selects_weekly_pair_lane_rules() -> None:
+    from app.agentic.prompts.answer import render_natural_language_system_prompt
+
+    graph = EvidenceGraph(
+        intent="pair_lane_outcome",
+        required_evidence=["pair_lane_outcome", "sample_size"],
+        data_quality=EvidenceDataQuality(completeness=1.0),
+    )
+
+    prompt = render_natural_language_system_prompt(graph)
     assert "week_index" in prompt
     assert "week_epoch" in prompt
     assert "trend" in prompt
     assert "missing_week_epochs" in prompt
+    assert "pair_lane_outcome" in prompt
+    assert "lane_win_rate" in prompt
+    assert "match_win_rate" in prompt
+    assert "filters.position_ids" in prompt
+    assert "multiple completed weeks" in prompt
+    assert "Do not add unsupported gameplay interpretations or hypotheses" in prompt
+    assert "attribute it to that evidence" in prompt
+    assert "label it clearly as a hypothesis" not in prompt
+    assert "组件（中文名（English）） | 价格 | 属性" not in prompt
+    assert "For a complete hero ability-list query" not in prompt
+    assert "filters.selection_mode" not in prompt
+
+
+def test_natural_language_prompt_selects_ability_without_talent_or_item_rules() -> None:
+    from app.agentic.prompts.answer import render_natural_language_system_prompt
+
+    graph = EvidenceGraph(
+        intent="hero_ability",
+        required_evidence=["hero_identity", "hero_ability"],
+        data_quality=EvidenceDataQuality(completeness=1.0),
+    )
+
+    prompt = render_natural_language_system_prompt(graph)
+
+    assert "ability level arrays" in prompt
+    assert "For a complete hero ability-list query" in prompt
+    assert "For a single-ability query, output only the one ability" in prompt
+    assert "full talent tree unless the user explicitly" in prompt
+    assert "`has_shard = true`" in prompt
+    assert "`special_bonus_*`" in prompt
+    assert "魔晶升级, 神杖升级, or 先天技能" in prompt
+    assert "level 10/15/20/25 and left/right side" not in prompt
+    assert "组件（中文名（English）） | 价格 | 属性" not in prompt
+    assert "pair_lane_outcome" not in prompt
+
+
+def test_natural_language_prompt_adds_talent_rules_only_for_talent_evidence() -> None:
+    from app.agentic.prompts.answer import render_natural_language_system_prompt
+
+    graph = EvidenceGraph(
+        intent="hero_abilities_and_talents",
+        required_evidence=["hero_ability", "hero_talent_tree"],
+        data_quality=EvidenceDataQuality(completeness=1.0),
+    )
+
+    prompt = render_natural_language_system_prompt(graph)
+
+    assert "For a complete hero ability-list query" in prompt
+    assert "level 10/15/20/25 and left/right side" in prompt
+    assert "等级 | 左侧天赋（中文 / English） | 右侧天赋（中文 / English）" in prompt
+    assert "组件（中文名（English）） | 价格 | 属性" not in prompt
+
+
+def test_natural_language_prompt_selects_item_recipe_rules() -> None:
+    from app.agentic.prompts.answer import render_natural_language_system_prompt
+
+    graph = EvidenceGraph(
+        intent="item_recipe",
+        required_evidence=["item_definition", "item_recipe"],
+        data_quality=EvidenceDataQuality(completeness=1.0),
+    )
+
+    prompt = render_natural_language_system_prompt(graph)
+
+    assert "final item from a recipe item" in prompt
+    assert "组件（中文名（English）） | 价格 | 属性" in prompt
+    assert "include the recipe scroll as an explicit row" in prompt
+    assert "Use cost_breakdown to verify and report the total price" in prompt
+    assert "Never infer item-build strength" in prompt
+    assert "For a complete hero ability-list query" not in prompt
+    assert "pair_lane_outcome" not in prompt
+
+
+def test_natural_language_prompt_keeps_catalog_and_stratz_metadata_local_in_mixed_answer() -> None:
+    from app.agentic.prompts.answer import render_natural_language_system_prompt
+
+    graph = EvidenceGraph(
+        intent="mixed_definition_and_stats",
+        required_evidence=["hero_ability", "pair_lane_outcome"],
+        tool_results=[
+            ToolResult(
+                tool_call_id="stats",
+                tool="stratz.pair_lane_outcome",
+                status="ok",
+                source=ToolSource(name="STRATZ", kind="public_graphql_api"),
+                latency_ms=0,
+                data={},
+            )
+        ],
+        data_quality=EvidenceDataQuality(completeness=1.0),
+    )
+
+    prompt = render_natural_language_system_prompt(graph)
+
+    assert "Disclose the Catalog snapshot patch and generated_at" in prompt
+    assert "requested facts are solely STRATZ statistics" in prompt
+    assert "attribute each source's metadata locally" in prompt
+    assert "For a complete hero ability-list query" in prompt
+    assert "For pair_lane_outcome evidence" in prompt
+
+
+def test_natural_language_prompt_selects_ranking_and_daily_rules_independently() -> None:
+    from app.agentic.prompts.answer import render_natural_language_system_prompt
+
+    ranking_prompt = render_natural_language_system_prompt(
+        EvidenceGraph(
+            intent="hero_synergy",
+            required_evidence=["hero_synergy_ranking_row", "sample_size"],
+            data_quality=EvidenceDataQuality(completeness=1.0),
+        )
+    )
+    daily_prompt = render_natural_language_system_prompt(
+        EvidenceGraph(
+            intent="hero_daily_trend",
+            required_evidence=["hero_daily_trend"],
+            data_quality=EvidenceDataQuality(completeness=1.0),
+        )
+    )
+
+    assert "the PRIMARY ranking is STRATZ `synergy`" in ranking_prompt
+    assert "pair_wilson_rating" in ranking_prompt
+    assert "week_index" in ranking_prompt
+    assert "calendar days" not in ranking_prompt
+    assert "calendar days" in daily_prompt
+    assert "do not invent week buckets" in daily_prompt
+    assert "pair_wilson_rating" not in daily_prompt
+    assert "week_index" not in daily_prompt
+
+
+def test_natural_language_prompt_adds_aligned_ti_status_example_for_match_evidence() -> None:
+    from app.agentic.prompts.answer import render_natural_language_system_prompt
+
+    match_prompt = render_natural_language_system_prompt(
+        EvidenceGraph(
+            intent="competition_latest_status",
+            required_evidence=[
+                "competition_identity",
+                "tournament_stage",
+                "match_schedule",
+                "match_state",
+                "series_score",
+            ],
+            data_quality=EvidenceDataQuality(completeness=1.0),
+        )
+    )
+    hero_prompt = render_natural_language_system_prompt(
+        EvidenceGraph(
+            intent="hero_attributes",
+            required_evidence=["hero_attributes"],
+            data_quality=EvidenceDataQuality(completeness=1.0),
+        )
+    )
+    match_details_prompt = render_natural_language_system_prompt(
+        EvidenceGraph(
+            intent="match_details",
+            required_evidence=[
+                "match_result",
+                "cross_source_match_mapping",
+                "player_scoreboard",
+                "match_draft",
+            ],
+            data_quality=EvidenceDataQuality(completeness=1.0),
+        )
+    )
+
+    assert "presentation-only" in match_prompt
+    assert "# {赛事名}最新战况" in match_prompt
+    assert "group fixtures by their UTC calendar date" in match_prompt
+    assert (
+        "future dates in ascending order, then historical dates in descending order"
+        in match_prompt
+    )
+    assert "## 后续赛程" in match_prompt
+    assert "## 历史赛果" in match_prompt
+    assert "Render each UTC date once" in match_prompt
+    assert "# {赛事名}最新战况" not in hero_prompt
+    assert "# {赛事全名} — {队伍A} vs {队伍B} 比赛详情" in match_details_prompt
+    assert "compact game" in match_details_prompt
+    assert "full draft, then player scoreboards" in match_details_prompt
+    assert "##### {队伍A}（{天辉 / 夜魇}）" in match_details_prompt
+    assert "Use the OpenDota draft `order` only" in match_details_prompt
+    assert (
+        "**{队伍A}（{队伍A系列赛得分}） ： {队伍B}（{队伍B系列赛得分}）**"
+        in match_details_prompt
+    )
+    assert "| 顺序 | 选择 | 禁用 |" in match_details_prompt
+    assert "（Ban 1）" not in match_details_prompt
+    assert "（Pick 1）" not in match_details_prompt
+    assert "| 选手 | 英雄 | K/D/A | 经济 | 装备 |" in match_details_prompt
+    assert "| {选手} | {英雄}（{等级}） | {K}/{D}/{A} | {22,790} |" in match_details_prompt
+    assert "standard thousands separators" in match_details_prompt
+    assert "Do not emit raw HTML such as `<sub>` or `<br>`" in match_details_prompt
+    assert "For a The International schedule or" not in match_details_prompt

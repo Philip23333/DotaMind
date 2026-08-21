@@ -61,7 +61,7 @@ def test_run_context_budget_and_fake_clock_contracts() -> None:
     assert state.run_context.deadline_at == UTC_START + timedelta(seconds=60)
     assert state.run_context.prompt_versions == {}
     assert state.run_budget is not None
-    assert state.run_budget.remaining("tools") == 8
+    assert state.run_budget.remaining("tools") == 16
     assert not state.run_budget.deadline_exceeded(clock.monotonic() - 10.0)
     with pytest.raises(RuntimeError, match="run context already exists"):
         run_init_node(state, RuntimePolicy(), clock)
@@ -435,8 +435,13 @@ def test_attempt_and_public_runtime_do_not_leak_private_payloads() -> None:
     assert SENTINEL not in attempt_json
     assert SENTINEL not in runtime_json
     assert SENTINEL not in trace_json
-    assert "handler_entered" not in runtime_json
-    assert "dispatch_stage" not in runtime_json
+    assert "handler_entered" in runtime_json
+    assert "dispatch_stage" in runtime_json
+    assert "failure_code" in runtime_json
+    tool_status = state.response["runtime"]["attempts"][0]["tool_call_statuses"][0]
+    assert tool_status["handler_entered"] is True
+    assert tool_status["dispatch_stage"] == "handler"
+    assert tool_status["failure_code"] == "handler_error"
     assert "error_code" not in runtime_json
     assert state.response["tool_results"][0]["error"] == "tool execution failed"
 
@@ -631,7 +636,8 @@ def _answer_graph_runner(*, answer_status: str, confidence: float) -> AgentGraph
             )
 
     class Synthesizer:
-        async def synthesize(self, execution_plan, graph):
+        async def synthesize(self, execution_plan, graph, *, current_query=None):
+            assert current_query == "q"
             return AnswerSynthesisResult(
                 answer_type="natural_language_answer",
                 status=answer_status,

@@ -16,7 +16,7 @@ app/
     runtime/       Run/Attempt/Budget models, clocks, summaries, stream events and flat-state reset
     conversation/  message/Turn contracts and bounded answer summaries
     planning/      ControllerDecision, Controller, contracts, sample policy
-    prompts/       Controller prompt bundle, feedback renderers and audit versions
+    prompts/       Controller/Answer prompt renderers, static Controller rules, feedback renderers and audit versions
     nodes/         controller, decision validation, conversation/tool paths
     tools/         registry, executor, OpenDota, STRATZ, patch and local tools
     evidence/      EvidenceGraph and extraction helpers
@@ -57,8 +57,34 @@ relations. `dota.item_info` expands each edge into bilingual recipe-scroll,
 component and upgrade-target definitions with prices and displayable special
 values, plus an auditable component/scroll/calculated/final-price comparison.
 
+The same committed catalog snapshot includes lightweight offline hero and
+non-recipe item PNGs under `app/data/catalog/images/`. The maintenance command's
+`--images-only` mode downloads these files from Valve's official React image CDN;
+the API mounts them at `/api/v1/assets/dota/...`. Catalog hero/item entities expose
+only a deterministic origin-relative `image_path`, so request-time code remains
+offline and does not expose server filesystem paths.
+
 Downstream STRATZ contracts continue to reference `data.hero.hero_id`, while
-OpenDota registrations remain unchanged. STRATZ reads its English hero display-
+the existing OpenDota team registrations remain unchanged. The competition slice
+uses PandaScore Fixture discovery plus batch game resolution, cross-source Valve
+mapping, and a combined OpenDota match-detail tool. When no game number is given,
+PandaScore returns all provider-exposed games in the uniquely identified series;
+the cross-source resolver maps each game using exact unordered team IDs, hard
+start-time/duration tolerances, and winner consistency. OpenDota `series_id` /
+derived game position is deliberately not a hard condition because the league
+feed can omit it; ambiguity is still surfaced rather than resolved by proximity.
+The free PandaScore Fixture response does not currently expose Valve IDs, so
+OpenDota receives only the explicit Valve ID list emitted by the resolver. A
+globally ambiguous team is resolved only when exactly one candidate has an exact
+`leagueid` participation record in the target league; zero or multiple
+participating candidates remain explicit `ambiguous_team` status. Each successful
+game yields an auditable `inferred_cross_source` mapping, never presented as a
+native PandaScore Valve ID. Match-detail player and BP evidence preserves
+OpenDota's raw hero/item IDs and deterministically adds display names and
+origin-relative `hero_image_path` / `item_image_path` values from the committed Valve
+Catalog snapshot; absent or unknown IDs retain `null` image paths, and the Answer layer
+must not infer names or image URLs from IDs.
+STRATZ reads its English hero display-
 name index from the same Catalog repository. The former `hero_tools.py` resolver
 and `data/heroes/dota2_heroes.yaml` snapshot were deleted rather than kept as a
 parallel source. Controller capability text distinguishes official static facts
@@ -88,8 +114,8 @@ START
       -> tool_plan
            -> validate_plan_node
            -> tool_executor_node
-              -> conversation.history_lookup -> controller_node (bounded; default once)
-              -> evidence_node -> answer_node -> critic_node
+              -> result_destination=controller_context -> controller_node
+              -> result_destination=evidence -> evidence_node -> answer_node -> critic_node
            -> attempt_finalize_node
   -> recovery_node
       -> terminal -> run_finalize_node -> response_node -> END
@@ -112,7 +138,9 @@ validation occur before handler entry and do not consume tool budget. A
 synchronous guard checks monotonic deadline and remaining tool budget after
 pre-dispatch validation, then a callback records budget immediately before the handler, so
 both successful and failed handler entries count exactly once. Dispatch stage
-and stable internal error codes never modify the public `ToolResult`. Within a
+and stable internal error codes never modify the public `ToolResult`. The public
+runtime summary exposes only `handler_entered`, `dispatch_stage`, and a mapped
+stable tool failure code; raw dispatch error text remains private. Within a
 Run, canonical fingerprints reuse same-id results and reject an equivalent call
 under a changed id.
 
@@ -134,10 +162,14 @@ when the model judges their subject, property, source and validity still match;
 current/latest/volatile/version-sensitive or conflicting facts should be
 re-queried through tools. A direct answer is always authored by the Controller
 from the current request and available conversation; the server does not require
-turn-index citations or deterministic recall templates. When the recent window
-is insufficient, the internal `conversation.history_lookup` tool may retrieve
-older messages within the configured budget (once by default); the result is
-request-local context and history lookup itself does not become Dota evidence or
+turn-index citations or deterministic recall templates. Tool-result flow is
+declared by `ToolDefinition.result_destination`, not by a tool-name branch.
+When the recent window is insufficient, the internal
+`conversation.history_lookup` tool may retrieve older messages within the
+configured budget (once by default). Its messages are request-local context,
+and every completed call also leaves a minimal summary containing the tool name,
+`status=completed`, and `matched_turns`; an empty lookup therefore reaches the
+next Controller call as `matched_turns=0`. Neither form becomes Dota evidence or
 an EvidenceGraph. A `session_id` remains a bearer capability for one user
 security subject, so cross-session history access is unavailable.
 
@@ -211,9 +243,58 @@ GraphRunner with that registry. `controller_node` copies the bundle manifest to
 `RunContext.prompt_versions` before the LLM call. Its SHA-256 identifies the configured/
 prepared system prompt, not delivery or model success. Dynamic history and user-message
 rendering are versioned without hashing request content. Prompt text, retry feedback,
-validation errors and raw model output stay out of public and persistent DTOs.
+validation errors and model output stay out of public and persistent DTOs. The explicit
+local-test-only observer may mirror full Controller/Answer exchanges and tool I/O into
+short-lived Run events; it is disabled by default and does not change PostgreSQL transcript
+or public result persistence.
 `controller.recovery_rules=v1` versions the separate dynamic Recovery renderer;
-it does not change the system Prompt hash.
+it does not change the system Prompt hash. `controller.validation_retry=v2`
+requires corrected decisions to preserve explicit subjects, requested result
+counts, and scope constraints; an unsupported required scope must become a
+capability boundary instead of being removed during retry.
+
+Static Controller behavior rules live in `agentic/prompts/controller_rules.py`,
+while `agentic/prompts/controller.py` remains the sole Controller prompt bundle
+and message renderer. ToolDefinition descriptions are dynamically rendered into
+that bundle and describe each tool's capability, data semantics, local behavior,
+and scope support. `ArgContract` describes argument semantics, while
+`requires_reference`, `AcceptedRef`, and `OutputPathContract` declare and validate
+cross-tool dependencies. The Controller keeps only cross-tool context conventions
+and a generic instruction to consult the rendered tool catalog and sample policy.
+Current DotaMind v1 player tools do not support region or
+game-mode filters; this capability boundary is returned only when the user
+explicitly requires either filter. Deterministic plan validation rejects those
+scopes on unsupported tool plans, while Controller rules prohibit silently
+weakening them and prohibit adding unstated role, position, lane, or scope to the
+plan goal. The player-performance `take` argument is the final returned top-N;
+the handler owns any internal over-fetching required for strong-mode ranking.
+Natural-language Answer prompt rules and message rendering live in
+`agentic/prompts/answer.py`; `answer/synthesizer.py` only invokes that renderer
+and handles LLM results. The renderer combines required and actual evidence kinds
+and includes only the relevant Catalog or STRATZ presentation sections. STRATZ
+source metadata also activates the cross-source attribution boundary. This
+selection never uses `intent`, tool names, or query-keyword routing, and no
+deterministic Catalog answer renderer is present. Prompt content changes are
+identified by the prepared prompt hash recorded in the Run manifest. For
+natural-language answers,
+`answer_node` passes the current user query alongside the plan and EvidenceGraph;
+the renderer sends both `current_query` and the Controller's reconstructed
+`plan.goal` as request context. This preserves explicit focus, exclusions, result
+count, and detail wording without adding a fixed presentation enum or intent route.
+The full Controller/tool/evidence/query-bypass flow is illustrated in
+[Answer + Critic layer](../design/architecture/Answer+Critic层.md) §2.
+Natural-language summaries are trimmed but not rewritten by domain keyword
+filters. Pair-lane causal and Catalog/STRATZ attribution boundaries are carried
+by the evidence-specific Answer prompt, so streamed deltas and the stored final
+summary do not diverge through a post-generation line-deletion pass.
+Natural-language answers do not permit unsupported interpretations merely because
+they are labeled as hypotheses. Gameplay or causal explanations require explicit
+EvidenceGraph support and must be attributed to that evidence; any future strategy
+simulation capability would need a separate contract.
+The current Critic does not claim sentence-level verification of natural-language
+summaries. DotaMind accepts that model-quality boundary unless reproducible
+transcription errors appear; it does not add structured claims, a second LLM
+critic, or evidence-kind-specific text parsing without demonstrated need.
 
 Graph validation repeats deterministic checks but never mutates tool args,
 metadata, or evidence obligations. Therefore state, debug output and execution
@@ -249,6 +330,11 @@ checks registry mandatory evidence against the evidence emitted by each
 successful `tool_call_id`; one call cannot satisfy another call's obligation.
 Registry metadata is validated once at service startup; plan-specific
 producibility is validated for each tool plan.
+
+The current STRATZ pair-lane contract is `pair_lane_outcome`. It carries both
+the five-category lane outcome rates and the separate match win rate. Lane scope
+comes from `filters.position_ids`; the provider row's `position` field is not a
+reliable echo of the requested position and is not exposed as pair evidence.
 
 The first release mandates primary result evidence only. `sample_size` remains
 available through sample-policy parameters, extraction, data-quality metadata,
@@ -299,6 +385,11 @@ events; disconnecting only closes observation and never cancels the detached Run
 Only the cancel endpoint requests cancellation. Provisional answer deltas are not
 authoritative unless followed by a successful final result. `/plan` and
 `/plan/stream` remain stateless debug surfaces.
+
+With both local test flags enabled, `apps/chat` exposes a right-side observer drawer
+for the current subscribed Run. It groups full model prompts, model outputs and
+planned/resolved tool input plus ToolResult output. The drawer reads assistant-message
+metadata populated from Redis Run events and does not create a second browser Run store.
 
 The in-repository `apps/chat` Next.js/assistant-ui client uses that boundary. It
 maps one thread to one DotaMind session, restores transcript through

@@ -49,6 +49,16 @@ LLM JSON
 歧义阻止有用且准确的回答时才返回 `clarification`；可由短答案覆盖的多个解释应
 合并回答。所有这些判断基于真实对话上下文，不依赖固定实体、集合或关系枚举。
 
+模型自身知识不是 `direct_answer` 的 Dota 事实证据。对新的 Dota 事实请求，
+只有当所需事实已经明确存在于当前消息或可复用历史时才可直答；否则，已注册
+工具能提供该事实时必须选择 `tool_plan`。这是跨工具的事实来源边界，不规定
+具体 Catalog 工具名、调用顺序或 intent 路由；工具依赖仍由 ToolRegistry 合同表达。
+
+历史回答只能复用其中明确出现、且主题/范围/时间窗口/来源一致的数值。只有当历史
+明确包含当前请求的每一个统计指标及其数值时，才允许 `direct_answer`。缺少任一指标
+时必须在同一次决策中选择 `tool_plan`；不得只复述已知值、声称另一值不可用，或说
+需要进一步查询后把查询留给用户。不得由模型推算或补造缺失数字。
+
 校验成功后，`conversation_answer_node` 直接使用 Controller 生成的 answer，
 不再读取消息字段或套用确定性回忆模板。direct answer 不创建 EvidenceGraph。
 
@@ -58,7 +68,10 @@ Controller 不直接访问全局 SessionStore。持久化 Chat Run 在进入 Gra
 `ConversationMemoryService` 取得 Redis recent dialogue window；cache miss/stale 时从
 PostgreSQL 重建。消息通过 `state.recent_messages` 注入，旧消息查找结果只存在于本次
 Run 的 `state.retrieved_messages`，并由 `conversation.history_lookup` 在配置预算内取得
-（默认最多一次）。
+（默认最多一次）。已完成的上下文工具另以 `state.controller_context_summaries` 向下一次
+Controller 调用提供最小状态；空结果明确表示为
+`{"tool":"conversation.history_lookup","status":"completed","matched_turns":0}`，因此
+不会因 `retrieved_messages` 为空而丢失“已经查过”的事实。
 
 ```mermaid
 sequenceDiagram
@@ -79,7 +92,7 @@ sequenceDiagram
     end
     Memory-->>Executor: recent messages + next index
     Executor->>Graph: AgentRunState(recent_messages, next_turn_index)
-    Graph->>Controller: query + recent/retrieved role messages
+    Graph->>Controller: query + recent/retrieved messages + context summaries
     Controller-->>Graph: ControllerDecision
     Graph-->>Executor: finalized response
     Executor->>PG: atomically commit assistant_message + compact Turn + completed Run
@@ -103,8 +116,9 @@ EvidenceGraph。
 
 ## 隐私边界
 
-服务端不序列化 `state.recent_messages`、`state.retrieved_messages`、完整历史渲染块、Controller prompt、retry
-feedback、raw Controller output 或未脱敏 validation error。每个 session
+服务端不序列化 `state.recent_messages`、`state.retrieved_messages`、上下文工具执行摘要、
+完整历史渲染块、Controller prompt、retry feedback、raw Controller output 或未脱敏
+validation error。每个 session
 对应一个用户安全主体；`session_id` 在无独立认证层时视为 bearer capability。
 
 ## Prompt Registry（V3.2-2）
@@ -114,3 +128,32 @@ policy 组成的 Prompt bundle。每个 Run 在调用前记录 renderer 版本�
 的 SHA-256；它表示 configured/prepared Prompt，不表示网络发送成功。历史与用户消息
 renderer 只通过版本覆盖动态内容。recovery rules 使用独立 renderer/version，不改变
 system Prompt hash。
+
+源码职责上，`agentic/prompts/controller_rules.py` 只保存 Controller 静态行为规则；
+`agentic/prompts/controller.py` 是唯一的 Controller bundle/system/message renderer，
+并继续组合 ToolRegistry、Contract Registry 与 sample policy 的动态内容。工具的 scope
+支持性、数据口径与自身行为由动态渲染的 `ToolDefinition.description` 提示；工具结果进入
+EvidenceGraph 还是重新进入 Controller 由不渲染的 `ToolDefinition.result_destination`
+确定。参数语义由 `ArgContract` 表达，跨工具依赖由 `requires_reference`、`AcceptedRef` 与
+`OutputPathContract` 表达并校验。Controller 只保留跨工具 context 放置、枚举解释及查询
+工具目录/样本策略的通用规则，不重复列举具体工具调用顺序或固定问句路由。
+跨源比赛身份是例外的契约边界：Prompt 会明确 PandaScore competition/game
+context 必须先经过 Valve Match ID 映射，再进入 OpenDota match-detail 工具；
+这不构成按 intent 固定路由。
+当前 DotaMind v1 玩家工具不支持地区或游戏模式过滤；仅当用户明确要求该过滤时才返回
+能力边界。Validator 会拒绝把该 scope 与不支持的工具组合；validation retry `v2` 禁止通过
+删除或弱化用户显式约束来绕过拒绝，并要求能力不足时返回 `capability_boundary`。Controller
+还要求 plan goal 保留用户明确的主体、角色、位置、数量和 scope，不补充未声明范围。
+
+## 赛事范围与届次
+
+对当前/最新赛事事实，Controller 只判断请求是否已有赛事、战队、选手或近期对话
+中的明确指代；真正缺少范围时返回 `clarification`。命名的周期性赛事即使没有
+年份也已经具备足够身份，年份留给 `pandascore.resolve_competition` 根据实时
+Fixture 时间确定。用户明确写出的年份必须保留，不能在 Controller 或 Graph 中
+硬编码当前年份或固定赛事 ID。赛事候选仍由工具的 `selection` 元数据和
+`competition_identity` evidence 审计。
+
+显式年份由 Controller 保留并交给 resolver；resolver 会先按年份限制 PandaScore
+Series 候选，再做赛事名称消歧。Controller 不根据自身知识推断届次时间，也不把
+历史年份缺失改写成最新届。

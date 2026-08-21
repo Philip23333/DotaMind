@@ -319,7 +319,7 @@ def test_hero_matchup_ranking_keeps_groups_separate(monkeypatch) -> None:
     assert row66["pair_wilson_rating"] > 0  # non-degenerate: win_count reached the handler
 
 
-def test_filter_heroes_by_position_joins_and_drops(monkeypatch) -> None:
+def test_filter_ranked_heroes_by_position_joins_and_drops(monkeypatch) -> None:
     """Thin-relay join: keep candidates that have enough position sample; carry
     the ORIGINAL ranking row + attach position sample; no composite score."""
     monkeypatch.setattr("app.agentic.tools.stratz_tools.StratzTransport", FakeTransport)
@@ -355,7 +355,7 @@ def test_filter_heroes_by_position_joins_and_drops(monkeypatch) -> None:
         ToolExecutor(_registry(token="token")).execute(
             ToolCall(
                 id="filter",
-                tool="stratz.filter_heroes_by_position",
+                tool="stratz.filter_ranked_heroes_by_position",
                 args={
                     "candidate_rows": candidate_rows,
                     "position_id": "POSITION_1",
@@ -387,7 +387,7 @@ def test_filter_heroes_by_position_joins_and_drops(monkeypatch) -> None:
         ToolExecutor(_registry(token="token")).execute(
             ToolCall(
                 id="filter2",
-                tool="stratz.filter_heroes_by_position",
+                tool="stratz.filter_ranked_heroes_by_position",
                 args={
                     "candidate_rows": candidate_rows,
                     "position_id": "POSITION_1",
@@ -401,12 +401,12 @@ def test_filter_heroes_by_position_joins_and_drops(monkeypatch) -> None:
     assert result2.data["dropped_hero_ids"] == [11, 99]
 
 
-def test_filter_heroes_by_position_evidence_preserves_original_row() -> None:
-    from app.agentic.tools.stratz_tools import filter_heroes_by_position_evidence
+def test_filter_ranked_heroes_by_position_evidence_preserves_original_row() -> None:
+    from app.agentic.tools.stratz_tools import filter_ranked_heroes_by_position_evidence
 
     tool_result = ToolResult(
         tool_call_id="filter",
-        tool="stratz.filter_heroes_by_position",
+        tool="stratz.filter_ranked_heroes_by_position",
         status="ok",
         latency_ms=1,
         source=ToolSource(name="STRATZ", kind="public_graphql_api"),
@@ -431,7 +431,7 @@ def test_filter_heroes_by_position_evidence_preserves_original_row() -> None:
         },
     )
 
-    evidence = filter_heroes_by_position_evidence(tool_result)
+    evidence = filter_ranked_heroes_by_position_evidence(tool_result)
     assert len(evidence) == 1
     row = evidence[0]
     assert row.kind == "role_filtered_candidate_row"
@@ -1399,14 +1399,14 @@ def test_matchup_and_synergy_evidence_relay_pair_wilson() -> None:
     assert "wilson" in s.value["wilson_provenance"]
 
 
-def test_filter_heroes_by_position_passes_pair_wilson_through() -> None:
+def test_filter_ranked_heroes_by_position_passes_pair_wilson_through() -> None:
     """The position filter spreads {**row}, so pair_wilson_rating survives the
     join and reaches role_filtered_candidate_row evidence alongside synergy."""
-    from app.agentic.tools.stratz_tools import filter_heroes_by_position_evidence
+    from app.agentic.tools.stratz_tools import filter_ranked_heroes_by_position_evidence
 
     result = ToolResult(
         tool_call_id="f",
-        tool="stratz.filter_heroes_by_position",
+        tool="stratz.filter_ranked_heroes_by_position",
         status="ok",
         latency_ms=1,
         source=ToolSource(name="STRATZ", kind="public_graphql_api"),
@@ -1428,7 +1428,7 @@ def test_filter_heroes_by_position_passes_pair_wilson_through() -> None:
     )
     row = next(
         i
-        for i in filter_heroes_by_position_evidence(result)
+        for i in filter_ranked_heroes_by_position_evidence(result)
         if i.kind == "role_filtered_candidate_row"
     )
     assert row.value["pair_wilson_rating"] == pytest.approx(0.51)

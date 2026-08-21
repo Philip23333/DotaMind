@@ -22,6 +22,7 @@ from app.integrations.valve.catalog import (
 )
 
 CATALOG_DIR = Path(__file__).resolve().parents[2] / "data" / "catalog"
+CATALOG_IMAGE_BASE_PATH = "/api/v1/assets/dota"
 ResolutionStatus = Literal["resolved", "ambiguous", "not_found"]
 
 
@@ -212,6 +213,7 @@ class _Resolver(Generic[EntityModel]):
                 "name_zh": entity.name_zh,
                 "localized_name": entity.name_zh or entity.name_en,
                 "aliases": list(entity.aliases),
+                "image_path": f"{CATALOG_IMAGE_BASE_PATH}/heroes/{entity.identifier}.png",
             }
         return {
             "item_id": entity.identifier,
@@ -221,6 +223,11 @@ class _Resolver(Generic[EntityModel]):
             "localized_name": entity.name_zh or entity.name_en,
             "aliases": list(entity.aliases),
             "is_recipe": entity.is_recipe,
+            "image_path": (
+                None
+                if entity.is_recipe
+                else f"{CATALOG_IMAGE_BASE_PATH}/items/{entity.identifier}.png"
+            ),
         }
 
 

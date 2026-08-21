@@ -111,8 +111,10 @@ Current output contracts:
 - `role_meta_report`
 - `team_recent_report`
 
-The current registry exposes 25 deterministic tools across the committed Valve
-Catalog, STRATZ hero/player analysis, OpenDota team/role data, local patch
+The current registry exposes 31 deterministic tools across the committed Valve
+Catalog, STRATZ hero/player analysis, PandaScore Dota 2 Fixture schedules and
+identity resolution, OpenDota team/role and single-match data, cross-source
+PandaScore-to-Valve match resolution, local patch
 records, and request-local conversation history lookup. Registry definitions,
 not a copied documentation list, are authoritative.
 
@@ -123,15 +125,21 @@ policy lives in `apps/api/app/config/policy.yaml` and is validated on startup.
 
 ```text
 DOTAMIND_LIVE_DATA_ENABLED=false
+DOTAMIND_PANDASCORE_TOKEN=
+DOTAMIND_PANDASCORE_BASE_URL=https://api.pandascore.co
 DOTAMIND_STRATZ_TOKEN=
 DOTAMIND_LLM_ENABLED=false
 DOTAMIND_LLM_API_KEY=
 DOTAMIND_POLICY_PATH=
 ```
 
-The policy covers OpenDota and STRATZ transport boundaries, team/hero/patch
-report rules, critic quality gates, LLM call settings, planner sample policy,
-and conversation memory budgets.
+The policy covers OpenDota, PandaScore, cross-source match resolution, and STRATZ transport boundaries,
+team/hero/patch report rules, critic quality gates, LLM call settings, planner
+sample policy, and conversation memory budgets. The free PandaScore Fixture
+boundary does not natively expose Valve match IDs; the explicit resolver can
+infer a mapping only from a unique OpenDota match and reports ambiguity.
+赛事 resolver 缺省年份时根据 PandaScore Fixture 时间确定最近一届，显式年份保持
+优先；公共 runtime 和 Chat UI 会区分工具尚未进入 handler 与执行后失败。
 Restart the API after editing it.
 
 ## Current Architecture

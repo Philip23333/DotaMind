@@ -5,7 +5,9 @@
       "internal_name": "item_blink",
       "name_en": "Blink Dagger",
       "name_zh": "闪烁匕首",
-      "aliases": [],
+      "aliases": [
+        "跳刀"
+      ],
       "description_en": "Active: Blink\nTeleport to a target point up to 1200 units away.\n\nBlink Dagger cannot be used for 3 seconds after taking damage from an enemy hero or Roshan.",
       "description_zh": "主动：闪烁\n传送到最远1200距离的位置。\n\n受到来自敌方英雄或肉山的攻击时，闪烁匕首将在3秒内无法使用。",
       "lore_en": "The fabled dagger used by the fastest assassin ever to walk the lands.",

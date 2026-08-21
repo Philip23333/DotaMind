@@ -10,6 +10,13 @@ from app.agentic.planning.decisions import (
     DirectAnswerDecision,
     ToolPlanDecision,
 )
+from app.agentic.runtime.streaming import (
+    ObserverStreamEvent,
+    bind_observer_attempt_index,
+    bind_stream_event_publisher,
+    reset_observer_attempt_index,
+    reset_stream_event_publisher,
+)
 from app.agentic.state import AgentRunState
 from app.agentic.tools.stratz_tools import build_default_tool_registry
 from app.core.config import Settings
@@ -118,6 +125,51 @@ def _valid_plan_payload() -> dict[str, Any]:
     }
 
 
+def _pair_lane_mid_plan_payload() -> dict[str, Any]:
+    return {
+        "kind": "tool_plan",
+        "plan": {
+            "intent": "pair_lane_outcome",
+            "goal": "Compare Storm Spirit and Lina lane and match outcomes.",
+            "output_contract": "natural_language_answer",
+            "context": {
+                "bracket": ["DIVINE_IMMORTAL"],
+                "weeks_back": None,
+                "position_ids": ["POSITION_2"],
+                "region_ids": None,
+                "game_mode_ids": None,
+            },
+            "tool_calls": [
+                {
+                    "id": "resolve_storm",
+                    "tool": "resolve_hero",
+                    "args": {"query": "蓝猫"},
+                },
+                {
+                    "id": "resolve_lina",
+                    "tool": "resolve_hero",
+                    "args": {"query": "火女"},
+                },
+                {
+                    "id": "pair_lane",
+                    "tool": "stratz.pair_lane_outcome",
+                    "args": {
+                        "hero_id": "$resolve_storm.data.hero.hero_id",
+                        "partner_hero_id": "$resolve_lina.data.hero.hero_id",
+                        "is_with": False,
+                    },
+                },
+            ],
+            "required_evidence": [
+                "hero_identity",
+                "pair_lane_outcome",
+                "sample_size",
+            ],
+            "constraints": {"max_tool_calls": 6, "allow_mock": False},
+        },
+    }
+
+
 def _controller_payload(payload: dict[str, Any]) -> dict[str, Any]:
     """Keep the catalog-validation fixtures compact while using the new contract."""
     if payload.get("status") == "planned":
@@ -151,6 +203,36 @@ def test_agent_controller_accepts_valid_counter_pick_plan() -> None:
     assert result.raw_output == _valid_plan_payload()
     assert [message["role"] for message in result.prompt_messages] == ["system", "user"]
     assert "Schema obedience rules" in result.prompt_messages[0]["content"]
+
+
+def test_agent_controller_publishes_full_test_observer_model_exchange(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.core.config.get_settings",
+        lambda: Settings(test_observer_enabled=True),
+    )
+    events: list[ObserverStreamEvent] = []
+    token = bind_stream_event_publisher(events.append)
+    attempt_token = bind_observer_attempt_index(2)
+    try:
+        result = asyncio.run(
+            AgentController(
+                _registry(),
+                llm=FakeLLM(_valid_plan_payload()),
+                llm_enabled=True,
+                planner_max_retries=0,
+            ).decide("enemy picked Lina, what should I pick?")
+        )
+    finally:
+        reset_observer_attempt_index(attempt_token)
+        reset_stream_event_publisher(token)
+
+    assert result.status == "decided"
+    assert [event.kind for event in events] == ["model_prompt", "model_output"]
+    assert events[0].attempt_index == 2
+    assert events[0].payload["messages"][-1]["content"] == (
+        "enemy picked Lina, what should I pick?"
+    )
+    assert events[1].payload["content"] == _valid_plan_payload()
 
 
 def test_agent_controller_returns_capability_boundary() -> None:
@@ -435,7 +517,7 @@ def test_agentic_planner_accepts_pair_lane_outcome_reference_from_any_previous_c
     payload["plan"]["output_contract"] = "natural_language_answer"
     payload["plan"]["required_evidence"] = [
         "hero_identity",
-        "pair_lane_winrate",
+        "pair_lane_outcome",
         "sample_size",
     ]
     planner = AgentController(
@@ -464,7 +546,7 @@ def test_agentic_planner_rejects_pair_lane_outcome_missing_is_with() -> None:
     payload["plan"]["output_contract"] = "natural_language_answer"
     payload["plan"]["required_evidence"] = [
         "hero_identity",
-        "pair_lane_winrate",
+        "pair_lane_outcome",
         "sample_size",
     ]
     planner = AgentController(
@@ -737,6 +819,78 @@ def test_direct_answer_uses_model_answer_without_retry() -> None:
     assert state.answer.summary == "用户之前提到想练 Lina。"
 
 
+def test_controller_accepts_tool_plan_when_history_lacks_requested_lane_metric() -> None:
+    history = [
+        ConversationMessage(
+            turn_index=1,
+            role="user",
+            content="冠绝分段，中路蓝猫对火女的胜率怎么样？",
+        ),
+        ConversationMessage(
+            turn_index=2,
+            role="assistant",
+            content="蓝猫对火女的整局胜率是46.25%。",
+        ),
+    ]
+    controller = AgentController(
+        _registry(),
+        llm=FakeLLM(_pair_lane_mid_plan_payload()),
+        llm_enabled=True,
+        planner_max_retries=0,
+    )
+
+    result = asyncio.run(
+        controller.decide(
+            "对线胜率与整局胜率分别是多少？",
+            recent_messages=history,
+        )
+    )
+
+    assert result.status == "decided"
+    plan = _result_plan(result)
+    assert plan.context.bracket == ["DIVINE_IMMORTAL"]
+    assert plan.context.position_ids == ["POSITION_2"]
+    assert [call.tool for call in plan.tool_calls] == [
+        "resolve_hero",
+        "resolve_hero",
+        "stratz.pair_lane_outcome",
+    ]
+    assert "pair_lane_outcome" in plan.required_evidence
+
+
+def test_controller_accepts_direct_answer_when_history_contains_all_metrics() -> None:
+    history = [
+        ConversationMessage(
+            turn_index=1,
+            role="assistant",
+            content="冠绝分段，中路蓝猫对火女的对线胜率是11.70%，整局胜率是46.25%。",
+        )
+    ]
+    controller = AgentController(
+        _registry(),
+        llm=FakeLLM(
+            {
+                "kind": "direct_answer",
+                "intent": "pair_lane_outcome",
+                "answer": "对线胜率11.70%，整局胜率46.25%。",
+            }
+        ),
+        llm_enabled=True,
+        planner_max_retries=0,
+    )
+
+    result = asyncio.run(
+        controller.decide(
+            "对线胜率与整局胜率分别是多少？",
+            recent_messages=history,
+        )
+    )
+
+    assert result.status == "decided"
+    assert isinstance(result.decision, DirectAnswerDecision)
+    assert result.decision.answer == "对线胜率11.70%，整局胜率46.25%。"
+
+
 def test_malformed_direct_answers_remain_decision_shape_errors() -> None:
     for invalid_answer in ({"text": "错误类型"}, "x" * 1001):
         llm = FakeLLM(
@@ -939,6 +1093,10 @@ def test_agentic_planner_retries_on_validation_error_then_succeeds() -> None:
         "assistant",
         "user",
     ]
+    assert "Never fix an invalid plan by dropping or weakening" in result.prompt_messages[-1][
+        "content"
+    ]
+    assert "return capability_boundary" in result.prompt_messages[-1]["content"]
 
 
 def test_agentic_planner_retries_on_missing_plan_then_succeeds() -> None:
@@ -1176,7 +1334,7 @@ def _player_hero_performance_payload() -> dict[str, Any]:
     }
 
 
-def test_agentic_planner_prompt_contains_player_routing() -> None:
+def test_agentic_planner_prompt_contains_player_capabilities() -> None:
     planner = AgentController(
         _registry(), llm=FakeLLM(_valid_plan_payload()), llm_enabled=True, planner_max_retries=0
     )
@@ -1187,13 +1345,12 @@ def test_agentic_planner_prompt_contains_player_routing() -> None:
     assert "stratz.player_profile" in prompt
     assert "stratz.player_recent_matches" in prompt
     assert "stratz.player_hero_performance" in prompt
-    # routing + param-semantics guidance is present
-    assert "Player evidence queries" in prompt
-    assert "match_take=N" in prompt
-    assert "NO name search" in prompt
-    assert "numeric Steam32 id" in prompt
-    assert "It is mandatory before player_recent_matches or player_hero_performance" in prompt
-    assert "$<profile_call>.data.confirmed_steam_account_id" in prompt
+    # capability and parameter semantics are rendered without fixed call ordering
+    assert "confirmed Steam32 account id" in prompt
+    assert "player-name lookup is not supported" in prompt
+    assert "Recent match sample size contributing to each hero's statistics" in prompt
+    assert "Ranking basis: 'strong' by win_rate, or 'popular' by games played" in prompt
+    assert "call this first and pass its confirmed_steam_account_id" not in prompt
 
 
 def test_agentic_planner_accepts_player_hero_performance_plan() -> None:

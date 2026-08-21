@@ -5,6 +5,15 @@ opendota:
   request_timeout_seconds: 20
   default_cache_ttl_seconds: 3600
 
+pandascore:
+  request_timeout_seconds: 20
+  default_cache_ttl_seconds: 60
+  max_page_size: 100
+
+cross_source_match_resolution:
+  start_time_tolerance_seconds: 1800
+  duration_tolerance_seconds: 5
+
 stratz:
   weeks_back_default: 1   # null weeks_back -> latest completed STRATZ week
   weeks_back_max: 8       # guardrail: N weeks = N STRATZ calls per tool
@@ -79,7 +88,7 @@ conversation:
 planning:
   runtime:
     max_replans: 1
-    max_tool_calls_total: 8
+    max_tool_calls_total: 16
     max_controller_calls: 2
     max_answer_calls: 2
     max_elapsed_seconds: 60
@@ -94,4 +103,4 @@ planning:
       stratz.hero_synergy_ranking:      { arg: min_sample_size, default: 2000, relaxed: 500, strict: 5000 }
       stratz.lane_meta_global:          { arg: min_sample_size, default: 1000, relaxed: 300, strict: 3000 }
       stratz.hero_position_stats:       { arg: min_sample_size, default: 1000, relaxed: 300, strict: 3000 }
-      stratz.filter_heroes_by_position: { arg: min_position_match_count, default: 1000, relaxed: 300, strict: 3000 }
+      stratz.filter_ranked_heroes_by_position: { arg: min_position_match_count, default: 1000, relaxed: 300, strict: 3000 }

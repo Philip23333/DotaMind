@@ -9,8 +9,11 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-import app.agentic.prompts.controller as controller_prompts
-from app.agentic.conversation.models import ConversationMessage
+import app.agentic.prompts.controller_rules as controller_rules
+from app.agentic.conversation.models import (
+    ControllerContextExecutionSummary,
+    ConversationMessage,
+)
 from app.agentic.graph import AgentGraphRunner
 from app.agentic.planning.contracts import CONTRACT_REGISTRY
 from app.agentic.planning.controller import AgentController
@@ -92,20 +95,66 @@ def test_system_prompt_matches_utf8_lf_golden_fixture() -> None:
 def test_controller_prompt_declares_catalog_static_and_statistical_boundaries() -> None:
     prompt = AgentController(_registry(), llm_enabled=False)._system_prompt()
 
-    assert "official committed Catalog snapshot queries for current hero attributes" in prompt
-    assert "official hero ability definitions" in prompt
-    assert "official hero talent trees at levels 10/15/20/25" in prompt
-    assert "official item definitions, prices" in prompt
+    assert "Supported in this development version:" not in prompt
     assert "Never substitute static\n  definitions" in prompt
     assert "return\n  capability_boundary" in prompt
-    assert 'dota.hero_abilities(hero_id="$<resolve_call>.data.hero.hero_id")' in prompt
-    assert "call resolve_hero exactly once" in prompt
-    assert "Hero ability query granularity" in prompt
-    assert '"齐天大圣有什么技能"' in prompt
-    assert "hero_identity + hero_ability + hero_talent_tree" in prompt
-    assert '"棒击大地是什么"' in prompt
-    assert "Do not add dota.hero_talent_tree" in prompt
-    assert 'dota.item_info(item_id="$<resolve_call>.data.item.item_id")' in prompt
+    assert "Returns resolved, ambiguous, or not_found without querying a network" in prompt
+    assert "For every fresh hero Catalog query, call once first" not in prompt
+    assert "Return a hero's ordered non-talent ability definitions" in prompt
+    assert "For a complete ability-list request, also call dota.hero_talent_tree" not in prompt
+    assert "hero_identity + hero_ability + hero_talent_tree" not in prompt
+    assert "For one named ability, call this alone after resolve_hero" not in prompt
+    assert "Return a hero's official static attributes and combat fields" in prompt
+    assert (
+        "For an attributes-and-talents request, pair this with dota.hero_talent_tree"
+        not in prompt
+    )
+    assert "Return a hero's ordered level 10/15/20/25 talent tree" in prompt
+    assert "Pair with dota.hero_abilities for a complete ability-list request" not in prompt
+    assert "Explicit recipe wording selects recipe scope" in prompt
+    assert "For every fresh item definition, price, or recipe request" not in prompt
+    assert "Recipe evidence is produced only when the resolved item has" in prompt
+    assert "For price or recipe questions, require item_identity" not in prompt
+    assert "Hero ability query granularity" not in prompt
+    assert "Catalog tool-planning examples" not in prompt
+
+
+def test_controller_prompt_declares_cross_source_reference_mapping() -> None:
+    prompt = AgentController(_registry(), llm_enabled=False)._system_prompt()
+
+    for reference in (
+        "$competition.data.competition.series_id",
+        "$competition.data.competition",
+        "$games.data.resolution_inputs",
+        "$valve_matches.data.valve_match_ids",
+    ):
+        assert reference in prompt
+    assert "The call ids are examples" in prompt
+    assert "already declared compatible by the Tool Catalog" in prompt
+
+
+def test_controller_prompt_derives_capability_answers_from_rendered_tools() -> None:
+    prompt = AgentController(_registry(), llm_enabled=False)._system_prompt()
+
+    assert "For user-facing capability questions" in prompt
+    assert "summarize capabilities from the rendered\n  tool catalog by task area" in prompt
+    assert "Do not list internal tool names unless the user\n  explicitly asks for them" in prompt
+    assert "do not claim unregistered capabilities" in prompt
+    assert "Capability-summary reference style" in prompt
+    assert "赛事与比赛详情以及补丁改动" in prompt
+
+
+def test_controller_prompt_uses_decision_kind_for_unsupported_scope() -> None:
+    prompt = AgentController(_registry(), llm_enabled=False)._system_prompt()
+
+    assert "Use capability_boundary only when the required capability is unavailable" in prompt
+    assert "Never\n  omit or weaken a requested filter to make a plan valid" in prompt
+    assert (
+        "If registered tools cannot honor a required scope, return\n  capability_boundary"
+        in prompt
+    )
+    assert "return\n  capability_boundary and state the filter is unavailable" not in prompt
+    assert "return\n  insufficient_tools and state the filter is unavailable" not in prompt
 
 
 def test_controller_prompt_uses_one_generic_history_first_decision_order() -> None:
@@ -115,21 +164,92 @@ def test_controller_prompt_uses_one_generic_history_first_decision_order() -> No
     assert "return direct_answer" in prompt
     assert "return direct_answer and stop" in prompt
     assert "Rules that describe which\ntools a query needs apply only after step 4" in prompt
-    assert "Once tool_plan is selected" in prompt
+    assert "After selecting tool_plan:" in prompt
     assert "After tool_plan has been selected for fresh evidence" in prompt
-    assert "For a fresh complete ability-list tool plan" in prompt
+    assert "For a fresh complete ability-list tool plan" not in prompt
     assert "This direct answer does not create an EvidenceGraph" in prompt
+    assert "direct_answer is valid only when every requested\n  fact is explicit" in prompt
+    assert "Do not fill\n  missing facts from model knowledge" in prompt
     assert "The length or formatting of a historical answer is not a refresh trigger" in prompt
+    assert (
+        "only facts explicitly present in the current\n"
+        "   message or reusable conversation"
+    ) in prompt
+    assert "the model's\n   own knowledge is not factual evidence" in prompt
+    assert "requested facts are absent from\n   that context" in prompt
+    assert "registered tools can provide them, choose tool_plan" in prompt
+    assert "required facts are already explicit and reusable" in prompt
+    assert "every\n  statistical metric and value requested" in prompt
+    assert "If even one requested metric is\n  absent, choose tool_plan" in prompt
+    assert "a further query would be needed" in prompt
+    assert "perform that\n  query through tool_plan instead" in prompt
+    assert "Follow the selected tool's declared scope and argument\n  semantics" in prompt
+    assert "context.region_ids/game_mode_ids are only supported by" not in prompt
+    assert "context.position_ids is not consumed" in prompt
+    assert "Derive each selected tool's arguments, ranking semantics, and evidence" in prompt
+    assert "The plan goal must preserve the user's stated subject, role, position, lane" in prompt
+    assert "Do not add or\n  broaden any of these when the current request" in prompt
+    assert "Lane-pair meta selection_mode" not in prompt
+    assert "Position stats selection_mode" not in prompt
+    assert "Hero matchup/synergy ranking" not in prompt
+    assert "Map 强势 / 胜率高 / 上分 to 'strong'" not in prompt
+    assert "Keep STRATZ `synergy` as the primary ranking" not in prompt
+    assert "is not part of the ranking score" in prompt
+    assert "the critic then flags insufficient evidence" not in prompt
+    assert "Use this for 'teammate X" not in prompt
+    assert "rendered Sample-size policy" not in prompt
+    assert "still worth practicing" not in prompt
+    assert "Player evidence queries (stratz.player_profile" not in prompt
+    assert "player-name lookup is not supported" in prompt
+    assert "non-numeric queries should return capability_boundary" not in prompt
+    assert "call this first and pass its confirmed_steam_account_id" not in prompt
+    assert "Return a player's recent STRATZ matches and a deterministic" in prompt
+    assert "Victory comes from native MatchPlayerType.isVictory" in prompt
+    assert "Confirmed player Steam32 account id" in prompt
+    assert "Requires confirmed_steam_account_id from stratz.player_profile. Args:" not in prompt
+    assert "region and game-mode filters are not supported" in prompt
+    assert (
+        "return capability_boundary only when the user explicitly requires either filter"
+        not in prompt
+    )
+    assert "STRATZ accepts numeric regionIds/gameModeIds here" not in prompt
+    assert "Final number of hero rows to return after filtering (1-50)" in prompt
+    assert "Internal over-fetching is handled by the tool" in prompt
+    assert "Recent match sample size contributing to each hero's statistics" in prompt
+    assert "match_take=N (NOT take)" not in prompt
+    assert "队友 X 选什么配合" not in prompt
+    assert "4 号位克制 Lina" not in prompt
+    assert "$<rank>.data.candidate_rows" not in prompt
+    assert "查某玩家战绩" not in prompt
+    assert "Completeness example:" in prompt
+    assert "Fresh-fact example:" in prompt
+    assert "兽王是什么英雄" in prompt
+    assert "Available conversation: no matching hero or ability facts" in prompt
+    assert "A direct_answer from model knowledge is invalid" in prompt
     assert "preserving that property or action" in prompt
     assert "full historical\n  answer unless they ask for it" in prompt
+    assert "Context unavailable:" in prompt
+    assert (
+        "Earlier user/assistant messages in this request are available conversation\n"
+        "  context."
+    ) in prompt
+    assert (
+        "context_missing means the requested conversation content is unavailable after\n"
+        "  considering the supplied messages and any completed history lookup result."
+    ) in prompt
+    assert '"kind":"context_missing","intent":"<semantic_intent>"' in prompt
+    assert '"intent":"conversation_recall"' not in prompt
+    assert "当前会话中没有足够的历史信息。" not in prompt
     assert "Answer only the selected subject's value" in prompt
-    assert "A direct_answer must address the reconstructed current request only" in prompt
-    assert "Decision validity invariants:" in prompt
-    assert "A tool_plan is invalid when the available conversation explicitly" in prompt
-    assert "A direct_answer must address the reconstructed current request only" in prompt
-    assert "Final decision gate (apply immediately before returning JSON):" in prompt
-    assert "returning tool_plan is invalid" in prompt
-    assert "Selecting a subject does not widen the inherited request" in prompt
+    assert "After selecting tool_plan:" in prompt
+    assert (
+        "Plan only the calls needed to obtain the missing conversation context or\n"
+        "  required fresh evidence."
+    ) in prompt
+    assert "Decision validity invariants:" not in prompt
+    assert "Final decision gate (apply immediately before returning JSON):" not in prompt
+    assert "Before returning JSON, validate that the selected decision follows the" in prompt
+    assert "returning tool_plan is invalid" not in prompt
     assert "history_grounded_answer" not in prompt
     assert "quote_user_query" not in prompt
     assert "recall_assistant_summary" not in prompt
@@ -146,9 +266,9 @@ def test_prompt_hash_changes_with_rendered_catalog_contract_and_policy(monkeypat
 
     with monkeypatch.context() as scoped:
         scoped.setattr(
-            controller_prompts,
-            "_PLANNER_SYSTEM_PROMPT",
-            controller_prompts._PLANNER_SYSTEM_PROMPT + "\nstatic change",
+            controller_rules,
+            "PLANNER_SYSTEM_PROMPT",
+            controller_rules.PLANNER_SYSTEM_PROMPT + "\nstatic change",
         )
         assert build_controller_prompt(_registry(), policy).prompt_versions[
             "controller.system.sha256"
@@ -254,6 +374,31 @@ def test_controller_runtime_context_exposes_stable_freshness_signals() -> None:
     assert "- catalog_snapshot_generated_at: 2026-08-09T19:05:36+00:00" in sent_system
 
 
+def test_controller_receives_completed_context_tool_summary() -> None:
+    registry = _registry()
+    llm = CapturingLLM()
+    controller = AgentController(registry, llm=llm, llm_enabled=True)
+
+    asyncio.run(
+        controller.decide(
+            "我刚才问了什么？",
+            controller_context_summaries=[
+                ControllerContextExecutionSummary(
+                    tool="conversation.history_lookup",
+                    matched_turns=0,
+                )
+            ],
+        )
+    )
+
+    sent_system = llm.messages[0][0]["content"]
+    assert "Completed conversation-context tool results:" in sent_system
+    assert (
+        '{"tool":"conversation.history_lookup","status":"completed",'
+        '"matched_turns":0}'
+    ) in sent_system
+
+
 def test_disabled_llm_still_records_prepared_prompt_manifest() -> None:
     registry = _registry()
     llm = CapturingLLM()
@@ -265,7 +410,7 @@ def test_disabled_llm_still_records_prepared_prompt_manifest() -> None:
 
     assert llm.calls == 0
     assert state.run_context.prompt_versions == controller.prompt_versions
-    assert state.run_context.prompt_versions["controller.validation_retry"] == "v1"
+    assert state.run_context.prompt_versions["controller.validation_retry"] == "v2"
 
 
 def test_recovery_rules_are_versioned_but_not_in_system_prompt() -> None:
@@ -274,11 +419,15 @@ def test_recovery_rules_are_versioned_but_not_in_system_prompt() -> None:
     assert RECOVERY_RULES_VERSION == "v1"
     assert render_recovery_rules() not in controller._system_prompt()
     assert controller.prompt_versions["controller.recovery_rules"] == "v1"
-    assert controller.prompt_versions["controller.validation_retry"] == "v1"
+    assert controller.prompt_versions["controller.validation_retry"] == "v2"
     assert render_validation_retry_feedback(["bad field"]) == (
         "Your previous response was rejected. Return the FULL corrected "
         "ControllerDecision JSON again, fixing every issue:\n"
-        "- bad field\nDo not explain; only return the corrected JSON."
+        "- bad field\nPreserve every explicit subject, requested result count, and scope "
+        "constraint from the current request. Never fix an invalid plan by "
+        "dropping or weakening a user requirement; return capability_boundary "
+        "if the registered tools cannot honor it.\n"
+        "Do not explain; only return the corrected JSON."
     )
     recovery_rules = render_recovery_rules()
     for clause in (

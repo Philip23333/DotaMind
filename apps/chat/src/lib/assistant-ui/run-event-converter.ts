@@ -6,6 +6,7 @@ import {
   getChatSession,
   type ChatRunStatus,
   type PlanStreamEvent,
+  type PlanResponse,
 } from "@/lib/dotamind-api";
 import {
   subscribeChatRun,
@@ -15,11 +16,13 @@ import { DOTAMIND_ASSISTANT_METADATA_KEY } from "./migration-contract";
 import { markDotaMindSessionUnread } from "./thread-unread";
 
 export type DotaMindRuntimeTool = Extract<PlanStreamEvent, { type: "tool" }>;
+export type DotaMindObservation = Extract<PlanStreamEvent, { type: "observer" }>;
 
 export type DotaMindRuntimeInfo = {
   messageId: string;
   phase: Extract<PlanStreamEvent, { type: "phase" }>["phase"];
   tools: DotaMindRuntimeTool[];
+  observations: DotaMindObservation[];
   status: "running" | "completed" | "failed" | "cancelled";
   durationMs?: number;
 };
@@ -57,6 +60,47 @@ function updateTool(tools: DotaMindRuntimeTool[], incoming: DotaMindRuntimeTool)
   return tools.map((tool, toolIndex) => (toolIndex === index ? incoming : tool));
 }
 
+function updateObservation(
+  observations: DotaMindObservation[],
+  incoming: DotaMindObservation,
+) {
+  const index = observations.findIndex(
+    (item) =>
+      item.attempt_index === incoming.attempt_index &&
+      item.stage === incoming.stage &&
+      item.call_id === incoming.call_id &&
+      item.kind === incoming.kind,
+  );
+  if (index === -1) return [...observations, incoming];
+  return observations.map((item, itemIndex) =>
+    itemIndex === index ? incoming : item,
+  );
+}
+
+function responseTools(response: PlanResponse): DotaMindRuntimeTool[] {
+  return (response.runtime?.attempts ?? []).flatMap((attempt, attemptIndex) =>
+    (attempt.tool_call_statuses ?? []).map((tool) => ({
+      type: "tool" as const,
+      tool_call_id: tool.tool_call_id,
+      tool: tool.tool,
+      attempt_index: attemptIndex,
+      status: tool.status,
+      latency_ms: tool.latency_ms,
+      reused: tool.reused,
+      failure_code: tool.failure_code,
+      handler_entered: tool.handler_entered,
+      dispatch_stage: tool.dispatch_stage,
+    })),
+  );
+}
+
+function mergeResponseTools(
+  tools: DotaMindRuntimeTool[],
+  response: PlanResponse,
+): DotaMindRuntimeTool[] {
+  return responseTools(response).reduce(updateTool, tools);
+}
+
 async function recoveredResponse(
   browserId: string,
   sessionId: string,
@@ -77,6 +121,7 @@ export async function* streamDotaMindRun(
     messageId: options.messageId,
     phase: "planning",
     tools: [],
+    observations: [],
     status: "running",
   };
 
@@ -133,6 +178,13 @@ export async function* streamDotaMindRun(
         runtime = { ...runtime, tools: updateTool(runtime.tools, event) };
         yield update();
         break;
+      case "observer":
+        runtime = {
+          ...runtime,
+          observations: updateObservation(runtime.observations, event),
+        };
+        yield update();
+        break;
       case "answer_delta":
         provisionalText += event.delta;
         yield update({ content: [{ type: "text", text: provisionalText }] });
@@ -140,6 +192,7 @@ export async function* streamDotaMindRun(
       case "result":
         runtime = {
           ...runtime,
+          tools: mergeResponseTools(runtime.tools, event.response),
           status: event.response.status === "error" || event.response.status === "insufficient_evidence"
             ? "failed"
             : "completed",
@@ -176,6 +229,7 @@ export async function* streamDotaMindRun(
             options.requestId,
             options.abortSignal,
           ).catch(() => undefined);
+          if (response) runtime = { ...runtime, tools: mergeResponseTools(runtime.tools, response) };
           yield update({
             content: [
               {

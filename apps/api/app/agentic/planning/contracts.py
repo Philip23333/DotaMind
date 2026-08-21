@@ -224,6 +224,13 @@ def validate_registry_contracts(registry: ToolRegistry) -> list[str]:
     for definition in definitions.values():
         mandatory = set(definition.mandatory_evidence)
         declared = set(definition.evidence_kinds)
+        if definition.result_destination == "controller_context" and (
+            declared or mandatory or definition.evidence_extractor is not None
+        ):
+            errors.append(
+                f"{definition.name} routes results to controller_context and must not "
+                "declare evidence extraction or evidence kinds"
+            )
         unknown_mandatory = sorted(mandatory - declared)
         if unknown_mandatory:
             errors.append(
@@ -604,5 +611,5 @@ def _placeholder(annotation: Any) -> Any:
         args = get_args(annotation)
         return [_placeholder(args[0])] if args else []
     if origin is dict or annotation is dict:
-        return {}
+        return {"_reference": "ref"}
     return "ref"

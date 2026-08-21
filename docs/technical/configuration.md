@@ -34,10 +34,13 @@ Important settings include:
 | `DOTAMIND_RUN_HEARTBEAT_SECONDS` / `DOTAMIND_RUN_STALE_SECONDS` / `DOTAMIND_RUN_SWEEPER_INTERVAL_SECONDS` | Chat Run liveness and stale-run recovery timing. |
 | `DOTAMIND_LIVE_DATA_ENABLED` | Enables live provider calls. |
 | `DOTAMIND_OPENDOTA_API_KEY` / `DOTAMIND_OPENDOTA_BASE_URL` | OpenDota access. |
+| `DOTAMIND_PANDASCORE_TOKEN` / `DOTAMIND_PANDASCORE_BASE_URL` | PandaScore Dota 2 fixture access. The token is never logged or committed. |
 | `DOTAMIND_STRATZ_TOKEN` / `DOTAMIND_STRATZ_GRAPHQL_URL` | STRATZ access. |
 | `DOTAMIND_LLM_ENABLED` | Enables planner/answer LLM calls. |
 | `DOTAMIND_LLM_PROVIDER` / `DOTAMIND_LLM_API_KEY` | LLM provider selection and secret. |
 | `DOTAMIND_LLM_BASE_URL` / `DOTAMIND_LLM_MODEL` | OpenAI-compatible endpoint and model. |
+| `DOTAMIND_TEST_OBSERVER_ENABLED` | Local-test-only full Prompt/model/tool I/O Run events. Disabled by default; never enable in a public environment. |
+| `NEXT_PUBLIC_DOTAMIND_TEST_OBSERVER_ENABLED` | Shows the chat right-side test observer drawer. Enable together with the API flag. |
 | `DOTAMIND_POLICY_PATH` | Optional absolute policy YAML override. |
 
 Use `.env.example` as the environment template. Never commit populated secrets.
@@ -62,6 +65,19 @@ DOTAMIND_POLICY_PATH=C:/absolute/path/policy.yaml
 
 Policy is cached for the process lifetime. Restart the API after editing the
 YAML or changing the override path.
+
+The `pandascore` policy controls the fixture transport timeout, short-lived
+cache TTL, and maximum upstream page size. A missing
+`DOTAMIND_PANDASCORE_TOKEN` only affects PandaScore tool execution; it does not
+prevent unrelated tools or the application from starting.
+
+The `cross_source_match_resolution` policy controls deterministic PandaScore
+Game to OpenDota/Valve matching. `start_time_tolerance_seconds` defaults to
+1800 and `duration_tolerance_seconds` defaults to 5. These are hard filters,
+not weights or closest-match scoring.
+
+`planning.runtime.max_tool_calls_total` is 16. Batch match-detail tools keep a
+series query within this Run budget while still querying each actual game.
 
 ## Local Game Data
 
@@ -88,6 +104,7 @@ committing them; request-time code never downloads or generates these files.
 | `version` | Policy schema version; currently `1`. |
 | `opendota` | Request timeout and default transport cache TTL. |
 | `stratz` | Default and maximum completed-week fan-out. |
+| `cross_source_match_resolution` | Hard start-time and duration tolerances for inferred Valve match mappings. |
 | `team_report` | Time range, team resolution, match-detail sampling, concurrency, and cache. |
 | `hero_report` | Result limits, sample gates, evidence thresholds, and normalization ranges. |
 | `patch_report` | Default patch, result count, neutral score, and change delta. |

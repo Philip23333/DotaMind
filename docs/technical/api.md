@@ -42,6 +42,27 @@ missing session returns the stable `404 chat_not_found` response.
 GET /health
 ```
 
+## Offline Catalog Images
+
+英雄和非配方物品图片随提交的 Catalog 快照保存在 API 本地，并通过现有 `/api/`
+边界访问：
+
+```http
+GET /api/v1/assets/dota/heroes/{hero_id}.png
+GET /api/v1/assets/dota/items/{item_id}.png
+```
+
+`resolve_hero`、`dota.hero_attributes`、`resolve_item` 和 `dota.item_info` 的
+实体结果包含 origin-relative `image_path`。图片只在离线维护命令
+`python apps/api/scripts/sync_game_data.py --images-only` 中从官方 CDN 下载；
+请求处理不会访问外部图片服务。
+
+`opendota.match_details` 的 `data.matches[].summary.players[]` 与
+`data.matches[].draft.draft[]` 在 Catalog 成功解析时分别携带 `hero_image_path`；装备、
+背包和中立物品详情携带 `item_image_path`。这些字段复用上述本地静态路径，Catalog
+未命中或缺失 ID 时为 `null`，并随原有工具结果和 EvidenceGraph 透传，不新增工具或
+evidence kind。
+
 ## Controller Request
 
 ```http
@@ -77,16 +98,26 @@ Response fields include:
   usage, plus one or two sanitized attempt summaries.
 
 The public attempt contains index, decision kind, status/failure stage,
-`recovery_code`, duration, tool call status/latency/`reused`, evidence summary, answer type/status/
+`recovery_code`, duration, tool call status/latency/`reused`, `handler_entered`,
+`dispatch_stage`, and a stable tool `failure_code`, evidence summary, answer type/status/
   confidence, and critic pass/severity/issue count. It never contains plan goal
   or args, ToolResult data/error/source/metadata, internal dispatch records,
   answer text, critic reasons, history, session/request ids, prompts, Controller
-  raw output, or validation/retry content.
+  raw output, or validation/retry content. Public tool failure codes are limited to
+  safe categories such as `reference_resolution_error`, `validation_error`,
+  `handler_error`, `tool_error`, and `execution_timeout`; raw exceptions and reference
+  paths are never serialized.
 
 `recovery_code` is `null` for Attempt 0 and `missing_evidence` only for an
 Attempt 1 that was actually started by Recovery. The top-level plan/tool results/
 evidence/answer/review always come from the final Attempt; earlier Attempts expose
 only the allowlisted runtime summary.
+
+For a named recurring competition, the Controller may omit the edition year and let
+the PandaScore resolver select the latest edition. When a year is explicit, the
+resolver forwards it to PandaScore Series as `filter[year]` before name ranking; a
+missing historical edition remains `not_found` rather than falling back to another
+year.
 
 Internal history, the rendered history block, raw Controller output, retry feedback and
 validation details are not serialized. Invalid Controller/plan results use a redacted
@@ -123,6 +154,9 @@ HTTP 422. This endpoint is for `/debug/plan` only; formal chat uses Chat Run eve
 - `tool.running` is emitted immediately before a validated tool enters its
   handler. Reused calls, reference-resolution failures, pre-dispatch runtime
   gates and handler failures emit only their safe terminal `ok`/`error` event.
+- Terminal tool events may include `handler_entered` and `dispatch_stage`; clients
+  should display an error with `handler_entered=false` as “未执行” rather than a
+  misleading zero-millisecond handler duration.
 - `answer_delta` is emitted only for the natural-language synthesizer's real
   upstream model stream. Direct replies and deterministic structured answers
   wait for the final `result`; no typing simulation is used.
@@ -130,8 +164,13 @@ HTTP 422. This endpoint is for `/debug/plan` only; formal chat uses Chat Run eve
   Once the stream has started, execution failures use a terminal `error` event
   because HTTP headers can no longer change.
 
-Events are an allowlist: they never contain tool parameters or results, history,
-prompts, model raw output, secrets, raw exceptions or internal dispatch state.
+Events are an allowlist. By default they never contain tool parameters or results,
+history, prompts, model output, secrets, raw exceptions or internal dispatch state.
+When the local-test-only `DOTAMIND_TEST_OBSERVER_ENABLED=true` flag is set, an
+additional `observer` event carries complete Controller/Answer message arrays and
+model output plus planned/resolved tool args and ToolResult output. These events
+remain in the short-lived Run event stream and are not added to the public result
+or PostgreSQL transcript; the flag must not be enabled in a public environment.
 Clients should discard provisional deltas unless the final `result.response.status`
 is `ok`; a Critic or execution failure makes the final public response authoritative.
 
@@ -157,7 +196,8 @@ returns `202` with a queued Run. Repeating the same request/payload returns the 
 payload conflicts or another active Run in the same session return `409`.
 
 Run events are replayable NDJSON envelopes with `run_id`, `session_id`, monotonically increasing
-`sequence` and allowlisted phase/tool/delta/result/status data. `after=0` is the page-refresh
+`sequence` and allowlisted phase/tool/delta/result/status data, plus test-only `observer` data
+when explicitly enabled. `after=0` is the page-refresh
 recovery path. Heartbeats are not persisted. If Redis events are missing after PostgreSQL has
 reached a terminal state, the API emits a synthetic `transcript_recovery` status event.
 

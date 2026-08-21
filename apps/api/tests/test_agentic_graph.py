@@ -239,14 +239,14 @@ def test_graph_lane_outcome_plan_generates_lane_evidence() -> None:
                 },
             ),
         ],
-        required_evidence=["hero_identity", "pair_lane_winrate", "sample_size"],
+        required_evidence=["hero_identity", "pair_lane_outcome", "sample_size"],
     )
 
     state = asyncio.run(_runner(plan).run(AgentRunState(query="debug", game="dota2")))
 
     assert state.status == "ok"
     assert state.evidence_graph
-    assert "pair_lane_winrate" in {item.kind for item in state.evidence_graph.evidence}
+    assert "pair_lane_outcome" in {item.kind for item in state.evidence_graph.evidence}
     assert state.answer
     assert state.answer.status == "ok"
 
@@ -379,7 +379,7 @@ def _registry() -> ToolRegistry:
                 "filters": {},
             },
             evidence_extractor=pair_lane_outcome_evidence,
-            evidence_kinds=("pair_lane_winrate", "sample_size"),
+            evidence_kinds=("pair_lane_outcome", "sample_size"),
             arg_contracts={
                 "hero_id": ArgContract(
                     accepts_refs=(

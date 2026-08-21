@@ -93,6 +93,9 @@ Next.js/assistant-ui client for Chat Session and Chat Run APIs.
   treat an older snapshot as current state.
 - [`archive/`](./archive/) contains superseded product, UI, and pre-v2.5 design
   documents retained only for historical context.
+- [`interview_review/Prompt职责边界与重构复盘.md`](./interview_review/Prompt职责边界与重构复盘.md)
+  records verified prompt-responsibility findings and future refactoring review
+  items. It is a study/review aid, not a runtime source of truth.
 
 ## Source-of-Truth Rules
 
