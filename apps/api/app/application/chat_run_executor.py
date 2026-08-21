@@ -289,6 +289,25 @@ class ChatRunExecutor:
             )
         except ValueError as exc:
             raise ChatRunRepositoryError(str(exc)) from exc
+        source_tool_call_id = snapshot.checkpoint.source_tool_call_id
+        # The selected option changes this call's arguments. Its paused
+        # ambiguous result must not coexist with the rerun result; preceding
+        # calls remain available for fingerprint reuse.
+        tool_results = [
+            result
+            for result in snapshot.tool_results
+            if result.tool_call_id != source_tool_call_id
+        ]
+        tool_dispatch_records = [
+            record
+            for record in snapshot.tool_dispatch_records
+            if record.tool_call_id != source_tool_call_id
+        ]
+        executed_call_fingerprints = {
+            fingerprint: cached
+            for fingerprint, cached in snapshot.executed_call_fingerprints.items()
+            if cached.call_id != source_tool_call_id
+        }
         started_at = running.started_at or datetime.now(UTC)
         run_context = RunContext(
             run_id=request.run_id,
@@ -313,15 +332,15 @@ class ChatRunExecutor:
             attempt_started_at=started_at,
             attempt_started_monotonic=self._runner.clock.monotonic(),
             attempts=snapshot.attempts,
-            executed_call_fingerprints=snapshot.executed_call_fingerprints,
+            executed_call_fingerprints=executed_call_fingerprints,
             plan=plan,
             planner_required_evidence=snapshot.planner_required_evidence,
             global_required_evidence=snapshot.global_required_evidence,
             effective_required_evidence=snapshot.effective_required_evidence,
             required_evidence_sources=snapshot.required_evidence_sources,
             mandatory_evidence_by_call=snapshot.mandatory_evidence_by_call,
-            tool_results=snapshot.tool_results,
-            tool_dispatch_records=snapshot.tool_dispatch_records,
+            tool_results=tool_results,
+            tool_dispatch_records=tool_dispatch_records,
             decision_kind="tool_plan",
             resume_node=snapshot.checkpoint.resume_node,
             status="ok",

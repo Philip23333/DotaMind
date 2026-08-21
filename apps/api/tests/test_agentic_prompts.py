@@ -133,6 +133,14 @@ def test_controller_prompt_declares_cross_source_reference_mapping() -> None:
     assert "already declared compatible by the Tool Catalog" in prompt
 
 
+def test_controller_prompt_keeps_tournament_status_out_of_match_detail_chain() -> None:
+    prompt = AgentController(_registry(), llm_enabled=False)._system_prompt()
+
+    assert "competition overview or \"latest status\" request" in prompt
+    assert "use pandascore.list_matches for its fixtures" in prompt
+    assert "Do not plan the match-detail\n  chain below" in prompt
+
+
 def test_controller_prompt_derives_capability_answers_from_rendered_tools() -> None:
     prompt = AgentController(_registry(), llm_enabled=False)._system_prompt()
 

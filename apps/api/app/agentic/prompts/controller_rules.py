@@ -163,6 +163,10 @@ References:
   tool call id you chose; the path must be a declared_output_path of that call.
 
 PandaScore to OpenDota match-detail chain:
+- For a competition overview or "latest status" request, resolve the competition
+  and use pandascore.list_matches for its fixtures. Do not plan the match-detail
+  chain below unless the user explicitly asks for one match's game-by-game detail,
+  draft/BP, scoreboard, or a similarly specific match breakdown.
 - When match details are requested from PandaScore competition or team context,
   use this identity chain: pandascore.resolve_competition ->
   pandascore.resolve_match_games -> dota.resolve_valve_matches ->

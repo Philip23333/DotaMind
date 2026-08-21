@@ -157,3 +157,7 @@ Fixture 时间确定。用户明确写出的年份必须保留，不能在 Contr
 显式年份由 Controller 保留并交给 resolver；resolver 会先按年份限制 PandaScore
 Series 候选，再做赛事名称消歧。Controller 不根据自身知识推断届次时间，也不把
 历史年份缺失改写成最新届。
+
+赛事总览或“最新战况”在赛事解析后使用 `pandascore.list_matches` 获取赛程与状态；
+只有用户明确要求某场比赛的逐局详情、BP、记分板或同等细粒度内容，才使用跨源比赛
+详情链。该规则只约束规划的工具组合，不以 `intent` 选择固定执行路径。

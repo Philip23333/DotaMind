@@ -26,19 +26,21 @@ def match_selection_checkpoint(result: ToolResult) -> Checkpoint | None:
         return None
 
     options: list[CheckpointOption] = []
-    used_ids: set[str] = set()
+    used_dates: set[date] = set()
     for candidate in candidates:
         if not isinstance(candidate, dict):
-            continue
+            return None
         scheduled_date = _candidate_date(candidate)
         if scheduled_date is None:
-            continue
+            return None
+        # This pilot resumes only by `scheduled_date`. Presenting choices that
+        # share a date would resume to the same ambiguous lookup, so leave that
+        # unsupported case on the existing explicit ambiguous path.
+        if scheduled_date in used_dates:
+            return None
+        used_dates.add(scheduled_date)
         stage = _stage_name(candidate)
         option_id = f"{_slug(stage)}_{scheduled_date.isoformat()}"
-        match_id = candidate.get("pandascore_match_id")
-        if option_id in used_ids and isinstance(match_id, int):
-            option_id = f"{option_id}_{match_id}"
-        used_ids.add(option_id)
         options.append(
             CheckpointOption(
                 id=option_id,

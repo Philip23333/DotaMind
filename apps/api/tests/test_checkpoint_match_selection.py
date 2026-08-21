@@ -17,7 +17,7 @@ from app.agentic.runtime.checkpoint_adapters import (
     apply_match_selection,
     match_selection_checkpoint,
 )
-from app.agentic.runtime.models import RunBudget
+from app.agentic.runtime.models import CachedToolCall, RunBudget, ToolDispatchRecord
 from app.agentic.state import AgentRunState
 from app.agentic.tools import ToolDefinition, ToolRegistry
 from app.agentic.tools.pandascore_tools import PandaScoreResolveMatchGamesInput
@@ -81,6 +81,34 @@ def test_match_selection_checkpoint_builds_options_and_patches_scheduled_date() 
 
     assert patched.tool_calls[0].args["scheduled_date"] == "2026-08-20"
     assert "scheduled_date" not in plan.tool_calls[0].args
+
+
+def test_match_selection_checkpoint_declines_same_date_candidates() -> None:
+    result = ToolResult(
+        tool_call_id="resolve_games",
+        tool="pandascore.resolve_match_games",
+        status="ok",
+        data={
+            "status": "ambiguous",
+            "candidates": [
+                {
+                    "pandascore_match_id": 101,
+                    "name": "TEAM VISION vs BoomBoys",
+                    "scheduled_at": "2026-08-20T10:00:00Z",
+                    "tournament": {"name": "Playoffs"},
+                },
+                {
+                    "pandascore_match_id": 102,
+                    "name": "TEAM VISION vs BoomBoys",
+                    "scheduled_at": "2026-08-20T14:00:00Z",
+                    "tournament": {"name": "Playoffs"},
+                },
+            ],
+        },
+        latency_ms=1,
+    )
+
+    assert match_selection_checkpoint(result) is None
 
 
 def test_ambiguous_match_stops_tools_before_downstream_calls() -> None:
@@ -198,9 +226,30 @@ def test_resume_state_patches_the_server_selected_date() -> None:
     snapshot = CheckpointSnapshot(
         checkpoint=checkpoint,
         plan=plan,
+        tool_results=[result],
+        tool_dispatch_records=[
+            ToolDispatchRecord(
+                tool_call_id="resolve_games",
+                tool="pandascore.resolve_match_games",
+                handler_entered=True,
+                stage="handler",
+            )
+        ],
         run_budget=RunBudget(),
         attempt_index=0,
         selected_option_id=checkpoint.options[0].id,
+        executed_call_fingerprints={
+            "ambiguous-games": CachedToolCall(
+                call_id="resolve_games",
+                result=result,
+                dispatch=ToolDispatchRecord(
+                    tool_call_id="resolve_games",
+                    tool="pandascore.resolve_match_games",
+                    handler_entered=True,
+                    stage="handler",
+                ),
+            )
+        },
     )
     run_id = uuid4()
     session_id = uuid4()
@@ -247,6 +296,9 @@ def test_resume_state_patches_the_server_selected_date() -> None:
 
     assert state.plan is not None
     assert state.plan.tool_calls[0].args["scheduled_date"] == "2026-08-20"
+    assert state.tool_results == []
+    assert state.tool_dispatch_records == []
+    assert state.executed_call_fingerprints == {}
 
 
 class FakeController:

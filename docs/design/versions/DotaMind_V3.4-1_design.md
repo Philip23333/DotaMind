@@ -89,8 +89,27 @@ Worker lease。恢复时使用同一个 `run_id`；前序结果缓存的复用�
 - 用户通过既有 resume API 选择 option 后，Executor 从快照按 option id 查找该值，
   将 `scheduled_date` 写回原 `pandascore.resolve_match_games` 调用，再从同一 Run
   进入 `tools`。Controller 不会二次调用，客户端不能提交日期或 Plan patch。
-- 恢复执行复用前序成功工具的 fingerprint；带新日期的比赛解析调用重新执行，随后
+- 恢复执行复用前序成功工具的 fingerprint；会先删除产生 Checkpoint 的旧 ambiguous
+  工具结果、dispatch record 和 fingerprint，再以新日期重新执行该比赛解析调用，随后
   才允许继续 Valve/OpenDota 工具链。
 
 本阶段不处理其它工具的 ambiguous、自由文本选项、同日多候选的额外判定、自动猜测、
-超时或过期策略，也不包含前端 CheckpointCard。
+超时或过期策略，也不包含前端 CheckpointCard。因为首期 resume patch 只有日期，候选
+中任意两个比赛同日时适配器不创建选择卡片，保留既有 explicit ambiguous 边界。
+
+## 阶段 3：ChatRun 前端恢复交互
+
+阶段 3 将阶段 0/1/2 的事件和 resume API 接入 `apps/chat`：
+
+- 前端补齐 `checkpoint` 事件与 `waiting_input` 状态类型，并将每个事件的 `sequence` 保存在
+  assistant message runtime metadata，作为恢复后的 `after` 游标。
+- `CheckpointCard` 只展示服务端生成的 `question` 与 `options[].label`；点击后提交
+  `checkpoint_type + option_id`，不读取或拼装 `options[].value`。
+- 选择成功后调用同一个 `run_id` 的 `/resume`，再通过 assistant-ui 的 `resumeRun` 从原消息
+  分支继续订阅；续订使用 Checkpoint 后的 sequence，因此不重复展示旧事件，也不重新调用
+  Controller。请求失败时保留卡片并允许再次选择。
+- 刷新页面沿用现有活动 Run 的 `unstable_resume` 与 `after=0` replay，重新得到 Checkpoint
+  事件和选择卡片；等待阶段不触发取消，也不调用 Valve/OpenDota。
+
+本阶段不接入其它 ambiguous 类型、自由文本选择、过期/超时策略或服务端 Checkpoint
+快照扩展；Checkpoint 的 `value` 仍只由后端解释。
