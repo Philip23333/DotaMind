@@ -713,8 +713,13 @@ def test_natural_language_prompt_adds_aligned_ti_status_example_for_match_eviden
     )
 
     assert "presentation-only" in match_prompt
-    assert "# 2026年国际邀请赛（TI）最新战况" in match_prompt
-    assert "| Team Falcons vs Vici Gaming | 2–0 | FLC 晋级 |" in match_prompt
-    assert "| Team Falcons 2:0 Vici Gaming | FLC 晋级 |" not in match_prompt
-    assert "omit the ordinal instead of outputting a literal X" in match_prompt
-    assert "# 2026年国际邀请赛（TI）最新战况" not in hero_prompt
+    assert "# {赛事名}最新战况" in match_prompt
+    assert "group fixtures by their UTC calendar date" in match_prompt
+    assert (
+        "future dates in ascending order, then historical dates in descending order"
+        in match_prompt
+    )
+    assert "## 后续赛程" in match_prompt
+    assert "## 历史赛果" in match_prompt
+    assert "Render each UTC date once" in match_prompt
+    assert "# {赛事名}最新战况" not in hero_prompt

@@ -110,58 +110,77 @@ MATCH_SOURCE_BOUNDARY_RULES = (
 )
 
 TI_TOURNAMENT_STATUS_OUTPUT_EXAMPLE = """For a The International schedule or
-latest-status overview, use the following Markdown presentation as the style and
-section-order example. This example is presentation-only: never reuse its teams,
-scores, dates, times, stages, region, series format, or source claims unless the
-current EvidenceGraph supports them. `第X届` is a layout placeholder; replace it
-with evidence or omit the ordinal instead of outputting a literal X. Do not invent
-content to fill an example section.
+latest-status overview, group fixtures by their UTC calendar date, never primarily
+by bracket/stage across multiple dates. Use this Markdown presentation and section
+order as a style example. This example is presentation-only: never reuse its
+teams, scores, dates, times, stages, region, series format, or source claims unless
+the current EvidenceGraph supports them. Do not invent content to fill a section.
 
-# 2026年国际邀请赛（TI）最新战况
+Order the sections as: the current date (only when the supplied evidence establishes
+it), future dates in ascending order, then historical dates in descending order.
+Within the current-date section use running, finished, then upcoming fixtures. A
+future date contains only its scheduled fixtures; a historical date contains only
+its finished fixtures. Render each UTC date once, omit empty subsections and dates,
+and use a date heading without the label `今日` when the current date is not known.
+
+# {赛事名}最新战况
 
 ## 赛事概况
 
-- **赛事**：The International 2026（第X届国际邀请赛）
-- **阶段**：目前处于**淘汰赛阶段**（Playoffs），8月20日开赛，8月23日结束
-- **赛区**：亚洲
+- **赛事**：{赛事全名}
+- **当前阶段**：{当前阶段；没有证据时省略}
+- **数据时间**：{查询或最新数据时间，UTC}
+- **数据来源**：PandaScore 赛事 Fixture
 
-## 当前进行中的比赛
+## {8月21日}（UTC）— 今日
 
-### 胜者组四分之一决赛（进行中）
+### 正在进行
 
-| 对阵 | 状态 | 比分 |
-| --- | --- | --- |
-| **Team Spirit (TS)** vs Iron Wing (IW) | ✅ 已结束 | **TS 2** - 0 IW |
-| **TEAM VISION (VSN)** vs BoomBoys (BB) | 🔴 进行中 | VSN 1 - 1 BB（决胜局进行中） |
-| Team Liquid vs Team Yandex (TY) | ⏳ 未开始 | 10:30 UTC 开赛 |
-| Nigma Galaxy (NGX) vs Team Falcons (FLC) | ⏳ 未开始 | 11:00 UTC 开赛 |
+| 阶段 | 对阵 | 当前比分 | 当前局 | 状态 |
+| --- | --- | --- | --- | --- |
+| {阶段} | {队伍A} vs {队伍B} | {系列赛比分} | 第 {N} 局 | 🔴 进行中 |
 
-## 已结束的关键比赛
+### 已结束
 
-### 胜者组四分之一决赛
+| 阶段 | 对阵 | 比分 | 结果 |
+| --- | --- | --- | --- |
+| {阶段} | {队伍A} vs {队伍B} | {A}–{B} | {胜者} 晋级 / {负者} 淘汰 |
 
-- **Team Spirit 2:0 战胜 Iron Wing**（晋级胜者组半决赛）
+### 后续比赛
 
-### 淘汰赛阶段（8月16日）
-
-| 对阵 | 比分 | 结果 |
-| --- | --- | --- |
-| Team Falcons vs Vici Gaming | 2–0 | FLC 晋级 |
-| BoomBoys vs Aurora | 2–0 | BB 晋级 |
-| Team Spirit vs Team Resilience | 2–1 | TS 晋级 |
-| Iron Wing vs GamerLegion | 2–0 | IW 晋级 |
-| Team Yandex vs LGD Gaming | 2–1 | TY 晋级 |
+| 时间（UTC） | 阶段 | 对阵 | 赛制 |
+| --- | --- | --- | --- |
+| {HH:mm} | {阶段} | {队伍A} vs {队伍B} | {BO3} |
 
 ## 后续赛程
 
-- **败者组第一轮**：8月21日 02:00 UTC（Iron Wing vs TBD）
-- **胜者组四分之一决赛剩余场次**：今日稍后进行
+### {8月22日}（UTC）
+
+| 时间（UTC） | 阶段 | 对阵 | 赛制 |
+| --- | --- | --- | --- |
+| {HH:mm} | {阶段} | {队伍A} vs {队伍B} | {BO3} |
+
+### {8月23日}（UTC）— 决赛日
+
+| 时间（UTC） | 阶段 | 对阵 | 赛制 |
+| --- | --- | --- | --- |
+| {HH:mm} | {败者组决赛} | {队伍A} vs {队伍B} | {BO3} |
+| {HH:mm} | {总决赛} | {队伍A} vs {队伍B} | {BO5} |
+
+## 历史赛果
+
+### {8月20日}（UTC）
+
+| 阶段 | 对阵 | 比分 | 结果 |
+| --- | --- | --- | --- |
+| {阶段} | {队伍A} vs {队伍B} | {A}–{B} | {胜者} 晋级 |
 
 ## 数据说明
 
-以上赛程、比分和状态均来自 PandaScore 赛事数据。所有比赛均为 BO3
-赛制。目前尚无 Valve 官方比赛 ID 的映射数据，如需查看具体比赛详情或录像，
-建议关注官方直播渠道。"""
+- 日期和时间均按 UTC 展示。
+- 赛程、比分和状态来自 PandaScore；Valve Match ID、选手数据和 BP 只在对应
+  OpenDota evidence 存在时展示。
+- 对阵、阶段、赛制或结果没有 evidence 时省略相应内容，不得补写。"""
 
 WEEKLY_TREND_RULES = (
     "When evidence items carry week_index/week_epoch (per-week STRATZ buckets), "

@@ -109,3 +109,20 @@
 
 - This phase does not cache skill, talent, innate-skill, match-panel, team, or league images.
 - Images do not receive SHA, dimension, PNG-structure, or startup-scan validation; sync only requires a successful HTTP request with a non-empty response body.
+
+## 15:30 — TI date-grouped schedule output template
+
+### Completed
+
+- Replaced the Answer Prompt's TI latest-status example with a UTC-date-first layout, rather than primarily grouping fixtures by bracket or stage across dates.
+- The fixed section order is: current date (running → finished → upcoming) → future dates in ascending order → historical dates in descending order. Each UTC date is rendered at most once, with empty dates and subsections omitted.
+- The current date is labelled "today" only when evidence establishes it; otherwise the exact date is shown. The example remains presentation-only, and its placeholder teams, scores, and schedule must not fill gaps in the EvidenceGraph.
+
+### Verification
+
+- Minimal focused Prompt test: `tests/test_agentic_answer.py -k ti_status_example`, 1 passed (17 deselected).
+- `ruff check` passed for the Prompt and test files touched by this change.
+
+### Known boundaries
+
+- This template only constrains the LLM presentation structure; it is still not a deterministic tournament-schedule output contract. The "today" label and date membership rely on time information supplied by runtime evidence.
