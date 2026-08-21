@@ -303,3 +303,80 @@
 - The adapter covers only match-selection ambiguity from `pandascore.resolve_match_games`.
   Other ambiguous tools, free-text selection, same-day multi-candidate disambiguation,
   guessing, timeout/expiry policies, and the frontend CheckpointCard are not connected.
+
+## 20:30 — Checkpoint Stage 2 resume-semantics repair
+
+### Completed
+
+- Resuming a match-selection Checkpoint now removes the source ambiguous `ToolResult`, dispatch
+  record, and fingerprint first. Successful prefix calls remain reusable, while the date-qualified
+  `resolve_match_games` rerun becomes the only result for that call id.
+- The first-date-only patch cannot distinguish same-day candidates. If a candidate lacks a date or
+  any two candidates share a UTC date, the adapter creates no selection card and retains the
+  existing explicit ambiguous boundary instead of presenting a choice that would pause again.
+- The Controller Prompt now directs competition-overview or latest-status requests to
+  `pandascore.list_matches` after competition resolution. The cross-source match-detail chain is
+  reserved for explicitly requested game-by-game details, BP, scoreboards, or equivalent breakdowns.
+
+### Verification
+
+- Targeted Checkpoint match-selection and Controller Prompt tests passed.
+
+### Known boundaries
+
+- Same-day candidates do not enter this Checkpoint pilot. They need a future distinct resume
+  parameter before they can be supported.
+
+## 20:45 — Checkpoint Stage 3 frontend resume interaction
+
+### Completed
+
+- `apps/chat` now types `checkpoint` events, the `waiting_input` status, and the match-selection
+  Checkpoint. Assistant-message runtime metadata stores the run, session/request identifiers and
+  the latest event sequence.
+- Added the `resumeChatRun` API wrapper. `CheckpointCard` displays only the server question and
+  option labels; selection submits `checkpoint_type + option_id` without interpreting `value` or
+  sending an arbitrary plan patch.
+- The event converter no longer treats waiting as a failure. After a successful selection,
+  assistant-ui `resumeRun` continues the same `run_id` from the old message branch and subscribes
+  with the sequence after the Checkpoint.
+- Refresh keeps the existing active-Run `unstable_resume`/`after=0` replay and reconstructs the
+  selection card; a failed selection leaves the card available for another attempt.
+- Updated the ChatRun stage design, technical architecture/API, overall architecture and Chat
+  frontend notes.
+
+### Verification
+
+- `apps/chat`: `npm test` passed, 8 test files and 22 tests.
+- `apps/chat`: `npm run lint` passed.
+- `apps/chat`: `npm run build` passed.
+
+### Known boundaries
+
+- Stage 3 still supports only match-selection ambiguity from `pandascore.resolve_match_games`;
+  other ambiguous sources, free-text selection, timeout/expiry policy and same-day candidates
+  remain out of scope.
+
+## 21:00 — Checkpoint Stage 4 test and documentation delivery
+
+### Completed
+
+- Completed the full API regression suite covering the Checkpoint contract, Graph pause/resume,
+  resume routes, event replay, cancellation and recovery boundaries.
+- Added a frontend resume-cursor test verifying that Checkpoint continuation subscribes to the
+  same `run_id` with the requested `after` sequence.
+- Added the Stage 4 delivery section to the design blueprint and kept the implementation boundary,
+  API, architecture and Chat behavior documentation aligned for stages 0—3.
+
+### Verification
+
+- `apps/api`: `uv run pytest -q` — 646 passed, 21 skipped, 1 warning.
+- `apps/chat`: `npm test` — 8 test files and 23 tests passed.
+- `apps/chat`: `npm run lint` passed.
+- `apps/chat`: `npm run build` passed.
+
+### Known boundaries
+
+- Stage 4 only delivers regression coverage and documentation for the current match-selection
+  Checkpoint. It adds no other ambiguous source, free-text/default selection, timeout/expiry or
+  generic dependency-invalidation mechanism.

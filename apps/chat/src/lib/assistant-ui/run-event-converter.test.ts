@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { subscribeChatRunMock, markUnreadMock } = vi.hoisted(() => ({
   subscribeChatRunMock: vi.fn(),
@@ -20,6 +20,11 @@ vi.mock("./thread-unread", () => ({
 import { streamDotaMindRun } from "./run-event-converter";
 
 describe("streamDotaMindRun Checkpoint events", () => {
+  beforeEach(() => {
+    subscribeChatRunMock.mockReset();
+    markUnreadMock.mockReset();
+  });
+
   it("keeps the checkpoint and stops at waiting_input", async () => {
     subscribeChatRunMock.mockImplementation(async function* () {
       yield {
@@ -67,5 +72,33 @@ describe("streamDotaMindRun Checkpoint events", () => {
       },
     });
     expect(markUnreadMock).not.toHaveBeenCalled();
+  });
+
+  it("resumes the same Run from the supplied event cursor", async () => {
+    subscribeChatRunMock.mockImplementation(async function* () {
+      yield {
+        run_id: "run-a",
+        session_id: "session-a",
+        sequence: 12,
+        event: { type: "status", status: "completed" },
+      };
+    });
+
+    await streamDotaMindRun({
+      browserId: "browser-a",
+      runId: "run-a",
+      sessionId: "session-a",
+      requestId: "request-a",
+      messageId: "message-resumed",
+      after: 11,
+      abortSignal: new AbortController().signal,
+    }).next();
+
+    expect(subscribeChatRunMock).toHaveBeenCalledWith(
+      "browser-a",
+      "run-a",
+      11,
+      expect.any(AbortSignal),
+    );
   });
 });

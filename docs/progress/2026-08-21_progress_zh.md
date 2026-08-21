@@ -302,3 +302,72 @@
 
 - 当前只适配 `pandascore.resolve_match_games` 的比赛选择歧义；其它工具的 ambiguous、
   自由文本选择、同日多候选消歧、自动猜测、超时/过期策略和前端 CheckpointCard 均未接入。
+
+## 20:30 — Checkpoint 阶段 2 恢复语义修复
+
+### 已完成
+
+- 恢复比赛选择 Checkpoint 时，先剔除产生 Checkpoint 的旧 ambiguous `ToolResult`、
+  dispatch record 与 fingerprint；前序成功调用继续复用，重新带日期执行的
+  `resolve_match_games` 成为该 call id 的唯一结果。
+- 首期日期 patch 无法区分同日候选；适配器发现任意候选缺少日期或出现同一 UTC 日期时，
+  不生成选择卡片，保留既有 explicit ambiguous 边界，避免用户选择后再次停在同一歧义。
+- Controller Prompt 明确：赛事总览或“最新战况”在赛事解析后使用
+  `pandascore.list_matches`；只有明确要求逐局详情、BP、记分板等比赛拆解时才规划跨源
+  比赛详情链。
+
+### 验证
+
+- Checkpoint 匹配选择与 Controller Prompt 定向测试通过。
+
+### 已知边界
+
+- 同日多候选不会进入本期 Checkpoint；它仍需要未来新增可区分的恢复参数后才可接入。
+
+## 20:45 — Checkpoint 阶段 3 前端恢复交互
+
+### 已完成
+
+- `apps/chat` 补齐 `checkpoint` 事件、`waiting_input` 状态和比赛选择 Checkpoint 类型，
+  并在 assistant message runtime metadata 中保存 `run_id`、session/request 标识与最后事件序号。
+- 新增 `resumeChatRun` API 封装；`CheckpointCard` 只展示服务端问题和选项标签，点击只提交
+  `checkpoint_type + option_id`，不把 `value` 或任意计划参数交给客户端解释。
+- 等待状态不再被事件转换器当作失败；选择成功后使用 assistant-ui `resumeRun` 在同一
+  `run_id` 上从旧消息分支继续订阅，并以 Checkpoint 后的 sequence 作为 `after` 游标。
+- 活动 Run 刷新沿用既有 `unstable_resume` 的 `after=0` replay，能够重新得到选择卡片；
+  选择失败会保留卡片并允许再次提交。
+- 更新 ChatRun 阶段设计、技术架构/API、总体架构和 Chat 前端说明。
+
+### 验证
+
+- `apps/chat`: `npm test`，8 个测试文件、22 个测试通过。
+- `apps/chat`: `npm run lint` 通过。
+- `apps/chat`: `npm run build` 通过。
+
+### 已知边界
+
+- 阶段 3 仍只支持 `pandascore.resolve_match_games` 的比赛选择歧义；其它 ambiguous、
+  自由文本选择、超时/过期策略和同日候选判定不在本阶段。
+
+## 21:00 — Checkpoint 阶段 4 测试与文档交付
+
+### 已完成
+
+- 完成 API 全量回归：Checkpoint 契约、Graph 暂停/恢复、resume 路由、事件回放、取消与
+  recovery 边界均纳入当前测试集。
+- 补充前端恢复游标测试，验证 Checkpoint 后仍以同一 `run_id` 和指定 `after` sequence
+  继续订阅。
+- 完成阶段设计蓝图的阶段 4 交付说明；阶段 0—3 的实现边界、API、架构和 Chat 行为文档
+  保持一致。
+
+### 验证
+
+- `apps/api`: `uv run pytest -q`，646 passed，21 skipped，1 warning。
+- `apps/chat`: `npm test`，8 个测试文件、23 个测试通过。
+- `apps/chat`: `npm run lint` 通过。
+- `apps/chat`: `npm run build` 通过。
+
+### 已知边界
+
+- 阶段 4 只完成当前比赛选择 Checkpoint 的回归与文档交付，不扩展其它 ambiguous 来源，
+  不新增自由文本、默认选择、超时/过期或通用依赖失效机制。

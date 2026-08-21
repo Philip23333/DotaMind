@@ -113,3 +113,16 @@ Worker lease。恢复时使用同一个 `run_id`；前序结果缓存的复用�
 
 本阶段不接入其它 ambiguous 类型、自由文本选择、过期/超时策略或服务端 Checkpoint
 快照扩展；Checkpoint 的 `value` 仍只由后端解释。
+
+## 阶段 4：测试与文档交付
+
+阶段 4 不扩展运行时能力，只对阶段 0—3 的闭环做回归验收：
+
+- API 定向测试覆盖 Checkpoint 契约、暂停时下游工具零调用、快照恢复、Controller 不重跑、
+  resume 参数校验、事件顺序与 `waiting_input` 生命周期。
+- Chat 定向测试覆盖 Checkpoint metadata、同一 `run_id` 的 sequence cursor 续订、resume
+  请求体和前端构建边界。
+- 使用 fixture 验收 `resolve_comp → resolve_games(ambiguous) → waiting_input → resume`
+  的跨节点契约；不固定实时 PandaScore ID、比分或日期。
+- 更新 API、运行时架构、总体架构、Tool 层、节点清单、API/Chat README 与当日中英文进度；
+  不新增其它 ambiguous 适配器、自动选择、超时策略或通用依赖失效图。
