@@ -140,10 +140,10 @@ const defaultComponents = memoizeMarkdownComponents({
       sourceWithoutFragment.includes("/api/v1/assets/dota/");
     const catalogSizeClass =
       size === "sm"
-        ? "size-5 rounded object-cover object-center align-[-0.12em] me-1"
+        ? "size-5 rounded object-cover object-center align-[-0.12em] mx-px"
         : size === "lg"
-          ? "size-14 rounded-lg object-cover object-center align-[-0.2em] me-2 shadow-sm"
-          : "size-8 rounded-md object-cover object-center align-[-0.16em] me-1.5";
+          ? "size-14 rounded-lg object-cover object-center align-[-0.2em] mx-px shadow-sm"
+          : "size-8 rounded-md object-cover object-center align-[-0.16em] mx-px";
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img

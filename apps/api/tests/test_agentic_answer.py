@@ -711,6 +711,18 @@ def test_natural_language_prompt_adds_aligned_ti_status_example_for_match_eviden
             data_quality=EvidenceDataQuality(completeness=1.0),
         )
     )
+    match_details_prompt = render_natural_language_system_prompt(
+        EvidenceGraph(
+            intent="match_details",
+            required_evidence=[
+                "match_result",
+                "cross_source_match_mapping",
+                "player_scoreboard",
+                "match_draft",
+            ],
+            data_quality=EvidenceDataQuality(completeness=1.0),
+        )
+    )
 
     assert "presentation-only" in match_prompt
     assert "# {赛事名}最新战况" in match_prompt
@@ -723,3 +735,20 @@ def test_natural_language_prompt_adds_aligned_ti_status_example_for_match_eviden
     assert "## 历史赛果" in match_prompt
     assert "Render each UTC date once" in match_prompt
     assert "# {赛事名}最新战况" not in hero_prompt
+    assert "# {赛事全名} — {队伍A} vs {队伍B} 比赛详情" in match_details_prompt
+    assert "compact game" in match_details_prompt
+    assert "full draft, then player scoreboards" in match_details_prompt
+    assert "##### {队伍A}（{天辉 / 夜魇}）" in match_details_prompt
+    assert "Use the OpenDota draft `order` only" in match_details_prompt
+    assert (
+        "**{队伍A}（{队伍A系列赛得分}） ： {队伍B}（{队伍B系列赛得分}）**"
+        in match_details_prompt
+    )
+    assert "| 顺序 | 选择 | 禁用 |" in match_details_prompt
+    assert "（Ban 1）" not in match_details_prompt
+    assert "（Pick 1）" not in match_details_prompt
+    assert "| 选手 | 英雄 | K/D/A | 经济 | 装备 |" in match_details_prompt
+    assert "| {选手} | {英雄}（{等级}） | {K}/{D}/{A} | {22,790} |" in match_details_prompt
+    assert "standard thousands separators" in match_details_prompt
+    assert "Do not emit raw HTML such as `<sub>` or `<br>`" in match_details_prompt
+    assert "For a The International schedule or" not in match_details_prompt

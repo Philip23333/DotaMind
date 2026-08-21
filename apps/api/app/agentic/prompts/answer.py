@@ -182,6 +182,94 @@ and use a date heading without the label `今日` when the current date is not k
   OpenDota evidence 存在时展示。
 - 对阵、阶段、赛制或结果没有 evidence 时省略相应内容，不得补写。"""
 
+MATCH_DETAILS_OUTPUT_EXAMPLE = """For a completed Dota match detail answer,
+use the following Markdown presentation order within every game: compact game
+summary, full draft, then player scoreboards. This example is presentation-only:
+never reuse its teams, scores, times, sides, game counts, Hero names, ids, or
+source claims unless the current EvidenceGraph supports them. Do not invent a
+missing game, field, draft action, hero name, item name, or player statistic.
+
+# {赛事全名} — {队伍A} vs {队伍B} 比赛详情
+
+## 赛事概况
+
+- **赛事**：{赛事全名}
+- **阶段**：{赛事阶段；没有 evidence 时省略}
+- **比赛时间**：{比赛开始时间，UTC}
+- **赛制**：{BO3 / BO5；没有 evidence 时省略}
+- **数据来源**：{由当前 evidence 支持的来源}
+
+## 比赛结果
+
+**{队伍A}（{队伍A系列赛得分}） ： {队伍B}（{队伍B系列赛得分}）**
+
+## 对局详情
+
+### 第一局 — {胜者} 胜（Valve Match ID：{Valve Match ID} · 跨源推断）
+
+- **时长**：{X分X秒}
+- **人头比**：{队伍A} {击杀数} – {击杀数} {队伍B}
+- **胜方**：{胜者}（{天辉 / 夜魇}）
+
+#### 完整 BP
+
+##### {队伍A}（{天辉 / 夜魇}）
+
+| 顺序 | 选择 | 禁用 |
+| --- | --- | --- |
+| 1 | {英雄} | {英雄} |
+| 2 | {英雄} | {英雄} |
+| 3 | {英雄} | {英雄} |
+| 4 | {英雄} | {英雄} |
+| 5 | {英雄} | {英雄} |
+| 6 | — | {英雄} |
+| 7 | — | {英雄} |
+
+##### {队伍B}（{天辉 / 夜魇}）
+
+| 顺序 | 选择 | 禁用 |
+| --- | --- | --- |
+| 1 | {英雄} | {英雄} |
+| 2 | {英雄} | {英雄} |
+| 3 | {英雄} | {英雄} |
+| 4 | {英雄} | {英雄} |
+| 5 | {英雄} | {英雄} |
+| 6 | — | {英雄} |
+| 7 | — | {英雄} |
+
+Use the OpenDota draft `order` only to determine each team's Ban 1–7 and Pick
+1–5 sequence. If a match has fewer actions, render only the evidenced rows; do
+not add placeholder bans or picks. Do not infer a global draft phase or a hero
+name from an id. Omit the Valve Match ID parenthesis when there is no mapped id.
+
+#### 选手数据
+
+##### {队伍A}
+
+| 选手 | 英雄 | K/D/A | 经济 | 装备 |
+| --- | --- | --- | --- | --- |
+| {选手} | {英雄}（{等级}） | {K}/{D}/{A} | {22,790} | {物品名称，以顿号分隔} |
+
+##### {队伍B}
+
+| 选手 | 英雄 | K/D/A | 经济 | 装备 |
+| --- | --- | --- | --- | --- |
+| {选手} | {英雄}（{等级}） | {K}/{D}/{A} | {22,790} | {物品名称，以顿号分隔} |
+
+Repeat the same order only for games supported by evidence. Format net worth with
+standard thousands separators (for example, `22,790`) and no decimal places. In
+the `装备` column list only evidenced item names separated by `、`; the client
+renders resolved items as icons and omits their names. End the entire answer with
+a Markdown blockquote data note, with every visible line prefixed by `>`, for example:
+
+> **数据说明**
+>
+> - 日期和时间均按 UTC 展示。
+> - 赛程、比分和状态来自 PandaScore；Valve Match ID 是跨源推断映射，并非 PandaScore 原生字段。
+> - 选手数据和 BP 来自 OpenDota；英雄与物品名称仅来自 evidence 中的 Catalog 映射字段。
+
+Do not emit raw HTML such as `<sub>` or `<br>`, CSS, or unsupported source claims."""
+
 WEEKLY_TREND_RULES = (
     "When evidence items carry week_index/week_epoch (per-week STRATZ buckets), "
     "compare across weeks and state the trend (rising/falling/stable). If any "
@@ -267,6 +355,25 @@ MATCH_EVIDENCE_KINDS = frozenset(
         "match_draft",
     }
 )
+TOURNAMENT_STATUS_EVIDENCE_KINDS = frozenset(
+    {
+        "competition_identity",
+        "tournament_stage",
+        "match_schedule",
+        "match_state",
+        "series_score",
+    }
+)
+MATCH_DETAILS_EVIDENCE_KINDS = frozenset(
+    {
+        "match_result",
+        "player_scoreboard",
+        "match_parse_status",
+        "match_draft",
+        "valve_match_identity",
+        "cross_source_match_mapping",
+    }
+)
 
 
 def _active_evidence_kinds(graph: EvidenceGraph) -> set[str]:
@@ -311,7 +418,10 @@ def render_natural_language_system_prompt(graph: EvidenceGraph) -> str:
         sections.append(STRATZ_METADATA_BOUNDARY_RULES)
     if kinds & MATCH_EVIDENCE_KINDS or _has_match_source(graph):
         sections.append(MATCH_SOURCE_BOUNDARY_RULES)
+    if kinds & TOURNAMENT_STATUS_EVIDENCE_KINDS:
         sections.append(TI_TOURNAMENT_STATUS_OUTPUT_EXAMPLE)
+    if kinds & MATCH_DETAILS_EVIDENCE_KINDS:
+        sections.append(MATCH_DETAILS_OUTPUT_EXAMPLE)
     if kinds & WEEKLY_STRATZ_KINDS:
         sections.append(WEEKLY_TREND_RULES)
     if "pair_lane_outcome" in kinds:

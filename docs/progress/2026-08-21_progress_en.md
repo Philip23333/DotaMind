@@ -146,6 +146,24 @@
 
 - This template only constrains the LLM presentation structure; it is still not a deterministic tournament-schedule output contract. The "today" label and date membership rely on time information supplied by runtime evidence.
 
+## 16:00 — Per-game BP and secondary data note for match details
+
+### Completed
+
+- Added a dedicated match-detail presentation example for natural-language Answers with match-result, cross-source mapping, scoreboard, or draft evidence. Tournament-status and match-detail templates are now selected by their respective evidence kinds, so match details do not receive the TI schedule example.
+- Each game now follows the fixed order: compact duration/kills/winner summary → two full BP tables separated by team → both player scoreboards. Each team's BP table expands Ban 1–7 and Pick 1–5; rows without real actions are omitted and no placeholder heroes are added.
+- A Valve Match ID appears in parentheses after the game title only when mapped. The final data note is a visually secondary blockquote + `<sub>` footnote, without CSS or HTML color styling.
+- Updated the Answer architecture document to state that the match-detail template only constrains presentation and does not expand the EvidenceGraph fact boundary.
+
+### Verification
+
+- Minimal focused Prompt test: `tests/test_agentic_answer.py -k ti_status_example`, 1 passed (17 deselected).
+- `ruff check` passed for the Prompt and test files touched by this change.
+
+### Known boundaries
+
+- The `<sub>` size reduction depends on the eventual Markdown renderer. If unsupported, the blockquote and its content remain, with source and fact constraints unchanged.
+
 ## 15:45 — Blink Dagger “跳刀” alias
 
 ### Completed
@@ -180,3 +198,36 @@
 ### Known boundaries
 
 - This change does not handle skill, team, league, or user-message images, and does not change image caching, static routes, tool registration, Evidence kinds, or Prompt contracts.
+
+## 16:15 — Fix player-column image injection
+
+### Completed
+
+- Corrected Chat entity extraction: `hero_image_path` matches only `hero_name_zh` / `hero_name_en`, and `item_image_path` only item-specific names; a player record's `name` is no longer treated as a hero alias.
+- Local Catalog images now use `1px` horizontal margins and no text-space between the Markdown image and entity name, avoiding extra visual gaps.
+
+### Verification
+
+- Added a frontend regression test that ensures a player name is not replaced by a hero icon.
+
+### Known boundaries
+
+- Images are still inserted only before hero or item names supported by server-provided structured image references.
+
+## 16:30 — Match-detail Markdown and player equipment table
+
+### Completed
+
+- The match-detail template no longer emits `<sub>` or `<br>`; the data note is a pure Markdown blockquote so literal HTML tags are not shown when raw HTML parsing is disabled.
+- Series results now use a single “Team A (wins) : Team B (wins)” line; BP tables use “order | pick | ban” and remove Ban/Pick parentheses and in-cell phase labels.
+- Player tables remove the separate level column, append the level to the hero name, require thousands separators for net worth, and add a final equipment column. The Answer emits only evidence-backed item names; Chat replaces resolved items with medium icons without their names.
+
+### Verification
+
+- Added regression assertions for the match-detail Prompt and equipment-cell image replacement.
+- Targeted API Prompt test: 1 passed (17 deselected); full API suite: 629 passed, 21 skipped, 1 warning.
+- `ruff check`, all 20 Chat tests, ESLint, and the Next.js production build passed.
+
+### Known boundaries
+
+- A Catalog-missing item retains its original name, avoiding silent removal of equipment information present in evidence.

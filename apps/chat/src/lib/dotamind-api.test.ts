@@ -70,7 +70,7 @@ describe("formatPlanResponse", () => {
     });
 
     expect(formatted).toContain(
-      "# ![齐天大圣](http://localhost:8001/api/v1/assets/dota/heroes/114.png#dota-size=lg) 齐天大圣（Monkey King）英雄介绍",
+      "# ![齐天大圣](http://localhost:8001/api/v1/assets/dota/heroes/114.png#dota-size=lg)齐天大圣（Monkey King）英雄介绍",
     );
     expect(formatted).not.toContain("### 相关图片");
   });
@@ -83,7 +83,7 @@ describe("formatPlanResponse", () => {
     });
 
     expect(formatted).toContain(
-      "# ![闪烁匕首](http://localhost:8001/api/v1/assets/dota/items/1.png#dota-size=lg) 闪烁匕首（Blink Dagger）物品介绍",
+      "# ![闪烁匕首](http://localhost:8001/api/v1/assets/dota/items/1.png#dota-size=lg)闪烁匕首（Blink Dagger）物品介绍",
     );
   });
 
@@ -124,16 +124,16 @@ describe("formatPlanResponse", () => {
     });
 
     expect(formatted).toContain(
-      "- ![斯温](http://localhost:8001/api/v1/assets/dota/heroes/18.png#dota-size=sm) 斯温（Sven）",
+      "- ![斯温](http://localhost:8001/api/v1/assets/dota/heroes/18.png#dota-size=sm)斯温（Sven）",
     );
     expect(formatted).toContain(
-      "- ![斯温](http://localhost:8001/api/v1/assets/dota/heroes/18.png#dota-size=md) 斯温是一名力量英雄。",
+      "- ![斯温](http://localhost:8001/api/v1/assets/dota/heroes/18.png#dota-size=md)斯温是一名力量英雄。",
     );
     expect(formatted).toContain(
-      "| Yuma | ![斯温](http://localhost:8001/api/v1/assets/dota/heroes/18.png#dota-size=sm) 斯温 | 8/2/3 |",
+      "| Yuma | ![斯温](http://localhost:8001/api/v1/assets/dota/heroes/18.png#dota-size=sm)斯温 | 8/2/3 |",
     );
     expect(formatted).toContain(
-      "| Ame | ![斯温](http://localhost:8001/api/v1/assets/dota/heroes/18.png#dota-size=sm) 斯温 | 5/4/7 |",
+      "| Ame | ![斯温](http://localhost:8001/api/v1/assets/dota/heroes/18.png#dota-size=sm)斯温 | 5/4/7 |",
     );
     expect(formatted).toContain("| --- | --- | --- |");
     expect(formatted.match(/#dota-size=sm/g)).toHaveLength(3);
@@ -154,7 +154,40 @@ describe("formatPlanResponse", () => {
     });
 
     expect(formatted).toContain(
-      "- 选手购买了![闪烁匕首](http://localhost:8001/api/v1/assets/dota/items/1.png#dota-size=md) 闪烁匕首（Blink Dagger）",
+      "- 选手购买了![闪烁匕首](http://localhost:8001/api/v1/assets/dota/items/1.png#dota-size=md)闪烁匕首（Blink Dagger）",
+    );
+  });
+
+  it("renders an equipment table cell as medium item icons without item names", () => {
+    const formatted = formatPlanResponse({
+      status: "ok",
+      answer: {
+        summary: [
+          "| 选手 | 英雄 | K/D/A | 经济 | 装备 |",
+          "| --- | --- | --- | --- | --- |",
+          "| Yuma | 斯温（24） | 8/2/3 | 22,790 | 闪烁匕首 |",
+        ].join("\n"),
+      },
+      tool_results: [
+        {
+          data: {
+            players: [
+              {
+                name: "Yuma",
+                ...hero,
+                final_item_details: { item_0: item },
+              },
+            ],
+          },
+        },
+      ],
+    });
+
+    expect(formatted).toContain(
+      "| Yuma | ![斯温](http://localhost:8001/api/v1/assets/dota/heroes/18.png#dota-size=sm)斯温（24） | 8/2/3 | 22,790 | ![闪烁匕首](http://localhost:8001/api/v1/assets/dota/items/1.png#dota-size=md) |",
+    );
+    expect(formatted).not.toContain(
+      "items/1.png#dota-size=md)闪烁匕首",
     );
   });
 
@@ -182,7 +215,7 @@ describe("formatPlanResponse", () => {
     expect(formatted).toContain("```text\n斯温\n```");
     expect(formatted).toContain("| --- | --- |");
     expect(formatted).toContain(
-      "| ![斯温](http://localhost:8001/api/v1/assets/dota/heroes/18.png#dota-size=sm) 斯温 | 胜利 |",
+      "| ![斯温](http://localhost:8001/api/v1/assets/dota/heroes/18.png#dota-size=sm)斯温 | 胜利 |",
     );
 
     expect(
@@ -192,6 +225,21 @@ describe("formatPlanResponse", () => {
         tool_results: [{ data: { player: hero } }],
       }),
     ).toBe("执行失败");
+  });
+
+  it("does not treat a player name as a hero alias", () => {
+    const formatted = formatPlanResponse({
+      status: "ok",
+      answer: { summary: "| 选手 | 英雄 |\n| --- | --- |\n| Yuma | 斯温 |" },
+      tool_results: [{ data: { players: [{ name: "Yuma", ...hero }] } }],
+    });
+
+    expect(formatted).toContain(
+      "| Yuma | ![斯温](http://localhost:8001/api/v1/assets/dota/heroes/18.png#dota-size=sm)斯温 |",
+    );
+    expect(formatted).not.toContain(
+      "| ![斯温](http://localhost:8001/api/v1/assets/dota/heroes/18.png#dota-size=sm)Yuma |",
+    );
   });
 
   it("does not insert thumbnails without a supported image path", () => {

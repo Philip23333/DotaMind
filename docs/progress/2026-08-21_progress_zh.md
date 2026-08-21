@@ -146,6 +146,24 @@
 
 - 该模板仅约束 LLM 的展示结构，当前仍不是确定性的赛事赛程输出 contract；“今日”与日期归属依赖运行时 evidence 提供的时间信息。
 
+## 16:00 — 比赛详情逐局 BP 与次级数据说明
+
+### 已完成
+
+- 为含比赛结果、跨源映射、选手面板或 BP evidence 的自然语言 Answer 注入独立的比赛详情版式示例；赛事状态与比赛详情模板现在按所需 evidence kinds 分别选择，避免比赛详情混入 TI 赛程示例。
+- 逐局固定展示顺序为：时长/人头比/胜方摘要 → 以队伍分开的两张完整 BP 表 → 双方选手数据。BP 表按每队的 Ban 1–7 与 Pick 1–5 展开，缺少的真实动作行省略，不补占位英雄。
+- Valve Match ID 仅在可映射时以局标题后括号展示；整篇末尾的“数据说明”固定为 blockquote + `<sub>` 脚注式次级视觉内容，不使用 CSS 或 HTML 颜色样式。
+- 同步更新 Answer 架构文档，明确比赛详情模板只约束展示，不扩张 EvidenceGraph 的事实边界。
+
+### 验证
+
+- 最小 Prompt 定向测试：`tests/test_agentic_answer.py -k ti_status_example`，1 passed（17 deselected）。
+- 本次涉及 Prompt 与测试文件的 `ruff check` 通过。
+
+### 已知边界
+
+- `<sub>` 的缩小效果取决于最终 Markdown 渲染器；不支持时仍保留 blockquote 和内容，来源与事实约束不变。
+
 ## 15:45 — 闪烁匕首“跳刀”别名
 
 ### 已完成
@@ -180,3 +198,36 @@
 ### 已知边界
 
 - 本次不处理技能、队伍、联赛或用户消息图片，也不改变图片缓存、静态路由、工具注册、Evidence kind 或 Prompt 合同。
+
+## 16:15 — 比赛选手列图片误注入修复
+
+### 已完成
+
+- 修正 Chat 的实体提取：`hero_image_path` 仅匹配 `hero_name_zh` / `hero_name_en`，`item_image_path` 仅匹配物品专属名称；选手对象的 `name` 不再被误作英雄别名。
+- 本地 Catalog 图片改为左右各 `1px` 间距，并移除图片 Markdown 与实体名称之间的文本空格，避免额外视觉间隙。
+
+### 验证
+
+- 新增选手名不被英雄图标替换的前端回归测试。
+
+### 已知边界
+
+- 仍只在服务端结构化图片引用支持的英雄或物品名称前插入图片。
+
+## 16:30 — 比赛详情 Markdown 与选手装备表
+
+### 已完成
+
+- 比赛详情模板不再输出 `<sub>` 或 `<br>`；数据说明改为纯 Markdown blockquote，避免未启用原始 HTML 解析时显示标签字面量。
+- 系列赛结果改为“队伍A（胜场） ： 队伍B（胜场）”单行；BP 表调整为“顺序 | 选择 | 禁用”，去除 Ban/Pick 括号和单元格内阶段标签。
+- 选手表移除独立等级列，等级附在英雄名后；经济要求使用千分位；新增最后一列“装备”，Answer 只输出由 evidence 支撑的物品名，Chat 将已解析物品替换为中尺寸图标且不显示名称。
+
+### 验证
+
+- 补充比赛详情 Prompt 与装备列图片替换的回归断言。
+- API 定向 Prompt 测试：1 passed（17 deselected）；API 全量：629 passed、21 skipped、1 warning。
+- `ruff check`、Chat 20 项测试、ESLint 与 Next.js production build 均通过。
+
+### 已知边界
+
+- Catalog 未命中的物品保留原名称，避免将 evidence 中的装备信息静默隐藏。
