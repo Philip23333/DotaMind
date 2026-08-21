@@ -126,3 +126,18 @@
 ### Known boundaries
 
 - This template only constrains the LLM presentation structure; it is still not a deterministic tournament-schedule output contract. The "today" label and date membership rely on time information supplied by runtime evidence.
+
+## 15:45 — Blink Dagger “跳刀” alias
+
+### Completed
+
+- Added the common Chinese alias “跳刀” to the Valve Catalog's `item_blink`; `resolve_item("跳刀")` can resolve Blink Dagger (Item ID 1).
+- The sync script retains this alias rule so a later Catalog refresh will not overwrite it.
+
+### Verification
+
+- Tests were not run, as requested.
+
+### Known boundaries
+
+- This change adds only the explicit “跳刀” alias and does not introduce a general item-synonym dictionary.

@@ -50,6 +50,9 @@ from app.integrations.valve.catalog import (  # noqa: E402
 from app.integrations.valve.datafeed import DATAFEED_ROOT, ValveDatafeedClient  # noqa: E402
 
 ALIASES_PATH = Path(__file__).with_name("hero_aliases_zh.yaml")
+ITEM_ALIASES_BY_INTERNAL_NAME: dict[str, tuple[str, ...]] = {
+    "item_blink": ("跳刀",),
+}
 PATCH_OUTPUT_DIR = API_ROOT / "app" / "data" / "patches"
 CATALOG_OUTPUT_DIR = API_ROOT / "app" / "data" / "catalog"
 CATALOG_MANIFEST_OUTPUT = CATALOG_OUTPUT_DIR / "manifest.json"
@@ -425,6 +428,9 @@ def _build_catalog_snapshot(
         normalize_item(
             item_details_en[item_id],
             item_details_zh[item_id],
+            aliases=ITEM_ALIASES_BY_INTERNAL_NAME.get(
+                str(item_details_en[item_id]["name"]), ()
+            ),
             recipe_component_ids=components_by_target.get(item_id, []),
             upgrade_item_ids=upgrades_by_recipe.get(item_id, []),
             is_recipe=bool(
