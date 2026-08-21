@@ -290,19 +290,11 @@ class ChatRunExecutor:
         except ValueError as exc:
             raise ChatRunRepositoryError(str(exc)) from exc
         source_tool_call_id = snapshot.checkpoint.source_tool_call_id
-        # The selected option changes this call's arguments. Its paused
-        # ambiguous result must not coexist with the rerun result; preceding
-        # calls remain available for fingerprint reuse.
-        tool_results = [
-            result
-            for result in snapshot.tool_results
-            if result.tool_call_id != source_tool_call_id
-        ]
-        tool_dispatch_records = [
-            record
-            for record in snapshot.tool_dispatch_records
-            if record.tool_call_id != source_tool_call_id
-        ]
+        # Snapshot records remain durable audit data, but a resumed execution
+        # state starts with fresh result/dispatch collections. The tools node
+        # traverses the plan again: preceding calls reuse the fingerprint cache
+        # and emit one fresh cache-reuse record, while the selected ambiguous
+        # call reruns with its patched arguments.
         executed_call_fingerprints = {
             fingerprint: cached
             for fingerprint, cached in snapshot.executed_call_fingerprints.items()
@@ -339,8 +331,8 @@ class ChatRunExecutor:
             effective_required_evidence=snapshot.effective_required_evidence,
             required_evidence_sources=snapshot.required_evidence_sources,
             mandatory_evidence_by_call=snapshot.mandatory_evidence_by_call,
-            tool_results=tool_results,
-            tool_dispatch_records=tool_dispatch_records,
+            tool_results=[],
+            tool_dispatch_records=[],
             decision_kind="tool_plan",
             resume_node=snapshot.checkpoint.resume_node,
             status="ok",

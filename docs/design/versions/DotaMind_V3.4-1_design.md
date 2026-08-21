@@ -126,3 +126,22 @@ Worker lease。恢复时使用同一个 `run_id`；前序结果缓存的复用�
   的跨节点契约；不固定实时 PandaScore ID、比分或日期。
 - 更新 API、运行时架构、总体架构、Tool 层、节点清单、API/Chat README 与当日中英文进度；
   不新增其它 ambiguous 适配器、自动选择、超时策略或通用依赖失效图。
+
+## 阶段 4 后修正：恢复执行态与持久化审计分离
+
+阶段 4 验收发现，恢复时如果把快照中的 `ToolResult` 与 `ToolDispatchRecord` 重新注入
+新的 `AgentRunState`，`tools` 节点再次遍历计划会为同一 `tool_call_id` 追加重复记录，
+最终在 Attempt 汇总阶段触发 `duplicate tool dispatch record`。
+
+修正后的边界是：
+
+- `CheckpointSnapshot.tool_results` 与 `tool_dispatch_records` 继续持久化，作为暂停前的
+  审计快照；它们不再恢复到新的内存执行态。
+- 恢复的 `AgentRunState` 从空的 `tool_results` 和 `tool_dispatch_records` 开始。
+- 只保留暂停前成功调用的 fingerprint cache，并排除产生 Checkpoint 的源调用；前序调用
+  通过 cache reuse 重新产生一条当前 Attempt 记录，源调用使用已选择的日期重新执行。
+- 因此每次恢复后的 Attempt 都只包含本次 Graph 遍历产生的一条结果和一条 dispatch，且
+  `build_attempt_record` 可以直接完成唯一性校验。
+
+本修正只改变恢复时的内存执行态，不改变数据库字段、resume API、前端交互、Checkpoint
+契约或工具调用链；其它 ambiguous 来源、通用依赖失效和额外恢复策略仍不在本试点范围内。

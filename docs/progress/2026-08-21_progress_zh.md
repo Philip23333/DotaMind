@@ -371,3 +371,25 @@
 
 - 阶段 4 只完成当前比赛选择 Checkpoint 的回归与文档交付，不扩展其它 ambiguous 来源，
   不新增自由文本、默认选择、超时/过期或通用依赖失效机制。
+
+## 21:30 — Checkpoint 恢复执行态重复 dispatch 修正
+
+### 已完成
+
+- 修复 `waiting_input → 同一 run_id resume → tools` 的恢复状态：持久化快照中的旧
+  `ToolResult` 与 `ToolDispatchRecord` 继续作为审计数据保存，但不再注入新的内存执行态。
+- 恢复状态只保留暂停前成功调用的 fingerprint cache，并排除产生歧义的源调用；前序调用
+  cache reuse 时产生本次 Attempt 的新记录，比赛解析调用按已选日期重跑。
+- 补充前缀成功调用 + ambiguous 源调用的恢复测试，覆盖计划日期 patch、handler 不重复执行、
+  新 dispatch 顺序和 `build_attempt_record` 唯一性校验。
+- 更新 V3.4-1 设计和运行时架构文档；不改数据库、API、前端、Checkpoint 契约或工具链。
+
+### 验证
+
+- Checkpoint 恢复定向测试：6 passed。
+- 变更 Python 文件 Ruff 检查通过。
+
+### 已知边界
+
+- 本修正只解决恢复后同一 Attempt 的结果/dispatch 重复问题；其它 ambiguous 来源、自由文本
+  选择、超时/过期策略和通用依赖失效机制仍未接入。

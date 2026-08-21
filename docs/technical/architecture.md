@@ -226,8 +226,10 @@ Controller and enters the Graph at the persisted `resume_node`. The stage-2 doma
 now covers only `pandascore.resolve_match_games` with `data.status=ambiguous`: the tools node
 builds date-valued options from candidate Fixtures and stops before Valve/OpenDota; resume
 validates the server-owned option and patches the original game lookup before re-entering
-`tools`. Before the rerun, the source ambiguous result, dispatch record and fingerprint are
-removed; preceding successful calls remain reusable. Because this pilot patches only a date,
+`tools`. The durable snapshot records remain available for audit, but a resumed in-memory
+execution state starts with empty result/dispatch collections. Only preceding successful
+fingerprints remain reusable; they emit fresh cache-reuse records, while the source ambiguous call
+is excluded from the cache and reruns with the selected date. Because this pilot patches only a date,
 same-date candidates do not produce a Checkpoint. Competition overview/latest-status planning
 uses `pandascore.list_matches`, while the detail chain is reserved for an explicitly requested
 match breakdown. The `apps/chat` frontend renders the replayed Checkpoint as a selection card and

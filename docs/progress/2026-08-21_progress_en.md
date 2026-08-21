@@ -380,3 +380,30 @@
 - Stage 4 only delivers regression coverage and documentation for the current match-selection
   Checkpoint. It adds no other ambiguous source, free-text/default selection, timeout/expiry or
   generic dependency-invalidation mechanism.
+
+## 21:30 — Checkpoint resumed execution-state duplicate-dispatch repair
+
+### Completed
+
+- Fixed `waiting_input -> same run_id resume -> tools`: persisted `ToolResult` and
+  `ToolDispatchRecord` entries remain durable audit data but are no longer injected into the new
+  in-memory execution state.
+- Resume keeps only successful prefix fingerprints and excludes the ambiguous source call. Prefix
+  calls emit fresh cache-reuse records for the resumed Attempt, while the game lookup reruns with
+  the selected date.
+- Added regression coverage for the prefix-success plus ambiguous-source snapshot, including date
+  patching, no duplicate handler execution, fresh dispatch ordering and `build_attempt_record`
+  uniqueness validation.
+- Updated the V3.4-1 design and runtime architecture documentation; database, API, frontend,
+  Checkpoint contracts and tool chain are unchanged.
+
+### Verification
+
+- Checkpoint resume targeted tests: 6 passed.
+- Ruff passed for the changed Python files.
+
+### Known boundaries
+
+- This repair only addresses duplicate result/dispatch entries within the resumed Attempt. Other
+  ambiguous sources, free-text selection, timeout/expiry policy and generic dependency invalidation
+  remain out of scope.
