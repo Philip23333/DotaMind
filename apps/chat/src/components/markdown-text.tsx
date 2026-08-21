@@ -131,6 +131,23 @@ const defaultComponents = memoizeMarkdownComponents({
       {...props}
     />
   ),
+  img: ({ alt, className, src, ...props }) => {
+    const isCatalogImage =
+      typeof src === "string" && src.includes("/api/v1/assets/dota/");
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        className={cn(
+          isCatalogImage &&
+            "mr-1.5 inline-block size-7 rounded object-cover align-[-0.18em] shadow-sm",
+          className,
+        )}
+        alt={alt ?? ""}
+        src={src}
+        {...props}
+      />
+    );
+  },
   p: ({ className, ...props }) => (
     <p
       className={cn(

@@ -20,6 +20,12 @@ type ToolResultPayload = {
   data?: unknown;
 };
 
+export type CatalogEntity = {
+  imagePath: string;
+  label: string;
+  names: string[];
+};
+
 export type RuntimeToolCallStatus = {
   tool_call_id: string;
   tool: string;
@@ -346,8 +352,9 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-function catalogImageMarkdown(payload: PlanResponse): string | null {
-  const images = new Map<string, string>();
+export function extractCatalogEntities(payload: PlanResponse): CatalogEntity[] {
+  const entities: CatalogEntity[] = [];
+  const seenImagePaths = new Set<string>();
   for (const toolResult of payload.tool_results ?? []) {
     const data = asRecord(toolResult.data);
     if (!data) continue;
@@ -362,20 +369,52 @@ function catalogImageMarkdown(payload: PlanResponse): string | null {
       ) {
         continue;
       }
-      const label =
-        (typeof entity.name_zh === "string" && entity.name_zh.trim()) ||
-        (typeof entity.name_en === "string" && entity.name_en.trim()) ||
-        (typeof entity.name === "string" && entity.name.trim()) ||
-        key;
-      images.set(imagePath, label);
+      const names = ["name_zh", "name_en", "name"]
+        .map((field) => entity[field])
+        .filter((value): value is string => typeof value === "string")
+        .map((value) => value.trim())
+        .filter(Boolean);
+      if (!names.length || seenImagePaths.has(imagePath)) continue;
+      seenImagePaths.add(imagePath);
+      entities.push({
+        imagePath,
+        label: names[0] ?? (key === "hero" ? "英雄" : "物品"),
+        names: Array.from(new Set(names)),
+      });
     }
   }
-  if (!images.size) return null;
-  return [
-    "### 相关图片",
-    "",
-    ...Array.from(images, ([imagePath, label]) => `![${label}](${getApiUrl()}${imagePath})`),
-  ].join("\n");
+  return entities;
+}
+
+export function decorateCatalogHeading(
+  answerText: string | null | undefined,
+  entities: CatalogEntity[],
+): string | null {
+  if (!answerText || !entities.length) return answerText ?? null;
+
+  const lines = answerText.split("\n");
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    const heading = lines[lineIndex].match(/^(#{1,6}\s+)(.*)$/);
+    if (!heading) continue;
+    const [, prefix, content] = heading;
+    const matches = entities
+      .map((entity) => {
+        const name = entity.names.find((candidate) => content.includes(candidate));
+        return name ? { entity, name } : null;
+      })
+      .filter((match): match is { entity: CatalogEntity; name: string } => match !== null)
+      .sort((left, right) => right.name.length - left.name.length);
+    const match = matches[0];
+    if (!match) continue;
+    const nameIndex = content.indexOf(match.name);
+    const imageUrl = `${getApiUrl()}${match.entity.imagePath}`;
+    if (content.includes(`](${imageUrl})`)) return answerText;
+    lines[lineIndex] =
+      `${prefix}${content.slice(0, nameIndex)}![${match.entity.label}](${imageUrl}) ` +
+      content.slice(nameIndex);
+    return lines.join("\n");
+  }
+  return answerText;
 }
 
 export function formatPlanResponse(payload: PlanResponse): string {
@@ -388,12 +427,15 @@ export function formatPlanResponse(payload: PlanResponse): string {
       !payload.answer?.summary?.trim() &&
       (!reason || ["tool execution failed", "execution failed"].includes(reason)),
   );
+  const summaryOrReason = payload.answer?.summary?.trim() || payload.reason?.trim();
   const sections = [
-    payload.answer?.summary?.trim() || payload.reason?.trim(),
+    decorateCatalogHeading(
+      summaryOrReason,
+      payload.status === "ok" ? extractCatalogEntities(payload) : [],
+    ),
     formatRecommendations(payload.answer?.recommendations),
     formatClaims(payload.answer?.claims),
     formatLimitations(payload.answer?.limitations),
-    catalogImageMarkdown(payload),
   ].filter((section): section is string => Boolean(section));
 
   if (sections.length && !shouldUseRuntimeFailure) return sections.join("\n\n");

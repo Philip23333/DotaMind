@@ -110,6 +110,25 @@
 - This phase does not cache skill, talent, innate-skill, match-panel, team, or league images.
 - Images do not receive SHA, dimension, PNG-structure, or startup-scan validation; sync only requires a successful HTTP request with a non-empty response body.
 
+## 15:30 — Inline hero and item heading thumbnails
+
+### Completed
+
+- Chat no longer appends a standalone “相关图片” image section at the end of an answer.
+- `formatPlanResponse()` extracts local `image_path` values from `tool_results.data.hero` / `data.item`, deduplicates them, and decorates only the first Markdown heading containing an entity name.
+- Name matching prefers Chinese, then English and internal names; the Markdown image is inserted immediately before the matched name, while an answer with no matching heading remains unchanged.
+- The Markdown `img` renderer adds the 28×28 rounded, cropped, vertically aligned style only for `/api/v1/assets/dota/` images; ordinary Markdown images are unaffected.
+
+### Verification
+
+- Full Chat test suite: 16 passed.
+- ESLint: passed.
+- Next.js production build: passed.
+
+### Known boundaries
+
+- Only hero/item query headings are decorated; repeated body names, match panels, teams, skills, and leagues are not processed.
+
 ## 15:30 — TI date-grouped schedule output template
 
 ### Completed

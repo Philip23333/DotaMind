@@ -57,8 +57,9 @@ assistant message metadata，不再维护独立的浏览器级 Run Store。移�
 聊天不再调用它们。Chat Run 事件包含 Redis Stream 的重放 cursor 和 heartbeat，最终 Turn
 由 PostgreSQL 原子提交。附件、跨设备同步和用户认证均不属于这个阶段。
 
-英雄和物品查询结果中的本地 `image_path` 会由 Chat 转换为当前 API 地址并以 Markdown
-图片显示。图片由 API 本地静态资源提供；技能、比赛面板、战队和联赛图片不在当前范围。
+英雄和物品查询结果中的本地 `image_path` 会由 Chat 转换为当前 API 地址，并以内联的
+28×28 圆角 Markdown 缩略图显示在第一个匹配实体标题名称前。图片由 API 本地静态资源
+提供；技能、比赛面板、战队和联赛图片不在当前范围。
 
 ## 测试
 

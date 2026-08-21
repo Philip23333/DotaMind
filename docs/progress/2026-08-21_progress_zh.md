@@ -110,6 +110,25 @@
 - 当前阶段不缓存技能、天赋、先天技能、比赛面板、战队或联赛图片。
 - 图片本身不做 SHA、尺寸、PNG 结构或启动时扫描；同步阶段只要求 HTTP 请求成功且响应体非空。
 
+## 15:30 — 英雄与物品标题内联缩略图
+
+### 已完成
+
+- Chat 不再在回答尾部追加“相关图片”图片区块。
+- `formatPlanResponse()` 从 `tool_results.data.hero` / `data.item` 提取本地 `image_path`，去重后只装饰第一个匹配到实体名称的 Markdown 标题。
+- 名称匹配优先中文名，其次英文名和内部名；匹配名称前插入图片 Markdown，未匹配标题时保持原回答不变。
+- Markdown `img` renderer 仅为 `/api/v1/assets/dota/` 图片添加 28×28、圆角、裁切和垂直对齐样式，普通 Markdown 图片不受影响。
+
+### 验证
+
+- Chat 全量测试：16 passed。
+- ESLint：通过。
+- Next.js production build：通过。
+
+### 已知边界
+
+- 只处理英雄/物品查询标题，不处理正文重复名称、比赛面板、队伍、技能或联赛实体。
+
 ## 15:30 — TI 按日期赛程输出模板
 
 ### 已完成
