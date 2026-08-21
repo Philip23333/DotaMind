@@ -222,8 +222,11 @@ The stage-1 runtime exits the Graph at a Checkpoint without running evidence, An
 or response finalization. The detached Worker then persists the snapshot, publishes a
 Checkpoint/status event pair and releases its lease. `POST /chat/runs/{run_id}/resume` validates
 the server-owned option, queues the same Run, reconstructs the minimal Agent state, skips the
-Controller and enters the Graph at the persisted `resume_node`. The match-selection producer
-and its deterministic argument patch remain the next stage.
+Controller and enters the Graph at the persisted `resume_node`. The stage-2 domain adapter
+now covers only `pandascore.resolve_match_games` with `data.status=ambiguous`: the tools node
+builds date-valued options from candidate Fixtures and stops before Valve/OpenDota; resume
+validates the server-owned option and patches the original game lookup before re-entering
+`tools`. Other ambiguous sources and frontend rendering remain outside this pilot.
 
 Deletion follows the same coordinator lock: it never deletes another owner's lock key,
 deletes PostgreSQL first, clears only Redis data keys while the lock is held, and lets normal

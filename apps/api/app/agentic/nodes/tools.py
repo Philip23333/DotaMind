@@ -3,6 +3,7 @@ from typing import Any, Literal
 
 from app.agentic.models import ToolCall, ToolResult
 from app.agentic.references import lookup_path, parse_reference
+from app.agentic.runtime.checkpoint_adapters import match_selection_checkpoint
 from app.agentic.runtime.clock import Clock
 from app.agentic.runtime.guards import apply_runtime_failure, runtime_gate_failure
 from app.agentic.runtime.models import (
@@ -195,6 +196,8 @@ async def tool_executor_node(
                 "tool_output",
                 {"result": result.model_dump(mode="json"), "reused": True},
             )
+            if _set_checkpoint_from_result(state, result):
+                break
             continue
 
         def check_handler_gate() -> None:
@@ -302,9 +305,13 @@ async def tool_executor_node(
                 "dispatch": dispatch.model_dump(mode="json"),
             },
         )
+        if _set_checkpoint_from_result(state, result):
+            break
         if result.status == "error":
             state.errors.append(f"{call.id}: {result.error or 'tool execution failed'}")
 
+    if state.status == "waiting_input":
+        return state
     if state.errors:
         state.status = "error"
         state.add_trace("tools", "tool execution failed", "failed")
@@ -313,6 +320,24 @@ async def tool_executor_node(
     state.status = "ok"
     state.add_trace("tools", "tool execution completed", "completed")
     return state
+
+
+def _set_checkpoint_from_result(state: AgentRunState, result: ToolResult) -> bool:
+    if state.internal_run_id is None:
+        return False
+    checkpoint = match_selection_checkpoint(result)
+    if checkpoint is None:
+        return False
+    state.checkpoint = checkpoint
+    state.status = "waiting_input"
+    state.add_trace(
+        "tools",
+        "checkpoint required",
+        "completed",
+        tool_call_id=result.tool_call_id,
+        tool=result.tool,
+    )
+    return True
 
 
 def _publish_tool_observation(

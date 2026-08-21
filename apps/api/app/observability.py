@@ -131,6 +131,7 @@ RUNTIME_EVENTS = frozenset(
         "agent_run_completed",
         "agent_run_failed",
         "agent_run_cancelled",
+        "agent_run_waiting_input",
         "agent_attempt_finalized",
         "controller_completed",
         "controller_failed",

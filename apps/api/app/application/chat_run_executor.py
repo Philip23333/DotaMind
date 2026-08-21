@@ -13,6 +13,7 @@ from uuid import UUID
 from app.agentic.conversation.models import DialogueTurn
 from app.agentic.graph import AgentGraphRunner
 from app.agentic.runtime.checkpoint import CheckpointSnapshot
+from app.agentic.runtime.checkpoint_adapters import apply_match_selection
 from app.agentic.runtime.models import RunContext
 from app.agentic.runtime.streaming import (
     CheckpointStreamEvent,
@@ -280,6 +281,14 @@ class ChatRunExecutor:
         if running.checkpoint_state is None:
             raise ChatRunRepositoryError("checkpoint_missing")
         snapshot = CheckpointSnapshot.model_validate(running.checkpoint_state)
+        try:
+            plan = apply_match_selection(
+                snapshot.plan,
+                snapshot.checkpoint,
+                snapshot.selected_option_id,
+            )
+        except ValueError as exc:
+            raise ChatRunRepositoryError(str(exc)) from exc
         started_at = running.started_at or datetime.now(UTC)
         run_context = RunContext(
             run_id=request.run_id,
@@ -305,7 +314,7 @@ class ChatRunExecutor:
             attempt_started_monotonic=self._runner.clock.monotonic(),
             attempts=snapshot.attempts,
             executed_call_fingerprints=snapshot.executed_call_fingerprints,
-            plan=snapshot.plan,
+            plan=plan,
             planner_required_evidence=snapshot.planner_required_evidence,
             global_required_evidence=snapshot.global_required_evidence,
             effective_required_evidence=snapshot.effective_required_evidence,

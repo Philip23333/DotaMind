@@ -180,6 +180,12 @@ using team IDs, hard time/duration tolerances, series game position, and winner
 consistency. Its Valve IDs are auditable inferences, not native PandaScore
 fields. Ambiguous or missing signals remain explicit statuses.
 
+For the Checkpoint pilot, an `ambiguous` result from `pandascore.resolve_match_games`
+pauses the same Chat Run and exposes one server-generated option per candidate date.
+The resume request still carries only `checkpoint_type` and `option_id`; the worker
+patches that option's UTC `scheduled_date` into the original lookup before continuing
+to Valve/OpenDota. Other ambiguous tool results remain outside this adapter.
+
 PandaScore Fixture IDs and Valve match IDs are distinct. The free Fixture
 response currently does not expose the Valve ID. `opendota.match_details`
 accepts Valve Match IDs only, normally from the separately declared cross-source

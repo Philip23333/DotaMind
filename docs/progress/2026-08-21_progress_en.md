@@ -272,3 +272,34 @@
 
 - Stage 1 does not generate a domain Checkpoint yet; the `resolve_match_games` ambiguous adapter, candidate options, and `scheduled_date` patch remain Stage 2.
 - The frontend does not render a CheckpointCard yet; this stage covers backend events and resume contracts only.
+
+## 20:00 — ChatRun Checkpoint Stage 2 match ambiguity adapter
+
+### Completed
+
+- When `pandascore.resolve_match_games` returns `data.status=ambiguous`, the `tools` node
+  immediately creates a `pandascore_match_selection` Checkpoint. Options are deterministically
+  built from candidate Fixture UTC `scheduled_at` values (falling back to `begin_at`), and
+  execution stops before Valve mapping or OpenDota details.
+- The adapter is enabled only for executions carrying a ChatRun `internal_run_id`; the stateless
+  `/plan` debug path does not create a persisted Checkpoint.
+- Checkpoint options expose only server-generated `scheduled_date`. During resume, the Executor
+  writes that value into the original `resolve_match_games` call after validating `option_id`;
+  clients cannot submit a date or arbitrary Plan patch, and Controller is not called again.
+- The resumed plan keeps its fingerprint cache: successful prefix calls can be reused, the
+  date-qualified game lookup runs again, and downstream tools continue only after it resolves.
+- Added `agent_run_waiting_input` to the observability event allowlist so a real Graph pause is
+  not rejected by the logging boundary.
+- Updated the V3.4-1 design, overall architecture, node/tool inventory, API, Tool layer, and API README.
+
+### Verification
+
+- Stage-2 targeted tests: 32 passed, 1 warning.
+- Full API suite: 644 passed, 21 skipped, 1 warning.
+- Ruff passed for the changed Python files.
+
+### Known boundaries
+
+- The adapter covers only match-selection ambiguity from `pandascore.resolve_match_games`.
+  Other ambiguous tools, free-text selection, same-day multi-candidate disambiguation,
+  guessing, timeout/expiry policies, and the frontend CheckpointCard are not connected.

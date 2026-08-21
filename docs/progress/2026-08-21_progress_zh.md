@@ -272,3 +272,33 @@
 
 - 阶段 1 还没有生成领域 Checkpoint；`resolve_match_games` ambiguous 适配器、候选选项和 `scheduled_date` patch 留到阶段 2。
 - 前端尚未渲染 CheckpointCard；当前阶段只完成后端事件与恢复契约。
+
+## 20:00 — ChatRun Checkpoint 阶段 2 比赛歧义适配
+
+### 已完成
+
+- `pandascore.resolve_match_games` 返回 `data.status=ambiguous` 时，`tools` 节点立即
+  生成 `pandascore_match_selection` Checkpoint；选项从候选 Fixture 的 UTC
+  `scheduled_at`（缺失时 `begin_at`）确定性生成，随后停止执行，不调用 Valve 映射或
+  OpenDota 详情。
+- 适配器只对带有 ChatRun `internal_run_id` 的执行启用；无状态 `/plan` 调试路径不创建
+  持久化 Checkpoint。
+- Checkpoint 选项只暴露服务端生成的 `scheduled_date`，恢复时由 Executor 按已校验的
+  `option_id` 写回原 `resolve_match_games` 调用；不接受客户端日期或任意 Plan patch，
+  不重新调用 Controller。
+- 恢复计划保留原 fingerprint cache：前序成功调用可复用，带日期的比赛解析调用重新
+  执行，成功后才继续下游工具链。
+- 补齐 `agent_run_waiting_input` 观测事件白名单，避免真实 Graph 进入等待状态时被观测
+  层拒绝。
+- 同步更新 V3.4-1 设计、整体架构、节点/工具清单、API、Tool 层和 API README。
+
+### 验证
+
+- 阶段 2 定向测试：32 passed、1 warning。
+- API 全量：644 passed、21 skipped、1 warning。
+- 变更 Python 文件 Ruff 检查通过。
+
+### 已知边界
+
+- 当前只适配 `pandascore.resolve_match_games` 的比赛选择歧义；其它工具的 ambiguous、
+  自由文本选择、同日多候选消歧、自动猜测、超时/过期策略和前端 CheckpointCard 均未接入。

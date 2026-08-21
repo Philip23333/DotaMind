@@ -74,3 +74,23 @@ Worker lease。恢复时使用同一个 `run_id`；前序结果缓存的复用�
 
 阶段 1 不生成任何领域 Checkpoint。`pandascore.resolve_match_games` 的 ambiguous 适配器、
 选项构造和 `scheduled_date` patch 属于阶段 2。
+
+## 阶段 2：比赛选择 Checkpoint 适配器
+
+阶段 2 只接入 `pandascore.resolve_match_games` 的 `data.status=ambiguous`：
+
+- 适配器只在带有 ChatRun `internal_run_id` 的执行中启用；无状态 `/plan` 调试入口不创建
+  持久化 Checkpoint。
+- `tools` 节点在该工具返回候选 Fixture 时立即构造
+  `checkpoint_type=pandascore_match_selection`，选项由候选的 UTC `scheduled_at`
+  （缺失时 `begin_at`）生成；不继续执行 Valve 映射或 OpenDota 详情工具。
+- 每个选项只把服务端生成的 `scheduled_date` 放入 `value`；`source_tool_call_id`
+  固定为产生歧义的工具调用，`resume_node=tools`。
+- 用户通过既有 resume API 选择 option 后，Executor 从快照按 option id 查找该值，
+  将 `scheduled_date` 写回原 `pandascore.resolve_match_games` 调用，再从同一 Run
+  进入 `tools`。Controller 不会二次调用，客户端不能提交日期或 Plan patch。
+- 恢复执行复用前序成功工具的 fingerprint；带新日期的比赛解析调用重新执行，随后
+  才允许继续 Valve/OpenDota 工具链。
+
+本阶段不处理其它工具的 ambiguous、自由文本选项、同日多候选的额外判定、自动猜测、
+超时或过期策略，也不包含前端 CheckpointCard。

@@ -210,6 +210,12 @@ queues the same `run_id`, and resumes from the persisted Graph node. A waiting s
 current event-stream segment after the Checkpoint and status events; the resumed Run is observed
 with a new `after` cursor on the same stream.
 
+The current domain adapter is limited to `pandascore.resolve_match_games` with
+`data.status=ambiguous`. Its Checkpoint options contain only server-generated
+`scheduled_date` values from candidate Fixture timestamps. Selecting an option
+patches the original lookup during resume; clients cannot supply that date directly,
+and no downstream Valve/OpenDota call is made before the selection.
+
 Cancel persists `cancel_requested` in PostgreSQL before local/Redis wake-up. A repeated cancel
 is `202`; terminal Runs return `409 run_terminal`. Disconnecting an event subscriber only closes
 the observer; it never cancels the detached background Run.

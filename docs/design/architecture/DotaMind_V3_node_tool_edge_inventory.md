@@ -79,7 +79,7 @@ future reset nodes delegate to the centralized pure reset function.
 | `decision_validate_node` | Repeat shared deterministic decision/plan validation without mutating the decision. | Recomputes and refreshes authoritative evidence obligations in state. |
 | `conversation_answer_node` | Accept the validated Controller-authored direct answer. | Never creates EvidenceGraph. |
 | `validate_plan_node` | Validate final args, references, contract and effective evidence producibility. | Never applies policy or modifies evidence. |
-| `tool_executor_node` | Resolve references, reuse Run-local fingerprints and execute registered tools. | `result_destination=evidence` proceeds to Evidence; `controller_context` merges request-local messages and a minimal execution summary, then returns to Controller. |
+| `tool_executor_node` | Resolve references, reuse Run-local fingerprints and execute registered tools. | In ChatRun execution, `pandascore.resolve_match_games` returning `ambiguous` produces a match-selection Checkpoint and stops before downstream tools; otherwise `result_destination=evidence` proceeds to Evidence and `controller_context` merges request-local messages before returning to Controller. |
 | `evidence_node` | Run tool-owned extractors and compute missing effective evidence and data quality. | Missing effective evidence routes to finalize before Answer. |
 | `answer_node` | Produce structured or natural-language answers from EvidenceGraph. | Tool-plan branch only. |
 | `critic_node` | Review missing/quality/mock/confidence constraints. | Tool-plan branch only. |
