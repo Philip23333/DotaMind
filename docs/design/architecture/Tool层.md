@@ -119,9 +119,9 @@ V3.2-2 中，默认 `PlanService` 装配会把同一 Registry 实例传给这些
   前者默认返回最新的 20 个 Fixture，并以 `scheduled_at` 降序排列。
 - `resolve_match_games` 在没有局号时返回该 Fixture 实际存在的全部 Game context；
   PandaScore Series/Match/Game ID 仍不是 Valve Match ID。若按两队查询得到多个
-  Fixture，工具返回 `ambiguous` 候选；Checkpoint 试点会将候选日期转换为
-  `pandascore_match_selection` 选项，恢复时只把服务端选中的 UTC `scheduled_date`
-  写回这个调用。
+  Fixture，工具返回 `ambiguous` 候选；Checkpoint 试点会将候选的精确
+  `pandascore_match_id` 转换为 `pandascore_match_selection` 选项，恢复时只把
+  服务端选中的 Fixture ID 写回这个调用。
 - `dota.resolve_valve_matches` 只接受 Competition 与 Game context 列表引用，
   通过 OpenDota league/team/league-matches API 做硬条件唯一匹配，输出按局排列的
   `data.valve_match_ids`、`data.matches` 与 `data.mappings`。

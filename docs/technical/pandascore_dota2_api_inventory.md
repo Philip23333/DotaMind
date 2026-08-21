@@ -109,3 +109,9 @@ historical → nearest future 选择。
 `upcoming`、`running`、`past` 三个状态端点均下推 `sort=-scheduled_at` 与
 `page[size]=20`，合并去重后仍按 `scheduled_at`（缺失时 `begin_at`）降序排序，
 再应用调用方 `limit`。因此不会因上游默认升序第一页而优先返回最早的小组赛。
+
+## 精确 Fixture 选择
+
+`pandascore.resolve_match_games` 可接受可选 `pandascore_match_id`。它仍先在已解析
+Series 的 Fixture 集合中匹配两支队伍，再以该 ID 精确筛选目标 Fixture；这只消除同队
+同日多场的歧义，不把 PandaScore ID 误作 Valve Match ID。

@@ -91,6 +91,26 @@ async def test_team_order_independent_resolution_returns_selected_game() -> None
 
 
 @pytest.mark.anyio
+async def test_exact_fixture_id_resolves_same_day_team_rematch() -> None:
+    rematch = {
+        **SAMPLE_MATCH,
+        "id": 1631695,
+        "scheduled_at": "2026-08-13T15:30:00Z",
+    }
+    transport = FakeTransport({"past": [SAMPLE_MATCH, rematch], "upcoming": [], "running": []})
+
+    result = await PandaScoreMatches(transport, object()).resolve_games(
+        10828,
+        ["NGX", "OG"],
+        pandascore_match_id=1631695,
+    )
+
+    assert result.status == "resolved"
+    assert result.match is not None
+    assert result.match.pandascore_match_id == 1631695
+
+
+@pytest.mark.anyio
 async def test_missing_game_number_returns_all_games_in_series() -> None:
     transport = FakeTransport({"past": [SAMPLE_MATCH], "upcoming": [], "running": []})
     result = await PandaScoreMatches(transport, object()).resolve_games(10828, ["NGX", "OG"])

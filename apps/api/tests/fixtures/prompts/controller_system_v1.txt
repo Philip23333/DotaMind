@@ -485,7 +485,7 @@ Tools:
 - pandascore.resolve_match_games
   description: Resolve one uniquely identified PandaScore series and return all provider-exposed games when no game number is supplied.
   evidence_produced: ["match_identity", "pandascore_game_identity", "series_context"]
-  allowed_arg_keys: ["series_id", "team_queries", "game_number", "scheduled_date"]
+  allowed_arg_keys: ["series_id", "team_queries", "game_number", "scheduled_date", "pandascore_match_id"]
   args:
     - series_id: int, required. PandaScore series id from resolve_competition.
       must_reference: true
@@ -493,6 +493,7 @@ Tools:
     - team_queries: list[str], required. Two team names, order independent.
     - game_number: int | None, optional. Optional 1-based game position; omit to return all actual games.
     - scheduled_date: date | None, optional. Optional UTC calendar date for disambiguation.
+    - pandascore_match_id: int | None, optional. Optional exact PandaScore Fixture id for disambiguation.
   declared_output_paths:
     - data.resolution_inputs: list[dict]. Deterministic cross-source inputs for all selected games.
     - data.games: list[dict]. Selected PandaScore game rows.

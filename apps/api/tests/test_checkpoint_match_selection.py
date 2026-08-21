@@ -70,8 +70,8 @@ def test_match_selection_checkpoint_builds_options_and_patches_scheduled_date() 
     assert checkpoint.source_tool_call_id == "resolve_games"
     assert checkpoint.resume_node == "tools"
     assert [option.value for option in checkpoint.options] == [
-        {"scheduled_date": "2026-08-20"},
-        {"scheduled_date": "2026-08-21"},
+        {"pandascore_match_id": 101},
+        {"pandascore_match_id": 102},
     ]
 
     plan = ExecutionPlan(
@@ -88,11 +88,11 @@ def test_match_selection_checkpoint_builds_options_and_patches_scheduled_date() 
     )
     patched = apply_match_selection(plan, checkpoint, checkpoint.options[0].id)
 
-    assert patched.tool_calls[0].args["scheduled_date"] == "2026-08-20"
-    assert "scheduled_date" not in plan.tool_calls[0].args
+    assert patched.tool_calls[0].args["pandascore_match_id"] == 101
+    assert "pandascore_match_id" not in plan.tool_calls[0].args
 
 
-def test_match_selection_checkpoint_declines_same_date_candidates() -> None:
+def test_match_selection_checkpoint_supports_same_date_candidates() -> None:
     result = ToolResult(
         tool_call_id="resolve_games",
         tool="pandascore.resolve_match_games",
@@ -117,7 +117,14 @@ def test_match_selection_checkpoint_declines_same_date_candidates() -> None:
         latency_ms=1,
     )
 
-    assert match_selection_checkpoint(result) is None
+    checkpoint = match_selection_checkpoint(result)
+
+    assert checkpoint is not None
+    assert [option.id for option in checkpoint.options] == ["match_101", "match_102"]
+    assert [option.value for option in checkpoint.options] == [
+        {"pandascore_match_id": 101},
+        {"pandascore_match_id": 102},
+    ]
 
 
 def test_ambiguous_match_stops_tools_before_downstream_calls() -> None:
@@ -304,7 +311,7 @@ def test_resume_state_patches_the_server_selected_date() -> None:
     )
 
     assert state.plan is not None
-    assert state.plan.tool_calls[0].args["scheduled_date"] == "2026-08-20"
+    assert state.plan.tool_calls[0].args["pandascore_match_id"] == 101
     assert state.tool_results == []
     assert state.tool_dispatch_records == []
     assert state.executed_call_fingerprints == {}
@@ -447,7 +454,7 @@ def _resumed_state_with_prefix() -> tuple[AgentRunState, datetime]:
 def test_resume_state_keeps_only_prefix_fingerprints() -> None:
     state, _now = _resumed_state_with_prefix()
     assert state.plan is not None
-    assert state.plan.tool_calls[1].args["scheduled_date"] == "2026-08-20"
+    assert state.plan.tool_calls[1].args["pandascore_match_id"] == 101
     assert state.tool_results == []
     assert state.tool_dispatch_records == []
     assert {
@@ -462,7 +469,7 @@ def test_resumed_tools_emit_fresh_records_and_build_attempt_summary() -> None:
         raise AssertionError("prefix call must be reused from the fingerprint cache")
 
     async def resolve_games(args: BaseModel, context: Any) -> dict[str, Any]:
-        assert args.scheduled_date.isoformat() == "2026-08-20"
+        assert args.pandascore_match_id == 101
         assert args.series_id == 10828
         return {"status": "resolved", "resolution_inputs": [{"pandascore_match_id": 101}]}
 

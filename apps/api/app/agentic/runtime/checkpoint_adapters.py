@@ -26,21 +26,17 @@ def match_selection_checkpoint(result: ToolResult) -> Checkpoint | None:
         return None
 
     options: list[CheckpointOption] = []
-    used_dates: set[date] = set()
     for candidate in candidates:
         if not isinstance(candidate, dict):
+            return None
+        pandascore_match_id = candidate.get("pandascore_match_id")
+        if not isinstance(pandascore_match_id, int) or pandascore_match_id <= 0:
             return None
         scheduled_date = _candidate_date(candidate)
         if scheduled_date is None:
             return None
-        # This pilot resumes only by `scheduled_date`. Presenting choices that
-        # share a date would resume to the same ambiguous lookup, so leave that
-        # unsupported case on the existing explicit ambiguous path.
-        if scheduled_date in used_dates:
-            return None
-        used_dates.add(scheduled_date)
         stage = _stage_name(candidate)
-        option_id = f"{_slug(stage)}_{scheduled_date.isoformat()}"
+        option_id = f"match_{pandascore_match_id}"
         options.append(
             CheckpointOption(
                 id=option_id,
@@ -48,7 +44,7 @@ def match_selection_checkpoint(result: ToolResult) -> Checkpoint | None:
                     f"{scheduled_date.month} 月 {scheduled_date.day} 日 · "
                     f"{stage} · {_fixture_label(candidate)}"
                 ),
-                value={"scheduled_date": scheduled_date.isoformat()},
+                value={"pandascore_match_id": pandascore_match_id},
             )
         )
     if not options:
@@ -69,7 +65,7 @@ def apply_match_selection(
     checkpoint: Checkpoint,
     selected_option_id: str | None,
 ) -> ExecutionPlan:
-    """Patch the persisted match lookup with the server-selected UTC date."""
+    """Patch the persisted match lookup with the server-selected Fixture id."""
 
     if checkpoint.checkpoint_type != MATCH_SELECTION_CHECKPOINT_TYPE:
         return plan.model_copy(deep=True)
@@ -81,13 +77,9 @@ def apply_match_selection(
     )
     if option is None:
         raise ValueError("checkpoint option is invalid")
-    scheduled_date = option.value.get("scheduled_date")
-    if not isinstance(scheduled_date, str):
-        raise ValueError("checkpoint option has no scheduled_date")
-    try:
-        date.fromisoformat(scheduled_date)
-    except ValueError as exc:
-        raise ValueError("checkpoint option has invalid scheduled_date") from exc
+    pandascore_match_id = option.value.get("pandascore_match_id")
+    if not isinstance(pandascore_match_id, int) or pandascore_match_id <= 0:
+        raise ValueError("checkpoint option has invalid pandascore_match_id")
 
     patched = plan.model_copy(deep=True)
     source_call = next(
@@ -96,7 +88,7 @@ def apply_match_selection(
     )
     if source_call is None or source_call.tool != MATCH_GAMES_TOOL:
         raise ValueError("checkpoint source tool call is unavailable")
-    source_call.args["scheduled_date"] = scheduled_date
+    source_call.args["pandascore_match_id"] = pandascore_match_id
     return patched
 
 

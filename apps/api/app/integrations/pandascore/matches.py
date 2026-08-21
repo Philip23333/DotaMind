@@ -57,9 +57,16 @@ class PandaScoreMatches:
         *,
         game_number: int | None = None,
         scheduled_date: date | None = None,
+        pandascore_match_id: int | None = None,
     ) -> ResolvedMatchGames:
         fixtures = await self.list_matches(series_id)
         matching = [fixture for fixture in fixtures if _teams_match(fixture, team_queries)]
+        if pandascore_match_id is not None:
+            matching = [
+                fixture
+                for fixture in matching
+                if fixture.pandascore_match_id == pandascore_match_id
+            ]
         if scheduled_date is not None:
             matching = [
                 fixture

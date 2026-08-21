@@ -127,6 +127,21 @@ Worker lease。恢复时使用同一个 `run_id`；前序结果缓存的复用�
 - 更新 API、运行时架构、总体架构、Tool 层、节点清单、API/Chat README 与当日中英文进度；
   不新增其它 ambiguous 适配器、自动选择、超时策略或通用依赖失效图。
 
+## 阶段 4 后补齐：精确 Fixture 选择
+
+阶段 2 最初只将候选的 UTC `scheduled_date` 写回比赛解析调用，因此同日两场同队
+Fixture 无法形成有效选择。该限制已由服务端拥有的 `pandascore_match_id` 取代：
+
+- `pandascore_match_selection` 选项的 `value` 保存候选的精确 PandaScore Fixture ID；
+  日期、阶段和比分仅保留在展示 label。
+- resume 将该 ID 写入原 `pandascore.resolve_match_games` 调用；Provider 仍在已解析
+  Series 与两队匹配范围内按 ID 精确选择，不将其传递给 Valve/OpenDota。
+- 因此同日候选可使用现有 CheckpointCard 正确恢复，无需新的 Checkpoint 类型、Controller
+  二次调用或客户端 Plan patch。
+- 快照仍保存暂停段的工具结果与 dispatch 作为审计数据；`resume_node=tools` 的新执行态
+  不恢复它们，只保留有效的前序 fingerprint cache，并重新形成本 Attempt 唯一的结果和
+  dispatch 记录。
+
 ## 阶段 4 后修正：恢复执行态与持久化审计分离
 
 阶段 4 验收发现，恢复时如果把快照中的 `ToolResult` 与 `ToolDispatchRecord` 重新注入

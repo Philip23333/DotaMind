@@ -280,18 +280,26 @@ async def test_resolve_match_games_serializes_coverage_as_a_list(
             self.closed = True
 
     class FakeMatches:
+        kwargs: dict = {}
+
         async def resolve_games(self, *args, **kwargs):
+            self.kwargs = kwargs
             return resolved
 
     transport = FakeTransport()
+    matches = FakeMatches()
     monkeypatch.setattr(
         "app.agentic.tools.pandascore_tools._clients",
-        lambda _settings, _policy: (transport, object(), FakeMatches()),
+        lambda _settings, _policy: (transport, object(), matches),
     )
 
     handler = _resolve_match_games_handler(Settings(_env_file=None), object())
     result = await handler(
-        PandaScoreResolveMatchGamesInput(series_id=42, team_queries=["Alpha", "Beta"]),
+        PandaScoreResolveMatchGamesInput(
+            series_id=42,
+            team_queries=["Alpha", "Beta"],
+            pandascore_match_id=55,
+        ),
         None,
     )
 
@@ -301,3 +309,4 @@ async def test_resolve_match_games_serializes_coverage_as_a_list(
     assert all(isinstance(item, dict) for item in result["coverage"])
     assert len(result["resolution_inputs"]) == 2
     assert transport.closed is True
+    assert matches.kwargs["pandascore_match_id"] == 55

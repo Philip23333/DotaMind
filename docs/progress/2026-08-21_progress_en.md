@@ -407,3 +407,29 @@
 - This repair only addresses duplicate result/dispatch entries within the resumed Attempt. Other
   ambiguous sources, free-text selection, timeout/expiry policy and generic dependency invalidation
   remain out of scope.
+
+## 22:00 — Checkpoint exact Fixture selection
+
+### Completed
+
+- Added optional `pandascore_match_id` input to `pandascore.resolve_match_games`; the Provider
+  selects the exact Fixture by that ID within the resolved Series and matching-team Fixture set.
+- Changed the server-owned `pandascore_match_selection` option value to the exact Fixture ID and
+  patched it into the original game lookup on resume. Dates remain presentation-only option labels.
+- Removed the same-day-candidate rejection. Multiple same-day Fixtures for the same teams can now
+  use the existing CheckpointCard, same-`run_id` resume, prefix fingerprint reuse and downstream
+  Valve/OpenDota chain.
+- Added no Checkpoint type, second Controller call, database migration, frontend request field or
+  other ambiguous adapter.
+
+### Verification
+
+- Targeted Checkpoint, PandaScore Provider and tool tests: 28 passed.
+- Full API suite: 649 passed, 21 skipped, 1 warning.
+- Ruff passed for the changed Python files.
+
+### Known boundaries
+
+- The adapter still covers only match-detail ambiguity from `pandascore.resolve_match_games`. The
+  option ID is effective only within the resolved Series and matching-team Fixture set; it is not a
+  Valve Match ID.

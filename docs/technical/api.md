@@ -212,9 +212,9 @@ with a new `after` cursor on the same stream.
 
 The current domain adapter is limited to `pandascore.resolve_match_games` with
 `data.status=ambiguous`. Its Checkpoint options contain only server-generated
-`scheduled_date` values from candidate Fixture timestamps. Selecting an option
-patches the original lookup during resume; clients cannot supply that date directly,
-and no downstream Valve/OpenDota call is made before the selection.
+`pandascore_match_id` values from candidate Fixtures. Selecting an option patches the
+original lookup during resume; clients cannot supply that ID directly, and no downstream
+Valve/OpenDota call is made before the selection.
 
 `apps/chat` renders the replayed `checkpoint` as a `CheckpointCard`. The card submits only the
 checkpoint type and option id, then resumes the same Run and subscribes with the saved sequence

@@ -393,3 +393,27 @@
 
 - 本修正只解决恢复后同一 Attempt 的结果/dispatch 重复问题；其它 ambiguous 来源、自由文本
   选择、超时/过期策略和通用依赖失效机制仍未接入。
+
+## 22:00 — Checkpoint 精确 Fixture 选择
+
+### 已完成
+
+- `pandascore.resolve_match_games` 增加可选 `pandascore_match_id` 输入；Provider 在已解析
+  Series 与两队匹配的 Fixture 集合中按该 ID 精确选择比赛。
+- `pandascore_match_selection` 的服务端 option value 改为精确 Fixture ID，恢复时写回原
+  比赛解析调用；日期继续只用于候选标签展示。
+- 删除同日候选拒绝逻辑；同日、同两队的多个 Fixture 现在可用既有 CheckpointCard 选择，
+  并沿用同一 `run_id` 恢复、前序 fingerprint cache 复用与后续 Valve/OpenDota 工具链。
+- 未新增 Checkpoint 类型、Controller 二次调用、数据库迁移、前端请求字段或其它 ambiguous
+  适配器。
+
+### 验证
+
+- Checkpoint、PandaScore Provider 与工具定向测试：28 passed。
+- API 全量：649 passed、21 skipped、1 warning。
+- 本次涉及 Python 文件 Ruff 检查通过。
+
+### 已知边界
+
+- 当前仍只适配 `pandascore.resolve_match_games` 的比赛详情歧义；选项 ID 仅在已解析 Series
+  和两队匹配的 Fixture 集合内生效，不是 Valve Match ID。

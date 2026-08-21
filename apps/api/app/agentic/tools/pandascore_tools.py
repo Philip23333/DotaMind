@@ -55,6 +55,7 @@ class PandaScoreResolveMatchGamesInput(BaseModel):
     team_queries: list[str] = Field(min_length=2, max_length=2)
     game_number: int | None = Field(default=None, ge=1)
     scheduled_date: date | None = None
+    pandascore_match_id: int | None = Field(default=None, gt=0)
 
 
 def register_pandascore_tools(registry: ToolRegistry, settings: Settings) -> None:
@@ -174,6 +175,9 @@ def register_pandascore_tools(registry: ToolRegistry, settings: Settings) -> Non
                 "scheduled_date": ArgContract(
                     description="Optional UTC calendar date for disambiguation."
                 ),
+                "pandascore_match_id": ArgContract(
+                    description="Optional exact PandaScore Fixture id for disambiguation."
+                ),
             },
             output_paths={
                 "resolution_inputs": OutputPathContract(
@@ -289,6 +293,7 @@ def _resolve_match_games_handler(settings: Settings, policy: Any):
                 args.team_queries,
                 game_number=args.game_number,
                 scheduled_date=args.scheduled_date,
+                pandascore_match_id=args.pandascore_match_id,
             )
             result: dict[str, Any] = {
                 "status": resolved.status,
