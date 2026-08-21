@@ -57,9 +57,10 @@ assistant message metadata，不再维护独立的浏览器级 Run Store。移�
 聊天不再调用它们。Chat Run 事件包含 Redis Stream 的重放 cursor 和 heartbeat，最终 Turn
 由 PostgreSQL 原子提交。附件、跨设备同步和用户认证均不属于这个阶段。
 
-英雄和物品查询结果中的本地 `image_path` 会由 Chat 转换为当前 API 地址，并以内联的
-28×28 圆角 Markdown 缩略图显示在第一个匹配实体标题名称前。图片由 API 本地静态资源
-提供；技能、比赛面板、战队和联赛图片不在当前范围。
+英雄、物品以及 OpenDota 比赛结构化实体中的本地 `image_path` 会由 Chat 转换为当前
+API 地址，并按 Markdown 上下文以内联缩略图显示：单实体一级标题为 56×56，普通列表与
+叙述为 32×32，表格和 BP/阵容列表为 20×20。图片由 API 本地静态资源提供；技能、战队和
+联赛图片不在当前范围。图片只由结构化 `image_path` 驱动，不由模型生成 URL。
 
 ## 测试
 

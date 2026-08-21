@@ -160,3 +160,23 @@
 ### 已知边界
 
 - 本次只补充“跳刀”这一明确别名，不扩展通用物品同义词词典。
+
+## 16:00 — OpenDota 比赛实体图片与上下文缩略图
+
+### 已完成
+
+- `opendota.match_details` 的选手英雄、BP 英雄、最终装备、背包和中立物品详情现在携带确定性的 `hero_image_path` / `item_image_path`；英雄或物品 ID 缺失、Catalog 未命中时为 `null`。
+- Chat 递归读取 `tool_results[*].data` 中的 Catalog 实体，仍只接受 `/api/v1/assets/dota/.../*.png` 本地路径，并按路径去重元数据。
+- 删除仅装饰首个标题的旧逻辑，改为按 Markdown 上下文插入受控图片 fragment：一级实体标题 `lg`（56×56）、普通列表/叙述 `md`（32×32）、表格及 BP/阵容/pick/ban 区域 `sm`（20×20）。同一实体在不同选手行或对局中可分别显示。
+- fenced code、行内代码、Markdown 链接、表格分隔行不会被改写；不再追加“相关图片”图片区块，图片 URL 仍由结构化后端字段确定。
+- Markdown `img` renderer 会移除 `#dota-size=sm|md|lg` fragment，并仅对本地 Catalog 图片应用三档样式；普通 Markdown 图片保持原行为。
+
+### 验证
+
+- API OpenDota 定向测试：5 passed。
+- Chat 图片格式化定向测试：8 passed。
+- Chat ESLint：通过。
+
+### 已知边界
+
+- 本次不处理技能、队伍、联赛或用户消息图片，也不改变图片缓存、静态路由、工具注册、Evidence kind 或 Prompt 合同。

@@ -80,8 +80,10 @@ globally ambiguous team is resolved only when exactly one candidate has an exact
 participating candidates remain explicit `ambiguous_team` status. Each successful
 game yields an auditable `inferred_cross_source` mapping, never presented as a
 native PandaScore Valve ID. Match-detail player and BP evidence preserves
-OpenDota's raw hero/item IDs and deterministically adds display names from the
-committed Valve Catalog snapshot; the Answer layer must not infer names from IDs.
+OpenDota's raw hero/item IDs and deterministically adds display names and
+origin-relative `hero_image_path` / `item_image_path` values from the committed Valve
+Catalog snapshot; absent or unknown IDs retain `null` image paths, and the Answer layer
+must not infer names or image URLs from IDs.
 STRATZ reads its English hero display-
 name index from the same Catalog repository. The former `hero_tools.py` resolver
 and `data/heroes/dota2_heroes.yaml` snapshot were deleted rather than kept as a

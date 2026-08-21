@@ -57,6 +57,12 @@ GET /api/v1/assets/dota/items/{item_id}.png
 `python apps/api/scripts/sync_game_data.py --images-only` 中从官方 CDN 下载；
 请求处理不会访问外部图片服务。
 
+`opendota.match_details` 的 `data.matches[].summary.players[]` 与
+`data.matches[].draft.draft[]` 在 Catalog 成功解析时分别携带 `hero_image_path`；装备、
+背包和中立物品详情携带 `item_image_path`。这些字段复用上述本地静态路径，Catalog
+未命中或缺失 ID 时为 `null`，并随原有工具结果和 EvidenceGraph 透传，不新增工具或
+evidence kind。
+
 ## Controller Request
 
 ```http

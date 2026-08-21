@@ -160,3 +160,23 @@
 ### Known boundaries
 
 - This change adds only the explicit “跳刀” alias and does not introduce a general item-synonym dictionary.
+
+## 16:00 — OpenDota match-entity images and context-sized thumbnails
+
+### Completed
+
+- `opendota.match_details` now carries deterministic `hero_image_path` / `item_image_path` values for player heroes, BP heroes, final inventory, backpack, and neutral-item details; missing IDs and Catalog misses use `null`.
+- Chat recursively reads Catalog entities from `tool_results[*].data`, still accepts only local `/api/v1/assets/dota/.../*.png` paths, and deduplicates entity metadata by path.
+- Replaced the old first-heading-only decoration with controlled Markdown image fragments selected by context: `lg` (56×56) for a single-entity H1, `md` (32×32) for ordinary lists/narrative, and `sm` (20×20) for tables and BP/roster/pick/ban sections. The same entity may render in separate player rows or games.
+- Fenced code, inline code, Markdown links, and table separator rows are not rewritten. No standalone “相关图片” section is appended; image URLs remain driven by structured backend fields.
+- The Markdown `img` renderer removes the `#dota-size=sm|md|lg` fragment and applies the three size styles only to local Catalog images; ordinary Markdown images keep their existing behavior.
+
+### Verification
+
+- Focused API OpenDota tests: 5 passed.
+- Focused Chat image-formatting tests: 8 passed.
+- Chat ESLint: passed.
+
+### Known boundaries
+
+- This change does not handle skill, team, league, or user-message images, and does not change image caching, static routes, tool registration, Evidence kinds, or Prompt contracts.

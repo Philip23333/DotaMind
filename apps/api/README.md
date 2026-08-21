@@ -130,6 +130,10 @@ CDN 下载到 `app/data/catalog/images/`，API 通过
 `/api/v1/assets/dota/items/{id}.png` 提供本地静态访问。Catalog 英雄/物品查询
 结果携带对应的 `image_path`；请求运行时不访问外部图片 CDN。
 
+`opendota.match_details` 的选手、背包/装备、中立物品和 BP 记录也会保留确定性的
+`hero_image_path` / `item_image_path`；Catalog 未命中或 ID 缺失时字段为 `null`，不会
+猜测图片路径。它们复用上述静态资源路由，并随 `tool_results` 与对应 evidence 透传。
+
 STRATZ:
 
 - `stratz.pair_lane_outcome`

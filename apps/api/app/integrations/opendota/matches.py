@@ -137,7 +137,12 @@ def _normalize_player(player: dict[str, Any], catalog: DotaCatalogRepository) ->
 def _hero_catalog_fields(hero_id: Any, catalog: DotaCatalogRepository) -> dict[str, Any]:
     identifier = _positive_int(hero_id)
     if identifier is None:
-        return {"hero_name_en": None, "hero_name_zh": None, "hero_catalog_status": "absent"}
+        return {
+            "hero_name_en": None,
+            "hero_name_zh": None,
+            "hero_catalog_status": "absent",
+            "hero_image_path": None,
+        }
     try:
         hero = catalog.get_hero(identifier)
     except CatalogLookupError:
@@ -145,11 +150,13 @@ def _hero_catalog_fields(hero_id: Any, catalog: DotaCatalogRepository) -> dict[s
             "hero_name_en": None,
             "hero_name_zh": None,
             "hero_catalog_status": "not_found",
+            "hero_image_path": None,
         }
     return {
         "hero_name_en": hero.name_en,
         "hero_name_zh": hero.name_zh,
         "hero_catalog_status": "resolved",
+        "hero_image_path": f"/api/v1/assets/dota/heroes/{hero.hero_id}.png",
     }
 
 
@@ -177,12 +184,14 @@ def _item_catalog_field(
             "item_name_en": None,
             "item_name_zh": None,
             "item_catalog_status": "not_found",
+            "item_image_path": None,
         }
     return {
         "item_id": identifier,
         "item_name_en": item.name_en,
         "item_name_zh": item.name_zh,
         "item_catalog_status": "resolved",
+        "item_image_path": f"/api/v1/assets/dota/items/{item.item_id}.png",
     }
 
 

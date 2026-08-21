@@ -67,21 +67,32 @@ def test_match_details_evidence_requires_ten_players() -> None:
     assert summary["players"][0]["hero_name_en"] == hero.name_en
     assert summary["players"][0]["hero_name_zh"] == hero.name_zh
     assert summary["players"][0]["hero_catalog_status"] == "resolved"
+    assert summary["players"][0]["hero_image_path"] == "/api/v1/assets/dota/heroes/80.png"
     assert summary["players"][0]["final_items"]["item_0"] == 1
     assert summary["players"][0]["final_item_details"]["item_0"] == {
         "item_id": 1,
         "item_name_en": item.name_en,
         "item_name_zh": item.name_zh,
         "item_catalog_status": "resolved",
+        "item_image_path": "/api/v1/assets/dota/items/1.png",
     }
     assert summary["players"][0]["neutral_item_detail"] == {
         "item_id": 3,
         "item_name_en": catalog.get_item(3).name_en,
         "item_name_zh": catalog.get_item(3).name_zh,
         "item_catalog_status": "resolved",
+        "item_image_path": "/api/v1/assets/dota/items/3.png",
+    }
+    assert summary["players"][0]["backpack_item_details"]["item_0"] == {
+        "item_id": 2,
+        "item_name_en": catalog.get_item(2).name_en,
+        "item_name_zh": catalog.get_item(2).name_zh,
+        "item_catalog_status": "resolved",
+        "item_image_path": "/api/v1/assets/dota/items/2.png",
     }
     assert draft["draft"][1]["hero_name_en"] == picked_hero.name_en
     assert draft["draft"][1]["hero_name_zh"] == picked_hero.name_zh
+    assert draft["draft"][1]["hero_image_path"] == "/api/v1/assets/dota/heroes/85.png"
     result = ToolResult(
         tool_call_id="s1",
         tool="opendota.match_details",
@@ -119,15 +130,29 @@ def test_unknown_or_empty_catalog_ids_do_not_gain_invented_names() -> None:
     assert player["hero_name_en"] is None
     assert player["hero_name_zh"] is None
     assert player["hero_catalog_status"] == "not_found"
+    assert player["hero_image_path"] is None
     assert player["final_item_details"]["item_0"] == {
         "item_id": 999999,
         "item_name_en": None,
         "item_name_zh": None,
         "item_catalog_status": "not_found",
+        "item_image_path": None,
     }
     assert player["neutral_item_detail"] is None
     assert draft["draft"][0]["hero_name_en"] is None
     assert draft["draft"][0]["hero_catalog_status"] == "not_found"
+    assert draft["draft"][0]["hero_image_path"] is None
+
+
+def test_absent_catalog_ids_have_null_image_paths() -> None:
+    summary = normalize_match_summary(
+        {"players": [{"hero_id": None, "item_0": None}]},
+        8943244303,
+    )
+    player = summary["players"][0]
+    assert player["hero_catalog_status"] == "absent"
+    assert player["hero_image_path"] is None
+    assert player["final_item_details"] == {}
 
 
 def test_empty_draft_is_ok_data_but_produces_no_evidence() -> None:

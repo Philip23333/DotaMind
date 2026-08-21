@@ -132,18 +132,27 @@ const defaultComponents = memoizeMarkdownComponents({
     />
   ),
   img: ({ alt, className, src, ...props }) => {
+    const source = typeof src === "string" ? src : undefined;
+    const [sourceWithoutFragment, fragment] = source?.split("#", 2) ?? [];
+    const size = fragment?.match(/^dota-size=(sm|md|lg)$/)?.[1];
     const isCatalogImage =
-      typeof src === "string" && src.includes("/api/v1/assets/dota/");
+      typeof sourceWithoutFragment === "string" &&
+      sourceWithoutFragment.includes("/api/v1/assets/dota/");
+    const catalogSizeClass =
+      size === "sm"
+        ? "size-5 rounded object-cover object-center align-[-0.12em] me-1"
+        : size === "lg"
+          ? "size-14 rounded-lg object-cover object-center align-[-0.2em] me-2 shadow-sm"
+          : "size-8 rounded-md object-cover object-center align-[-0.16em] me-1.5";
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
         className={cn(
-          isCatalogImage &&
-            "mr-1.5 inline-block size-7 rounded object-cover align-[-0.18em] shadow-sm",
+          isCatalogImage && `inline-block ${catalogSizeClass}`,
           className,
         )}
         alt={alt ?? ""}
-        src={src}
+        src={isCatalogImage ? sourceWithoutFragment : src}
         {...props}
       />
     );

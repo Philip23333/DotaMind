@@ -20,7 +20,8 @@ type ToolResultPayload = {
   data?: unknown;
 };
 
-export type CatalogEntity = {
+export type CatalogVisualEntity = {
+  kind: "hero" | "item";
   imagePath: string;
   label: string;
   names: string[];
@@ -352,69 +353,236 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-export function extractCatalogEntities(payload: PlanResponse): CatalogEntity[] {
-  const entities: CatalogEntity[] = [];
-  const seenImagePaths = new Set<string>();
-  for (const toolResult of payload.tool_results ?? []) {
-    const data = asRecord(toolResult.data);
-    if (!data) continue;
-    for (const key of ["hero", "item"]) {
-      const entity = asRecord(data[key]);
-      if (!entity) continue;
-      const imagePath = entity.image_path;
-      if (
-        typeof imagePath !== "string" ||
-        !imagePath.startsWith("/api/v1/assets/dota/") ||
-        !imagePath.endsWith(".png")
-      ) {
-        continue;
-      }
-      const names = ["name_zh", "name_en", "name"]
-        .map((field) => entity[field])
-        .filter((value): value is string => typeof value === "string")
-        .map((value) => value.trim())
-        .filter(Boolean);
-      if (!names.length || seenImagePaths.has(imagePath)) continue;
-      seenImagePaths.add(imagePath);
-      entities.push({
-        imagePath,
-        label: names[0] ?? (key === "hero" ? "英雄" : "物品"),
-        names: Array.from(new Set(names)),
-      });
-    }
-  }
-  return entities;
+const CATALOG_IMAGE_PREFIX = "/api/v1/assets/dota/";
+
+function catalogImagePath(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.startsWith(CATALOG_IMAGE_PREFIX) &&
+    value.endsWith(".png")
+  );
 }
 
-export function decorateCatalogHeading(
-  answerText: string | null | undefined,
-  entities: CatalogEntity[],
-): string | null {
-  if (!answerText || !entities.length) return answerText ?? null;
+function catalogKindFromPath(imagePath: string): "hero" | "item" | null {
+  if (imagePath.includes("/heroes/")) return "hero";
+  if (imagePath.includes("/items/")) return "item";
+  return null;
+}
 
-  const lines = answerText.split("\n");
-  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
-    const heading = lines[lineIndex].match(/^(#{1,6}\s+)(.*)$/);
-    if (!heading) continue;
-    const [, prefix, content] = heading;
-    const matches = entities
-      .map((entity) => {
-        const name = entity.names.find((candidate) => content.includes(candidate));
-        return name ? { entity, name } : null;
-      })
-      .filter((match): match is { entity: CatalogEntity; name: string } => match !== null)
-      .sort((left, right) => right.name.length - left.name.length);
-    const match = matches[0];
-    if (!match) continue;
-    const nameIndex = content.indexOf(match.name);
-    const imageUrl = `${getApiUrl()}${match.entity.imagePath}`;
-    if (content.includes(`](${imageUrl})`)) return answerText;
-    lines[lineIndex] =
-      `${prefix}${content.slice(0, nameIndex)}![${match.entity.label}](${imageUrl}) ` +
-      content.slice(nameIndex);
-    return lines.join("\n");
+function nonEmptyStrings(values: unknown[]): string[] {
+  return Array.from(
+    new Set(
+      values
+        .filter((value): value is string => typeof value === "string")
+        .map((value) => value.trim())
+        .filter(Boolean),
+    ),
+  );
+}
+
+function collectFieldNames(
+  record: Record<string, unknown>,
+  kind: "hero" | "item" | null,
+): { names: string[]; label: string | null } {
+  const fields =
+    kind === "hero"
+      ? ["hero_name_zh", "hero_name_en", "name_zh", "name_en", "name"]
+      : kind === "item"
+        ? ["item_name_zh", "item_name_en", "name_zh", "name_en", "name"]
+        : ["name_zh", "name_en", "name"];
+  const names = nonEmptyStrings(fields.map((field) => record[field]));
+  return { names, label: names[0] ?? null };
+}
+
+export function extractCatalogVisualEntities(
+  payload: PlanResponse,
+): CatalogVisualEntity[] {
+  const byImagePath = new Map<string, CatalogVisualEntity>();
+  const labelRank = new Map<string, number>();
+
+  const addEntity = (
+    imagePath: string,
+    kind: "hero" | "item",
+    names: string[],
+    label: string | null,
+    rank: number,
+  ) => {
+    if (!names.length) return;
+    const existing = byImagePath.get(imagePath);
+    if (!existing) {
+      byImagePath.set(imagePath, {
+        kind,
+        imagePath,
+        label: label ?? (kind === "hero" ? "英雄" : "物品"),
+        names: [...names].sort((left, right) => right.length - left.length),
+      });
+      labelRank.set(imagePath, rank);
+      return;
+    }
+    existing.names = nonEmptyStrings([...existing.names, ...names]).sort(
+      (left, right) => right.length - left.length,
+    );
+    if (label && rank < (labelRank.get(imagePath) ?? Number.MAX_SAFE_INTEGER)) {
+      existing.label = label;
+      labelRank.set(imagePath, rank);
+    }
+  };
+
+  const visit = (value: unknown, keyHint?: string) => {
+    if (Array.isArray(value)) {
+      value.forEach((item) => visit(item, keyHint));
+      return;
+    }
+    const record = asRecord(value);
+    if (!record) return;
+
+    const heroImagePath = catalogImagePath(record.hero_image_path)
+      ? record.hero_image_path
+      : null;
+    const itemImagePath = catalogImagePath(record.item_image_path)
+      ? record.item_image_path
+      : null;
+    if (heroImagePath) {
+      const { names, label } = collectFieldNames(record, "hero");
+      addEntity(heroImagePath, "hero", names, label, 0);
+    }
+    if (itemImagePath) {
+      const { names, label } = collectFieldNames(record, "item");
+      addEntity(itemImagePath, "item", names, label, 0);
+    }
+
+    if (catalogImagePath(record.image_path)) {
+      const kind = catalogKindFromPath(record.image_path);
+      const { names, label } = collectFieldNames(record, kind);
+      addEntity(record.image_path, kind ?? (keyHint === "item" ? "item" : "hero"), names, label, 1);
+    }
+
+    Object.entries(record).forEach(([key, child]) => visit(child, key));
+  };
+
+  (payload.tool_results ?? []).forEach((toolResult) => visit(toolResult.data));
+  return [...byImagePath.values()];
+}
+
+type TextRange = [start: number, end: number];
+
+function protectedMarkdownRanges(line: string): TextRange[] {
+  const ranges: TextRange[] = [];
+  const addMatches = (pattern: RegExp) => {
+    for (const match of line.matchAll(pattern)) {
+      const start = match.index ?? 0;
+      ranges.push([start, start + match[0].length]);
+    }
+  };
+  addMatches(/`+[^`]*`+/g);
+  addMatches(/!?\[[^\]]*\]\([^)]*\)/g);
+  return ranges.sort((left, right) => left[0] - right[0]);
+}
+
+function rangeAt(ranges: TextRange[], index: number): TextRange | null {
+  return ranges.find(([start, end]) => index >= start && index < end) ?? null;
+}
+
+function isTableSeparator(line: string): boolean {
+  return /^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line);
+}
+
+function isTableRow(line: string): boolean {
+  return /^\s*\|.*\|\s*$/.test(line) && !isTableSeparator(line);
+}
+
+function smallHeading(line: string): boolean {
+  return /(?:\bbp\b|\bpick\b|\bban\b|阵容)/i.test(line);
+}
+
+function hasCatalogImageBefore(line: string, index: number): boolean {
+  return /!\[[^\]]*\]\([^)]*\/api\/v1\/assets\/dota\/[^)]*#dota-size=(?:sm|md|lg)\)\s*$/.test(
+    line.slice(0, index),
+  );
+}
+
+function decorateCatalogLine(
+  line: string,
+  entities: CatalogVisualEntity[],
+  size: "sm" | "md" | "lg",
+): string {
+  if (!entities.length || isTableSeparator(line)) return line;
+  const ranges = protectedMarkdownRanges(line);
+  const replacements: Array<{ index: number; name: string; entity: CatalogVisualEntity }> = [];
+  let index = 0;
+  let previous: { entity: CatalogVisualEntity; end: number } | null = null;
+
+  while (index < line.length) {
+    const protectedRange = rangeAt(ranges, index);
+    if (protectedRange) {
+      index = protectedRange[1];
+      continue;
+    }
+    const matches = entities.flatMap((entity) =>
+      entity.names
+        .filter((name) => line.startsWith(name, index))
+        .map((name) => ({ entity, name })),
+    );
+    const match = matches.sort((left, right) => right.name.length - left.name.length)[0];
+    if (!match) {
+      index += 1;
+      continue;
+    }
+    const aliasSeparator =
+      previous?.entity.imagePath === match.entity.imagePath &&
+      /^[\s（）()［］\[\]{}:：,，./·—–\-]*$/u.test(line.slice(previous.end, index));
+    if (!aliasSeparator && !hasCatalogImageBefore(line, index)) {
+      replacements.push({ index, name: match.name, entity: match.entity });
+      previous = { entity: match.entity, end: index + match.name.length };
+    }
+    index += match.name.length;
   }
-  return answerText;
+
+  return replacements
+    .reverse()
+    .reduce((result, replacement) => {
+      const imageUrl = `${getApiUrl()}${replacement.entity.imagePath}#dota-size=${size}`;
+      return `${result.slice(0, replacement.index)}![${replacement.entity.label}](${imageUrl}) ${result.slice(replacement.index)}`;
+    }, line);
+}
+
+export function decorateCatalogMentions(
+  markdown: string | null | undefined,
+  entities: CatalogVisualEntity[],
+): string | null {
+  if (!markdown || !entities.length) return markdown ?? null;
+  const lines = markdown.split("\n");
+  let inFence = false;
+  let compactHeadingLevel: number | null = null;
+  return lines
+    .map((line) => {
+      if (/^\s*(```|~~~)/.test(line)) {
+        inFence = !inFence;
+        return line;
+      }
+      if (inFence) return line;
+      const heading = line.match(/^(#{1,6})\s+/);
+      if (heading) {
+        const level = heading[1].length;
+        if (smallHeading(line)) {
+          compactHeadingLevel = level;
+        } else if (compactHeadingLevel !== null && level <= compactHeadingLevel) {
+          compactHeadingLevel = null;
+        }
+      }
+      const inCompactHeading = compactHeadingLevel !== null;
+      const size = isTableRow(line)
+        ? "sm"
+        : heading?.[1] === "#"
+          ? inCompactHeading
+            ? "sm"
+            : "lg"
+          : inCompactHeading
+            ? "sm"
+            : "md";
+      return decorateCatalogLine(line, entities, size);
+    })
+    .join("\n");
 }
 
 export function formatPlanResponse(payload: PlanResponse): string {
@@ -429,16 +597,18 @@ export function formatPlanResponse(payload: PlanResponse): string {
   );
   const summaryOrReason = payload.answer?.summary?.trim() || payload.reason?.trim();
   const sections = [
-    decorateCatalogHeading(
-      summaryOrReason,
-      payload.status === "ok" ? extractCatalogEntities(payload) : [],
-    ),
+    summaryOrReason,
     formatRecommendations(payload.answer?.recommendations),
     formatClaims(payload.answer?.claims),
     formatLimitations(payload.answer?.limitations),
   ].filter((section): section is string => Boolean(section));
+  const answerText = sections.join("\n\n");
+  const formattedAnswer =
+    payload.status === "ok"
+      ? decorateCatalogMentions(answerText, extractCatalogVisualEntities(payload))
+      : answerText;
 
-  if (sections.length && !shouldUseRuntimeFailure) return sections.join("\n\n");
+  if (formattedAnswer && !shouldUseRuntimeFailure) return formattedAnswer;
 
   if (shouldUseRuntimeFailure && isToolFailureCode(runtimeFailure)) {
     return formatToolFailure(runtimeFailure);
