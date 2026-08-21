@@ -84,6 +84,11 @@ OpenDota's raw hero/item IDs and deterministically adds display names and
 origin-relative `hero_image_path` / `item_image_path` values from the committed Valve
 Catalog snapshot; parsed-player data also preserves purchase events, inventory and
 neutral history, level-indexed ability upgrades and mechanically identified talents.
+Evidence extraction projects these parsed players by evidence kind: scoreboard items
+keep display and summary fields, while purchase, ability-upgrade and talent evidence
+keep only their own progress sequence plus player identity. The raw ToolResult remains
+available for audit and observation; this projection prevents the same complete player
+object from being repeated across all four evidence kinds.
 The Chat formatter keeps the user-facing answer as Markdown: it deterministically
 turns the Answer's horizontal seven-order BP table into `md` hero icons, decorates
 the combined player/hero column with `md` hero icons, and renders main inventory as

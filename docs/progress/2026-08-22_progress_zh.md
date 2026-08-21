@@ -29,3 +29,21 @@
 - Chat 全量：8 个测试文件、24 个测试通过。
 - Chat ESLint 与 Next.js production build 通过。
 - `git diff --check` 通过。
+
+## 01:43 — OpenDota 选手 evidence 字段投影
+
+### 已完成
+
+- 修复 `match_details_evidence()` 的数据重复：记分牌、购买顺序、技能加点和天赋 evidence 不再各自携带完整选手对象。
+- 记分牌保留展示字段与购买/加点/天赋计数；三类进度 evidence 只保留对应序列和选手/英雄身份字段。
+- 原始 `ToolResult`、EvidenceGraph 双层结构、Answer Prompt、Chat Run 和前端均保持不变。
+
+### 验证
+
+- `tests/test_agentic_opendota_match_tools.py`：9 passed。
+- OpenDota evidence 投影回归断言与定向 Ruff 检查通过。
+- 使用已落库的真实三局比赛 ToolResult 重跑 extractor：Answer messages 约从 3.10 MB 降至 1.30 MB；原始 ToolResult 未改写。
+
+### 已知边界
+
+- 本次未移除 `EvidenceGraph.tool_results`，因此没有改变原始结果进入 Answer Prompt 的总体模式；只消除了 evidence 内部的字段交叉复制。

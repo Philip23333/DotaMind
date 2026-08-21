@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -127,6 +127,69 @@ def _details_handler(settings: Settings):
     return handle
 
 
+_PLAYER_IDENTITY_FIELDS = (
+    "name",
+    "personaname",
+    "player_slot",
+    "hero_id",
+    "hero_name_en",
+    "hero_name_zh",
+    "hero_image_path",
+    "hero_catalog_status",
+)
+
+_PLAYER_SCOREBOARD_FIELDS = (
+    *_PLAYER_IDENTITY_FIELDS,
+    "level",
+    "kills",
+    "deaths",
+    "assists",
+    "last_hits",
+    "denies",
+    "gpm",
+    "xpm",
+    "net_worth",
+    "hero_damage",
+    "tower_damage",
+    "hero_healing",
+    "final_items",
+    "final_item_details",
+    "backpack",
+    "backpack_item_details",
+    "neutral_item",
+    "neutral_item_detail",
+    "inventory",
+)
+
+
+def _project_fields(
+    player: dict[str, Any],
+    fields: tuple[str, ...],
+) -> dict[str, Any]:
+    return {field: player.get(field) for field in fields}
+
+
+def _project_scoreboard_player(player: dict[str, Any]) -> dict[str, Any]:
+    projected = _project_fields(player, _PLAYER_SCOREBOARD_FIELDS)
+    projected["purchase_event_count"] = len(player.get("purchase_timeline") or [])
+    projected["ability_upgrade_count"] = len(player.get("ability_upgrade_sequence") or [])
+    projected["talent_selection_count"] = len(player.get("talent_selections") or [])
+    return projected
+
+
+def _project_player_progress(
+    player: dict[str, Any],
+    field: Literal[
+        "purchase_timeline",
+        "ability_upgrade_sequence",
+        "talent_selections",
+    ],
+) -> dict[str, Any]:
+    projected = _project_fields(player, _PLAYER_IDENTITY_FIELDS)
+    projected[field] = player.get(field) or []
+    return projected
+
+
 def match_details_evidence(result: ToolResult) -> list[EvidenceItem]:
     data = result.data if isinstance(result.data, dict) else {}
     matches = data.get("matches")
@@ -174,7 +237,7 @@ def match_details_evidence(result: ToolResult) -> list[EvidenceItem]:
                     kind="player_scoreboard",
                     subject=f"Valve match {match_id} player scoreboard",
                     value={
-                        "players": players,
+                        "players": [_project_scoreboard_player(player) for player in players],
                         "catalog_snapshot": summary.get("catalog_snapshot"),
                     },
                     source=result.source,
@@ -210,7 +273,7 @@ def match_details_evidence(result: ToolResult) -> list[EvidenceItem]:
                 ),
             ):
                 rows = [
-                    row
+                    _project_player_progress(row, field)
                     for row in players
                     if isinstance(row, dict) and row.get(field)
                 ]

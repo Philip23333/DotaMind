@@ -114,6 +114,17 @@ def test_match_details_evidence_requires_ten_players() -> None:
         "catalog_snapshot"
     ] == draft["catalog_snapshot"]
 
+    scoreboard_player = next(
+        item for item in evidence if item.kind == "player_scoreboard"
+    ).value["players"][0]
+    assert scoreboard_player["inventory"]["main"][0]["item_id"] == 1
+    assert scoreboard_player["purchase_event_count"] == 0
+    assert scoreboard_player["ability_upgrade_count"] == 0
+    assert scoreboard_player["talent_selection_count"] == 0
+    assert "purchase_timeline" not in scoreboard_player
+    assert "ability_upgrade_sequence" not in scoreboard_player
+    assert "talent_selections" not in scoreboard_player
+
     data["matches"][0]["summary"]["players"] = data["matches"][0]["summary"]["players"][:9]
     assert "player_scoreboard" not in {item.kind for item in match_details_evidence(result)}
 
@@ -259,6 +270,59 @@ def test_player_progress_and_inventory_are_normalized_without_reordering() -> No
         "player_purchase_timeline",
         "player_skill_build",
         "player_talent_selection",
+    }
+
+    scoreboard_player = next(
+        item for item in match_details_evidence(result) if item.kind == "player_scoreboard"
+    ).value["players"][0]
+    assert scoreboard_player["purchase_event_count"] == 3
+    assert scoreboard_player["ability_upgrade_count"] == 3
+    assert scoreboard_player["talent_selection_count"] == 1
+    assert "purchase_timeline" not in scoreboard_player
+    assert "ability_upgrade_sequence" not in scoreboard_player
+    assert "talent_selections" not in scoreboard_player
+
+    progress_evidence = {
+        item.kind: item.value["players"][0]
+        for item in match_details_evidence(result)
+        if item.kind in {
+            "player_purchase_timeline",
+            "player_skill_build",
+            "player_talent_selection",
+        }
+    }
+    assert set(progress_evidence["player_purchase_timeline"]) == {
+        "name",
+        "personaname",
+        "player_slot",
+        "hero_id",
+        "hero_name_en",
+        "hero_name_zh",
+        "hero_image_path",
+        "hero_catalog_status",
+        "purchase_timeline",
+    }
+    assert set(progress_evidence["player_skill_build"]) == {
+        "name",
+        "personaname",
+        "player_slot",
+        "hero_id",
+        "hero_name_en",
+        "hero_name_zh",
+        "hero_image_path",
+        "hero_catalog_status",
+        "ability_upgrade_sequence",
+    }
+    assert set(progress_evidence["player_talent_selection"]) == {
+        "name",
+        "personaname",
+        "player_slot",
+        "hero_id",
+        "hero_name_en",
+        "hero_name_zh",
+        "hero_image_path",
+        "hero_catalog_status",
+        "talent_selections",
     }
 
 

@@ -29,3 +29,21 @@
 - Full Chat suite: 8 test files and 24 tests passed.
 - Chat ESLint and Next.js production build passed.
 - `git diff --check` passed.
+
+## 01:43 — OpenDota player evidence field projection
+
+### Completed
+
+- Fixed duplication in `match_details_evidence()`: scoreboard, purchase, skill-build, and talent evidence no longer carry complete player objects independently.
+- Scoreboard evidence keeps display fields and purchase/skill/talent counts; each progress evidence keeps only its own sequence plus player/hero identity fields.
+- The raw `ToolResult`, two-layer EvidenceGraph structure, Answer Prompt, Chat Run, and frontend remain unchanged.
+
+### Verification
+
+- `tests/test_agentic_opendota_match_tools.py`: 9 passed.
+- OpenDota evidence projection regression assertions and focused Ruff checks passed.
+- Replayed the extractor with the persisted real three-game ToolResult: Answer messages decreased from about 3.10 MB to 1.30 MB; the raw ToolResult was unchanged.
+
+### Known boundary
+
+- This change does not remove `EvidenceGraph.tool_results`, so it does not change the overall raw-result-to-Answer Prompt model; it only removes cross-kind field duplication inside evidence.
