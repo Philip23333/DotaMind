@@ -465,7 +465,7 @@ Tools:
     - data.competition: dict. Resolved PandaScore competition context.
     - data.competition.series_id: int. PandaScore series id.
 - pandascore.list_matches
-  description: List upcoming, running, and past PandaScore fixtures for a resolved series.
+  description: List the newest PandaScore fixtures first across upcoming, running, and past fixtures for a resolved series. Defaults to the newest 20 fixtures.
   evidence_produced: ["match_schedule", "match_state", "series_score"]
   allowed_arg_keys: ["series_id", "date_from", "date_to", "statuses", "limit"]
   args:

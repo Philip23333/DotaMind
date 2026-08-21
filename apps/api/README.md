@@ -124,6 +124,12 @@ Committed Valve Catalog:
 - `resolve_item`
 - `dota.item_info`
 
+英雄与物品图片由 `scripts/sync_game_data.py --images-only` 从 Valve 官方
+CDN 下载到 `app/data/catalog/images/`，API 通过
+`/api/v1/assets/dota/heroes/{id}.png` 和
+`/api/v1/assets/dota/items/{id}.png` 提供本地静态访问。Catalog 英雄/物品查询
+结果携带对应的 `image_path`；请求运行时不访问外部图片 CDN。
+
 STRATZ:
 
 - `stratz.pair_lane_outcome`

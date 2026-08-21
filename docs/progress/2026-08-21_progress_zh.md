@@ -87,3 +87,25 @@
 ### 已知边界
 
 - 名称取自提交的 Valve Catalog 快照；该快照未收录的新 ID 会保持无名称状态，直到按仓库脚本更新 Catalog。
+
+## 15:00 — 英雄与物品图片离线缓存
+
+### 已完成
+
+- 在 `apps/api/app/data/catalog/images/` 提交当前 Catalog 的 127 张英雄图片和 414 张非配方物品图片，共 541 张、约 21.1 MiB。
+- `sync_game_data.py` 增加 `--images-only`，从 Valve 官方 React 图片 CDN 下载图片到临时目录，全部成功后替换本地图片目录；下载失败时不会先覆盖旧目录。
+- API 通过 `/api/v1/assets/dota/heroes/{id}.png` 和 `/api/v1/assets/dota/items/{id}.png` 提供本地静态访问。
+- `resolve_hero`、`dota.hero_attributes`、`resolve_item`、`dota.item_info` 的实体结果和对应身份 Evidence 增加确定性的 `image_path`。
+- Chat 从 `tool_results` 读取 `image_path`，去重后追加 Markdown 图片；图片地址由 API 基地址和本地路径组成，模型不生成图片 URL。
+
+### 验证
+
+- 图片资源实际下载完成：541 张，目录总大小 22,121,037 bytes。
+- Catalog、同步、Graph、工具链定向测试：71 passed；图片静态路由与解析器测试：2 passed。
+- Chat 图片格式化测试：3 passed。
+- API 定向 Ruff 检查通过；同步脚本编译检查通过。
+
+### 已知边界
+
+- 当前阶段不缓存技能、天赋、先天技能、比赛面板、战队或联赛图片。
+- 图片本身不做 SHA、尺寸、PNG 结构或启动时扫描；同步阶段只要求 HTTP 请求成功且响应体非空。

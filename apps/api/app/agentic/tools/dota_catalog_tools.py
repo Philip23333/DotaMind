@@ -16,6 +16,7 @@ from app.agentic.tools import (
     ToolRegistry,
 )
 from app.integrations.valve.catalog_repository import (
+    CATALOG_IMAGE_BASE_PATH,
     CatalogSnapshotError,
     DotaCatalogRepository,
     load_default_catalog_repository,
@@ -340,6 +341,7 @@ def _hero_attributes_handler(repository: DotaCatalogRepository):
                 "name_en": hero.name_en,
                 "name_zh": hero.name_zh,
                 "aliases": list(hero.aliases),
+                "image_path": f"{CATALOG_IMAGE_BASE_PATH}/heroes/{hero.hero_id}.png",
             },
             "attributes": {
                 "primary_attribute": hero.primary_attribute,
@@ -391,6 +393,7 @@ def _hero_abilities_handler(repository: DotaCatalogRepository):
                 "name_en": hero.name_en,
                 "name_zh": hero.name_zh,
                 "aliases": list(hero.aliases),
+                "image_path": f"{CATALOG_IMAGE_BASE_PATH}/heroes/{hero.hero_id}.png",
             },
             "abilities": abilities,
             "snapshot": repository.snapshot_metadata(),
@@ -594,6 +597,11 @@ def _serialize_item_identity(item: Any) -> dict[str, Any]:
         "name_en": item.name_en,
         "name_zh": item.name_zh,
         "is_recipe": item.is_recipe,
+        "image_path": (
+            None
+            if item.is_recipe
+            else f"{CATALOG_IMAGE_BASE_PATH}/items/{item.item_id}.png"
+        ),
     }
 
 
@@ -691,6 +699,7 @@ def resolve_hero_evidence(result: ToolResult) -> list[EvidenceItem]:
                 "name_zh": hero.get("name_zh"),
                 "localized_name": hero.get("localized_name"),
                 "aliases": hero.get("aliases", []),
+                "image_path": hero.get("image_path"),
                 "method": data.get("method"),
                 "query": data.get("query"),
                 "snapshot": data.get("snapshot"),
@@ -849,6 +858,7 @@ def resolve_item_evidence(result: ToolResult) -> list[EvidenceItem]:
                 "localized_name": item.get("localized_name"),
                 "aliases": item.get("aliases", []),
                 "is_recipe": item.get("is_recipe"),
+                "image_path": item.get("image_path"),
                 "method": data.get("method"),
                 "query": data.get("query"),
                 "snapshot": dict(snapshot),

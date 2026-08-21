@@ -57,6 +57,13 @@ relations. `dota.item_info` expands each edge into bilingual recipe-scroll,
 component and upgrade-target definitions with prices and displayable special
 values, plus an auditable component/scroll/calculated/final-price comparison.
 
+The same committed catalog snapshot includes lightweight offline hero and
+non-recipe item PNGs under `app/data/catalog/images/`. The maintenance command's
+`--images-only` mode downloads these files from Valve's official React image CDN;
+the API mounts them at `/api/v1/assets/dota/...`. Catalog hero/item entities expose
+only a deterministic origin-relative `image_path`, so request-time code remains
+offline and does not expose server filesystem paths.
+
 Downstream STRATZ contracts continue to reference `data.hero.hero_id`, while
 the existing OpenDota team registrations remain unchanged. The competition slice
 uses PandaScore Fixture discovery plus batch game resolution, cross-source Valve

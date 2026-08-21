@@ -310,6 +310,7 @@ def test_hero_attributes_contract_handler_and_evidence_use_official_snapshot() -
         "name_en": lina.name_en,
         "name_zh": lina.name_zh,
         "aliases": lina.aliases,
+        "image_path": "/api/v1/assets/dota/heroes/25.png",
     }
     assert result["attributes"]["strength_base"] == lina.strength_base
     assert result["attributes"]["agility_gain"] == lina.agility_gain

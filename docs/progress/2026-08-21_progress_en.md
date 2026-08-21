@@ -87,3 +87,25 @@
 ### Known boundaries
 
 - Names come from the committed Valve Catalog snapshot. A new ID absent from that snapshot remains unnamed until the Catalog is regenerated through the repository script.
+
+## 15:00 — Offline hero and item images
+
+### Completed
+
+- Committed 127 hero images and 414 non-recipe item images under `apps/api/app/data/catalog/images/`, 541 files totaling about 21.1 MiB for the current Catalog.
+- Added `--images-only` to `sync_game_data.py`. It downloads from Valve's official React image CDN into a temporary directory and replaces the local image directory only after all requests succeed; failures do not overwrite the previous directory first.
+- API now serves local assets at `/api/v1/assets/dota/heroes/{id}.png` and `/api/v1/assets/dota/items/{id}.png`.
+- `resolve_hero`, `dota.hero_attributes`, `resolve_item`, and `dota.item_info` entity results and their identity evidence now carry deterministic `image_path` values.
+- Chat reads `image_path` from `tool_results`, deduplicates images, and appends Markdown image references using the API base URL; the model does not generate image URLs.
+
+### Verification
+
+- Image download completed: 541 files, 22,121,037 bytes total.
+- Catalog, sync, graph, and tool-chain focused tests: 71 passed; image route and resolver tests: 2 passed.
+- Chat image-formatting tests: 3 passed.
+- Targeted API Ruff checks passed; the sync script compiled successfully.
+
+### Known boundaries
+
+- This phase does not cache skill, talent, innate-skill, match-panel, team, or league images.
+- Images do not receive SHA, dimension, PNG-structure, or startup-scan validation; sync only requires a successful HTTP request with a non-empty response body.

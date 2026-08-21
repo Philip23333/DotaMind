@@ -13,8 +13,10 @@ import html
 import json
 import os
 import re
+import shutil
 import sys
 import tempfile
+import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
@@ -27,11 +29,14 @@ if str(API_ROOT) not in sys.path:
     sys.path.insert(0, str(API_ROOT))
 
 from app.integrations.valve.catalog import (  # noqa: E402
+    AbilityCatalogRecord,
     CatalogBundle,
     CatalogExcludedEntity,
     CatalogManifest,
     CatalogSyncAudit,
     CatalogValidationError,
+    HeroCatalogRecord,
+    ItemCatalogRecord,
     RecipeEdge,
     extract_display_tokens,
     index_talent_bonus_candidates,
@@ -52,6 +57,8 @@ CATALOG_HERO_OUTPUT = CATALOG_OUTPUT_DIR / "dota2_heroes.json"
 CATALOG_ABILITY_OUTPUT = CATALOG_OUTPUT_DIR / "dota2_abilities.json"
 CATALOG_ITEM_OUTPUT = CATALOG_OUTPUT_DIR / "dota2_items.json"
 CATALOG_AUDIT_OUTPUT = CATALOG_OUTPUT_DIR / "sync_audit.json"
+CATALOG_IMAGE_OUTPUT_DIR = CATALOG_OUTPUT_DIR / "images"
+VALVE_IMAGE_ROOT = "https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react"
 
 
 def main() -> None:
@@ -67,13 +74,23 @@ def main() -> None:
         default=8,
         help="Concurrent detail requests for the offline sync (default: 8).",
     )
+    parser.add_argument(
+        "--images-only",
+        action="store_true",
+        help="Download images for the committed catalog without refreshing JSON snapshots.",
+    )
     args = parser.parse_args()
     if args.workers < 1 or args.workers > 16:
         parser.error("--workers must be between 1 and 16")
 
+    if args.images_only:
+        _sync_catalog_images(_load_committed_catalog_bundle(), workers=args.workers)
+        return
+
     client = ValveDatafeedClient()
     patch = _latest_patch(client) if args.patch == "latest" else args.patch
     bundle = _build_catalog_snapshot(client, patch, workers=args.workers)
+    _sync_catalog_images(bundle, workers=args.workers)
     _write_catalog_snapshot(bundle)
     patch_records = _build_patch_records(client, patch)
 
@@ -83,7 +100,6 @@ def main() -> None:
         json.dumps(patch_records, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
-
     print(f"wrote {patch_path} ({len(patch_records['changes'])} changes)")
     print(
         f"wrote {CATALOG_OUTPUT_DIR} "
@@ -91,6 +107,111 @@ def main() -> None:
         f"{len(bundle.items)} items)"
     )
 
+
+def _load_committed_catalog_bundle() -> CatalogBundle:
+    manifest = CatalogManifest.model_validate(
+        json.loads(CATALOG_MANIFEST_OUTPUT.read_text(encoding="utf-8"))
+    )
+    heroes = [
+        HeroCatalogRecord.model_validate(payload)
+        for payload in json.loads(CATALOG_HERO_OUTPUT.read_text(encoding="utf-8"))
+    ]
+    abilities = [
+        AbilityCatalogRecord.model_validate(payload)
+        for payload in json.loads(CATALOG_ABILITY_OUTPUT.read_text(encoding="utf-8"))
+    ]
+    item_payload = json.loads(CATALOG_ITEM_OUTPUT.read_text(encoding="utf-8"))
+    item_records = item_payload if isinstance(item_payload, list) else item_payload["items"]
+    recipes_payload = [] if isinstance(item_payload, list) else item_payload.get("recipes", [])
+    items = [ItemCatalogRecord.model_validate(payload) for payload in item_records]
+    recipes = [RecipeEdge.model_validate(payload) for payload in recipes_payload]
+    audit = CatalogSyncAudit.model_validate(
+        json.loads(CATALOG_AUDIT_OUTPUT.read_text(encoding="utf-8"))
+    )
+    return CatalogBundle(
+        manifest=manifest,
+        heroes=heroes,
+        abilities=abilities,
+        items=items,
+        recipes=recipes,
+        sync_audit=audit,
+    )
+
+
+def _sync_catalog_images(bundle: CatalogBundle, *, workers: int = 8) -> None:
+    """Download hero and non-recipe item images into the local snapshot."""
+
+    requests: list[tuple[str, str, int, str]] = []
+    for hero in bundle.heroes:
+        slug = _asset_slug(hero.internal_name, "npc_dota_hero_")
+        requests.append(("heroes", slug, hero.hero_id, f"{VALVE_IMAGE_ROOT}/heroes/{slug}.png"))
+    for item in bundle.items:
+        if item.is_recipe:
+            continue
+        slug = _asset_slug(item.internal_name, "item_")
+        requests.append(("items", slug, item.item_id, f"{VALVE_IMAGE_ROOT}/items/{slug}.png"))
+
+    temporary_dir = Path(tempfile.mkdtemp(prefix=".catalog-images-", dir=CATALOG_OUTPUT_DIR.parent))
+    staging_dir = temporary_dir / "images"
+    try:
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            futures = {
+                executor.submit(
+                    _download_catalog_image,
+                    url,
+                    staging_dir / kind / f"{entity_id}.png",
+                ): (kind, slug, entity_id)
+                for kind, slug, entity_id, url in requests
+            }
+            for future in as_completed(futures):
+                kind, slug, entity_id = futures[future]
+                try:
+                    future.result()
+                except Exception as exc:
+                    raise RuntimeError(
+                        f"failed to download {kind} image {entity_id} ({slug})"
+                    ) from exc
+
+        _replace_catalog_images(staging_dir)
+        print(f"wrote {CATALOG_IMAGE_OUTPUT_DIR} ({len(requests)} images)")
+    finally:
+        shutil.rmtree(temporary_dir, ignore_errors=True)
+
+
+def _asset_slug(internal_name: str, prefix: str) -> str:
+    slug = internal_name.removeprefix(prefix)
+    if not slug or not re.fullmatch(r"[a-z0-9_]+", slug):
+        raise CatalogValidationError(f"invalid image asset name: {internal_name!r}")
+    return slug
+
+
+def _download_catalog_image(url: str, target: Path) -> None:
+    request = urllib.request.Request(url, headers={"User-Agent": "DotaMind catalog sync"})
+    with urllib.request.urlopen(request, timeout=30) as response:
+        payload = response.read()
+    if not payload:
+        raise RuntimeError(f"empty image response: {url}")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(payload)
+
+
+def _replace_catalog_images(staging_dir: Path) -> None:
+    backup_dir = CATALOG_OUTPUT_DIR.parent / ".catalog-images-backup"
+    if backup_dir.exists():
+        shutil.rmtree(backup_dir)
+    moved_old = False
+    try:
+        if CATALOG_IMAGE_OUTPUT_DIR.exists():
+            os.replace(CATALOG_IMAGE_OUTPUT_DIR, backup_dir)
+            moved_old = True
+        os.replace(staging_dir, CATALOG_IMAGE_OUTPUT_DIR)
+    except Exception:
+        if moved_old and not CATALOG_IMAGE_OUTPUT_DIR.exists():
+            os.replace(backup_dir, CATALOG_IMAGE_OUTPUT_DIR)
+        raise
+    finally:
+        if backup_dir.exists():
+            shutil.rmtree(backup_dir)
 
 def _latest_patch(client: ValveDatafeedClient) -> str:
     payload = client.patchnoteslist("english")

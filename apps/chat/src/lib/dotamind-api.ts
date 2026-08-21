@@ -16,6 +16,9 @@ export type PlanStatus =
   | "error";
 
 type AnswerItem = Record<string, unknown>;
+type ToolResultPayload = {
+  data?: unknown;
+};
 
 export type RuntimeToolCallStatus = {
   tool_call_id: string;
@@ -37,6 +40,7 @@ export type PlanResponse = {
   reason?: string;
   error_code?: string | null;
   runtime?: { duration_ms?: number; attempts?: RuntimeAttempt[] };
+  tool_results?: ToolResultPayload[];
   answer?: {
     summary?: string;
     claims?: AnswerItem[];
@@ -336,6 +340,44 @@ function formatLimitations(items: AnswerItem[] | undefined): string | null {
   return lines.length ? `### 注意\n\n${lines.join("\n")}` : null;
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function catalogImageMarkdown(payload: PlanResponse): string | null {
+  const images = new Map<string, string>();
+  for (const toolResult of payload.tool_results ?? []) {
+    const data = asRecord(toolResult.data);
+    if (!data) continue;
+    for (const key of ["hero", "item"]) {
+      const entity = asRecord(data[key]);
+      if (!entity) continue;
+      const imagePath = entity.image_path;
+      if (
+        typeof imagePath !== "string" ||
+        !imagePath.startsWith("/api/v1/assets/dota/") ||
+        !imagePath.endsWith(".png")
+      ) {
+        continue;
+      }
+      const label =
+        (typeof entity.name_zh === "string" && entity.name_zh.trim()) ||
+        (typeof entity.name_en === "string" && entity.name_en.trim()) ||
+        (typeof entity.name === "string" && entity.name.trim()) ||
+        key;
+      images.set(imagePath, label);
+    }
+  }
+  if (!images.size) return null;
+  return [
+    "### 相关图片",
+    "",
+    ...Array.from(images, ([imagePath, label]) => `![${label}](${getApiUrl()}${imagePath})`),
+  ].join("\n");
+}
+
 export function formatPlanResponse(payload: PlanResponse): string {
   const runtimeFailure = payload.runtime?.attempts
     ?.flatMap((attempt) => attempt.tool_call_statuses ?? [])
@@ -351,6 +393,7 @@ export function formatPlanResponse(payload: PlanResponse): string {
     formatRecommendations(payload.answer?.recommendations),
     formatClaims(payload.answer?.claims),
     formatLimitations(payload.answer?.limitations),
+    catalogImageMarkdown(payload),
   ].filter((section): section is string => Boolean(section));
 
   if (sections.length && !shouldUseRuntimeFailure) return sections.join("\n\n");

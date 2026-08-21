@@ -7,6 +7,7 @@ from uuid import uuid4
 from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from app.api.v1.chat_routes import router as chat_router
@@ -31,6 +32,7 @@ from app.persistence.database import (
 
 settings = get_settings()
 PLAN_CONSOLE_PATH = Path(__file__).parent / "resources" / "plan_console.html"
+CATALOG_IMAGE_DIR = Path(__file__).parent / "data" / "catalog" / "images"
 
 
 class PipeFormatter(logging.Formatter):
@@ -175,6 +177,11 @@ app.add_middleware(
 app.include_router(v1_router, prefix=settings.api_v1_prefix)
 app.include_router(chat_router, prefix=settings.api_v1_prefix)
 app.include_router(chat_run_router, prefix=settings.api_v1_prefix)
+app.mount(
+    f"{settings.api_v1_prefix}/assets/dota",
+    StaticFiles(directory=CATALOG_IMAGE_DIR, check_dir=False),
+    name="dota-catalog-images",
+)
 
 
 @app.get("/health", tags=["system"])

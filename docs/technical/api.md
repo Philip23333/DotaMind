@@ -42,6 +42,21 @@ missing session returns the stable `404 chat_not_found` response.
 GET /health
 ```
 
+## Offline Catalog Images
+
+英雄和非配方物品图片随提交的 Catalog 快照保存在 API 本地，并通过现有 `/api/`
+边界访问：
+
+```http
+GET /api/v1/assets/dota/heroes/{hero_id}.png
+GET /api/v1/assets/dota/items/{item_id}.png
+```
+
+`resolve_hero`、`dota.hero_attributes`、`resolve_item` 和 `dota.item_info` 的
+实体结果包含 origin-relative `image_path`。图片只在离线维护命令
+`python apps/api/scripts/sync_game_data.py --images-only` 中从官方 CDN 下载；
+请求处理不会访问外部图片服务。
+
 ## Controller Request
 
 ```http

@@ -39,4 +39,34 @@ describe("formatPlanResponse", () => {
       }),
     ).toBe("你想查看哪个赛事或哪支战队的最新战况？");
   });
+
+  it("renders unique catalog images from tool results", () => {
+    const response: PlanResponse = {
+      status: "ok",
+      answer: { summary: "敌法师是一名敏捷英雄。" },
+      tool_results: [
+        {
+          data: {
+            hero: {
+              name_zh: "敌法师",
+              image_path: "/api/v1/assets/dota/heroes/1.png",
+            },
+          },
+        },
+        {
+          data: {
+            hero: {
+              name_zh: "敌法师",
+              image_path: "/api/v1/assets/dota/heroes/1.png",
+            },
+          },
+        },
+      ],
+    };
+    const formatted = formatPlanResponse(response);
+    expect(formatted).toContain(
+      "![敌法师](http://localhost:8001/api/v1/assets/dota/heroes/1.png)",
+    );
+    expect(formatted.match(/\/api\/v1\/assets\/dota\/heroes\/1\.png/g)).toHaveLength(1);
+  });
 });

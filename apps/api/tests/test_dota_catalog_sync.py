@@ -78,6 +78,14 @@ def test_datafeed_transport_allowlists_endpoint_and_retries() -> None:
         client.patchnotes("7.41-e")
 
 
+def test_catalog_image_slug_uses_only_supported_internal_name_prefixes() -> None:
+    assert sync_game_data._asset_slug("npc_dota_hero_antimage", "npc_dota_hero_") == "antimage"
+    assert sync_game_data._asset_slug("item_blink", "item_") == "blink"
+
+    with pytest.raises(CatalogValidationError, match="invalid image asset name"):
+        sync_game_data._asset_slug("item_Blink", "item_")
+
+
 def _hero_fixture() -> tuple[dict, dict]:
     talents_en = []
     for index in range(101, 109):
