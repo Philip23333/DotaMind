@@ -1,3 +1,4 @@
+from app.agentic.runtime.checkpoint import Checkpoint, CheckpointOption, CheckpointSnapshot
 from app.agentic.runtime.clock import Clock, FakeClock, SystemClock
 from app.agentic.runtime.models import (
     AgentRunStatus,
@@ -26,6 +27,9 @@ from app.agentic.runtime.models import (
 
 __all__ = [
     "AgentRunStatus",
+    "Checkpoint",
+    "CheckpointOption",
+    "CheckpointSnapshot",
     "AttemptAnswerSummary",
     "AttemptCriticSummary",
     "AttemptEvidenceSummary",

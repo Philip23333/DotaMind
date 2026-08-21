@@ -201,6 +201,12 @@ when explicitly enabled. `after=0` is the page-refresh
 recovery path. Heartbeats are not persisted. If Redis events are missing after PostgreSQL has
 reached a terminal state, the API emits a synthetic `transcript_recovery` status event.
 
+The durable Run status set also reserves `waiting_input` for the Checkpoint pilot. It is an
+active session Run with a persisted `chat_runs.checkpoint_state` snapshot, but it has no live
+Worker heartbeat and is not treated as a stale execution. The stage-0 schema accepts only
+`checkpoint_type` and `option_id` for a future resume request; the public resume route and
+event handling are implemented in the subsequent dynamic-execution stage.
+
 Cancel persists `cancel_requested` in PostgreSQL before local/Redis wake-up. A repeated cancel
 is `202`; terminal Runs return `409 run_terminal`. Disconnecting an event subscriber only closes
 the observer; it never cancels the detached background Run.

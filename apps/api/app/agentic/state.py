@@ -18,6 +18,7 @@ from app.agentic.planning.decisions import (
     DirectAnswerResult,
     ToolPlanDecision,
 )
+from app.agentic.runtime.checkpoint import Checkpoint
 from app.agentic.runtime.clock import current_node_timing
 from app.agentic.runtime.models import (
     AgentRunStatus,
@@ -107,6 +108,7 @@ class AgentRunState(BaseModel):
     trace: list[AgentTraceEvent] = Field(default_factory=list)
     response_type: str | None = None
     response: dict[str, Any] | None = None
+    checkpoint: Checkpoint | None = None
 
     def add_trace(
         self,

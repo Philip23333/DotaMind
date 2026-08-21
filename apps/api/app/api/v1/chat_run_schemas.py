@@ -6,11 +6,12 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 ChatRunStatus = Literal[
     "queued",
     "running",
+    "waiting_input",
     "cancel_requested",
     "completed",
     "failed",
@@ -72,6 +73,19 @@ class ChatRunStreamErrorResponse(BaseModel):
 
 
 class ChatRunCancelResponse(BaseModel):
+    run: ChatRunResponse
+
+
+class ChatRunResumeRequest(BaseModel):
+    """Select one option from the Run's persisted Checkpoint."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    checkpoint_type: str = Field(min_length=1)
+    option_id: str = Field(min_length=1)
+
+
+class ChatRunResumeResponse(BaseModel):
     run: ChatRunResponse
 
 

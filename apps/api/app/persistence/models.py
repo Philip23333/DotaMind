@@ -112,6 +112,7 @@ class ChatRunRow(Base):
     status: Mapped[str] = mapped_column(String(32), nullable=False)
     fencing_token: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     worker_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    checkpoint_state: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     last_event_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     result_turn_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
@@ -143,7 +144,7 @@ class ChatRunRow(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('queued', 'running', 'cancel_requested', 'completed', "
+            "status IN ('queued', 'running', 'waiting_input', 'cancel_requested', 'completed', "
             "'failed', 'cancelled', 'interrupted')",
             name="ck_chat_runs_status",
         ),
@@ -156,7 +157,7 @@ class ChatRunRow(Base):
             "session_id",
             unique=True,
             postgresql_where=text(
-                "status IN ('queued', 'running', 'cancel_requested')"
+                "status IN ('queued', 'running', 'waiting_input', 'cancel_requested')"
             ),
         ),
         Index(

@@ -12,6 +12,7 @@ from app.agentic.conversation.models import Turn
 ChatRunStatus = Literal[
     "queued",
     "running",
+    "waiting_input",
     "cancel_requested",
     "completed",
     "failed",
@@ -19,6 +20,12 @@ ChatRunStatus = Literal[
     "interrupted",
 ]
 ACTIVE_RUN_STATUSES: frozenset[ChatRunStatus] = frozenset(
+    {"queued", "running", "waiting_input", "cancel_requested"}
+)
+LEASED_RUN_STATUSES: frozenset[ChatRunStatus] = frozenset(
+    {"running", "cancel_requested"}
+)
+RECOVERABLE_RUN_STATUSES: frozenset[ChatRunStatus] = frozenset(
     {"queued", "running", "cancel_requested"}
 )
 TERMINAL_RUN_STATUSES: frozenset[ChatRunStatus] = frozenset(
@@ -64,6 +71,13 @@ class ChatRunTerminalError(ChatRunRepositoryError):
         super().__init__("run_terminal")
 
 
+class ChatRunCheckpointError(ChatRunRepositoryError):
+    """The requested Checkpoint selection cannot resume this Run."""
+
+    def __init__(self, code: str = "checkpoint_invalid") -> None:
+        super().__init__(code)
+
+
 @dataclass(frozen=True)
 class ChatRunSummary:
     run_id: UUID
@@ -82,6 +96,7 @@ class ChatRunSummary:
     heartbeat_at: datetime | None
     cancel_requested_at: datetime | None
     completed_at: datetime | None
+    checkpoint_state: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -93,6 +108,12 @@ class ChatRunCreateResult:
 @dataclass(frozen=True)
 class ChatRunCancelResult:
     action: Literal["requested", "already_requested"]
+    run: ChatRunSummary
+
+
+@dataclass(frozen=True)
+class ChatRunResumeResult:
+    action: Literal["queued"]
     run: ChatRunSummary
 
 
@@ -117,6 +138,24 @@ class ChatRunRepository(Protocol):
     async def mark_running(
         self, *, browser_id: str, run_id: UUID, worker_id: str, fencing_token: int
     ) -> ChatRunSummary: ...
+
+    async def mark_waiting_input(
+        self,
+        *,
+        run_id: UUID,
+        worker_id: str,
+        fencing_token: int,
+        checkpoint_state: dict[str, Any],
+    ) -> ChatRunSummary: ...
+
+    async def resume_checkpoint(
+        self,
+        *,
+        browser_id: str,
+        run_id: UUID,
+        checkpoint_type: str,
+        option_id: str,
+    ) -> ChatRunResumeResult: ...
 
     async def update_heartbeat(self, *, run_id: UUID, worker_id: str) -> ChatRunSummary: ...
 

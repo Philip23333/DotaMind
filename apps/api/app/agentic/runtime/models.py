@@ -13,6 +13,7 @@ AgentRunStatus = Literal[
     "insufficient_context",
     "insufficient_tools",
     "insufficient_evidence",
+    "waiting_input",
     "error",
 ]
 AttemptStatus = AgentRunStatus

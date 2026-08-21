@@ -211,6 +211,15 @@ Graph, and atomically commits the public response, assistant message and compact
 through `PostgresChatRunRepository.complete_with_turn()`. A Redis flush, expiry or restart cannot
 make a committed Turn regress; Redis is used for replayable Run events and cancel notices.
 
+The V3.4-1 Checkpoint pilot adds a nullable `chat_runs.checkpoint_state` JSONB field and
+the active `waiting_input` status. A waiting Run remains the session's active Run but
+releases worker ownership and is excluded from stale-heartbeat recovery. The persisted
+snapshot is limited to the Checkpoint, plan, prior tool results/dispatch records, budget,
+attempt metadata and fingerprint cache; prompts, raw model output, history and Answer
+content remain outside the snapshot. The stage-0 contract does not yet change Graph or
+Executor control flow; the match-selection producer and same-Run resume path are staged
+for V3.4-1 follow-up work.
+
 Deletion follows the same coordinator lock: it never deletes another owner's lock key,
 deletes PostgreSQL first, clears only Redis data keys while the lock is held, and lets normal
 transaction exit release the lock. A coordinator cleanup failure is logged but does not turn

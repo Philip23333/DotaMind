@@ -231,3 +231,22 @@
 ### Known boundaries
 
 - A Catalog-missing item retains its original name, avoiding silent removal of equipment information present in evidence.
+
+## 17:00 — ChatRun Checkpoint Stage 0 contract
+
+### Completed
+
+- Added the `Checkpoint`, `CheckpointOption`, and `CheckpointSnapshot` contracts. The snapshot keeps only the plan, tool results/dispatch records, budget, attempt metadata, and fingerprint cache required for recovery; prompts, raw model output, history, and Answer content are excluded.
+- Added the active `waiting_input` ChatRun status and nullable `checkpoint_state` JSONB persistence. Waiting Runs remain active for the session but are excluded from stale-Run recovery and do not hold Worker/lease ownership.
+- Added the resume request contract, which accepts only `checkpoint_type + option_id`; clients cannot submit a date or arbitrary Plan patch. The Repository now has Checkpoint option validation and waiting/queued transition primitives; Graph/Executor resume behavior remains the next stage.
+- Added Alembic migration `20260821_01_chat_run_checkpoint`, including the status constraint and active-session unique index updates.
+
+### Verification
+
+- Targeted Checkpoint and ChatRun contract tests: 5 passed.
+- ChatRun regression tests: 19 passed, 1 warning.
+- Ruff passed for the changed Python files.
+
+### Known boundaries
+
+- Stage 0 does not yet connect the `resolve_match_games` ambiguous adapter, Graph pause exit, same-Run execution resume, Checkpoint events, or the frontend card.

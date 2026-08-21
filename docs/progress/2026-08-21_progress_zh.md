@@ -231,3 +231,22 @@
 ### 已知边界
 
 - Catalog 未命中的物品保留原名称，避免将 evidence 中的装备信息静默隐藏。
+
+## 17:00 — ChatRun Checkpoint 阶段 0 契约
+
+### 已完成
+
+- 新增 `Checkpoint`、`CheckpointOption` 与 `CheckpointSnapshot` 契约；快照只保留恢复所需的计划、工具结果/dispatch、预算、attempt 和 fingerprint，不保存 Prompt、模型 raw output、历史上下文或 Answer。
+- ChatRun 增加 `waiting_input` 活跃状态与 `checkpoint_state` JSONB 持久化字段；等待状态不参与失联 Run 扫描，并从 Worker/lease 视角保持未占用。
+- 增加 resume 请求契约，只允许 `checkpoint_type + option_id`，不接受客户端日期或任意 Plan patch；Repository 已具备 Checkpoint 选项校验和等待/排队状态转换原语，Graph/Executor resume 行为留到下一阶段。
+- 新增 Alembic migration `20260821_01_chat_run_checkpoint`，更新状态约束和 session 活跃 Run 唯一索引。
+
+### 验证
+
+- Checkpoint 与 ChatRun 契约定向测试：5 passed。
+- ChatRun 相关回归测试：19 passed、1 warning。
+- 涉及 Python 文件 Ruff 检查通过。
+
+### 已知边界
+
+- 阶段 0 尚未接入 `resolve_match_games` ambiguous 适配器、Graph 暂停出口、同一 Run 恢复执行、Checkpoint 事件或前端卡片。

@@ -66,6 +66,7 @@ class StatusStreamEvent(_StreamEvent):
     status: Literal[
         "queued",
         "running",
+        "waiting_input",
         "cancel_requested",
         "completed",
         "failed",
