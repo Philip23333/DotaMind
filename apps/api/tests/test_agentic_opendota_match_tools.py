@@ -262,6 +262,27 @@ def test_player_progress_and_inventory_are_normalized_without_reordering() -> No
     }
 
 
+def test_zero_valued_inventory_slots_are_empty() -> None:
+    summary = normalize_match_summary(
+        {
+            "players": [
+                {
+                    "item_0": 0,
+                    "backpack_0": "0",
+                    "item_neutral": 0,
+                    "item_neutral2": "0",
+                }
+            ]
+        },
+        8943244303,
+    )
+
+    inventory = summary["players"][0]["inventory"]
+    assert inventory["main"][0] is None
+    assert inventory["backpack"][0] is None
+    assert inventory["neutral"] == {"item": None, "enhancement": None}
+
+
 def test_unparsed_match_does_not_emit_player_progress_evidence() -> None:
     raw = _raw_match()
     raw["version"] = None

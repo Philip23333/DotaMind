@@ -459,3 +459,16 @@
 
 - 补充 `test_opendota_domains.py` 的标准化回归后，OpenDota/Registry 定向测试：39 passed。
 - 最终 API 全量：654 passed、21 skipped、1 warning。
+
+## 23:15 — OpenDota 装备空槽位标准化修复
+
+### 已完成
+
+- OpenDota 原始装备栏位中的 `0` 或 `"0"` 现在与缺失值一样标准化为 `null`；主栏、背包、中立物品和中立强化不再把空槽位误报为 Catalog `not_found` 物品。
+- 补充主栏、背包、中立物品和中立强化四类零值空槽位回归断言。
+
+### 验证
+
+- OpenDota、Registry 定向测试：40 passed。
+- 本次涉及 Python 文件 Ruff 检查通过。
+- `git diff --check` 通过。

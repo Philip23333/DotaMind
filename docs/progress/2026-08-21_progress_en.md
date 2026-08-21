@@ -481,3 +481,19 @@
 - After adding the normalization regression in `test_opendota_domains.py`, OpenDota/Registry
   targeted tests: 39 passed.
 - Final full API suite: 654 passed, 21 skipped, 1 warning.
+
+## 23:15 — OpenDota empty inventory-slot normalization repair
+
+### Completed
+
+- Raw OpenDota equipment value `0` or `"0"` now normalizes to `null`, like an absent value. Main,
+  backpack, neutral-item and neutral-enhancement slots no longer report empty slots as Catalog
+  `not_found` items.
+- Added regression assertions for zero-valued main, backpack, neutral-item and neutral-enhancement
+  slots.
+
+### Verification
+
+- OpenDota and Registry targeted tests: 40 passed.
+- Ruff passed for the Python files changed in this repair.
+- `git diff --check` passed.

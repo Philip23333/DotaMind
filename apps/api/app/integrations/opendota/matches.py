@@ -289,7 +289,7 @@ def _ability_reference(
 
 
 def _item_reference(value: Any, catalog: DotaCatalogRepository) -> dict[str, Any] | None:
-    if value is None or value == "":
+    if value is None or value == "" or value == 0 or value == "0":
         return None
     if (identifier := _positive_int(value)) is not None:
         detail = _item_catalog_field(identifier, catalog)
