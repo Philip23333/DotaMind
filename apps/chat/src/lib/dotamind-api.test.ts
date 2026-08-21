@@ -14,6 +14,24 @@ const item = {
   item_image_path: "/api/v1/assets/dota/items/1.png",
 };
 
+const backpackItem = {
+  item_name_zh: "魔晶",
+  item_name_en: "Aghanim's Shard",
+  item_image_path: "/api/v1/assets/dota/items/609.png",
+};
+
+const neutralItem = {
+  item_name_zh: "仙灵榴弹",
+  item_name_en: "Faerie Fire",
+  item_image_path: "/api/v1/assets/dota/items/237.png",
+};
+
+const enhancementItem = {
+  item_name_zh: "警觉",
+  item_name_en: "Alert",
+  item_image_path: "/api/v1/assets/dota/items/1584.png",
+};
+
 describe("formatPlanResponse", () => {
   it("prefers a stable runtime failure over generic tool execution text", () => {
     const response: PlanResponse = {
@@ -188,6 +206,53 @@ describe("formatPlanResponse", () => {
     );
     expect(formatted).not.toContain(
       "items/1.png#dota-size=md)闪烁匕首",
+    );
+  });
+
+  it("uses Markdown table semantics for horizontal BP and grouped match inventory", () => {
+    const formatted = formatPlanResponse({
+      status: "ok",
+      answer: {
+        summary: [
+          "| 顺序 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |",
+          "| --- | --- | --- | --- | --- | --- | --- | --- |",
+          "| 选择 | 斯温 | 斯温 | 斯温 | 斯温 | 斯温 | — | — |",
+          "| 禁用 | 斯温 | 斯温 | 斯温 | 斯温 | 斯温 | 斯温 | 斯温 |",
+          "",
+          "| 选手 / 英雄 | K/D/A | 经济 | 装备 | 技能加点与天赋 |",
+          "| --- | --- | --- | --- | --- |",
+          "| Yuma · 斯温（24） | 8/2/3 | 22,790 | 主装备：闪烁匕首；背包：魔晶；中立：仙灵榴弹（强化：警觉） | 已记录 20 次加点 · 已选 5 项天赋 |",
+        ].join("\n"),
+      },
+      tool_results: [
+        {
+          data: {
+            players: [
+              {
+                name: "Yuma",
+                ...hero,
+                inventory: {
+                  main: [item],
+                  backpack: [backpackItem],
+                  neutral: { item: neutralItem, enhancement: enhancementItem },
+                },
+              },
+            ],
+            draft: { draft: [hero] },
+          },
+        },
+      ],
+    });
+
+    const heroIcon = "![斯温](http://localhost:8001/api/v1/assets/dota/heroes/18.png#dota-size=md)";
+    expect(formatted).toContain(`| 选择 | ${Array(5).fill(heroIcon).join(" | ")} | — | — |`);
+    expect(formatted).toContain(`| 禁用 | ${Array(7).fill(heroIcon).join(" | ")} |`);
+    expect(formatted).not.toContain("| 选择 | 斯温");
+    expect(formatted).toContain(
+      "| Yuma · ![斯温](http://localhost:8001/api/v1/assets/dota/heroes/18.png#dota-size=md)斯温（24） |",
+    );
+    expect(formatted).toContain(
+      "主装备：![闪烁匕首](http://localhost:8001/api/v1/assets/dota/items/1.png#dota-size=md)；背包：![魔晶](http://localhost:8001/api/v1/assets/dota/items/609.png#dota-size=sm)；中立：![仙灵榴弹](http://localhost:8001/api/v1/assets/dota/items/237.png#dota-size=sm)（强化：![警觉](http://localhost:8001/api/v1/assets/dota/items/1584.png#dota-size=sm)）",
     );
   });
 

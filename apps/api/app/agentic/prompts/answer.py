@@ -182,9 +182,19 @@ and use a date heading without the label `今日` when the current date is not k
   OpenDota evidence 存在时展示。
 - 对阵、阶段、赛制或结果没有 evidence 时省略相应内容，不得补写。"""
 
+MATCH_PLAYER_TABLE_ROW = (
+    "| {选手} · {英雄}（{等级}） | {K}/{D}/{A} | {22,790} | "
+    "主装备：{物品名称}；背包：{物品名称；无则省略}；"
+    "中立：{物品名称；无则省略}（强化：{物品名称；无则省略}） | "
+    "已记录 {加点次数} 次加点 · 已选 {天赋数} 项天赋 |"
+)
+
 MATCH_DETAILS_OUTPUT_EXAMPLE = """For a completed Dota match detail answer,
 use the following Markdown presentation order within every game: compact game
-summary, full draft, then player scoreboards. This example is presentation-only:
+summary, full draft, then player scoreboards. A focused request for one player's
+purchase order, skill build, or talent selections follows the player-progress
+rules instead and does not repeat the full draft or ten-player scoreboard. This
+example is presentation-only:
 never reuse its teams, scores, times, sides, game counts, Hero names, ids, or
 source claims unless the current EvidenceGraph supports them. Do not invent a
 missing game, field, draft action, hero name, item name, or player statistic.
@@ -215,52 +225,46 @@ missing game, field, draft action, hero name, item name, or player statistic.
 
 ##### {队伍A}（{天辉 / 夜魇}）
 
-| 顺序 | 选择 | 禁用 |
-| --- | --- | --- |
-| 1 | {英雄} | {英雄} |
-| 2 | {英雄} | {英雄} |
-| 3 | {英雄} | {英雄} |
-| 4 | {英雄} | {英雄} |
-| 5 | {英雄} | {英雄} |
-| 6 | — | {英雄} |
-| 7 | — | {英雄} |
+| 顺序 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 选择 | {英雄} | {英雄} | {英雄} | {英雄} | {英雄} | — | — |
+| 禁用 | {英雄} | {英雄} | {英雄} | {英雄} | {英雄} | {英雄} | {英雄} |
 
 ##### {队伍B}（{天辉 / 夜魇}）
 
-| 顺序 | 选择 | 禁用 |
-| --- | --- | --- |
-| 1 | {英雄} | {英雄} |
-| 2 | {英雄} | {英雄} |
-| 3 | {英雄} | {英雄} |
-| 4 | {英雄} | {英雄} |
-| 5 | {英雄} | {英雄} |
-| 6 | — | {英雄} |
-| 7 | — | {英雄} |
+| 顺序 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 选择 | {英雄} | {英雄} | {英雄} | {英雄} | {英雄} | — | — |
+| 禁用 | {英雄} | {英雄} | {英雄} | {英雄} | {英雄} | {英雄} | {英雄} |
 
-Use the OpenDota draft `order` only to determine each team's Ban 1–7 and Pick
-1–5 sequence. If a match has fewer actions, render only the evidenced rows; do
-not add placeholder bans or picks. Do not infer a global draft phase or a hero
-name from an id. Omit the Valve Match ID parenthesis when there is no mapped id.
+Use the OpenDota draft `order` only to determine each team's local Pick 1–5 and
+Ban 1–7 sequence. If a match has fewer actions, preserve only the evidenced
+heroes and use `—` for unsupported later slots; do not infer a global draft
+phase or a hero name from an id. Omit the Valve Match ID parenthesis when there
+is no mapped id.
 
 #### 选手数据
 
 ##### {队伍A}
 
-| 选手 | 英雄 | K/D/A | 经济 | 装备 |
+| 选手 / 英雄 | K/D/A | 经济 | 装备 | 技能加点与天赋 |
 | --- | --- | --- | --- | --- |
-| {选手} | {英雄}（{等级}） | {K}/{D}/{A} | {22,790} | {物品名称，以顿号分隔} |
+__MATCH_PLAYER_TABLE_ROW__
 
 ##### {队伍B}
 
-| 选手 | 英雄 | K/D/A | 经济 | 装备 |
+| 选手 / 英雄 | K/D/A | 经济 | 装备 | 技能加点与天赋 |
 | --- | --- | --- | --- | --- |
-| {选手} | {英雄}（{等级}） | {K}/{D}/{A} | {22,790} | {物品名称，以顿号分隔} |
+__MATCH_PLAYER_TABLE_ROW__
 
 Repeat the same order only for games supported by evidence. Format net worth with
 standard thousands separators (for example, `22,790`) and no decimal places. In
-the `装备` column list only evidenced item names separated by `、`; the client
-renders resolved items as icons and omits their names. End the entire answer with
-a Markdown blockquote data note, with every visible line prefixed by `>`, for example:
+the `装备` column use only the fixed labels `主装备：`, `背包：`, `中立：`, and
+`强化：` when their evidence is available. The client deterministically renders
+resolved equipment as Catalog icons. Do not put full purchase sequences, full
+skill sequences, or individual talent labels in the normal match-detail table.
+End the entire answer with a Markdown blockquote data note, with every visible
+line prefixed by `>`, for example:
 
 > **数据说明**
 >
@@ -268,7 +272,57 @@ a Markdown blockquote data note, with every visible line prefixed by `>`, for ex
 > - 赛程、比分和状态来自 PandaScore；Valve Match ID 是跨源推断映射，并非 PandaScore 原生字段。
 > - 选手数据和 BP 来自 OpenDota；英雄与物品名称仅来自 evidence 中的 Catalog 映射字段。
 
-Do not emit raw HTML such as `<sub>` or `<br>`, CSS, or unsupported source claims."""
+Do not emit raw HTML such as `<sub>` or `<br>`, CSS, or unsupported source claims.""".replace(
+    "__MATCH_PLAYER_TABLE_ROW__", MATCH_PLAYER_TABLE_ROW
+)
+
+MATCH_PLAYER_PROGRESS_RULES = """For player_purchase_timeline,
+player_skill_build, or player_talent_selection evidence, append the following
+section only when the current request explicitly asks for a completed game's
+purchase order, item build, skill build, or talent selections. Select only the
+player, hero, and game supported by the current request and evidence. If the
+request explicitly asks for every player's progress, repeat the subsection for
+every evidenced player. Otherwise do not append this section to a normal match
+detail answer.
+
+Do not treat historical purchases as a recommendation, popular build, core-build
+classification, or win-rate claim. Do not output the full draft or ten-player
+scoreboard for a focused player-progress request.
+
+#### 出装、加点与天赋
+
+##### {选手} · {英雄}（{等级}）
+
+**最终装备**
+
+主装备：{物品名称}
+背包：{物品名称；无则省略}
+中立：{物品名称；无则省略}（强化：{物品名称；无则省略}）
+
+**购买顺序**
+
+| 相对开局时间 | 购买 |
+| --- | --- |
+| 开局前 01:29 | {物品} |
+| 00:33 | {物品} |
+
+**技能加点**
+
+| 等级 | 选择 |
+| --- | --- |
+| 1 | {技能} |
+| 2 | {技能} |
+
+**天赋选择**
+
+- {等级}级：{天赋}
+
+Render one purchase event per evidence row in its original order. Keep negative
+times as `开局前 MM:SS`, and zero or positive times as `MM:SS`; never merge
+same-second purchases. The skill `等级` is the recorded upgrade-sequence level,
+not a timestamp. List only mechanically evidenced talent selections; do not
+infer historical talent-tree sides or tiers. Use only evidence-backed Catalog
+names and omit unavailable inventory groups."""
 
 WEEKLY_TREND_RULES = (
     "When evidence items carry week_index/week_epoch (per-week STRATZ buckets), "
@@ -374,6 +428,13 @@ MATCH_DETAILS_EVIDENCE_KINDS = frozenset(
         "cross_source_match_mapping",
     }
 )
+MATCH_PLAYER_PROGRESS_EVIDENCE_KINDS = frozenset(
+    {
+        "player_purchase_timeline",
+        "player_skill_build",
+        "player_talent_selection",
+    }
+)
 
 
 def _active_evidence_kinds(graph: EvidenceGraph) -> set[str]:
@@ -422,6 +483,8 @@ def render_natural_language_system_prompt(graph: EvidenceGraph) -> str:
         sections.append(TI_TOURNAMENT_STATUS_OUTPUT_EXAMPLE)
     if kinds & MATCH_DETAILS_EVIDENCE_KINDS:
         sections.append(MATCH_DETAILS_OUTPUT_EXAMPLE)
+    if kinds & MATCH_PLAYER_PROGRESS_EVIDENCE_KINDS:
+        sections.append(MATCH_PLAYER_PROGRESS_RULES)
     if kinds & WEEKLY_STRATZ_KINDS:
         sections.append(WEEKLY_TREND_RULES)
     if "pair_lane_outcome" in kinds:

@@ -723,6 +723,19 @@ def test_natural_language_prompt_adds_aligned_ti_status_example_for_match_eviden
             data_quality=EvidenceDataQuality(completeness=1.0),
         )
     )
+    progress_prompt = render_natural_language_system_prompt(
+        EvidenceGraph(
+            intent="hero_build",
+            required_evidence=[
+                "match_result",
+                "player_scoreboard",
+                "player_purchase_timeline",
+                "player_skill_build",
+                "player_talent_selection",
+            ],
+            data_quality=EvidenceDataQuality(completeness=1.0),
+        )
+    )
 
     assert "presentation-only" in match_prompt
     assert "# {赛事名}最新战况" in match_prompt
@@ -744,11 +757,24 @@ def test_natural_language_prompt_adds_aligned_ti_status_example_for_match_eviden
         "**{队伍A}（{队伍A系列赛得分}） ： {队伍B}（{队伍B系列赛得分}）**"
         in match_details_prompt
     )
-    assert "| 顺序 | 选择 | 禁用 |" in match_details_prompt
+    assert "| 顺序 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |" in match_details_prompt
+    assert "| 选择 | {英雄} | {英雄} | {英雄} | {英雄} | {英雄} | — | — |" in match_details_prompt
+    assert (
+        "| 禁用 | {英雄} | {英雄} | {英雄} | {英雄} | {英雄} | {英雄} | {英雄} |"
+        in match_details_prompt
+    )
     assert "（Ban 1）" not in match_details_prompt
     assert "（Pick 1）" not in match_details_prompt
-    assert "| 选手 | 英雄 | K/D/A | 经济 | 装备 |" in match_details_prompt
-    assert "| {选手} | {英雄}（{等级}） | {K}/{D}/{A} | {22,790} |" in match_details_prompt
+    assert "| 选手 / 英雄 | K/D/A | 经济 | 装备 | 技能加点与天赋 |" in match_details_prompt
+    assert "| {选手} · {英雄}（{等级}） | {K}/{D}/{A} | {22,790} |" in match_details_prompt
+    assert "主装备：{物品名称}" in match_details_prompt
+    assert "已记录 {加点次数} 次加点 · 已选 {天赋数} 项天赋" in match_details_prompt
     assert "standard thousands separators" in match_details_prompt
     assert "Do not emit raw HTML such as `<sub>` or `<br>`" in match_details_prompt
     assert "For a The International schedule or" not in match_details_prompt
+    assert "#### 出装、加点与天赋" in progress_prompt
+    assert "| 相对开局时间 | 购买 |" in progress_prompt
+    assert "Render one purchase event per evidence row in its original order" in progress_prompt
+    assert "Do not treat historical purchases as a recommendation" in progress_prompt
+    assert "infer historical talent-tree sides or tiers" in progress_prompt
+    assert "#### 出装、加点与天赋" not in match_details_prompt

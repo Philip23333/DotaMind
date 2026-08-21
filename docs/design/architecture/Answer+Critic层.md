@@ -153,10 +153,14 @@ LLM、执行同步/流式调用和包装结果，不内嵌 prompt 文本。syste
 renderer 合并 `required_evidence` 与实际 evidence kinds，只注入 Catalog 属性、技能、天赋、
 物品、赛事/比赛、STRATZ 周趋势、pair-lane、排名或日趋势中与当前 EvidenceGraph 相关的片段；
 STRATZ 与赛事跨来源元数据边界还依据 evidence/tool result 的 source 加载。赛事状态 evidence
-会额外注入 TI 最新战况的 Markdown 版式示例；比赛详情 evidence 则注入逐局“摘要 → 双方独立
-BP 表 → 选手数据”的版式示例，数据说明以纯 Markdown blockquote 作为次级视觉内容。两类示例
-只约束展示顺序和表格列，不提供可复用事实；其中队伍、比分、时间、阶段、赛制、BP、Valve ID
-和来源声明仍必须由当前 EvidenceGraph 支撑。
+会额外注入 TI 最新战况的 Markdown 版式示例；比赛详情 evidence 则注入逐局“摘要 → 双方横向
+BP 表 → 选手数据”的版式示例，数据说明以纯 Markdown blockquote 作为次级视觉内容。选手表使用
+`选手 / 英雄 | K/D/A | 经济 | 装备 | 技能加点与天赋`，装备以主栏、背包、中立及强化分组；普通
+比赛详情只显示加点/天赋摘要。存在选手购买、加点或天赋 evidence 时，Answer 额外获得按需的
+“出装、加点与天赋”Markdown 章节规则：只有当前问题明确要求这些历史进度事实时才展开目标
+选手的完整记录，不能把单场记录写成推荐或胜率结论。两类示例只约束展示顺序和表格列，不提供
+可复用事实；其中队伍、比分、时间、阶段、赛制、BP、Valve ID 和来源声明仍必须由当前
+EvidenceGraph 支撑。
 
 规则选择不读取 `intent`、工具名或自然语言关键词，不形成固定回答路线。完整技能与具名单技能
 等粒度仍由 Answer LLM 结合 `current_query` / `reconstructed_goal` 判断；只有存在或要求

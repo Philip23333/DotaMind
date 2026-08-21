@@ -515,8 +515,10 @@ function isTableRow(line: string): boolean {
   return /^\s*\|.*\|\s*$/.test(line) && !isTableSeparator(line);
 }
 
+type CatalogIconSize = "sm" | "md" | "lg";
+
 function smallHeading(line: string): boolean {
-  return /(?:\bbp\b|\bpick\b|\bban\b|阵容)/i.test(line);
+  return /(?:\bbp\b|\bpick\b|\bban\b|阵容|出装|购买顺序|加点|天赋)/i.test(line);
 }
 
 function hasCatalogImageBefore(line: string, index: number): boolean {
@@ -527,7 +529,7 @@ function hasCatalogImageBefore(line: string, index: number): boolean {
 
 function catalogImageMarkdown(
   entity: CatalogVisualEntity,
-  size: "sm" | "md" | "lg",
+  size: CatalogIconSize,
 ): string {
   return `![${entity.label}](${getApiUrl()}${entity.imagePath}#dota-size=${size})`;
 }
@@ -535,7 +537,7 @@ function catalogImageMarkdown(
 function decorateCatalogLine(
   line: string,
   entities: CatalogVisualEntity[],
-  size: "sm" | "md" | "lg",
+  size: CatalogIconSize,
 ): string {
   if (!entities.length || isTableSeparator(line)) return line;
   const ranges = protectedMarkdownRanges(line);
@@ -590,19 +592,37 @@ function renderMarkdownTableCells(cells: string[]): string {
 }
 
 function equipmentColumnIndex(cells: string[]): number | null {
-  const index = cells.findIndex((cell) => /(?:核心)?装备/.test(cell));
+  const index = cells.findIndex((cell) => /^(?:核心)?装备$/.test(cell));
   return index === -1 ? null : index;
 }
 
-function replaceEquipmentItemNames(
+function playerHeroColumnIndex(cells: string[]): number | null {
+  const index = cells.findIndex((cell) => /^选手\s*\/\s*英雄$/.test(cell));
+  return index === -1 ? null : index;
+}
+
+function isDraftOrderHeader(cells: string[]): boolean {
+  return (
+    cells.length === 8 &&
+    cells[0] === "顺序" &&
+    cells.slice(1).every((cell, index) => cell === String(index + 1))
+  );
+}
+
+function isDraftActionRow(cells: string[]): boolean {
+  return cells.length === 8 && (cells[0] === "选择" || cells[0] === "禁用");
+}
+
+function replaceEntityNamesWithIcons(
   value: string,
-  items: CatalogVisualEntity[],
+  entities: CatalogVisualEntity[],
+  size: CatalogIconSize,
 ): string {
-  if (!items.length) return value;
+  if (!entities.length) return value;
   const replacements: Array<{ index: number; name: string; entity: CatalogVisualEntity }> = [];
   let index = 0;
   while (index < value.length) {
-    const matches = items.flatMap((entity) =>
+    const matches = entities.flatMap((entity) =>
       entity.names
         .filter((name) => value.startsWith(name, index))
         .map((name) => ({ entity, name })),
@@ -622,11 +642,35 @@ function replaceEquipmentItemNames(
   for (const replacement of replacements) {
     const between = value.slice(cursor, replacement.index);
     if (!/^[\s,，、/·]*$/u.test(between)) output += between;
-    output += catalogImageMarkdown(replacement.entity, "md");
+    output += catalogImageMarkdown(replacement.entity, size);
     cursor = replacement.index + replacement.name.length;
   }
   const tail = value.slice(cursor);
   if (!/^[\s,，、/·]*$/u.test(tail)) output += tail;
+  return output;
+}
+
+function replaceLabeledEquipmentItemNames(
+  value: string,
+  items: CatalogVisualEntity[],
+): string {
+  const labels = [...value.matchAll(/主装备：|背包：|中立：|强化：/g)];
+  if (!labels.length) return replaceEntityNamesWithIcons(value, items, "md");
+
+  let output = "";
+  let cursor = 0;
+  for (const [index, label] of labels.entries()) {
+    const start = label.index ?? 0;
+    const contentStart = start + label[0].length;
+    const contentEnd = labels[index + 1]?.index ?? value.length;
+    output += value.slice(cursor, contentStart);
+    output += replaceEntityNamesWithIcons(
+      value.slice(contentStart, contentEnd),
+      items,
+      label[0] === "主装备：" ? "md" : "sm",
+    );
+    cursor = contentEnd;
+  }
   return output;
 }
 
@@ -639,6 +683,8 @@ export function decorateCatalogMentions(
   let inFence = false;
   let compactHeadingLevel: number | null = null;
   let activeEquipmentColumn: number | null = null;
+  let activePlayerHeroColumn: number | null = null;
+  let activeDraftTable = false;
   return lines
     .map((line) => {
       if (/^\s*(```|~~~)/.test(line)) {
@@ -652,23 +698,59 @@ export function decorateCatalogMentions(
         const headerEquipmentColumn = cells ? equipmentColumnIndex(cells) : null;
         if (headerEquipmentColumn !== null) {
           activeEquipmentColumn = headerEquipmentColumn;
+          activePlayerHeroColumn = playerHeroColumnIndex(cells ?? []);
+          activeDraftTable = false;
           return line;
+        }
+        if (cells && isDraftOrderHeader(cells)) {
+          activeEquipmentColumn = null;
+          activePlayerHeroColumn = null;
+          activeDraftTable = true;
+          return line;
+        }
+        if (cells && activeDraftTable && isDraftActionRow(cells)) {
+          return renderMarkdownTableCells([
+            cells[0],
+            ...cells.slice(1).map((cell) =>
+              replaceEntityNamesWithIcons(
+                cell,
+                entities.filter((entity) => entity.kind === "hero"),
+                "md",
+              ),
+            ),
+          ]);
         }
         if (cells && activeEquipmentColumn !== null && activeEquipmentColumn < cells.length) {
           const heroEntities = entities.filter((entity) => entity.kind === "hero");
-          const decoratedCells = markdownTableCells(
-            decorateCatalogLine(line, heroEntities, "sm"),
-          );
+          const decoratedCells =
+            activePlayerHeroColumn === null
+              ? markdownTableCells(decorateCatalogLine(line, heroEntities, "sm"))
+              : [...cells];
           if (!decoratedCells) return line;
-          decoratedCells[activeEquipmentColumn] = replaceEquipmentItemNames(
+          if (
+            activePlayerHeroColumn !== null &&
+            activePlayerHeroColumn < decoratedCells.length
+          ) {
+            decoratedCells[activePlayerHeroColumn] = decorateCatalogLine(
+              decoratedCells[activePlayerHeroColumn],
+              heroEntities,
+              "md",
+            );
+          }
+          decoratedCells[activeEquipmentColumn] = replaceLabeledEquipmentItemNames(
             decoratedCells[activeEquipmentColumn],
             entities.filter((entity) => entity.kind === "item"),
           );
           return renderMarkdownTableCells(decoratedCells);
         }
+        activeEquipmentColumn = null;
+        activePlayerHeroColumn = null;
+        activeDraftTable = false;
         return decorateCatalogLine(line, entities, "sm");
       }
       activeEquipmentColumn = null;
+      activePlayerHeroColumn = null;
+      activeDraftTable = false;
       const heading = line.match(/^(#{1,6})\s+/);
       if (heading) {
         const level = heading[1].length;
