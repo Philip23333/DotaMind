@@ -174,3 +174,14 @@
 
 - Focused Answer, Graph, Controller, and Prompt tests: 87 passed.
 - Added Answer-node regression coverage proving global evidence is used while the original effective Graph remains unchanged.
+
+## 13:20 — Global Answer evidence-view invariant
+
+### Completed
+
+- Generalized the Answer-node regression into a domain-independent invariant: evidence introduced only by a tool's `mandatory_evidence`, and absent from the Controller/contract Answer-visible obligation, must not reach natural-language Answer messages.
+- Formally defined `global_required_evidence` as the Answer-visible obligation and `effective_required_evidence` as the runtime/Critic validation obligation in the Evidence and technical architecture documents.
+
+### Verification
+
+- Focused Graph coverage exercises the local Answer view, preservation of the original validation Graph, and the natural-language renderer's generic whitelist projection.

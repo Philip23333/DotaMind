@@ -6,7 +6,7 @@ from uuid import uuid4
 from pydantic import BaseModel
 
 from app.agentic.answer.synthesizer import AnswerSynthesisResult
-from app.agentic.evidence import EvidenceDataQuality, EvidenceGraph
+from app.agentic.evidence import EvidenceDataQuality, EvidenceGraph, EvidenceItem
 from app.agentic.graph import AgentGraphRunner
 from app.agentic.models import ExecutionPlan, ToolCall
 from app.agentic.nodes.answer import answer_node
@@ -16,6 +16,7 @@ from app.agentic.planning.decisions import (
     ToolPlanDecision,
     resolve_required_evidence,
 )
+from app.agentic.prompts.answer import render_natural_language_answer_messages
 from app.agentic.runtime.models import RunBudget, RunContext
 from app.agentic.state import AgentRunState
 from app.agentic.tools import (
@@ -85,32 +86,54 @@ class CapturingAnswerSynthesizer:
         )
 
 
-def test_answer_node_uses_global_evidence_without_mutating_effective_graph() -> None:
+def test_answer_node_projects_only_answer_visible_evidence(
+) -> None:
     plan = ExecutionPlan(
-        intent="hero_build",
-        goal="Show a player's purchase order.",
+        intent="evidence_boundary",
+        goal="Show only the requested evidence.",
         output_contract="natural_language_answer",
-        required_evidence=["player_purchase_timeline"],
+        required_evidence=["answer_visible_sentinel"],
     )
     state = AgentRunState(
-        query="show the purchase order",
+        query="show only the requested evidence",
         game="dota2",
         plan=plan,
         evidence_graph=EvidenceGraph(
             intent=plan.intent,
             required_evidence=[
-                "match_result",
-                "player_scoreboard",
-                "player_purchase_timeline",
+                "answer_visible_sentinel",
+                "tool_mandatory_sentinel",
+            ],
+            evidence=[
+                EvidenceItem(
+                    id="answer-visible",
+                    kind="answer_visible_sentinel",
+                    subject="answer-visible sentinel",
+                    value={"visible": True},
+                    tool_call_id="requested",
+                    tool="debug.requested",
+                ),
+                EvidenceItem(
+                    id="tool-mandatory",
+                    kind="tool_mandatory_sentinel",
+                    subject="tool-mandatory sentinel",
+                    value={"visible": False},
+                    tool_call_id="mandatory",
+                    tool="debug.mandatory",
+                ),
             ],
             data_quality=EvidenceDataQuality(completeness=1.0),
         ),
-        global_required_evidence=["player_purchase_timeline"],
+        global_required_evidence=["answer_visible_sentinel"],
         effective_required_evidence=[
-            "match_result",
-            "player_scoreboard",
-            "player_purchase_timeline",
+            "answer_visible_sentinel",
+            "tool_mandatory_sentinel",
         ],
+        required_evidence_sources={
+            "answer_visible_sentinel": ["planner"],
+            "tool_mandatory_sentinel": ["tool:debug.mandatory"],
+        },
+        mandatory_evidence_by_call={"mandatory": ["tool_mandatory_sentinel"]},
     )
     original_graph = state.evidence_graph
     synthesizer = CapturingAnswerSynthesizer()
@@ -120,12 +143,14 @@ def test_answer_node_uses_global_evidence_without_mutating_effective_graph() -> 
     assert original_graph is not None
     assert synthesizer.graph is not None
     assert synthesizer.graph is not original_graph
-    assert synthesizer.graph.required_evidence == ["player_purchase_timeline"]
+    assert synthesizer.graph.required_evidence == ["answer_visible_sentinel"]
     assert original_graph.required_evidence == [
-        "match_result",
-        "player_scoreboard",
-        "player_purchase_timeline",
+        "answer_visible_sentinel",
+        "tool_mandatory_sentinel",
     ]
+    messages = render_natural_language_answer_messages(plan, synthesizer.graph)
+    assert "answer-visible sentinel" in messages[1]["content"]
+    assert "tool-mandatory sentinel" not in messages[1]["content"]
 
 
 def test_graph_stops_when_tools_are_insufficient() -> None:

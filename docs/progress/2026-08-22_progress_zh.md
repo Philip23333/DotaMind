@@ -174,3 +174,14 @@
 
 - Answer、Graph、Controller 与 Prompt 定向测试：87 passed。
 - Answer 节点回归覆盖：Answer 使用 global evidence，原始 effective Graph 保持不变。
+
+## 13:20 — 全局 Answer evidence 视图不变量
+
+### 已完成
+
+- 将 Answer 节点回归泛化为领域无关的不变量：仅由工具 `mandatory_evidence` 引入、且不在 Controller/contract Answer 可见义务中的 evidence，不得进入自然语言 Answer messages。
+- 在 Evidence 与技术架构文档正式定义 `global_required_evidence` 为 Answer-visible obligation，`effective_required_evidence` 为 runtime/Critic validation obligation。
+
+### 验证
+
+- Graph 定向测试覆盖 Answer 局部视图、原始验证 Graph 不变及自然语言 renderer 的通用白名单过滤。

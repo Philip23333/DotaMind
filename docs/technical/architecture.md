@@ -314,14 +314,16 @@ plan goal. The player-performance `take` argument is the final returned top-N;
 the handler owns any internal over-fetching required for strong-mode ranking.
 Natural-language Answer prompt rules and message rendering live in
 `agentic/prompts/answer.py`; `answer/synthesizer.py` only invokes that renderer
-and handles LLM results. The Answer node creates a shallow Answer-only Graph view
-whose required evidence is the global planner/contract obligation, not the
-effective union that also contains per-tool mandatory proof obligations. The
-renderer projects that view to matching `EvidenceItem`s, `missing`, and data-quality
-metadata; it never serializes `EvidenceGraph.tool_results`. The original effective
-Graph remains available to runtime/Critic validation, execution audit, test
-observation, and deterministic downstream processing. The renderer uses that view
-to include only relevant Catalog
+and handles LLM results. `global_required_evidence` is the Answer-visible
+obligation: the Controller plan plus any output-contract requirement.
+`effective_required_evidence` is the runtime/Critic validation obligation: that
+global set plus each called tool's mandatory proof kinds. The Answer node creates a
+shallow Answer-only Graph view whose required evidence is the global set, not the
+effective union. The renderer projects matching `EvidenceItem`s from that view;
+`missing` and data-quality metadata are passed to Answer unchanged for now. It
+never serializes `EvidenceGraph.tool_results`. The original effective Graph remains
+available to runtime/Critic validation, execution audit, test observation, and
+deterministic downstream processing. The renderer uses that view to include only relevant Catalog
 or STRATZ presentation sections; evidence source metadata also activates the
 cross-source attribution boundary. This selection never uses `intent`, tool names,
 or query-keyword routing, and no deterministic Catalog answer renderer is present. Prompt content changes are

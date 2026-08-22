@@ -61,10 +61,22 @@ EvidenceGraph(
 )
 ```
 
-EvidenceGraph 是 runtime/Critic 的完整审计输入；Answer 节点会基于
-`global_required_evidence` 创建一个浅的 Answer-only view。工具的
-`mandatory_evidence` 仍保留在原始 Graph 中用于 per-call 完整性校验，
-不会因此自动成为 Answer 的展示证据。
+EvidenceGraph 是 runtime/Critic 的完整审计输入。证据义务有两个不可互换的
+视图：
+
+```text
+global_required_evidence
+= Controller 的 plan.required_evidence + output contract 的固定义务
+= Answer-visible obligation
+
+effective_required_evidence
+= global_required_evidence + 每个已调用工具的 mandatory_evidence
+= runtime / Critic validation obligation
+```
+
+Answer 节点会基于 `global_required_evidence` 创建一个浅的 Answer-only view。
+工具的 `mandatory_evidence` 仍保留在原始 Graph 中用于 per-call 完整性校验，
+不会仅因其 mandatory 来源自动成为 Answer 的展示证据。
 
 ## 3. EvidenceItem 结构
 
