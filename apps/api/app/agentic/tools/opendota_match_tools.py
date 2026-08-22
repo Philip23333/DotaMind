@@ -23,6 +23,16 @@ from app.integrations.opendota.matches import (
 )
 from app.integrations.opendota.transport import OpenDotaTransport
 
+POST_START_BUILD_EXCLUDED_ITEM_INTERNAL_NAMES = frozenset(
+    {
+        "item_tango",
+        "item_clarity",
+        "item_ward_observer",
+        "item_ward_sentry",
+        "item_tpscroll",
+    }
+)
+
 
 class OpenDotaMatchDetailsInput(BaseModel):
     valve_match_ids: list[int] = Field(min_length=1, max_length=5)
@@ -112,7 +122,8 @@ def register_opendota_match_tools(registry: ToolRegistry, settings: Settings) ->
                 "normalized "
                 "matches output of opendota.match_details. It performs no network request and "
                 "accepts only that tool's data.matches reference. The result includes final "
-                "inventory, purchase timeline, ability upgrades, and talent selections."
+                "inventory, a deterministic purchase display projection, ability upgrades, "
+                "and talent selections."
             ),
             input_model=DotaExtractMatchPlayerProgressInput,
             handler=extract_match_player_progress,
@@ -143,7 +154,8 @@ def register_opendota_match_tools(registry: ToolRegistry, settings: Settings) ->
                     type="list[dict]",
                     description=(
                         "Complete selected player post-match configurations, one row per "
-                        "matching game."
+                        "matching game; purchase_display is the deterministic default "
+                        "presentation projection."
                     ),
                 )
             },
@@ -261,12 +273,87 @@ def _project_player_match_progress(player: dict[str, Any]) -> dict[str, Any]:
         {
             "level": player.get("level"),
             "final_inventory": _project_final_inventory(player),
-            "purchase_timeline": player.get("purchase_timeline") or [],
+            "purchase_display": _project_purchase_display(player.get("purchase_timeline")),
             "ability_upgrade_sequence": player.get("ability_upgrade_sequence") or [],
             "talent_selections": player.get("talent_selections") or [],
         }
     )
     return projected
+
+
+def _project_purchase_display(timeline: Any) -> dict[str, Any]:
+    """Build the compact, deterministic purchase view used by Answer."""
+
+    if not isinstance(timeline, list):
+        return {
+            "starting_items": [],
+            "build_segments": [],
+            "omitted_unresolved_count": 0,
+        }
+
+    starting_items: list[dict[str, Any]] = []
+    starting_index: dict[tuple[Any, Any], int] = {}
+    build_segments: list[dict[str, Any]] = []
+    current_segment: list[dict[str, Any]] = []
+    omitted_unresolved_count = 0
+
+    for event in timeline:
+        if not isinstance(event, dict):
+            continue
+        time_seconds = event.get("time_seconds")
+        if not isinstance(time_seconds, (int, float)):
+            omitted_unresolved_count += 1
+            continue
+        item_id = event.get("item_id")
+        item_name = event.get("item_name_zh") or event.get("item_name_en")
+        image_path = event.get("item_image_path")
+        internal_name = event.get("item_internal_name")
+        if not item_name or not image_path or not item_id:
+            omitted_unresolved_count += 1
+            continue
+
+        if time_seconds < 0:
+            key = (item_id, internal_name)
+            existing_index = starting_index.get(key)
+            if existing_index is None:
+                starting_index[key] = len(starting_items)
+                starting_items.append(
+                    {
+                        "item_id": item_id,
+                        "item_name_zh": event.get("item_name_zh"),
+                        "item_name_en": event.get("item_name_en"),
+                        "item_image_path": image_path,
+                        "count": 1,
+                    }
+                )
+            else:
+                starting_items[existing_index]["count"] += 1
+            continue
+
+        if internal_name in POST_START_BUILD_EXCLUDED_ITEM_INTERNAL_NAMES:
+            continue
+
+        purchase = {
+            "item_id": item_id,
+            "item_name_zh": event.get("item_name_zh"),
+            "item_name_en": event.get("item_name_en"),
+            "item_image_path": image_path,
+        }
+        if event.get("is_terminal_item") is True:
+            purchase["completed_at_seconds"] = int(time_seconds)
+        current_segment.append(purchase)
+        if event.get("is_terminal_item") is True:
+            build_segments.append({"purchases": current_segment})
+            current_segment = []
+
+    if current_segment:
+        build_segments.append({"purchases": current_segment})
+
+    return {
+        "starting_items": starting_items,
+        "build_segments": build_segments,
+        "omitted_unresolved_count": omitted_unresolved_count,
+    }
 
 
 def match_details_evidence(result: ToolResult) -> list[EvidenceItem]:

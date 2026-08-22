@@ -266,3 +266,43 @@
 
 - `tests/test_agentic_opendota_match_tools.py`, `tests/test_opendota_domains.py`, and `tests/test_agentic_answer.py`: 36 passed.
 - Ruff for changed files and `git diff --check` passed.
+
+## 17:46 — Deterministic purchase-display projection
+
+### Completed
+
+- Removed the previous price field, price threshold, and Prompt-side low-price omission rules; purchase events, `player_match_progress`, and the Answer Prompt no longer carry price-filter semantics.
+- Normalized OpenDota purchase events now include the canonical Catalog `item_internal_name` and `is_terminal_item`; the raw purchase timeline remains in the upstream ToolResult for audit.
+- `dota.extract_match_player_progress` emits `purchase_display`: negative-time events aggregate into starting items, non-negative events are filtered only by `POST_START_BUILD_EXCLUDED_ITEM_INTERNAL_NAMES` for Tango, Clarity, observer/sentry wards, and teleport scrolls, terminal items receive completion times, and unfinished trailing segments remain visible.
+- Answer renders the build path horizontally with medium Catalog icons and `→` instead of a purchase-order table; Chat reuses its existing inline Markdown icon support.
+
+### Verification
+
+- API focused tests: 31 passed; Chat focused tests: 14 passed.
+- Ruff for changed files and `git diff --check` passed.
+
+### Known boundaries
+
+- The exclusion set applies only to the post-start display projection; negative-time starting items bypass it.
+- Raw purchase events remain available for audit, while Answer receives the deterministic display projection by default; unresolved post-start events without Catalog identity/image are counted as omitted.
+
+## 17:52 — Final regression
+
+### Verification
+
+- Full API suite: `665 passed, 21 skipped` (one existing Starlette deprecation warning).
+- Full Chat suite: `27 passed`.
+- Final Answer/Prompt/OpenDota focused regression: `47 passed`; Ruff for changed files and `git diff --check` passed.
+
+## 18:21 — Player-build horizontal layout and icon rendering
+
+### Completed
+
+- Removed the pseudo image URL from the Answer build-path example. Answer now emits only a single horizontal item-name-and-`→` path and no longer asks the model to generate Markdown images.
+- Chat deterministically decorates equipment names as `md` Catalog icons only inside the explicit `出装、加点与天赋` player-progress subsection; this covers starting items, final equipment, and build paths without changing other inventory-table icon sizes. Stored historical answers are not migrated or reformatted.
+- Each build-path segment remains horizontal; the purchase-order table and one-item-per-line layout are not restored.
+
+### Verification
+
+- API `tests/test_agentic_answer.py`: 20 passed; relevant Ruff check passed.
+- Chat `src/lib/dotamind-api.test.ts`: 15 passed; relevant ESLint check passed.

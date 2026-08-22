@@ -266,3 +266,43 @@
 
 - `tests/test_agentic_opendota_match_tools.py`、`tests/test_opendota_domains.py` 与 `tests/test_agentic_answer.py`：36 passed。
 - 变更文件 Ruff 与 `git diff --check` 通过。
+
+## 17:46 — 确定性出装展示投影
+
+### 已完成
+
+- 清除旧的价格字段、价格阈值和 Prompt 低价省略规则；购买事件、`player_match_progress` 与 Answer Prompt 不再携带价格筛选语义。
+- 在 OpenDota 标准化购买事件中补充 Catalog canonical `item_internal_name` 与 `is_terminal_item`；原始购买时间线仍保留在上游 ToolResult 供审计。
+- `dota.extract_match_player_progress` 产出 `purchase_display`：负时间事件聚合为出门装，非负时间仅按 `POST_START_BUILD_EXCLUDED_ITEM_INTERNAL_NAMES` 过滤树之祭祀、净化药水、真假眼和回城卷轴，成品事件附完成时间，未完成尾段保留。
+- Answer 改为使用中尺寸 Catalog 图标和 `→` 横向展示出装路径，不再输出购买顺序表格；Chat 继续复用现有 Markdown 行内图标能力。
+
+### 验证
+
+- API 定向测试：31 passed；Chat 定向测试：14 passed。
+- 变更文件 Ruff 与 `git diff --check` 通过。
+
+### 已知边界
+
+- 过滤集合只作用于开局后的展示投影；负时间出门装不经过该集合。
+- 原始购买事件保留给审计，但 Answer 默认只接收确定性展示投影；未解析且缺少 Catalog 身份/图片的后续事件只计入省略计数。
+
+## 17:52 — 最终回归
+
+### 验证
+
+- API 全量：`665 passed, 21 skipped`（1 个既有 Starlette 弃用警告）。
+- Chat 全量：`27 passed`。
+- 最终 Answer/Prompt/OpenDota 定向回归：`47 passed`；变更文件 Ruff 与 `git diff --check` 通过。
+
+## 18:21 — 出装明细横向与图标渲染收束
+
+### 已完成
+
+- 移除 Answer 出装路径示例中的伪图片 URL；Answer 只输出装备名称和 `→` 的单行路径，不再要求模型自行生成 Markdown 图片。
+- Chat 仅在明确的“出装、加点与天赋”选手进度章节为装备名称确定性补充 `md` Catalog 图标；出门装、最终装备和出装路径均适用，其他装备表格尺寸保持不变；不处理已保存的历史回答。
+- 保持每段出装路径横向展示，不恢复购买顺序表格或逐项换行的版式。
+
+### 验证
+
+- API `tests/test_agentic_answer.py`：20 passed；相关 Ruff 检查通过。
+- Chat `src/lib/dotamind-api.test.ts`：15 passed；相关 ESLint 检查通过。

@@ -86,18 +86,24 @@ Catalog snapshot; parsed-player data also preserves purchase events, inventory a
 neutral history, level-indexed ability upgrades and mechanically identified talents.
 Evidence extraction projects these parsed players by evidence kind: scoreboard items
 keep display and summary fields, while the downstream player transform emits one
-`player_match_progress` package containing identity, level, final inventory, purchase
-timeline, ability upgrades, and talent selections. The raw ToolResult remains
-available for audit and observation; this projection prevents the same complete player
-object from being repeated across multiple progress evidence kinds.
+`player_match_progress` package containing identity, level, final inventory, the
+deterministic `purchase_display` projection, ability upgrades, and talent selections.
+That projection aggregates negative-time starting items, filters only the configured
+post-start consumable/ward internal names, and marks terminal items with completion
+times. The normalized raw purchase events remain in the upstream ToolResult for audit;
+the projection prevents the same complete player object from being repeated across
+multiple progress evidence kinds.
 The Chat formatter keeps the user-facing answer as Markdown: it deterministically
 turns the Answer's horizontal seven-order BP table into `md` hero icons, decorates
 the combined player/hero column with `md` hero icons, and renders main inventory as
 `md` items while backpack, neutral item, and enhancement groups use `sm` items.
-It does not parse arbitrary prose as match data; the grouped replacement is limited
-to the fixed Answer table headers and inventory labels. Parsed player progress is
-expanded only by the Answer rules for an explicit purchase, skill-build, or talent
-request.
+Within the explicit `出装、加点与天赋` player-progress subsection, every equipment
+name is instead decorated as an `md` item icon; its Answer template supplies a
+single horizontal name-and-arrow line and never a hand-written image URL. It does
+not parse arbitrary prose as match data; the grouped replacement is limited to the
+fixed Answer table headers, inventory labels, and this explicit subsection. Parsed
+player progress is expanded only by the Answer rules for an explicit purchase,
+skill-build, or talent request.
 Unknown item keys retain their raw key with `not_found` status; absent or unknown IDs
 retain `null` image paths, and the Answer layer must not infer names, talent branches,
 purchase timing, or image URLs from IDs.

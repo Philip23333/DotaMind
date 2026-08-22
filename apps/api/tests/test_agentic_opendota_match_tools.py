@@ -196,7 +196,6 @@ def test_empty_draft_is_ok_data_but_produces_no_evidence() -> None:
 
 def test_player_progress_and_inventory_are_normalized_without_reordering() -> None:
     raw = _raw_match()
-    catalog = load_default_catalog_repository()
     raw["players"][0].update(
         {
             "purchase_log": [
@@ -234,9 +233,10 @@ def test_player_progress_and_inventory_are_normalized_without_reordering() -> No
         "item_clarity",
         "unknown_item",
     ]
+    assert all("item_price" not in event for event in player["purchase_timeline"])
     assert player["purchase_timeline"][0]["item_id"] == 44
-    assert player["purchase_timeline"][0]["item_price"] == catalog.get_item(44).price
-    assert player["purchase_timeline"][2]["item_price"] is None
+    assert player["purchase_timeline"][0]["item_internal_name"] == "item_tango"
+    assert player["purchase_timeline"][0]["is_terminal_item"] is True
     assert player["purchase_timeline"][0]["charges"] == 3
     assert player["purchase_timeline"][2]["item_catalog_status"] == "not_found"
     assert player["inventory"]["main"][0]["item_id"] == 44
@@ -334,13 +334,17 @@ def test_player_progress_and_inventory_are_normalized_without_reordering() -> No
         "hero_catalog_status",
         "level",
         "final_inventory",
-        "purchase_timeline",
+        "purchase_display",
         "ability_upgrade_sequence",
         "talent_selections",
     }
     assert "neutral_history" not in progress_player["final_inventory"]
     assert progress_player["final_inventory"]["main"][0]["item_id"] == 44
-    assert progress_player["purchase_timeline"][0]["time_seconds"] == -89
+    assert progress_player["purchase_display"]["starting_items"][0]["item_id"] == 44
+    assert progress_player["purchase_display"]["starting_items"][0]["count"] == 1
+    assert progress_player["purchase_display"]["build_segments"] == []
+    assert progress_player["purchase_display"]["omitted_unresolved_count"] == 1
+    assert "purchase_timeline" not in progress_player
 
 
 def test_player_progress_transform_returns_complete_configuration() -> None:
@@ -360,10 +364,48 @@ def test_player_progress_transform_returns_complete_configuration() -> None:
     assert row["player"]["name"] == "Player 0"
     assert "summary" not in row
     assert "final_inventory" in row["player"]
-    assert "purchase_timeline" in row["player"]
+    assert "purchase_display" in row["player"]
+    assert "purchase_timeline" not in row["player"]
     assert "ability_upgrade_sequence" in row["player"]
     assert "talent_selections" in row["player"]
     assert "neutral_history" not in row["player"]["final_inventory"]
+
+
+def test_purchase_display_filters_post_start_consumables_and_marks_terminal_items() -> None:
+    raw = _raw_match()
+    raw["players"][0]["purchase_log"] = [
+        {"time": -89, "key": "tango"},
+        {"time": -88, "key": "tango"},
+        {"time": 0, "key": "tango"},
+        {"time": 1, "key": "item_clarity"},
+        {"time": 2, "key": "item_ward_observer"},
+        {"time": 3, "key": "item_ward_sentry"},
+        {"time": 4, "key": "item_tpscroll"},
+        {"time": 5, "key": "item_boots"},
+        {"time": 6, "key": "item_blink"},
+    ]
+    summary = normalize_match_summary(raw, 8943244303)
+    output = extract_match_player_progress(
+        DotaExtractMatchPlayerProgressInput(
+            matches=[{"valve_match_id": 8943244303, "summary": summary}],
+            player_query="Player 0",
+        ),
+        QueryContext(),
+    )
+
+    display = output["matches"][0]["player"]["purchase_display"]
+    assert display["starting_items"][0]["item_name_en"] == "Tango"
+    assert display["starting_items"][0]["count"] == 2
+    displayed_names = [
+        purchase["item_name_en"]
+        for segment in display["build_segments"]
+        for purchase in segment["purchases"]
+    ]
+    assert displayed_names == ["Boots of Speed", "Blink Dagger"]
+    assert [
+        segment["purchases"][-1]["completed_at_seconds"]
+        for segment in display["build_segments"]
+    ] == [5, 6]
 
 
 def test_zero_valued_inventory_slots_are_empty() -> None:

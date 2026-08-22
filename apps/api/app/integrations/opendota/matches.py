@@ -159,13 +159,15 @@ def _normalize_purchase_timeline(
             continue
         raw_key = row.get("key")
         item = _item_reference(raw_key, catalog)
+        item_internal_name, is_terminal_item = _catalog_item_progress_fields(item, catalog)
         event = {
             "time_seconds": row.get("time"),
             "item_key": raw_key,
             "item_id": item.get("item_id") if item else None,
             "item_name_en": item.get("item_name_en") if item else None,
             "item_name_zh": item.get("item_name_zh") if item else None,
-            "item_price": _catalog_item_price(item, catalog),
+            "item_internal_name": item_internal_name,
+            "is_terminal_item": is_terminal_item,
             "item_catalog_status": item.get("item_catalog_status")
             if item
             else "not_found",
@@ -177,17 +179,16 @@ def _normalize_purchase_timeline(
     return timeline
 
 
-def _catalog_item_price(
+def _catalog_item_progress_fields(
     item: dict[str, Any] | None, catalog: DotaCatalogRepository
-) -> int | None:
-    """Return the resolved Catalog price for Answer-side purchase filtering."""
-
+) -> tuple[str | None, bool | None]:
     if not isinstance(item, dict) or (item_id := _positive_int(item.get("item_id"))) is None:
-        return None
+        return None, None
     try:
-        return catalog.get_item(item_id).price
+        catalog_item = catalog.get_item(item_id)
     except CatalogLookupError:
-        return None
+        return None, None
+    return catalog_item.internal_name, not bool(catalog_item.upgrade_item_ids)
 
 
 def _normalize_inventory(

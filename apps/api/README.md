@@ -196,9 +196,12 @@ or paid endpoint is used.
 `dota.extract_match_player_progress` is a deterministic downstream transform:
 it accepts only `opendota.match_details.data.matches`, performs no provider
 request, and emits one complete `player_match_progress` package for the exact
-player: final inventory (main/backpack/neutral item and enhancement), purchase
-timeline, skill sequence, and talent selections. It runs only when one of those
-facts is explicitly requested; ordinary match details do not extract it. The
+player: final inventory (main/backpack/neutral item and enhancement), deterministic
+`purchase_display` (aggregated starting items, configured post-start consumable/ward
+exclusions, and terminal completion times), skill sequence, and talent selections.
+The normalized raw purchase events remain in the upstream ToolResult for audit. It
+runs only when one of those facts is explicitly requested; ordinary match details do
+not extract it. The
 original match result remains available to the test observer and execution audit,
 but is not copied into ordinary Answer evidence for unrelated match-detail
 requests. Cross-Run Match Artifact reuse is not part of this transform.

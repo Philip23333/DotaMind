@@ -9,11 +9,11 @@ export function StartupOverlay() {
 
   const dismiss = useCallback(() => {
     setLeaving(true);
-    window.setTimeout(() => setVisible(false), 260);
+    window.setTimeout(() => setVisible(false), 180);
   }, []);
 
   useEffect(() => {
-    const delay = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 1400;
+    const delay = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 700;
     const timer = window.setTimeout(dismiss, delay);
     return () => window.clearTimeout(timer);
   }, [dismiss]);

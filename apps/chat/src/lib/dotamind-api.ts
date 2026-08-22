@@ -697,6 +697,7 @@ export function decorateCatalogMentions(
   const lines = markdown.split("\n");
   let inFence = false;
   let compactHeadingLevel: number | null = null;
+  let playerProgressHeadingLevel: number | null = null;
   let activeEquipmentColumn: number | null = null;
   let activePlayerHeroColumn: number | null = null;
   let activeDraftTable = false;
@@ -768,11 +769,26 @@ export function decorateCatalogMentions(
       const heading = line.match(/^(#{1,6})\s+/);
       if (heading) {
         const level = heading[1].length;
+        if (/出装、加点与天赋/.test(line)) {
+          playerProgressHeadingLevel = level;
+        } else if (
+          playerProgressHeadingLevel !== null &&
+          level <= playerProgressHeadingLevel
+        ) {
+          playerProgressHeadingLevel = null;
+        }
         if (smallHeading(line)) {
           compactHeadingLevel = level;
         } else if (compactHeadingLevel !== null && level <= compactHeadingLevel) {
           compactHeadingLevel = null;
         }
+      }
+      if (playerProgressHeadingLevel !== null) {
+        return decorateCatalogLine(
+          line,
+          entities.filter((entity) => entity.kind === "item"),
+          "md",
+        );
       }
       const inCompactHeading = compactHeadingLevel !== null;
       const size = heading?.[1] === "#"

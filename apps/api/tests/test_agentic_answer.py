@@ -778,11 +778,17 @@ def test_natural_language_prompt_adds_aligned_ti_status_example_for_match_eviden
     assert "For a The International schedule or" not in match_details_prompt
     assert "#### 出装、加点与天赋" in progress_prompt
     assert "**出门装**" in progress_prompt
-    assert "| 相对开局时间 | 购买 |" in progress_prompt
+    assert "**出装路径**" in progress_prompt
+    assert "#dota-size=md" in progress_prompt
+    assert "→" in progress_prompt
+    assert "![力量腰带](...#dota-size=md)" not in progress_prompt
+    assert "Do not emit `![](...)` image Markdown" in progress_prompt
+    assert "completed_at_seconds" in progress_prompt
+    assert "Do not render a Markdown purchase table" in progress_prompt
     assert "Aggregate every purchase" in progress_prompt
-    assert "item_price` is at least 150" in progress_prompt
-    assert "Do not apply the price filter to 出门装" in progress_prompt
-    assert "omit that line when there is no" in progress_prompt
+    assert "item_price" not in progress_prompt
+    assert "150" not in progress_prompt
+    assert "price" not in progress_prompt.lower()
     assert "Render **技能加点** as one compact arrow sequence, not a table" in progress_prompt
     assert "`attribute_bonus` mapping is named `全属性 +2`" in progress_prompt
     assert "fixed 10/15/20/25-level talent timing" in progress_prompt

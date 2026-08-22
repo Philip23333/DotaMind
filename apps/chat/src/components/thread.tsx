@@ -77,15 +77,15 @@ export const Thread: FC<{ browserId?: string }> = ({ browserId }) => {
 };
 
 const Welcome: FC = () => (
-  <div className="flex flex-1 flex-col items-center justify-center pb-24 text-center">
+  <div className="welcome-intro flex flex-1 flex-col items-center justify-center pb-24 text-center">
     <div className="mb-6 flex size-[150px] items-center justify-center rounded-[2rem] bg-[#b92d1e] text-[#fff4e1] shadow-[0_16px_36px_rgb(115_31_24_/_24%)]">
       <svg className="size-24" viewBox="0 0 24 24" aria-hidden="true">
         <path fill="currentColor" d={siDota2.path} />
       </svg>
     </div>
-    <h1 className="text-2xl font-semibold tracking-tight">今天想分析什么？</h1>
+    <h1 className="text-2xl font-semibold tracking-tight">🔥TI正在火热进行中！</h1>
     <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-      可以询问英雄克制、阵容配合、对线表现或版本数据。
+      快捷查询赛程、比赛详情与选手数据等
     </p>
   </div>
 );
@@ -151,7 +151,6 @@ const AssistantMessage: FC<{ browserId?: string }> = ({ browserId }) => {
 
 const Composer: FC<{ browserId?: string }> = ({ browserId }) => {
   const aui = useAui();
-  const [isFocused, setIsFocused] = useState(false);
   const isRunning = useAuiState((state) => state.thread.isRunning);
   const isNewThread = useAuiState((state) => state.thread.messages.length === 0);
 
@@ -163,17 +162,17 @@ const Composer: FC<{ browserId?: string }> = ({ browserId }) => {
 
   return (
     <div className="relative">
-      {isNewThread && isFocused && !isRunning && (
-        <div className="absolute bottom-full left-0 mb-3">
+      {isNewThread && !isRunning && (
+        <div className="absolute inset-x-0 bottom-full mb-[5px]">
           <Button
             type="button"
-            variant="outline"
-            size="sm"
-            className="rounded-full bg-card shadow-sm"
+            variant="ghost"
+            size="lg"
+            className="h-11 w-full justify-start rounded-lg bg-transparent px-4 text-base text-foreground/55 shadow-none hover:bg-popover hover:text-foreground hover:shadow-[0_-5px_14px_rgb(0_0_0_/_8%)] focus-visible:bg-popover focus-visible:text-foreground focus-visible:shadow-[0_-5px_14px_rgb(0_0_0_/_8%)]"
             onMouseDown={(event) => event.preventDefault()}
             onClick={sendTiUpdatePrompt}
           >
-            <SparklesIcon className="size-3.5" />
+            <SparklesIcon className="size-4" />
             本届TI最新战况
           </Button>
         </div>
@@ -186,8 +185,6 @@ const Composer: FC<{ browserId?: string }> = ({ browserId }) => {
           autoFocus
           enterKeyHint="send"
           aria-label="消息输入框"
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
         />
         <div className="flex justify-end px-1 pb-1">
           <AuiIf condition={(state) => !state.thread.isRunning}>

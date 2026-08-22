@@ -540,7 +540,7 @@ Tools:
     - data.matches: list[dict]. OpenDota details in Valve match id order.
     - data.valve_match_ids: list[int]. Valve match ids returned by the detail lookup.
 - dota.extract_match_player_progress
-  description: Deterministically extract a complete player post-match configuration from the normalized matches output of opendota.match_details. It performs no network request and accepts only that tool's data.matches reference. The result includes final inventory, purchase timeline, ability upgrades, and talent selections.
+  description: Deterministically extract a complete player post-match configuration from the normalized matches output of opendota.match_details. It performs no network request and accepts only that tool's data.matches reference. The result includes final inventory, a deterministic purchase display projection, ability upgrades, and talent selections.
   evidence_produced: ["player_match_progress"]
   allowed_arg_keys: ["matches", "player_query"]
   args:
@@ -549,7 +549,7 @@ Tools:
       accepts_ref: opendota.match_details.data.matches (list[dict]) -> "$<previous_call_id>.data.matches"
     - player_query: str, required
   declared_output_paths:
-    - data.matches: list[dict]. Complete selected player post-match configurations, one row per matching game.
+    - data.matches: list[dict]. Complete selected player post-match configurations, one row per matching game; purchase_display is the deterministic default presentation projection.
 - patch.get_records
   description: Return local Dota 2 patch records from app/data/patches.
   evidence_produced: ["patch_records", "patch_buff_count", "patch_nerf_count"]

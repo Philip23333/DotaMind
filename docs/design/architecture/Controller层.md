@@ -167,4 +167,5 @@ Series 候选，再做赛事名称消歧。Controller 不根据自身知识推�
 或天赋时，统一加入 `player_match_progress`，并在 `opendota.match_details` 后规划
 `dota.extract_match_player_progress`。该 transform 只接受 `data.matches` 的前序引用
 和 `player_query`，不再传递 `aspects`；工具能够产生进度字段本身不是把它加入普通
-详情义务的理由。
+详情义务的理由。购买展示由 transform 的 `purchase_display` 确定性投影提供，Controller
+不承担消耗品/守卫过滤或购买路径排版。

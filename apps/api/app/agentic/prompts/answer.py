@@ -326,12 +326,11 @@ popular build, core-build classification, or win-rate claim.
 For purchases, use only evidence-backed Catalog names. Aggregate every purchase
 with a negative `time_seconds` into the **出门装** line immediately above
 **最终装备**; preserve first-seen item order and write repeated items as `物品 × N`.
-Do not apply the price filter to 出门装, and omit that line when there is no
-negative-time purchase. In **购买顺序**, include only zero or positive-time events
-whose resolved Catalog `item_price` is at least 150; omit events with an absent
-or lower price instead of guessing. Keep the remaining events in their original
-order, format their times as `MM:SS`, and never merge same-second purchases.
-Omit the entire **购买顺序** table when no event remains.
+Omit 出门装 when there is no negative-time purchase. The purchase display is a
+deterministic transform: it already excludes the configured post-start consumable
+and ward item keys, so do not add any price-based filtering or invent a second
+filter list in this Prompt. Render the remaining events in their original order.
+Do not render a Markdown purchase table.
 Render **技能加点** as one compact arrow sequence, not a table. Group each
 non-talent selection by its first appearance and write its total selected rank
 as `技能（N）`; preserve that first-appearance order. The deterministic

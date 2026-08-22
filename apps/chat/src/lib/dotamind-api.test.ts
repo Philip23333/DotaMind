@@ -278,6 +278,82 @@ describe("formatPlanResponse", () => {
     expect(formatted).not.toContain("强化：");
   });
 
+  it("keeps purchase paths as inline medium Catalog icons with terminal times", () => {
+    const formatted = formatPlanResponse({
+      status: "ok",
+      answer: {
+        summary:
+          "出装路径\n力量腰带 → 护腕 **(03:52)**",
+      },
+      catalog_visual_entities: [
+        {
+          kind: "item",
+          imagePath: "/api/v1/assets/dota/items/21.png",
+          label: "力量腰带",
+          names: ["力量腰带", "Belt of Strength"],
+        },
+        {
+          kind: "item",
+          imagePath: "/api/v1/assets/dota/items/2.png",
+          label: "护腕",
+          names: ["护腕", "Bracer"],
+        },
+      ],
+    });
+
+    expect(formatted).toContain(
+      "![力量腰带](http://localhost:8001/api/v1/assets/dota/items/21.png#dota-size=md)力量腰带 →",
+    );
+    expect(formatted).toContain(
+      "![护腕](http://localhost:8001/api/v1/assets/dota/items/2.png#dota-size=md)护腕 **(03:52)**",
+    );
+    expect(formatted).not.toContain("| 相对开局时间 |");
+  });
+
+  it("uses medium icons throughout the player-progress equipment subsection", () => {
+    const formatted = formatPlanResponse({
+      status: "ok",
+      answer: {
+        summary:
+          "#### 出装、加点与天赋\n\n##### 玩家 · 英雄（12）\n\n**出门装**\n\n仙灵之火 → 铁树枝干 × 2\n\n**最终装备**\n\n主装备：敏捷便鞋\n\n**出装路径**\n\n敏捷便鞋 → 怨灵系带 **(03:52)**",
+      },
+      catalog_visual_entities: [
+        {
+          kind: "item",
+          imagePath: "/api/v1/assets/dota/items/44.png",
+          label: "仙灵之火",
+          names: ["仙灵之火"],
+        },
+        {
+          kind: "item",
+          imagePath: "/api/v1/assets/dota/items/11.png",
+          label: "铁树枝干",
+          names: ["铁树枝干"],
+        },
+        {
+          kind: "item",
+          imagePath: "/api/v1/assets/dota/items/16.png",
+          label: "敏捷便鞋",
+          names: ["敏捷便鞋"],
+        },
+        {
+          kind: "item",
+          imagePath: "/api/v1/assets/dota/items/3.png",
+          label: "怨灵系带",
+          names: ["怨灵系带"],
+        },
+      ],
+    });
+
+    expect(formatted).toContain(
+      "![仙灵之火](http://localhost:8001/api/v1/assets/dota/items/44.png#dota-size=md)仙灵之火 → ![铁树枝干](http://localhost:8001/api/v1/assets/dota/items/11.png#dota-size=md)铁树枝干 × 2",
+    );
+    expect(formatted).toContain(
+      "![敏捷便鞋](http://localhost:8001/api/v1/assets/dota/items/16.png#dota-size=md)敏捷便鞋 → ![怨灵系带](http://localhost:8001/api/v1/assets/dota/items/3.png#dota-size=md)怨灵系带 **(03:52)**",
+    );
+    expect(formatted).not.toContain("#dota-size=sm");
+  });
+
   it("does not decorate a player name from a stale hero visual alias", () => {
     const formatted = formatPlanResponse({
       status: "ok",
