@@ -25,6 +25,7 @@ from app.integrations.pandascore.models import (
     PandaCompetition,
     PandaMatchFixture,
 )
+from app.integrations.pandascore.team_asset_repository import PandaScoreTeamAssetRepository
 from app.integrations.pandascore.transport import PandaScoreTransport
 
 
@@ -66,6 +67,7 @@ def register_pandascore_tools(registry: ToolRegistry, settings: Settings) -> Non
         url=settings.pandascore_base_url,
         status="live",
     )
+    team_assets = PandaScoreTeamAssetRepository()
     registry.register(
         ToolDefinition(
             name="pandascore.resolve_competition",
@@ -109,7 +111,7 @@ def register_pandascore_tools(registry: ToolRegistry, settings: Settings) -> Non
                 "fixtures for a resolved series. Defaults to the newest 20 fixtures."
             ),
             input_model=PandaScoreListMatchesInput,
-            handler=_list_matches_handler(settings, policy),
+            handler=_list_matches_handler(settings, policy, team_assets),
             source=source,
             evidence_extractor=match_schedule_evidence,
             evidence_kinds=("match_schedule", "match_state", "series_score"),
@@ -147,7 +149,7 @@ def register_pandascore_tools(registry: ToolRegistry, settings: Settings) -> Non
                 "provider-exposed games when no game number is supplied."
             ),
             input_model=PandaScoreResolveMatchGamesInput,
-            handler=_resolve_match_games_handler(settings, policy),
+            handler=_resolve_match_games_handler(settings, policy, team_assets),
             source=source,
             evidence_extractor=match_games_evidence,
             evidence_kinds=(
@@ -258,7 +260,11 @@ def _resolve_competition_handler(settings: Settings, policy: Any):
     return handle
 
 
-def _list_matches_handler(settings: Settings, policy: Any):
+def _list_matches_handler(
+    settings: Settings,
+    policy: Any,
+    team_assets: PandaScoreTeamAssetRepository | None = None,
+):
     async def handle(args: PandaScoreListMatchesInput, context: QueryContext) -> dict[str, Any]:
         transport, _competitions, matches_client = _clients(settings, policy)
         try:
@@ -273,7 +279,7 @@ def _list_matches_handler(settings: Settings, policy: Any):
             fixtures = fixtures[: args.limit]
             return {
                 "series_id": args.series_id,
-                "matches": [_fixture_data(fixture) for fixture in fixtures],
+                "matches": [_fixture_data(fixture, team_assets) for fixture in fixtures],
                 "count": len(fixtures),
             }
         finally:
@@ -282,7 +288,11 @@ def _list_matches_handler(settings: Settings, policy: Any):
     return handle
 
 
-def _resolve_match_games_handler(settings: Settings, policy: Any):
+def _resolve_match_games_handler(
+    settings: Settings,
+    policy: Any,
+    team_assets: PandaScoreTeamAssetRepository | None = None,
+):
     async def handle(
         args: PandaScoreResolveMatchGamesInput, context: QueryContext
     ) -> dict[str, Any]:
@@ -298,10 +308,12 @@ def _resolve_match_games_handler(settings: Settings, policy: Any):
             result: dict[str, Any] = {
                 "status": resolved.status,
                 "coverage": [item.model_dump(mode="json") for item in resolved.coverage],
-                "candidates": [_fixture_data(item) for item in resolved.candidates],
+                "candidates": [
+                    _fixture_data(item, team_assets) for item in resolved.candidates
+                ],
             }
             if resolved.match is not None:
-                result["match"] = _fixture_data(resolved.match)
+                result["match"] = _fixture_data(resolved.match, team_assets)
             result["games"] = [game.model_dump(mode="json") for game in resolved.games]
             result["resolution_inputs"] = [
                 _resolution_input(resolved.match, game) for game in resolved.games
@@ -688,8 +700,27 @@ def _competition_labels(row: Any) -> set[str]:
     return labels
 
 
-def _fixture_data(fixture: PandaMatchFixture) -> dict[str, Any]:
-    return fixture.model_dump(mode="json")
+def _fixture_data(
+    fixture: PandaMatchFixture,
+    team_assets: PandaScoreTeamAssetRepository | None = None,
+) -> dict[str, Any]:
+    data = fixture.model_dump(mode="json")
+    opponents = []
+    for opponent in data.get("opponents", []):
+        if not isinstance(opponent, dict):
+            opponents.append(opponent)
+            continue
+        team = opponent.get("opponent")
+        if not isinstance(team, dict):
+            opponents.append(opponent)
+            continue
+        image_path = team_assets.image_path(team.get("id")) if team_assets is not None else None
+        public_team = {key: value for key, value in team.items() if key != "image_url"}
+        if image_path is not None:
+            public_team["team_image_path"] = image_path
+        opponents.append({**opponent, "opponent": public_team})
+    data["opponents"] = opponents
+    return data
 
 
 def _resolution_input(match: PandaMatchFixture | None, game: Any) -> dict[str, Any]:

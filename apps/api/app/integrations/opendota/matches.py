@@ -273,6 +273,7 @@ def _normalize_talent_selections(
             "internal_name": row["internal_name"],
             "name_en": row["name_en"],
             "name_zh": row["name_zh"],
+            "ability_image_path": row["ability_image_path"],
             "catalog_status": row["catalog_status"],
         }
         for index, row in enumerate(talent_rows)
@@ -322,6 +323,16 @@ def _ability_reference(
         "internal_name": internal_name,
         "name_en": name_en,
         "name_zh": name_zh,
+        "ability_image_path": (
+            f"/api/v1/assets/dota/abilities/{ability.ability_id}.png"
+            if (
+                ability is not None
+                and not ability.is_item
+                and not ability.is_talent
+                and not ability.is_innate
+            )
+            else None
+        ),
         "kind": kind,
         "catalog_status": (
             "resolved" if ability is not None else "mapped" if is_attribute_bonus else "not_found"

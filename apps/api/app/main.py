@@ -33,6 +33,7 @@ from app.persistence.database import (
 settings = get_settings()
 PLAN_CONSOLE_PATH = Path(__file__).parent / "resources" / "plan_console.html"
 CATALOG_IMAGE_DIR = Path(__file__).parent / "data" / "catalog" / "images"
+ESPORTS_ASSET_DIR = Path(__file__).parent / "data" / "esports"
 
 
 class PipeFormatter(logging.Formatter):
@@ -181,6 +182,11 @@ app.mount(
     f"{settings.api_v1_prefix}/assets/dota",
     StaticFiles(directory=CATALOG_IMAGE_DIR, check_dir=False),
     name="dota-catalog-images",
+)
+app.mount(
+    f"{settings.api_v1_prefix}/assets/esports",
+    StaticFiles(directory=ESPORTS_ASSET_DIR, check_dir=False),
+    name="esports-assets",
 )
 
 

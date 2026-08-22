@@ -306,3 +306,83 @@
 
 - API `tests/test_agentic_answer.py`：20 passed；相关 Ruff 检查通过。
 - Chat `src/lib/dotamind-api.test.ts`：15 passed；相关 ESLint 检查通过。
+
+## 19:05 — 技能与战队本地图标资产
+
+### 已完成
+
+- Valve Catalog 图片同步现在覆盖英雄、非配方物品和普通技能；技能路径统一为
+  `/api/v1/assets/dota/abilities/{id}.png`。技能证据仅为已解析且非天赋/非物品/非先天的技能附加
+  `ability_image_path`，天赋、属性加成和未解析技能保持空值。
+- 新增 PandaScore Dota 2 战队分页读取、白名单图片下载、并发 staging、manifest 原子替换
+  与只读 `PandaScoreTeamAssetRepository`；比赛 Fixture 只在本地命中时附加
+  `team_image_path`，不会把 CDN 地址写入 ToolResult 或 Chat。
+- API 静态资源挂载 `/api/v1/assets/esports`；Chat 识别技能/战队本地实体，技能加点序列使用
+  `md` 图标，天赋和属性加成保持纯文本，战队图标按普通文本/表格尺寸装饰。
+- 同步清除了 Prompt、progress evidence 和购买事件中的价格筛选语义；出装过滤只保留
+  `POST_START_BUILD_EXCLUDED_ITEM_INTERNAL_NAMES`，负时间出门装不经过该集合。
+
+### 验证
+
+- API 全量：`673 passed, 21 skipped`（1 个既有 Starlette 弃用警告）；Ruff 全量通过。
+- Chat 全量：`30 passed`；ESLint 通过。
+- Valve `--images-only` 已实际执行，严格失败于上游 `ability 1166 (axe_one_man_army)` 返回 HTTP 404；
+  staging/原子替换保护生效，原有图标目录未被替换且未留下备份目录。
+
+### 已知边界
+
+- Valve 普通技能同步按计划保持严格失败策略；需要上游为该 Catalog 技能提供有效图片，才能生成
+  完整技能快照。当前工作区没有提交半成品技能图片。
+- PandaScore 战队 manifest 需要在具备有效 API Token 的环境执行
+  `python scripts/sync_pandascore_team_assets.py --workers 8` 生成；运行时缺失或损坏的本地
+  manifest 不会阻断赛程和比赛回答。
+
+## 19:20 — PandaScore 公开 Fixture 脱敏
+
+### 已完成
+
+- `_fixture_data()` 现在始终移除上游 `opponent.image_url`，仅在本地 manifest 命中时保留
+  `team_image_path`；没有 repository、没有 Logo 或历史 Fixture 都不会把 PandaScore CDN URL
+  传到 Chat/浏览器。
+
+### 验证
+
+- API 全量：`673 passed, 21 skipped`（1 个既有 Starlette 弃用警告）；专项战队测试 6 passed，
+  Ruff 与 `git diff --check` 通过。
+
+## 20:18 — 排除无图标的英雄先天技能
+
+### 已完成
+
+- Valve 技能图片同步、OpenDota 技能引用和英雄技能序列化统一排除 `is_innate`；先天技能保留 evidence 文字，不再生成本地图片路径。
+- 修复 `axe_one_man_army`（ability 1166）被错误视为普通技能并请求 CDN 图片的问题；其 CDN 图片路径返回 404 不再阻断完整技能图片快照。
+- 同步测试 fixture 改回普通技能，并新增先天技能不下载图片的回归覆盖。
+
+### 验证
+
+- `tests/test_dota_catalog_sync.py`、`tests/test_agentic_opendota_match_tools.py` 与 `tests/test_agentic_registry.py`：87 passed。
+- 相关 Ruff 与 `git diff --check` 通过。
+
+## 20:23 — 本地图标快照同步完成
+
+### 已完成
+
+- 执行 `sync_game_data.py --images-only --workers 8`，生成 607 张普通技能图片；英雄先天技能不在快照中，`ability 1166` 不再请求不存在的图片。
+- 执行 `sync_pandascore_team_assets.py --workers 8`，原子生成 PandaScore 战队 manifest 与 1,377 张本地 Logo；1,119 支无 Logo 战队按非阻断规则跳过，下载失败数为 0。
+
+### 验证
+
+- 已确认 `app/data/catalog/images/abilities/1166.png` 不存在，`app/data/esports/teams/manifest.json` 记录 1,377 个本地资源路径。
+
+## 20:30 — PandaScore 战队快照收束为近期 Series
+
+### 已完成
+
+- 战队 Logo 同步不再全量读取 `/dota2/teams`；默认按 `begin_at` 选取最近 10 个 Dota 2 Series，并从各 Series 的 upcoming/running/past Fixture 对手去重出战队。
+- 新增 `--series-limit` 参数；同步成功时继续原子替换整个战队目录，因此移除了此前全量同步的陈旧图片。
+- 实际同步的 10 个 Series 生成 60 张本地 Logo；7 支无 Logo 战队按非阻断规则跳过，下载失败数为 0。
+
+### 验证
+
+- `tests/test_pandascore_team_assets.py`：7 passed；相关 Ruff 通过。
+- manifest 记录选取的 10 个 Series ID，资源数量为 60。

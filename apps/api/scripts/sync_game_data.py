@@ -142,7 +142,7 @@ def _load_committed_catalog_bundle() -> CatalogBundle:
 
 
 def _sync_catalog_images(bundle: CatalogBundle, *, workers: int = 8) -> None:
-    """Download hero and non-recipe item images into the local snapshot."""
+    """Download hero, non-recipe item, and ordinary ability images."""
 
     requests: list[tuple[str, str, int, str]] = []
     for hero in bundle.heroes:
@@ -153,6 +153,18 @@ def _sync_catalog_images(bundle: CatalogBundle, *, workers: int = 8) -> None:
             continue
         slug = _asset_slug(item.internal_name, "item_")
         requests.append(("items", slug, item.item_id, f"{VALVE_IMAGE_ROOT}/items/{slug}.png"))
+    for ability in bundle.abilities:
+        if ability.is_item or ability.is_talent or ability.is_innate:
+            continue
+        slug = _asset_slug(ability.internal_name, "")
+        requests.append(
+            (
+                "abilities",
+                slug,
+                ability.ability_id,
+                f"{VALVE_IMAGE_ROOT}/abilities/{ability.internal_name}.png",
+            )
+        )
 
     temporary_dir = Path(tempfile.mkdtemp(prefix=".catalog-images-", dir=CATALOG_OUTPUT_DIR.parent))
     staging_dir = temporary_dir / "images"

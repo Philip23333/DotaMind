@@ -290,5 +290,8 @@ Evidence 层不负责：
 确定性的 `purchase_display`：负时间事件聚合为出门装，非负时间事件仅按维护的
 消耗品/守卫内部名集合过滤，成品事件携带完成时间；原始标准化购买事件仍保留在
 上游 ToolResult 中供审计和确定性 transform 使用，但不因核心详情请求自动复制为
-progress evidence。
+progress evidence。技能加点中的普通已解析技能可携带本地
+`ability_image_path`，天赋、属性加成和未解析技能保持空值；PandaScore Fixture
+中的 `team_image_path` 同样只来自本地 manifest 命中，不改变 Evidence 的事实选择或
+可见性边界。
 

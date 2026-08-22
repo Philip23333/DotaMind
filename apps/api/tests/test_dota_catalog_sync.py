@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import json
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -86,6 +87,46 @@ def test_catalog_image_slug_uses_only_supported_internal_name_prefixes() -> None
         sync_game_data._asset_slug("item_Blink", "item_")
 
 
+def test_catalog_image_sync_includes_only_ordinary_abilities(monkeypatch) -> None:
+    bundle = _catalog_fixture()
+    requests: list[tuple[str, str]] = []
+
+    def download(url: str, target: Path) -> None:
+        requests.append((url, str(target)))
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b"image")
+
+    monkeypatch.setattr(sync_game_data, "_download_catalog_image", download)
+    monkeypatch.setattr(sync_game_data, "_replace_catalog_images", lambda _staging: None)
+
+    sync_game_data._sync_catalog_images(bundle, workers=1)
+
+    assert any(
+        url.endswith("/abilities/test_ability.png")
+        and target.endswith("abilities\\10.png")
+        for url, target in requests
+    )
+    assert not any("/abilities/special_bonus_" in url for url, _target in requests)
+
+
+def test_catalog_image_sync_excludes_innate_abilities(monkeypatch) -> None:
+    bundle = _catalog_fixture()
+    bundle.abilities[0] = bundle.abilities[0].model_copy(update={"is_innate": True})
+    requests: list[str] = []
+
+    def download(url: str, target: Path) -> None:
+        requests.append(url)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b"image")
+
+    monkeypatch.setattr(sync_game_data, "_download_catalog_image", download)
+    monkeypatch.setattr(sync_game_data, "_replace_catalog_images", lambda _staging: None)
+
+    sync_game_data._sync_catalog_images(bundle, workers=1)
+
+    assert not any(url.endswith("/abilities/test_ability.png") for url in requests)
+
+
 def _hero_fixture() -> tuple[dict, dict]:
     talents_en = []
     for index in range(101, 109):
@@ -130,7 +171,7 @@ def _hero_fixture() -> tuple[dict, dict]:
                 "bonuses": [{"name": "special_bonus_101", "value": 5, "operation": 0}],
             }
         ],
-        "ability_is_innate": True,
+        "ability_is_innate": False,
         "ability_has_scepter": True,
     }
     ability_zh = dict(

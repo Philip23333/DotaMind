@@ -491,6 +491,11 @@ def test_hero_abilities_contract_preserves_catalog_order_and_fields() -> None:
 
     for output, source in zip(result["abilities"], source_abilities, strict=True):
         assert output["internal_name"] == source.internal_name
+        assert output["ability_image_path"] == (
+            f"/api/v1/assets/dota/abilities/{source.ability_id}.png"
+            if not source.is_item and not source.is_talent and not source.is_innate
+            else None
+        )
         assert output["name_en"] == source.name_en
         assert output["name_zh"] == source.name_zh
         assert output["description_en"] == source.description_en

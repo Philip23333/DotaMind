@@ -42,6 +42,8 @@
   已完成的 Valve committed Catalog 与静态查询工具蓝图。
 - [`DotaMind_V3.3-4_design.md`](./versions/DotaMind_V3.3-4_design.md) —
   已完成的统一 direct answer、删除历史回忆模式与 basis 合同轻量收敛蓝图。
+- [`DotaMind_V3.4-UX_assets_design.md`](./versions/DotaMind_V3.4-UX_assets_design.md) —
+  当前 v3.4 用户体验的 Valve 技能与 PandaScore 战队本地图标资产边界。
 
 版本蓝图负责回答“这个版本要到哪里”，但当前实现状态仍以最新进度快照和工作树为准。
 

@@ -62,12 +62,14 @@ assistant message metadata，不再维护独立的浏览器级 Run Store。移�
 聊天不再调用它们。Chat Run 事件包含 Redis Stream 的重放 cursor 和 heartbeat，最终 Turn
 由 PostgreSQL 原子提交。附件、跨设备同步和用户认证均不属于这个阶段。
 
-英雄、物品以及 OpenDota 比赛结构化实体中的本地 `image_path` 会由 Chat 转换为当前
+英雄、普通技能、物品以及 OpenDota/PandaScore 比赛结构化实体中的本地 `image_path` 会由 Chat 转换为当前
 API 地址，并按 Markdown 上下文以内联缩略图显示：单实体一级标题为 56×56，普通列表与
 叙述为 32×32。比赛详情的横向 BP 表、`选手 / 英雄`列和主装备使用 32×32；装备列中带有
 `背包：`、`中立：`或`强化：`标签的物品使用 20×20。横向 BP 仅显示图标且窄屏可横向滚动。
-图片由 API 本地静态资源提供；技能、战队和联赛图片不在当前范围。图片只由结构化
-`image_path` 驱动，不由模型生成 URL。
+技能加点箭头序列使用技能 `md` 图标，天赋和全属性加点保持纯文本；赛果、对阵和 BP
+中的本地战队 Logo 按普通段落 `md`、表格 `sm` 展示。图片由 API 本地静态资源提供，
+只接受 `/api/v1/assets/dota/...` 与 `/api/v1/assets/esports/teams/...`，不允许 PandaScore
+CDN URL 到达 Chat Response、数据库紧凑响应或浏览器。图片只由结构化路径驱动，不由模型生成 URL。
 
 ## 测试
 

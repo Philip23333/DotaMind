@@ -137,7 +137,8 @@ const defaultComponents = memoizeMarkdownComponents({
     const size = fragment?.match(/^dota-size=(sm|md|lg)$/)?.[1];
     const isCatalogImage =
       typeof sourceWithoutFragment === "string" &&
-      sourceWithoutFragment.includes("/api/v1/assets/dota/");
+      /\/api\/v1\/assets\/(?:dota|esports)\//.test(sourceWithoutFragment) &&
+      /\.(?:png|jpe?g|webp)$/i.test(sourceWithoutFragment);
     const catalogSizeClass =
       size === "sm"
         ? "size-5 rounded object-cover object-center align-[-0.12em] mx-px"

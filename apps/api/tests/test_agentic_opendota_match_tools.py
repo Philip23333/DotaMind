@@ -263,6 +263,13 @@ def test_player_progress_and_inventory_are_normalized_without_reordering() -> No
         "talent",
         "talent",
     ]
+    assert player["ability_upgrade_sequence"][0]["ability_image_path"] == (
+        "/api/v1/assets/dota/abilities/5154.png"
+    )
+    assert all(
+        player["ability_upgrade_sequence"][index]["ability_image_path"] is None
+        for index in (1, 2, 3, 4, 5)
+    )
     assert player["ability_upgrade_sequence"][2]["name_zh"] == "全属性 +2"
     assert player["ability_upgrade_sequence"][2]["catalog_status"] == "mapped"
     assert [row["level_taken"] for row in player["talent_selections"]] == [10, 15, 20, 25]
@@ -344,6 +351,8 @@ def test_player_progress_and_inventory_are_normalized_without_reordering() -> No
     assert progress_player["purchase_display"]["starting_items"][0]["count"] == 1
     assert progress_player["purchase_display"]["build_segments"] == []
     assert progress_player["purchase_display"]["omitted_unresolved_count"] == 1
+    assert "item_price" not in str(progress_player)
+    assert "150" not in str(progress_player)
     assert "purchase_timeline" not in progress_player
 
 

@@ -170,15 +170,18 @@ Answer 额外获得按需的“出装、加点与天赋”Markdown 章节规则�
 购买路径由 progress transform 的 `purchase_display` 投影提供：负时间事件聚合为出门装，
 非负时间事件按维护的消耗品/守卫内部名集合过滤，成品事件携带完成时间；Answer 只输出以 `→`
 连接的单行证据名称，不重新按价格或名称筛选，也不输出购买顺序表格或手写图片 URL；Chat 只在
-该具名选手进度章节为每个装备名称确定性补充中尺寸 Catalog 图标。不能把单场记录写成推荐或
+该具名选手进度章节为每个装备名称确定性补充中尺寸 Catalog 图标，并在技能加点箭头序列中
+为普通已解析技能补充中尺寸图标；天赋、属性加成和未解析技能保持纯文本。PandaScore
+队伍名称仅在本地战队 manifest 命中时补充普通尺寸图标。不能把单场记录写成推荐或
 胜率结论。两类示例只约束展示顺序和表格列，不提供
 可复用事实；其中队伍、比分、时间、阶段、赛制、BP、Valve ID 和来源声明仍必须由当前
 EvidenceGraph 支撑。
 
 规则选择不读取 `intent`、工具名或自然语言关键词，不形成固定回答路线。完整技能与具名单技能
 等粒度仍由 Answer LLM 结合 `current_query` / `reconstructed_goal` 判断；只有存在或要求
-`hero_talent_tree` 时才注入天赋表规则。当前没有确定性 Catalog Renderer，Catalog 自然语言
-回答仍由 Answer LLM 生成。
+`hero_talent_tree` 时才注入天赋表规则。Catalog 自然语言回答仍由 Answer LLM 生成；本地
+Catalog 图标仅由 Chat 展示层根据已投影的 `catalog_visual_entities` 确定性装饰，不参与
+Answer 的事实选择。
 
 当前系统提示还要求：
 

@@ -406,6 +406,11 @@ def _serialize_hero_ability(ability: Any) -> dict[str, Any]:
     return {
         "ability_id": ability.ability_id,
         "internal_name": ability.internal_name,
+        "ability_image_path": (
+            f"{CATALOG_IMAGE_BASE_PATH}/abilities/{ability.ability_id}.png"
+            if not ability.is_item and not ability.is_talent and not ability.is_innate
+            else None
+        ),
         "name_en": ability.name_en,
         "name_zh": ability.name_zh,
         "description_en": ability.description_en,

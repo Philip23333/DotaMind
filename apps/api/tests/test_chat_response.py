@@ -72,3 +72,46 @@ def test_compact_visual_entities_do_not_treat_player_names_as_hero_names() -> No
             "names": ["自然先知", "Nature's Prophet"],
         }
     ]
+
+
+def test_compact_visual_entities_include_abilities_and_local_team_logos() -> None:
+    compact = compact_chat_response(
+        {
+            "status": "ok",
+            "tool_results": [
+                {
+                    "data": {
+                        "ability_id": 5154,
+                        "name_zh": "暗杀",
+                        "name_en": "Assassinate",
+                        "ability_image_path": "/api/v1/assets/dota/abilities/5154.png",
+                        "opponents": [
+                            {
+                                "opponent": {
+                                    "id": 1,
+                                    "name": "Team Alpha",
+                                    "acronym": "TA",
+                                    "team_image_path": "/api/v1/assets/esports/teams/1.webp",
+                                }
+                            }
+                        ],
+                    }
+                }
+            ],
+        }
+    )
+
+    assert compact["catalog_visual_entities"] == [
+        {
+            "kind": "ability",
+            "imagePath": "/api/v1/assets/dota/abilities/5154.png",
+            "label": "暗杀",
+            "names": ["暗杀", "Assassinate"],
+        },
+        {
+            "kind": "team",
+            "imagePath": "/api/v1/assets/esports/teams/1.webp",
+            "label": "Team Alpha",
+            "names": ["Team Alpha", "TA"],
+        },
+    ]

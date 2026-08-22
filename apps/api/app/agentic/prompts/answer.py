@@ -306,11 +306,9 @@ popular build, core-build classification, or win-rate claim.
 背包：{物品名称；无则省略}
 中立：{物品名称；无则省略}（强化：{物品名称；无则省略}）
 
-**购买顺序**
+**出装路径**
 
-| 相对开局时间 | 购买 |
-| --- | --- |
-| 00:33 | {物品} |
+{物品名称} → {成品装备} **(MM:SS)**
 
 **技能加点**
 
@@ -328,8 +326,13 @@ with a negative `time_seconds` into the **出门装** line immediately above
 **最终装备**; preserve first-seen item order and write repeated items as `物品 × N`.
 Omit 出门装 when there is no negative-time purchase. The purchase display is a
 deterministic transform: it already excludes the configured post-start consumable
-and ward item keys, so do not add any price-based filtering or invent a second
-filter list in this Prompt. Render the remaining events in their original order.
+and ward item keys. Render the remaining events in their original order. For each
+`build_segments` entry, connect purchases with `→`. The client decorates
+evidence-backed item names with medium local Catalog icons (`#dota-size=md`).
+Do not emit `![](...)` image Markdown or invent image URLs in this Prompt. Only
+a terminal item may show its `completed_at_seconds`, formatted immediately
+after the item as bold `**(MM:SS)**`; do not attach times to components or invent
+a completion time for an unfinished tail segment.
 Do not render a Markdown purchase table.
 Render **技能加点** as one compact arrow sequence, not a table. Group each
 non-talent selection by its first appearance and write its total selected rank

@@ -21,7 +21,7 @@ type ToolResultPayload = {
 };
 
 export type CatalogVisualEntity = {
-  kind: "hero" | "item";
+  kind: "hero" | "item" | "ability" | "team";
   imagePath: string;
   label: string;
   names: string[];
@@ -370,19 +370,23 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-const CATALOG_IMAGE_PREFIX = "/api/v1/assets/dota/";
+const LOCAL_ASSET_PREFIX = "/api/v1/assets/";
 
-function catalogImagePath(value: unknown): value is string {
+function localAssetPath(value: unknown): value is string {
   return (
     typeof value === "string" &&
-    value.startsWith(CATALOG_IMAGE_PREFIX) &&
-    value.endsWith(".png")
+    value.startsWith(LOCAL_ASSET_PREFIX) &&
+    /\.(?:png|jpe?g|webp)$/i.test(value)
   );
 }
 
-function catalogKindFromPath(imagePath: string): "hero" | "item" | null {
+function catalogKindFromPath(
+  imagePath: string,
+): CatalogVisualEntity["kind"] | null {
   if (imagePath.includes("/heroes/")) return "hero";
   if (imagePath.includes("/items/")) return "item";
+  if (imagePath.includes("/abilities/")) return "ability";
+  if (imagePath.includes("/esports/teams/")) return "team";
   return null;
 }
 
@@ -399,7 +403,7 @@ function nonEmptyStrings(values: unknown[]): string[] {
 
 function collectFieldNames(
   record: Record<string, unknown>,
-  kind: "hero" | "item" | null,
+  kind: CatalogVisualEntity["kind"] | null,
   includeGenericNames = false,
 ): { names: string[]; label: string | null } {
   const fields = [
@@ -413,7 +417,7 @@ function collectFieldNames(
       : kind === "item"
         ? "item_name_en"
         : "name_en",
-    ...(includeGenericNames ? ["name_zh", "name_en", "name"] : []),
+    ...(includeGenericNames ? ["name_zh", "name_en", "name", "acronym"] : []),
   ];
   const names = nonEmptyStrings(fields.map((field) => record[field]));
   return { names, label: names[0] ?? null };
@@ -422,13 +426,17 @@ function collectFieldNames(
 export function extractCatalogVisualEntities(
   payload: PlanResponse,
 ): CatalogVisualEntity[] {
-  if (payload.catalog_visual_entities) return payload.catalog_visual_entities;
+  if (payload.catalog_visual_entities) {
+    return payload.catalog_visual_entities.filter((entity) =>
+      isLocalVisualEntity(entity),
+    );
+  }
   const byImagePath = new Map<string, CatalogVisualEntity>();
   const labelRank = new Map<string, number>();
 
   const addEntity = (
     imagePath: string,
-    kind: "hero" | "item",
+    kind: CatalogVisualEntity["kind"],
     names: string[],
     label: string | null,
     rank: number,
@@ -454,18 +462,18 @@ export function extractCatalogVisualEntities(
     }
   };
 
-  const visit = (value: unknown, keyHint?: string) => {
+  const visit = (value: unknown) => {
     if (Array.isArray(value)) {
-      value.forEach((item) => visit(item, keyHint));
+      value.forEach((item) => visit(item));
       return;
     }
     const record = asRecord(value);
     if (!record) return;
 
-    const heroImagePath = catalogImagePath(record.hero_image_path)
+    const heroImagePath = localAssetPath(record.hero_image_path)
       ? record.hero_image_path
       : null;
-    const itemImagePath = catalogImagePath(record.item_image_path)
+    const itemImagePath = localAssetPath(record.item_image_path)
       ? record.item_image_path
       : null;
     if (heroImagePath) {
@@ -476,18 +484,38 @@ export function extractCatalogVisualEntities(
       const { names, label } = collectFieldNames(record, "item");
       addEntity(itemImagePath, "item", names, label, 0);
     }
-
-    if (catalogImagePath(record.image_path)) {
-      const kind = catalogKindFromPath(record.image_path);
-      const { names, label } = collectFieldNames(record, kind, true);
-      addEntity(record.image_path, kind ?? (keyHint === "item" ? "item" : "hero"), names, label, 1);
+    const abilityImagePath = localAssetPath(record.ability_image_path)
+      ? record.ability_image_path
+      : null;
+    if (abilityImagePath) {
+      const { names, label } = collectFieldNames(record, "ability", true);
+      addEntity(abilityImagePath, "ability", names, label, 0);
+    }
+    const teamImagePath = localAssetPath(record.team_image_path)
+      ? record.team_image_path
+      : null;
+    if (teamImagePath) {
+      const { names, label } = collectFieldNames(record, "team", true);
+      addEntity(teamImagePath, "team", names, label, 0);
     }
 
-    Object.entries(record).forEach(([key, child]) => visit(child, key));
+    if (localAssetPath(record.image_path)) {
+      const kind = catalogKindFromPath(record.image_path);
+      if (kind !== null) {
+        const { names, label } = collectFieldNames(record, kind, true);
+        addEntity(record.image_path, kind, names, label, 1);
+      }
+    }
+
+    Object.values(record).forEach((child) => visit(child));
   };
 
   (payload.tool_results ?? []).forEach((toolResult) => visit(toolResult.data));
   return [...byImagePath.values()];
+}
+
+function isLocalVisualEntity(entity: CatalogVisualEntity): boolean {
+  return catalogKindFromPath(entity.imagePath) === entity.kind && localAssetPath(entity.imagePath);
 }
 
 type TextRange = [start: number, end: number];
@@ -524,7 +552,7 @@ function smallHeading(line: string): boolean {
 }
 
 function hasCatalogImageBefore(line: string, index: number): boolean {
-  return /!\[[^\]]*\]\([^)]*\/api\/v1\/assets\/dota\/[^)]*#dota-size=(?:sm|md|lg)\)\s*$/.test(
+  return /!\[[^\]]*\]\([^)]*\/api\/v1\/assets\/[^)]*#dota-size=(?:sm|md|lg)\)\s*$/.test(
     line.slice(0, index),
   );
 }
@@ -698,6 +726,7 @@ export function decorateCatalogMentions(
   let inFence = false;
   let compactHeadingLevel: number | null = null;
   let playerProgressHeadingLevel: number | null = null;
+  let playerProgressSubsection: "item" | "ability" | null = null;
   let activeEquipmentColumn: number | null = null;
   let activePlayerHeroColumn: number | null = null;
   let activeDraftTable = false;
@@ -771,11 +800,13 @@ export function decorateCatalogMentions(
         const level = heading[1].length;
         if (/出装、加点与天赋/.test(line)) {
           playerProgressHeadingLevel = level;
+          playerProgressSubsection = null;
         } else if (
           playerProgressHeadingLevel !== null &&
           level <= playerProgressHeadingLevel
         ) {
           playerProgressHeadingLevel = null;
+          playerProgressSubsection = null;
         }
         if (smallHeading(line)) {
           compactHeadingLevel = level;
@@ -784,11 +815,28 @@ export function decorateCatalogMentions(
         }
       }
       if (playerProgressHeadingLevel !== null) {
-        return decorateCatalogLine(
-          line,
-          entities.filter((entity) => entity.kind === "item"),
-          "md",
-        );
+        if (/^\*\*(?:出门装|最终装备|出装路径)\*\*/.test(line)) {
+          playerProgressSubsection = "item";
+        } else if (/^\*\*技能加点\*\*/.test(line)) {
+          playerProgressSubsection = "ability";
+        } else if (/^\*\*天赋选择\*\*/.test(line)) {
+          playerProgressSubsection = null;
+        }
+        if (playerProgressSubsection === "ability") {
+          return decorateCatalogLine(
+            line,
+            entities.filter((entity) => entity.kind === "ability"),
+            "md",
+          );
+        }
+        if (playerProgressSubsection === "item") {
+          return decorateCatalogLine(
+            line,
+            entities.filter((entity) => entity.kind === "item"),
+            "md",
+          );
+        }
+        return line;
       }
       const inCompactHeading = compactHeadingLevel !== null;
       const size = heading?.[1] === "#"

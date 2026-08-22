@@ -49,6 +49,20 @@ class PandaScoreCompetitions:
         normalized = [normalize_competition(row) for row in rows if isinstance(row, dict)]
         return normalized[0] if normalized else None
 
+    async def list_recent_series_ids(self, *, limit: int) -> list[int]:
+        if limit < 1 or limit > self.transport.max_page_size:
+            raise ValueError("recent series limit must fit PandaScore page size")
+        rows = await self.transport.get(
+            "/dota2/series",
+            params={"sort": "-begin_at", "page[size]": limit},
+        )
+        series_ids: list[int] = []
+        for row in rows if isinstance(rows, list) else []:
+            series_id = _as_int(row.get("id")) if isinstance(row, dict) else None
+            if series_id is not None and series_id > 0:
+                series_ids.append(series_id)
+        return list(dict.fromkeys(series_ids))
+
     async def list_tournaments(self, series_id: int) -> list[PandaTournamentStage]:
         rows = await self.transport.get(
             "/dota2/tournaments",

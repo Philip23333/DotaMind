@@ -41,6 +41,13 @@ class PandaTournamentStage(BaseModel):
     region: str | None = None
 
 
+class PandaScoreTeam(BaseModel):
+    pandascore_team_id: int
+    name: str
+    acronym: str | None = None
+    image_url: str | None = None
+
+
 class PandaGameReference(BaseModel):
     pandascore_game_id: int
     pandascore_match_id: int

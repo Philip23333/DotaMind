@@ -131,11 +131,12 @@ Committed Valve Catalog:
 - `resolve_item`
 - `dota.item_info`
 
-英雄与物品图片由 `scripts/sync_game_data.py --images-only` 从 Valve 官方
+英雄、普通技能与物品图片由 `scripts/sync_game_data.py --images-only` 从 Valve 官方
 CDN 下载到 `app/data/catalog/images/`，API 通过
 `/api/v1/assets/dota/heroes/{id}.png` 和
-`/api/v1/assets/dota/items/{id}.png` 提供本地静态访问。Catalog 英雄/物品查询
-结果携带对应的 `image_path`；请求运行时不访问外部图片 CDN。
+`/api/v1/assets/dota/items/{id}.png`、`/api/v1/assets/dota/abilities/{id}.png`
+提供本地静态访问。Catalog 英雄/物品/技能查询和 OpenDota 技能进度结果携带对应的
+本地路径；请求运行时不访问外部图片 CDN。天赋和全属性加点保持无技能图片路径。
 
 `opendota.match_details` 的选手、背包/装备、中立物品和 BP 记录也会保留确定性的
 `hero_image_path` / `item_image_path`；Catalog 未命中或 ID 缺失时字段为 `null`，不会
@@ -169,6 +170,19 @@ PandaScore Dota 2 Fixture:
 - `pandascore.resolve_competition`
 - `pandascore.list_matches`
 - `pandascore.resolve_match_games`
+
+PandaScore 战队 Logo 是独立的离线快照，不参与比赛解析或跨源映射：
+
+```powershell
+cd apps/api
+.\\.venv\\Scripts\\python.exe scripts\\sync_pandascore_team_assets.py --workers 8
+```
+
+脚本默认读取按开始时间最新的 10 个 Series，并从每个 Series 的 upcoming/running/past
+Fixture 对手中去重出战队，将合法 Logo 写入 `app/data/esports/teams/` 并原子替换 manifest。
+可通过 `--series-limit N` 调整 Series 数量；无 Logo 或单图下载失败只记录并跳过，整体
+Series/Fixture 分页或认证失败则保留旧快照并以非零退出。运行时只读该快照，API 通过
+`/api/v1/assets/esports/teams/{id}.{png|jpg|webp}` 提供本地静态访问。
 
 Cross-source match resolution:
 

@@ -57,12 +57,13 @@ relations. `dota.item_info` expands each edge into bilingual recipe-scroll,
 component and upgrade-target definitions with prices and displayable special
 values, plus an auditable component/scroll/calculated/final-price comparison.
 
-The same committed catalog snapshot includes lightweight offline hero and
-non-recipe item PNGs under `app/data/catalog/images/`. The maintenance command's
-`--images-only` mode downloads these files from Valve's official React image CDN;
-the API mounts them at `/api/v1/assets/dota/...`. Catalog hero/item entities expose
-only a deterministic origin-relative `image_path`, so request-time code remains
-offline and does not expose server filesystem paths.
+The same committed catalog snapshot includes lightweight offline hero, ordinary
+ability, and non-recipe item PNGs under `app/data/catalog/images/`. The maintenance
+command's `--images-only` mode downloads these files from Valve's official React image
+CDN; the API mounts them at `/api/v1/assets/dota/...`. Catalog hero/item entities and
+ordinary ability evidence expose only deterministic origin-relative paths, so
+request-time code remains offline and does not expose server filesystem paths. Talent
+and attribute-bonus rows deliberately retain null ability image paths.
 
 Downstream STRATZ contracts continue to reference `data.hero.hero_id`, while
 the existing OpenDota team registrations remain unchanged. The competition slice
@@ -82,8 +83,9 @@ game yields an auditable `inferred_cross_source` mapping, never presented as a
 native PandaScore Valve ID. Match-detail player and BP evidence preserves
 OpenDota's raw hero/item IDs and deterministically adds display names and
 origin-relative `hero_image_path` / `item_image_path` values from the committed Valve
-Catalog snapshot; parsed-player data also preserves purchase events, inventory and
-neutral history, level-indexed ability upgrades and mechanically identified talents.
+Catalog snapshot; parsed-player ability upgrades add `ability_image_path` only for
+resolved ordinary skills. Parsed-player data also preserves purchase events, inventory
+and neutral history, level-indexed ability upgrades and mechanically identified talents.
 Evidence extraction projects these parsed players by evidence kind: scoreboard items
 keep display and summary fields, while the downstream player transform emits one
 `player_match_progress` package containing identity, level, final inventory, the
@@ -93,10 +95,20 @@ post-start consumable/ward internal names, and marks terminal items with complet
 times. The normalized raw purchase events remain in the upstream ToolResult for audit;
 the projection prevents the same complete player object from being repeated across
 multiple progress evidence kinds.
+PandaScore team logos use a separate committed offline snapshot under
+`apps/api/app/data/esports/teams/`, maintained by
+`scripts/sync_pandascore_team_assets.py` through the newest ten Dota 2 Series (by
+`begin_at`) and the de-duplicated opponents from each Series' upcoming/running/past
+Fixtures. Missing logos and individual image failures are non-blocking and omitted from
+the manifest; Series/Fixture pagination or authentication failures never replace the
+previous snapshot. Runtime lookup is read-only and local, and the API mounts it at
+`/api/v1/assets/esports/...`. PandaScore CDN URLs never enter the public response.
 The Chat formatter keeps the user-facing answer as Markdown: it deterministically
 turns the Answer's horizontal seven-order BP table into `md` hero icons, decorates
 the combined player/hero column with `md` hero icons, and renders main inventory as
-`md` items while backpack, neutral item, and enhancement groups use `sm` items.
+`md` items while backpack, neutral item, and enhancement groups use `sm` items. It
+renders ordinary skill names in the explicit player-progress skill sequence as `md`
+ability icons and local team names as `md`/`sm` team icons by Markdown context.
 Within the explicit `出装、加点与天赋` player-progress subsection, every equipment
 name is instead decorated as an `md` item icon; its Answer template supplies a
 single horizontal name-and-arrow line and never a hand-written image URL. It does

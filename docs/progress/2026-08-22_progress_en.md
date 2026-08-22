@@ -306,3 +306,86 @@
 
 - API `tests/test_agentic_answer.py`: 20 passed; relevant Ruff check passed.
 - Chat `src/lib/dotamind-api.test.ts`: 15 passed; relevant ESLint check passed.
+
+## 19:05 — Local skill and team-logo assets
+
+### Completed
+
+- Valve Catalog image sync now covers heroes, non-recipe items, and ordinary abilities; ability
+  paths use `/api/v1/assets/dota/abilities/{id}.png`. Skill evidence adds `ability_image_path`
+  only for resolved non-talent, non-item, non-innate abilities; talents, attribute bonuses, and unresolved
+  skills remain null.
+- Added PandaScore Dota 2 team pagination, allowlisted image downloads, concurrent staging,
+  manifest atomic replacement, and the read-only `PandaScoreTeamAssetRepository`. A Fixture adds
+  `team_image_path` only on a local hit; CDN URLs are not written into ToolResult or Chat.
+- Mounted `/api/v1/assets/esports`; Chat recognizes local skill/team entities, decorates skill
+  sequences with `md` icons, keeps talents and attribute bonuses as plain text, and uses ordinary
+  text/table icon sizes for team logos.
+- Removed price-filter semantics from the Prompt, progress evidence, and purchase events; only
+  `POST_START_BUILD_EXCLUDED_ITEM_INTERNAL_NAMES` remains, and negative-time starting items bypass it.
+
+### Verification
+
+- Full API suite: `673 passed, 21 skipped` (one existing Starlette deprecation warning); full Ruff passed.
+- Full Chat suite: `30 passed`; ESLint passed.
+- Valve `--images-only` was executed and strictly failed when upstream returned HTTP 404 for
+  `ability 1166 (axe_one_man_army)`; staging/atomic replacement preserved the existing image
+  directory and left no backup directory.
+
+### Known boundaries
+
+- Valve ordinary-ability sync intentionally remains strict; the upstream Catalog must provide a
+  valid image before a complete skill snapshot can be generated. No partial skill images were committed.
+- The PandaScore team manifest must be generated in an environment with a valid API token using
+  `python scripts/sync_pandascore_team_assets.py --workers 8`; a missing or corrupt local manifest
+  does not block schedule or match answers.
+
+## 19:20 — PandaScore public-Fixture redaction
+
+### Completed
+
+- `_fixture_data()` now always removes upstream `opponent.image_url`, retaining only
+  `team_image_path` on a local manifest hit. With no repository, no logo, or a historical Fixture,
+  PandaScore CDN URLs do not reach Chat or the browser.
+
+### Verification
+
+- Full API suite: `673 passed, 21 skipped` (one existing Starlette deprecation warning); team-asset
+  focused tests: 6 passed; Ruff and `git diff --check` passed.
+
+## 20:18 — Exclude innate hero abilities without icons
+
+### Completed
+
+- Valve skill-image sync, OpenDota ability references, and hero-ability serialization now consistently exclude `is_innate`; innate abilities retain evidence-backed text and no longer receive local image paths.
+- Fixed `axe_one_man_army` (ability 1166) being treated as an ordinary ability and requesting a CDN image; its 404 path no longer blocks a complete skill-image snapshot.
+- Restored the sync-test fixture to an ordinary ability and added regression coverage that innate abilities are not downloaded.
+
+### Verification
+
+- `tests/test_dota_catalog_sync.py`, `tests/test_agentic_opendota_match_tools.py`, and `tests/test_agentic_registry.py`: 87 passed.
+- Related Ruff and `git diff --check` passed.
+
+## 20:23 — Local icon snapshots synchronized
+
+### Completed
+
+- Ran `sync_game_data.py --images-only --workers 8`, generating 607 ordinary skill images; innate hero abilities are absent from the snapshot, and `ability 1166` no longer requests a nonexistent image.
+- Ran `sync_pandascore_team_assets.py --workers 8`, atomically generating the PandaScore team manifest and 1,377 local logos; 1,119 teams without logos were skipped under the non-blocking rule and there were zero download failures.
+
+### Verification
+
+- Confirmed that `app/data/catalog/images/abilities/1166.png` is absent and that `app/data/esports/teams/manifest.json` records 1,377 local resource paths.
+
+## 20:30 — PandaScore team snapshot narrowed to recent Series
+
+### Completed
+
+- Team-logo sync no longer reads the full `/dota2/teams` list; by default it selects the ten newest Dota 2 Series by `begin_at` and de-duplicates teams from each Series' upcoming/running/past Fixture opponents.
+- Added `--series-limit`; a successful sync still atomically replaces the entire team directory, removing the stale images from the previous full synchronization.
+- The actual ten-Series synchronization generated 60 local logos; seven teams without logos were skipped under the non-blocking rule and there were zero download failures.
+
+### Verification
+
+- `tests/test_pandascore_team_assets.py`: 7 passed; related Ruff passed.
+- The manifest records the selected ten Series IDs and 60 local assets.

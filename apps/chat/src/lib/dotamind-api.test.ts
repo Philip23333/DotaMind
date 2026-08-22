@@ -354,6 +354,64 @@ describe("formatPlanResponse", () => {
     expect(formatted).not.toContain("#dota-size=sm");
   });
 
+  it("uses medium ability icons only in the player-progress skill sequence", () => {
+    const formatted = formatPlanResponse({
+      status: "ok",
+      answer: {
+        summary:
+          "#### 出装、加点与天赋\n\n##### 玩家 · 英雄（12）\n\n**技能加点**\n\n风暴之拳 → 战吼\n\n**天赋选择**\n\n- 10级：+5秒 战吼持续时间",
+      },
+      catalog_visual_entities: [
+        {
+          kind: "ability",
+          imagePath: "/api/v1/assets/dota/abilities/1.png",
+          label: "风暴之拳",
+          names: ["风暴之拳"],
+        },
+        {
+          kind: "ability",
+          imagePath: "/api/v1/assets/dota/abilities/2.png",
+          label: "战吼",
+          names: ["战吼"],
+        },
+      ],
+    });
+
+    expect(formatted).toContain(
+      "![风暴之拳](http://localhost:8001/api/v1/assets/dota/abilities/1.png#dota-size=md)风暴之拳 → ![战吼](http://localhost:8001/api/v1/assets/dota/abilities/2.png#dota-size=md)战吼",
+    );
+    expect(formatted).toContain("- 10级：+5秒 战吼持续时间");
+  });
+
+  it("renders local PandaScore team icons without allowing remote image URLs", () => {
+    const formatted = formatPlanResponse({
+      status: "ok",
+      answer: { summary: "# Team Alpha vs Team Beta" },
+      catalog_visual_entities: [
+        {
+          kind: "team",
+          imagePath: "/api/v1/assets/esports/teams/1.webp",
+          label: "Team Alpha",
+          names: ["Team Alpha", "TA"],
+        },
+        {
+          kind: "team",
+          imagePath: "/api/v1/assets/esports/teams/2.jpg",
+          label: "Team Beta",
+          names: ["Team Beta", "TB"],
+        },
+      ],
+    });
+
+    expect(formatted).toContain(
+      "![Team Alpha](http://localhost:8001/api/v1/assets/esports/teams/1.webp#dota-size=lg)Team Alpha",
+    );
+    expect(formatted).toContain(
+      "![Team Beta](http://localhost:8001/api/v1/assets/esports/teams/2.jpg#dota-size=lg)Team Beta",
+    );
+    expect(formatted).not.toContain("pandascore.co");
+  });
+
   it("does not decorate a player name from a stale hero visual alias", () => {
     const formatted = formatPlanResponse({
       status: "ok",

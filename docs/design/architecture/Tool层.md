@@ -136,6 +136,9 @@ V3.2-2 中，默认 `PlanService` 装配会把同一 Registry 实例传给这些
   非负时间消耗品/守卫内部名集合过滤，并给成品事件附完成时间；原始购买事件仍留在
   上游 ToolResult。输出不携带完整比赛或原始 ToolResult，也不提供通用 JSONPath 或
   自由 `aspects` 过滤参数。
+- PandaScore Fixture 的 `opponents[].opponent` 仅在本地战队 manifest 命中时附加
+  `team_image_path`；读取 manifest 的 repository 是只读且不发网络请求，缺失或损坏时
+  保留原始队伍字段，不阻断赛程、比赛解析或 Evidence 构建。
 
 PandaScore 赛事 Fixture 事实、跨源推断映射与 OpenDota Valve/Replay 事实分别进入 EvidenceGraph；
 `detailed_stats` 不是 `has_parsed`，空 BP 不产生 `match_draft` 证据。未指定局号时，
