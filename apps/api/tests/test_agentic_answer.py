@@ -2,7 +2,12 @@
 from typing import Any
 
 from app.agentic.answer import AnswerSynthesizer
-from app.agentic.evidence import EvidenceDataQuality, EvidenceGraph, build_evidence_graph
+from app.agentic.evidence import (
+    EvidenceDataQuality,
+    EvidenceGraph,
+    EvidenceItem,
+    build_evidence_graph,
+)
 from app.agentic.models import ExecutionPlan, QueryContext, ToolCall, ToolResult, ToolSource
 from app.agentic.runtime.streaming import (
     ObserverStreamEvent,
@@ -292,11 +297,11 @@ def test_natural_language_answer_receives_catalog_rules_and_real_evidence() -> N
     assert "filters.selection_mode" not in system
     assert "STRATZ `synergy`" not in system
     assert "calendar days" not in system
-    assert "'kind':'hero_attributes'" in user.replace(" ", "")
-    assert "'strength_base'" in user
-    assert "'strength_gain'" in user
-    assert "'patch':'7.41e'" in user.replace(" ", "")
-    assert "'generated_at'" in user
+    assert '"kind": "hero_attributes"' in user
+    assert '"strength_base"' in user
+    assert '"strength_gain"' in user
+    assert '"patch": "7.41e"' in user
+    assert '"generated_at"' in user
 
 
 def test_natural_language_prompt_separates_catalog_metadata_from_stratz_lane_stats() -> None:
@@ -778,3 +783,130 @@ def test_natural_language_prompt_adds_aligned_ti_status_example_for_match_eviden
     assert "Do not treat historical purchases as a recommendation" in progress_prompt
     assert "infer historical talent-tree sides or tiers" in progress_prompt
     assert "#### 出装、加点与天赋" not in match_details_prompt
+
+
+def test_answer_messages_exclude_raw_tool_results_and_unrequired_match_progress() -> None:
+    from app.agentic.prompts.answer import render_natural_language_answer_messages
+
+    plan = ExecutionPlan(
+        intent="match_details",
+        goal="Show the match result and scoreboard.",
+        output_contract="natural_language_answer",
+        required_evidence=["match_result", "player_scoreboard"],
+    )
+    graph = EvidenceGraph(
+        intent=plan.intent,
+        required_evidence=plan.required_evidence,
+        tool_results=[
+            ToolResult(
+                tool_call_id="details",
+                tool="opendota.match_details",
+                status="ok",
+                latency_ms=0,
+                data={"raw_tool_result_sentinel": "must-not-reach-answer"},
+            )
+        ],
+        evidence=[
+            EvidenceItem(
+                id="result",
+                kind="match_result",
+                subject="match",
+                value={"winner": "TEAM VISION"},
+                tool_call_id="details",
+                tool="opendota.match_details",
+            ),
+            EvidenceItem(
+                id="scoreboard",
+                kind="player_scoreboard",
+                subject="match",
+                value={"players": []},
+                tool_call_id="details",
+                tool="opendota.match_details",
+            ),
+            EvidenceItem(
+                id="purchase",
+                kind="player_purchase_timeline",
+                subject="optional purchase sentinel",
+                value={"events": []},
+                tool_call_id="details",
+                tool="opendota.match_details",
+            ),
+            EvidenceItem(
+                id="skills",
+                kind="player_skill_build",
+                subject="optional skill sentinel",
+                value={"events": []},
+                tool_call_id="details",
+                tool="opendota.match_details",
+            ),
+            EvidenceItem(
+                id="talents",
+                kind="player_talent_selection",
+                subject="optional talent sentinel",
+                value={"events": []},
+                tool_call_id="details",
+                tool="opendota.match_details",
+            ),
+        ],
+        missing=["match_parse_status"],
+        data_quality=EvidenceDataQuality(completeness=0.9),
+    )
+
+    messages = render_natural_language_answer_messages(plan, graph)
+
+    assert "must-not-reach-answer" not in messages[1]["content"]
+    assert "optional purchase sentinel" not in messages[1]["content"]
+    assert "optional skill sentinel" not in messages[1]["content"]
+    assert "optional talent sentinel" not in messages[1]["content"]
+    assert '"winner": "TEAM VISION"' in messages[1]["content"]
+    assert "match_parse_status" in messages[1]["content"]
+    assert "#### 出装、加点与天赋" not in messages[0]["content"]
+
+
+def test_answer_messages_include_only_explicitly_required_purchase_progress() -> None:
+    from app.agentic.prompts.answer import render_natural_language_answer_messages
+
+    plan = ExecutionPlan(
+        intent="hero_build",
+        goal="Show the purchase order.",
+        output_contract="natural_language_answer",
+        required_evidence=["player_purchase_timeline"],
+    )
+    graph = EvidenceGraph(
+        intent=plan.intent,
+        required_evidence=plan.required_evidence,
+        evidence=[
+            EvidenceItem(
+                id="purchase",
+                kind="player_purchase_timeline",
+                subject="purchase sentinel",
+                value={"events": []},
+                tool_call_id="details",
+                tool="opendota.match_details",
+            ),
+            EvidenceItem(
+                id="skills",
+                kind="player_skill_build",
+                subject="skill sentinel",
+                value={"events": []},
+                tool_call_id="details",
+                tool="opendota.match_details",
+            ),
+            EvidenceItem(
+                id="talents",
+                kind="player_talent_selection",
+                subject="talent sentinel",
+                value={"events": []},
+                tool_call_id="details",
+                tool="opendota.match_details",
+            ),
+        ],
+        data_quality=EvidenceDataQuality(completeness=1.0),
+    )
+
+    messages = render_natural_language_answer_messages(plan, graph)
+
+    assert "purchase sentinel" in messages[1]["content"]
+    assert "skill sentinel" not in messages[1]["content"]
+    assert "talent sentinel" not in messages[1]["content"]
+    assert "#### 出装、加点与天赋" in messages[0]["content"]

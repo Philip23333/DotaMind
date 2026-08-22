@@ -61,3 +61,17 @@
 - `tests/test_agent_controller.py`: 42 passed.
 - Ruff passed for Controller rules, the OpenDota tool description, and targeted tests.
 - `git diff --check` passed.
+
+## 02:20 — Answer-specific Evidence View
+
+### Completed
+
+- Natural-language Answer no longer serializes the complete `EvidenceGraph` or raw `tool_results`; it sends only the evidence matching the required kinds, missing entries, and data quality.
+- Purchase, skill-build, and talent evidence not required by the current request neither activates presentation rules nor enters the Answer Prompt.
+- Raw tool results remain in execution state for audit, test observation, and later deterministic processing.
+
+### Verification
+
+- `tests/test_agentic_answer.py`: 20 passed.
+- New regression coverage proves raw tool results and unrequested player-progress evidence stay out of Answer, while an explicit purchase request projects only purchase evidence.
+- Answer-focused Ruff and `git diff --check` passed.

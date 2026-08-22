@@ -127,7 +127,7 @@ Structured answer 的优点是稳定、可测；缺点是每个 contract 都需�
 
 ## 5. Natural Language Answer 链路
 
-Natural language answer 调用 LLM，并同时提供请求语义与 EvidenceGraph：
+Natural language answer 调用 LLM，并同时提供请求语义与 Answer 专用 Evidence View：
 
 ```text
 system:
@@ -139,20 +139,26 @@ user:
     current_query: <当前用户原话>,
     reconstructed_goal: <plan.goal>
   }
-  required_evidence=<plan.required_evidence>
-  evidence_graph=<graph JSON>
+  evidence_view={
+    required_evidence: <effective required evidence>,
+    evidence: <only EvidenceItem kinds required by this answer>,
+    missing: <graph missing>,
+    data_quality: <graph data quality>
+  }
 ```
 
 `current_query` 保留当前消息中的具名焦点、排除项、数量和细节要求；
 `reconstructed_goal` 承接 Controller 从多轮会话恢复的完整请求。两者只影响展示范围，
-不得扩大 EvidenceGraph 中可陈述的事实。该方案不新增固定 presentation 枚举或 intent 路由。
+不得扩大 Evidence View 中可陈述的事实。完整 `EvidenceGraph.tool_results` 继续保留给
+执行审计、测试观察器与下游确定性处理，但不发送给 Answer LLM。该方案不新增固定
+presentation 枚举或 intent 路由。
 
 自然语言 Answer 的 system prompt 和上述消息形状由
 `agentic/prompts/answer.py` 的 renderer 负责；`answer/synthesizer.py` 负责选择
 LLM、执行同步/流式调用和包装结果，不内嵌 prompt 文本。system prompt 不再是固定总规则：
-renderer 合并 `required_evidence` 与实际 evidence kinds，只注入 Catalog 属性、技能、天赋、
+renderer 以 effective `required_evidence` 选择并投影 evidence，只注入 Catalog 属性、技能、天赋、
 物品、赛事/比赛、STRATZ 周趋势、pair-lane、排名或日趋势中与当前 EvidenceGraph 相关的片段；
-STRATZ 与赛事跨来源元数据边界还依据 evidence/tool result 的 source 加载。赛事状态 evidence
+STRATZ 与赛事跨来源元数据边界还依据已投影 evidence 的 source 加载。赛事状态 evidence
 会额外注入 TI 最新战况的 Markdown 版式示例；比赛详情 evidence 则注入逐局“摘要 → 双方横向
 BP 表 → 选手数据”的版式示例，数据说明以纯 Markdown blockquote 作为次级视觉内容。选手表使用
 `选手 / 英雄 | K/D/A | 经济 | 装备 | 技能加点与天赋`，装备以主栏、背包、中立及强化分组；普通

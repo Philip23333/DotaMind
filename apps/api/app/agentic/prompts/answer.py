@@ -499,6 +499,19 @@ def render_natural_language_system_prompt(graph: EvidenceGraph) -> str:
     return "\n\n".join(sections)
 
 
+def _answer_evidence_view(graph: EvidenceGraph) -> dict[str, object]:
+    """Project the execution graph to the facts the Answer model may use."""
+
+    required_kinds = set(graph.required_evidence)
+    evidence = [item for item in graph.evidence if item.kind in required_kinds]
+    return {
+        "required_evidence": graph.required_evidence,
+        "evidence": [item.model_dump(mode="json") for item in evidence],
+        "missing": graph.missing,
+        "data_quality": graph.data_quality.model_dump(mode="json"),
+    }
+
+
 def render_natural_language_answer_messages(
     plan: ExecutionPlan,
     graph: EvidenceGraph,
@@ -509,15 +522,25 @@ def render_natural_language_answer_messages(
         "current_query": current_query or plan.goal,
         "reconstructed_goal": plan.goal,
     }
+    answer_evidence = _answer_evidence_view(graph)
+    answer_graph = graph.model_copy(
+        update={
+            "tool_results": [],
+            "evidence": [
+                item
+                for item in graph.evidence
+                if item.kind in set(graph.required_evidence)
+            ],
+        }
+    )
     return [
-        {"role": "system", "content": render_natural_language_system_prompt(graph)},
+        {"role": "system", "content": render_natural_language_system_prompt(answer_graph)},
         {
             "role": "user",
             "content": (
                 "request_context="
                 f"{json.dumps(request_context, ensure_ascii=False)}\n"
-                f"required_evidence={graph.required_evidence}\n"
-                f"evidence_graph={graph.model_dump(mode='json')}"
+                f"evidence_view={json.dumps(answer_evidence, ensure_ascii=False)}"
             ),
         },
     ]

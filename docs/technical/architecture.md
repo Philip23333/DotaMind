@@ -309,11 +309,14 @@ plan goal. The player-performance `take` argument is the final returned top-N;
 the handler owns any internal over-fetching required for strong-mode ranking.
 Natural-language Answer prompt rules and message rendering live in
 `agentic/prompts/answer.py`; `answer/synthesizer.py` only invokes that renderer
-and handles LLM results. The renderer combines required and actual evidence kinds
-and includes only the relevant Catalog or STRATZ presentation sections. STRATZ
-source metadata also activates the cross-source attribution boundary. This
-selection never uses `intent`, tool names, or query-keyword routing, and no
-deterministic Catalog answer renderer is present. Prompt content changes are
+and handles LLM results. The renderer projects an Answer Evidence View containing
+effective required evidence, only the matching `EvidenceItem`s, `missing`, and
+data-quality metadata; it never serializes `EvidenceGraph.tool_results`. Raw tool
+results remain available to execution audit, test observation, and deterministic
+downstream processing. The renderer uses that view to include only relevant Catalog
+or STRATZ presentation sections; evidence source metadata also activates the
+cross-source attribution boundary. This selection never uses `intent`, tool names,
+or query-keyword routing, and no deterministic Catalog answer renderer is present. Prompt content changes are
 identified by the prepared prompt hash recorded in the Run manifest. For
 natural-language answers,
 `answer_node` passes the current user query alongside the plan and EvidenceGraph;

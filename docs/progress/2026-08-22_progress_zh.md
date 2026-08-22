@@ -61,3 +61,17 @@
 - `tests/test_agent_controller.py`：42 passed。
 - Controller 规则、OpenDota 工具说明和定向测试 Ruff 检查通过。
 - `git diff --check` 通过。
+
+## 02:20 — Answer 专用 Evidence View
+
+### 已完成
+
+- 自然语言 Answer 不再序列化完整 `EvidenceGraph` 或原始 `tool_results`；发送给模型的是 required evidence 对应的 evidence、缺失项与数据质量。
+- 未被当前请求要求的购买、技能加点和天赋 evidence 不会激活展示规则，也不会进入 Answer Prompt。
+- 原始工具结果仍保留在执行态，供审计、测试观察器和后续确定性处理使用。
+
+### 验证
+
+- `tests/test_agentic_answer.py`：20 passed。
+- 新增回归覆盖：原始工具结果及未要求的选手进度 evidence 不进入 Answer；明确要求购买顺序时只投影购买 evidence。
+- Answer 定向 Ruff 检查与 `git diff --check` 通过。
