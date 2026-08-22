@@ -1,7 +1,12 @@
 from __future__ import annotations
 
-from app.agentic.models import ToolResult
-from app.agentic.tools.opendota_match_tools import match_details_evidence
+from app.agentic.models import QueryContext, ToolResult
+from app.agentic.tools.opendota_match_tools import (
+    DotaExtractMatchPlayerProgressInput,
+    extract_match_player_progress,
+    match_details_evidence,
+    match_player_progress_evidence,
+)
 from app.integrations.opendota.matches import normalize_match_draft, normalize_match_summary
 from app.integrations.valve.catalog_repository import load_default_catalog_repository
 
@@ -267,9 +272,6 @@ def test_player_progress_and_inventory_are_normalized_without_reordering() -> No
         "player_scoreboard",
         "match_parse_status",
         "match_draft",
-        "player_purchase_timeline",
-        "player_skill_build",
-        "player_talent_selection",
     }
 
     scoreboard_player = next(
@@ -282,15 +284,28 @@ def test_player_progress_and_inventory_are_normalized_without_reordering() -> No
     assert "ability_upgrade_sequence" not in scoreboard_player
     assert "talent_selections" not in scoreboard_player
 
+    progress_result = extract_match_player_progress(
+        DotaExtractMatchPlayerProgressInput(
+            matches=result.data["matches"],
+            player_query="Player 0",
+            aspects=["purchase_timeline", "ability_upgrade_sequence", "talent_selections"],
+        ),
+        QueryContext(),
+    )
+    progress_tool_result = ToolResult(
+        tool_call_id="progress_extract",
+        tool="dota.extract_match_player_progress",
+        status="ok",
+        data=progress_result,
+        latency_ms=0,
+    )
     progress_evidence = {
         item.kind: item.value["players"][0]
-        for item in match_details_evidence(result)
-        if item.kind in {
-            "player_purchase_timeline",
-            "player_skill_build",
-            "player_talent_selection",
-        }
+        for item in match_player_progress_evidence(progress_tool_result)
     }
+    assert {item.kind for item in match_details_evidence(result)}.isdisjoint(
+        {"player_purchase_timeline", "player_skill_build", "player_talent_selection"}
+    )
     assert set(progress_evidence["player_purchase_timeline"]) == {
         "name",
         "personaname",
@@ -324,6 +339,27 @@ def test_player_progress_and_inventory_are_normalized_without_reordering() -> No
         "hero_catalog_status",
         "talent_selections",
     }
+
+
+def test_player_progress_transform_returns_only_requested_aspects() -> None:
+    raw = _raw_match()
+    raw["players"][0]["purchase_log"] = [{"time": 12, "key": "tango"}]
+    summary = normalize_match_summary(raw, 8943244303)
+    output = extract_match_player_progress(
+        DotaExtractMatchPlayerProgressInput(
+            matches=[{"valve_match_id": 8943244303, "summary": summary}],
+            player_query="Player 0",
+            aspects=["purchase_timeline", "purchase_timeline"],
+        ),
+        QueryContext(),
+    )
+
+    assert output["status"] == "resolved"
+    row = output["matches"][0]
+    assert row["player"]["name"] == "Player 0"
+    assert "purchase_timeline" in row
+    assert "ability_upgrade_sequence" not in row
+    assert "talent_selections" not in row
 
 
 def test_zero_valued_inventory_slots_are_empty() -> None:

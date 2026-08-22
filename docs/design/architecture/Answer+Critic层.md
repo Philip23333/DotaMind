@@ -140,7 +140,7 @@ user:
     reconstructed_goal: <plan.goal>
   }
   evidence_view={
-    required_evidence: <effective required evidence>,
+    required_evidence: <global planner/contract evidence for Answer>,
     evidence: <only EvidenceItem kinds required by this answer>,
     missing: <graph missing>,
     data_quality: <graph data quality>
@@ -155,8 +155,10 @@ presentation 枚举或 intent 路由。
 
 自然语言 Answer 的 system prompt 和上述消息形状由
 `agentic/prompts/answer.py` 的 renderer 负责；`answer/synthesizer.py` 负责选择
-LLM、执行同步/流式调用和包装结果，不内嵌 prompt 文本。system prompt 不再是固定总规则：
-renderer 以 effective `required_evidence` 选择并投影 evidence，只注入 Catalog 属性、技能、天赋、
+LLM、执行同步/流式调用和包装结果，不内嵌 prompt 文本。Answer 节点会从完整
+EvidenceGraph 创建浅的 Answer-only view：runtime/Critic 继续使用包含工具 mandatory
+evidence 的 effective 集合，Answer view 只使用 global planner/contract evidence。system
+prompt 不再是固定总规则：renderer 以 Answer view 的 `required_evidence` 选择并投影 evidence，只注入 Catalog 属性、技能、天赋、
 物品、赛事/比赛、STRATZ 周趋势、pair-lane、排名或日趋势中与当前 EvidenceGraph 相关的片段；
 STRATZ 与赛事跨来源元数据边界还依据已投影 evidence 的 source 加载。赛事状态 evidence
 会额外注入 TI 最新战况的 Markdown 版式示例；比赛详情 evidence 则注入逐局“摘要 → 双方横向

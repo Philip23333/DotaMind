@@ -774,6 +774,8 @@ def test_agentic_planner_prompt_contains_team_recent_catalog_example() -> None:
     assert "Do not require player_purchase_timeline" in prompt
     assert "only for an explicit purchase/build-order" in prompt
     assert "optional evidence kind merely because" in prompt
+    assert "For a focused player-progress request" in prompt
+    assert "mandatory core evidence is not Answer data" in prompt
     assert "$resolve_target.data.hero.hero_id" not in prompt
     # Slimmed: redundant meta-rule markers and the inline example are gone.
     assert "produced_evidence_names_must_be_exact" not in prompt

@@ -127,11 +127,13 @@ V3.2-2 中，默认 `PlanService` 装配会把同一 Registry 实例传给这些
   `data.valve_match_ids`、`data.matches` 与 `data.mappings`。
 - `opendota.match_details` 只接受 Valve Match ID 列表，正常来源是
   `dota.resolve_valve_matches.data.valve_match_ids`；不得把 PandaScore ID 直接传入。
-  除现有比赛结果、选手比分、解析覆盖和 BP 外，已解析且对应字段非空的选手还可产生
-  `player_purchase_timeline`、`player_skill_build` 和 `player_talent_selection` evidence。
-  购买事件保留 OpenDota 原始顺序与时间（包括负数和同秒事件）；加点的 `level` 是数组
-  位置，不是时间。天赋只按 `special_bonus_*` 内部名机械筛选，`special_bonus_attributes`
-  单独标为属性加点。当前 Catalog 不用于倒推历史天赋左右分支或层级。
+  它只产生比赛结果、选手比分、解析覆盖和 BP 四类核心 evidence；完整选手进度仍留在
+  `data.matches`，不自动进入普通 Answer。
+- `dota.extract_match_player_progress` 是一个确定性的领域 transform：只接受
+  `opendota.match_details.data.matches` 引用，不发 HTTP，按 `player_query` 和显式
+  `aspects` 产生 `player_purchase_timeline`、`player_skill_build` 或
+  `player_talent_selection`。购买事件和加点序列保持上游顺序，输出不携带其它 aspect、
+  完整比赛或原始 ToolResult。
 
 PandaScore 赛事 Fixture 事实、跨源推断映射与 OpenDota Valve/Replay 事实分别进入 EvidenceGraph；
 `detailed_stats` 不是 `has_parsed`，空 BP 不产生 `match_draft` 证据。未指定局号时，

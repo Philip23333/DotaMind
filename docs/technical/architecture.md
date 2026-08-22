@@ -314,11 +314,14 @@ plan goal. The player-performance `take` argument is the final returned top-N;
 the handler owns any internal over-fetching required for strong-mode ranking.
 Natural-language Answer prompt rules and message rendering live in
 `agentic/prompts/answer.py`; `answer/synthesizer.py` only invokes that renderer
-and handles LLM results. The renderer projects an Answer Evidence View containing
-effective required evidence, only the matching `EvidenceItem`s, `missing`, and
-data-quality metadata; it never serializes `EvidenceGraph.tool_results`. Raw tool
-results remain available to execution audit, test observation, and deterministic
-downstream processing. The renderer uses that view to include only relevant Catalog
+and handles LLM results. The Answer node creates a shallow Answer-only Graph view
+whose required evidence is the global planner/contract obligation, not the
+effective union that also contains per-tool mandatory proof obligations. The
+renderer projects that view to matching `EvidenceItem`s, `missing`, and data-quality
+metadata; it never serializes `EvidenceGraph.tool_results`. The original effective
+Graph remains available to runtime/Critic validation, execution audit, test
+observation, and deterministic downstream processing. The renderer uses that view
+to include only relevant Catalog
 or STRATZ presentation sections; evidence source metadata also activates the
 cross-source attribution boundary. This selection never uses `intent`, tool names,
 or query-keyword routing, and no deterministic Catalog answer renderer is present. Prompt content changes are
@@ -337,8 +340,11 @@ summary do not diverge through a post-generation line-deletion pass.
 For ordinary match details, the Controller requires only the core identity,
 cross-source mapping, result, parse status, draft, and scoreboard facts it presents;
 purchase timelines, skill builds, and talent selections enter `required_evidence`
-only for an explicit corresponding request. This is evidence planning, not an
-intent-based execution route.
+only for an explicit corresponding request. Those progress requests add the
+deterministic `dota.extract_match_player_progress` transform after
+`opendota.match_details`, using only the declared `data.matches` reference and
+making no network request. This is evidence planning, not an intent-based
+execution route.
 Natural-language answers do not permit unsupported interpretations merely because
 they are labeled as hypotheses. Gameplay or causal explanations require explicit
 EvidenceGraph support and must be attributed to that evidence; any future strategy

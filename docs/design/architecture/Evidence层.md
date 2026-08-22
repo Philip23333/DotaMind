@@ -35,7 +35,8 @@ flowchart LR
     Graph --> Missing["Missing Kinds"]
     Graph --> Quality["Completeness / Sample / Mock"]
     Missing -->|"非空"| Finalize["run_finalize: insufficient_evidence"]
-    Missing -->|"为空"| Answer["Answer"]
+    Missing -->|"为空"| AnswerView["Answer-only view: global evidence"]
+    AnswerView --> Answer["Answer"]
     Quality --> Answer
     Answer --> Critic["Critic"]
 ```
@@ -60,7 +61,10 @@ EvidenceGraph(
 )
 ```
 
-EvidenceGraph 是 Answer 和 Critic 的共同输入。
+EvidenceGraph 是 runtime/Critic 的完整审计输入；Answer 节点会基于
+`global_required_evidence` 创建一个浅的 Answer-only view。工具的
+`mandatory_evidence` 仍保留在原始 Graph 中用于 per-call 完整性校验，
+不会因此自动成为 Answer 的展示证据。
 
 ## 3. EvidenceItem 结构
 
@@ -192,15 +196,21 @@ evidence 同时保留五类对线计数派生的赢/平/输率和独立的整局
 
 ## 8. 与 Answer 层的关系
 
-Answer 层收到的是整个 EvidenceGraph：
+Answer 节点从完整 EvidenceGraph 创建 Answer-only view：
 
 ```text
 goal
-required_evidence
-evidence_graph
+global_required_evidence
+matching EvidenceItems
+missing
+data_quality
 ```
 
-自然语言回答必须只使用 EvidenceGraph 内的信息，不得发明统计值。Evidence 层越清楚地保留 filters、source、sample_size、week tags，Answer 层越容易给出诚实回答。
+原始 EvidenceGraph 仍保留 effective evidence、tool results 和 per-call mandatory
+obligations，供 runtime、Critic、审计和确定性下游使用；Answer view 只投影
+global planner/contract evidence。自然语言回答必须只使用 Answer view 内的信息，
+不得发明统计值。Evidence 层越清楚地保留 filters、source、sample_size、week tags，
+Answer 层越容易给出诚实回答。
 
 ## 9. 与 Critic 层的关系
 
@@ -260,4 +270,10 @@ Evidence 层不负责：
 - 保留 sample size、filters、source-specific provenance。
 - 对缺失 row 返回空列表，而不是伪造 evidence。
 - 不进行自然语言总结。
+
+比赛详情的选手进度采用两段式边界：`opendota.match_details` extractor 只发出
+核心比赛 evidence；用户明确询问出装、加点或天赋时，Controller 追加
+`dota.extract_match_player_progress`，其 extractor 只读取前序
+`data.matches` 的窄投影。完整 ToolResult 仍保留给审计和确定性 transform，
+但不因核心详情请求自动复制为三类 progress evidence。
 

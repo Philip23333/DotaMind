@@ -143,3 +143,34 @@
 ### 验证
 
 - Chat `dotamind-api` 定向测试：13 passed；ESLint 与 `git diff --check` 通过。
+
+## 12:00 — P0 比赛详情下游进度提取
+
+### 已完成
+
+- `opendota.match_details` 收敛为比赛核心 evidence：赛果、十人记分牌、解析状态和 BP；完整 `data.matches` 仍保留给审计和下游处理。
+- 新增 `dota.extract_match_player_progress` 确定性 transform，只接受 `opendota.match_details.data.matches` 引用，不发网络请求，按 `player_query` 与显式 `aspects` 投影出装顺序、技能加点或天赋选择。
+- transform 只产生请求的 progress evidence；普通比赛详情不会自动携带三类逐事件进度数据。未匹配或单局多匹配直接返回工具错误，不猜测选手。
+- 同步 Controller 工具规划规则、注册表契约、Answer Evidence 边界及架构/工具/节点清单文档；未修改 Checkpoint、原始 ToolResult 或 Chat 持久化边界。
+
+### 验证
+
+- OpenDota 工具、注册表和 Prompt 定向测试：51 passed。
+- Ruff：涉及 transform、测试和注册表文件通过。
+
+### 已知边界
+
+- 当前 transform 仅支持三类固定 progress aspect，不提供通用 JSONPath、自由字段过滤或 Checkpoint 适配；后续其它领域 transform 复用现有 ToolRegistry 与引用契约。
+
+## 12:30 — Answer 专用 evidence 视图收束
+
+### 已完成
+
+- 保留 `effective_required_evidence` 作为 runtime/Critic 的完整证据义务，继续校验工具的 per-call `mandatory_evidence`。
+- `answer_node` 为 Answer 创建浅的专用 Graph 视图，将 `required_evidence` 切换为 `global_required_evidence`；原始 effective Graph 不变，不复制大 ToolResult 数据。
+- Controller 比赛详情规则改为：聚焦出装、加点或天赋时，只在 `plan.required_evidence` 中列出对应 progress evidence；`opendota.match_details` 的 mandatory core evidence 只有在用户明确要求赛果、BP 或记分牌时才进入 Answer 视图。
+
+### 验证
+
+- Answer、Graph、Controller 与 Prompt 定向测试：87 passed。
+- Answer 节点回归覆盖：Answer 使用 global evidence，原始 effective Graph 保持不变。

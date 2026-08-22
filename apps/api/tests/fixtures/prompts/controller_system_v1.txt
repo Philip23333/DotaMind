@@ -178,6 +178,16 @@ PandaScore to OpenDota match-detail chain:
   order request; require player_talent_selection only for an explicit talent-choice
   request. A request may require more than one of these only when it explicitly
   asks for those respective facts.
+- For an explicit player purchase, skill, or talent request after match details,
+  add dota.extract_match_player_progress after opendota.match_details. Pass
+  `matches` as "$<details_call_id>.data.matches", preserve the user's player
+  name in `player_query`, and include only the requested `aspects`. This is a
+  deterministic transform over the prior result and makes no network request.
+- For a focused player-progress request, put only the requested
+  player_purchase_timeline, player_skill_build, and/or player_talent_selection
+  kind(s) in plan.required_evidence. opendota.match_details remains an upstream
+  dependency; its mandatory core evidence is not Answer data unless the current
+  request also asks for match results, BP, or the scoreboard.
 - PandaScore series, match, and game ids are provider ids, not Valve Match IDs.
   Never pass them to opendota.match_details. Its `valve_match_ids` argument
   accepts Valve Match IDs only, normally from
@@ -524,8 +534,8 @@ Tools:
     - data.matches: list[dict]. Resolved Valve match rows in game order.
     - data.mappings: list[dict]. Auditable cross-source matching evidence in game order.
 - opendota.match_details
-  description: Return core match-detail facts: result, ten-player scoreboard, parse coverage, and picks/bans for up to five Valve match ids. For parsed matches it can also produce each player's complete purchase timeline, inventory/backpack/neutral history, ability upgrade sequence, and mechanically identified talent selections; require those progress evidence kinds only when the current request explicitly asks for the respective history. Inputs must be Valve match ids, not PandaScore series, match, or game ids.
-  evidence_produced: ["match_result", "player_scoreboard", "match_parse_status", "match_draft", "player_purchase_timeline", "player_skill_build", "player_talent_selection"]
+  description: Return core match-detail facts: result, ten-player scoreboard, parse coverage, and picks/bans for up to five Valve match ids. Player progress is extracted separately by dota.extract_match_player_progress so the Answer receives only the requested timeline, skill, or talent data. Inputs must be Valve match ids, not PandaScore series, match, or game ids.
+  evidence_produced: ["match_result", "player_scoreboard", "match_parse_status", "match_draft"]
   allowed_arg_keys: ["valve_match_ids"]
   args:
     - valve_match_ids: list[int], required. Valve Match IDs only; use the cross-source resolver output.
@@ -533,6 +543,18 @@ Tools:
   declared_output_paths:
     - data.matches: list[dict]. OpenDota details in Valve match id order.
     - data.valve_match_ids: list[int]. Valve match ids returned by the detail lookup.
+- dota.extract_match_player_progress
+  description: Deterministically extract requested player progress from the normalized matches output of opendota.match_details. It performs no network request and accepts only that tool's data.matches reference. Use purchase_timeline for item order, ability_upgrade_sequence for skill order, and talent_selections for talent choices.
+  evidence_produced: ["player_purchase_timeline", "player_skill_build", "player_talent_selection"]
+  allowed_arg_keys: ["matches", "player_query", "aspects"]
+  args:
+    - matches: list[dict[str, Any]], required. Normalized matches from opendota.match_details; no raw JSONPath.
+      must_reference: true
+      accepts_ref: opendota.match_details.data.matches (list[dict]) -> "$<previous_call_id>.data.matches"
+    - player_query: str, required
+    - aspects: list[Literal], required
+  declared_output_paths:
+    - data.matches: list[dict]. Selected player progress projections, one row per matching game.
 - patch.get_records
   description: Return local Dota 2 patch records from app/data/patches.
   evidence_produced: ["patch_records", "patch_buff_count", "patch_nerf_count"]

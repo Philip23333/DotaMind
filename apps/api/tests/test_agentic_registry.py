@@ -238,6 +238,7 @@ def test_default_registry_matches_v32_frozen_tool_catalog() -> None:
         "pandascore.resolve_match_games",
         "dota.resolve_valve_matches",
         "opendota.match_details",
+        "dota.extract_match_player_progress",
         "patch.get_records",
         "patch.hero_changes",
         "patch.item_changes",
@@ -245,7 +246,7 @@ def test_default_registry_matches_v32_frozen_tool_catalog() -> None:
     }
 
 
-def test_match_details_catalog_declares_player_progress_evidence() -> None:
+def test_match_detail_catalog_separates_player_progress_transform() -> None:
     registry = build_default_tool_registry(
         Settings(
             opendota_base_url="https://api.opendota.test/api",
@@ -255,14 +256,45 @@ def test_match_details_catalog_declares_player_progress_evidence() -> None:
     )
     definition = registry.get("opendota.match_details")
 
-    assert {
+    assert definition.evidence_kinds == (
+        "match_result",
+        "player_scoreboard",
+        "match_parse_status",
+        "match_draft",
+    )
+    transform = registry.get("dota.extract_match_player_progress")
+    assert transform.evidence_kinds == (
         "player_purchase_timeline",
         "player_skill_build",
         "player_talent_selection",
-    }.issubset(definition.evidence_kinds)
-    assert "complete purchase timeline" in definition.description
-    assert "ability upgrade sequence" in definition.description
-    assert "talent selections" in definition.description
+    )
+    assert transform.metadata["execution_kind"] == "deterministic_transform"
+    assert transform.arg_contracts["matches"].requires_reference is True
+    assert transform.arg_contracts["matches"].accepts_refs[0].path == "data.matches"
+
+    plan = ExecutionPlan(
+        intent="hero_build",
+        goal="Player 0 purchase order",
+        output_contract="natural_language_answer",
+        tool_calls=[
+            ToolCall(
+                id="details",
+                tool="opendota.match_details",
+                args={"valve_match_ids": [8943244303]},
+            ),
+            ToolCall(
+                id="progress",
+                tool="dota.extract_match_player_progress",
+                args={
+                    "matches": "$details.data.matches",
+                    "player_query": "Player 0",
+                    "aspects": ["purchase_timeline"],
+                },
+            ),
+        ],
+        required_evidence=["match_result", "player_scoreboard", "player_purchase_timeline"],
+    )
+    assert validate_plan_against_catalog(plan, registry) == []
 
 
 def test_default_registry_uses_unique_catalog_resolve_hero() -> None:

@@ -35,6 +35,36 @@ class OpenDotaMatchDetailsInput(BaseModel):
         return value
 
 
+class DotaExtractMatchPlayerProgressInput(BaseModel):
+    """Select a small player-progress projection from normalized match data."""
+
+    matches: list[dict[str, Any]] = Field(min_length=1)
+    player_query: str = Field(min_length=1)
+    aspects: list[
+        Literal["purchase_timeline", "ability_upgrade_sequence", "talent_selections"]
+    ] = Field(min_length=1)
+
+    @field_validator("player_query")
+    @classmethod
+    def validate_player_query(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("player_query must not be blank")
+        return value
+
+    @field_validator("aspects")
+    @classmethod
+    def deduplicate_aspects(
+        cls,
+        value: list[
+            Literal["purchase_timeline", "ability_upgrade_sequence", "talent_selections"]
+        ],
+    ) -> list[
+        Literal["purchase_timeline", "ability_upgrade_sequence", "talent_selections"]
+    ]:
+        return list(dict.fromkeys(value))
+
+
 def register_opendota_match_tools(registry: ToolRegistry, settings: Settings) -> None:
     source = ToolSource(
         name="OpenDota",
@@ -47,11 +77,9 @@ def register_opendota_match_tools(registry: ToolRegistry, settings: Settings) ->
             name="opendota.match_details",
             description=(
                 "Return core match-detail facts: result, ten-player scoreboard, parse coverage, "
-                "and picks/bans for up to five Valve match ids. For parsed matches it can also "
-                "produce each player's complete purchase timeline, inventory/backpack/neutral "
-                "history, ability upgrade sequence, and mechanically identified talent "
-                "selections; require those progress evidence kinds only when the current "
-                "request explicitly asks for the respective history. "
+                "and picks/bans for up to five Valve match ids. Player progress is extracted "
+                "separately by dota.extract_match_player_progress so the Answer receives only "
+                "the requested timeline, skill, or talent data. "
                 "Inputs must be Valve match ids, not PandaScore series, match, or game ids."
             ),
             input_model=OpenDotaMatchDetailsInput,
@@ -63,9 +91,6 @@ def register_opendota_match_tools(registry: ToolRegistry, settings: Settings) ->
                 "player_scoreboard",
                 "match_parse_status",
                 "match_draft",
-                "player_purchase_timeline",
-                "player_skill_build",
-                "player_talent_selection",
             ),
             mandatory_evidence=("match_result", "player_scoreboard"),
             arg_contracts={
@@ -93,6 +118,57 @@ def register_opendota_match_tools(registry: ToolRegistry, settings: Settings) ->
                 ),
             },
             metadata={"game": "dota2", "domain": "match_details"},
+        )
+    )
+    registry.register(
+        ToolDefinition(
+            name="dota.extract_match_player_progress",
+            description=(
+                "Deterministically extract requested player progress from the normalized "
+                "matches output of opendota.match_details. It performs no network request and "
+                "accepts only that tool's data.matches reference. Use purchase_timeline for "
+                "item order, ability_upgrade_sequence for skill order, and talent_selections "
+                "for talent choices."
+            ),
+            input_model=DotaExtractMatchPlayerProgressInput,
+            handler=extract_match_player_progress,
+            source=ToolSource(
+                name="OpenDota",
+                kind="derived",
+                url=settings.opendota_base_url,
+                status="derived",
+            ),
+            evidence_extractor=match_player_progress_evidence,
+            evidence_kinds=(
+                "player_purchase_timeline",
+                "player_skill_build",
+                "player_talent_selection",
+            ),
+            arg_contracts={
+                "matches": ArgContract(
+                    description="Normalized matches from opendota.match_details; no raw JSONPath.",
+                    accepts_refs=(
+                        AcceptedRef(
+                            from_tool="opendota.match_details",
+                            path="data.matches",
+                            type="list[dict]",
+                        ),
+                    ),
+                    requires_reference=True,
+                )
+            },
+            output_paths={
+                "matches": OutputPathContract(
+                    path="data.matches",
+                    type="list[dict]",
+                    description="Selected player progress projections, one row per matching game.",
+                )
+            },
+            metadata={
+                "game": "dota2",
+                "domain": "match_player_progress",
+                "execution_kind": "deterministic_transform",
+            },
         )
     )
 
@@ -179,19 +255,6 @@ def _project_scoreboard_player(player: dict[str, Any]) -> dict[str, Any]:
     return projected
 
 
-def _project_player_progress(
-    player: dict[str, Any],
-    field: Literal[
-        "purchase_timeline",
-        "ability_upgrade_sequence",
-        "talent_selections",
-    ],
-) -> dict[str, Any]:
-    projected = _project_fields(player, _PLAYER_IDENTITY_FIELDS)
-    projected[field] = player.get(field) or []
-    return projected
-
-
 def match_details_evidence(result: ToolResult) -> list[EvidenceItem]:
     data = result.data if isinstance(result.data, dict) else {}
     matches = data.get("matches")
@@ -260,40 +323,6 @@ def match_details_evidence(result: ToolResult) -> list[EvidenceItem]:
                     tool=result.tool,
                 )
             )
-        if isinstance(coverage, dict) and coverage.get("has_parsed") is True:
-            for kind, field, label in (
-                (
-                    "player_purchase_timeline",
-                    "purchase_timeline",
-                    "player purchase timeline",
-                ),
-                ("player_skill_build", "ability_upgrade_sequence", "player skill builds"),
-                (
-                    "player_talent_selection",
-                    "talent_selections",
-                    "player talent selections",
-                ),
-            ):
-                rows = [
-                    _project_player_progress(row, field)
-                    for row in players
-                    if isinstance(row, dict) and row.get(field)
-                ]
-                if rows:
-                    items.append(
-                        EvidenceItem(
-                            id=f"{result.tool_call_id}:{kind}:{match_id}",
-                            kind=kind,
-                            subject=f"Valve match {match_id} {label}",
-                            value={
-                                "players": rows,
-                                "catalog_snapshot": summary.get("catalog_snapshot"),
-                            },
-                            source=result.source,
-                            tool_call_id=result.tool_call_id,
-                            tool=result.tool,
-                        )
-                    )
         draft = draft_data.get("draft") if isinstance(draft_data, dict) else None
         if not isinstance(draft, list):
             continue
@@ -317,6 +346,104 @@ def match_details_evidence(result: ToolResult) -> list[EvidenceItem]:
                         "draft_timings": draft_data.get("draft_timings", []),
                         "coverage": draft_data.get("coverage", {}),
                         "catalog_snapshot": draft_data.get("catalog_snapshot"),
+                    },
+                    source=result.source,
+                    tool_call_id=result.tool_call_id,
+                    tool=result.tool,
+                )
+            )
+    return items
+
+
+_PROGRESS_FIELDS = {
+    "purchase_timeline": ("player_purchase_timeline", "player purchase timeline"),
+    "ability_upgrade_sequence": ("player_skill_build", "player skill builds"),
+    "talent_selections": ("player_talent_selection", "player talent selections"),
+}
+
+
+def extract_match_player_progress(
+    args: DotaExtractMatchPlayerProgressInput,
+    context: QueryContext,
+) -> dict[str, Any]:
+    """Project only the requested progress fields from normalized match rows."""
+
+    del context
+    query = args.player_query.casefold()
+    selected: list[dict[str, Any]] = []
+    for entry in args.matches:
+        match_id = entry.get("valve_match_id")
+        summary = entry.get("summary")
+        if not isinstance(match_id, int) or not isinstance(summary, dict):
+            raise ValueError("matches must contain normalized Valve match summaries")
+        coverage = summary.get("parse_coverage")
+        if not isinstance(coverage, dict) or coverage.get("has_parsed") is not True:
+            raise ValueError(f"Valve match {match_id} has no parsed player progress")
+        players = summary.get("players")
+        if not isinstance(players, list):
+            raise ValueError(f"Valve match {match_id} has no normalized players")
+        matching_players = [
+            player
+            for player in players
+            if isinstance(player, dict)
+            and query
+            in {
+                str(player.get("name") or "").casefold(),
+                str(player.get("personaname") or "").casefold(),
+            }
+        ]
+        if len(matching_players) != 1:
+            raise ValueError(
+                f"player_query {args.player_query!r} matched {len(matching_players)} "
+                f"players in Valve match {match_id}"
+            )
+        for player in matching_players:
+            identity = _project_fields(player, _PLAYER_IDENTITY_FIELDS)
+            selected.append(
+                {
+                    "valve_match_id": match_id,
+                    "player": identity,
+                    "catalog_snapshot": summary.get("catalog_snapshot"),
+                    **{aspect: player.get(aspect) or [] for aspect in args.aspects},
+                }
+            )
+    if not selected:
+        raise ValueError(f"player_query {args.player_query!r} was not found in parsed matches")
+    return {
+        "status": "resolved",
+        "player_query": args.player_query,
+        "matches": selected,
+    }
+
+
+def match_player_progress_evidence(result: ToolResult) -> list[EvidenceItem]:
+    data = result.data if isinstance(result.data, dict) else {}
+    rows = data.get("matches")
+    if not isinstance(rows, list):
+        return []
+    items: list[EvidenceItem] = []
+    for row in rows:
+        if not isinstance(row, dict) or not isinstance(row.get("valve_match_id"), int):
+            continue
+        match_id = row["valve_match_id"]
+        identity = row.get("player")
+        if not isinstance(identity, dict):
+            continue
+        for aspect in _PROGRESS_FIELDS:
+            if aspect not in row:
+                continue
+            kind, label = _PROGRESS_FIELDS[aspect]
+            player = {**identity, aspect: row[aspect]}
+            player_name = identity.get("name") or identity.get("personaname") or "unknown"
+            items.append(
+                EvidenceItem(
+                    id=f"{result.tool_call_id}:{kind}:{match_id}:{player_name}",
+                    kind=kind,
+                    subject=f"Valve match {match_id} {player_name} {label}",
+                    value={
+                        "match": {"valve_match_id": match_id, "match_id": match_id},
+                        "players": [player],
+                        "catalog_snapshot": row.get("catalog_snapshot"),
                     },
                     source=result.source,
                     tool_call_id=result.tool_call_id,

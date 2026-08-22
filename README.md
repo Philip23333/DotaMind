@@ -118,6 +118,11 @@ PandaScore-to-Valve match resolution, local patch
 records, and request-local conversation history lookup. Registry definitions,
 not a copied documentation list, are authoritative.
 
+Match-detail player progress is a deterministic downstream transform: the
+registered `dota.extract_match_player_progress` tool consumes only normalized
+`opendota.match_details.data.matches` and emits requested purchase, skill, or
+talent evidence without another provider request.
+
 ## Configuration
 
 Runtime environment, secrets, URLs, and feature flags live in `.env`. Business

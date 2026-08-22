@@ -164,4 +164,6 @@ Series 候选，再做赛事名称消歧。Controller 不根据自身知识推�
 
 普通比赛详情的 `required_evidence` 只覆盖实际展示的赛事/比赛身份、跨源映射、
 赛果、解析状态、BP 与十人记分牌。购买顺序、技能加点和天赋选择分别只在用户
-明确询问对应历史时加入；工具能够产生某类证据本身不是把它加入义务的理由。
+明确询问对应历史时加入；此时在 `opendota.match_details` 后规划
+`dota.extract_match_player_progress`，将 `data.matches` 作为唯一允许的前序引用，
+并只填写用户请求的 `aspects`。工具能够产生某类证据本身不是把它加入义务的理由。

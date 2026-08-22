@@ -162,6 +162,7 @@ OpenDota:
 - `opendota.team_heroes`
 - `opendota.hero_stats_by_role`
 - `opendota.match_details`
+- `dota.extract_match_player_progress`
 
 PandaScore Dota 2 Fixture:
 
@@ -191,6 +192,13 @@ response currently does not expose the Valve ID. `opendota.match_details`
 accepts Valve Match IDs only, normally from the separately declared cross-source
 inference; it must not receive PandaScore Series, Match, or Game IDs. No guessing
 or paid endpoint is used.
+
+`dota.extract_match_player_progress` is a deterministic downstream transform:
+it accepts only `opendota.match_details.data.matches`, performs no provider
+request, and emits only the explicitly requested purchase timeline, skill-build,
+or talent-selection evidence. The original match result remains available to
+the test observer and execution audit, but is not copied into ordinary Answer
+evidence for unrelated match-detail requests.
 
 Local patch records:
 

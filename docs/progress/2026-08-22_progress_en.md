@@ -143,3 +143,34 @@
 ### Verification
 
 - Focused Chat `dotamind-api` tests: 13 passed; ESLint and `git diff --check` passed.
+
+## 12:00 — P0 downstream player-progress extraction for match details
+
+### Completed
+
+- `opendota.match_details` is now limited to core evidence: result, ten-player scoreboard, parse status, and draft; full `data.matches` remains available for audit and downstream processing.
+- Added deterministic `dota.extract_match_player_progress`, which accepts only the `opendota.match_details.data.matches` reference, performs no network request, and projects purchase order, skill upgrades, or talent choices from explicit `player_query` and `aspects`.
+- The transform emits only requested progress evidence; ordinary match details no longer carry the three event-level progress kinds automatically. Missing or multiply matched players return a direct tool error instead of a guess.
+- Synchronized Controller planning rules, registry contracts, Answer Evidence boundaries, and architecture/tool/node inventory docs; Checkpoint, raw ToolResult, and Chat persistence boundaries remain unchanged.
+
+### Verification
+
+- Focused OpenDota tool, registry, and Prompt tests: 51 passed.
+- Ruff passed for the transform, tests, and registry files.
+
+### Known boundaries
+
+- The transform currently supports only the three fixed progress aspects; it does not provide generic JSONPath, free-field filtering, or a Checkpoint adapter. Future domain transforms should reuse the existing ToolRegistry and reference contracts.
+
+## 12:30 — Bound the Answer-only evidence view
+
+### Completed
+
+- Kept `effective_required_evidence` as the complete runtime/Critic obligation, including per-call tool `mandatory_evidence` validation.
+- `answer_node` now creates a shallow Answer-only Graph view with `required_evidence` set to `global_required_evidence`; the original effective Graph is unchanged and no large ToolResult data is copied.
+- Controller match-detail rules now require focused purchase, skill, or talent requests to list only the corresponding progress evidence in `plan.required_evidence`; `opendota.match_details` mandatory core evidence enters the Answer view only when the user explicitly asks for result, BP, or scoreboard data.
+
+### Verification
+
+- Focused Answer, Graph, Controller, and Prompt tests: 87 passed.
+- Added Answer-node regression coverage proving global evidence is used while the original effective Graph remains unchanged.

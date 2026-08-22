@@ -20,6 +20,13 @@ async def answer_node(
         state.add_trace("answer", "missing answer inputs", "failed")
         return state
 
+    # Tool mandatory evidence remains available to runtime/Critic validation,
+    # but Answer should see only the planner/contract evidence requested for
+    # the current response.
+    answer_graph = state.evidence_graph.model_copy(
+        update={"required_evidence": list(state.global_required_evidence)}
+    )
+
     if state.run_budget is not None:
         state.run_budget.record_answer_call()
     observer_token = bind_observer_attempt_index(state.attempt_index)
@@ -27,7 +34,7 @@ async def answer_node(
         if stream_events_enabled():
             state.answer = await synthesizer.synthesize(
                 state.plan,
-                state.evidence_graph,
+                answer_graph,
                 current_query=state.query,
                 on_delta=lambda delta: publish_stream_event(
                     AnswerDeltaStreamEvent(delta=delta, attempt_index=state.attempt_index)
@@ -36,7 +43,7 @@ async def answer_node(
         else:
             state.answer = await synthesizer.synthesize(
                 state.plan,
-                state.evidence_graph,
+                answer_graph,
                 current_query=state.query,
             )
     finally:

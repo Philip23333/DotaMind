@@ -5,8 +5,11 @@ from uuid import uuid4
 
 from pydantic import BaseModel
 
+from app.agentic.answer.synthesizer import AnswerSynthesisResult
+from app.agentic.evidence import EvidenceDataQuality, EvidenceGraph
 from app.agentic.graph import AgentGraphRunner
 from app.agentic.models import ExecutionPlan, ToolCall
+from app.agentic.nodes.answer import answer_node
 from app.agentic.planning.controller import AgentControllerResult
 from app.agentic.planning.decisions import (
     CapabilityBoundaryDecision,
@@ -66,6 +69,63 @@ class FakeController:
         self, query: str, game: str = "dota2", history=None, **kwargs
     ) -> AgentControllerResult:
         return self.result
+
+
+class CapturingAnswerSynthesizer:
+    def __init__(self) -> None:
+        self.graph = None
+
+    async def synthesize(self, plan, graph, *, current_query=None, on_delta=None):
+        self.graph = graph
+        return AnswerSynthesisResult(
+            answer_type=plan.output_contract,
+            status="ok",
+            summary="captured",
+            confidence=1.0,
+        )
+
+
+def test_answer_node_uses_global_evidence_without_mutating_effective_graph() -> None:
+    plan = ExecutionPlan(
+        intent="hero_build",
+        goal="Show a player's purchase order.",
+        output_contract="natural_language_answer",
+        required_evidence=["player_purchase_timeline"],
+    )
+    state = AgentRunState(
+        query="show the purchase order",
+        game="dota2",
+        plan=plan,
+        evidence_graph=EvidenceGraph(
+            intent=plan.intent,
+            required_evidence=[
+                "match_result",
+                "player_scoreboard",
+                "player_purchase_timeline",
+            ],
+            data_quality=EvidenceDataQuality(completeness=1.0),
+        ),
+        global_required_evidence=["player_purchase_timeline"],
+        effective_required_evidence=[
+            "match_result",
+            "player_scoreboard",
+            "player_purchase_timeline",
+        ],
+    )
+    original_graph = state.evidence_graph
+    synthesizer = CapturingAnswerSynthesizer()
+
+    asyncio.run(answer_node(state, synthesizer))
+
+    assert original_graph is not None
+    assert synthesizer.graph is not None
+    assert synthesizer.graph is not original_graph
+    assert synthesizer.graph.required_evidence == ["player_purchase_timeline"]
+    assert original_graph.required_evidence == [
+        "match_result",
+        "player_scoreboard",
+        "player_purchase_timeline",
+    ]
 
 
 def test_graph_stops_when_tools_are_insufficient() -> None:

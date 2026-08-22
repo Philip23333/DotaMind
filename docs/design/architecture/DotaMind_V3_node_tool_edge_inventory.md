@@ -147,6 +147,7 @@ cannot borrow one another's primary evidence.
 | `pandascore.resolve_match_games` | `match_identity`, `pandascore_game_identity` |
 | `dota.resolve_valve_matches` | `cross_source_match_mapping`, `valve_match_identity` |
 | `opendota.match_details` | `match_result`, `player_scoreboard`, `match_parse_status`, `match_draft` |
+| `dota.extract_match_player_progress` | `player_purchase_timeline`, `player_skill_build`, `player_talent_selection` |
 | `patch.get_records` | `patch_records` |
 | `patch.hero_changes` | `hero_patch_changes` |
 | `patch.item_changes` | `item_patch_changes` |
@@ -226,12 +227,14 @@ runtime summaries additionally expose safe per-call dispatch state
 (`handler_entered`, `dispatch_stage`, mapped `failure_code`) without changing Graph
 routing or adding an `intent` branch.
 
-## OpenDota match-detail optional player evidence
+## OpenDota match-detail player-progress transform
 
 `opendota.match_details` keeps `match_result`, `player_scoreboard`,
-`match_parse_status` and `match_draft` as its mandatory/conditional existing
-evidence boundary. For a parsed match, non-empty normalized player fields can
-add the optional evidence kinds `player_purchase_timeline`, `player_skill_build`
-and `player_talent_selection`. These evidence items are grouped by player and
-Valve match, preserve purchase order and level-indexed upgrades, and do not
-change the mandatory evidence requirements or Answer contract.
+`match_parse_status` and `match_draft` as its core evidence boundary. Its full
+normalized `data.matches` remains available to downstream deterministic work,
+but is not automatically converted into progress evidence. An explicit
+`dota.extract_match_player_progress` call accepts only
+`$<match_details_call_id>.data.matches`, selects one player per parsed game, and
+emits only the requested `player_purchase_timeline`, `player_skill_build`, or
+`player_talent_selection` item. It does not issue another provider request or
+change the Checkpoint lifecycle.
