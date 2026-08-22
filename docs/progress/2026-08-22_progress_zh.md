@@ -75,3 +75,17 @@
 - `tests/test_agentic_answer.py`：20 passed。
 - 新增回归覆盖：原始工具结果及未要求的选手进度 evidence 不进入 Answer；明确要求购买顺序时只投影购买 evidence。
 - Answer 定向 Ruff 检查与 `git diff --check` 通过。
+
+## 02:35 — Chat 历史紧凑响应
+
+### 已完成
+
+- Chat Run 在写库和发布 `result` 事件前，将响应投影为状态、原因/错误码、Answer 与 runtime 摘要；不再保存 plan、原始工具结果、EvidenceGraph、review、errors 或 trace。
+- 为保持现有 Markdown 英雄/物品图标展示，仅从原始工具结果提取去重后的轻量 `catalog_visual_entities`，不保留原始数据包。
+- 会话读取对旧的完整 `public_response` 应用同一投影，无需迁移历史行即可避免刷新重新下载大结果。
+
+### 验证
+
+- API 定向：`tests/test_chat_response.py`、`tests/test_chat_run_executor.py`、`tests/test_chat_routes.py` 共 10 passed、1 warning。
+- Chat `src/lib/dotamind-api.test.ts`：12 passed；相关 ESLint 通过。
+- API Ruff 与 `git diff --check` 通过。

@@ -19,8 +19,10 @@ DELETE /api/v1/chat/sessions/{session_id}
 
 `POST` creates an empty `dota2` session. `PATCH` accepts either `{ "title": "..." }`
 (1–80 characters) or `{ "is_pinned": true|false }`; the first completed turn automatically
-supplies a title unless it was customized. `GET /{session_id}` returns the ordered transcript, including the stored
-allowlisted public response and compact audit metadata. Full user and assistant
+supplies a title unless it was customized. `GET /{session_id}` returns the ordered transcript, including only the
+chat presentation response (`status`, `reason`/`error_code`, `answer`, runtime summary, and any derived Catalog
+visual entities) and compact audit metadata. It never returns a plan, raw tool results, an EvidenceGraph, review,
+errors, or trace data; legacy stored rows are projected the same way on read. Full user and assistant
 messages come from PostgreSQL transcript columns, not from the compact summary. A session or transcript belonging
 to another browser is indistinguishable from missing and returns `404`; missing or invalid
 browser identity returns `422`.
@@ -62,6 +64,8 @@ GET /api/v1/assets/dota/items/{item_id}.png
 背包和中立物品详情携带 `item_image_path`。这些字段复用上述本地静态路径，Catalog
 未命中或缺失 ID 时为 `null`，并随原有工具结果和 EvidenceGraph 透传，不新增工具或
 evidence kind。
+Chat completion derives a compact Catalog visual-entity list from these paths only when needed to render the
+stored Markdown answer; it does not retain the full tool result for icon replacement.
 
 ## Controller Request
 

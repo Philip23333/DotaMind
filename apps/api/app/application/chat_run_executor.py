@@ -22,6 +22,7 @@ from app.agentic.runtime.streaming import (
     publish_stream_event,
 )
 from app.agentic.state import AgentRunState
+from app.application.chat_response import compact_chat_response
 from app.application.chat_run_repository import (
     ChatRunRepository,
     ChatRunRepositoryError,
@@ -205,7 +206,9 @@ class ChatRunExecutor:
                         state=state,
                         public_response={},
                     )
-                public_response = self._build_response(state, request.session_id)
+                public_response = compact_chat_response(
+                    self._build_response(state, request.session_id)
+                )
                 turn_result = await self._build_turn(state)
                 completed = await self._run_repository.complete_with_turn(
                     run_id=request.run_id,

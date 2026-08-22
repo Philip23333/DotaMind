@@ -209,6 +209,25 @@ describe("formatPlanResponse", () => {
     );
   });
 
+  it("uses compact server-projected visual entities without raw tool results", () => {
+    const formatted = formatPlanResponse({
+      status: "ok",
+      answer: { summary: "# 齐天大圣（Monkey King）英雄介绍" },
+      catalog_visual_entities: [
+        {
+          kind: "hero",
+          imagePath: "/api/v1/assets/dota/heroes/114.png",
+          label: "齐天大圣",
+          names: ["齐天大圣", "Monkey King"],
+        },
+      ],
+    });
+
+    expect(formatted).toContain(
+      "# ![齐天大圣](http://localhost:8001/api/v1/assets/dota/heroes/114.png#dota-size=lg)齐天大圣（Monkey King）英雄介绍",
+    );
+  });
+
   it("uses Markdown table semantics for horizontal BP and grouped match inventory", () => {
     const formatted = formatPlanResponse({
       status: "ok",

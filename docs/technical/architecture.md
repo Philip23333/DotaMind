@@ -226,6 +226,11 @@ recent messages and next turn index, injects the preallocated `run_id`, executes
 Graph, and atomically commits the public response, assistant message and compact Turn
 through `PostgresChatRunRepository.complete_with_turn()`. A Redis flush, expiry or restart cannot
 make a committed Turn regress; Redis is used for replayable Run events and cancel notices.
+The Chat public response is a presentation projection: status, reason/error code, Answer,
+runtime summary, and (when needed for Markdown icons) a small derived Catalog visual-entity
+list. It excludes plans, raw tool results, EvidenceGraph, review, errors, and trace data.
+`GET /chat/sessions/{session_id}` applies the same projection to legacy stored rows without a
+data migration, so replay never redownloads a historical raw tool payload.
 
 The V3.4-1 Checkpoint pilot adds a nullable `chat_runs.checkpoint_state` JSONB field and
 the active `waiting_input` status. A waiting Run remains the session's active Run but

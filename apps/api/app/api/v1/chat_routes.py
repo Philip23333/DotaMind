@@ -19,6 +19,7 @@ from app.api.v1.chat_schemas import (
     ChatTranscriptTurnResponse,
 )
 from app.application.chat_repository import ChatNotFoundError, ChatRepositoryError
+from app.application.chat_response import compact_chat_response
 from app.application.postgres_chat_repository import PostgresChatRepository
 from app.application.session_store import SessionStoreError
 
@@ -83,7 +84,7 @@ async def get_session(
                 turn_index=turn.turn_index,
                 request_id=turn.request_id,
                 user_query=turn.user_query,
-                public_response=turn.public_response,
+                public_response=compact_chat_response(turn.public_response),
                 created_at=turn.created_at,
             )
             for turn in snapshot.turns

@@ -47,6 +47,7 @@ export type PlanResponse = {
   reason?: string;
   error_code?: string | null;
   runtime?: { duration_ms?: number; attempts?: RuntimeAttempt[] };
+  catalog_visual_entities?: CatalogVisualEntity[];
   tool_results?: ToolResultPayload[];
   answer?: {
     summary?: string;
@@ -421,6 +422,7 @@ function collectFieldNames(
 export function extractCatalogVisualEntities(
   payload: PlanResponse,
 ): CatalogVisualEntity[] {
+  if (payload.catalog_visual_entities) return payload.catalog_visual_entities;
   const byImagePath = new Map<string, CatalogVisualEntity>();
   const labelRank = new Map<string, number>();
 

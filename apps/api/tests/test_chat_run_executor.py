@@ -63,6 +63,53 @@ def test_chat_run_executor_uses_preallocated_id_and_commits_before_terminal_even
     asyncio.run(scenario())
 
 
+def test_chat_run_executor_persists_and_emits_only_compact_chat_response() -> None:
+    async def scenario() -> None:
+        run_id = uuid4()
+        session_id = uuid4()
+        events: list[StoredRunEvent] = []
+        calls: list[str] = []
+        run_repository = FakeRunRepository(calls=calls, run_id=run_id, session_id=session_id)
+        executor = ChatRunExecutor(
+            runner=FakeRunner(calls=calls),
+            run_repository=run_repository,
+            chat_repository=FakeChatRepository(calls=calls),
+            session_store=FakeSessionStore(),
+            memory_service=FakeMemoryService(calls=calls),
+            event_bus=FakeEventBus(events, calls),
+            worker_id="worker-a",
+            build_turn=lambda state: _build_turn(state),
+            build_response=lambda state, sid: {
+                "status": "ok",
+                "answer": {"summary": "done"},
+                "runtime": {"duration_ms": 1},
+                "tool_results": [{"data": {"raw_sentinel": "must-not-persist"}}],
+                "evidence_graph": {"raw_sentinel": "must-not-persist"},
+                "plan": {"raw_sentinel": "must-not-persist"},
+            },
+        )
+
+        result = await executor.execute(
+            ChatRunExecutionRequest(
+                run_id=run_id,
+                browser_id="browser-a",
+                session_id=session_id,
+                request_id=uuid4(),
+                query="compact response",
+                game="dota2",
+            )
+        )
+
+        assert run_repository.complete_kwargs is not None
+        persisted = run_repository.complete_kwargs["public_response"]
+        emitted = events[1].event.response
+        for response in (result.public_response, persisted, emitted):
+            assert set(response) == {"status", "answer", "runtime"}
+            assert "must-not-persist" not in str(response)
+
+    asyncio.run(scenario())
+
+
 def test_chat_run_executor_marks_failed_graph_without_writing_a_turn() -> None:
     async def scenario() -> None:
         run_id = uuid4()
@@ -420,6 +467,7 @@ class FakeRunRepository:
     session_id: object
     cancel_requested: bool = True
     completed: ChatRunSummary | None = None
+    complete_kwargs: dict | None = None
 
     async def mark_running(self, **kwargs) -> ChatRunSummary:
         self.calls.append("running")
@@ -427,6 +475,7 @@ class FakeRunRepository:
 
     async def complete_with_turn(self, **kwargs) -> ChatRunSummary:
         self.calls.append("complete")
+        self.complete_kwargs = kwargs
         self.completed = self._summary("completed")
         return self.completed
 

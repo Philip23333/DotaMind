@@ -75,3 +75,17 @@
 - `tests/test_agentic_answer.py`: 20 passed.
 - New regression coverage proves raw tool results and unrequested player-progress evidence stay out of Answer, while an explicit purchase request projects only purchase evidence.
 - Answer-focused Ruff and `git diff --check` passed.
+
+## 02:35 — Compact Chat history responses
+
+### Completed
+
+- Before persistence and the `result` event, Chat Run projects a response to status, reason/error code, Answer, and runtime summary; it no longer retains plan, raw tool results, EvidenceGraph, review, errors, or trace.
+- To preserve existing Markdown hero/item icons, it derives a deduplicated lightweight `catalog_visual_entities` list from raw tool results without retaining the raw payload.
+- Session reads apply the same projection to older complete `public_response` rows, so refreshes stop redownloading historical large results without a migration.
+
+### Verification
+
+- Focused API tests: `tests/test_chat_response.py`, `tests/test_chat_run_executor.py`, and `tests/test_chat_routes.py`: 10 passed, 1 warning.
+- Chat `src/lib/dotamind-api.test.ts`: 12 passed; related ESLint passed.
+- API Ruff and `git diff --check` passed.
