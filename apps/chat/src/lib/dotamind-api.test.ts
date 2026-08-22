@@ -310,12 +310,12 @@ describe("formatPlanResponse", () => {
     expect(formatted).not.toContain("| 相对开局时间 |");
   });
 
-  it("uses medium icons throughout the player-progress equipment subsection", () => {
+  it("uses large icon-only starting and final equipment while retaining named build paths", () => {
     const formatted = formatPlanResponse({
       status: "ok",
       answer: {
         summary:
-          "#### 出装、加点与天赋\n\n##### 玩家 · 英雄（12）\n\n**出门装**\n\n仙灵之火 → 铁树枝干 × 2\n\n**最终装备**\n\n主装备：敏捷便鞋\n\n**出装路径**\n\n敏捷便鞋 → 怨灵系带 **(03:52)**",
+          "## 出装、加点与天赋 · 玩家 · 英雄（12）\n\n**出门装**\n\n仙灵之火 铁树枝干 仙灵之火\n\n**最终装备**\n\n主装备：敏捷便鞋 背包：仙灵之火 中立：铁树枝干（强化：怨灵系带）\n\n**出装路径**\n\n敏捷便鞋 → 怨灵系带 **(03:52)**",
       },
       catalog_visual_entities: [
         {
@@ -346,12 +346,20 @@ describe("formatPlanResponse", () => {
     });
 
     expect(formatted).toContain(
-      "![仙灵之火](http://localhost:8001/api/v1/assets/dota/items/44.png#dota-size=md)仙灵之火 → ![铁树枝干](http://localhost:8001/api/v1/assets/dota/items/11.png#dota-size=md)铁树枝干 × 2",
+      "![仙灵之火](http://localhost:8001/api/v1/assets/dota/items/44.png#dota-size=lg)![铁树枝干](http://localhost:8001/api/v1/assets/dota/items/11.png#dota-size=lg)![仙灵之火](http://localhost:8001/api/v1/assets/dota/items/44.png#dota-size=lg)",
+    );
+    expect(formatted).toContain(
+      "![敏捷便鞋](http://localhost:8001/api/v1/assets/dota/items/16.png#dota-size=lg)![仙灵之火](http://localhost:8001/api/v1/assets/dota/items/44.png#dota-size=md)![铁树枝干](http://localhost:8001/api/v1/assets/dota/items/11.png#dota-size=md)![怨灵系带](http://localhost:8001/api/v1/assets/dota/items/3.png#dota-size=md)",
     );
     expect(formatted).toContain(
       "![敏捷便鞋](http://localhost:8001/api/v1/assets/dota/items/16.png#dota-size=md)敏捷便鞋 → ![怨灵系带](http://localhost:8001/api/v1/assets/dota/items/3.png#dota-size=md)怨灵系带 **(03:52)**",
     );
-    expect(formatted).not.toContain("#dota-size=sm");
+    expect(formatted).not.toContain("#dota-size=lg)仙灵之火");
+    expect(formatted).not.toContain("#dota-size=lg)敏捷便鞋");
+    expect(formatted).not.toContain("主装备：");
+    expect(formatted).not.toContain("背包：");
+    expect(formatted).not.toContain("中立：");
+    expect(formatted).not.toContain("强化：");
   });
 
   it("uses medium ability icons only in the player-progress skill sequence", () => {
@@ -359,7 +367,7 @@ describe("formatPlanResponse", () => {
       status: "ok",
       answer: {
         summary:
-          "#### 出装、加点与天赋\n\n##### 玩家 · 英雄（12）\n\n**技能加点**\n\n风暴之拳 → 战吼\n\n**天赋选择**\n\n- 10级：+5秒 战吼持续时间",
+          "#### 出装、加点与天赋\n\n##### 玩家 · 英雄（12）\n\n**技能加点**\n\n风暴之拳 → 战吼 → 全属性 +2 → 全属性 +2\n\n**天赋选择**\n\n- 10级：+5秒 战吼持续时间",
       },
       catalog_visual_entities: [
         {
@@ -378,7 +386,7 @@ describe("formatPlanResponse", () => {
     });
 
     expect(formatted).toContain(
-      "![风暴之拳](http://localhost:8001/api/v1/assets/dota/abilities/1.png#dota-size=md)风暴之拳 → ![战吼](http://localhost:8001/api/v1/assets/dota/abilities/2.png#dota-size=md)战吼",
+      "![风暴之拳](http://localhost:8001/api/v1/assets/dota/abilities/1.png#dota-size=md)风暴之拳 → ![战吼](http://localhost:8001/api/v1/assets/dota/abilities/2.png#dota-size=md)战吼 → 全属性 +2 → 全属性 +2",
     );
     expect(formatted).toContain("- 10级：+5秒 战吼持续时间");
   });

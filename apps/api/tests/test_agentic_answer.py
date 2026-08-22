@@ -776,26 +776,31 @@ def test_natural_language_prompt_adds_aligned_ti_status_example_for_match_eviden
     assert "standard thousands separators" in match_details_prompt
     assert "Do not emit raw HTML such as `<sub>` or `<br>`" in match_details_prompt
     assert "For a The International schedule or" not in match_details_prompt
-    assert "#### 出装、加点与天赋" in progress_prompt
+    assert "## 出装、加点与天赋 · {选手} · {英雄}（{等级}）" in progress_prompt
     assert "**出门装**" in progress_prompt
     assert "**出装路径**" in progress_prompt
     assert "#dota-size=md" in progress_prompt
+    assert "#dota-size=lg" in progress_prompt
     assert "→" in progress_prompt
     assert "![力量腰带](...#dota-size=md)" not in progress_prompt
     assert "Do not emit `![](...)` image Markdown" in progress_prompt
-    assert "completed_at_seconds" in progress_prompt
+    assert "milestone_at_seconds" in progress_prompt
     assert "Do not render a Markdown purchase table" in progress_prompt
     assert "Aggregate every purchase" in progress_prompt
+    assert "including repeated items" in progress_prompt
     assert "item_price" not in progress_prompt
     assert "150" not in progress_prompt
     assert "price" not in progress_prompt.lower()
     assert "Render **技能加点** as one compact arrow sequence, not a table" in progress_prompt
-    assert "`attribute_bonus` mapping is named `全属性 +2`" in progress_prompt
+    assert "`attribute_bonus` mapping is named" in progress_prompt
+    assert "`全属性 +2`; include each occurrence" in progress_prompt
+    assert "include every non-talent selection as its own entry" in progress_prompt
+    assert "without grouping or rank counts" in progress_prompt
     assert "fixed 10/15/20/25-level talent timing" in progress_prompt
     assert "Do not treat historical purchases as a recommendation" in progress_prompt
     assert "do not infer historical" in progress_prompt
     assert "talent-tree sides or tiers" in progress_prompt
-    assert "#### 出装、加点与天赋" not in match_details_prompt
+    assert "## 出装、加点与天赋 · {选手} · {英雄}（{等级}）" not in match_details_prompt
 
 
 def test_answer_messages_exclude_raw_tool_results_and_unrequired_match_progress() -> None:
@@ -855,7 +860,7 @@ def test_answer_messages_exclude_raw_tool_results_and_unrequired_match_progress(
     assert "optional player progress sentinel" not in messages[1]["content"]
     assert '"winner": "TEAM VISION"' in messages[1]["content"]
     assert "match_parse_status" in messages[1]["content"]
-    assert "#### 出装、加点与天赋" not in messages[0]["content"]
+    assert "## 出装、加点与天赋 · {选手} · {英雄}（{等级}）" not in messages[0]["content"]
 
 
 def test_answer_messages_include_complete_required_player_progress() -> None:
@@ -902,4 +907,4 @@ def test_answer_messages_include_complete_required_player_progress() -> None:
     assert "purchase_timeline" in messages[1]["content"]
     assert "ability_upgrade_sequence" in messages[1]["content"]
     assert "talent_selections" in messages[1]["content"]
-    assert "#### 出装、加点与天赋" in messages[0]["content"]
+    assert "## 出装、加点与天赋 · {选手} · {英雄}（{等级}）" in messages[0]["content"]

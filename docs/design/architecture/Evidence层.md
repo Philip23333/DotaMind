@@ -287,8 +287,9 @@ Evidence 层不负责：
 核心比赛 evidence；用户明确询问出装、加点或天赋时，Controller 追加
 `dota.extract_match_player_progress`，其 extractor 只读取前序 `data.matches` 的
 窄投影，并为每局输出一条完整 `player_match_progress` evidence。其购买部分是
-确定性的 `purchase_display`：负时间事件聚合为出门装，非负时间事件仅按维护的
-消耗品/守卫内部名集合过滤，成品事件携带完成时间；原始标准化购买事件仍保留在
+确定性的 `purchase_display`：负时间事件按原始购买顺序平铺为出门装，非负时间事件仅按维护的
+消耗品/守卫内部名集合过滤。`milestone_at_seconds` 只标注终件或维护的关键中间装备；终件判定使用
+Catalog 配方边及产物的可购买状态，并显式排除历史遗留的非标准产物。原始标准化购买事件仍保留在
 上游 ToolResult 中供审计和确定性 transform 使用，但不因核心详情请求自动复制为
 progress evidence。技能加点中的普通已解析技能可携带本地
 `ability_image_path`，天赋、属性加成和未解析技能保持空值；PandaScore Fixture

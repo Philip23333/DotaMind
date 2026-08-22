@@ -132,8 +132,9 @@ V3.2-2 中，默认 `PlanService` 装配会把同一 Registry 实例传给这些
 - `dota.extract_match_player_progress` 是一个确定性的领域 transform：只接受
   `opendota.match_details.data.matches` 引用，不发 HTTP，按 `player_query` 产生一个
   完整的 `player_match_progress` 包，包含最终装备/背包/中立配置、`purchase_display`
-  出装投影、技能加点和天赋选择。`purchase_display` 聚合负时间出门装，只按显式维护的
-  非负时间消耗品/守卫内部名集合过滤，并给成品事件附完成时间；原始购买事件仍留在
+  出装投影、技能加点和天赋选择。`purchase_display` 按原始购买顺序平铺负时间出门装，只按显式维护的
+  非负时间消耗品/守卫内部名集合过滤，并只给终件或维护的关键中间装备附 `milestone_at_seconds`；
+  Catalog 的历史遗留非标准产物不参与终件判定。原始购买事件仍留在
   上游 ToolResult。输出不携带完整比赛或原始 ToolResult，也不提供通用 JSONPath 或
   自由 `aspects` 过滤参数。
 - PandaScore Fixture 的 `opponents[].opponent` 仅在本地战队 manifest 命中时附加

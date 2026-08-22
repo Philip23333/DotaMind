@@ -389,3 +389,52 @@
 
 - `tests/test_pandascore_team_assets.py`: 7 passed; related Ruff passed.
 - The manifest records the selected ten Series IDs and 60 local assets.
+
+## 21:11 — Build terminal-time and icon presentation consolidation
+
+### Completed
+
+- `is_terminal_item` now derives from Valve Catalog recipe edges: only non-recipe items with no current purchasable upgrade target are terminal; it no longer incorrectly reads a recipe scroll's own `upgrade_item_ids`.
+- An explicit exclusion covers the historical Trident target that the Catalog still marks purchasable but which is not a current standard-shop item. Kaya and Sange remains terminal, while Boots of Speed, Magic Stick, and Magic Wand no longer receive completion times.
+- The player-progress heading is now the combined H2 “出装、加点与天赋 · player · hero (level)”. Chat renders starting and final equipment as large icon-only assets while retaining quantities and main/backpack/neutral grouping labels; build paths retain named medium icons.
+
+### Verification
+
+- API: `tests/test_agentic_opendota_match_tools.py` and `tests/test_agentic_answer.py`, 31 passed.
+- Chat: `src/lib/dotamind-api.test.ts`, 17 passed.
+
+## 21:47 — Build and skill-sequence presentation refinement
+
+### Completed
+
+- `purchase_display.starting_items` no longer aggregates duplicate items or carries counts; every negative-time purchase remains flattened in original order, so starting equipment no longer renders `× N`.
+- Chat removes the main/backpack/neutral/enhancement text from final inventory: main inventory renders only large icons, while backpack, neutral item, and enhancement render only medium icons. Starting equipment remains large icon-only.
+- Answer now renders skill upgrades in `upgrade_index` order as every non-talent event. Ordinary skills and every `全属性 +2` occurrence remain separate instead of rank-grouped; talents remain in the talent-selection section only.
+
+### Verification
+
+- API: `tests/test_agentic_opendota_match_tools.py` and `tests/test_agentic_answer.py`, 31 passed.
+- Chat: `src/lib/dotamind-api.test.ts`, 17 passed.
+
+## 21:50 — Key build milestone times
+
+### Completed
+
+- Added the presentation-only `BUILD_MILESTONE_ITEM_INTERNAL_NAMES` allowlist. Terminal items and listed key intermediate items receive `milestone_at_seconds` and end their current build-path segment, without calling a key purchase a terminal completion.
+- The list includes Blink Dagger, Maelstrom, Boots of Travel (including level two), Force Staff, Eul's Scepter of Divinity, Helm of the Dominator, Rod of Atos, Ghost Scepter, Vanguard, Mekansm, Echo Sabre, Diffusal Blade, Witch Blade, Arcane Boots, and Specialist's Array.
+- The raw purchase timeline, terminal-item determination, and consumable filter boundary are unchanged; the allowlist affects only `purchase_display` time markers and segmentation.
+
+### Verification
+
+- Tool-layer basic test only: `tests/test_agentic_opendota_match_tools.py`, 11 passed.
+
+## 21:52 — Key milestones do not split paths
+
+### Correction
+
+- A key intermediate item's `milestone_at_seconds` controls only its displayed time; it does not end a `→` build-path segment. Only terminal items continue to end the current segment.
+- The allowlist still affects only time presentation and does not alter raw purchases, terminal determination, or path segmentation rules.
+
+### Verification
+
+- Tool-layer basic test only: `tests/test_agentic_opendota_match_tools.py`, 11 passed.

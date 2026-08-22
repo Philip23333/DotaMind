@@ -24,6 +24,7 @@ from app.integrations.valve.catalog import (
 CATALOG_DIR = Path(__file__).resolve().parents[2] / "data" / "catalog"
 CATALOG_IMAGE_BASE_PATH = "/api/v1/assets/dota"
 ResolutionStatus = Literal["resolved", "ambiguous", "not_found"]
+NON_STANDARD_UPGRADE_TARGET_INTERNAL_NAMES = frozenset({"item_trident"})
 
 
 class CatalogSnapshotError(RuntimeError):
@@ -266,6 +267,18 @@ class DotaCatalogRepository:
         self._abilities = {record.ability_id: record for record in abilities}
         self._items = {record.item_id: record for record in items}
         self._recipes = tuple(recipes)
+        self._item_ids_with_purchasable_upgrades = frozenset(
+            component_item_id
+            for edge in recipes
+            if any(
+                (upgrade_item := self._items.get(upgrade_item_id)) is not None
+                and upgrade_item.is_purchasable
+                and upgrade_item.internal_name
+                not in NON_STANDARD_UPGRADE_TARGET_INTERNAL_NAMES
+                for upgrade_item_id in edge.upgrade_item_ids
+            )
+            for component_item_id in edge.component_item_ids
+        )
         recipe_edges_by_item_id: dict[int, list[RecipeEdge]] = {}
         for edge in recipes:
             related_ids = (edge.recipe_item_id, *edge.upgrade_item_ids)
@@ -326,6 +339,12 @@ class DotaCatalogRepository:
             edge.model_copy(deep=True)
             for edge in self._recipe_edges_by_item_id.get(int(item_id), ())
         ]
+
+    def is_terminal_item(self, item_id: int) -> bool:
+        """Whether an item has no current purchasable upgrade target."""
+
+        item = self.get_item(item_id)
+        return not item.is_recipe and item.item_id not in self._item_ids_with_purchasable_upgrades
 
     def get_hero_abilities(self, hero_id: int) -> list[AbilityCatalogRecord]:
         hero = self.get_hero(hero_id)

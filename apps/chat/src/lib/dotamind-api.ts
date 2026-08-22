@@ -705,6 +705,26 @@ function replaceLabeledEquipmentItemNames(
   return output;
 }
 
+function replaceFinalInventoryItemNamesWithIcons(
+  value: string,
+  items: CatalogVisualEntity[],
+): string {
+  const labels = [...value.matchAll(/主装备：|背包：|中立：|强化：/g)];
+  if (!labels.length) return replaceEntityNamesWithIcons(value, items, "lg");
+
+  return labels
+    .map((label, index) => {
+      const start = label.index ?? 0;
+      const contentStart = start + label[0].length;
+      const contentEnd = labels[index + 1]?.index ?? value.length;
+      const size: CatalogIconSize = label[0] === "主装备：" ? "lg" : "md";
+      const content = value.slice(contentStart, contentEnd).replace(/[（）()]/g, "");
+      return replaceEntityNamesWithIcons(content, items, size);
+    })
+    .filter(Boolean)
+    .join("");
+}
+
 function decoratePlayerHeroCell(value: string, heroes: CatalogVisualEntity[]): string {
   const separator = " · ";
   const separatorIndex = value.indexOf(separator);
@@ -726,7 +746,12 @@ export function decorateCatalogMentions(
   let inFence = false;
   let compactHeadingLevel: number | null = null;
   let playerProgressHeadingLevel: number | null = null;
-  let playerProgressSubsection: "item" | "ability" | null = null;
+  let playerProgressSubsection:
+    | "starting_items"
+    | "final_inventory"
+    | "build"
+    | "ability"
+    | null = null;
   let activeEquipmentColumn: number | null = null;
   let activePlayerHeroColumn: number | null = null;
   let activeDraftTable = false;
@@ -815,8 +840,12 @@ export function decorateCatalogMentions(
         }
       }
       if (playerProgressHeadingLevel !== null) {
-        if (/^\*\*(?:出门装|最终装备|出装路径)\*\*/.test(line)) {
-          playerProgressSubsection = "item";
+        if (/^\*\*出门装\*\*/.test(line)) {
+          playerProgressSubsection = "starting_items";
+        } else if (/^\*\*最终装备\*\*/.test(line)) {
+          playerProgressSubsection = "final_inventory";
+        } else if (/^\*\*出装路径\*\*/.test(line)) {
+          playerProgressSubsection = "build";
         } else if (/^\*\*技能加点\*\*/.test(line)) {
           playerProgressSubsection = "ability";
         } else if (/^\*\*天赋选择\*\*/.test(line)) {
@@ -829,7 +858,20 @@ export function decorateCatalogMentions(
             "md",
           );
         }
-        if (playerProgressSubsection === "item") {
+        if (playerProgressSubsection === "starting_items") {
+          return replaceEntityNamesWithIcons(
+            line,
+            entities.filter((entity) => entity.kind === "item"),
+            "lg",
+          );
+        }
+        if (playerProgressSubsection === "final_inventory") {
+          return replaceFinalInventoryItemNamesWithIcons(
+            line,
+            entities.filter((entity) => entity.kind === "item"),
+          );
+        }
+        if (playerProgressSubsection === "build") {
           return decorateCatalogLine(
             line,
             entities.filter((entity) => entity.kind === "item"),

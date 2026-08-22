@@ -90,9 +90,12 @@ Evidence extraction projects these parsed players by evidence kind: scoreboard i
 keep display and summary fields, while the downstream player transform emits one
 `player_match_progress` package containing identity, level, final inventory, the
 deterministic `purchase_display` projection, ability upgrades, and talent selections.
-That projection aggregates negative-time starting items, filters only the configured
-post-start consumable/ward internal names, and marks terminal items with completion
-times. The normalized raw purchase events remain in the upstream ToolResult for audit;
+That projection preserves negative-time starting items in purchase order, filters only the configured
+post-start consumable/ward internal names, and marks only non-recipe items without a
+current purchasable upgrade target or that are in the curated build-milestone list with
+`milestone_at_seconds`. Historical non-standard Catalog upgrade targets are explicitly excluded
+from terminal determination. The normalized raw purchase
+events remain in the upstream ToolResult for audit;
 the projection prevents the same complete player object from being repeated across
 multiple progress evidence kinds.
 PandaScore team logos use a separate committed offline snapshot under

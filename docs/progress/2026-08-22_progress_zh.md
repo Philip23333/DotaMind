@@ -386,3 +386,52 @@
 
 - `tests/test_pandascore_team_assets.py`：7 passed；相关 Ruff 通过。
 - manifest 记录选取的 10 个 Series ID，资源数量为 60。
+
+## 21:11 — 出装终件时间与图标展示收束
+
+### 已完成
+
+- `is_terminal_item` 改为从 Valve Catalog 配方边判定：只有非图纸且不存在当前可购买上位产物的物品才是终件；不再错误地读取图纸自身的 `upgrade_item_ids`。
+- 为 Catalog 中仍标为可购买、但不是当前标准商店物品的历史三元重戟维护显式排除项，因此散慧对剑仍为终件；速度之靴、魔棒和魔杖等有当前上位合成的物品不再标完成时间。
+- 选手进度标题合并为二级“出装、加点与天赋 · 选手 · 英雄（等级）”。Chat 将出门装和最终装备改为大尺寸纯图标，保留数量及主装备/背包/中立分组标签；出装路径保持中尺寸具名图标。
+
+### 验证
+
+- API：`tests/test_agentic_opendota_match_tools.py`、`tests/test_agentic_answer.py` 共 31 passed。
+- Chat：`src/lib/dotamind-api.test.ts` 17 passed。
+
+## 21:47 — 出装与技能序列展示细化
+
+### 已完成
+
+- `purchase_display.starting_items` 不再合并同名物品或携带数量；所有负时间购买按原始顺序平铺，出门装展示不再出现 `× N`。
+- Chat 最终装备移除主装备、背包、中立和强化文字：主栏仅显示大尺寸图标，背包、中立与强化仅显示中尺寸图标；出门装继续仅显示大尺寸图标。
+- Answer 的技能加点规则改为按 `upgrade_index` 平铺所有非天赋升级；普通技能和每一次“全属性 +2”均独立展示，不再按技能等级折叠，天赋仍只在天赋选择章节展示。
+
+### 验证
+
+- API：`tests/test_agentic_opendota_match_tools.py`、`tests/test_agentic_answer.py` 共 31 passed。
+- Chat：`src/lib/dotamind-api.test.ts` 17 passed。
+
+## 21:50 — 出装关键里程碑时间
+
+### 已完成
+
+- 新增 `BUILD_MILESTONE_ITEM_INTERNAL_NAMES` 展示白名单；终件与名单内关键中间装备均以 `milestone_at_seconds` 标记时间并结束当前出装路径段，不再将关键购入误称为终件完成时间。
+- 白名单包含闪烁匕首、漩涡、远行鞋（含二级）、原力法杖、Eul 的神圣法杖、支配头盔、阿托斯之棍、幽魂权杖、先锋盾、梅肯斯姆、回音战刃、净魂之刃、巫师之刃、秘法鞋和行家阵列。
+- 原始购买时间线、终件判定与消耗品过滤边界不变；白名单只影响 `purchase_display` 的时间标记与分段。
+
+### 验证
+
+- 仅工具层基本测试：`tests/test_agentic_opendota_match_tools.py`，11 passed。
+
+## 21:52 — 关键里程碑不切分路径
+
+### 修正
+
+- 关键中间装备的 `milestone_at_seconds` 只控制时间标记，不结束 `→` 出装路径段；只有终件继续结束当前路径段。
+- 白名单仍只影响时间展示，未改变原始购买、终件判定或路径分段规则。
+
+### 验证
+
+- 仅工具层基本测试：`tests/test_agentic_opendota_match_tools.py`，11 passed。

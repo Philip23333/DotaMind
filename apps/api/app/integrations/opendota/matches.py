@@ -188,7 +188,7 @@ def _catalog_item_progress_fields(
         catalog_item = catalog.get_item(item_id)
     except CatalogLookupError:
         return None, None
-    return catalog_item.internal_name, not bool(catalog_item.upgrade_item_ids)
+    return catalog_item.internal_name, catalog.is_terminal_item(item_id)
 
 
 def _normalize_inventory(

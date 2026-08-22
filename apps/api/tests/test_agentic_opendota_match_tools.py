@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from app.agentic.models import QueryContext, ToolResult
 from app.agentic.tools.opendota_match_tools import (
+    BUILD_MILESTONE_ITEM_INTERNAL_NAMES,
     DotaExtractMatchPlayerProgressInput,
     extract_match_player_progress,
     match_details_evidence,
@@ -348,7 +349,7 @@ def test_player_progress_and_inventory_are_normalized_without_reordering() -> No
     assert "neutral_history" not in progress_player["final_inventory"]
     assert progress_player["final_inventory"]["main"][0]["item_id"] == 44
     assert progress_player["purchase_display"]["starting_items"][0]["item_id"] == 44
-    assert progress_player["purchase_display"]["starting_items"][0]["count"] == 1
+    assert "count" not in progress_player["purchase_display"]["starting_items"][0]
     assert progress_player["purchase_display"]["build_segments"] == []
     assert progress_player["purchase_display"]["omitted_unresolved_count"] == 1
     assert "item_price" not in str(progress_player)
@@ -380,7 +381,7 @@ def test_player_progress_transform_returns_complete_configuration() -> None:
     assert "neutral_history" not in row["player"]["final_inventory"]
 
 
-def test_purchase_display_filters_post_start_consumables_and_marks_terminal_items() -> None:
+def test_purchase_display_filters_consumables_and_marks_only_current_terminal_items() -> None:
     raw = _raw_match()
     raw["players"][0]["purchase_log"] = [
         {"time": -89, "key": "tango"},
@@ -392,8 +393,32 @@ def test_purchase_display_filters_post_start_consumables_and_marks_terminal_item
         {"time": 4, "key": "item_tpscroll"},
         {"time": 5, "key": "item_boots"},
         {"time": 6, "key": "item_blink"},
+        {"time": 7, "key": "item_maelstrom"},
+        {"time": 8, "key": "item_travel_boots"},
+        {"time": 9, "key": "item_force_staff"},
+        {"time": 10, "key": "item_cyclone"},
+        {"time": 11, "key": "item_helm_of_the_dominator"},
+        {"time": 12, "key": "item_rod_of_atos"},
+        {"time": 13, "key": "item_ghost"},
+        {"time": 14, "key": "item_vanguard"},
+        {"time": 15, "key": "item_mekansm"},
+        {"time": 16, "key": "item_echo_sabre"},
+        {"time": 17, "key": "item_diffusal_blade"},
+        {"time": 18, "key": "item_witch_blade"},
+        {"time": 19, "key": "item_arcane_boots"},
+        {"time": 20, "key": "item_specialists_array"},
+        {"time": 21, "key": "item_kaya_and_sange"},
+        {"time": 22, "key": "item_black_king_bar"},
     ]
     summary = normalize_match_summary(raw, 8943244303)
+    terminal_by_item = {
+        event["item_internal_name"]: event["is_terminal_item"]
+        for event in summary["players"][0]["purchase_timeline"]
+    }
+    assert terminal_by_item["item_boots"] is False
+    assert terminal_by_item["item_kaya_and_sange"] is True
+    assert terminal_by_item["item_black_king_bar"] is True
+
     output = extract_match_player_progress(
         DotaExtractMatchPlayerProgressInput(
             matches=[{"valve_match_id": 8943244303, "summary": summary}],
@@ -403,18 +428,32 @@ def test_purchase_display_filters_post_start_consumables_and_marks_terminal_item
     )
 
     display = output["matches"][0]["player"]["purchase_display"]
-    assert display["starting_items"][0]["item_name_en"] == "Tango"
-    assert display["starting_items"][0]["count"] == 2
+    assert [item["item_name_en"] for item in display["starting_items"]] == ["Tango", "Tango"]
+    assert all("count" not in item for item in display["starting_items"])
     displayed_names = [
         purchase["item_name_en"]
         for segment in display["build_segments"]
         for purchase in segment["purchases"]
     ]
-    assert displayed_names == ["Boots of Speed", "Blink Dagger"]
+    assert displayed_names[0] == "Boots of Speed"
+    assert len(displayed_names) == 18
     assert [
-        segment["purchases"][-1]["completed_at_seconds"]
+        purchase["milestone_at_seconds"]
         for segment in display["build_segments"]
-    ] == [5, 6]
+        for purchase in segment["purchases"]
+        if "milestone_at_seconds" in purchase
+    ] == list(range(6, 23))
+    assert [
+        segment["purchases"][-1]["item_name_en"]
+        for segment in display["build_segments"]
+    ] == ["Kaya and Sange", "Black King Bar"]
+    assert {
+        event["item_internal_name"]
+        for event in summary["players"][0]["purchase_timeline"]
+        if event["time_seconds"] is not None
+        and event["time_seconds"] >= 0
+        and event["item_internal_name"] in BUILD_MILESTONE_ITEM_INTERNAL_NAMES
+    } == BUILD_MILESTONE_ITEM_INTERNAL_NAMES - {"item_travel_boots_2"}
 
 
 def test_zero_valued_inventory_slots_are_empty() -> None:

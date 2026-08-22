@@ -237,8 +237,9 @@ but is not automatically converted into progress evidence. An explicit
 `$<match_details_call_id>.data.matches`, selects one player per parsed game, and
 emits one complete `player_match_progress` package containing final inventory,
 the deterministic `purchase_display` projection, skill sequence, and talent selections.
-The projection aggregates negative-time starting items, filters only the configured
-post-start consumable/ward internal names, and annotates terminal items with completion
-times; the normalized raw purchase timeline remains in the upstream ToolResult for audit.
+The projection preserves negative-time starting items in purchase order, filters only the configured
+post-start consumable/ward internal names, and annotates terminal or curated milestone items
+with `milestone_at_seconds`; the normalized raw purchase timeline remains in the upstream
+ToolResult for audit.
 It does not issue another provider request, expose an `aspects` filter, or change the
 Checkpoint lifecycle.

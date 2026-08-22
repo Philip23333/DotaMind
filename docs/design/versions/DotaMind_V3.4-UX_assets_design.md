@@ -47,6 +47,11 @@ upcoming/running/past Fixture，并从 `opponents[].opponent` 去重出战队。
 `catalog_visual_entities` 支持 `ability` 和 `team` 两种本地实体：
 
 - 技能加点箭头序列使用 `md` 技能图标；天赋和全属性加点保持纯文本。
+- 明确询问选手进度时，标题合并为二级“出装、加点与天赋 · 选手 · 英雄（等级）”；出门装按购买顺序
+  仅显示 `lg` 本地图标，最终装备仅显示图标（主栏 `lg`，背包/中立/强化 `md`），出装路径保持带名称的 `md` 图标。
+- 出装路径只为 `milestone_at_seconds` 标记时间：终件自动成为里程碑，闪烁匕首、漩涡、远行鞋、原力法杖、
+  Eul 的神圣法杖、支配头盔、阿托斯之棍、幽魂权杖、先锋盾、梅肯斯姆、回音战刃、净魂之刃、巫师之刃、
+  秘法鞋和行家阵列由代码中的 Catalog internal-name 白名单额外标记。
 - 赛果、对阵和 BP 标题中的战队 Logo 使用本地路径，普通段落为 `md`，表格为 `sm`。
 - 只接受 `/api/v1/assets/dota/...` 与 `/api/v1/assets/esports/teams/...`；PandaScore
   CDN URL 不进入 Chat Response、数据库紧凑响应或浏览器。

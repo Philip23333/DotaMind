@@ -32,6 +32,26 @@ POST_START_BUILD_EXCLUDED_ITEM_INTERNAL_NAMES = frozenset(
         "item_tpscroll",
     }
 )
+BUILD_MILESTONE_ITEM_INTERNAL_NAMES = frozenset(
+    {
+        "item_blink",
+        "item_maelstrom",
+        "item_travel_boots",
+        "item_travel_boots_2",
+        "item_force_staff",
+        "item_cyclone",
+        "item_helm_of_the_dominator",
+        "item_rod_of_atos",
+        "item_ghost",
+        "item_vanguard",
+        "item_mekansm",
+        "item_echo_sabre",
+        "item_diffusal_blade",
+        "item_witch_blade",
+        "item_arcane_boots",
+        "item_specialists_array",
+    }
+)
 
 
 class OpenDotaMatchDetailsInput(BaseModel):
@@ -292,7 +312,6 @@ def _project_purchase_display(timeline: Any) -> dict[str, Any]:
         }
 
     starting_items: list[dict[str, Any]] = []
-    starting_index: dict[tuple[Any, Any], int] = {}
     build_segments: list[dict[str, Any]] = []
     current_segment: list[dict[str, Any]] = []
     omitted_unresolved_count = 0
@@ -313,21 +332,14 @@ def _project_purchase_display(timeline: Any) -> dict[str, Any]:
             continue
 
         if time_seconds < 0:
-            key = (item_id, internal_name)
-            existing_index = starting_index.get(key)
-            if existing_index is None:
-                starting_index[key] = len(starting_items)
-                starting_items.append(
-                    {
-                        "item_id": item_id,
-                        "item_name_zh": event.get("item_name_zh"),
-                        "item_name_en": event.get("item_name_en"),
-                        "item_image_path": image_path,
-                        "count": 1,
-                    }
-                )
-            else:
-                starting_items[existing_index]["count"] += 1
+            starting_items.append(
+                {
+                    "item_id": item_id,
+                    "item_name_zh": event.get("item_name_zh"),
+                    "item_name_en": event.get("item_name_en"),
+                    "item_image_path": image_path,
+                }
+            )
             continue
 
         if internal_name in POST_START_BUILD_EXCLUDED_ITEM_INTERNAL_NAMES:
@@ -339,8 +351,11 @@ def _project_purchase_display(timeline: Any) -> dict[str, Any]:
             "item_name_en": event.get("item_name_en"),
             "item_image_path": image_path,
         }
-        if event.get("is_terminal_item") is True:
-            purchase["completed_at_seconds"] = int(time_seconds)
+        is_build_milestone = event.get("is_terminal_item") is True or (
+            internal_name in BUILD_MILESTONE_ITEM_INTERNAL_NAMES
+        )
+        if is_build_milestone:
+            purchase["milestone_at_seconds"] = int(time_seconds)
         current_segment.append(purchase)
         if event.get("is_terminal_item") is True:
             build_segments.append({"purchases": current_segment})

@@ -292,13 +292,11 @@ focused player-progress request unless those facts are separately required by th
 current request. Do not treat historical purchases as a recommendation,
 popular build, core-build classification, or win-rate claim.
 
-#### 出装、加点与天赋
-
-##### {选手} · {英雄}（{等级}）
+## 出装、加点与天赋 · {选手} · {英雄}（{等级}）
 
 **出门装**
 
-{所有开局前购买的物品；相同物品使用 `× N` 聚合}
+{所有开局前购买的物品，按购买顺序平铺}
 
 **最终装备**
 
@@ -312,7 +310,7 @@ popular build, core-build classification, or win-rate claim.
 
 **技能加点**
 
-{技能} → {技能}（5） → {技能}（4） → {大招}（3） → {全属性 +2（N）；无则省略}
+{技能} → {技能} → {全属性 +2} → {技能}
 
 **天赋选择**
 
@@ -323,21 +321,24 @@ popular build, core-build classification, or win-rate claim.
 
 For purchases, use only evidence-backed Catalog names. Aggregate every purchase
 with a negative `time_seconds` into the **出门装** line immediately above
-**最终装备**; preserve first-seen item order and write repeated items as `物品 × N`.
+**最终装备**; preserve the original purchase order, including repeated items.
 Omit 出门装 when there is no negative-time purchase. The purchase display is a
 deterministic transform: it already excludes the configured post-start consumable
 and ward item keys. Render the remaining events in their original order. For each
 `build_segments` entry, connect purchases with `→`. The client decorates
-evidence-backed item names with medium local Catalog icons (`#dota-size=md`).
+evidence-backed path item names with medium local Catalog icons (`#dota-size=md`).
+For **出门装**, it replaces evidence-backed item names with large local Catalog icons
+(`#dota-size=lg`). For **最终装备**, it renders only icons: main inventory uses `lg`,
+while backpack, neutral item, and enhancement use `md`.
 Do not emit `![](...)` image Markdown or invent image URLs in this Prompt. Only
-a terminal item may show its `completed_at_seconds`, formatted immediately
-after the item as bold `**(MM:SS)**`; do not attach times to components or invent
-a completion time for an unfinished tail segment.
+an item carrying `milestone_at_seconds` may show its time, formatted immediately
+after the item as bold `**(MM:SS)**`; do not attach times to other components or
+invent a time for an unfinished tail segment.
 Do not render a Markdown purchase table.
-Render **技能加点** as one compact arrow sequence, not a table. Group each
-non-talent selection by its first appearance and write its total selected rank
-as `技能（N）`; preserve that first-appearance order. The deterministic
-`attribute_bonus` mapping is named `全属性 +2` and belongs in this sequence.
+Render **技能加点** as one compact arrow sequence, not a table. In original
+`upgrade_index` order, include every non-talent selection as its own entry; omit all
+talent selections from this line. The deterministic `attribute_bonus` mapping is named
+`全属性 +2`; include each occurrence without grouping or rank counts.
 For **天赋选择**, use each evidence row's `level_taken` exactly: it is the
 player's fixed 10/15/20/25-level talent timing, not its raw `upgrade_index`.
 List only mechanically evidenced talent selections; do not infer historical
