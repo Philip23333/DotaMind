@@ -89,3 +89,17 @@
 - Focused API tests: `tests/test_chat_response.py`, `tests/test_chat_run_executor.py`, and `tests/test_chat_routes.py`: 10 passed, 1 warning.
 - Chat `src/lib/dotamind-api.test.ts`: 12 passed; related ESLint passed.
 - API Ruff and `git diff --check` passed.
+
+## 02:50 — P0 full automated regression
+
+### Verification
+
+- Full API suite: 660 passed, 21 skipped, 1 warning.
+- Full API Ruff and `git diff --check` passed.
+- Full Chat suite: 8 test files and 25 tests passed.
+- Chat ESLint and Next.js production build passed.
+
+### Test closure
+
+- Synchronized the Controller system-prompt golden fixture with the stage-1 rule text.
+- Updated the complete Catalog ability-answer test to assert the JSON Answer Evidence View; its complete-ability plan already explicitly requires talent evidence, so no Answer projection boundary was loosened.

@@ -89,3 +89,17 @@
 - API 定向：`tests/test_chat_response.py`、`tests/test_chat_run_executor.py`、`tests/test_chat_routes.py` 共 10 passed、1 warning。
 - Chat `src/lib/dotamind-api.test.ts`：12 passed；相关 ESLint 通过。
 - API Ruff 与 `git diff --check` 通过。
+
+## 02:50 — P0 全量自动化回归
+
+### 验证
+
+- API 全量：660 passed、21 skipped、1 warning。
+- API 全量 Ruff 与 `git diff --check` 通过。
+- Chat 全量：8 个测试文件、25 个测试通过。
+- Chat ESLint 与 Next.js production build 通过。
+
+### 测试收口
+
+- 同步 Controller system prompt golden fixture 与阶段 1 的规则文本。
+- Catalog 完整技能回答测试改为断言 Answer Evidence View 的 JSON 表示；完整技能计划本来已显式要求天赋 evidence，未放宽任何 Answer 投影边界。

@@ -92,8 +92,8 @@ class FullAbilityFormattingLLM(CatalogAnswerLLM):
         max_tokens: int = 1000,
     ) -> str:
         self.messages.append([dict(message) for message in messages])
-        assert "'kind': 'hero_ability'" in messages[1]["content"]
-        assert "'kind': 'hero_talent_tree'" in messages[1]["content"]
+        assert '"kind": "hero_ability"' in messages[1]["content"]
+        assert '"kind": "hero_talent_tree"' in messages[1]["content"]
         return (
             "齐天大圣 / Monkey King\n\n"
             "快照：7.41e\n\n"
