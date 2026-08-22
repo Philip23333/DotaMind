@@ -643,12 +643,12 @@ function replaceEntityNamesWithIcons(
   let cursor = 0;
   for (const replacement of replacements) {
     const between = value.slice(cursor, replacement.index);
-    if (!/^[\s,，、/·]*$/u.test(between)) output += between;
+    if (!/^[\s,，、；;/·]*$/u.test(between)) output += between;
     output += catalogImageMarkdown(replacement.entity, size);
     cursor = replacement.index + replacement.name.length;
   }
   const tail = value.slice(cursor);
-  if (!/^[\s,，、/·]*$/u.test(tail)) output += tail;
+  if (!/^[\s,，、；;/·]*$/u.test(tail)) output += tail;
   return output;
 }
 
@@ -665,7 +665,8 @@ function replaceLabeledEquipmentItemNames(
     const start = label.index ?? 0;
     const contentStart = start + label[0].length;
     const contentEnd = labels[index + 1]?.index ?? value.length;
-    output += value.slice(cursor, contentStart);
+    const prefix = value.slice(cursor, label[0] === "主装备：" ? contentStart : start);
+    output += label[0] === "强化：" ? prefix : prefix.replace(/[；;]\s*$/u, "");
     output += replaceEntityNamesWithIcons(
       value.slice(contentStart, contentEnd),
       items,
@@ -674,6 +675,18 @@ function replaceLabeledEquipmentItemNames(
     cursor = contentEnd;
   }
   return output;
+}
+
+function decoratePlayerHeroCell(value: string, heroes: CatalogVisualEntity[]): string {
+  const separator = " · ";
+  const separatorIndex = value.indexOf(separator);
+  if (separatorIndex === -1) return decorateCatalogLine(value, heroes, "md");
+  const playerPrefixEnd = separatorIndex + separator.length;
+  const heroText = value.slice(playerPrefixEnd);
+  const decoratedHeroText = decorateCatalogLine(heroText, heroes, "md");
+  if (decoratedHeroText === heroText) return value;
+  const icon = decoratedHeroText.slice(0, decoratedHeroText.length - heroText.length);
+  return icon ? `${icon}${value}` : decoratedHeroText;
 }
 
 export function decorateCatalogMentions(
@@ -717,7 +730,7 @@ export function decorateCatalogMentions(
               replaceEntityNamesWithIcons(
                 cell,
                 entities.filter((entity) => entity.kind === "hero"),
-                "md",
+                "lg",
               ),
             ),
           ]);
@@ -733,10 +746,9 @@ export function decorateCatalogMentions(
             activePlayerHeroColumn !== null &&
             activePlayerHeroColumn < decoratedCells.length
           ) {
-            decoratedCells[activePlayerHeroColumn] = decorateCatalogLine(
+            decoratedCells[activePlayerHeroColumn] = decoratePlayerHeroCell(
               decoratedCells[activePlayerHeroColumn],
               heroEntities,
-              "md",
             );
           }
           decoratedCells[activeEquipmentColumn] = replaceLabeledEquipmentItemNames(

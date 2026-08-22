@@ -238,9 +238,9 @@ describe("formatPlanResponse", () => {
           "| 选择 | 斯温 | 斯温 | 斯温 | 斯温 | 斯温 | — | — |",
           "| 禁用 | 斯温 | 斯温 | 斯温 | 斯温 | 斯温 | 斯温 | 斯温 |",
           "",
-          "| 选手 / 英雄 | K/D/A | 经济 | 装备 | 技能加点与天赋 |",
-          "| --- | --- | --- | --- | --- |",
-          "| Yuma · 斯温（24） | 8/2/3 | 22,790 | 主装备：闪烁匕首；背包：魔晶；中立：仙灵榴弹（强化：警觉） | 已记录 20 次加点 · 已选 5 项天赋 |",
+          "| 选手 / 英雄 | K/D/A | 经济 | 装备 |",
+          "| --- | --- | --- | --- |",
+          "| Yuma · 斯温（24） | 8/2/3 | 22,790 | 主装备：闪烁匕首；背包：魔晶；中立：仙灵榴弹（强化：警觉） |",
         ].join("\n"),
       },
       tool_results: [
@@ -263,15 +263,46 @@ describe("formatPlanResponse", () => {
       ],
     });
 
-    const heroIcon = "![斯温](http://localhost:8001/api/v1/assets/dota/heroes/18.png#dota-size=md)";
+    const heroIcon = "![斯温](http://localhost:8001/api/v1/assets/dota/heroes/18.png#dota-size=lg)";
     expect(formatted).toContain(`| 选择 | ${Array(5).fill(heroIcon).join(" | ")} | — | — |`);
     expect(formatted).toContain(`| 禁用 | ${Array(7).fill(heroIcon).join(" | ")} |`);
     expect(formatted).not.toContain("| 选择 | 斯温");
     expect(formatted).toContain(
-      "| Yuma · ![斯温](http://localhost:8001/api/v1/assets/dota/heroes/18.png#dota-size=md)斯温（24） |",
+      "| ![斯温](http://localhost:8001/api/v1/assets/dota/heroes/18.png#dota-size=md)Yuma · 斯温（24） |",
     );
     expect(formatted).toContain(
-      "主装备：![闪烁匕首](http://localhost:8001/api/v1/assets/dota/items/1.png#dota-size=md)；背包：![魔晶](http://localhost:8001/api/v1/assets/dota/items/609.png#dota-size=sm)；中立：![仙灵榴弹](http://localhost:8001/api/v1/assets/dota/items/237.png#dota-size=sm)（强化：![警觉](http://localhost:8001/api/v1/assets/dota/items/1584.png#dota-size=sm)）",
+      "主装备：![闪烁匕首](http://localhost:8001/api/v1/assets/dota/items/1.png#dota-size=md)![魔晶](http://localhost:8001/api/v1/assets/dota/items/609.png#dota-size=sm)![仙灵榴弹](http://localhost:8001/api/v1/assets/dota/items/237.png#dota-size=sm)（![警觉](http://localhost:8001/api/v1/assets/dota/items/1584.png#dota-size=sm)）",
+    );
+    expect(formatted).not.toContain("背包：");
+    expect(formatted).not.toContain("中立：");
+    expect(formatted).not.toContain("强化：");
+  });
+
+  it("does not decorate a player name from a stale hero visual alias", () => {
+    const formatted = formatPlanResponse({
+      status: "ok",
+      answer: {
+        summary: [
+          "| 选手 / 英雄 | K/D/A | 经济 | 装备 |",
+          "| --- | --- | --- | --- |",
+          "| Satanic · 自然先知（27） | 12/2/12 | 39,852 | 主装备： |",
+        ].join("\n"),
+      },
+      catalog_visual_entities: [
+        {
+          kind: "hero",
+          imagePath: "/api/v1/assets/dota/heroes/53.png",
+          label: "自然先知",
+          names: ["Satanic", "自然先知", "Nature's Prophet"],
+        },
+      ],
+    });
+
+    expect(formatted).toContain(
+      "| ![自然先知](http://localhost:8001/api/v1/assets/dota/heroes/53.png#dota-size=md)Satanic · 自然先知（27） |",
+    );
+    expect(formatted).not.toContain(
+      "Satanic · ![自然先知](http://localhost:8001/api/v1/assets/dota/heroes/53.png#dota-size=md)",
     );
   });
 

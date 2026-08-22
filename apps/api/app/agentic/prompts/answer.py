@@ -185,8 +185,7 @@ and use a date heading without the label `今日` when the current date is not k
 MATCH_PLAYER_TABLE_ROW = (
     "| {选手} · {英雄}（{等级}） | {K}/{D}/{A} | {22,790} | "
     "主装备：{物品名称}；背包：{物品名称；无则省略}；"
-    "中立：{物品名称；无则省略}（强化：{物品名称；无则省略}） | "
-    "已记录 {加点次数} 次加点 · 已选 {天赋数} 项天赋 |"
+    "中立：{物品名称；无则省略}（强化：{物品名称；无则省略}） |"
 )
 
 MATCH_DETAILS_OUTPUT_EXAMPLE = """For a completed Dota match detail answer,
@@ -247,22 +246,25 @@ is no mapped id.
 
 ##### {队伍A}
 
-| 选手 / 英雄 | K/D/A | 经济 | 装备 | 技能加点与天赋 |
-| --- | --- | --- | --- | --- |
+| 选手 / 英雄 | K/D/A | 经济 | 装备 |
+| --- | --- | --- | --- |
 __MATCH_PLAYER_TABLE_ROW__
 
 ##### {队伍B}
 
-| 选手 / 英雄 | K/D/A | 经济 | 装备 | 技能加点与天赋 |
-| --- | --- | --- | --- | --- |
+| 选手 / 英雄 | K/D/A | 经济 | 装备 |
+| --- | --- | --- | --- |
 __MATCH_PLAYER_TABLE_ROW__
 
 Repeat the same order only for games supported by evidence. Format net worth with
 standard thousands separators (for example, `22,790`) and no decimal places. In
 the `装备` column use only the fixed labels `主装备：`, `背包：`, `中立：`, and
-`强化：` when their evidence is available. The client deterministically renders
-resolved equipment as Catalog icons. Do not put full purchase sequences, full
-skill sequences, or individual talent labels in the normal match-detail table.
+`强化：` when their evidence is available. The client renders the main inventory
+as medium Catalog icons, and removes the backpack, neutral, and enhancement
+labels while rendering those items as small icons; the enhancement icon remains
+inside parentheses. Do not put skill-leveling or talent information, full
+purchase sequences, full skill sequences, or individual talent labels in the
+normal match-detail table.
 End the entire answer with a Markdown blockquote data note, with every visible
 line prefixed by `>`, for example:
 

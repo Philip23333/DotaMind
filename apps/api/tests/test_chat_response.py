@@ -45,3 +45,30 @@ def test_compact_chat_response_discards_internal_graph_data_and_keeps_visuals() 
         }
     ]
     assert compact_chat_response(compact) == compact
+
+
+def test_compact_visual_entities_do_not_treat_player_names_as_hero_names() -> None:
+    compact = compact_chat_response(
+        {
+            "status": "ok",
+            "tool_results": [
+                {
+                    "data": {
+                        "name": "Satanic",
+                        "hero_name_zh": "自然先知",
+                        "hero_name_en": "Nature's Prophet",
+                        "hero_image_path": "/api/v1/assets/dota/heroes/53.png",
+                    }
+                }
+            ],
+        }
+    )
+
+    assert compact["catalog_visual_entities"] == [
+        {
+            "kind": "hero",
+            "imagePath": "/api/v1/assets/dota/heroes/53.png",
+            "label": "自然先知",
+            "names": ["自然先知", "Nature's Prophet"],
+        }
+    ]

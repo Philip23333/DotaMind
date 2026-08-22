@@ -770,10 +770,11 @@ def test_natural_language_prompt_adds_aligned_ti_status_example_for_match_eviden
     )
     assert "（Ban 1）" not in match_details_prompt
     assert "（Pick 1）" not in match_details_prompt
-    assert "| 选手 / 英雄 | K/D/A | 经济 | 装备 | 技能加点与天赋 |" in match_details_prompt
+    assert "| 选手 / 英雄 | K/D/A | 经济 | 装备 |" in match_details_prompt
+    assert "| 选手 / 英雄 | K/D/A | 经济 | 装备 | 技能加点与天赋 |" not in match_details_prompt
     assert "| {选手} · {英雄}（{等级}） | {K}/{D}/{A} | {22,790} |" in match_details_prompt
     assert "主装备：{物品名称}" in match_details_prompt
-    assert "已记录 {加点次数} 次加点 · 已选 {天赋数} 项天赋" in match_details_prompt
+    assert "Do not put skill-leveling or talent information" in match_details_prompt
     assert "standard thousands separators" in match_details_prompt
     assert "Do not emit raw HTML such as `<sub>` or `<br>`" in match_details_prompt
     assert "For a The International schedule or" not in match_details_prompt

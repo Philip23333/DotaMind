@@ -114,3 +114,32 @@
 ### Verification
 
 - Added focused coverage for compact-response idempotency and for preserving visual entities when a session reads the new compact format.
+
+## 11:05 — Correct match-detail icon semantics
+
+### Completed
+
+- Corrected compact Chat Catalog visual projection: records with `hero_image_path` / `item_image_path` now collect only entity-specific names, so a player's generic `name` is no longer written as a hero or item alias.
+- Added frontend context protection for the combined player / hero column: the hero icon is inserted only after ` · `, so even a legacy compact response with a bad alias cannot replace the player name.
+- Horizontal BP hero icons now use `lg`; player inventory retains the main-inventory label and medium icons, while backpack, neutral, and enhancement entries show small icons only. The enhancement icon remains inside parentheses without its text label.
+- Removed the “skill leveling and talents” column from normal match-detail player tables. The on-demand detail rules for an explicitly requested player's skill leveling or talents remain unchanged.
+
+### Verification
+
+- Focused Chat icon-formatting tests: 13 passed.
+- Focused API compact-response and Answer Prompt tests: 2 passed (20 deselected); Ruff passed for affected files.
+- Full API suite: 662 passed, 21 skipped, 1 warning; full Chat suite: 26 passed; ESLint and the Next.js production build passed.
+
+### Known boundaries
+
+- Persisted legacy compact responses are not migrated. The frontend player / hero column protection prevents their polluted aliases from replacing player names; new responses use the corrected visual projection.
+
+## 11:10 — Icon position in the combined player / hero column
+
+### Completed
+
+- The combined player / hero column still identifies the hero only from text after the ` · ` separator, but moves the identified hero icon to the beginning of the entire cell: “hero icon player · hero (level)”.
+
+### Verification
+
+- Focused Chat `dotamind-api` tests: 13 passed; ESLint and `git diff --check` passed.

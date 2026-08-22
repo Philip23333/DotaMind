@@ -28,20 +28,28 @@ def compact_chat_response(response: dict[str, Any]) -> dict[str, Any]:
 def _catalog_visual_entities(tool_results: Any) -> list[dict[str, Any]]:
     entities: dict[str, dict[str, Any]] = {}
 
-    def add(record: dict[str, Any], *, image_key: str, kind: str) -> None:
+    def add(
+        record: dict[str, Any],
+        *,
+        image_key: str,
+        kind: str,
+        include_generic_names: bool = False,
+    ) -> None:
         image_path = record.get(image_key)
         if not isinstance(image_path, str) or not image_path.startswith("/api/v1/assets/dota/"):
             return
         name_prefix = "hero" if kind == "hero" else "item"
+        name_values = [
+            record.get(f"{name_prefix}_name_zh"),
+            record.get(f"{name_prefix}_name_en"),
+        ]
+        if include_generic_names:
+            name_values.extend(
+                (record.get("name_zh"), record.get("name_en"), record.get("name"))
+            )
         names = [
             value.strip()
-            for value in (
-                record.get(f"{name_prefix}_name_zh"),
-                record.get(f"{name_prefix}_name_en"),
-                record.get("name_zh"),
-                record.get("name_en"),
-                record.get("name"),
-            )
+            for value in name_values
             if isinstance(value, str) and value.strip()
         ]
         if not names:
@@ -69,7 +77,7 @@ def _catalog_visual_entities(tool_results: Any) -> list[dict[str, Any]]:
         image_path = value.get("image_path")
         if isinstance(image_path, str):
             kind = "item" if "/items/" in image_path else "hero"
-            add(value, image_key="image_path", kind=kind)
+            add(value, image_key="image_path", kind=kind, include_generic_names=True)
         for child in value.values():
             visit(child)
 
