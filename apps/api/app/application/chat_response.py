@@ -17,7 +17,10 @@ def compact_chat_response(response: dict[str, Any]) -> dict[str, Any]:
     """Keep only chat presentation data, plus its small Catalog visual projection."""
 
     compact = {key: response[key] for key in _CHAT_RESPONSE_FIELDS if key in response}
-    if visual_entities := _catalog_visual_entities(response.get("tool_results")):
+    visual_entities = response.get("catalog_visual_entities")
+    if not isinstance(visual_entities, list):
+        visual_entities = _catalog_visual_entities(response.get("tool_results"))
+    if visual_entities:
         compact["catalog_visual_entities"] = visual_entities
     return compact
 

@@ -44,3 +44,4 @@ def test_compact_chat_response_discards_internal_graph_data_and_keeps_visuals() 
             "names": ["斯温", "Sven"],
         }
     ]
+    assert compact_chat_response(compact) == compact

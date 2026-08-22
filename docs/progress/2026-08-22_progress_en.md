@@ -103,3 +103,14 @@
 
 - Synchronized the Controller system-prompt golden fixture with the stage-1 rule text.
 - Updated the complete Catalog ability-answer test to assert the JSON Answer Evidence View; its complete-ability plan already explicitly requires talent evidence, so no Answer projection boundary was loosened.
+
+## 10:50 — Preserve Catalog visuals when reading compact Chat responses
+
+### Completed
+
+- `compact_chat_response()` now preserves existing `catalog_visual_entities` on already compact responses, and derives them from raw `tool_results` only for legacy responses that lack the field.
+- This fixes the second compaction during session reads from dropping Markdown hero/item visual entities from newly persisted Chat Runs.
+
+### Verification
+
+- Added focused coverage for compact-response idempotency and for preserving visual entities when a session reads the new compact format.

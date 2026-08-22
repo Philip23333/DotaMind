@@ -103,3 +103,14 @@
 
 - 同步 Controller system prompt golden fixture 与阶段 1 的规则文本。
 - Catalog 完整技能回答测试改为断言 Answer Evidence View 的 JSON 表示；完整技能计划本来已显式要求天赋 evidence，未放宽任何 Answer 投影边界。
+
+## 10:50 — Chat 紧凑响应图标实体重读修复
+
+### 已完成
+
+- `compact_chat_response()` 对已紧凑的响应保留既有 `catalog_visual_entities`；仅旧响应缺失该字段时才从原始 `tool_results` 派生。
+- 修复新 Chat Run 写库后在会话读取时二次压缩、丢失 Markdown 英雄/物品图标实体的问题。
+
+### 验证
+
+- 定向覆盖紧凑响应幂等性，以及会话读取保留新格式图标实体。
