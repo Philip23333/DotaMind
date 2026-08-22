@@ -130,10 +130,10 @@ V3.2-2 中，默认 `PlanService` 装配会把同一 Registry 实例传给这些
   它只产生比赛结果、选手比分、解析覆盖和 BP 四类核心 evidence；完整选手进度仍留在
   `data.matches`，不自动进入普通 Answer。
 - `dota.extract_match_player_progress` 是一个确定性的领域 transform：只接受
-  `opendota.match_details.data.matches` 引用，不发 HTTP，按 `player_query` 和显式
-  `aspects` 产生 `player_purchase_timeline`、`player_skill_build` 或
-  `player_talent_selection`。购买事件和加点序列保持上游顺序，输出不携带其它 aspect、
-  完整比赛或原始 ToolResult。
+  `opendota.match_details.data.matches` 引用，不发 HTTP，按 `player_query` 产生一个
+  完整的 `player_match_progress` 包，包含最终装备/背包/中立配置、购买顺序、技能加点
+  和天赋选择。输出不携带完整比赛或原始 ToolResult，也不提供通用 JSONPath 或自由
+  `aspects` 过滤参数。
 
 PandaScore 赛事 Fixture 事实、跨源推断映射与 OpenDota Valve/Replay 事实分别进入 EvidenceGraph；
 `detailed_stats` 不是 `has_parsed`，空 BP 不产生 `match_draft` 证据。未指定局号时，

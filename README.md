@@ -120,8 +120,11 @@ not a copied documentation list, are authoritative.
 
 Match-detail player progress is a deterministic downstream transform: the
 registered `dota.extract_match_player_progress` tool consumes only normalized
-`opendota.match_details.data.matches` and emits requested purchase, skill, or
-talent evidence without another provider request.
+`opendota.match_details.data.matches` and emits one complete
+`player_match_progress` package (final inventory, purchase timeline, skill
+sequence, and talent selections) without another provider request. It runs only
+when the user explicitly asks for a player's post-match configuration; ordinary
+match details do not extract it, and there is no cross-Run artifact reuse.
 
 ## Configuration
 

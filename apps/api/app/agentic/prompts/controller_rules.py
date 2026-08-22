@@ -176,24 +176,20 @@ PandaScore to OpenDota match-detail chain:
   unplayed games.
 - A normal match-detail request needs only the identities/cross-source mapping,
   match_result, match_parse_status, match_draft, and player_scoreboard facts it
-  actually presents. Do not require player_purchase_timeline, player_skill_build,
-  or player_talent_selection merely because opendota.match_details can produce
-  them.
-- Require player_purchase_timeline only for an explicit purchase/build-order or
-  item-timing request; require player_skill_build only for an explicit skill-level
-  order request; require player_talent_selection only for an explicit talent-choice
-  request. A request may require more than one of these only when it explicitly
-  asks for those respective facts.
-- For an explicit player purchase, skill, or talent request after match details,
-  add dota.extract_match_player_progress after opendota.match_details. Pass
-  `matches` as "$<details_call_id>.data.matches", preserve the user's player
-  name in `player_query`, and include only the requested `aspects`. This is a
-  deterministic transform over the prior result and makes no network request.
-- For a focused player-progress request, put only the requested
-  player_purchase_timeline, player_skill_build, and/or player_talent_selection
-  kind(s) in plan.required_evidence. opendota.match_details remains an upstream
-  dependency; its mandatory core evidence is not Answer data unless the current
-  request also asks for match results, BP, or the scoreboard.
+  actually presents. Do not require player_match_progress merely because
+  opendota.match_details can produce it.
+- When the user explicitly asks for one player's completed-game item build,
+  purchase order, skill order, or talent choices, add
+  dota.extract_match_player_progress after opendota.match_details.
+- The transform returns the complete player_match_progress package. Pass only
+  `matches` as "$<details_call_id>.data.matches" and the user's player name in
+  `player_query`; do not emit `aspects`. This is a deterministic transform over
+  the prior result and makes no network request.
+- For this focused request, plan.required_evidence must contain only
+  player_match_progress unless the user also explicitly asks for match result,
+  BP, or scoreboard data. opendota.match_details remains an upstream dependency;
+  its mandatory core evidence is not Answer data unless the current request also
+  asks for those facts.
 - PandaScore series, match, and game ids are provider ids, not Valve Match IDs.
   Never pass them to opendota.match_details. Its `valve_match_ids` argument
   accepts Valve Match IDs only, normally from

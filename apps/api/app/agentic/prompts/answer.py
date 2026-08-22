@@ -278,22 +278,27 @@ Do not emit raw HTML such as `<sub>` or `<br>`, CSS, or unsupported source claim
     "__MATCH_PLAYER_TABLE_ROW__", MATCH_PLAYER_TABLE_ROW
 )
 
-MATCH_PLAYER_PROGRESS_RULES = """For player_purchase_timeline,
-player_skill_build, or player_talent_selection evidence, append the following
-section only when the current request explicitly asks for a completed game's
-purchase order, item build, skill build, or talent selections. Select only the
-player, hero, and game supported by the current request and evidence. If the
-request explicitly asks for every player's progress, repeat the subsection for
-every evidenced player. Otherwise do not append this section to a normal match
-detail answer.
+MATCH_PLAYER_PROGRESS_RULES = """For player_match_progress evidence, render the
+complete post-match player configuration whenever the current request explicitly
+asks for that player's item build, purchase order, skill order, or talent choices.
+Render all three sections together even when the user explicitly mentions only
+one of them. Select only the player, hero, and game supported by the current
+request and evidence. If the request explicitly asks for every player's progress,
+repeat the subsection for every evidenced player. Otherwise do not append this
+section to a normal match-detail answer.
 
-Do not treat historical purchases as a recommendation, popular build, core-build
-classification, or win-rate claim. Do not output the full draft or ten-player
-scoreboard for a focused player-progress request.
+Do not render match overview, result, full draft, or ten-player scoreboard for a
+focused player-progress request unless those facts are separately required by the
+current request. Do not treat historical purchases as a recommendation,
+popular build, core-build classification, or win-rate claim.
 
 #### 出装、加点与天赋
 
 ##### {选手} · {英雄}（{等级}）
+
+**出门装**
+
+{所有开局前购买的物品；相同物品使用 `× N` 聚合}
 
 **最终装备**
 
@@ -305,26 +310,36 @@ scoreboard for a focused player-progress request.
 
 | 相对开局时间 | 购买 |
 | --- | --- |
-| 开局前 01:29 | {物品} |
 | 00:33 | {物品} |
 
 **技能加点**
 
-| 等级 | 选择 |
-| --- | --- |
-| 1 | {技能} |
-| 2 | {技能} |
+{技能} → {技能}（5） → {技能}（4） → {大招}（3） → {全属性 +2（N）；无则省略}
 
 **天赋选择**
 
-- {等级}级：{天赋}
+- 10级：{天赋；无则省略}
+- 15级：{天赋；无则省略}
+- 20级：{天赋；无则省略}
+- 25级：{天赋；无则省略}
 
-Render one purchase event per evidence row in its original order. Keep negative
-times as `开局前 MM:SS`, and zero or positive times as `MM:SS`; never merge
-same-second purchases. The skill `等级` is the recorded upgrade-sequence level,
-not a timestamp. List only mechanically evidenced talent selections; do not
-infer historical talent-tree sides or tiers. Use only evidence-backed Catalog
-names and omit unavailable inventory groups."""
+For purchases, use only evidence-backed Catalog names. Aggregate every purchase
+with a negative `time_seconds` into the **出门装** line immediately above
+**最终装备**; preserve first-seen item order and write repeated items as `物品 × N`.
+Do not apply the price filter to 出门装, and omit that line when there is no
+negative-time purchase. In **购买顺序**, include only zero or positive-time events
+whose resolved Catalog `item_price` is at least 150; omit events with an absent
+or lower price instead of guessing. Keep the remaining events in their original
+order, format their times as `MM:SS`, and never merge same-second purchases.
+Omit the entire **购买顺序** table when no event remains.
+Render **技能加点** as one compact arrow sequence, not a table. Group each
+non-talent selection by its first appearance and write its total selected rank
+as `技能（N）`; preserve that first-appearance order. The deterministic
+`attribute_bonus` mapping is named `全属性 +2` and belongs in this sequence.
+For **天赋选择**, use each evidence row's `level_taken` exactly: it is the
+player's fixed 10/15/20/25-level talent timing, not its raw `upgrade_index`.
+List only mechanically evidenced talent selections; do not infer historical
+talent-tree sides or tiers. Omit unavailable inventory groups."""
 
 WEEKLY_TREND_RULES = (
     "When evidence items carry week_index/week_epoch (per-week STRATZ buckets), "
@@ -432,9 +447,7 @@ MATCH_DETAILS_EVIDENCE_KINDS = frozenset(
 )
 MATCH_PLAYER_PROGRESS_EVIDENCE_KINDS = frozenset(
     {
-        "player_purchase_timeline",
-        "player_skill_build",
-        "player_talent_selection",
+        "player_match_progress",
     }
 )
 

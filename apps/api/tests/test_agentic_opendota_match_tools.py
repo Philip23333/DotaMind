@@ -196,6 +196,7 @@ def test_empty_draft_is_ok_data_but_produces_no_evidence() -> None:
 
 def test_player_progress_and_inventory_are_normalized_without_reordering() -> None:
     raw = _raw_match()
+    catalog = load_default_catalog_repository()
     raw["players"][0].update(
         {
             "purchase_log": [
@@ -216,7 +217,10 @@ def test_player_progress_and_inventory_are_normalized_without_reordering() -> No
             "ability_upgrades_arr": [
                 5154,
                 {"ability_id": 303},
-                {"ability_id": 999999, "internal_name": "special_bonus_attributes"},
+                730,
+                {"ability_id": 999998, "internal_name": "special_bonus_test_2"},
+                {"ability_id": 999997, "internal_name": "special_bonus_test_3"},
+                {"ability_id": 999996, "internal_name": "special_bonus_test_4"},
             ],
         }
     )
@@ -231,6 +235,8 @@ def test_player_progress_and_inventory_are_normalized_without_reordering() -> No
         "unknown_item",
     ]
     assert player["purchase_timeline"][0]["item_id"] == 44
+    assert player["purchase_timeline"][0]["item_price"] == catalog.get_item(44).price
+    assert player["purchase_timeline"][2]["item_price"] is None
     assert player["purchase_timeline"][0]["charges"] == 3
     assert player["purchase_timeline"][2]["item_catalog_status"] == "not_found"
     assert player["inventory"]["main"][0]["item_id"] == 44
@@ -241,13 +247,26 @@ def test_player_progress_and_inventory_are_normalized_without_reordering() -> No
     )
     assert player["inventory"]["neutral_history"][0]["time_seconds"] == 526
     assert player["inventory"]["neutral_history"][0]["item"]["item_id"] == 44
-    assert [row["level"] for row in player["ability_upgrade_sequence"]] == [1, 2, 3]
+    assert [row["upgrade_index"] for row in player["ability_upgrade_sequence"]] == [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+    ]
     assert [row["kind"] for row in player["ability_upgrade_sequence"]] == [
         "ability",
         "talent",
         "attribute_bonus",
+        "talent",
+        "talent",
+        "talent",
     ]
-    assert [row["level_taken"] for row in player["talent_selections"]] == [2]
+    assert player["ability_upgrade_sequence"][2]["name_zh"] == "全属性 +2"
+    assert player["ability_upgrade_sequence"][2]["catalog_status"] == "mapped"
+    assert [row["level_taken"] for row in player["talent_selections"]] == [10, 15, 20, 25]
+    assert [row["upgrade_index"] for row in player["talent_selections"]] == [2, 4, 5, 6]
 
     result = ToolResult(
         tool_call_id="progress",
@@ -278,8 +297,8 @@ def test_player_progress_and_inventory_are_normalized_without_reordering() -> No
         item for item in match_details_evidence(result) if item.kind == "player_scoreboard"
     ).value["players"][0]
     assert scoreboard_player["purchase_event_count"] == 3
-    assert scoreboard_player["ability_upgrade_count"] == 3
-    assert scoreboard_player["talent_selection_count"] == 1
+    assert scoreboard_player["ability_upgrade_count"] == 6
+    assert scoreboard_player["talent_selection_count"] == 4
     assert "purchase_timeline" not in scoreboard_player
     assert "ability_upgrade_sequence" not in scoreboard_player
     assert "talent_selections" not in scoreboard_player
@@ -288,7 +307,6 @@ def test_player_progress_and_inventory_are_normalized_without_reordering() -> No
         DotaExtractMatchPlayerProgressInput(
             matches=result.data["matches"],
             player_query="Player 0",
-            aspects=["purchase_timeline", "ability_upgrade_sequence", "talent_selections"],
         ),
         QueryContext(),
     )
@@ -299,14 +317,13 @@ def test_player_progress_and_inventory_are_normalized_without_reordering() -> No
         data=progress_result,
         latency_ms=0,
     )
-    progress_evidence = {
-        item.kind: item.value["players"][0]
-        for item in match_player_progress_evidence(progress_tool_result)
-    }
+    progress_items = match_player_progress_evidence(progress_tool_result)
     assert {item.kind for item in match_details_evidence(result)}.isdisjoint(
-        {"player_purchase_timeline", "player_skill_build", "player_talent_selection"}
+        {"player_match_progress"}
     )
-    assert set(progress_evidence["player_purchase_timeline"]) == {
+    assert [item.kind for item in progress_items] == ["player_match_progress"]
+    progress_player = progress_items[0].value["players"][0]
+    assert set(progress_player) == {
         "name",
         "personaname",
         "player_slot",
@@ -315,33 +332,18 @@ def test_player_progress_and_inventory_are_normalized_without_reordering() -> No
         "hero_name_zh",
         "hero_image_path",
         "hero_catalog_status",
+        "level",
+        "final_inventory",
         "purchase_timeline",
-    }
-    assert set(progress_evidence["player_skill_build"]) == {
-        "name",
-        "personaname",
-        "player_slot",
-        "hero_id",
-        "hero_name_en",
-        "hero_name_zh",
-        "hero_image_path",
-        "hero_catalog_status",
         "ability_upgrade_sequence",
-    }
-    assert set(progress_evidence["player_talent_selection"]) == {
-        "name",
-        "personaname",
-        "player_slot",
-        "hero_id",
-        "hero_name_en",
-        "hero_name_zh",
-        "hero_image_path",
-        "hero_catalog_status",
         "talent_selections",
     }
+    assert "neutral_history" not in progress_player["final_inventory"]
+    assert progress_player["final_inventory"]["main"][0]["item_id"] == 44
+    assert progress_player["purchase_timeline"][0]["time_seconds"] == -89
 
 
-def test_player_progress_transform_returns_only_requested_aspects() -> None:
+def test_player_progress_transform_returns_complete_configuration() -> None:
     raw = _raw_match()
     raw["players"][0]["purchase_log"] = [{"time": 12, "key": "tango"}]
     summary = normalize_match_summary(raw, 8943244303)
@@ -349,7 +351,6 @@ def test_player_progress_transform_returns_only_requested_aspects() -> None:
         DotaExtractMatchPlayerProgressInput(
             matches=[{"valve_match_id": 8943244303, "summary": summary}],
             player_query="Player 0",
-            aspects=["purchase_timeline", "purchase_timeline"],
         ),
         QueryContext(),
     )
@@ -357,9 +358,12 @@ def test_player_progress_transform_returns_only_requested_aspects() -> None:
     assert output["status"] == "resolved"
     row = output["matches"][0]
     assert row["player"]["name"] == "Player 0"
-    assert "purchase_timeline" in row
-    assert "ability_upgrade_sequence" not in row
-    assert "talent_selections" not in row
+    assert "summary" not in row
+    assert "final_inventory" in row["player"]
+    assert "purchase_timeline" in row["player"]
+    assert "ability_upgrade_sequence" in row["player"]
+    assert "talent_selections" in row["player"]
+    assert "neutral_history" not in row["player"]["final_inventory"]
 
 
 def test_zero_valued_inventory_slots_are_empty() -> None:
@@ -407,9 +411,7 @@ def test_unparsed_match_does_not_emit_player_progress_evidence() -> None:
     )
 
     kinds = {item.kind for item in match_details_evidence(result)}
-    assert "player_purchase_timeline" not in kinds
-    assert "player_skill_build" not in kinds
-    assert "player_talent_selection" not in kinds
+    assert "player_match_progress" not in kinds
 
 
 def test_catalog_internal_name_lookup_is_exact_and_accepts_item_prefix() -> None:

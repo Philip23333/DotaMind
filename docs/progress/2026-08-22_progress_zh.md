@@ -144,6 +144,41 @@
 
 - Chat `dotamind-api` 定向测试：13 passed；ESLint 与 `git diff --check` 通过。
 
+## 11:25 — 新对话 TI 快捷入口与欢迎界面
+
+### 已完成
+
+- 新对话未运行时始终展示“本届TI最新战况”快捷提问，不再依赖输入框聚焦；入口改为与输入框同色、无可见边框的长条候选框。
+- 欢迎文案更新为“🔥TI正在火热进行中！”及“🤖可快捷查询赛程、比赛详情与选手数据等”。
+- 启动遮罩淡出时间调整为 360ms，欢迎内容淡入；背景 Dota 2 标识透明度由 10% 降为 4%。
+
+### 验证
+
+- Chat 全量：26 passed；ESLint、Next.js production build 与 `git diff --check` 均通过。
+
+## 11:40 — 新对话动效与快捷入口微调
+
+### 已完成
+
+- 启动遮罩的自动淡出等待由 1400ms 提前至 700ms，淡出动画由 360ms 缩短至 180ms。
+- TI 快捷入口与输入框零间隔贴合，改为直角、带轻微上浮阴影的候选框；默认 55% 不透明度，鼠标悬停时恢复至 100%。
+- 欢迎副标题移除机器人 emoji，更新为“快捷查询赛程、比赛详情与选手数据等”。
+
+### 验证
+
+- Chat 全量：26 passed；ESLint 与 Next.js production build 通过。
+
+## 11:50 — TI 快捷入口悬停状态
+
+### 已完成
+
+- 快捷入口默认改为透明背景与低透明度文字；鼠标悬停或键盘聚焦时恢复文字不透明度、显示与输入框一致的背景，并使用浮动阴影。
+- 快捷入口恢复与输入框的 5px 间隔及小圆角。
+
+### 验证
+
+- Chat 全量：26 passed；ESLint 与 `git diff --check` 通过。
+
 ## 12:00 — P0 比赛详情下游进度提取
 
 ### 已完成
@@ -185,3 +220,49 @@
 ### 验证
 
 - Graph 定向测试覆盖 Answer 局部视图、原始验证 Graph 不变及自然语言 renderer 的通用白名单过滤。
+
+## 14:04 — 出装默认展示收束
+
+### 已完成
+
+- 购买事件补充只读 Catalog `item_price`，原始购买顺序和事件不删除。
+- 明确询问出装时，负时间购买按首次出现顺序聚合为“出门装”，重复物品显示为 `× N`，并置于最终装备上方。
+- 后续购买顺序只显示时间非负且 Catalog 价格不低于 150 金币的物品；未解析或低价物品默认省略，不猜测价格。
+- 普通比赛详情、最终装备、技能加点和天赋展示边界保持不变。
+
+### 验证
+
+- `tests/test_agentic_opendota_match_tools.py` 与 `tests/test_agentic_answer.py`：30 passed。
+- 变更文件 Ruff 与 `git diff --check` 通过。
+
+## 14:59 — 收束选手赛后配置 evidence
+
+### 已完成
+
+- `dota.extract_match_player_progress` 删除 `aspects` 参数；用户明确询问出装、购买顺序、技能加点或天赋时，始终为精确选手和每个已解析对局返回完整 `player_match_progress` 包。
+- 聚合包只保留选手/英雄身份、等级、最终装备配置（主栏、背包、中立物品与强化）、购买顺序、技能加点和天赋选择；不携带全队、BP、原始 OpenDota 包或 `neutral_history`。
+- transform 每局只产生一条 `player_match_progress` evidence；普通比赛详情仍不自动提取该包，跨 Run Match Artifact 复用不在本次范围内。
+- Controller、Answer、ToolRegistry、Prompt golden fixture、架构文档与 README 已同步；Answer 聚焦请求继续使用专用 evidence 视图，不展示上游比赛核心 evidence。
+
+### 验证
+
+- API 定向：`122 passed`（OpenDota transform、Registry、Controller、Answer、Graph、Prompt fixture）。
+- 变更文件 Ruff 与 `git diff --check` 通过。
+
+### 已知边界
+
+- 150 金币是当前默认展示阈值；过滤不修改原始 ToolResult，也不改变显式审计数据的保留范围。
+
+## 14:28 — 技能加点与天赋映射收束
+
+### 已完成
+
+- OpenDota 技能 ID `730` 归一化为通用 `special_bonus_attributes`，展示名固定为“全属性 +2”，不再作为 Catalog 缺失技能。
+- 技能升级数组的顺序字段更名为 `upgrade_index`，不再误称角色等级；天赋按其第 1/2/3/4 个机械 evidence 确定性映射到 10/15/20/25 级，并保留原始顺序索引供审计。
+- Answer 的技能加点由逐级 Markdown 表格改为按首次出现顺序、附最终等级的横向箭头序列；天赋仅按 10/15/20/25 级逐项说明。
+- 出装默认展示和普通比赛详情边界未改变。
+
+### 验证
+
+- `tests/test_agentic_opendota_match_tools.py`、`tests/test_opendota_domains.py` 与 `tests/test_agentic_answer.py`：36 passed。
+- 变更文件 Ruff 与 `git diff --check` 通过。

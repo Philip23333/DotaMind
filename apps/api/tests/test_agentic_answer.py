@@ -734,9 +734,7 @@ def test_natural_language_prompt_adds_aligned_ti_status_example_for_match_eviden
             required_evidence=[
                 "match_result",
                 "player_scoreboard",
-                "player_purchase_timeline",
-                "player_skill_build",
-                "player_talent_selection",
+                "player_match_progress",
             ],
             data_quality=EvidenceDataQuality(completeness=1.0),
         )
@@ -779,10 +777,18 @@ def test_natural_language_prompt_adds_aligned_ti_status_example_for_match_eviden
     assert "Do not emit raw HTML such as `<sub>` or `<br>`" in match_details_prompt
     assert "For a The International schedule or" not in match_details_prompt
     assert "#### 出装、加点与天赋" in progress_prompt
+    assert "**出门装**" in progress_prompt
     assert "| 相对开局时间 | 购买 |" in progress_prompt
-    assert "Render one purchase event per evidence row in its original order" in progress_prompt
+    assert "Aggregate every purchase" in progress_prompt
+    assert "item_price` is at least 150" in progress_prompt
+    assert "Do not apply the price filter to 出门装" in progress_prompt
+    assert "omit that line when there is no" in progress_prompt
+    assert "Render **技能加点** as one compact arrow sequence, not a table" in progress_prompt
+    assert "`attribute_bonus` mapping is named `全属性 +2`" in progress_prompt
+    assert "fixed 10/15/20/25-level talent timing" in progress_prompt
     assert "Do not treat historical purchases as a recommendation" in progress_prompt
-    assert "infer historical talent-tree sides or tiers" in progress_prompt
+    assert "do not infer historical" in progress_prompt
+    assert "talent-tree sides or tiers" in progress_prompt
     assert "#### 出装、加点与天赋" not in match_details_prompt
 
 
@@ -825,28 +831,12 @@ def test_answer_messages_exclude_raw_tool_results_and_unrequired_match_progress(
                 tool="opendota.match_details",
             ),
             EvidenceItem(
-                id="purchase",
-                kind="player_purchase_timeline",
-                subject="optional purchase sentinel",
-                value={"events": []},
+                id="progress",
+                kind="player_match_progress",
+                subject="optional player progress sentinel",
+                value={"players": []},
                 tool_call_id="details",
-                tool="opendota.match_details",
-            ),
-            EvidenceItem(
-                id="skills",
-                kind="player_skill_build",
-                subject="optional skill sentinel",
-                value={"events": []},
-                tool_call_id="details",
-                tool="opendota.match_details",
-            ),
-            EvidenceItem(
-                id="talents",
-                kind="player_talent_selection",
-                subject="optional talent sentinel",
-                value={"events": []},
-                tool_call_id="details",
-                tool="opendota.match_details",
+                tool="dota.extract_match_player_progress",
             ),
         ],
         missing=["match_parse_status"],
@@ -856,50 +846,45 @@ def test_answer_messages_exclude_raw_tool_results_and_unrequired_match_progress(
     messages = render_natural_language_answer_messages(plan, graph)
 
     assert "must-not-reach-answer" not in messages[1]["content"]
-    assert "optional purchase sentinel" not in messages[1]["content"]
-    assert "optional skill sentinel" not in messages[1]["content"]
-    assert "optional talent sentinel" not in messages[1]["content"]
+    assert "optional player progress sentinel" not in messages[1]["content"]
     assert '"winner": "TEAM VISION"' in messages[1]["content"]
     assert "match_parse_status" in messages[1]["content"]
     assert "#### 出装、加点与天赋" not in messages[0]["content"]
 
 
-def test_answer_messages_include_only_explicitly_required_purchase_progress() -> None:
+def test_answer_messages_include_complete_required_player_progress() -> None:
     from app.agentic.prompts.answer import render_natural_language_answer_messages
 
     plan = ExecutionPlan(
         intent="hero_build",
         goal="Show the purchase order.",
         output_contract="natural_language_answer",
-        required_evidence=["player_purchase_timeline"],
+        required_evidence=["player_match_progress"],
     )
     graph = EvidenceGraph(
         intent=plan.intent,
         required_evidence=plan.required_evidence,
         evidence=[
             EvidenceItem(
-                id="purchase",
-                kind="player_purchase_timeline",
-                subject="purchase sentinel",
-                value={"events": []},
+                id="progress",
+                kind="player_match_progress",
+                subject="complete progress sentinel",
+                value={
+                    "match": {"valve_match_id": 8943244303},
+                    "players": [
+                        {
+                            "name": "Player 0",
+                            "hero_name_zh": "莉娜",
+                            "level": 30,
+                            "final_inventory": {"main": [], "backpack": [], "neutral": {}},
+                            "purchase_timeline": [],
+                            "ability_upgrade_sequence": [],
+                            "talent_selections": [],
+                        }
+                    ],
+                },
                 tool_call_id="details",
-                tool="opendota.match_details",
-            ),
-            EvidenceItem(
-                id="skills",
-                kind="player_skill_build",
-                subject="skill sentinel",
-                value={"events": []},
-                tool_call_id="details",
-                tool="opendota.match_details",
-            ),
-            EvidenceItem(
-                id="talents",
-                kind="player_talent_selection",
-                subject="talent sentinel",
-                value={"events": []},
-                tool_call_id="details",
-                tool="opendota.match_details",
+                tool="dota.extract_match_player_progress",
             ),
         ],
         data_quality=EvidenceDataQuality(completeness=1.0),
@@ -907,7 +892,8 @@ def test_answer_messages_include_only_explicitly_required_purchase_progress() ->
 
     messages = render_natural_language_answer_messages(plan, graph)
 
-    assert "purchase sentinel" in messages[1]["content"]
-    assert "skill sentinel" not in messages[1]["content"]
-    assert "talent sentinel" not in messages[1]["content"]
+    assert "complete progress sentinel" in messages[1]["content"]
+    assert "purchase_timeline" in messages[1]["content"]
+    assert "ability_upgrade_sequence" in messages[1]["content"]
+    assert "talent_selections" in messages[1]["content"]
     assert "#### 出装、加点与天赋" in messages[0]["content"]

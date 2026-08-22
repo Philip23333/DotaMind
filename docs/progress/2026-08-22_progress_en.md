@@ -144,6 +144,41 @@
 
 - Focused Chat `dotamind-api` tests: 13 passed; ESLint and `git diff --check` passed.
 
+## 11:25 — New-chat TI shortcut and welcome screen
+
+### Completed
+
+- The “本届TI最新战况” shortcut is now always visible while a new thread is idle and no longer depends on input focus. It is a long, borderless suggestion using the same background as the composer.
+- Updated welcome copy to “🔥TI正在火热进行中！” and “🤖可快捷查询赛程、比赛详情与选手数据等”.
+- Extended startup-overlay fade-out to 360ms, added a welcome-content fade-in, and reduced the background Dota 2 mark opacity from 10% to 4%.
+
+### Verification
+
+- Full Chat suite: 26 passed; ESLint, the Next.js production build, and `git diff --check` passed.
+
+## 11:40 — New-chat motion and shortcut refinements
+
+### Completed
+
+- Moved automatic startup-overlay dismissal forward from 1400ms to 700ms and shortened its fade-out from 360ms to 180ms.
+- Joined the TI shortcut to the composer with no gap, made it square-cornered with a slight floating shadow, and set it to 55% opacity until hover restores full opacity.
+- Removed the robot emoji from the welcome subtitle and updated it to “快捷查询赛程、比赛详情与选手数据等”.
+
+### Verification
+
+- Full Chat suite: 26 passed; ESLint and the Next.js production build passed.
+
+## 11:50 — TI shortcut hover state
+
+### Completed
+
+- The shortcut now has a transparent background and muted text by default. Hover or keyboard focus restores full text opacity, uses the composer-matching background, and adds a floating shadow.
+- Restored a 5px gap and small rounded corners between the shortcut and composer.
+
+### Verification
+
+- Full Chat suite: 26 passed; ESLint and `git diff --check` passed.
+
 ## 12:00 — P0 downstream player-progress extraction for match details
 
 ### Completed
@@ -185,3 +220,49 @@
 ### Verification
 
 - Focused Graph coverage exercises the local Answer view, preservation of the original validation Graph, and the natural-language renderer's generic whitelist projection.
+
+## 14:04 — Tighter default purchase presentation
+
+### Completed
+
+- Purchase events now include the read-only Catalog `item_price`; the raw purchase order and events are retained.
+- For an explicit item-build request, negative-time purchases are aggregated in first-seen order as **出门装**; repeated items render as `× N` and appear above final inventory.
+- The subsequent purchase-order table includes only non-negative-time items whose Catalog price is at least 150 gold; unresolved or lower-priced items are omitted by default without guessing a price.
+- Ordinary match details and the existing final-inventory, skill-build, and talent-presentation boundaries are unchanged.
+
+### Verification
+
+- `tests/test_agentic_opendota_match_tools.py` and `tests/test_agentic_answer.py`: 30 passed.
+- Ruff for changed files and `git diff --check` passed.
+
+## 14:59 — Aggregate player post-match progress evidence
+
+### Completed
+
+- `dota.extract_match_player_progress` no longer accepts `aspects`; when the user explicitly asks for item build, purchase order, skill order, or talents, it returns the complete `player_match_progress` package for the exact player and each parsed game.
+- The aggregate package keeps only player/hero identity, level, final inventory configuration (main, backpack, neutral item and enhancement), purchase timeline, ability upgrades, and talent selections; it excludes the full team, draft, raw OpenDota payload, and `neutral_history`.
+- The transform emits one `player_match_progress` evidence item per game. Ordinary match details still do not extract it automatically, and cross-Run Match Artifact reuse remains out of scope.
+- Controller, Answer, ToolRegistry, the prompt golden fixture, architecture documents, and README were synchronized; focused requests continue using the Answer-only evidence view and do not display upstream core match evidence.
+
+### Verification
+
+- API focused suite: `122 passed` (OpenDota transform, Registry, Controller, Answer, Graph, and prompt fixture).
+- Ruff for changed files and `git diff --check` passed.
+
+### Known boundaries
+
+- 150 gold is the current default display threshold. Filtering does not alter the raw ToolResult or reduce the retained scope of explicit audit data.
+
+## 14:28 — Skill-build and talent mapping refinement
+
+### Completed
+
+- OpenDota ability ID `730` is normalized as the shared `special_bonus_attributes` upgrade with the display name **全属性 +2**, rather than a missing Catalog ability.
+- The skill-upgrade array's ordering field is now `upgrade_index`, not a claimed player level. The first through fourth mechanically evidenced talent selections map deterministically to player levels 10/15/20/25 while retaining their raw ordering index for audit.
+- Answer renders the skill build as a horizontal arrow sequence in first-appearance order with final ranks, rather than a per-level Markdown table; talent choices appear only at 10/15/20/25.
+- Default item-build presentation and ordinary match-detail boundaries are unchanged.
+
+### Verification
+
+- `tests/test_agentic_opendota_match_tools.py`, `tests/test_opendota_domains.py`, and `tests/test_agentic_answer.py`: 36 passed.
+- Ruff for changed files and `git diff --check` passed.

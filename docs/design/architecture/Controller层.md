@@ -163,7 +163,8 @@ Series 候选，再做赛事名称消歧。Controller 不根据自身知识推�
 详情链。该规则只约束规划的工具组合，不以 `intent` 选择固定执行路径。
 
 普通比赛详情的 `required_evidence` 只覆盖实际展示的赛事/比赛身份、跨源映射、
-赛果、解析状态、BP 与十人记分牌。购买顺序、技能加点和天赋选择分别只在用户
-明确询问对应历史时加入；此时在 `opendota.match_details` 后规划
-`dota.extract_match_player_progress`，将 `data.matches` 作为唯一允许的前序引用，
-并只填写用户请求的 `aspects`。工具能够产生某类证据本身不是把它加入义务的理由。
+赛果、解析状态、BP 与十人记分牌。用户明确询问某选手的出装、购买顺序、技能加点
+或天赋时，统一加入 `player_match_progress`，并在 `opendota.match_details` 后规划
+`dota.extract_match_player_progress`。该 transform 只接受 `data.matches` 的前序引用
+和 `player_query`，不再传递 `aspects`；工具能够产生进度字段本身不是把它加入普通
+详情义务的理由。

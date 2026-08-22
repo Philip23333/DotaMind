@@ -85,10 +85,11 @@ origin-relative `hero_image_path` / `item_image_path` values from the committed 
 Catalog snapshot; parsed-player data also preserves purchase events, inventory and
 neutral history, level-indexed ability upgrades and mechanically identified talents.
 Evidence extraction projects these parsed players by evidence kind: scoreboard items
-keep display and summary fields, while purchase, ability-upgrade and talent evidence
-keep only their own progress sequence plus player identity. The raw ToolResult remains
+keep display and summary fields, while the downstream player transform emits one
+`player_match_progress` package containing identity, level, final inventory, purchase
+timeline, ability upgrades, and talent selections. The raw ToolResult remains
 available for audit and observation; this projection prevents the same complete player
-object from being repeated across all four evidence kinds.
+object from being repeated across multiple progress evidence kinds.
 The Chat formatter keeps the user-facing answer as Markdown: it deterministically
 turns the Answer's horizontal seven-order BP table into `md` hero icons, decorates
 the combined player/hero column with `md` hero icons, and renders main inventory as
@@ -341,12 +342,12 @@ by the evidence-specific Answer prompt, so streamed deltas and the stored final
 summary do not diverge through a post-generation line-deletion pass.
 For ordinary match details, the Controller requires only the core identity,
 cross-source mapping, result, parse status, draft, and scoreboard facts it presents;
-purchase timelines, skill builds, and talent selections enter `required_evidence`
-only for an explicit corresponding request. Those progress requests add the
-deterministic `dota.extract_match_player_progress` transform after
-`opendota.match_details`, using only the declared `data.matches` reference and
-making no network request. This is evidence planning, not an intent-based
-execution route.
+the aggregate `player_match_progress` package enters `required_evidence` only for
+an explicit player item-build, purchase-order, skill-order, or talent request.
+Those requests add the deterministic `dota.extract_match_player_progress` transform
+after `opendota.match_details`, using only the declared `data.matches` reference and
+making no network request. This is evidence planning, not an intent-based execution
+route; there is no cross-Run Match Artifact reuse.
 Natural-language answers do not permit unsupported interpretations merely because
 they are labeled as hypotheses. Gameplay or causal explanations require explicit
 EvidenceGraph support and must be attributed to that evidence; any future strategy

@@ -263,11 +263,7 @@ def test_match_detail_catalog_separates_player_progress_transform() -> None:
         "match_draft",
     )
     transform = registry.get("dota.extract_match_player_progress")
-    assert transform.evidence_kinds == (
-        "player_purchase_timeline",
-        "player_skill_build",
-        "player_talent_selection",
-    )
+    assert transform.evidence_kinds == ("player_match_progress",)
     assert transform.metadata["execution_kind"] == "deterministic_transform"
     assert transform.arg_contracts["matches"].requires_reference is True
     assert transform.arg_contracts["matches"].accepts_refs[0].path == "data.matches"
@@ -288,11 +284,10 @@ def test_match_detail_catalog_separates_player_progress_transform() -> None:
                 args={
                     "matches": "$details.data.matches",
                     "player_query": "Player 0",
-                    "aspects": ["purchase_timeline"],
                 },
             ),
         ],
-        required_evidence=["match_result", "player_scoreboard", "player_purchase_timeline"],
+        required_evidence=["player_match_progress"],
     )
     assert validate_plan_against_catalog(plan, registry) == []
 

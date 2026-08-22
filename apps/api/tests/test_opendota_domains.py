@@ -230,5 +230,5 @@ def test_match_domain_preserves_parsed_player_progress_fields() -> None:
     player = summary["players"][0]
 
     assert player["purchase_timeline"][0]["time_seconds"] == -89
-    assert player["ability_upgrade_sequence"][0]["level"] == 1
+    assert player["ability_upgrade_sequence"][0]["upgrade_index"] == 1
     assert player["inventory"]["neutral_history"][0]["time_seconds"] == 526

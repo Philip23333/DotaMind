@@ -147,7 +147,7 @@ cannot borrow one another's primary evidence.
 | `pandascore.resolve_match_games` | `match_identity`, `pandascore_game_identity` |
 | `dota.resolve_valve_matches` | `cross_source_match_mapping`, `valve_match_identity` |
 | `opendota.match_details` | `match_result`, `player_scoreboard`, `match_parse_status`, `match_draft` |
-| `dota.extract_match_player_progress` | `player_purchase_timeline`, `player_skill_build`, `player_talent_selection` |
+| `dota.extract_match_player_progress` | `player_match_progress` |
 | `patch.get_records` | `patch_records` |
 | `patch.hero_changes` | `hero_patch_changes` |
 | `patch.item_changes` | `item_patch_changes` |
@@ -235,6 +235,6 @@ normalized `data.matches` remains available to downstream deterministic work,
 but is not automatically converted into progress evidence. An explicit
 `dota.extract_match_player_progress` call accepts only
 `$<match_details_call_id>.data.matches`, selects one player per parsed game, and
-emits only the requested `player_purchase_timeline`, `player_skill_build`, or
-`player_talent_selection` item. It does not issue another provider request or
-change the Checkpoint lifecycle.
+emits one complete `player_match_progress` package containing final inventory,
+purchase timeline, skill sequence, and talent selections. It does not issue another
+provider request, expose an `aspects` filter, or change the Checkpoint lifecycle.

@@ -11,6 +11,12 @@ from app.integrations.valve.catalog_repository import (
     load_default_catalog_repository,
 )
 
+_ATTRIBUTE_BONUS_ABILITY_ID = 730
+_ATTRIBUTE_BONUS_INTERNAL_NAME = "special_bonus_attributes"
+_ATTRIBUTE_BONUS_NAME_EN = "Attributes +2"
+_ATTRIBUTE_BONUS_NAME_ZH = "全属性 +2"
+_TALENT_PLAYER_LEVELS = (10, 15, 20, 25)
+
 
 class OpenDotaMatches:
     def __init__(self, transport: OpenDotaTransport) -> None:
@@ -159,6 +165,7 @@ def _normalize_purchase_timeline(
             "item_id": item.get("item_id") if item else None,
             "item_name_en": item.get("item_name_en") if item else None,
             "item_name_zh": item.get("item_name_zh") if item else None,
+            "item_price": _catalog_item_price(item, catalog),
             "item_catalog_status": item.get("item_catalog_status")
             if item
             else "not_found",
@@ -168,6 +175,19 @@ def _normalize_purchase_timeline(
             event["charges"] = row.get("charges")
         timeline.append(event)
     return timeline
+
+
+def _catalog_item_price(
+    item: dict[str, Any] | None, catalog: DotaCatalogRepository
+) -> int | None:
+    """Return the resolved Catalog price for Answer-side purchase filtering."""
+
+    if not isinstance(item, dict) or (item_id := _positive_int(item.get("item_id"))) is None:
+        return None
+    try:
+        return catalog.get_item(item_id).price
+    except CatalogLookupError:
+        return None
 
 
 def _normalize_inventory(
@@ -226,14 +246,14 @@ def _normalize_ability_upgrades(
     if not isinstance(upgrades, list):
         return []
     sequence: list[dict[str, Any]] = []
-    for level, raw in enumerate(upgrades, start=1):
+    for upgrade_index, raw in enumerate(upgrades, start=1):
         ability_id = raw.get("ability_id", raw.get("id")) if isinstance(raw, dict) else raw
         raw_internal_name = raw.get("internal_name") if isinstance(raw, dict) else None
         sequence.append(
             _ability_reference(
                 ability_id,
                 catalog,
-                level=level,
+                upgrade_index=upgrade_index,
                 raw_internal_name=raw_internal_name,
             )
         )
@@ -243,17 +263,19 @@ def _normalize_ability_upgrades(
 def _normalize_talent_selections(
     upgrades: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
+    talent_rows = [row for row in upgrades if row["kind"] == "talent"]
     return [
         {
-            "level_taken": row["level"],
+            "level_taken": _TALENT_PLAYER_LEVELS[index],
+            "upgrade_index": row["upgrade_index"],
             "ability_id": row["ability_id"],
             "internal_name": row["internal_name"],
             "name_en": row["name_en"],
             "name_zh": row["name_zh"],
             "catalog_status": row["catalog_status"],
         }
-        for row in upgrades
-        if row["kind"] == "talent"
+        for index, row in enumerate(talent_rows)
+        if index < len(_TALENT_PLAYER_LEVELS)
     ]
 
 
@@ -261,7 +283,7 @@ def _ability_reference(
     ability_id: Any,
     catalog: DotaCatalogRepository,
     *,
-    level: int,
+    upgrade_index: int,
     raw_internal_name: str | None = None,
 ) -> dict[str, Any]:
     identifier = _positive_int(ability_id)
@@ -271,20 +293,38 @@ def _ability_reference(
             ability = catalog.get_ability(identifier)
         except CatalogLookupError:
             pass
-    internal_name = ability.internal_name if ability is not None else raw_internal_name
+    is_attribute_bonus = ability is None and identifier == _ATTRIBUTE_BONUS_ABILITY_ID
+    internal_name = (
+        ability.internal_name
+        if ability is not None
+        else _ATTRIBUTE_BONUS_INTERNAL_NAME
+        if is_attribute_bonus
+        else raw_internal_name
+    )
     kind = "ability"
     if internal_name == "special_bonus_attributes":
         kind = "attribute_bonus"
     elif internal_name is not None and internal_name.startswith("special_bonus_"):
         kind = "talent"
+    if ability is not None:
+        name_en = ability.name_en
+        name_zh = ability.name_zh
+    elif is_attribute_bonus:
+        name_en = _ATTRIBUTE_BONUS_NAME_EN
+        name_zh = _ATTRIBUTE_BONUS_NAME_ZH
+    else:
+        name_en = None
+        name_zh = None
     return {
-        "level": level,
+        "upgrade_index": upgrade_index,
         "ability_id": identifier,
         "internal_name": internal_name,
-        "name_en": ability.name_en if ability is not None else None,
-        "name_zh": ability.name_zh if ability is not None else None,
+        "name_en": name_en,
+        "name_zh": name_zh,
         "kind": kind,
-        "catalog_status": "resolved" if ability is not None else "not_found",
+        "catalog_status": (
+            "resolved" if ability is not None else "mapped" if is_attribute_bonus else "not_found"
+        ),
     }
 
 

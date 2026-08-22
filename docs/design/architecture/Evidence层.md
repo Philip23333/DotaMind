@@ -285,7 +285,7 @@ Evidence 层不负责：
 
 比赛详情的选手进度采用两段式边界：`opendota.match_details` extractor 只发出
 核心比赛 evidence；用户明确询问出装、加点或天赋时，Controller 追加
-`dota.extract_match_player_progress`，其 extractor 只读取前序
-`data.matches` 的窄投影。完整 ToolResult 仍保留给审计和确定性 transform，
-但不因核心详情请求自动复制为三类 progress evidence。
+`dota.extract_match_player_progress`，其 extractor 只读取前序 `data.matches` 的
+窄投影，并为每局输出一条完整 `player_match_progress` evidence。完整 ToolResult
+仍保留给审计和确定性 transform，但不因核心详情请求自动复制为 progress evidence。
 
