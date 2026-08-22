@@ -46,10 +46,12 @@ def register_opendota_match_tools(registry: ToolRegistry, settings: Settings) ->
         ToolDefinition(
             name="opendota.match_details",
             description=(
-                "Return result, ten-player scoreboard, parse coverage, and picks/bans "
-                "for up to five Valve match ids. For parsed matches it also returns each "
-                "player's complete purchase timeline, inventory/backpack/neutral history, "
-                "ability upgrade sequence, and mechanically identified talent selections. "
+                "Return core match-detail facts: result, ten-player scoreboard, parse coverage, "
+                "and picks/bans for up to five Valve match ids. For parsed matches it can also "
+                "produce each player's complete purchase timeline, inventory/backpack/neutral "
+                "history, ability upgrade sequence, and mechanically identified talent "
+                "selections; require those progress evidence kinds only when the current "
+                "request explicitly asks for the respective history. "
                 "Inputs must be Valve match ids, not PandaScore series, match, or game ids."
             ),
             input_model=OpenDotaMatchDetailsInput,

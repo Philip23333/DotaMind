@@ -47,3 +47,17 @@
 ### 已知边界
 
 - 本次未移除 `EvidenceGraph.tool_results`，因此没有改变原始结果进入 Answer Prompt 的总体模式；只消除了 evidence 内部的字段交叉复制。
+
+## 02:10 — Controller 最小化比赛详情证据规划
+
+### 已完成
+
+- 普通比赛详情的 `required_evidence` 明确限定为实际展示的身份映射、赛果、解析状态、BP 与十人记分牌。
+- 购买顺序、技能加点和天赋选择仅在用户明确询问对应历史时才加入证据义务；不因 `opendota.match_details` 能够产出这些字段而默认规划。
+- 未改动 Tool Registry 的可产出 evidence 契约、Graph 执行路径或 `intent` 路由语义。
+
+### 验证
+
+- `tests/test_agent_controller.py`：42 passed。
+- Controller 规则、OpenDota 工具说明和定向测试 Ruff 检查通过。
+- `git diff --check` 通过。

@@ -326,6 +326,11 @@ Natural-language summaries are trimmed but not rewritten by domain keyword
 filters. Pair-lane causal and Catalog/STRATZ attribution boundaries are carried
 by the evidence-specific Answer prompt, so streamed deltas and the stored final
 summary do not diverge through a post-generation line-deletion pass.
+For ordinary match details, the Controller requires only the core identity,
+cross-source mapping, result, parse status, draft, and scoreboard facts it presents;
+purchase timelines, skill builds, and talent selections enter `required_evidence`
+only for an explicit corresponding request. This is evidence planning, not an
+intent-based execution route.
 Natural-language answers do not permit unsupported interpretations merely because
 they are labeled as hypotheses. Gameplay or causal explanations require explicit
 EvidenceGraph support and must be attributed to that evidence; any future strategy

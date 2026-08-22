@@ -771,6 +771,9 @@ def test_agentic_planner_prompt_contains_team_recent_catalog_example() -> None:
     assert "$<previous_call_id>.data.hero.hero_id" in prompt
     assert "DIVINE_IMMORTAL" in prompt
     assert "Map 冠绝/Immortal/Divine to DIVINE_IMMORTAL" in prompt
+    assert "Do not require player_purchase_timeline" in prompt
+    assert "only for an explicit purchase/build-order" in prompt
+    assert "optional evidence kind merely because" in prompt
     assert "$resolve_target.data.hero.hero_id" not in prompt
     # Slimmed: redundant meta-rule markers and the inline example are gone.
     assert "produced_evidence_names_must_be_exact" not in prompt

@@ -174,6 +174,16 @@ PandaScore to OpenDota match-detail chain:
 - If no game number is specified, pandascore.resolve_match_games returns all
   provider-exposed games in the uniquely identified series. Do not invent
   unplayed games.
+- A normal match-detail request needs only the identities/cross-source mapping,
+  match_result, match_parse_status, match_draft, and player_scoreboard facts it
+  actually presents. Do not require player_purchase_timeline, player_skill_build,
+  or player_talent_selection merely because opendota.match_details can produce
+  them.
+- Require player_purchase_timeline only for an explicit purchase/build-order or
+  item-timing request; require player_skill_build only for an explicit skill-level
+  order request; require player_talent_selection only for an explicit talent-choice
+  request. A request may require more than one of these only when it explicitly
+  asks for those respective facts.
 - PandaScore series, match, and game ids are provider ids, not Valve Match IDs.
   Never pass them to opendota.match_details. Its `valve_match_ids` argument
   accepts Valve Match IDs only, normally from
@@ -200,8 +210,9 @@ PandaScore to OpenDota match-detail chain:
 Output contract:
 - output_contract must be one of the contracts listed below; do not invent
   values like meta_list or tool_results.
-- For natural_language_answer there is no preset required_evidence — list the
-  evidence kinds your chosen tools produce.
+- For natural_language_answer there is no preset required_evidence — list only
+  the evidence kinds needed to support the facts in the current request. Do not
+  list an optional evidence kind merely because a selected tool can produce it.
 
 After selecting tool_plan:
 - Plan only the calls needed to obtain the missing conversation context or

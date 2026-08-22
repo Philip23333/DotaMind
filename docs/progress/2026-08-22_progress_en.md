@@ -47,3 +47,17 @@
 ### Known boundary
 
 - This change does not remove `EvidenceGraph.tool_results`, so it does not change the overall raw-result-to-Answer Prompt model; it only removes cross-kind field duplication inside evidence.
+
+## 02:10 — Controller minimization of match-detail evidence planning
+
+### Completed
+
+- Normal match-detail `required_evidence` is explicitly limited to the identity mapping, result, parse status, draft, and ten-player scoreboard facts it presents.
+- Purchase timelines, skill builds, and talent selections become evidence obligations only when the user explicitly asks for the respective history; they are no longer planned merely because `opendota.match_details` can produce them.
+- Tool Registry producible-evidence contracts, Graph execution paths, and `intent` routing semantics remain unchanged.
+
+### Verification
+
+- `tests/test_agent_controller.py`: 42 passed.
+- Ruff passed for Controller rules, the OpenDota tool description, and targeted tests.
+- `git diff --check` passed.
