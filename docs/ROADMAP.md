@@ -22,12 +22,13 @@ Goal: replace Legacy orchestration with a thin model-to-tool loop.
 Deliverables:
 
 - Provider-neutral model message protocol
-- Tool registration, schema validation, dispatch, budgets, cancellation, trace,
-  and streaming
-- Persistent messages and a minimal run record
+- Tool registration, schema validation, and dispatch
+- Step and tool-call budgets, request deadlines, cancellation, basic trace, and
+  streaming
+- In-memory, session-neutral execution
 
-Acceptance: multi-turn native tool calls work without ExecutionPlan, EvidenceGraph,
-or scenario routes.
+Acceptance: multi-turn native tool calls work without ExecutionPlan,
+EvidenceGraph, scenario routes, or a durable transcript dependency.
 
 ## Phase 2 — Competition and match
 
@@ -39,8 +40,8 @@ Deliverables:
 - Match search and detail capabilities
 - Deterministic identity and cross-source match resolution
 
-Acceptance: the tournament-status and match-detail evals pass against live
-provider data without claiming ambiguous mappings as facts.
+Acceptance: deterministic competition and match capability evals pass, and live
+provider smoke tests succeed without claiming ambiguous mappings as facts.
 
 ## Phase 3 — Team, player, and catalog
 
@@ -61,12 +62,16 @@ Goal: harden long-lived conversations based on observed needs.
 
 Deliverables:
 
-- Durable session transcript and bounded context strategy
-- Error, timeout, cancellation, and retry behavior
-- Expanded regression and provider-drift evals
+- PostgreSQL session transcript, AgentRun persistence, and bounded context
+  strategy
+- Reconnection and recovery semantics, plus a production retry policy when
+  demonstrated necessary
+- Durable event semantics and expanded regression and provider-drift evals only
+  where they solve an observed need
 
-Acceptance: conversation context and cancellation behavior have repeatable tests;
-additional infrastructure is added only when the need is demonstrated.
+Acceptance: durable conversation context, recovery, and cancellation behavior
+have repeatable tests; additional infrastructure is added only when the need is
+demonstrated.
 
 ## Phase 5 — Product UX
 

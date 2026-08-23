@@ -1,47 +1,42 @@
 # DotaMind
 
-DotaMind is an evidence-grounded Dota 2 intelligence agent. It plans constrained
-tool calls, retrieves structured data, builds an `EvidenceGraph`, synthesizes an
-answer, and runs a rule-first critic before returning a response.
+DotaMind is being rebuilt as a Dota 2 esports agent: a conversational product
+for professional competitions, matches, teams, players, and the game facts
+needed to understand them.
 
-This repository is in active development. The old fixed report pipeline and its
-public endpoints have been removed. V3.2 completed the bounded Agent Runtime
-Foundation; V3.3 added durable PostgreSQL Chat Runs and the committed Valve
-Catalog. All current work preserves the v2.5 constrained Tool Calling boundary:
+The repository is in a clean-slate vNext rewrite. Legacy V3 is preserved at the
+Git tag [`pre-vnext-rewrite`](https://github.com/Philip23333/DotaMind/tree/pre-vnext-rewrite);
+it is historical context, not a compatibility contract for new work.
 
-```text
-Controller -> Decision Validation -> Tools -> Evidence -> Answer -> Critic -> Response
-```
+## vNext architecture
 
-Start with the [documentation index](docs/README.md), the current
-[technical architecture](docs/technical/architecture.md), and the
-[v2.5 architecture foundation](docs/design/versions/DotaMind_MVP_v2.5.md).
-Version blueprints are retained as implementation history; the latest progress
-snapshot and current code decide implementation status.
+- [Product](docs/PRODUCT.md) — what DotaMind is and is not building
+- [Architecture](docs/ARCHITECTURE.md) — layer ownership and runtime shape
+- [Tools](docs/TOOLS.md) — agent-visible domain capabilities
+- [Data](docs/DATA.md) — identity, providers, normalization, and provenance
+- [Evals](docs/EVALS.md) — behavioral and live-integration acceptance
+- [Roadmap](docs/ROADMAP.md) — implementation order
+- [Reference facts](docs/reference/) — expensive-to-rediscover provider knowledge
 
-## Repository Layout
+Read these documents before changing vNext architecture or product behavior.
 
-```text
-apps/
-  api/        FastAPI service, agentic workflow, tests, and `/debug/plan` UI
-  chat/       Next.js/assistant-ui client for Chat Session and Chat Run APIs
-docs/
-  design/     Version blueprints, architecture, tool designs, and roadmaps
-  technical/  API, configuration, and provider reference material
-  progress/   Daily cumulative bilingual handoff snapshots
-  archive/    Superseded product and architecture documents
-```
+## Current repository state
 
-## Run Locally
+`apps/api` and `apps/chat` currently contain Legacy V3 implementations. They
+remain runnable for development and are being replaced incrementally; their
+current behavior does not define the vNext target architecture.
+
+## Local development
+
+Start the current Legacy API:
 
 ```bash
 cd apps/api
-python -m pip install -e ".[dev]"
-python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8001 --log-level info
+uv sync --extra dev
+uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 8001 --log-level info
 ```
 
-The API uses port `8001` and fails when the port is already occupied. In a
-second terminal, start the chat client:
+In another terminal, start the current chat client:
 
 ```bash
 cd apps/chat
@@ -49,138 +44,25 @@ npm install
 npm run dev
 ```
 
-Useful local pages:
+Useful local pages are `http://localhost:8001/docs`,
+`http://localhost:8001/debug/plan`, and `http://localhost:3000`.
 
-- `http://localhost:8001/docs`
-- `http://localhost:8001/debug/plan`
-- `http://localhost:3000` for the assistant-ui chat client
-
-The chat client uses the PostgreSQL-backed Chat Session and detached Chat Run
-APIs; it does not host a model or parallel Agent Runtime. `/debug/plan` remains
-the internal plan/runtime inspection UI.
-
-## Current API
+## Verification
 
 ```bash
-curl -X POST http://localhost:8001/api/v1/plan \
-  -H "Content-Type: application/json" \
-  -d '{"game":"dota2","query":"enemy picked Lina, what should I pick?"}'
+cd apps/api
+uv run pytest
+
+cd ../chat
+npm run test
+npm run lint
+npm run build
 ```
 
-Active endpoints:
-
-- `GET /health`
-- `POST /api/v1/plan`
-- `POST /api/v1/plan/stream`
-- `/api/v1/chat/sessions` session CRUD
-- `/api/v1/chat/.../runs` create/query/active/events/cancel
-- `GET /debug/plan`
-
-Removed endpoints are intentionally not redirected or wrapped:
-
-- `POST /api/v1/query`
-- `POST /api/v1/meta-report`
-- `POST /api/v1/patch-impact`
-- `POST /api/v1/team-report`
-- `POST /api/v1/verify-claim`
-- `GET /api/v1/services`
-- `GET /debug/chat`
-
-## Agentic Runtime
-
-Both stateless debug requests and durable Chat Runs execute the same LangGraph
-`StateGraph(AgentRunState)`:
-
-```text
-controller_node
-  -> decision_validate_node
-      -> direct_answer / clarification / context_missing / capability_boundary
-      -> tool_plan -> validate_plan_node -> tool_executor_node
-                   -> conversation.history_lookup -> controller_node
-                   -> evidence_node -> answer_node -> critic_node
-  -> attempt_finalize_node -> recovery_node -> run_finalize_node -> response_node
-```
-
-Missing tools, validation errors, tool failures, and insufficient evidence are
-returned directly. There is no fallback to the old report pipeline.
-
-Current output contracts:
-
-- `natural_language_answer`
-- `patch_impact_report`
-- `role_meta_report`
-- `team_recent_report`
-
-The current registry exposes 31 deterministic tools across the committed Valve
-Catalog, STRATZ hero/player analysis, PandaScore Dota 2 Fixture schedules and
-identity resolution, OpenDota team/role and single-match data, cross-source
-PandaScore-to-Valve match resolution, local patch
-records, and request-local conversation history lookup. Registry definitions,
-not a copied documentation list, are authoritative.
-
-Match-detail player progress is a deterministic downstream transform: the
-registered `dota.extract_match_player_progress` tool consumes only normalized
-`opendota.match_details.data.matches` and emits one complete
-`player_match_progress` package (final inventory, purchase timeline, skill
-sequence, and talent selections) without another provider request. It runs only
-when the user explicitly asks for a player's post-match configuration; ordinary
-match details do not extract it, and there is no cross-Run artifact reuse.
-
-## Configuration
-
-Runtime environment, secrets, URLs, and feature flags live in `.env`. Business
-policy lives in `apps/api/app/config/policy.yaml` and is validated on startup.
-
-```text
-DOTAMIND_LIVE_DATA_ENABLED=false
-DOTAMIND_PANDASCORE_TOKEN=
-DOTAMIND_PANDASCORE_BASE_URL=https://api.pandascore.co
-DOTAMIND_STRATZ_TOKEN=
-DOTAMIND_LLM_ENABLED=false
-DOTAMIND_LLM_API_KEY=
-DOTAMIND_POLICY_PATH=
-```
-
-The policy covers OpenDota, PandaScore, cross-source match resolution, and STRATZ transport boundaries,
-team/hero/patch report rules, critic quality gates, LLM call settings, planner
-sample policy, and conversation memory budgets. The free PandaScore Fixture
-boundary does not natively expose Valve match IDs; the explicit resolver can
-infer a mapping only from a unique OpenDota match and reports ambiguity.
-赛事 resolver 缺省年份时根据 PandaScore Fixture 时间确定最近一届，显式年份保持
-优先；公共 runtime 和 Chat UI 会区分工具尚未进入 handler 与执行后失败。
-Restart the API after editing it.
-
-## Current Architecture
-
-The current backend includes bounded Run/Attempt/Budget execution, one bounded
-missing-evidence replan, PostgreSQL-authoritative Chat Runs, a Redis recent
-dialogue cache and event/coordinator boundary, history-grounded answers, and six
-official Catalog tools for hero, ability, talent, and item facts. It does not
-maintain a discourse graph or use LangGraph checkpointing for conversation
-memory. CAP/CROO integration remains parked.
-
-## Deploy with Docker Compose
-
-The production Compose stack runs PostgreSQL, Redis, FastAPI, Next.js, an
-internal sing-box VLESS egress proxy, and an Nginx reverse proxy. Only Nginx
-ports are published; application and data services remain on the internal
-Docker network. Before first deployment, copy
-`deploy/sing-box.client.example.json` to the ignored
-`deploy/sing-box.client.json` and fill in the server-only VLESS credentials.
-The deployment host must also provide the ignored static
-`deploy/sing-box/sing-box` binary used to build the proxy sidecar.
-
-```bash
-docker compose -f compose.prod.yml up -d --build
-curl http://<server-ip>/health
-docker compose -f compose.prod.yml ps
-```
-
-The API container runs `alembic upgrade head` before Uvicorn. Configure
-`DOTAMIND_PUBLIC_ORIGIN` and replace the default PostgreSQL password before a
-durable deployment. The current stack provides HTTP only; add a domain and TLS
-termination before exposing it to the Internet.
+See [the API README](apps/api/README.md) and
+[the chat README](apps/chat/README.md) for the current Legacy services' local
+run and test details.
 
 ## License
 
-MIT. See `LICENSE`.
+MIT. See [LICENSE](LICENSE).

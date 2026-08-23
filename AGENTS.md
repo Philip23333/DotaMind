@@ -33,7 +33,8 @@ compatibility contract.
 
 - Verify the current working tree and relevant tests before changing behavior.
 - Do not add fallback or mock behavior that hides missing integrations or errors.
-- Keep provider calls inside provider adapters and domain services.
+- Network and provider-SDK calls belong only in provider adapters. Domain
+  services orchestrate those adapters and never call upstream APIs directly.
 - Run focused tests for every behavior change and report only checks that ran.
 - Update a core document only when its long-term product or architecture contract
   changes. Do not maintain daily progress snapshots or an in-repository archive;

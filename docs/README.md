@@ -20,6 +20,21 @@ replaced the Legacy implementation.
 reference/ contains provider and identity facts that were costly to establish.
 It is supporting material, not product or architecture authority.
 
+## Document ownership
+
+Each long-term fact has one owner document; other documents link rather than
+copy it.
+
+| Question | Owner |
+| --- | --- |
+| What DotaMind does and excludes | PRODUCT.md |
+| Layer responsibilities and boundaries | ARCHITECTURE.md |
+| Agent-visible capabilities | TOOLS.md |
+| Identity, providers, normalization, and provenance | DATA.md |
+| Behavioral and integration acceptance | EVALS.md |
+| Delivery order | ROADMAP.md |
+| Costly external implementation facts | reference/ |
+
 ## Source of truth
 
 - Code describes CURRENT behavior.

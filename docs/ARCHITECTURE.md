@@ -9,8 +9,8 @@ claim to implement it until each replacement is deliberately delivered.
 
 - The model owns ordinary business reasoning: it decides what information is
   needed, which domain tools to call, whether to continue, and when to answer.
-- Runtime code owns durable boundaries: schemas, authorization, identity,
-  transport, normalization, budgets, cancellation, and persistence.
+- Deterministic application code owns hard boundaries, with each boundary kept
+  in its proper layer rather than folded into the agent runtime.
 - Tools expose Dota domain capabilities, never provider plumbing or a complete
   scenario workflow.
 - Domain services hide provider selection, identifier conversion, cross-source
@@ -26,9 +26,13 @@ claim to implement it until each replacement is deliberately delivered.
                    -> Domain Services
                    -> Provider Adapters
 
-The API owns authentication and request ownership. The runtime owns messages,
-tool dispatch, general limits, trace events, and cancellation. It does not know
-what a tournament, player build, or match-detail scenario is.
+The API owns authentication and request ownership. The runtime owns model
+messages, tool dispatch, general limits, request deadlines, cancellation, and
+trace or streaming events. Domain services own Dota identity, cross-source
+resolution, normalization, composition, and provenance. Provider adapters own
+upstream HTTP or SDK transport, provider authentication, and provider schemas.
+The runtime does not know what a tournament, player build, or match-detail
+scenario is.
 
 ## Agent loop
 

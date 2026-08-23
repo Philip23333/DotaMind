@@ -16,26 +16,44 @@ boundaries.
 - Explicit handling of ambiguity, missing data, and unsupported requests
 - Tool-call efficiency and general budget compliance
 
-## Initial scenario set
+## Deterministic behavioral evals
+
+These evals are fixture-backed and CI-friendly. They protect general agent
+behavior and architecture boundaries; they do not depend on a provider's
+current schedule, result, or match count.
 
 | Area | User request | Expected behavior |
 | --- | --- | --- |
-| Tournament status | 现在 TI 最新战况？ | Resolve the event, inspect current schedule or results, and distinguish live facts from stale data |
-| Tournament schedule | 下一场什么时候开始？ | Use the resolved competition and return the next scheduled match with time context |
-| Match detail | Spirit 和 Falcons 最近一次交手？ | Find candidate matches, resolve ambiguity, and return a grounded match summary |
+| Tournament status | 这项赛事现在是什么状态？ | Resolve the fixture competition, inspect its schedule or results, and distinguish current facts from stale data |
+| Tournament schedule | 下一场什么时候开始？ | Use the resolved fixture competition and return the next scheduled match with time context |
+| Match detail | Spirit 和 Falcons 最近一次交手？ | Find fixture candidate matches, resolve ambiguity, and return a grounded match summary |
 | Game follow-up | 第二局详细说说。 | Reuse only valid conversation context, obtain game detail, and answer with available data |
-| Player performance | Malr1ne 那局表现怎么样？ | Resolve player and game references, then return recorded performance facts |
+| Player performance | Malr1ne 那局表现怎么样？ | Resolve fixture player and game references, then return recorded performance facts |
 | Player build | 他那局出了什么、怎么加点？ | Obtain a match build and disclose unavailable parsed fields |
 | Earlier match | 那他上一场呢？ | Resolve the follow-up reference and query a separate record when needed |
 | Unsupported scope | 给我当前版本全英雄强度排行 | State that ranked-meta ranking is outside vNext Core without inventing an alternative |
 | Ambiguous identity | 查一下 Nigma 最近比赛 | Ask for clarification or expose candidates when identity cannot be uniquely resolved |
 
+## Live provider smoke evals
+
+These checks exercise real provider integrations. They verify that a provider
+response can be fetched, normalized, attributed, and surfaced with its
+freshness or uncertainty. They are not exact-value assertions and do not make a
+provider-data change a core architecture regression.
+
+- Search a current competition and list a small schedule or results window.
+- Search a current professional team and retrieve its available match context.
+- Resolve a current match candidate and request available detail.
+- Retrieve a static catalog item and verify its committed snapshot provenance.
+
 ## Acceptance
 
-An eval passes only when the final answer is supported by tool results, preserves
-identity and provider uncertainty, avoids unsupported claims, and does not rely
-on a scenario-specific runtime branch. Exact provider values and match counts
-are not fixed assertions because live esports data changes.
+Deterministic behavioral evals pass only when the final answer is supported by
+fixture tool results, preserves identity and provider uncertainty, avoids
+unsupported claims, and does not rely on a scenario-specific runtime branch.
+Live smoke evals pass when the integration succeeds with appropriate source,
+freshness, and uncertainty disclosure. Exact live provider values and match
+counts are never fixed assertions because esports data changes.
 
 New functionality adds or updates an eval before it adds a new special-case
 execution path.
