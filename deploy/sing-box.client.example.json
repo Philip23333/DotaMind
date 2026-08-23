@@ -1,0 +1,38 @@
+{
+  "log": {
+    "level": "warn"
+  },
+  "inbounds": [
+    {
+      "type": "http",
+      "listen": "0.0.0.0",
+      "listen_port": 7890
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "vless",
+      "tag": "vless-out",
+      "server": "VLESS_SERVER",
+      "server_port": 443,
+      "uuid": "VLESS_UUID",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "VLESS_SNI",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "REALITY_PUBLIC_KEY",
+          "short_id": "REALITY_SHORT_ID"
+        }
+      }
+    }
+  ],
+  "route": {
+    "final": "vless-out"
+  }
+}

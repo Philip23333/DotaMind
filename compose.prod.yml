@@ -26,6 +26,16 @@ services:
       retries: 20
     restart: unless-stopped
 
+  vless-proxy:
+    build:
+      context: ./deploy/sing-box
+      dockerfile: Dockerfile
+    image: dotamind-vless-proxy:local
+    command: run -c /etc/sing-box/config.json
+    volumes:
+      - ./deploy/sing-box.client.json:/etc/sing-box/config.json:ro
+    restart: unless-stopped
+
   api:
     build:
       context: ./apps/api
@@ -40,11 +50,16 @@ services:
       DOTAMIND_DATABASE_URL: postgresql://dotamind:${DOTAMIND_POSTGRES_PASSWORD:-dotamind}@postgres:5432/dotamind
       DOTAMIND_REDIS_URL: redis://redis:6379/0
       DOTAMIND_SESSION_STORE_BACKEND: redis
+      HTTP_PROXY: http://vless-proxy:7890
+      HTTPS_PROXY: http://vless-proxy:7890
+      NO_PROXY: localhost,127.0.0.1,::1,postgres,redis,vless-proxy
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      vless-proxy:
+        condition: service_started
     restart: unless-stopped
 
   chat:

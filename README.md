@@ -161,9 +161,14 @@ memory. CAP/CROO integration remains parked.
 
 ## Deploy with Docker Compose
 
-The production Compose stack runs PostgreSQL, Redis, FastAPI, Next.js, and an
-Nginx reverse proxy. Only Nginx port `80` is published; application and data
-services remain on the internal Docker network.
+The production Compose stack runs PostgreSQL, Redis, FastAPI, Next.js, an
+internal sing-box VLESS egress proxy, and an Nginx reverse proxy. Only Nginx
+ports are published; application and data services remain on the internal
+Docker network. Before first deployment, copy
+`deploy/sing-box.client.example.json` to the ignored
+`deploy/sing-box.client.json` and fill in the server-only VLESS credentials.
+The deployment host must also provide the ignored static
+`deploy/sing-box/sing-box` binary used to build the proxy sidecar.
 
 ```bash
 docker compose -f compose.prod.yml up -d --build

@@ -17,6 +17,9 @@ venv/
 .env
 .env.*
 !.env.example
+deploy/sing-box.client.json
+deploy/sing-box/sing-box
+*.log
 
 # editors
 .idea/

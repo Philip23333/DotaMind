@@ -77,6 +77,9 @@ Next.js/assistant-ui client for Chat Session and Chat Run APIs.
 - [`technical/api.md`](./technical/api.md) — active and removed HTTP surface.
 - [`technical/configuration.md`](./technical/configuration.md) — environment and
   policy sources of truth.
+- [`technical/pandascore_egress_migration_2026-08-23.md`](./technical/pandascore_egress_migration_2026-08-23.md)
+  — verified PandaScore egress diagnosis, VLESS cutover, and WireGuard retirement
+  record.
 - [`technical/stratz_hero_page_graphql_inventory.md`](./technical/stratz_hero_page_graphql_inventory.md)
   and [`technical/stratz_player_page_graphql_inventory.md`](./technical/stratz_player_page_graphql_inventory.md)
   — empirical STRATZ operation inventories.

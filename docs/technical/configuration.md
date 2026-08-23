@@ -45,6 +45,23 @@ Important settings include:
 
 Use `.env.example` as the environment template. Never commit populated secrets.
 
+## Production VLESS Egress
+
+`compose.prod.yml` runs a private `vless-proxy` sing-box sidecar for the API's
+outbound provider traffic. Copy `deploy/sing-box.client.example.json` to the
+ignored `deploy/sing-box.client.json` on the deployment host and fill it with
+the VLESS/Reality client credentials. The deployment image is built from the
+locally available `dotamind-api` image plus an ignored static
+`deploy/sing-box/sing-box` binary. Do not commit either private deployment
+asset.
+
+The sidecar exposes HTTP proxy port `7890` only on the Compose network. The
+API receives `HTTP_PROXY` and `HTTPS_PROXY` pointing to
+`http://vless-proxy:7890`; `NO_PROXY` keeps Docker-local service traffic
+direct. This route applies to live provider and LLM HTTP clients that honor
+standard proxy environment variables. Bring up the sidecar before the API and
+verify provider requests from inside `api` after deployment.
+
 ## Policy Loading
 
 `app/core/config.py` loads YAML with `yaml.safe_load()` and validates it through
