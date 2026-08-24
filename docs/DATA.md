@@ -16,16 +16,44 @@ vNext centers on these provider-neutral objects:
 Tool results use these domain objects rather than direct PandaScore, OpenDota,
 Valve, or future-provider response shapes.
 
+A domain object is primarily an identity and meaning contract. It answers:
+
+    What entity is this?
+
+Examples include `CompetitionRef`, `MatchRef`, `GameRef`, `TeamRef`, and
+`PlayerRef`. A valid reference identifies an entity even when no detailed
+artifact is currently available.
+
+## Domain Object vs Artifact
+
+| | Domain object or DTO | Canonical artifact |
+| --- | --- | --- |
+| Primary question | What is this? | What data has been collected about this? |
+| Purpose | Communication between domain services and tools | Reusable storage and bounded retrieval |
+| Typical size | Small and bounded | Potentially large, sectioned, and quality-tagged |
+| Intended lifetime | Request or operation scope | Reusable cache or store scope; backend is a separate decision |
+| Model context | Usually suitable as a bounded tool view | Not entered by default; exposed through summaries, refs, and bounded sections |
+| Contents | Identity, normalized facts, resolution state | Canonical facts, sections, provenance, coverage, completeness, and missing data |
+
+The distinction is intentional. A tool can return a domain object and an
+artifact reference without returning the complete artifact content.
+
 ## Identity
 
 Each domain object has a canonical DotaMind reference and may carry provider
-identifiers internally. Provider IDs are data-layer implementation details, not
-an agent language.
+identifiers internally. Provider-specific identifiers are data-layer
+implementation details, not an agent language and not part of a model-facing
+canonical artifact.
 
 Identity resolution must be deterministic and explainable. A unique mapping may
 be returned as resolved; zero or multiple credible candidates remain not found
 or ambiguous. The data layer must not choose a nearest candidate merely to keep
 a conversation moving.
+
+Identity and availability are independent. Resolving a `GameRef` does not imply
+that scoreboard, draft, inventory, or timeline data exists. Availability is
+reported through coverage and completeness metadata rather than by changing
+the identity result.
 
 ## Cross-source resolution
 
@@ -40,12 +68,71 @@ providers. Domain services own:
 - Explicit resolution status and provenance
 
 The detailed, verified PandaScore-to-Valve matching rules live in
-reference/match-resolution.md. They are reference material for an implementation,
-not a requirement to retain Legacy code structure.
+reference/match-resolution.md. They are reference material for an
+implementation, not a requirement to retain Legacy code structure.
+
+## Canonical Artifacts
+
+A canonical artifact is defined as a DotaMind data object that a future
+artifact layer could create from normalized facts from one or more providers.
+It is intended for domain use and retrieval, not for mirroring an upstream
+response. Its proposed public schema would use canonical references, normalized
+values, and quality metadata. Raw provider JSON and provider-specific
+identifiers would remain below the model boundary.
+
+The initial artifact vocabulary may include:
+
+- `GameArtifact`: game identity, summary, players, draft, economy, inventory,
+  events, and their coverage
+- `PlayerMatchArtifact`: a bounded player's performance and build facts for a
+  match or game
+- `DraftArtifact`: picks, bans, and draft timing where available
+- `TimelineArtifact`: time-ordered events where the source provides them
+
+These are canonical data shapes, not scenario-specific tools. Sections such as
+inventory, economy, and skill history are views of an artifact rather than
+reasons to create one tool per user question.
+
+## Artifact lifecycle
+
+The target data lifecycle is:
+
+    Provider Fetch
+      -> Normalization
+      -> Artifact Store
+      -> Retrieval
+      -> bounded Tool View
+
+This is a data lifecycle, not a mandatory A-to-B-to-C model workflow. An
+existing artifact may be reused, a request may be answered by a bounded domain
+result, and a missing artifact may produce an explicit unavailable result. The
+artifact lifecycle does not belong to Agent Runtime: runtime transports
+messages and dispatches tools, while domain and retrieval layers own data
+quality and access semantics.
+
+## Artifact quality
+
+Every artifact or bounded artifact view should preserve the following metadata
+when applicable:
+
+| Field | Meaning |
+| --- | --- |
+| `source` | Provider or normalized source set that supplied the facts |
+| `fetched_at` | Time the source data was obtained |
+| `schema_version` | Version of the canonical artifact schema |
+| `coverage` | Sections or fact families currently available |
+| `completeness` | Whether the artifact is complete, partial, or otherwise limited |
+| `missing` | Known sections or facts that are unavailable |
+
+For example, a `GameArtifact` may report coverage for scoreboard, draft,
+inventory, and purchase events while listing replay timeline under `missing`.
+The absence must remain visible; a summary must not imply that unlisted data
+was fetched or verified.
 
 ## Normalization and provenance
 
-Providers are normalized into stable domain DTOs. Each returned fact retains:
+The proposed normalization path would produce stable domain DTOs and canonical
+artifacts. Each returned fact should retain:
 
 - Source or sources
 - Fetched time when available
