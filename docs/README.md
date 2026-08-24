@@ -5,9 +5,9 @@ not a compatibility layer for the frozen Legacy V3 implementation.
 
 ## Status
 
-The Legacy V3 baseline is preserved at Git tag pre-vnext-rewrite. vNext
-documentation is ready to guide the rewrite; vNext runtime code has not yet
-replaced the Legacy implementation.
+The Legacy V3 baseline is preserved at Git tag pre-vnext-rewrite. The vNext
+runtime foundation exists, while public API and domain capabilities still use
+Legacy V3 until later migration phases.
 
 ## Read in order
 

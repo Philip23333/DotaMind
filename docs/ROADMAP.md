@@ -17,6 +17,8 @@ Non-goal: claiming that Legacy runtime code has already migrated.
 
 ## Phase 1 — Minimal agent runtime
 
+Status: complete.
+
 Goal: replace Legacy orchestration with a thin model-to-tool loop.
 
 Deliverables:
