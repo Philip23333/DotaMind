@@ -47,24 +47,53 @@ Deliverables:
 Acceptance: deterministic competition and match capability evals pass, and live
 provider smoke tests succeed without claiming ambiguous mappings as facts.
 
-## Phase 3 — Team, player, and catalog
+## Phase 3 — Retrieval and artifact foundation
 
-Goal: make conversational team and player research useful.
+Status: planned.
 
-Deliverables:
+Goal: establish a bounded, reusable data-access boundary before expanding
+scenario capabilities.
+
+Proposed deliverables:
+
+- Artifact Store contract and backend boundary
+- Canonical `GameArtifact` and artifact quality metadata
+- Future `artifacts.search` and `artifacts.read` capabilities
+- Bounded tool responses using summaries, canonical references, coverage, and
+  artifact references
+- Reuse of artifact references across conversation turns where data is
+  available
+
+Non-goals:
+
+- Adding a tool for every artifact section or user scenario
+- Exposing raw provider JSON or provider identifiers to the model
+- Requiring a fixed retrieval sequence
+- Claiming that artifact storage or the new retrieval tools are implemented
+
+Acceptance: the artifact and retrieval contracts are implemented and evaluated
+with explicit bounds, coverage, missing-data behavior, and conversation reuse.
+The phase is not complete merely because the documents or interfaces exist.
+
+## Phase 4 — Team, player, and catalog
+
+Goal: make conversational team and player research useful after the retrieval
+boundary is proven.
+
+Proposed deliverables:
 
 - Team search, schedule, and roster capabilities
 - Player record, performance, and match-build capabilities
 - Hero and item catalog capabilities
 
-Acceptance: the player and contextual follow-up evals pass with explicit coverage
-and parse-data limits.
+Acceptance: the player and contextual follow-up evals pass with explicit
+coverage and parse-data limits.
 
-## Phase 4 — Conversation reliability and eval expansion
+## Phase 5 — Conversation reliability and eval expansion
 
 Goal: harden long-lived conversations based on observed needs.
 
-Deliverables:
+Proposed deliverables:
 
 - PostgreSQL session transcript, AgentRun persistence, and bounded context
   strategy
@@ -77,11 +106,11 @@ Acceptance: durable conversation context, recovery, and cancellation behavior
 have repeatable tests; additional infrastructure is added only when the need is
 demonstrated.
 
-## Phase 5 — Product UX
+## Phase 6 — Product UX
 
 Goal: present facts clearly in chat and structured match views.
 
-Deliverables:
+Proposed deliverables:
 
 - Chat interaction and streaming presentation
 - Structured rendering where it is more reliable than generated prose
@@ -89,7 +118,7 @@ Deliverables:
 
 Acceptance: users can understand what is fact, inference, or unavailable data.
 
-## Phase 6 — Legacy deletion
+## Phase 7 — Legacy deletion
 
 Goal: remove remaining Legacy runtime paths after their replacements are proven.
 
