@@ -8,6 +8,8 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from app.vnext.llm.protocol import ModelTool
+
 ToolHandler = Callable[[BaseModel], Any | Awaitable[Any]]
 
 
@@ -35,17 +37,14 @@ class ToolDefinition:
         if self.timeout is not None and self.timeout <= 0:
             raise ValueError("tool timeout must be greater than zero")
 
-    def schema(self) -> dict[str, Any]:
-        """Return the standard function-tool shape consumed by model adapters."""
+    def schema(self) -> ModelTool:
+        """Return the provider-neutral tool description consumed by the runtime."""
 
-        return {
-            "type": "function",
-            "function": {
-                "name": self.name,
-                "description": self.description,
-                "parameters": self.input_model.model_json_schema(),
-            },
-        }
+        return ModelTool(
+            name=self.name,
+            description=self.description,
+            input_schema=self.input_model.model_json_schema(),
+        )
 
 
 __all__ = ["ToolDefinition", "ToolHandler"]

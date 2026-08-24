@@ -27,6 +27,7 @@ from app.vnext.agent.events import (
     AgentStarted,
     ModelRequested,
     ModelResponded,
+    TextDelta,
     ToolCompleted,
     ToolFailed,
     ToolStarted,
@@ -39,6 +40,8 @@ from app.vnext.llm.protocol import (
     ModelClient,
     ModelRequest,
     ModelResponse,
+    ModelTextDelta,
+    StreamingModelClient,
     ToolCall,
     ToolResultMessage,
 )
@@ -97,7 +100,7 @@ class AgentRuntime:
 
     def __init__(
         self,
-        model: ModelClient,
+        model: ModelClient | StreamingModelClient,
         tools: ToolRegistry,
         *,
         limits: AgentLimits | None = None,
@@ -173,12 +176,64 @@ class AgentRuntime:
 
                 model_started = monotonic()
                 try:
-                    raw_response = await self._await_controlled(
-                        self.model.complete(request),
-                        token,
-                        deadline,
-                    )
-                    response = self._normalize_response(raw_response)
+                    stream = getattr(self.model, "stream", None)
+                    if callable(stream):
+                        response = None
+                        model_stream = stream(request)
+                        if inspect.isawaitable(model_stream):
+                            model_stream = await self._await_controlled(
+                                model_stream,
+                                token,
+                                deadline,
+                            )
+                        if not hasattr(model_stream, "__anext__"):
+                            raise ModelProtocolError(
+                                "streaming model client did not return an async iterator"
+                            )
+                        try:
+                            while True:
+                                try:
+                                    item = await self._await_controlled(
+                                        anext(model_stream),
+                                        token,
+                                        deadline,
+                                    )
+                                except StopAsyncIteration:
+                                    break
+                                if isinstance(item, ModelTextDelta):
+                                    if response is not None:
+                                        raise ModelProtocolError(
+                                            "stream emitted text after its terminal response"
+                                        )
+                                    event = TextDelta(step=step, text=item.text)
+                                    yield await self._publish(event, sink)
+                                elif isinstance(item, ModelResponse):
+                                    if response is not None:
+                                        raise ModelProtocolError(
+                                            "stream emitted more than one terminal response"
+                                        )
+                                    response = self._normalize_response(item)
+                                else:
+                                    raise ModelProtocolError(
+                                        "stream emitted an unsupported model item"
+                                    )
+                        finally:
+                            close = getattr(model_stream, "aclose", None)
+                            if callable(close):
+                                result = close()
+                                if inspect.isawaitable(result):
+                                    await result
+                        if response is None:
+                            raise ModelProtocolError(
+                                "stream ended without a terminal model response"
+                            )
+                    else:
+                        raw_response = await self._await_controlled(
+                            self.model.complete(request),
+                            token,
+                            deadline,
+                        )
+                        response = self._normalize_response(raw_response)
                 except (AgentCancelledError, AgentDeadlineExceeded):
                     raise
                 except AgentRuntimeError:
@@ -375,14 +430,16 @@ class AgentRuntime:
                 raise ModelProtocolError(f"invalid model response: {exc}") from exc
 
         message = response.message
-        if message is None:
-            raise ModelProtocolError("model response did not contain a message")
         if isinstance(message, AssistantMessage) and not message.tool_calls:
             if message.content is None:
                 raise ModelProtocolError(
                     "assistant response had neither content nor tool calls"
                 )
-            return ModelResponse(message=FinalMessage(content=message.content))
+            return ModelResponse(
+                message=FinalMessage(content=message.content),
+                finish_reason=response.finish_reason,
+                usage=response.usage,
+            )
         return response
 
     @staticmethod

@@ -9,9 +9,9 @@ from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
-from app.vnext.agent.errors import ToolError, ToolErrorCode
-from app.vnext.llm.protocol import ToolCall, ToolResultMessage
+from app.vnext.llm.protocol import ModelTool, ToolCall, ToolResultMessage
 from app.vnext.tools.definition import ToolDefinition
+from app.vnext.tools.errors import ToolError, ToolErrorCode
 
 
 class ToolRegistry:
@@ -32,7 +32,7 @@ class ToolRegistry:
     def list(self) -> list[ToolDefinition]:
         return list(self._tools.values())
 
-    def schemas(self) -> list[dict[str, Any]]:
+    def schemas(self) -> list[ModelTool]:
         return [tool.schema() for tool in self._tools.values()]
 
     async def execute(
@@ -56,11 +56,20 @@ class ToolRegistry:
         try:
             arguments = definition.input_model.model_validate(call.arguments)
         except ValidationError as exc:
+            details = {
+                "validation_errors": [
+                    {
+                        "loc": error.get("loc", ()),
+                        "type": error.get("type", "value_error"),
+                    }
+                    for error in exc.errors(include_url=False)
+                ]
+            }
             return self._error_result(
                 call,
                 "invalid_arguments",
                 f"invalid arguments for tool {call.name}",
-                {"validation_errors": exc.errors(include_url=False)},
+                details,
             )
 
         effective_timeout = definition.timeout if timeout is None else timeout
@@ -79,26 +88,39 @@ class ToolRegistry:
             )
         except asyncio.CancelledError:
             raise
-        except Exception as exc:
+        except Exception:
             return self._error_result(
                 call,
                 "tool_execution_error",
                 f"tool execution failed: {call.name}",
-                {"exception_type": type(exc).__name__, "exception_message": str(exc)},
+                {},
             )
 
         try:
             validated_output = definition.output_model.model_validate(raw_output)
             output = validated_output.model_dump(mode="json")
-        except (ValidationError, TypeError, ValueError) as exc:
-            details: dict[str, Any] = {"exception_type": type(exc).__name__}
-            if isinstance(exc, ValidationError):
-                details["validation_errors"] = exc.errors(include_url=False)
+        except ValidationError as exc:
+            details = {
+                "validation_errors": [
+                    {
+                        "loc": error.get("loc", ()),
+                        "type": error.get("type", "value_error"),
+                    }
+                    for error in exc.errors(include_url=False)
+                ]
+            }
             return self._error_result(
                 call,
                 "invalid_tool_output",
                 f"invalid output from tool: {call.name}",
                 details,
+            )
+        except (TypeError, ValueError):
+            return self._error_result(
+                call,
+                "invalid_tool_output",
+                f"invalid output from tool: {call.name}",
+                {},
             )
         return ToolResultMessage(
             tool_call_id=call.id,

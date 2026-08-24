@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from typing import Any
 
 import httpx
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from app.vnext.llm.openai_compatible import (
     MalformedToolArgumentsError,
@@ -18,6 +19,8 @@ from app.vnext.llm.protocol import (
     FinalMessage,
     ModelRequest,
     ModelResponse,
+    ModelTextDelta,
+    ModelTool,
     SystemMessage,
     ToolCall,
     ToolResultMessage,
@@ -58,7 +61,32 @@ def test_protocol_supports_nullable_assistant_and_multiple_calls() -> None:
     response = ModelResponse(message=message)
     assert response.message == message
     assert len(response.message.tool_calls) == 2  # type: ignore[union-attr]
-    assert ModelResponse(final=FinalMessage(content="done")).is_final
+    final_response = ModelResponse.from_final("done")
+    assert final_response.is_final
+    assert ModelResponse.model_validate(final_response.model_dump()) == final_response
+    assert ModelResponse.model_validate(response.model_dump()) == response
+    assert "final" not in ModelResponse.model_fields
+    assert "assistant" not in ModelResponse.model_fields
+
+
+def test_model_tool_is_generic_and_forbids_provider_wrapper_fields() -> None:
+    tool = ModelTool(
+        name="echo",
+        description="echo",
+        input_schema={"type": "object"},
+    )
+    assert tool.model_dump() == {
+        "name": "echo",
+        "description": "echo",
+        "input_schema": {"type": "object"},
+    }
+    with pytest.raises(ValidationError):
+        ModelTool(
+            name="echo",
+            description="echo",
+            input_schema={},
+            type="function",
+        )
 
 
 def test_adapter_serializes_messages_tools_and_tool_result_ids() -> None:
@@ -98,7 +126,7 @@ def test_adapter_serializes_messages_tools_and_tool_result_ids() -> None:
     )
 
     result = asyncio.run(client.complete(request))
-    payload = __import__("json").loads(seen["payload"])
+    payload = json.loads(seen["payload"])
     assert result.message == FinalMessage(content="ok")
     assert payload["model"] == "test-model"
     assert payload["messages"][2]["tool_calls"][0]["id"] == "c1"
@@ -109,7 +137,136 @@ def test_adapter_serializes_messages_tools_and_tool_result_ids() -> None:
         "content": '{"value":3}',
     }
     assert payload["tools"][0]["function"]["name"] == "echo"
+    assert payload["tools"][0]["function"]["parameters"]["properties"]["value"]["type"] == "integer"
+    assert request.tools[0].name == "echo"
+    assert "type" not in request.tools[0].model_dump()
+    assert "function" not in request.tools[0].model_dump()
     assert seen["headers"]["authorization"] == "Bearer test-key"
+
+
+def _sse_body(*chunks: dict[str, Any]) -> str:
+    return "".join(f"data: {json.dumps(chunk)}\n\n" for chunk in chunks) + "data: [DONE]\n\n"
+
+
+def _collect_stream(client: OpenAICompatibleModelClient, request: ModelRequest):
+    async def collect():
+        return [item async for item in client.stream(request)]
+
+    return asyncio.run(collect())
+
+
+def test_adapter_streams_text_deltas_and_emits_one_final_response() -> None:
+    seen: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["payload"] = json.loads(request.read())
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            text=_sse_body(
+                {
+                    "choices": [
+                        {"delta": {"role": "assistant", "content": "Hel"}, "finish_reason": None}
+                    ]
+                },
+                {"choices": [{"delta": {"content": "lo"}, "finish_reason": None}]},
+                {"choices": [{"delta": {}, "finish_reason": "stop"}]},
+            ),
+            request=request,
+        )
+
+    items = _collect_stream(_adapter(handler), _request([UserMessage(content="go")]))
+    assert [item.text for item in items if isinstance(item, ModelTextDelta)] == ["Hel", "lo"]
+    assert isinstance(items[-1], ModelResponse)
+    assert items[-1].message == FinalMessage(content="Hello")  # type: ignore[union-attr]
+    assert seen["payload"]["stream"] is True
+
+
+def test_adapter_assembles_streamed_tool_call_fragments() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            text=_sse_body(
+                {
+                    "choices": [
+                        {
+                            "delta": {
+                                "role": "assistant",
+                                "tool_calls": [
+                                    {
+                                        "index": 0,
+                                        "id": "call-1",
+                                        "type": "function",
+                                        "function": {
+                                            "name": "echo",
+                                            "arguments": '{"value":',
+                                        },
+                                    }
+                                ],
+                            },
+                            "finish_reason": None,
+                        }
+                    ]
+                },
+                {
+                    "choices": [
+                        {
+                            "delta": {
+                                "tool_calls": [
+                                    {
+                                        "index": 0,
+                                        "function": {"arguments": "3}"},
+                                    }
+                                ]
+                            },
+                            "finish_reason": "tool_calls",
+                        }
+                    ]
+                },
+            ),
+            request=request,
+        )
+
+    items = _collect_stream(_adapter(handler), _request([UserMessage(content="go")]))
+    assert len(items) == 1
+    assert isinstance(items[0], ModelResponse)
+    assert isinstance(items[0].message, AssistantMessage)
+    assert items[0].message.tool_calls[0].id == "call-1"
+    assert items[0].message.tool_calls[0].name == "echo"
+    assert items[0].message.tool_calls[0].arguments == {"value": 3}
+
+
+def test_adapter_rejects_malformed_sse_and_missing_done_marker() -> None:
+    def malformed(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            text="data: not-json\n\n",
+            request=request,
+        )
+
+    with pytest.raises(ProviderProtocolError, match="valid JSON"):
+        _collect_stream(_adapter(malformed), _request([UserMessage(content="go")]))
+
+    def missing_done(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            text=_sse_body(
+                {"choices": [{"delta": {"content": "ok"}, "finish_reason": "stop"}]}
+            ).replace("data: [DONE]\n\n", ""),
+            request=request,
+        )
+
+    with pytest.raises(ProviderProtocolError, match=r"\[DONE\]"):
+        _collect_stream(_adapter(missing_done), _request([UserMessage(content="go")]))
+
+    def http_error(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(503, text="provider secret body", request=request)
+
+    with pytest.raises(ProviderHTTPError):
+        _collect_stream(_adapter(http_error), _request([UserMessage(content="go")]))
 
 
 def test_adapter_parses_final_and_multiple_tool_calls_with_ids() -> None:

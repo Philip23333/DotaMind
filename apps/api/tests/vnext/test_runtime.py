@@ -12,18 +12,19 @@ from app.vnext.agent.errors import (
     MaxStepsExceeded,
     MaxToolCallsExceeded,
 )
-from app.vnext.agent.events import AgentCompleted
+from app.vnext.agent.events import AgentCompleted, TextDelta
 from app.vnext.agent.limits import AgentLimits
 from app.vnext.agent.runtime import AgentRuntime, CancellationToken
 from app.vnext.llm.protocol import (
     AssistantMessage,
     FinalMessage,
     ModelResponse,
+    ModelTextDelta,
     ToolCall,
     UserMessage,
 )
 from app.vnext.tools import ToolDefinition, ToolRegistry
-from tests.vnext.fakes import ScriptedModelClient
+from tests.vnext.fakes import ScriptedModelClient, ScriptedStreamingModelClient
 
 
 class EchoInput(BaseModel):
@@ -267,6 +268,82 @@ def test_runtime_event_order_and_streaming() -> None:
         "agent_completed",
     ]
     assert isinstance(events[-1], AgentCompleted)
+    assert events[-1].final.content == "done"  # type: ignore[union-attr]
+
+
+def test_runtime_streams_text_deltas_before_model_response_and_final() -> None:
+    model = ScriptedStreamingModelClient(
+        [
+            [
+                ModelTextDelta(text="Hel"),
+                ModelTextDelta(text="lo"),
+                ModelResponse.from_final("Hello"),
+            ]
+        ]
+    )
+    runtime = AgentRuntime(model, ToolRegistry(), limits=AgentLimits(deadline_seconds=2))
+
+    async def collect():
+        return [
+            event
+            async for event in runtime.run_stream([UserMessage(content="go")])
+        ]
+
+    events = asyncio.run(collect())
+    assert [event.kind for event in events] == [
+        "agent_started",
+        "model_requested",
+        "text_delta",
+        "text_delta",
+        "model_responded",
+        "agent_completed",
+    ]
+    assert [event.text for event in events if isinstance(event, TextDelta)] == ["Hel", "lo"]
+    assert isinstance(events[-1], AgentCompleted)
+    assert events[-1].final.content == "Hello"
+
+
+def test_runtime_streams_deltas_then_continues_tool_loop_without_repeating_text() -> None:
+    model = ScriptedStreamingModelClient(
+        [
+            [
+                ModelTextDelta(text="checking "),
+                ModelResponse(
+                    message=AssistantMessage(
+                        content="checking ",
+                        tool_calls=[_call()],
+                    )
+                ),
+            ],
+            [ModelTextDelta(text="done"), ModelResponse.from_final("done")],
+        ]
+    )
+    runtime = AgentRuntime(model, _registry(), limits=AgentLimits(deadline_seconds=2))
+
+    async def collect():
+        return [
+            event
+            async for event in runtime.run_stream([UserMessage(content="go")])
+        ]
+
+    events = asyncio.run(collect())
+    assert [event.kind for event in events] == [
+        "agent_started",
+        "model_requested",
+        "text_delta",
+        "model_responded",
+        "tool_started",
+        "tool_completed",
+        "model_requested",
+        "text_delta",
+        "model_responded",
+        "agent_completed",
+    ]
+    assert [event.text for event in events if isinstance(event, TextDelta)] == [
+        "checking ",
+        "done",
+    ]
+    assert model.requests[1].messages[-1].content == {"value": 1}  # type: ignore[union-attr]
     assert events[-1].final.content == "done"  # type: ignore[union-attr]
 
 

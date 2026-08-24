@@ -44,6 +44,17 @@ class ModelResponded(AgentEvent):
     duration: float = Field(ge=0)
 
 
+class TextDelta(AgentEvent):
+    kind: Literal["text_delta"] = "text_delta"
+    text: str
+
+    @property
+    def delta(self) -> str:
+        """A concise alias for consumers that call the fragment a delta."""
+
+        return self.text
+
+
 class ToolStarted(AgentEvent):
     kind: Literal["tool_started"] = "tool_started"
     tool_call_id: str = Field(min_length=1)
@@ -93,6 +104,7 @@ __all__ = [
     "AgentStarted",
     "ModelRequested",
     "ModelResponded",
+    "TextDelta",
     "ToolCompleted",
     "ToolFailed",
     "ToolStarted",

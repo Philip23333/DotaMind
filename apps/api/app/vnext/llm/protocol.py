@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from typing import Any, Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.vnext.agent.errors import ToolError
+from app.vnext.tools.errors import ToolError, ToolErrorCode
 
 
 class _Message(BaseModel):
@@ -61,39 +62,27 @@ class FinalMessage(_Message):
 Message = SystemMessage | UserMessage | AssistantMessage | ToolResultMessage | FinalMessage
 
 
+class ModelTool(_Message):
+    """Provider-neutral description of one agent-visible tool."""
+
+    name: str = Field(min_length=1)
+    description: str = Field(min_length=1)
+    input_schema: dict[str, Any]
+
+
 class ModelRequest(_Message):
     messages: list[Message]
-    tools: list[dict[str, Any]] = Field(default_factory=list)
+    tools: list[ModelTool] = Field(default_factory=list)
     step: int | None = Field(default=None, ge=1)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class ModelResponse(_Message):
-    """One provider-neutral model turn.
+    """One provider-neutral model turn with one canonical message."""
 
-    ``message`` is the canonical field.  ``final`` and ``assistant`` are
-    convenience constructor fields for small model fakes and normalize into
-    the same canonical message.
-    """
-
-    message: AssistantMessage | FinalMessage | None = None
-    final: FinalMessage | None = None
-    assistant: AssistantMessage | None = None
+    message: AssistantMessage | FinalMessage
     finish_reason: str | None = None
     usage: dict[str, Any] = Field(default_factory=dict)
-
-    @model_validator(mode="after")
-    def normalize_message(self) -> ModelResponse:
-        candidates = [
-            candidate
-            for candidate in (self.message, self.final, self.assistant)
-            if candidate is not None
-        ]
-        if len(candidates) != 1:
-            raise ValueError("model response must contain exactly one message")
-        if self.message is None:
-            object.__setattr__(self, "message", candidates[0])
-        return self
 
     @property
     def is_final(self) -> bool:
@@ -101,17 +90,35 @@ class ModelResponse(_Message):
 
     @classmethod
     def from_final(cls, content: str, **kwargs: Any) -> ModelResponse:
-        return cls(final=FinalMessage(content=content), **kwargs)
+        return cls(message=FinalMessage(content=content), **kwargs)
 
     @classmethod
     def from_assistant(cls, message: AssistantMessage, **kwargs: Any) -> ModelResponse:
-        return cls(assistant=message, **kwargs)
+        return cls(message=message, **kwargs)
 
 
 @runtime_checkable
 class ModelClient(Protocol):
     async def complete(self, request: ModelRequest) -> ModelResponse:
         """Return one complete model turn for the supplied transcript."""
+
+
+class ModelTextDelta(_Message):
+    """A provider-neutral fragment of assistant text emitted while streaming."""
+
+    text: str
+
+    @property
+    def delta(self) -> str:
+        """A concise alias for consumers that call the fragment a delta."""
+
+        return self.text
+
+
+@runtime_checkable
+class StreamingModelClient(Protocol):
+    def stream(self, request: ModelRequest) -> AsyncIterator[ModelTextDelta | ModelResponse]:
+        """Yield text fragments followed by exactly one terminal model response."""
 
 
 __all__ = [
@@ -121,7 +128,12 @@ __all__ = [
     "ModelClient",
     "ModelRequest",
     "ModelResponse",
+    "ModelTextDelta",
+    "ModelTool",
     "SystemMessage",
+    "StreamingModelClient",
+    "ToolError",
+    "ToolErrorCode",
     "ToolCall",
     "ToolResultMessage",
     "UserMessage",

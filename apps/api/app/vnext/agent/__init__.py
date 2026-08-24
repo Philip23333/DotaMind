@@ -25,9 +25,8 @@ _EXPORTS = {
     "ModelProtocolError": ("app.vnext.agent.errors", "ModelProtocolError"),
     "ModelRequested": ("app.vnext.agent.events", "ModelRequested"),
     "ModelResponded": ("app.vnext.agent.events", "ModelResponded"),
+    "TextDelta": ("app.vnext.agent.events", "TextDelta"),
     "ToolCompleted": ("app.vnext.agent.events", "ToolCompleted"),
-    "ToolError": ("app.vnext.agent.errors", "ToolError"),
-    "ToolErrorCode": ("app.vnext.agent.errors", "ToolErrorCode"),
     "ToolFailed": ("app.vnext.agent.events", "ToolFailed"),
     "ToolStarted": ("app.vnext.agent.events", "ToolStarted"),
 }

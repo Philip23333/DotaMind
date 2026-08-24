@@ -5,7 +5,7 @@ import asyncio
 import pytest
 from pydantic import BaseModel, ConfigDict
 
-from app.vnext.llm.protocol import ToolCall
+from app.vnext.llm.protocol import ModelTool, ToolCall
 from app.vnext.tools import ToolDefinition, ToolRegistry
 
 
@@ -52,9 +52,12 @@ def test_register_duplicate_names_fail_and_schemas_are_provider_neutral() -> Non
         )
 
     schema = registry.schemas()[0]
-    assert schema["type"] == "function"
-    assert schema["function"]["name"] == "echo"
-    assert schema["function"]["parameters"]["properties"]["value"]["type"] == "integer"
+    assert isinstance(schema, ModelTool)
+    assert schema.name == "echo"
+    assert schema.description == "Return the supplied value."
+    assert schema.input_schema["properties"]["value"]["type"] == "integer"
+    assert "type" not in schema.model_dump()
+    assert "function" not in schema.model_dump()
 
 
 def test_input_and_output_models_are_validated() -> None:
@@ -72,13 +75,20 @@ def test_input_and_output_models_are_validated() -> None:
 
 
 def test_unknown_tool_and_handler_exception_are_explicit_errors() -> None:
-    registry = _echo_registry(handler=lambda args: (_ for _ in ()).throw(RuntimeError("boom")))
+    secret = "provider token: sk-live-secret"
+    registry = _echo_registry(
+        handler=lambda args: (_ for _ in ()).throw(RuntimeError(secret))
+    )
     unknown = asyncio.run(registry.execute(ToolCall(id="missing-1", name="missing", arguments={})))
     failed = asyncio.run(registry.execute(_call()))
 
     assert unknown.tool_call_id == "missing-1"
     assert unknown.error is not None and unknown.error.code == "unknown_tool"
     assert failed.error is not None and failed.error.code == "tool_execution_error"
+    assert failed.error.details == {}
+    serialized = failed.model_dump_json()
+    assert secret not in serialized
+    assert "RuntimeError" not in serialized
 
 
 def test_tool_timeout_is_a_tool_result_and_not_a_success() -> None:
