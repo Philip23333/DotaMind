@@ -1,10 +1,10 @@
-# Artifacts
+# Artifact System
 
 ## Status
 
 This document defines the vNext target contract for canonical artifacts and
 bounded retrieval. It does not claim that an Artifact Store, artifact
-persistence, or `artifacts.search` and `artifacts.read` are implemented.
+persistence, or `artifact.search` and `artifact.read` are implemented.
 
 ## Definition
 
@@ -104,39 +104,23 @@ Quality metadata would let a model distinguish “not present in this artifact�
 from “not checked” or “not known.” It would prevent a short summary from
 implying that all underlying data was collected.
 
-## Access pattern
+## Retrieval principle
 
-The proposed target boundary is a bounded tool view containing identity,
-summary, coverage, and an artifact reference. The model would decide whether
-that view is enough to answer the question. If more detail is useful and a
-retrieval capability is available, the model could choose a bounded search or
-read against the reference.
+The model decides what detail it needs after receiving a bounded summary,
+coverage information, and an artifact reference. The system would provide only
+bounded retrieval capabilities:
 
-For example, a question about a player's inventory could be answered from the
-summary if inventory coverage were already present. Otherwise, the model could
-choose an artifact search or read for the relevant section and limit the
-returned slice. If the reference or section were unavailable, the retrieval
-result would preserve that state.
+- `artifact.search` would find relevant paths and bounded snippets for a
+  query within a referenced artifact.
+- `artifact.read` would return a bounded section from a referenced artifact.
 
-This is an access pattern, not a required A-to-B-to-C workflow. Calls could be
-made independently when a valid reference is already available; an artifact
-could be reused across turns; and a tool could answer directly without
-retrieval. The model would choose when to retrieve. Code would enforce
-reference validity, access boundaries, response limits, and data quality. Agent
-Runtime would transport the conversation but would not own artifact storage or
+These capabilities are proposed and are not implemented. They are independent
+data-access capabilities, not a fixed workflow. The model may choose either
+capability when a valid reference is available, and neither capability requires
+the other to be called first.
+
+The system would enforce reference validity, path and size limits, coverage,
+and explicit unavailable sections. It would never return an entire artifact by
+default or accept an unbounded request. Agent Runtime would transport the
+conversation and dispatch tools, but would not own artifact storage or
 lifecycle.
-
-## Proposed retrieval capabilities
-
-The future retrieval surface would consist of independent data-access
-capabilities:
-
-- `artifacts.search` would find bounded matching sections or references within
-  a canonical artifact.
-- `artifacts.read` would return a bounded section or path from a canonical
-  artifact.
-
-Neither capability would return the entire artifact by default. Neither
-capability would be a scenario tool, and neither would require the other to be
-called first. The capabilities are proposed for Phase 3 and are not currently
-implemented.

@@ -39,8 +39,8 @@ workflow.
 
 The following table is a proposed contract, not a claim that these target
 shapes are implemented. In particular, a future `matches.get_detail` view is
-bounded: it would return identity, summary, available coverage, and artifact
-references instead of the full underlying artifact.
+bounded: it would return a match or game summary, available coverage, and
+artifact references instead of the full underlying artifact.
 
 | Tool | Purpose | Input | Proposed output | Boundary |
 | --- | --- | --- | --- | --- |
@@ -58,22 +58,21 @@ references instead of the full underlying artifact.
 | `catalog.get_hero` | Explain a hero | Hero query or reference | Hero, abilities, and talents | Static facts only |
 | `catalog.get_item` | Explain an item | Item query or reference | Item, recipe, and attributes | Static facts only |
 
-## Future artifact retrieval capabilities
+## Artifact Inspection Tools
 
-Artifact retrieval is an independent data-access capability proposed for a
-future retrieval foundation. It is not a scenario tool and does not prescribe
-how a question must be answered.
+These are proposed, not implemented. They are independent data-access
+capabilities: the model decides whether the summary and coverage already answer
+the question or whether a bounded inspection is useful. Neither tool is a
+scenario workflow, and neither requires the other to be called first.
 
-| Tool | Purpose | Input | Proposed output | Boundary |
+| Tool | Purpose | Inputs | Proposed output | Boundary |
 | --- | --- | --- | --- | --- |
-| `artifacts.search` | Find relevant information inside a canonical artifact | Artifact reference, query, optional section and limit | Bounded matching sections or references | Would not return the whole artifact or raw provider data |
-| `artifacts.read` | Read a bounded section of a canonical artifact | Artifact reference, path, limit | Requested bounded data slice with coverage metadata | Reference, path, and size limits would be enforced |
+| `artifact.search` | Find relevant information inside a canonical artifact | `artifact_ref`, `query` | Matched paths and bounded snippets | Never returns the entire artifact or raw provider data |
+| `artifact.read` | Read a bounded section of a canonical artifact | `artifact_ref`, `path`, `limit`, `offset` | A bounded section with coverage metadata | Entire-artifact reads are forbidden; limits are enforced |
 
-The model decides whether the summary and coverage already answer the question
-or whether a bounded retrieval call would be useful. Retrieval calls could be
-made independently when a valid artifact reference is already available. If a
-section is missing or unavailable, the response would preserve that state
-rather than manufacture a value.
+If a reference or path is missing or unavailable, the response would preserve
+that state rather than manufacture a value. The model chooses detail; the
+system supplies only the bounded, retrievable view allowed by the contract.
 
 ## Response boundaries
 

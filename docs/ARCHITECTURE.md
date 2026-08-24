@@ -5,7 +5,7 @@
 This is the vNext target architecture. The checked-out Legacy code does not
 claim to implement it until each replacement is deliberately delivered.
 The artifact and retrieval boundaries below are target contracts; they do not
-claim that a Phase 3 store or retrieval tool exists today.
+claim that the planned Phase 2.x store or retrieval tools exist today.
 
 ## Principles
 
@@ -101,22 +101,11 @@ underlying data. Detailed data is obtained only when an independent retrieval
 capability is available and the model chooses that it is useful. No tool
 description may require a fixed sequence of calls.
 
-## Domain, retrieval, and provider layers
+## Domain and provider layers
 
 Domain services own entity resolution, provider selection, cross-source
 mapping, normalization, de-duplication, domain errors, and provenance. They
 produce provider-neutral canonical references and domain objects.
-
-Retrieval services own availability and access to canonical data. They can
-report existing coverage, return bounded summaries or sections, and preserve
-missing or unavailable data. They do not change entity identity merely because
-a provider has partial data. Retrieval may use the Artifact Store and provider
-adapters, but the model never reasons over provider IDs or provider schemas.
-
-The proposed Artifact Store would define the future boundary for normalized
-canonical artifacts. It would not be a raw provider-response cache and would
-not be owned by Agent Runtime. Its backend may eventually be a cache or durable
-store; that decision and implementation are separate from the runtime loop.
 
 Provider adapters own upstream transport, authentication, rate limits, retry
 policy, provider-specific models, and conversion from provider responses. Raw
@@ -127,54 +116,59 @@ match identity, OpenDota detail, and Valve catalog enrichment. The model sees a
 stable match or game summary with provenance, coverage, and references, not
 provider IDs, raw payloads, or intermediate wiring.
 
-## Artifact Architecture
+## Artifact and Retrieval Layer
 
-An artifact is defined as canonical domain data that a future store may cache
-or persist after assembly from normalized provider facts. It is intended to be
-a reusable data object, not a provider response cache and not a scenario
-workflow.
-
-Examples include:
-
-- Game Artifact
-- Player Match Artifact
-- Draft Artifact
-- Timeline Artifact
-
-The conceptual transformation is:
+This is the target contract for Phase 2.x — Artifact Foundation. It does not
+claim that an Artifact Store or retrieval tool has been implemented. The
+proposed ownership and data path are:
 
     Provider data
-      -> domain normalization
-      -> canonical artifact
+      -> Normalization
+      -> Canonical Artifact
+      -> Artifact Store
+      -> Retrieval Tools
+      -> Model
 
-The transformation describes data ownership and quality boundaries. It is not
-a required A-to-B-to-C sequence for every user request. An existing artifact
-may be reused, a bounded domain result may be sufficient, and unavailable data
-must remain explicitly unavailable.
+Provider data is translated by domain normalization into canonical artifacts.
+An artifact is reusable, normalized domain data with canonical references,
+normalized values, provenance, coverage, completeness, and known missing
+sections. It is not a raw provider-response cache. The Artifact Store is a
+future storage boundary outside model context; its cache or durable backend is
+not selected by this document.
 
-The artifact contract would carry quality metadata such as source, fetched
-time, schema version, coverage, completeness, and missing sections. Canonical
-artifact content would use domain references and normalized fields; provider
-identifiers and raw provider JSON would remain implementation details below the
-model boundary.
+Retrieval tools would expose independent, bounded views of an artifact. The
+proposed capabilities are `artifact.search` and `artifact.read`; they would
+enforce reference validity, path and size limits, and explicit unavailable
+sections. They would not expose provider IDs or raw payloads.
 
-## Model Context Boundary
+This diagram describes ownership and a possible data path, not a mandatory
+request workflow. An existing artifact may be reused, a bounded domain summary
+may be sufficient, and unavailable data must remain unavailable. The model
+decides whether more detail is useful. Agent Runtime transports messages and
+dispatches tools; it does not create, store, refresh, expire, or otherwise own
+the artifact lifecycle.
 
-The model should not receive an entire match detail, an entire game timeline,
-or raw provider JSON by default. A normal tool view contains only the bounded
-information needed to decide what to do next, for example:
+## Context Boundary
 
-- entity or artifact references
-- a concise identity and summary
+Artifacts live outside model context. The model does not receive these by
+default:
+
+- raw provider payloads
+- a full match dump
+- large domain records or an entire artifact
+
+Normal model-facing views contain only bounded information such as:
+
+- canonical entity or artifact references
+- concise match or game summaries
 - available coverage and explicit missing sections
-- source and freshness information where relevant
+- bounded retrieval results when the model chooses more detail
+- source, freshness, and uncertainty information where relevant
 
-If the question requires detail, the model may choose an available artifact
-search or read capability with an explicit bounded query or section. The
-retrieval layer enforces reference validity, limits, and availability; the
-model chooses when retrieval is useful. The model never assumes storage
-responsibility and never receives provider payloads as a substitute for a
-domain contract.
+The retrieval layer would enforce bounds and availability while the model
+chooses when retrieval is useful. Artifact storage is never a responsibility
+of Agent Runtime, and artifact retrieval is not a fixed workflow or mandatory
+sequence of calls.
 
 ## Sessions and persistence
 
@@ -207,4 +201,5 @@ budgets. It does not mask a failed tool as a successful answer.
 - A separate prompt program for each match, tournament, or player scenario
 - Separate scenario tools for every artifact section such as inventory,
   economy, or skill history
-- Treating artifact search or read as a mandatory multi-step workflow
+- Treating `artifact.search` or `artifact.read` as a mandatory multi-step
+  workflow

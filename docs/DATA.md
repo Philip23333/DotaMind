@@ -24,9 +24,9 @@ Examples include `CompetitionRef`, `MatchRef`, `GameRef`, `TeamRef`, and
 `PlayerRef`. A valid reference identifies an entity even when no detailed
 artifact is currently available.
 
-## Domain Object vs Artifact
+## Domain Entity and Artifact
 
-| | Domain object or DTO | Canonical artifact |
+| | Domain entity or DTO | Canonical artifact |
 | --- | --- | --- |
 | Primary question | What is this? | What data has been collected about this? |
 | Purpose | Communication between domain services and tools | Reusable storage and bounded retrieval |
@@ -35,8 +35,10 @@ artifact is currently available.
 | Model context | Usually suitable as a bounded tool view | Not entered by default; exposed through summaries, refs, and bounded sections |
 | Contents | Identity, normalized facts, resolution state | Canonical facts, sections, provenance, coverage, completeness, and missing data |
 
-The distinction is intentional. A tool can return a domain object and an
-artifact reference without returning the complete artifact content.
+The distinction is intentional. A domain entity identifies and describes an
+entity; an artifact records what normalized data has been collected about that
+entity. A tool can return a domain reference and an artifact reference without
+returning the complete artifact content.
 
 ## Identity
 
@@ -73,25 +75,94 @@ implementation, not a requirement to retain Legacy code structure.
 
 ## Canonical Artifacts
 
-A canonical artifact is defined as a DotaMind data object that a future
-artifact layer could create from normalized facts from one or more providers.
-It is intended for domain use and retrieval, not for mirroring an upstream
-response. Its proposed public schema would use canonical references, normalized
-values, and quality metadata. Raw provider JSON and provider-specific
-identifiers would remain below the model boundary.
+A canonical artifact is a DotaMind data object that a future artifact layer
+could create from provider data after normalization. It answers:
 
-The initial artifact vocabulary may include:
+    What normalized data has been collected about this entity?
 
-- `GameArtifact`: game identity, summary, players, draft, economy, inventory,
-  events, and their coverage
-- `PlayerMatchArtifact`: a bounded player's performance and build facts for a
-  match or game
-- `DraftArtifact`: picks, bans, and draft timing where available
-- `TimelineArtifact`: time-ordered events where the source provides them
+Artifact fields use canonical entity references and normalized values. Raw
+provider JSON, provider schemas, and provider-specific IDs remain below the
+artifact boundary. Artifact sections are data views, not reasons to create a
+specialized tool for every user question.
 
-These are canonical data shapes, not scenario-specific tools. Sections such as
-inventory, economy, and skill history are views of an artifact rather than
-reasons to create one tool per user question.
+## GameSummaryArtifact v0
+
+### Purpose
+
+`GameSummaryArtifact v0` is the first proposed game-level artifact contract.
+It is intended to support:
+
+- post-game summary
+- player overview grounded in recorded game facts
+- player build lookup
+
+The first validation example is:
+
+    “Malr1ne 第二把出了什么装备？”
+
+The artifact is a canonical, normalized view of one game. It is not a raw
+provider response and is not a precomputed answer to a particular question.
+
+### Structure
+
+The proposed v0 structure is:
+
+```text
+GameSummaryArtifact
+  game
+    match_id
+    duration
+    winner
+    teams
+
+  players[]
+    player_name
+    account_id
+    team
+    hero
+
+    stats
+      kills
+      deaths
+      assists
+      last_hits
+      denies
+
+    economy
+      gold
+      gold_spent
+      gold_per_min
+      xp_per_min
+
+    items
+      inventory
+      backpack
+      neutral
+
+    purchase_history
+    abilities
+
+  draft
+    picks
+    bans
+```
+
+`game.match_id` is a canonical match reference or normalized match
+identifier, not a provider-specific ID. Team, player, hero, item, and ability
+values use canonical references or normalized names. `account_id`, when
+available, means the normalized public player account identifier supplied by
+provider data; it is not an adapter-specific provider record or payload field.
+
+All fields in this artifact must originate in provider data. Normalization may
+convert names, units, timestamps, and identities into canonical values, but it
+must not silently invent facts. Provenance, freshness, coverage,
+completeness, and known missing sections remain part of the artifact quality
+contract.
+
+The v0 artifact explicitly excludes derived analytics such as damage
+percentage, participation rate, rating, custom score, or other computed
+performance judgments. Such fields can be added only by a future, explicit
+contract change; they are not implied by the v0 schema.
 
 ## Artifact lifecycle
 
