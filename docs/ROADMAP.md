@@ -34,6 +34,8 @@ EvidenceGraph, scenario routes, or a durable transcript dependency.
 
 ## Phase 2 — Competition and match
 
+Status: complete.
+
 Goal: make current esports discovery and match detail useful.
 
 Deliverables:

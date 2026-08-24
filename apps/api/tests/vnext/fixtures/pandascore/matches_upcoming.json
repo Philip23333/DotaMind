@@ -1,0 +1,18 @@
+[
+  {
+    "id": 30003,
+    "name": "Playoffs: OG vs Nigma Galaxy",
+    "status": "not_started",
+    "scheduled_at": "2026-08-20T12:00:00Z",
+    "serie_id": 20001,
+    "serie": {"id": 20001, "name": "The International 2026", "year": 2026},
+    "tournament_id": 60002,
+    "number_of_games": 3,
+    "opponents": [
+      {"type": "Team", "opponent": {"id": 70002, "name": "OG", "acronym": "OG"}},
+      {"type": "Team", "opponent": {"id": 70001, "name": "Nigma Galaxy", "acronym": "NGX"}}
+    ],
+    "results": [],
+    "games": []
+  }
+]

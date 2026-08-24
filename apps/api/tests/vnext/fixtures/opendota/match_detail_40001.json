@@ -1,0 +1,23 @@
+{
+  "match_id": 40001,
+  "leagueid": 9001,
+  "series_id": 0,
+  "start_time": 1786613667,
+  "duration": 3227,
+  "radiant_win": true,
+  "radiant_score": 20,
+  "dire_score": 10,
+  "radiant_team": {"team_id": 9101, "name": "Nigma Galaxy"},
+  "dire_team": {"team_id": 9102, "name": "OG"},
+  "version": 22,
+  "game_mode": 2,
+  "lobby_type": 1,
+  "picks_bans": [
+    {"order": 0, "is_pick": true, "team": 0, "hero_id": 1},
+    {"order": 1, "is_pick": false, "team": 1, "hero_id": 2}
+  ],
+  "players": [
+    {"isRadiant": true, "name": "carry", "hero_id": 1, "kills": 8, "deaths": 2, "assists": 12, "last_hits": 240, "gold_per_min": 620, "xp_per_min": 700},
+    {"isRadiant": false, "name": "offlane", "hero_id": 2, "kills": 2, "deaths": 8, "assists": 4, "last_hits": 120, "gold_per_min": 350, "xp_per_min": 420}
+  ]
+}

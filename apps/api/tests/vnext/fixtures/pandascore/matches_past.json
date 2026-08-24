@@ -1,0 +1,45 @@
+[
+  {
+    "id": 30001,
+    "name": "Round 2: NGX vs OG",
+    "status": "finished",
+    "scheduled_at": "2026-08-13T09:30:00Z",
+    "begin_at": "2026-08-13T09:34:25Z",
+    "end_at": "2026-08-13T12:25:00Z",
+    "serie_id": 20001,
+    "serie": {"id": 20001, "name": "The International 2026", "year": 2026},
+    "tournament_id": 60001,
+    "number_of_games": 3,
+    "complete": true,
+    "detailed_stats": true,
+    "opponents": [
+      {"type": "Team", "opponent": {"id": 70001, "name": "Nigma Galaxy", "acronym": "NGX"}},
+      {"type": "Team", "opponent": {"id": 70002, "name": "OG", "acronym": "OG"}}
+    ],
+    "results": [{"score": 2, "team_id": 70001}, {"score": 0, "team_id": 70002}],
+    "games": [
+      {"id": 71001, "position": 1, "status": "finished", "begin_at": "2026-08-13T09:34:25Z", "length": 3227, "match_id": 30001, "winner": {"id": 70001, "name": "Nigma Galaxy"}},
+      {"id": 71002, "position": 2, "status": "finished", "length": 4461, "match_id": 30001, "winner": {"id": 70001, "name": "Nigma Galaxy"}}
+    ]
+  },
+  {
+    "id": 30002,
+    "name": "Upper Bracket: NGX vs OG",
+    "status": "finished",
+    "scheduled_at": "2026-08-10T09:30:00Z",
+    "begin_at": "2026-08-10T09:35:00Z",
+    "end_at": "2026-08-10T11:00:00Z",
+    "serie_id": 20001,
+    "serie": {"id": 20001, "name": "The International 2026", "year": 2026},
+    "tournament_id": 60001,
+    "number_of_games": 2,
+    "opponents": [
+      {"type": "Team", "opponent": {"id": 70001, "name": "Nigma Galaxy", "acronym": "NGX"}},
+      {"type": "Team", "opponent": {"id": 70002, "name": "OG", "acronym": "OG"}}
+    ],
+    "results": [{"score": 0, "team_id": 70001}, {"score": 2, "team_id": 70002}],
+    "games": [
+      {"id": 71003, "position": 1, "status": "finished", "length": 2700, "match_id": 30002}
+    ]
+  }
+]

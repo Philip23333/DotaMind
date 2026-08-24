@@ -1,0 +1,46 @@
+[
+  {
+    "id": 20001,
+    "name": "The International 2026",
+    "full_name": "The International 2026",
+    "year": 2026,
+    "season": "2026",
+    "status": "running",
+    "begin_at": "2026-08-01T00:00:00Z",
+    "end_at": "2026-08-30T23:59:59Z",
+    "league": {"id": 501, "name": "The International"}
+  },
+  {
+    "id": 20002,
+    "name": "The International 2025",
+    "full_name": "The International 2025",
+    "year": 2025,
+    "season": "2025",
+    "status": "finished",
+    "begin_at": "2025-08-01T00:00:00Z",
+    "end_at": "2025-09-15T23:59:59Z",
+    "league": {"id": 501, "name": "The International"}
+  },
+  {
+    "id": 20001,
+    "name": "The International 2026",
+    "full_name": "The International 2026",
+    "year": 2026,
+    "season": "2026",
+    "status": "running",
+    "begin_at": "2026-08-01T00:00:00Z",
+    "end_at": "2026-08-30T23:59:59Z",
+    "league": {"id": 501, "name": "The International"}
+  },
+  {
+    "id": 20003,
+    "name": "ESL One Birmingham 2026",
+    "full_name": "ESL One Birmingham 2026",
+    "year": 2026,
+    "season": "2026",
+    "status": "finished",
+    "begin_at": "2026-03-22T00:00:00Z",
+    "end_at": "2026-03-29T23:59:59Z",
+    "league": {"id": 502, "name": "ESL One"}
+  }
+]

@@ -1,0 +1,14 @@
+[
+  {
+    "match_id": 40001,
+    "leagueid": 9001,
+    "series_id": 0,
+    "start_time": 1786613667,
+    "duration": 3227,
+    "radiant_team_id": 9101,
+    "dire_team_id": 9102,
+    "radiant_win": true,
+    "radiant_score": 20,
+    "dire_score": 10
+  }
+]

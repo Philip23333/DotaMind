@@ -1,0 +1,79 @@
+"""Thin agent-visible match tool definitions."""
+
+from __future__ import annotations
+
+from typing import Literal
+
+from pydantic import Field, model_validator
+
+from app.vnext.domain.common.models import CompetitionRef, DomainModel, GameRef, MatchRef
+from app.vnext.domain.matches.models import MatchDetail, MatchSearchResult
+from app.vnext.domain.matches.service import MatchService
+from app.vnext.tools.definition import ToolDefinition
+from app.vnext.tools.registry import ToolRegistry
+
+
+class MatchSearchInput(DomainModel):
+    query: str | None = None
+    teams: list[str] = Field(default_factory=list, max_length=2)
+    competition: CompetitionRef | None = None
+    time_scope: Literal["upcoming", "recent", "running", "all"] = "all"
+    limit: int = Field(default=10, ge=1, le=50)
+
+
+class MatchGetDetailInput(DomainModel):
+    match_ref: MatchRef | None = None
+    game_ref: GameRef | None = None
+
+    @model_validator(mode="after")
+    def require_one_reference(self) -> MatchGetDetailInput:
+        if (self.match_ref is None) == (self.game_ref is None):
+            raise ValueError("provide exactly one match_ref or game_ref")
+        return self
+
+
+def register_match_tools(
+    registry: ToolRegistry,
+    service: MatchService,
+) -> None:
+    async def search(args: MatchSearchInput) -> MatchSearchResult:
+        return await service.search(
+            query=args.query,
+            teams=args.teams,
+            competition=args.competition,
+            time_scope=args.time_scope,
+            limit=args.limit,
+        )
+
+    async def get_detail(args: MatchGetDetailInput) -> MatchDetail:
+        return await service.get_detail(match_ref=args.match_ref, game_ref=args.game_ref)
+
+    registry.register(
+        ToolDefinition(
+            name="matches.search",
+            description=(
+                "Find professional Dota 2 series by teams, competition, query, or time scope. "
+                "Returns ordered candidates without guessing among ambiguity."
+            ),
+            input_model=MatchSearchInput,
+            output_model=MatchSearchResult,
+            handler=search,
+            parallel_safe=True,
+        )
+    )
+    registry.register(
+        ToolDefinition(
+            name="matches.get_detail",
+            description=(
+                "Return normalized series facts and available game detail for one match or game. "
+                "Cross-source mapping and coverage limits remain explicit."
+            ),
+            input_model=MatchGetDetailInput,
+            output_model=MatchDetail,
+            handler=get_detail,
+            parallel_safe=True,
+        )
+    )
+
+
+__all__ = ["MatchGetDetailInput", "MatchSearchInput", "register_match_tools"]

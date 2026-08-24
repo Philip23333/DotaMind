@@ -1,0 +1,150 @@
+"""Lightweight Phase 2 composition root.
+
+Importing this module only defines configuration and factories; no HTTP client
+is created until an adapter receives its first request.
+"""
+
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass
+from pathlib import Path
+
+from dotenv import dotenv_values
+
+from app.vnext.domain.competitions.service import CompetitionService
+from app.vnext.domain.matches.service import MatchService
+from app.vnext.providers.opendota.adapter import OpenDotaAdapter
+from app.vnext.providers.pandascore.adapter import PandaScoreAdapter
+from app.vnext.tools.competitions import register_competition_tools
+from app.vnext.tools.matches import register_match_tools
+from app.vnext.tools.registry import ToolRegistry
+
+
+@dataclass(frozen=True, slots=True)
+class VNextSettings:
+    pandascore_base_url: str = "https://api.pandascore.co"
+    pandascore_token: str | None = None
+    opendota_base_url: str = "https://api.opendota.com/api"
+    opendota_api_key: str | None = None
+    pandascore_timeout_seconds: float = 20.0
+    opendota_timeout_seconds: float = 20.0
+    pandascore_max_page_size: int = 100
+    resolution_start_tolerance_seconds: int = 1800
+    resolution_duration_tolerance_seconds: int = 5
+
+    @classmethod
+    def from_env(cls) -> VNextSettings:
+        file_values = dotenv_values(Path(__file__).resolve().parents[4] / ".env")
+        return cls(
+            pandascore_base_url=_env_value(
+                "DOTAMIND_PANDASCORE_BASE_URL",
+                cls.pandascore_base_url,
+                file_values,
+            ),
+            pandascore_token=_env_value("DOTAMIND_PANDASCORE_TOKEN", None, file_values),
+            opendota_base_url=_env_value(
+                "DOTAMIND_OPENDOTA_BASE_URL",
+                cls.opendota_base_url,
+                file_values,
+            ),
+            opendota_api_key=_env_value("DOTAMIND_OPENDOTA_API_KEY", None, file_values),
+            pandascore_timeout_seconds=float(
+                _env_value("DOTAMIND_PANDASCORE_TIMEOUT_SECONDS", "20", file_values)
+            ),
+            opendota_timeout_seconds=float(
+                _env_value("DOTAMIND_OPENDOTA_TIMEOUT_SECONDS", "20", file_values)
+            ),
+            pandascore_max_page_size=int(
+                _env_value("DOTAMIND_PANDASCORE_MAX_PAGE_SIZE", "100", file_values)
+            ),
+            resolution_start_tolerance_seconds=int(
+                _env_value(
+                    "DOTAMIND_RESOLUTION_START_TOLERANCE_SECONDS",
+                    "1800",
+                    file_values,
+                )
+            ),
+            resolution_duration_tolerance_seconds=int(
+                _env_value(
+                    "DOTAMIND_RESOLUTION_DURATION_TOLERANCE_SECONDS",
+                    "5",
+                    file_values,
+                )
+            ),
+        )
+
+
+def _env_value(
+    name: str,
+    default: str | None,
+    file_values: dict[str, str | None],
+) -> str | None:
+    value = os.getenv(name)
+    if value is not None:
+        return value
+    return file_values.get(name, default)
+
+
+@dataclass(slots=True)
+class VNextServices:
+    pandascore: PandaScoreAdapter
+    opendota: OpenDotaAdapter
+    competitions: CompetitionService
+    matches: MatchService
+
+    async def aclose(self) -> None:
+        await self.pandascore.aclose()
+        await self.opendota.aclose()
+
+
+def build_vnext_services(
+    settings: VNextSettings | None = None,
+    *,
+    pandascore: PandaScoreAdapter | None = None,
+    opendota: OpenDotaAdapter | None = None,
+) -> VNextServices:
+    config = settings or VNextSettings.from_env()
+    panda_adapter = pandascore or PandaScoreAdapter(
+        base_url=config.pandascore_base_url,
+        token=config.pandascore_token,
+        request_timeout_seconds=config.pandascore_timeout_seconds,
+        max_page_size=config.pandascore_max_page_size,
+    )
+    open_adapter = opendota or OpenDotaAdapter(
+        base_url=config.opendota_base_url,
+        api_key=config.opendota_api_key,
+        request_timeout_seconds=config.opendota_timeout_seconds,
+    )
+    competition_service = CompetitionService(panda_adapter)
+    match_service = MatchService(
+        panda_adapter,
+        open_adapter,
+        competition_service=competition_service,
+    )
+    return VNextServices(
+        pandascore=panda_adapter,
+        opendota=open_adapter,
+        competitions=competition_service,
+        matches=match_service,
+    )
+
+
+def build_vnext_registry(
+    services: VNextServices | None = None,
+    *,
+    settings: VNextSettings | None = None,
+) -> ToolRegistry:
+    resolved_services = services or build_vnext_services(settings)
+    registry = ToolRegistry()
+    register_competition_tools(registry, resolved_services.competitions)
+    register_match_tools(registry, resolved_services.matches)
+    return registry
+
+
+__all__ = [
+    "VNextServices",
+    "VNextSettings",
+    "build_vnext_registry",
+    "build_vnext_services",
+]
