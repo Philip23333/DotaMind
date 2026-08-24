@@ -122,6 +122,7 @@ def build_vnext_services(
         open_adapter,
         competition_service=competition_service,
     )
+    competition_service.set_match_cache(match_service.remember_fixture)
     return VNextServices(
         pandascore=panda_adapter,
         opendota=open_adapter,

@@ -122,11 +122,14 @@ def test_match_service_detail_resolves_and_normalizes_opendota_detail() -> None:
 
     assert result.status == "unique"
     assert detail.status == "available"
-    assert detail.resolution.status == "resolved"
+    assert detail.games[0].resolution is not None
+    assert detail.games[0].resolution.status == "resolved"
+    assert detail.games[1].resolution is not None
+    assert detail.games[1].resolution.status == "insufficient_signals"
     assert detail.provenance.identity_status == "inferred_cross_source"
     assert detail.games[0].detail_status == "available"
     assert detail.games[0].scoreboard[0].kills == 8
-    assert panda.get_calls == [30001]
+    assert panda.get_calls == []
     assert opendota.detail_calls == [40001]
     serialized = detail.model_dump_json()
     for forbidden in (
@@ -142,17 +145,38 @@ def test_match_service_detail_resolves_and_normalizes_opendota_detail() -> None:
     assert "40001" not in serialized
 
 
-def test_match_detail_uses_cached_series_facts_after_pandascore_404() -> None:
-    _, match_service, _, _ = fixture_services(pandascore_detail_available=False)
+def test_match_detail_uses_cached_series_facts_without_pandascore_detail() -> None:
+    _, match_service, panda, _ = fixture_services(pandascore_detail_available=False)
     result = asyncio.run(match_service.search(query="Round 2", time_scope="recent"))
 
     detail = asyncio.run(match_service.get_detail(match_ref=result.candidates[0].ref))
 
     assert detail.status == "available"
-    assert detail.resolution.status == "resolved"
+    assert detail.games[0].resolution is not None
+    assert detail.games[0].resolution.status == "resolved"
     assert detail.match is not None
-    assert "PandaScore match detail is unavailable" in " ".join(detail.provenance.warnings)
-    assert "cached PandaScore series facts" in " ".join(detail.provenance.warnings)
+    assert panda.get_calls == []
+
+
+def test_competition_list_caches_fixture_for_match_detail_without_pandascore_detail() -> None:
+    competition_service, match_service, panda, opendota = fixture_services()
+    found = asyncio.run(competition_service.search("The International 2026", year=2026))
+
+    schedule = asyncio.run(
+        competition_service.list_matches(
+            found.candidates[0].ref,
+            time_scope="recent",
+            limit=1,
+        )
+    )
+    detail = asyncio.run(match_service.get_detail(match_ref=schedule.matches[0].ref))
+
+    assert schedule.status == "ok"
+    assert schedule.matches[0].ref == detail.match.ref  # type: ignore[union-attr]
+    assert detail.status == "available"
+    assert panda.list_calls[-1]["series_id"] == 20001
+    assert panda.get_calls == []
+    assert opendota.detail_calls == [40001]
 
 
 def test_match_detail_preserves_series_facts_when_opendota_detail_is_unavailable() -> None:
@@ -162,7 +186,12 @@ def test_match_detail_preserves_series_facts_when_opendota_detail_is_unavailable
 
     assert detail.status == "detail_unavailable"
     assert detail.match is not None
-    assert detail.resolution.status == "resolved"
+    assert detail.games[0].detail_status == "unavailable"
+    assert detail.games[0].resolution is not None
+    assert detail.games[0].resolution.status == "resolved"
+    assert detail.games[1].detail_status == "fixture_only"
+    assert detail.games[1].resolution is not None
+    assert detail.games[1].resolution.status == "insufficient_signals"
     assert "PandaScore series facts remain available" in " ".join(detail.provenance.warnings)
     assert opendota.detail_calls == [40001]
 
@@ -390,3 +419,94 @@ def _league_match(
         dire_team_id=dire,
         radiant_win=radiant_win,
     )
+
+
+def test_bo3_resolves_each_game_to_a_distinct_opendota_match() -> None:
+    _, match_service, _, opendota = fixture_services()
+    result = asyncio.run(match_service.search(query="Grand Final", time_scope="recent"))
+
+    detail = asyncio.run(match_service.get_detail(match_ref=result.candidates[0].ref))
+
+    assert result.status == "unique"
+    assert detail.status == "available"
+    assert [game.resolution.status for game in detail.games] == [
+        "resolved",
+        "resolved",
+        "resolved",
+    ]
+    assert [game.detail_status for game in detail.games] == [
+        "available",
+        "available",
+        "available",
+    ]
+    assert opendota.detail_calls == [40002, 40003, 40004]
+    assert detail.resolution.status == "resolved"
+
+
+def test_game_ref_roundtrip_resolves_only_the_selected_second_game() -> None:
+    _, match_service, _, opendota = fixture_services()
+    result = asyncio.run(match_service.search(query="Grand Final", time_scope="recent"))
+    series = asyncio.run(match_service.get_detail(match_ref=result.candidates[0].ref))
+    game_two_ref = next(game.ref for game in series.games if game.position == 2)
+    opendota.detail_calls.clear()
+
+    selected = asyncio.run(match_service.get_detail(game_ref=game_two_ref))
+
+    assert selected.status == "available"
+    assert len(selected.games) == 1
+    assert selected.games[0].position == 2
+    assert selected.games[0].resolution is not None
+    assert selected.games[0].resolution.status == "resolved"
+    assert selected.games[0].winner == series.match.teams[1].ref  # type: ignore[union-attr]
+    assert opendota.detail_calls == [40003]
+
+
+def test_game_time_missing_does_not_fallback_to_series_time() -> None:
+    row = PandaScoreMatch.model_validate(load_fixture("pandascore", "match_30001.json"))
+    normalized = normalize_panda_match(row, fetched_at=FETCHED_AT)
+
+    assert normalized.games[1].start_time is None
+    assert normalized.games[1].public.started_at is None
+
+    _, match_service, _, _ = fixture_services()
+    result = asyncio.run(match_service.search(query="Round 2", time_scope="recent"))
+    detail = asyncio.run(match_service.get_detail(match_ref=result.candidates[0].ref))
+
+    assert detail.games[1].resolution is not None
+    assert detail.games[1].resolution.status == "insufficient_signals"
+
+
+def test_game_winner_uses_game_fixture_not_series_winner() -> None:
+    _, match_service, _, _ = fixture_services()
+    result = asyncio.run(match_service.search(query="Grand Final", time_scope="recent"))
+    detail = asyncio.run(match_service.get_detail(match_ref=result.candidates[0].ref))
+
+    assert detail.match is not None
+    assert detail.match.result is not None
+    series_winner = detail.match.result.winner
+    assert series_winner == detail.games[0].winner
+    assert detail.games[1].winner != series_winner
+    assert detail.games[1].winner == detail.match.teams[1].ref
+    assert detail.games[2].winner == series_winner
+
+
+def test_one_game_opendota_failure_keeps_other_games_and_series_facts() -> None:
+    _, match_service, _, opendota = fixture_services(unavailable_detail_ids={40003})
+    result = asyncio.run(match_service.search(query="Grand Final", time_scope="recent"))
+
+    detail = asyncio.run(match_service.get_detail(match_ref=result.candidates[0].ref))
+
+    assert detail.status == "available"
+    assert detail.match is not None
+    assert [game.detail_status for game in detail.games] == [
+        "available",
+        "unavailable",
+        "available",
+    ]
+    assert [game.resolution.status for game in detail.games] == [
+        "resolved",
+        "resolved",
+        "resolved",
+    ]
+    assert opendota.detail_calls == [40002, 40003, 40004]
+    assert "PandaScore series facts remain available" in " ".join(detail.provenance.warnings)

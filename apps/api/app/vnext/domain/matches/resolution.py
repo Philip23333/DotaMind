@@ -53,6 +53,7 @@ class ResolutionDecision:
     signals: tuple[str, ...] = ()
     candidate_evidence: tuple[ResolutionEvidence, ...] = ()
     resolved_provider_match_id: int | None = None
+    resolved_team_ids: tuple[tuple[int, int], ...] = ()
     warnings: tuple[str, ...] = ()
 
 
@@ -278,6 +279,11 @@ class MatchResolutionService:
             signals=tuple(resolution_signals),
             candidate_evidence=evidence,
             resolved_provider_match_id=row.provider_id,
+            resolved_team_ids=tuple(
+                (team.fixture_id, team.provider_id)
+                for team in selected
+                if team.fixture_id is not None
+            ),
             warnings=(),
         )
 

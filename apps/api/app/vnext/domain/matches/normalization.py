@@ -155,7 +155,9 @@ def _normalize_game(
         if winner_provider_id in teams_by_provider_id
         else None
     )
-    start_at = game.begin_at or game.scheduled_at or row.begin_at or row.scheduled_at
+    # A series timestamp is not a game identity signal.  A missing game time
+    # must remain missing so the resolver can return insufficient_signals.
+    start_at = game.begin_at or game.scheduled_at
     end_at = game.end_at
     warnings: list[str] = []
     if game.complete is False:

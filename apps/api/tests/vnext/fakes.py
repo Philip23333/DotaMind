@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import inspect
-from collections.abc import AsyncIterator, Awaitable, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from typing import Any
 
 from app.vnext.llm.protocol import ModelRequest, ModelResponse, ModelTextDelta
@@ -23,6 +23,26 @@ class ScriptedModelClient:
             raise response
         if inspect.isawaitable(response):
             response = await response
+        return response
+
+
+class ScriptedTranscriptModelClient:
+    """A deterministic model script whose next turn can inspect the transcript."""
+
+    def __init__(
+        self,
+        responders: Sequence[Callable[[ModelRequest], ModelResponse]],
+    ) -> None:
+        self.responders = list(responders)
+        self.requests: list[ModelRequest] = []
+        self.responses: list[ModelResponse] = []
+
+    async def complete(self, request: ModelRequest) -> ModelResponse:
+        self.requests.append(request)
+        if not self.responders:
+            raise AssertionError("scripted transcript model ran out of responses")
+        response = self.responders.pop(0)(request)
+        self.responses.append(response)
         return response
 
 

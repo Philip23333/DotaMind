@@ -25,9 +25,9 @@ from app.vnext.domain.matches.models import (
     MatchStatus,
     TimeScope,
 )
-from app.vnext.domain.matches.normalization import normalize_panda_match
+from app.vnext.domain.matches.normalization import NormalizedPandaMatch, normalize_panda_match
 from app.vnext.providers.pandascore.adapter import PandaScoreAdapter
-from app.vnext.providers.pandascore.models import PandaScoreSeries
+from app.vnext.providers.pandascore.models import PandaScoreMatch, PandaScoreSeries
 
 
 class CompetitionService:
@@ -38,10 +38,21 @@ class CompetitionService:
         provider: PandaScoreAdapter,
         *,
         now: Callable[[], datetime] | None = None,
+        match_cache: Callable[[PandaScoreMatch, NormalizedPandaMatch, datetime], None]
+        | None = None,
     ) -> None:
         self.provider = provider
         self._now = now or (lambda: datetime.now(timezone.utc))
+        self._match_cache = match_cache
         self._competitions: dict[str, tuple[int, Competition]] = {}
+
+    def set_match_cache(
+        self,
+        callback: Callable[[PandaScoreMatch, NormalizedPandaMatch, datetime], None] | None,
+    ) -> None:
+        """Attach the in-memory match fixture cache owned by MatchService."""
+
+        self._match_cache = callback
 
     async def search(
         self,
@@ -154,6 +165,8 @@ class CompetitionService:
             seen.add(normalized.summary.ref.value)
             matches.append(normalized.summary)
             warnings.extend(normalized.summary.provenance.warnings)
+            if self._match_cache is not None:
+                self._match_cache(row, normalized, batch.fetched_at)
         matches.sort(key=_schedule_sort_key, reverse=time_scope == "recent")
         matches = matches[: max(1, limit)]
         return CompetitionMatchesResult(

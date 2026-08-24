@@ -13,7 +13,6 @@ from app.vnext.domain.common.models import (
     GameRef,
     MatchRef,
     Provenance,
-    hash_ref,
     normalize_text,
 )
 from app.vnext.domain.competitions.service import CompetitionService
@@ -48,7 +47,7 @@ from app.vnext.providers.opendota.models import (
     OpenDotaMatchDetail,
     OpenDotaTeam,
 )
-from app.vnext.providers.pandascore.adapter import PandaScoreAdapter, PandaScoreHTTPError
+from app.vnext.providers.pandascore.adapter import PandaScoreAdapter
 from app.vnext.providers.pandascore.models import PandaScoreMatch
 
 
@@ -64,6 +63,12 @@ class _KnownMatch:
 class _ResolutionAttempt:
     decision: ResolutionDecision
     game: NormalizedGame | None
+
+
+@dataclass(frozen=True, slots=True)
+class _KnownGame:
+    match_ref: str
+    game: NormalizedGame
 
 
 class MatchService:
@@ -84,7 +89,7 @@ class MatchService:
         self.resolver = resolver or MatchResolutionService()
         self._now = now or (lambda: datetime.now(timezone.utc))
         self._matches: dict[str, _KnownMatch] = {}
-        self._games: dict[str, str] = {}
+        self._games: dict[str, _KnownGame] = {}
 
     async def search(
         self,
@@ -175,89 +180,58 @@ class MatchService:
         match_ref: MatchRef | None = None,
         game_ref: GameRef | None = None,
     ) -> MatchDetail:
-        known = self._known_match(match_ref=match_ref, game_ref=game_ref)
-        if known is None:
-            return MatchDetail(
-                status="not_found",
-                match=None,
-                games=[],
-                resolution=ResolutionSummary(
-                    status="not_found",
-                    candidate_count=0,
-                    warnings=["match reference is not known to this in-memory runtime"],
-                ),
-                provenance=Provenance(
-                    sources=["pandascore"],
-                    freshness=Freshness(status="unknown"),
-                    identity_status="not_found",
-                    warnings=["match references are runtime-scoped and are not persisted"],
-                ),
-            )
-
-        pandascore_warning: str | None = None
-        try:
-            refreshed = await self.pandascore.get_match(known.provider_id)
-        except PandaScoreHTTPError as exc:
-            if exc.status_code != 404:
-                raise
-            pandascore_warning = (
-                "PandaScore match detail is unavailable; cached PandaScore series facts "
-                "were used for cross-source resolution"
-            )
-        else:
-            normalized = normalize_panda_match(
-                refreshed.item,
-                fetched_at=refreshed.fetched_at,
-                competition_ref=known.normalized.summary.competition.ref
-                if known.normalized.summary.competition
-                else None,
-                competition_name=known.normalized.competition_name,
-                competition_year=known.normalized.competition_year,
-            )
-            self._remember(refreshed.item, normalized, refreshed.fetched_at)
-            known = _KnownMatch(
-                provider_id=refreshed.item.provider_id,
-                provider_row=refreshed.item,
-                normalized=normalized,
-                fetched_at=refreshed.fetched_at,
-            )
+        target = self._known_target(match_ref=match_ref, game_ref=game_ref)
+        if target is None:
+            return _not_found_detail()
+        known, target_games = target
 
         try:
-            attempts = await self._resolve_games(known)
+            attempts = await self._resolve_games(known, games=target_games)
         except OpenDotaProviderError:
-            return self._provider_unavailable_detail(
-                known.normalized,
-                extra_warning=pandascore_warning,
-            )
-        combined = _combine_attempts(attempts)
-        if combined.decision.status != "resolved" or combined.game is None:
-            return self._unresolved_detail(
-                known.normalized,
-                combined.decision,
-                extra_warning=pandascore_warning,
+            return self._provider_unavailable_detail(known.normalized, target_games)
+
+        public_games: list[GameDetail] = []
+        detail_fetched_at: datetime | None = None
+        for attempt in attempts:
+            if attempt.game is None:
+                continue
+            if attempt.decision.status != "resolved":
+                public_games.append(_fixture_game(attempt.game, attempt.decision))
+                continue
+            resolved_match_id = attempt.decision.resolved_provider_match_id
+            if resolved_match_id is None:
+                public_games.append(_fixture_game(attempt.game, attempt.decision))
+                continue
+            try:
+                detail = await self.opendota.get_match_detail(resolved_match_id)
+            except OpenDotaProviderError:
+                public_games.append(_unavailable_game(attempt.game, attempt.decision))
+                continue
+            detail_fetched_at = detail.fetched_at
+            public_games.append(
+                _normalize_opendota_game(
+                    known.normalized,
+                    attempt.game,
+                    attempt.decision,
+                    detail.item,
+                    detail.fetched_at,
+                )
             )
 
-        try:
-            detail = await self.opendota.get_match_detail(
-                combined.decision.resolved_provider_match_id or 0
-            )
-        except OpenDotaProviderError:
-            return self._detail_unavailable(
-                known.normalized,
-                combined.decision,
-                extra_warning=pandascore_warning,
-            )
-
-        return self._available_detail(
+        return self._compose_detail(
             known.normalized,
-            combined.game,
-            combined.decision,
-            detail.item,
-            detail.fetched_at,
-            extra_warning=pandascore_warning,
+            attempts,
+            public_games,
+            detail_fetched_at=detail_fetched_at,
         )
 
-    async def _resolve_games(self, known: _KnownMatch) -> list[_ResolutionAttempt]:
+    async def _resolve_games(
+        self,
+        known: _KnownMatch,
+        *,
+        games: tuple[NormalizedGame, ...] | None = None,
+    ) -> list[_ResolutionAttempt]:
+        selected_games = games if games is not None else known.normalized.games
         competition = known.normalized.summary.competition
         if competition is None or competition.year is None:
             return [
@@ -266,8 +240,9 @@ class MatchService:
                         status="insufficient_signals",
                         warnings=("competition year is unavailable",),
                     ),
-                    game=None,
+                    game=game,
                 )
+                for game in selected_games
             ]
         leagues_batch = await self.opendota.list_leagues()
         leagues = [
@@ -309,33 +284,8 @@ class MatchService:
             )
             for provider_id, team in known.normalized.teams_by_provider_id.items()
         )
-        games = list(known.normalized.games)
-        if not games:
-            games = [
-                NormalizedGame(
-                    provider_id=known.provider_id,
-                    public=GameDetail(
-                        ref=GameRef(
-                            value=hash_ref("game", "pandascore", known.provider_id, "series")
-                        ),
-                        status=known.normalized.summary.status,
-                        started_at=known.normalized.summary.started_at,
-                        scheduled_at=known.normalized.summary.scheduled_at,
-                        ended_at=known.normalized.summary.ended_at,
-                        provenance=known.normalized.summary.provenance,
-                    ),
-                    start_time=_epoch_seconds(
-                        known.normalized.summary.started_at or known.normalized.summary.scheduled_at
-                    ),
-                    duration_seconds=_duration_seconds(
-                        known.normalized.summary.started_at,
-                        known.normalized.summary.ended_at,
-                    ),
-                    winner_provider_id=known.normalized.winner_provider_id,
-                )
-            ]
         attempts: list[_ResolutionAttempt] = []
-        for game in games:
+        for game in selected_games:
             fixture = MatchSignal(
                 provider_id=game.provider_id,
                 competition_name=known.normalized.competition_name,
@@ -354,128 +304,104 @@ class MatchService:
             attempts.append(_ResolutionAttempt(decision=decision, game=game))
         return attempts
 
-    def _available_detail(
-        self,
-        normalized: NormalizedPandaMatch,
-        game: NormalizedGame,
-        decision: ResolutionDecision,
-        detail: OpenDotaMatchDetail,
-        fetched_at: datetime,
-        *,
-        extra_warning: str | None = None,
-    ) -> MatchDetail:
-        public_game = _normalize_opendota_game(
-            normalized,
-            game,
-            detail,
-            fetched_at,
-        )
-        games = [
-            public_game if item.provider_id == game.provider_id else item.public
-            for item in normalized.games
-        ]
-        if not normalized.games:
-            games = [public_game]
-        warnings = list(normalized.summary.provenance.warnings)
-        warnings.extend(public_game.provenance.warnings)
-        if extra_warning:
-            warnings.append(extra_warning)
-        return MatchDetail(
-            status="available",
-            match=normalized.summary,
-            games=games,
-            resolution=_public_resolution(decision),
-            provenance=Provenance(
-                sources=["pandascore", "opendota"],
-                freshness=Freshness(fetched_at=fetched_at, status="fresh"),
-                identity_status="inferred_cross_source",
-                warnings=list(dict.fromkeys(warnings)),
-            ),
-        )
-
-    def _detail_unavailable(
-        self,
-        normalized: NormalizedPandaMatch,
-        decision: ResolutionDecision,
-        *,
-        extra_warning: str | None = None,
-    ) -> MatchDetail:
-        warning = "OpenDota match detail is unavailable; PandaScore series facts remain available"
-        games = [item.public for item in normalized.games]
-        warnings = [*normalized.summary.provenance.warnings, warning]
-        if extra_warning:
-            warnings.append(extra_warning)
-        return MatchDetail(
-            status="detail_unavailable",
-            match=normalized.summary,
-            games=games,
-            resolution=_public_resolution(decision),
-            provenance=Provenance(
-                sources=["pandascore"],
-                freshness=normalized.summary.provenance.freshness,
-                identity_status="inferred_cross_source",
-                warnings=list(dict.fromkeys(warnings)),
-            ),
-        )
-
     def _provider_unavailable_detail(
         self,
         normalized: NormalizedPandaMatch,
-        *,
-        extra_warning: str | None = None,
+        games: tuple[NormalizedGame, ...],
     ) -> MatchDetail:
         warning = (
             "OpenDota provider data was unavailable during identity resolution; "
             "PandaScore series facts remain available and OpenDota detail is outside coverage"
         )
-        warnings = [*normalized.summary.provenance.warnings, warning]
-        if extra_warning:
-            warnings.append(extra_warning)
+        decision = ResolutionDecision(status="insufficient_signals", warnings=(warning,))
+        attempts = [_ResolutionAttempt(decision=decision, game=game) for game in games]
+        public_games = [_fixture_game(game, decision) for game in games]
         return MatchDetail(
             status="detail_unavailable",
             match=normalized.summary,
-            games=[item.public for item in normalized.games],
-            resolution=ResolutionSummary(
-                status="insufficient_signals",
-                candidate_count=0,
-                warnings=[warning],
-            ),
+            games=public_games,
+            resolution=_aggregate_resolution(attempts),
             provenance=Provenance(
                 sources=["pandascore"],
                 freshness=normalized.summary.provenance.freshness,
                 identity_status="unresolved",
+                warnings=list(
+                    dict.fromkeys([*normalized.summary.provenance.warnings, warning])
+                ),
+            ),
+        )
+
+    def _compose_detail(
+        self,
+        normalized: NormalizedPandaMatch,
+        attempts: list[_ResolutionAttempt],
+        public_games: list[GameDetail],
+        *,
+        detail_fetched_at: datetime | None,
+    ) -> MatchDetail:
+        resolution = _aggregate_resolution(attempts)
+        available_count = sum(item.detail_status == "available" for item in public_games)
+        resolved_count = sum(item.decision.status == "resolved" for item in attempts)
+        if available_count:
+            status = "available"
+        elif resolved_count:
+            status = "detail_unavailable"
+        else:
+            status = "unresolved"
+        warnings = [*normalized.summary.provenance.warnings, *resolution.warnings]
+        warnings.extend(
+            warning
+            for game in public_games
+            for warning in game.provenance.warnings
+        )
+        if resolved_count and available_count < resolved_count:
+            warnings.append(
+                "OpenDota game detail is unavailable; PandaScore series facts remain available"
+            )
+        if not attempts:
+            warnings.append("PandaScore did not provide any game fixture for resolution")
+        sources = ["pandascore"]
+        if available_count:
+            sources.append("opendota")
+        identity_status = (
+            "inferred_cross_source"
+            if resolved_count
+            else "ambiguous"
+            if resolution.status in {"ambiguous_league", "ambiguous_team", "ambiguous_match"}
+            else "unresolved"
+        )
+        return MatchDetail(
+            status=status,
+            match=normalized.summary,
+            games=public_games,
+            resolution=resolution,
+            provenance=Provenance(
+                sources=sources,
+                freshness=Freshness(
+                    fetched_at=(
+                        detail_fetched_at
+                        or normalized.summary.provenance.freshness.fetched_at
+                    ),
+                    status=(
+                        "fresh"
+                        if detail_fetched_at
+                        else normalized.summary.provenance.freshness.status
+                    ),
+                ),
+                identity_status=identity_status,
                 warnings=list(dict.fromkeys(warnings)),
             ),
         )
 
-    def _unresolved_detail(
+    def remember_fixture(
         self,
+        row: PandaScoreMatch,
         normalized: NormalizedPandaMatch,
-        decision: ResolutionDecision,
-        *,
-        extra_warning: str | None = None,
-    ) -> MatchDetail:
-        warning = "OpenDota game-level detail is unavailable until cross-source identity resolves"
-        games = [item.public for item in normalized.games]
-        warnings = [*normalized.summary.provenance.warnings, warning]
-        if extra_warning:
-            warnings.append(extra_warning)
-        return MatchDetail(
-            status="unresolved",
-            match=normalized.summary,
-            games=games,
-            resolution=_public_resolution(decision),
-            provenance=Provenance(
-                sources=["pandascore"],
-                freshness=normalized.summary.provenance.freshness,
-                identity_status=(
-                    "ambiguous"
-                    if decision.status in {"ambiguous_league", "ambiguous_team", "ambiguous_match"}
-                    else "unresolved"
-                ),
-                warnings=list(dict.fromkeys(warnings)),
-            ),
-        )
+        fetched_at: datetime,
+    ) -> None:
+        """Cache a fixture already fetched by a Phase 2 search/list call."""
+
+        self._remember(row, normalized, fetched_at)
 
     def _remember(
         self,
@@ -490,18 +416,26 @@ class MatchService:
             fetched_at=fetched_at,
         )
         for game in normalized.games:
-            self._games[game.public.ref.value] = normalized.summary.ref.value
+            self._games[game.public.ref.value] = _KnownGame(
+                match_ref=normalized.summary.ref.value,
+                game=game,
+            )
 
-    def _known_match(
+    def _known_target(
         self,
         *,
         match_ref: MatchRef | None,
         game_ref: GameRef | None,
-    ) -> _KnownMatch | None:
+    ) -> tuple[_KnownMatch, tuple[NormalizedGame, ...]] | None:
         ref_value = match_ref.value if match_ref else None
         if game_ref is not None:
-            ref_value = self._games.get(game_ref.value)
-        return self._matches.get(ref_value) if ref_value else None
+            known_game = self._games.get(game_ref.value)
+            if known_game is None:
+                return None
+            known = self._matches.get(known_game.match_ref)
+            return (known, (known_game.game,)) if known is not None else None
+        known = self._matches.get(ref_value) if ref_value else None
+        return (known, known.normalized.games) if known is not None else None
 
 
 def _not_found_search(
@@ -525,56 +459,68 @@ def _not_found_search(
     )
 
 
-def _combine_attempts(attempts: list[_ResolutionAttempt]) -> _ResolutionAttempt:
-    if not attempts:
-        return _ResolutionAttempt(
-            decision=ResolutionDecision(status="insufficient_signals"),
-            game=None,
-        )
-    resolved = [item for item in attempts if item.decision.status == "resolved"]
-    ambiguous = [item for item in attempts if item.decision.status == "ambiguous_match"]
-    resolved_ids = {
-        item.decision.resolved_provider_match_id
-        for item in resolved
-        if item.decision.resolved_provider_match_id
-    }
-    if ambiguous or len(resolved_ids) > 1:
-        evidence = tuple(
-            evidence
-            for item in [*resolved, *ambiguous]
-            for evidence in item.decision.candidate_evidence
-        )
-        return _ResolutionAttempt(
-            decision=ResolutionDecision(
-                status="ambiguous_match",
-                candidate_count=len(evidence) or len(resolved_ids),
-                signals=tuple(
-                    dict.fromkeys(
-                        signal
-                        for item in [*resolved, *ambiguous]
-                        for signal in item.decision.signals
-                    )
-                ),
-                candidate_evidence=evidence,
-                warnings=("multiple credible game mappings remain ambiguous",),
-            ),
-            game=None,
-        )
-    if len(resolved) == 1:
-        return resolved[0]
-    priority = (
-        "ambiguous_league",
-        "ambiguous_team",
-        "insufficient_signals",
-        "league_not_found",
-        "team_not_found",
-        "not_found",
+def _not_found_detail() -> MatchDetail:
+    return MatchDetail(
+        status="not_found",
+        match=None,
+        games=[],
+        resolution=ResolutionSummary(
+            status="not_found",
+            candidate_count=0,
+            warnings=["match reference is not known to this in-memory runtime"],
+        ),
+        provenance=Provenance(
+            sources=["pandascore"],
+            freshness=Freshness(status="unknown"),
+            identity_status="not_found",
+            warnings=["match references are runtime-scoped and are not persisted"],
+        ),
     )
-    for status in priority:
-        for attempt in attempts:
-            if attempt.decision.status == status:
-                return attempt
-    return attempts[0]
+
+
+def _aggregate_resolution(attempts: list[_ResolutionAttempt]) -> ResolutionSummary:
+    if not attempts:
+        return ResolutionSummary(
+            status="insufficient_signals",
+            candidate_count=0,
+            warnings=["no game was available for resolution"],
+        )
+    statuses = [item.decision.status for item in attempts]
+    if all(status == "resolved" for status in statuses):
+        status = "resolved"
+    else:
+        priority = (
+            "ambiguous_match",
+            "ambiguous_league",
+            "ambiguous_team",
+            "insufficient_signals",
+            "league_not_found",
+            "team_not_found",
+            "not_found",
+        )
+        status = next((candidate for candidate in priority if candidate in statuses), statuses[0])
+    decisions = [item.decision for item in attempts]
+    signals = list(
+        dict.fromkeys(signal for decision in decisions for signal in decision.signals)
+    )
+    evidence = [item for decision in decisions for item in decision.candidate_evidence]
+    warnings = list(
+        dict.fromkeys(warning for decision in decisions for warning in decision.warnings)
+    )
+    return ResolutionSummary(
+        status=status,
+        candidate_count=sum(decision.candidate_count for decision in decisions),
+        signals=signals,
+        candidate_evidence=evidence,
+        start_time_delta_seconds=(
+            evidence[0].start_time_delta_seconds if len(evidence) == 1 else None
+        ),
+        duration_delta_seconds=(
+            evidence[0].duration_delta_seconds if len(evidence) == 1 else None
+        ),
+        winner_consistent=evidence[0].winner_consistent if len(evidence) == 1 else None,
+        warnings=warnings,
+    )
 
 
 def _public_resolution(decision: ResolutionDecision) -> ResolutionSummary:
@@ -602,9 +548,38 @@ def _public_resolution(decision: ResolutionDecision) -> ResolutionSummary:
     )
 
 
+def _fixture_game(game: NormalizedGame, decision: ResolutionDecision) -> GameDetail:
+    warning = list(game.public.provenance.warnings)
+    warning.extend(decision.warnings)
+    return game.public.model_copy(
+        update={
+            "resolution": _public_resolution(decision),
+            "provenance": game.public.provenance.model_copy(
+                update={"warnings": list(dict.fromkeys(warning))}
+            ),
+        }
+    )
+
+
+def _unavailable_game(game: NormalizedGame, decision: ResolutionDecision) -> GameDetail:
+    warning = "OpenDota game detail is unavailable; PandaScore game facts remain available"
+    public = _fixture_game(game, decision)
+    return public.model_copy(
+        update={
+            "detail_status": "unavailable",
+            "provenance": public.provenance.model_copy(
+                update={
+                    "warnings": list(dict.fromkeys([*public.provenance.warnings, warning]))
+                }
+            ),
+        }
+    )
+
+
 def _normalize_opendota_game(
     normalized: NormalizedPandaMatch,
     game: NormalizedGame,
+    decision: ResolutionDecision,
     detail: OpenDotaMatchDetail,
     fetched_at: datetime,
 ) -> GameDetail:
@@ -656,6 +631,7 @@ def _normalize_opendota_game(
         for item in detail.players
         if isinstance(item, dict)
     ]
+    winner = game.public.winner or _winner_from_detail(normalized, decision, detail)
     return GameDetail(
         ref=game.public.ref,
         position=game.public.position,
@@ -664,8 +640,9 @@ def _normalize_opendota_game(
         started_at=_from_epoch(detail.start_time) or game.public.started_at,
         ended_at=None,
         duration_seconds=detail.duration or game.public.duration_seconds,
-        winner=normalized.summary.result.winner if normalized.summary.result else None,
+        winner=winner,
         detail_status="available",
+        resolution=_public_resolution(decision),
         radiant_win=detail.radiant_win,
         radiant_score=detail.radiant_score,
         dire_score=detail.dire_score,
@@ -679,6 +656,32 @@ def _normalize_opendota_game(
             warnings=warnings,
         ),
     )
+
+
+def _winner_from_detail(
+    normalized: NormalizedPandaMatch,
+    decision: ResolutionDecision,
+    detail: OpenDotaMatchDetail,
+) -> object:
+    if detail.radiant_win is None:
+        return None
+    winning_side = detail.radiant_team if detail.radiant_win else detail.dire_team
+    winning_open_dota_id = (
+        winning_side.get("team_id") if isinstance(winning_side, dict) else None
+    )
+    if winning_open_dota_id is not None:
+        for fixture_id, open_dota_id in decision.resolved_team_ids:
+            if open_dota_id == winning_open_dota_id:
+                team = normalized.teams_by_provider_id.get(fixture_id)
+                if team is not None:
+                    return team.ref
+    winning_name = winning_side.get("name") if isinstance(winning_side, dict) else None
+    if winning_name:
+        normalized_name = normalize_text(str(winning_name))
+        for team in normalized.teams_by_provider_id.values():
+            if normalize_text(team.name) == normalized_name:
+                return team.ref
+    return None
 
 
 def _match_query(summary: MatchSummary, query: str | None) -> bool:

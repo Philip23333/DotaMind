@@ -1,62 +1,219 @@
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 
+from app.vnext.agent.limits import AgentLimits
+from app.vnext.agent.runtime import AgentRuntime
+from app.vnext.composition import VNextServices, build_vnext_registry
+from app.vnext.llm.protocol import (
+    AssistantMessage,
+    FinalMessage,
+    ModelRequest,
+    ModelResponse,
+    ToolCall,
+    ToolResultMessage,
+    UserMessage,
+)
+from tests.vnext.fakes import ScriptedTranscriptModelClient
 from tests.vnext.phase2_support import fixture_services
 
 
-def test_behavior_eval_tournament_status_uses_competition_and_schedule_capabilities() -> None:
-    competition_service, _, _, _ = fixture_services()
-
-    async def scenario():
-        found = await competition_service.search("The International 2026", year=2026)
-        schedule = await competition_service.list_matches(
-            found.candidates[0].ref,
-            time_scope="all",
-            limit=10,
-        )
-        return found, schedule
-
-    found, schedule = asyncio.run(scenario())
-    assert found.status == "unique"
-    assert schedule.status == "ok"
-    assert schedule.matches
-    assert all(match.competition.name == "The International 2026" for match in schedule.matches)
+def _runtime():
+    competition_service, match_service, panda, opendota = fixture_services()
+    services = VNextServices(panda, opendota, competition_service, match_service)
+    registry = build_vnext_registry(services)
+    runtime = AgentRuntime(
+        ScriptedTranscriptModelClient([]),
+        registry,
+        limits=AgentLimits(deadline_seconds=2),
+    )
+    return runtime, services, registry
 
 
-def test_behavior_eval_tournament_schedule_returns_upcoming_facts() -> None:
-    competition_service, _, _, _ = fixture_services()
-
-    async def scenario():
-        found = await competition_service.search("The International 2026", year=2026)
-        return await competition_service.list_matches(
-            found.candidates[0].ref,
-            time_scope="upcoming",
-            limit=5,
-        )
-
-    schedule = asyncio.run(scenario())
-    assert schedule.status == "ok"
-    assert len(schedule.matches) == 1
-    assert schedule.matches[0].status == "scheduled"
+def _last_tool_result(request: ModelRequest) -> dict[str, Any]:
+    for message in reversed(request.messages):
+        if isinstance(message, ToolResultMessage):
+            assert message.status == "ok"
+            assert isinstance(message.content, dict)
+            return message.content
+    raise AssertionError("scripted model expected a preceding tool result")
 
 
-def test_behavior_eval_match_detail_and_game_follow_up_keep_coverage_boundary() -> None:
-    _, match_service, _, _ = fixture_services()
+def _assistant_call(call: ToolCall) -> ModelResponse:
+    return ModelResponse.from_assistant(
+        AssistantMessage(content=None, tool_calls=[call])
+    )
 
-    async def scenario():
-        candidates = await match_service.search(
-            teams=["Nigma Galaxy", "OG"],
-            query="Round 2",
-            time_scope="recent",
-        )
-        detail = await match_service.get_detail(match_ref=candidates.candidates[0].ref)
-        follow_up = await match_service.get_detail(game_ref=detail.games[0].ref)
-        return candidates, detail, follow_up
 
-    candidates, detail, follow_up = asyncio.run(scenario())
-    assert candidates.status == "unique"
-    assert detail.status == "available"
-    assert follow_up.status == "available"
-    assert follow_up.games[0].detail_status == "available"
-    assert follow_up.provenance.identity_status == "inferred_cross_source"
+def _tool_calls(model: ScriptedTranscriptModelClient) -> list[ToolCall]:
+    return [
+        message.message.tool_calls[0]
+        for message in model.responses
+        if isinstance(message.message, AssistantMessage) and message.message.tool_calls
+    ]
+
+
+def test_behavior_scenario_a_competition_search_runs_through_runtime_and_registry() -> None:
+    runtime, _, registry = _runtime()
+    model = ScriptedTranscriptModelClient(
+        [
+            lambda request: _assistant_call(
+                ToolCall(
+                    id="competition-search",
+                    name="competitions.search",
+                    arguments={"query": "The International 2026", "year": 2026},
+                )
+            ),
+            lambda request: ModelResponse.from_final("赛事已找到"),
+        ]
+    )
+    runtime.model = model
+
+    final = asyncio.run(runtime.run([UserMessage(content="帮我查一下 The International 2026")]))
+
+    assert final == FinalMessage(content="赛事已找到")
+    assert _tool_calls(model)[0].name == "competitions.search"
+    assert [tool.name for tool in registry.list()] == [
+        "competitions.search",
+        "competitions.list_matches",
+        "matches.search",
+        "matches.get_detail",
+    ]
+    assert len(model.requests[0].tools) == 4
+
+
+def test_behavior_scenario_b_upcoming_uses_competition_ref_from_prior_tool_result() -> None:
+    runtime, _, _ = _runtime()
+    model = ScriptedTranscriptModelClient(
+        [
+            lambda request: _assistant_call(
+                ToolCall(
+                    id="competition-search",
+                    name="competitions.search",
+                    arguments={"query": "The International 2026", "year": 2026},
+                )
+            ),
+            lambda request: _assistant_call(
+                ToolCall(
+                    id="competition-matches",
+                    name="competitions.list_matches",
+                    arguments={
+                        "competition_ref": {
+                            "value": _last_tool_result(request)["candidates"][0]["ref"]["value"]
+                        },
+                        "time_scope": "upcoming",
+                    },
+                )
+            ),
+            lambda request: ModelResponse.from_final("下一场已找到"),
+        ]
+    )
+    runtime.model = model
+
+    final = asyncio.run(runtime.run([UserMessage(content="下一场什么时候？")]))
+
+    assert final.content == "下一场已找到"
+    calls = _tool_calls(model)
+    assert [call.name for call in calls] == [
+        "competitions.search",
+        "competitions.list_matches",
+    ]
+    assert calls[1].arguments["competition_ref"]["value"].startswith("competition:")
+    assert calls[1].arguments["time_scope"] == "upcoming"
+
+
+def test_behavior_scenario_c_team_search_and_match_detail_use_runtime_tool_calls() -> None:
+    runtime, _, _ = _runtime()
+    model = ScriptedTranscriptModelClient(
+        [
+            lambda request: _assistant_call(
+                ToolCall(
+                    id="match-search",
+                    name="matches.search",
+                    arguments={
+                        "teams": ["Team Alpha", "Team Beta"],
+                        "time_scope": "recent",
+                    },
+                )
+            ),
+            lambda request: _assistant_call(
+                ToolCall(
+                    id="match-detail",
+                    name="matches.get_detail",
+                    arguments={
+                        "match_ref": {
+                            "value": _last_tool_result(request)["candidates"][0]["ref"]["value"]
+                        }
+                    },
+                )
+            ),
+            lambda request: ModelResponse.from_final("这场比赛详情已返回"),
+        ]
+    )
+    runtime.model = model
+
+    final = asyncio.run(
+        runtime.run([UserMessage(content="Team Alpha 和 Team Beta 最近一次交手？")])
+    )
+
+    assert final.content == "这场比赛详情已返回"
+    calls = _tool_calls(model)
+    assert [call.name for call in calls] == ["matches.search", "matches.get_detail"]
+    assert calls[1].arguments["match_ref"]["value"].startswith("match:")
+
+
+def test_behavior_scenario_d_second_game_uses_exact_game_ref_through_runtime() -> None:
+    runtime, services, _ = _runtime()
+    model = ScriptedTranscriptModelClient(
+        [
+            lambda request: _assistant_call(
+                ToolCall(
+                    id="match-search",
+                    name="matches.search",
+                    arguments={"query": "Grand Final", "time_scope": "recent"},
+                )
+            ),
+            lambda request: _assistant_call(
+                ToolCall(
+                    id="match-detail",
+                    name="matches.get_detail",
+                    arguments={
+                        "match_ref": {
+                            "value": _last_tool_result(request)["candidates"][0]["ref"]["value"]
+                        }
+                    },
+                )
+            ),
+            lambda request: _assistant_call(
+                ToolCall(
+                    id="game-detail",
+                    name="matches.get_detail",
+                    arguments={
+                        "game_ref": {
+                            "value": next(
+                                game["ref"]["value"]
+                                for game in _last_tool_result(request)["games"]
+                                if game["position"] == 2
+                            )
+                        }
+                    },
+                )
+            ),
+            lambda request: ModelResponse.from_final("第二局是 Team Beta 获胜"),
+        ]
+    )
+    runtime.model = model
+
+    final = asyncio.run(runtime.run([UserMessage(content="第二局详细说说")]))
+
+    assert final.content == "第二局是 Team Beta 获胜"
+    assert services.opendota.detail_calls == [40002, 40003, 40004, 40003]
+    calls = _tool_calls(model)
+    assert [call.name for call in calls] == [
+        "matches.search",
+        "matches.get_detail",
+        "matches.get_detail",
+    ]
+    assert "match_ref" not in calls[-1].arguments
+    assert calls[-1].arguments["game_ref"]["value"].startswith("game:")

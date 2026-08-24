@@ -1,4 +1,6 @@
 [
   {"team_id": 9101, "name": "Nigma Galaxy", "tag": "NGX"},
-  {"team_id": 9102, "name": "OG", "tag": "OG"}
+  {"team_id": 9102, "name": "OG", "tag": "OG"},
+  {"team_id": 9111, "name": "Team Alpha", "tag": "ALP"},
+  {"team_id": 9112, "name": "Team Beta", "tag": "BET"}
 ]

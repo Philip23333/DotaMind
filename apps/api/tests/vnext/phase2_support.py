@@ -39,6 +39,7 @@ def panda_series() -> list[PandaScoreSeries]:
 def panda_matches() -> list[PandaScoreMatch]:
     rows = load_fixture("pandascore", "matches_past.json")
     rows.extend(load_fixture("pandascore", "matches_upcoming.json"))
+    rows.append(load_fixture("pandascore", "match_bo3.json"))
     return [PandaScoreMatch.model_validate(row) for row in rows]
 
 
@@ -51,14 +52,21 @@ def open_teams() -> list[OpenDotaTeam]:
 
 
 def open_league_matches() -> list[OpenDotaLeagueMatch]:
-    return [
+    rows = [
         OpenDotaLeagueMatch.model_validate(row)
         for row in load_fixture("opendota", "league_matches_9001.json")
     ]
+    rows.extend(
+        OpenDotaLeagueMatch.model_validate(row)
+        for row in load_fixture("opendota", "league_matches_9001_bo3.json")
+    )
+    return rows
 
 
-def open_detail() -> OpenDotaMatchDetail:
-    return OpenDotaMatchDetail.model_validate(load_fixture("opendota", "match_detail_40001.json"))
+def open_detail(provider_match_id: int = 40001) -> OpenDotaMatchDetail:
+    return OpenDotaMatchDetail.model_validate(
+        load_fixture("opendota", f"match_detail_{provider_match_id}.json")
+    )
 
 
 class FakePandaScore:
@@ -67,6 +75,7 @@ class FakePandaScore:
         self.matches = panda_matches()
         self.detail_available = detail_available
         self.get_calls: list[int] = []
+        self.list_calls: list[dict[str, object]] = []
 
     async def search_series(
         self,
@@ -85,6 +94,9 @@ class FakePandaScore:
         query: str | None = None,
         limit: int = 20,
     ) -> ProviderBatch[PandaScoreMatch]:
+        self.list_calls.append(
+            {"scope": scope, "series_id": series_id, "query": query, "limit": limit}
+        )
         rows = self.matches
         if scope == "recent":
             rows = [item for item in rows if item.status == "finished"]
@@ -115,12 +127,14 @@ class FakeOpenDota:
         *,
         detail_available: bool = True,
         resolution_available: bool = True,
+        unavailable_detail_ids: set[int] | None = None,
     ) -> None:
         self.leagues = open_leagues()
         self.teams = open_teams()
         self.matches = open_league_matches()
         self.detail_available = detail_available
         self.resolution_available = resolution_available
+        self.unavailable_detail_ids = unavailable_detail_ids or set()
         self.detail_calls: list[int] = []
 
     async def list_leagues(self) -> ProviderBatch[OpenDotaLeague]:
@@ -146,11 +160,9 @@ class FakeOpenDota:
 
     async def get_match_detail(self, match_id: int) -> ProviderObject[OpenDotaMatchDetail]:
         self.detail_calls.append(match_id)
-        if not self.detail_available:
+        if not self.detail_available or match_id in self.unavailable_detail_ids:
             raise OpenDotaHTTPError(503, "/matches")
-        if match_id != 40001:
-            raise AssertionError(f"unknown fixture detail {match_id}")
-        return ProviderObject(open_detail(), FETCHED_AT)
+        return ProviderObject(open_detail(match_id), FETCHED_AT)
 
 
 def fixture_services(
@@ -158,11 +170,13 @@ def fixture_services(
     pandascore_detail_available: bool = True,
     detail_available: bool = True,
     resolution_available: bool = True,
+    unavailable_detail_ids: set[int] | None = None,
 ) -> tuple[CompetitionService, MatchService, FakePandaScore, FakeOpenDota]:
     panda = FakePandaScore(detail_available=pandascore_detail_available)
     opendota = FakeOpenDota(
         detail_available=detail_available,
         resolution_available=resolution_available,
+        unavailable_detail_ids=unavailable_detail_ids,
     )
     competition_service = CompetitionService(
         panda, now=lambda: datetime(2026, 8, 14, tzinfo=timezone.utc)
@@ -173,4 +187,5 @@ def fixture_services(
         competition_service=competition_service,
         now=lambda: datetime(2026, 8, 14, tzinfo=timezone.utc),
     )
+    competition_service.set_match_cache(match_service.remember_fixture)
     return competition_service, match_service, panda, opendota

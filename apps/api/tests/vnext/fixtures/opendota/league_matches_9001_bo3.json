@@ -1,0 +1,38 @@
+[
+  {
+    "match_id": 40002,
+    "leagueid": 9001,
+    "series_id": 0,
+    "start_time": 1786701600,
+    "duration": 3000,
+    "radiant_team_id": 9111,
+    "dire_team_id": 9112,
+    "radiant_win": true,
+    "radiant_score": 30,
+    "dire_score": 20
+  },
+  {
+    "match_id": 40003,
+    "leagueid": 9001,
+    "series_id": 0,
+    "start_time": 1786708800,
+    "duration": 3200,
+    "radiant_team_id": 9111,
+    "dire_team_id": 9112,
+    "radiant_win": false,
+    "radiant_score": 18,
+    "dire_score": 28
+  },
+  {
+    "match_id": 40004,
+    "leagueid": 9001,
+    "series_id": 0,
+    "start_time": 1786716000,
+    "duration": 2800,
+    "radiant_team_id": 9111,
+    "dire_team_id": 9112,
+    "radiant_win": true,
+    "radiant_score": 26,
+    "dire_score": 19
+  }
+]

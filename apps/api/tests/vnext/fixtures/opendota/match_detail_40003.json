@@ -1,0 +1,14 @@
+{
+  "match_id": 40003,
+  "leagueid": 9001,
+  "start_time": 1786708800,
+  "duration": 3200,
+  "radiant_win": false,
+  "radiant_score": 18,
+  "dire_score": 28,
+  "radiant_team": {"team_id": 9111, "name": "Team Alpha"},
+  "dire_team": {"team_id": 9112, "name": "Team Beta"},
+  "version": 22,
+  "picks_bans": [],
+  "players": []
+}

@@ -98,6 +98,23 @@ class MatchSearchResult(DomainModel):
     provenance: Provenance
 
 
+class ResolutionEvidence(DomainModel):
+    start_time_delta_seconds: float | None = None
+    duration_delta_seconds: float | None = None
+    winner_consistent: bool | None = None
+
+
+class ResolutionSummary(DomainModel):
+    status: ResolutionStatus
+    candidate_count: int = Field(ge=0)
+    signals: list[str] = Field(default_factory=list)
+    start_time_delta_seconds: float | None = None
+    duration_delta_seconds: float | None = None
+    winner_consistent: bool | None = None
+    candidate_evidence: list[ResolutionEvidence] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
 class DraftPick(DomainModel):
     order: int | None = None
     action: Literal["pick", "ban", "unknown"] = "unknown"
@@ -129,6 +146,7 @@ class GameSummary(DomainModel):
 
 class GameDetail(GameSummary):
     detail_status: Literal["available", "fixture_only", "unavailable"] = "fixture_only"
+    resolution: ResolutionSummary | None = None
     radiant_win: bool | None = None
     radiant_score: int | None = None
     dire_score: int | None = None
@@ -138,23 +156,6 @@ class GameDetail(GameSummary):
 
 
 Game = GameDetail
-
-
-class ResolutionEvidence(DomainModel):
-    start_time_delta_seconds: float | None = None
-    duration_delta_seconds: float | None = None
-    winner_consistent: bool | None = None
-
-
-class ResolutionSummary(DomainModel):
-    status: ResolutionStatus
-    candidate_count: int = Field(ge=0)
-    signals: list[str] = Field(default_factory=list)
-    start_time_delta_seconds: float | None = None
-    duration_delta_seconds: float | None = None
-    winner_consistent: bool | None = None
-    candidate_evidence: list[ResolutionEvidence] = Field(default_factory=list)
-    warnings: list[str] = Field(default_factory=list)
 
 
 class MatchDetail(DomainModel):
