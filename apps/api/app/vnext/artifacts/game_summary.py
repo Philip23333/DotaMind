@@ -1,0 +1,189 @@
+"""Canonical, provider-neutral data models for one Dota game summary."""
+
+from datetime import datetime
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class _GameSummaryModel(BaseModel):
+    """Reject fields that are outside the v0 canonical artifact contract."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class CatalogValue(_GameSummaryModel):
+    """A catalog-backed value whose source identifier or name may be missing."""
+
+    id: int | None = None
+    name: str | None = None
+
+
+class GameInfo(_GameSummaryModel):
+    """Canonical native identity and recorded facts for the game."""
+
+    valve_match_id: int
+    start_time: datetime | None = None
+    duration_seconds: int | None = None
+    winner: Literal["radiant", "dire"] | None = None
+    game_mode: CatalogValue = Field(default_factory=CatalogValue)
+    lobby_type: CatalogValue = Field(default_factory=CatalogValue)
+
+
+class TeamSummary(_GameSummaryModel):
+    """Recorded team facts for one side of a game."""
+
+    valve_team_id: int | None = None
+    name: str | None = None
+    score: int | None = None
+
+
+class Teams(_GameSummaryModel):
+    """Stable radiant and dire team structure."""
+
+    radiant: TeamSummary = Field(default_factory=TeamSummary)
+    dire: TeamSummary = Field(default_factory=TeamSummary)
+
+
+class PlayerIdentity(_GameSummaryModel):
+    """Persistent player identity facts, distinct from game placement."""
+
+    steam_account_id: int | None = None
+    registered_name: str | None = None
+    persona_name: str | None = None
+
+
+class Hero(_GameSummaryModel):
+    """Canonical hero identity recorded for one player."""
+
+    id: int
+    name: str | None = None
+
+
+class PlayerStats(_GameSummaryModel):
+    """Recorded scoreboard facts without derived analytics."""
+
+    level: int | None = None
+    kills: int | None = None
+    deaths: int | None = None
+    assists: int | None = None
+    last_hits: int | None = None
+    denies: int | None = None
+
+
+class PlayerEconomy(_GameSummaryModel):
+    """Recorded economy facts without derived total gold or experience."""
+
+    net_worth: int | None = None
+    gold_per_min: int | None = None
+    xp_per_min: int | None = None
+
+
+class CanonicalItem(_GameSummaryModel):
+    """One catalog-normalized item or neutral enhancement."""
+
+    id: int
+    name: str | None = None
+
+
+class ItemSlot(_GameSummaryModel):
+    """One stable inventory or backpack slot, including empty slots."""
+
+    slot: int
+    id: int | None = None
+    name: str | None = None
+
+
+class NeutralItems(_GameSummaryModel):
+    """Stable neutral item and enhancement structure."""
+
+    item: CanonicalItem | None = None
+    enhancement: CanonicalItem | None = None
+
+
+class PlayerItems(_GameSummaryModel):
+    """Item views with stable neutral structure and slot collections."""
+
+    inventory: list[ItemSlot] = Field(default_factory=list)
+    backpack: list[ItemSlot] = Field(default_factory=list)
+    neutral: NeutralItems = Field(default_factory=NeutralItems)
+
+
+class PurchaseEvent(_GameSummaryModel):
+    """One purchase event in source order."""
+
+    time_seconds: int
+    item_id: int
+    item_name: str | None = None
+
+
+class AbilityUpgrade(_GameSummaryModel):
+    """One skill-up event, rather than a hero ability catalog entry."""
+
+    level: int
+    time_seconds: int
+    ability_id: int
+    ability_name: str | None = None
+
+
+class PlayerGameSummary(_GameSummaryModel):
+    """One player's canonical facts and game-specific placement."""
+
+    identity: PlayerIdentity
+    side: Literal["radiant", "dire"]
+    player_slot: int
+    hero: Hero
+    stats: PlayerStats = Field(default_factory=PlayerStats)
+    economy: PlayerEconomy = Field(default_factory=PlayerEconomy)
+    items: PlayerItems = Field(default_factory=PlayerItems)
+    purchase_history: list[PurchaseEvent] = Field(default_factory=list)
+    ability_upgrades: list[AbilityUpgrade] = Field(default_factory=list)
+
+
+class DraftEvent(_GameSummaryModel):
+    """One pick or ban, with order retained in its separate collection."""
+
+    order: int
+    side: Literal["radiant", "dire"]
+    hero_id: int
+    hero_name: str | None = None
+
+
+class Draft(_GameSummaryModel):
+    """Stable draft structure even when no draft data is available."""
+
+    picks: list[DraftEvent] = Field(default_factory=list)
+    bans: list[DraftEvent] = Field(default_factory=list)
+
+
+class GameSummaryArtifact(_GameSummaryModel):
+    """Provider-neutral canonical Dota facts for one game."""
+
+    artifact_type: Literal["game_summary"] = "game_summary"
+    schema_version: Literal["1"] = "1"
+    game: GameInfo
+    teams: Teams
+    players: list[PlayerGameSummary] = Field(default_factory=list)
+    draft: Draft = Field(default_factory=Draft)
+
+
+__all__ = [
+    "AbilityUpgrade",
+    "CanonicalItem",
+    "CatalogValue",
+    "Draft",
+    "DraftEvent",
+    "GameInfo",
+    "GameSummaryArtifact",
+    "Hero",
+    "ItemSlot",
+    "NeutralItems",
+    "PlayerEconomy",
+    "PlayerGameSummary",
+    "PlayerIdentity",
+    "PlayerItems",
+    "PlayerStats",
+    "PurchaseEvent",
+    "TeamSummary",
+    "Teams",
+]

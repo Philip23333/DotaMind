@@ -111,10 +111,15 @@ Provider adapters own upstream transport, authentication, rate limits, retry
 policy, provider-specific models, and conversion from provider responses. Raw
 provider JSON stays below this boundary and is never exposed to the model.
 
+Provider-private resource IDs also stay below the artifact boundary. Canonical
+Dota/Valve-native identifiers may cross it when they express domain identity:
+for example, Valve match or team IDs, Steam account IDs, and hero, item, or
+ability IDs are allowed; PandaScore resource IDs are not.
+
 For example, MatchService can combine a PandaScore fixture, a resolved Valve
 match identity, OpenDota detail, and Valve catalog enrichment. The model sees a
 stable match or game summary with provenance, coverage, and references, not
-provider IDs, raw payloads, or intermediate wiring.
+provider-private IDs, raw payloads, or intermediate wiring.
 
 ## Artifact and Retrieval Layer
 
@@ -139,7 +144,7 @@ not selected by this document.
 Retrieval tools would expose independent, bounded views of an artifact. The
 proposed capabilities are `artifact.search` and `artifact.read`; they would
 enforce reference validity, path and size limits, and explicit unavailable
-sections. They would not expose provider IDs or raw payloads.
+sections. They would not expose provider-private IDs or raw payloads.
 
 This diagram describes ownership and a possible data path, not a mandatory
 request workflow. An existing artifact may be reused, a bounded domain summary

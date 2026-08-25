@@ -54,14 +54,18 @@ Status: planned.
 Goal: establish a bounded, reusable artifact and retrieval boundary before
 expanding scenario capabilities.
 
-Proposed deliverables:
+Implemented deliverable:
 
-- Artifact contract and canonical artifact model
-- Artifact Store contract and backend boundary
-- `GameSummaryArtifact v0`
-- Proposed `artifact.search` and `artifact.read` capabilities
-- Bounded tool responses using summaries, canonical references, coverage, and
-  artifact references
+- `GameSummaryArtifact v0` canonical schema
+
+Planned / pending deliverables:
+
+- OpenDota-to-`GameSummaryArtifact` normalization
+- ArtifactStore integration and backend boundary
+- Bounded artifact tool results using summaries, canonical references, coverage,
+  and artifact references
+- `artifact.search` and `artifact.read` capabilities
+- Evaluation scenarios for artifact and retrieval behavior
 - Reduced default tool context through bounded retrieval
 
 Non-goals:

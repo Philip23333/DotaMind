@@ -1,5 +1,6 @@
 """Generic artifact storage contracts for the vNext foundation."""
 
+from .game_summary import GameSummaryArtifact
 from .memory import MemoryArtifactStore
 from .models import ArtifactRef
 from .protocol import Artifact
@@ -11,5 +12,6 @@ __all__ = [
     "ArtifactRef",
     "ArtifactStore",
     "ArtifactTypeMismatchError",
+    "GameSummaryArtifact",
     "MemoryArtifactStore",
 ]

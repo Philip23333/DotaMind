@@ -43,9 +43,11 @@ returning the complete artifact content.
 ## Identity
 
 Each domain object has a canonical DotaMind reference and may carry provider
-identifiers internally. Provider-specific identifiers are data-layer
+identifiers internally. Provider-private identifiers are data-layer
 implementation details, not an agent language and not part of a model-facing
-canonical artifact.
+canonical artifact. Dota/Valve-native identifiers may cross the artifact
+boundary when they identify a canonical Dota domain object, such as a Valve
+match or team, a Steam account, or a hero, item, or ability.
 
 Identity resolution must be deterministic and explainable. A unique mapping may
 be returned as resolved; zero or multiple credible candidates remain not found
@@ -81,88 +83,180 @@ could create from provider data after normalization. It answers:
     What normalized data has been collected about this entity?
 
 Artifact fields use canonical entity references and normalized values. Raw
-provider JSON, provider schemas, and provider-specific IDs remain below the
-artifact boundary. Artifact sections are data views, not reasons to create a
-specialized tool for every user question.
+provider JSON, provider schemas, and provider-private resource IDs remain
+below the artifact boundary. Canonical Dota/Valve-native IDs may remain in an
+artifact when they express domain identity. Artifact sections are data views,
+not reasons to create a specialized tool for every user question.
 
 ## GameSummaryArtifact v0
 
 ### Purpose
 
-`GameSummaryArtifact v0` is the first proposed game-level artifact contract.
-It is intended to support:
+`GameSummaryArtifact v0` defines provider-neutral, canonical Dota facts for
+one game. It is neither a provider DTO, a database record, nor a full replay
+representation. It is intended to support:
 
-- post-game summary
-- player overview grounded in recorded game facts
-- player build lookup
+- post-game scoreboard or dashboard views
+- player performance grounded in recorded game facts
+- item and build lookup
+- skill-build lookup
+- draft inspection
+- future bounded artifact retrieval
 
-The first validation example is:
-
-    “Malr1ne 第二把出了什么装备？”
-
-The artifact is a canonical, normalized view of one game. It is not a raw
-provider response and is not a precomputed answer to a particular question.
+The artifact is a canonical, normalized view of one game, not a precomputed
+answer to a particular question.
 
 ### Structure
 
-The proposed v0 structure is:
+The v0 canonical structure is:
 
 ```text
 GameSummaryArtifact
-  game
-    match_id
-    duration
-    winner
-    teams
-
-  players[]
-    player_name
-    account_id
-    team
-    hero
-
-    stats
-      kills
-      deaths
-      assists
-      last_hits
-      denies
-
-    economy
-      gold
-      gold_spent
-      gold_per_min
-      xp_per_min
-
-    items
-      inventory
-      backpack
-      neutral
-
-    purchase_history
-    abilities
-
-  draft
-    picks
-    bans
+├── artifact_type = "game_summary"
+├── schema_version = "1"
+├── game
+│   ├── valve_match_id
+│   ├── start_time
+│   ├── duration_seconds
+│   ├── winner
+│   ├── game_mode
+│   │   ├── id
+│   │   └── name
+│   └── lobby_type
+│       ├── id
+│       └── name
+├── teams
+│   ├── radiant
+│   │   ├── valve_team_id
+│   │   ├── name
+│   │   └── score
+│   └── dire
+│       ├── valve_team_id
+│       ├── name
+│       └── score
+├── players[]
+│   ├── identity
+│   │   ├── steam_account_id
+│   │   ├── registered_name
+│   │   └── persona_name
+│   ├── side
+│   ├── player_slot
+│   ├── hero
+│   │   ├── id
+│   │   └── name
+│   ├── stats
+│   │   ├── level
+│   │   ├── kills
+│   │   ├── deaths
+│   │   ├── assists
+│   │   ├── last_hits
+│   │   └── denies
+│   ├── economy
+│   │   ├── net_worth
+│   │   ├── gold_per_min
+│   │   └── xp_per_min
+│   ├── items
+│   │   ├── inventory[]
+│   │   │   ├── slot
+│   │   │   ├── id
+│   │   │   └── name
+│   │   ├── backpack[]
+│   │   │   ├── slot
+│   │   │   ├── id
+│   │   │   └── name
+│   │   └── neutral
+│   │       ├── item
+│   │       │   ├── id
+│   │       │   └── name
+│   │       └── enhancement
+│   │           ├── id
+│   │           └── name
+│   ├── purchase_history[]
+│   │   ├── time_seconds
+│   │   ├── item_id
+│   │   └── item_name
+│   └── ability_upgrades[]
+│       ├── level
+│       ├── time_seconds
+│       ├── ability_id
+│       └── ability_name
+└── draft
+    ├── picks[]
+    │   ├── order
+    │   ├── side
+    │   ├── hero_id
+    │   └── hero_name
+    └── bans[]
+        ├── order
+        ├── side
+        ├── hero_id
+        └── hero_name
 ```
 
-`game.match_id` is a canonical match reference or normalized match
-identifier, not a provider-specific ID. Team, player, hero, item, and ability
-values use canonical references or normalized names. `account_id`, when
-available, means the normalized public player account identifier supplied by
-provider data; it is not an adapter-specific provider record or payload field.
+### Identifier boundary
 
-All fields in this artifact must originate in provider data. Normalization may
-convert names, units, timestamps, and identities into canonical values, but it
-must not silently invent facts. Provenance, freshness, coverage,
-completeness, and known missing sections remain part of the artifact quality
-contract.
+Provider-private identifiers must remain below the artifact boundary. This
+includes PandaScore match, game, team, and player resource IDs, as well as
+other provider-private resource IDs. A PandaScore team ID is not a Valve team
+ID, and a PandaScore game ID is not a Valve match ID; numeric coincidence never
+permits their namespaces to be mixed.
 
-The v0 artifact explicitly excludes derived analytics such as damage
-percentage, participation rate, rating, custom score, or other computed
-performance judgments. Such fields can be added only by a future, explicit
-contract change; they are not implied by the v0 schema.
+Dota/Valve-native identifiers are canonical domain identity and may appear in
+this artifact: Valve match IDs, Valve team IDs, Steam account IDs, and hero,
+item, and ability IDs. `valve_match_id` is therefore the canonical game
+identity, rather than an ambiguous `match_id` or any provider resource ID.
+
+### Source-backed normalization and exclusions
+
+Every v0 fact is source-backed. The artifact may contain provider source facts,
+canonical semantic normalization, and static Dota catalog normalization. For
+example, normalization may represent `radiant_win` as `winner = radiant` or
+`dire`, map a source team-side code such as `0` or `1` to `radiant` or `dire`,
+and map hero, item, ability, game-mode, or lobby-type IDs to canonical catalog
+names.
+
+v0 excludes DotaMind-derived analytics and estimates. It must not add KDA,
+total gold derived from GPM, total XP derived from XPM, lane efficiency,
+teamfight participation, benchmarks, rankings, or scores. Normalization may
+make a source fact semantically canonical; it must not invent an analytical
+fact.
+
+### Player and catalog semantics
+
+Player identity is the three-field object `steam_account_id`,
+`registered_name`, and `persona_name`. There is no unified `player_name`
+fallback. `side` and `player_slot` describe that player's placement in this
+game, so they belong on each player entry rather than inside persistent
+identity.
+
+Hero, item, and ability names are catalog-normalized companions to their native
+IDs. All ordinary items, neutral items, and neutral enhancements use the same
+canonical Item Catalog: Dota item ID to catalog to `id` and canonical `name`.
+`neutral.item` and `neutral.enhancement` differ only in game-semantic role; no
+second catalog or special resolver is introduced.
+
+### Missing-data and fixed-structure semantics
+
+The artifact uses one missing-data contract:
+
+- A missing source scalar fact is `null`.
+- A missing catalog mapping preserves the native ID and uses `name = null`.
+- A missing collection is `[]`.
+- A fixed structure remains present even when its fields or nested values are
+  unavailable.
+
+The fixed objects are `game`, `teams`, each player's `stats`, `economy`, and
+`items`, `items.neutral`, and `draft`.
+
+For example, missing `purchase_history` and `ability_upgrades` are `[]`.
+Missing draft data is `draft: { picks: [], bans: [] }`. `items.neutral` always
+exists; an unavailable neutral item is represented as `item: null` and an
+unavailable enhancement as `enhancement: null`. Inventory and backpack slot
+structure is preserved even for empty slots, for example
+`{ slot: 2, id: null, name: null }`.
+
+Provenance, freshness, coverage, completeness, and known missing sections
+remain part of the artifact quality contract.
 
 ## Artifact lifecycle
 
