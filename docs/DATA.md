@@ -206,6 +206,13 @@ this artifact: Valve match IDs, Valve team IDs, Steam account IDs, and hero,
 item, and ability IDs. `valve_match_id` is therefore the canonical game
 identity, rather than an ambiguous `match_id` or any provider resource ID.
 
+### Entity resolution
+
+Canonical artifact entity representations use Valve-native hero, item, and
+ability IDs, Steam account IDs, and Valve team IDs. Provider-private IDs are
+excluded. Catalog resolution preserves the native ID and uses `name = null`
+when no catalog name is available.
+
 ### Source-backed normalization and exclusions
 
 Every v0 fact is source-backed. The artifact may contain provider source facts,

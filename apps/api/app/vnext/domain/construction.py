@@ -1,0 +1,61 @@
+"""Provider-neutral construction input for a future game artifact builder."""
+
+from datetime import datetime
+from typing import Literal
+
+from pydantic import Field
+
+from .common.models import DomainModel
+from .refs import AbilityUpgradeRef, DraftEventRef, HeroRef, ItemSlotRef, PlayerRef, TeamRef
+
+
+class GameContext(DomainModel):
+    """Source-native game facts that may be absent before construction."""
+
+    valve_match_id: int | None
+    start_time: datetime | None
+    duration_seconds: int | None
+    radiant_win: bool | None
+    game_mode_id: int | None
+    lobby_type_id: int | None
+
+
+class TeamContext(DomainModel):
+    """One side's source-native identity and recorded game facts."""
+
+    team_ref: TeamRef
+    name: str | None
+    score: int | None
+
+
+class PlayerContext(DomainModel):
+    """One player's source-native facts before catalog normalization."""
+
+    player_ref: PlayerRef
+    registered_name: str | None
+    persona_name: str | None
+    side: Literal["radiant", "dire"]
+    player_slot: int
+    hero_ref: HeroRef | None
+    item_slots: list[ItemSlotRef] = Field(default_factory=list)
+    backpack_slots: list[ItemSlotRef] = Field(default_factory=list)
+    neutral_items: list[ItemSlotRef] = Field(default_factory=list)
+    ability_upgrades: list[AbilityUpgradeRef] = Field(default_factory=list)
+
+
+class GameConstructionContext(DomainModel):
+    """Complete construction input; a later builder enforces artifact identity."""
+
+    game: GameContext
+    radiant_team: TeamContext
+    dire_team: TeamContext
+    players: list[PlayerContext] = Field(default_factory=list)
+    draft_events: list[DraftEventRef] = Field(default_factory=list)
+
+
+__all__ = [
+    "GameConstructionContext",
+    "GameContext",
+    "PlayerContext",
+    "TeamContext",
+]

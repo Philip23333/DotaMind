@@ -8,8 +8,26 @@ from typing import Any
 import httpx
 from pydantic import ValidationError
 
+from app.vnext.domain.construction import (
+    GameConstructionContext,
+    GameContext,
+    PlayerContext,
+    TeamContext,
+)
+from app.vnext.domain.refs import (
+    AbilityUpgradeRef,
+    DraftEventRef,
+    HeroRef,
+    ItemRef,
+    ItemSlotRef,
+    PlayerRef,
+    TeamRef,
+)
 from app.vnext.providers.common import ProviderBatch, ProviderObject
 from app.vnext.providers.opendota.models import (
+    OpenDotaGameConstructionMatch,
+    OpenDotaGameConstructionPlayer,
+    OpenDotaGameConstructionTeam,
     OpenDotaLeague,
     OpenDotaLeagueMatch,
     OpenDotaMatchDetail,
@@ -40,6 +58,109 @@ class OpenDotaHTTPError(OpenDotaProviderError):
 
 class OpenDotaSchemaError(OpenDotaProviderError):
     """OpenDota returned a payload outside the adapter contract."""
+
+
+class OpenDotaGameConstructionAdapter:
+    """Pure OpenDota-to-construction mapping with no transport behavior."""
+
+    def to_construction_context(
+        self,
+        source: OpenDotaGameConstructionMatch,
+    ) -> GameConstructionContext:
+        return GameConstructionContext(
+            game=GameContext(
+                valve_match_id=source.match_id,
+                start_time=(
+                    datetime.fromtimestamp(source.start_time, tz=timezone.utc)
+                    if source.start_time is not None
+                    else None
+                ),
+                duration_seconds=source.duration,
+                radiant_win=source.radiant_win,
+                game_mode_id=source.game_mode,
+                lobby_type_id=source.lobby_type,
+            ),
+            radiant_team=self._team_context(source.radiant_team, source.radiant_score),
+            dire_team=self._team_context(source.dire_team, source.dire_score),
+            players=[self._player_context(player) for player in source.players],
+            draft_events=[
+                DraftEventRef(
+                    order=event.order,
+                    side="radiant" if event.team == 0 else "dire",
+                    hero=HeroRef(valve_hero_id=event.hero_id),
+                    is_pick=event.is_pick,
+                )
+                for event in source.picks_bans
+            ],
+        )
+
+    @staticmethod
+    def _team_context(
+        source: OpenDotaGameConstructionTeam | None,
+        score: int | None,
+    ) -> TeamContext:
+        return TeamContext(
+            team_ref=TeamRef(valve_team_id=source.valve_team_id if source else None),
+            name=source.name if source else None,
+            score=score,
+        )
+
+    @classmethod
+    def _player_context(cls, source: OpenDotaGameConstructionPlayer) -> PlayerContext:
+        return PlayerContext(
+            player_ref=PlayerRef(steam_account_id=source.account_id),
+            registered_name=source.registered_name,
+            persona_name=source.persona_name,
+            side="radiant" if source.player_slot < 128 else "dire",
+            player_slot=source.player_slot,
+            hero_ref=HeroRef(valve_hero_id=source.hero_id) if source.hero_id is not None else None,
+            item_slots=[
+                cls._item_slot(slot, item_id)
+                for slot, item_id in enumerate(
+                    (
+                        source.item_0,
+                        source.item_1,
+                        source.item_2,
+                        source.item_3,
+                        source.item_4,
+                        source.item_5,
+                    )
+                )
+            ],
+            backpack_slots=[
+                cls._item_slot(slot, item_id)
+                for slot, item_id in enumerate(
+                    (source.backpack_0, source.backpack_1, source.backpack_2),
+                    start=6,
+                )
+            ],
+            neutral_items=[
+                cls._item_slot(slot, item_id)
+                for slot, item_id in enumerate(
+                    (source.item_neutral, source.item_neutral2),
+                )
+            ],
+            ability_upgrades=[
+                AbilityUpgradeRef(
+                    valve_ability_id=upgrade.ability_id,
+                    level=upgrade.level,
+                    time_seconds=upgrade.time_seconds,
+                )
+                for upgrade in source.ability_upgrades
+                if (
+                    upgrade.ability_id is not None
+                    and upgrade.level is not None
+                    and upgrade.time_seconds is not None
+                )
+            ],
+        )
+
+    @staticmethod
+    def _item_slot(slot: int, item_id: int | None) -> ItemSlotRef:
+        return ItemSlotRef(
+            slot=slot,
+            item=ItemRef(valve_item_id=item_id) if item_id not in (None, 0) else None,
+        )
 
 
 class OpenDotaAdapter:
@@ -182,6 +303,7 @@ class OpenDotaAdapter:
 __all__ = [
     "OpenDotaAdapter",
     "OpenDotaConfigurationError",
+    "OpenDotaGameConstructionAdapter",
     "OpenDotaHTTPError",
     "OpenDotaProviderError",
     "OpenDotaSchemaError",

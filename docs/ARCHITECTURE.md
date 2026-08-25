@@ -121,6 +121,31 @@ match identity, OpenDota detail, and Valve catalog enrichment. The model sees a
 stable match or game summary with provenance, coverage, and references, not
 provider-private IDs, raw payloads, or intermediate wiring.
 
+## Artifact Construction Pipeline
+
+The implemented construction boundary is layered:
+
+    Provider Data
+      -> Provider Adapter
+      -> Domain References and Construction Context
+      -> Resolvers
+      -> Artifact Builder
+      -> Canonical Artifact
+
+The provider adapter maps provider fields, nulls, and source structure into
+construction input. It does not catalog-resolve, construct an artifact, or
+access the Artifact Store. Construction references are provider-neutral native
+Dota identities such as Valve hero, item, and team IDs and Steam account IDs;
+provider-private IDs remain below this boundary.
+
+Resolvers enrich native references from an injected static Dota catalog
+dependency without introducing a Catalog Entity framework. A catalog miss
+preserves the native ID and produces `name = null`. The Artifact Builder alone
+composes `GameSummaryArtifact`; provider adapters and resolvers may not.
+
+This pipeline ends at artifact construction. It does not imply storage,
+retrieval, tool, or runtime integration.
+
 ## Artifact and Retrieval Layer
 
 This is the target contract for Phase 2.x — Artifact Foundation. It does not

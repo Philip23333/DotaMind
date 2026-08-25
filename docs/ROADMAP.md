@@ -57,10 +57,10 @@ expanding scenario capabilities.
 Implemented deliverable:
 
 - `GameSummaryArtifact v0` canonical schema
+- OpenDota-to-`GameSummaryArtifact` construction pipeline
 
 Planned / pending deliverables:
 
-- OpenDota-to-`GameSummaryArtifact` normalization
 - ArtifactStore integration and backend boundary
 - Bounded artifact tool results using summaries, canonical references, coverage,
   and artifact references

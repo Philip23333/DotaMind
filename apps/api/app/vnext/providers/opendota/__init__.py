@@ -3,6 +3,7 @@
 from app.vnext.providers.opendota.adapter import (
     OpenDotaAdapter,
     OpenDotaConfigurationError,
+    OpenDotaGameConstructionAdapter,
     OpenDotaHTTPError,
     OpenDotaProviderError,
     OpenDotaSchemaError,
@@ -12,6 +13,7 @@ from app.vnext.providers.opendota.adapter import (
 __all__ = [
     "OpenDotaAdapter",
     "OpenDotaConfigurationError",
+    "OpenDotaGameConstructionAdapter",
     "OpenDotaHTTPError",
     "OpenDotaProviderError",
     "OpenDotaSchemaError",
