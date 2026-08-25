@@ -88,13 +88,13 @@ below the artifact boundary. Canonical Dota/Valve-native IDs may remain in an
 artifact when they express domain identity. Artifact sections are data views,
 not reasons to create a specialized tool for every user question.
 
-## GameSummaryArtifact v0
+## GameSummaryArtifact schema version 2
 
 ### Purpose
 
-`GameSummaryArtifact v0` defines provider-neutral, canonical Dota facts for
-one game. It is neither a provider DTO, a database record, nor a full replay
-representation. It is intended to support:
+`GameSummaryArtifact` schema version 2 defines provider-neutral, canonical Dota
+facts for one game. It is neither a provider DTO, a database record, nor a full
+replay representation. It is intended to support:
 
 - post-game scoreboard or dashboard views
 - player performance grounded in recorded game facts
@@ -108,12 +108,12 @@ answer to a particular question.
 
 ### Structure
 
-The v0 canonical structure is:
+The schema version 2 canonical structure is:
 
 ```text
 GameSummaryArtifact
 ├── artifact_type = "game_summary"
-├── schema_version = "1"
+├── schema_version = "2"
 ├── game
 │   ├── valve_match_id
 │   ├── start_time
@@ -164,13 +164,9 @@ GameSummaryArtifact
 │   │   │   ├── slot
 │   │   │   ├── id
 │   │   │   └── name
-│   │   └── neutral
-│   │       ├── item
-│   │       │   ├── id
-│   │       │   └── name
-│   │       └── enhancement
-│   │           ├── id
-│   │           └── name
+│   │   └── neutral_items[]
+│   │       ├── id
+│   │       └── name
 │   ├── purchase_history[]
 │   │   ├── time_seconds
 │   │   ├── item_id
@@ -215,18 +211,18 @@ when no catalog name is available.
 
 ### Source-backed normalization and exclusions
 
-Every v0 fact is source-backed. The artifact may contain provider source facts,
-canonical semantic normalization, and static Dota catalog normalization. For
-example, normalization may represent `radiant_win` as `winner = radiant` or
-`dire`, map a source team-side code such as `0` or `1` to `radiant` or `dire`,
-and map hero, item, ability, game-mode, or lobby-type IDs to canonical catalog
-names.
+Every schema version 2 fact is source-backed. The artifact may contain provider
+source facts, canonical semantic normalization, and static Dota catalog
+normalization. For example, normalization may represent `radiant_win` as
+`winner = radiant` or `dire`, map a source team-side code such as `0` or `1` to
+`radiant` or `dire`, and map hero, item, ability, game-mode, or lobby-type IDs
+to canonical catalog names.
 
-v0 excludes DotaMind-derived analytics and estimates. It must not add KDA,
-total gold derived from GPM, total XP derived from XPM, lane efficiency,
-teamfight participation, benchmarks, rankings, or scores. Normalization may
-make a source fact semantically canonical; it must not invent an analytical
-fact.
+Schema version 2 excludes DotaMind-derived analytics and estimates. It must not
+add KDA, total gold derived from GPM, total XP derived from XPM, lane
+efficiency, teamfight participation, benchmarks, rankings, or scores.
+Normalization may make a source fact semantically canonical; it must not invent
+an analytical fact.
 
 ### Player and catalog semantics
 
@@ -237,10 +233,10 @@ game, so they belong on each player entry rather than inside persistent
 identity.
 
 Hero, item, and ability names are catalog-normalized companions to their native
-IDs. All ordinary items, neutral items, and neutral enhancements use the same
-canonical Item Catalog: Dota item ID to catalog to `id` and canonical `name`.
-`neutral.item` and `neutral.enhancement` differ only in game-semantic role; no
-second catalog or special resolver is introduced.
+IDs. All ordinary and neutral items use the same canonical Item Catalog: Dota
+item ID to catalog to `id` and canonical `name`. OpenDota neutral source slots
+are normalized into `neutral_items` as ordinary `CanonicalItem` entries in
+source order. There is no separate enhancement semantic.
 
 ### Missing-data and fixed-structure semantics
 
@@ -255,13 +251,11 @@ The artifact uses one missing-data contract:
   unavailable.
 
 The fixed objects are `game`, `teams`, each player's `stats`, `economy`, and
-`items`, `items.neutral`, and `draft`.
+`items`, and `draft`.
 
-For example, missing `purchase_history` and `ability_upgrades` are `[]`.
-Missing draft data is `draft: { picks: [], bans: [] }`. `items.neutral` always
-exists; an unavailable neutral item is represented as `item: null` and an
-unavailable enhancement as `enhancement: null`. Inventory and backpack slot
-structure is preserved even for empty slots, for example
+For example, missing `purchase_history`, `ability_upgrades`, and `neutral_items`
+are `[]`. Missing draft data is `draft: { picks: [], bans: [] }`. Inventory and
+backpack slot structure is preserved even for empty slots, for example
 `{ slot: 2, id: null, name: null }`.
 
 Provenance, freshness, coverage, completeness, and known missing sections

@@ -91,7 +91,7 @@ def test_complete_source_model_flows_to_a_canonical_artifact() -> None:
     artifact = builder().build(construction_context())
 
     assert artifact.artifact_type == "game_summary"
-    assert artifact.schema_version == "1"
+    assert artifact.schema_version == "2"
     assert artifact.game.valve_match_id == 8123456789
     assert artifact.game.winner == "radiant"
     assert artifact.players[0].hero.name == "Anti-Mage"
@@ -111,11 +111,31 @@ def test_neutral_source_slots_remain_positional_until_builder_shapes_artifact() 
     assert player.neutral_items[1].item is not None
 
     artifact = builder().build(context)
+    items = artifact.players[0].items
 
-    assert artifact.players[0].items.neutral.item is not None
-    assert artifact.players[0].items.neutral.item.name == "Trusty Shovel"
-    assert artifact.players[0].items.neutral.enhancement is not None
-    assert artifact.players[0].items.neutral.enhancement.name == "Mystical"
+    assert "enhancement" not in type(items).model_fields
+    assert [(item.id, item.name) for item in items.neutral_items] == [
+        (3, "Trusty Shovel"),
+        (4, "Mystical"),
+    ]
+
+    payload = deepcopy(source_payload())
+    payload["players"][0]["item_neutral"] = 0
+    artifact_with_empty_source_slot = builder().build(construction_context(payload))
+
+    assert [item.id for item in artifact_with_empty_source_slot.players[0].items.neutral_items] == [
+        4
+    ]
+
+
+def test_zero_item_id_never_reaches_canonical_item_fields() -> None:
+    artifact = builder().build(construction_context())
+    items = artifact.players[0].items
+
+    assert items.inventory[0].id is None
+    assert items.inventory[0].name is None
+    assert all(slot.id != 0 for slot in [*items.inventory, *items.backpack])
+    assert all(item.id != 0 for item in items.neutral_items)
 
 
 def test_builder_rejects_a_missing_valve_match_id() -> None:

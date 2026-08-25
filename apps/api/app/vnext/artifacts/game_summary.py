@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class _GameSummaryModel(BaseModel):
-    """Reject fields that are outside the v0 canonical artifact contract."""
+    """Reject fields that are outside the version 2 canonical artifact contract."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -80,7 +80,7 @@ class PlayerEconomy(_GameSummaryModel):
 
 
 class CanonicalItem(_GameSummaryModel):
-    """One catalog-normalized item or neutral enhancement."""
+    """One catalog-normalized item."""
 
     id: int
     name: str | None = None
@@ -94,19 +94,12 @@ class ItemSlot(_GameSummaryModel):
     name: str | None = None
 
 
-class NeutralItems(_GameSummaryModel):
-    """Stable neutral item and enhancement structure."""
-
-    item: CanonicalItem | None = None
-    enhancement: CanonicalItem | None = None
-
-
 class PlayerItems(_GameSummaryModel):
-    """Item views with stable neutral structure and slot collections."""
+    """Inventory, backpack, and neutral item collections."""
 
     inventory: list[ItemSlot] = Field(default_factory=list)
     backpack: list[ItemSlot] = Field(default_factory=list)
-    neutral: NeutralItems = Field(default_factory=NeutralItems)
+    neutral_items: list[CanonicalItem] = Field(default_factory=list)
 
 
 class PurchaseEvent(_GameSummaryModel):
@@ -157,10 +150,10 @@ class Draft(_GameSummaryModel):
 
 
 class GameSummaryArtifact(_GameSummaryModel):
-    """Provider-neutral canonical Dota facts for one game."""
+    """Provider-neutral canonical Dota facts for one game, schema version 2."""
 
     artifact_type: Literal["game_summary"] = "game_summary"
-    schema_version: Literal["1"] = "1"
+    schema_version: Literal["2"] = "2"
     game: GameInfo
     teams: Teams
     players: list[PlayerGameSummary] = Field(default_factory=list)
@@ -177,7 +170,6 @@ __all__ = [
     "GameSummaryArtifact",
     "Hero",
     "ItemSlot",
-    "NeutralItems",
     "PlayerEconomy",
     "PlayerGameSummary",
     "PlayerIdentity",

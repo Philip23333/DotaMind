@@ -1,4 +1,4 @@
-"""Contract tests for the canonical GameSummaryArtifact v0 schema."""
+"""Contract tests for the canonical GameSummaryArtifact schema version 2."""
 
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -27,7 +27,7 @@ from app.vnext.artifacts.game_summary import (
 
 
 def artifact_payload() -> dict[str, object]:
-    """Return a complete minimal v0 payload with native Dota identifiers."""
+    """Return a complete minimal version 2 payload with native Dota identifiers."""
 
     return {
         "game": {
@@ -68,10 +68,10 @@ def artifact_payload() -> dict[str, object]:
                 "items": {
                     "inventory": [{"slot": 0, "id": 50, "name": "Power Treads"}],
                     "backpack": [{"slot": 6, "id": None, "name": None}],
-                    "neutral": {
-                        "item": {"id": 287, "name": "Trusty Shovel"},
-                        "enhancement": {"id": 1700, "name": "Mystical"},
-                    },
+                    "neutral_items": [
+                        {"id": 287, "name": "Trusty Shovel"},
+                        {"id": 1700, "name": "Mystical"},
+                    ],
                 },
                 "purchase_history": [
                     {"time_seconds": 120, "item_id": 50, "item_name": "Power Treads"}
@@ -97,13 +97,17 @@ def test_minimal_artifact_has_fixed_schema_identity() -> None:
     artifact = GameSummaryArtifact.model_validate(artifact_payload())
 
     assert artifact.artifact_type == "game_summary"
-    assert artifact.schema_version == "1"
+    assert artifact.schema_version == "2"
     assert artifact.game.start_time == datetime(2026, 8, 25, 12, tzinfo=timezone.utc)
 
 
 @pytest.mark.parametrize(
     ("field", "value"),
-    [("artifact_type", "other"), ("schema_version", "2")],
+    [
+        ("artifact_type", "other"),
+        ("schema_version", "1"),
+        ("schema_version", "3"),
+    ],
 )
 def test_root_literal_contract_rejects_other_identity_values(field: str, value: str) -> None:
     payload = artifact_payload()
@@ -178,8 +182,7 @@ def test_missing_scalars_and_fixed_structures_use_the_documented_empty_shape() -
     assert player.economy == PlayerEconomy()
     assert player.items.inventory == []
     assert player.items.backpack == []
-    assert player.items.neutral.item is None
-    assert player.items.neutral.enhancement is None
+    assert player.items.neutral_items == []
     assert artifact.draft == Draft()
 
 
@@ -199,7 +202,7 @@ def test_collections_default_to_empty_lists() -> None:
     assert artifact.draft.bans == []
 
 
-def test_neutral_structure_remains_present_when_both_values_are_missing() -> None:
+def test_neutral_items_default_to_an_empty_list() -> None:
     payload = artifact_payload()
     player = payload["players"][0]
     assert isinstance(player, dict)
@@ -207,8 +210,16 @@ def test_neutral_structure_remains_present_when_both_values_are_missing() -> Non
 
     artifact = GameSummaryArtifact.model_validate(payload)
 
-    assert artifact.players[0].items.neutral.item is None
-    assert artifact.players[0].items.neutral.enhancement is None
+    assert artifact.players[0].items.neutral_items == []
+
+
+def test_neutral_values_are_canonical_item_list_entries() -> None:
+    artifact = GameSummaryArtifact.model_validate(artifact_payload())
+
+    assert artifact.players[0].items.neutral_items == [
+        CanonicalItem(id=287, name="Trusty Shovel"),
+        CanonicalItem(id=1700, name="Mystical"),
+    ]
 
 
 def test_empty_inventory_slot_is_valid() -> None:
@@ -281,7 +292,7 @@ def test_contract_has_no_provider_private_or_derived_analytics_fields() -> None:
 def test_component_models_use_only_the_documented_fields() -> None:
     assert set(Teams.model_fields) == {"radiant", "dire"}
     assert set(Hero.model_fields) == {"id", "name"}
-    assert set(PlayerItems.model_fields) == {"inventory", "backpack", "neutral"}
+    assert set(PlayerItems.model_fields) == {"inventory", "backpack", "neutral_items"}
     assert set(CanonicalItem.model_fields) == {"id", "name"}
     assert set(PurchaseEvent.model_fields) == {"time_seconds", "item_id", "item_name"}
     assert set(AbilityUpgrade.model_fields) == {

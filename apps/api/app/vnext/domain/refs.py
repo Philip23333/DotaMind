@@ -12,7 +12,7 @@ class HeroRef(DomainModel):
 
 
 class ItemRef(DomainModel):
-    """Native Valve identity for one item or neutral enhancement."""
+    """Native Valve identity for one item."""
 
     valve_item_id: int
 

@@ -1,14 +1,12 @@
 """Build a canonical game-summary artifact from provider-neutral construction input."""
 
 from app.vnext.artifacts.game_summary import (
-    CanonicalItem,
     CatalogValue,
     Draft,
     DraftEvent,
     GameInfo,
     GameSummaryArtifact,
     ItemSlot,
-    NeutralItems,
     PlayerGameSummary,
     PlayerIdentity,
     PlayerItems,
@@ -25,7 +23,7 @@ class MissingValveMatchIdError(ValueError):
 
 
 class GameSummaryBuilder:
-    """Convert construction context into the existing canonical v0 schema."""
+    """Convert construction context into the canonical schema version 2."""
 
     def __init__(
         self,
@@ -94,10 +92,11 @@ class GameSummaryBuilder:
             items=PlayerItems(
                 inventory=[self._item_slot(slot) for slot in context.item_slots],
                 backpack=[self._item_slot(slot) for slot in context.backpack_slots],
-                neutral=NeutralItems(
-                    item=self._neutral_item(context.neutral_items, 0),
-                    enhancement=self._neutral_item(context.neutral_items, 1),
-                ),
+                neutral_items=[
+                    self._item_resolver.resolve(slot.item)
+                    for slot in context.neutral_items
+                    if slot.item is not None
+                ],
             ),
             ability_upgrades=[
                 self._ability_resolver.resolve(upgrade)
@@ -123,11 +122,5 @@ class GameSummaryBuilder:
             return ItemSlot(slot=source.slot, id=None, name=None)
         item = self._item_resolver.resolve(source.item)
         return ItemSlot(slot=source.slot, id=item.id, name=item.name)
-
-    def _neutral_item(self, source: list[ItemSlotRef], index: int) -> CanonicalItem | None:
-        if index >= len(source) or source[index].item is None:
-            return None
-        return self._item_resolver.resolve(source[index].item)
-
 
 __all__ = ["GameSummaryBuilder", "MissingValveMatchIdError"]
