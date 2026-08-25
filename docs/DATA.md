@@ -240,6 +240,8 @@ second catalog or special resolver is introduced.
 The artifact uses one missing-data contract:
 
 - A missing source scalar fact is `null`.
+- A represented canonical entity requires its native identity; an object without
+  that identity is omitted rather than represented as an empty entity.
 - A missing catalog mapping preserves the native ID and uses `name = null`.
 - A missing collection is `[]`.
 - A fixed structure remains present even when its fields or nested values are
