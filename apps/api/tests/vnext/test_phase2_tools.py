@@ -6,8 +6,10 @@ import json
 from app.vnext.composition import (
     VNextSettings,
     build_vnext_registry,
+    build_vnext_runtime,
     build_vnext_services,
 )
+from app.vnext.llm.openai_compatible import OpenAICompatibleModelClient
 from app.vnext.llm.protocol import ToolCall
 from tests.vnext.phase2_support import fixture_services, fixture_vnext_services
 
@@ -28,6 +30,46 @@ def test_composition_is_lazy_and_registers_the_six_vnext_tools() -> None:
         "artifact.read",
     ]
     assert registry.get("matches.get_detail").read_only is False
+
+
+def test_vnext_runtime_uses_the_shared_llm_configuration() -> None:
+    settings = VNextSettings(
+        llm_api_key="test-key",
+        llm_base_url="https://provider.test/v1",
+        llm_model="test-model",
+        llm_timeout_seconds=12.5,
+        pandascore_token="test-token",
+    )
+
+    runtime = build_vnext_runtime(settings)
+
+    assert isinstance(runtime.model, OpenAICompatibleModelClient)
+    assert runtime.model.api_key == "test-key"
+    assert runtime.model.base_url == "https://provider.test/v1"
+    assert runtime.model.model == "test-model"
+    assert runtime.model.timeout == 12.5
+    assert [tool.name for tool in runtime.tools.list()] == [
+        "competitions.search",
+        "competitions.list_matches",
+        "matches.search",
+        "matches.get_detail",
+        "artifact.search",
+        "artifact.read",
+    ]
+
+
+def test_vnext_settings_read_shared_llm_environment(monkeypatch) -> None:
+    monkeypatch.setenv("DOTAMIND_LLM_API_KEY", "test-key")
+    monkeypatch.setenv("DOTAMIND_LLM_BASE_URL", "https://provider.test/v1")
+    monkeypatch.setenv("DOTAMIND_LLM_MODEL", "test-model")
+    monkeypatch.setenv("DOTAMIND_LLM_TIMEOUT_SECONDS", "12.5")
+
+    settings = VNextSettings.from_env()
+
+    assert settings.llm_api_key == "test-key"
+    assert settings.llm_base_url == "https://provider.test/v1"
+    assert settings.llm_model == "test-model"
+    assert settings.llm_timeout_seconds == 12.5
 
 
 def test_registry_executes_phase2_tools_and_exposes_canonical_valve_ids() -> None:

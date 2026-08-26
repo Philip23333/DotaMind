@@ -88,6 +88,11 @@ parallel calls, text streaming, cancellation, and provider-specific message
 conversion at the adapter edge. Structured JSON generation may remain useful
 for isolated tasks but is not the primary planning mechanism.
 
+`build_vnext_runtime()` composes the provider-neutral model client with the
+vNext tool registry from `apps/api/app/vnext/.env`. It uses the shared
+`DOTAMIND_LLM_*` names already used by the application; the local configuration
+file is never a repository artifact.
+
 ## Tool runtime
 
 A tool definition has a name, description, input model, output model, and

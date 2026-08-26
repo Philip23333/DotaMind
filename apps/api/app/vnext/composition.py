@@ -13,6 +13,7 @@ from pathlib import Path
 from dotenv import dotenv_values
 
 from app.integrations.valve.catalog_repository import load_default_catalog_repository
+from app.vnext.agent.runtime import AgentRuntime
 from app.vnext.artifacts import (
     ArtifactReader,
     ArtifactSearcher,
@@ -24,6 +25,7 @@ from app.vnext.artifacts.game_summary_builder import GameSummaryBuilder
 from app.vnext.domain.competitions.service import CompetitionService
 from app.vnext.domain.matches.service import MatchService
 from app.vnext.identity import AbilityResolver, HeroResolver, ItemResolver
+from app.vnext.llm.openai_compatible import OpenAICompatibleModelClient
 from app.vnext.providers.opendota.adapter import (
     OpenDotaAdapter,
     OpenDotaGameConstructionAdapter,
@@ -34,9 +36,15 @@ from app.vnext.tools.domain.competitions import register_competition_tools
 from app.vnext.tools.domain.matches import register_match_tools
 from app.vnext.tools.registry import ToolRegistry
 
+_VNEXT_ENV_PATH = Path(__file__).with_name(".env")
+
 
 @dataclass(frozen=True, slots=True)
 class VNextSettings:
+    llm_api_key: str = ""
+    llm_base_url: str = "https://api.deepseek.com"
+    llm_model: str = "deepseek-chat"
+    llm_timeout_seconds: float = 90.0
     pandascore_base_url: str = "https://api.pandascore.co"
     pandascore_token: str | None = None
     opendota_base_url: str = "https://api.opendota.com/api"
@@ -49,8 +57,20 @@ class VNextSettings:
 
     @classmethod
     def from_env(cls) -> VNextSettings:
-        file_values = dotenv_values(Path(__file__).resolve().parents[4] / ".env")
+        file_values = dotenv_values(_VNEXT_ENV_PATH)
         return cls(
+            llm_api_key=_env_value("DOTAMIND_LLM_API_KEY", "", file_values) or "",
+            llm_base_url=_env_value(
+                "DOTAMIND_LLM_BASE_URL",
+                cls.llm_base_url,
+                file_values,
+            )
+            or cls.llm_base_url,
+            llm_model=_env_value("DOTAMIND_LLM_MODEL", cls.llm_model, file_values)
+            or cls.llm_model,
+            llm_timeout_seconds=float(
+                _env_value("DOTAMIND_LLM_TIMEOUT_SECONDS", "90", file_values)
+            ),
             pandascore_base_url=_env_value(
                 "DOTAMIND_PANDASCORE_BASE_URL",
                 cls.pandascore_base_url,
@@ -197,9 +217,27 @@ def build_vnext_registry(
     return registry
 
 
+def build_vnext_runtime(
+    settings: VNextSettings | None = None,
+    *,
+    services: VNextServices | None = None,
+) -> AgentRuntime:
+    """Compose the configured provider-neutral model client and vNext tool surface."""
+
+    config = settings or VNextSettings.from_env()
+    model = OpenAICompatibleModelClient(
+        api_key=config.llm_api_key,
+        base_url=config.llm_base_url,
+        model=config.llm_model,
+        timeout=config.llm_timeout_seconds,
+    )
+    return AgentRuntime(model, build_vnext_registry(services, settings=config))
+
+
 __all__ = [
     "VNextServices",
     "VNextSettings",
     "build_vnext_registry",
+    "build_vnext_runtime",
     "build_vnext_services",
 ]
