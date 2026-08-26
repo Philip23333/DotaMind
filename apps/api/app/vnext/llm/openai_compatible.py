@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -70,8 +71,9 @@ class OpenAICompatibleModelClient:
         self._client = client
 
     async def complete(self, request: ModelRequest) -> ModelResponse:
-        response = await self._post(self._payload(request))
-        return self._parse_response(response)
+        agent_to_provider, provider_to_agent = self._tool_name_maps(request.tools)
+        response = await self._post(self._payload(request, agent_to_provider))
+        return self._parse_response(response, provider_to_agent)
 
     async def stream(
         self,
@@ -79,7 +81,8 @@ class OpenAICompatibleModelClient:
     ) -> AsyncIterator[ModelTextDelta | ModelResponse]:
         """Stream provider text deltas and one assembled terminal response."""
 
-        payload = self._payload(request)
+        agent_to_provider, provider_to_agent = self._tool_name_maps(request.tools)
+        payload = self._payload(request, agent_to_provider)
         payload["stream"] = True
 
         content_parts: list[str] = []
@@ -125,15 +128,26 @@ class OpenAICompatibleModelClient:
             tool_calls,
             finish_reason,
             usage,
+            provider_to_agent,
         )
 
-    def _payload(self, request: ModelRequest) -> dict[str, Any]:
+    def _payload(
+        self,
+        request: ModelRequest,
+        agent_to_provider: Mapping[str, str],
+    ) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "model": self.model,
-            "messages": [self._serialize_message(message) for message in request.messages],
+            "messages": [
+                self._serialize_message(message, agent_to_provider)
+                for message in request.messages
+            ],
         }
         if request.tools:
-            payload["tools"] = [self._serialize_tool(tool) for tool in request.tools]
+            payload["tools"] = [
+                self._serialize_tool(tool, agent_to_provider[tool.name])
+                for tool in request.tools
+            ]
             payload["tool_choice"] = "auto"
         return payload
 
@@ -190,7 +204,11 @@ class OpenAICompatibleModelClient:
             raise ProviderHTTPError(response.status_code, response.text)
 
     @classmethod
-    def _parse_response(cls, response: httpx.Response) -> ModelResponse:
+    def _parse_response(
+        cls,
+        response: httpx.Response,
+        provider_to_agent: Mapping[str, str],
+    ) -> ModelResponse:
         try:
             data = response.json()
         except (JSONDecodeError, ValueError) as exc:
@@ -215,7 +233,10 @@ class OpenAICompatibleModelClient:
         if raw_tool_calls is not None and not isinstance(raw_tool_calls, list):
             raise ProviderProtocolError("assistant tool_calls must be a list")
 
-        tool_calls = [cls._parse_tool_call(raw_call) for raw_call in (raw_tool_calls or [])]
+        tool_calls = [
+            cls._parse_tool_call(raw_call, provider_to_agent)
+            for raw_call in (raw_tool_calls or [])
+        ]
         finish_reason = choice.get("finish_reason")
         if finish_reason is not None and not isinstance(finish_reason, str):
             raise ProviderProtocolError("finish_reason must be a string or null")
@@ -326,6 +347,7 @@ class OpenAICompatibleModelClient:
         tool_calls: dict[int, _ToolCallAccumulator],
         finish_reason: str | None,
         usage: dict[str, Any],
+        provider_to_agent: Mapping[str, str],
     ) -> ModelResponse:
         content = "".join(content_parts) if content_parts else None
         if tool_calls:
@@ -349,7 +371,7 @@ class OpenAICompatibleModelClient:
                 assembled_calls.append(
                     ToolCall(
                         id=accumulator.call_id,
-                        name=accumulator.name,
+                        name=provider_to_agent.get(accumulator.name, accumulator.name),
                         arguments=arguments,
                     )
                 )
@@ -372,7 +394,11 @@ class OpenAICompatibleModelClient:
         return dict(usage) if isinstance(usage, Mapping) else {}
 
     @classmethod
-    def _parse_tool_call(cls, raw_call: Any) -> ToolCall:
+    def _parse_tool_call(
+        cls,
+        raw_call: Any,
+        provider_to_agent: Mapping[str, str],
+    ) -> ToolCall:
         if not isinstance(raw_call, Mapping):
             raise ProviderProtocolError("tool call must be an object")
         call_id = raw_call.get("id")
@@ -396,25 +422,51 @@ class OpenAICompatibleModelClient:
         if not isinstance(arguments, dict):
             raise MalformedToolArgumentsError("tool call arguments must decode to an object")
         try:
-            return ToolCall(id=call_id, name=name, arguments=arguments)
+            return ToolCall(
+                id=call_id,
+                name=provider_to_agent.get(name, name),
+                arguments=arguments,
+            )
         except ValueError as exc:
             raise ProviderProtocolError("tool call arguments are not a valid object") from exc
 
     @staticmethod
-    def _serialize_tool(tool: ModelTool) -> dict[str, Any]:
+    def _tool_name_maps(
+        tools: list[ModelTool],
+    ) -> tuple[dict[str, str], dict[str, str]]:
+        """Map agent names to provider-safe, unique function identifiers."""
+
+        agent_to_provider: dict[str, str] = {}
+        provider_to_agent: dict[str, str] = {}
+        for tool in tools:
+            base_name = re.sub(r"[^a-zA-Z0-9_-]", "_", tool.name)
+            provider_name = base_name
+            suffix = 2
+            while provider_name in provider_to_agent:
+                provider_name = f"{base_name}_{suffix}"
+                suffix += 1
+            agent_to_provider[tool.name] = provider_name
+            provider_to_agent[provider_name] = tool.name
+        return agent_to_provider, provider_to_agent
+
+    @staticmethod
+    def _serialize_tool(tool: ModelTool, provider_name: str) -> dict[str, Any]:
         """Convert the generic tool only at the OpenAI-compatible adapter edge."""
 
         return {
             "type": "function",
             "function": {
-                "name": tool.name,
+                "name": provider_name,
                 "description": tool.description,
                 "parameters": tool.input_schema,
             },
         }
 
     @staticmethod
-    def _serialize_message(message: Message) -> dict[str, Any]:
+    def _serialize_message(
+        message: Message,
+        agent_to_provider: Mapping[str, str],
+    ) -> dict[str, Any]:
         if message.role == "system":
             return {"role": "system", "content": message.content}
         if message.role == "user":
@@ -427,7 +479,7 @@ class OpenAICompatibleModelClient:
                         "id": call.id,
                         "type": "function",
                         "function": {
-                            "name": call.name,
+                            "name": agent_to_provider.get(call.name, call.name),
                             "arguments": json.dumps(
                                 call.arguments,
                                 ensure_ascii=False,

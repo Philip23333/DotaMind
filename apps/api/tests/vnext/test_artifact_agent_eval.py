@@ -6,6 +6,7 @@ import asyncio
 import json
 import os
 import re
+from collections.abc import Sequence
 from typing import Any
 
 import pytest
@@ -19,6 +20,8 @@ from app.vnext.identity import AbilityResolver, HeroResolver, ItemResolver
 from app.vnext.llm.openai_compatible import OpenAICompatibleModelClient
 from app.vnext.llm.protocol import (
     AssistantMessage,
+    FinalMessage,
+    Message,
     ModelRequest,
     ModelResponse,
     ToolCall,
@@ -162,6 +165,22 @@ def _failure_context(
     return f"prompt={prompt!r}\nanswer={answer!r}\ntrace={_compact_trace(calls, results)}"
 
 
+def _run_with_trace(
+    runtime: AgentRuntime,
+    model: _TracingModelClient,
+    messages: Sequence[Message],
+    prompt: str,
+) -> FinalMessage:
+    try:
+        return asyncio.run(runtime.run(messages))
+    except Exception as exc:
+        pytest.fail(
+            "agent evaluation terminated before a final answer: "
+            f"{type(exc).__name__}: {exc}\n"
+            + _failure_context(prompt, "", _tool_calls(model), _tool_results(model))
+        )
+
+
 def _contains_value(value: object, payload: Any) -> bool:
     if payload == value:
         return True
@@ -200,7 +219,7 @@ def test_artifact_agent_eval_deep_facts_and_follow_up() -> None:
         "装备和技能请保留工具结果中的英文名称。"
     )
 
-    first_final = asyncio.run(runtime.run([UserMessage(content=prompt)]))
+    first_final = _run_with_trace(runtime, model, [UserMessage(content=prompt)], prompt)
     first_calls = _tool_calls(model)
     first_results = _tool_results(model)
     first_context = _failure_context(prompt, first_final.content, first_calls, first_results)
@@ -223,7 +242,7 @@ def test_artifact_agent_eval_deep_facts_and_follow_up() -> None:
         first_final,
         UserMessage(content=follow_up_prompt),
     ]
-    second_final = asyncio.run(runtime.run(follow_up_messages))
+    second_final = _run_with_trace(runtime, model, follow_up_messages, follow_up_prompt)
     all_calls = _tool_calls(model)
     all_results = _tool_results(model)
     second_calls = all_calls[len(first_calls) :]
@@ -252,7 +271,7 @@ def test_artifact_agent_eval_missing_data_stays_grounded() -> None:
         "如果记录没有这个事实，请明确说无法确认。"
     )
 
-    final = asyncio.run(runtime.run([UserMessage(content=prompt)]))
+    final = _run_with_trace(runtime, model, [UserMessage(content=prompt)], prompt)
     calls = _tool_calls(model)
     results = _tool_results(model)
     context = _failure_context(prompt, final.content, calls, results)

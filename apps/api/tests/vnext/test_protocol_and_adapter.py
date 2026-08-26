@@ -144,6 +144,64 @@ def test_adapter_serializes_messages_tools_and_tool_result_ids() -> None:
     assert seen["headers"]["authorization"] == "Bearer test-key"
 
 
+def test_adapter_maps_provider_unsafe_tool_names_at_its_boundary() -> None:
+    seen: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["payload"] = json.loads(request.read())
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": None,
+                            "tool_calls": [
+                                {
+                                    "id": "call-2",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "matches_search",
+                                        "arguments": '{"query":"Grand Final"}',
+                                    },
+                                }
+                            ],
+                        },
+                        "finish_reason": "tool_calls",
+                    }
+                ]
+            },
+            request=request,
+        )
+
+    tool = ModelTool(
+        name="matches.search",
+        description="search matches",
+        input_schema={"type": "object"},
+    )
+    request = _request(
+        [
+            UserMessage(content="find a match"),
+            AssistantMessage(
+                content=None,
+                tool_calls=[ToolCall(id="call-1", name="matches.search", arguments={})],
+            ),
+            ToolResultMessage(tool_call_id="call-1", content={"matches": []}),
+        ],
+        [tool],
+    )
+
+    result = asyncio.run(_adapter(handler).complete(request))
+
+    assert seen["payload"]["tools"][0]["function"]["name"] == "matches_search"
+    assert (
+        seen["payload"]["messages"][1]["tool_calls"][0]["function"]["name"]
+        == "matches_search"
+    )
+    assert isinstance(result.message, AssistantMessage)
+    assert result.message.tool_calls[0].name == "matches.search"
+
+
 def _sse_body(*chunks: dict[str, Any]) -> str:
     return "".join(f"data: {json.dumps(chunk)}\n\n" for chunk in chunks) + "data: [DONE]\n\n"
 
@@ -235,6 +293,59 @@ def test_adapter_assembles_streamed_tool_call_fragments() -> None:
     assert items[0].message.tool_calls[0].id == "call-1"
     assert items[0].message.tool_calls[0].name == "echo"
     assert items[0].message.tool_calls[0].arguments == {"value": 3}
+
+
+def test_adapter_maps_streamed_provider_tool_names_back_to_agent_names() -> None:
+    seen: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["payload"] = json.loads(request.read())
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            text=_sse_body(
+                {
+                    "choices": [
+                        {
+                            "delta": {
+                                "tool_calls": [
+                                    {
+                                        "index": 0,
+                                        "id": "call-1",
+                                        "type": "function",
+                                        "function": {
+                                            "name": "matches_search",
+                                            "arguments": "{}",
+                                        },
+                                    }
+                                ]
+                            },
+                            "finish_reason": "tool_calls",
+                        }
+                    ]
+                }
+            ),
+            request=request,
+        )
+
+    items = _collect_stream(
+        _adapter(handler),
+        _request(
+            [UserMessage(content="go")],
+            [
+                ModelTool(
+                    name="matches.search",
+                    description="search matches",
+                    input_schema={"type": "object"},
+                )
+            ],
+        ),
+    )
+
+    assert seen["payload"]["tools"][0]["function"]["name"] == "matches_search"
+    assert isinstance(items[0], ModelResponse)
+    assert isinstance(items[0].message, AssistantMessage)
+    assert items[0].message.tool_calls[0].name == "matches.search"
 
 
 def test_adapter_rejects_malformed_sse_and_missing_done_marker() -> None:
