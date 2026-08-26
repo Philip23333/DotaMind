@@ -12,6 +12,22 @@ class MemoryArtifactStore:
         self._storage: dict[str, Artifact] = {}
 
     def put(self, ref: ArtifactRef, artifact: Artifact) -> None:
+        self._validate_reference(ref, artifact)
+        self._storage[ref.id] = artifact
+
+    def get(self, ref: ArtifactRef) -> Artifact:
+        try:
+            artifact = self._storage[ref.id]
+        except KeyError as exc:
+            raise ArtifactNotFoundError(f"artifact not found: {ref.id!r}") from exc
+        self._validate_reference(ref, artifact)
+        return artifact
+
+    def exists(self, ref: ArtifactRef) -> bool:
+        return ref.id in self._storage
+
+    @staticmethod
+    def _validate_reference(ref: ArtifactRef, artifact: Artifact) -> None:
         if (
             ref.artifact_type != artifact.artifact_type
             or ref.schema_version != artifact.schema_version
@@ -23,14 +39,3 @@ class MemoryArtifactStore:
                 f"received type={artifact.artifact_type!r}, "
                 f"schema_version={artifact.schema_version!r}"
             )
-
-        self._storage[ref.id] = artifact
-
-    def get(self, ref: ArtifactRef) -> Artifact:
-        try:
-            return self._storage[ref.id]
-        except KeyError as exc:
-            raise ArtifactNotFoundError(f"artifact not found: {ref.id!r}") from exc
-
-    def exists(self, ref: ArtifactRef) -> bool:
-        return ref.id in self._storage

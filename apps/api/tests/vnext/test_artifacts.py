@@ -94,3 +94,25 @@ def test_put_replaces_existing_value_when_reference_is_compatible() -> None:
     store.put(ref, second)
 
     assert store.get(ref) is second
+
+
+@pytest.mark.parametrize(
+    ("ref_type", "ref_version"),
+    [("actual", "1"), ("test", "2")],
+)
+def test_get_rejects_reference_metadata_mismatch(ref_type: str, ref_version: str) -> None:
+    store = MemoryArtifactStore()
+    stored_ref = ArtifactRef(
+        id="artifact:test:stored-mismatch",
+        artifact_type="test",
+        schema_version="1",
+    )
+    requested_ref = ArtifactRef(
+        id=stored_ref.id,
+        artifact_type=ref_type,
+        schema_version=ref_version,
+    )
+    store.put(stored_ref, TestArtifact())
+
+    with pytest.raises(ArtifactTypeMismatchError):
+        store.get(requested_ref)

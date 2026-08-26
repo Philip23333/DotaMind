@@ -69,6 +69,11 @@ section descriptors. A dotted path may address object fields and positional list
 indexes; invalid paths remain explicit errors. A missing reference remains an
 explicit tool error rather than triggering discovery or production.
 
+Retrieval failures preserve stable model-visible categories: `artifact_not_found`
+for a missing reference, `artifact_path_not_found` for an invalid structural path,
+and `artifact_type_mismatch` when stored artifact metadata does not match the
+provided reference. Unexpected failures remain `tool_execution_error`.
+
 ## Response boundaries
 
 - Return canonical identity, summary, provenance, freshness, coverage, and

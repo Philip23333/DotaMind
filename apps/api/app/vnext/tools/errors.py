@@ -12,6 +12,9 @@ ToolErrorCode = Literal[
     "tool_timeout",
     "tool_execution_error",
     "invalid_tool_output",
+    "artifact_not_found",
+    "artifact_path_not_found",
+    "artifact_type_mismatch",
 ]
 
 

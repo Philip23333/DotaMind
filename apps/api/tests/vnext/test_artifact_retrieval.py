@@ -284,6 +284,30 @@ def test_production_failure_fails_get_detail_tool() -> None:
     assert opendota.construction_calls == [40001]
 
 
+def test_artifact_read_missing_path_is_a_stable_tool_error() -> None:
+    competition_service, match_service, panda, opendota = fixture_services()
+    services = fixture_vnext_services(competition_service, match_service, panda, opendota)
+    ref = game_summary_artifact_ref(8123456789)
+    services.artifact_store.put(ref, _artifact())
+
+    registry = build_vnext_registry(services)
+    result = asyncio.run(
+        registry.execute(
+            ToolCall(
+                id="missing-artifact-path",
+                name="artifact.read",
+                arguments={
+                    "ref": ref.model_dump(),
+                    "path": "players.1",
+                },
+            )
+        )
+    )
+
+    assert result.status == "error"
+    assert result.error is not None and result.error.code == "artifact_path_not_found"
+
+
 def test_artifact_read_missing_ref_is_an_explicit_tool_error() -> None:
     competition_service, match_service, panda, opendota = fixture_services()
     services = fixture_vnext_services(competition_service, match_service, panda, opendota)
@@ -307,7 +331,7 @@ def test_artifact_read_missing_ref_is_an_explicit_tool_error() -> None:
     )
 
     assert result.status == "error"
-    assert result.error is not None and result.error.code == "tool_execution_error"
+    assert result.error is not None and result.error.code == "artifact_not_found"
 
 
 def test_tool_input_contracts_bound_search_and_read() -> None:
