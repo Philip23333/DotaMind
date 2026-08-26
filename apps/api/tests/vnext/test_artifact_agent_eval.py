@@ -16,6 +16,7 @@ import pytest
 from app.integrations.valve.catalog_repository import load_default_catalog_repository
 from app.vnext.agent.limits import AgentLimits
 from app.vnext.agent.runtime import AgentRuntime
+from app.vnext.agent.tool_result_summary import summarize_tool_result
 from app.vnext.artifacts.game_summary_builder import GameSummaryBuilder
 from app.vnext.composition import build_vnext_registry
 from app.vnext.identity import AbilityResolver, HeroResolver, ItemResolver
@@ -155,6 +156,11 @@ def _trace_rows(calls: list[ToolCall], results: list[ToolResultMessage]) -> list
                 "arguments": call.arguments,
                 "status": result.status if result else "not_returned",
                 "error": result.error.code if result and result.error else None,
+                "result": (
+                    summarize_tool_result(call.name, result.content)
+                    if result is not None and result.status == "ok"
+                    else None
+                ),
             }
         )
     return rows
@@ -215,7 +221,16 @@ def _failure_context(
 def test_trace_result_file_is_compact_and_local(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setitem(_write_trace_result.__globals__, "_RESULT_DIR", tmp_path)
     call = ToolCall(id="call-1", name="matches.search", arguments={"query": "Grand Final"})
-    result = ToolResultMessage(tool_call_id="call-1", content={"unwritten": "artifact body"})
+    result = ToolResultMessage(
+        tool_call_id="call-1",
+        content={
+            "status": "unique",
+            "query": "Grand Final",
+            "candidate_count": 0,
+            "candidates": [],
+            "unwritten": "artifact body",
+        },
+    )
 
     _write_trace_result(
         name="writer_contract",
@@ -237,6 +252,13 @@ def test_trace_result_file_is_compact_and_local(monkeypatch, tmp_path: Path) -> 
             "arguments": {"query": "Grand Final"},
             "status": "ok",
             "error": None,
+            "result": {
+                "status": "unique",
+                "query": "Grand Final",
+                "candidate_count": 0,
+                "candidates": [],
+                "candidates_truncated": False,
+            },
         }
     ]
     assert "artifact body" not in (tmp_path / "writer_contract.json").read_text(encoding="utf-8")

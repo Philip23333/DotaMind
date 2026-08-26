@@ -95,6 +95,43 @@ def test_pandascore_adapter_translates_http_and_schema_failures() -> None:
         )
 
 
+def test_pandascore_adapter_discovers_leagues_and_league_series() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        if request.url.path == "/dota2/leagues":
+            return _json_response(request, [{"id": 123, "name": "The International"}])
+        if request.url.path == "/leagues/123/series":
+            return _json_response(request, load_fixture("pandascore", "series_search.json"))
+        raise AssertionError(request.url)
+
+    async def exercise():
+        adapter = PandaScoreAdapter(
+            base_url="https://pandascore.test",
+            token="test-token",
+            transport=httpx.MockTransport(handler),
+        )
+        leagues = await adapter.search_leagues(query="The International", limit=7)
+        series = await adapter.list_league_series(123, year=2026, limit=7)
+        await adapter.aclose()
+        return leagues, series
+
+    leagues, series = asyncio.run(exercise())
+
+    assert leagues.items[0].provider_id == 123
+    assert leagues.items[0].name == "The International"
+    assert len(series.items) == 4
+    assert series.items[0].provider_id == 20001
+    assert seen[0].url.path == "/dota2/leagues"
+    assert seen[0].url.params["search[name]"] == "The International"
+    assert seen[0].url.params["page[size]"] == "7"
+    assert seen[0].url.params["page[number]"] == "1"
+    assert seen[1].url.path == "/leagues/123/series"
+    assert seen[1].url.params["filter[year]"] == "2026"
+    assert seen[1].url.params["page[size]"] == "7"
+
+
 def test_opendota_adapter_parses_league_team_match_and_detail_with_key_query() -> None:
     seen: list[httpx.Request] = []
 

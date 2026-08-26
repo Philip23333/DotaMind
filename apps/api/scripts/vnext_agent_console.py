@@ -15,6 +15,7 @@ from typing import Any
 from uuid import uuid4
 
 from app.vnext.agent.runtime import AgentRuntime
+from app.vnext.agent.tool_result_summary import summarize_tool_result
 from app.vnext.composition import VNextSettings, build_vnext_runtime, build_vnext_services
 from app.vnext.llm.protocol import (
     AssistantMessage,
@@ -160,6 +161,11 @@ def _trace_rows(
                     if result is not None and result.error is not None
                     else event_state["error"]
                     if event_state is not None
+                    else None
+                ),
+                "result": (
+                    summarize_tool_result(call.name, result.content)
+                    if result is not None and result.status == "ok"
                     else None
                 ),
             }

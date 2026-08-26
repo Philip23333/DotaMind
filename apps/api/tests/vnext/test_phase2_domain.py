@@ -33,6 +33,31 @@ def test_competition_search_normalizes_year_deduplicates_and_preserves_provenanc
     assert missing.candidates == []
 
 
+def test_competition_search_uses_league_route_when_direct_series_is_empty() -> None:
+    competition_service, _, panda, _ = fixture_services()
+    panda.direct_series = []
+    panda.league_series = [panda.series[0]]
+
+    result = asyncio.run(competition_service.search("The International", year=2026))
+
+    assert result.status == "unique"
+    assert result.candidate_count == 1
+    assert result.candidates[0].year == 2026
+    assert panda.league_search_calls == [{"query": "The International", "limit": 10}]
+    assert panda.league_series_calls == [{"league_id": 501, "year": 2026, "limit": 10}]
+
+
+def test_competition_search_deduplicates_direct_and_league_series_by_provider_id() -> None:
+    competition_service, _, panda, _ = fixture_services()
+
+    result = asyncio.run(competition_service.search("The International", year=2026))
+
+    assert result.status == "unique"
+    assert result.candidate_count == 1
+    assert result.candidates[0].year == 2026
+    assert len(panda.league_series_calls) == 1
+
+
 def test_competition_schedule_is_normalized_and_status_filtered() -> None:
     competition_service, _, _, _ = fixture_services()
     search = asyncio.run(competition_service.search("The International 2026", year=2026))

@@ -30,6 +30,7 @@ from app.vnext.providers.opendota.models import (
 )
 from app.vnext.providers.pandascore.adapter import PandaScoreHTTPError
 from app.vnext.providers.pandascore.models import (
+    PandaScoreLeague,
     PandaScoreMatch,
     PandaScoreSeries,
 )
@@ -85,10 +86,14 @@ def open_detail(provider_match_id: int = 40001) -> OpenDotaMatchDetail:
 class FakePandaScore:
     def __init__(self, *, detail_available: bool = True) -> None:
         self.series = panda_series()
+        self.direct_series = self.series
+        self.league_series = self.series
         self.matches = panda_matches()
         self.detail_available = detail_available
         self.get_calls: list[int] = []
         self.list_calls: list[dict[str, object]] = []
+        self.league_search_calls: list[dict[str, object]] = []
+        self.league_series_calls: list[dict[str, object]] = []
 
     async def search_series(
         self,
@@ -97,7 +102,42 @@ class FakePandaScore:
         year: int | None = None,
         limit: int = 20,
     ) -> ProviderBatch[PandaScoreSeries]:
-        return ProviderBatch(self.series, FETCHED_AT)
+        return ProviderBatch(self.direct_series[:limit], FETCHED_AT)
+
+    async def search_leagues(
+        self,
+        *,
+        query: str | None = None,
+        limit: int = 20,
+    ) -> ProviderBatch[PandaScoreLeague]:
+        self.league_search_calls.append({"query": query, "limit": limit})
+        leagues = {
+            item.league.provider_id: PandaScoreLeague(
+                id=item.league.provider_id,
+                name=item.league.name,
+            )
+            for item in self.league_series
+            if item.league is not None
+            and (not query or query.casefold() in (item.league.name or "").casefold())
+        }
+        return ProviderBatch(list(leagues.values())[:limit], FETCHED_AT)
+
+    async def list_league_series(
+        self,
+        league_id: int,
+        *,
+        year: int | None = None,
+        limit: int = 20,
+    ) -> ProviderBatch[PandaScoreSeries]:
+        self.league_series_calls.append({"league_id": league_id, "year": year, "limit": limit})
+        rows = [
+            item
+            for item in self.league_series
+            if item.league and item.league.provider_id == league_id
+        ]
+        if year is not None:
+            rows = [item for item in rows if item.year == year]
+        return ProviderBatch(rows[:limit], FETCHED_AT)
 
     async def list_matches(
         self,

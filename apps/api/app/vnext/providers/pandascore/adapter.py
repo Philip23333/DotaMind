@@ -10,6 +10,7 @@ from pydantic import ValidationError
 
 from app.vnext.providers.common import ProviderBatch, ProviderObject
 from app.vnext.providers.pandascore.models import (
+    PandaScoreLeague,
     PandaScoreMatch,
     PandaScoreSeries,
 )
@@ -90,6 +91,40 @@ class PandaScoreAdapter:
         rows = self._require_list(payload, "/dota2/series")
         return ProviderBatch(
             items=[self._parse(PandaScoreSeries, row, "/dota2/series") for row in rows],
+            fetched_at=fetched_at,
+        )
+
+    async def search_leagues(
+        self,
+        *,
+        query: str | None = None,
+        limit: int = 20,
+    ) -> ProviderBatch[PandaScoreLeague]:
+        params: dict[str, Any] = self._page_params(limit)
+        if query:
+            params["search[name]"] = query
+        payload, fetched_at = await self._get_json("/dota2/leagues", params=params)
+        rows = self._require_list(payload, "/dota2/leagues")
+        return ProviderBatch(
+            items=[self._parse(PandaScoreLeague, row, "/dota2/leagues") for row in rows],
+            fetched_at=fetched_at,
+        )
+
+    async def list_league_series(
+        self,
+        league_id: int,
+        *,
+        year: int | None = None,
+        limit: int = 20,
+    ) -> ProviderBatch[PandaScoreSeries]:
+        path = f"/leagues/{league_id}/series"
+        params = self._page_params(limit)
+        if year is not None:
+            params["filter[year]"] = year
+        payload, fetched_at = await self._get_json(path, params=params)
+        rows = self._require_list(payload, path)
+        return ProviderBatch(
+            items=[self._parse(PandaScoreSeries, row, path) for row in rows],
             fetched_at=fetched_at,
         )
 

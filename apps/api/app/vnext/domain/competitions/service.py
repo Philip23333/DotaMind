@@ -62,24 +62,34 @@ class CompetitionService:
         limit: int = 10,
     ) -> CompetitionSearchResult:
         normalized_query = " ".join(query.split())
-        batch = await self.provider.search_series(query=normalized_query, year=year, limit=limit)
+        direct_series = await self.provider.search_series(
+            query=normalized_query,
+            year=year,
+            limit=limit,
+        )
+        leagues = await self.provider.search_leagues(query=normalized_query, limit=limit)
+        series_by_id: dict[int, tuple[PandaScoreSeries, datetime]] = {
+            series.provider_id: (series, direct_series.fetched_at)
+            for series in direct_series.items
+        }
+        fetched_at = direct_series.fetched_at
+        for league in leagues.items:
+            league_series = await self.provider.list_league_series(
+                league.provider_id,
+                year=year,
+                limit=limit,
+            )
+            fetched_at = max(fetched_at, league_series.fetched_at)
+            for series in league_series.items:
+                series_by_id[series.provider_id] = (series, league_series.fetched_at)
+
         candidates: list[CompetitionCandidate] = []
-        seen: set[tuple[str, int | None, datetime | None, datetime | None]] = set()
-        for series in batch.items:
-            candidate = self._normalize_series(series, fetched_at=batch.fetched_at)
+        for series, series_fetched_at in series_by_id.values():
+            candidate = self._normalize_series(series, fetched_at=series_fetched_at)
             if year is not None and candidate.year != year:
                 continue
             if not _query_matches(candidate, normalized_query, series):
                 continue
-            key = (
-                normalize_text(candidate.name),
-                candidate.year,
-                candidate.starts_at,
-                candidate.ends_at,
-            )
-            if key in seen:
-                continue
-            seen.add(key)
             candidates.append(CompetitionCandidate.model_validate(candidate.model_dump()))
             self._remember(series.provider_id, candidate)
         candidates.sort(key=lambda item: (item.year is None, -(item.year or 0), item.name))
@@ -92,7 +102,7 @@ class CompetitionService:
             warnings.append("no competition edition matched the requested year")
         provenance = Provenance(
             sources=["pandascore"],
-            freshness=Freshness(fetched_at=batch.fetched_at, status="fresh"),
+            freshness=Freshness(fetched_at=fetched_at, status="fresh"),
             identity_status=(
                 "not_found" if not candidates else "ambiguous" if len(candidates) > 1 else "native"
             ),

@@ -9,7 +9,16 @@ from scripts.vnext_agent_console import _console_text, _trace_rows, _write_resul
 
 def test_console_result_contains_compact_tool_trace(tmp_path: Path) -> None:
     call = ToolCall(id="call-1", name="matches.search", arguments={"query": "Grand Final"})
-    result = ToolResultMessage(tool_call_id="call-1", content={"unwritten": "artifact body"})
+    result = ToolResultMessage(
+        tool_call_id="call-1",
+        content={
+            "status": "unique",
+            "query": "Grand Final",
+            "candidate_count": 0,
+            "candidates": [],
+            "unwritten": "full artifact body",
+        },
+    )
 
     destination = _write_result(
         name="console_contract",
@@ -32,9 +41,16 @@ def test_console_result_contains_compact_tool_trace(tmp_path: Path) -> None:
             "arguments": {"query": "Grand Final"},
             "status": "ok",
             "error": None,
+            "result": {
+                "status": "unique",
+                "query": "Grand Final",
+                "candidate_count": 0,
+                "candidates": [],
+                "candidates_truncated": False,
+            },
         }
     ]
-    assert "artifact body" not in destination.read_text(encoding="utf-8")
+    assert "full artifact body" not in destination.read_text(encoding="utf-8")
 
 
 def test_console_trace_uses_terminal_tool_event_when_no_next_model_turn() -> None:
@@ -56,6 +72,7 @@ def test_console_trace_uses_terminal_tool_event_when_no_next_model_turn() -> Non
             "arguments": {"path": "players"},
             "status": "ok",
             "error": None,
+            "result": None,
         }
     ]
 
