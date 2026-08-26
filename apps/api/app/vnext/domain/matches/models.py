@@ -145,6 +145,7 @@ class GameSummary(DomainModel):
 
 
 class GameDetail(GameSummary):
+    valve_match_id: int | None = None
     detail_status: Literal["available", "fixture_only", "unavailable"] = "fixture_only"
     resolution: ResolutionSummary | None = None
     radiant_win: bool | None = None

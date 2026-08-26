@@ -6,6 +6,7 @@ from typing import Literal
 
 from pydantic import Field, model_validator
 
+from app.vnext.artifacts import GameSummaryArtifactProducer
 from app.vnext.domain.common.models import CompetitionRef, DomainModel, GameRef, MatchRef
 from app.vnext.domain.matches.models import MatchDetail, MatchSearchResult
 from app.vnext.domain.matches.service import MatchService
@@ -35,6 +36,7 @@ class MatchGetDetailInput(DomainModel):
 def register_match_tools(
     registry: ToolRegistry,
     service: MatchService,
+    game_summary_producer: GameSummaryArtifactProducer,
 ) -> None:
     async def search(args: MatchSearchInput) -> MatchSearchResult:
         return await service.search(
@@ -46,7 +48,11 @@ def register_match_tools(
         )
 
     async def get_detail(args: MatchGetDetailInput) -> MatchDetail:
-        return await service.get_detail(match_ref=args.match_ref, game_ref=args.game_ref)
+        detail = await service.get_detail(match_ref=args.match_ref, game_ref=args.game_ref)
+        for game in detail.games:
+            if game.valve_match_id is not None:
+                await game_summary_producer.produce(game.valve_match_id)
+        return detail
 
     registry.register(
         ToolDefinition(
@@ -66,11 +72,13 @@ def register_match_tools(
             name="matches.get_detail",
             description=(
                 "Return normalized series facts and available game detail for one match or game. "
-                "Cross-source mapping and coverage limits remain explicit."
+                "Resolved games include their canonical Valve match ID and a stored local "
+                "GameSummary artifact. Cross-source mapping and coverage limits remain explicit."
             ),
             input_model=MatchGetDetailInput,
             output_model=MatchDetail,
             handler=get_detail,
+            read_only=False,
             parallel_safe=True,
         )
     )

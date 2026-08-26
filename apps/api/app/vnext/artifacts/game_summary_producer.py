@@ -9,7 +9,7 @@ from app.vnext.providers.opendota.adapter import (
 
 from .game_summary import GameSummaryArtifact
 from .game_summary_builder import GameSummaryBuilder
-from .models import ArtifactRef
+from .models import ArtifactRef, game_summary_artifact_ref
 from .store import ArtifactStore
 
 
@@ -38,15 +38,7 @@ class GameSummaryArtifactProducer:
 
     @staticmethod
     def _artifact_ref(artifact: GameSummaryArtifact) -> ArtifactRef:
-        return ArtifactRef(
-            id=(
-                f"{artifact.artifact_type}:"
-                f"{artifact.schema_version}:"
-                f"{artifact.game.valve_match_id}"
-            ),
-            artifact_type=artifact.artifact_type,
-            schema_version=artifact.schema_version,
-        )
+        return game_summary_artifact_ref(artifact.game.valve_match_id)
 
 
 __all__ = ["GameSummaryArtifactProducer"]

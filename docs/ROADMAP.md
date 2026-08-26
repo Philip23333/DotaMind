@@ -65,18 +65,17 @@ Implemented deliverables:
   - request/response canonical match identity validation
   - no cache/TTL/refresh policy in this commit
   - keep artifact production outside Agent Runtime and model-facing tools
+- Commit 4 — Artifact Retrieval Capability
+  - `matches.get_detail` exposes canonical `valve_match_id` and guarantees
+    production and storage for every resolved game before success
+  - bounded `artifact.search` lookup over canonical Valve match IDs
+  - bounded `artifact.read` outline and structural path views with list limits
+  - six-tool registry with artifact retrieval kept separate from production
 
 Artifact quality metadata persistence is not part of Commit 3.5.
 
 Planned / pending deliverables:
 
-- Commit 4 — Artifact Retrieval Capability
-  - bounded lookup and read over stored artifacts
-  - reference validation, explicit coverage and missing-data behavior, and
-    bounded artifact views
-- Bounded artifact tool results using summaries, canonical references, coverage,
-  and artifact references
-- `artifact.search` and `artifact.read` capabilities
 - Evaluation scenarios for artifact and retrieval behavior
 - Reduced default tool context through bounded retrieval
 
@@ -94,13 +93,12 @@ Non-goals:
 - Requiring a fixed retrieval sequence
 - Making Agent Runtime responsible for creating, storing, refreshing, expiring,
   or otherwise owning artifact lifecycle
-- Claiming that artifact production integration or retrieval tools are
-  implemented before their respective commits are complete
 
 Acceptance: the artifact production and retrieval contracts are implemented and
 evaluated with explicit bounds, coverage, missing-data behavior, and
-conversation reuse. This phase is not complete merely because the documents or
-interfaces exist.
+canonical serialized views. Commit 4 is complete when domain detail, stored
+canonical artifacts, and model-visible bounded retrieval work together without
+requiring a fixed workflow.
 
 ## Phase 3 — Team, player, and catalog
 

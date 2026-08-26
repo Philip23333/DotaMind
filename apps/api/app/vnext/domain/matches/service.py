@@ -482,6 +482,7 @@ def _fixture_game(game: NormalizedGame, decision: ResolutionDecision) -> GameDet
     warning.extend(decision.warnings)
     return game.public.model_copy(
         update={
+            "valve_match_id": decision.resolved_provider_match_id,
             "resolution": _public_resolution(decision),
             "provenance": game.public.provenance.model_copy(
                 update={"warnings": list(dict.fromkeys(warning))}
@@ -563,6 +564,7 @@ def _normalize_opendota_game(
     winner = game.public.winner or _winner_from_detail(normalized, decision, detail)
     return GameDetail(
         ref=game.public.ref,
+        valve_match_id=decision.resolved_provider_match_id,
         position=game.public.position,
         status="finished",
         scheduled_at=game.public.scheduled_at,

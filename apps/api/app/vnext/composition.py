@@ -14,6 +14,8 @@ from dotenv import dotenv_values
 
 from app.integrations.valve.catalog_repository import load_default_catalog_repository
 from app.vnext.artifacts import (
+    ArtifactReader,
+    ArtifactSearcher,
     ArtifactStore,
     GameSummaryArtifactProducer,
     MemoryArtifactStore,
@@ -27,8 +29,9 @@ from app.vnext.providers.opendota.adapter import (
     OpenDotaGameConstructionAdapter,
 )
 from app.vnext.providers.pandascore.adapter import PandaScoreAdapter
-from app.vnext.tools.competitions import register_competition_tools
-from app.vnext.tools.matches import register_match_tools
+from app.vnext.tools.artifacts import register_artifact_tools
+from app.vnext.tools.domain.competitions import register_competition_tools
+from app.vnext.tools.domain.matches import register_match_tools
 from app.vnext.tools.registry import ToolRegistry
 
 
@@ -105,6 +108,8 @@ class VNextServices:
     matches: MatchService
     artifact_store: ArtifactStore
     game_summary_producer: GameSummaryArtifactProducer
+    artifact_searcher: ArtifactSearcher
+    artifact_reader: ArtifactReader
 
     async def aclose(self) -> None:
         await self.pandascore.aclose()
@@ -157,6 +162,8 @@ def build_vnext_services(
         builder=_build_game_summary_builder(),
         store=store,
     )
+    artifact_searcher = ArtifactSearcher(store)
+    artifact_reader = ArtifactReader(store)
     return VNextServices(
         pandascore=panda_adapter,
         opendota=open_adapter,
@@ -164,6 +171,8 @@ def build_vnext_services(
         matches=match_service,
         artifact_store=store,
         game_summary_producer=producer,
+        artifact_searcher=artifact_searcher,
+        artifact_reader=artifact_reader,
     )
 
 
@@ -175,7 +184,16 @@ def build_vnext_registry(
     resolved_services = services or build_vnext_services(settings)
     registry = ToolRegistry()
     register_competition_tools(registry, resolved_services.competitions)
-    register_match_tools(registry, resolved_services.matches)
+    register_match_tools(
+        registry,
+        resolved_services.matches,
+        resolved_services.game_summary_producer,
+    )
+    register_artifact_tools(
+        registry,
+        resolved_services.artifact_searcher,
+        resolved_services.artifact_reader,
+    )
     return registry
 
 

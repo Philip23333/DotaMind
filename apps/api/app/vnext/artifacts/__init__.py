@@ -3,17 +3,32 @@
 from .game_summary import GameSummaryArtifact
 from .game_summary_producer import GameSummaryArtifactProducer
 from .memory import MemoryArtifactStore
-from .models import ArtifactRef
+from .models import ArtifactRef, game_summary_artifact_ref
 from .protocol import Artifact
+from .retrieval import (
+    ArtifactPathNotFoundError,
+    ArtifactReader,
+    ArtifactReadResult,
+    ArtifactReadValidationError,
+    ArtifactSearcher,
+    ArtifactSearchResult,
+)
 from .store import ArtifactNotFoundError, ArtifactStore, ArtifactTypeMismatchError
 
 __all__ = [
     "Artifact",
     "ArtifactNotFoundError",
     "ArtifactRef",
+    "ArtifactPathNotFoundError",
+    "ArtifactReadResult",
+    "ArtifactReadValidationError",
+    "ArtifactReader",
+    "ArtifactSearchResult",
+    "ArtifactSearcher",
     "ArtifactStore",
     "ArtifactTypeMismatchError",
     "GameSummaryArtifact",
     "GameSummaryArtifactProducer",
     "MemoryArtifactStore",
+    "game_summary_artifact_ref",
 ]

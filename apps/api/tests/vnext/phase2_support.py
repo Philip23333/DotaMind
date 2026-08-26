@@ -5,7 +5,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from app.vnext.artifacts import GameSummaryArtifactProducer, MemoryArtifactStore
+from app.vnext.artifacts import (
+    ArtifactReader,
+    ArtifactSearcher,
+    GameSummaryArtifactProducer,
+    MemoryArtifactStore,
+)
 from app.vnext.artifacts.game_summary_builder import GameSummaryBuilder
 from app.vnext.composition import VNextServices
 from app.vnext.domain.competitions.service import CompetitionService
@@ -17,6 +22,7 @@ from app.vnext.providers.opendota.adapter import (
     OpenDotaHTTPError,
 )
 from app.vnext.providers.opendota.models import (
+    OpenDotaGameConstructionMatch,
     OpenDotaLeague,
     OpenDotaLeagueMatch,
     OpenDotaMatchDetail,
@@ -143,6 +149,7 @@ class FakeOpenDota:
         self.resolution_available = resolution_available
         self.unavailable_detail_ids = unavailable_detail_ids or set()
         self.detail_calls: list[int] = []
+        self.construction_calls: list[int] = []
 
     async def list_leagues(self) -> ProviderBatch[OpenDotaLeague]:
         if not self.resolution_available:
@@ -170,6 +177,39 @@ class FakeOpenDota:
         if not self.detail_available or match_id in self.unavailable_detail_ids:
             raise OpenDotaHTTPError(503, "/matches")
         return ProviderObject(open_detail(match_id), FETCHED_AT)
+
+    async def get_game_construction_match(
+        self,
+        match_id: int,
+    ) -> ProviderObject[OpenDotaGameConstructionMatch]:
+        self.construction_calls.append(match_id)
+        if not self.detail_available or match_id in self.unavailable_detail_ids:
+            raise OpenDotaHTTPError(503, "/matches")
+        detail = open_detail(match_id)
+        players = []
+        for index, player in enumerate(detail.players):
+            row = dict(player)
+            row.setdefault("player_slot", 0 if row.get("isRadiant") is True else 128 + index)
+            players.append(row)
+        return ProviderObject(
+            OpenDotaGameConstructionMatch.model_validate(
+                {
+                    "match_id": detail.provider_match_id,
+                    "start_time": detail.start_time,
+                    "duration": detail.duration,
+                    "radiant_win": detail.radiant_win,
+                    "game_mode": detail.game_mode,
+                    "lobby_type": detail.lobby_type,
+                    "radiant_team": detail.radiant_team,
+                    "dire_team": detail.dire_team,
+                    "radiant_score": detail.radiant_score,
+                    "dire_score": detail.dire_score,
+                    "players": players,
+                    "picks_bans": detail.picks_bans,
+                }
+            ),
+            FETCHED_AT,
+        )
 
 
 def fixture_services(
@@ -215,6 +255,8 @@ def fixture_vnext_services(
         ),
         store=store,
     )
+    searcher = ArtifactSearcher(store)
+    reader = ArtifactReader(store)
     return VNextServices(
         panda,
         opendota,
@@ -222,4 +264,6 @@ def fixture_vnext_services(
         match_service,
         store,
         producer,
+        searcher,
+        reader,
     )

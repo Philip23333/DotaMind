@@ -12,7 +12,7 @@ from app.vnext.llm.protocol import ToolCall
 from tests.vnext.phase2_support import fixture_services, fixture_vnext_services
 
 
-def test_composition_is_lazy_and_registers_only_the_four_phase2_tools() -> None:
+def test_composition_is_lazy_and_registers_the_six_vnext_tools() -> None:
     services = build_vnext_services(VNextSettings(pandascore_token="test-token"))
     assert services.pandascore._client is None  # type: ignore[attr-defined]
     assert services.opendota._client is None  # type: ignore[attr-defined]
@@ -24,10 +24,13 @@ def test_composition_is_lazy_and_registers_only_the_four_phase2_tools() -> None:
         "competitions.list_matches",
         "matches.search",
         "matches.get_detail",
+        "artifact.search",
+        "artifact.read",
     ]
+    assert registry.get("matches.get_detail").read_only is False
 
 
-def test_registry_executes_all_four_phase2_tools_without_provider_ids() -> None:
+def test_registry_executes_phase2_tools_and_exposes_canonical_valve_ids() -> None:
     competition_service, match_service, panda, opendota = fixture_services()
     services = fixture_vnext_services(competition_service, match_service, panda, opendota)
     registry = build_vnext_registry(services)
@@ -80,7 +83,7 @@ def test_registry_executes_all_four_phase2_tools_without_provider_ids() -> None:
     ):
         assert forbidden not in serialized
     assert "30001" not in serialized
-    assert "40001" not in serialized
+    assert "40001" in serialized
 
 
 def test_registry_game_ref_roundtrip_selects_only_game_two_without_provider_ids() -> None:
@@ -145,7 +148,7 @@ def test_registry_game_ref_roundtrip_selects_only_game_two_without_provider_ids(
         "provider_payload",
     ):
         assert forbidden not in serialized
-    for provider_id in ("30004", "72001", "72002", "72003", "40002", "40003", "40004"):
+    for provider_id in ("30004", "72001", "72002", "72003"):
         assert provider_id not in serialized
 
 

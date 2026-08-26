@@ -4,9 +4,8 @@
 
 This is the vNext target architecture. The checked-out Legacy code does not
 claim to implement it until each replacement is deliberately delivered.
-The artifact construction and production/store boundaries are implemented;
-artifact retrieval remains a Phase 2.x delivery stage until its commit is
-complete.
+The artifact construction, production/store, and bounded retrieval boundaries
+are implemented for the current GameSummary capability.
 
 ## Principles
 
@@ -40,7 +39,7 @@ trace or streaming events. The Domain / Retrieval Layer owns Dota identity,
 availability, cross-source resolution, normalization, composition, and
 bounded views. The Artifact Store retains normalized canonical data that should
 not automatically enter model context; its contract exists independently from
-the planned production and retrieval integrations. Provider Adapters own
+the application production and retrieval integrations. Provider Adapters own
 upstream HTTP or SDK transport, provider authentication, and provider schemas.
 Raw Sources are external provider systems and are never model-facing
 contracts.
@@ -193,7 +192,7 @@ Commit 3.5 freezes these production contracts:
 
 ## Artifact Retrieval Capability
 
-Commit 4 is the planned retrieval boundary over stored artifacts:
+Commit 4 implements the retrieval boundary over stored artifacts:
 
     ArtifactRef / Lookup Criteria
       -> Retrieval Layer
@@ -205,10 +204,24 @@ not fetch provider data or construct a new artifact as part of the read path.
 Production and retrieval are separate responsibilities even when a later
 application capability may choose between reuse and production.
 
-The proposed model-facing retrieval capabilities are `artifact.search` and
-`artifact.read`. Their exact tool exposure follows the retrieval contract; the
-existence of Commit 4 does not require the model to follow a fixed search-then-
-read workflow.
+The model-facing retrieval capabilities are `artifact.search` and
+`artifact.read`. They expose only the retrieval contract; the model is not
+required to follow a fixed search-then-read workflow.
+
+Commit 4 freezes these retrieval and integration contracts:
+
+- A resolved game returned by `matches.get_detail` includes its canonical
+  `valve_match_id`. The application handler produces and stores every resolved
+  game artifact before the tool succeeds; unresolved or fixture-only games do
+  not trigger production, and a production failure fails the whole tool.
+- `artifact.search` accepts at most 100 canonical Valve match IDs, deduplicates
+  them in first-seen order, checks only `ArtifactStore.exists`, and never reads,
+  fetches, or produces an artifact.
+- `artifact.read` accepts an exact `ArtifactRef`, returns either a top-level
+  outline or a serialized bounded structural path, and only paginates when the
+  final value is a list. It does not discover or produce artifacts.
+- Structural paths support object fields and non-negative list indexes only;
+  invalid paths use one `ArtifactPathNotFoundError` boundary.
 
 ## Artifact and Retrieval Layer
 

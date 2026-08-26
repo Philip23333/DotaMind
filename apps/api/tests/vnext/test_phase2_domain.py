@@ -124,6 +124,7 @@ def test_match_service_detail_resolves_and_normalizes_opendota_detail() -> None:
     assert detail.status == "available"
     assert detail.games[0].resolution is not None
     assert detail.games[0].resolution.status == "resolved"
+    assert detail.games[0].valve_match_id == 40001
     assert detail.games[1].resolution is not None
     assert detail.games[1].resolution.status == "insufficient_signals"
     assert detail.provenance.identity_status == "inferred_cross_source"
@@ -142,7 +143,7 @@ def test_match_service_detail_resolves_and_normalizes_opendota_detail() -> None:
     ):
         assert forbidden not in serialized
     assert "30001" not in serialized
-    assert "40001" not in serialized
+    assert "40001" in serialized
 
 
 def test_match_detail_uses_cached_series_facts_without_pandascore_detail() -> None:

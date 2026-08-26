@@ -11,43 +11,38 @@ Tool descriptions state only capability, input, output, and material data
 limits. A tool result does not necessarily contain the complete artifact
 content. Large or sectioned data is intended to be exposed through canonical
 artifact references and independent retrieval capabilities when those
-capabilities are proposed and later delivered.
+capabilities are available.
 
 The model may compose capabilities according to the question. No tool or tool
 description requires a fixed sequence such as search, then detail, then read.
 Provider selection, ID conversion, normalization, and cross-source mapping
 happen inside domain and provider layers.
 
-## Implemented Phase 2 surface
+## Implemented Phase 2 and Artifact Retrieval Surface
 
-These are the four existing Phase 2 agent-visible tools. Their names and
-independent domain capabilities remain unchanged. This list does not imply
-that any artifact store or artifact retrieval capability exists.
+These are the six implemented agent-visible tools. They remain independent
+capabilities; the artifact tools do not create a required workflow around the
+match tools.
 
-| Tool | Purpose |
-| --- | --- |
-| `competitions.search` | Find a competition or edition |
-| `competitions.list_matches` | List matches for a competition |
-| `matches.search` | Find a series or game |
-| `matches.get_detail` | Return detail for a resolved match or game |
+| Tool | Purpose | Important contract |
+| --- | --- | --- |
+| `competitions.search` | Find a competition or edition | Preserves candidate ambiguity |
+| `competitions.list_matches` | List matches for a competition | Returns bounded schedule facts |
+| `matches.search` | Find a series or game | Does not guess a unique match |
+| `matches.get_detail` | Return detail for a resolved match or game | Resolved games include `valve_match_id` and guarantee local artifact production |
+| `artifact.search` | Find stored GameSummary artifacts | Accepts canonical Valve IDs; returns refs and missing IDs without reading or producing |
+| `artifact.read` | Read a bounded canonical artifact view | Accepts an exact ref, structural path, and bounded list pagination |
 
-They preserve explicit ambiguity, resolution, provenance, freshness, and
-availability boundaries. No additional tool is required for a fixed scenario
-workflow.
+The domain tools preserve explicit ambiguity, resolution, provenance, freshness,
+and availability boundaries. `matches.get_detail` production is owned by the
+application composition boundary, not by `MatchService` or the model.
 
 ## Future target surface
 
-The following table is a proposed contract, not a claim that these target
-shapes are implemented. In particular, a future `matches.get_detail` view is
-bounded: it would return a match or game summary, available coverage, and
-artifact references instead of the full underlying artifact.
+The following capabilities remain proposed and are not implemented.
 
 | Tool | Purpose | Input | Proposed output | Boundary |
 | --- | --- | --- | --- | --- |
-| `competitions.search` | Find a competition or edition | Query, optional year | Competition candidates | Ambiguity remains explicit |
-| `competitions.list_matches` | List a competition schedule | Competition reference, status or time scope | Scheduled, running, or completed match summaries | Schedules are volatile and bounded |
-| `matches.search` | Find a series or game | Teams, competition, time, or query | Match candidates | Does not guess a unique match |
-| `matches.get_detail` | Explain a resolved match or game | Match or game reference | Identity, bounded summary, available coverage, and artifact references | Full artifact content would not be returned by default |
 | `teams.search` | Find a professional team | Query | Team candidates | Name collisions remain explicit |
 | `teams.list_matches` | Show team schedule or recent results | Team reference, time scope | Bounded match summaries | No aggregated meta analysis |
 | `teams.get_roster` | Show known roster context | Team reference | Players and roster metadata | Source freshness is disclosed |
@@ -60,19 +55,19 @@ artifact references instead of the full underlying artifact.
 
 ## Artifact Inspection Tools
 
-These are proposed, not implemented. They are independent data-access
-capabilities: the model decides whether the summary and coverage already answer
-the question or whether a bounded inspection is useful. Neither tool is a
-scenario workflow, and neither requires the other to be called first.
+These implemented independent data-access capabilities let the model decide
+whether a stored canonical artifact is useful. Neither tool is a scenario
+workflow, and neither requires the other to be called first.
 
-| Tool | Purpose | Inputs | Proposed output | Boundary |
-| --- | --- | --- | --- | --- |
-| `artifact.search` | Find relevant information inside a canonical artifact | `artifact_ref`, `query` | Matched paths and bounded snippets | Never returns the entire artifact or raw provider data |
-| `artifact.read` | Read a bounded section of a canonical artifact | `artifact_ref`, `path`, `limit`, `offset` | A bounded section with coverage metadata | Entire-artifact reads are forbidden; limits are enforced |
+| Tool | Inputs | Output | Boundary |
+| --- | --- | --- | --- |
+| `artifact.search` | `artifact_type=game_summary`, up to 100 canonical Valve match IDs | `refs` and ordered `missing_valve_match_ids` | Existence checks only; no content read, provider call, or production |
+| `artifact.read` | Exact `ArtifactRef`, optional dotted path, `offset`, `limit` | Outline or serialized bounded value with list bounds | Object fields and list indexes only; list limit is at most 100 |
 
-If a reference or path is missing or unavailable, the response would preserve
-that state rather than manufacture a value. The model chooses detail; the
-system supplies only the bounded, retrievable view allowed by the contract.
+With `path=null`, `artifact.read` returns top-level scalar metadata and one-level
+section descriptors. A dotted path may address object fields and positional list
+indexes; invalid paths remain explicit errors. A missing reference remains an
+explicit tool error rather than triggering discovery or production.
 
 ## Response boundaries
 

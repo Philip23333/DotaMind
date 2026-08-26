@@ -79,8 +79,10 @@ def test_behavior_scenario_a_competition_search_runs_through_runtime_and_registr
         "competitions.list_matches",
         "matches.search",
         "matches.get_detail",
+        "artifact.search",
+        "artifact.read",
     ]
-    assert len(model.requests[0].tools) == 4
+    assert len(model.requests[0].tools) == 6
 
 
 def test_behavior_scenario_b_upcoming_uses_competition_ref_from_prior_tool_result() -> None:
