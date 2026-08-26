@@ -58,6 +58,16 @@ provider response to determine the result.
 Scripted behavioral tests are deterministic runtime regressions; they are not
 autonomous real-model agent evals.
 
+## Manual vNext console
+
+Run `python -m scripts.vnext_agent_console --direct "<question>"` from
+`apps/api` to exercise the configured vNext chain: local vNext configuration,
+the model adapter, `AgentRuntime`, the six-tool registry, and real provider
+adapters. `--direct` only disables proxy environment variables in that console
+process. Each run writes a timestamped compact trace to
+`tests/vnext/testResult/`; interactive mode preserves the previous transcript
+for follow-up questions.
+
 ## Live provider smoke evals
 
 These checks exercise real provider integrations. They verify that a provider
