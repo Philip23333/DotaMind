@@ -1,4 +1,4 @@
-"""Contract tests for the canonical GameSummaryArtifact schema version 2."""
+"""Contract tests for the canonical GameSummaryArtifact schema version 3."""
 
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -27,7 +27,7 @@ from app.vnext.artifacts.game_summary import (
 
 
 def artifact_payload() -> dict[str, object]:
-    """Return a complete minimal version 2 payload with native Dota identifiers."""
+    """Return a complete minimal version 3 payload with native Dota identifiers."""
 
     return {
         "game": {
@@ -69,8 +69,8 @@ def artifact_payload() -> dict[str, object]:
                     "inventory": [{"slot": 0, "id": 50, "name": "Power Treads"}],
                     "backpack": [{"slot": 6, "id": None, "name": None}],
                     "neutral_items": [
-                        {"id": 287, "name": "Trusty Shovel"},
-                        {"id": 1700, "name": "Mystical"},
+                        {"slot": 0, "id": 287, "name": "Trusty Shovel"},
+                        {"slot": 1, "id": 1700, "name": "Mystical"},
                     ],
                 },
                 "purchase_history": [
@@ -97,7 +97,7 @@ def test_minimal_artifact_has_fixed_schema_identity() -> None:
     artifact = GameSummaryArtifact.model_validate(artifact_payload())
 
     assert artifact.artifact_type == "game_summary"
-    assert artifact.schema_version == "2"
+    assert artifact.schema_version == "3"
     assert artifact.game.start_time == datetime(2026, 8, 25, 12, tzinfo=timezone.utc)
 
 
@@ -106,7 +106,8 @@ def test_minimal_artifact_has_fixed_schema_identity() -> None:
     [
         ("artifact_type", "other"),
         ("schema_version", "1"),
-        ("schema_version", "3"),
+        ("schema_version", "2"),
+        ("schema_version", "4"),
     ],
 )
 def test_root_literal_contract_rejects_other_identity_values(field: str, value: str) -> None:
@@ -182,7 +183,10 @@ def test_missing_scalars_and_fixed_structures_use_the_documented_empty_shape() -
     assert player.economy == PlayerEconomy()
     assert player.items.inventory == []
     assert player.items.backpack == []
-    assert player.items.neutral_items == []
+    assert player.items.neutral_items == [
+        ItemSlot(slot=0, id=None, name=None),
+        ItemSlot(slot=1, id=None, name=None),
+    ]
     assert artifact.draft == Draft()
 
 
@@ -202,7 +206,7 @@ def test_collections_default_to_empty_lists() -> None:
     assert artifact.draft.bans == []
 
 
-def test_neutral_items_default_to_an_empty_list() -> None:
+def test_neutral_items_default_to_two_empty_slots() -> None:
     payload = artifact_payload()
     player = payload["players"][0]
     assert isinstance(player, dict)
@@ -210,16 +214,43 @@ def test_neutral_items_default_to_an_empty_list() -> None:
 
     artifact = GameSummaryArtifact.model_validate(payload)
 
-    assert artifact.players[0].items.neutral_items == []
+    assert artifact.players[0].items.neutral_items == [
+        ItemSlot(slot=0, id=None, name=None),
+        ItemSlot(slot=1, id=None, name=None),
+    ]
 
 
-def test_neutral_values_are_canonical_item_list_entries() -> None:
+def test_neutral_values_are_item_slot_list_entries() -> None:
     artifact = GameSummaryArtifact.model_validate(artifact_payload())
 
     assert artifact.players[0].items.neutral_items == [
-        CanonicalItem(id=287, name="Trusty Shovel"),
-        CanonicalItem(id=1700, name="Mystical"),
+        ItemSlot(slot=0, id=287, name="Trusty Shovel"),
+        ItemSlot(slot=1, id=1700, name="Mystical"),
     ]
+
+
+@pytest.mark.parametrize(
+    "neutral_items",
+    [
+        [],
+        [{"slot": 0, "id": 287, "name": "Trusty Shovel"}],
+        [
+            {"slot": 0, "id": 287, "name": "Trusty Shovel"},
+            {"slot": 1, "id": 1700, "name": "Mystical"},
+            {"slot": 2, "id": None, "name": None},
+        ],
+        [
+            {"slot": 1, "id": 287, "name": "Trusty Shovel"},
+            {"slot": 0, "id": 1700, "name": "Mystical"},
+        ],
+    ],
+)
+def test_neutral_items_require_both_slots_in_order(neutral_items: list[dict[str, object]]) -> None:
+    payload = artifact_payload()
+    payload["players"][0]["items"]["neutral_items"] = neutral_items
+
+    with pytest.raises(ValidationError):
+        GameSummaryArtifact.model_validate(payload)
 
 
 def test_empty_inventory_slot_is_valid() -> None:

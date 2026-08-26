@@ -88,11 +88,11 @@ below the artifact boundary. Canonical Dota/Valve-native IDs may remain in an
 artifact when they express domain identity. Artifact sections are data views,
 not reasons to create a specialized tool for every user question.
 
-## GameSummaryArtifact schema version 2
+## GameSummaryArtifact schema version 3
 
 ### Purpose
 
-`GameSummaryArtifact` schema version 2 defines provider-neutral, canonical Dota
+`GameSummaryArtifact` schema version 3 defines provider-neutral, canonical Dota
 facts for one game. It is neither a provider DTO, a database record, nor a full
 replay representation. It is intended to support:
 
@@ -108,12 +108,12 @@ answer to a particular question.
 
 ### Structure
 
-The schema version 2 canonical structure is:
+The schema version 3 canonical structure is:
 
 ```text
 GameSummaryArtifact
 ├── artifact_type = "game_summary"
-├── schema_version = "2"
+├── schema_version = "3"
 ├── game
 │   ├── valve_match_id
 │   ├── start_time
@@ -165,6 +165,7 @@ GameSummaryArtifact
 │   │   │   ├── id
 │   │   │   └── name
 │   │   └── neutral_items[]
+│   │       ├── slot
 │   │       ├── id
 │   │       └── name
 │   ├── purchase_history[]
@@ -211,14 +212,14 @@ when no catalog name is available.
 
 ### Source-backed normalization and exclusions
 
-Every schema version 2 fact is source-backed. The artifact may contain provider
+Every schema version 3 fact is source-backed. The artifact may contain provider
 source facts, canonical semantic normalization, and static Dota catalog
 normalization. For example, normalization may represent `radiant_win` as
 `winner = radiant` or `dire`, map a source team-side code such as `0` or `1` to
 `radiant` or `dire`, and map hero, item, ability, game-mode, or lobby-type IDs
 to canonical catalog names.
 
-Schema version 2 excludes DotaMind-derived analytics and estimates. It must not
+Schema version 3 excludes DotaMind-derived analytics and estimates. It must not
 add KDA, total gold derived from GPM, total XP derived from XPM, lane
 efficiency, teamfight participation, benchmarks, rankings, or scores.
 Normalization may make a source fact semantically canonical; it must not invent
@@ -235,8 +236,28 @@ identity.
 Hero, item, and ability names are catalog-normalized companions to their native
 IDs. All ordinary and neutral items use the same canonical Item Catalog: Dota
 item ID to catalog to `id` and canonical `name`. OpenDota neutral source slots
-are normalized into `neutral_items` as ordinary `CanonicalItem` entries in
-source order. There is no separate enhancement semantic.
+are normalized into `neutral_items` as positional `ItemSlot` entries. The
+collection always has slots 0 and 1, and there is no separate enhancement
+semantic.
+
+Player stats and economy values are copied from provider-recorded match facts
+when available. They are not derived by DotaMind. In particular, KDA, estimated
+total gold, and estimated total XP are not calculated from these fields.
+
+When OpenDota provides an ID-only `ability_upgrades_arr` sequence, artifact
+construction preserves the ability IDs and source order; unavailable level and
+timing metadata remain `null`.
+
+### Purchase history canonicalization
+
+OpenDota `purchase_log` provides purchase time and an item key. The provider
+adapter preserves this as a construction-level `item_key`; it does not perform
+catalog resolution. During artifact construction, `ItemResolver` resolves
+`item_key` to Valve-native item identity and canonical display name.
+
+If an `item_key` cannot be resolved to a Valve item identity, that purchase
+event is omitted rather than creating an identity-less `PurchaseEvent` or
+failing the entire artifact. `purchase_history` preserves source event order.
 
 ### Missing-data and fixed-structure semantics
 
@@ -253,10 +274,38 @@ The artifact uses one missing-data contract:
 The fixed objects are `game`, `teams`, each player's `stats`, `economy`, and
 `items`, and `draft`.
 
-For example, missing `purchase_history`, `ability_upgrades`, and `neutral_items`
-are `[]`. Missing draft data is `draft: { picks: [], bans: [] }`. Inventory and
-backpack slot structure is preserved even for empty slots, for example
-`{ slot: 2, id: null, name: null }`.
+For example, missing `purchase_history` and `ability_upgrades` are `[]`. Missing
+draft data is `draft: { picks: [], bans: [] }`. Inventory and backpack slot
+structure is preserved even for empty slots, for example
+`{ slot: 2, id: null, name: null }`. Missing `neutral_items` is represented by
+the two empty neutral slots described below.
+
+Inventory, backpack, and neutral item placement is positional. `neutral_items`
+is always a fixed two-slot positional collection: slot 0 corresponds to the
+first neutral source slot and slot 1 corresponds to the second. An empty slot
+remains represented with `id = null` and `name = null`.
+
+```json
+"neutral_items": [
+  {
+    "slot": 0,
+    "id": null,
+    "name": null
+  },
+  {
+    "slot": 1,
+    "id": 1700,
+    "name": "Mystical"
+  }
+]
+```
+
+### Schema evolution
+
+Version 3 replaces neutral item value entries with positional `ItemSlot`
+entries so both neutral source positions remain observable when one is empty.
+It also permits ID-only ability upgrades to retain source IDs and order with
+`level` and `time_seconds` set to `null` when that metadata is unavailable.
 
 Provenance, freshness, coverage, completeness, and known missing sections
 remain part of the artifact quality contract.

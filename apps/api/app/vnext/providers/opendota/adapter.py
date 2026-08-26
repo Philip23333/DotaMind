@@ -21,6 +21,7 @@ from app.vnext.domain.refs import (
     ItemRef,
     ItemSlotRef,
     PlayerRef,
+    PurchaseEventRef,
     TeamRef,
 )
 from app.vnext.providers.common import ProviderBatch, ProviderObject
@@ -114,6 +115,15 @@ class OpenDotaGameConstructionAdapter:
             side="radiant" if source.player_slot < 128 else "dire",
             player_slot=source.player_slot,
             hero_ref=HeroRef(valve_hero_id=source.hero_id) if source.hero_id is not None else None,
+            level=source.level,
+            kills=source.kills,
+            deaths=source.deaths,
+            assists=source.assists,
+            last_hits=source.last_hits,
+            denies=source.denies,
+            net_worth=source.net_worth,
+            gold_per_min=source.gold_per_min,
+            xp_per_min=source.xp_per_min,
             item_slots=[
                 cls._item_slot(slot, item_id)
                 for slot, item_id in enumerate(
@@ -140,6 +150,18 @@ class OpenDotaGameConstructionAdapter:
                     (source.item_neutral, source.item_neutral2),
                 )
             ],
+            purchase_history=[
+                PurchaseEventRef(
+                    time_seconds=event.time,
+                    item_key=event.key,
+                )
+                for event in source.purchase_log
+                if (
+                    event.time is not None
+                    and isinstance(event.key, str)
+                    and event.key.strip()
+                )
+            ],
             ability_upgrades=[
                 AbilityUpgradeRef(
                     valve_ability_id=upgrade.ability_id,
@@ -147,11 +169,7 @@ class OpenDotaGameConstructionAdapter:
                     time_seconds=upgrade.time_seconds,
                 )
                 for upgrade in source.ability_upgrades
-                if (
-                    upgrade.ability_id is not None
-                    and upgrade.level is not None
-                    and upgrade.time_seconds is not None
-                )
+                if upgrade.ability_id is not None
             ],
         )
 

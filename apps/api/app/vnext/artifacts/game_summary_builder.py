@@ -7,9 +7,12 @@ from app.vnext.artifacts.game_summary import (
     GameInfo,
     GameSummaryArtifact,
     ItemSlot,
+    PlayerEconomy,
     PlayerGameSummary,
     PlayerIdentity,
     PlayerItems,
+    PlayerStats,
+    PurchaseEvent,
     Teams,
     TeamSummary,
 )
@@ -23,7 +26,7 @@ class MissingValveMatchIdError(ValueError):
 
 
 class GameSummaryBuilder:
-    """Convert construction context into the canonical schema version 2."""
+    """Convert construction context into the canonical schema version 3."""
 
     def __init__(
         self,
@@ -89,15 +92,29 @@ class GameSummaryBuilder:
             side=context.side,
             player_slot=context.player_slot,
             hero=self._hero_resolver.resolve(hero_ref),
+            stats=PlayerStats(
+                level=context.level,
+                kills=context.kills,
+                deaths=context.deaths,
+                assists=context.assists,
+                last_hits=context.last_hits,
+                denies=context.denies,
+            ),
+            economy=PlayerEconomy(
+                net_worth=context.net_worth,
+                gold_per_min=context.gold_per_min,
+                xp_per_min=context.xp_per_min,
+            ),
             items=PlayerItems(
                 inventory=[self._item_slot(slot) for slot in context.item_slots],
                 backpack=[self._item_slot(slot) for slot in context.backpack_slots],
-                neutral_items=[
-                    self._item_resolver.resolve(slot.item)
-                    for slot in context.neutral_items
-                    if slot.item is not None
-                ],
+                neutral_items=(
+                    [self._item_slot(slot) for slot in context.neutral_items]
+                    if context.neutral_items
+                    else [ItemSlot(slot=0), ItemSlot(slot=1)]
+                ),
             ),
+            purchase_history=self._purchase_history(context),
             ability_upgrades=[
                 self._ability_resolver.resolve(upgrade)
                 for upgrade in context.ability_upgrades
@@ -122,5 +139,23 @@ class GameSummaryBuilder:
             return ItemSlot(slot=source.slot, id=None, name=None)
         item = self._item_resolver.resolve(source.item)
         return ItemSlot(slot=source.slot, id=item.id, name=item.name)
+
+    def _purchase_history(self, context: PlayerContext) -> list[PurchaseEvent]:
+        events: list[PurchaseEvent] = []
+
+        for source in context.purchase_history:
+            item = self._item_resolver.resolve_key(source.item_key)
+            if item is None:
+                continue
+
+            events.append(
+                PurchaseEvent(
+                    time_seconds=source.time_seconds,
+                    item_id=item.id,
+                    item_name=item.name,
+                )
+            )
+
+        return events
 
 __all__ = ["GameSummaryBuilder", "MissingValveMatchIdError"]

@@ -145,6 +145,13 @@ dependency without introducing a Catalog Entity framework. A catalog miss
 preserves the native ID and produces `name = null`. The Artifact Builder alone
 composes `GameSummaryArtifact`; provider adapters and resolvers may not.
 
+Provider-native lookup keys may cross the adapter boundary as construction facts
+when they are required for later canonical identity resolution. For example,
+OpenDota `purchase_log.key` is preserved as `item_key` in construction input.
+The provider adapter does not resolve it against the Item Catalog. Item identity
+resolution happens at the Resolver/Builder boundary. Source representation is
+not canonical identity.
+
 This pipeline ends at artifact construction. It does not imply storage,
 retrieval, tool, or runtime integration.
 

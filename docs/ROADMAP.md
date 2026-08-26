@@ -56,7 +56,7 @@ before expanding scenario capabilities.
 
 Implemented deliverables:
 
-- `GameSummaryArtifact` schema version 2
+- `GameSummaryArtifact` schema version 3
 - Commit 3 — OpenDota-to-`GameSummaryArtifact` construction pipeline
 
 Planned / pending deliverables:

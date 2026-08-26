@@ -24,12 +24,19 @@ class ItemSlotRef(DomainModel):
     item: ItemRef | None
 
 
+class PurchaseEventRef(DomainModel):
+    """One provider-neutral purchase event before catalog normalization."""
+
+    time_seconds: int
+    item_key: str
+
+
 class AbilityUpgradeRef(DomainModel):
     """One source-native ability upgrade event."""
 
     valve_ability_id: int
-    level: int
-    time_seconds: int
+    level: int | None = None
+    time_seconds: int | None = None
 
 
 class PlayerRef(DomainModel):
@@ -60,5 +67,6 @@ __all__ = [
     "ItemRef",
     "ItemSlotRef",
     "PlayerRef",
+    "PurchaseEventRef",
     "TeamRef",
 ]

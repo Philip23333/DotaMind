@@ -6,7 +6,15 @@ from typing import Literal
 from pydantic import Field
 
 from .common.models import DomainModel
-from .refs import AbilityUpgradeRef, DraftEventRef, HeroRef, ItemSlotRef, PlayerRef, TeamRef
+from .refs import (
+    AbilityUpgradeRef,
+    DraftEventRef,
+    HeroRef,
+    ItemSlotRef,
+    PlayerRef,
+    PurchaseEventRef,
+    TeamRef,
+)
 
 
 class GameContext(DomainModel):
@@ -37,9 +45,19 @@ class PlayerContext(DomainModel):
     side: Literal["radiant", "dire"]
     player_slot: int
     hero_ref: HeroRef | None
+    level: int | None = None
+    kills: int | None = None
+    deaths: int | None = None
+    assists: int | None = None
+    last_hits: int | None = None
+    denies: int | None = None
+    net_worth: int | None = None
+    gold_per_min: int | None = None
+    xp_per_min: int | None = None
     item_slots: list[ItemSlotRef] = Field(default_factory=list)
     backpack_slots: list[ItemSlotRef] = Field(default_factory=list)
     neutral_items: list[ItemSlotRef] = Field(default_factory=list)
+    purchase_history: list[PurchaseEventRef] = Field(default_factory=list)
     ability_upgrades: list[AbilityUpgradeRef] = Field(default_factory=list)
 
 

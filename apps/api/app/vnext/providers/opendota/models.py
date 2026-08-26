@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
 
 
 class OpenDotaModel(BaseModel):
@@ -80,7 +80,7 @@ class OpenDotaGameConstructionTeam(OpenDotaModel):
 
 
 class OpenDotaGameConstructionAbilityUpgrade(OpenDotaModel):
-    """One explicitly timed and leveled OpenDota ability-upgrade event."""
+    """One OpenDota ability-upgrade event, with optional timing metadata."""
 
     ability_id: int | None = Field(
         default=None,
@@ -91,6 +91,20 @@ class OpenDotaGameConstructionAbilityUpgrade(OpenDotaModel):
         default=None,
         validation_alias=AliasChoices("time_seconds", "time"),
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_integer_ability_id(cls, value: Any) -> Any:
+        if isinstance(value, int) and not isinstance(value, bool):
+            return {"ability_id": value}
+        return value
+
+
+class OpenDotaGameConstructionPurchaseEvent(OpenDotaModel):
+    """One OpenDota purchase event used for construction input."""
+
+    time: int | None = None
+    key: str | None = None
 
 
 class OpenDotaGameConstructionPlayer(OpenDotaModel):
@@ -107,6 +121,15 @@ class OpenDotaGameConstructionPlayer(OpenDotaModel):
     )
     player_slot: int = Field(ge=0)
     hero_id: int | None = None
+    level: int | None = None
+    kills: int | None = None
+    deaths: int | None = None
+    assists: int | None = None
+    last_hits: int | None = None
+    denies: int | None = None
+    net_worth: int | None = None
+    gold_per_min: int | None = None
+    xp_per_min: int | None = None
     item_0: int | None = None
     item_1: int | None = None
     item_2: int | None = None
@@ -118,8 +141,13 @@ class OpenDotaGameConstructionPlayer(OpenDotaModel):
     backpack_2: int | None = None
     item_neutral: int | None = None
     item_neutral2: int | None = None
+    purchase_log: list[OpenDotaGameConstructionPurchaseEvent] = Field(default_factory=list)
     ability_upgrades: list[OpenDotaGameConstructionAbilityUpgrade] = Field(
-        default_factory=list
+        default_factory=list,
+        validation_alias=AliasChoices(
+            "ability_upgrades_arr",
+            "ability_upgrades",
+        ),
     )
 
 
@@ -154,6 +182,7 @@ __all__ = [
     "OpenDotaGameConstructionDraftEvent",
     "OpenDotaGameConstructionMatch",
     "OpenDotaGameConstructionPlayer",
+    "OpenDotaGameConstructionPurchaseEvent",
     "OpenDotaGameConstructionTeam",
     "OpenDotaLeague",
     "OpenDotaLeagueMatch",

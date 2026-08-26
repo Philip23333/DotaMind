@@ -3,11 +3,11 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class _GameSummaryModel(BaseModel):
-    """Reject fields that are outside the version 2 canonical artifact contract."""
+    """Reject fields that are outside the version 3 canonical artifact contract."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -94,12 +94,28 @@ class ItemSlot(_GameSummaryModel):
     name: str | None = None
 
 
+def _default_neutral_items() -> list[ItemSlot]:
+    """Keep both canonical neutral positions observable when source data is absent."""
+
+    return [ItemSlot(slot=0), ItemSlot(slot=1)]
+
+
 class PlayerItems(_GameSummaryModel):
     """Inventory, backpack, and neutral item collections."""
 
     inventory: list[ItemSlot] = Field(default_factory=list)
     backpack: list[ItemSlot] = Field(default_factory=list)
-    neutral_items: list[CanonicalItem] = Field(default_factory=list)
+    neutral_items: list[ItemSlot] = Field(
+        default_factory=_default_neutral_items,
+        validate_default=True,
+    )
+
+    @field_validator("neutral_items")
+    @classmethod
+    def _validate_neutral_slots(cls, value: list[ItemSlot]) -> list[ItemSlot]:
+        if len(value) != 2 or [slot.slot for slot in value] != [0, 1]:
+            raise ValueError("neutral_items must contain slots 0 and 1 in order")
+        return value
 
 
 class PurchaseEvent(_GameSummaryModel):
@@ -113,8 +129,8 @@ class PurchaseEvent(_GameSummaryModel):
 class AbilityUpgrade(_GameSummaryModel):
     """One skill-up event, rather than a hero ability catalog entry."""
 
-    level: int
-    time_seconds: int
+    level: int | None = None
+    time_seconds: int | None = None
     ability_id: int
     ability_name: str | None = None
 
@@ -150,10 +166,10 @@ class Draft(_GameSummaryModel):
 
 
 class GameSummaryArtifact(_GameSummaryModel):
-    """Provider-neutral canonical Dota facts for one game, schema version 2."""
+    """Provider-neutral canonical Dota facts for one game, schema version 3."""
 
     artifact_type: Literal["game_summary"] = "game_summary"
-    schema_version: Literal["2"] = "2"
+    schema_version: Literal["3"] = "3"
     game: GameInfo
     teams: Teams
     players: list[PlayerGameSummary] = Field(default_factory=list)
