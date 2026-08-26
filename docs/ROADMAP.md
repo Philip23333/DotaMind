@@ -71,12 +71,16 @@ Implemented deliverables:
   - bounded `artifact.search` lookup over canonical Valve match IDs
   - bounded `artifact.read` outline and structural path views with list limits
   - six-tool registry with artifact retrieval kept separate from production
+- Commit 5 — Artifact-driven Agent Evals
+  - fixture-backed real-model evaluation through the real AgentRuntime and
+    six-tool registry
+  - deep artifact fact exploration, conversation follow-up reuse, and
+    missing-data grounding behavior
 
 Artifact quality metadata persistence is not part of Commit 3.5.
 
 Planned / pending deliverables:
 
-- Evaluation scenarios for artifact and retrieval behavior
 - Reduced default tool context through bounded retrieval
 
 The Phase 2.x delivery order separates three responsibilities deliberately:

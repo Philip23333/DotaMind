@@ -243,12 +243,15 @@ def fixture_vnext_services(
     match_service: MatchService,
     panda: FakePandaScore,
     opendota: FakeOpenDota,
+    *,
+    builder: GameSummaryBuilder | None = None,
 ) -> VNextServices:
     store = MemoryArtifactStore()
     producer = GameSummaryArtifactProducer(
         opendota=opendota,
         construction_adapter=OpenDotaGameConstructionAdapter(),
-        builder=GameSummaryBuilder(
+        builder=builder
+        or GameSummaryBuilder(
             hero_resolver=HeroResolver({}),
             item_resolver=ItemResolver({}),
             ability_resolver=AbilityResolver({}),

@@ -34,6 +34,27 @@ current schedule, result, or match count.
 | Unsupported scope | 给我当前版本全英雄强度排行 | State that ranked-meta ranking is outside vNext Core without inventing an alternative |
 | Ambiguous identity | 查一下 Nigma 最近比赛 | Ask for clarification or expose candidates when identity cannot be uniquely resolved |
 
+## Fixture-backed agent evals
+
+These opt-in evaluations run a real configured model against fixture-backed
+PandaScore and OpenDota adapters, the real `AgentRuntime`, and the six-tool
+registry. They test autonomous agent behavior without allowing a volatile live
+provider response to determine the result.
+
+- Tool sequences are observed rather than prescribed. The model decides whether
+  it needs match detail or bounded artifact retrieval.
+- Assertions cover fixture-grounded facts, unavailable-data boundaries,
+  provider-private ID exclusion, and general tool-call budgets.
+- A multi-turn eval passes the prior transcript into a fresh runtime call, so
+  follow-up references must be resolved from actual conversation context.
+- `DOTAMIND_AGENT_EVAL_BASE_URL` and `DOTAMIND_AGENT_EVAL_MODEL` are required;
+  `DOTAMIND_AGENT_EVAL_API_KEY` is optional for compatible endpoints.
+- They are marked `agent_eval`, skipped without explicit model configuration,
+  and excluded from the ordinary deterministic CI acceptance path.
+
+Scripted behavioral tests are deterministic runtime regressions; they are not
+autonomous real-model agent evals.
+
 ## Live provider smoke evals
 
 These checks exercise real provider integrations. They verify that a provider

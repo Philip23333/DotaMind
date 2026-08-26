@@ -27,6 +27,9 @@ dev = [
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+markers = [
+  "agent_eval: fixture-backed agent evaluations using a real model"
+]
 
 [tool.ruff]
 line-length = 100
