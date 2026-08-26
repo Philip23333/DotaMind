@@ -49,7 +49,7 @@ provider smoke tests succeed without claiming ambiguous mappings as facts.
 
 ## Phase 2.x — Artifact Foundation
 
-Status: planned.
+Status: in progress.
 
 Goal: establish bounded, reusable artifact production and retrieval boundaries
 before expanding scenario capabilities.
@@ -58,13 +58,18 @@ Implemented deliverables:
 
 - `GameSummaryArtifact` schema version 3
 - Commit 3 — OpenDota-to-`GameSummaryArtifact` construction pipeline
-
-Planned / pending deliverables:
-
 - Commit 3.5 — Artifact Production & Store Integration
   - coordinate canonical game identity -> provider fetch -> artifact construction
     -> `ArtifactStore.put` -> `ArtifactRef`
+  - deterministic `ArtifactRef` derived from canonical artifact identity
+  - request/response canonical match identity validation
+  - no cache/TTL/refresh policy in this commit
   - keep artifact production outside Agent Runtime and model-facing tools
+
+Artifact quality metadata persistence is not part of Commit 3.5.
+
+Planned / pending deliverables:
+
 - Commit 4 — Artifact Retrieval Capability
   - bounded lookup and read over stored artifacts
   - reference validation, explicit coverage and missing-data behavior, and

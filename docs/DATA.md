@@ -310,6 +310,11 @@ It also permits ID-only ability upgrades to retain source IDs and order with
 Provenance, freshness, coverage, completeness, and known missing sections
 remain part of the artifact quality contract.
 
+> `GameSummaryArtifact` schema v3 and Commit 3.5 do not yet persist
+> `fetched_at`, provenance, coverage, completeness, or known-missing metadata.
+> These remain target artifact-quality contracts for a later explicit
+> schema/storage contract.
+
 ## Artifact lifecycle
 
 The target data lifecycle is:

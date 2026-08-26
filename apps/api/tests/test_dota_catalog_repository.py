@@ -137,6 +137,15 @@ def test_repository_loads_once_and_returns_deep_copies(tmp_path) -> None:
     assert repository.get_hero_abilities(1)[0].ability_id == 10
     assert [tier.level for tier in repository.get_hero_talent_tree(1)] == [10, 15, 20, 25]
     assert repository.hero_name_index() == {1: "Test Hero"}
+    ability_index = repository.ability_name_index()
+    ability_id = next(iter(ability_index))
+    assert ability_index[ability_id] == repository.get_ability(ability_id).name_en
+    item_index = repository.item_key_index()
+    item_record = next(
+        record for record in repository.list_items() if record.internal_name.startswith("item_")
+    )
+    assert item_index[item_record.internal_name] == item_record.item_id
+    assert item_index[item_record.internal_name.removeprefix("item_")] == item_record.item_id
     assert repository.snapshot_metadata()["status"] == "committed_snapshot"
 
     with pytest.raises(CatalogLookupError, match="item not found"):

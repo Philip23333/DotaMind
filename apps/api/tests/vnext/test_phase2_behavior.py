@@ -5,7 +5,7 @@ from typing import Any
 
 from app.vnext.agent.limits import AgentLimits
 from app.vnext.agent.runtime import AgentRuntime
-from app.vnext.composition import VNextServices, build_vnext_registry
+from app.vnext.composition import build_vnext_registry
 from app.vnext.llm.protocol import (
     AssistantMessage,
     FinalMessage,
@@ -16,12 +16,12 @@ from app.vnext.llm.protocol import (
     UserMessage,
 )
 from tests.vnext.fakes import ScriptedTranscriptModelClient
-from tests.vnext.phase2_support import fixture_services
+from tests.vnext.phase2_support import fixture_services, fixture_vnext_services
 
 
 def _runtime():
     competition_service, match_service, panda, opendota = fixture_services()
-    services = VNextServices(panda, opendota, competition_service, match_service)
+    services = fixture_vnext_services(competition_service, match_service, panda, opendota)
     registry = build_vnext_registry(services)
     runtime = AgentRuntime(
         ScriptedTranscriptModelClient([]),

@@ -12,9 +12,20 @@ from pathlib import Path
 
 from dotenv import dotenv_values
 
+from app.integrations.valve.catalog_repository import load_default_catalog_repository
+from app.vnext.artifacts import (
+    ArtifactStore,
+    GameSummaryArtifactProducer,
+    MemoryArtifactStore,
+)
+from app.vnext.artifacts.game_summary_builder import GameSummaryBuilder
 from app.vnext.domain.competitions.service import CompetitionService
 from app.vnext.domain.matches.service import MatchService
-from app.vnext.providers.opendota.adapter import OpenDotaAdapter
+from app.vnext.identity import AbilityResolver, HeroResolver, ItemResolver
+from app.vnext.providers.opendota.adapter import (
+    OpenDotaAdapter,
+    OpenDotaGameConstructionAdapter,
+)
 from app.vnext.providers.pandascore.adapter import PandaScoreAdapter
 from app.vnext.tools.competitions import register_competition_tools
 from app.vnext.tools.matches import register_match_tools
@@ -92,10 +103,25 @@ class VNextServices:
     opendota: OpenDotaAdapter
     competitions: CompetitionService
     matches: MatchService
+    artifact_store: ArtifactStore
+    game_summary_producer: GameSummaryArtifactProducer
 
     async def aclose(self) -> None:
         await self.pandascore.aclose()
         await self.opendota.aclose()
+
+
+def _build_game_summary_builder() -> GameSummaryBuilder:
+    catalog = load_default_catalog_repository()
+    items = catalog.list_items()
+    return GameSummaryBuilder(
+        hero_resolver=HeroResolver(catalog.hero_name_index()),
+        item_resolver=ItemResolver(
+            {item.item_id: item.name_en for item in items},
+            item_key_to_id=catalog.item_key_index(),
+        ),
+        ability_resolver=AbilityResolver(catalog.ability_name_index()),
+    )
 
 
 def build_vnext_services(
@@ -103,6 +129,7 @@ def build_vnext_services(
     *,
     pandascore: PandaScoreAdapter | None = None,
     opendota: OpenDotaAdapter | None = None,
+    artifact_store: ArtifactStore | None = None,
 ) -> VNextServices:
     config = settings or VNextSettings.from_env()
     panda_adapter = pandascore or PandaScoreAdapter(
@@ -123,11 +150,20 @@ def build_vnext_services(
         competition_service=competition_service,
     )
     competition_service.set_match_cache(match_service.remember_fixture)
+    store = artifact_store if artifact_store is not None else MemoryArtifactStore()
+    producer = GameSummaryArtifactProducer(
+        opendota=open_adapter,
+        construction_adapter=OpenDotaGameConstructionAdapter(),
+        builder=_build_game_summary_builder(),
+        store=store,
+    )
     return VNextServices(
         pandascore=panda_adapter,
         opendota=open_adapter,
         competitions=competition_service,
         matches=match_service,
+        artifact_store=store,
+        game_summary_producer=producer,
     )
 
 

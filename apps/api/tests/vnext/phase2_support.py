@@ -5,10 +5,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from app.vnext.artifacts import GameSummaryArtifactProducer, MemoryArtifactStore
+from app.vnext.artifacts.game_summary_builder import GameSummaryBuilder
+from app.vnext.composition import VNextServices
 from app.vnext.domain.competitions.service import CompetitionService
 from app.vnext.domain.matches.service import MatchService
+from app.vnext.identity import AbilityResolver, HeroResolver, ItemResolver
 from app.vnext.providers.common import ProviderBatch, ProviderObject
-from app.vnext.providers.opendota.adapter import OpenDotaHTTPError
+from app.vnext.providers.opendota.adapter import (
+    OpenDotaGameConstructionAdapter,
+    OpenDotaHTTPError,
+)
 from app.vnext.providers.opendota.models import (
     OpenDotaLeague,
     OpenDotaLeagueMatch,
@@ -189,3 +196,30 @@ def fixture_services(
     )
     competition_service.set_match_cache(match_service.remember_fixture)
     return competition_service, match_service, panda, opendota
+
+
+def fixture_vnext_services(
+    competition_service: CompetitionService,
+    match_service: MatchService,
+    panda: FakePandaScore,
+    opendota: FakeOpenDota,
+) -> VNextServices:
+    store = MemoryArtifactStore()
+    producer = GameSummaryArtifactProducer(
+        opendota=opendota,
+        construction_adapter=OpenDotaGameConstructionAdapter(),
+        builder=GameSummaryBuilder(
+            hero_resolver=HeroResolver({}),
+            item_resolver=ItemResolver({}),
+            ability_resolver=AbilityResolver({}),
+        ),
+        store=store,
+    )
+    return VNextServices(
+        panda,
+        opendota,
+        competition_service,
+        match_service,
+        store,
+        producer,
+    )

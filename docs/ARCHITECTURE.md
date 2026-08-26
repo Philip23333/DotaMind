@@ -4,9 +4,9 @@
 
 This is the vNext target architecture. The checked-out Legacy code does not
 claim to implement it until each replacement is deliberately delivered.
-The artifact construction boundary is implemented; artifact production/store
-integration and retrieval remain Phase 2.x delivery stages until their
-respective commits are complete.
+The artifact construction and production/store boundaries are implemented;
+artifact retrieval remains a Phase 2.x delivery stage until its commit is
+complete.
 
 ## Principles
 
@@ -157,7 +157,7 @@ retrieval, tool, or runtime integration.
 
 ## Artifact Production Lifecycle
 
-Commit 3.5 is the planned application-level production boundary:
+Commit 3.5 is the implemented application-level production boundary:
 
     Canonical Game Identity
       -> Provider Fetch
@@ -176,6 +176,16 @@ Runtime responsible for artifact creation, storage, refresh, expiration, or
 reuse policy. Runtime may eventually dispatch capabilities that reach this
 application boundary, but artifact production remains outside the runtime
 itself.
+
+Commit 3.5 freezes these production contracts:
+
+- The typed OpenDota construction fetch validates that the response match ID is
+  present and equals the requested canonical match ID.
+- `ArtifactRef` identity is derived from the completed canonical artifact.
+- Each `produce()` call fetches, constructs, and stores again; Commit 3.5 does
+  not define cache, TTL, refresh, or freshness policy.
+- `fetched_at`, provenance, and coverage are not persisted in the artifact
+  store in this commit.
 
 ## Artifact Retrieval Capability
 

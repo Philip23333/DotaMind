@@ -4,19 +4,20 @@ import asyncio
 import json
 
 from app.vnext.composition import (
-    VNextServices,
     VNextSettings,
     build_vnext_registry,
     build_vnext_services,
 )
 from app.vnext.llm.protocol import ToolCall
-from tests.vnext.phase2_support import fixture_services
+from tests.vnext.phase2_support import fixture_services, fixture_vnext_services
 
 
 def test_composition_is_lazy_and_registers_only_the_four_phase2_tools() -> None:
     services = build_vnext_services(VNextSettings(pandascore_token="test-token"))
     assert services.pandascore._client is None  # type: ignore[attr-defined]
     assert services.opendota._client is None  # type: ignore[attr-defined]
+    assert services.artifact_store is not None
+    assert services.game_summary_producer is not None
     registry = build_vnext_registry(services)
     assert [tool.name for tool in registry.list()] == [
         "competitions.search",
@@ -28,7 +29,7 @@ def test_composition_is_lazy_and_registers_only_the_four_phase2_tools() -> None:
 
 def test_registry_executes_all_four_phase2_tools_without_provider_ids() -> None:
     competition_service, match_service, panda, opendota = fixture_services()
-    services = VNextServices(panda, opendota, competition_service, match_service)
+    services = fixture_vnext_services(competition_service, match_service, panda, opendota)
     registry = build_vnext_registry(services)
 
     async def exercise():
@@ -85,7 +86,7 @@ def test_registry_executes_all_four_phase2_tools_without_provider_ids() -> None:
 def test_registry_game_ref_roundtrip_selects_only_game_two_without_provider_ids() -> None:
     competition_service, match_service, panda, opendota = fixture_services()
     registry = build_vnext_registry(
-        VNextServices(panda, opendota, competition_service, match_service)
+        fixture_vnext_services(competition_service, match_service, panda, opendota)
     )
 
     async def exercise():
@@ -152,7 +153,7 @@ def test_get_detail_requires_exactly_one_domain_reference() -> None:
     _, _, panda, opendota = fixture_services()
     competition_service, match_service, _, _ = fixture_services()
     registry = build_vnext_registry(
-        VNextServices(panda, opendota, competition_service, match_service)
+        fixture_vnext_services(competition_service, match_service, panda, opendota)
     )
     result = asyncio.run(
         registry.execute(

@@ -267,6 +267,27 @@ class OpenDotaAdapter:
             fetched_at=fetched_at,
         )
 
+    async def get_game_construction_match(
+        self,
+        match_id: int,
+    ) -> ProviderObject[OpenDotaGameConstructionMatch]:
+        """Fetch and validate the typed match input used by artifact construction."""
+
+        path = f"/matches/{match_id}"
+        payload, fetched_at = await self._get_json(path)
+        if not isinstance(payload, dict):
+            raise OpenDotaSchemaError(f"OpenDota response at {path} must be an object")
+
+        item = self._parse(OpenDotaGameConstructionMatch, payload, path)
+        if item.match_id is None:
+            raise OpenDotaSchemaError(f"OpenDota response at {path} is missing match_id")
+        if item.match_id != match_id:
+            raise OpenDotaSchemaError(
+                f"OpenDota response at {path} does not match requested match"
+            )
+
+        return ProviderObject(item=item, fetched_at=fetched_at)
+
     async def _get_json(
         self,
         path: str,

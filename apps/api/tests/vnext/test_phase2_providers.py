@@ -11,6 +11,7 @@ from app.vnext.providers.opendota.adapter import (
     OpenDotaHTTPError,
     OpenDotaSchemaError,
 )
+from app.vnext.providers.opendota.models import OpenDotaGameConstructionMatch
 from app.vnext.providers.pandascore.adapter import (
     PandaScoreAdapter,
     PandaScoreHTTPError,
@@ -161,3 +162,54 @@ def test_opendota_adapter_sanitizes_http_and_invalid_payloads() -> None:
                 )
             )
         )
+
+
+def test_opendota_typed_construction_fetch_validates_and_preserves_identity() -> None:
+    requested_match_id = 8123456789
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return _json_response(request, {"match_id": requested_match_id})
+
+    async def exercise():
+        adapter = OpenDotaAdapter(
+            base_url="https://opendota.test/api",
+            transport=httpx.MockTransport(handler),
+        )
+        result = await adapter.get_game_construction_match(requested_match_id)
+        await adapter.aclose()
+        return result
+
+    result = asyncio.run(exercise())
+
+    assert isinstance(result.item, OpenDotaGameConstructionMatch)
+    assert result.item.match_id == requested_match_id
+    assert result.fetched_at is not None
+    assert seen[0].url.path == f"/api/matches/{requested_match_id}"
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {},
+        {"match_id": 4567},
+    ],
+)
+def test_opendota_typed_construction_fetch_rejects_missing_or_mismatched_identity(
+    payload: dict[str, Any],
+) -> None:
+    requested_match_id = 8123
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return _json_response(request, payload)
+
+    async def call() -> None:
+        adapter = OpenDotaAdapter(
+            base_url="https://opendota.test/api",
+            transport=httpx.MockTransport(handler),
+        )
+        await adapter.get_game_construction_match(requested_match_id)
+
+    with pytest.raises(OpenDotaSchemaError):
+        asyncio.run(call())

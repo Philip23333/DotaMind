@@ -305,8 +305,30 @@ class DotaCatalogRepository:
     def hero_name_index(self) -> dict[int, str]:
         return {hero_id: record.name_en for hero_id, record in self._heroes.items()}
 
+    def ability_name_index(self) -> dict[int, str]:
+        return {
+            ability_id: record.name_en
+            for ability_id, record in self._abilities.items()
+        }
+
     def list_items(self) -> list[ItemCatalogRecord]:
         return [record.model_copy(deep=True) for record in self._items.values()]
+
+    def item_key_index(self) -> dict[str, int]:
+        """Map exact item internal names and their ``item_`` aliases to IDs."""
+
+        index: dict[str, int] = {}
+        for item_id, record in self._items.items():
+            keys = [record.internal_name]
+            if record.internal_name.startswith("item_"):
+                keys.append(record.internal_name.removeprefix("item_"))
+
+            for key in keys:
+                existing = index.get(key)
+                if existing is not None and existing != item_id:
+                    raise CatalogSnapshotError(f"ambiguous item key alias: {key}")
+                index[key] = item_id
+        return index
 
     def get_ability(self, ability_id: int) -> AbilityCatalogRecord:
         return self._copy_or_raise(self._abilities, ability_id, "ability")
