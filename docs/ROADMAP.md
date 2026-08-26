@@ -51,22 +51,35 @@ provider smoke tests succeed without claiming ambiguous mappings as facts.
 
 Status: planned.
 
-Goal: establish a bounded, reusable artifact and retrieval boundary before
-expanding scenario capabilities.
+Goal: establish bounded, reusable artifact production and retrieval boundaries
+before expanding scenario capabilities.
 
-Implemented deliverable:
+Implemented deliverables:
 
 - `GameSummaryArtifact` schema version 2
-- OpenDota-to-`GameSummaryArtifact` construction pipeline
+- Commit 3 — OpenDota-to-`GameSummaryArtifact` construction pipeline
 
 Planned / pending deliverables:
 
-- ArtifactStore integration and backend boundary
+- Commit 3.5 — Artifact Production & Store Integration
+  - coordinate canonical game identity -> provider fetch -> artifact construction
+    -> `ArtifactStore.put` -> `ArtifactRef`
+  - keep artifact production outside Agent Runtime and model-facing tools
+- Commit 4 — Artifact Retrieval Capability
+  - bounded lookup and read over stored artifacts
+  - reference validation, explicit coverage and missing-data behavior, and
+    bounded artifact views
 - Bounded artifact tool results using summaries, canonical references, coverage,
   and artifact references
 - `artifact.search` and `artifact.read` capabilities
 - Evaluation scenarios for artifact and retrieval behavior
 - Reduced default tool context through bounded retrieval
+
+The Phase 2.x delivery order separates three responsibilities deliberately:
+Commit 3 constructs a canonical artifact, Commit 3.5 produces and stores it,
+and Commit 4 retrieves bounded views of stored artifacts. Production and
+retrieval are application/data-layer responsibilities rather than Agent Runtime
+stages.
 
 Non-goals:
 
@@ -74,11 +87,15 @@ Non-goals:
 - Exposing raw provider JSON, full match dumps, large records, or provider IDs
   to the model
 - Requiring a fixed retrieval sequence
-- Claiming that artifact storage or the new retrieval tools are implemented
+- Making Agent Runtime responsible for creating, storing, refreshing, expiring,
+  or otherwise owning artifact lifecycle
+- Claiming that artifact production integration or retrieval tools are
+  implemented before their respective commits are complete
 
-Acceptance: the artifact and retrieval contracts are implemented and evaluated
-with explicit bounds, coverage, missing-data behavior, and conversation reuse.
-This phase is not complete merely because the documents or interfaces exist.
+Acceptance: the artifact production and retrieval contracts are implemented and
+evaluated with explicit bounds, coverage, missing-data behavior, and
+conversation reuse. This phase is not complete merely because the documents or
+interfaces exist.
 
 ## Phase 3 — Team, player, and catalog
 

@@ -4,8 +4,9 @@
 
 This is the vNext target architecture. The checked-out Legacy code does not
 claim to implement it until each replacement is deliberately delivered.
-The artifact and retrieval boundaries below are target contracts; they do not
-claim that the planned Phase 2.x store or retrieval tools exist today.
+The artifact construction boundary is implemented; artifact production/store
+integration and retrieval remain Phase 2.x delivery stages until their
+respective commits are complete.
 
 ## Principles
 
@@ -37,8 +38,9 @@ The API owns authentication and request ownership. The runtime owns model
 messages, tool dispatch, general limits, request deadlines, cancellation, and
 trace or streaming events. The Domain / Retrieval Layer owns Dota identity,
 availability, cross-source resolution, normalization, composition, and
-bounded views. The proposed Artifact Store would retain normalized canonical
-data that should not automatically enter model context. Provider Adapters own
+bounded views. The Artifact Store retains normalized canonical data that should
+not automatically enter model context; its contract exists independently from
+the planned production and retrieval integrations. Provider Adapters own
 upstream HTTP or SDK transport, provider authentication, and provider schemas.
 Raw Sources are external provider systems and are never model-facing
 contracts.
@@ -123,7 +125,7 @@ provider-private IDs, raw payloads, or intermediate wiring.
 
 ## Artifact Construction Pipeline
 
-The implemented construction boundary is layered:
+Commit 3 establishes the implemented construction boundary:
 
     Provider Data
       -> Provider Adapter
@@ -146,30 +148,69 @@ composes `GameSummaryArtifact`; provider adapters and resolvers may not.
 This pipeline ends at artifact construction. It does not imply storage,
 retrieval, tool, or runtime integration.
 
+## Artifact Production Lifecycle
+
+Commit 3.5 is the planned application-level production boundary:
+
+    Canonical Game Identity
+      -> Provider Fetch
+      -> Artifact Construction Pipeline
+      -> Canonical Artifact
+      -> ArtifactStore.put
+      -> ArtifactRef
+
+This layer coordinates already-defined provider, construction, resolver,
+builder, and store boundaries. It owns the deterministic application work
+required to produce and persist an artifact from canonical game identity. It
+does not redefine provider normalization or artifact schema semantics.
+
+Commit 3.5 does not add a model-facing artifact tool and does not make Agent
+Runtime responsible for artifact creation, storage, refresh, expiration, or
+reuse policy. Runtime may eventually dispatch capabilities that reach this
+application boundary, but artifact production remains outside the runtime
+itself.
+
+## Artifact Retrieval Capability
+
+Commit 4 is the planned retrieval boundary over stored artifacts:
+
+    ArtifactRef / Lookup Criteria
+      -> Retrieval Layer
+      -> Bounded Artifact View
+
+Retrieval answers what artifact data is available and returns bounded views
+with explicit reference validity, coverage, and missing-data semantics. It does
+not fetch provider data or construct a new artifact as part of the read path.
+Production and retrieval are separate responsibilities even when a later
+application capability may choose between reuse and production.
+
+The proposed model-facing retrieval capabilities are `artifact.search` and
+`artifact.read`. Their exact tool exposure follows the retrieval contract; the
+existence of Commit 4 does not require the model to follow a fixed search-then-
+read workflow.
+
 ## Artifact and Retrieval Layer
 
-This is the target contract for Phase 2.x — Artifact Foundation. It does not
-claim that an Artifact Store or retrieval tool has been implemented. The
-proposed ownership and data path are:
+Phase 2.x therefore separates the data lifecycle into deliberate stages:
 
     Provider data
-      -> Normalization
+      -> Normalization / Construction
       -> Canonical Artifact
       -> Artifact Store
-      -> Retrieval Tools
-      -> Model
+      -> Bounded Retrieval
+      -> Model-facing Capability
 
 Provider data is translated by domain normalization into canonical artifacts.
 An artifact is reusable, normalized domain data with canonical references,
 normalized values, provenance, coverage, completeness, and known missing
 sections. It is not a raw provider-response cache. The Artifact Store is a
-future storage boundary outside model context; its cache or durable backend is
-not selected by this document.
+storage boundary outside model context; Commit 3.5 connects artifact production
+to that boundary without assigning lifecycle ownership to Agent Runtime.
 
-Retrieval tools would expose independent, bounded views of an artifact. The
-proposed capabilities are `artifact.search` and `artifact.read`; they would
-enforce reference validity, path and size limits, and explicit unavailable
-sections. They would not expose provider-private IDs or raw payloads.
+Commit 4 retrieval exposes independent, bounded views of stored artifacts. The
+retrieval boundary enforces reference validity, path and size limits where
+applicable, and explicit unavailable sections. It does not expose
+provider-private IDs or raw payloads.
 
 This diagram describes ownership and a possible data path, not a mandatory
 request workflow. An existing artifact may be reused, a bounded domain summary
@@ -195,10 +236,10 @@ Normal model-facing views contain only bounded information such as:
 - bounded retrieval results when the model chooses more detail
 - source, freshness, and uncertainty information where relevant
 
-The retrieval layer would enforce bounds and availability while the model
-chooses when retrieval is useful. Artifact storage is never a responsibility
-of Agent Runtime, and artifact retrieval is not a fixed workflow or mandatory
-sequence of calls.
+The retrieval layer enforces bounds and availability while the model chooses
+when retrieval is useful. Artifact storage is never a responsibility of Agent
+Runtime, and artifact retrieval is not a fixed workflow or mandatory sequence
+of calls.
 
 ## Sessions and persistence
 
