@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -34,19 +33,12 @@ from app.vnext.domain.matches.normalization import (
     normalize_panda_match,
 )
 from app.vnext.domain.matches.resolution import (
-    LeagueMatchSignal,
-    LeagueSignal,
     MatchResolutionService,
-    MatchSignal,
     ResolutionDecision,
-    TeamSignal,
 )
+from app.vnext.domain.matches.valve_match_id_resolver import ValveMatchIdResolver
 from app.vnext.providers.opendota.adapter import OpenDotaAdapter, OpenDotaProviderError
-from app.vnext.providers.opendota.models import (
-    OpenDotaLeagueMatch,
-    OpenDotaMatchDetail,
-    OpenDotaTeam,
-)
+from app.vnext.providers.opendota.models import OpenDotaMatchDetail
 from app.vnext.providers.pandascore.adapter import PandaScoreAdapter
 from app.vnext.providers.pandascore.models import PandaScoreMatch
 
@@ -86,7 +78,7 @@ class MatchService:
         self.pandascore = pandascore
         self.opendota = opendota
         self.competition_service = competition_service
-        self.resolver = resolver or MatchResolutionService()
+        self.valve_match_id_resolver = ValveMatchIdResolver(opendota, resolver=resolver)
         self._now = now or (lambda: datetime.now(timezone.utc))
         self._matches: dict[str, _KnownMatch] = {}
         self._games: dict[str, _KnownGame] = {}
@@ -232,77 +224,14 @@ class MatchService:
         games: tuple[NormalizedGame, ...] | None = None,
     ) -> list[_ResolutionAttempt]:
         selected_games = games if games is not None else known.normalized.games
-        competition = known.normalized.summary.competition
-        if competition is None or competition.year is None:
-            return [
-                _ResolutionAttempt(
-                    decision=ResolutionDecision(
-                        status="insufficient_signals",
-                        warnings=("competition year is unavailable",),
-                    ),
-                    game=game,
-                )
-                for game in selected_games
-            ]
-        leagues_batch = await self.opendota.list_leagues()
-        leagues = [
-            LeagueSignal(
-                provider_id=league.provider_id,
-                name=league.name,
-                year=_extract_year(league.name),
-            )
-            for league in leagues_batch.items
+        decisions = await self.valve_match_id_resolver.resolve_many(
+            known.normalized,
+            selected_games,
+        )
+        return [
+            _ResolutionAttempt(decision=decision, game=game)
+            for game, decision in zip(selected_games, decisions, strict=True)
         ]
-        matching_leagues = self.resolver.matching_leagues(
-            known.normalized.competition_name,
-            known.normalized.competition_year,
-            leagues,
-        )
-        league_matches: dict[int, list[LeagueMatchSignal]] = {}
-        if len(matching_leagues) == 1:
-            league_id = matching_leagues[0].provider_id
-            match_batch = await self.opendota.list_league_matches(league_id)
-            league_matches[league_id] = [
-                _league_match_signal(item, league_id) for item in match_batch.items
-            ]
-        teams_batch = await self.opendota.list_teams()
-        open_teams = [_team_signal(item) for item in teams_batch.items]
-        team_candidates = {
-            normalize_text(team.name): [
-                candidate
-                for candidate in open_teams
-                if _same_team_name(team.name, candidate.name, candidate.tag)
-            ]
-            for team in known.normalized.summary.teams
-        }
-        fixture_teams = tuple(
-            TeamSignal(
-                provider_id=provider_id,
-                name=team.name,
-                tag=team.acronym,
-                fixture_id=provider_id,
-            )
-            for provider_id, team in known.normalized.teams_by_provider_id.items()
-        )
-        attempts: list[_ResolutionAttempt] = []
-        for game in selected_games:
-            fixture = MatchSignal(
-                provider_id=game.provider_id,
-                competition_name=known.normalized.competition_name,
-                competition_year=known.normalized.competition_year,
-                teams=fixture_teams,
-                start_time=game.start_time,
-                duration_seconds=game.duration_seconds,
-                winner_team_id=game.winner_provider_id,
-            )
-            decision = self.resolver.resolve(
-                fixture,
-                leagues,
-                team_candidates,
-                league_matches,
-            )
-            attempts.append(_ResolutionAttempt(decision=decision, game=game))
-        return attempts
 
     def _provider_unavailable_detail(
         self,
@@ -714,31 +643,6 @@ def _schedule_key(match: MatchSummary) -> datetime:
     return match.scheduled_at or match.started_at or datetime.max.replace(tzinfo=timezone.utc)
 
 
-def _league_match_signal(item: OpenDotaLeagueMatch, league_id: int) -> LeagueMatchSignal:
-    return LeagueMatchSignal(
-        provider_id=item.provider_match_id,
-        league_id=item.league_id or league_id,
-        start_time=item.start_time,
-        duration_seconds=item.duration,
-        radiant_team_id=item.radiant_team_id,
-        dire_team_id=item.dire_team_id,
-        radiant_win=item.radiant_win,
-    )
-
-
-def _team_signal(item: OpenDotaTeam) -> TeamSignal:
-    return TeamSignal(
-        provider_id=item.provider_id,
-        name=item.name or item.tag or str(item.provider_id),
-        tag=item.tag,
-    )
-
-
-def _same_team_name(query: str, name: str, tag: str | None) -> bool:
-    normalized_query = normalize_text(query)
-    return normalized_query in {normalize_text(name), normalize_text(tag or "")}
-
-
 def _epoch_seconds(value: datetime | None) -> int | None:
     return int(value.timestamp()) if value is not None else None
 
@@ -751,11 +655,6 @@ def _duration_seconds(start: datetime | None, end: datetime | None) -> int | Non
     if start is None or end is None:
         return None
     return max(0, int((end - start).total_seconds()))
-
-
-def _extract_year(value: str) -> int | None:
-    match = re.search(r"\b((?:19|20)\d{2})\b", value)
-    return int(match.group(1)) if match else None
 
 
 def _as_int(value: object) -> int | None:

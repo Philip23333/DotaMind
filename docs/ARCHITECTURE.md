@@ -109,6 +109,10 @@ Domain services own entity resolution, provider selection, cross-source
 mapping, normalization, de-duplication, domain errors, and provenance. They
 produce provider-neutral canonical references and domain objects.
 
+PandaScore Game to Valve match ID cross-source resolution is an internal,
+reusable domain capability. It is not a model-facing Tool; match detail and
+future artifact workflows may reuse the same resolver.
+
 Provider adapters own upstream transport, authentication, rate limits, retry
 policy, provider-specific models, and conversion from provider responses. Raw
 provider JSON stays below this boundary and is never exposed to the model.
