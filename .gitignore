@@ -34,3 +34,4 @@ Thumbs.db
 /data/
 postgres-data/
 redis-data/
+apps/api/tests/vnext/testResult/

@@ -7,6 +7,8 @@ import json
 import os
 import re
 from collections.abc import Sequence
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -29,6 +31,8 @@ from app.vnext.llm.protocol import (
     UserMessage,
 )
 from tests.vnext.phase2_support import fixture_services, fixture_vnext_services
+
+_RESULT_DIR = Path(__file__).parent / "testResult"
 
 
 class _TracingModelClient:
@@ -120,19 +124,19 @@ def _fixture_facts() -> dict[str, Any]:
     }
 
 
-def _tool_calls(model: _TracingModelClient) -> list[ToolCall]:
+def _tool_calls(model: _TracingModelClient, *, start: int = 0) -> list[ToolCall]:
     return [
         call
-        for response in model.responses
+        for response in model.responses[start:]
         if isinstance(response.message, AssistantMessage)
         for call in response.message.tool_calls
     ]
 
 
-def _tool_results(model: _TracingModelClient) -> list[ToolResultMessage]:
+def _tool_results(model: _TracingModelClient, *, start: int = 0) -> list[ToolResultMessage]:
     results: list[ToolResultMessage] = []
     seen_ids: set[str] = set()
-    for request in model.requests:
+    for request in model.requests[start:]:
         for message in request.messages:
             if isinstance(message, ToolResultMessage) and message.tool_call_id not in seen_ids:
                 seen_ids.add(message.tool_call_id)
@@ -140,7 +144,7 @@ def _tool_results(model: _TracingModelClient) -> list[ToolResultMessage]:
     return results
 
 
-def _compact_trace(calls: list[ToolCall], results: list[ToolResultMessage]) -> str:
+def _trace_rows(calls: list[ToolCall], results: list[ToolResultMessage]) -> list[dict[str, Any]]:
     result_by_id = {result.tool_call_id: result for result in results}
     rows: list[dict[str, Any]] = []
     for call in calls:
@@ -153,7 +157,50 @@ def _compact_trace(calls: list[ToolCall], results: list[ToolResultMessage]) -> s
                 "error": result.error.code if result and result.error else None,
             }
         )
-    return json.dumps(rows, ensure_ascii=False)
+    return rows
+
+
+def _compact_trace(calls: list[ToolCall], results: list[ToolResultMessage]) -> str:
+    return json.dumps(_trace_rows(calls, results), ensure_ascii=False)
+
+
+def _write_trace_result(
+    *,
+    name: str,
+    prompt: str,
+    answer: str | None,
+    terminal_error: Exception | None,
+    model_steps: int,
+    calls: list[ToolCall],
+    results: list[ToolResultMessage],
+) -> None:
+    """Persist a compact, local-only trace without model configuration or artifact bodies."""
+
+    payload = {
+        "recorded_at": datetime.now(timezone.utc).isoformat(),
+        "name": name,
+        "terminal_status": "final" if terminal_error is None else "error",
+        "prompt": prompt,
+        "answer": answer,
+        "terminal_error": (
+            None
+            if terminal_error is None
+            else {
+                "type": type(terminal_error).__name__,
+                "message": str(terminal_error),
+            }
+        ),
+        "model_steps": model_steps,
+        "trace": _trace_rows(calls, results),
+    }
+    _RESULT_DIR.mkdir(parents=True, exist_ok=True)
+    destination = _RESULT_DIR / f"{name}.json"
+    temporary = destination.with_suffix(".tmp")
+    temporary.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    temporary.replace(destination)
 
 
 def _failure_context(
@@ -165,20 +212,76 @@ def _failure_context(
     return f"prompt={prompt!r}\nanswer={answer!r}\ntrace={_compact_trace(calls, results)}"
 
 
+def test_trace_result_file_is_compact_and_local(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setitem(_write_trace_result.__globals__, "_RESULT_DIR", tmp_path)
+    call = ToolCall(id="call-1", name="matches.search", arguments={"query": "Grand Final"})
+    result = ToolResultMessage(tool_call_id="call-1", content={"unwritten": "artifact body"})
+
+    _write_trace_result(
+        name="writer_contract",
+        prompt="find the match",
+        answer="found it",
+        terminal_error=None,
+        model_steps=1,
+        calls=[call],
+        results=[result],
+    )
+
+    payload = json.loads((tmp_path / "writer_contract.json").read_text(encoding="utf-8"))
+    assert payload["terminal_status"] == "final"
+    assert payload["answer"] == "found it"
+    assert payload["model_steps"] == 1
+    assert payload["trace"] == [
+        {
+            "tool": "matches.search",
+            "arguments": {"query": "Grand Final"},
+            "status": "ok",
+            "error": None,
+        }
+    ]
+    assert "artifact body" not in (tmp_path / "writer_contract.json").read_text(encoding="utf-8")
+
+
 def _run_with_trace(
     runtime: AgentRuntime,
     model: _TracingModelClient,
     messages: Sequence[Message],
     prompt: str,
+    trace_name: str,
 ) -> FinalMessage:
+    response_start = len(model.responses)
+    request_start = len(model.requests)
     try:
-        return asyncio.run(runtime.run(messages))
+        final = asyncio.run(runtime.run(messages))
     except Exception as exc:
+        calls = _tool_calls(model, start=response_start)
+        results = _tool_results(model, start=request_start)
+        _write_trace_result(
+            name=trace_name,
+            prompt=prompt,
+            answer=None,
+            terminal_error=exc,
+            model_steps=len(model.responses) - response_start,
+            calls=calls,
+            results=results,
+        )
         pytest.fail(
             "agent evaluation terminated before a final answer: "
             f"{type(exc).__name__}: {exc}\n"
-            + _failure_context(prompt, "", _tool_calls(model), _tool_results(model))
+            + _failure_context(prompt, "", calls, results)
         )
+    calls = _tool_calls(model, start=response_start)
+    results = _tool_results(model, start=request_start)
+    _write_trace_result(
+        name=trace_name,
+        prompt=prompt,
+        answer=final.content,
+        terminal_error=None,
+        model_steps=len(model.responses) - response_start,
+        calls=calls,
+        results=results,
+    )
+    return final
 
 
 def _contains_value(value: object, payload: Any) -> bool:
@@ -219,7 +322,13 @@ def test_artifact_agent_eval_deep_facts_and_follow_up() -> None:
         "装备和技能请保留工具结果中的英文名称。"
     )
 
-    first_final = _run_with_trace(runtime, model, [UserMessage(content=prompt)], prompt)
+    first_final = _run_with_trace(
+        runtime,
+        model,
+        [UserMessage(content=prompt)],
+        prompt,
+        "deep_facts_initial",
+    )
     first_calls = _tool_calls(model)
     first_results = _tool_results(model)
     first_context = _failure_context(prompt, first_final.content, first_calls, first_results)
@@ -242,7 +351,13 @@ def test_artifact_agent_eval_deep_facts_and_follow_up() -> None:
         first_final,
         UserMessage(content=follow_up_prompt),
     ]
-    second_final = _run_with_trace(runtime, model, follow_up_messages, follow_up_prompt)
+    second_final = _run_with_trace(
+        runtime,
+        model,
+        follow_up_messages,
+        follow_up_prompt,
+        "deep_facts_follow_up",
+    )
     all_calls = _tool_calls(model)
     all_results = _tool_results(model)
     second_calls = all_calls[len(first_calls) :]
@@ -271,7 +386,13 @@ def test_artifact_agent_eval_missing_data_stays_grounded() -> None:
         "如果记录没有这个事实，请明确说无法确认。"
     )
 
-    final = _run_with_trace(runtime, model, [UserMessage(content=prompt)], prompt)
+    final = _run_with_trace(
+        runtime,
+        model,
+        [UserMessage(content=prompt)],
+        prompt,
+        "missing_data",
+    )
     calls = _tool_calls(model)
     results = _tool_results(model)
     context = _failure_context(prompt, final.content, calls, results)

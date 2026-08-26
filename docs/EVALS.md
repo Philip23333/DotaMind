@@ -51,6 +51,9 @@ provider response to determine the result.
   `DOTAMIND_AGENT_EVAL_API_KEY` is optional for compatible endpoints.
 - They are marked `agent_eval`, skipped without explicit model configuration,
   and excluded from the ordinary deterministic CI acceptance path.
+- Each completed or terminated model turn writes a compact JSON trace under
+  `apps/api/tests/vnext/testResult/`. The directory is local-only and excludes
+  model configuration, credentials, and full artifact bodies.
 
 Scripted behavioral tests are deterministic runtime regressions; they are not
 autonomous real-model agent evals.
