@@ -55,25 +55,78 @@ class _OpaqueRef(DomainModel):
 class CompetitionRef(_OpaqueRef):
     """Opaque, runtime-scoped reference to a normalized competition."""
 
-    value: str = Field(pattern=r"^competition:[0-9a-f]{24}$")
+    model_config = ConfigDict(
+        json_schema_extra={
+            "description": (
+                "Competition reference object. Pass the complete object returned by another "
+                "tool. Do not pass its value as a bare string or JSON-encode this object "
+                "into a string."
+            ),
+            "examples": [{"value": "competition:0123456789abcdef01234567"}],
+        }
+    )
+
+    value: str = Field(
+        pattern=r"^competition:[0-9a-f]{24}$",
+        description="Opaque competition reference value inside this reference object.",
+    )
 
 
 class MatchRef(_OpaqueRef):
     """Opaque, runtime-scoped reference to a normalized series match."""
 
-    value: str = Field(pattern=r"^match:[0-9a-f]{24}$")
+    model_config = ConfigDict(
+        json_schema_extra={
+            "description": (
+                "Match reference object. Pass the complete object returned by another tool. "
+                "Do not pass its value as a bare string or JSON-encode this object into a string."
+            ),
+            "examples": [{"value": "match:0123456789abcdef01234567"}],
+        }
+    )
+
+    value: str = Field(
+        pattern=r"^match:[0-9a-f]{24}$",
+        description="Opaque match reference value inside this reference object.",
+    )
 
 
 class GameRef(_OpaqueRef):
     """Opaque, runtime-scoped reference to a normalized game."""
 
-    value: str = Field(pattern=r"^game:[0-9a-f]{24}$")
+    model_config = ConfigDict(
+        json_schema_extra={
+            "description": (
+                "Game reference object. Pass the complete object returned by another tool. "
+                "Do not pass its value as a bare string or JSON-encode this object into a string."
+            ),
+            "examples": [{"value": "game:0123456789abcdef01234567"}],
+        }
+    )
+
+    value: str = Field(
+        pattern=r"^game:[0-9a-f]{24}$",
+        description="Opaque game reference value inside this reference object.",
+    )
 
 
 class TeamRef(_OpaqueRef):
     """Opaque team reference used inside match facts, not a team capability."""
 
-    value: str = Field(pattern=r"^team:[0-9a-f]{24}$")
+    model_config = ConfigDict(
+        json_schema_extra={
+            "description": (
+                "Team reference object. Pass the complete object returned by another tool. "
+                "Do not pass its value as a bare string or JSON-encode this object into a string."
+            ),
+            "examples": [{"value": "team:0123456789abcdef01234567"}],
+        }
+    )
+
+    value: str = Field(
+        pattern=r"^team:[0-9a-f]{24}$",
+        description="Opaque team reference value inside this reference object.",
+    )
 
 
 class Team(DomainModel):

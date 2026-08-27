@@ -21,7 +21,14 @@ class CompetitionSearchInput(DomainModel):
 
 
 class CompetitionListMatchesInput(DomainModel):
-    competition_ref: CompetitionRef
+    competition_ref: CompetitionRef = Field(
+        description=(
+            "Competition reference object returned by competitions.search. Pass the whole "
+            "object unchanged. Correct: {\"competition_ref\":{\"value\":"
+            "\"competition:0123456789abcdef01234567\"}}. Incorrect: "
+            "{\"competition_ref\":\"competition:...\"}."
+        )
+    )
     time_scope: Literal["upcoming", "recent", "running", "all"] = "all"
     status: MatchStatus | None = None
     limit: int = Field(default=10, ge=1, le=50)
@@ -59,8 +66,8 @@ def register_competition_tools(
         ToolDefinition(
             name="competitions.list_matches",
             description=(
-                "List a competition's bounded upcoming, recent, running, or all matches "
-                "with source freshness."
+                "List bounded matches for a CompetitionRef returned by competitions.search. "
+                "Use the returned reference object directly."
             ),
             input_model=CompetitionListMatchesInput,
             output_model=CompetitionMatchesResult,

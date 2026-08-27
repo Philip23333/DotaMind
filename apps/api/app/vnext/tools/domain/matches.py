@@ -17,14 +17,36 @@ from app.vnext.tools.registry import ToolRegistry
 class MatchSearchInput(DomainModel):
     query: str | None = None
     teams: list[str] = Field(default_factory=list, max_length=2)
-    competition: CompetitionRef | None = None
+    competition: CompetitionRef | None = Field(
+        default=None,
+        description=(
+            "Optional CompetitionRef object returned by competitions.search. This field is "
+            "named competition, not competition_ref. Use: {\"competition\":{\"value\":"
+            "\"competition:0123456789abcdef01234567\"}}."
+        ),
+    )
     time_scope: Literal["upcoming", "recent", "running", "all"] = "all"
     limit: int = Field(default=10, ge=1, le=50)
 
 
 class MatchGetDetailInput(DomainModel):
-    match_ref: MatchRef | None = None
-    game_ref: GameRef | None = None
+    match_ref: MatchRef | None = Field(
+        default=None,
+        description=(
+            "MatchRef object returned by matches.search. Pass the whole object unchanged: "
+            "{\"match_ref\":{\"value\":\"match:0123456789abcdef01234567\"}}. "
+            "Provide exactly one of match_ref or game_ref."
+        ),
+    )
+    game_ref: GameRef | None = Field(
+        default=None,
+        description=(
+            "GameRef object returned by matches.get_detail. Pass the whole object unchanged: "
+            "{\"game_ref\":{\"value\":"
+            "\"game:0123456789abcdef01234567\"}}. Provide exactly one of match_ref "
+            "or game_ref."
+        ),
+    )
 
     @model_validator(mode="after")
     def require_one_reference(self) -> MatchGetDetailInput:
@@ -59,7 +81,8 @@ def register_match_tools(
             name="matches.search",
             description=(
                 "Find professional Dota 2 series by teams, competition, query, or time scope. "
-                "Returns ordered candidates without guessing among ambiguity."
+                "When filtering by competition, pass the CompetitionRef object returned by "
+                "competitions.search. Returns ordered candidates without guessing among ambiguity."
             ),
             input_model=MatchSearchInput,
             output_model=MatchSearchResult,

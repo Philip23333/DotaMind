@@ -24,7 +24,12 @@ class ArtifactSearchInput(DomainModel):
 
 
 class ArtifactReadInput(DomainModel):
-    ref: ArtifactRef
+    ref: ArtifactRef = Field(
+        description=(
+            "Exact ArtifactRef object returned by artifact.search. Pass the whole object "
+            "unchanged; do not pass its id as a bare string or JSON-encode the object."
+        )
+    )
     path: str | None = None
     offset: int = Field(default=0, ge=0)
     limit: int = Field(default=50, ge=1, le=100)
@@ -67,7 +72,8 @@ def register_artifact_tools(
             name="artifact.read",
             description=(
                 "Read a bounded serialized view of an exact canonical artifact reference. "
-                "Supports structural dotted paths and bounded list slices only."
+                "Use the returned ArtifactRef object directly. Supports structural dotted paths "
+                "and bounded list slices only."
             ),
             input_model=ArtifactReadInput,
             output_model=ArtifactReadResult,
