@@ -11,14 +11,16 @@ from app.vnext.artifacts import (
     GameSummaryArtifactProducer,
     MemoryArtifactStore,
 )
-from app.vnext.artifacts.game_summary_builder import GameSummaryBuilder
+from app.vnext.artifacts.game_summary_builder_v4 import GameSummaryBuilderV4
 from app.vnext.composition import VNextServices
 from app.vnext.domain.competitions.service import CompetitionService
 from app.vnext.domain.matches.service import MatchService
 from app.vnext.domain.players.service import PlayerService
 from app.vnext.domain.team_player_index import TeamPlayerRefIndex
 from app.vnext.domain.teams.service import TeamService
-from app.vnext.identity import AbilityResolver, HeroResolver, ItemResolver
+from app.vnext.identity.ability_v4 import AbilityResolverV4
+from app.vnext.identity.hero_v4 import HeroResolverV4
+from app.vnext.identity.item_v4 import ItemResolverV4
 from app.vnext.providers.common import ProviderBatch, ProviderObject
 from app.vnext.providers.opendota.adapter import (
     OpenDotaGameConstructionAdapter,
@@ -436,17 +438,17 @@ def fixture_vnext_services(
     panda: FakePandaScore,
     opendota: FakeOpenDota,
     *,
-    builder: GameSummaryBuilder | None = None,
+    builder: GameSummaryBuilderV4 | None = None,
 ) -> VNextServices:
     store = MemoryArtifactStore()
     producer = GameSummaryArtifactProducer(
         opendota=opendota,
         construction_adapter=OpenDotaGameConstructionAdapter(),
         builder=builder
-        or GameSummaryBuilder(
-            hero_resolver=HeroResolver({}),
-            item_resolver=ItemResolver({}),
-            ability_resolver=AbilityResolver({}),
+        or GameSummaryBuilderV4(
+            hero_resolver=HeroResolverV4({}),
+            item_resolver=ItemResolverV4({}),
+            ability_resolver=AbilityResolverV4({}),
         ),
         store=store,
     )

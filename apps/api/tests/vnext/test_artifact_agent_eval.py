@@ -17,9 +17,12 @@ from app.integrations.valve.catalog_repository import load_default_catalog_repos
 from app.vnext.agent.limits import AgentLimits
 from app.vnext.agent.runtime import AgentRuntime
 from app.vnext.agent.tool_result_summary import summarize_tool_result
-from app.vnext.artifacts.game_summary_builder import GameSummaryBuilder
+from app.vnext.artifacts.game_summary_builder_v4 import GameSummaryBuilderV4
 from app.vnext.composition import build_vnext_registry
-from app.vnext.identity import AbilityResolver, HeroResolver, ItemResolver
+from app.vnext.identity.ability_v4 import AbilityResolverV4
+from app.vnext.identity.hero_v4 import HeroResolverV4
+from app.vnext.identity.item_v4 import ItemResolverV4
+from app.vnext.identity.localized import LocalizedName
 from app.vnext.llm.openai_compatible import OpenAICompatibleModelClient
 from app.vnext.llm.protocol import (
     AssistantMessage,
@@ -65,15 +68,30 @@ def _build_real_model() -> OpenAICompatibleModelClient:
     )
 
 
-def _fixture_builder() -> GameSummaryBuilder:
+def _fixture_builder() -> GameSummaryBuilderV4:
     catalog = load_default_catalog_repository()
-    return GameSummaryBuilder(
-        hero_resolver=HeroResolver(catalog.hero_name_index()),
-        item_resolver=ItemResolver(
-            {item.item_id: item.name_en for item in catalog.list_items()},
+    return GameSummaryBuilderV4(
+        hero_resolver=HeroResolverV4(
+            {
+                hero.hero_id: LocalizedName(hero.name_en or None, hero.name_zh or None)
+                for hero in catalog.list_heroes()
+            }
+        ),
+        item_resolver=ItemResolverV4(
+            {
+                item.item_id: LocalizedName(item.name_en or None, item.name_zh or None)
+                for item in catalog.list_items()
+            },
             item_key_to_id=catalog.item_key_index(),
         ),
-        ability_resolver=AbilityResolver(catalog.ability_name_index()),
+        ability_resolver=AbilityResolverV4(
+            {
+                ability.ability_id: LocalizedName(
+                    ability.name_en or None, ability.name_zh or None
+                )
+                for ability in catalog.list_abilities()
+            }
+        ),
     )
 
 

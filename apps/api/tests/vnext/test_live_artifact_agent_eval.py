@@ -10,7 +10,7 @@ from typing import Any
 import pytest
 
 from app.vnext.agent.runtime import AgentRuntime
-from app.vnext.artifacts.game_summary import GameSummaryArtifact
+from app.vnext.artifacts.game_summary_v4 import GameSummaryArtifactV4
 from app.vnext.artifacts.models import game_summary_artifact_ref
 from app.vnext.composition import (
     VNextSettings,
@@ -278,10 +278,10 @@ async def _run_live_full_chain(settings: VNextSettings) -> None:
                 "production could not retrieve the stored artifact: "
                 f"{type(exc).__name__}: {exc}; {second_context}"
             )
-        assert isinstance(artifact, GameSummaryArtifact), (
+        assert isinstance(artifact, GameSummaryArtifactV4), (
             f"production stored an unexpected artifact type; {second_context}"
         )
-        assert artifact.schema_version == "3", (
+        assert artifact.schema_version == "4", (
             f"production stored the wrong artifact schema version; {second_context}"
         )
 

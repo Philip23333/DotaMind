@@ -70,9 +70,9 @@ def test_artifact_read_summary_does_not_persist_its_value_body() -> None:
         "artifact.read",
         {
             "ref": {
-                "id": "game_summary:3:40003",
+                "id": "game_summary:4:40003",
                 "artifact_type": "game_summary",
-                "schema_version": "3",
+                "schema_version": "4",
             },
             "path": "players",
             "value": [{"registered_name": "carry"}],
@@ -85,9 +85,9 @@ def test_artifact_read_summary_does_not_persist_its_value_body() -> None:
 
     assert summary == {
         "ref": {
-            "id": "game_summary:3:40003",
+            "id": "game_summary:4:40003",
             "artifact_type": "game_summary",
-            "schema_version": "3",
+            "schema_version": "4",
         },
         "path": "players",
         "offset": 0,

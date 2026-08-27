@@ -21,13 +21,16 @@ from app.vnext.artifacts import (
     GameSummaryArtifactProducer,
     MemoryArtifactStore,
 )
-from app.vnext.artifacts.game_summary_builder import GameSummaryBuilder
+from app.vnext.artifacts.game_summary_builder_v4 import GameSummaryBuilderV4
 from app.vnext.domain.competitions.service import CompetitionService
 from app.vnext.domain.matches.service import MatchService
 from app.vnext.domain.players.service import PlayerService
 from app.vnext.domain.team_player_index import TeamPlayerRefIndex
 from app.vnext.domain.teams.service import TeamService
-from app.vnext.identity import AbilityResolver, HeroResolver, ItemResolver
+from app.vnext.identity.ability_v4 import AbilityResolverV4
+from app.vnext.identity.hero_v4 import HeroResolverV4
+from app.vnext.identity.item_v4 import ItemResolverV4
+from app.vnext.identity.localized import LocalizedName
 from app.vnext.llm.openai_compatible import OpenAICompatibleModelClient
 from app.vnext.providers.opendota.adapter import (
     OpenDotaAdapter,
@@ -144,16 +147,37 @@ class VNextServices:
         await self.opendota.aclose()
 
 
-def _build_game_summary_builder() -> GameSummaryBuilder:
+def _build_game_summary_builder() -> GameSummaryBuilderV4:
     catalog = load_default_catalog_repository()
-    items = catalog.list_items()
-    return GameSummaryBuilder(
-        hero_resolver=HeroResolver(catalog.hero_name_index()),
-        item_resolver=ItemResolver(
-            {item.item_id: item.name_en for item in items},
+    return GameSummaryBuilderV4(
+        hero_resolver=HeroResolverV4(
+            {
+                hero.hero_id: LocalizedName(
+                    name_en=hero.name_en or None,
+                    name_zh=hero.name_zh or None,
+                )
+                for hero in catalog.list_heroes()
+            }
+        ),
+        item_resolver=ItemResolverV4(
+            {
+                item.item_id: LocalizedName(
+                    name_en=item.name_en or None,
+                    name_zh=item.name_zh or None,
+                )
+                for item in catalog.list_items()
+            },
             item_key_to_id=catalog.item_key_index(),
         ),
-        ability_resolver=AbilityResolver(catalog.ability_name_index()),
+        ability_resolver=AbilityResolverV4(
+            {
+                ability.ability_id: LocalizedName(
+                    name_en=ability.name_en or None,
+                    name_zh=ability.name_zh or None,
+                )
+                for ability in catalog.list_abilities()
+            }
+        ),
     )
 
 

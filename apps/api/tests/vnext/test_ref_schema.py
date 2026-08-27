@@ -147,9 +147,9 @@ def test_domain_reference_inputs_reject_string_forms(
 
 def test_artifact_reference_input_remains_a_strict_nested_object() -> None:
     valid_ref = {
-        "id": "game_summary:3:8123456789",
+        "id": "game_summary:4:8123456789",
         "artifact_type": "game_summary",
-        "schema_version": "3",
+        "schema_version": "4",
     }
     assert ArtifactReadInput.model_validate({"ref": valid_ref}).ref == ArtifactRef(**valid_ref)
     for invalid_value in (valid_ref["id"], json.dumps(valid_ref)):

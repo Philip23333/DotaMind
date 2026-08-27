@@ -14,15 +14,15 @@ from app.vnext.artifacts import (
     MemoryArtifactStore,
     game_summary_artifact_ref,
 )
-from app.vnext.artifacts.game_summary import GameSummaryArtifact
+from app.vnext.artifacts.game_summary_v4 import GameSummaryArtifactV4
 from app.vnext.composition import build_vnext_registry
 from app.vnext.llm.protocol import ToolCall
 from app.vnext.tools.artifacts.retrieval import ArtifactReadInput, ArtifactSearchInput
 from tests.vnext.phase2_support import fixture_services, fixture_vnext_services
 
 
-def _artifact() -> GameSummaryArtifact:
-    return GameSummaryArtifact(
+def _artifact() -> GameSummaryArtifactV4:
+    return GameSummaryArtifactV4(
         game={
             "valve_match_id": 8123456789,
             "start_time": datetime(2026, 8, 26, 12, tzinfo=timezone.utc),
@@ -72,7 +72,7 @@ def test_reader_outline_is_bounded_and_serializes_datetime() -> None:
     assert result.truncated is False
     assert result.value == {
         "artifact_type": "game_summary",
-        "schema_version": "3",
+        "schema_version": "4",
         "sections": {
             "game": {"kind": "object"},
             "teams": {"kind": "object"},
@@ -93,7 +93,12 @@ def test_reader_traverses_objects_lists_and_preserves_null_values() -> None:
     assert reader.read(ref, "game.valve_match_id").value == 8123456789
     assert reader.read(ref, "players.0.items.inventory.0.id").value is None
     assert reader.read(ref, "players.0.purchase_history", offset=1, limit=1).value == [
-        {"time_seconds": 20, "item_id": 2, "item_name": None}
+        {
+            "time_seconds": 20,
+            "item_id": 2,
+            "item_name_en": None,
+            "item_name_zh": None,
+        }
     ]
     paged = reader.read(ref, "players.0.purchase_history", offset=0, limit=1)
     assert paged.offset == 0
@@ -320,9 +325,9 @@ def test_artifact_read_missing_ref_is_an_explicit_tool_error() -> None:
                 name="artifact.read",
                 arguments={
                     "ref": {
-                        "id": "game_summary:3:999999",
+                        "id": "game_summary:4:999999",
                         "artifact_type": "game_summary",
-                        "schema_version": "3",
+                        "schema_version": "4",
                     },
                     "path": "game",
                 },
@@ -343,9 +348,9 @@ def test_tool_input_contracts_bound_search_and_read() -> None:
         ArtifactReadInput.model_validate(
             {
                 "ref": {
-                    "id": "game_summary:3:1",
+                    "id": "game_summary:4:1",
                     "artifact_type": "game_summary",
-                    "schema_version": "3",
+                    "schema_version": "4",
                 },
                 "limit": 101,
             }

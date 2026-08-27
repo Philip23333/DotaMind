@@ -311,6 +311,9 @@ class DotaCatalogRepository:
             for ability_id, record in self._abilities.items()
         }
 
+    def list_abilities(self) -> list[AbilityCatalogRecord]:
+        return [record.model_copy(deep=True) for record in self._abilities.values()]
+
     def list_items(self) -> list[ItemCatalogRecord]:
         return [record.model_copy(deep=True) for record in self._items.values()]
 

@@ -2,6 +2,7 @@
 
 from .game_summary import GameSummaryArtifact
 from .game_summary_producer import GameSummaryArtifactProducer
+from .game_summary_v4 import GameSummaryArtifactV4
 from .memory import MemoryArtifactStore
 from .models import ArtifactRef, game_summary_artifact_ref
 from .protocol import Artifact
@@ -28,6 +29,7 @@ __all__ = [
     "ArtifactStore",
     "ArtifactTypeMismatchError",
     "GameSummaryArtifact",
+    "GameSummaryArtifactV4",
     "GameSummaryArtifactProducer",
     "MemoryArtifactStore",
     "game_summary_artifact_ref",
