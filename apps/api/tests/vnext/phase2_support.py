@@ -33,6 +33,7 @@ from app.vnext.providers.pandascore.models import (
     PandaScoreLeague,
     PandaScoreMatch,
     PandaScoreSeries,
+    PandaScoreTeam,
 )
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -89,11 +90,17 @@ class FakePandaScore:
         self.direct_series = self.series
         self.league_series = self.series
         self.matches = panda_matches()
+        self.teams = _panda_teams(self.matches)
+        self.team_search_results: dict[str, list[PandaScoreTeam]] = {}
+        self.team_match_pages: dict[int, list[list[PandaScoreMatch]]] = {}
         self.detail_available = detail_available
+        self.list_matches_has_more = False
         self.get_calls: list[int] = []
         self.list_calls: list[dict[str, object]] = []
         self.league_search_calls: list[dict[str, object]] = []
         self.league_series_calls: list[dict[str, object]] = []
+        self.team_search_calls: list[dict[str, object]] = []
+        self.team_match_calls: list[dict[str, object]] = []
 
     async def search_series(
         self,
@@ -102,7 +109,7 @@ class FakePandaScore:
         year: int | None = None,
         limit: int = 20,
     ) -> ProviderBatch[PandaScoreSeries]:
-        return ProviderBatch(self.direct_series[:limit], FETCHED_AT)
+        return ProviderBatch(self.direct_series[:limit], FETCHED_AT, has_more=False)
 
     async def search_leagues(
         self,
@@ -120,7 +127,7 @@ class FakePandaScore:
             if item.league is not None
             and (not query or query.casefold() in (item.league.name or "").casefold())
         }
-        return ProviderBatch(list(leagues.values())[:limit], FETCHED_AT)
+        return ProviderBatch(list(leagues.values())[:limit], FETCHED_AT, has_more=False)
 
     async def list_league_series(
         self,
@@ -137,7 +144,27 @@ class FakePandaScore:
         ]
         if year is not None:
             rows = [item for item in rows if item.year == year]
-        return ProviderBatch(rows[:limit], FETCHED_AT)
+        return ProviderBatch(rows[:limit], FETCHED_AT, has_more=False)
+
+    async def search_teams(
+        self,
+        *,
+        query: str | None = None,
+        limit: int = 20,
+    ) -> ProviderBatch[PandaScoreTeam]:
+        self.team_search_calls.append({"query": query, "limit": limit})
+        rows = self.team_search_results.get(query or "", self.teams)
+        if query:
+            needle = query.casefold()
+            rows = [
+                item
+                for item in rows
+                if any(
+                    needle in (value or "").casefold()
+                    for value in (item.name, item.acronym, item.slug)
+                )
+            ]
+        return ProviderBatch(rows[:limit], FETCHED_AT, has_more=False)
 
     async def list_matches(
         self,
@@ -162,7 +189,49 @@ class FakePandaScore:
         if query:
             needle = query.casefold()
             rows = [item for item in rows if needle in item.name.casefold()]
-        return ProviderBatch(rows[:limit], FETCHED_AT)
+        return ProviderBatch(rows[:limit], FETCHED_AT, has_more=self.list_matches_has_more)
+
+    async def list_team_matches(
+        self,
+        team_id: int,
+        *,
+        page_number: int = 1,
+        page_size: int = 20,
+        sort: str | None = None,
+        query: str | None = None,
+        series_id: int | None = None,
+    ) -> ProviderBatch[PandaScoreMatch]:
+        self.team_match_calls.append(
+            {
+                "team_id": team_id,
+                "page_number": page_number,
+                "page_size": page_size,
+                "sort": sort,
+                "query": query,
+                "series_id": series_id,
+            }
+        )
+        configured_pages = self.team_match_pages.get(team_id)
+        if configured_pages is not None:
+            if page_number > len(configured_pages):
+                return ProviderBatch([], FETCHED_AT, has_more=False)
+            return ProviderBatch(
+                configured_pages[page_number - 1],
+                FETCHED_AT,
+                has_more=page_number < len(configured_pages),
+            )
+        rows = [
+            item
+            for item in self.matches
+            if team_id in {opponent.opponent.provider_id for opponent in item.opponents}
+        ]
+        start = (page_number - 1) * page_size
+        page = rows[start : start + page_size]
+        return ProviderBatch(
+            page,
+            FETCHED_AT,
+            has_more=start + page_size < len(rows),
+        )
 
     async def get_match(self, provider_match_id: int) -> ProviderObject[PandaScoreMatch]:
         self.get_calls.append(provider_match_id)
@@ -172,6 +241,24 @@ class FakePandaScore:
             if item.provider_id == provider_match_id:
                 return ProviderObject(item, FETCHED_AT)
         raise AssertionError(f"unknown fixture match {provider_match_id}")
+
+
+def _panda_teams(matches: list[PandaScoreMatch]) -> list[PandaScoreTeam]:
+    teams: dict[int, PandaScoreTeam] = {}
+    for match in matches:
+        for opponent in match.opponents:
+            team = opponent.opponent
+            teams.setdefault(
+                team.provider_id,
+                PandaScoreTeam(
+                    id=team.provider_id,
+                    name=team.name,
+                    acronym=team.acronym,
+                    slug=team.name.casefold().replace(" ", "-"),
+                    image_url=team.image_url,
+                ),
+            )
+    return list(teams.values())
 
 
 class FakeOpenDota:

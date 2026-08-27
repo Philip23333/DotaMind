@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 
 from app.vnext.domain.common.models import CompetitionRef
+from app.vnext.domain.competitions.service import competition_display_name
 from app.vnext.domain.matches.normalization import normalize_panda_match
 from app.vnext.domain.matches.resolution import (
     LeagueMatchSignal,
@@ -11,7 +12,7 @@ from app.vnext.domain.matches.resolution import (
     MatchSignal,
     TeamSignal,
 )
-from app.vnext.providers.pandascore.models import PandaScoreMatch
+from app.vnext.providers.pandascore.models import PandaScoreMatch, PandaScoreSeries
 from tests.vnext.phase2_support import FETCHED_AT, fixture_services, load_fixture
 
 
@@ -24,6 +25,7 @@ def test_competition_search_normalizes_year_deduplicates_and_preserves_provenanc
 
     assert exact.status == "unique"
     assert exact.candidate_count == 1
+    assert exact.candidates[0].name == "The International 2026"
     assert exact.candidates[0].year == 2026
     assert exact.provenance.sources == ["pandascore"]
     assert exact.provenance.freshness.fetched_at == FETCHED_AT
@@ -31,6 +33,85 @@ def test_competition_search_normalizes_year_deduplicates_and_preserves_provenanc
     assert ambiguous.candidate_count == 2
     assert missing.status == "not_found"
     assert missing.candidates == []
+
+
+def test_competition_display_identity_composes_league_year_and_qualifier() -> None:
+    competition_service, _, panda, _ = fixture_services()
+    panda.direct_series = [
+        PandaScoreSeries.model_validate(
+            {
+                "id": 21001,
+                "name": "2026",
+                "full_name": "2026",
+                "year": 2026,
+                "league": {"id": 551, "name": "Example League"},
+            }
+        ),
+        PandaScoreSeries.model_validate(
+            {
+                "id": 21002,
+                "name": "China Closed Qualifier",
+                "full_name": "China Closed Qualifier 2026",
+                "year": 2026,
+                "league": {"id": 551, "name": "Example League"},
+            }
+        ),
+    ]
+    panda.league_series = panda.direct_series
+
+    result = asyncio.run(competition_service.search("Example League", year=2026))
+
+    names = {candidate.name for candidate in result.candidates}
+    assert names == {
+        "Example League 2026",
+        "Example League 2026 — China Closed Qualifier",
+    }
+    assert (
+        competition_display_name(
+            league_name="Example League",
+            series_name="Example League 2026",
+            series_full_name="Example League 2026",
+            year=2026,
+        )
+        == "Example League 2026"
+    )
+    assert (
+        competition_display_name(
+            league_name=None,
+            series_name="Standalone Championship 2026",
+            series_full_name="Standalone Championship 2026",
+            year=2026,
+        )
+        == "Standalone Championship 2026"
+    )
+
+
+def test_competition_schedule_truncated_uses_provider_pagination_even_after_local_filter() -> None:
+    competition_service, _, panda, _ = fixture_services()
+    found = asyncio.run(competition_service.search("The International 2026", year=2026))
+    panda.list_matches_has_more = True
+
+    result = asyncio.run(
+        competition_service.list_matches(
+            found.candidates[0].ref,
+            time_scope="recent",
+            status="finished",
+            limit=10,
+        )
+    )
+
+    assert result.candidate_count == 2
+    assert result.truncated is True
+
+
+def test_unknown_competition_schedule_is_not_truncated() -> None:
+    competition_service, _, _, _ = fixture_services()
+    unknown = CompetitionRef(value="competition:" + "f" * 24)
+
+    result = asyncio.run(competition_service.list_matches(unknown))
+
+    assert result.status == "not_found"
+    assert result.truncated is False
 
 
 def test_competition_search_uses_league_route_when_direct_series_is_empty() -> None:
@@ -77,6 +158,7 @@ def test_competition_schedule_is_normalized_and_status_filtered() -> None:
     assert all(
         match.competition and match.competition.ref == competition_ref for match in schedule.matches
     )
+    assert schedule.truncated is False
     assert schedule.provenance.freshness.fetched_at == FETCHED_AT
 
 
@@ -138,6 +220,83 @@ def test_match_search_orders_recent_candidates_and_keeps_ambiguity() -> None:
     assert result.candidate_count == 2
     assert result.candidates[0].scheduled_at > result.candidates[1].scheduled_at
     assert result.candidates[0].teams[0].name == "Nigma Galaxy"
+
+
+def test_team_search_discovers_pair_on_second_page() -> None:
+    _, match_service, panda, _ = fixture_services()
+    panda.team_match_pages[70001] = [[panda.matches[-1]], [panda.matches[0]]]
+
+    result = asyncio.run(
+        match_service.search(
+            teams=["Nigma Galaxy", "OG"],
+            query="Nigma Galaxy vs OG",
+            time_scope="recent",
+            limit=1,
+        )
+    )
+
+    assert result.status == "unique"
+    assert result.candidate_count == 1
+    assert result.candidates[0].name == "Round 2: NGX vs OG"
+    assert [call["query"] for call in panda.team_search_calls] == ["Nigma Galaxy", "OG"]
+    assert [call["page_number"] for call in panda.team_match_calls] == [1, 2]
+    assert all(call["query"] is None for call in panda.team_match_calls)
+
+
+def test_single_team_recent_search_uses_team_route_and_filters_time_scope() -> None:
+    _, match_service, panda, _ = fixture_services()
+
+    result = asyncio.run(
+        match_service.search(
+            teams=["Nigma Galaxy"],
+            time_scope="recent",
+            limit=10,
+        )
+    )
+
+    assert result.status == "ambiguous"
+    assert result.candidate_count == 2
+    assert all(candidate.status == "finished" for candidate in result.candidates)
+    assert panda.list_calls == []
+    assert len(panda.team_match_calls) == 1
+
+
+def test_team_search_stops_at_page_bound_and_discloses_truncation() -> None:
+    _, match_service, panda, _ = fixture_services()
+    panda.team_match_pages[70001] = [[panda.matches[0]] for _ in range(6)]
+
+    result = asyncio.run(
+        match_service.search(
+            teams=["Nigma Galaxy", "OG"],
+            time_scope="recent",
+            limit=10,
+        )
+    )
+
+    assert result.status == "unique"
+    assert result.candidate_count == 1
+    assert len(panda.team_match_calls) == 5
+    warning_text = " ".join(result.provenance.warnings)
+    assert "bounded" in warning_text
+    assert "truncated" in warning_text
+
+
+def test_team_search_result_does_not_serialize_provider_team_ids() -> None:
+    _, match_service, panda, _ = fixture_services()
+
+    result = asyncio.run(
+        match_service.search(
+            teams=["Team Alpha", "Team Beta"],
+            time_scope="recent",
+            limit=1,
+        )
+    )
+    serialized = result.model_dump_json()
+
+    assert result.status == "unique"
+    assert "70010" not in serialized
+    assert "70011" not in serialized
+    assert panda.team_search_calls
 
 
 def test_match_service_detail_resolves_and_normalizes_opendota_detail() -> None:

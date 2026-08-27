@@ -13,6 +13,7 @@ T = TypeVar("T")
 class ProviderBatch(Generic[T]):
     items: list[T]
     fetched_at: datetime
+    has_more: bool | None = None
 
 
 @dataclass(frozen=True, slots=True)

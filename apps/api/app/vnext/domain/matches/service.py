@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 
 from app.vnext.domain.common.models import (
@@ -14,7 +14,8 @@ from app.vnext.domain.common.models import (
     Provenance,
     normalize_text,
 )
-from app.vnext.domain.competitions.service import CompetitionService
+from app.vnext.domain.competitions.models import Competition
+from app.vnext.domain.competitions.service import CompetitionService, competition_display_name
 from app.vnext.domain.matches.models import (
     CompetitionSummary,
     DraftPick,
@@ -40,7 +41,11 @@ from app.vnext.domain.matches.valve_match_id_resolver import ValveMatchIdResolve
 from app.vnext.providers.opendota.adapter import OpenDotaAdapter, OpenDotaProviderError
 from app.vnext.providers.opendota.models import OpenDotaMatchDetail
 from app.vnext.providers.pandascore.adapter import PandaScoreAdapter
-from app.vnext.providers.pandascore.models import PandaScoreMatch
+from app.vnext.providers.pandascore.models import PandaScoreMatch, PandaScoreTeam
+
+_TEAM_SEARCH_LIMIT = 20
+_TEAM_MATCH_PAGE_SIZE = 100
+_TEAM_MATCH_MAX_PAGES = 5
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,6 +116,15 @@ class MatchService:
             )
         if known_competition is not None and self.competition_service is not None:
             provider_series_id = self.competition_service.provider_id_for(known_competition.ref)
+        if normalized_teams:
+            return await self._search_by_teams(
+                query=query,
+                teams=normalized_teams,
+                known_competition=known_competition,
+                provider_series_id=provider_series_id,
+                time_scope=time_scope,
+                limit=limit,
+            )
         provider_query = None if normalized_teams else query
         batch = await self.pandascore.list_matches(
             scope=time_scope,
@@ -121,7 +135,7 @@ class MatchService:
         candidates: list[MatchCandidate] = []
         seen: set[str] = set()
         for row in batch.items:
-            normalized = normalize_panda_match(
+            normalized = _normalize_search_match(
                 row,
                 fetched_at=batch.fetched_at,
                 competition_ref=known_competition.ref if known_competition else None,
@@ -163,6 +177,125 @@ class MatchService:
                     "not_found" if total == 0 else "ambiguous" if total > 1 else "native"
                 ),
                 warnings=[],
+            ),
+        )
+
+    async def _search_by_teams(
+        self,
+        *,
+        query: str | None,
+        teams: list[str],
+        known_competition: Competition | None,
+        provider_series_id: int | None,
+        time_scope: TimeScope,
+        limit: int,
+    ) -> MatchSearchResult:
+        resolved: list[PandaScoreTeam] = []
+        warnings: list[str] = []
+        for team_query in teams:
+            batch = await self.pandascore.search_teams(
+                query=team_query,
+                limit=_TEAM_SEARCH_LIMIT,
+            )
+            candidates = _exact_team_matches(team_query, batch.items)
+            if len(candidates) == 1:
+                resolved.append(candidates[0])
+            elif not candidates:
+                warnings.append(
+                    f"no unique PandaScore team matched {team_query!r} by exact normalized "
+                    "name, acronym, or slug"
+                )
+            else:
+                warnings.append(
+                    f"multiple PandaScore teams matched {team_query!r} by exact normalized "
+                    "name, acronym, or slug; provider identity was not guessed"
+                )
+
+        if len(resolved) != len(teams):
+            return _not_found_search(query=query, teams=teams, warning=warnings)
+        provider_team_ids = {team.provider_id for team in resolved}
+        if len(provider_team_ids) != len(resolved):
+            return _not_found_search(
+                query=query,
+                teams=teams,
+                warning=[
+                    "team queries did not resolve to two distinct provider teams; "
+                    "provider identity was not guessed"
+                ],
+            )
+
+        requested_limit = max(1, limit)
+        matches: list[MatchSummary] = []
+        seen: set[str] = set()
+        page_warnings: list[str] = []
+        fetched_at: datetime | None = None
+        for page_number in range(1, _TEAM_MATCH_MAX_PAGES + 1):
+            batch = await self.pandascore.list_team_matches(
+                resolved[0].provider_id,
+                page_number=page_number,
+                page_size=_TEAM_MATCH_PAGE_SIZE,
+                sort=_team_match_sort(time_scope),
+                query=None,
+                series_id=provider_series_id,
+            )
+            fetched_at = (
+                batch.fetched_at
+                if fetched_at is None
+                else max(fetched_at, batch.fetched_at)
+            )
+            for row in batch.items:
+                if not _has_provider_teams(row, provider_team_ids):
+                    continue
+                if (
+                    provider_series_id is not None
+                    and _provider_series_id(row) != provider_series_id
+                ):
+                    continue
+                normalized = _normalize_search_match(
+                    row,
+                    fetched_at=batch.fetched_at,
+                    competition_ref=known_competition.ref if known_competition else None,
+                    competition_name=known_competition.name if known_competition else None,
+                    competition_year=known_competition.year if known_competition else None,
+                )
+                if not _time_scope_matches(normalized.summary, time_scope):
+                    continue
+                if not _match_query(normalized.summary, query):
+                    continue
+                if normalized.summary.ref.value in seen:
+                    continue
+                seen.add(normalized.summary.ref.value)
+                matches.append(normalized.summary)
+                page_warnings.extend(normalized.summary.provenance.warnings)
+                self._remember(row, normalized, batch.fetched_at)
+
+            if len(matches) >= requested_limit:
+                break
+            if batch.has_more is False:
+                break
+            if page_number == _TEAM_MATCH_MAX_PAGES:
+                page_warnings.append(
+                    "team match discovery was bounded at 5 pages; additional provider pages "
+                    "may exist, so results are truncated"
+                )
+
+        reverse = time_scope in {"recent", "all"}
+        matches.sort(key=_schedule_key, reverse=reverse)
+        matches = matches[:requested_limit]
+        total = len(matches)
+        return MatchSearchResult(
+            status="not_found" if total == 0 else "unique" if total == 1 else "ambiguous",
+            query=query.strip() if query else None,
+            teams=teams,
+            candidate_count=total,
+            candidates=[MatchCandidate.model_validate(item.model_dump()) for item in matches],
+            provenance=Provenance(
+                sources=["pandascore"],
+                freshness=Freshness(fetched_at=fetched_at, status="fresh"),
+                identity_status=(
+                    "not_found" if total == 0 else "ambiguous" if total > 1 else "native"
+                ),
+                warnings=list(dict.fromkeys(page_warnings)),
             ),
         )
 
@@ -371,8 +504,9 @@ def _not_found_search(
     *,
     query: str | None,
     teams: list[str],
-    warning: str,
+    warning: str | list[str],
 ) -> MatchSearchResult:
+    warnings = [warning] if isinstance(warning, str) else warning
     return MatchSearchResult(
         status="not_found",
         query=query.strip() if query and query.strip() else None,
@@ -383,7 +517,7 @@ def _not_found_search(
             sources=["pandascore"],
             freshness=Freshness(status="unknown"),
             identity_status="not_found",
-            warnings=[warning],
+            warnings=list(dict.fromkeys(warnings)),
         ),
     )
 
@@ -629,6 +763,83 @@ def _match_query(summary: MatchSummary, query: str | None) -> bool:
         values.append(summary.competition.name)
     haystack = normalize_text(" ".join(values))
     return all(token in haystack for token in tokens)
+
+
+def _normalize_search_match(
+    row: PandaScoreMatch,
+    *,
+    fetched_at: datetime,
+    competition_ref: CompetitionRef | None = None,
+    competition_name: str | None = None,
+    competition_year: int | None = None,
+) -> NormalizedPandaMatch:
+    normalized = normalize_panda_match(
+        row,
+        fetched_at=fetched_at,
+        competition_ref=competition_ref,
+        competition_name=competition_name,
+        competition_year=competition_year,
+    )
+    if competition_name is not None or normalized.summary.competition is None:
+        return normalized
+    series = row.series
+    league_name = (
+        row.league.name
+        if row.league and row.league.name
+        else series.league.name
+        if series and series.league and series.league.name
+        else None
+    )
+    if not league_name and not series:
+        return normalized
+    display_name = competition_display_name(
+        league_name=league_name,
+        series_name=series.name if series else None,
+        series_full_name=series.full_name if series else None,
+        year=normalized.competition_year,
+    )
+    if display_name == normalized.summary.competition.name:
+        return normalized
+    competition = normalized.summary.competition.model_copy(update={"name": display_name})
+    summary = normalized.summary.model_copy(update={"competition": competition})
+    return replace(
+        normalized,
+        summary=summary,
+        competition_name=display_name,
+    )
+
+
+def _exact_team_matches(query: str, candidates: list[PandaScoreTeam]) -> list[PandaScoreTeam]:
+    needle = normalize_text(query)
+    matches: dict[int, PandaScoreTeam] = {}
+    for candidate in candidates:
+        values = (candidate.name, candidate.acronym, candidate.slug)
+        if any(value and normalize_text(value) == needle for value in values):
+            matches[candidate.provider_id] = candidate
+    return list(matches.values())
+
+
+def _has_provider_teams(row: PandaScoreMatch, provider_team_ids: set[int]) -> bool:
+    row_team_ids = {item.opponent.provider_id for item in row.opponents}
+    return provider_team_ids.issubset(row_team_ids)
+
+
+def _provider_series_id(row: PandaScoreMatch) -> int | None:
+    return row.series_id or (row.series.provider_id if row.series else None)
+
+
+def _time_scope_matches(summary: MatchSummary, time_scope: TimeScope) -> bool:
+    if time_scope == "recent":
+        return summary.status == "finished"
+    if time_scope == "upcoming":
+        return summary.status == "scheduled"
+    if time_scope == "running":
+        return summary.status == "running"
+    return True
+
+
+def _team_match_sort(time_scope: TimeScope) -> str:
+    return "scheduled_at" if time_scope == "upcoming" else "-scheduled_at"
 
 
 def _match_teams(summary: MatchSummary, queries: list[str]) -> bool:

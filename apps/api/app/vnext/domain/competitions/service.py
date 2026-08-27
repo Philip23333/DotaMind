@@ -138,6 +138,7 @@ class CompetitionService:
                 time_scope=time_scope,
                 candidate_count=0,
                 matches=[],
+                truncated=False,
                 provenance=Provenance(
                     sources=["pandascore"],
                     freshness=Freshness(status="unknown"),
@@ -185,6 +186,7 @@ class CompetitionService:
             time_scope=time_scope,
             candidate_count=len(matches),
             matches=matches,
+            truncated=batch.has_more is not False,
             provenance=Provenance(
                 sources=["pandascore"],
                 freshness=Freshness(fetched_at=batch.fetched_at, status="fresh"),
@@ -239,18 +241,17 @@ class CompetitionService:
         *,
         fetched_at: datetime,
     ) -> Competition:
-        name = (
-            series.name
-            or series.full_name
-            or (
-                series.league.name
-                if series.league and series.league.name
-                else "Unknown competition"
-            )
+        year = series.year or _extract_year(series.full_name or "") or _extract_year(
+            series.name or ""
         )
-        year = series.year or _extract_year(series.full_name or "") or _extract_year(name)
         if year is None and series.league and series.league.name:
             year = _extract_year(series.league.name)
+        name = competition_display_name(
+            league_name=series.league.name if series.league else None,
+            series_name=series.name,
+            series_full_name=series.full_name,
+            year=year,
+        )
         warnings: list[str] = []
         if series.begin_at is None and series.end_at is None:
             warnings.append("PandaScore did not provide competition dates")
@@ -330,4 +331,80 @@ def _extract_year(value: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
-__all__ = ["CompetitionService"]
+def competition_display_name(
+    *,
+    league_name: str | None,
+    series_name: str | None,
+    series_full_name: str | None,
+    year: int | None,
+) -> str:
+    """Build a readable league/series identity without repeating source parts."""
+
+    league = (league_name or "").strip()
+    candidates = [
+        value.strip()
+        for value in (series_full_name, series_name)
+        if isinstance(value, str) and value.strip()
+    ]
+    base = _competition_base(league, year)
+    league_key = normalize_text(league)
+
+    for candidate in candidates:
+        if _is_year_only(candidate):
+            continue
+        candidate_key = normalize_text(candidate)
+        has_league = bool(league_key and league_key in candidate_key)
+        has_year = year is not None and _contains_year(candidate, year)
+        if (has_league and has_year) or (not league and has_year):
+            return candidate
+        if league_key and candidate_key == league_key:
+            continue
+
+    for candidate in candidates:
+        if _is_year_only(candidate):
+            continue
+        qualifier = _remove_display_prefix(candidate, base, league, str(year) if year else "")
+        if base and year is not None:
+            qualifier = re.sub(rf"(?<!\w){year}(?!\w)", "", qualifier)
+            qualifier = re.sub(r"^\s*[-:|/–—]+\s*|\s*[-:|/–—]+\s*$", "", qualifier)
+            qualifier = " ".join(qualifier.split())
+        if not qualifier:
+            return base or candidate
+        if base:
+            return f"{base} — {qualifier}"
+        return qualifier
+    return base or "Unknown competition"
+
+
+def _competition_base(league: str, year: int | None) -> str:
+    if not league:
+        return str(year) if year is not None else ""
+    if year is None or _contains_year(league, year):
+        return league
+    return f"{league} {year}"
+
+
+def _contains_year(value: str, year: int) -> bool:
+    return re.search(rf"\b{year}\b", value) is not None
+
+
+def _is_year_only(value: str) -> bool:
+    return bool(re.fullmatch(r"(?:19|20)\d{2}", value.strip()))
+
+
+def _remove_display_prefix(value: str, *prefixes: str) -> str:
+    remainder = value.strip()
+    for prefix in prefixes:
+        if not prefix:
+            continue
+        match = re.match(
+            rf"^{re.escape(prefix)}(?:\s*[-:|/–—]\s*|\s+|$)",
+            remainder,
+            flags=re.IGNORECASE,
+        )
+        if match:
+            return remainder[match.end() :].strip()
+    return remainder
+
+
+__all__ = ["CompetitionService", "competition_display_name"]

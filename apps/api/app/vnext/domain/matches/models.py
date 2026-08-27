@@ -80,6 +80,7 @@ class CompetitionMatchesResult(DomainModel):
     time_scope: TimeScope
     candidate_count: int = Field(ge=0)
     matches: list[MatchSummary] = Field(default_factory=list)
+    truncated: bool = False
     provenance: Provenance
 
     @property
