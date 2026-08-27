@@ -106,7 +106,7 @@ requiring a fixed workflow.
 
 ## Phase 3 — Team, player, and catalog
 
-Status: in progress (Commit 1 complete).
+Status: complete.
 
 Goal: make conversational team and player research useful after the retrieval
 boundary is proven.
@@ -145,7 +145,7 @@ gaps.
 
 ## Phase 3.5 — vNext Product Integration
 
-Status: in progress.
+Status: complete.
 
 Goal: expose the current vNext Agent through the existing browser chat product
 without importing Legacy orchestration into the vNext execution path.
