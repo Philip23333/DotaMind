@@ -18,11 +18,11 @@ description requires a fixed sequence such as search, then detail, then read.
 Provider selection, ID conversion, normalization, and cross-source mapping
 happen inside domain and provider layers.
 
-## Implemented Phase 2 and Artifact Retrieval Surface
+## Implemented Domain and Artifact Retrieval Surface
 
-These are the six implemented agent-visible tools. They remain independent
+These are the ten implemented agent-visible tools. They remain independent
 capabilities; the artifact tools do not create a required workflow around the
-match tools.
+domain tools.
 
 | Tool | Purpose | Important contract |
 | --- | --- | --- |
@@ -30,6 +30,10 @@ match tools.
 | `competitions.list_matches` | List matches for a competition | Returns bounded schedule facts |
 | `matches.search` | Find a series or game | Does not guess a unique match |
 | `matches.get_detail` | Return detail for a resolved match or game | Resolved games include `valve_match_id` and guarantee local artifact production |
+| `teams.search` | Find a professional team | Preserves candidate ambiguity and returns opaque `TeamRef` objects |
+| `teams.get_detail` | Return source-backed team facts and known players | Accepts a `TeamRef` object and preserves nullable roster facts |
+| `players.search` | Find a professional player | Preserves candidate ambiguity and current-team identity when available |
+| `players.get_detail` | Return source-backed player facts | Accepts a `PlayerRef` object and preserves nullable biographical facts |
 | `artifact.search` | Find stored GameSummary artifacts | Accepts canonical Valve IDs; returns refs and missing IDs without reading or producing |
 | `artifact.read` | Read a bounded canonical artifact view | Accepts an exact ref, structural path, and bounded list pagination |
 
@@ -43,10 +47,7 @@ The following capabilities remain proposed and are not implemented.
 
 | Tool | Purpose | Input | Proposed output | Boundary |
 | --- | --- | --- | --- | --- |
-| `teams.search` | Find a professional team | Query | Team candidates | Name collisions remain explicit |
 | `teams.list_matches` | Show team schedule or recent results | Team reference, time scope | Bounded match summaries | No aggregated meta analysis |
-| `teams.get_roster` | Show known roster context | Team reference | Players and roster metadata | Source freshness is disclosed |
-| `players.search` | Find a professional player | Query, optional team context | Player candidates | Identity ambiguity remains explicit |
 | `players.list_matches` | Show a player's match record | Player reference, time scope | Bounded matches and participation | Coverage depends on provider data |
 | `players.get_match_performance` | Show one player's game performance | Player and game references | Bounded stats, hero, and result context | Only recorded game facts |
 | `players.get_match_build` | Show one player's build | Player and game references | Bounded items, skill upgrades, talents, and timing | Missing parse data is explicit |

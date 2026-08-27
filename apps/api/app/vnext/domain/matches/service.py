@@ -38,6 +38,7 @@ from app.vnext.domain.matches.resolution import (
     ResolutionDecision,
 )
 from app.vnext.domain.matches.valve_match_id_resolver import ValveMatchIdResolver
+from app.vnext.domain.team_player_index import TeamPlayerRefIndex
 from app.vnext.providers.opendota.adapter import OpenDotaAdapter, OpenDotaProviderError
 from app.vnext.providers.opendota.models import OpenDotaMatchDetail
 from app.vnext.providers.pandascore.adapter import PandaScoreAdapter
@@ -78,11 +79,13 @@ class MatchService:
         *,
         competition_service: CompetitionService | None = None,
         resolver: MatchResolutionService | None = None,
+        team_player_index: TeamPlayerRefIndex | None = None,
         now: Callable[[], datetime] | None = None,
     ) -> None:
         self.pandascore = pandascore
         self.opendota = opendota
         self.competition_service = competition_service
+        self.team_player_index = team_player_index or TeamPlayerRefIndex()
         self.valve_match_id_resolver = ValveMatchIdResolver(opendota, resolver=resolver)
         self._now = now or (lambda: datetime.now(timezone.utc))
         self._matches: dict[str, _KnownMatch] = {}
@@ -471,6 +474,8 @@ class MatchService:
         normalized: NormalizedPandaMatch,
         fetched_at: datetime,
     ) -> None:
+        for opponent in row.opponents:
+            self.team_player_index.remember_team(opponent.opponent.provider_id)
         self._matches[normalized.summary.ref.value] = _KnownMatch(
             provider_id=row.provider_id,
             provider_row=row,

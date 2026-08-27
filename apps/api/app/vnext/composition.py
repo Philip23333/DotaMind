@@ -24,6 +24,9 @@ from app.vnext.artifacts import (
 from app.vnext.artifacts.game_summary_builder import GameSummaryBuilder
 from app.vnext.domain.competitions.service import CompetitionService
 from app.vnext.domain.matches.service import MatchService
+from app.vnext.domain.players.service import PlayerService
+from app.vnext.domain.team_player_index import TeamPlayerRefIndex
+from app.vnext.domain.teams.service import TeamService
 from app.vnext.identity import AbilityResolver, HeroResolver, ItemResolver
 from app.vnext.llm.openai_compatible import OpenAICompatibleModelClient
 from app.vnext.providers.opendota.adapter import (
@@ -34,6 +37,8 @@ from app.vnext.providers.pandascore.adapter import PandaScoreAdapter
 from app.vnext.tools.artifacts import register_artifact_tools
 from app.vnext.tools.domain.competitions import register_competition_tools
 from app.vnext.tools.domain.matches import register_match_tools
+from app.vnext.tools.domain.players import register_player_tools
+from app.vnext.tools.domain.teams import register_team_tools
 from app.vnext.tools.registry import ToolRegistry
 
 _VNEXT_ENV_PATH = Path(__file__).with_name(".env")
@@ -127,6 +132,8 @@ class VNextServices:
     opendota: OpenDotaAdapter
     competitions: CompetitionService
     matches: MatchService
+    teams: TeamService
+    players: PlayerService
     artifact_store: ArtifactStore
     game_summary_producer: GameSummaryArtifactProducer
     artifact_searcher: ArtifactSearcher
@@ -170,10 +177,14 @@ def build_vnext_services(
         request_timeout_seconds=config.opendota_timeout_seconds,
     )
     competition_service = CompetitionService(panda_adapter)
+    team_player_index = TeamPlayerRefIndex()
+    team_service = TeamService(panda_adapter, team_player_index)
+    player_service = PlayerService(panda_adapter, team_player_index)
     match_service = MatchService(
         panda_adapter,
         open_adapter,
         competition_service=competition_service,
+        team_player_index=team_player_index,
     )
     competition_service.set_match_cache(match_service.remember_fixture)
     store = artifact_store if artifact_store is not None else MemoryArtifactStore()
@@ -190,6 +201,8 @@ def build_vnext_services(
         opendota=open_adapter,
         competitions=competition_service,
         matches=match_service,
+        teams=team_service,
+        players=player_service,
         artifact_store=store,
         game_summary_producer=producer,
         artifact_searcher=artifact_searcher,
@@ -210,6 +223,8 @@ def build_vnext_registry(
         resolved_services.matches,
         resolved_services.game_summary_producer,
     )
+    register_team_tools(registry, resolved_services.teams)
+    register_player_tools(registry, resolved_services.players)
     register_artifact_tools(
         registry,
         resolved_services.artifact_searcher,

@@ -6,7 +6,7 @@ translate them into opaque references and normalized DotaMind DTOs.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
@@ -42,12 +42,39 @@ class PandaScoreSeries(PandaScoreSeriesBrief):
     tournaments: list[dict[str, Any]] = Field(default_factory=list)
 
 
-class PandaScoreTeam(PandaModel):
+class PandaScoreTeamBrief(PandaModel):
     provider_id: int = Field(alias="id", gt=0)
     name: str = Field(min_length=1)
     acronym: str | None = None
     slug: str | None = None
+    location: str | None = None
     image_url: str | None = None
+
+
+class PandaScorePlayerBrief(PandaModel):
+    provider_id: int = Field(alias="id", gt=0)
+    name: str = Field(min_length=1)
+    active: bool | None = None
+    role: str | None = None
+    slug: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
+    nationality: str | None = None
+    image_url: str | None = None
+    birthday: date | None = None
+    birth_year: int | None = None
+    hometown: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("hometown", "home_town"),
+    )
+
+
+class PandaScoreTeam(PandaScoreTeamBrief):
+    players: list[PandaScorePlayerBrief] = Field(default_factory=list)
+
+
+class PandaScorePlayer(PandaScorePlayerBrief):
+    current_team: PandaScoreTeamBrief | None = None
 
 
 class PandaScoreWinner(PandaModel):
@@ -129,10 +156,13 @@ __all__ = [
     "PandaScoreLeague",
     "PandaScoreMatch",
     "PandaScoreOpponent",
+    "PandaScorePlayer",
+    "PandaScorePlayerBrief",
     "PandaScoreResult",
     "PandaScoreSeries",
     "PandaScoreSeriesBrief",
     "PandaScoreTeam",
+    "PandaScoreTeamBrief",
     "PandaScoreTournament",
     "PandaScoreWinner",
 ]

@@ -17,11 +17,15 @@ from app.vnext.llm.protocol import ModelRequest, UserMessage
 from app.vnext.tools.artifacts.retrieval import ArtifactReadInput
 from app.vnext.tools.domain.competitions import CompetitionListMatchesInput
 from app.vnext.tools.domain.matches import MatchGetDetailInput, MatchSearchInput
+from app.vnext.tools.domain.players import PlayerGetDetailInput
+from app.vnext.tools.domain.teams import TeamGetDetailInput
 from tests.vnext.phase2_support import fixture_services, fixture_vnext_services
 
 _COMPETITION_VALUE = "competition:0123456789abcdef01234567"
 _MATCH_VALUE = "match:0123456789abcdef01234567"
 _GAME_VALUE = "game:0123456789abcdef01234567"
+_TEAM_VALUE = "team:0123456789abcdef01234567"
+_PLAYER_VALUE = "player:0123456789abcdef01234567"
 
 
 def _tool_schemas() -> dict[str, dict[str, Any]]:
@@ -75,6 +79,18 @@ def test_agent_visible_reference_schemas_explain_nested_object_inputs() -> None:
     assert match_ref["examples"] == [{"value": _MATCH_VALUE}]
     assert game_ref["examples"] == [{"value": _GAME_VALUE}]
 
+    team_field, team_ref = _reference_definition(schemas["teams.get_detail"], "team_ref")
+    player_field, player_ref = _reference_definition(
+        schemas["players.get_detail"], "player_ref"
+    )
+    assert "Complete TeamRef object" in team_field["description"]
+    assert "Complete PlayerRef object" in player_field["description"]
+    assert team_ref["type"] == player_ref["type"] == "object"
+    assert "bare string" in team_ref["description"]
+    assert "bare string" in player_ref["description"]
+    assert team_ref["examples"] == [{"value": _TEAM_VALUE}]
+    assert player_ref["examples"] == [{"value": _PLAYER_VALUE}]
+
     artifact_field, artifact_ref = _reference_definition(schemas["artifact.read"], "ref")
     assert "returned by artifact.search" in artifact_field["description"]
     assert artifact_ref["type"] == "object"
@@ -102,6 +118,18 @@ def test_agent_visible_reference_schemas_explain_nested_object_inputs() -> None:
             "match_ref",
             _MATCH_VALUE,
             {"match_ref": {"value": _MATCH_VALUE}},
+        ),
+        (
+            TeamGetDetailInput,
+            "team_ref",
+            _TEAM_VALUE,
+            {"team_ref": {"value": _TEAM_VALUE}},
+        ),
+        (
+            PlayerGetDetailInput,
+            "player_ref",
+            _PLAYER_VALUE,
+            {"player_ref": {"value": _PLAYER_VALUE}},
         ),
     ],
 )

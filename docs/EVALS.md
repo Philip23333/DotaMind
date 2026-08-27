@@ -37,8 +37,8 @@ current schedule, result, or match count.
 ## Fixture-backed agent evals
 
 These opt-in evaluations run a real configured model against fixture-backed
-PandaScore and OpenDota adapters, the real `AgentRuntime`, and the six-tool
-registry. They test autonomous agent behavior without allowing a volatile live
+PandaScore and OpenDota adapters, the real `AgentRuntime`, and the current
+domain-tool registry. They test autonomous agent behavior without allowing a volatile live
 provider response to determine the result.
 
 - Tool sequences are observed rather than prescribed. The model decides whether
@@ -63,7 +63,7 @@ autonomous real-model agent evals.
 
 Run `python -m scripts.vnext_agent_console --direct "<question>"` from
 `apps/api` to exercise the configured vNext chain: local vNext configuration,
-the model adapter, `AgentRuntime`, the six-tool registry, and real provider
+the model adapter, `AgentRuntime`, the domain-tool registry, and real provider
 adapters. `--direct` only disables proxy environment variables in that console
 process. Each run writes a timestamped compact trace to
 `tests/vnext/testResult/`; interactive mode preserves the previous transcript
@@ -77,7 +77,9 @@ freshness or uncertainty. They are not exact-value assertions and do not make a
 provider-data change a core architecture regression.
 
 - Search a current competition and list a small schedule or results window.
-- Search a current professional team and retrieve its available match context.
+- Search a current professional team and retrieve its available roster facts.
+- Search a current professional player, preserve ambiguity, and retrieve the
+  selected player's current-team identity.
 - Resolve a current match candidate and request available detail.
 - Retrieve a static catalog item and verify its committed snapshot provenance.
 

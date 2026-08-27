@@ -106,12 +106,22 @@ requiring a fixed workflow.
 
 ## Phase 3 — Team, player, and catalog
 
+Status: in progress (Commit 1 complete).
+
 Goal: make conversational team and player research useful after the retrieval
 boundary is proven.
 
-Proposed deliverables:
+Implemented in Commit 1:
 
-- Team search, schedule, and roster capabilities
+- PandaScore-backed team search and detail capabilities
+- PandaScore-backed player search and detail capabilities
+- Provider-neutral Team/Player domain models with nullable source facts
+- Shared runtime-scoped opaque TeamRef/PlayerRef identity across match, team,
+  and player capabilities
+
+Planned / pending deliverables:
+
+- Team schedule and additional roster capabilities
 - Player record, performance, and match-build capabilities
 - Hero and item catalog capabilities
 

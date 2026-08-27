@@ -1,0 +1,33 @@
+{
+  "id": 1669,
+  "name": "Team Spirit",
+  "acronym": "TS",
+  "slug": "team-spirit",
+  "location": "RU",
+  "image_url": "https://cdn-api.pandascore.co/images/team/image/1669/team-spirit.png",
+  "players": [
+    {
+      "id": 30258,
+      "name": "Yatoro",
+      "active": true,
+      "role": "1",
+      "slug": "yatoro",
+      "first_name": "Ilya",
+      "last_name": "Mulyarchuk",
+      "nationality": "UA",
+      "image_url": "https://cdn-api.pandascore.co/images/player/image/30258/yatoro.png",
+      "birthday": "2003-03-12"
+    },
+    {
+      "id": 54351,
+      "name": "not me",
+      "active": true,
+      "role": "4",
+      "slug": "notme",
+      "first_name": "Alexey",
+      "last_name": "Kosmynin",
+      "nationality": "RU",
+      "image_url": null
+    }
+  ]
+}

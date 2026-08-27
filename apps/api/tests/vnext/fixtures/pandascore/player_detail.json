@@ -1,0 +1,19 @@
+{
+  "id": 30258,
+  "name": "Yatoro",
+  "active": true,
+  "role": "1",
+  "slug": "yatoro",
+  "first_name": "Ilya",
+  "last_name": "Mulyarchuk",
+  "nationality": "UA",
+  "image_url": "https://cdn-api.pandascore.co/images/player/image/30258/yatoro.png",
+  "current_team": {
+    "id": 1669,
+    "name": "Team Spirit",
+    "location": "RU",
+    "slug": "team-spirit",
+    "acronym": "TS",
+    "image_url": "https://cdn-api.pandascore.co/images/team/image/1669/team-spirit.png"
+  }
+}

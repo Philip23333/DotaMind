@@ -14,6 +14,7 @@ from app.vnext.providers.common import ProviderBatch, ProviderObject
 from app.vnext.providers.pandascore.models import (
     PandaScoreLeague,
     PandaScoreMatch,
+    PandaScorePlayer,
     PandaScoreSeries,
     PandaScoreTeam,
 )
@@ -163,6 +164,45 @@ class PandaScoreAdapter:
             items=[self._parse(PandaScoreTeam, row, path) for row in rows],
             fetched_at=fetched_at,
             has_more=pagination.has_more,
+        )
+
+    async def get_team(self, provider_team_id: int) -> ProviderObject[PandaScoreTeam]:
+        path = f"/teams/{provider_team_id}"
+        payload, fetched_at, _ = await self._get_json(path)
+        if not isinstance(payload, dict):
+            raise PandaScoreSchemaError(f"PandaScore response at {path} must be an object")
+        return ProviderObject(
+            item=self._parse(PandaScoreTeam, payload, path),
+            fetched_at=fetched_at,
+        )
+
+    async def search_players(
+        self,
+        *,
+        query: str | None = None,
+        limit: int = 20,
+    ) -> ProviderBatch[PandaScorePlayer]:
+        params = self._page_params(limit)
+        if query:
+            params["search[name]"] = query
+        path = "/dota2/players"
+        payload, fetched_at, pagination = await self._get_json(path, params=params)
+        rows = self._require_list(payload, path)
+        pagination = _complete_pagination(pagination, len(rows))
+        return ProviderBatch(
+            items=[self._parse(PandaScorePlayer, row, path) for row in rows],
+            fetched_at=fetched_at,
+            has_more=pagination.has_more,
+        )
+
+    async def get_player(self, provider_player_id: int) -> ProviderObject[PandaScorePlayer]:
+        path = f"/players/{provider_player_id}"
+        payload, fetched_at, _ = await self._get_json(path)
+        if not isinstance(payload, dict):
+            raise PandaScoreSchemaError(f"PandaScore response at {path} must be an object")
+        return ProviderObject(
+            item=self._parse(PandaScorePlayer, payload, path),
+            fetched_at=fetched_at,
         )
 
     async def list_matches(

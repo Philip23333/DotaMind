@@ -129,6 +129,25 @@ class TeamRef(_OpaqueRef):
     )
 
 
+class PlayerRef(_OpaqueRef):
+    """Opaque, runtime-scoped reference to a normalized professional player."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "description": (
+                "Player reference object. Pass the complete object returned by another tool. "
+                "Do not pass its value as a bare string or JSON-encode this object into a string."
+            ),
+            "examples": [{"value": "player:0123456789abcdef01234567"}],
+        }
+    )
+
+    value: str = Field(
+        pattern=r"^player:[0-9a-f]{24}$",
+        description="Opaque player reference value inside this reference object.",
+    )
+
+
 class Team(DomainModel):
     ref: TeamRef
     name: str = Field(min_length=1)
@@ -145,7 +164,9 @@ def normalize_text(value: str) -> str:
     return " ".join(normalized.split())
 
 
-def hash_ref(kind: Literal["competition", "match", "game", "team"], *parts: object) -> str:
+def hash_ref(
+    kind: Literal["competition", "match", "game", "team", "player"], *parts: object
+) -> str:
     """Create a deterministic opaque reference without embedding provider IDs."""
 
     payload = "\x1f".join(
@@ -162,6 +183,7 @@ __all__ = [
     "GameRef",
     "IdentityStatus",
     "MatchRef",
+    "PlayerRef",
     "Provenance",
     "Team",
     "TeamRef",

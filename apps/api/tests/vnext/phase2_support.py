@@ -15,6 +15,9 @@ from app.vnext.artifacts.game_summary_builder import GameSummaryBuilder
 from app.vnext.composition import VNextServices
 from app.vnext.domain.competitions.service import CompetitionService
 from app.vnext.domain.matches.service import MatchService
+from app.vnext.domain.players.service import PlayerService
+from app.vnext.domain.team_player_index import TeamPlayerRefIndex
+from app.vnext.domain.teams.service import TeamService
 from app.vnext.identity import AbilityResolver, HeroResolver, ItemResolver
 from app.vnext.providers.common import ProviderBatch, ProviderObject
 from app.vnext.providers.opendota.adapter import (
@@ -32,6 +35,7 @@ from app.vnext.providers.pandascore.adapter import PandaScoreHTTPError
 from app.vnext.providers.pandascore.models import (
     PandaScoreLeague,
     PandaScoreMatch,
+    PandaScorePlayer,
     PandaScoreSeries,
     PandaScoreTeam,
 )
@@ -56,6 +60,28 @@ def panda_matches() -> list[PandaScoreMatch]:
     rows.extend(load_fixture("pandascore", "matches_upcoming.json"))
     rows.append(load_fixture("pandascore", "match_bo3.json"))
     return [PandaScoreMatch.model_validate(row) for row in rows]
+
+
+def panda_team_search() -> list[PandaScoreTeam]:
+    return [
+        PandaScoreTeam.model_validate(row)
+        for row in load_fixture("pandascore", "teams_search.json")
+    ]
+
+
+def panda_team_detail() -> PandaScoreTeam:
+    return PandaScoreTeam.model_validate(load_fixture("pandascore", "team_detail.json"))
+
+
+def panda_player_search() -> list[PandaScorePlayer]:
+    return [
+        PandaScorePlayer.model_validate(row)
+        for row in load_fixture("pandascore", "players_search.json")
+    ]
+
+
+def panda_player_detail() -> PandaScorePlayer:
+    return PandaScorePlayer.model_validate(load_fixture("pandascore", "player_detail.json"))
 
 
 def open_leagues() -> list[OpenDotaLeague]:
@@ -91,7 +117,17 @@ class FakePandaScore:
         self.league_series = self.series
         self.matches = panda_matches()
         self.teams = _panda_teams(self.matches)
-        self.team_search_results: dict[str, list[PandaScoreTeam]] = {}
+        self.team_search_results: dict[str, list[PandaScoreTeam]] = {
+            "Team Spirit": panda_team_search(),
+        }
+        self.team_details: dict[int, PandaScoreTeam] = {
+            team.provider_id: team for team in self.teams
+        }
+        self.team_details[1669] = panda_team_detail()
+        self.player_search_results: dict[str, list[PandaScorePlayer]] = {
+            "Yatoro": panda_player_search(),
+        }
+        self.player_details: dict[int, PandaScorePlayer] = {30258: panda_player_detail()}
         self.team_match_pages: dict[int, list[list[PandaScoreMatch]]] = {}
         self.detail_available = detail_available
         self.list_matches_has_more = False
@@ -101,6 +137,9 @@ class FakePandaScore:
         self.league_series_calls: list[dict[str, object]] = []
         self.team_search_calls: list[dict[str, object]] = []
         self.team_match_calls: list[dict[str, object]] = []
+        self.team_get_calls: list[int] = []
+        self.player_search_calls: list[dict[str, object]] = []
+        self.player_get_calls: list[int] = []
 
     async def search_series(
         self,
@@ -165,6 +204,30 @@ class FakePandaScore:
                 )
             ]
         return ProviderBatch(rows[:limit], FETCHED_AT, has_more=False)
+
+    async def get_team(self, provider_team_id: int) -> ProviderObject[PandaScoreTeam]:
+        self.team_get_calls.append(provider_team_id)
+        try:
+            return ProviderObject(self.team_details[provider_team_id], FETCHED_AT)
+        except KeyError as exc:
+            raise PandaScoreHTTPError(404, f"/teams/{provider_team_id}") from exc
+
+    async def search_players(
+        self,
+        *,
+        query: str | None = None,
+        limit: int = 20,
+    ) -> ProviderBatch[PandaScorePlayer]:
+        self.player_search_calls.append({"query": query, "limit": limit})
+        rows = self.player_search_results.get(query or "", [])
+        return ProviderBatch(rows[:limit], FETCHED_AT, has_more=False)
+
+    async def get_player(self, provider_player_id: int) -> ProviderObject[PandaScorePlayer]:
+        self.player_get_calls.append(provider_player_id)
+        try:
+            return ProviderObject(self.player_details[provider_player_id], FETCHED_AT)
+        except KeyError as exc:
+            raise PandaScoreHTTPError(404, f"/players/{provider_player_id}") from exc
 
     async def list_matches(
         self,
@@ -355,10 +418,12 @@ def fixture_services(
     competition_service = CompetitionService(
         panda, now=lambda: datetime(2026, 8, 14, tzinfo=timezone.utc)
     )
+    team_player_index = TeamPlayerRefIndex()
     match_service = MatchService(
         panda,
         opendota,
         competition_service=competition_service,
+        team_player_index=team_player_index,
         now=lambda: datetime(2026, 8, 14, tzinfo=timezone.utc),
     )
     competition_service.set_match_cache(match_service.remember_fixture)
@@ -387,11 +452,15 @@ def fixture_vnext_services(
     )
     searcher = ArtifactSearcher(store)
     reader = ArtifactReader(store)
+    team_service = TeamService(panda, match_service.team_player_index)
+    player_service = PlayerService(panda, match_service.team_player_index)
     return VNextServices(
         panda,
         opendota,
         competition_service,
         match_service,
+        team_service,
+        player_service,
         store,
         producer,
         searcher,

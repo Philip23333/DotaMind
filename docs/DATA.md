@@ -24,6 +24,12 @@ Examples include `CompetitionRef`, `MatchRef`, `GameRef`, `TeamRef`, and
 `PlayerRef`. A valid reference identifies an entity even when no detailed
 artifact is currently available.
 
+The model-facing `TeamRef` and professional-player `PlayerRef` are opaque,
+runtime-scoped references backed by the provider identity index. They are
+passed as nested objects between independent tools and do not contain provider
+IDs. Artifact construction has a separate Steam-native player reference for
+recorded game data; the two `PlayerRef` contracts must not be conflated.
+
 ## Domain Entity and Artifact
 
 | | Domain entity or DTO | Canonical artifact |
