@@ -16,6 +16,7 @@ from app.application.chat_repository import (
     ChatActiveRunSummary,
     ChatCommitResult,
     ChatConversationContext,
+    ChatDialogueTurnResult,
     ChatFencingLostError,
     ChatIdempotencyConflictError,
     ChatNotFoundError,
@@ -427,6 +428,126 @@ class PostgresChatRepository:
             raise ChatIdempotencyConflictError()
         return ChatRequestLookup(status="replay", public_response=dict(row.public_response))
 
+    async def lookup_dialogue_request(
+        self,
+        browser_id: str,
+        session_id: UUID,
+        request_id: UUID,
+        user_query: str,
+    ) -> ChatDialogueTurnResult | None:
+        """Find a product-chat retry without exposing Legacy response shapes."""
+
+        payload_hash = _dialogue_payload_hash(user_query)
+        try:
+            async with self._session_factory() as session:
+                owner = await session.scalar(
+                    select(ChatSessionRow.id).where(
+                        ChatSessionRow.id == session_id,
+                        ChatSessionRow.browser_id_hash == browser_id_hash(browser_id),
+                    )
+                )
+                if owner is None:
+                    raise ChatNotFoundError()
+                row = await session.scalar(
+                    select(ChatTurnRow).where(
+                        ChatTurnRow.session_id == session_id,
+                        ChatTurnRow.request_id == request_id,
+                    )
+                )
+        except ChatNotFoundError:
+            raise
+        except SQLAlchemyError as exc:
+            raise ChatRepositoryError() from exc
+        if row is None:
+            return None
+        if row.payload_hash != payload_hash:
+            raise ChatIdempotencyConflictError()
+        return ChatDialogueTurnResult(
+            status="replay",
+            turn_index=row.turn_index,
+            assistant_message=row.assistant_message,
+        )
+
+    async def append_dialogue_turn(
+        self,
+        *,
+        browser_id: str,
+        session_id: UUID,
+        request_id: UUID,
+        user_query: str,
+        assistant_message: str,
+    ) -> ChatDialogueTurnResult:
+        """Persist one User/Final Assistant dialogue pair for product chat.
+
+        ``public_response`` and ``compact_turn`` are Legacy table columns.  Their
+        smallest compatible values remain contained here, outside the vNext
+        runtime and product service.
+        """
+
+        payload_hash = _dialogue_payload_hash(user_query)
+        try:
+            async with self._session_factory.begin() as session:
+                row = await session.scalar(
+                    select(ChatSessionRow)
+                    .where(
+                        ChatSessionRow.id == session_id,
+                        ChatSessionRow.browser_id_hash == browser_id_hash(browser_id),
+                    )
+                    .with_for_update()
+                )
+                if row is None:
+                    raise ChatNotFoundError()
+                existing = await session.scalar(
+                    select(ChatTurnRow).where(
+                        ChatTurnRow.session_id == session_id,
+                        ChatTurnRow.request_id == request_id,
+                    )
+                )
+                if existing is not None:
+                    if existing.payload_hash != payload_hash:
+                        raise ChatIdempotencyConflictError()
+                    return ChatDialogueTurnResult(
+                        status="replay",
+                        turn_index=existing.turn_index,
+                        assistant_message=existing.assistant_message,
+                    )
+
+                turn_index = row.next_turn_index
+                row.next_turn_index += 1
+                row.updated_at = datetime.now(UTC)
+                if not row.title_is_custom and turn_index == 1:
+                    row.title = user_query.strip()[:80] or "新对话"
+                compatibility_response = {
+                    "status": "ok",
+                    "answer": {"summary": assistant_message},
+                }
+                compact_turn = Turn(
+                    query=user_query,
+                    response_summary=assistant_message,
+                    turn_index=turn_index,
+                )
+                session.add(
+                    ChatTurnRow(
+                        session_id=session_id,
+                        request_id=request_id,
+                        payload_hash=payload_hash,
+                        turn_index=turn_index,
+                        user_query=user_query,
+                        assistant_message=assistant_message,
+                        public_response=compatibility_response,
+                        compact_turn=compact_turn.model_dump(mode="json"),
+                    )
+                )
+        except (ChatNotFoundError, ChatIdempotencyConflictError):
+            raise
+        except SQLAlchemyError as exc:
+            raise ChatRepositoryError() from exc
+        return ChatDialogueTurnResult(
+            status="executed",
+            turn_index=turn_index,
+            assistant_message=assistant_message,
+        )
+
     async def commit_turn(
         self,
         *,
@@ -523,6 +644,10 @@ def _summary(
             else None
         ),
     )
+
+
+def _dialogue_payload_hash(user_query: str) -> str:
+    return hashlib.sha256(user_query.encode("utf-8")).hexdigest()
 
 
 def _transcript_turn(row: ChatTurnRow) -> ChatTranscriptTurn:

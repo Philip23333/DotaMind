@@ -87,3 +87,12 @@ class ChatCommitResult:
     turn_index: int
     public_response: dict[str, Any]
     session_summary: ChatSessionSummary | None = None
+
+
+@dataclass(frozen=True)
+class ChatDialogueTurnResult:
+    """The narrow durable result required by the product chat bridge."""
+
+    status: Literal["executed", "replay"]
+    turn_index: int
+    assistant_message: str

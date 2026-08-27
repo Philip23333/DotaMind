@@ -13,6 +13,7 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from app.api.v1.chat_routes import router as chat_router
 from app.api.v1.chat_run_routes import router as chat_run_router
 from app.api.v1.routes import router as v1_router
+from app.api.v1.vnext_chat_routes import router as vnext_chat_router
 from app.application.background_run_manager import BackgroundRunManager
 from app.application.chat_run_executor import ChatRunExecutor
 from app.application.chat_run_runtime import ChatRunRuntime
@@ -29,6 +30,8 @@ from app.persistence.database import (
     create_database_resources,
     ping_database,
 )
+from app.vnext.composition import VNextSettings, build_vnext_runtime, build_vnext_services
+from app.vnext.product import VNextChatService
 
 settings = get_settings()
 PLAN_CONSOLE_PATH = Path(__file__).parent / "resources" / "plan_console.html"
@@ -80,6 +83,13 @@ async def lifespan(app: FastAPI):
     from app.application.plan_service import PlanService
 
     app.state.chat_repository = PostgresChatRepository(database.session_factory)
+    vnext_services = build_vnext_services(VNextSettings.from_env())
+    app.state.vnext_services = vnext_services
+    app.state.vnext_runtime = build_vnext_runtime(services=vnext_services)
+    app.state.vnext_chat_service = VNextChatService(
+        app.state.chat_repository,
+        app.state.vnext_runtime,
+    )
     app.state.chat_run_repository = PostgresChatRunRepository(database.session_factory)
     app.state.session_store = store
     app.state.conversation_memory = ConversationMemoryService(
@@ -156,6 +166,7 @@ async def lifespan(app: FastAPI):
             await run_manager.shutdown()
         if run_event_bus is not None:
             await run_event_bus.aclose()
+        await vnext_services.aclose()
         await store.aclose()
         await close_database(database)
 
@@ -177,6 +188,7 @@ app.add_middleware(
 
 app.include_router(v1_router, prefix=settings.api_v1_prefix)
 app.include_router(chat_router, prefix=settings.api_v1_prefix)
+app.include_router(vnext_chat_router, prefix=settings.api_v1_prefix)
 app.include_router(chat_run_router, prefix=settings.api_v1_prefix)
 app.mount(
     f"{settings.api_v1_prefix}/assets/dota",
