@@ -282,13 +282,22 @@ of calls.
 
 ## Sessions and persistence
 
-The initial conversation model is a persistent session transcript with bounded
-history trimming and an AgentRun record. PostgreSQL is the likely durable store.
-Redis is optional and must be justified by a concrete distributed coordination,
-event replay, or throughput need rather than copied from Legacy V3.
+The product chat API owns browser session authorization and a durable PostgreSQL
+transcript of User and Final Assistant dialogue. It builds the current vNext
+model input from the complete persisted dialogue plus the new User message, then
+executes one request-bound `AgentRuntime.run_stream()` call. A product
+`completed` event is emitted only after the final assistant message is durable.
 
-Conversation reuse may carry canonical references across turns, but artifact
-storage and retrieval remain separate contracts from runtime message history.
+The runtime remains session-neutral: it does not know PostgreSQL, browser IDs,
+chat sessions, or transcript persistence. Tool calls, tool results, runtime
+trace events, and artifacts are execution data and are not transcript rows.
+The in-memory artifact store is shared for the process lifetime, but it is not
+yet durable across a server restart.
+
+Bounded context construction, compaction, durable AgentRuns, reconnect, and
+event replay remain later product reliability work. Redis is optional and must
+be justified by a demonstrated distributed coordination, replay, or throughput
+need rather than copied from Legacy V3.
 
 ## Reliability and provenance
 

@@ -1,8 +1,10 @@
 # DotaMind Chat
 
 This Next.js and assistant-ui client is the current chat interface. It does not
-run a model locally. Its present API integration and runtime behavior belong to
-Legacy V3 and may be replaced as the vNext backend is delivered; the target
+run a model locally. New messages use the vNext `AgentRuntime` through the
+stable product chat endpoint. Session CRUD and transcript persistence
+temporarily reuse the existing browser-owned PostgreSQL storage layer; Legacy
+ChatRun orchestration is not part of the active model path. The target
 architecture is defined in [docs/](../../docs/README.md).
 
 ## Local development

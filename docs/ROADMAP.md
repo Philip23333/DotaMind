@@ -121,13 +121,12 @@ Implemented in Commit 1:
 
 Planned / pending deliverables:
 
-- Cross-capability Agent evaluation across Team, Player, Competition,
-  Match, Game, and Artifact capabilities
-- Additional Team or Player capabilities only when real evaluations
+- Cross-capability Agent evaluation across Team, Player, Competition, Match,
+  Game, and Artifact capabilities
+- Additional Team, Player, or catalog capabilities only when real evaluations
   demonstrate a concrete missing fact boundary
-- Model-facing hero/item catalog capabilities only if standalone
-  static-knowledge use cases demonstrate that existing capabilities
-  are insufficient
+
+These demand-driven capability additions do not block Phase 3.5.
 
 Non-goals:
 
@@ -144,16 +143,46 @@ representative research questions without requiring scenario-specific tools
 or fixed workflows. New capabilities are added only for demonstrated coverage
 gaps.
 
+## Phase 3.5 — vNext Product Integration
+
+Status: in progress.
+
+Goal: expose the current vNext Agent through the existing browser chat product
+without importing Legacy orchestration into the vNext execution path.
+
+Deliverables:
+
+- Reuse the existing Next.js / assistant-ui chat and browser-owned PostgreSQL
+  session/transcript persistence.
+- Add a request-bound vNext `AgentRuntime` streaming endpoint at
+  `POST /api/v1/chat/sessions/{session_id}/messages`.
+- Persist only durable User and Final Assistant dialogue, including across
+  browser refreshes.
+- Share process-lifetime vNext services and the in-memory ArtifactStore across
+  web requests.
+- Verify browser end-to-end product smoke behavior.
+
+Non-goals:
+
+- Durable AgentRun lifecycle, Redis event replay, resume, or checkpoint recovery
+- Context compaction or summarization
+- Tool-result or artifact persistence
+- New domain capabilities or Legacy deletion
+
+Acceptance: users can create, resume, refresh, and continue browser
+conversations backed by the vNext AgentRuntime while the frontend remains
+independent of Agent, Tool, Artifact, and provider internals.
+
 ## Phase 4 — Conversation reliability and eval expansion
 
 Goal: harden long-lived conversations based on observed needs.
 
 Proposed deliverables:
 
-- PostgreSQL session transcript, AgentRun persistence, and bounded context
-  strategy
-- Reconnection and recovery semantics, plus a production retry policy when
-  demonstrated necessary
+- Bounded model context over the already durable conversation transcript
+- Lightweight conversation compaction only when observed necessary
+- Durable AgentRun, reconnect, and recovery semantics only when product usage
+  demonstrates a need
 - Durable event semantics and expanded regression and provider-drift evals only
   where they solve an observed need
 
@@ -167,7 +196,6 @@ Goal: present facts clearly in chat and structured match views.
 
 Proposed deliverables:
 
-- Chat interaction and streaming presentation
 - Structured rendering where it is more reliable than generated prose
 - Source, freshness, and uncertainty presentation
 
