@@ -28,8 +28,8 @@ current schedule, result, or match count.
 | Tournament schedule | 下一场什么时候开始？ | Use the resolved fixture competition and return the next scheduled match with time context |
 | Match detail | Spirit 和 Falcons 最近一次交手？ | Find fixture candidate matches, resolve ambiguity, and return a grounded match summary |
 | Game follow-up | 第二局详细说说。 | Reuse only valid conversation context, obtain game detail, and answer with available data |
-| Player performance | Malr1ne 那局表现怎么样？ | Resolve fixture player and game references, then return recorded performance facts |
-| Player build | 他那局出了什么、怎么加点？ | Obtain a match build and disclose unavailable parsed fields |
+| Player performance | Malr1ne 那局表现怎么样？ | Resolve the player and match/game, then retrieve available recorded game facts through existing match/artifact capabilities |
+| Player build | 他那局出了什么、怎么加点？ | Resolve the referenced player and game, then use bounded artifact retrieval for items and ability upgrades |
 | Earlier match | 那他上一场呢？ | Resolve the follow-up reference and query a separate record when needed |
 | Unsupported scope | 给我当前版本全英雄强度排行 | State that ranked-meta ranking is outside vNext Core without inventing an alternative |
 | Ambiguous identity | 查一下 Nigma 最近比赛 | Ask for clarification or expose candidates when identity cannot be uniquely resolved |

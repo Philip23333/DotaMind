@@ -121,12 +121,28 @@ Implemented in Commit 1:
 
 Planned / pending deliverables:
 
-- Team schedule and additional roster capabilities
-- Player record, performance, and match-build capabilities
-- Hero and item catalog capabilities
+- Cross-capability Agent evaluation across Team, Player, Competition,
+  Match, Game, and Artifact capabilities
+- Additional Team or Player capabilities only when real evaluations
+  demonstrate a concrete missing fact boundary
+- Model-facing hero/item catalog capabilities only if standalone
+  static-knowledge use cases demonstrate that existing capabilities
+  are insufficient
 
-Acceptance: the player and contextual follow-up evals pass with explicit
-coverage and parse-data limits.
+Non-goals:
+
+- Adding team-specific match capabilities when `matches.*` already covers the
+  use case
+- Adding player performance or build capabilities before evaluating
+  composition through `matches.*` and `artifact.*`
+- Adding one tool per user scenario
+- Introducing scenario-specific runtime workflows
+
+Acceptance: real and fixture-backed Agent evaluations demonstrate that the
+model can compose Team, Player, Match, Game, and Artifact capabilities for
+representative research questions without requiring scenario-specific tools
+or fixed workflows. New capabilities are added only for demonstrated coverage
+gaps.
 
 ## Phase 4 — Conversation reliability and eval expansion
 
