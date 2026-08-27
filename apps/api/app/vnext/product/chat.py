@@ -13,7 +13,9 @@ from app.application.chat_repository import ChatDialogueTurnResult
 from app.application.postgres_chat_repository import PostgresChatRepository
 from app.vnext.agent.events import AgentCancelled, AgentCompleted, AgentFailed, TextDelta
 from app.vnext.agent.runtime import AgentRuntime
-from app.vnext.llm.protocol import FinalMessage, Message, UserMessage
+from app.vnext.llm.protocol import FinalMessage, Message
+
+from .context import ConversationContextBuilder
 
 
 class ProductChatEvent(BaseModel):
@@ -50,9 +52,15 @@ class PreparedVNextChatTurn:
 class VNextChatService:
     """Compose durable dialogue with one request-bound AgentRuntime execution."""
 
-    def __init__(self, repository: PostgresChatRepository, runtime: AgentRuntime) -> None:
+    def __init__(
+        self,
+        repository: PostgresChatRepository,
+        runtime: AgentRuntime,
+        context_builder: ConversationContextBuilder,
+    ) -> None:
         self._repository = repository
         self._runtime = runtime
+        self._context_builder = context_builder
 
     async def prepare_turn(
         self,
@@ -76,23 +84,14 @@ class VNextChatService:
                 query=query,
                 history=[],
                 replay=replay,
-            )
+        )
         dialogue, _ = await self._repository.get_all_dialogue_turns(browser_id, session_id)
-        history: list[Message] = []
-        for turn in dialogue:
-            history.extend(
-                (
-                    UserMessage(content=turn.user_message),
-                    FinalMessage(content=turn.assistant_message),
-                )
-            )
-        history.append(UserMessage(content=query))
         return PreparedVNextChatTurn(
             browser_id=browser_id,
             session_id=session_id,
             request_id=request_id,
             query=query,
-            history=history,
+            history=self._context_builder.build(dialogue, query),
         )
 
     async def stream_turn(
