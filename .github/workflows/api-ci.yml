@@ -1,0 +1,35 @@
+name: API CI
+
+on:
+  push:
+    branches:
+      - main
+      - codex/vnext-agent-runtime
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: apps/api
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Ruff
+        run: ruff check app tests
+
+      - name: vNext tests
+        run: pytest tests/vnext -m "not agent_eval"
