@@ -1,13 +1,23 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 
+from pydantic import BaseModel
+
 from app.vnext.llm.protocol import ToolCall, ToolResultMessage
-from scripts.vnext_agent_console import _console_text, _trace_rows, _write_result
+from app.vnext.tools.definition import ToolDefinition
+from app.vnext.tools.registry import ToolRegistry
+from scripts.vnext_agent_console import (
+    _console_text,
+    _ConversationTrace,
+    _trace_rows,
+    _TracingToolRegistry,
+)
 
 
-def test_console_result_contains_compact_tool_trace(tmp_path: Path) -> None:
+def test_console_conversation_preserves_full_tool_results_across_turns(tmp_path: Path) -> None:
     call = ToolCall(id="call-1", name="matches.search", arguments={"query": "Grand Final"})
     result = ToolResultMessage(
         tool_call_id="call-1",
@@ -20,8 +30,8 @@ def test_console_result_contains_compact_tool_trace(tmp_path: Path) -> None:
         },
     )
 
-    destination = _write_result(
-        name="console_contract",
+    conversation = _ConversationTrace(name="console_contract", result_dir=tmp_path)
+    destination = conversation.append_turn(
         prompt="find the match",
         answer="found it",
         terminal_error=None,
@@ -29,14 +39,26 @@ def test_console_result_contains_compact_tool_trace(tmp_path: Path) -> None:
         calls=[call],
         results=[result],
         events=[],
-        result_dir=tmp_path,
+    )
+
+    conversation.append_turn(
+        prompt="follow up",
+        answer="done",
+        terminal_error=None,
+        model_steps=1,
+        calls=[],
+        results=[],
+        events=[],
     )
 
     payload = json.loads(destination.read_text(encoding="utf-8"))
-    assert payload["terminal_status"] == "final"
-    assert payload["answer"] == "found it"
-    assert payload["trace"] == [
+    assert payload["name"] == "console_contract"
+    assert len(payload["turns"]) == 2
+    assert payload["turns"][0]["terminal_status"] == "final"
+    assert payload["turns"][0]["answer"] == "found it"
+    assert payload["turns"][0]["trace"] == [
         {
+            "tool_call_id": "call-1",
             "tool": "matches.search",
             "arguments": {"query": "Grand Final"},
             "status": "ok",
@@ -46,11 +68,11 @@ def test_console_result_contains_compact_tool_trace(tmp_path: Path) -> None:
                 "query": "Grand Final",
                 "candidate_count": 0,
                 "candidates": [],
-                "candidates_truncated": False,
+                "unwritten": "full artifact body",
             },
         }
     ]
-    assert "full artifact body" not in destination.read_text(encoding="utf-8")
+    assert "full artifact body" in destination.read_text(encoding="utf-8")
 
 
 def test_console_trace_uses_terminal_tool_event_when_no_next_model_turn() -> None:
@@ -68,6 +90,7 @@ def test_console_trace_uses_terminal_tool_event_when_no_next_model_turn() -> Non
 
     assert _trace_rows([call], [], events) == [
         {
+            "tool_call_id": "call-1",
             "tool": "artifact.read",
             "arguments": {"path": "players"},
             "status": "ok",
@@ -75,6 +98,35 @@ def test_console_trace_uses_terminal_tool_event_when_no_next_model_turn() -> Non
             "result": None,
         }
     ]
+
+
+def test_console_captures_complete_terminal_tool_result_before_next_model_turn() -> None:
+    class Input(BaseModel):
+        query: str
+
+    class Output(BaseModel):
+        full_body: dict[str, list[int]]
+
+    registry = ToolRegistry()
+    registry.register(
+        ToolDefinition(
+            name="test.full_result",
+            description="Return an uncompressed tool result for console tracing.",
+            input_model=Input,
+            output_model=Output,
+            handler=lambda _args: {"full_body": {"all_values": [1, 2, 3]}},
+        )
+    )
+    traced = _TracingToolRegistry(registry)
+
+    result = asyncio.run(
+        traced.execute(
+            ToolCall(id="call-terminal", name="test.full_result", arguments={"query": "all"})
+        )
+    )
+
+    assert result.content == {"full_body": {"all_values": [1, 2, 3]}}
+    assert [item.content for item in traced.results] == [result.content]
 
 
 def test_console_text_replaces_characters_unsupported_by_windows_gbk() -> None:

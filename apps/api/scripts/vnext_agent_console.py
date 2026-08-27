@@ -9,13 +9,13 @@ import os
 import re
 import sys
 from collections.abc import Sequence
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 from app.vnext.agent.runtime import AgentRuntime
-from app.vnext.agent.tool_result_summary import summarize_tool_result
 from app.vnext.composition import VNextSettings, build_vnext_runtime, build_vnext_services
 from app.vnext.llm.protocol import (
     AssistantMessage,
@@ -28,6 +28,7 @@ from app.vnext.llm.protocol import (
     ToolResultMessage,
     UserMessage,
 )
+from app.vnext.tools.registry import ToolRegistry
 
 _RESULT_DIR = Path(__file__).resolve().parents[1] / "tests" / "vnext" / "testResult"
 _SAFE_RESULT_NAME = re.compile(r"^[a-zA-Z0-9_-]+$")
@@ -46,6 +47,30 @@ class _TracingModelClient:
         response = await self._client.complete(request)
         self.responses.append(response.model_copy(deep=True))
         return response
+
+
+class _TracingToolRegistry:
+    """Copy complete tool results before the runtime advances to another model step."""
+
+    def __init__(self, registry: ToolRegistry) -> None:
+        self._registry = registry
+        self.results: list[ToolResultMessage] = []
+
+    def schemas(self):
+        return self._registry.schemas()
+
+    def get(self, name: str):
+        return self._registry.get(name)
+
+    async def execute(
+        self,
+        call: ToolCall,
+        *,
+        timeout: float | None = None,
+    ) -> ToolResultMessage:
+        result = await self._registry.execute(call, timeout=timeout)
+        self.results.append(result.model_copy(deep=True))
+        return result
 
 
 def parse_args() -> argparse.Namespace:
@@ -72,8 +97,6 @@ def parse_args() -> argparse.Namespace:
         parser.error("provide a prompt or pass --interactive")
     if args.result_name and not _SAFE_RESULT_NAME.fullmatch(args.result_name):
         parser.error("--result-name may contain only letters, digits, underscores, and hyphens")
-    if args.result_name and args.interactive:
-        parser.error("--result-name is available only for one-shot runs")
     return args
 
 
@@ -120,8 +143,8 @@ def _tool_results(model: _TracingModelClient, *, start: int) -> list[ToolResultM
     return results
 
 
-def _event_tool_states(events: list[dict[str, Any]]) -> dict[str, dict[str, str | None]]:
-    states: dict[str, dict[str, str | None]] = {}
+def _event_tool_states(events: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    states: dict[str, dict[str, Any]] = {}
     for event in events:
         kind = event["kind"]
         if kind == "tool_completed":
@@ -147,6 +170,7 @@ def _trace_rows(
         event_state = event_states.get(call.id)
         rows.append(
             {
+                "tool_call_id": call.id,
                 "tool": call.name,
                 "arguments": call.arguments,
                 "status": (
@@ -157,58 +181,71 @@ def _trace_rows(
                     else "not_returned"
                 ),
                 "error": (
-                    result.error.code
+                    result.error.model_dump(mode="json")
                     if result is not None and result.error is not None
                     else event_state["error"]
                     if event_state is not None
                     else None
                 ),
-                "result": (
-                    summarize_tool_result(call.name, result.content)
-                    if result is not None and result.status == "ok"
-                    else None
-                ),
+                "result": result.content if result is not None else None,
             }
         )
     return rows
 
 
-def _write_result(
-    *,
-    name: str,
-    prompt: str,
-    answer: str | None,
-    terminal_error: Exception | None,
-    model_steps: int,
-    calls: list[ToolCall],
-    results: list[ToolResultMessage],
-    events: list[dict[str, Any]],
-    result_dir: Path = _RESULT_DIR,
-) -> Path:
-    payload = {
-        "recorded_at": datetime.now(timezone.utc).isoformat(),
-        "name": name,
-        "terminal_status": "final" if terminal_error is None else "error",
-        "prompt": prompt,
-        "answer": answer,
-        "terminal_error": (
-            None
-            if terminal_error is None
-            else {"type": type(terminal_error).__name__, "message": str(terminal_error)}
-        ),
-        "model_steps": model_steps,
-        "trace": _trace_rows(calls, results, events),
-        "events": events,
-    }
-    result_dir.mkdir(parents=True, exist_ok=True)
-    destination = result_dir / f"{name}.json"
-    temporary = destination.with_suffix(".tmp")
-    temporary.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
-    temporary.replace(destination)
-    return destination
+@dataclass
+class _ConversationTrace:
+    """Persist every completed console turn in one local conversation record."""
+
+    name: str
+    result_dir: Path = _RESULT_DIR
+    recorded_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    turns: list[dict[str, Any]] = field(default_factory=list)
+
+    def append_turn(
+        self,
+        *,
+        prompt: str,
+        answer: str | None,
+        terminal_error: Exception | None,
+        model_steps: int,
+        calls: list[ToolCall],
+        results: list[ToolResultMessage],
+        events: list[dict[str, Any]],
+    ) -> Path:
+        self.turns.append(
+            {
+                "recorded_at": datetime.now(timezone.utc).isoformat(),
+                "terminal_status": "final" if terminal_error is None else "error",
+                "prompt": prompt,
+                "answer": answer,
+                "terminal_error": (
+                    None
+                    if terminal_error is None
+                    else {"type": type(terminal_error).__name__, "message": str(terminal_error)}
+                ),
+                "model_steps": model_steps,
+                "trace": _trace_rows(calls, results, events),
+                "events": events,
+            }
+        )
+        return self.write()
+
+    def write(self) -> Path:
+        payload = {
+            "recorded_at": self.recorded_at,
+            "name": self.name,
+            "turns": self.turns,
+        }
+        self.result_dir.mkdir(parents=True, exist_ok=True)
+        destination = self.result_dir / f"{self.name}.json"
+        temporary = destination.with_suffix(".tmp")
+        temporary.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        temporary.replace(destination)
+        return destination
 
 
 def _new_result_name() -> str:
@@ -222,10 +259,15 @@ async def _run_turn(
     history: Sequence[Message],
     prompt: str,
     result_name: str,
+    *,
+    conversation: _ConversationTrace | None = None,
+    tool_trace: _TracingToolRegistry | None = None,
 ) -> tuple[FinalMessage | None, list[Message], Path, Exception | None]:
     response_start = len(model.responses)
     request_start = len(model.requests)
+    result_start = len(tool_trace.results) if tool_trace is not None else None
     events: list[dict[str, Any]] = []
+    recorder = conversation or _ConversationTrace(name=result_name)
 
     def record_event(event: Any) -> None:
         events.append(event.model_dump(mode="json"))
@@ -237,9 +279,12 @@ async def _run_turn(
         )
     except Exception as exc:
         calls = _tool_calls(model, start=response_start)
-        results = _tool_results(model, start=request_start)
-        destination = _write_result(
-            name=result_name,
+        results = (
+            tool_trace.results[result_start:]
+            if tool_trace is not None and result_start is not None
+            else _tool_results(model, start=request_start)
+        )
+        destination = recorder.append_turn(
             prompt=prompt,
             answer=None,
             terminal_error=exc,
@@ -251,9 +296,12 @@ async def _run_turn(
         return None, list(history), destination, exc
 
     calls = _tool_calls(model, start=response_start)
-    results = _tool_results(model, start=request_start)
-    destination = _write_result(
-        name=result_name,
+    results = (
+        tool_trace.results[result_start:]
+        if tool_trace is not None and result_start is not None
+        else _tool_results(model, start=request_start)
+    )
+    destination = recorder.append_turn(
         prompt=prompt,
         answer=final.content,
         terminal_error=None,
@@ -270,8 +318,10 @@ async def _run(args: argparse.Namespace) -> int:
     services = build_vnext_services(settings)
     base_runtime = build_vnext_runtime(settings, services=services)
     model = _TracingModelClient(base_runtime.model)
-    runtime = AgentRuntime(model, base_runtime.tools, limits=base_runtime.limits)
+    tool_trace = _TracingToolRegistry(base_runtime.tools)
+    runtime = AgentRuntime(model, tool_trace, limits=base_runtime.limits)
     try:
+        conversation = _ConversationTrace(name=args.result_name or _new_result_name())
         if args.prompt:
             prompt = " ".join(args.prompt)
             final, _history, destination, error = await _run_turn(
@@ -279,9 +329,11 @@ async def _run(args: argparse.Namespace) -> int:
                 model,
                 [],
                 prompt,
-                args.result_name or _new_result_name(),
+                conversation.name,
+                conversation=conversation,
+                tool_trace=tool_trace,
             )
-            _print_console(f"Result trace: {destination}")
+            _print_console(f"Conversation trace: {destination}")
             if error is not None:
                 _print_console(f"Agent failed: {type(error).__name__}: {error}")
                 return 1
@@ -305,9 +357,11 @@ async def _run(args: argparse.Namespace) -> int:
                 model,
                 history,
                 prompt,
-                _new_result_name(),
+                conversation.name,
+                conversation=conversation,
+                tool_trace=tool_trace,
             )
-            _print_console(f"Result trace: {destination}")
+            _print_console(f"Conversation trace: {destination}")
             if error is not None:
                 _print_console(f"Agent failed: {type(error).__name__}: {error}")
                 continue

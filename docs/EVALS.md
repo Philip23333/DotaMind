@@ -51,10 +51,10 @@ provider response to determine the result.
   `DOTAMIND_AGENT_EVAL_API_KEY` is optional for compatible endpoints.
 - They are marked `agent_eval`, skipped without explicit model configuration,
   and excluded from the ordinary deterministic CI acceptance path.
-- Each completed or terminated model turn writes a compact JSON trace under
-  `apps/api/tests/vnext/testResult/`. The directory is local-only and excludes
-  model configuration, credentials, and full artifact bodies. Each tool row
-  keeps execution `status` separate from a bounded business `result` summary.
+- The manual console writes one JSON record per console process under
+  `apps/api/tests/vnext/testResult/`. It appends each completed or terminated
+  turn to that record and retains the complete tool result content and
+  structured error, so the directory is local-only and must not be shared.
 
 Scripted behavioral tests are deterministic runtime regressions; they are not
 autonomous real-model agent evals.
@@ -65,9 +65,9 @@ Run `python -m scripts.vnext_agent_console --direct "<question>"` from
 `apps/api` to exercise the configured vNext chain: local vNext configuration,
 the model adapter, `AgentRuntime`, the domain-tool registry, and real provider
 adapters. `--direct` only disables proxy environment variables in that console
-process. Each run writes a timestamped compact trace to
-`tests/vnext/testResult/`; interactive mode preserves the previous transcript
-for follow-up questions.
+process. Each console process writes one timestamped conversation record to
+`tests/vnext/testResult/`; interactive mode appends follow-up turns to that
+same file and preserves complete tool results.
 
 ## Live provider smoke evals
 
