@@ -94,11 +94,11 @@ below the artifact boundary. Canonical Dota/Valve-native IDs may remain in an
 artifact when they express domain identity. Artifact sections are data views,
 not reasons to create a specialized tool for every user question.
 
-## GameSummaryArtifact schema version 3
+## GameSummaryArtifact schema version 4
 
 ### Purpose
 
-`GameSummaryArtifact` schema version 3 defines provider-neutral, canonical Dota
+`GameSummaryArtifact` schema version 4 defines provider-neutral, canonical Dota
 facts for one game. It is neither a provider DTO, a database record, nor a full
 replay representation. It is intended to support:
 
@@ -114,12 +114,12 @@ answer to a particular question.
 
 ### Structure
 
-The schema version 3 canonical structure is:
+The schema version 4 canonical structure is:
 
 ```text
 GameSummaryArtifact
 ├── artifact_type = "game_summary"
-├── schema_version = "3"
+├── schema_version = "4"
 ├── game
 │   ├── valve_match_id
 │   ├── start_time
@@ -149,7 +149,8 @@ GameSummaryArtifact
 │   ├── player_slot
 │   ├── hero
 │   │   ├── id
-│   │   └── name
+│   │   ├── name_en
+│   │   └── name_zh
 │   ├── stats
 │   │   ├── level
 │   │   ├── kills
@@ -165,35 +166,42 @@ GameSummaryArtifact
 │   │   ├── inventory[]
 │   │   │   ├── slot
 │   │   │   ├── id
-│   │   │   └── name
+│   │   │   ├── name_en
+│   │   │   └── name_zh
 │   │   ├── backpack[]
 │   │   │   ├── slot
 │   │   │   ├── id
-│   │   │   └── name
+│   │   │   ├── name_en
+│   │   │   └── name_zh
 │   │   └── neutral_items[]
 │   │       ├── slot
 │   │       ├── id
-│   │       └── name
+│   │       ├── name_en
+│   │       └── name_zh
 │   ├── purchase_history[]
 │   │   ├── time_seconds
 │   │   ├── item_id
-│   │   └── item_name
+│   │   ├── item_name_en
+│   │   └── item_name_zh
 │   └── ability_upgrades[]
 │       ├── level
 │       ├── time_seconds
 │       ├── ability_id
-│       └── ability_name
+│       ├── ability_name_en
+│       └── ability_name_zh
 └── draft
     ├── picks[]
     │   ├── order
     │   ├── side
     │   ├── hero_id
-    │   └── hero_name
+    │   ├── hero_name_en
+    │   └── hero_name_zh
     └── bans[]
         ├── order
         ├── side
         ├── hero_id
-        └── hero_name
+        ├── hero_name_en
+        └── hero_name_zh
 ```
 
 ### Identifier boundary
@@ -213,19 +221,19 @@ identity, rather than an ambiguous `match_id` or any provider resource ID.
 
 Canonical artifact entity representations use Valve-native hero, item, and
 ability IDs, Steam account IDs, and Valve team IDs. Provider-private IDs are
-excluded. Catalog resolution preserves the native ID and uses `name = null`
-when no catalog name is available.
+excluded. Catalog resolution preserves the native ID and uses `name_en = null`
+and `name_zh = null` when the corresponding catalog name is unavailable.
 
 ### Source-backed normalization and exclusions
 
-Every schema version 3 fact is source-backed. The artifact may contain provider
+Every schema version 4 fact is source-backed. The artifact may contain provider
 source facts, canonical semantic normalization, and static Dota catalog
 normalization. For example, normalization may represent `radiant_win` as
 `winner = radiant` or `dire`, map a source team-side code such as `0` or `1` to
 `radiant` or `dire`, and map hero, item, ability, game-mode, or lobby-type IDs
 to canonical catalog names.
 
-Schema version 3 excludes DotaMind-derived analytics and estimates. It must not
+Schema version 4 excludes DotaMind-derived analytics and estimates. It must not
 add KDA, total gold derived from GPM, total XP derived from XPM, lane
 efficiency, teamfight participation, benchmarks, rankings, or scores.
 Normalization may make a source fact semantically canonical; it must not invent
@@ -240,9 +248,11 @@ game, so they belong on each player entry rather than inside persistent
 identity.
 
 Hero, item, and ability names are catalog-normalized companions to their native
-IDs. All ordinary and neutral items use the same canonical Item Catalog: Dota
-item ID to catalog to `id` and canonical `name`. OpenDota neutral source slots
-are normalized into `neutral_items` as positional `ItemSlot` entries. The
+IDs. Version 4 preserves each available canonical catalog fact as `name_en` and
+`name_zh`; it does not ask the model to translate stable entity names. All
+ordinary and neutral items use the same canonical Item Catalog: Dota item ID to
+catalog to `id`, `name_en`, and `name_zh`. OpenDota neutral source slots are
+normalized into `neutral_items` as positional `ItemSlot` entries. The
 collection always has slots 0 and 1, and there is no separate enhancement
 semantic.
 
@@ -259,7 +269,7 @@ timing metadata remain `null`.
 OpenDota `purchase_log` provides purchase time and an item key. The provider
 adapter preserves this as a construction-level `item_key`; it does not perform
 catalog resolution. During artifact construction, `ItemResolver` resolves
-`item_key` to Valve-native item identity and canonical display name.
+`item_key` to Valve-native item identity and available catalog-localized names.
 
 If an `item_key` cannot be resolved to a Valve item identity, that purchase
 event is omitted rather than creating an identity-less `PurchaseEvent` or
@@ -272,7 +282,8 @@ The artifact uses one missing-data contract:
 - A missing source scalar fact is `null`.
 - A represented canonical entity requires its native identity; an object without
   that identity is omitted rather than represented as an empty entity.
-- A missing catalog mapping preserves the native ID and uses `name = null`.
+- A missing catalog mapping preserves the native ID and uses `name_en = null`
+  and `name_zh = null`.
 - A missing collection is `[]`.
 - A fixed structure remains present even when its fields or nested values are
   unavailable.
@@ -283,40 +294,48 @@ The fixed objects are `game`, `teams`, each player's `stats`, `economy`, and
 For example, missing `purchase_history` and `ability_upgrades` are `[]`. Missing
 draft data is `draft: { picks: [], bans: [] }`. Inventory and backpack slot
 structure is preserved even for empty slots, for example
-`{ slot: 2, id: null, name: null }`. Missing `neutral_items` is represented by
+`{ slot: 2, id: null, name_en: null, name_zh: null }`. Missing `neutral_items` is represented by
 the two empty neutral slots described below.
 
 Inventory, backpack, and neutral item placement is positional. `neutral_items`
 is always a fixed two-slot positional collection: slot 0 corresponds to the
 first neutral source slot and slot 1 corresponds to the second. An empty slot
-remains represented with `id = null` and `name = null`.
+remains represented with `id = null`, `name_en = null`, and `name_zh = null`.
 
 ```json
 "neutral_items": [
   {
     "slot": 0,
     "id": null,
-    "name": null
+    "name_en": null,
+    "name_zh": null
   },
   {
     "slot": 1,
     "id": 1700,
-    "name": "Mystical"
+    "name_en": "Mystical",
+    "name_zh": "神秘法杖"
   }
 ]
 ```
 
 ### Schema evolution
 
-Version 3 replaces neutral item value entries with positional `ItemSlot`
+Version 3 is a frozen historical schema. It replaces neutral item value entries with positional `ItemSlot`
 entries so both neutral source positions remain observable when one is empty.
 It also permits ID-only ability upgrades to retain source IDs and order with
 `level` and `time_seconds` set to `null` when that metadata is unavailable.
 
+Version 4 is the current production schema. It preserves the version 3 shape
+while evolving catalog-backed hero, item, and ability identity to expose native
+IDs plus available `name_en` and `name_zh` facts. A catalog miss preserves the
+native ID and leaves both localized names `null`; this is canonical localized
+identity, not a translation feature.
+
 Provenance, freshness, coverage, completeness, and known missing sections
 remain part of the artifact quality contract.
 
-> `GameSummaryArtifact` schema v3 and Commit 3.5 do not yet persist
+> `GameSummaryArtifact` schema v4 and its current production path do not yet persist
 > `fetched_at`, provenance, coverage, completeness, or known-missing metadata.
 > These remain target artifact-quality contracts for a later explicit
 > schema/storage contract.
