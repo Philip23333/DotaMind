@@ -7,6 +7,7 @@ from app.vnext.composition import build_vnext_registry
 from app.vnext.domain.common.models import PlayerRef, TeamRef
 from app.vnext.domain.team_player_index import TeamPlayerRefIndex
 from app.vnext.llm.protocol import ToolCall
+from app.vnext.providers.common import ProviderBatch
 from app.vnext.providers.pandascore.models import PandaScoreMatch
 from tests.vnext.phase2_support import fixture_services, fixture_vnext_services
 
@@ -56,6 +57,48 @@ def test_team_and_player_services_preserve_source_facts_and_opaque_refs() -> Non
     )
     for forbidden in ("pandascore_id", "provider_id", "raw_response", "provider_payload"):
         assert forbidden not in serialized
+
+
+def test_team_search_preserves_ambiguity_when_bounded_result_is_truncated() -> None:
+    competition_service, match_service, panda, _ = fixture_services()
+    services = fixture_vnext_services(competition_service, match_service, panda, _)
+    original_search = panda.search_teams
+
+    async def truncated_search(*, query: str | None = None, limit: int = 20):
+        batch = await original_search(query=query, limit=limit)
+        return ProviderBatch(batch.items[:1], batch.fetched_at, has_more=True)
+
+    panda.search_teams = truncated_search  # type: ignore[method-assign]
+
+    result = asyncio.run(services.teams.search("Team Spirit"))
+
+    assert result.status == "ambiguous"
+    assert result.candidate_count == 1
+    assert result.provenance.identity_status == "ambiguous"
+    assert result.provenance.warnings == [
+        "provider search was truncated; additional candidates may exist"
+    ]
+
+
+def test_player_search_preserves_ambiguity_when_bounded_result_is_truncated() -> None:
+    competition_service, match_service, panda, _ = fixture_services()
+    services = fixture_vnext_services(competition_service, match_service, panda, _)
+    original_search = panda.search_players
+
+    async def truncated_search(*, query: str | None = None, limit: int = 20):
+        batch = await original_search(query=query, limit=limit)
+        return ProviderBatch(batch.items[:1], batch.fetched_at, has_more=True)
+
+    panda.search_players = truncated_search  # type: ignore[method-assign]
+
+    result = asyncio.run(services.players.search("Yatoro"))
+
+    assert result.status == "ambiguous"
+    assert result.candidate_count == 1
+    assert result.provenance.identity_status == "ambiguous"
+    assert result.provenance.warnings == [
+        "provider search was truncated; additional candidates may exist"
+    ]
 
 
 def test_shared_index_keeps_match_team_player_identity_consistent_across_tools() -> None:

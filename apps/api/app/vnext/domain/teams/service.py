@@ -29,8 +29,24 @@ class TeamService:
             self._candidate(row)
             for row in batch.items
         ]
-        status = (
-            "not_found" if not candidates else "unique" if len(candidates) == 1 else "ambiguous"
+        has_more = batch.has_more is True
+        if not candidates:
+            status = "not_found"
+        elif len(candidates) == 1 and not has_more:
+            status = "unique"
+        else:
+            status = "ambiguous"
+        identity_status = (
+            "not_found"
+            if not candidates
+            else "native"
+            if len(candidates) == 1 and not has_more
+            else "ambiguous"
+        )
+        warnings = (
+            ["provider search was truncated; additional candidates may exist"]
+            if has_more
+            else []
         )
         return TeamSearchResult(
             status=status,
@@ -40,13 +56,8 @@ class TeamService:
             provenance=Provenance(
                 sources=["pandascore"],
                 freshness=Freshness(fetched_at=batch.fetched_at, status="fresh"),
-                identity_status=(
-                    "not_found"
-                    if not candidates
-                    else "ambiguous"
-                    if len(candidates) > 1
-                    else "native"
-                ),
+                identity_status=identity_status,
+                warnings=warnings,
             ),
         )
 
