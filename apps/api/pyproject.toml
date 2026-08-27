@@ -28,7 +28,8 @@ dev = [
 pythonpath = ["."]
 testpaths = ["tests"]
 markers = [
-  "agent_eval: fixture-backed agent evaluations using a real model"
+  "agent_eval: fixture-backed agent evaluations using a real model",
+  "live_agent_eval: opt-in live full-chain agent evaluation using real providers"
 ]
 
 [tool.ruff]

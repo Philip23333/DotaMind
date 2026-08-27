@@ -57,29 +57,30 @@ class VNextSettings:
 
     @classmethod
     def from_env(cls) -> VNextSettings:
+        defaults = cls()
         file_values = dotenv_values(_VNEXT_ENV_PATH)
         return cls(
             llm_api_key=_env_value("DOTAMIND_LLM_API_KEY", "", file_values) or "",
             llm_base_url=_env_value(
                 "DOTAMIND_LLM_BASE_URL",
-                cls.llm_base_url,
+                defaults.llm_base_url,
                 file_values,
             )
-            or cls.llm_base_url,
-            llm_model=_env_value("DOTAMIND_LLM_MODEL", cls.llm_model, file_values)
-            or cls.llm_model,
+            or defaults.llm_base_url,
+            llm_model=_env_value("DOTAMIND_LLM_MODEL", defaults.llm_model, file_values)
+            or defaults.llm_model,
             llm_timeout_seconds=float(
                 _env_value("DOTAMIND_LLM_TIMEOUT_SECONDS", "90", file_values)
             ),
             pandascore_base_url=_env_value(
                 "DOTAMIND_PANDASCORE_BASE_URL",
-                cls.pandascore_base_url,
+                defaults.pandascore_base_url,
                 file_values,
             ),
             pandascore_token=_env_value("DOTAMIND_PANDASCORE_TOKEN", None, file_values),
             opendota_base_url=_env_value(
                 "DOTAMIND_OPENDOTA_BASE_URL",
-                cls.opendota_base_url,
+                defaults.opendota_base_url,
                 file_values,
             ),
             opendota_api_key=_env_value("DOTAMIND_OPENDOTA_API_KEY", None, file_values),

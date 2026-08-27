@@ -72,6 +72,27 @@ def test_vnext_settings_read_shared_llm_environment(monkeypatch) -> None:
     assert settings.llm_timeout_seconds == 12.5
 
 
+def test_vnext_settings_use_literal_defaults_without_environment(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(
+        "app.vnext.composition._VNEXT_ENV_PATH",
+        tmp_path / "missing.env",
+    )
+    for name in (
+        "DOTAMIND_LLM_BASE_URL",
+        "DOTAMIND_LLM_MODEL",
+        "DOTAMIND_PANDASCORE_BASE_URL",
+        "DOTAMIND_OPENDOTA_BASE_URL",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    settings = VNextSettings.from_env()
+
+    assert settings.llm_base_url == "https://api.deepseek.com"
+    assert settings.llm_model == "deepseek-chat"
+    assert settings.pandascore_base_url == "https://api.pandascore.co"
+    assert settings.opendota_base_url == "https://api.opendota.com/api"
+
+
 def test_registry_executes_phase2_tools_and_exposes_canonical_valve_ids() -> None:
     competition_service, match_service, panda, opendota = fixture_services()
     services = fixture_vnext_services(competition_service, match_service, panda, opendota)
