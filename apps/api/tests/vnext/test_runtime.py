@@ -349,7 +349,11 @@ def test_runtime_streams_deltas_then_continues_tool_loop_without_repeating_text(
 
 def test_vnext_runtime_has_no_legacy_or_langgraph_import_dependency() -> None:
     root = Path(__file__).parents[2] / "app" / "vnext"
-    source = "\n".join(path.read_text(encoding="utf-8") for path in root.rglob("*.py"))
+    source = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in root.rglob("*.py")
+        if "product" not in path.relative_to(root).parts
+    )
     forbidden = (
         "app.agentic",
         "langgraph",

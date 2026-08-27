@@ -283,21 +283,27 @@ of calls.
 ## Sessions and persistence
 
 The product chat API owns browser session authorization and a durable PostgreSQL
-transcript of User and Final Assistant dialogue. It builds the current vNext
-model input from the complete persisted dialogue plus the new User message, then
+transcript of User and Final Assistant dialogue. A `ConversationContextBuilder`
+projects that complete durable transcript into model-visible context: a recent,
+contiguous suffix of at most 12 complete turns whose historical User and Final
+Assistant text totals at most 40,000 characters, followed by the new User
+message. The durable transcript and browser history remain complete; the bounds
+apply only to the next request's historical model input. The product then
 executes one request-bound `AgentRuntime.run_stream()` call. A product
 `completed` event is emitted only after the final assistant message is durable.
 
 The runtime remains session-neutral: it does not know PostgreSQL, browser IDs,
 chat sessions, or transcript persistence. Tool calls, tool results, runtime
 trace events, and artifacts are execution data and are not transcript rows.
-The in-memory artifact store is shared for the process lifetime, but it is not
-yet durable across a server restart.
+Current-run ToolCall and ToolResult messages remain intact inside one runtime
+execution; historical ToolCall and ToolResult messages are not restored across
+product turns. The in-memory artifact store is shared for the process lifetime,
+but it is not yet durable across a server restart.
 
-Bounded context construction, compaction, durable AgentRuns, reconnect, and
-event replay remain later product reliability work. Redis is optional and must
-be justified by a demonstrated distributed coordination, replay, or throughput
-need rather than copied from Legacy V3.
+Compaction, durable AgentRuns, reconnect, and event replay remain later product
+reliability work. Redis is optional and must be justified by a demonstrated
+distributed coordination, replay, or throughput need rather than copied from
+Legacy V3.
 
 ## Reliability and provenance
 

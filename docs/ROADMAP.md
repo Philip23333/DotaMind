@@ -179,9 +179,15 @@ independent of Agent, Tool, Artifact, and provider internals.
 
 Goal: harden long-lived conversations based on observed needs.
 
-Proposed deliverables:
+Implemented deliverables:
 
-- Bounded model context over the already durable conversation transcript
+- Conversation context construction boundary between the full PostgreSQL
+  transcript and vNext model input
+- Bounded recent, complete-turn context: at most 12 persisted turns and 40,000
+  historical text characters, while retaining the complete durable transcript
+
+Planned / pending deliverables:
+
 - Lightweight conversation compaction only when observed necessary
 - Durable AgentRun, reconnect, and recovery semantics only when product usage
   demonstrates a need

@@ -181,3 +181,44 @@ def test_product_chat_uses_the_injected_context_builder() -> None:
 
     assert context_builder.received == (repository.dialogue, "query")
     assert runtime.messages == [UserMessage(content="context-sentinel")]
+
+
+def test_product_chat_bounds_runtime_history_without_mutating_durable_dialogue() -> None:
+    repository = _Repository()
+    repository.dialogue = [
+        DialogueTurn(
+            turn_index=index,
+            user_message=f"user {index}",
+            assistant_message=f"assistant {index}",
+        )
+        for index in range(1, 21)
+    ]
+    runtime = _Runtime(
+        [AgentCompleted(duration=0.1, final=FinalMessage(content="answer"))]
+    )
+    service = VNextChatService(  # type: ignore[arg-type]
+        repository,
+        runtime,
+        ConversationContextBuilder(max_turns=3),
+    )
+
+    _collect(
+        service,
+        browser_id=str(uuid4()),
+        session_id=uuid4(),
+        request_id=uuid4(),
+        query="current",
+    )
+
+    assert [(message.role, message.content) for message in runtime.messages] == [
+        ("user", "user 18"),
+        ("final", "assistant 18"),
+        ("user", "user 19"),
+        ("final", "assistant 19"),
+        ("user", "user 20"),
+        ("final", "assistant 20"),
+        ("user", "current"),
+    ]
+    assert len(repository.dialogue) == 20
+    assert repository.dialogue[0].user_message == "user 1"
+    assert len(repository.appended) == 1
