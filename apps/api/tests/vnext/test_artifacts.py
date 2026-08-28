@@ -23,6 +23,16 @@ class TestArtifact:
     value: str = "payload"
 
 
+def _iter_refs(
+    store: MemoryArtifactStore,
+    artifact_types: list[str] | None = None,
+) -> list[ArtifactRef]:
+    async def collect() -> list[ArtifactRef]:
+        return [ref async for ref in store.iter_refs(artifact_types)]
+
+    return asyncio.run(collect())
+
+
 def test_artifact_ref_is_frozen_and_contains_only_identity_fields() -> None:
     ref = ArtifactRef(id="artifact:test:1", artifact_type="test", schema_version="1")
 
@@ -95,6 +105,27 @@ def test_put_replaces_existing_value_when_reference_is_compatible() -> None:
     asyncio.run(store.put(ref, second))
 
     assert asyncio.run(store.get(ref)) is second
+
+
+def test_iter_refs_returns_all_stored_references_in_deterministic_order() -> None:
+    store = MemoryArtifactStore()
+    later = ArtifactRef(id="artifact:test:later", artifact_type="test", schema_version="1")
+    earlier = ArtifactRef(id="artifact:other:earlier", artifact_type="other", schema_version="2")
+    asyncio.run(store.put(later, TestArtifact()))
+    asyncio.run(store.put(earlier, TestArtifact(artifact_type="other", schema_version="2")))
+
+    assert _iter_refs(store) == [earlier, later]
+
+
+def test_iter_refs_filters_by_artifact_type_without_reading_artifacts() -> None:
+    store = MemoryArtifactStore()
+    matching = ArtifactRef(id="artifact:test:1", artifact_type="test", schema_version="1")
+    excluded = ArtifactRef(id="artifact:other:1", artifact_type="other", schema_version="1")
+    asyncio.run(store.put(matching, TestArtifact()))
+    asyncio.run(store.put(excluded, TestArtifact(artifact_type="other")))
+
+    assert _iter_refs(store, ["test"]) == [matching]
+    assert _iter_refs(store, []) == []
 
 
 @pytest.mark.parametrize(

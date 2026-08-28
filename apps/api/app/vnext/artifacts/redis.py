@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
 
 from pydantic import BaseModel
@@ -78,6 +78,38 @@ class RedisArtifactStore:
 
     async def exists(self, ref: ArtifactRef) -> bool:
         return bool(await self._redis_call(lambda: self._client.exists(self.key_for(ref))))
+
+    async def iter_refs(
+        self,
+        artifact_types: list[str] | None = None,
+    ) -> AsyncIterator[ArtifactRef]:
+        """Yield refs recovered from retained artifact envelopes using Redis SCAN."""
+
+        allowed_types = set(artifact_types) if artifact_types is not None else None
+        refs: dict[str, ArtifactRef] = {}
+        cursor = 0
+        match = f"dotamind:vnext:artifact:v{self.STORAGE_SCHEMA_VERSION}:*"
+        while True:
+            scan_cursor = cursor
+            cursor, keys = await self._redis_call(
+                lambda scan_cursor=scan_cursor, match=match: self._client.scan(
+                    cursor=scan_cursor,
+                    match=match,
+                )
+            )
+            for key in keys:
+                payload = await self._redis_call(lambda key=key: self._client.get(key))
+                if payload is None:
+                    continue
+                envelope = self._decode_envelope(payload)
+                ref = ArtifactRef.model_validate(envelope["ref"])
+                if allowed_types is None or ref.artifact_type in allowed_types:
+                    refs[ref.id] = ref
+            if cursor == 0:
+                break
+
+        for ref in sorted(refs.values(), key=lambda item: item.id):
+            yield ref
 
     @classmethod
     def key_for(cls, ref: ArtifactRef) -> str:

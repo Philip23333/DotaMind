@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from typing import Protocol, runtime_checkable
 
 from .models import ArtifactRef
@@ -36,6 +37,12 @@ class ArtifactStore(Protocol):
 
     async def exists(self, ref: ArtifactRef) -> bool:
         """Return whether an artifact exists under a reference."""
+
+    async def iter_refs(
+        self,
+        artifact_types: list[str] | None = None,
+    ) -> AsyncIterator[ArtifactRef]:
+        """Yield stored references, optionally limited to artifact types."""
 
 
 class ArtifactNotFoundError(LookupError):

@@ -31,6 +31,11 @@ class FakeRedis:
     async def exists(self, key: str) -> int:
         return int(key in self.values)
 
+    async def scan(self, *, cursor: int, match: str) -> tuple[int, list[str]]:
+        assert cursor == 0
+        prefix = match.removesuffix("*")
+        return 0, list(reversed([key for key in self.values if key.startswith(prefix)]))
+
 
 class UnavailableRedis:
     async def get(self, key: str) -> None:
@@ -90,3 +95,18 @@ def test_redis_store_rejects_mismatched_stored_reference_metadata() -> None:
 
     with pytest.raises(ArtifactTypeMismatchError):
         asyncio.run(store.get(ref))
+
+
+def test_redis_store_iterates_retained_refs_with_scan_and_type_filtering() -> None:
+    client = FakeRedis()
+    store = RedisArtifactStore(client)
+    first = game_summary_artifact_ref(100)
+    second = game_summary_artifact_ref(200)
+    asyncio.run(store.put(second, _artifact(200)))
+    asyncio.run(store.put(first, _artifact(100)))
+
+    async def collect(artifact_types: list[str] | None = None):
+        return [ref async for ref in store.iter_refs(artifact_types)]
+
+    assert asyncio.run(collect()) == [first, second]
+    assert asyncio.run(collect(["other"])) == []
