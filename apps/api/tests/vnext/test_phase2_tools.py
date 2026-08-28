@@ -22,8 +22,8 @@ def test_composition_is_lazy_and_registers_the_eleven_vnext_tools() -> None:
     assert services.game_summary_producer is not None
     registry = build_vnext_registry(services)
     assert [tool.name for tool in registry.list()] == [
-        "competitions.search",
-        "competitions.list_matches",
+        "series.search",
+        "series.list_matches",
         "matches.search",
         "matches.get_detail",
         "teams.search",
@@ -54,8 +54,8 @@ def test_vnext_runtime_uses_the_shared_llm_configuration() -> None:
     assert runtime.model.model == "test-model"
     assert runtime.model.timeout == 12.5
     assert [tool.name for tool in runtime.tools.list()] == [
-        "competitions.search",
-        "competitions.list_matches",
+        "series.search",
+        "series.list_matches",
         "matches.search",
         "matches.get_detail",
         "teams.search",
@@ -104,25 +104,25 @@ def test_vnext_settings_use_literal_defaults_without_environment(monkeypatch, tm
 
 
 def test_registry_executes_phase2_tools_and_exposes_canonical_valve_ids() -> None:
-    competition_service, match_service, panda, opendota = fixture_services()
-    services = fixture_vnext_services(competition_service, match_service, panda, opendota)
+    series_service, match_service, panda, opendota = fixture_services()
+    services = fixture_vnext_services(series_service, match_service, panda, opendota)
     registry = build_vnext_registry(services)
 
     async def exercise():
-        competition = await registry.execute(
+        series = await registry.execute(
             ToolCall(
-                id="competition-search",
-                name="competitions.search",
+                id="series-search",
+                name="series.search",
                 arguments={"query": "The International 2026", "year": 2026},
             )
         )
-        competition_ref = competition.content["candidates"][0]["ref"]["value"]
+        series_ref = series.content["candidates"][0]["ref"]["value"]
         schedule = await registry.execute(
             ToolCall(
-                id="competition-matches",
-                name="competitions.list_matches",
+                id="series-matches",
+                name="series.list_matches",
                 arguments={
-                    "competition_ref": {"value": competition_ref},
+                    "series_ref": {"value": series_ref},
                     "time_scope": "recent",
                 },
             )
@@ -142,7 +142,7 @@ def test_registry_executes_phase2_tools_and_exposes_canonical_valve_ids() -> Non
                 arguments={"match_ref": {"value": match_ref}},
             )
         )
-        return competition, schedule, match_search, detail
+        return series, schedule, match_search, detail
 
     results = asyncio.run(exercise())
     assert all(result.status == "ok" for result in results)
@@ -160,9 +160,9 @@ def test_registry_executes_phase2_tools_and_exposes_canonical_valve_ids() -> Non
 
 
 def test_registry_game_ref_roundtrip_selects_only_game_two_without_provider_ids() -> None:
-    competition_service, match_service, panda, opendota = fixture_services()
+    series_service, match_service, panda, opendota = fixture_services()
     registry = build_vnext_registry(
-        fixture_vnext_services(competition_service, match_service, panda, opendota)
+        fixture_vnext_services(series_service, match_service, panda, opendota)
     )
 
     async def exercise():
@@ -227,9 +227,9 @@ def test_registry_game_ref_roundtrip_selects_only_game_two_without_provider_ids(
 
 def test_get_detail_requires_exactly_one_domain_reference() -> None:
     _, _, panda, opendota = fixture_services()
-    competition_service, match_service, _, _ = fixture_services()
+    series_service, match_service, _, _ = fixture_services()
     registry = build_vnext_registry(
-        fixture_vnext_services(competition_service, match_service, panda, opendota)
+        fixture_vnext_services(series_service, match_service, panda, opendota)
     )
     result = asyncio.run(
         registry.execute(

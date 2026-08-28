@@ -52,12 +52,12 @@ class ValveMatchIdResolver:
         """Resolve games after loading shared OpenDota resolution data once."""
 
         selected_games = tuple(games)
-        competition = match.summary.competition
-        if competition is None or competition.year is None:
+        series = match.summary.series
+        if series is None or series.year is None:
             return [
                 ResolutionDecision(
                     status="insufficient_signals",
-                    warnings=("competition year is unavailable",),
+                    warnings=("series year is unavailable",),
                 )
                 for _ in selected_games
             ]
@@ -65,8 +65,8 @@ class ValveMatchIdResolver:
         leagues_batch = await self.opendota.list_leagues()
         leagues = [_league_signal(item) for item in leagues_batch.items]
         matching_leagues = self.resolver.matching_leagues(
-            match.competition_name,
-            match.competition_year,
+            match.series_name,
+            match.series_year,
             leagues,
         )
         league_matches: dict[int, list[LeagueMatchSignal]] = {}
@@ -100,8 +100,8 @@ class ValveMatchIdResolver:
             self.resolver.resolve(
                 MatchSignal(
                     provider_id=game.provider_id,
-                    competition_name=match.competition_name,
-                    competition_year=match.competition_year,
+                    series_name=match.series_name,
+                    series_year=match.series_year,
                     teams=fixture_teams,
                     start_time=game.start_time,
                     duration_seconds=game.duration_seconds,

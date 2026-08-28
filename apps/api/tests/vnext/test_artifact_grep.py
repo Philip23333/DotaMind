@@ -146,8 +146,8 @@ def test_grep_input_and_direct_boundary_reject_invalid_bounds() -> None:
 
 
 def test_artifact_grep_tool_searches_stored_content_without_provider_production() -> None:
-    competition_service, match_service, panda, opendota = fixture_services()
-    services = fixture_vnext_services(competition_service, match_service, panda, opendota)
+    series_service, match_service, panda, opendota = fixture_services()
+    services = fixture_vnext_services(series_service, match_service, panda, opendota)
     ref = ArtifactRef(id="game_summary:4:88", artifact_type="game_summary", schema_version="4")
     _put(
         services.artifact_store,

@@ -15,13 +15,13 @@ from app.vnext.composition import build_vnext_registry
 from app.vnext.llm.openai_compatible import OpenAICompatibleModelClient
 from app.vnext.llm.protocol import ModelRequest, UserMessage
 from app.vnext.tools.artifacts.retrieval import ArtifactReadInput
-from app.vnext.tools.domain.competitions import CompetitionListMatchesInput
 from app.vnext.tools.domain.matches import MatchGetDetailInput, MatchSearchInput
 from app.vnext.tools.domain.players import PlayerGetDetailInput
+from app.vnext.tools.domain.series import SeriesListMatchesInput
 from app.vnext.tools.domain.teams import TeamGetDetailInput
 from tests.vnext.phase2_support import fixture_services, fixture_vnext_services
 
-_COMPETITION_VALUE = "competition:0123456789abcdef01234567"
+_SERIES_VALUE = "series:0123456789abcdef01234567"
 _MATCH_VALUE = "match:0123456789abcdef01234567"
 _GAME_VALUE = "game:0123456789abcdef01234567"
 _TEAM_VALUE = "team:0123456789abcdef01234567"
@@ -29,9 +29,9 @@ _PLAYER_VALUE = "player:0123456789abcdef01234567"
 
 
 def _tool_schemas() -> dict[str, dict[str, Any]]:
-    competition_service, match_service, panda, opendota = fixture_services()
+    series_service, match_service, panda, opendota = fixture_services()
     registry = build_vnext_registry(
-        fixture_vnext_services(competition_service, match_service, panda, opendota)
+        fixture_vnext_services(series_service, match_service, panda, opendota)
     )
     return {tool.name: tool.input_schema for tool in registry.schemas()}
 
@@ -55,21 +55,21 @@ def _reference_definition(
 def test_agent_visible_reference_schemas_explain_nested_object_inputs() -> None:
     schemas = _tool_schemas()
 
-    competition_field, competition_ref = _reference_definition(
-        schemas["competitions.list_matches"], "competition_ref"
+    series_field, series_ref = _reference_definition(
+        schemas["series.list_matches"], "series_ref"
     )
-    assert "returned by competitions.search" in competition_field["description"]
-    assert "whole object unchanged" in competition_field["description"]
-    assert competition_ref["type"] == "object"
-    assert "bare string" in competition_ref["description"]
-    assert competition_ref["examples"] == [{"value": _COMPETITION_VALUE}]
-    assert "inside this reference object" in competition_ref["properties"]["value"]["description"]
+    assert "returned by series.search" in series_field["description"]
+    assert "whole object unchanged" in series_field["description"]
+    assert series_ref["type"] == "object"
+    assert "bare string" in series_ref["description"]
+    assert series_ref["examples"] == [{"value": _SERIES_VALUE}]
+    assert "inside this reference object" in series_ref["properties"]["value"]["description"]
 
-    search_field, search_competition_ref = _reference_definition(
-        schemas["matches.search"], "competition"
+    search_field, search_series_ref = _reference_definition(
+        schemas["matches.search"], "series"
     )
-    assert "named competition, not competition_ref" in search_field["description"]
-    assert search_competition_ref["type"] == "object"
+    assert "returned by series.search" in search_field["description"]
+    assert search_series_ref["type"] == "object"
 
     match_field, match_ref = _reference_definition(schemas["matches.get_detail"], "match_ref")
     game_field, game_ref = _reference_definition(schemas["matches.get_detail"], "game_ref")
@@ -102,16 +102,16 @@ def test_agent_visible_reference_schemas_explain_nested_object_inputs() -> None:
     ("input_model", "field_name", "value", "valid_arguments"),
     [
         (
-            CompetitionListMatchesInput,
-            "competition_ref",
-            _COMPETITION_VALUE,
-            {"competition_ref": {"value": _COMPETITION_VALUE}},
+            SeriesListMatchesInput,
+            "series_ref",
+            _SERIES_VALUE,
+            {"series_ref": {"value": _SERIES_VALUE}},
         ),
         (
             MatchSearchInput,
-            "competition",
-            _COMPETITION_VALUE,
-            {"competition": {"value": _COMPETITION_VALUE}},
+            "series",
+            _SERIES_VALUE,
+            {"series": {"value": _SERIES_VALUE}},
         ),
         (
             MatchGetDetailInput,
@@ -173,7 +173,7 @@ def test_openai_compatible_payload_preserves_reference_schema_metadata() -> None
         model="test-model",
         transport=httpx.MockTransport(handler),
     )
-    competition_schema = _tool_schemas()["matches.search"]
+    match_search_schema = _tool_schemas()["matches.search"]
     asyncio.run(
         client.complete(
             ModelRequest(
@@ -188,7 +188,7 @@ def test_openai_compatible_payload_preserves_reference_schema_metadata() -> None
     )
 
     provider_schema = seen["payload"]["tools"][0]["function"]["parameters"]
-    assert provider_schema == competition_schema
-    provider_field, provider_ref = _reference_definition(provider_schema, "competition")
-    assert "named competition, not competition_ref" in provider_field["description"]
-    assert provider_ref["examples"] == [{"value": _COMPETITION_VALUE}]
+    assert provider_schema == match_search_schema
+    provider_field, provider_ref = _reference_definition(provider_schema, "series")
+    assert "returned by series.search" in provider_field["description"]
+    assert provider_ref["examples"] == [{"value": _SERIES_VALUE}]

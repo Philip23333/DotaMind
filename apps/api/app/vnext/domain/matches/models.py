@@ -8,7 +8,6 @@ from typing import Literal
 from pydantic import Field
 
 from app.vnext.domain.common.models import (
-    CompetitionRef,
     DomainModel,
     GameRef,
     LeagueRef,
@@ -48,14 +47,6 @@ class LeagueSummary(DomainModel):
     name: str = Field(min_length=1)
 
 
-class CompetitionSummary(DomainModel):
-    """Legacy compatibility DTO pending replacement by Series capability."""
-
-    ref: CompetitionRef
-    name: str = Field(min_length=1)
-    year: int | None = None
-
-
 class SeriesSummary(DomainModel):
     ref: SeriesRef
     name: str = Field(min_length=1)
@@ -86,7 +77,6 @@ class MatchSummary(DomainModel):
     league: LeagueSummary | None = None
     series: SeriesSummary | None = None
     tournament: TournamentSummary | None = None
-    competition: CompetitionSummary | None = None
     teams: list[Team] = Field(default_factory=list)
     scheduled_at: datetime | None = None
     started_at: datetime | None = None
@@ -101,9 +91,9 @@ class MatchCandidate(MatchSummary):
     """A search candidate; the candidate status is held by the search result."""
 
 
-class CompetitionMatchesResult(DomainModel):
+class SeriesMatchesResult(DomainModel):
     status: Literal["ok", "not_found"]
-    competition: CompetitionSummary
+    series: SeriesSummary
     time_scope: TimeScope
     candidate_count: int = Field(ge=0)
     matches: list[MatchSummary] = Field(default_factory=list)
@@ -196,8 +186,8 @@ class MatchDetail(DomainModel):
 
 
 __all__ = [
-    "CompetitionMatchesResult",
-    "CompetitionSummary",
+    "SeriesMatchesResult",
+    "SeriesSummary",
     "DraftPick",
     "Game",
     "GameDetail",

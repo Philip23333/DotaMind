@@ -4,8 +4,8 @@ from importlib import import_module
 from typing import Any
 
 _EXPORTS = {
-    "CompetitionMatchesResult": ("app.vnext.domain.matches.models", "CompetitionMatchesResult"),
-    "CompetitionSummary": ("app.vnext.domain.matches.models", "CompetitionSummary"),
+    "SeriesMatchesResult": ("app.vnext.domain.matches.models", "SeriesMatchesResult"),
+    "SeriesSummary": ("app.vnext.domain.matches.models", "SeriesSummary"),
     "Game": ("app.vnext.domain.matches.models", "Game"),
     "GameDetail": ("app.vnext.domain.matches.models", "GameDetail"),
     "GameSummary": ("app.vnext.domain.matches.models", "GameSummary"),

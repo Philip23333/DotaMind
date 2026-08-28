@@ -12,13 +12,13 @@ def summarize_tool_result(tool_name: str, content: Any) -> dict[str, Any] | None
 
     if not isinstance(content, dict):
         return {"value_kind": _value_kind(content)}
-    if tool_name == "competitions.search":
-        return _search_summary(content, "candidates", _competition_summary)
-    if tool_name == "competitions.list_matches":
+    if tool_name == "series.search":
+        return _search_summary(content, "candidates", _series_summary)
+    if tool_name == "series.list_matches":
         summary = _search_summary(content, "matches", _match_summary)
-        competition = content.get("competition")
-        if isinstance(competition, dict):
-            summary["competition"] = _competition_summary(competition)
+        series = content.get("series")
+        if isinstance(series, dict):
+            summary["series"] = _series_summary(series)
         return summary
     if tool_name == "matches.search":
         return _search_summary(content, "candidates", _match_summary)
@@ -50,7 +50,7 @@ def _search_summary(
     }
 
 
-def _competition_summary(value: dict[str, Any]) -> dict[str, Any]:
+def _series_summary(value: dict[str, Any]) -> dict[str, Any]:
     return {
         **_reference_field(value, "ref"),
         **_present_fields(

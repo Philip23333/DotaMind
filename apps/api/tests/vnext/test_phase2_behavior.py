@@ -20,8 +20,8 @@ from tests.vnext.phase2_support import fixture_services, fixture_vnext_services
 
 
 def _runtime():
-    competition_service, match_service, panda, opendota = fixture_services()
-    services = fixture_vnext_services(competition_service, match_service, panda, opendota)
+    series_service, match_service, panda, opendota = fixture_services()
+    services = fixture_vnext_services(series_service, match_service, panda, opendota)
     registry = build_vnext_registry(services)
     runtime = AgentRuntime(
         ScriptedTranscriptModelClient([]),
@@ -54,14 +54,14 @@ def _tool_calls(model: ScriptedTranscriptModelClient) -> list[ToolCall]:
     ]
 
 
-def test_behavior_scenario_a_competition_search_runs_through_runtime_and_registry() -> None:
+def test_behavior_scenario_a_series_search_runs_through_runtime_and_registry() -> None:
     runtime, _, registry = _runtime()
     model = ScriptedTranscriptModelClient(
         [
             lambda request: _assistant_call(
                 ToolCall(
-                    id="competition-search",
-                    name="competitions.search",
+                    id="series-search",
+                    name="series.search",
                     arguments={"query": "The International 2026", "year": 2026},
                 )
             ),
@@ -73,10 +73,10 @@ def test_behavior_scenario_a_competition_search_runs_through_runtime_and_registr
     final = asyncio.run(runtime.run([UserMessage(content="帮我查一下 The International 2026")]))
 
     assert final == FinalMessage(content="赛事已找到")
-    assert _tool_calls(model)[0].name == "competitions.search"
+    assert _tool_calls(model)[0].name == "series.search"
     assert [tool.name for tool in registry.list()] == [
-        "competitions.search",
-        "competitions.list_matches",
+        "series.search",
+        "series.list_matches",
         "matches.search",
         "matches.get_detail",
         "teams.search",
@@ -90,23 +90,23 @@ def test_behavior_scenario_a_competition_search_runs_through_runtime_and_registr
     assert len(model.requests[0].tools) == 11
 
 
-def test_behavior_scenario_b_upcoming_uses_competition_ref_from_prior_tool_result() -> None:
+def test_behavior_scenario_b_upcoming_uses_series_ref_from_prior_tool_result() -> None:
     runtime, _, _ = _runtime()
     model = ScriptedTranscriptModelClient(
         [
             lambda request: _assistant_call(
                 ToolCall(
-                    id="competition-search",
-                    name="competitions.search",
+                    id="series-search",
+                    name="series.search",
                     arguments={"query": "The International 2026", "year": 2026},
                 )
             ),
             lambda request: _assistant_call(
                 ToolCall(
-                    id="competition-matches",
-                    name="competitions.list_matches",
+                    id="series-matches",
+                    name="series.list_matches",
                     arguments={
-                        "competition_ref": {
+                        "series_ref": {
                             "value": _last_tool_result(request)["candidates"][0]["ref"]["value"]
                         },
                         "time_scope": "upcoming",
@@ -123,10 +123,10 @@ def test_behavior_scenario_b_upcoming_uses_competition_ref_from_prior_tool_resul
     assert final.content == "下一场已找到"
     calls = _tool_calls(model)
     assert [call.name for call in calls] == [
-        "competitions.search",
-        "competitions.list_matches",
+        "series.search",
+        "series.list_matches",
     ]
-    assert calls[1].arguments["competition_ref"]["value"].startswith("competition:")
+    assert calls[1].arguments["series_ref"]["value"].startswith("series:")
     assert calls[1].arguments["time_scope"] == "upcoming"
 
 

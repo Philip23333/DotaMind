@@ -27,8 +27,8 @@ class TeamSignal:
 @dataclass(frozen=True, slots=True)
 class MatchSignal:
     provider_id: int
-    competition_name: str
-    competition_year: int | None
+    series_name: str
+    series_year: int | None
     teams: tuple[TeamSignal, ...]
     start_time: int | None
     duration_seconds: int | None
@@ -77,16 +77,16 @@ class MatchResolutionService:
 
     def matching_leagues(
         self,
-        competition_name: str,
-        competition_year: int | None,
+        series_name: str,
+        series_year: int | None,
         leagues: list[LeagueSignal],
     ) -> list[LeagueSignal]:
-        if competition_year is None:
+        if series_year is None:
             return []
         return [
             league
             for league in leagues
-            if _league_matches(competition_name, competition_year, league)
+            if _league_matches(series_name, series_year, league)
         ]
 
     def resolve(
@@ -96,33 +96,33 @@ class MatchResolutionService:
         team_candidates: dict[str, list[TeamSignal]],
         league_matches: dict[int, list[LeagueMatchSignal]],
     ) -> ResolutionDecision:
-        if len(fixture.teams) != 2 or not fixture.competition_name.strip():
+        if len(fixture.teams) != 2 or not fixture.series_name.strip():
             return ResolutionDecision(
                 status="insufficient_signals",
-                warnings=("two team signals and a competition name are required",),
+                warnings=("two team signals and a series name are required",),
             )
 
-        if fixture.competition_year is None:
+        if fixture.series_year is None:
             return ResolutionDecision(
                 status="insufficient_signals",
-                warnings=("competition year is required for league resolution",),
+                warnings=("series year is required for league resolution",),
             )
 
         matching_leagues = self.matching_leagues(
-            fixture.competition_name,
-            fixture.competition_year,
+            fixture.series_name,
+            fixture.series_year,
             leagues,
         )
         if not matching_leagues:
             return ResolutionDecision(
                 status="league_not_found",
-                warnings=("no unique OpenDota league matched the competition name and year",),
+                warnings=("no unique OpenDota league matched the series name and year",),
             )
         if len(matching_leagues) > 1:
             return ResolutionDecision(
                 status="ambiguous_league",
                 candidate_count=len(matching_leagues),
-                warnings=("multiple OpenDota leagues matched the competition name and year",),
+                warnings=("multiple OpenDota leagues matched the series name and year",),
             )
 
         league = matching_leagues[0]
@@ -133,7 +133,7 @@ class MatchResolutionService:
             if team_id is not None
         }
         selected: list[TeamSignal] = []
-        signals: list[str] = ["competition_name_year"]
+        signals: list[str] = ["series_name_year"]
         for fixture_team in fixture.teams:
             candidates = _deduplicate_team_candidates(
                 team_candidates.get(normalize_text(fixture_team.name), [])

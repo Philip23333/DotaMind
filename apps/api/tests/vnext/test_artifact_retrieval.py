@@ -137,8 +137,8 @@ def test_reader_rejects_pagination_for_outline_or_non_list_values() -> None:
 
 
 def test_registry_tool_chain_produces_searches_and_reads_one_artifact() -> None:
-    competition_service, match_service, panda, opendota = fixture_services()
-    services = fixture_vnext_services(competition_service, match_service, panda, opendota)
+    series_service, match_service, panda, opendota = fixture_services()
+    services = fixture_vnext_services(series_service, match_service, panda, opendota)
 
     registry = build_vnext_registry(services)
 
@@ -192,10 +192,10 @@ def test_registry_tool_chain_produces_searches_and_reads_one_artifact() -> None:
 
 
 def test_unresolved_games_do_not_trigger_artifact_production() -> None:
-    competition_service, match_service, panda, opendota = fixture_services(
+    series_service, match_service, panda, opendota = fixture_services(
         resolution_available=False
     )
-    services = fixture_vnext_services(competition_service, match_service, panda, opendota)
+    services = fixture_vnext_services(series_service, match_service, panda, opendota)
 
     registry = build_vnext_registry(services)
 
@@ -224,8 +224,8 @@ def test_unresolved_games_do_not_trigger_artifact_production() -> None:
 
 
 def test_each_resolved_game_is_produced_and_stored() -> None:
-    competition_service, match_service, panda, opendota = fixture_services()
-    services = fixture_vnext_services(competition_service, match_service, panda, opendota)
+    series_service, match_service, panda, opendota = fixture_services()
+    services = fixture_vnext_services(series_service, match_service, panda, opendota)
 
     registry = build_vnext_registry(services)
 
@@ -258,10 +258,10 @@ def test_each_resolved_game_is_produced_and_stored() -> None:
 
 
 def test_production_failure_fails_get_detail_tool() -> None:
-    competition_service, match_service, panda, opendota = fixture_services(
+    series_service, match_service, panda, opendota = fixture_services(
         detail_available=False
     )
-    services = fixture_vnext_services(competition_service, match_service, panda, opendota)
+    services = fixture_vnext_services(series_service, match_service, panda, opendota)
 
     registry = build_vnext_registry(services)
 
@@ -290,8 +290,8 @@ def test_production_failure_fails_get_detail_tool() -> None:
 
 
 def test_artifact_read_missing_path_is_a_stable_tool_error() -> None:
-    competition_service, match_service, panda, opendota = fixture_services()
-    services = fixture_vnext_services(competition_service, match_service, panda, opendota)
+    series_service, match_service, panda, opendota = fixture_services()
+    services = fixture_vnext_services(series_service, match_service, panda, opendota)
     ref = game_summary_artifact_ref(8123456789)
     asyncio.run(services.artifact_store.put(ref, _artifact()))
 
@@ -314,8 +314,8 @@ def test_artifact_read_missing_path_is_a_stable_tool_error() -> None:
 
 
 def test_artifact_read_missing_ref_is_an_explicit_tool_error() -> None:
-    competition_service, match_service, panda, opendota = fixture_services()
-    services = fixture_vnext_services(competition_service, match_service, panda, opendota)
+    series_service, match_service, panda, opendota = fixture_services()
+    services = fixture_vnext_services(series_service, match_service, panda, opendota)
 
     registry = build_vnext_registry(services)
     result = asyncio.run(

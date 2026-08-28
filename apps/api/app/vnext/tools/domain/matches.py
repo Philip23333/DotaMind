@@ -7,7 +7,7 @@ from typing import Literal
 from pydantic import Field, model_validator
 
 from app.vnext.artifacts import GameSummaryArtifactProducer
-from app.vnext.domain.common.models import CompetitionRef, DomainModel, GameRef, MatchRef
+from app.vnext.domain.common.models import DomainModel, GameRef, MatchRef, SeriesRef
 from app.vnext.domain.matches.models import MatchDetail, MatchSearchResult
 from app.vnext.domain.matches.service import MatchService
 from app.vnext.tools.definition import ToolDefinition
@@ -17,12 +17,11 @@ from app.vnext.tools.registry import ToolRegistry
 class MatchSearchInput(DomainModel):
     query: str | None = None
     teams: list[str] = Field(default_factory=list, max_length=2)
-    competition: CompetitionRef | None = Field(
+    series: SeriesRef | None = Field(
         default=None,
         description=(
-            "Optional CompetitionRef object returned by competitions.search. This field is "
-            "named competition, not competition_ref. Use: {\"competition\":{\"value\":"
-            "\"competition:0123456789abcdef01234567\"}}."
+            "Optional SeriesRef object returned by series.search. Use: "
+            "{\"series\":{\"value\":\"series:0123456789abcdef01234567\"}}."
         ),
     )
     time_scope: Literal["upcoming", "recent", "running", "all"] = "all"
@@ -64,7 +63,7 @@ def register_match_tools(
         return await service.search(
             query=args.query,
             teams=args.teams,
-            competition=args.competition,
+            series=args.series,
             time_scope=args.time_scope,
             limit=args.limit,
         )
@@ -80,9 +79,9 @@ def register_match_tools(
         ToolDefinition(
             name="matches.search",
             description=(
-                "Find professional Dota 2 series by teams, competition, query, or time scope. "
-                "When filtering by competition, pass the CompetitionRef object returned by "
-                "competitions.search. Returns ordered candidates without guessing among ambiguity."
+                "Find professional Dota 2 matches by teams, series, query, or time scope. "
+                "When filtering by series, pass the SeriesRef object returned by series.search. "
+                "Returns ordered candidates without guessing among ambiguity."
             ),
             input_model=MatchSearchInput,
             output_model=MatchSearchResult,

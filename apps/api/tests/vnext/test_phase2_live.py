@@ -30,7 +30,7 @@ if not _live_settings.pandascore_token:
     )
 
 
-def test_live_pandascore_competition_and_small_match_window() -> None:
+def test_live_pandascore_series_and_small_match_window() -> None:
     query = os.getenv("DOTAMIND_LIVE_COMPETITION_QUERY", "The International")
     year_raw = os.getenv("DOTAMIND_LIVE_COMPETITION_YEAR")
     year = int(year_raw) if year_raw else None
@@ -38,9 +38,9 @@ def test_live_pandascore_competition_and_small_match_window() -> None:
     async def exercise() -> None:
         services = build_vnext_services(_live_settings)
         try:
-            result = await services.competitions.search(query, year=year, limit=5)
-            assert result.candidates, "PandaScore returned no live competition candidates"
-            schedule = await services.competitions.list_matches(
+            result = await services.series.search(query, year=year, limit=5)
+            assert result.candidates, "PandaScore returned no live series candidates"
+            schedule = await services.series.list_matches(
                 result.candidates[0].ref,
                 time_scope="all",
                 limit=5,

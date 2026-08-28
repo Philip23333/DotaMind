@@ -193,23 +193,23 @@ async def _run_live_full_chain(settings: VNextSettings) -> None:
             f"first turn returned a tool error; {first_context}"
         )
 
-        competition_calls = [
-            call for call in first_calls if call.name == "competitions.search"
+        series_calls = [
+            call for call in first_calls if call.name == "series.search"
         ]
-        assert competition_calls, f"discovery did not call competitions.search; {first_context}"
-        competition_contents = [
+        assert series_calls, f"discovery did not call series.search; {first_context}"
+        series_contents = [
             content
-            for call in competition_calls
+            for call in series_calls
             if (content := _result_content(_call_result(call, first_result_map))) is not None
         ]
-        assert any(content.get("candidates") for content in competition_contents), (
-            f"discovery returned no competition candidates; {first_context}"
+        assert any(content.get("candidates") for content in series_contents), (
+            f"discovery returned no series candidates; {first_context}"
         )
         assert any(
             _has_match_data(content)
             for result in first_results
             if (content := _result_content(result)) is not None
-        ), f"discovery returned no match data after competition search; {first_context}"
+        ), f"discovery returned no match data after series search; {first_context}"
 
         second_response_start = len(model.responses)
         second_request_start = len(model.requests)

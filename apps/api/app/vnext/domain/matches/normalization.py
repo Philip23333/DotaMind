@@ -1,4 +1,4 @@
-"""PandaScore-to-domain normalization shared by competition and match services."""
+"""PandaScore-to-domain normalization shared by series and match services."""
 
 from __future__ import annotations
 
@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from app.vnext.domain.common.models import (
-    CompetitionRef,
     Freshness,
     GameRef,
     LeagueRef,
@@ -21,7 +20,6 @@ from app.vnext.domain.common.models import (
     normalize_text,
 )
 from app.vnext.domain.matches.models import (
-    CompetitionSummary,
     GameDetail,
     LeagueSummary,
     MatchResult,
@@ -51,8 +49,8 @@ class NormalizedPandaMatch:
     games: tuple[NormalizedGame, ...]
     teams_by_provider_id: dict[int, Team]
     winner_provider_id: int | None
-    competition_name: str
-    competition_year: int | None
+    series_name: str
+    series_year: int | None
 
 
 def normalize_panda_match(
@@ -60,13 +58,12 @@ def normalize_panda_match(
     *,
     fetched_at: datetime,
     series_ref: SeriesRef | None = None,
-    competition_ref: CompetitionRef | None = None,
-    competition_name: str | None = None,
-    competition_year: int | None = None,
+    series_name: str | None = None,
+    series_year: int | None = None,
 ) -> NormalizedPandaMatch:
     series_id = row.series_id or (row.series.provider_id if row.series else None)
-    series_name = competition_name or _canonical_competition_name(row)
-    series_year = competition_year or _series_year(row)
+    series_name = series_name or _canonical_series_name(row)
+    series_year = series_year or _series_year(row)
     resolved_series_ref = series_ref or (
         SeriesRef(value=hash_ref("series", "pandascore", series_id))
         if series_id is not None
@@ -120,18 +117,18 @@ def normalize_panda_match(
             year=series_year,
             season=row.series.season if row.series else None,
         ),
-        competition=CompetitionSummary(
-            ref=competition_ref
-            or CompetitionRef(value=hash_ref("competition", "pandascore-series", series_id)),
-            name=series_name,
-            year=series_year,
-        ) if series_id is not None else None,
         tournament=(
             TournamentSummary(
                 ref=TournamentRef(
                     value=hash_ref("tournament", "pandascore", row.tournament.provider_id)
                 ),
                 name=row.tournament.name,
+                series=SeriesSummary(
+                    ref=resolved_series_ref,
+                    name=series_name,
+                    year=series_year,
+                    season=row.series.season if row.series else None,
+                ),
             )
             if row.tournament
             else None
@@ -162,8 +159,8 @@ def normalize_panda_match(
         games=games,
         teams_by_provider_id=teams_by_provider_id,
         winner_provider_id=winner_provider_id,
-        competition_name=series_name,
-        competition_year=series_year,
+        series_name=series_name,
+        series_year=series_year,
     )
 
 
@@ -288,13 +285,13 @@ def _extract_year(value: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
-def _canonical_competition_name(row: PandaScoreMatch) -> str:
+def _canonical_series_name(row: PandaScoreMatch) -> str:
     series = row.series
     series_name = series.name.strip() if series and series.name else ""
     series_full_name = series.full_name.strip() if series and series.full_name else ""
     league_name = row.league.name.strip() if row.league and row.league.name else ""
     if not series_name or _is_year_only(series_name) or _is_year_only(series_full_name):
-        return league_name or series_name or series_full_name or "Unknown competition"
+        return league_name or series_name or series_full_name or "Unknown series"
     return series_name
 
 

@@ -7,17 +7,14 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 
 from app.vnext.domain.common.models import (
-    CompetitionRef,
     Freshness,
     GameRef,
     MatchRef,
     Provenance,
+    SeriesRef,
     normalize_text,
 )
-from app.vnext.domain.competitions.models import Competition
-from app.vnext.domain.competitions.service import CompetitionService, competition_display_name
 from app.vnext.domain.matches.models import (
-    CompetitionSummary,
     DraftPick,
     GameDetail,
     MatchCandidate,
@@ -26,6 +23,7 @@ from app.vnext.domain.matches.models import (
     MatchSummary,
     ResolutionSummary,
     ScoreboardRow,
+    SeriesSummary,
     TimeScope,
 )
 from app.vnext.domain.matches.normalization import (
@@ -38,6 +36,8 @@ from app.vnext.domain.matches.resolution import (
     ResolutionDecision,
 )
 from app.vnext.domain.matches.valve_match_id_resolver import ValveMatchIdResolver
+from app.vnext.domain.series.models import Series
+from app.vnext.domain.series.service import SeriesService, series_display_name
 from app.vnext.domain.team_player_index import TeamPlayerRefIndex
 from app.vnext.providers.opendota.adapter import OpenDotaAdapter, OpenDotaProviderError
 from app.vnext.providers.opendota.models import OpenDotaMatchDetail
@@ -77,14 +77,14 @@ class MatchService:
         pandascore: PandaScoreAdapter,
         opendota: OpenDotaAdapter,
         *,
-        competition_service: CompetitionService | None = None,
+        series_service: SeriesService | None = None,
         resolver: MatchResolutionService | None = None,
         team_player_index: TeamPlayerRefIndex | None = None,
         now: Callable[[], datetime] | None = None,
     ) -> None:
         self.pandascore = pandascore
         self.opendota = opendota
-        self.competition_service = competition_service
+        self.series_service = series_service
         self.team_player_index = team_player_index or TeamPlayerRefIndex()
         self.valve_match_id_resolver = ValveMatchIdResolver(opendota, resolver=resolver)
         self._now = now or (lambda: datetime.now(timezone.utc))
@@ -96,34 +96,34 @@ class MatchService:
         *,
         query: str | None = None,
         teams: list[str] | None = None,
-        competition: CompetitionRef | None = None,
+        series: SeriesRef | None = None,
         time_scope: TimeScope = "all",
         limit: int = 10,
     ) -> MatchSearchResult:
         normalized_teams = [item.strip() for item in (teams or []) if item.strip()]
         provider_series_id: int | None = None
-        if competition is not None and self.competition_service is None:
+        if series is not None and self.series_service is None:
             return _not_found_search(
                 query=query,
                 teams=normalized_teams,
-                warning="competition references require the competition capability",
+                warning="series references require the series capability",
             )
-        known_competition = (
-            self.competition_service.get_known(competition) if competition is not None else None
+        known_series = (
+            self.series_service.get_known(series) if series is not None else None
         )
-        if competition is not None and known_competition is None:
+        if series is not None and known_series is None:
             return _not_found_search(
                 query=query,
                 teams=normalized_teams,
-                warning="competition reference is not known to this in-memory runtime",
+                warning="series reference is not known to this in-memory runtime",
             )
-        if known_competition is not None and self.competition_service is not None:
-            provider_series_id = self.competition_service.provider_id_for(known_competition.ref)
+        if known_series is not None and self.series_service is not None:
+            provider_series_id = self.series_service.provider_id_for(known_series.ref)
         if normalized_teams:
             return await self._search_by_teams(
                 query=query,
                 teams=normalized_teams,
-                known_competition=known_competition,
+                known_series=known_series,
                 provider_series_id=provider_series_id,
                 time_scope=time_scope,
                 limit=limit,
@@ -141,19 +141,19 @@ class MatchService:
             normalized = _normalize_search_match(
                 row,
                 fetched_at=batch.fetched_at,
-                competition_ref=known_competition.ref if known_competition else None,
-                competition_name=known_competition.name if known_competition else None,
-                competition_year=known_competition.year if known_competition else None,
+                series_ref=known_series.ref if known_series else None,
+                series_name=known_series.name if known_series else None,
+                series_year=known_series.year if known_series else None,
             )
             if normalized.summary.ref.value in seen:
                 continue
-            if known_competition is not None:
-                requested_competition = CompetitionSummary(
-                    ref=known_competition.ref,
-                    name=known_competition.name,
-                    year=known_competition.year,
+            if known_series is not None:
+                requested_series = SeriesSummary(
+                    ref=known_series.ref,
+                    name=known_series.name,
+                    year=known_series.year,
                 )
-                if normalized.summary.competition != requested_competition:
+                if normalized.summary.series != requested_series:
                     continue
             if not _match_query(normalized.summary, query):
                 continue
@@ -188,7 +188,7 @@ class MatchService:
         *,
         query: str | None,
         teams: list[str],
-        known_competition: Competition | None,
+        known_series: Series | None,
         provider_series_id: int | None,
         time_scope: TimeScope,
         limit: int,
@@ -257,9 +257,9 @@ class MatchService:
                 normalized = _normalize_search_match(
                     row,
                     fetched_at=batch.fetched_at,
-                    competition_ref=known_competition.ref if known_competition else None,
-                    competition_name=known_competition.name if known_competition else None,
-                    competition_year=known_competition.year if known_competition else None,
+                    series_ref=known_series.ref if known_series else None,
+                    series_name=known_series.name if known_series else None,
+                    series_year=known_series.year if known_series else None,
                 )
                 if not _time_scope_matches(normalized.summary, time_scope):
                     continue
@@ -764,8 +764,8 @@ def _match_query(summary: MatchSummary, query: str | None) -> bool:
     ]
     values = [team.name for team in summary.teams]
     values.append(summary.name)
-    if summary.competition is not None:
-        values.append(summary.competition.name)
+    if summary.series is not None:
+        values.append(summary.series.name)
     haystack = normalize_text(" ".join(values))
     return all(token in haystack for token in tokens)
 
@@ -774,18 +774,18 @@ def _normalize_search_match(
     row: PandaScoreMatch,
     *,
     fetched_at: datetime,
-    competition_ref: CompetitionRef | None = None,
-    competition_name: str | None = None,
-    competition_year: int | None = None,
+    series_ref: SeriesRef | None = None,
+    series_name: str | None = None,
+    series_year: int | None = None,
 ) -> NormalizedPandaMatch:
     normalized = normalize_panda_match(
         row,
         fetched_at=fetched_at,
-        competition_ref=competition_ref,
-        competition_name=competition_name,
-        competition_year=competition_year,
+        series_ref=series_ref,
+        series_name=series_name,
+        series_year=series_year,
     )
-    if competition_name is not None or normalized.summary.competition is None:
+    if series_name is not None or normalized.summary.series is None:
         return normalized
     series = row.series
     league_name = (
@@ -797,20 +797,20 @@ def _normalize_search_match(
     )
     if not league_name and not series:
         return normalized
-    display_name = competition_display_name(
+    display_name = series_display_name(
         league_name=league_name,
         series_name=series.name if series else None,
         series_full_name=series.full_name if series else None,
-        year=normalized.competition_year,
+        year=normalized.series_year,
     )
-    if display_name == normalized.summary.competition.name:
+    if display_name == normalized.summary.series.name:
         return normalized
-    competition = normalized.summary.competition.model_copy(update={"name": display_name})
-    summary = normalized.summary.model_copy(update={"competition": competition})
+    series_summary = normalized.summary.series.model_copy(update={"name": display_name})
+    summary = normalized.summary.model_copy(update={"series": series_summary})
     return replace(
         normalized,
         summary=summary,
-        competition_name=display_name,
+        series_name=display_name,
     )
 
 

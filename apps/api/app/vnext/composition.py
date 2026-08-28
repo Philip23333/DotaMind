@@ -23,9 +23,9 @@ from app.vnext.artifacts import (
     MemoryArtifactStore,
 )
 from app.vnext.artifacts.game_summary_builder_v4 import GameSummaryBuilderV4
-from app.vnext.domain.competitions.service import CompetitionService
 from app.vnext.domain.matches.service import MatchService
 from app.vnext.domain.players.service import PlayerService
+from app.vnext.domain.series.service import SeriesService
 from app.vnext.domain.team_player_index import TeamPlayerRefIndex
 from app.vnext.domain.teams.service import TeamService
 from app.vnext.identity.ability_v4 import AbilityResolverV4
@@ -39,9 +39,9 @@ from app.vnext.providers.opendota.adapter import (
 )
 from app.vnext.providers.pandascore.adapter import PandaScoreAdapter
 from app.vnext.tools.artifacts import register_artifact_tools
-from app.vnext.tools.domain.competitions import register_competition_tools
 from app.vnext.tools.domain.matches import register_match_tools
 from app.vnext.tools.domain.players import register_player_tools
+from app.vnext.tools.domain.series import register_series_tools
 from app.vnext.tools.domain.teams import register_team_tools
 from app.vnext.tools.registry import ToolRegistry
 
@@ -142,7 +142,7 @@ def _env_value(
 class VNextServices:
     pandascore: PandaScoreAdapter
     opendota: OpenDotaAdapter
-    competitions: CompetitionService
+    series: SeriesService
     matches: MatchService
     teams: TeamService
     players: PlayerService
@@ -210,17 +210,17 @@ def build_vnext_services(
         api_key=config.opendota_api_key,
         request_timeout_seconds=config.opendota_timeout_seconds,
     )
-    competition_service = CompetitionService(panda_adapter)
+    series_service = SeriesService(panda_adapter)
     team_player_index = TeamPlayerRefIndex()
     team_service = TeamService(panda_adapter, team_player_index)
     player_service = PlayerService(panda_adapter, team_player_index)
     match_service = MatchService(
         panda_adapter,
         open_adapter,
-        competition_service=competition_service,
+        series_service=series_service,
         team_player_index=team_player_index,
     )
-    competition_service.set_match_cache(match_service.remember_fixture)
+    series_service.set_match_cache(match_service.remember_fixture)
     store = artifact_store if artifact_store is not None else MemoryArtifactStore()
     producer = GameSummaryArtifactProducer(
         opendota=open_adapter,
@@ -234,7 +234,7 @@ def build_vnext_services(
     return VNextServices(
         pandascore=panda_adapter,
         opendota=open_adapter,
-        competitions=competition_service,
+        series=series_service,
         matches=match_service,
         teams=team_service,
         players=player_service,
@@ -253,7 +253,7 @@ def build_vnext_registry(
 ) -> ToolRegistry:
     resolved_services = services or build_vnext_services(settings)
     registry = ToolRegistry()
-    register_competition_tools(registry, resolved_services.competitions)
+    register_series_tools(registry, resolved_services.series)
     register_match_tools(
         registry,
         resolved_services.matches,

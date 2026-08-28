@@ -1,4 +1,4 @@
-"""Small, stable contracts shared by competition and match capabilities."""
+"""Small, stable contracts shared by series and match capabilities."""
 
 from __future__ import annotations
 
@@ -73,17 +73,27 @@ class LeagueRef(_OpaqueRef):
 
 
 class SeriesRef(_OpaqueRef):
-    value: str = Field(pattern=r"^series:[0-9a-f]{24}$")
+    """Opaque, runtime-scoped reference to a normalized esports series."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "description": (
+                "Series reference object. Pass the complete object returned by another "
+                "tool. Do not pass its value as a bare string or JSON-encode this object "
+                "into a string."
+            ),
+            "examples": [{"value": "series:0123456789abcdef01234567"}],
+        }
+    )
+
+    value: str = Field(
+        pattern=r"^series:[0-9a-f]{24}$",
+        description="Opaque series reference value inside this reference object.",
+    )
 
 
 class TournamentRef(_OpaqueRef):
     value: str = Field(pattern=r"^tournament:[0-9a-f]{24}$")
-
-
-class CompetitionRef(_OpaqueRef):
-    """Legacy ref retained until the Series capability replacement lands."""
-
-    value: str = Field(pattern=r"^competition:[0-9a-f]{24}$")
 
 
 class MatchRef(_OpaqueRef):
@@ -202,7 +212,6 @@ __all__ = [
     "Team",
     "TeamRef",
     "LeagueRef",
-    "CompetitionRef",
     "SeriesRef",
     "TournamentRef",
     "hash_ref",

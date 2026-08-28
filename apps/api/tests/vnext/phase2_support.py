@@ -14,9 +14,9 @@ from app.vnext.artifacts import (
 )
 from app.vnext.artifacts.game_summary_builder_v4 import GameSummaryBuilderV4
 from app.vnext.composition import VNextServices
-from app.vnext.domain.competitions.service import CompetitionService
 from app.vnext.domain.matches.service import MatchService
 from app.vnext.domain.players.service import PlayerService
+from app.vnext.domain.series.service import SeriesService
 from app.vnext.domain.team_player_index import TeamPlayerRefIndex
 from app.vnext.domain.teams.service import TeamService
 from app.vnext.identity.ability_v4 import AbilityResolverV4
@@ -411,30 +411,30 @@ def fixture_services(
     detail_available: bool = True,
     resolution_available: bool = True,
     unavailable_detail_ids: set[int] | None = None,
-) -> tuple[CompetitionService, MatchService, FakePandaScore, FakeOpenDota]:
+) -> tuple[SeriesService, MatchService, FakePandaScore, FakeOpenDota]:
     panda = FakePandaScore(detail_available=pandascore_detail_available)
     opendota = FakeOpenDota(
         detail_available=detail_available,
         resolution_available=resolution_available,
         unavailable_detail_ids=unavailable_detail_ids,
     )
-    competition_service = CompetitionService(
+    series_service = SeriesService(
         panda, now=lambda: datetime(2026, 8, 14, tzinfo=timezone.utc)
     )
     team_player_index = TeamPlayerRefIndex()
     match_service = MatchService(
         panda,
         opendota,
-        competition_service=competition_service,
+        series_service=series_service,
         team_player_index=team_player_index,
         now=lambda: datetime(2026, 8, 14, tzinfo=timezone.utc),
     )
-    competition_service.set_match_cache(match_service.remember_fixture)
-    return competition_service, match_service, panda, opendota
+    series_service.set_match_cache(match_service.remember_fixture)
+    return series_service, match_service, panda, opendota
 
 
 def fixture_vnext_services(
-    competition_service: CompetitionService,
+    series_service: SeriesService,
     match_service: MatchService,
     panda: FakePandaScore,
     opendota: FakeOpenDota,
@@ -461,7 +461,7 @@ def fixture_vnext_services(
     return VNextServices(
         panda,
         opendota,
-        competition_service,
+        series_service,
         match_service,
         team_service,
         player_service,

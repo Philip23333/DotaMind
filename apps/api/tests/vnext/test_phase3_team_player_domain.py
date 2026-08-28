@@ -13,8 +13,8 @@ from tests.vnext.phase2_support import fixture_services, fixture_vnext_services
 
 
 def test_team_and_player_services_preserve_source_facts_and_opaque_refs() -> None:
-    competition_service, match_service, panda, opendota = fixture_services()
-    services = fixture_vnext_services(competition_service, match_service, panda, opendota)
+    series_service, match_service, panda, opendota = fixture_services()
+    services = fixture_vnext_services(series_service, match_service, panda, opendota)
 
     team_search = asyncio.run(services.teams.search("  Team   Spirit "))
     assert team_search.status == "unique"
@@ -60,8 +60,8 @@ def test_team_and_player_services_preserve_source_facts_and_opaque_refs() -> Non
 
 
 def test_team_search_preserves_ambiguity_when_bounded_result_is_truncated() -> None:
-    competition_service, match_service, panda, _ = fixture_services()
-    services = fixture_vnext_services(competition_service, match_service, panda, _)
+    series_service, match_service, panda, _ = fixture_services()
+    services = fixture_vnext_services(series_service, match_service, panda, _)
     original_search = panda.search_teams
 
     async def truncated_search(*, query: str | None = None, limit: int = 20):
@@ -81,8 +81,8 @@ def test_team_search_preserves_ambiguity_when_bounded_result_is_truncated() -> N
 
 
 def test_player_search_preserves_ambiguity_when_bounded_result_is_truncated() -> None:
-    competition_service, match_service, panda, _ = fixture_services()
-    services = fixture_vnext_services(competition_service, match_service, panda, _)
+    series_service, match_service, panda, _ = fixture_services()
+    services = fixture_vnext_services(series_service, match_service, panda, _)
     original_search = panda.search_players
 
     async def truncated_search(*, query: str | None = None, limit: int = 20):
@@ -102,8 +102,8 @@ def test_player_search_preserves_ambiguity_when_bounded_result_is_truncated() ->
 
 
 def test_shared_index_keeps_match_team_player_identity_consistent_across_tools() -> None:
-    competition_service, match_service, panda, opendota = fixture_services()
-    services = fixture_vnext_services(competition_service, match_service, panda, opendota)
+    series_service, match_service, panda, opendota = fixture_services()
+    services = fixture_vnext_services(series_service, match_service, panda, opendota)
     other = panda.matches[0].opponents[1].opponent
     synthetic = PandaScoreMatch.model_validate(
         {
@@ -173,9 +173,9 @@ def test_shared_index_keeps_match_team_player_identity_consistent_across_tools()
 
 
 def test_team_and_player_detail_tools_require_nested_opaque_reference_objects() -> None:
-    competition_service, match_service, panda, opendota = fixture_services()
+    series_service, match_service, panda, opendota = fixture_services()
     registry = build_vnext_registry(
-        fixture_vnext_services(competition_service, match_service, panda, opendota)
+        fixture_vnext_services(series_service, match_service, panda, opendota)
     )
 
     async def exercise():
@@ -202,8 +202,8 @@ def test_team_and_player_detail_tools_require_nested_opaque_reference_objects() 
 
 
 def test_unknown_team_and_player_refs_are_typed_not_found_without_provider_calls() -> None:
-    competition_service, match_service, panda, opendota = fixture_services()
-    services = fixture_vnext_services(competition_service, match_service, panda, opendota)
+    series_service, match_service, panda, opendota = fixture_services()
+    services = fixture_vnext_services(series_service, match_service, panda, opendota)
 
     team_result = asyncio.run(services.teams.get(TeamRef(value="team:" + "f" * 24)))
     player_result = asyncio.run(services.players.get(PlayerRef(value="player:" + "f" * 24)))

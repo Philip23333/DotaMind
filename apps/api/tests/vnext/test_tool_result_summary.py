@@ -3,9 +3,9 @@ from __future__ import annotations
 from app.vnext.agent.tool_result_summary import summarize_tool_result
 
 
-def test_competition_search_summary_preserves_business_status_and_candidates() -> None:
+def test_series_search_summary_preserves_business_status_and_candidates() -> None:
     summary = summarize_tool_result(
-        "competitions.search",
+        "series.search",
         {
             "status": "unique",
             "query": "The International",
@@ -13,7 +13,7 @@ def test_competition_search_summary_preserves_business_status_and_candidates() -
             "candidate_count": 1,
             "candidates": [
                 {
-                    "ref": {"value": "competition:ti2026"},
+                    "ref": {"value": "series:ti2026"},
                     "name": "The International 2026",
                     "year": 2026,
                     "status": "completed",
@@ -31,7 +31,7 @@ def test_competition_search_summary_preserves_business_status_and_candidates() -
         "candidate_count": 1,
         "candidates": [
             {
-                "ref": "competition:ti2026",
+                "ref": "series:ti2026",
                 "name": "The International 2026",
                 "year": 2026,
                 "status": "completed",
@@ -43,9 +43,9 @@ def test_competition_search_summary_preserves_business_status_and_candidates() -
     }
 
 
-def test_competition_search_summary_preserves_not_found_separately_from_tool_status() -> None:
+def test_series_search_summary_preserves_not_found_separately_from_tool_status() -> None:
     summary = summarize_tool_result(
-        "competitions.search",
+        "series.search",
         {
             "status": "not_found",
             "query": "The International",

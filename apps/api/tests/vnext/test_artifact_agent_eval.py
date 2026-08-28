@@ -96,9 +96,9 @@ def _fixture_builder() -> GameSummaryBuilderV4:
 
 
 def _build_eval_runtime() -> tuple[AgentRuntime, _TracingModelClient]:
-    competition_service, match_service, panda, opendota = fixture_services()
+    series_service, match_service, panda, opendota = fixture_services()
     services = fixture_vnext_services(
-        competition_service,
+        series_service,
         match_service,
         panda,
         opendota,
@@ -111,9 +111,9 @@ def _build_eval_runtime() -> tuple[AgentRuntime, _TracingModelClient]:
 def _fixture_facts() -> dict[str, Any]:
     """Derive every hard assertion from the canonical artifact used by the eval."""
 
-    competition_service, match_service, panda, opendota = fixture_services()
+    series_service, match_service, panda, opendota = fixture_services()
     services = fixture_vnext_services(
-        competition_service,
+        series_service,
         match_service,
         panda,
         opendota,
