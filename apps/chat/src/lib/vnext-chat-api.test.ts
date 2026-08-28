@@ -104,9 +104,10 @@ describe("vNext chat API", () => {
         sessionId: "session-a",
         requestId: "request-a",
         query: "question",
-        signal: new AbortController().signal,
+      signal: new AbortController().signal,
       })) {
         // Consume the stream so parser validation is reached.
+        void _event;
       }
     };
 

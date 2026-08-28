@@ -33,6 +33,18 @@ def test_normal_ability_and_team_alias_resolve_to_local_visual_entities(
     }
 
 
+def test_item_aliases_resolve_to_one_local_visual_entity(
+    enricher: DotaVisualEntityEnricher,
+) -> None:
+    entities = enricher.match("跳刀（Blink Dagger / 闪烁匕首）是核心装备。")
+
+    items = [entity for entity in entities if entity.kind == "item"]
+    assert len(items) == 1
+    assert items[0].imagePath == "/api/v1/assets/dota/items/1.png"
+    assert items[0].label == "闪烁匕首"
+    assert {"跳刀", "Blink Dagger", "闪烁匕首"}.issubset(items[0].names)
+
+
 def test_unknown_text_and_ascii_substrings_do_not_create_visual_entities(
     enricher: DotaVisualEntityEnricher,
 ) -> None:

@@ -1,5 +1,5 @@
 import { createUuidV4 } from "./uuid";
-import { getApiUrl } from "./dotamind-api";
+import { getApiUrl } from "./api-url";
 import type { CatalogVisualEntity } from "./dota-visuals";
 
 export type VNextChatEvent =
