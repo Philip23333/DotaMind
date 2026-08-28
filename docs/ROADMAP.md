@@ -6,14 +6,8 @@ Status: complete.
 
 Goal: replace the Legacy V3 design tree with a small vNext documentation set.
 
-Deliverables:
-
-- Product, architecture, tools, data, evaluation, and roadmap documents
-- Retained cross-source match mapping and provider/catalog references
-- Collaboration guidance focused on incremental architecture decisions
-
-Acceptance: the vNext documentation is internally consistent and no active
-roadmap depends on deleted Legacy design documents.
+Acceptance: active vNext work follows the core documents rather than Legacy
+orchestration contracts.
 
 ## Phase 1 — Native Agent Runtime
 
@@ -21,232 +15,170 @@ Status: complete.
 
 Goal: establish the minimal provider-neutral native tool-calling loop.
 
-Deliverables:
+Delivered:
 
-- Provider-neutral model protocol
-- Tool registry and validated dispatch
-- Maximum steps/tool calls, deadlines, cancellation, and stable runtime errors
-- Native text streaming
-- In-memory, session-neutral execution
+- provider-neutral model protocol
+- validated tool registry/dispatch
+- execution limits, deadlines, cancellation, stable errors
+- native streaming
+- session-neutral runtime
 
-Acceptance: multi-turn native tool calls work without ExecutionPlan,
-EvidenceGraph, scenario routes, or a durable transcript dependency.
+## Phase 2 — Esports navigation and match resolution
 
-## Phase 2 — Competition and match
+Status: complete, with one identity-correctness follow-up pending.
 
-Status: complete.
+Goal: make esports discovery and resolved match/game detail useful without
+scenario orchestration.
 
-Goal: make current esports discovery and match detail useful.
+Delivered:
 
-Deliverables:
+- Series and Match capabilities
+- canonical PandaScore navigation semantics
+- deterministic PandaScore Game -> Valve match resolution
+- OpenDota resolved-game detail
 
-- Competition and schedule capabilities
-- Match search and detail capabilities
-- Deterministic identity and cross-source match resolution
+Pending correctness follow-up:
 
-Acceptance: deterministic competition and match capability evals pass, and live
-provider smoke tests succeed without claiming ambiguous mappings as facts.
+- make PandaScore entity -> Domain Ref construction single-source and fix the
+  current divergent SeriesRef recipes before scoped Artifact membership is
+  considered reliable
 
-## Phase 2.x — Artifact Foundation
+## Phase 2.x — Simplified Artifact corpus
 
 Status: in progress.
 
-Goal: establish bounded, reusable artifact production and retrieval boundaries
-before expanding scenario capabilities.
+Goal: keep complete large game results outside model context while making them
+generically searchable/readable, without maintaining a second Dota object graph
+inside Artifact construction.
 
-Implemented deliverables:
+Historical implementation already delivered:
 
-- `GameSummaryArtifact` schema version 3, frozen as a historical schema
-- `GameSummaryArtifact` schema version 4 with catalog-backed English and Chinese
-  entity identity facts for heroes, items, and abilities
-- Commit 3 — OpenDota-to-`GameSummaryArtifact` construction pipeline
-- Commit 3.5 — Artifact Production & Store Integration
-  - coordinate canonical game identity -> provider fetch -> artifact construction
-    -> `ArtifactStore.put` -> `ArtifactRef`
-  - deterministic `ArtifactRef` derived from canonical artifact identity
-  - request/response canonical match identity validation
-  - no cache/TTL/refresh policy in this commit
-  - keep artifact production outside Agent Runtime and model-facing tools
-- Commit 4 — Artifact Retrieval Capability
-  - `matches.get_detail` exposes canonical `valve_match_id` and guarantees
-    production and storage for every resolved game before success
-  - bounded `artifact.search` lookup over canonical Valve match IDs
-  - bounded `artifact.read` outline and structural path views with list limits
-  - six-tool registry with artifact retrieval kept separate from production
-- Commit 5 — Artifact-driven Agent Evals
-  - fixture-backed real-model evaluation through the real AgentRuntime and
-    six-tool registry
-  - deep artifact fact exploration, conversation follow-up reuse, and
-    missing-data grounding behavior
+- GameSummary schema versions 3, 4, and 5
+- ArtifactStore memory/Redis retention
+- deterministic versioned `ArtifactRef`
+- automatic resolved-game production from match detail
+- `artifact.search`, `artifact.grep`, and `artifact.read`
+- generic `ArtifactScopeStore`
+- V5 readable PandaScore event context
 
-Artifact quality metadata persistence is not part of Commit 3.5.
+These contracts proved the externalized-corpus model, but the current production
+path became heavier than needed through construction-only Ref wrappers and
+catalog enrichment.
 
-Redis-backed ArtifactStore is now implemented as a later retention boundary:
-process-restart persistence with deterministic versioned keys and a seven-day
-TTL, without adding a producer cache-hit or freshness policy.
+### Simplification migration
 
-- Canonical esports navigation: `League -> Series -> Tournament -> Match -> Game`,
-  including opaque League/Series/Tournament refs and Series-named discovery tools.
-- `GameSummaryArtifact` schema version 5, preserving V4 game facts plus
-  already-known readable esports event context without provider IDs or refs.
-- Generic `ArtifactScopeStore` with seven-day-aligned memory/Redis contracts;
-  successful V5 production registers known esports navigation memberships.
-- Generic `artifact.grep` breadth search with optional opaque scope and explicit
-  `materialized_only` coverage.
+The next implementation sequence is frozen in `ARTIFACTS.md` and should be
+executed incrementally:
 
-Planned / pending deliverables:
+1. Stabilize PandaScore navigation identity and SeriesRef reverse mapping.
+2. Add minimal local `catalog.search` and batch `catalog.lookup` tools.
+3. Define a new simplified GameSummary schema version (expected v6).
+4. Keep readable PandaScore event context but store Valve-native hero/item/
+   ability IDs directly instead of duplicated catalog names.
+5. Replace the construction-Ref/catalog-enrichment graph with thin canonical
+   normalization from verified provider models to the v6 document.
+6. Switch automatic GameSummary production to v6 while keeping generic
+   `artifact.grep/read` contracts.
+7. Delete obsolete construction-only refs/resolvers/builders after the new path
+   is proven.
+8. Validate the composition with real model questions that require navigation,
+   catalog lookup, Artifact grep/read, and reasoning without scenario-specific
+   runtime code.
 
-- Reduced default tool context through bounded retrieval.
+Target exploration model:
 
-The intended exploration model is breadth-to-depth and model-first:
+```text
+navigation tools
+  -> locate Game / scope
 
-    generic corpus search
-      -> bounded matches + ArtifactRef + structural path
-      -> model chooses what matters
-      -> artifact.read
-      -> bounded detailed evidence
+large game facts
+  -> ArtifactStore
+  -> ArtifactRef
 
-Search is treated as an observation primitive, analogous to grep over a
-structured artifact corpus. It should not encode user scenarios such as
-player-plus-hero builds, tournament strategy, or one search projection per
-artifact type. New artifact types should become searchable through their
-canonical serialization; performance may later move from corpus scanning to a
-generic index without changing the model-facing contract.
-
-The Phase 2.x delivery order separates three responsibilities deliberately:
-Commit 3 constructs a canonical artifact, Commit 3.5 produces and stores it,
-and Commit 4 retrieves bounded views of stored artifacts. Production and
-retrieval are application/data-layer responsibilities rather than Agent Runtime
-stages.
+model
+  -> artifact.grep / artifact.read
+  -> catalog.search / catalog.lookup when static ID meaning is needed
+  -> answer
+```
 
 Non-goals:
 
-- Adding a tool for every artifact section or user scenario
-- Exposing raw provider JSON, full match dumps, large records, or provider IDs
-  to the model
-- Requiring a fixed retrieval sequence
-- Making Agent Runtime responsible for creating, storing, refreshing, expiring,
-  or otherwise owning artifact lifecycle
-- Creating programmer-authored discovery projections or search adapters for
-  each artifact type when generic canonical-content search is sufficient
-- Letting artifact search implicitly populate its corpus from providers
+- one Ref type per nested Dota value
+- one tool per Artifact section or scenario
+- raw provider JSON in model context
+- provider-private IDs in Artifacts
+- semantic/vector search before demonstrated need
+- automatic provider fetch from Artifact search/read
+- a separate model-facing produce tool for normal match-detail production
 
-Acceptance: the artifact production and retrieval contracts are implemented and
-evaluated with explicit bounds, coverage, missing-data behavior, and canonical
-serialized views. The next breadth-search increment is accepted only if the
-same search primitive can operate across future canonical artifact types
-without embedding GameSummary-specific business dimensions in its public
-contract.
+Acceptance:
 
-## Phase 3 — Team, player, and catalog
+- complete large game data stays outside model context by default;
+- a stored v6 Game document is understandable through generic Artifact tools
+  plus small catalog tools;
+- Artifact production no longer depends on construction-only Ref/catalog
+  enrichment machinery;
+- scoped corpus membership uses stable navigation identity;
+- representative real-model questions work through capability composition rather
+  than hard-coded workflows.
 
-Status: complete.
+## Phase 3 — Team, player, and static catalog capabilities
 
-Goal: make conversational team and player research useful after the retrieval
-boundary is proven.
+Status: team/player complete; minimal catalog tool surface pending as part of the
+Artifact simplification.
 
-Implemented in Commit 1:
+Delivered:
 
-- PandaScore-backed team search and detail capabilities
-- PandaScore-backed player search and detail capabilities
-- Provider-neutral Team/Player domain models with nullable source facts
-- Shared runtime-scoped opaque TeamRef/PlayerRef identity across match, team,
-  and player capabilities
+- PandaScore-backed team search/detail
+- PandaScore-backed player search/detail
+- shared runtime-scoped TeamRef/PlayerRef navigation identity
 
-Planned / pending deliverables:
+Pending:
 
-- Cross-capability Agent evaluation across Team, Player, Competition, Match,
-  Game, and Artifact capabilities
-- Additional Team, Player, or catalog capabilities only when real evaluations
-  demonstrate a concrete missing fact boundary
+- `catalog.search`
+- bounded batch `catalog.lookup`
+- additional team/player capabilities only when real evals show an independent
+  fact-space gap
 
-These demand-driven capability additions do not block Phase 3.5.
-
-Non-goals:
-
-- Adding team-specific match capabilities when `matches.*` already covers the
-  use case
-- Adding player performance or build capabilities before evaluating
-  composition through `matches.*` and `artifact.*`
-- Adding one tool per user scenario
-- Introducing scenario-specific runtime workflows
-
-Acceptance: real and fixture-backed Agent evaluations demonstrate that the
-model can compose Team, Player, Match, Game, and Artifact capabilities for
-representative research questions without requiring scenario-specific tools
-or fixed workflows. New capabilities are added only for demonstrated coverage
-gaps.
+Non-goal: add player-build/performance scenario tools when generic Match,
+Artifact, and catalog composition is sufficient.
 
 ## Phase 3.5 — vNext Product Integration
 
 Status: complete.
 
-Goal: expose the current vNext Agent through the existing browser chat product
-without importing Legacy orchestration into the vNext execution path.
+Goal: expose vNext through the existing browser chat product without importing
+Legacy orchestration.
 
-Deliverables:
+Delivered:
 
-- Reuse the existing Next.js / assistant-ui chat and browser-owned PostgreSQL
-  session/transcript persistence.
-- Add a request-bound vNext `AgentRuntime` streaming endpoint at
-  `POST /api/v1/chat/sessions/{session_id}/messages`.
-- Persist only durable User and Final Assistant dialogue, including across
-  browser refreshes.
-- Share process-lifetime vNext services and the in-memory ArtifactStore across
-  web requests.
-- Verify browser end-to-end product smoke behavior.
-
-Non-goals:
-
-- Durable AgentRun lifecycle, Redis event replay, resume, or checkpoint recovery
-- Context compaction or summarization
-- Tool-result or artifact persistence
-- New domain capabilities or Legacy deletion
-
-Acceptance: users can create, resume, refresh, and continue browser
-conversations backed by the vNext AgentRuntime while the frontend remains
-independent of Agent, Tool, Artifact, and provider internals.
+- request-bound vNext AgentRuntime streaming endpoint
+- browser-owned PostgreSQL session/transcript persistence
+- persisted User and Final Assistant dialogue
+- process-lifetime shared vNext services
+- deterministic visual entity enrichment after the model response
 
 ## Phase 4 — Conversation reliability and eval expansion
 
-Goal: harden long-lived conversations based on observed needs.
+Status: in progress.
 
-Implemented deliverables:
+Delivered:
 
-- Conversation context construction boundary between the full PostgreSQL
-  transcript and vNext model input
-- Bounded recent, complete-turn context: at most 12 persisted turns and 40,000
-  historical text characters, while retaining the complete durable transcript
-- Failure-trace observability: browser-owned failed-run traces retained in Redis
-  for 72 hours, with expiring ZIP downloads that include application-visible
-  execution evidence and still-available referenced artifacts.
+- bounded ConversationContextBuilder over the complete PostgreSQL transcript
+- failed-run trace retention and downloadable debugging evidence
 
-Planned / pending deliverables:
-
-- Lightweight conversation compaction only when observed necessary
-- Durable AgentRun, reconnect, and recovery semantics only when product usage
-  demonstrates a need
-- Durable event semantics and expanded regression and provider-drift evals only
-  where they solve an observed need
-
-Acceptance: durable conversation context, recovery, and cancellation behavior
-have repeatable tests; additional infrastructure is added only when the need is
-demonstrated.
+Add compaction, durable AgentRun/reconnect/replay, and broader provider-drift
+infrastructure only when observed product failures justify them.
 
 ## Phase 5 — Product UX
 
-Goal: present facts clearly in chat and structured match views.
-
-Proposed deliverables:
-
-- Structured rendering where it is more reliable than generated prose
-- Source, freshness, and uncertainty presentation
-
-Acceptance: users can understand what is fact, inference, or unavailable data.
+Goal: present facts, sources, uncertainty, and structured data clearly without
+moving gameplay reasoning out of the model.
 
 ## Phase 6 — Legacy deletion
 
-Goal: remove remaining Legacy runtime paths after their replacements are proven.
+Goal: remove remaining Legacy paths after vNext replacements are proven.
 
-Acceptance: vNext passes its eval suite without Legacy orchestration or
-compatibility shims. Git tag pre-vnext-rewrite remains the historical reference.
+Acceptance: vNext passes its regression/eval suite without Legacy orchestration
+or compatibility shims. The `pre-vnext-rewrite` tag remains the historical
+reference.

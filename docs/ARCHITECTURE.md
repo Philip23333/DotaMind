@@ -2,396 +2,328 @@
 
 ## Status
 
-This is the vNext target architecture. The checked-out Legacy code does not
-claim to implement it until each replacement is deliberately delivered.
-The artifact construction, production/store, and bounded retrieval boundaries
-are implemented for the current GameSummary capability.
+This is the vNext target architecture. Code describes current behavior; this
+document describes the intended long-term boundaries. `ARTIFACTS.md` owns the
+Artifact externalization, corpus, and migration contract.
+
+The current code still contains a heavier GameSummary construction pipeline with
+construction-only Ref wrappers and catalog enrichment. That implementation is
+transitional and is intentionally being simplified rather than extended.
 
 ## Principles
 
-- The model owns ordinary business reasoning: it decides what information is
-  needed, which domain capabilities to call, whether more data is useful, and
-  when to answer.
-- Tools expand the model's observable fact space. They should expose stable
-  identities, searchable corpora, locators, bounded reads, and hard operational
-  limits rather than pre-interpreting each user scenario for the model.
-- Prefer general observation primitives over scenario-specific helpers. A tool
-  should answer questions such as "what exists?", "where does this occur?", or
-  "what is at this location?" without deciding which facts are important to the
-  user's final question.
-- Deterministic application code owns hard boundaries, with each boundary kept
-  in its proper layer rather than folded into the agent runtime.
-- Tools expose independent Dota domain capabilities, never provider plumbing or
-  a complete scenario workflow.
-- Domain services answer what an entity is. Retrieval services answer what data
-  is available and how to obtain a bounded view of it.
-- Canonical domain data may be large, but model context remains bounded by
-  default. Storage is not a responsibility of the model.
-- Scenarios are evaluated as behavior, not encoded as runtime routes.
+- The model owns ordinary business reasoning and decides which facts or tools it
+  needs.
+- Tools expand the model's observable fact space; they do not encode user
+  scenarios as workflows.
+- Prefer small orthogonal capabilities such as search, lookup, grep, and read.
+- Deterministic code owns hard boundaries: validation, provider transport,
+  canonical identity, cross-source resolution, authorization, persistence,
+  limits, and errors.
+- Keep model context bounded. Complete large results may live outside context and
+  remain addressable through locators.
+- Do not create abstractions merely to mirror every provider field or Dota
+  entity.
+- A Ref is a locator passed between capabilities, not a generic wrapper for any
+  value that has an ID.
 
-A useful review test for new capabilities is whether application code is adding
-visibility or replacing model reasoning. Stable domain identity lookup,
-canonical normalization, corpus search, locators, pagination, size bounds,
-permissions, and error semantics belong in deterministic code. Deciding which
-matches are relevant, which facts matter, how several observations relate, and
-what conclusion follows belongs to the model. Avoid capabilities whose main
-purpose is to encode a specific question shape such as player-plus-hero build,
-competition-specific strategy, or one artifact section when the same task can
-be composed from general search and read primitives.
+A useful review question is:
+
+> Is application code increasing what the model can observe, or replacing the
+> model's ability to understand and combine the observed facts?
 
 ## System boundary
 
-    User
-      -> Chat / API
-      -> Agent Runtime
-      -> LLM <-> Dota Agent Tools / Capabilities
-                   -> Domain / Retrieval Layer
-                   -> Artifact Store
-                   -> Provider Adapters
-                   -> Raw Sources
+```text
+User
+  -> Product Chat API
+  -> Agent Runtime
+  -> LLM <-> Dota Tools
+               -> Domain / Resolution
+               -> Artifact Corpus
+               -> Catalog
+               -> Provider Adapters
+               -> External Sources
+```
 
-The API owns authentication and request ownership. The runtime owns model
-messages, tool dispatch, general limits, request deadlines, cancellation, and
-trace or streaming events. The Domain / Retrieval Layer owns Dota identity,
-availability, cross-source resolution, normalization, composition, and
-bounded views. The Artifact Store retains normalized canonical data that should
-not automatically enter model context; its contract exists independently from
-the application production and retrieval integrations. Provider Adapters own
-upstream HTTP or SDK transport, provider authentication, and provider schemas.
-Raw Sources are external provider systems and are never model-facing
-contracts.
+The API owns authentication, browser request ownership, and durable dialogue
+persistence. Agent Runtime owns the native tool-calling loop, execution limits,
+streaming, deadlines, cancellation, and model protocol. It does not own Dota
+business workflows or Artifact lifecycle.
 
-Identity and availability are separate concerns. Domain services answer
-"what entity is this?" and produce canonical references. Retrieval services
-answer "what data is available, with what coverage, and how can it be
-obtained?" A valid entity reference does not imply that a complete artifact is
-available, and an available artifact does not redefine entity identity.
+Provider adapters own transport, provider authentication, provider schemas,
+rate-limit/retry policy, and conversion from raw responses into verified
+source-level models.
 
-This boundary is a dependency description, not a model-authored or mandatory
-call sequence. The runtime does not know what a tournament, player build, or
-match-detail scenario is, and it does not own the artifact lifecycle.
+Domain/Resolution owns esports navigation identity, deterministic provider
+mapping, cross-source game resolution, ambiguity, and bounded domain results.
+
+The Artifact Corpus owns complete canonical documents that should not enter
+model context automatically. Catalog owns static Valve ID reference facts.
 
 ## Agent loop
 
-The initial runtime is a thin native tool-calling loop:
+The runtime is a thin native tool-calling loop:
 
-    messages
-      -> model response
-      -> final answer, or tool calls
-      -> validated parallel-safe tool execution
-      -> tool-result messages
-      -> model continuation
+```text
+messages
+  -> model response
+  -> final answer OR tool calls
+  -> validated tool execution
+  -> tool-result messages
+  -> model continuation
+```
 
-It enforces maximum steps, maximum tool calls, deadlines, cancellation,
-streaming, and stable error reporting. It does not use an ExecutionPlan DSL,
-required-evidence DSL, fixed result destinations, or scenario-specific replan
-protocol. Fetching, storing, and retrieving artifacts are domain/retrieval
-concerns, not runtime stages.
+It enforces maximum steps/tool calls, request deadlines, cancellation, stable
+errors, and text streaming. It does not use an ExecutionPlan DSL, scenario
+router, evidence DSL, or fixed search/read sequence.
 
-LangGraph or another workflow runtime is not a first-version requirement. Add
-one only after a demonstrated need for durable pause/resume, human approval,
-long-running state machines, or reusable checkpointing.
+Current-run tool messages stay in one execution. Historical tool calls/results
+are not restored across browser turns; durable conversation persistence contains
+User and Final Assistant dialogue only.
 
-## Model protocol
+## Model-facing capability style
 
-The model-facing protocol is provider-neutral:
+A capability should expose one independent fact-space or access primitive.
+Typical shapes are:
 
-- ModelRequest and ModelResponse
-- AssistantMessage and FinalMessage
-- ToolCall and ToolResultMessage
+```text
+search / lookup
+  -> bounded candidates + locator
 
-It supports native tool calls, multiple turns of result feedback, supported
-parallel calls, text streaming, cancellation, and provider-specific message
-conversion at the adapter edge. Structured JSON generation may remain useful
-for isolated tasks but is not the primary planning mechanism.
+grep
+  -> locator + structural path + preview
 
-`build_vnext_runtime()` composes the provider-neutral model client with the
-vNext tool registry from `apps/api/app/vnext/.env`. It uses the shared
-`DOTAMIND_LLM_*` names already used by the application; the local configuration
-file is never a repository artifact.
+read
+  -> bounded content at locator/path
+```
 
-## Tool runtime
+The model decides which observations matter to the question.
 
-A tool definition has a name, description, input model, output model, and
-handler, with optional generic metadata such as source, timeout, and read-only
-status. The runtime validates tool inputs before dispatch and returns explicit
-tool errors; it never silently substitutes another data source or workflow.
+Tool descriptions state capability, inputs, outputs, and material limits. They
+do not prescribe a scenario-specific sequence.
 
-Tool descriptions state capability, input, output, and important data limits.
-Tool responses are bounded views: a capability may return a summary, canonical
-references, coverage, and artifact references instead of the complete
-underlying data. Detailed data is obtained only when an independent retrieval
-capability is available and the model chooses that it is useful. No tool
-description may require a fixed sequence of calls.
+## Esports navigation domain
 
-The preferred primitive is breadth-to-depth exploration:
+The current canonical esports navigation domain is:
 
-    search / grep / lookup
-      -> bounded candidates + stable locator
-      -> model chooses where to inspect
-      -> read / fetch
-      -> bounded detailed evidence
+```text
+League -> Series -> Tournament -> Match -> Game
+```
 
-Search is the model's observation mechanism, not a scenario interpreter. Where
-a stable substrate exists, search should operate directly on that substrate
-instead of requiring a programmer-authored search view for every business type.
-For canonical artifacts, the target direction is generic content search over
-the canonical serialized artifact corpus, returning `ArtifactRef` plus a
-structural locator. `artifact.read` then dereferences that locator. Search
-implementation may evolve from scanning to a generic index for performance, but
-the model-facing contract should not become artifact-type-specific merely to
-accommodate storage details.
+PandaScore is the current primary source for this hierarchy and its readable
+event context.
 
-## Domain and provider layers
+Domain refs are used only where cross-capability navigation needs a stable
+locator. Provider-private IDs remain internal. One provider entity must have one
+canonical Ref-construction rule; services do not define competing identity
+recipes.
 
-Domain services own entity resolution, provider selection, cross-source
-mapping, normalization, de-duplication, domain errors, and provenance. They
-produce provider-neutral canonical references and domain objects.
+The model may receive small domain objects and refs from capabilities such as
+Series, Match, Team, and Player search/detail.
 
-PandaScore Game to Valve match ID cross-source resolution is an internal,
-reusable domain capability. It is not a model-facing Tool; match detail and
-future artifact workflows may reuse the same resolver.
+## Cross-source Game resolution
 
-Provider adapters own upstream transport, authentication, rate limits, retry
-policy, provider-specific models, and conversion from provider responses. Raw
-provider JSON stays below this boundary and is never exposed to the model.
+The current game data chain is intentionally simple:
 
-Provider-private resource IDs also stay below the artifact boundary. Canonical
-Dota/Valve-native identifiers may cross it when they express domain identity:
-for example, Valve match or team IDs, Steam account IDs, and hero, item, or
-ability IDs are allowed; PandaScore resource IDs are not.
+```text
+PandaScore
+  -> identify League / Series / Tournament / Match / Game
+  -> resolve concrete PandaScore Game
+  -> cross-source resolver
+  -> canonical valve_match_id
+  -> OpenDota game detail
+```
 
-For example, MatchService can combine a PandaScore fixture, a resolved Valve
-match identity, OpenDota detail, and Valve catalog enrichment. The model sees a
-stable match or game summary with provenance, coverage, and references, not
-provider-private IDs, raw payloads, or intermediate wiring.
+PandaScore answers what esports event/game this is. OpenDota answers what
+happened in the already-resolved Valve game.
 
-## Artifact Construction Pipeline
+The resolver is deterministic application/domain code, not a model-facing tool.
+Unresolved or ambiguous mappings remain explicit rather than being guessed.
 
-Commit 3 establishes the implemented construction boundary:
+## Valve-native identity and Catalog
 
-    Provider Data
-      -> Provider Adapter
-      -> Domain References and Construction Context
-      -> Resolvers
-      -> Artifact Builder
-      -> Canonical Artifact
+Valve match/team IDs, Steam account IDs, and hero/item/ability IDs are canonical
+Dota-native facts. They may cross the Artifact boundary directly.
 
-The provider adapter maps provider fields, nulls, and source structure into
-construction input. It does not catalog-resolve, construct an artifact, or
-access the Artifact Store. Construction references are provider-neutral native
-Dota identities such as Valve hero, item, and team IDs and Steam account IDs;
-provider-private IDs remain below this boundary.
+Static ID -> entity translation belongs to the committed local Valve catalog,
+not to dynamic Artifact construction. The model should receive small catalog
+capabilities such as:
 
-Resolvers enrich native references from an injected static Dota catalog
-dependency without introducing a Catalog Entity framework. A catalog miss
-preserves the native ID and produces `name = null`. The Artifact Builder alone
-composes `GameSummaryArtifact`; provider adapters and resolvers may not.
+```text
+catalog.search(text, optional types)
+  -> Valve-native candidate IDs
 
-Provider-native lookup keys may cross the adapter boundary as construction facts
-when they are required for later canonical identity resolution. For example,
-OpenDota `purchase_log.key` is preserved as `item_key` in construction input.
-The provider adapter does not resolve it against the Item Catalog. Item identity
-resolution happens at the Resolver/Builder boundary. Source representation is
-not canonical identity.
+catalog.lookup(hero/item/ability ID batches)
+  -> static names/localization/reference facts
+```
 
-This pipeline ends at artifact construction. It does not imply storage,
-retrieval, tool, or runtime integration.
+This avoids copying static names into every dynamic game document and avoids a
+construction Ref type for every Valve ID.
 
-## Artifact Production Lifecycle
+## Artifact boundary
 
-Commit 3.5 is the implemented application-level production boundary:
+Artifact exists because complete tool results may be too large for model
+context.
 
-    Canonical Game Identity
-      -> Provider Fetch
-      -> Artifact Construction Pipeline
-      -> Canonical Artifact
-      -> ArtifactStore.put
-      -> ArtifactRef
+The target path is:
 
-This layer coordinates already-defined provider, construction, resolver,
-builder, and store boundaries. It owns the deterministic application work
-required to produce and persist an artifact from canonical game identity. It
-does not redefine provider normalization or artifact schema semantics.
+```text
+complete source-backed result
+  -> light canonical normalization
+  -> JSON-like Artifact document
+  -> ArtifactStore
+  -> ArtifactRef
 
-Commit 3.5 does not add a model-facing artifact tool and does not make Agent
-Runtime responsible for artifact creation, storage, refresh, expiration, or
-reuse policy. Runtime may eventually dispatch capabilities that reach this
-application boundary, but artifact production remains outside the runtime
-itself.
+bounded tool result + ArtifactRef
+  -> model context
+```
 
-Commit 3.5 freezes these production contracts:
+The Artifact is a document substrate, not a second Domain object graph.
 
-- The typed OpenDota construction fetch validates that the response match ID is
-  present and equals the requested canonical match ID.
-- `ArtifactRef` identity is derived from the completed canonical artifact.
-- Each `produce()` call fetches, constructs, and stores again; Commit 3.5 does
-  not define cache, TTL, refresh, or freshness policy.
-- `fetched_at`, provenance, and coverage are not persisted in the artifact
-  store in this commit.
+For a GameSummary document, readable PandaScore event context may be composed
+with OpenDota recorded game facts. Provider-private IDs remain below the
+boundary. Valve-native hero/item/ability IDs remain ordinary scalar fields.
 
-A later Redis `ArtifactStore` adds process-restart persistence and a seven-day
-retention TTL when `DOTAMIND_REDIS_URL` is configured. This is retention, not a
-freshness policy: every `produce()` call still fetches, builds, stores, and
-refreshes the TTL; `get()` and `exists()` never extend it. Without Redis the
-same asynchronous store contract uses process-lifetime memory storage.
+The current `GameConstructionContext` plus construction-only Ref/catalog-
+enrichment pipeline is transitional. The target is a thin normalizer that
+validates source semantics and produces the canonical document directly.
 
-## Artifact Retrieval Capability
+See `ARTIFACTS.md` for the detailed target and migration order.
 
-Commit 4 implements the retrieval boundary over stored artifacts:
+## Artifact production
 
-    ArtifactRef / Lookup Criteria
-      -> Retrieval Layer
-      -> Bounded Artifact View
+A normal capability may externalize a large complete result as part of its own
+successful data path. For resolved match detail, production conceptually is:
 
-Retrieval answers what artifact data is available and returns bounded views
-with explicit reference validity, coverage, and missing-data semantics. It does
-not fetch provider data or construct a new artifact as part of the read path.
-Production and retrieval are separate responsibilities even when a later
-application capability may choose between reuse and production.
+```text
+valve_match_id
+  -> OpenDota fetch
+  + already-known PandaScore event context
+  -> thin canonical Game document
+  -> ArtifactStore.put
+  -> ArtifactRef
+```
 
-The model-facing retrieval capabilities are `artifact.search` and
-`artifact.read`. They expose only the retrieval contract; the model is not
-required to follow a fixed search-then-read workflow.
+The model does not need a separate `artifact.produce` capability for ordinary
+match-detail flow.
 
-Commit 4 freezes these retrieval and integration contracts:
+Production is not an Agent Runtime stage. The runtime only dispatches the
+capability that happens to reach this data boundary.
 
-- A resolved game returned by `matches.get_detail` includes its canonical
-  `valve_match_id`. The application handler produces and stores every resolved
-  game artifact before the tool succeeds; unresolved or fixture-only games do
-  not trigger production, and a production failure fails the whole tool.
-- `artifact.search` accepts at most 100 canonical Valve match IDs, deduplicates
-  them in first-seen order, checks only `ArtifactStore.exists`, and never reads,
-  fetches, or produces an artifact.
-- `artifact.read` accepts an exact `ArtifactRef`, returns either a top-level
-  outline or a serialized bounded structural path, and only paginates when the
-  final value is a list. It does not discover or produce artifacts.
-- Structural paths support object fields and non-negative list indexes only;
-  invalid paths use one `ArtifactPathNotFoundError` boundary.
+Artifact persistence may use Redis retention; retention is not freshness and a
+missing/expired Artifact does not invalidate canonical Game identity.
 
-`artifact.search` remains an exact availability lookup. `artifact.grep` is the
-schema-neutral breadth primitive over canonical serialized artifact content; it
-returns stable `ArtifactRef`, structural paths, bounded previews, and explicit
-materialized-only coverage. `artifact.read` remains the generic depth primitive.
+## Artifact corpus exploration
 
-Artifact corpus scope is a generic `ArtifactScopeStore` whose members are
-complete canonical `ArtifactRef` values. PandaScore canonical League, Series,
-Tournament, and Match refs register V5 artifacts only after a successful write.
-Scope never fetches providers, materializes missing artifacts, infers membership,
-or turns materialized coverage into a completeness claim.
+Artifacts form a structured corpus outside context.
 
-## Artifact and Retrieval Layer
+`artifact.search` remains exact availability lookup where useful.
 
-Phase 2.x therefore separates the data lifecycle into deliberate stages:
+`artifact.grep` is the generic breadth primitive:
 
-    Provider data
-      -> Normalization / Construction
-      -> Canonical Artifact
-      -> Artifact Store
-      -> Bounded Retrieval
-      -> Model-facing Capability
+```text
+serialized Artifact corpus
+  -> literal/schema-neutral scalar search
+  -> ArtifactRef + structural path + bounded preview
+```
 
-Provider data is translated by domain normalization into canonical artifacts.
-An artifact is reusable, normalized domain data with canonical references,
-normalized values, provenance, coverage, completeness, and known missing
-sections. It is not a raw provider-response cache. The Artifact Store is a
-storage boundary outside model context; Commit 3.5 connects artifact production
-to that boundary without assigning lifecycle ownership to Agent Runtime.
+`artifact.read` is the generic depth primitive:
 
-Commit 4 retrieval exposes independent, bounded views of stored artifacts. The
-retrieval boundary enforces reference validity, path and size limits where
-applicable, and explicit unavailable sections. It does not expose
-provider-private IDs or raw payloads.
+```text
+ArtifactRef + structural path
+  -> bounded serialized value
+```
 
-The desired artifact exploration model is analogous to a structured filesystem:
-canonical artifacts are the corpus, generic content search is the model's
-breadth-oriented observation primitive, `ArtifactRef` plus structural path is
-the locator, and `artifact.read` is the bounded depth-oriented primitive. A new
-artifact type should become searchable because it is a canonical serialized
-artifact, not because a new scenario-specific search adapter or discovery view
-was written for it.
+Search/read never fetch providers or produce missing Artifacts. They do not
+understand Hero, Player, Match, build, inventory, or another scenario-specific
+business dimension.
 
-This diagram describes ownership and a possible data path, not a mandatory
-request workflow. An existing artifact may be reused, a bounded domain summary
-may be sufficient, and unavailable data must remain unavailable. The model
-decides whether more detail is useful. Agent Runtime transports messages and
-dispatches tools; it does not create, store, refresh, expire, or otherwise own
-the artifact lifecycle.
+A future generic index may replace scanning for performance without changing the
+public contract.
 
-## Context Boundary
+## Artifact scope
 
-Artifacts live outside model context. The model does not receive these by
-default:
+Scope remains a generic membership relation:
+
+```text
+ArtifactScopeRef -> ArtifactRef[]
+```
+
+Known navigation ancestry may register a successful Game Artifact under League,
+Series, Tournament, and Match locators. `ArtifactScopeStore` itself does not know
+what those locators mean.
+
+Membership is not inferred from Artifact content. Scoped search describes only
+currently materialized corpus coverage.
+
+Because scopes reuse navigation identity, inconsistent navigation Ref creation
+is a data-integrity defect and must fail closed rather than silently broaden a
+search.
+
+## Context boundary
+
+The model does not receive these by default:
 
 - raw provider payloads
-- a full match dump
-- large domain records or an entire artifact
+- a complete large match/game dump
+- an entire Artifact
+- static catalog duplication for every Valve-native ID
 
-Normal model-facing views contain only bounded information such as:
+Normal model-facing results contain bounded data such as:
 
-- canonical entity or artifact references
-- concise match or game summaries
-- available coverage and explicit missing sections
-- bounded retrieval results when the model chooses more detail
-- source, freshness, and uncertainty information where relevant
+- navigation candidates and refs
+- canonical Valve identity
+- concise status/coverage/error information
+- ArtifactRef
+- bounded grep/read results
+- catalog lookup results requested by the model
 
-The retrieval layer enforces bounds and availability while the model chooses
-when retrieval is useful. Artifact storage is never a responsibility of Agent
-Runtime, and artifact retrieval is not a fixed workflow or mandatory sequence
-of calls.
+The model decides whether additional detail is useful.
 
 ## Sessions and persistence
 
-The product chat API owns browser session authorization and a durable PostgreSQL
-transcript of User and Final Assistant dialogue. A `ConversationContextBuilder`
-projects that complete durable transcript into model-visible context: a recent,
-contiguous suffix of at most 12 complete turns whose historical User and Final
-Assistant text totals at most 40,000 characters, followed by the new User
-message. The durable transcript and browser history remain complete; the bounds
-apply only to the next request's historical model input. The product then
-executes one request-bound `AgentRuntime.run_stream()` call. A product
-`completed` event is emitted only after the final assistant message is durable.
+The product chat API owns browser session authorization and PostgreSQL dialogue
+persistence. `ConversationContextBuilder` projects the durable transcript into a
+bounded recent model context; the durable transcript itself remains complete.
 
-The runtime remains session-neutral: it does not know PostgreSQL, browser IDs,
-chat sessions, or transcript persistence. Tool calls, tool results, runtime
-trace events, and artifacts are execution data and are not transcript rows.
-Current-run ToolCall and ToolResult messages remain intact inside one runtime
-execution; historical ToolCall and ToolResult messages are not restored across
-product turns. PostgreSQL retains complete dialogue. When Redis is configured,
-it retains two separate ephemeral-durable contracts: canonical artifacts for
-seven days and browser-owned failed AgentRun traces for 72 hours. Artifacts are
-cross-run data; traces are run-scoped debugging evidence. The runtime creates a
-trace but does not own Redis persistence. Only failed runs are retained;
-cancellation and successful runs are discarded. Neither artifacts nor traces
-become transcript rows or historical model context.
+The runtime remains session-neutral and does not know browser session IDs or
+PostgreSQL rows.
 
-Compaction, durable AgentRuns, reconnect, and event replay remain later product
-reliability work. Redis is optional and must be justified by a demonstrated
-distributed coordination, replay, or throughput need rather than copied from
-Legacy V3.
+Artifacts are cross-run data outside the transcript. Failed-run traces are
+separate debugging evidence. Neither Artifact content nor tool traces are
+restored as historical dialogue by default.
+
+Redis may retain Artifacts and failed-run traces under separate retention
+contracts. Durable AgentRun/reconnect/replay infrastructure is added only after a
+demonstrated product need.
 
 ## Reliability and provenance
 
-Every tool result carries its source or sources, fetch time when available,
-warnings, and an optional confidence or identity status. A cross-source
-inference is never presented as a native provider field. Artifact views also
-preserve coverage, completeness, and known missing data.
+Provider/domain capabilities preserve explicit source, freshness where useful,
+ambiguity/resolution status, truncation, coverage, and warnings.
 
-The runtime exposes stable failure states for invalid inputs, unresolved
-identity, provider errors, timeouts, cancellation, and exhausted general
-budgets. It does not mask a failed tool as a successful answer.
+A cross-source inference is never presented as a native provider fact. A missing
+Artifact is an availability state, not an identity rewrite. A catalog miss does
+not change the Valve-native ID.
+
+Do not add a large provenance/completeness framework to Artifact schema without a
+concrete consumer; keep metadata source-backed and proportionate to observed
+needs.
 
 ## Rejected designs
 
-- ExecutionPlan and reference-path planning DSLs
-- Model-authored evidence obligations and EvidenceGraph contracts
-- Intent or scenario routers that choose a fixed workflow
-- Provider-level tools and provider-ID reasoning by the model
-- Workflow instructions embedded in prompts or tool descriptions
-- A separate prompt program for each match, tournament, or player scenario
-- Separate scenario tools for every artifact section such as inventory,
-  economy, or skill history
-- Programmer-authored search views or discovery projectors for each artifact
-  type when generic canonical-content search can provide breadth discovery
-- Treating `artifact.search` or `artifact.read` as a mandatory multi-step
-  workflow
+- ExecutionPlan or reference-path planning DSLs
+- model-authored evidence obligations
+- intent/scenario routers that select fixed workflows
+- provider-level tools or provider-ID reasoning by the model
+- one prompt/program per match, tournament, or player scenario
+- one tool per Artifact section
+- one Artifact search adapter/projector per schema
+- a construction Ref type for every Hero, Item, Ability, slot, purchase, or
+  event
+- mandatory catalog enrichment inside dynamic Game Artifact production
+- treating search -> read as a required sequence
+- semantic/vector search before a demonstrated need
+- a generic identity framework when a small canonical construction rule is
+  sufficient

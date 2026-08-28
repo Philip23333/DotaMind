@@ -2,432 +2,236 @@
 
 ## Domain model
 
-vNext centers on these provider-neutral objects:
-
-- League
-- Series
-- Tournament
-- Match
-- Game
-- Team
-- Professional Player
-- Hero, Item, and Ability
-- PlayerGamePerformance
-- PlayerBuild
-
-Tool results use these domain objects rather than direct PandaScore, OpenDota,
-Valve, or future-provider response shapes.
-
-A domain object is primarily an identity and meaning contract. It answers:
-
-    What entity is this?
-
-Examples include `LeagueRef`, `SeriesRef`, `TournamentRef`, `MatchRef`, `GameRef`, `TeamRef`, and
-`PlayerRef`. A valid reference identifies an entity even when no detailed
-artifact is currently available.
-
-The model-facing `TeamRef` and professional-player `PlayerRef` are opaque,
-runtime-scoped references backed by the provider identity index. They are
-passed as nested objects between independent tools and do not contain provider
-IDs. Artifact construction has a separate Steam-native player reference for
-recorded game data; the two `PlayerRef` contracts must not be conflated.
-
-## Domain Entity and Artifact
-
-| | Domain entity or DTO | Canonical artifact |
-| --- | --- | --- |
-| Primary question | What is this? | What data has been collected about this? |
-| Purpose | Communication between domain services and tools | Reusable storage and bounded retrieval |
-| Typical size | Small and bounded | Potentially large, sectioned, and quality-tagged |
-| Intended lifetime | Request or operation scope | Seven-day Redis retention when configured; otherwise process lifetime |
-| Model context | Usually suitable as a bounded tool view | Not entered by default; exposed through summaries, refs, and bounded sections |
-| Contents | Identity, normalized facts, resolution state | Canonical facts, sections, provenance, coverage, completeness, and missing data |
-
-The distinction is intentional. A domain entity identifies and describes an
-entity; an artifact records what normalized data has been collected about that
-entity. A tool can return a domain reference and an artifact reference without
-returning the complete artifact content.
-
-## Identity
-
-Each domain object has a canonical DotaMind reference and may carry provider
-identifiers internally. Provider-private identifiers are data-layer
-implementation details, not an agent language and not part of a model-facing
-canonical artifact. Dota/Valve-native identifiers may cross the artifact
-boundary when they identify a canonical Dota domain object, such as a Valve
-match or team, a Steam account, or a hero, item, or ability.
-
-Identity resolution must be deterministic and explainable. A unique mapping may
-be returned as resolved; zero or multiple credible candidates remain not found
-or ambiguous. The data layer must not choose a nearest candidate merely to keep
-a conversation moving.
-
-Identity and availability are independent. Resolving a `GameRef` does not imply
-that scoreboard, draft, inventory, or timeline data exists. Availability is
-reported through coverage and completeness metadata rather than by changing
-the identity result.
-
-## Cross-source resolution
-
-Competition, team, series, game, and player identities can differ across
-providers. Domain services own:
-
-- Query normalization and candidate generation
-- Canonical reference creation
-- Provider-ID mapping
-- Cross-source match resolution
-- De-duplication and conflict handling
-- Explicit resolution status and provenance
-
-The detailed, verified PandaScore-to-Valve matching rules live in
-reference/match-resolution.md. They are reference material for an
-implementation, not a requirement to retain Legacy code structure.
-
-## Canonical Artifacts
-
-A canonical artifact is a DotaMind data object that a future artifact layer
-could create from provider data after normalization. It answers:
-
-    What normalized data has been collected about this entity?
-
-Artifact fields use canonical entity references and normalized values. Raw
-provider JSON, provider schemas, and provider-private resource IDs remain
-below the artifact boundary. Canonical Dota/Valve-native IDs may remain in an
-artifact when they express domain identity. Artifact sections are data views,
-not reasons to create a specialized tool for every user question.
-
-## GameSummaryArtifact schema versions 4 and 5
-
-### Purpose
-
-`GameSummaryArtifact` schema version 4 defines provider-neutral, canonical Dota
-facts for one game. It is neither a provider DTO, a database record, nor a full
-replay representation. It is intended to support:
-
-- post-game scoreboard or dashboard views
-- player performance grounded in recorded game facts
-- item and build lookup
-- skill-build lookup
-- draft inspection
-- future bounded artifact retrieval
-
-The artifact is a canonical, normalized view of one game, not a precomputed
-answer to a particular question.
-
-### Structure
-
-The schema version 4 canonical structure is:
+vNext uses a small provider-neutral esports navigation domain:
 
 ```text
-GameSummaryArtifact
-├── artifact_type = "game_summary"
-├── schema_version = "4"
-├── game
-│   ├── valve_match_id
-│   ├── start_time
-│   ├── duration_seconds
-│   ├── winner
-│   ├── game_mode
-│   │   ├── id
-│   │   └── name
-│   └── lobby_type
-│       ├── id
-│       └── name
-├── teams
-│   ├── radiant
-│   │   ├── valve_team_id
-│   │   ├── name
-│   │   └── score
-│   └── dire
-│       ├── valve_team_id
-│       ├── name
-│       └── score
-├── players[]
-│   ├── identity
-│   │   ├── steam_account_id
-│   │   ├── registered_name
-│   │   └── persona_name
-│   ├── side
-│   ├── player_slot
-│   ├── hero
-│   │   ├── id
-│   │   ├── name_en
-│   │   └── name_zh
-│   ├── stats
-│   │   ├── level
-│   │   ├── kills
-│   │   ├── deaths
-│   │   ├── assists
-│   │   ├── last_hits
-│   │   └── denies
-│   ├── economy
-│   │   ├── net_worth
-│   │   ├── gold_per_min
-│   │   └── xp_per_min
-│   ├── items
-│   │   ├── inventory[]
-│   │   │   ├── slot
-│   │   │   ├── id
-│   │   │   ├── name_en
-│   │   │   └── name_zh
-│   │   ├── backpack[]
-│   │   │   ├── slot
-│   │   │   ├── id
-│   │   │   ├── name_en
-│   │   │   └── name_zh
-│   │   └── neutral_items[]
-│   │       ├── slot
-│   │       ├── id
-│   │       ├── name_en
-│   │       └── name_zh
-│   ├── purchase_history[]
-│   │   ├── time_seconds
-│   │   ├── item_id
-│   │   ├── item_name_en
-│   │   └── item_name_zh
-│   └── ability_upgrades[]
-│       ├── level
-│       ├── time_seconds
-│       ├── ability_id
-│       ├── ability_name_en
-│       └── ability_name_zh
-└── draft
-    ├── picks[]
-    │   ├── order
-    │   ├── side
-    │   ├── hero_id
-    │   ├── hero_name_en
-    │   └── hero_name_zh
-    └── bans[]
-        ├── order
-        ├── side
-        ├── hero_id
-        ├── hero_name_en
-        └── hero_name_zh
+League -> Series -> Tournament -> Match -> Game
 ```
 
-### Identifier boundary
+PandaScore is the current primary source for that navigation and event context.
+OpenDota becomes authoritative only after a concrete Game has been resolved to a
+canonical Valve match ID.
 
-Provider-private identifiers must remain below the artifact boundary. This
-includes PandaScore match, game, team, and player resource IDs, as well as
-other provider-private resource IDs. A PandaScore team ID is not a Valve team
-ID, and a PandaScore game ID is not a Valve match ID; numeric coincidence never
-permits their namespaces to be mixed.
+Team and professional Player are additional navigation entities where the model
+needs cross-capability locators.
 
-Dota/Valve-native identifiers are canonical domain identity and may appear in
-this artifact: Valve match IDs, Valve team IDs, Steam account IDs, and hero,
-item, and ability IDs. `valve_match_id` is therefore the canonical game
-identity, rather than an ambiguous `match_id` or any provider resource ID.
+A Domain Ref is a locator, not a generic ID wrapper. Use it only when another
+capability may need to receive the same entity again. Examples include
+`SeriesRef`, `MatchRef`, `GameRef`, `TeamRef`, and `PlayerRef` where those tool
+contracts require them.
 
-### Entity resolution
-
-Canonical artifact entity representations use Valve-native hero, item, and
-ability IDs, Steam account IDs, and Valve team IDs. Provider-private IDs are
-excluded. Catalog resolution preserves the native ID and uses `name_en = null`
-and `name_zh = null` when the corresponding catalog name is unavailable.
-
-### Source-backed normalization and exclusions
-
-Every schema version 4 fact is source-backed. The artifact may contain provider
-source facts, canonical semantic normalization, and static Dota catalog
-normalization. For example, normalization may represent `radiant_win` as
-`winner = radiant` or `dire`, map a source team-side code such as `0` or `1` to
-`radiant` or `dire`, and map hero, item, ability, game-mode, or lobby-type IDs
-to canonical catalog names.
-
-Schema version 4 excludes DotaMind-derived analytics and estimates. It must not
-add KDA, total gold derived from GPM, total XP derived from XPM, lane
-efficiency, teamfight participation, benchmarks, rankings, or scores.
-Normalization may make a source fact semantically canonical; it must not invent
-an analytical fact.
-
-### Player and catalog semantics
-
-Player identity is the three-field object `steam_account_id`,
-`registered_name`, and `persona_name`. There is no unified `player_name`
-fallback. `side` and `player_slot` describe that player's placement in this
-game, so they belong on each player entry rather than inside persistent
-identity.
-
-Hero, item, and ability names are catalog-normalized companions to their native
-IDs. Version 4 preserves each available canonical catalog fact as `name_en` and
-`name_zh`; it does not ask the model to translate stable entity names. All
-ordinary and neutral items use the same canonical Item Catalog: Dota item ID to
-catalog to `id`, `name_en`, and `name_zh`. OpenDota neutral source slots are
-normalized into `neutral_items` as positional `ItemSlot` entries. The
-collection always has slots 0 and 1, and there is no separate enhancement
-semantic.
-
-Player stats and economy values are copied from provider-recorded match facts
-when available. They are not derived by DotaMind. In particular, KDA, estimated
-total gold, and estimated total XP are not calculated from these fields.
-
-When OpenDota provides an ID-only `ability_upgrades_arr` sequence, artifact
-construction preserves the ability IDs and source order; unavailable level and
-timing metadata remain `null`.
-
-### Purchase history canonicalization
-
-OpenDota `purchase_log` provides purchase time and an item key. The provider
-adapter preserves this as a construction-level `item_key`; it does not perform
-catalog resolution. During artifact construction, `ItemResolver` resolves
-`item_key` to Valve-native item identity and available catalog-localized names.
-
-If an `item_key` cannot be resolved to a Valve item identity, that purchase
-event is omitted rather than creating an identity-less `PurchaseEvent` or
-failing the entire artifact. `purchase_history` preserves source event order.
-
-### Missing-data and fixed-structure semantics
-
-The artifact uses one missing-data contract:
-
-- A missing source scalar fact is `null`.
-- A represented canonical entity requires its native identity; an object without
-  that identity is omitted rather than represented as an empty entity.
-- A missing catalog mapping preserves the native ID and uses `name_en = null`
-  and `name_zh = null`.
-- A missing collection is `[]`.
-- A fixed structure remains present even when its fields or nested values are
-  unavailable.
-
-The fixed objects are `game`, `teams`, each player's `stats`, `economy`, and
-`items`, and `draft`.
-
-For example, missing `purchase_history` and `ability_upgrades` are `[]`. Missing
-draft data is `draft: { picks: [], bans: [] }`. Inventory and backpack slot
-structure is preserved even for empty slots, for example
-`{ slot: 2, id: null, name_en: null, name_zh: null }`. Missing `neutral_items` is represented by
-the two empty neutral slots described below.
-
-Inventory, backpack, and neutral item placement is positional. `neutral_items`
-is always a fixed two-slot positional collection: slot 0 corresponds to the
-first neutral source slot and slot 1 corresponds to the second. An empty slot
-remains represented with `id = null`, `name_en = null`, and `name_zh = null`.
-
-```json
-"neutral_items": [
-  {
-    "slot": 0,
-    "id": null,
-    "name_en": null,
-    "name_zh": null
-  },
-  {
-    "slot": 1,
-    "id": 1700,
-    "name_en": "Mystical",
-    "name_zh": "神秘法杖"
-  }
-]
-```
-
-### Schema evolution
-
-Version 3 is a frozen historical schema. It replaces neutral item value entries with positional `ItemSlot`
-entries so both neutral source positions remain observable when one is empty.
-It also permits ID-only ability upgrades to retain source IDs and order with
-`level` and `time_seconds` set to `null` when that metadata is unavailable.
-
-Version 4 is a retained readable schema. It preserves the version 3 shape
-while evolving catalog-backed hero, item, and ability identity to expose native
-IDs plus available `name_en` and `name_zh` facts. A catalog miss preserves the
-native ID and leaves both localized names `null`; this is canonical localized
-identity, not a translation feature.
-
-Provenance, freshness, coverage, completeness, and known missing sections
-remain part of the artifact quality contract.
-
-> `GameSummaryArtifact` schema v4 and its current production path do not yet persist
-> `fetched_at`, provenance, coverage, completeness, or known-missing metadata.
-> These remain target artifact-quality contracts for a later explicit
-> schema/storage contract.
-
-Version 5 is the current production schema. It preserves V4 game facts and adds
-already-known readable League, Series, Tournament, Match, and game-position
-context. It excludes PandaScore IDs and DotaMind navigation refs. The canonical
-esports hierarchy is `League -> Series -> Tournament -> Match -> Game`; it is a
-DotaMind domain contract, not a PandaScore DTO schema.
-
-## Artifact corpus scope
-
-`ArtifactScopeRef` is an opaque generic corpus locator. A successful artifact
-write may register its complete `ArtifactRef` under already-known canonical
-navigation refs. Scoped `artifact.grep` searches retained refs only, skips
-expired members, returns `coverage = materialized_only`, and never fetches,
-produces, or infers membership.
-
-## Artifact lifecycle
-
-`GameSummaryArtifact` retains its deterministic `ArtifactRef` and schema shape.
-With `DOTAMIND_REDIS_URL`, `RedisArtifactStore` uses a versioned key and a fixed
-seven-day TTL. `put()` sets or refreshes TTL; `get()` and `exists()` do not.
-Expiration means the artifact is unavailable, not that its canonical identity is
-invalid; it may be produced again from its canonical game identity.
-
-The target data lifecycle is:
-
-    Provider Fetch
-      -> Normalization
-      -> Artifact Store
-      -> Retrieval
-      -> bounded Tool View
-
-This is a data lifecycle, not a mandatory A-to-B-to-C model workflow. An
-existing artifact may be reused, a request may be answered by a bounded domain
-result, and a missing artifact may produce an explicit unavailable result. The
-artifact lifecycle does not belong to Agent Runtime: runtime transports
-messages and dispatches tools, while domain and retrieval layers own data
-quality and access semantics.
-
-## Artifact quality
-
-Every artifact or bounded artifact view should preserve the following metadata
-when applicable:
-
-| Field | Meaning |
-| --- | --- |
-| `source` | Provider or normalized source set that supplied the facts |
-| `fetched_at` | Time the source data was obtained |
-| `schema_version` | Version of the canonical artifact schema |
-| `coverage` | Sections or fact families currently available |
-| `completeness` | Whether the artifact is complete, partial, or otherwise limited |
-| `missing` | Known sections or facts that are unavailable |
-
-For example, a `GameArtifact` may report coverage for scoreboard, draft,
-inventory, and purchase events while listing replay timeline under `missing`.
-The absence must remain visible; a summary must not imply that unlisted data
-was fetched or verified.
-
-## Normalization and provenance
-
-The proposed normalization path would produce stable domain DTOs and canonical
-artifacts. Each returned fact should retain:
-
-- Source or sources
-- Fetched time when available
-- Identity or mapping status
-- Warnings, coverage limits, and known missing fields
-
-If a fact is inferred by combining providers, the result states that inference.
-It never claims that an upstream provider directly supplied the derived field.
+Provider-private IDs remain internal to provider/domain resolution. A single
+provider entity must have exactly one deterministic Domain Ref construction rule;
+different services must not invent separate hash recipes for the same entity.
 
 ## Provider roles
 
-Initial provider roles are selected for product value:
+Current roles are intentionally narrow:
 
-- PandaScore supplies esports competition and fixture discovery.
-- OpenDota can supply Valve-match detail and recorded player game data after a
-  valid match mapping exists.
-- Valve Catalog supplies static hero, ability, and item facts from a committed
-  official snapshot.
+- PandaScore: esports navigation and readable event context
+- OpenDota: resolved Valve-match detail and recorded game facts
+- committed Valve catalog: static hero/item/ability reference facts
 
-STRATZ is not part of the initial vNext provider commitment. It may be assessed
-later for a concrete professional-player capability and must not reintroduce
-ranked-meta analytics as an accidental product scope.
+The current game chain is:
 
-## Freshness and quality
+```text
+PandaScore Game
+  -> cross-source resolution
+  -> valve_match_id
+  -> OpenDota game detail
+```
 
-Schedules, results, rosters, and parse coverage are volatile. Static catalog
-data has an explicit snapshot version. The data layer returns incomplete,
-ambiguous, delayed, or unavailable data as such; presentation must preserve
-these limits rather than upgrading them to certainty.
+OpenDota does not currently define which Series, Tournament, or PandaScore Match
+a Game belongs to.
+
+## Identity boundary
+
+Provider-private resource IDs do not enter canonical Artifacts or model-facing
+navigation contracts. Numeric coincidence never merges namespaces.
+
+Canonical Valve/Dota-native identities may cross the Artifact boundary as plain
+facts, including:
+
+- Valve match ID
+- Valve team ID
+- Steam account ID
+- hero ID
+- item ID
+- ability ID
+
+These IDs do not require an additional construction-layer Ref merely because
+they identify a Dota entity.
+
+## Static catalog facts
+
+All supported Dota game data sources use Valve-defined hero/item/ability
+identity. The committed local catalog provides the stable mapping from those
+native IDs to static entity facts such as canonical English/Chinese names.
+
+The target architecture keeps catalog facts separate from dynamic game
+Artifacts:
+
+```text
+Dynamic Game Artifact
+  -> hero_id / item_id / ability_id
+
+Static Catalog
+  -> ID <-> name/localization/reference facts
+```
+
+The model accesses the static catalog through small local capabilities:
+`catalog.search` for text -> IDs and `catalog.lookup` for bounded batch ID ->
+static facts.
+
+Artifact production should not duplicate catalog names into every dynamic game
+record by default.
+
+## Artifact data contract
+
+An Artifact is a provider-neutral JSON-like document stored outside model
+context. It exists so a large complete result can be retained while the model
+receives only a bounded view plus a locator.
+
+The target GameSummary document combines:
+
+- readable PandaScore event context: League, Series, Tournament, Match, game
+  position
+- canonical Valve game identity and recorded OpenDota game facts
+- Valve-native hero/item/ability/team/player IDs as scalar facts
+
+It excludes:
+
+- PandaScore/OpenDota private resource IDs
+- raw provider payloads
+- storage/cache metadata as gameplay facts
+- construction-layer Ref wrappers
+- duplicated static catalog names as a requirement
+- DotaMind-derived gameplay analytics
+
+Conceptual target shape:
+
+```text
+GameSummaryArtifact
+  artifact_type
+  schema_version
+  event
+    league
+    series
+    tournament
+    match
+    game_position
+  game
+    valve_match_id
+    start_time
+    duration_seconds
+    winner
+    game_mode_id
+    lobby_type_id
+  teams
+    radiant { valve_team_id, name, score }
+    dire    { valve_team_id, name, score }
+  players[]
+    steam_account_id
+    registered_name
+    persona_name
+    side
+    player_slot
+    hero_id
+    stats
+    economy
+    items
+      inventory[] { slot, item_id }
+      backpack[] { slot, item_id }
+      neutral_items[] { slot, item_id }
+    purchase_history[] { time_seconds, item_id }
+    ability_upgrades[] { ability_id, level, time_seconds }
+  draft
+    picks[] { order, side, hero_id }
+    bans[]  { order, side, hero_id }
+```
+
+Missing scalar source facts remain `null`; missing collections remain `[]`;
+fixed positional structures may retain empty slots where source semantics make
+position meaningful.
+
+## Historical GameSummary schemas
+
+Schema versions 3, 4, and 5 are frozen historical contracts.
+
+- v3 established the earlier canonical game structure.
+- v4 added catalog-enriched English/Chinese hero, item, and ability names.
+- v5 retained v4 game facts and added readable PandaScore event context.
+
+They must not be silently changed.
+
+The simplified Artifact representation should be introduced as a new schema
+version, currently expected to be v6. Its material contract change is that
+Valve-native IDs remain directly observable while static catalog translation
+moves to catalog tools instead of Artifact construction.
+
+## Ref cleanup target
+
+The current construction layer contains types such as:
+
+- `HeroRef`
+- `ItemRef`
+- `AbilityUpgradeRef`
+- `ItemSlotRef`
+- `PurchaseEventRef`
+- `DraftEventRef`
+- construction-only Team/Player native refs
+
+Most of these are value/event structures rather than locators. The migration
+should replace them with ordinary typed values where typing is useful and remove
+the `Ref` abstraction where no cross-capability locator exists.
+
+This cleanup must follow a proven v6 production path rather than mutate the old
+v4/v5 implementation in place.
+
+## Artifact identity and storage
+
+`ArtifactRef` is the locator for stored canonical documents. GameSummary
+identity is based on canonical Valve match ID plus schema version, not on
+PandaScore IDs or catalog names.
+
+Redis Artifact storage remains a retention boundary rather than a source of
+truth or freshness policy. A missing/expired Artifact does not invalidate the
+underlying canonical Game identity.
+
+## Artifact scope
+
+`ArtifactScopeRef -> ArtifactRef[]` is a generic corpus-membership contract.
+Known navigation ancestry may register a successfully stored Game Artifact under
+League/Series/Tournament/Match scopes.
+
+Scope does not infer membership from Artifact content and does not claim corpus
+completeness. Scoped search is materialized-only.
+
+Because scope keys reuse Domain navigation identity, the existing SeriesRef
+construction inconsistency must be corrected before scoped corpus behavior is
+considered reliable.
+
+## Provenance and uncertainty
+
+Tool-facing domain results should preserve source, fetch time where useful,
+identity/resolution status, warnings, truncation, and coverage limits.
+
+Artifact schema should stay focused on the canonical fact document. Do not add a
+large quality-metadata framework preemptively; add source-backed metadata only
+when a concrete retrieval or product consumer needs it.
+
+Cross-source resolution remains explicit. Inference may be recorded as
+inference but must never be presented as a native provider field.
+
+## Data design test
+
+For every proposed field or type, ask:
+
+1. Is this a source-backed fact the model may need to observe?
+2. Is it dynamic game/event data or static catalog data?
+3. Does it need a locator between calls, or is it simply document content?
+4. Does putting it in Artifact reduce model-context pressure or merely duplicate
+   another fact space?
+
+If a value is only static ID -> name translation, prefer the catalog capability.
+If it is only nested game content, prefer a plain value structure over a Ref.
