@@ -3,6 +3,7 @@ import type { ChatModelRunResult } from "@assistant-ui/react";
 import { streamChatMessage } from "@/lib/vnext-chat-api";
 import { decorateCatalogMentions } from "../dota-visuals";
 import { markDotaMindSessionUnread } from "./thread-unread";
+import { DOTAMIND_ASSISTANT_METADATA_KEY } from "./migration-contract";
 
 export async function* streamVNextChatMessage({
   browserId,
@@ -35,7 +36,13 @@ export async function* streamVNextChatMessage({
       yield { content: [{ type: "text", text: finalText }] };
       return;
     }
-    yield { content: [{ type: "text", text: `本次请求未完成：${event.reason}` }] };
+    yield {
+      content: [{ type: "text", text: `本次请求未完成：${event.reason}` }],
+      metadata:
+        event.trace === undefined
+          ? undefined
+          : { custom: { [DOTAMIND_ASSISTANT_METADATA_KEY]: { trace: event.trace } } },
+    };
     return;
   }
   if (!abortSignal.aborted) {

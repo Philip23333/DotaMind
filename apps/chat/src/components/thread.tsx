@@ -19,12 +19,14 @@ import {
   ArrowUpIcon,
   CheckIcon,
   CopyIcon,
+  FootprintsIcon,
   SquareIcon,
   SparklesIcon,
 } from "lucide-react";
 import { siDota2 } from "simple-icons";
 import { cancelChatRun } from "@/lib/chat-run-api";
 import { DOTAMIND_ASSISTANT_METADATA_KEY } from "@/lib/assistant-ui/migration-contract";
+import { downloadTrace, TraceExpiredError } from "@/lib/trace-download";
 import { useRef, useState, type FC } from "react";
 
 export const Thread: FC<{ browserId?: string }> = ({ browserId }) => {
@@ -105,6 +107,7 @@ const UserMessage: FC = () => (
 
 const AssistantMessage: FC<{ browserId?: string }> = ({ browserId }) => {
   const messageId = useAuiState((state) => state.message.id);
+  const trace = useAuiState((state) => traceFromMetadata(state.message.metadata?.custom));
   const runtimeInfo = useRuntimeInfo(messageId);
 
   return (
@@ -144,10 +147,49 @@ const AssistantMessage: FC<{ browserId?: string }> = ({ browserId }) => {
             <CopyIcon className="size-4" />
           </AuiIf>
         </ActionBarPrimitive.Copy>
+        {browserId && trace && new Date(trace.expires_at) > new Date() && (
+          <TraceDownloadAction browserId={browserId} traceId={trace.trace_id} />
+        )}
       </ActionBarPrimitive.Root>
     </MessagePrimitive.Root>
   );
 };
+
+const TraceDownloadAction: FC<{ browserId: string; traceId: string }> = ({ browserId, traceId }) => {
+  const [expired, setExpired] = useState(false);
+  const download = async () => {
+    try {
+      await downloadTrace(browserId, traceId);
+    } catch (error) {
+      if (error instanceof TraceExpiredError) setExpired(true);
+    }
+  };
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className="size-8"
+      aria-label={expired ? "Trace 已过期" : "下载本次调用 Trace"}
+      title={expired ? "Trace 已过期" : "下载本次调用 Trace"}
+      disabled={expired}
+      onClick={() => void download()}
+    >
+      <FootprintsIcon className="size-4" />
+    </Button>
+  );
+};
+
+function traceFromMetadata(custom: unknown): { trace_id: string; expires_at: string } | null {
+  if (!custom || typeof custom !== "object") return null;
+  const dotamind = (custom as Record<string, unknown>)[DOTAMIND_ASSISTANT_METADATA_KEY];
+  if (!dotamind || typeof dotamind !== "object") return null;
+  const trace = (dotamind as Record<string, unknown>).trace;
+  if (!trace || typeof trace !== "object") return null;
+  const value = trace as Record<string, unknown>;
+  return typeof value.trace_id === "string" && typeof value.expires_at === "string"
+    ? { trace_id: value.trace_id, expires_at: value.expires_at }
+    : null;
+}
 
 const Composer: FC<{ browserId?: string }> = ({ browserId }) => {
   const aui = useAui();

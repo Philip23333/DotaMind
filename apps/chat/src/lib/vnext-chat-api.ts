@@ -10,7 +10,12 @@ export type VNextChatEvent =
       turn_index: number;
       catalog_visual_entities?: CatalogVisualEntity[];
     }
-  | { type: "error"; error_code: string; reason: string };
+  | {
+      type: "error";
+      error_code: string;
+      reason: string;
+      trace?: { trace_id: string; expires_at: string };
+    };
 
 function browserHeaders(browserId: string): HeadersInit {
   return {
@@ -58,9 +63,24 @@ function parseEvent(line: string): VNextChatEvent {
     typeof event.error_code === "string" &&
     typeof event.reason === "string"
   ) {
-    return { type: "error", error_code: event.error_code, reason: event.reason };
+    const trace = event.trace;
+    if (trace !== undefined && !isTraceRef(trace)) {
+      throw new Error("DotaMind 流式响应包含无效 Trace 引用。");
+    }
+    return {
+      type: "error",
+      error_code: event.error_code,
+      reason: event.reason,
+      ...(trace === undefined ? {} : { trace }),
+    };
   }
   throw new Error("DotaMind 流式响应包含未知事件。");
+}
+
+function isTraceRef(value: unknown): value is { trace_id: string; expires_at: string } {
+  if (!value || typeof value !== "object") return false;
+  const trace = value as Record<string, unknown>;
+  return typeof trace.trace_id === "string" && typeof trace.expires_at === "string";
 }
 
 function isCatalogVisualEntityList(value: unknown): value is CatalogVisualEntity[] {
