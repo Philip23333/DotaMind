@@ -17,6 +17,12 @@ from .retrieval import (
     ArtifactSearcher,
     ArtifactSearchResult,
 )
+from .scope import (
+    ArtifactScopeRef,
+    ArtifactScopeStore,
+    MemoryArtifactScopeStore,
+    RedisArtifactScopeStore,
+)
 from .store import (
     ArtifactNotFoundError,
     ArtifactStore,
@@ -37,6 +43,8 @@ __all__ = [
     "ArtifactReader",
     "ArtifactSearchResult",
     "ArtifactSearcher",
+    "ArtifactScopeRef",
+    "ArtifactScopeStore",
     "ArtifactStore",
     "ArtifactStoreUnavailableError",
     "ArtifactTypeMismatchError",
@@ -45,6 +53,8 @@ __all__ = [
     "GameSummaryArtifactV5",
     "GameSummaryArtifactProducer",
     "MemoryArtifactStore",
+    "MemoryArtifactScopeStore",
     "RedisArtifactStore",
+    "RedisArtifactScopeStore",
     "game_summary_artifact_ref",
 ]
