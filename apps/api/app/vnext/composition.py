@@ -234,7 +234,7 @@ def build_vnext_services(
     )
     artifact_searcher = ArtifactSearcher(store)
     artifact_reader = ArtifactReader(store)
-    artifact_grepper = ArtifactGrepper(store)
+    artifact_grepper = ArtifactGrepper(store, scope_store)
     return VNextServices(
         pandascore=panda_adapter,
         opendota=open_adapter,

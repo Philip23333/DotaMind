@@ -458,7 +458,7 @@ def fixture_vnext_services(
     )
     searcher = ArtifactSearcher(store)
     reader = ArtifactReader(store)
-    grepper = ArtifactGrepper(store)
+    grepper = ArtifactGrepper(store, scope_store)
     team_service = TeamService(panda, match_service.team_player_index)
     player_service = PlayerService(panda, match_service.team_player_index)
     return VNextServices(

@@ -9,7 +9,8 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from .models import ArtifactRef
-from .store import ArtifactStore
+from .scope import ArtifactScopeRef, ArtifactScopeStore
+from .store import ArtifactNotFoundError, ArtifactStore
 
 
 class ArtifactGrepMatch(BaseModel):
@@ -30,6 +31,7 @@ class ArtifactGrepResult(BaseModel):
     matches: list[ArtifactGrepMatch] = Field(default_factory=list)
     returned: int
     truncated: bool
+    coverage: str = "materialized_only"
 
 
 class ArtifactGrepper:
@@ -40,21 +42,33 @@ class ArtifactGrepper:
     MAX_LIMIT = 100
     MAX_PREVIEW_LENGTH = 200
 
-    def __init__(self, store: ArtifactStore) -> None:
+    def __init__(self, store: ArtifactStore, scope_store: ArtifactScopeStore | None = None) -> None:
         self._store = store
+        self._scope_store = scope_store
 
     async def grep(
         self,
         pattern: str,
         artifact_types: list[str] | None = None,
         limit: int = DEFAULT_LIMIT,
+        scope: ArtifactScopeRef | None = None,
     ) -> ArtifactGrepResult:
         _validate_search(pattern, limit)
         normalized_pattern = pattern.casefold()
         matches: list[ArtifactGrepMatch] = []
 
-        async for ref in self._store.iter_refs(artifact_types):
-            artifact = await self._store.get(ref)
+        refs = (
+            self._scope_store.iter_refs(scope)
+            if scope is not None and self._scope_store is not None
+            else self._store.iter_refs(artifact_types)
+        )
+        async for ref in refs:
+            if artifact_types is not None and ref.artifact_type not in artifact_types:
+                continue
+            try:
+                artifact = await self._store.get(ref)
+            except ArtifactNotFoundError:
+                continue
             payload = _serialize_artifact(artifact)
             for path, value in _scalar_leaves(payload):
                 match_index = value.casefold().find(normalized_pattern)

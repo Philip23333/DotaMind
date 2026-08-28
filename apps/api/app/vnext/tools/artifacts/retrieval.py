@@ -11,6 +11,7 @@ from app.vnext.artifacts import (
     ArtifactGrepResult,
     ArtifactReader,
     ArtifactReadResult,
+    ArtifactScopeRef,
     ArtifactSearcher,
     ArtifactSearchResult,
 )
@@ -48,6 +49,10 @@ class ArtifactGrepInput(DomainModel):
         default=None,
         description="Optional generic artifact-type restriction; omit to search the whole corpus.",
     )
+    scope: ArtifactScopeRef | None = Field(
+        default=None,
+        description="Optional opaque corpus scope. It only constrains stored artifact search.",
+    )
     limit: int = Field(
         default=ArtifactGrepper.DEFAULT_LIMIT,
         ge=1,
@@ -82,7 +87,7 @@ def register_artifact_tools(
         )
 
     async def grep(args: ArtifactGrepInput) -> ArtifactGrepResult:
-        return await grepper.grep(args.pattern, args.artifact_types, args.limit)
+        return await grepper.grep(args.pattern, args.artifact_types, args.limit, args.scope)
 
     registry.register(
         ToolDefinition(

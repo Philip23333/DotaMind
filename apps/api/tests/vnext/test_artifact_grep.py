@@ -175,7 +175,8 @@ def test_artifact_grep_tool_searches_stored_content_without_provider_production(
                 "preview": "Malr1ne",
             }
         ],
-        "returned": 1,
-        "truncated": False,
-    }
+            "returned": 1,
+            "truncated": False,
+            "coverage": "materialized_only",
+        }
     assert opendota.construction_calls == []

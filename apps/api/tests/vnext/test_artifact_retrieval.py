@@ -207,6 +207,23 @@ def test_registry_tool_chain_produces_searches_and_reads_one_artifact() -> None:
     )
     assert scoped_ref == game_summary_artifact_ref(40001)
 
+    scoped_grep = asyncio.run(
+        registry.execute(
+            ToolCall(
+                id="artifact-grep-scope",
+                name="artifact.grep",
+                arguments={
+                    "pattern": "Round 2",
+                    "scope": {"value": series_ref},
+                    "artifact_types": ["game_summary"],
+                },
+            )
+        )
+    )
+    assert scoped_grep.status == "ok"
+    assert scoped_grep.content["coverage"] == "materialized_only"
+    assert scoped_grep.content["matches"]
+
 
 def test_unresolved_games_do_not_trigger_artifact_production() -> None:
     series_service, match_service, panda, opendota = fixture_services(
