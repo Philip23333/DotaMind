@@ -8,6 +8,22 @@ from .models import ArtifactRef
 from .protocol import Artifact
 
 
+def validate_artifact_reference(ref: ArtifactRef, artifact: Artifact) -> None:
+    """Ensure stored artifact metadata agrees with its canonical reference."""
+
+    if (
+        ref.artifact_type != artifact.artifact_type
+        or ref.schema_version != artifact.schema_version
+    ):
+        raise ArtifactTypeMismatchError(
+            f"artifact {ref.id!r} does not match its reference: "
+            f"expected type={ref.artifact_type!r}, "
+            f"schema_version={ref.schema_version!r}; "
+            f"received type={artifact.artifact_type!r}, "
+            f"schema_version={artifact.schema_version!r}"
+        )
+
+
 @runtime_checkable
 class ArtifactStore(Protocol):
     """Storage interface for typed artifacts."""

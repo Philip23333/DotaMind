@@ -62,6 +62,7 @@ class VNextSettings:
     pandascore_max_page_size: int = 100
     resolution_start_tolerance_seconds: int = 1800
     resolution_duration_tolerance_seconds: int = 5
+    artifact_ttl_seconds: int = 7 * 24 * 60 * 60
 
     @classmethod
     def from_env(cls) -> VNextSettings:
@@ -114,6 +115,9 @@ class VNextSettings:
                     "5",
                     file_values,
                 )
+            ),
+            artifact_ttl_seconds=int(
+                _env_value("DOTAMIND_VNEXT_ARTIFACT_TTL_SECONDS", "604800", file_values)
             ),
         )
 

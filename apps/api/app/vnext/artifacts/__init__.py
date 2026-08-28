@@ -6,6 +6,7 @@ from .game_summary_v4 import GameSummaryArtifactV4
 from .memory import MemoryArtifactStore
 from .models import ArtifactRef, game_summary_artifact_ref
 from .protocol import Artifact
+from .redis import RedisArtifactStore
 from .retrieval import (
     ArtifactPathNotFoundError,
     ArtifactReader,
@@ -38,5 +39,6 @@ __all__ = [
     "GameSummaryArtifactV4",
     "GameSummaryArtifactProducer",
     "MemoryArtifactStore",
+    "RedisArtifactStore",
     "game_summary_artifact_ref",
 ]

@@ -30,6 +30,7 @@ from app.persistence.database import (
     create_database_resources,
     ping_database,
 )
+from app.vnext.artifacts import RedisArtifactStore
 from app.vnext.composition import VNextSettings, build_vnext_runtime, build_vnext_services
 from app.vnext.product import (
     ConversationContextBuilder,
@@ -87,7 +88,20 @@ async def lifespan(app: FastAPI):
     from app.application.plan_service import PlanService
 
     app.state.chat_repository = PostgresChatRepository(database.session_factory)
-    vnext_services = build_vnext_services(VNextSettings.from_env())
+    vnext_redis = None
+    artifact_store = None
+    if settings.redis_url:
+        from redis.asyncio import from_url
+
+        vnext_redis = from_url(settings.redis_url, decode_responses=True)
+        await vnext_redis.ping()
+        artifact_store = RedisArtifactStore(
+            vnext_redis,
+            ttl_seconds=VNextSettings.from_env().artifact_ttl_seconds,
+        )
+    vnext_services = build_vnext_services(
+        VNextSettings.from_env(), artifact_store=artifact_store
+    )
     app.state.vnext_services = vnext_services
     app.state.vnext_runtime = build_vnext_runtime(services=vnext_services)
     app.state.vnext_chat_service = VNextChatService(
@@ -172,6 +186,8 @@ async def lifespan(app: FastAPI):
             await run_manager.shutdown()
         if run_event_bus is not None:
             await run_event_bus.aclose()
+        if vnext_redis is not None:
+            await vnext_redis.aclose()
         await vnext_services.aclose()
         await store.aclose()
         await close_database(database)
