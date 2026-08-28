@@ -15,6 +15,7 @@ from app.vnext.agent.errors import (
 from app.vnext.agent.events import AgentCompleted, TextDelta
 from app.vnext.agent.limits import AgentLimits
 from app.vnext.agent.runtime import AgentRuntime, CancellationToken
+from app.vnext.agent.trace import AgentTraceCollector
 from app.vnext.llm.protocol import (
     AssistantMessage,
     FinalMessage,
@@ -93,6 +94,27 @@ def test_single_tool_call_result_then_final() -> None:
     assert result.content == "done"
     assert model.requests[1].messages[-1].tool_call_id == "call-1"  # type: ignore[union-attr]
     assert model.requests[1].messages[-1].content == {"value": 1}  # type: ignore[union-attr]
+
+
+def test_trace_collector_records_canonical_model_and_tool_evidence() -> None:
+    model = ScriptedModelClient(
+        [_tool_turn(_call()), ModelResponse(message=FinalMessage(content="done"))]
+    )
+    collector = AgentTraceCollector()
+    runtime = AgentRuntime(model, _registry(), limits=AgentLimits(deadline_seconds=2))
+
+    result = _run(runtime, model, trace_collector=collector)
+
+    trace = collector.snapshot()
+    assert result.content == "done"
+    assert trace["initial_messages"] == [{"role": "user", "content": "hello"}]
+    assert trace["tool_schemas"][0]["name"] == "echo"
+    assert trace["steps"][0]["model_request"]["step"] == 1
+    assert trace["steps"][0]["model_response"]["message"]["tool_calls"][0]["arguments"] == {
+        "value": 1
+    }
+    assert trace["steps"][0]["tool_results"][0]["result"]["content"] == {"value": 1}
+    assert trace["terminal"]["status"] == "completed"
 
 
 def test_multiple_tool_calls_preserve_assistant_and_result_order_and_ids() -> None:

@@ -33,6 +33,7 @@ from app.vnext.agent.events import (
     ToolStarted,
 )
 from app.vnext.agent.limits import AgentLimits
+from app.vnext.agent.trace import AgentTraceCollector
 from app.vnext.llm.protocol import (
     AssistantMessage,
     FinalMessage,
@@ -117,6 +118,7 @@ class AgentRuntime:
         *,
         cancellation_token: CancellationToken | None = None,
         event_sink: EventSink | None = None,
+        trace_collector: AgentTraceCollector | None = None,
     ) -> FinalMessage:
         """Run to a final message, while ``run_stream`` exposes every event."""
 
@@ -125,6 +127,7 @@ class AgentRuntime:
             messages,
             cancellation_token=cancellation_token,
             event_sink=event_sink,
+            trace_collector=trace_collector,
         ):
             if isinstance(event, AgentCompleted):
                 final = event.final
@@ -138,6 +141,7 @@ class AgentRuntime:
         *,
         cancellation_token: CancellationToken | None = None,
         event_sink: EventSink | None = None,
+        trace_collector: AgentTraceCollector | None = None,
     ) -> AsyncIterator[AgentEvent]:
         """Yield ephemeral runtime events in execution order."""
 
@@ -153,6 +157,11 @@ class AgentRuntime:
             # Validate the initial transcript before model dispatch.  This also
             # makes a defensive copy so a caller's list is never mutated.
             request_messages = ModelRequest(messages=request_messages, tools=[]).messages
+            if trace_collector is not None:
+                trace_collector.begin(
+                    request_messages,
+                    [schema.model_dump(mode="json") for schema in self.tools.schemas()],
+                )
             event = AgentStarted()
             yield await self._publish(event, sink)
 
@@ -167,6 +176,8 @@ class AgentRuntime:
                     tools=self.tools.schemas(),
                     step=step,
                 )
+                if trace_collector is not None:
+                    trace_collector.model_request(request)
                 event = ModelRequested(
                     step=step,
                     message_count=len(request_messages),
@@ -201,6 +212,8 @@ class AgentRuntime:
                                 except StopAsyncIteration:
                                     break
                                 if isinstance(item, ModelTextDelta):
+                                    if trace_collector is not None:
+                                        trace_collector.text_delta(step, item.text)
                                     if response is not None:
                                         raise ModelProtocolError(
                                             "stream emitted text after its terminal response"
@@ -254,9 +267,17 @@ class AgentRuntime:
                     has_tool_calls=has_tool_calls,
                     duration=max(0.0, monotonic() - model_started),
                 )
+                if trace_collector is not None:
+                    trace_collector.model_response(
+                        step, response, max(0.0, monotonic() - model_started)
+                    )
                 yield await self._publish(event, sink)
 
                 if isinstance(assistant, FinalMessage):
+                    if trace_collector is not None:
+                        trace_collector.terminal(
+                            status="completed", error_code=None, error_message=None
+                        )
                     event = AgentCompleted(
                         step=step,
                         duration=max(0.0, monotonic() - started_at),
@@ -277,6 +298,10 @@ class AgentRuntime:
                             "assistant response had neither content nor tool calls"
                         )
                     final = FinalMessage(content=assistant.content)
+                    if trace_collector is not None:
+                        trace_collector.terminal(
+                            status="completed", error_code=None, error_message=None
+                        )
                     event = AgentCompleted(
                         step=step,
                         duration=max(0.0, monotonic() - started_at),
@@ -301,12 +326,17 @@ class AgentRuntime:
                     deadline,
                     sink,
                     results,
+                    trace_collector,
                 ):
                     yield tool_event
                 request_messages.extend(results)
                 self._check_controls(token, deadline)
 
         except AgentCancelledError as exc:
+            if trace_collector is not None:
+                trace_collector.terminal(
+                    status="cancelled", error_code=exc.code, error_message=str(exc)
+                )
             event = AgentCancelled(
                 step=step or None,
                 error_message=str(exc),
@@ -314,6 +344,10 @@ class AgentRuntime:
             yield await self._publish(event, sink)
             raise
         except AgentRuntimeError as exc:
+            if trace_collector is not None:
+                trace_collector.terminal(
+                    status="failed", error_code=exc.code, error_message=str(exc)
+                )
             event = AgentFailed(
                 step=step or None,
                 duration=max(0.0, monotonic() - started_at),
@@ -326,6 +360,10 @@ class AgentRuntime:
             # Failures outside a model call are still runtime failures and must
             # never be represented as a successful tool result.
             wrapped = AgentRuntimeError(f"agent runtime failed: {exc}")
+            if trace_collector is not None:
+                trace_collector.terminal(
+                    status="failed", error_code=wrapped.code, error_message=str(wrapped)
+                )
             event = AgentFailed(
                 step=step or None,
                 duration=max(0.0, monotonic() - started_at),
@@ -343,6 +381,7 @@ class AgentRuntime:
         deadline: _Deadline,
         sink: EventSink | None,
         results: list[ToolResultMessage],
+        trace_collector: AgentTraceCollector | None,
     ) -> AsyncIterator[AgentEvent]:
         index = 0
         while index < len(calls):
@@ -396,6 +435,8 @@ class AgentRuntime:
                     )
                 yield await self._publish(event, sink)
                 results.append(result)
+                if trace_collector is not None:
+                    trace_collector.tool_result(step, result, duration)
             index += len(group)
 
     def _is_parallel_safe(self, call: ToolCall) -> bool:
