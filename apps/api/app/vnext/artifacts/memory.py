@@ -11,11 +11,11 @@ class MemoryArtifactStore:
     def __init__(self) -> None:
         self._storage: dict[str, Artifact] = {}
 
-    def put(self, ref: ArtifactRef, artifact: Artifact) -> None:
+    async def put(self, ref: ArtifactRef, artifact: Artifact) -> None:
         self._validate_reference(ref, artifact)
         self._storage[ref.id] = artifact
 
-    def get(self, ref: ArtifactRef) -> Artifact:
+    async def get(self, ref: ArtifactRef) -> Artifact:
         try:
             artifact = self._storage[ref.id]
         except KeyError as exc:
@@ -23,7 +23,7 @@ class MemoryArtifactStore:
         self._validate_reference(ref, artifact)
         return artifact
 
-    def exists(self, ref: ArtifactRef) -> bool:
+    async def exists(self, ref: ArtifactRef) -> bool:
         return ref.id in self._storage
 
     @staticmethod

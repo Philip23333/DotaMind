@@ -47,10 +47,10 @@ def _artifact() -> GameSummaryArtifactV4:
 def test_search_deduplicates_in_input_order_and_only_checks_existence() -> None:
     store = MemoryArtifactStore()
     ref = game_summary_artifact_ref(8123456789)
-    store.put(ref, _artifact())
+    asyncio.run(store.put(ref, _artifact()))
     searcher = ArtifactSearcher(store)
 
-    result = searcher.search("game_summary", [8123456789, 1, 8123456789, 2, 1])
+    result = asyncio.run(searcher.search("game_summary", [8123456789, 1, 8123456789, 2, 1]))
 
     assert result.refs == [ref]
     assert result.missing_valve_match_ids == [1, 2]
@@ -60,10 +60,10 @@ def test_reader_outline_is_bounded_and_serializes_datetime() -> None:
     store = MemoryArtifactStore()
     ref = game_summary_artifact_ref(8123456789)
     artifact = _artifact()
-    store.put(ref, artifact)
+    asyncio.run(store.put(ref, artifact))
     reader = ArtifactReader(store)
 
-    result = reader.read(ref)
+    result = asyncio.run(reader.read(ref))
 
     assert result.path is None
     assert result.offset is None
@@ -81,18 +81,18 @@ def test_reader_outline_is_bounded_and_serializes_datetime() -> None:
         },
     }
     json.dumps(result.model_dump(mode="json"))
-    assert reader.read(ref, "game.start_time").value == "2026-08-26T12:00:00Z"
+    assert asyncio.run(reader.read(ref, "game.start_time")).value == "2026-08-26T12:00:00Z"
 
 
 def test_reader_traverses_objects_lists_and_preserves_null_values() -> None:
     store = MemoryArtifactStore()
     ref = game_summary_artifact_ref(8123456789)
-    store.put(ref, _artifact())
+    asyncio.run(store.put(ref, _artifact()))
     reader = ArtifactReader(store)
 
-    assert reader.read(ref, "game.valve_match_id").value == 8123456789
-    assert reader.read(ref, "players.0.items.inventory.0.id").value is None
-    assert reader.read(ref, "players.0.purchase_history", offset=1, limit=1).value == [
+    assert asyncio.run(reader.read(ref, "game.valve_match_id")).value == 8123456789
+    assert asyncio.run(reader.read(ref, "players.0.items.inventory.0.id")).value is None
+    assert asyncio.run(reader.read(ref, "players.0.purchase_history", offset=1, limit=1)).value == [
         {
             "time_seconds": 20,
             "item_id": 2,
@@ -100,7 +100,7 @@ def test_reader_traverses_objects_lists_and_preserves_null_values() -> None:
             "item_name_zh": None,
         }
     ]
-    paged = reader.read(ref, "players.0.purchase_history", offset=0, limit=1)
+    paged = asyncio.run(reader.read(ref, "players.0.purchase_history", offset=0, limit=1))
     assert paged.offset == 0
     assert paged.limit == 1
     assert paged.total == 2
@@ -114,26 +114,26 @@ def test_reader_traverses_objects_lists_and_preserves_null_values() -> None:
 def test_reader_uses_one_error_for_invalid_paths(path: str) -> None:
     store = MemoryArtifactStore()
     ref = game_summary_artifact_ref(8123456789)
-    store.put(ref, _artifact())
+    asyncio.run(store.put(ref, _artifact()))
 
     with pytest.raises(ArtifactPathNotFoundError):
-        ArtifactReader(store).read(ref, path)
+        asyncio.run(ArtifactReader(store).read(ref, path))
 
 
 def test_reader_rejects_pagination_for_outline_or_non_list_values() -> None:
     store = MemoryArtifactStore()
     ref = game_summary_artifact_ref(8123456789)
-    store.put(ref, _artifact())
+    asyncio.run(store.put(ref, _artifact()))
     reader = ArtifactReader(store)
 
     with pytest.raises(ArtifactReadValidationError):
-        reader.read(ref, offset=0, pagination_requested=True)
+        asyncio.run(reader.read(ref, offset=0, pagination_requested=True))
     with pytest.raises(ArtifactReadValidationError):
-        reader.read(ref, "game", limit=1)
+        asyncio.run(reader.read(ref, "game", limit=1))
     with pytest.raises(ArtifactReadValidationError):
-        reader.read(ref, "game", limit=50, pagination_requested=True)
+        asyncio.run(reader.read(ref, "game", limit=50, pagination_requested=True))
     with pytest.raises(ArtifactReadValidationError):
-        reader.read(ref, "players", limit=101)
+        asyncio.run(reader.read(ref, "players", limit=101))
 
 
 def test_registry_tool_chain_produces_searches_and_reads_one_artifact() -> None:
@@ -252,7 +252,7 @@ def test_each_resolved_game_is_produced_and_stored() -> None:
     assert [game["valve_match_id"] for game in result.content["games"]] == [40002, 40003, 40004]
     assert opendota.construction_calls == [40002, 40003, 40004]
     assert all(
-        services.artifact_store.exists(game_summary_artifact_ref(match_id))
+        asyncio.run(services.artifact_store.exists(game_summary_artifact_ref(match_id)))
         for match_id in (40002, 40003, 40004)
     )
 
@@ -293,7 +293,7 @@ def test_artifact_read_missing_path_is_a_stable_tool_error() -> None:
     competition_service, match_service, panda, opendota = fixture_services()
     services = fixture_vnext_services(competition_service, match_service, panda, opendota)
     ref = game_summary_artifact_ref(8123456789)
-    services.artifact_store.put(ref, _artifact())
+    asyncio.run(services.artifact_store.put(ref, _artifact()))
 
     registry = build_vnext_registry(services)
     result = asyncio.run(

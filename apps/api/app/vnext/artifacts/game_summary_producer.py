@@ -44,7 +44,7 @@ class GameSummaryArtifactProducer:
         context = self._construction_adapter.to_construction_context(source.item)
         artifact = self._builder.build(context)
         ref = self._artifact_ref(artifact)
-        self._store.put(ref, artifact)
+        await self._store.put(ref, artifact)
         return ref
 
     @staticmethod

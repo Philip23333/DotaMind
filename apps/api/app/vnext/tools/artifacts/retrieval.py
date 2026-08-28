@@ -40,12 +40,12 @@ def register_artifact_tools(
     searcher: ArtifactSearcher,
     reader: ArtifactReader,
 ) -> None:
-    def search(args: ArtifactSearchInput) -> ArtifactSearchResult:
-        return searcher.search(args.artifact_type, args.valve_match_ids)
+    async def search(args: ArtifactSearchInput) -> ArtifactSearchResult:
+        return await searcher.search(args.artifact_type, args.valve_match_ids)
 
-    def read(args: ArtifactReadInput) -> ArtifactReadResult:
+    async def read(args: ArtifactReadInput) -> ArtifactReadResult:
         fields_set = args.model_fields_set
-        return reader.read(
+        return await reader.read(
             args.ref,
             path=args.path,
             offset=args.offset,

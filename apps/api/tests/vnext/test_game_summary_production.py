@@ -76,9 +76,9 @@ class RecordingStore(MemoryArtifactStore):
         super().__init__()
         self.put_count = 0
 
-    def put(self, ref: ArtifactRef, artifact: GameSummaryArtifact) -> None:
+    async def put(self, ref: ArtifactRef, artifact: GameSummaryArtifact) -> None:
         self.put_count += 1
-        super().put(ref, artifact)
+        await super().put(ref, artifact)
 
 
 class FailingBuilder:
@@ -135,8 +135,8 @@ def test_producer_fetches_builds_stores_and_derives_deterministic_ref() -> None:
         artifact_type="game_summary",
         schema_version="3",
     )
-    assert store.exists(ref)
-    artifact = store.get(ref)
+    assert asyncio.run(store.exists(ref))
+    artifact = asyncio.run(store.get(ref))
     assert artifact.game.valve_match_id == MATCH_ID
     assert artifact.artifact_type == "game_summary"
     assert artifact.schema_version == "3"
@@ -165,8 +165,8 @@ def test_producer_derives_ref_from_the_completed_artifact_identity() -> None:
         artifact_type="game_summary",
         schema_version="3",
     )
-    assert store.exists(ref)
-    assert store.get(ref).game.valve_match_id == 999
+    assert asyncio.run(store.exists(ref))
+    assert asyncio.run(store.get(ref)).game.valve_match_id == 999
 
 
 def test_producer_always_fetches_and_overwrites_the_same_deterministic_ref() -> None:
@@ -190,7 +190,7 @@ def test_producer_always_fetches_and_overwrites_the_same_deterministic_ref() -> 
 
     assert request_count == 2
     assert ref1 == ref2
-    assert store.get(ref2).teams.radiant.score == 20
+    assert asyncio.run(store.get(ref2)).teams.radiant.score == 20
 
 
 def test_producer_does_not_put_when_fetch_fails() -> None:
@@ -240,7 +240,7 @@ def test_producer_does_not_put_or_delete_old_artifact_when_build_fails() -> None
 
     async def exercise() -> tuple[ArtifactRef, GameSummaryArtifact]:
         first_ref = await producer.produce(MATCH_ID)
-        first_artifact = store.get(first_ref)
+        first_artifact = await store.get(first_ref)
         failing_producer = GameSummaryArtifactProducer(
             opendota=adapter,
             construction_adapter=OpenDotaGameConstructionAdapter(),
@@ -257,5 +257,5 @@ def test_producer_does_not_put_or_delete_old_artifact_when_build_fails() -> None
         asyncio.run(adapter.aclose())
 
     assert store.put_count == 1
-    assert store.get(first_ref) is first_artifact
-    assert store.get(first_ref).teams.radiant.score == 10
+    assert asyncio.run(store.get(first_ref)) is first_artifact
+    assert asyncio.run(store.get(first_ref)).teams.radiant.score == 10

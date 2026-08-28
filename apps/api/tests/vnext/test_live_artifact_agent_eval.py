@@ -267,12 +267,12 @@ async def _run_live_full_chain(settings: VNextSettings) -> None:
             key=lambda row: row[0] if row[0] is not None else -1,
         )
         artifact_ref = game_summary_artifact_ref(valve_match_id)
-        assert services.artifact_store.exists(artifact_ref), (
+        assert await services.artifact_store.exists(artifact_ref), (
             "production did not store the resolved game artifact; "
             f"{second_context}; ref={artifact_ref.model_dump(mode='json')}"
         )
         try:
-            artifact = services.artifact_store.get(artifact_ref)
+            artifact = await services.artifact_store.get(artifact_ref)
         except Exception as exc:
             pytest.fail(
                 "production could not retrieve the stored artifact: "

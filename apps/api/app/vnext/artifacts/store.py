@@ -12,13 +12,13 @@ from .protocol import Artifact
 class ArtifactStore(Protocol):
     """Storage interface for typed artifacts."""
 
-    def put(self, ref: ArtifactRef, artifact: Artifact) -> None:
+    async def put(self, ref: ArtifactRef, artifact: Artifact) -> None:
         """Store an artifact under its reference."""
 
-    def get(self, ref: ArtifactRef) -> Artifact:
+    async def get(self, ref: ArtifactRef) -> Artifact:
         """Return the artifact stored under a reference."""
 
-    def exists(self, ref: ArtifactRef) -> bool:
+    async def exists(self, ref: ArtifactRef) -> bool:
         """Return whether an artifact exists under a reference."""
 
 
@@ -28,3 +28,7 @@ class ArtifactNotFoundError(LookupError):
 
 class ArtifactTypeMismatchError(ValueError):
     """Raised when an artifact does not match its reference metadata."""
+
+
+class ArtifactStoreUnavailableError(RuntimeError):
+    """Raised when the configured artifact store cannot be reached."""

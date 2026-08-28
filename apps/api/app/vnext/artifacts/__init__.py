@@ -14,7 +14,12 @@ from .retrieval import (
     ArtifactSearcher,
     ArtifactSearchResult,
 )
-from .store import ArtifactNotFoundError, ArtifactStore, ArtifactTypeMismatchError
+from .store import (
+    ArtifactNotFoundError,
+    ArtifactStore,
+    ArtifactStoreUnavailableError,
+    ArtifactTypeMismatchError,
+)
 
 __all__ = [
     "Artifact",
@@ -27,6 +32,7 @@ __all__ = [
     "ArtifactSearchResult",
     "ArtifactSearcher",
     "ArtifactStore",
+    "ArtifactStoreUnavailableError",
     "ArtifactTypeMismatchError",
     "GameSummaryArtifact",
     "GameSummaryArtifactV4",

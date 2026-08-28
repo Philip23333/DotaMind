@@ -120,7 +120,7 @@ def _fixture_facts() -> dict[str, Any]:
         builder=_fixture_builder(),
     )
     ref = asyncio.run(services.game_summary_producer.produce(40003))
-    artifact = services.artifact_store.get(ref)
+    artifact = asyncio.run(services.artifact_store.get(ref))
     player = next(item for item in artifact.players if item.identity.registered_name == "carry")
     item_names = [item.name for item in player.items.inventory if item.name is not None]
     ability_names = [

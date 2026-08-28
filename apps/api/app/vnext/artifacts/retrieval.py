@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -49,7 +50,7 @@ class ArtifactSearcher:
     def __init__(self, store: ArtifactStore) -> None:
         self._store = store
 
-    def search(
+    async def search(
         self,
         artifact_type: ArtifactType,
         valve_match_ids: list[int],
@@ -59,16 +60,22 @@ class ArtifactSearcher:
         if len(valve_match_ids) > 100:
             raise ValueError("at most 100 valve match IDs may be searched")
 
-        refs: list[ArtifactRef] = []
-        missing: list[int] = []
         seen: set[int] = set()
+        unique_ids: list[int] = []
         for valve_match_id in valve_match_ids:
             if valve_match_id in seen:
                 continue
             seen.add(valve_match_id)
-            ref = game_summary_artifact_ref(valve_match_id)
-            if self._store.exists(ref):
-                refs.append(ref)
+            unique_ids.append(valve_match_id)
+
+        exists = await asyncio.gather(
+            *(self._store.exists(game_summary_artifact_ref(match_id)) for match_id in unique_ids)
+        )
+        refs: list[ArtifactRef] = []
+        missing: list[int] = []
+        for valve_match_id, found in zip(unique_ids, exists, strict=True):
+            if found:
+                refs.append(game_summary_artifact_ref(valve_match_id))
             else:
                 missing.append(valve_match_id)
         return ArtifactSearchResult(refs=refs, missing_valve_match_ids=missing)
@@ -82,7 +89,7 @@ class ArtifactReader:
     def __init__(self, store: ArtifactStore) -> None:
         self._store = store
 
-    def read(
+    async def read(
         self,
         ref: ArtifactRef,
         path: str | None = None,
@@ -99,7 +106,7 @@ class ArtifactReader:
                 "pagination is only valid when the final value is a list"
             )
 
-        artifact = self._store.get(ref)
+        artifact = await self._store.get(ref)
         payload = _serialize_artifact(artifact)
         value = _outline(payload) if path is None else _resolve_path(payload, path)
         if isinstance(value, list):
