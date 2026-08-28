@@ -85,14 +85,17 @@ Redis-backed ArtifactStore is now implemented as a later retention boundary:
 process-restart persistence with deterministic versioned keys and a seven-day
 TTL, without adding a producer cache-hit or freshness policy.
 
+- Canonical esports navigation: `League -> Series -> Tournament -> Match -> Game`,
+  including opaque League/Series/Tournament refs and Series-named discovery tools.
+- `GameSummaryArtifact` schema version 5, preserving V4 game facts plus
+  already-known readable esports event context without provider IDs or refs.
+- Generic `ArtifactScopeStore` with seven-day-aligned memory/Redis contracts;
+  successful V5 production registers known esports navigation memberships.
+- Generic `artifact.grep` breadth search with optional opaque scope and explicit
+  `materialized_only` coverage.
+
 Planned / pending deliverables:
 
-- Generic artifact corpus breadth search over canonical serialized artifact
-  content, returning stable `ArtifactRef` plus structural locators and bounded
-  previews rather than artifact-type-specific search views.
-- A separate artifact corpus scope contract that constrains which artifacts are
-  searched without silently fetching providers or materializing missing
-  artifacts inside search.
 - Reduced default tool context through bounded retrieval.
 
 The intended exploration model is breadth-to-depth and model-first:

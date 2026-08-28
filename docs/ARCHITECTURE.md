@@ -269,21 +269,16 @@ Commit 4 freezes these retrieval and integration contracts:
 - Structural paths support object fields and non-negative list indexes only;
   invalid paths use one `ArtifactPathNotFoundError` boundary.
 
-The current `artifact.search` is therefore an exact availability lookup, not the
-long-term generic breadth-search primitive. The planned direction is to add a
-schema-neutral artifact corpus search capability that searches canonical
-serialized artifact content and returns stable `ArtifactRef` plus structural
-paths and bounded previews. It must not require one programmer-authored search
-projection per artifact type. `artifact.read` remains the generic depth
-primitive. Exact availability lookup can remain independently useful and does
-not need to absorb corpus discovery semantics.
+`artifact.search` remains an exact availability lookup. `artifact.grep` is the
+schema-neutral breadth primitive over canonical serialized artifact content; it
+returns stable `ArtifactRef`, structural paths, bounded previews, and explicit
+materialized-only coverage. `artifact.read` remains the generic depth primitive.
 
-Artifact corpus scope is a separate design concern from content search. Content
-search answers "where does this pattern occur in the artifacts I am allowed to
-search?" Scope answers "which artifact corpus should be searched?" Scope must
-not be implemented by silently fetching providers or materializing missing
-artifacts inside the search operation. Artifact discovery and artifact
-production remain separate lifecycle boundaries.
+Artifact corpus scope is a generic `ArtifactScopeStore` whose members are
+complete canonical `ArtifactRef` values. PandaScore canonical League, Series,
+Tournament, and Match refs register V5 artifacts only after a successful write.
+Scope never fetches providers, materializes missing artifacts, infers membership,
+or turns materialized coverage into a completeness claim.
 
 ## Artifact and Retrieval Layer
 

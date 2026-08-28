@@ -26,8 +26,8 @@ domain tools.
 
 | Tool | Purpose | Important contract |
 | --- | --- | --- |
-| `competitions.search` | Find a competition or edition | Preserves candidate ambiguity |
-| `competitions.list_matches` | List matches for a competition | Returns bounded schedule facts |
+| `series.search` | Find an esports series or edition | Preserves candidate ambiguity |
+| `series.list_matches` | List matches for a series | Returns bounded schedule facts |
 | `matches.search` | Find a series or game | Does not guess a unique match |
 | `matches.get_detail` | Return detail for a resolved match or game | Resolved games include `valve_match_id` and guarantee local artifact production |
 | `teams.search` | Find a professional team | Preserves candidate ambiguity and returns opaque `TeamRef` objects |
@@ -36,6 +36,7 @@ domain tools.
 | `players.get_detail` | Return source-backed player facts | Accepts a `PlayerRef` object and preserves nullable biographical facts |
 | `artifact.search` | Find stored GameSummary artifacts | Accepts canonical Valve IDs; returns refs and missing IDs without reading or producing |
 | `artifact.read` | Read a bounded canonical artifact view | Accepts an exact ref, structural path, and bounded list pagination |
+| `artifact.grep` | Search canonical artifact scalar content | Optional opaque scope limits the materialized corpus only |
 
 The domain tools preserve explicit ambiguity, resolution, provenance, freshness,
 and availability boundaries. `matches.get_detail` production is owned by the
@@ -64,6 +65,7 @@ workflow, and neither requires the other to be called first.
 | --- | --- | --- | --- |
 | `artifact.search` | `artifact_type=game_summary`, up to 100 canonical Valve match IDs | `refs` and ordered `missing_valve_match_ids` | Existence checks only; no content read, provider call, or production |
 | `artifact.read` | Exact `ArtifactRef`, optional dotted path, `offset`, `limit` | Outline or serialized bounded value with list bounds | Object fields and list indexes only; list limit is at most 100 |
+| `artifact.grep` | Literal pattern, optional `scope`, optional type restriction, limit | `ArtifactRef`, path, preview, and `coverage=materialized_only` | Never fetches or produces; stale scope members are skipped |
 
 With `path=null`, `artifact.read` returns top-level scalar metadata and one-level
 section descriptors. A dotted path may address object fields and positional list

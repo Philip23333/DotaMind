@@ -4,8 +4,10 @@
 
 vNext centers on these provider-neutral objects:
 
-- Competition
-- Series or Match
+- League
+- Series
+- Tournament
+- Match
 - Game
 - Team
 - Professional Player
@@ -20,7 +22,7 @@ A domain object is primarily an identity and meaning contract. It answers:
 
     What entity is this?
 
-Examples include `CompetitionRef`, `MatchRef`, `GameRef`, `TeamRef`, and
+Examples include `LeagueRef`, `SeriesRef`, `TournamentRef`, `MatchRef`, `GameRef`, `TeamRef`, and
 `PlayerRef`. A valid reference identifies an entity even when no detailed
 artifact is currently available.
 
@@ -94,7 +96,7 @@ below the artifact boundary. Canonical Dota/Valve-native IDs may remain in an
 artifact when they express domain identity. Artifact sections are data views,
 not reasons to create a specialized tool for every user question.
 
-## GameSummaryArtifact schema version 4
+## GameSummaryArtifact schema versions 4 and 5
 
 ### Purpose
 
@@ -326,7 +328,7 @@ entries so both neutral source positions remain observable when one is empty.
 It also permits ID-only ability upgrades to retain source IDs and order with
 `level` and `time_seconds` set to `null` when that metadata is unavailable.
 
-Version 4 is the current production schema. It preserves the version 3 shape
+Version 4 is a retained readable schema. It preserves the version 3 shape
 while evolving catalog-backed hero, item, and ability identity to expose native
 IDs plus available `name_en` and `name_zh` facts. A catalog miss preserves the
 native ID and leaves both localized names `null`; this is canonical localized
@@ -339,6 +341,20 @@ remain part of the artifact quality contract.
 > `fetched_at`, provenance, coverage, completeness, or known-missing metadata.
 > These remain target artifact-quality contracts for a later explicit
 > schema/storage contract.
+
+Version 5 is the current production schema. It preserves V4 game facts and adds
+already-known readable League, Series, Tournament, Match, and game-position
+context. It excludes PandaScore IDs and DotaMind navigation refs. The canonical
+esports hierarchy is `League -> Series -> Tournament -> Match -> Game`; it is a
+DotaMind domain contract, not a PandaScore DTO schema.
+
+## Artifact corpus scope
+
+`ArtifactScopeRef` is an opaque generic corpus locator. A successful artifact
+write may register its complete `ArtifactRef` under already-known canonical
+navigation refs. Scoped `artifact.grep` searches retained refs only, skips
+expired members, returns `coverage = materialized_only`, and never fetches,
+produces, or infers membership.
 
 ## Artifact lifecycle
 
