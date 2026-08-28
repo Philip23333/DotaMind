@@ -19,7 +19,7 @@ from app.application.postgres_chat_repository import PostgresChatRepository
 from app.vnext.agent.events import AgentCancelled, AgentCompleted, AgentFailed, TextDelta
 from app.vnext.agent.runtime import AgentRuntime
 from app.vnext.agent.trace import AgentTraceCollector
-from app.vnext.artifacts import ArtifactNotFoundError, ArtifactStore
+from app.vnext.artifacts import ArtifactNotFoundError, ArtifactRef, ArtifactStore
 from app.vnext.llm.protocol import FinalMessage, Message
 
 from .context import ConversationContextBuilder
@@ -246,9 +246,13 @@ def _browser_hash(browser_id: str) -> str:
     return hashlib.sha256(browser_id.encode("utf-8")).hexdigest()
 
 
-def _artifact_refs(value: object):
-    from app.vnext.artifacts import ArtifactRef
+def _artifact_refs(trace: object) -> list[ArtifactRef]:
+    """Extract references from executed tool calls and results only.
 
+    Trace tool schemas and model requests can contain illustrative ArtifactRef
+    JSON Schema examples. Those examples are not evidence that this run used an
+    artifact and must never affect a downloaded bundle.
+    """
     found: dict[str, ArtifactRef] = {}
 
     def visit(item: object) -> None:
@@ -265,7 +269,27 @@ def _artifact_refs(value: object):
             for child in item:
                 visit(child)
 
-    visit(value)
+    if not isinstance(trace, dict):
+        return []
+    steps = trace.get("steps")
+    if not isinstance(steps, list):
+        return []
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        response = step.get("model_response")
+        message = response.get("message") if isinstance(response, dict) else None
+        tool_calls = message.get("tool_calls") if isinstance(message, dict) else None
+        if isinstance(tool_calls, list):
+            for call in tool_calls:
+                if isinstance(call, dict):
+                    visit(call.get("arguments"))
+        results = step.get("tool_results")
+        if isinstance(results, list):
+            for item in results:
+                result = item.get("result") if isinstance(item, dict) else None
+                if isinstance(result, dict):
+                    visit(result.get("content"))
     return list(found.values())
 
 

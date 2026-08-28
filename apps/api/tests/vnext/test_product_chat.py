@@ -5,13 +5,15 @@ from uuid import uuid4
 
 from app.agentic.conversation.models import DialogueTurn
 from app.application.chat_repository import ChatDialogueTurnResult
-from app.vnext.agent.events import AgentCompleted, AgentFailed, TextDelta
+from app.vnext.agent.events import AgentCancelled, AgentCompleted, AgentFailed, TextDelta
+from app.vnext.artifacts import ArtifactRef
 from app.vnext.llm.protocol import FinalMessage, UserMessage
 from app.vnext.product.chat import (
     ProductChatCompleted,
     ProductChatDelta,
     ProductChatError,
     VNextChatService,
+    _artifact_refs,
 )
 from app.vnext.product.context import ConversationContextBuilder
 from app.vnext.product.presentation import ProductVisualEntity
@@ -50,7 +52,7 @@ class _Runtime:
         self.events = events
         self.messages = None
 
-    async def run_stream(self, messages):
+    async def run_stream(self, messages, *, trace_collector=None):
         self.messages = messages
         for event in self.events:
             yield event
@@ -73,6 +75,17 @@ class _VisualEntityEnricher:
     def match(self, text: str) -> list[ProductVisualEntity]:
         self.received.append(text)
         return self.entities
+
+
+class _TraceStore:
+    def __init__(self, *, fail: bool = False) -> None:
+        self.fail = fail
+        self.saved = []
+
+    async def put(self, trace) -> None:
+        if self.fail:
+            raise OSError("unavailable")
+        self.saved.append(trace)
 
 
 def _collect(service: VNextChatService, **kwargs):
@@ -144,6 +157,77 @@ def test_product_chat_failure_does_not_create_a_dialogue_turn() -> None:
     assert repository.appended == []
 
 
+def test_product_chat_persists_only_failed_runs_and_preserves_original_error_on_store_failure() -> (
+    None
+):
+    browser_id = str(uuid4())
+    trace_store = _TraceStore()
+    service = VNextChatService(  # type: ignore[arg-type]
+        _Repository(),
+        _Runtime(
+            [AgentFailed(duration=0.1, error_code="max_steps_exceeded", error_message="failed")]
+        ),
+        ConversationContextBuilder(),
+        _VisualEntityEnricher(),
+        trace_store=trace_store,
+    )
+
+    events = _collect(
+        service,
+        browser_id=browser_id,
+        session_id=uuid4(),
+        request_id=uuid4(),
+        query="query",
+    )
+
+    assert events[0].trace is not None
+    assert len(trace_store.saved) == 1
+    assert trace_store.saved[0].browser_id_hash
+
+    unavailable = VNextChatService(  # type: ignore[arg-type]
+        _Repository(),
+        _Runtime(
+            [AgentFailed(duration=0.1, error_code="max_steps_exceeded", error_message="failed")]
+        ),
+        ConversationContextBuilder(),
+        _VisualEntityEnricher(),
+        trace_store=_TraceStore(fail=True),
+    )
+    unavailable_events = _collect(
+        unavailable,
+        browser_id=browser_id,
+        session_id=uuid4(),
+        request_id=uuid4(),
+        query="query",
+    )
+    assert unavailable_events == [
+        ProductChatError(error_code="max_steps_exceeded", reason="failed")
+    ]
+
+
+def test_product_chat_does_not_save_success_or_cancellation_traces() -> None:
+    for event in (
+        AgentCompleted(duration=0.1, final=FinalMessage(content="done")),
+        AgentCancelled(error_code="agent_cancelled", error_message="cancelled"),
+    ):
+        trace_store = _TraceStore()
+        service = VNextChatService(  # type: ignore[arg-type]
+            _Repository(),
+            _Runtime([event]),
+            ConversationContextBuilder(),
+            _VisualEntityEnricher(),
+            trace_store=trace_store,
+        )
+        _collect(
+            service,
+            browser_id=str(uuid4()),
+            session_id=uuid4(),
+            request_id=uuid4(),
+            query="query",
+        )
+        assert trace_store.saved == []
+
+
 def test_product_chat_replays_without_running_the_agent() -> None:
     replay = ChatDialogueTurnResult(
         status="replay",
@@ -178,9 +262,7 @@ def test_product_chat_replays_without_running_the_agent() -> None:
 
 def test_product_chat_uses_the_injected_context_builder() -> None:
     repository = _Repository()
-    runtime = _Runtime(
-        [AgentCompleted(duration=0.1, final=FinalMessage(content="answer"))]
-    )
+    runtime = _Runtime([AgentCompleted(duration=0.1, final=FinalMessage(content="answer"))])
     context_builder = _ContextBuilder()
     service = VNextChatService(  # type: ignore[arg-type]
         repository,
@@ -211,9 +293,7 @@ def test_product_chat_bounds_runtime_history_without_mutating_durable_dialogue()
         )
         for index in range(1, 21)
     ]
-    runtime = _Runtime(
-        [AgentCompleted(duration=0.1, final=FinalMessage(content="answer"))]
-    )
+    runtime = _Runtime([AgentCompleted(duration=0.1, final=FinalMessage(content="answer"))])
     service = VNextChatService(  # type: ignore[arg-type]
         repository,
         runtime,
@@ -314,3 +394,28 @@ def test_product_chat_replay_returns_persisted_visual_metadata() -> None:
 
     assert events[-1].catalog_visual_entities == [ProductVisualEntity.model_validate(entity)]
     assert visual_entity_enricher.received == []
+
+
+def test_trace_artifact_refs_exclude_schema_examples_and_keep_execution_evidence() -> None:
+    schema_example = {
+        "id": "game_summary:4:8123456789",
+        "artifact_type": "game_summary",
+        "schema_version": "4",
+    }
+    used_ref = {
+        "id": "game_summary:4:8960577698",
+        "artifact_type": "game_summary",
+        "schema_version": "4",
+    }
+    trace = {
+        "tool_schemas": [{"examples": [schema_example]}],
+        "steps": [
+            {
+                "model_request": {"tools": [{"examples": [schema_example]}]},
+                "model_response": {"message": {"tool_calls": [{"arguments": {"ref": used_ref}}]}},
+                "tool_results": [{"result": {"content": {"refs": [used_ref]}}}],
+            }
+        ],
+    }
+
+    assert _artifact_refs(trace) == [ArtifactRef.model_validate(used_ref)]

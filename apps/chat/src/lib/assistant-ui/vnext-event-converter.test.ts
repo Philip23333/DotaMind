@@ -103,4 +103,29 @@ describe("vNext event converter", () => {
     ]);
     expect(markUnreadMock).not.toHaveBeenCalled();
   });
+
+  it("preserves a failed-run trace reference in assistant metadata", async () => {
+    streamChatMessageMock.mockImplementation(async function* () {
+      yield {
+        type: "error",
+        error_code: "max_tool_calls_exceeded",
+        reason: "too many calls",
+        trace: { trace_id: "trace-1", expires_at: "2026-08-31T12:00:00Z" },
+      };
+    });
+
+    const results = [];
+    for await (const result of streamVNextChatMessage({
+      browserId: "browser-a",
+      sessionId: "session-a",
+      query: "question",
+      abortSignal: new AbortController().signal,
+    })) {
+      results.push(result);
+    }
+
+    expect(results[0]?.metadata?.custom).toEqual({
+      dotamind: { trace: { trace_id: "trace-1", expires_at: "2026-08-31T12:00:00Z" } },
+    });
+  });
 });
