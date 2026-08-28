@@ -1,6 +1,7 @@
 import type { ChatModelRunResult } from "@assistant-ui/react";
 
 import { streamChatMessage } from "@/lib/vnext-chat-api";
+import { decorateCatalogMentions } from "../dota-visuals";
 import { markDotaMindSessionUnread } from "./thread-unread";
 
 export async function* streamVNextChatMessage({
@@ -29,7 +30,9 @@ export async function* streamVNextChatMessage({
     }
     if (event.type === "completed") {
       markDotaMindSessionUnread(sessionId);
-      yield { content: [{ type: "text", text: event.content }] };
+      const finalText =
+        decorateCatalogMentions(event.content, event.catalog_visual_entities ?? []) ?? event.content;
+      yield { content: [{ type: "text", text: finalText }] };
       return;
     }
     yield { content: [{ type: "text", text: `本次请求未完成：${event.reason}` }] };

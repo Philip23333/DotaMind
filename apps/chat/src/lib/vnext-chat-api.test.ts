@@ -53,4 +53,63 @@ describe("vNext chat API", () => {
       }),
     );
   });
+
+  it("accepts only local catalog visual entities on completed events", async () => {
+    const fetchMock = vi.fn(async () =>
+      streamResponse([
+        '{"type":"completed","content":"不朽尸王","turn_index":1,"catalog_visual_entities":[{"kind":"hero","imagePath":"/api/v1/assets/dota/heroes/85.png","label":"不朽尸王","names":["不朽尸王","Undying"]}]}\n',
+      ]),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const events = [];
+    for await (const event of streamChatMessage({
+      browserId: "browser-a",
+      sessionId: "session-a",
+      requestId: "request-a",
+      query: "介绍不朽尸王",
+      signal: new AbortController().signal,
+    })) {
+      events.push(event);
+    }
+
+    expect(events).toEqual([
+      {
+        type: "completed",
+        content: "不朽尸王",
+        turn_index: 1,
+        catalog_visual_entities: [
+          {
+            kind: "hero",
+            imagePath: "/api/v1/assets/dota/heroes/85.png",
+            label: "不朽尸王",
+            names: ["不朽尸王", "Undying"],
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("rejects non-local catalog visual entity paths", async () => {
+    const fetchMock = vi.fn(async () =>
+      streamResponse([
+        '{"type":"completed","content":"answer","turn_index":1,"catalog_visual_entities":[{"kind":"hero","imagePath":"https://example.test/hero.png","label":"hero","names":["hero"]}]}\n',
+      ]),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const consume = async () => {
+      for await (const _event of streamChatMessage({
+        browserId: "browser-a",
+        sessionId: "session-a",
+        requestId: "request-a",
+        query: "question",
+        signal: new AbortController().signal,
+      })) {
+        // Consume the stream so parser validation is reached.
+      }
+    };
+
+    await expect(consume()).rejects.toThrow("无效实体展示数据");
+  });
 });

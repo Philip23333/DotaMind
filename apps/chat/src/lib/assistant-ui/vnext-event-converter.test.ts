@@ -47,6 +47,42 @@ describe("vNext event converter", () => {
     expect(markUnreadMock).toHaveBeenCalledWith("session-a");
   });
 
+  it("decorates only the completed final text with persisted catalog entities", async () => {
+    streamChatMessageMock.mockImplementation(async function* () {
+      yield { type: "delta", text: "不朽" };
+      yield { type: "delta", text: "尸王" };
+      yield {
+        type: "completed",
+        content: "不朽尸王（Undying）是一名英雄。",
+        turn_index: 1,
+        catalog_visual_entities: [
+          {
+            kind: "hero",
+            imagePath: "/api/v1/assets/dota/heroes/85.png",
+            label: "不朽尸王",
+            names: ["不朽尸王", "Undying"],
+          },
+        ],
+      };
+    });
+
+    const results = [];
+    for await (const result of streamVNextChatMessage({
+      browserId: "browser-a",
+      sessionId: "session-a",
+      query: "介绍不朽尸王",
+      abortSignal: new AbortController().signal,
+    })) {
+      results.push(result);
+    }
+
+    expect(results.map(text)).toEqual([
+      "不朽",
+      "不朽尸王",
+      "![不朽尸王](http://localhost:8001/api/v1/assets/dota/heroes/85.png#dota-size=md)不朽尸王（Undying）是一名英雄。",
+    ]);
+  });
+
   it("renders an error event without marking the thread completed", async () => {
     streamChatMessageMock.mockImplementation(async function* () {
       yield { type: "error", error_code: "max_steps_exceeded", reason: "too many steps" };

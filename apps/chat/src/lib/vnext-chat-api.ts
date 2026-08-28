@@ -1,9 +1,15 @@
 import { createUuidV4 } from "./uuid";
 import { getApiUrl } from "./dotamind-api";
+import type { CatalogVisualEntity } from "./dota-visuals";
 
 export type VNextChatEvent =
   | { type: "delta"; text: string }
-  | { type: "completed"; content: string; turn_index: number }
+  | {
+      type: "completed";
+      content: string;
+      turn_index: number;
+      catalog_visual_entities?: CatalogVisualEntity[];
+    }
   | { type: "error"; error_code: string; reason: string };
 
 function browserHeaders(browserId: string): HeadersInit {
@@ -36,7 +42,16 @@ function parseEvent(line: string): VNextChatEvent {
     typeof event.content === "string" &&
     typeof event.turn_index === "number"
   ) {
-    return { type: "completed", content: event.content, turn_index: event.turn_index };
+    const entities = event.catalog_visual_entities;
+    if (entities !== undefined && !isCatalogVisualEntityList(entities)) {
+      throw new Error("DotaMind 流式响应包含无效实体展示数据。");
+    }
+    return {
+      type: "completed",
+      content: event.content,
+      turn_index: event.turn_index,
+      ...(entities === undefined ? {} : { catalog_visual_entities: entities }),
+    };
   }
   if (
     event.type === "error" &&
@@ -46,6 +61,28 @@ function parseEvent(line: string): VNextChatEvent {
     return { type: "error", error_code: event.error_code, reason: event.reason };
   }
   throw new Error("DotaMind 流式响应包含未知事件。");
+}
+
+function isCatalogVisualEntityList(value: unknown): value is CatalogVisualEntity[] {
+  return Array.isArray(value) && value.every(isCatalogVisualEntity);
+}
+
+function isCatalogVisualEntity(value: unknown): value is CatalogVisualEntity {
+  if (!value || typeof value !== "object") return false;
+  const entity = value as Record<string, unknown>;
+  const kind = entity.kind;
+  const imagePath = entity.imagePath;
+  return (
+    (kind === "hero" || kind === "item" || kind === "ability" || kind === "team") &&
+    typeof imagePath === "string" &&
+    imagePath.startsWith("/api/v1/assets/") &&
+    /\.(?:png|jpe?g|webp)$/i.test(imagePath) &&
+    typeof entity.label === "string" &&
+    entity.label.trim().length > 0 &&
+    Array.isArray(entity.names) &&
+    entity.names.length > 0 &&
+    entity.names.every((name) => typeof name === "string" && name.trim().length > 0)
+  );
 }
 
 export async function* streamChatMessage({
