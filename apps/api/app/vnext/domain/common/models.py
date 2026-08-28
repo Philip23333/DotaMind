@@ -52,24 +52,38 @@ class _OpaqueRef(DomainModel):
         return self.value
 
 
-class CompetitionRef(_OpaqueRef):
-    """Opaque, runtime-scoped reference to a normalized competition."""
+class LeagueRef(_OpaqueRef):
+    """Opaque, runtime-scoped reference to a normalized esports league."""
 
     model_config = ConfigDict(
         json_schema_extra={
             "description": (
-                "Competition reference object. Pass the complete object returned by another "
+                "League reference object. Pass the complete object returned by another "
                 "tool. Do not pass its value as a bare string or JSON-encode this object "
                 "into a string."
             ),
-            "examples": [{"value": "competition:0123456789abcdef01234567"}],
+            "examples": [{"value": "league:0123456789abcdef01234567"}],
         }
     )
 
     value: str = Field(
-        pattern=r"^competition:[0-9a-f]{24}$",
-        description="Opaque competition reference value inside this reference object.",
+        pattern=r"^league:[0-9a-f]{24}$",
+        description="Opaque league reference value inside this reference object.",
     )
+
+
+class SeriesRef(_OpaqueRef):
+    value: str = Field(pattern=r"^series:[0-9a-f]{24}$")
+
+
+class TournamentRef(_OpaqueRef):
+    value: str = Field(pattern=r"^tournament:[0-9a-f]{24}$")
+
+
+class CompetitionRef(_OpaqueRef):
+    """Legacy ref retained until the Series capability replacement lands."""
+
+    value: str = Field(pattern=r"^competition:[0-9a-f]{24}$")
 
 
 class MatchRef(_OpaqueRef):
@@ -165,7 +179,8 @@ def normalize_text(value: str) -> str:
 
 
 def hash_ref(
-    kind: Literal["competition", "match", "game", "team", "player"], *parts: object
+    kind: Literal["league", "series", "tournament", "match", "game", "team", "player"],
+    *parts: object,
 ) -> str:
     """Create a deterministic opaque reference without embedding provider IDs."""
 
@@ -177,7 +192,6 @@ def hash_ref(
 
 
 __all__ = [
-    "CompetitionRef",
     "DomainModel",
     "Freshness",
     "GameRef",
@@ -187,6 +201,10 @@ __all__ = [
     "Provenance",
     "Team",
     "TeamRef",
+    "LeagueRef",
+    "CompetitionRef",
+    "SeriesRef",
+    "TournamentRef",
     "hash_ref",
     "normalize_text",
 ]

@@ -11,10 +11,13 @@ from app.vnext.domain.common.models import (
     CompetitionRef,
     DomainModel,
     GameRef,
+    LeagueRef,
     MatchRef,
     Provenance,
+    SeriesRef,
     Team,
     TeamRef,
+    TournamentRef,
 )
 
 MatchStatus = Literal[
@@ -40,10 +43,31 @@ ResolutionStatus = Literal[
 ]
 
 
+class LeagueSummary(DomainModel):
+    ref: LeagueRef
+    name: str = Field(min_length=1)
+
+
 class CompetitionSummary(DomainModel):
+    """Legacy compatibility DTO pending replacement by Series capability."""
+
     ref: CompetitionRef
     name: str = Field(min_length=1)
     year: int | None = None
+
+
+class SeriesSummary(DomainModel):
+    ref: SeriesRef
+    name: str = Field(min_length=1)
+    year: int | None = None
+    season: str | None = None
+    league: LeagueSummary | None = None
+
+
+class TournamentSummary(DomainModel):
+    ref: TournamentRef
+    name: str | None = None
+    series: SeriesSummary | None = None
 
 
 class TeamScore(DomainModel):
@@ -59,6 +83,9 @@ class MatchResult(DomainModel):
 class MatchSummary(DomainModel):
     ref: MatchRef
     name: str = Field(min_length=1)
+    league: LeagueSummary | None = None
+    series: SeriesSummary | None = None
+    tournament: TournamentSummary | None = None
     competition: CompetitionSummary | None = None
     teams: list[Team] = Field(default_factory=list)
     scheduled_at: datetime | None = None

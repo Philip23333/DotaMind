@@ -173,6 +173,14 @@ def test_panda_year_only_series_uses_league_name_without_exposing_provider_ids()
     assert competition is not None
     assert competition.name == "The International"
     assert competition.year == 2026
+    assert normalized.summary.league is not None
+    assert normalized.summary.league.name == "The International"
+    assert normalized.summary.series is not None
+    assert normalized.summary.series.name == "The International"
+    assert normalized.summary.series.year == 2026
+    assert normalized.summary.tournament is not None
+    assert normalized.summary.tournament.name == "Playoffs"
+    assert normalized.games[0].public.position == 1
 
     serialized = normalized.summary.model_dump_json()
     for provider_id in (
