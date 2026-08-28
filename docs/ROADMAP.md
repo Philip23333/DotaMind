@@ -81,6 +81,10 @@ Implemented deliverables:
 
 Artifact quality metadata persistence is not part of Commit 3.5.
 
+Redis-backed ArtifactStore is now implemented as a later retention boundary:
+process-restart persistence with deterministic versioned keys and a seven-day
+TTL, without adding a producer cache-hit or freshness policy.
+
 Planned / pending deliverables:
 
 - Reduced default tool context through bounded retrieval
@@ -185,6 +189,9 @@ Implemented deliverables:
   transcript and vNext model input
 - Bounded recent, complete-turn context: at most 12 persisted turns and 40,000
   historical text characters, while retaining the complete durable transcript
+- Failure-trace observability: browser-owned failed-run traces retained in Redis
+  for 72 hours, with expiring ZIP downloads that include application-visible
+  execution evidence and still-available referenced artifacts.
 
 Planned / pending deliverables:
 

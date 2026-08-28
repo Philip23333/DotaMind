@@ -195,6 +195,12 @@ Commit 3.5 freezes these production contracts:
 - `fetched_at`, provenance, and coverage are not persisted in the artifact
   store in this commit.
 
+A later Redis `ArtifactStore` adds process-restart persistence and a seven-day
+retention TTL when `DOTAMIND_REDIS_URL` is configured. This is retention, not a
+freshness policy: every `produce()` call still fetches, builds, stores, and
+refreshes the TTL; `get()` and `exists()` never extend it. Without Redis the
+same asynchronous store contract uses process-lifetime memory storage.
+
 ## Artifact Retrieval Capability
 
 Commit 4 implements the retrieval boundary over stored artifacts:
@@ -297,8 +303,13 @@ chat sessions, or transcript persistence. Tool calls, tool results, runtime
 trace events, and artifacts are execution data and are not transcript rows.
 Current-run ToolCall and ToolResult messages remain intact inside one runtime
 execution; historical ToolCall and ToolResult messages are not restored across
-product turns. The in-memory artifact store is shared for the process lifetime,
-but it is not yet durable across a server restart.
+product turns. PostgreSQL retains complete dialogue. When Redis is configured,
+it retains two separate ephemeral-durable contracts: canonical artifacts for
+seven days and browser-owned failed AgentRun traces for 72 hours. Artifacts are
+cross-run data; traces are run-scoped debugging evidence. The runtime creates a
+trace but does not own Redis persistence. Only failed runs are retained;
+cancellation and successful runs are discarded. Neither artifacts nor traces
+become transcript rows or historical model context.
 
 Compaction, durable AgentRuns, reconnect, and event replay remain later product
 reliability work. Redis is optional and must be justified by a demonstrated

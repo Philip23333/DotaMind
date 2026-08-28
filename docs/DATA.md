@@ -37,7 +37,7 @@ recorded game data; the two `PlayerRef` contracts must not be conflated.
 | Primary question | What is this? | What data has been collected about this? |
 | Purpose | Communication between domain services and tools | Reusable storage and bounded retrieval |
 | Typical size | Small and bounded | Potentially large, sectioned, and quality-tagged |
-| Intended lifetime | Request or operation scope | Reusable cache or store scope; backend is a separate decision |
+| Intended lifetime | Request or operation scope | Seven-day Redis retention when configured; otherwise process lifetime |
 | Model context | Usually suitable as a bounded tool view | Not entered by default; exposed through summaries, refs, and bounded sections |
 | Contents | Identity, normalized facts, resolution state | Canonical facts, sections, provenance, coverage, completeness, and missing data |
 
@@ -341,6 +341,12 @@ remain part of the artifact quality contract.
 > schema/storage contract.
 
 ## Artifact lifecycle
+
+`GameSummaryArtifact` retains its deterministic `ArtifactRef` and schema shape.
+With `DOTAMIND_REDIS_URL`, `RedisArtifactStore` uses a versioned key and a fixed
+seven-day TTL. `put()` sets or refreshes TTL; `get()` and `exists()` do not.
+Expiration means the artifact is unavailable, not that its canonical identity is
+invalid; it may be produced again from its canonical game identity.
 
 The target data lifecycle is:
 
