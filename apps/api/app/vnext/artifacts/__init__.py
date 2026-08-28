@@ -3,6 +3,7 @@
 from .game_summary import GameSummaryArtifact
 from .game_summary_producer import GameSummaryArtifactProducer
 from .game_summary_v4 import GameSummaryArtifactV4
+from .grep import ArtifactGrepMatch, ArtifactGrepper, ArtifactGrepResult
 from .memory import MemoryArtifactStore
 from .models import ArtifactRef, game_summary_artifact_ref
 from .protocol import Artifact
@@ -26,6 +27,9 @@ __all__ = [
     "Artifact",
     "ArtifactNotFoundError",
     "ArtifactRef",
+    "ArtifactGrepMatch",
+    "ArtifactGrepResult",
+    "ArtifactGrepper",
     "ArtifactPathNotFoundError",
     "ArtifactReadResult",
     "ArtifactReadValidationError",

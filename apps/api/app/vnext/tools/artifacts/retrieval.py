@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from app.vnext.artifacts import (
+    ArtifactGrepper,
+    ArtifactGrepResult,
     ArtifactReader,
     ArtifactReadResult,
     ArtifactSearcher,
@@ -26,7 +28,8 @@ class ArtifactSearchInput(DomainModel):
 class ArtifactReadInput(DomainModel):
     ref: ArtifactRef = Field(
         description=(
-            "Exact ArtifactRef object returned by artifact.search. Pass the whole object "
+            "Exact ArtifactRef object returned by artifact.search or artifact.grep. "
+            "Pass the whole object "
             "unchanged; do not pass its id as a bare string or JSON-encode the object."
         )
     )
@@ -35,10 +38,35 @@ class ArtifactReadInput(DomainModel):
     limit: int = Field(default=50, ge=1, le=100)
 
 
+class ArtifactGrepInput(DomainModel):
+    pattern: str = Field(
+        min_length=1,
+        max_length=ArtifactGrepper.MAX_PATTERN_LENGTH,
+        description="Case-insensitive literal text to find in canonical artifact scalar values.",
+    )
+    artifact_types: list[str] | None = Field(
+        default=None,
+        description="Optional generic artifact-type restriction; omit to search the whole corpus.",
+    )
+    limit: int = Field(
+        default=ArtifactGrepper.DEFAULT_LIMIT,
+        ge=1,
+        le=ArtifactGrepper.MAX_LIMIT,
+    )
+
+    @field_validator("pattern")
+    @classmethod
+    def _reject_blank_pattern(cls, value: str) -> str:
+        if value.isspace():
+            raise ValueError("pattern must not be blank")
+        return value
+
+
 def register_artifact_tools(
     registry: ToolRegistry,
     searcher: ArtifactSearcher,
     reader: ArtifactReader,
+    grepper: ArtifactGrepper,
 ) -> None:
     async def search(args: ArtifactSearchInput) -> ArtifactSearchResult:
         return await searcher.search(args.artifact_type, args.valve_match_ids)
@@ -53,6 +81,9 @@ def register_artifact_tools(
             pagination_requested=bool({"offset", "limit"} & fields_set),
         )
 
+    async def grep(args: ArtifactGrepInput) -> ArtifactGrepResult:
+        return await grepper.grep(args.pattern, args.artifact_types, args.limit)
+
     registry.register(
         ToolDefinition(
             name="artifact.search",
@@ -64,6 +95,20 @@ def register_artifact_tools(
             input_model=ArtifactSearchInput,
             output_model=ArtifactSearchResult,
             handler=search,
+            parallel_safe=True,
+        )
+    )
+    registry.register(
+        ToolDefinition(
+            name="artifact.grep",
+            description=(
+                "Find case-insensitive literal text in stored canonical artifact content. "
+                "Returns bounded ArtifactRef and structural-path observations without fetching "
+                "or producing artifacts."
+            ),
+            input_model=ArtifactGrepInput,
+            output_model=ArtifactGrepResult,
+            handler=grep,
             parallel_safe=True,
         )
     )
@@ -83,4 +128,9 @@ def register_artifact_tools(
     )
 
 
-__all__ = ["ArtifactReadInput", "ArtifactSearchInput", "register_artifact_tools"]
+__all__ = [
+    "ArtifactGrepInput",
+    "ArtifactReadInput",
+    "ArtifactSearchInput",
+    "register_artifact_tools",
+]

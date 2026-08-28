@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from app.vnext.artifacts import (
+    ArtifactGrepper,
     ArtifactReader,
     ArtifactSearcher,
     GameSummaryArtifactProducer,
@@ -454,6 +455,7 @@ def fixture_vnext_services(
     )
     searcher = ArtifactSearcher(store)
     reader = ArtifactReader(store)
+    grepper = ArtifactGrepper(store)
     team_service = TeamService(panda, match_service.team_player_index)
     player_service = PlayerService(panda, match_service.team_player_index)
     return VNextServices(
@@ -467,4 +469,5 @@ def fixture_vnext_services(
         producer,
         searcher,
         reader,
+        grepper,
     )

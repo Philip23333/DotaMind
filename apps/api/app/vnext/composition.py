@@ -15,6 +15,7 @@ from dotenv import dotenv_values
 from app.integrations.valve.catalog_repository import load_default_catalog_repository
 from app.vnext.agent.runtime import AgentRuntime
 from app.vnext.artifacts import (
+    ArtifactGrepper,
     ArtifactReader,
     ArtifactSearcher,
     ArtifactStore,
@@ -149,6 +150,7 @@ class VNextServices:
     game_summary_producer: GameSummaryArtifactProducer
     artifact_searcher: ArtifactSearcher
     artifact_reader: ArtifactReader
+    artifact_grepper: ArtifactGrepper
 
     async def aclose(self) -> None:
         await self.pandascore.aclose()
@@ -228,6 +230,7 @@ def build_vnext_services(
     )
     artifact_searcher = ArtifactSearcher(store)
     artifact_reader = ArtifactReader(store)
+    artifact_grepper = ArtifactGrepper(store)
     return VNextServices(
         pandascore=panda_adapter,
         opendota=open_adapter,
@@ -239,6 +242,7 @@ def build_vnext_services(
         game_summary_producer=producer,
         artifact_searcher=artifact_searcher,
         artifact_reader=artifact_reader,
+        artifact_grepper=artifact_grepper,
     )
 
 
@@ -261,6 +265,7 @@ def build_vnext_registry(
         registry,
         resolved_services.artifact_searcher,
         resolved_services.artifact_reader,
+        resolved_services.artifact_grepper,
     )
     return registry
 

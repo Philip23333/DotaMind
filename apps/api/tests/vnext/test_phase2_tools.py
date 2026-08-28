@@ -14,7 +14,7 @@ from app.vnext.llm.protocol import ToolCall
 from tests.vnext.phase2_support import fixture_services, fixture_vnext_services
 
 
-def test_composition_is_lazy_and_registers_the_ten_vnext_tools() -> None:
+def test_composition_is_lazy_and_registers_the_eleven_vnext_tools() -> None:
     services = build_vnext_services(VNextSettings(pandascore_token="test-token"))
     assert services.pandascore._client is None  # type: ignore[attr-defined]
     assert services.opendota._client is None  # type: ignore[attr-defined]
@@ -31,6 +31,7 @@ def test_composition_is_lazy_and_registers_the_ten_vnext_tools() -> None:
         "players.search",
         "players.get_detail",
         "artifact.search",
+        "artifact.grep",
         "artifact.read",
     ]
     assert registry.get("matches.get_detail").read_only is False
@@ -62,6 +63,7 @@ def test_vnext_runtime_uses_the_shared_llm_configuration() -> None:
         "players.search",
         "players.get_detail",
         "artifact.search",
+        "artifact.grep",
         "artifact.read",
     ]
 
