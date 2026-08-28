@@ -1,32 +1,32 @@
 # Roadmap
 
-## Phase 0 — Legacy freeze and documentation reset
-
-Status: complete for documentation.
-
-Goal: stop Legacy V3 architecture from constraining vNext design.
-
-Deliverables:
-
-- Git tag pre-vnext-rewrite freezes the Legacy baseline.
-- The active documentation tree contains only vNext core documents and
-  high-cost reference facts.
-- AGENTS.md no longer requires Legacy V3 planning contracts.
-
-Non-goal: claiming that Legacy runtime code has already migrated.
-
-## Phase 1 — Minimal agent runtime
+## Phase 0 — Clean-slate documentation
 
 Status: complete.
 
-Goal: replace Legacy orchestration with a thin model-to-tool loop.
+Goal: replace the Legacy V3 design tree with a small vNext documentation set.
 
 Deliverables:
 
-- Provider-neutral model message protocol
-- Tool registration, schema validation, and dispatch
-- Step and tool-call budgets, request deadlines, cancellation, basic trace, and
-  streaming
+- Product, architecture, tools, data, evaluation, and roadmap documents
+- Retained cross-source match mapping and provider/catalog references
+- Collaboration guidance focused on incremental architecture decisions
+
+Acceptance: the vNext documentation is internally consistent and no active
+roadmap depends on deleted Legacy design documents.
+
+## Phase 1 — Native Agent Runtime
+
+Status: complete.
+
+Goal: establish the minimal provider-neutral native tool-calling loop.
+
+Deliverables:
+
+- Provider-neutral model protocol
+- Tool registry and validated dispatch
+- Maximum steps/tool calls, deadlines, cancellation, and stable runtime errors
+- Native text streaming
 - In-memory, session-neutral execution
 
 Acceptance: multi-turn native tool calls work without ExecutionPlan,
@@ -87,7 +87,28 @@ TTL, without adding a producer cache-hit or freshness policy.
 
 Planned / pending deliverables:
 
-- Reduced default tool context through bounded retrieval
+- Generic artifact corpus breadth search over canonical serialized artifact
+  content, returning stable `ArtifactRef` plus structural locators and bounded
+  previews rather than artifact-type-specific search views.
+- A separate artifact corpus scope contract that constrains which artifacts are
+  searched without silently fetching providers or materializing missing
+  artifacts inside search.
+- Reduced default tool context through bounded retrieval.
+
+The intended exploration model is breadth-to-depth and model-first:
+
+    generic corpus search
+      -> bounded matches + ArtifactRef + structural path
+      -> model chooses what matters
+      -> artifact.read
+      -> bounded detailed evidence
+
+Search is treated as an observation primitive, analogous to grep over a
+structured artifact corpus. It should not encode user scenarios such as
+player-plus-hero builds, tournament strategy, or one search projection per
+artifact type. New artifact types should become searchable through their
+canonical serialization; performance may later move from corpus scanning to a
+generic index without changing the model-facing contract.
 
 The Phase 2.x delivery order separates three responsibilities deliberately:
 Commit 3 constructs a canonical artifact, Commit 3.5 produces and stores it,
@@ -103,12 +124,16 @@ Non-goals:
 - Requiring a fixed retrieval sequence
 - Making Agent Runtime responsible for creating, storing, refreshing, expiring,
   or otherwise owning artifact lifecycle
+- Creating programmer-authored discovery projections or search adapters for
+  each artifact type when generic canonical-content search is sufficient
+- Letting artifact search implicitly populate its corpus from providers
 
 Acceptance: the artifact production and retrieval contracts are implemented and
-evaluated with explicit bounds, coverage, missing-data behavior, and
-canonical serialized views. Commit 4 is complete when domain detail, stored
-canonical artifacts, and model-visible bounded retrieval work together without
-requiring a fixed workflow.
+evaluated with explicit bounds, coverage, missing-data behavior, and canonical
+serialized views. The next breadth-search increment is accepted only if the
+same search primitive can operate across future canonical artifact types
+without embedding GameSummary-specific business dimensions in its public
+contract.
 
 ## Phase 3 — Team, player, and catalog
 
