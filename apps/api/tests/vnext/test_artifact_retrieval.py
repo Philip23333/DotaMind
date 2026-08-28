@@ -10,6 +10,7 @@ from app.vnext.artifacts import (
     ArtifactPathNotFoundError,
     ArtifactReader,
     ArtifactReadValidationError,
+    ArtifactScopeRef,
     ArtifactSearcher,
     MemoryArtifactStore,
     game_summary_artifact_ref,
@@ -200,6 +201,11 @@ def test_registry_tool_chain_produces_searches_and_reads_one_artifact() -> None:
     assert read.content["value"]["valve_match_id"] == 40001
     assert read.content["offset"] is None
     assert opendota.construction_calls == [40001]
+    series_ref = search.content["candidates"][0]["series"]["ref"]["value"]
+    scoped_ref = asyncio.run(
+        anext(services.artifact_scope_store.iter_refs(ArtifactScopeRef(value=series_ref)))
+    )
+    assert scoped_ref == game_summary_artifact_ref(40001)
 
 
 def test_unresolved_games_do_not_trigger_artifact_production() -> None:

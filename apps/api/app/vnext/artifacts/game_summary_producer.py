@@ -12,6 +12,7 @@ from app.vnext.providers.opendota.adapter import (
 
 from .models import ArtifactRef, game_summary_artifact_ref
 from .protocol import Artifact
+from .scope import ArtifactScopeRef, ArtifactScopeStore
 from .store import ArtifactStore
 
 
@@ -33,17 +34,20 @@ class GameSummaryArtifactProducer:
         construction_adapter: OpenDotaGameConstructionAdapter,
         builder: _GameSummaryBuilder,
         store: ArtifactStore,
+        scope_store: ArtifactScopeStore | None = None,
     ) -> None:
         self._opendota = opendota
         self._construction_adapter = construction_adapter
         self._builder = builder
         self._store = store
+        self._scope_store = scope_store
 
     async def produce(
         self,
         valve_match_id: int,
         *,
         event_context: GameEventContext | None = None,
+        scope_refs: list[ArtifactScopeRef] | None = None,
     ) -> ArtifactRef:
         source = await self._opendota.get_game_construction_match(valve_match_id)
         context = self._construction_adapter.to_construction_context(source.item)
@@ -52,6 +56,9 @@ class GameSummaryArtifactProducer:
         artifact = self._builder.build(context)
         ref = self._artifact_ref(artifact)
         await self._store.put(ref, artifact)
+        if self._scope_store is not None:
+            for scope in scope_refs or []:
+                await self._scope_store.add(scope, ref)
         return ref
 
     @staticmethod

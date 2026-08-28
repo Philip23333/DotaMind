@@ -20,6 +20,7 @@ from app.vnext.artifacts import (
     ArtifactSearcher,
     ArtifactStore,
     GameSummaryArtifactProducer,
+    MemoryArtifactScopeStore,
     MemoryArtifactStore,
 )
 from app.vnext.artifacts.game_summary_builder_v5 import GameSummaryBuilderV5
@@ -151,6 +152,7 @@ class VNextServices:
     artifact_searcher: ArtifactSearcher
     artifact_reader: ArtifactReader
     artifact_grepper: ArtifactGrepper
+    artifact_scope_store: MemoryArtifactScopeStore | None = None
 
     async def aclose(self) -> None:
         await self.pandascore.aclose()
@@ -222,11 +224,13 @@ def build_vnext_services(
     )
     series_service.set_match_cache(match_service.remember_fixture)
     store = artifact_store if artifact_store is not None else MemoryArtifactStore()
+    scope_store = MemoryArtifactScopeStore()
     producer = GameSummaryArtifactProducer(
         opendota=open_adapter,
         construction_adapter=OpenDotaGameConstructionAdapter(),
         builder=_build_game_summary_builder(),
         store=store,
+        scope_store=scope_store,
     )
     artifact_searcher = ArtifactSearcher(store)
     artifact_reader = ArtifactReader(store)
@@ -243,6 +247,7 @@ def build_vnext_services(
         artifact_searcher=artifact_searcher,
         artifact_reader=artifact_reader,
         artifact_grepper=artifact_grepper,
+        artifact_scope_store=scope_store,
     )
 
 

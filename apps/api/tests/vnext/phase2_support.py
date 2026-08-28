@@ -10,6 +10,7 @@ from app.vnext.artifacts import (
     ArtifactReader,
     ArtifactSearcher,
     GameSummaryArtifactProducer,
+    MemoryArtifactScopeStore,
     MemoryArtifactStore,
 )
 from app.vnext.artifacts.game_summary_builder_v5 import GameSummaryBuilderV5
@@ -442,6 +443,7 @@ def fixture_vnext_services(
     builder: GameSummaryBuilderV5 | None = None,
 ) -> VNextServices:
     store = MemoryArtifactStore()
+    scope_store = MemoryArtifactScopeStore()
     producer = GameSummaryArtifactProducer(
         opendota=opendota,
         construction_adapter=OpenDotaGameConstructionAdapter(),
@@ -452,6 +454,7 @@ def fixture_vnext_services(
             ability_resolver=AbilityResolverV4({}),
         ),
         store=store,
+        scope_store=scope_store,
     )
     searcher = ArtifactSearcher(store)
     reader = ArtifactReader(store)
@@ -470,4 +473,5 @@ def fixture_vnext_services(
         searcher,
         reader,
         grepper,
+        scope_store,
     )

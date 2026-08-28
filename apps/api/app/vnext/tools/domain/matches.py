@@ -6,7 +6,7 @@ from typing import Literal
 
 from pydantic import Field, model_validator
 
-from app.vnext.artifacts import GameSummaryArtifactProducer
+from app.vnext.artifacts import ArtifactScopeRef, GameSummaryArtifactProducer
 from app.vnext.domain.common.models import DomainModel, GameRef, MatchRef, SeriesRef
 from app.vnext.domain.construction import GameEventContext
 from app.vnext.domain.matches.models import MatchDetail, MatchSearchResult
@@ -76,6 +76,7 @@ def register_match_tools(
                 await game_summary_producer.produce(
                     game.valve_match_id,
                     event_context=_event_context(detail.match, game),
+                    scope_refs=_scope_refs(detail.match),
                 )
         return detail
 
@@ -126,6 +127,22 @@ def _event_context(match: object | None, game: object) -> GameEventContext | Non
         match_number_of_games=getattr(match, "games_count", None),
         game_position=getattr(game, "position", None),
     )
+
+
+def _scope_refs(match: object | None) -> list[ArtifactScopeRef]:
+    if match is None:
+        return []
+    scopes: list[ArtifactScopeRef] = []
+    for field_name in ("league", "series", "tournament"):
+        item = getattr(match, field_name, None)
+        ref = getattr(item, "ref", None)
+        value = getattr(ref, "value", None)
+        if isinstance(value, str):
+            scopes.append(ArtifactScopeRef(value=value))
+    match_ref = getattr(getattr(match, "ref", None), "value", None)
+    if isinstance(match_ref, str):
+        scopes.append(ArtifactScopeRef(value=match_ref))
+    return scopes
 
 
 __all__ = ["MatchGetDetailInput", "MatchSearchInput", "register_match_tools"]
