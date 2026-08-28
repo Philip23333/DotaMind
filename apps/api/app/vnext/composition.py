@@ -22,7 +22,7 @@ from app.vnext.artifacts import (
     GameSummaryArtifactProducer,
     MemoryArtifactStore,
 )
-from app.vnext.artifacts.game_summary_builder_v4 import GameSummaryBuilderV4
+from app.vnext.artifacts.game_summary_builder_v5 import GameSummaryBuilderV5
 from app.vnext.domain.matches.service import MatchService
 from app.vnext.domain.players.service import PlayerService
 from app.vnext.domain.series.service import SeriesService
@@ -157,9 +157,9 @@ class VNextServices:
         await self.opendota.aclose()
 
 
-def _build_game_summary_builder() -> GameSummaryBuilderV4:
+def _build_game_summary_builder() -> GameSummaryBuilderV5:
     catalog = load_default_catalog_repository()
-    return GameSummaryBuilderV4(
+    return GameSummaryBuilderV5(
         hero_resolver=HeroResolverV4(
             {
                 hero.hero_id: LocalizedName(

@@ -15,9 +15,9 @@ class ArtifactRef(BaseModel):
             ),
             "examples": [
                 {
-                    "id": "game_summary:4:8123456789",
+                    "id": "game_summary:5:8123456789",
                     "artifact_type": "game_summary",
-                    "schema_version": "4",
+                    "schema_version": "5",
                 }
             ],
         },
@@ -31,7 +31,7 @@ class ArtifactRef(BaseModel):
 def game_summary_artifact_ref(
     valve_match_id: int,
     *,
-    schema_version: str = "4",
+    schema_version: str = "5",
 ) -> ArtifactRef:
     """Build a deterministic reference for one versioned game summary."""
 

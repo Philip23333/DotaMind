@@ -8,6 +8,7 @@ from pydantic import Field, model_validator
 
 from app.vnext.artifacts import GameSummaryArtifactProducer
 from app.vnext.domain.common.models import DomainModel, GameRef, MatchRef, SeriesRef
+from app.vnext.domain.construction import GameEventContext
 from app.vnext.domain.matches.models import MatchDetail, MatchSearchResult
 from app.vnext.domain.matches.service import MatchService
 from app.vnext.tools.definition import ToolDefinition
@@ -72,7 +73,10 @@ def register_match_tools(
         detail = await service.get_detail(match_ref=args.match_ref, game_ref=args.game_ref)
         for game in detail.games:
             if game.valve_match_id is not None:
-                await game_summary_producer.produce(game.valve_match_id)
+                await game_summary_producer.produce(
+                    game.valve_match_id,
+                    event_context=_event_context(detail.match, game),
+                )
         return detail
 
     registry.register(
@@ -103,6 +107,24 @@ def register_match_tools(
             read_only=False,
             parallel_safe=True,
         )
+    )
+
+
+def _event_context(match: object | None, game: object) -> GameEventContext | None:
+    if match is None:
+        return None
+    league = getattr(match, "league", None)
+    series = getattr(match, "series", None)
+    tournament = getattr(match, "tournament", None)
+    return GameEventContext(
+        league_name=getattr(league, "name", None),
+        series_name=getattr(series, "name", None),
+        series_year=getattr(series, "year", None),
+        series_season=getattr(series, "season", None),
+        tournament_name=getattr(tournament, "name", None),
+        match_name=getattr(match, "name", None),
+        match_number_of_games=getattr(match, "games_count", None),
+        game_position=getattr(game, "position", None),
     )
 
 

@@ -49,7 +49,7 @@ def _artifact(match_id: int = 8960577698) -> GameSummaryArtifactV4:
 def test_redis_store_round_trips_v4_with_a_versioned_key_and_fixed_ttl() -> None:
     client = FakeRedis()
     store = RedisArtifactStore(client, ttl_seconds=600)
-    ref = game_summary_artifact_ref(8960577698)
+    ref = game_summary_artifact_ref(8960577698, schema_version="4")
 
     asyncio.run(store.put(ref, _artifact()))
 
@@ -65,7 +65,7 @@ def test_redis_store_round_trips_v4_with_a_versioned_key_and_fixed_ttl() -> None
 def test_redis_get_and_exists_do_not_refresh_ttl() -> None:
     client = FakeRedis()
     store = RedisArtifactStore(client, ttl_seconds=600)
-    ref = game_summary_artifact_ref(8960577698)
+    ref = game_summary_artifact_ref(8960577698, schema_version="4")
     asyncio.run(store.put(ref, _artifact()))
     key = store.key_for(ref)
 
@@ -76,7 +76,7 @@ def test_redis_get_and_exists_do_not_refresh_ttl() -> None:
 
 
 def test_redis_store_reports_missing_and_unavailable_distinctly() -> None:
-    ref = game_summary_artifact_ref(8960577698)
+    ref = game_summary_artifact_ref(8960577698, schema_version="4")
 
     with pytest.raises(ArtifactNotFoundError):
         asyncio.run(RedisArtifactStore(FakeRedis()).get(ref))
@@ -87,7 +87,7 @@ def test_redis_store_reports_missing_and_unavailable_distinctly() -> None:
 def test_redis_store_rejects_mismatched_stored_reference_metadata() -> None:
     client = FakeRedis()
     store = RedisArtifactStore(client)
-    ref = game_summary_artifact_ref(8960577698)
+    ref = game_summary_artifact_ref(8960577698, schema_version="4")
     asyncio.run(store.put(ref, _artifact()))
     envelope = json.loads(client.values[store.key_for(ref)])
     envelope["ref"]["schema_version"] = "3"
@@ -100,8 +100,8 @@ def test_redis_store_rejects_mismatched_stored_reference_metadata() -> None:
 def test_redis_store_iterates_retained_refs_with_scan_and_type_filtering() -> None:
     client = FakeRedis()
     store = RedisArtifactStore(client)
-    first = game_summary_artifact_ref(100)
-    second = game_summary_artifact_ref(200)
+    first = game_summary_artifact_ref(100, schema_version="4")
+    second = game_summary_artifact_ref(200, schema_version="4")
     asyncio.run(store.put(second, _artifact(200)))
     asyncio.run(store.put(first, _artifact(100)))
 

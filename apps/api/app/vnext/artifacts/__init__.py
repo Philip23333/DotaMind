@@ -3,6 +3,7 @@
 from .game_summary import GameSummaryArtifact
 from .game_summary_producer import GameSummaryArtifactProducer
 from .game_summary_v4 import GameSummaryArtifactV4
+from .game_summary_v5 import GameSummaryArtifactV5
 from .grep import ArtifactGrepMatch, ArtifactGrepper, ArtifactGrepResult
 from .memory import MemoryArtifactStore
 from .models import ArtifactRef, game_summary_artifact_ref
@@ -41,6 +42,7 @@ __all__ = [
     "ArtifactTypeMismatchError",
     "GameSummaryArtifact",
     "GameSummaryArtifactV4",
+    "GameSummaryArtifactV5",
     "GameSummaryArtifactProducer",
     "MemoryArtifactStore",
     "RedisArtifactStore",

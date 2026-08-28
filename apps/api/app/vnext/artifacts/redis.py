@@ -11,6 +11,7 @@ from redis.exceptions import RedisError
 
 from .game_summary import GameSummaryArtifact
 from .game_summary_v4 import GameSummaryArtifactV4
+from .game_summary_v5 import GameSummaryArtifactV5
 from .models import ArtifactRef
 from .protocol import Artifact
 from .store import (
@@ -29,6 +30,7 @@ class RedisArtifactStore:
     _ARTIFACT_MODELS: dict[tuple[str, str], type[BaseModel]] = {
         ("game_summary", "3"): GameSummaryArtifact,
         ("game_summary", "4"): GameSummaryArtifactV4,
+        ("game_summary", "5"): GameSummaryArtifactV5,
     }
 
     def __init__(self, client: Any, *, ttl_seconds: int = DEFAULT_TTL_SECONDS) -> None:

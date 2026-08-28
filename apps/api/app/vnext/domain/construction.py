@@ -28,6 +28,20 @@ class GameContext(DomainModel):
     lobby_type_id: int | None
 
 
+class GameEventContext(DomainModel):
+    """Readable canonical esports facts known before game construction."""
+
+    league_name: str | None = None
+    series_name: str | None = None
+    series_year: int | None = None
+    series_season: str | None = None
+    tournament_name: str | None = None
+    match_name: str | None = None
+    match_number_of_games: int | None = None
+    match_type: str | None = None
+    game_position: int | None = None
+
+
 class TeamContext(DomainModel):
     """One side's source-native identity and recorded game facts."""
 
@@ -69,10 +83,12 @@ class GameConstructionContext(DomainModel):
     dire_team: TeamContext
     players: list[PlayerContext] = Field(default_factory=list)
     draft_events: list[DraftEventRef] = Field(default_factory=list)
+    event: GameEventContext | None = None
 
 
 __all__ = [
     "GameConstructionContext",
+    "GameEventContext",
     "GameContext",
     "PlayerContext",
     "TeamContext",

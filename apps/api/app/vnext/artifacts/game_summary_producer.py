@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from app.vnext.domain.construction import GameConstructionContext
+from app.vnext.domain.construction import GameConstructionContext, GameEventContext
 from app.vnext.providers.opendota.adapter import (
     OpenDotaAdapter,
     OpenDotaGameConstructionAdapter,
@@ -39,9 +39,16 @@ class GameSummaryArtifactProducer:
         self._builder = builder
         self._store = store
 
-    async def produce(self, valve_match_id: int) -> ArtifactRef:
+    async def produce(
+        self,
+        valve_match_id: int,
+        *,
+        event_context: GameEventContext | None = None,
+    ) -> ArtifactRef:
         source = await self._opendota.get_game_construction_match(valve_match_id)
         context = self._construction_adapter.to_construction_context(source.item)
+        if event_context is not None:
+            context = context.model_copy(update={"event": event_context})
         artifact = self._builder.build(context)
         ref = self._artifact_ref(artifact)
         await self._store.put(ref, artifact)

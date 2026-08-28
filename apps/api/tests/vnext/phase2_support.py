@@ -12,7 +12,7 @@ from app.vnext.artifacts import (
     GameSummaryArtifactProducer,
     MemoryArtifactStore,
 )
-from app.vnext.artifacts.game_summary_builder_v4 import GameSummaryBuilderV4
+from app.vnext.artifacts.game_summary_builder_v5 import GameSummaryBuilderV5
 from app.vnext.composition import VNextServices
 from app.vnext.domain.matches.service import MatchService
 from app.vnext.domain.players.service import PlayerService
@@ -439,14 +439,14 @@ def fixture_vnext_services(
     panda: FakePandaScore,
     opendota: FakeOpenDota,
     *,
-    builder: GameSummaryBuilderV4 | None = None,
+    builder: GameSummaryBuilderV5 | None = None,
 ) -> VNextServices:
     store = MemoryArtifactStore()
     producer = GameSummaryArtifactProducer(
         opendota=opendota,
         construction_adapter=OpenDotaGameConstructionAdapter(),
         builder=builder
-        or GameSummaryBuilderV4(
+        or GameSummaryBuilderV5(
             hero_resolver=HeroResolverV4({}),
             item_resolver=ItemResolverV4({}),
             ability_resolver=AbilityResolverV4({}),

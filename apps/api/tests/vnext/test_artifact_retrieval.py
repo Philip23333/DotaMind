@@ -15,6 +15,7 @@ from app.vnext.artifacts import (
     game_summary_artifact_ref,
 )
 from app.vnext.artifacts.game_summary_v4 import GameSummaryArtifactV4
+from app.vnext.artifacts.game_summary_v5 import GameSummaryArtifactV5
 from app.vnext.composition import build_vnext_registry
 from app.vnext.llm.protocol import ToolCall
 from app.vnext.tools.artifacts.retrieval import ArtifactReadInput, ArtifactSearchInput
@@ -44,10 +45,20 @@ def _artifact() -> GameSummaryArtifactV4:
     )
 
 
+def _artifact_v5() -> GameSummaryArtifactV5:
+    artifact = _artifact()
+    return GameSummaryArtifactV5(
+        game=artifact.game,
+        teams=artifact.teams,
+        players=artifact.players,
+        draft=artifact.draft,
+    )
+
+
 def test_search_deduplicates_in_input_order_and_only_checks_existence() -> None:
     store = MemoryArtifactStore()
     ref = game_summary_artifact_ref(8123456789)
-    asyncio.run(store.put(ref, _artifact()))
+    asyncio.run(store.put(ref, _artifact_v5()))
     searcher = ArtifactSearcher(store)
 
     result = asyncio.run(searcher.search("game_summary", [8123456789, 1, 8123456789, 2, 1]))
@@ -58,7 +69,7 @@ def test_search_deduplicates_in_input_order_and_only_checks_existence() -> None:
 
 def test_reader_outline_is_bounded_and_serializes_datetime() -> None:
     store = MemoryArtifactStore()
-    ref = game_summary_artifact_ref(8123456789)
+    ref = game_summary_artifact_ref(8123456789, schema_version="4")
     artifact = _artifact()
     asyncio.run(store.put(ref, artifact))
     reader = ArtifactReader(store)
@@ -86,7 +97,7 @@ def test_reader_outline_is_bounded_and_serializes_datetime() -> None:
 
 def test_reader_traverses_objects_lists_and_preserves_null_values() -> None:
     store = MemoryArtifactStore()
-    ref = game_summary_artifact_ref(8123456789)
+    ref = game_summary_artifact_ref(8123456789, schema_version="4")
     asyncio.run(store.put(ref, _artifact()))
     reader = ArtifactReader(store)
 
@@ -113,7 +124,7 @@ def test_reader_traverses_objects_lists_and_preserves_null_values() -> None:
 )
 def test_reader_uses_one_error_for_invalid_paths(path: str) -> None:
     store = MemoryArtifactStore()
-    ref = game_summary_artifact_ref(8123456789)
+    ref = game_summary_artifact_ref(8123456789, schema_version="4")
     asyncio.run(store.put(ref, _artifact()))
 
     with pytest.raises(ArtifactPathNotFoundError):
@@ -122,7 +133,7 @@ def test_reader_uses_one_error_for_invalid_paths(path: str) -> None:
 
 def test_reader_rejects_pagination_for_outline_or_non_list_values() -> None:
     store = MemoryArtifactStore()
-    ref = game_summary_artifact_ref(8123456789)
+    ref = game_summary_artifact_ref(8123456789, schema_version="4")
     asyncio.run(store.put(ref, _artifact()))
     reader = ArtifactReader(store)
 
@@ -292,7 +303,7 @@ def test_production_failure_fails_get_detail_tool() -> None:
 def test_artifact_read_missing_path_is_a_stable_tool_error() -> None:
     series_service, match_service, panda, opendota = fixture_services()
     services = fixture_vnext_services(series_service, match_service, panda, opendota)
-    ref = game_summary_artifact_ref(8123456789)
+    ref = game_summary_artifact_ref(8123456789, schema_version="4")
     asyncio.run(services.artifact_store.put(ref, _artifact()))
 
     registry = build_vnext_registry(services)
