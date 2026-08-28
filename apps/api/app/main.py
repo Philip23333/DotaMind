@@ -14,6 +14,7 @@ from app.api.v1.chat_routes import router as chat_router
 from app.api.v1.chat_run_routes import router as chat_run_router
 from app.api.v1.routes import router as v1_router
 from app.api.v1.vnext_chat_routes import router as vnext_chat_router
+from app.api.v1.vnext_chat_routes import trace_router as vnext_trace_router
 from app.application.background_run_manager import BackgroundRunManager
 from app.application.chat_run_executor import ChatRunExecutor
 from app.application.chat_run_runtime import ChatRunRuntime
@@ -37,6 +38,7 @@ from app.vnext.product import (
     DotaVisualEntityEnricher,
     VNextChatService,
 )
+from app.vnext.product.trace_store import RedisTraceStore
 
 settings = get_settings()
 PLAN_CONSOLE_PATH = Path(__file__).parent / "resources" / "plan_console.html"
@@ -90,6 +92,7 @@ async def lifespan(app: FastAPI):
     app.state.chat_repository = PostgresChatRepository(database.session_factory)
     vnext_redis = None
     artifact_store = None
+    trace_store = None
     if settings.redis_url:
         from redis.asyncio import from_url
 
@@ -98,6 +101,10 @@ async def lifespan(app: FastAPI):
         artifact_store = RedisArtifactStore(
             vnext_redis,
             ttl_seconds=VNextSettings.from_env().artifact_ttl_seconds,
+        )
+        trace_store = RedisTraceStore(
+            vnext_redis,
+            ttl_seconds=VNextSettings.from_env().trace_ttl_seconds,
         )
     vnext_services = build_vnext_services(
         VNextSettings.from_env(), artifact_store=artifact_store
@@ -109,6 +116,9 @@ async def lifespan(app: FastAPI):
         app.state.vnext_runtime,
         ConversationContextBuilder(),
         DotaVisualEntityEnricher(),
+        trace_store=trace_store,
+        artifact_store=vnext_services.artifact_store,
+        trace_ttl_seconds=VNextSettings.from_env().trace_ttl_seconds,
     )
     app.state.chat_run_repository = PostgresChatRunRepository(database.session_factory)
     app.state.session_store = store
@@ -211,6 +221,7 @@ app.add_middleware(
 app.include_router(v1_router, prefix=settings.api_v1_prefix)
 app.include_router(chat_router, prefix=settings.api_v1_prefix)
 app.include_router(vnext_chat_router, prefix=settings.api_v1_prefix)
+app.include_router(vnext_trace_router, prefix=settings.api_v1_prefix)
 app.include_router(chat_run_router, prefix=settings.api_v1_prefix)
 app.mount(
     f"{settings.api_v1_prefix}/assets/dota",

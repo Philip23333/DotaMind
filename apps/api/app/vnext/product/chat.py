@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import hashlib
+import io
+import json
+import zipfile
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Literal
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field
 
@@ -13,10 +18,13 @@ from app.application.chat_repository import ChatDialogueTurnResult
 from app.application.postgres_chat_repository import PostgresChatRepository
 from app.vnext.agent.events import AgentCancelled, AgentCompleted, AgentFailed, TextDelta
 from app.vnext.agent.runtime import AgentRuntime
+from app.vnext.agent.trace import AgentTraceCollector
+from app.vnext.artifacts import ArtifactNotFoundError, ArtifactStore
 from app.vnext.llm.protocol import FinalMessage, Message
 
 from .context import ConversationContextBuilder
 from .presentation import DotaVisualEntityEnricher, ProductVisualEntity
+from .trace_store import FailedRunTrace, TraceNotFoundError, TraceStore
 
 
 class ProductChatEvent(BaseModel):
@@ -39,6 +47,12 @@ class ProductChatError(ProductChatEvent):
     type: Literal["error"] = "error"
     error_code: str
     reason: str
+    trace: ProductTraceRef | None = None
+
+
+class ProductTraceRef(BaseModel):
+    trace_id: str
+    expires_at: datetime
 
 
 @dataclass(frozen=True)
@@ -60,11 +74,18 @@ class VNextChatService:
         runtime: AgentRuntime,
         context_builder: ConversationContextBuilder,
         visual_entity_enricher: DotaVisualEntityEnricher,
+        *,
+        trace_store: TraceStore | None = None,
+        artifact_store: ArtifactStore | None = None,
+        trace_ttl_seconds: int = 72 * 60 * 60,
     ) -> None:
         self._repository = repository
         self._runtime = runtime
         self._context_builder = context_builder
         self._visual_entity_enricher = visual_entity_enricher
+        self._trace_store = trace_store
+        self._artifact_store = artifact_store
+        self._trace_ttl_seconds = trace_ttl_seconds
 
     async def prepare_turn(
         self,
@@ -114,16 +135,26 @@ class VNextChatService:
             return
 
         final: FinalMessage | None = None
+        trace_collector = AgentTraceCollector() if self._trace_store is not None else None
         try:
-            async for event in self._runtime.run_stream(prepared.history):
+            stream = (
+                self._runtime.run_stream(prepared.history, trace_collector=trace_collector)
+                if trace_collector is not None
+                else self._runtime.run_stream(prepared.history)
+            )
+            async for event in stream:
                 if isinstance(event, TextDelta):
                     yield ProductChatDelta(text=event.text)
                 elif isinstance(event, AgentCompleted):
                     final = event.final
                 elif isinstance(event, (AgentCancelled, AgentFailed)):
+                    trace_ref = None
+                    if isinstance(event, AgentFailed) and trace_collector is not None:
+                        trace_ref = await self._save_failed_trace(prepared, trace_collector)
                     yield ProductChatError(
                         error_code=event.error_code,
                         reason=event.error_message,
+                        trace=trace_ref,
                     )
                     return
         except Exception as exc:
@@ -158,6 +189,84 @@ class VNextChatService:
                 for entity in committed.catalog_visual_entities
             ],
         )
+
+    async def download_trace_bundle(self, *, browser_id: str, trace_id: str) -> bytes:
+        if self._trace_store is None:
+            raise TraceNotFoundError(trace_id)
+        trace = await self._trace_store.get(trace_id)
+        if trace.browser_id_hash != _browser_hash(browser_id):
+            raise PermissionError("trace does not belong to this browser")
+        manifest: dict[str, list[dict[str, str]]] = {"included": [], "missing": []}
+        stream = io.BytesIO()
+        with zipfile.ZipFile(stream, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr("trace.json", trace.model_dump_json(indent=2))
+            for ref in _artifact_refs(trace.trace):
+                try:
+                    artifact = await self._artifact(ref)
+                except ArtifactNotFoundError:
+                    manifest["missing"].append(ref.model_dump())
+                    continue
+                artifact_id = ref.id.rsplit(":", 1)[-1]
+                filename = f"artifacts/{ref.artifact_type}_{ref.schema_version}_{artifact_id}.json"
+                archive.writestr(filename, artifact.model_dump_json(indent=2))
+                manifest["included"].append({"ref": ref.model_dump(), "path": filename})
+            archive.writestr("artifact-manifest.json", json.dumps(manifest, indent=2))
+        return stream.getvalue()
+
+    async def _save_failed_trace(
+        self, prepared: PreparedVNextChatTurn, collector: AgentTraceCollector
+    ) -> ProductTraceRef | None:
+        assert self._trace_store is not None
+        created_at = datetime.now(UTC)
+        trace_id = str(uuid4())
+        expires_at = created_at + timedelta(seconds=self._trace_ttl_seconds)
+        try:
+            await self._trace_store.put(
+                FailedRunTrace(
+                    trace_id=trace_id,
+                    browser_id_hash=_browser_hash(prepared.browser_id),
+                    session_id=str(prepared.session_id),
+                    request_id=str(prepared.request_id),
+                    created_at=created_at,
+                    expires_at=expires_at,
+                    trace=collector.snapshot(),
+                )
+            )
+        except Exception:
+            return None
+        return ProductTraceRef(trace_id=trace_id, expires_at=expires_at)
+
+    async def _artifact(self, ref):
+        if self._artifact_store is None:
+            raise ArtifactNotFoundError(ref.id)
+        return await self._artifact_store.get(ref)
+
+
+def _browser_hash(browser_id: str) -> str:
+    return hashlib.sha256(browser_id.encode("utf-8")).hexdigest()
+
+
+def _artifact_refs(value: object):
+    from app.vnext.artifacts import ArtifactRef
+
+    found: dict[str, ArtifactRef] = {}
+
+    def visit(item: object) -> None:
+        if isinstance(item, dict):
+            if {"id", "artifact_type", "schema_version"} <= item.keys():
+                try:
+                    ref = ArtifactRef.model_validate(item)
+                    found[ref.id] = ref
+                except ValueError:
+                    pass
+            for child in item.values():
+                visit(child)
+        elif isinstance(item, list):
+            for child in item:
+                visit(child)
+
+    visit(value)
+    return list(found.values())
 
 
 __all__ = [

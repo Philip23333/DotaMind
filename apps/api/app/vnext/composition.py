@@ -63,6 +63,7 @@ class VNextSettings:
     resolution_start_tolerance_seconds: int = 1800
     resolution_duration_tolerance_seconds: int = 5
     artifact_ttl_seconds: int = 7 * 24 * 60 * 60
+    trace_ttl_seconds: int = 72 * 60 * 60
 
     @classmethod
     def from_env(cls) -> VNextSettings:
@@ -118,6 +119,9 @@ class VNextSettings:
             ),
             artifact_ttl_seconds=int(
                 _env_value("DOTAMIND_VNEXT_ARTIFACT_TTL_SECONDS", "604800", file_values)
+            ),
+            trace_ttl_seconds=int(
+                _env_value("DOTAMIND_VNEXT_TRACE_TTL_SECONDS", "259200", file_values)
             ),
         )
 
