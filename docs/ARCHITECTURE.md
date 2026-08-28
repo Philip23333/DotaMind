@@ -12,6 +12,13 @@ are implemented for the current GameSummary capability.
 - The model owns ordinary business reasoning: it decides what information is
   needed, which domain capabilities to call, whether more data is useful, and
   when to answer.
+- Tools expand the model's observable fact space. They should expose stable
+  identities, searchable corpora, locators, bounded reads, and hard operational
+  limits rather than pre-interpreting each user scenario for the model.
+- Prefer general observation primitives over scenario-specific helpers. A tool
+  should answer questions such as "what exists?", "where does this occur?", or
+  "what is at this location?" without deciding which facts are important to the
+  user's final question.
 - Deterministic application code owns hard boundaries, with each boundary kept
   in its proper layer rather than folded into the agent runtime.
 - Tools expose independent Dota domain capabilities, never provider plumbing or
@@ -21,6 +28,16 @@ are implemented for the current GameSummary capability.
 - Canonical domain data may be large, but model context remains bounded by
   default. Storage is not a responsibility of the model.
 - Scenarios are evaluated as behavior, not encoded as runtime routes.
+
+A useful review test for new capabilities is whether application code is adding
+visibility or replacing model reasoning. Stable domain identity lookup,
+canonical normalization, corpus search, locators, pagination, size bounds,
+permissions, and error semantics belong in deterministic code. Deciding which
+matches are relevant, which facts matter, how several observations relate, and
+what conclusion follows belongs to the model. Avoid capabilities whose main
+purpose is to encode a specific question shape such as player-plus-hero build,
+competition-specific strategy, or one artifact section when the same task can
+be composed from general search and read primitives.
 
 ## System boundary
 
@@ -106,6 +123,24 @@ references, coverage, and artifact references instead of the complete
 underlying data. Detailed data is obtained only when an independent retrieval
 capability is available and the model chooses that it is useful. No tool
 description may require a fixed sequence of calls.
+
+The preferred primitive is breadth-to-depth exploration:
+
+    search / grep / lookup
+      -> bounded candidates + stable locator
+      -> model chooses where to inspect
+      -> read / fetch
+      -> bounded detailed evidence
+
+Search is the model's observation mechanism, not a scenario interpreter. Where
+a stable substrate exists, search should operate directly on that substrate
+instead of requiring a programmer-authored search view for every business type.
+For canonical artifacts, the target direction is generic content search over
+the canonical serialized artifact corpus, returning `ArtifactRef` plus a
+structural locator. `artifact.read` then dereferences that locator. Search
+implementation may evolve from scanning to a generic index for performance, but
+the model-facing contract should not become artifact-type-specific merely to
+accommodate storage details.
 
 ## Domain and provider layers
 
@@ -234,6 +269,22 @@ Commit 4 freezes these retrieval and integration contracts:
 - Structural paths support object fields and non-negative list indexes only;
   invalid paths use one `ArtifactPathNotFoundError` boundary.
 
+The current `artifact.search` is therefore an exact availability lookup, not the
+long-term generic breadth-search primitive. The planned direction is to add a
+schema-neutral artifact corpus search capability that searches canonical
+serialized artifact content and returns stable `ArtifactRef` plus structural
+paths and bounded previews. It must not require one programmer-authored search
+projection per artifact type. `artifact.read` remains the generic depth
+primitive. Exact availability lookup can remain independently useful and does
+not need to absorb corpus discovery semantics.
+
+Artifact corpus scope is a separate design concern from content search. Content
+search answers "where does this pattern occur in the artifacts I am allowed to
+search?" Scope answers "which artifact corpus should be searched?" Scope must
+not be implemented by silently fetching providers or materializing missing
+artifacts inside the search operation. Artifact discovery and artifact
+production remain separate lifecycle boundaries.
+
 ## Artifact and Retrieval Layer
 
 Phase 2.x therefore separates the data lifecycle into deliberate stages:
@@ -256,6 +307,14 @@ Commit 4 retrieval exposes independent, bounded views of stored artifacts. The
 retrieval boundary enforces reference validity, path and size limits where
 applicable, and explicit unavailable sections. It does not expose
 provider-private IDs or raw payloads.
+
+The desired artifact exploration model is analogous to a structured filesystem:
+canonical artifacts are the corpus, generic content search is the model's
+breadth-oriented observation primitive, `ArtifactRef` plus structural path is
+the locator, and `artifact.read` is the bounded depth-oriented primitive. A new
+artifact type should become searchable because it is a canonical serialized
+artifact, not because a new scenario-specific search adapter or discovery view
+was written for it.
 
 This diagram describes ownership and a possible data path, not a mandatory
 request workflow. An existing artifact may be reused, a bounded domain summary
@@ -337,5 +396,7 @@ budgets. It does not mask a failed tool as a successful answer.
 - A separate prompt program for each match, tournament, or player scenario
 - Separate scenario tools for every artifact section such as inventory,
   economy, or skill history
+- Programmer-authored search views or discovery projectors for each artifact
+  type when generic canonical-content search can provide breadth discovery
 - Treating `artifact.search` or `artifact.read` as a mandatory multi-step
   workflow
