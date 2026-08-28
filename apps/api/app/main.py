@@ -31,7 +31,11 @@ from app.persistence.database import (
     ping_database,
 )
 from app.vnext.composition import VNextSettings, build_vnext_runtime, build_vnext_services
-from app.vnext.product import ConversationContextBuilder, VNextChatService
+from app.vnext.product import (
+    ConversationContextBuilder,
+    DotaVisualEntityEnricher,
+    VNextChatService,
+)
 
 settings = get_settings()
 PLAN_CONSOLE_PATH = Path(__file__).parent / "resources" / "plan_console.html"
@@ -90,6 +94,7 @@ async def lifespan(app: FastAPI):
         app.state.chat_repository,
         app.state.vnext_runtime,
         ConversationContextBuilder(),
+        DotaVisualEntityEnricher(),
     )
     app.state.chat_run_repository = PostgresChatRunRepository(database.session_factory)
     app.state.session_store = store

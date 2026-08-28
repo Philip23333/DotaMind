@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.application.chat_repository import ChatDialogueTurnResult
 from app.application.postgres_chat_repository import PostgresChatRepository
@@ -16,6 +16,7 @@ from app.vnext.agent.runtime import AgentRuntime
 from app.vnext.llm.protocol import FinalMessage, Message
 
 from .context import ConversationContextBuilder
+from .presentation import DotaVisualEntityEnricher, ProductVisualEntity
 
 
 class ProductChatEvent(BaseModel):
@@ -31,6 +32,7 @@ class ProductChatCompleted(ProductChatEvent):
     type: Literal["completed"] = "completed"
     content: str
     turn_index: int
+    catalog_visual_entities: list[ProductVisualEntity] = Field(default_factory=list)
 
 
 class ProductChatError(ProductChatEvent):
@@ -57,10 +59,12 @@ class VNextChatService:
         repository: PostgresChatRepository,
         runtime: AgentRuntime,
         context_builder: ConversationContextBuilder,
+        visual_entity_enricher: DotaVisualEntityEnricher,
     ) -> None:
         self._repository = repository
         self._runtime = runtime
         self._context_builder = context_builder
+        self._visual_entity_enricher = visual_entity_enricher
 
     async def prepare_turn(
         self,
@@ -102,6 +106,10 @@ class VNextChatService:
             yield ProductChatCompleted(
                 content=prepared.replay.assistant_message,
                 turn_index=prepared.replay.turn_index,
+                catalog_visual_entities=[
+                    ProductVisualEntity.model_validate(entity)
+                    for entity in prepared.replay.catalog_visual_entities
+                ],
             )
             return
 
@@ -129,6 +137,7 @@ class VNextChatService:
                 reason="agent stream ended without a final message",
             )
             return
+        visual_entities = self._visual_entity_enricher.match(final.content)
         try:
             committed = await self._repository.append_dialogue_turn(
                 browser_id=prepared.browser_id,
@@ -136,6 +145,7 @@ class VNextChatService:
                 request_id=prepared.request_id,
                 user_query=prepared.query,
                 assistant_message=final.content,
+                catalog_visual_entities=[entity.model_dump() for entity in visual_entities],
             )
         except Exception as exc:
             yield ProductChatError(error_code="chat_store_error", reason=str(exc))
@@ -143,6 +153,10 @@ class VNextChatService:
         yield ProductChatCompleted(
             content=committed.assistant_message,
             turn_index=committed.turn_index,
+            catalog_visual_entities=[
+                ProductVisualEntity.model_validate(entity)
+                for entity in committed.catalog_visual_entities
+            ],
         )
 
 

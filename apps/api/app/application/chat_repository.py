@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
@@ -96,3 +96,4 @@ class ChatDialogueTurnResult:
     status: Literal["executed", "replay"]
     turn_index: int
     assistant_message: str
+    catalog_visual_entities: list[dict[str, Any]] = field(default_factory=list)

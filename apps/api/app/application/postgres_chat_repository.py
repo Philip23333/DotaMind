@@ -466,6 +466,7 @@ class PostgresChatRepository:
             status="replay",
             turn_index=row.turn_index,
             assistant_message=row.assistant_message,
+            catalog_visual_entities=_stored_visual_entities(row.public_response),
         )
 
     async def append_dialogue_turn(
@@ -476,6 +477,7 @@ class PostgresChatRepository:
         request_id: UUID,
         user_query: str,
         assistant_message: str,
+        catalog_visual_entities: list[dict[str, Any]] | None = None,
     ) -> ChatDialogueTurnResult:
         """Persist one User/Final Assistant dialogue pair for product chat.
 
@@ -510,6 +512,7 @@ class PostgresChatRepository:
                         status="replay",
                         turn_index=existing.turn_index,
                         assistant_message=existing.assistant_message,
+                        catalog_visual_entities=_stored_visual_entities(existing.public_response),
                     )
 
                 turn_index = row.next_turn_index
@@ -521,6 +524,11 @@ class PostgresChatRepository:
                     "status": "ok",
                     "answer": {"summary": assistant_message},
                 }
+                visual_entities = _stored_visual_entities(
+                    {"catalog_visual_entities": catalog_visual_entities}
+                )
+                if visual_entities:
+                    compatibility_response["catalog_visual_entities"] = visual_entities
                 compact_turn = Turn(
                     query=user_query,
                     response_summary=assistant_message,
@@ -546,6 +554,7 @@ class PostgresChatRepository:
             status="executed",
             turn_index=turn_index,
             assistant_message=assistant_message,
+            catalog_visual_entities=visual_entities,
         )
 
     async def commit_turn(
@@ -648,6 +657,15 @@ def _summary(
 
 def _dialogue_payload_hash(user_query: str) -> str:
     return hashlib.sha256(user_query.encode("utf-8")).hexdigest()
+
+
+def _stored_visual_entities(public_response: object) -> list[dict[str, Any]]:
+    if not isinstance(public_response, dict):
+        return []
+    value = public_response.get("catalog_visual_entities")
+    if not isinstance(value, list):
+        return []
+    return [dict(entity) for entity in value if isinstance(entity, dict)]
 
 
 def _transcript_turn(row: ChatTurnRow) -> ChatTranscriptTurn:

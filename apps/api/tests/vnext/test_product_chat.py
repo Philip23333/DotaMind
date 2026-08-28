@@ -14,6 +14,7 @@ from app.vnext.product.chat import (
     VNextChatService,
 )
 from app.vnext.product.context import ConversationContextBuilder
+from app.vnext.product.presentation import ProductVisualEntity
 
 
 class _Repository:
@@ -40,6 +41,7 @@ class _Repository:
             status="executed",
             turn_index=2,
             assistant_message=str(kwargs["assistant_message"]),
+            catalog_visual_entities=list(kwargs.get("catalog_visual_entities", [])),
         )
 
 
@@ -63,6 +65,16 @@ class _ContextBuilder:
         return [UserMessage(content="context-sentinel")]
 
 
+class _VisualEntityEnricher:
+    def __init__(self, entities: list[ProductVisualEntity] | None = None) -> None:
+        self.entities = entities or []
+        self.received: list[str] = []
+
+    def match(self, text: str) -> list[ProductVisualEntity]:
+        self.received.append(text)
+        return self.entities
+
+
 def _collect(service: VNextChatService, **kwargs):
     async def run():
         prepared = await service.prepare_turn(**kwargs)
@@ -84,6 +96,7 @@ def test_product_chat_replays_full_dialogue_then_persists_before_completed() -> 
         repository,
         runtime,
         ConversationContextBuilder(),
+        _VisualEntityEnricher(),
     )
 
     events = _collect(
@@ -116,6 +129,7 @@ def test_product_chat_failure_does_not_create_a_dialogue_turn() -> None:
         repository,
         runtime,
         ConversationContextBuilder(),
+        _VisualEntityEnricher(),
     )
 
     events = _collect(
@@ -139,10 +153,12 @@ def test_product_chat_replays_without_running_the_agent() -> None:
     repository = _Repository(replay=replay)
     runtime = _Runtime([])
     context_builder = _ContextBuilder()
+    visual_entity_enricher = _VisualEntityEnricher()
     service = VNextChatService(  # type: ignore[arg-type]
         repository,
         runtime,
         context_builder,
+        visual_entity_enricher,
     )
 
     events = _collect(
@@ -157,6 +173,7 @@ def test_product_chat_replays_without_running_the_agent() -> None:
     assert runtime.messages is None
     assert repository.appended == []
     assert context_builder.received is None
+    assert visual_entity_enricher.received == []
 
 
 def test_product_chat_uses_the_injected_context_builder() -> None:
@@ -169,6 +186,7 @@ def test_product_chat_uses_the_injected_context_builder() -> None:
         repository,
         runtime,
         context_builder,
+        _VisualEntityEnricher(),
     )
 
     _collect(
@@ -200,6 +218,7 @@ def test_product_chat_bounds_runtime_history_without_mutating_durable_dialogue()
         repository,
         runtime,
         ConversationContextBuilder(max_turns=3),
+        _VisualEntityEnricher(),
     )
 
     _collect(
@@ -222,3 +241,76 @@ def test_product_chat_bounds_runtime_history_without_mutating_durable_dialogue()
     assert len(repository.dialogue) == 20
     assert repository.dialogue[0].user_message == "user 1"
     assert len(repository.appended) == 1
+
+
+def test_product_chat_persists_and_returns_visual_metadata_without_changing_final_text() -> None:
+    repository = _Repository()
+    runtime = _Runtime(
+        [AgentCompleted(duration=0.1, final=FinalMessage(content="不朽尸王（Undying）"))]
+    )
+    entity = ProductVisualEntity(
+        kind="hero",
+        imagePath="/api/v1/assets/dota/heroes/85.png",
+        label="不朽尸王",
+        names=["不朽尸王", "尸王", "Undying"],
+    )
+    visual_entity_enricher = _VisualEntityEnricher([entity])
+    service = VNextChatService(  # type: ignore[arg-type]
+        repository,
+        runtime,
+        ConversationContextBuilder(),
+        visual_entity_enricher,
+    )
+
+    events = _collect(
+        service,
+        browser_id=str(uuid4()),
+        session_id=uuid4(),
+        request_id=uuid4(),
+        query="hero",
+    )
+
+    assert visual_entity_enricher.received == ["不朽尸王（Undying）"]
+    assert repository.appended[0]["assistant_message"] == "不朽尸王（Undying）"
+    assert repository.appended[0]["catalog_visual_entities"] == [entity.model_dump()]
+    assert events[-1] == ProductChatCompleted(
+        content="不朽尸王（Undying）",
+        turn_index=2,
+        catalog_visual_entities=[entity],
+    )
+
+
+def test_product_chat_replay_returns_persisted_visual_metadata() -> None:
+    entity = {
+        "kind": "team",
+        "imagePath": "/api/v1/assets/esports/teams/1669.png",
+        "label": "Team Spirit",
+        "names": ["Team Spirit", "TS"],
+    }
+    repository = _Repository(
+        replay=ChatDialogueTurnResult(
+            status="replay",
+            turn_index=4,
+            assistant_message="Team Spirit",
+            catalog_visual_entities=[entity],
+        )
+    )
+    runtime = _Runtime([])
+    visual_entity_enricher = _VisualEntityEnricher()
+    service = VNextChatService(  # type: ignore[arg-type]
+        repository,
+        runtime,
+        ConversationContextBuilder(),
+        visual_entity_enricher,
+    )
+
+    events = _collect(
+        service,
+        browser_id=str(uuid4()),
+        session_id=uuid4(),
+        request_id=uuid4(),
+        query="same query",
+    )
+
+    assert events[-1].catalog_visual_entities == [ProductVisualEntity.model_validate(entity)]
+    assert visual_entity_enricher.received == []
