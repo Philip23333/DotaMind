@@ -61,6 +61,9 @@ def test_agent_visible_reference_schemas_explain_nested_object_inputs() -> None:
     assert search_locator["type"] == detail_locator["type"] == "object"
     assert set(detail_locator["required"]) == {"source", "kind", "value"}
     assert set(search_locator["properties"]) == {"source", "kind", "value"}
+    team_constraint = schemas["esports.search"]["properties"]["teams"]
+    assert "match, schedule, and result discovery" in team_constraint["description"]
+    assert "TeamRef is not required" in team_constraint["description"]
 
     team_field, team_ref = _reference_definition(schemas["teams.get_detail"], "team_ref")
     player_field, player_ref = _reference_definition(

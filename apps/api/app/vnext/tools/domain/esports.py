@@ -14,7 +14,14 @@ from app.vnext.tools.registry import ToolRegistry
 class EsportsSearchInput(DomainModel):
     query: str | None = None
     within: SourceLocator | None = None
-    teams: list[str] = Field(default_factory=list, max_length=2)
+    teams: list[str] = Field(
+        default_factory=list,
+        max_length=2,
+        description=(
+            "Optional exact professional team-name constraint for match, schedule, and result "
+            "discovery. Supply team names directly; a TeamRef is not required."
+        ),
+    )
     time_scope: Literal["upcoming", "recent", "running", "all"] = "all"
     limit: int = Field(default=10, ge=1, le=50)
 
@@ -33,10 +40,11 @@ def register_esports_tools(registry: ToolRegistry, service: EsportsSearchService
         ToolDefinition(
             name="esports.search",
             description=(
-                "Search professional Dota 2 esports source facts. Use within with a returned "
-                "league, series, or match locator to continue source-local navigation. Each "
-                "record contains bounded structural facts and, when externalized, an ArtifactRef "
-                "for the complete validated source document."
+                "Search professional Dota 2 esports source facts, including match, schedule, "
+                "and result discovery by exact team name. Use within with a returned league, "
+                "series, or match locator to continue source-local navigation. Each record "
+                "contains bounded structural facts and, when externalized, an ArtifactRef for "
+                "the complete validated source document."
             ),
             input_model=EsportsSearchInput,
             output_model=EsportsSearchResult,

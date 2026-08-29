@@ -37,8 +37,9 @@ def register_team_tools(registry: ToolRegistry, service: TeamService) -> None:
         ToolDefinition(
             name="teams.search",
             description=(
-                "Search professional Dota 2 teams by name. Returns bounded normalized "
-                "candidates and preserves ambiguity."
+                "Search professional Dota 2 team identity and roster context by name. Returns "
+                "bounded normalized candidates and preserves ambiguity; it does not search "
+                "matches, schedules, or results."
             ),
             input_model=TeamSearchInput,
             output_model=TeamSearchResult,
