@@ -30,7 +30,11 @@ class SourceDocumentArtifact(BaseModel):
     facts: dict[str, Any] = Field(default_factory=dict)
 
 
-def source_document_artifact_ref(source: str, kind: str, provider_identity: int | str) -> ArtifactRef:
+def source_document_artifact_ref(
+    source: str,
+    kind: str,
+    provider_identity: int | str,
+) -> ArtifactRef:
     """Build an opaque deterministic reference without exposing provider identity."""
 
     payload = f"{source}\x1f{kind}\x1f{provider_identity}".encode("utf-8")
