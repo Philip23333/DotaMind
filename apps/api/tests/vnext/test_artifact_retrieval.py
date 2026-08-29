@@ -158,17 +158,21 @@ def test_registry_tool_chain_produces_searches_and_reads_one_artifact() -> None:
         search = await registry.execute(
             ToolCall(
                 id="match-search",
-                name="matches.search",
+                name="esports.search",
                 arguments={"query": "Round 2", "time_scope": "recent"},
             )
         )
         assert opendota.construction_calls == []
-        match_ref = search.content["candidates"][0]["ref"]["value"]
+        match_locator = next(
+            record["locator"]
+            for record in search.content["records"]
+            if record["kind"] == "match"
+        )
         detail = await registry.execute(
             ToolCall(
                 id="match-detail",
                 name="matches.get_detail",
-                arguments={"match_ref": {"value": match_ref}},
+                arguments={"locator": match_locator},
             )
         )
         valve_match_id = detail.content["games"][0]["valve_match_id"]
@@ -201,7 +205,7 @@ def test_registry_tool_chain_produces_searches_and_reads_one_artifact() -> None:
     assert read.content["value"]["valve_match_id"] == 40001
     assert read.content["offset"] is None
     assert opendota.construction_calls == [40001]
-    series_ref = search.content["candidates"][0]["series"]["ref"]["value"]
+    series_ref = detail.content["match"]["series"]["ref"]["value"]
     scoped_ref = asyncio.run(
         anext(services.artifact_scope_store.iter_refs(ArtifactScopeRef(value=series_ref)))
     )
@@ -237,16 +241,20 @@ def test_unresolved_games_do_not_trigger_artifact_production() -> None:
         search = await registry.execute(
             ToolCall(
                 id="match-search",
-                name="matches.search",
+                name="esports.search",
                 arguments={"query": "Round 2", "time_scope": "recent"},
             )
         )
-        match_ref = search.content["candidates"][0]["ref"]["value"]
+        match_locator = next(
+            record["locator"]
+            for record in search.content["records"]
+            if record["kind"] == "match"
+        )
         return await registry.execute(
             ToolCall(
                 id="match-detail",
                 name="matches.get_detail",
-                arguments={"match_ref": {"value": match_ref}},
+                arguments={"locator": match_locator},
             )
         )
 
@@ -267,16 +275,20 @@ def test_each_resolved_game_is_produced_and_stored() -> None:
         search = await registry.execute(
             ToolCall(
                 id="match-search",
-                name="matches.search",
+                name="esports.search",
                 arguments={"query": "Grand Final", "time_scope": "recent"},
             )
         )
-        match_ref = search.content["candidates"][0]["ref"]["value"]
+        match_locator = next(
+            record["locator"]
+            for record in search.content["records"]
+            if record["kind"] == "match"
+        )
         return await registry.execute(
             ToolCall(
                 id="match-detail",
                 name="matches.get_detail",
-                arguments={"match_ref": {"value": match_ref}},
+                arguments={"locator": match_locator},
             )
         )
 
@@ -303,16 +315,20 @@ def test_production_failure_fails_get_detail_tool() -> None:
         search = await registry.execute(
             ToolCall(
                 id="match-search",
-                name="matches.search",
+                name="esports.search",
                 arguments={"query": "Round 2", "time_scope": "recent"},
             )
         )
-        match_ref = search.content["candidates"][0]["ref"]["value"]
+        match_locator = next(
+            record["locator"]
+            for record in search.content["records"]
+            if record["kind"] == "match"
+        )
         return await registry.execute(
             ToolCall(
                 id="match-detail",
                 name="matches.get_detail",
-                arguments={"match_ref": {"value": match_ref}},
+                arguments={"locator": match_locator},
             )
         )
 

@@ -14,6 +14,7 @@ from app.vnext.tools.registry import ToolRegistry
 class EsportsSearchInput(DomainModel):
     query: str | None = None
     within: SourceLocator | None = None
+    teams: list[str] = Field(default_factory=list, max_length=2)
     time_scope: Literal["upcoming", "recent", "running", "all"] = "all"
     limit: int = Field(default=10, ge=1, le=50)
 
@@ -23,6 +24,7 @@ def register_esports_tools(registry: ToolRegistry, service: EsportsSearchService
         return await service.search(
             query=args.query,
             within=args.within,
+            teams=args.teams,
             time_scope=args.time_scope,
             limit=args.limit,
         )

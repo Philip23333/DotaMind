@@ -23,23 +23,21 @@ must have come from one specific preceding tool.
 
 ## Current implemented surface
 
-The current branch still exposes these migration-era tools:
+The current branch exposes these migration-era tools:
 
 | Tool | Current purpose | Target disposition |
 | --- | --- | --- |
-| `series.search` | Search PandaScore-backed Series | Fold into `esports.search` |
-| `series.list_matches` | List PandaScore matches within a Series | Fold into `esports.search` with `within` locator |
-| `matches.search` | Search PandaScore professional matches | Fold into `esports.search` |
-| `matches.get_detail` | Resolve game identity and obtain OpenDota-backed detail | Replace with `game.detail` |
+| `esports.search` | Navigate PandaScore-backed esports source facts | Retain as the broad discovery capability |
+| `matches.get_detail` | Transitional SourceLocator-to-detail bridge | Replace with `game.detail` |
 | `teams.search` / `teams.get_detail` | Team discovery/detail | Keep during this migration; revisit only when another source requires it |
 | `players.search` / `players.get_detail` | Player discovery/detail | Keep during this migration; revisit only when another source requires it |
 | `artifact.search` | Exact stored Artifact availability lookup | Retain |
 | `artifact.grep` | Generic Artifact content search | Retain |
 | `artifact.read` | Generic bounded Artifact read | Retain |
 
-Do not spend migration effort perfecting the old Series/Match Ref hierarchy
-unless a live correctness issue must be contained before those tools are
-replaced.
+The old `series.search`, `series.list_matches`, and `matches.search` tools are
+no longer model-visible. Their Ref-based internals remain only where the
+transitional detail and Artifact path still needs them.
 
 ## Target capability surface
 
@@ -59,6 +57,7 @@ The initial contract should stay small. Conceptually useful inputs are:
 ```text
 query        optional user text
 within       optional SourceLocator
+teams        optional exact PandaScore team-name constraint
 time_scope   optional bounded temporal scope
 limit        bounded result count
 ```
@@ -82,9 +81,17 @@ For PandaScore, `kind` may be its own vocabulary such as `league`, `series`,
 universal League/Series/Tournament/Match DTO.
 
 An optional `within` locator lets the same broad search capability continue
-inside a source object. For example, the PandaScore implementation may use a
-Series locator to list/search its matches internally. The model does not need a
-separate `series.list_matches` tool.
+inside a source object. The current PandaScore implementation supports:
+
+```text
+league -> series
+series -> match
+match  -> game
+```
+
+Unknown locators, a locator from another source, and locator-kind mismatches are
+explicit tool errors; they are not equivalent to an empty search result. The
+model does not need a separate `series.list_matches` tool.
 
 The first implementation does not need a provider-routing framework or explicit
 model-selected source list. With only PandaScore configured, `esports.search`

@@ -38,6 +38,7 @@ from app.vnext.providers.opendota.models import (
     OpenDotaTeam,
 )
 from app.vnext.providers.pandascore.adapter import PandaScoreHTTPError
+from app.vnext.providers.pandascore.locator import PandaScoreLocatorIndex
 from app.vnext.providers.pandascore.models import (
     PandaScoreLeague,
     PandaScoreMatch,
@@ -425,10 +426,12 @@ def fixture_services(
         panda, now=lambda: datetime(2026, 8, 14, tzinfo=timezone.utc)
     )
     team_player_index = TeamPlayerRefIndex()
+    locator_index = PandaScoreLocatorIndex()
     match_service = MatchService(
         panda,
         opendota,
         series_service=series_service,
+        locator_index=locator_index,
         team_player_index=team_player_index,
         now=lambda: datetime(2026, 8, 14, tzinfo=timezone.utc),
     )
@@ -466,7 +469,9 @@ def fixture_vnext_services(
     return VNextServices(
         pandascore=panda,
         opendota=opendota,
-        esports=EsportsSearchService(PandaScoreEsportsSearch(panda)),
+        esports=EsportsSearchService(
+            PandaScoreEsportsSearch(panda, match_service.locator_index)
+        ),
         series=series_service,
         matches=match_service,
         teams=team_service,

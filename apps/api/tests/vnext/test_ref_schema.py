@@ -15,15 +15,13 @@ from app.vnext.composition import build_vnext_registry
 from app.vnext.llm.openai_compatible import OpenAICompatibleModelClient
 from app.vnext.llm.protocol import ModelRequest, UserMessage
 from app.vnext.tools.artifacts.retrieval import ArtifactReadInput
-from app.vnext.tools.domain.matches import MatchGetDetailInput, MatchSearchInput
+from app.vnext.tools.domain.esports import EsportsSearchInput
+from app.vnext.tools.domain.matches import MatchGetDetailInput
 from app.vnext.tools.domain.players import PlayerGetDetailInput
-from app.vnext.tools.domain.series import SeriesListMatchesInput
 from app.vnext.tools.domain.teams import TeamGetDetailInput
 from tests.vnext.phase2_support import fixture_services, fixture_vnext_services
 
-_SERIES_VALUE = "series:0123456789abcdef01234567"
-_MATCH_VALUE = "match:0123456789abcdef01234567"
-_GAME_VALUE = "game:0123456789abcdef01234567"
+_LOCATOR = {"source": "pandascore", "kind": "match", "value": "src:0123456789abcdef"}
 _TEAM_VALUE = "team:0123456789abcdef01234567"
 _PLAYER_VALUE = "player:0123456789abcdef01234567"
 
@@ -55,29 +53,14 @@ def _reference_definition(
 def test_agent_visible_reference_schemas_explain_nested_object_inputs() -> None:
     schemas = _tool_schemas()
 
-    series_field, series_ref = _reference_definition(
-        schemas["series.list_matches"], "series_ref"
+    search_field, search_locator = _reference_definition(schemas["esports.search"], "within")
+    detail_field, detail_locator = _reference_definition(
+        schemas["matches.get_detail"], "locator"
     )
-    assert "returned by series.search" in series_field["description"]
-    assert "whole object unchanged" in series_field["description"]
-    assert series_ref["type"] == "object"
-    assert "bare string" in series_ref["description"]
-    assert series_ref["examples"] == [{"value": _SERIES_VALUE}]
-    assert "inside this reference object" in series_ref["properties"]["value"]["description"]
-
-    search_field, search_series_ref = _reference_definition(
-        schemas["matches.search"], "series"
-    )
-    assert "returned by series.search" in search_field["description"]
-    assert search_series_ref["type"] == "object"
-
-    match_field, match_ref = _reference_definition(schemas["matches.get_detail"], "match_ref")
-    game_field, game_ref = _reference_definition(schemas["matches.get_detail"], "game_ref")
-    assert "exactly one of match_ref or game_ref" in match_field["description"]
-    assert "exactly one of match_ref or game_ref" in game_field["description"]
-    assert match_ref["type"] == game_ref["type"] == "object"
-    assert match_ref["examples"] == [{"value": _MATCH_VALUE}]
-    assert game_ref["examples"] == [{"value": _GAME_VALUE}]
+    assert search_field["default"] is None
+    assert search_locator["type"] == detail_locator["type"] == "object"
+    assert set(detail_locator["required"]) == {"source", "kind", "value"}
+    assert set(search_locator["properties"]) == {"source", "kind", "value"}
 
     team_field, team_ref = _reference_definition(schemas["teams.get_detail"], "team_ref")
     player_field, player_ref = _reference_definition(
@@ -102,22 +85,16 @@ def test_agent_visible_reference_schemas_explain_nested_object_inputs() -> None:
     ("input_model", "field_name", "value", "valid_arguments"),
     [
         (
-            SeriesListMatchesInput,
-            "series_ref",
-            _SERIES_VALUE,
-            {"series_ref": {"value": _SERIES_VALUE}},
-        ),
-        (
-            MatchSearchInput,
-            "series",
-            _SERIES_VALUE,
-            {"series": {"value": _SERIES_VALUE}},
-        ),
-        (
             MatchGetDetailInput,
-            "match_ref",
-            _MATCH_VALUE,
-            {"match_ref": {"value": _MATCH_VALUE}},
+            "locator",
+            _LOCATOR,
+            {"locator": _LOCATOR},
+        ),
+        (
+            EsportsSearchInput,
+            "within",
+            _LOCATOR,
+            {"within": _LOCATOR},
         ),
         (
             TeamGetDetailInput,
@@ -136,11 +113,16 @@ def test_agent_visible_reference_schemas_explain_nested_object_inputs() -> None:
 def test_domain_reference_inputs_reject_string_forms(
     input_model: type[BaseModel],
     field_name: str,
-    value: str,
+    value: dict[str, str] | str,
     valid_arguments: dict[str, object],
 ) -> None:
     assert input_model.model_validate(valid_arguments)
-    for invalid_value in (value, json.dumps({"value": value})):
+    invalid_values = (
+        (json.dumps(value), value["value"])
+        if isinstance(value, dict)
+        else (value, json.dumps({"value": value}))
+    )
+    for invalid_value in invalid_values:
         with pytest.raises(ValidationError):
             input_model.model_validate({field_name: invalid_value})
 
@@ -173,22 +155,21 @@ def test_openai_compatible_payload_preserves_reference_schema_metadata() -> None
         model="test-model",
         transport=httpx.MockTransport(handler),
     )
-    match_search_schema = _tool_schemas()["matches.search"]
+    esports_search_schema = _tool_schemas()["esports.search"]
     asyncio.run(
         client.complete(
             ModelRequest(
-                messages=[UserMessage(content="find matches")],
+                messages=[UserMessage(content="find esports")],
                 tools=[
                     build_vnext_registry(
                         fixture_vnext_services(*fixture_services())
-                    ).get("matches.search").schema()
+                    ).get("esports.search").schema()
                 ],
             )
         )
     )
 
     provider_schema = seen["payload"]["tools"][0]["function"]["parameters"]
-    assert provider_schema == match_search_schema
-    provider_field, provider_ref = _reference_definition(provider_schema, "series")
-    assert "returned by series.search" in provider_field["description"]
-    assert provider_ref["examples"] == [{"value": _SERIES_VALUE}]
+    assert provider_schema == esports_search_schema
+    _, provider_locator = _reference_definition(provider_schema, "within")
+    assert set(provider_locator["required"]) == {"source", "kind", "value"}

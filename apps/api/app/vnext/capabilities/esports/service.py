@@ -17,12 +17,14 @@ class EsportsSearchService:
         *,
         query: str | None = None,
         within: SourceLocator | None = None,
+        teams: list[str] | None = None,
         time_scope: TimeScope = "all",
         limit: int = 10,
     ) -> EsportsSearchResult:
         return await self._provider.search(
             query=query,
             within=within,
+            teams=teams or [],
             time_scope=time_scope,
             limit=limit,
         )

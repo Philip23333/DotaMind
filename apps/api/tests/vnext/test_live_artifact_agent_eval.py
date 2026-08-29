@@ -72,7 +72,7 @@ def _result_content(result: ToolResultMessage | None) -> dict[str, Any] | None:
 def _has_match_data(content: dict[str, Any]) -> bool:
     return any(
         isinstance(content.get(key), list) and bool(content[key])
-        for key in ("matches", "candidates", "games")
+        for key in ("records", "matches", "candidates", "games")
     ) or isinstance(content.get("match"), dict)
 
 
@@ -151,7 +151,8 @@ def _live_settings() -> VNextSettings:
     return settings
 
 
-async def _run_live_full_chain(settings: VNextSettings) -> None:
+async def _run_live_full_chain() -> None:
+    settings = _live_settings()
     services = build_vnext_services(settings)
     base_runtime = build_vnext_runtime(settings, services=services)
     model = _TracingModelClient(base_runtime.model)
@@ -193,23 +194,24 @@ async def _run_live_full_chain(settings: VNextSettings) -> None:
             f"first turn returned a tool error; {first_context}"
         )
 
-        series_calls = [
-            call for call in first_calls if call.name == "series.search"
-        ]
-        assert series_calls, f"discovery did not call series.search; {first_context}"
-        series_contents = [
+        esports_calls = [call for call in first_calls if call.name == "esports.search"]
+        assert esports_calls, f"discovery did not call esports.search; {first_context}"
+        esports_contents = [
             content
-            for call in series_calls
+            for call in esports_calls
             if (content := _result_content(_call_result(call, first_result_map))) is not None
         ]
-        assert any(content.get("candidates") for content in series_contents), (
-            f"discovery returned no series candidates; {first_context}"
+        assert any(
+            any(record.get("kind") == "series" for record in content.get("records", []))
+            for content in esports_contents
+        ), (
+            f"discovery returned no series locator; {first_context}"
         )
         assert any(
             _has_match_data(content)
             for result in first_results
             if (content := _result_content(result)) is not None
-        ), f"discovery returned no match data after series search; {first_context}"
+        ), f"discovery returned no match data after esports search; {first_context}"
 
         second_response_start = len(model.responses)
         second_request_start = len(model.requests)
@@ -250,6 +252,9 @@ async def _run_live_full_chain(settings: VNextSettings) -> None:
             call for call in second_calls if call.name == "matches.get_detail"
         ]
         assert detail_calls, f"resolution did not call matches.get_detail; {second_context}"
+        assert all("locator" in call.arguments for call in detail_calls), (
+            f"resolution did not pass a SourceLocator to matches.get_detail; {second_context}"
+        )
         resolved_games = _resolved_game_rows(second_calls, second_result_map)
         assert resolved_games, (
             "resolution did not return a resolved valve_match_id from matches.get_detail; "
@@ -315,4 +320,4 @@ async def _run_live_full_chain(settings: VNextSettings) -> None:
 
 @pytest.mark.live_agent_eval
 def test_live_full_chain_artifact_agent_eval() -> None:
-    asyncio.run(_run_live_full_chain(_live_settings()))
+    asyncio.run(_run_live_full_chain())

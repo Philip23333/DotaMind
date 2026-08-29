@@ -106,67 +106,162 @@ def test_esports_search_reuses_a_series_locator_for_matches() -> None:
     assert panda.list_calls[-1]["series_id"] == 20001
 
 
-def test_esports_search_preserves_old_series_and_match_tools_for_comparison() -> None:
+def test_esports_search_uses_exact_team_constraint_when_name_search_is_insufficient() -> None:
     series_service, match_service, panda, opendota = fixture_services()
     registry = build_vnext_registry(
         fixture_vnext_services(series_service, match_service, panda, opendota)
     )
-    assert {"esports.search", "series.search", "series.list_matches"} <= {
-        tool.name for tool in registry.list()
-    }
 
     async def exercise():
-        old_series = await registry.execute(
+        query_only = await registry.execute(
             ToolCall(
-                id="old-series",
-                name="series.search",
-                arguments={"query": "The International 2026", "year": 2026},
+                id="query-only",
+                name="esports.search",
+                arguments={"query": "Team Alpha Team Beta", "time_scope": "recent"},
             )
         )
-        new_series = await registry.execute(
+        constrained = await registry.execute(
             ToolCall(
-                id="new-series",
+                id="team-constraint",
+                name="esports.search",
+                arguments={
+                    "teams": ["Team Alpha", "Team Beta"],
+                    "time_scope": "recent",
+                },
+            )
+        )
+        return query_only, constrained
+
+    query_only, constrained = asyncio.run(exercise())
+
+    assert query_only.status == constrained.status == "ok"
+    assert not any(record["kind"] == "match" for record in query_only.content["records"])
+    assert [record["facts"]["name"] for record in constrained.content["records"]] == [
+        "Grand Final: Alpha vs Beta"
+    ]
+
+
+def test_esports_search_navigates_league_series_match_and_game() -> None:
+    series_service, match_service, panda, opendota = fixture_services()
+    registry = build_vnext_registry(
+        fixture_vnext_services(series_service, match_service, panda, opendota)
+    )
+    assert {"series.search", "series.list_matches", "matches.search"}.isdisjoint(
+        {tool.name for tool in registry.list()}
+    )
+
+    async def exercise():
+        discovery = await registry.execute(
+            ToolCall(
+                id="league-discovery",
+                name="esports.search",
+                arguments={"query": "The International"},
+            )
+        )
+        league = next(
+            record["locator"]
+            for record in discovery.content["records"]
+            if record["kind"] == "league" and record["facts"]["name"] == "The International"
+        )
+        series = await registry.execute(
+            ToolCall(
+                id="league-series",
+                name="esports.search",
+                arguments={"within": league},
+            )
+        )
+        series_locator = next(
+            record["locator"]
+            for record in series.content["records"]
+            if record["kind"] == "series" and record["facts"]["name"] == "The International 2026"
+        )
+        matches = await registry.execute(
+            ToolCall(
+                id="series-matches",
+                name="esports.search",
+                arguments={"within": series_locator, "time_scope": "recent"},
+            )
+        )
+        match_locator = next(
+            record["locator"]
+            for record in matches.content["records"]
+            if record["kind"] == "match"
+        )
+        games = await registry.execute(
+            ToolCall(
+                id="match-games",
+                name="esports.search",
+                arguments={"within": match_locator},
+            )
+        )
+        return discovery, series, matches, games
+
+    discovery, series, matches, games = asyncio.run(exercise())
+
+    assert all(
+        result.status == "ok"
+        for result in (discovery, series, matches, games)
+    )
+    assert {record["kind"] for record in games.content["records"]} == {"game"}
+
+
+def test_esports_search_rejects_unknown_or_wrong_source_locators() -> None:
+    series_service, match_service, panda, opendota = fixture_services()
+    registry = build_vnext_registry(
+        fixture_vnext_services(series_service, match_service, panda, opendota)
+    )
+
+    async def exercise():
+        discovery = await registry.execute(
+            ToolCall(
+                id="discover-locator",
                 name="esports.search",
                 arguments={"query": "The International 2026"},
             )
         )
-        old_schedule = await registry.execute(
+        unknown = await registry.execute(
             ToolCall(
-                id="old-schedule",
-                name="series.list_matches",
+                id="unknown-locator",
+                name="esports.search",
                 arguments={
-                    "series_ref": old_series.content["candidates"][0]["ref"],
-                    "time_scope": "recent",
+                    "within": {"source": "pandascore", "kind": "series", "value": "src:missing"}
+                },
+            )
+        )
+        wrong_source = await registry.execute(
+            ToolCall(
+                id="wrong-source",
+                name="esports.search",
+                arguments={
+                    "within": {"source": "opendota", "kind": "series", "value": "src:missing"}
                 },
             )
         )
         series_locator = next(
             record["locator"]
-            for record in new_series.content["records"]
-            if record["kind"] == "series" and record["facts"]["name"] == "The International 2026"
+            for record in discovery.content["records"]
+            if record["kind"] == "series"
         )
-        new_schedule = await registry.execute(
+        wrong_kind = await registry.execute(
             ToolCall(
-                id="new-schedule",
+                id="wrong-kind",
                 name="esports.search",
-                arguments={"within": series_locator, "time_scope": "recent"},
+                arguments={
+                    "within": {**series_locator, "kind": "match"},
+                },
             )
         )
-        return old_series, new_series, old_schedule, new_schedule
+        return unknown, wrong_source, wrong_kind
 
-    old_series, new_series, old_schedule, new_schedule = asyncio.run(exercise())
+    unknown, wrong_source, wrong_kind = asyncio.run(exercise())
 
-    assert all(
-        result.status == "ok"
-        for result in (old_series, new_series, old_schedule, new_schedule)
+    assert unknown.status == wrong_source.status == wrong_kind.status == "error"
+    assert unknown.error is not None
+    assert wrong_source.error is not None
+    assert wrong_kind.error is not None
+    assert (
+        unknown.error.code
+        == wrong_source.error.code
+        == wrong_kind.error.code
+        == "invalid_source_locator"
     )
-    new_series_facts = next(
-        record["facts"]
-        for record in new_series.content["records"]
-        if record["kind"] == "series" and record["facts"]["name"] == "The International 2026"
-    )
-    assert old_series.content["candidates"][0]["name"] == new_series_facts["name"]
-    assert old_series.content["candidates"][0]["year"] == new_series_facts["year"]
-    assert [match["name"] for match in old_schedule.content["matches"]] == [
-        record["facts"]["name"] for record in new_schedule.content["records"]
-    ]

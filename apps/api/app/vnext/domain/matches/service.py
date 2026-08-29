@@ -38,10 +38,12 @@ from app.vnext.domain.matches.resolution import (
 from app.vnext.domain.matches.valve_match_id_resolver import ValveMatchIdResolver
 from app.vnext.domain.series.models import Series
 from app.vnext.domain.series.service import SeriesService, series_display_name
+from app.vnext.domain.source import SourceLocator, SourceLocatorError
 from app.vnext.domain.team_player_index import TeamPlayerRefIndex
 from app.vnext.providers.opendota.adapter import OpenDotaAdapter, OpenDotaProviderError
 from app.vnext.providers.opendota.models import OpenDotaMatchDetail
 from app.vnext.providers.pandascore.adapter import PandaScoreAdapter
+from app.vnext.providers.pandascore.locator import PandaScoreLocatorIndex
 from app.vnext.providers.pandascore.models import PandaScoreMatch, PandaScoreTeam
 
 _TEAM_SEARCH_LIMIT = 20
@@ -78,6 +80,7 @@ class MatchService:
         opendota: OpenDotaAdapter,
         *,
         series_service: SeriesService | None = None,
+        locator_index: PandaScoreLocatorIndex | None = None,
         resolver: MatchResolutionService | None = None,
         team_player_index: TeamPlayerRefIndex | None = None,
         now: Callable[[], datetime] | None = None,
@@ -85,6 +88,7 @@ class MatchService:
         self.pandascore = pandascore
         self.opendota = opendota
         self.series_service = series_service
+        self.locator_index = locator_index or PandaScoreLocatorIndex()
         self.team_player_index = team_player_index or TeamPlayerRefIndex()
         self.valve_match_id_resolver = ValveMatchIdResolver(opendota, resolver=resolver)
         self._now = now or (lambda: datetime.now(timezone.utc))
@@ -305,10 +309,15 @@ class MatchService:
     async def get_detail(
         self,
         *,
+        locator: SourceLocator | None = None,
         match_ref: MatchRef | None = None,
         game_ref: GameRef | None = None,
     ) -> MatchDetail:
-        target = self._known_target(match_ref=match_ref, game_ref=game_ref)
+        target = (
+            await self._known_target_for_locator(locator)
+            if locator is not None
+            else self._known_target(match_ref=match_ref, game_ref=game_ref)
+        )
         if target is None:
             return _not_found_detail()
         known, target_games = target
@@ -351,6 +360,47 @@ class MatchService:
             attempts,
             public_games,
             detail_fetched_at=detail_fetched_at,
+        )
+
+    async def _known_target_for_locator(
+        self,
+        locator: SourceLocator,
+    ) -> tuple[_KnownMatch, tuple[NormalizedGame, ...]]:
+        resolved = self.locator_index.resolve(locator)
+        if resolved.kind == "match":
+            provider_match_id = resolved.provider_id
+            requested_game_id: int | None = None
+        elif resolved.kind == "game":
+            provider_match_id = resolved.parent_match_provider_id
+            requested_game_id = resolved.provider_id
+            if provider_match_id is None:
+                raise SourceLocatorError(
+                    "game source locator is not linked to a PandaScore match",
+                    details={"source": locator.source, "kind": locator.kind},
+                )
+        else:
+            raise SourceLocatorError(
+                "source locator cannot be used for match detail",
+                details={"source": locator.source, "kind": locator.kind},
+            )
+
+        provider_match = await self.pandascore.get_match(provider_match_id)
+        normalized = _normalize_search_match(
+            provider_match.item,
+            fetched_at=provider_match.fetched_at,
+        )
+        self._remember(provider_match.item, normalized, provider_match.fetched_at)
+        known = self._matches[normalized.summary.ref.value]
+        if requested_game_id is None:
+            return known, known.normalized.games
+        games = tuple(
+            game for game in known.normalized.games if game.provider_id == requested_game_id
+        )
+        if games:
+            return known, games
+        raise SourceLocatorError(
+            "game source locator is not present in its PandaScore match",
+            details={"source": locator.source, "kind": locator.kind},
         )
 
     async def _resolve_games(

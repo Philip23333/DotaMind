@@ -5,11 +5,11 @@
 This is the vNext target architecture. Code describes current behavior; this
 document describes intended long-term boundaries.
 
-The current code still exposes `series.search`, `series.list_matches`,
-`matches.search`, and `matches.get_detail`, and it still contains the heavier
-GameSummary construction pipeline. Those are transitional. The target is a
-smaller capability layer with source-backed implementations and generic Artifact
-externalization.
+The current code exposes source-backed `esports.search` and transitional
+`matches.get_detail`, and it still contains the heavier GameSummary construction
+pipeline. `matches.get_detail` will be replaced by `game.detail`; the target is
+a smaller capability layer with source-backed implementations and generic
+Artifact externalization.
 
 ## Principles
 

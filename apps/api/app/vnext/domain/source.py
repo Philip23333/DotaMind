@@ -11,4 +11,12 @@ class SourceLocator(DomainModel):
     value: str
 
 
-__all__ = ["SourceLocator"]
+class SourceLocatorError(ValueError):
+    """A source locator is malformed, unsupported, or no longer known."""
+
+    def __init__(self, message: str, *, details: dict[str, str]) -> None:
+        super().__init__(message)
+        self.details = details
+
+
+__all__ = ["SourceLocator", "SourceLocatorError"]

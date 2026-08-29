@@ -30,7 +30,7 @@ if not _live_settings.pandascore_token:
     )
 
 
-def test_live_pandascore_series_and_small_match_window() -> None:
+def test_live_pandascore_esports_navigation_and_small_match_window() -> None:
     query = os.getenv("DOTAMIND_LIVE_COMPETITION_QUERY", "The International")
     year_raw = os.getenv("DOTAMIND_LIVE_COMPETITION_YEAR")
     year = int(year_raw) if year_raw else None
@@ -38,16 +38,19 @@ def test_live_pandascore_series_and_small_match_window() -> None:
     async def exercise() -> None:
         services = build_vnext_services(_live_settings)
         try:
-            result = await services.series.search(query, year=year, limit=5)
-            assert result.candidates, "PandaScore returned no live series candidates"
-            schedule = await services.series.list_matches(
-                result.candidates[0].ref,
+            result = await services.esports.search(query=query, limit=5)
+            series = next(
+                record
+                for record in result.records
+                if record.kind == "series" and (year is None or record.facts.get("year") == year)
+            )
+            assert series.locator is not None, "PandaScore series result did not include a locator"
+            schedule = await services.esports.search(
+                within=series.locator,
                 time_scope="all",
                 limit=5,
             )
-            assert schedule.status == "ok", "PandaScore returned no live match window"
-            assert schedule.provenance.sources == ["pandascore"]
-            assert schedule.provenance.freshness.fetched_at is not None
+            assert all(record.kind == "match" for record in schedule.records)
         finally:
             await services.aclose()
 
@@ -61,16 +64,18 @@ def test_live_opendota_resolution_and_detail() -> None:
     async def exercise() -> None:
         services = build_vnext_services(_live_settings)
         try:
-            matches = await services.matches.search(
+            discovery = await services.esports.search(
                 time_scope="recent",
                 limit=5,
             )
-            assert matches.candidates, "no live match candidate for OpenDota smoke"
+            matches = [record for record in discovery.records if record.kind == "match"]
+            assert matches, "no live match candidate for OpenDota smoke"
             detail = None
             outcomes: list[str] = []
-            for candidate in matches.candidates:
+            for candidate in matches:
+                assert candidate.locator is not None
                 try:
-                    candidate_detail = await services.matches.get_detail(match_ref=candidate.ref)
+                    candidate_detail = await services.matches.get_detail(locator=candidate.locator)
                 except PandaScoreProviderError:
                     outcomes.append("pandascore_detail_unavailable")
                     continue

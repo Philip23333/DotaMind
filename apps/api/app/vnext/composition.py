@@ -41,11 +41,11 @@ from app.vnext.providers.opendota.adapter import (
     OpenDotaGameConstructionAdapter,
 )
 from app.vnext.providers.pandascore.adapter import PandaScoreAdapter
+from app.vnext.providers.pandascore.locator import PandaScoreLocatorIndex
 from app.vnext.tools.artifacts import register_artifact_tools
 from app.vnext.tools.domain.esports import register_esports_tools
 from app.vnext.tools.domain.matches import register_match_tools
 from app.vnext.tools.domain.players import register_player_tools
-from app.vnext.tools.domain.series import register_series_tools
 from app.vnext.tools.domain.teams import register_team_tools
 from app.vnext.tools.registry import ToolRegistry
 
@@ -217,7 +217,8 @@ def build_vnext_services(
         request_timeout_seconds=config.opendota_timeout_seconds,
     )
     series_service = SeriesService(panda_adapter)
-    esports_service = EsportsSearchService(PandaScoreEsportsSearch(panda_adapter))
+    locator_index = PandaScoreLocatorIndex()
+    esports_service = EsportsSearchService(PandaScoreEsportsSearch(panda_adapter, locator_index))
     team_player_index = TeamPlayerRefIndex()
     team_service = TeamService(panda_adapter, team_player_index)
     player_service = PlayerService(panda_adapter, team_player_index)
@@ -225,6 +226,7 @@ def build_vnext_services(
         panda_adapter,
         open_adapter,
         series_service=series_service,
+        locator_index=locator_index,
         team_player_index=team_player_index,
     )
     series_service.set_match_cache(match_service.remember_fixture)
@@ -265,7 +267,6 @@ def build_vnext_registry(
     resolved_services = services or build_vnext_services(settings)
     registry = ToolRegistry()
     register_esports_tools(registry, resolved_services.esports)
-    register_series_tools(registry, resolved_services.series)
     register_match_tools(
         registry,
         resolved_services.matches,

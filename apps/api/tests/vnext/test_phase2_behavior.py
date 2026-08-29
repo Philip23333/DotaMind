@@ -54,15 +54,15 @@ def _tool_calls(model: ScriptedTranscriptModelClient) -> list[ToolCall]:
     ]
 
 
-def test_behavior_scenario_a_series_search_runs_through_runtime_and_registry() -> None:
+def test_behavior_scenario_a_esports_search_runs_through_runtime_and_registry() -> None:
     runtime, _, registry = _runtime()
     model = ScriptedTranscriptModelClient(
         [
             lambda request: _assistant_call(
                 ToolCall(
-                    id="series-search",
-                    name="series.search",
-                    arguments={"query": "The International 2026", "year": 2026},
+                    id="esports-search",
+                    name="esports.search",
+                    arguments={"query": "The International 2026"},
                 )
             ),
             lambda request: ModelResponse.from_final("赛事已找到"),
@@ -73,12 +73,9 @@ def test_behavior_scenario_a_series_search_runs_through_runtime_and_registry() -
     final = asyncio.run(runtime.run([UserMessage(content="帮我查一下 The International 2026")]))
 
     assert final == FinalMessage(content="赛事已找到")
-    assert _tool_calls(model)[0].name == "series.search"
+    assert _tool_calls(model)[0].name == "esports.search"
     assert [tool.name for tool in registry.list()] == [
         "esports.search",
-        "series.search",
-        "series.list_matches",
-        "matches.search",
         "matches.get_detail",
         "teams.search",
         "teams.get_detail",
@@ -88,28 +85,31 @@ def test_behavior_scenario_a_series_search_runs_through_runtime_and_registry() -
         "artifact.grep",
         "artifact.read",
     ]
-    assert len(model.requests[0].tools) == 12
+    assert len(model.requests[0].tools) == 9
 
 
-def test_behavior_scenario_b_upcoming_uses_series_ref_from_prior_tool_result() -> None:
+def test_behavior_scenario_b_upcoming_uses_series_locator_from_prior_tool_result() -> None:
     runtime, _, _ = _runtime()
     model = ScriptedTranscriptModelClient(
         [
             lambda request: _assistant_call(
                 ToolCall(
-                    id="series-search",
-                    name="series.search",
-                    arguments={"query": "The International 2026", "year": 2026},
+                    id="esports-search",
+                    name="esports.search",
+                    arguments={"query": "The International 2026"},
                 )
             ),
             lambda request: _assistant_call(
                 ToolCall(
                     id="series-matches",
-                    name="series.list_matches",
+                    name="esports.search",
                     arguments={
-                        "series_ref": {
-                            "value": _last_tool_result(request)["candidates"][0]["ref"]["value"]
-                        },
+                        "within": next(
+                            record["locator"]
+                            for record in _last_tool_result(request)["records"]
+                            if record["kind"] == "series"
+                            and record["facts"]["name"] == "The International 2026"
+                        ),
                         "time_scope": "upcoming",
                     },
                 )
@@ -124,21 +124,21 @@ def test_behavior_scenario_b_upcoming_uses_series_ref_from_prior_tool_result() -
     assert final.content == "下一场已找到"
     calls = _tool_calls(model)
     assert [call.name for call in calls] == [
-        "series.search",
-        "series.list_matches",
+        "esports.search",
+        "esports.search",
     ]
-    assert calls[1].arguments["series_ref"]["value"].startswith("series:")
+    assert calls[1].arguments["within"]["kind"] == "series"
     assert calls[1].arguments["time_scope"] == "upcoming"
 
 
-def test_behavior_scenario_c_team_search_and_match_detail_use_runtime_tool_calls() -> None:
+def test_behavior_scenario_c_team_constraint_and_match_detail_use_source_locators() -> None:
     runtime, _, _ = _runtime()
     model = ScriptedTranscriptModelClient(
         [
             lambda request: _assistant_call(
                 ToolCall(
                     id="match-search",
-                    name="matches.search",
+                    name="esports.search",
                     arguments={
                         "teams": ["Team Alpha", "Team Beta"],
                         "time_scope": "recent",
@@ -150,9 +150,7 @@ def test_behavior_scenario_c_team_search_and_match_detail_use_runtime_tool_calls
                     id="match-detail",
                     name="matches.get_detail",
                     arguments={
-                        "match_ref": {
-                            "value": _last_tool_result(request)["candidates"][0]["ref"]["value"]
-                        }
+                        "locator": _last_tool_result(request)["records"][0]["locator"]
                     },
                 )
             ),
@@ -167,29 +165,32 @@ def test_behavior_scenario_c_team_search_and_match_detail_use_runtime_tool_calls
 
     assert final.content == "这场比赛详情已返回"
     calls = _tool_calls(model)
-    assert [call.name for call in calls] == ["matches.search", "matches.get_detail"]
-    assert calls[1].arguments["match_ref"]["value"].startswith("match:")
+    assert [call.name for call in calls] == ["esports.search", "matches.get_detail"]
+    assert calls[1].arguments["locator"]["kind"] == "match"
 
 
-def test_behavior_scenario_d_second_game_uses_exact_game_ref_through_runtime() -> None:
+def test_behavior_scenario_d_second_game_uses_exact_game_locator_through_runtime() -> None:
     runtime, services, _ = _runtime()
     model = ScriptedTranscriptModelClient(
         [
             lambda request: _assistant_call(
                 ToolCall(
                     id="match-search",
-                    name="matches.search",
+                    name="esports.search",
                     arguments={"query": "Grand Final", "time_scope": "recent"},
                 )
             ),
             lambda request: _assistant_call(
                 ToolCall(
-                    id="match-detail",
-                    name="matches.get_detail",
+                    id="match-games",
+                    name="esports.search",
                     arguments={
-                        "match_ref": {
-                            "value": _last_tool_result(request)["candidates"][0]["ref"]["value"]
-                        }
+                        "within": next(
+                            record["locator"]
+                            for record in _last_tool_result(request)["records"]
+                            if record["kind"] == "match"
+                            and record["facts"]["name"] == "Grand Final: Alpha vs Beta"
+                        )
                     },
                 )
             ),
@@ -198,13 +199,11 @@ def test_behavior_scenario_d_second_game_uses_exact_game_ref_through_runtime() -
                     id="game-detail",
                     name="matches.get_detail",
                     arguments={
-                        "game_ref": {
-                            "value": next(
-                                game["ref"]["value"]
-                                for game in _last_tool_result(request)["games"]
-                                if game["position"] == 2
-                            )
-                        }
+                        "locator": next(
+                            record["locator"]
+                            for record in _last_tool_result(request)["records"]
+                            if record["facts"]["position"] == 2
+                        )
                     },
                 )
             ),
@@ -216,12 +215,11 @@ def test_behavior_scenario_d_second_game_uses_exact_game_ref_through_runtime() -
     final = asyncio.run(runtime.run([UserMessage(content="第二局详细说说")]))
 
     assert final.content == "第二局是 Team Beta 获胜"
-    assert services.opendota.detail_calls == [40002, 40003, 40004, 40003]
+    assert services.opendota.detail_calls == [40003]
     calls = _tool_calls(model)
     assert [call.name for call in calls] == [
-        "matches.search",
-        "matches.get_detail",
+        "esports.search",
+        "esports.search",
         "matches.get_detail",
     ]
-    assert "match_ref" not in calls[-1].arguments
-    assert calls[-1].arguments["game_ref"]["value"].startswith("game:")
+    assert calls[-1].arguments["locator"]["kind"] == "game"

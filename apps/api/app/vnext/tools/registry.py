@@ -11,6 +11,7 @@ from pydantic import BaseModel, ValidationError
 
 from app.vnext.artifacts.retrieval import ArtifactPathNotFoundError
 from app.vnext.artifacts.store import ArtifactNotFoundError, ArtifactTypeMismatchError
+from app.vnext.domain.source import SourceLocatorError
 from app.vnext.llm.protocol import ModelTool, ToolCall, ToolResultMessage
 from app.vnext.tools.definition import ToolDefinition
 from app.vnext.tools.errors import ToolError, ToolErrorCode
@@ -110,6 +111,13 @@ class ToolRegistry:
                 "artifact_type_mismatch",
                 f"artifact reference metadata mismatch: {call.name}",
                 {},
+            )
+        except SourceLocatorError as exc:
+            return self._error_result(
+                call,
+                "invalid_source_locator",
+                str(exc),
+                exc.details,
             )
         except Exception:
             return self._error_result(

@@ -14,7 +14,7 @@ from app.vnext.llm.protocol import ToolCall
 from tests.vnext.phase2_support import fixture_services, fixture_vnext_services
 
 
-def test_composition_is_lazy_and_registers_the_twelve_vnext_tools() -> None:
+def test_composition_is_lazy_and_retires_the_old_esports_search_tools() -> None:
     services = build_vnext_services(VNextSettings(pandascore_token="test-token"))
     assert services.pandascore._client is None  # type: ignore[attr-defined]
     assert services.opendota._client is None  # type: ignore[attr-defined]
@@ -23,9 +23,6 @@ def test_composition_is_lazy_and_registers_the_twelve_vnext_tools() -> None:
     registry = build_vnext_registry(services)
     assert [tool.name for tool in registry.list()] == [
         "esports.search",
-        "series.search",
-        "series.list_matches",
-        "matches.search",
         "matches.get_detail",
         "teams.search",
         "teams.get_detail",
@@ -56,9 +53,6 @@ def test_vnext_runtime_uses_the_shared_llm_configuration() -> None:
     assert runtime.model.timeout == 12.5
     assert [tool.name for tool in runtime.tools.list()] == [
         "esports.search",
-        "series.search",
-        "series.list_matches",
-        "matches.search",
         "matches.get_detail",
         "teams.search",
         "teams.get_detail",
@@ -105,46 +99,42 @@ def test_vnext_settings_use_literal_defaults_without_environment(monkeypatch, tm
     assert settings.opendota_base_url == "https://api.opendota.com/api"
 
 
-def test_registry_executes_phase2_tools_and_exposes_canonical_valve_ids() -> None:
+def test_registry_uses_esports_locators_for_match_detail_and_artifacts() -> None:
     series_service, match_service, panda, opendota = fixture_services()
     services = fixture_vnext_services(series_service, match_service, panda, opendota)
     registry = build_vnext_registry(services)
 
     async def exercise():
-        series = await registry.execute(
+        discovery = await registry.execute(
             ToolCall(
-                id="series-search",
-                name="series.search",
-                arguments={"query": "The International 2026", "year": 2026},
+                id="event-search",
+                name="esports.search",
+                arguments={"query": "The International 2026"},
             )
         )
-        series_ref = series.content["candidates"][0]["ref"]["value"]
         schedule = await registry.execute(
             ToolCall(
-                id="series-matches",
-                name="series.list_matches",
+                id="event-matches",
+                name="esports.search",
                 arguments={
-                    "series_ref": {"value": series_ref},
+                    "within": next(
+                        record["locator"]
+                        for record in discovery.content["records"]
+                        if record["kind"] == "series"
+                        and record["facts"]["name"] == "The International 2026"
+                    ),
                     "time_scope": "recent",
                 },
             )
         )
-        match_search = await registry.execute(
-            ToolCall(
-                id="match-search",
-                name="matches.search",
-                arguments={"query": "Round 2", "time_scope": "recent"},
-            )
-        )
-        match_ref = match_search.content["candidates"][0]["ref"]["value"]
         detail = await registry.execute(
             ToolCall(
                 id="match-detail",
                 name="matches.get_detail",
-                arguments={"match_ref": {"value": match_ref}},
+                arguments={"locator": schedule.content["records"][0]["locator"]},
             )
         )
-        return series, schedule, match_search, detail
+        return discovery, schedule, detail
 
     results = asyncio.run(exercise())
     assert all(result.status == "ok" for result in results)
@@ -157,61 +147,65 @@ def test_registry_executes_phase2_tools_and_exposes_canonical_valve_ids() -> Non
         "provider_payload",
     ):
         assert forbidden not in serialized
+    assert "20001" not in serialized
     assert "30001" not in serialized
     assert "40001" in serialized
 
 
-def test_registry_game_ref_roundtrip_selects_only_game_two_without_provider_ids() -> None:
+def test_registry_game_locator_selects_only_game_two_without_provider_ids() -> None:
     series_service, match_service, panda, opendota = fixture_services()
     registry = build_vnext_registry(
         fixture_vnext_services(series_service, match_service, panda, opendota)
     )
 
     async def exercise():
-        search = await registry.execute(
+        discovery = await registry.execute(
             ToolCall(
                 id="bo3-search",
-                name="matches.search",
+                name="esports.search",
                 arguments={"query": "Grand Final", "time_scope": "recent"},
             )
         )
-        match_ref = search.content["candidates"][0]["ref"]["value"]
-        series = await registry.execute(
+        games = await registry.execute(
             ToolCall(
-                id="bo3-detail",
-                name="matches.get_detail",
-                arguments={"match_ref": {"value": match_ref}},
+                id="bo3-games",
+                name="esports.search",
+                arguments={
+                    "within": next(
+                        record["locator"]
+                        for record in discovery.content["records"]
+                        if record["kind"] == "match"
+                        and record["facts"]["name"] == "Grand Final: Alpha vs Beta"
+                    )
+                },
             )
         )
-        game_two_ref = next(
-            game["ref"]["value"]
-            for game in series.content["games"]
-            if game["position"] == 2
+        game_two_locator = next(
+            record["locator"]
+            for record in games.content["records"]
+            if record["facts"]["position"] == 2
         )
         opendota.detail_calls.clear()
         game_two = await registry.execute(
             ToolCall(
                 id="game-two-detail",
                 name="matches.get_detail",
-                arguments={"game_ref": {"value": game_two_ref}},
+                arguments={"locator": game_two_locator},
             )
         )
-        return search, series, game_two
+        return discovery, games, game_two
 
-    search, series, game_two = asyncio.run(exercise())
+    discovery, games, game_two = asyncio.run(exercise())
 
-    assert search.status == series.status == game_two.status == "ok"
-    assert len(series.content["games"]) == 3
+    assert discovery.status == games.status == game_two.status == "ok"
+    assert len(games.content["records"]) == 3
     assert len(game_two.content["games"]) == 1
     assert game_two.content["games"][0]["position"] == 2
-    assert game_two.content["games"][0]["winner"]["value"] != series.content["games"][0][
-        "winner"
-    ]["value"]
     assert opendota.detail_calls == [40003]
-    assert panda.get_calls == []
+    assert panda.get_calls == [30004, 30004]
 
     serialized = json.dumps(
-        [search.content, series.content, game_two.content],
+        [discovery.content, games.content, game_two.content],
         sort_keys=True,
     )
     for forbidden in (
@@ -227,7 +221,7 @@ def test_registry_game_ref_roundtrip_selects_only_game_two_without_provider_ids(
         assert provider_id not in serialized
 
 
-def test_get_detail_requires_exactly_one_domain_reference() -> None:
+def test_get_detail_requires_a_source_locator() -> None:
     _, _, panda, opendota = fixture_services()
     series_service, match_service, _, _ = fixture_services()
     registry = build_vnext_registry(
