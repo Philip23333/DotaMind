@@ -14,6 +14,7 @@ from .game_summary_v4 import GameSummaryArtifactV4
 from .game_summary_v5 import GameSummaryArtifactV5
 from .models import ArtifactRef
 from .protocol import Artifact
+from .source_document import SourceDocumentArtifact
 from .store import (
     ArtifactNotFoundError,
     ArtifactStoreUnavailableError,
@@ -31,6 +32,7 @@ class RedisArtifactStore:
         ("game_summary", "3"): GameSummaryArtifact,
         ("game_summary", "4"): GameSummaryArtifactV4,
         ("game_summary", "5"): GameSummaryArtifactV5,
+        ("source_document", "1"): SourceDocumentArtifact,
     }
 
     def __init__(self, client: Any, *, ttl_seconds: int = DEFAULT_TTL_SECONDS) -> None:
@@ -85,7 +87,7 @@ class RedisArtifactStore:
         self,
         artifact_types: list[str] | None = None,
     ) -> AsyncIterator[ArtifactRef]:
-        """Yield refs recovered from retained artifact envelopes using Redis SCAN."""
+        """Yield stored references recovered from retained artifact envelopes using Redis SCAN."""
 
         allowed_types = set(artifact_types) if artifact_types is not None else None
         refs: dict[str, ArtifactRef] = {}

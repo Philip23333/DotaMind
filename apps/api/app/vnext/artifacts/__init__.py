@@ -23,6 +23,11 @@ from .scope import (
     MemoryArtifactScopeStore,
     RedisArtifactScopeStore,
 )
+from .source_document import (
+    SourceDocumentArtifact,
+    bounded_source_observation,
+    source_document_artifact_ref,
+)
 from .store import (
     ArtifactNotFoundError,
     ArtifactStore,
@@ -56,5 +61,8 @@ __all__ = [
     "MemoryArtifactScopeStore",
     "RedisArtifactStore",
     "RedisArtifactScopeStore",
+    "SourceDocumentArtifact",
+    "bounded_source_observation",
     "game_summary_artifact_ref",
+    "source_document_artifact_ref",
 ]

@@ -22,9 +22,9 @@ The target flow is:
 
 ```text
 model-facing capability
-  -> provider implementation obtains complete validated result
-  -> store large result outside context
-  -> return bounded facts + ArtifactRef
+  -> provider implementation obtains complete validated source document
+  -> store the document outside context
+  -> return generic bounded observation + ArtifactRef
 
 model
   -> artifact.grep for breadth
@@ -49,16 +49,28 @@ Artifact
   facts
 ```
 
-- `source` identifies the source implementation such as `opendota`;
+- `source` identifies the source implementation such as `pandascore` or
+  `opendota`;
 - `kind` identifies the source/document kind;
 - `canonical_ids` contains only genuinely shared identities when useful, such as
   `valve_match_id`;
-- `facts` is a validated, bounded-at-tool-boundary, source-backed JSON-like
-  document and may remain source-shaped.
+- `facts` is the complete validated provider-shaped business document.
 
-"Source-shaped" does not mean raw provider payload. Transport-only metadata,
-raw provider-private IDs, invalid/unbounded structures, and undocumented source
-fields remain below the provider boundary.
+The complete Artifact is not the same thing as model-facing `facts` returned by
+a capability. A capability derives a generic bounded observation from this
+source document and returns that observation together with the `ArtifactRef`.
+The observation is structural and provider-blind; it is not a hand-authored
+`MatchPreview`/`SeriesPreview` DTO.
+
+"Source-shaped" does not mean raw transport payload. Headers, credentials,
+pagination envelopes, transport-only metadata, invalid types, and unbounded
+transport data remain below the provider boundary. Additional provider business
+fields should be retained when validation can safely carry them.
+
+Provider-private IDs may remain inside a stored source document as source-local
+evidence. They are omitted from bounded capability observations and are not a
+supported cross-tool identity language; the model navigates provider objects
+with `SourceLocator`.
 
 ## No universal detail schema requirement
 
@@ -68,22 +80,25 @@ game-detail provider to expose the same fields.
 Prefer:
 
 ```text
-OpenDota detail
+PandaScore fixture
   -> source-backed Artifact A
 
-Future detail source
+OpenDota detail
   -> source-backed Artifact B
 
+Future detail source
+  -> source-backed Artifact C
+
 artifact.grep/read
-  -> works on both JSON-like documents
+  -> works on all JSON-like documents
 ```
 
 over:
 
 ```text
-OpenDota detail ----\
-                    -> UnifiedGameDetail -> Artifact
-Future provider ----/
+provider A ----\
+provider B ----- -> UnifiedGameOrMatchDTO -> Artifact
+provider C ----/
 ```
 
 A shared business schema should be introduced only when a concrete deterministic
@@ -91,15 +106,16 @@ consumer actually requires one.
 
 ## Capability relationship
 
-Artifact production is subordinate to the capability that obtained the large
-result.
+Artifact production is subordinate to the capability that obtained the result.
 
 Current target examples:
 
 ```text
 esports.search
   -> PandaScore implementation
-  -> bounded source-backed search facts
+  -> validated PandaScore source object
+  -> source_document Artifact
+  -> bounded structural observation + SourceLocator + ArtifactRef
 
 game.detail
   -> resolve valve_match_id when needed
@@ -117,7 +133,7 @@ part of a capability's successful data path when externalization is useful.
 
 ```text
 SourceLocator
-  = revisit one object inside one provider/source
+  = revisit/navigate one object inside one provider/source
 
 ArtifactRef
   = revisit one stored document inside DotaMind's Artifact corpus
@@ -126,7 +142,28 @@ ArtifactRef
 A source locator is provider-scoped and opaque. An ArtifactRef is storage-scoped
 and versioned according to the stored document contract.
 
+A record may carry both. For example, an `esports.search` match record can use
+its `SourceLocator` to navigate to games and its `ArtifactRef` to inspect the
+complete PandaScore fixture with generic read/grep.
+
 Neither needs to become a canonical DotaMind League/Series/Match identity.
+
+## Bounded observation policy
+
+`esports.search` does not define a separate preview schema for each PandaScore
+object. It derives a generic observation from the stored source document.
+
+The initial policy is intentionally simple:
+
+- omit provider-private identity keys from the model-facing observation;
+- retain bounded top-level scalar values;
+- represent nested objects and collections structurally (for example object
+  field count or collection item count);
+- bound top-level field count and long strings;
+- keep the complete source document behind `ArtifactRef`.
+
+If later evidence requires a different generic bound, change the bounding policy
+rather than adding `MatchPreview`, `SeriesPreview`, or scenario-specific fields.
 
 ## Canonical Valve identities
 
@@ -171,18 +208,15 @@ merged into one universal Artifact.
 The target relationship can be expressed through:
 
 ```text
-PandaScore SourceLocator
-  -> deterministic source-to-Valve resolution
+PandaScore SourceLocator + PandaScore source-document ArtifactRef
+  -> deterministic source-to-Valve resolution when game detail is needed
   -> valve_match_id
   -> OpenDota detail Artifact
 ```
 
-The bounded `game.detail` result may retain the source locator and resolved Valve
-identity. Generic Artifact scope may associate the resulting Artifact with the
-source locator when useful.
-
-Readable PandaScore hierarchy/context is copied into the detail Artifact only if
-a concrete consumer demonstrates that storing the duplication is valuable.
+Readable PandaScore hierarchy/context is copied into an OpenDota detail Artifact
+only if a concrete consumer demonstrates that storing the duplication is
+valuable.
 
 ## Artifact exploration
 
@@ -191,7 +225,9 @@ Artifacts form a generic JSON-like corpus outside model context.
 ### `artifact.search`
 
 Exact availability lookup where useful. It never fetches providers or creates a
-missing Artifact.
+missing Artifact. The current exact-search surface remains GameSummary/Valve-ID
+oriented during migration; an ArtifactRef returned directly by another
+capability does not need to pass through `artifact.search`.
 
 ### `artifact.grep`
 
@@ -208,7 +244,8 @@ It does not know source-specific or gameplay-specific dimensions.
 ### `artifact.read`
 
 Bounded depth retrieval by exact ArtifactRef plus structural path. It does not
-interpret provider semantics.
+interpret provider semantics. A source-document Artifact keeps complete provider
+facts under its `facts` field.
 
 Search/read are independent observation primitives; no fixed grep-then-read
 workflow is required.
@@ -248,9 +285,9 @@ enrichment that are no longer required by the target architecture.
 
 Do not silently mutate v3/v4/v5.
 
-The replacement does **not** need to be called `GameSummaryArtifactV6`. First
-prove the capability and source-backed document boundary, then introduce the
-smallest stable Artifact type/version required by the production path.
+The replacement does **not** need to be called `GameSummaryArtifactV6`. Source
+backed `source_document` artifacts are the generic substrate; game-detail
+migration can use the same principle without defining another universal schema.
 
 ## Migration route
 
@@ -263,23 +300,16 @@ Define the minimum shared contracts needed by the new tool layer:
 - target `esports.search` contract;
 - no generic provider registry/framework yet.
 
-Implement `esports.search` with PandaScore using existing verified provider
-operations internally. Keep old Series/Match tools temporarily while focused
-evals compare behavior.
-
 ### Commit B — migrate esports discovery to `esports.search`
 
-Cover current use cases of:
+Cover current use cases of `series.search`, `series.list_matches`, and
+`matches.search` using `within: SourceLocator` for continued source-local
+navigation. After focused and real-model acceptance, remove obsolete
+ontology-shaped registrations.
 
-- `series.search`;
-- `series.list_matches`;
-- `matches.search`.
-
-Use `within: SourceLocator` where continued source-local navigation is needed.
-After focused and real-model acceptance, remove the old registrations and the
-canonical PandaScore navigation Ref machinery that no retained consumer needs.
-
-Do not add `league.search` or another ontology-shaped replacement.
+The PandaScore implementation externalizes each discovered source object as a
+`source_document` Artifact and derives model-facing `facts` generically from that
+same document. Do not restore manually selected Match/Series preview DTOs.
 
 ### Commit C — introduce `game.detail`
 
@@ -294,47 +324,25 @@ After acceptance, retire `matches.get_detail` as the model-facing detail tool.
 
 ### Commit D — add minimal Catalog capabilities
 
-Expose the local Valve catalog through:
+Expose the local Valve catalog through `catalog.search` and bounded batch
+`catalog.lookup`. Keep catalog mapping outside dynamic Artifact production.
 
-- `catalog.search`;
-- bounded batch `catalog.lookup`.
-
-Keep catalog mapping outside dynamic Artifact production.
-
-### Commit E — simplify Artifact production
+### Commit E — simplify remaining Artifact production
 
 Replace the old construction-Ref/catalog-enrichment graph with direct storage of
-the validated source-backed detail document plus only necessary stable envelope
+validated source-backed detail documents plus only necessary stable envelope
 metadata and true canonical Valve IDs.
-
-Do not create a new universal game schema unless a demonstrated consumer
-requires it.
 
 ### Commit F — remove obsolete normalization machinery
 
 Delete construction-only Ref types, builders, resolvers, canonical navigation
 DTOs, and compatibility code that no accepted capability still uses.
 
-Delete incrementally after the replacement path is tested; do not preserve dead
-machinery for hypothetical future providers.
-
 ### Commit G — real model acceptance and second-source readiness
 
-Validate representative questions through:
-
-```text
-esports.search
--> game.detail
--> artifact.grep/read
--> catalog.search/lookup when needed
--> model reasoning
-```
-
-Acceptance is about capability sufficiency, not a required call sequence.
-
-A future second provider should be addable as another implementation of
-`esports.search` or `game.detail` without first changing every existing source
-record into a universal DTO.
+Validate representative questions through the small capability surface. A future
+second provider should be addable as another implementation of `esports.search`
+or `game.detail` without first changing every source record into a universal DTO.
 
 ## Non-goals
 
@@ -344,7 +352,7 @@ The target does not add:
 - one tool per League/Series/Tournament/Match type;
 - a provider-neutral esports ontology as a prerequisite for search;
 - a universal game-detail DTO as a prerequisite for storage;
-- provider-private raw IDs in model-facing facts;
+- provider-private raw IDs as capability navigation inputs;
 - one Ref type per nested Dota value;
 - catalog-name duplication as a requirement for stored game data;
 - provider-specific Artifact grep/read adapters;
@@ -360,11 +368,12 @@ The migration is complete when:
    tools;
 2. PandaScore can satisfy esports search without becoming a universal Domain
    hierarchy;
-3. OpenDota can satisfy game detail without being normalized into a synthetic
+3. discovered PandaScore source objects retain complete validated source
+   documents outside model context and expose only generic bounded observations;
+4. OpenDota can satisfy game detail without being normalized into a synthetic
    cross-provider DTO;
-4. large provider results stay outside model context and remain generically
-   grep/read-able;
-5. source attribution and provider failures stay explicit;
-6. Valve-native IDs remain directly observable and Catalog remains separate;
-7. a second provider can join an existing capability with source-attributed
-   facts instead of forcing a rewrite of every source schema.
+5. large provider results remain generically grep/read-able;
+6. source attribution and provider failures stay explicit;
+7. Valve-native IDs remain directly observable and Catalog remains separate;
+8. a second provider can join an existing capability with source-attributed
+   documents instead of forcing a rewrite of every source schema.

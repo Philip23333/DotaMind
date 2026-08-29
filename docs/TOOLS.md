@@ -14,9 +14,10 @@ Different providers implementing the same capability may return different
 source-shaped fact payloads. DotaMind should not invent a field-by-field
 universal DTO unless a concrete cross-source consumer requires one.
 
-Large complete results stay outside model context. A capability may persist the
-complete validated result as an Artifact, return only bounded facts plus an
-`ArtifactRef`, and let the model use generic Artifact search/read when useful.
+Complete provider results stay outside model context when they are larger than a
+useful search observation. A capability stores the validated source document as
+an Artifact, returns a generic bounded observation plus an `ArtifactRef`, and
+lets the model use generic Artifact grep/read for depth.
 
 No tool description should prescribe a fixed workflow or claim that a locator
 must have come from one specific preceding tool.
@@ -71,14 +72,20 @@ A result record uses a thin envelope:
 source
 kind
 locator
+artifact_ref
 facts
 ```
 
 For PandaScore, `kind` may be its own vocabulary such as `league`, `series`,
 `tournament`, `match`, or `game`. Another source may use different terms.
 
-`facts` are bounded, validated, source-backed facts. They do not need to fit a
-universal League/Series/Tournament/Match DTO.
+`facts` is not a hand-written `MatchPreview`, `SeriesPreview`, or another
+business DTO. It is a generic bounded structural observation derived from the
+same validated source document stored behind `artifact_ref`. The current
+observation keeps safe top-level scalar facts and structural information such as
+nested object/collection counts while omitting provider-private identity values.
+The complete source-shaped facts remain available through `artifact.read` and
+`artifact.grep`.
 
 An optional `within` locator lets the same broad search capability continue
 inside a source object. The current PandaScore implementation supports:
@@ -140,9 +147,9 @@ Conceptually:
 }
 ```
 
-The raw PandaScore/provider resource ID remains internal. The locator means
-"this object in this source"; it is not a claim that DotaMind has established a
-cross-source canonical Series/Match identity.
+The raw PandaScore/provider resource ID remains internal to source navigation.
+The locator means "this object in this source"; it is not a claim that DotaMind
+has established a cross-source canonical Series/Match identity.
 
 A locator returned by one capability may be passed to any capability that
 explicitly accepts a `SourceLocator`. Tool descriptions should describe the
@@ -190,8 +197,11 @@ Artifact exploration remains generic and provider-blind:
 | `artifact.grep` | Literal/schema-neutral scalar search over stored documents | Returns ArtifactRef + structural path + preview |
 | `artifact.read` | Bounded structural read | Exact ArtifactRef/path; no provider semantics |
 
-A new source-backed Artifact becomes searchable because it is a JSON-like stored
-document, not because a provider-specific search adapter is added.
+An `ArtifactRef` may be returned directly by a source capability such as
+`esports.search`; it does not have to be rediscovered through
+`artifact.search`. A new source-backed Artifact becomes grep/read-able because
+it is a JSON-like stored document, not because a provider-specific search
+adapter is added.
 
 Future generic path constraints are acceptable when real usage requires them.
 Business dimensions such as hero, player, build, PandaScore Series, or OpenDota

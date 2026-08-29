@@ -35,6 +35,7 @@ Cross-capability composition needs only a small common envelope where useful:
 source
 kind
 locator
+artifact_ref
 facts
 ```
 
@@ -42,10 +43,17 @@ facts
 - `kind`: source-defined object kind;
 - `locator`: opaque provider-scoped `SourceLocator` when the object must be
   referenced again;
-- `facts`: bounded validated source-backed data that may remain source-shaped.
+- `artifact_ref`: address of the validated stored source document when the
+  capability externalizes it;
+- `facts`: a generic bounded observation of that same source document.
+
+`facts` is not a hand-authored League/Series/Match preview schema. The current
+source observation keeps safe top-level scalar values and structural information
+for nested objects/collections. The full source-shaped document is explored with
+`artifact.grep/read`.
 
 The envelope is not a canonical entity model. It exists to preserve provenance,
-reusability, and generic composition.
+reusability, generic composition, and bounded model context.
 
 ## SourceLocator
 
@@ -61,7 +69,7 @@ SourceLocator
 ```
 
 The token may internally resolve to a PandaScore/private provider ID, but the
-raw provider ID is not exposed as agent language.
+raw provider ID is not used as agent-facing navigation language.
 
 A provider-scoped locator does not claim cross-source identity. Two source
 records with similar names are not the same entity merely because their text
@@ -95,30 +103,41 @@ DotaMind identity namespace.
 
 ## Provider-private identifiers
 
-Raw provider-private IDs remain below the model-facing boundary.
+Provider-private IDs have two different visibility rules.
 
-When an object needs to be revisited, convert the private ID into an opaque
-`SourceLocator`. When it does not need to be revisited, omit the private ID from
-the bounded model-facing facts.
+At the model-facing capability boundary, raw provider-private IDs are omitted
+from bounded `facts`; the model uses `SourceLocator` to navigate the source.
+
+Inside a stored source document, provider-private IDs may be retained as part of
+the provider-shaped evidence. They remain source-local facts only: seeing a
+PandaScore ID through `artifact.read/grep` does not make it a supported input to
+another capability and does not establish cross-source identity.
 
 Do not hash provider IDs into object-specific canonical refs merely to hide the
-number; a provider-scoped locator is sufficient unless true cross-source
-identity has been established.
+number; `SourceLocator` is sufficient for navigation unless true cross-source
+identity has been established. `ArtifactRef` identifies a stored document, not
+the provider entity itself.
 
-## Source-shaped does not mean raw
+## Source-shaped does not mean raw transport
 
-Provider facts are still validated and sanitized before they become tool or
-Artifact content.
+Provider facts are validated and sanitized before they become stored source
+documents. The goal is to preserve the provider's business fact space, not its
+HTTP envelope.
 
 Provider implementations own:
 
-- upstream schema validation;
+- upstream schema/type validation;
 - source-specific null/missing semantics;
-- bounded collections;
 - transport/provider error handling;
-- removal of transport-only fields;
-- hiding raw provider-private IDs;
+- removal of headers, credentials, pagination envelopes, and transport-only
+  metadata;
+- retention of additional provider business fields instead of dropping them
+  merely because DotaMind has not modeled a use case yet;
 - explicit source attribution.
+
+Bounding happens at the model-facing observation/read boundary rather than by
+inventing a smaller business DTO and discarding the rest of the source
+document.
 
 DotaMind should not add a second normalization layer whose only purpose is to
 rename every provider field into a universal esports/game DTO.
@@ -138,7 +157,7 @@ The current useful chain remains:
 
 ```text
 PandaScore source object
-  -> SourceLocator
+  -> SourceLocator + source-document ArtifactRef
   -> deterministic source-to-Valve resolution when needed
   -> valve_match_id
   -> OpenDota recorded-game facts
@@ -180,15 +199,18 @@ Artifact document
   source
   kind
   canonical_ids?   # only truly shared IDs such as valve_match_id
-  facts            # validated source-shaped document
+  facts            # complete validated provider-shaped source document
 ```
+
+`facts` may contain provider-private IDs because they are part of the retained
+source evidence. Those IDs remain source-local and are not capability identity.
+Transport credentials/envelopes are not Artifact facts.
 
 For an OpenDota game-detail Artifact, `facts` may remain close to the verified
 OpenDota source model instead of being rebuilt as a universal GameSummary object.
 A future detail provider may store a different fact shape under the same generic
 Artifact substrate.
 
-Provider-private IDs are still excluded or encapsulated as opaque locators.
 Valve-native IDs remain directly observable.
 
 ## Relationship between esports and game facts
@@ -200,6 +222,7 @@ OpenDota Artifact.
 Their relationship can be retained through:
 
 - the source locator used to find the game;
+- the source-document ArtifactRef;
 - the resolved `valve_match_id`;
 - the bounded `game.detail` result;
 - generic Artifact scope/membership if useful.
@@ -256,5 +279,5 @@ For every proposed schema or normalization step, ask:
 5. Does storing/normalizing it reduce model-context pressure or merely create
    another application-owned representation?
 
-Prefer source attribution and generic access over a universal object model when
-the latter has no demonstrated consumer.
+Prefer source attribution, retained source documents, and generic access over a
+universal object model when the latter has no demonstrated consumer.

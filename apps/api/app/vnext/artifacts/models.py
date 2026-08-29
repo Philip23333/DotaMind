@@ -10,7 +10,7 @@ class ArtifactRef(BaseModel):
         frozen=True,
         json_schema_extra={
             "description": (
-                "Artifact reference object. Pass the complete object returned by artifact.search. "
+                "Artifact reference object. Pass the complete object returned by another tool. "
                 "Do not pass one field as a bare string or JSON-encode this object into a string."
             ),
             "examples": [

@@ -5,6 +5,14 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
+from pydantic import BaseModel
+
+from app.vnext.artifacts import (
+    ArtifactStore,
+    SourceDocumentArtifact,
+    bounded_source_observation,
+    source_document_artifact_ref,
+)
 from app.vnext.domain.common.models import normalize_text
 from app.vnext.domain.source import SourceLocator, SourceLocatorError
 from app.vnext.providers.pandascore.adapter import PandaScoreAdapter
@@ -27,11 +35,17 @@ _TEAM_MATCH_MAX_PAGES = 5
 
 
 class PandaScoreEsportsSearch:
-    """Project validated PandaScore objects into bounded source-backed records."""
+    """Discover PandaScore objects and externalize their source-shaped documents."""
 
-    def __init__(self, provider: PandaScoreAdapter, locators: PandaScoreLocatorIndex) -> None:
+    def __init__(
+        self,
+        provider: PandaScoreAdapter,
+        locators: PandaScoreLocatorIndex,
+        artifact_store: ArtifactStore | None = None,
+    ) -> None:
         self._provider = provider
         self._locators = locators
+        self._artifact_store = artifact_store
 
     async def search(
         self,
@@ -67,24 +81,23 @@ class PandaScoreEsportsSearch:
         records: list[SourceRecord] = []
         seen: set[tuple[str, int]] = set()
         for item in series_batch.items:
-            self._append(records, seen, self._series_record(item), limit)
+            record = await self._record("series", item, series_batch.fetched_at)
+            self._append(records, seen, record, limit)
         for item in league_batch.items:
-            self._append(records, seen, self._league_record(item), limit)
+            record = await self._record("league", item, league_batch.fetched_at)
+            self._append(records, seen, record, limit)
         for league in league_batch.items:
             if len(records) >= limit:
                 break
             related = await self._provider.list_league_series(league.provider_id, limit=limit)
             for item in related.items:
-                self._append(records, seen, self._series_record(item), limit)
+                record = await self._record("series", item, related.fetched_at)
+                self._append(records, seen, record, limit)
             if related.has_more:
                 break
         for item in match_batch.items:
-            self._append(
-                records,
-                seen,
-                self._match_record(item, fetched_at=match_batch.fetched_at),
-                limit,
-            )
+            record = await self._match_record(item, fetched_at=match_batch.fetched_at)
+            self._append(records, seen, record, limit)
         truncated = len(records) >= limit and (
             series_batch.has_more is not False
             or league_batch.has_more is not False
@@ -103,7 +116,10 @@ class PandaScoreEsportsSearch:
         resolved = self._locators.resolve(within)
         if resolved.kind == "league":
             series = await self._provider.list_league_series(resolved.provider_id, limit=limit)
-            records = [self._series_record(item) for item in series.items]
+            records = [
+                await self._record("series", item, series.fetched_at)
+                for item in series.items
+            ]
             return EsportsSearchResult(records=records, truncated=series.has_more is not False)
         if resolved.kind == "series":
             matches = await self._provider.list_matches(
@@ -112,13 +128,11 @@ class PandaScoreEsportsSearch:
                 query=query,
                 limit=limit,
             )
-            return EsportsSearchResult(
-                records=[
-                    self._match_record(item, fetched_at=matches.fetched_at)
-                    for item in matches.items
-                ],
-                truncated=matches.has_more is not False,
-            )
+            records = [
+                await self._match_record(item, fetched_at=matches.fetched_at)
+                for item in matches.items
+            ]
+            return EsportsSearchResult(records=records, truncated=matches.has_more is not False)
         if resolved.kind == "match":
             snapshot = self._locators.match_snapshot(resolved.provider_id)
             if snapshot is None:
@@ -131,8 +145,12 @@ class PandaScoreEsportsSearch:
                 snapshot = self._locators.match_snapshot(resolved.provider_id)
             assert snapshot is not None
             games = snapshot.match.games[:limit]
+            records = [
+                await self._game_record(item, snapshot.match, snapshot.fetched_at)
+                for item in games
+            ]
             return EsportsSearchResult(
-                records=[self._game_record(item, snapshot.match) for item in games],
+                records=records,
                 truncated=len(snapshot.match.games) > limit,
             )
         raise SourceLocatorError(
@@ -182,7 +200,7 @@ class PandaScoreEsportsSearch:
                 if len(records) >= limit:
                     truncated = True
                     continue
-                records.append(self._match_record(item, fetched_at=batch.fetched_at))
+                records.append(await self._match_record(item, fetched_at=batch.fetched_at))
             if len(records) >= limit:
                 truncated = truncated or batch.has_more is not False
                 break
@@ -208,79 +226,55 @@ class PandaScoreEsportsSearch:
             seen.add(key)
             records.append(record)
 
-    def _league_record(self, item: PandaScoreLeague) -> SourceRecord:
-        return SourceRecord(
-            source=_SOURCE,
-            kind="league",
-            locator=self._locators.make("league", item.provider_id),
-            facts={"name": item.name},
-        )
-
-    def _series_record(self, item: PandaScoreSeries) -> SourceRecord:
-        return SourceRecord(
-            source=_SOURCE,
-            kind="series",
-            locator=self._locators.make("series", item.provider_id),
-            facts={
-                "name": item.name,
-                "full_name": item.full_name,
-                "year": item.year,
-                "season": item.season,
-                "league": item.league.name if item.league else None,
-                "begin_at": item.begin_at,
-                "end_at": item.end_at,
-                "status": item.status,
-                "tier": item.tier,
-                "region": item.region,
-            },
-        )
-
-    def _match_record(self, item: PandaScoreMatch, *, fetched_at: datetime) -> SourceRecord:
+    async def _match_record(self, item: PandaScoreMatch, *, fetched_at: datetime) -> SourceRecord:
         self._locators.remember_match(item.provider_id, item, fetched_at)
-        return SourceRecord(
-            source=_SOURCE,
-            kind="match",
-            locator=self._locators.make("match", item.provider_id),
-            facts={
-                "name": item.name,
-                "status": item.status,
-                "scheduled_at": item.scheduled_at,
-                "begin_at": item.begin_at,
-                "end_at": item.end_at,
-                "opponents": [
-                    {"name": opponent.opponent.name, "acronym": opponent.opponent.acronym}
-                    for opponent in item.opponents
-                ],
-                "number_of_games": item.number_of_games,
-                "match_type": item.match_type,
-                "league": item.league.name if item.league else None,
-                "series": (
-                    item.series.full_name or item.series.name
-                    if item.series is not None
-                    else None
-                ),
-                "tournament": item.tournament.name if item.tournament else None,
-            },
-        )
+        return await self._record("match", item, fetched_at)
 
-    def _game_record(self, item: PandaScoreGame, match: PandaScoreMatch) -> SourceRecord:
+    async def _game_record(
+        self,
+        item: PandaScoreGame,
+        match: PandaScoreMatch,
+        fetched_at: datetime,
+    ) -> SourceRecord:
         locator = self._locators.make("game", item.provider_id)
         self._locators.remember_game_parent(item.provider_id, match.provider_id)
+        return await self._record(
+            "game",
+            item,
+            fetched_at,
+            locator=locator,
+        )
+
+    async def _record(
+        self,
+        kind: str,
+        item: BaseModel,
+        fetched_at: datetime,
+        *,
+        locator: SourceLocator | None = None,
+    ) -> SourceRecord:
+        provider_id = getattr(item, "provider_id")
+        source_locator = locator or self._locators.make(kind, provider_id)
+        document = item.model_dump(mode="json", by_alias=True)
+        ref = source_document_artifact_ref(_SOURCE, kind, provider_id)
+        if self._artifact_store is not None:
+            await self._artifact_store.put(
+                ref,
+                SourceDocumentArtifact(
+                    source=_SOURCE,
+                    kind=kind,
+                    fetched_at=fetched_at,
+                    facts=document,
+                ),
+            )
+        else:
+            ref = None
         return SourceRecord(
             source=_SOURCE,
-            kind="game",
-            locator=locator,
-            facts={
-                "position": item.position,
-                "status": item.status,
-                "scheduled_at": item.scheduled_at,
-                "begin_at": item.begin_at,
-                "end_at": item.end_at,
-                "length": item.length,
-                "winner": item.winner.name if item.winner else None,
-                "complete": item.complete,
-                "detailed_stats": item.detailed_stats,
-            },
+            kind=kind,
+            locator=source_locator,
+            artifact_ref=ref,
+            facts=bounded_source_observation(document),
         )
 
 

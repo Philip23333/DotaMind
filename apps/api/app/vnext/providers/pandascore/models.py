@@ -1,7 +1,8 @@
 """PandaScore-only response models.
 
-These models intentionally stop at the provider boundary. Domain services
-translate them into opaque references and normalized DotaMind DTOs.
+These models intentionally stop at the provider boundary. They validate known
+fields while retaining additional source fields so a source document can be
+stored without first inventing a DotaMind-wide business DTO.
 """
 
 from __future__ import annotations
@@ -14,7 +15,7 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 class PandaModel(BaseModel):
     model_config = ConfigDict(
-        extra="ignore",
+        extra="allow",
         populate_by_name=True,
     )
 

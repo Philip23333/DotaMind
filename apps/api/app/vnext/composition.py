@@ -71,7 +71,7 @@ class VNextSettings:
     trace_ttl_seconds: int = 72 * 60 * 60
 
     @classmethod
-    def from_env(cls) -> VNextSettings:
+    def from_env(cls) -> "VNextSettings":
         defaults = cls()
         file_values = dotenv_values(_VNEXT_ENV_PATH)
         return cls(
@@ -91,13 +91,15 @@ class VNextSettings:
                 "DOTAMIND_PANDASCORE_BASE_URL",
                 defaults.pandascore_base_url,
                 file_values,
-            ),
+            )
+            or defaults.pandascore_base_url,
             pandascore_token=_env_value("DOTAMIND_PANDASCORE_TOKEN", None, file_values),
             opendota_base_url=_env_value(
                 "DOTAMIND_OPENDOTA_BASE_URL",
                 defaults.opendota_base_url,
                 file_values,
-            ),
+            )
+            or defaults.opendota_base_url,
             opendota_api_key=_env_value("DOTAMIND_OPENDOTA_API_KEY", None, file_values),
             pandascore_timeout_seconds=float(
                 _env_value("DOTAMIND_PANDASCORE_TIMEOUT_SECONDS", "20", file_values)
@@ -216,9 +218,12 @@ def build_vnext_services(
         api_key=config.opendota_api_key,
         request_timeout_seconds=config.opendota_timeout_seconds,
     )
+    store = artifact_store if artifact_store is not None else MemoryArtifactStore()
     series_service = SeriesService(panda_adapter)
     locator_index = PandaScoreLocatorIndex()
-    esports_service = EsportsSearchService(PandaScoreEsportsSearch(panda_adapter, locator_index))
+    esports_service = EsportsSearchService(
+        PandaScoreEsportsSearch(panda_adapter, locator_index, store)
+    )
     team_player_index = TeamPlayerRefIndex()
     team_service = TeamService(panda_adapter, team_player_index)
     player_service = PlayerService(panda_adapter, team_player_index)
@@ -230,7 +235,6 @@ def build_vnext_services(
         team_player_index=team_player_index,
     )
     series_service.set_match_cache(match_service.remember_fixture)
-    store = artifact_store if artifact_store is not None else MemoryArtifactStore()
     scope_store = MemoryArtifactScopeStore()
     producer = GameSummaryArtifactProducer(
         opendota=open_adapter,

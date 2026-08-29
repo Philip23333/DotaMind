@@ -33,9 +33,10 @@ def register_esports_tools(registry: ToolRegistry, service: EsportsSearchService
         ToolDefinition(
             name="esports.search",
             description=(
-                "Search professional Dota 2 esports events and matches. Returns bounded "
-                "source-attributed records with opaque locators that can be reused to search "
-                "within a known source object."
+                "Search professional Dota 2 esports source facts. Use within with a returned "
+                "league, series, or match locator to continue source-local navigation. Each "
+                "record contains bounded structural facts and, when externalized, an ArtifactRef "
+                "for the complete validated source document."
             ),
             input_model=EsportsSearchInput,
             output_model=EsportsSearchResult,

@@ -29,9 +29,9 @@ class ArtifactSearchInput(DomainModel):
 class ArtifactReadInput(DomainModel):
     ref: ArtifactRef = Field(
         description=(
-            "Exact ArtifactRef object returned by artifact.search or artifact.grep. "
-            "Pass the whole object "
-            "unchanged; do not pass its id as a bare string or JSON-encode the object."
+            "Exact ArtifactRef object returned by esports.search, artifact.search, "
+            "artifact.grep, or another capability. Pass the whole object unchanged; "
+            "do not pass its id as a bare string or JSON-encode the object."
         )
     )
     path: str | None = None
@@ -107,7 +107,7 @@ def register_artifact_tools(
         ToolDefinition(
             name="artifact.grep",
             description=(
-                "Find case-insensitive literal text in stored canonical artifact content. "
+                "Find case-insensitive literal text in stored artifact content. "
                 "Returns bounded ArtifactRef and structural-path observations without fetching "
                 "or producing artifacts."
             ),
@@ -121,9 +121,9 @@ def register_artifact_tools(
         ToolDefinition(
             name="artifact.read",
             description=(
-                "Read a bounded serialized view of an exact canonical artifact reference. "
-                "Use the returned ArtifactRef object directly. Supports structural dotted paths "
-                "and bounded list slices only."
+                "Read a bounded serialized view of an exact ArtifactRef returned by another "
+                "capability. Source documents keep complete provider-shaped facts under the "
+                "facts field. Supports structural dotted paths and bounded list slices only."
             ),
             input_model=ArtifactReadInput,
             output_model=ArtifactReadResult,
