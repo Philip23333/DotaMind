@@ -75,6 +75,7 @@ def test_behavior_scenario_a_series_search_runs_through_runtime_and_registry() -
     assert final == FinalMessage(content="赛事已找到")
     assert _tool_calls(model)[0].name == "series.search"
     assert [tool.name for tool in registry.list()] == [
+        "esports.search",
         "series.search",
         "series.list_matches",
         "matches.search",
@@ -87,7 +88,7 @@ def test_behavior_scenario_a_series_search_runs_through_runtime_and_registry() -
         "artifact.grep",
         "artifact.read",
     ]
-    assert len(model.requests[0].tools) == 11
+    assert len(model.requests[0].tools) == 12
 
 
 def test_behavior_scenario_b_upcoming_uses_series_ref_from_prior_tool_result() -> None:

@@ -14,7 +14,7 @@ from app.vnext.llm.protocol import ToolCall
 from tests.vnext.phase2_support import fixture_services, fixture_vnext_services
 
 
-def test_composition_is_lazy_and_registers_the_eleven_vnext_tools() -> None:
+def test_composition_is_lazy_and_registers_the_twelve_vnext_tools() -> None:
     services = build_vnext_services(VNextSettings(pandascore_token="test-token"))
     assert services.pandascore._client is None  # type: ignore[attr-defined]
     assert services.opendota._client is None  # type: ignore[attr-defined]
@@ -22,6 +22,7 @@ def test_composition_is_lazy_and_registers_the_eleven_vnext_tools() -> None:
     assert services.game_summary_producer is not None
     registry = build_vnext_registry(services)
     assert [tool.name for tool in registry.list()] == [
+        "esports.search",
         "series.search",
         "series.list_matches",
         "matches.search",
@@ -54,6 +55,7 @@ def test_vnext_runtime_uses_the_shared_llm_configuration() -> None:
     assert runtime.model.model == "test-model"
     assert runtime.model.timeout == 12.5
     assert [tool.name for tool in runtime.tools.list()] == [
+        "esports.search",
         "series.search",
         "series.list_matches",
         "matches.search",

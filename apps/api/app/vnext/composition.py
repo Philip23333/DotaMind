@@ -24,6 +24,8 @@ from app.vnext.artifacts import (
     MemoryArtifactStore,
 )
 from app.vnext.artifacts.game_summary_builder_v5 import GameSummaryBuilderV5
+from app.vnext.capabilities.esports.pandascore import PandaScoreEsportsSearch
+from app.vnext.capabilities.esports.service import EsportsSearchService
 from app.vnext.domain.matches.service import MatchService
 from app.vnext.domain.players.service import PlayerService
 from app.vnext.domain.series.service import SeriesService
@@ -40,6 +42,7 @@ from app.vnext.providers.opendota.adapter import (
 )
 from app.vnext.providers.pandascore.adapter import PandaScoreAdapter
 from app.vnext.tools.artifacts import register_artifact_tools
+from app.vnext.tools.domain.esports import register_esports_tools
 from app.vnext.tools.domain.matches import register_match_tools
 from app.vnext.tools.domain.players import register_player_tools
 from app.vnext.tools.domain.series import register_series_tools
@@ -143,6 +146,7 @@ def _env_value(
 class VNextServices:
     pandascore: PandaScoreAdapter
     opendota: OpenDotaAdapter
+    esports: EsportsSearchService
     series: SeriesService
     matches: MatchService
     teams: TeamService
@@ -213,6 +217,7 @@ def build_vnext_services(
         request_timeout_seconds=config.opendota_timeout_seconds,
     )
     series_service = SeriesService(panda_adapter)
+    esports_service = EsportsSearchService(PandaScoreEsportsSearch(panda_adapter))
     team_player_index = TeamPlayerRefIndex()
     team_service = TeamService(panda_adapter, team_player_index)
     player_service = PlayerService(panda_adapter, team_player_index)
@@ -238,6 +243,7 @@ def build_vnext_services(
     return VNextServices(
         pandascore=panda_adapter,
         opendota=open_adapter,
+        esports=esports_service,
         series=series_service,
         matches=match_service,
         teams=team_service,
@@ -258,6 +264,7 @@ def build_vnext_registry(
 ) -> ToolRegistry:
     resolved_services = services or build_vnext_services(settings)
     registry = ToolRegistry()
+    register_esports_tools(registry, resolved_services.esports)
     register_series_tools(registry, resolved_services.series)
     register_match_tools(
         registry,

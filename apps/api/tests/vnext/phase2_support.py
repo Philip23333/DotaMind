@@ -14,6 +14,8 @@ from app.vnext.artifacts import (
     MemoryArtifactStore,
 )
 from app.vnext.artifacts.game_summary_builder_v5 import GameSummaryBuilderV5
+from app.vnext.capabilities.esports.pandascore import PandaScoreEsportsSearch
+from app.vnext.capabilities.esports.service import EsportsSearchService
 from app.vnext.composition import VNextServices
 from app.vnext.domain.matches.service import MatchService
 from app.vnext.domain.players.service import PlayerService
@@ -462,16 +464,17 @@ def fixture_vnext_services(
     team_service = TeamService(panda, match_service.team_player_index)
     player_service = PlayerService(panda, match_service.team_player_index)
     return VNextServices(
-        panda,
-        opendota,
-        series_service,
-        match_service,
-        team_service,
-        player_service,
-        store,
-        producer,
-        searcher,
-        reader,
-        grepper,
-        scope_store,
+        pandascore=panda,
+        opendota=opendota,
+        esports=EsportsSearchService(PandaScoreEsportsSearch(panda)),
+        series=series_service,
+        matches=match_service,
+        teams=team_service,
+        players=player_service,
+        artifact_store=store,
+        game_summary_producer=producer,
+        artifact_searcher=searcher,
+        artifact_reader=reader,
+        artifact_grepper=grepper,
+        artifact_scope_store=scope_store,
     )
