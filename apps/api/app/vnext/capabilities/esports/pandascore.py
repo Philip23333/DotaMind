@@ -19,9 +19,7 @@ from app.vnext.providers.pandascore.adapter import PandaScoreAdapter
 from app.vnext.providers.pandascore.locator import PandaScoreLocatorIndex
 from app.vnext.providers.pandascore.models import (
     PandaScoreGame,
-    PandaScoreLeague,
     PandaScoreMatch,
-    PandaScoreSeries,
     PandaScoreTeam,
 )
 
@@ -253,7 +251,7 @@ class PandaScoreEsportsSearch:
         *,
         locator: SourceLocator | None = None,
     ) -> SourceRecord:
-        provider_id = getattr(item, "provider_id")
+        provider_id = item.provider_id
         source_locator = locator or self._locators.make(kind, provider_id)
         document = item.model_dump(mode="json", by_alias=True)
         ref = source_document_artifact_ref(_SOURCE, kind, provider_id)

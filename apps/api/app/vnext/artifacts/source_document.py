@@ -37,7 +37,7 @@ def source_document_artifact_ref(
 ) -> ArtifactRef:
     """Build an opaque deterministic reference without exposing provider identity."""
 
-    payload = f"{source}\x1f{kind}\x1f{provider_identity}".encode("utf-8")
+    payload = f"{source}\x1f{kind}\x1f{provider_identity}".encode()
     digest = sha256(payload).hexdigest()[:24]
     return ArtifactRef(
         id=f"{_SOURCE_DOCUMENT_TYPE}:{_SOURCE_DOCUMENT_SCHEMA_VERSION}:{digest}",

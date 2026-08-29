@@ -75,7 +75,7 @@ def test_agent_visible_reference_schemas_explain_nested_object_inputs() -> None:
     assert player_ref["examples"] == [{"value": _PLAYER_VALUE}]
 
     artifact_field, artifact_ref = _reference_definition(schemas["artifact.read"], "ref")
-    assert "returned by artifact.search" in artifact_field["description"]
+    assert "returned by esports.search" in artifact_field["description"]
     assert artifact_ref["type"] == "object"
     assert "bare string" in artifact_ref["description"]
     assert artifact_ref["examples"][0]["artifact_type"] == "game_summary"

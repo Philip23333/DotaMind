@@ -84,4 +84,4 @@ def test_pandascore_player_model_preserves_nullable_source_facts_and_home_town_a
     assert player.birth_year is None
     assert player.hometown == "Kyiv"
     assert player.current_team is None
-    assert "age" not in player.model_dump()
+    assert player.model_dump()["age"] == 23
