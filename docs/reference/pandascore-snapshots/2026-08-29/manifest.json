@@ -1,0 +1,171 @@
+{
+  "purpose": "Bounded raw PandaScore endpoint observations for local reference.",
+  "credentials": "Not stored. Request headers are not captured.",
+  "entries": [
+    {
+      "name": "leagues_search",
+      "status": "captured",
+      "file": "leagues_search.json",
+      "request": {
+        "path": "/dota2/leagues",
+        "params": {
+          "page[size]": 5,
+          "page[number]": 1
+        }
+      }
+    },
+    {
+      "name": "series_search",
+      "status": "captured",
+      "file": "series_search.json",
+      "request": {
+        "path": "/dota2/series",
+        "params": {
+          "page[size]": 5,
+          "page[number]": 1
+        }
+      }
+    },
+    {
+      "name": "teams_search",
+      "status": "captured",
+      "file": "teams_search.json",
+      "request": {
+        "path": "/dota2/teams",
+        "params": {
+          "page[size]": 5,
+          "page[number]": 1,
+          "search[name]": "Team Spirit"
+        }
+      }
+    },
+    {
+      "name": "players_search",
+      "status": "captured",
+      "file": "players_search.json",
+      "request": {
+        "path": "/dota2/players",
+        "params": {
+          "page[size]": 5,
+          "page[number]": 1,
+          "search[name]": "Yatoro"
+        }
+      }
+    },
+    {
+      "name": "matches_past",
+      "status": "captured",
+      "file": "matches_past.json",
+      "request": {
+        "path": "/dota2/matches/past",
+        "params": {
+          "page[size]": 5,
+          "page[number]": 1,
+          "sort": "-scheduled_at"
+        }
+      }
+    },
+    {
+      "name": "matches_running",
+      "status": "captured",
+      "file": "matches_running.json",
+      "request": {
+        "path": "/dota2/matches/running",
+        "params": {
+          "page[size]": 5,
+          "page[number]": 1,
+          "sort": "scheduled_at"
+        }
+      }
+    },
+    {
+      "name": "matches_upcoming",
+      "status": "captured",
+      "file": "matches_upcoming.json",
+      "request": {
+        "path": "/dota2/matches/upcoming",
+        "params": {
+          "page[size]": 5,
+          "page[number]": 1,
+          "sort": "scheduled_at"
+        }
+      }
+    },
+    {
+      "name": "league_series",
+      "status": "captured",
+      "file": "league_series.json",
+      "request": {
+        "path": "/leagues/5550/series",
+        "params": {
+          "page[size]": 5,
+          "page[number]": 1
+        }
+      }
+    },
+    {
+      "name": "series_matches_past",
+      "status": "captured",
+      "file": "series_matches_past.json",
+      "request": {
+        "path": "/series/10900/matches/past",
+        "params": {
+          "page[size]": 5,
+          "page[number]": 1
+        }
+      }
+    },
+    {
+      "name": "team_detail",
+      "status": "captured",
+      "file": "team_detail.json",
+      "request": {
+        "path": "/teams/1669",
+        "params": {}
+      }
+    },
+    {
+      "name": "team_matches",
+      "status": "captured",
+      "file": "team_matches.json",
+      "request": {
+        "path": "/teams/1669/matches",
+        "params": {
+          "page[size]": 5,
+          "page[number]": 1,
+          "sort": "-scheduled_at"
+        }
+      }
+    },
+    {
+      "name": "player_detail",
+      "status": "captured",
+      "file": "player_detail.json",
+      "request": {
+        "path": "/players/54603",
+        "params": {}
+      }
+    },
+    {
+      "name": "match_detail",
+      "status": "captured",
+      "file": "match_detail.json",
+      "request": {
+        "path": "/matches/1099552",
+        "params": {}
+      }
+    },
+    {
+      "name": "embedded_game",
+      "status": "embedded",
+      "file": "embedded_game.json",
+      "parent": "match_detail.json"
+    },
+    {
+      "name": "embedded_tournament",
+      "status": "embedded",
+      "file": "embedded_tournament.json",
+      "parent": "match_detail.json"
+    }
+  ]
+}

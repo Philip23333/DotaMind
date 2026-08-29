@@ -1,0 +1,267 @@
+{
+  "source": "pandascore",
+  "captured_at": "2026-08-29T18:34:42.518181+00:00",
+  "request": {
+    "path": "/dota2/leagues",
+    "params": {
+      "page[size]": 5,
+      "page[number]": 1
+    }
+  },
+  "pagination": {
+    "page_number": 1,
+    "page_size": 5,
+    "total_count": 251,
+    "has_more": true
+  },
+  "response": [
+    {
+      "id": 5550,
+      "name": "Asgard Championship",
+      "url": null,
+      "slug": "dota-2-asgard-championship",
+      "videogame": {
+        "id": 4,
+        "name": "Dota 2",
+        "current_version": null,
+        "slug": "dota-2"
+      },
+      "modified_at": "2026-08-07T08:37:45Z",
+      "series": [
+        {
+          "id": 10852,
+          "name": "",
+          "year": 2026,
+          "slug": "dota-2-asgard-championship-1-2026",
+          "begin_at": "2026-08-07T12:00:00Z",
+          "end_at": "2026-08-11T22:00:00Z",
+          "winner_id": null,
+          "winner_type": "Team",
+          "modified_at": "2026-08-10T18:47:18Z",
+          "league_id": 5550,
+          "season": "1",
+          "full_name": "Season 1 2026"
+        }
+      ],
+      "image_url": "https://cdn-api.pandascore.co/images/league/image/5550/800px-asgard_championship_lightmode-png"
+    },
+    {
+      "id": 5547,
+      "name": "Paragon Turbina",
+      "url": null,
+      "slug": "dota-2-paragon-turbina",
+      "videogame": {
+        "id": 4,
+        "name": "Dota 2",
+        "current_version": null,
+        "slug": "dota-2"
+      },
+      "modified_at": "2026-07-23T21:10:22Z",
+      "series": [
+        {
+          "id": 10824,
+          "name": "",
+          "year": 2026,
+          "slug": "dota-2-paragon-turbina-2026",
+          "begin_at": "2026-07-25T13:00:00Z",
+          "end_at": "2026-07-25T21:00:00Z",
+          "winner_id": null,
+          "winner_type": "Team",
+          "modified_at": "2026-07-23T21:10:22Z",
+          "league_id": 5547,
+          "season": null,
+          "full_name": "2026"
+        }
+      ],
+      "image_url": null
+    },
+    {
+      "id": 5544,
+      "name": "EPL Masters",
+      "url": null,
+      "slug": "dota-2-epl-masters",
+      "videogame": {
+        "id": 4,
+        "name": "Dota 2",
+        "current_version": null,
+        "slug": "dota-2"
+      },
+      "modified_at": "2026-07-16T14:21:14Z",
+      "series": [
+        {
+          "id": 10800,
+          "name": "Play-In",
+          "year": 2026,
+          "slug": "dota-2-epl-masters-play-in-2026",
+          "begin_at": "2026-07-20T07:00:00Z",
+          "end_at": "2026-07-25T21:00:00Z",
+          "winner_id": null,
+          "winner_type": "Team",
+          "modified_at": "2026-08-24T06:10:54Z",
+          "league_id": 5544,
+          "season": "1",
+          "full_name": "Play-In season 1 2026"
+        },
+        {
+          "id": 10802,
+          "name": "",
+          "year": 2026,
+          "slug": "dota-2-epl-masters-1-2026",
+          "begin_at": "2026-07-26T09:00:00Z",
+          "end_at": "2026-08-12T16:20:00Z",
+          "winner_id": 1699,
+          "winner_type": "Team",
+          "modified_at": "2026-08-13T09:32:57Z",
+          "league_id": 5544,
+          "season": "1",
+          "full_name": "Season 1 2026"
+        },
+        {
+          "id": 10886,
+          "name": "Play-In",
+          "year": 2026,
+          "slug": "dota-2-epl-masters-play-in-2-2026",
+          "begin_at": "2026-08-24T07:00:00Z",
+          "end_at": "2026-08-29T19:00:00Z",
+          "winner_id": null,
+          "winner_type": "Team",
+          "modified_at": "2026-08-24T06:10:00Z",
+          "league_id": 5544,
+          "season": "2",
+          "full_name": "Play-In season 2 2026"
+        }
+      ],
+      "image_url": null
+    },
+    {
+      "id": 5541,
+      "name": "Esports Nations Cup",
+      "url": "https://esportsnationscup.com/en/competitions/2026/dota2",
+      "slug": "dota-2-esports-nations-cup",
+      "videogame": {
+        "id": 4,
+        "name": "Dota 2",
+        "current_version": null,
+        "slug": "dota-2"
+      },
+      "modified_at": "2026-06-29T12:05:49Z",
+      "series": [
+        {
+          "id": 10752,
+          "name": "Europe East Qualifier",
+          "year": 2026,
+          "slug": "dota-2-esports-nations-cup-europe-east-qualifier-2026",
+          "begin_at": "2026-06-29T14:00:00Z",
+          "end_at": "2026-07-01T20:58:00Z",
+          "winner_id": null,
+          "winner_type": "Team",
+          "modified_at": "2026-07-02T20:28:01Z",
+          "league_id": 5541,
+          "season": null,
+          "full_name": "Europe East Qualifier 2026"
+        },
+        {
+          "id": 10751,
+          "name": "Europe West Qualifier",
+          "year": 2026,
+          "slug": "dota-2-esports-nations-cup-europe-west-qualifier-2026",
+          "begin_at": "2026-06-29T15:00:00Z",
+          "end_at": "2026-07-01T20:52:00Z",
+          "winner_id": null,
+          "winner_type": "Team",
+          "modified_at": "2026-07-02T20:25:51Z",
+          "league_id": 5541,
+          "season": null,
+          "full_name": "Europe West Qualifier 2026"
+        },
+        {
+          "id": 10748,
+          "name": "North America Qualifier",
+          "year": 2026,
+          "slug": "dota-2-esports-nations-cup-north-america-qualifier-2026",
+          "begin_at": "2026-06-29T21:00:00Z",
+          "end_at": "2026-07-02T02:00:00Z",
+          "winner_id": 138860,
+          "winner_type": "Team",
+          "modified_at": "2026-07-02T06:01:12Z",
+          "league_id": 5541,
+          "season": null,
+          "full_name": "North America Qualifier 2026"
+        },
+        {
+          "id": 10749,
+          "name": "South America Qualifier",
+          "year": 2026,
+          "slug": "dota-2-esports-nations-cup-south-america-qualifier-2026",
+          "begin_at": "2026-06-29T21:00:00Z",
+          "end_at": "2026-07-02T01:28:00Z",
+          "winner_id": null,
+          "winner_type": "Team",
+          "modified_at": "2026-07-02T20:30:56Z",
+          "league_id": 5541,
+          "season": null,
+          "full_name": "South America Qualifier 2026"
+        },
+        {
+          "id": 10750,
+          "name": "Southeast Asia and Oceania Qualifier",
+          "year": 2026,
+          "slug": "dota-2-esports-nations-cup-southeast-asia-and-oceania-qualifier-2026",
+          "begin_at": "2026-06-30T09:00:00Z",
+          "end_at": "2026-07-01T13:47:00Z",
+          "winner_id": null,
+          "winner_type": "Team",
+          "modified_at": "2026-07-01T21:29:27Z",
+          "league_id": 5541,
+          "season": null,
+          "full_name": "Southeast Asia and Oceania Qualifier 2026"
+        }
+      ],
+      "image_url": null
+    },
+    {
+      "id": 5528,
+      "name": "1win Essence",
+      "url": null,
+      "slug": "dota-2-1win-essence",
+      "videogame": {
+        "id": 4,
+        "name": "Dota 2",
+        "current_version": null,
+        "slug": "dota-2"
+      },
+      "modified_at": "2026-04-29T11:30:42Z",
+      "series": [
+        {
+          "id": 10576,
+          "name": "",
+          "year": 2026,
+          "slug": "dota-2-1win-essence-1-2026",
+          "begin_at": "2026-05-02T09:00:00Z",
+          "end_at": "2026-05-11T21:00:00Z",
+          "winner_id": 135712,
+          "winner_type": "Team",
+          "modified_at": "2026-05-12T07:53:19Z",
+          "league_id": 5528,
+          "season": "1",
+          "full_name": "Season 1 2026"
+        },
+        {
+          "id": 10832,
+          "name": "",
+          "year": 2026,
+          "slug": "dota-2-1win-essence-2-2026",
+          "begin_at": "2026-07-30T09:00:00Z",
+          "end_at": "2026-08-05T21:15:00Z",
+          "winner_id": null,
+          "winner_type": "Team",
+          "modified_at": "2026-08-06T07:59:34Z",
+          "league_id": 5528,
+          "season": "2",
+          "full_name": "Season 2 2026"
+        }
+      ],
+      "image_url": null
+    }
+  ]
+}

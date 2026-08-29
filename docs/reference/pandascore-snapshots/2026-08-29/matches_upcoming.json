@@ -1,0 +1,930 @@
+{
+  "source": "pandascore",
+  "captured_at": "2026-08-29T18:34:45.213640+00:00",
+  "request": {
+    "path": "/dota2/matches/upcoming",
+    "params": {
+      "page[size]": 5,
+      "page[number]": 1,
+      "sort": "scheduled_at"
+    }
+  },
+  "pagination": {
+    "page_number": 1,
+    "page_size": 5,
+    "total_count": 9,
+    "has_more": true
+  },
+  "response": [
+    {
+      "number_of_games": 3,
+      "results": [
+        {
+          "team_id": 133873,
+          "score": 0
+        },
+        {
+          "team_id": 137540,
+          "score": 0
+        }
+      ],
+      "videogame_version": null,
+      "original_scheduled_at": "2026-08-29T19:00:00Z",
+      "serie_id": 10886,
+      "match_type": "best_of",
+      "videogame": {
+        "id": 4,
+        "name": "Dota 2",
+        "slug": "dota-2"
+      },
+      "serie": {
+        "id": 10886,
+        "name": "Play-In",
+        "year": 2026,
+        "slug": "dota-2-epl-masters-play-in-2-2026",
+        "begin_at": "2026-08-24T07:00:00Z",
+        "end_at": "2026-08-29T19:00:00Z",
+        "winner_id": null,
+        "winner_type": "Team",
+        "modified_at": "2026-08-24T06:10:00Z",
+        "league_id": 5544,
+        "season": "2",
+        "full_name": "Play-In season 2 2026"
+      },
+      "tournament_id": 21749,
+      "forfeit": false,
+      "streams_list": [
+        {
+          "main": true,
+          "language": "en",
+          "embed_url": "https://player.kick.com/epldota_en2",
+          "official": true,
+          "raw_url": "https://kick.com/epldota_en2"
+        },
+        {
+          "main": false,
+          "language": "ru",
+          "embed_url": "https://player.twitch.tv/?channel=ya4iller",
+          "official": false,
+          "raw_url": "https://www.twitch.tv/ya4iller"
+        }
+      ],
+      "tournament": {
+        "id": 21749,
+        "name": "Group B",
+        "type": "online",
+        "country": null,
+        "slug": "dota-2-epl-masters-play-in-2-2026-group-b",
+        "begin_at": "2026-08-24T10:00:00Z",
+        "detailed_stats": true,
+        "end_at": "2026-08-29T22:00:00Z",
+        "winner_id": null,
+        "winner_type": "Team",
+        "serie_id": 10886,
+        "modified_at": "2026-08-29T14:45:26Z",
+        "league_id": 5544,
+        "prizepool": null,
+        "tier": "d",
+        "has_bracket": false,
+        "region": "WEU",
+        "live_supported": false
+      },
+      "status": "not_started",
+      "games": [
+        {
+          "complete": false,
+          "id": 738885,
+          "position": 1,
+          "status": "not_started",
+          "length": null,
+          "finished": false,
+          "match_id": 1649566,
+          "winner": {
+            "id": null,
+            "type": "Team"
+          },
+          "begin_at": null,
+          "detailed_stats": true,
+          "end_at": null,
+          "forfeit": false,
+          "winner_type": "Team"
+        },
+        {
+          "complete": false,
+          "id": 738886,
+          "position": 2,
+          "status": "not_started",
+          "length": null,
+          "finished": false,
+          "match_id": 1649566,
+          "winner": {
+            "id": null,
+            "type": "Team"
+          },
+          "begin_at": null,
+          "detailed_stats": true,
+          "end_at": null,
+          "forfeit": false,
+          "winner_type": "Team"
+        },
+        {
+          "complete": false,
+          "id": 738887,
+          "position": 3,
+          "status": "not_started",
+          "length": null,
+          "finished": false,
+          "match_id": 1649566,
+          "winner": {
+            "id": null,
+            "type": "Team"
+          },
+          "begin_at": null,
+          "detailed_stats": true,
+          "end_at": null,
+          "forfeit": false,
+          "winner_type": "Team"
+        }
+      ],
+      "rescheduled": false,
+      "league": {
+        "id": 5544,
+        "name": "EPL Masters",
+        "url": null,
+        "slug": "dota-2-epl-masters",
+        "modified_at": "2026-07-16T14:21:14Z",
+        "image_url": null
+      },
+      "slug": "klim-sani4-vs-spirit-academy-2026-08-29",
+      "draw": false,
+      "detailed_stats": true,
+      "game_advantage": null,
+      "winner_id": null,
+      "winner_type": "Team",
+      "opponents": [
+        {
+          "type": "Team",
+          "opponent": {
+            "id": 133873,
+            "name": "Klim Sani4",
+            "location": "RU",
+            "slug": "klim-sani4",
+            "modified_at": "2026-08-28T22:36:34Z",
+            "acronym": "KS",
+            "image_url": "https://cdn-api.pandascore.co/images/team/image/133873/649px_klim_sani4_lightmode.png",
+            "dark_mode_image_url": "https://cdn-api.pandascore.co/dark_images/team/dark_image/133873/649px_klim_sani4_darkmode.png"
+          }
+        },
+        {
+          "type": "Team",
+          "opponent": {
+            "id": 137540,
+            "name": "Spirit Academy",
+            "location": "RU",
+            "slug": "spirit-academy-dota-2",
+            "modified_at": "2026-08-24T04:32:16Z",
+            "acronym": "TS.A",
+            "image_url": "https://cdn-api.pandascore.co/images/team/image/137540/185px_team_spirit_academy_2021_lightmode.png",
+            "dark_mode_image_url": "https://cdn-api.pandascore.co/dark_images/team/dark_image/137540/185px_team_spirit_academy_2021_darkmode.png"
+          }
+        }
+      ],
+      "modified_at": "2026-08-28T21:17:11Z",
+      "winner": null,
+      "id": 1649566,
+      "name": "KS vs TS.A",
+      "live": {
+        "supported": false,
+        "url": null,
+        "opens_at": null
+      },
+      "begin_at": "2026-08-29T19:00:00Z",
+      "league_id": 5544,
+      "end_at": null,
+      "scheduled_at": "2026-08-29T19:00:00Z",
+      "videogame_title": null
+    },
+    {
+      "number_of_games": 3,
+      "results": [
+        {
+          "team_id": 138753,
+          "score": 0
+        },
+        {
+          "team_id": 136650,
+          "score": 0
+        }
+      ],
+      "videogame_version": null,
+      "original_scheduled_at": "2026-08-30T02:00:00Z",
+      "serie_id": 10898,
+      "match_type": "best_of",
+      "videogame": {
+        "id": 4,
+        "name": "Dota 2",
+        "slug": "dota-2"
+      },
+      "serie": {
+        "id": 10898,
+        "name": "Southeast Asia Closed Qualifier",
+        "year": 2026,
+        "slug": "dota-2-blast-slam-southeast-asia-closed-qualifier-8-2026",
+        "begin_at": "2026-08-29T02:00:00Z",
+        "end_at": "2026-08-30T11:00:00Z",
+        "winner_id": null,
+        "winner_type": "Team",
+        "modified_at": "2026-08-27T21:26:26Z",
+        "league_id": 5319,
+        "season": "8",
+        "full_name": "Southeast Asia Closed Qualifier season 8 2026"
+      },
+      "tournament_id": 21770,
+      "forfeit": false,
+      "streams_list": [
+        {
+          "main": true,
+          "language": "en",
+          "embed_url": "https://player.twitch.tv/?channel=rlg_dota2_b",
+          "official": true,
+          "raw_url": "https://www.twitch.tv/rlg_dota2_b"
+        },
+        {
+          "main": false,
+          "language": "ru",
+          "embed_url": "https://player.twitch.tv/?channel=betboom_dota_ru2",
+          "official": false,
+          "raw_url": "https://www.twitch.tv/betboom_dota_ru2"
+        }
+      ],
+      "tournament": {
+        "id": 21770,
+        "name": "Playoffs",
+        "type": "online",
+        "country": null,
+        "slug": "dota-2-blast-slam-southeast-asia-closed-qualifier-8-2026-playoffs",
+        "begin_at": "2026-08-29T02:00:00Z",
+        "detailed_stats": true,
+        "end_at": "2026-08-30T11:00:00Z",
+        "winner_id": null,
+        "winner_type": "Team",
+        "serie_id": 10898,
+        "modified_at": "2026-08-29T12:21:11Z",
+        "league_id": 5319,
+        "prizepool": null,
+        "tier": "c",
+        "has_bracket": true,
+        "region": "ASIA",
+        "live_supported": false
+      },
+      "status": "not_started",
+      "games": [
+        {
+          "complete": false,
+          "id": 738943,
+          "position": 1,
+          "status": "not_started",
+          "length": null,
+          "finished": false,
+          "match_id": 1655421,
+          "winner": {
+            "id": null,
+            "type": "Team"
+          },
+          "begin_at": null,
+          "detailed_stats": true,
+          "end_at": null,
+          "forfeit": false,
+          "winner_type": "Team"
+        },
+        {
+          "complete": false,
+          "id": 738944,
+          "position": 2,
+          "status": "not_started",
+          "length": null,
+          "finished": false,
+          "match_id": 1655421,
+          "winner": {
+            "id": null,
+            "type": "Team"
+          },
+          "begin_at": null,
+          "detailed_stats": true,
+          "end_at": null,
+          "forfeit": false,
+          "winner_type": "Team"
+        },
+        {
+          "complete": false,
+          "id": 738945,
+          "position": 3,
+          "status": "not_started",
+          "length": null,
+          "finished": false,
+          "match_id": 1655421,
+          "winner": {
+            "id": null,
+            "type": "Team"
+          },
+          "begin_at": null,
+          "detailed_stats": true,
+          "end_at": null,
+          "forfeit": false,
+          "winner_type": "Team"
+        }
+      ],
+      "rescheduled": false,
+      "league": {
+        "id": 5319,
+        "name": "BLAST Slam",
+        "url": null,
+        "slug": "dota-2-blast-slam",
+        "modified_at": "2024-11-14T08:26:28Z",
+        "image_url": null
+      },
+      "slug": "direborn-2026-08-30",
+      "draw": false,
+      "detailed_stats": true,
+      "game_advantage": null,
+      "winner_id": null,
+      "winner_type": "Team",
+      "opponents": [
+        {
+          "type": "Team",
+          "opponent": {
+            "id": 138753,
+            "name": "Direborn",
+            "location": "ID",
+            "slug": "direborn",
+            "modified_at": "2026-08-28T14:18:48Z",
+            "acronym": "DB",
+            "image_url": null,
+            "dark_mode_image_url": null
+          }
+        },
+        {
+          "type": "Team",
+          "opponent": {
+            "id": 136650,
+            "name": "Team Nemesis",
+            "location": "PH",
+            "slug": "team-nemesis",
+            "modified_at": "2026-08-28T14:10:07Z",
+            "acronym": "Nem",
+            "image_url": "https://cdn-api.pandascore.co/images/team/image/136650/159px_team_nem_lightmode.png",
+            "dark_mode_image_url": "https://cdn-api.pandascore.co/dark_images/team/dark_image/136650/285px_team_nem_darkmode.png"
+          }
+        }
+      ],
+      "modified_at": "2026-08-29T13:44:45Z",
+      "winner": null,
+      "id": 1655421,
+      "name": "Semifinal 1: DB vs Nem",
+      "live": {
+        "supported": false,
+        "url": null,
+        "opens_at": null
+      },
+      "begin_at": "2026-08-30T02:00:00Z",
+      "league_id": 5319,
+      "end_at": null,
+      "scheduled_at": "2026-08-30T02:00:00Z",
+      "videogame_title": null
+    },
+    {
+      "number_of_games": 3,
+      "results": [
+        {
+          "team_id": 137428,
+          "score": 0
+        },
+        {
+          "team_id": 135697,
+          "score": 0
+        }
+      ],
+      "videogame_version": null,
+      "original_scheduled_at": "2026-08-30T05:00:00Z",
+      "serie_id": 10900,
+      "match_type": "best_of",
+      "videogame": {
+        "id": 4,
+        "name": "Dota 2",
+        "slug": "dota-2"
+      },
+      "serie": {
+        "id": 10900,
+        "name": "China Closed Qualifier",
+        "year": 2026,
+        "slug": "dota-2-blast-slam-china-closed-qualifier-2026",
+        "begin_at": "2026-08-29T02:00:00Z",
+        "end_at": "2026-08-30T14:00:00Z",
+        "winner_id": null,
+        "winner_type": "Team",
+        "modified_at": "2026-08-28T12:41:52Z",
+        "league_id": 5319,
+        "season": null,
+        "full_name": "China Closed Qualifier 2026"
+      },
+      "tournament_id": 21773,
+      "forfeit": false,
+      "streams_list": [],
+      "tournament": {
+        "id": 21773,
+        "name": "Playoffs",
+        "type": "online",
+        "country": "CN",
+        "slug": "dota-2-blast-slam-china-closed-qualifier-2026-playoffs",
+        "begin_at": "2026-08-29T02:00:00Z",
+        "detailed_stats": true,
+        "end_at": "2026-08-30T14:00:00Z",
+        "winner_id": null,
+        "winner_type": "Team",
+        "serie_id": 10900,
+        "modified_at": "2026-08-29T10:37:20Z",
+        "league_id": 5319,
+        "prizepool": null,
+        "tier": "c",
+        "has_bracket": true,
+        "region": "ASIA",
+        "live_supported": false
+      },
+      "status": "not_started",
+      "games": [
+        {
+          "complete": false,
+          "id": 738970,
+          "position": 1,
+          "status": "not_started",
+          "length": null,
+          "finished": false,
+          "match_id": 1656401,
+          "winner": {
+            "id": null,
+            "type": "Team"
+          },
+          "begin_at": null,
+          "detailed_stats": true,
+          "end_at": null,
+          "forfeit": false,
+          "winner_type": "Team"
+        },
+        {
+          "complete": false,
+          "id": 738971,
+          "position": 2,
+          "status": "not_started",
+          "length": null,
+          "finished": false,
+          "match_id": 1656401,
+          "winner": {
+            "id": null,
+            "type": "Team"
+          },
+          "begin_at": null,
+          "detailed_stats": true,
+          "end_at": null,
+          "forfeit": false,
+          "winner_type": "Team"
+        },
+        {
+          "complete": false,
+          "id": 738972,
+          "position": 3,
+          "status": "not_started",
+          "length": null,
+          "finished": false,
+          "match_id": 1656401,
+          "winner": {
+            "id": null,
+            "type": "Team"
+          },
+          "begin_at": null,
+          "detailed_stats": true,
+          "end_at": null,
+          "forfeit": false,
+          "winner_type": "Team"
+        }
+      ],
+      "rescheduled": false,
+      "league": {
+        "id": 5319,
+        "name": "BLAST Slam",
+        "url": null,
+        "slug": "dota-2-blast-slam",
+        "modified_at": "2024-11-14T08:26:28Z",
+        "image_url": null
+      },
+      "slug": "cloud-rising-2026-08-30",
+      "draw": false,
+      "detailed_stats": true,
+      "game_advantage": null,
+      "winner_id": null,
+      "winner_type": "Team",
+      "opponents": [
+        {
+          "type": "Team",
+          "opponent": {
+            "id": 137428,
+            "name": "Cloud Rising",
+            "location": "CN",
+            "slug": "cloud-rising",
+            "modified_at": "2026-08-29T07:14:19Z",
+            "acronym": "CR",
+            "image_url": "https://cdn-api.pandascore.co/images/team/image/137428/219px_cloud_rising_lightmode.png",
+            "dark_mode_image_url": "https://cdn-api.pandascore.co/dark_images/team/dark_image/137428/146px_cloud_rising_darkmode.png"
+          }
+        },
+        {
+          "type": "Team",
+          "opponent": {
+            "id": 135697,
+            "name": "Yakult Brothers",
+            "location": "CN",
+            "slug": "yakult-s-brothers",
+            "modified_at": "2026-08-29T08:41:23Z",
+            "acronym": "YB",
+            "image_url": "https://cdn-api.pandascore.co/images/team/image/135697/yakult_brothers_lightmode.png",
+            "dark_mode_image_url": "https://cdn-api.pandascore.co/dark_images/team/dark_image/135697/yakult_brothers_darkmode.png"
+          }
+        }
+      ],
+      "modified_at": "2026-08-29T09:21:07Z",
+      "winner": null,
+      "id": 1656401,
+      "name": "Semifinal 2: CR vs YB",
+      "live": {
+        "supported": false,
+        "url": null,
+        "opens_at": null
+      },
+      "begin_at": "2026-08-30T05:00:00Z",
+      "league_id": 5319,
+      "end_at": null,
+      "scheduled_at": "2026-08-30T05:00:00Z",
+      "videogame_title": null
+    },
+    {
+      "number_of_games": 3,
+      "results": [
+        {
+          "team_id": 139147,
+          "score": 0
+        },
+        {
+          "team_id": 1660,
+          "score": 0
+        }
+      ],
+      "videogame_version": null,
+      "original_scheduled_at": "2026-08-30T05:00:00Z",
+      "serie_id": 10898,
+      "match_type": "best_of",
+      "videogame": {
+        "id": 4,
+        "name": "Dota 2",
+        "slug": "dota-2"
+      },
+      "serie": {
+        "id": 10898,
+        "name": "Southeast Asia Closed Qualifier",
+        "year": 2026,
+        "slug": "dota-2-blast-slam-southeast-asia-closed-qualifier-8-2026",
+        "begin_at": "2026-08-29T02:00:00Z",
+        "end_at": "2026-08-30T11:00:00Z",
+        "winner_id": null,
+        "winner_type": "Team",
+        "modified_at": "2026-08-27T21:26:26Z",
+        "league_id": 5319,
+        "season": "8",
+        "full_name": "Southeast Asia Closed Qualifier season 8 2026"
+      },
+      "tournament_id": 21770,
+      "forfeit": false,
+      "streams_list": [
+        {
+          "main": false,
+          "language": "ru",
+          "embed_url": "https://player.twitch.tv/?channel=betboom_dota_ru2",
+          "official": false,
+          "raw_url": "https://www.twitch.tv/betboom_dota_ru2"
+        },
+        {
+          "main": true,
+          "language": "en",
+          "embed_url": "https://player.twitch.tv/?channel=rlg_dota2_b",
+          "official": true,
+          "raw_url": "https://www.twitch.tv/rlg_dota2_b"
+        }
+      ],
+      "tournament": {
+        "id": 21770,
+        "name": "Playoffs",
+        "type": "online",
+        "country": null,
+        "slug": "dota-2-blast-slam-southeast-asia-closed-qualifier-8-2026-playoffs",
+        "begin_at": "2026-08-29T02:00:00Z",
+        "detailed_stats": true,
+        "end_at": "2026-08-30T11:00:00Z",
+        "winner_id": null,
+        "winner_type": "Team",
+        "serie_id": 10898,
+        "modified_at": "2026-08-29T12:21:11Z",
+        "league_id": 5319,
+        "prizepool": null,
+        "tier": "c",
+        "has_bracket": true,
+        "region": "ASIA",
+        "live_supported": false
+      },
+      "status": "not_started",
+      "games": [
+        {
+          "complete": false,
+          "id": 738949,
+          "position": 1,
+          "status": "not_started",
+          "length": null,
+          "finished": false,
+          "match_id": 1655423,
+          "winner": {
+            "id": null,
+            "type": "Team"
+          },
+          "begin_at": null,
+          "detailed_stats": true,
+          "end_at": null,
+          "forfeit": false,
+          "winner_type": "Team"
+        },
+        {
+          "complete": false,
+          "id": 738950,
+          "position": 2,
+          "status": "not_started",
+          "length": null,
+          "finished": false,
+          "match_id": 1655423,
+          "winner": {
+            "id": null,
+            "type": "Team"
+          },
+          "begin_at": null,
+          "detailed_stats": true,
+          "end_at": null,
+          "forfeit": false,
+          "winner_type": "Team"
+        },
+        {
+          "complete": false,
+          "id": 738951,
+          "position": 3,
+          "status": "not_started",
+          "length": null,
+          "finished": false,
+          "match_id": 1655423,
+          "winner": {
+            "id": null,
+            "type": "Team"
+          },
+          "begin_at": null,
+          "detailed_stats": true,
+          "end_at": null,
+          "forfeit": false,
+          "winner_type": "Team"
+        }
+      ],
+      "rescheduled": false,
+      "league": {
+        "id": 5319,
+        "name": "BLAST Slam",
+        "url": null,
+        "slug": "dota-2-blast-slam",
+        "modified_at": "2024-11-14T08:26:28Z",
+        "image_url": null
+      },
+      "slug": "ice-cream-men-2026-08-30",
+      "draw": false,
+      "detailed_stats": true,
+      "game_advantage": null,
+      "winner_id": null,
+      "winner_type": "Team",
+      "opponents": [
+        {
+          "type": "Team",
+          "opponent": {
+            "id": 139147,
+            "name": "Ice Cream Men",
+            "location": "",
+            "slug": "ice-cream-men",
+            "modified_at": "2026-08-28T14:10:10Z",
+            "acronym": null,
+            "image_url": null,
+            "dark_mode_image_url": null
+          }
+        },
+        {
+          "type": "Team",
+          "opponent": {
+            "id": 1660,
+            "name": "Execration",
+            "location": "PH",
+            "slug": "execration",
+            "modified_at": "2026-08-28T14:10:05Z",
+            "acronym": "XctN",
+            "image_url": "https://cdn-api.pandascore.co/images/team/image/1660/771px_execration_2024_full_allmode.png",
+            "dark_mode_image_url": null
+          }
+        }
+      ],
+      "modified_at": "2026-08-29T13:01:42Z",
+      "winner": null,
+      "id": 1655423,
+      "name": "Semifinal 2: Ice Cream Men vs XctN",
+      "live": {
+        "supported": false,
+        "url": null,
+        "opens_at": null
+      },
+      "begin_at": "2026-08-30T05:00:00Z",
+      "league_id": 5319,
+      "end_at": null,
+      "scheduled_at": "2026-08-30T05:00:00Z",
+      "videogame_title": null
+    },
+    {
+      "number_of_games": 3,
+      "results": [
+        {
+          "team_id": 138494,
+          "score": 0
+        },
+        {
+          "team_id": 139151,
+          "score": 0
+        }
+      ],
+      "videogame_version": null,
+      "original_scheduled_at": "2026-08-30T07:30:00Z",
+      "serie_id": 10900,
+      "match_type": "best_of",
+      "videogame": {
+        "id": 4,
+        "name": "Dota 2",
+        "slug": "dota-2"
+      },
+      "serie": {
+        "id": 10900,
+        "name": "China Closed Qualifier",
+        "year": 2026,
+        "slug": "dota-2-blast-slam-china-closed-qualifier-2026",
+        "begin_at": "2026-08-29T02:00:00Z",
+        "end_at": "2026-08-30T14:00:00Z",
+        "winner_id": null,
+        "winner_type": "Team",
+        "modified_at": "2026-08-28T12:41:52Z",
+        "league_id": 5319,
+        "season": null,
+        "full_name": "China Closed Qualifier 2026"
+      },
+      "tournament_id": 21773,
+      "forfeit": false,
+      "streams_list": [],
+      "tournament": {
+        "id": 21773,
+        "name": "Playoffs",
+        "type": "online",
+        "country": "CN",
+        "slug": "dota-2-blast-slam-china-closed-qualifier-2026-playoffs",
+        "begin_at": "2026-08-29T02:00:00Z",
+        "detailed_stats": true,
+        "end_at": "2026-08-30T14:00:00Z",
+        "winner_id": null,
+        "winner_type": "Team",
+        "serie_id": 10900,
+        "modified_at": "2026-08-29T10:37:20Z",
+        "league_id": 5319,
+        "prizepool": null,
+        "tier": "c",
+        "has_bracket": true,
+        "region": "ASIA",
+        "live_supported": false
+      },
+      "status": "not_started",
+      "games": [
+        {
+          "complete": false,
+          "id": 738967,
+          "position": 1,
+          "status": "not_started",
+          "length": null,
+          "finished": false,
+          "match_id": 1656400,
+          "winner": {
+            "id": null,
+            "type": "Team"
+          },
+          "begin_at": null,
+          "detailed_stats": true,
+          "end_at": null,
+          "forfeit": false,
+          "winner_type": "Team"
+        },
+        {
+          "complete": false,
+          "id": 738968,
+          "position": 2,
+          "status": "not_started",
+          "length": null,
+          "finished": false,
+          "match_id": 1656400,
+          "winner": {
+            "id": null,
+            "type": "Team"
+          },
+          "begin_at": null,
+          "detailed_stats": true,
+          "end_at": null,
+          "forfeit": false,
+          "winner_type": "Team"
+        },
+        {
+          "complete": false,
+          "id": 738969,
+          "position": 3,
+          "status": "not_started",
+          "length": null,
+          "finished": false,
+          "match_id": 1656400,
+          "winner": {
+            "id": null,
+            "type": "Team"
+          },
+          "begin_at": null,
+          "detailed_stats": true,
+          "end_at": null,
+          "forfeit": false,
+          "winner_type": "Team"
+        }
+      ],
+      "rescheduled": false,
+      "league": {
+        "id": 5319,
+        "name": "BLAST Slam",
+        "url": null,
+        "slug": "dota-2-blast-slam",
+        "modified_at": "2024-11-14T08:26:28Z",
+        "image_url": null
+      },
+      "slug": "crescent-2026-08-30",
+      "draw": false,
+      "detailed_stats": true,
+      "game_advantage": null,
+      "winner_id": null,
+      "winner_type": "Team",
+      "opponents": [
+        {
+          "type": "Team",
+          "opponent": {
+            "id": 138494,
+            "name": "Team Resilience",
+            "location": "CN",
+            "slug": "team-resilience",
+            "modified_at": "2026-08-29T11:52:24Z",
+            "acronym": "TR",
+            "image_url": "https://cdn-api.pandascore.co/images/team/image/138494/800px_team_resilience__dota2__lightmode.png",
+            "dark_mode_image_url": "https://cdn-api.pandascore.co/dark_images/team/dark_image/138494/800px_team_resilience__dota2__darkmode.png"
+          }
+        },
+        {
+          "type": "Team",
+          "opponent": {
+            "id": 139151,
+            "name": "Crescent",
+            "location": "",
+            "slug": "crescent-dota-2",
+            "modified_at": "2026-08-29T04:12:09Z",
+            "acronym": "CRES",
+            "image_url": null,
+            "dark_mode_image_url": null
+          }
+        }
+      ],
+      "modified_at": "2026-08-29T14:20:18Z",
+      "winner": null,
+      "id": 1656400,
+      "name": "Semifinal 1: TR vs CRES",
+      "live": {
+        "supported": false,
+        "url": null,
+        "opens_at": null
+      },
+      "begin_at": "2026-08-30T07:30:00Z",
+      "league_id": 5319,
+      "end_at": null,
+      "scheduled_at": "2026-08-30T07:30:00Z",
+      "videogame_title": null
+    }
+  ]
+}

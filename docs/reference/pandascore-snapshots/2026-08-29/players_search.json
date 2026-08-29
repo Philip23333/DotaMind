@@ -1,0 +1,74 @@
+{
+  "source": "pandascore",
+  "captured_at": "2026-08-29T18:34:43.749793+00:00",
+  "request": {
+    "path": "/dota2/players",
+    "params": {
+      "page[size]": 5,
+      "page[number]": 1,
+      "search[name]": "Yatoro"
+    }
+  },
+  "pagination": {
+    "page_number": 1,
+    "page_size": 5,
+    "total_count": 2,
+    "has_more": false
+  },
+  "response": [
+    {
+      "active": true,
+      "id": 54603,
+      "name": "Yatoro^^",
+      "role": null,
+      "slug": "yatoro-4c614990-e956-4b9c-a3f0-300cd91a5a1e",
+      "modified_at": "2026-04-01T16:55:02Z",
+      "first_name": null,
+      "last_name": null,
+      "nationality": null,
+      "image_url": null,
+      "current_videogame": {
+        "id": 4,
+        "name": "Dota 2",
+        "slug": "dota-2"
+      },
+      "current_team": {
+        "id": 135067,
+        "name": "NGNB",
+        "location": "CN",
+        "slug": "ngnb",
+        "modified_at": "2026-06-11T15:30:05Z",
+        "acronym": "NGNB",
+        "image_url": null,
+        "dark_mode_image_url": null
+      }
+    },
+    {
+      "active": true,
+      "id": 30258,
+      "name": "Yatoro",
+      "role": "1",
+      "slug": "yatoro",
+      "modified_at": "2026-08-16T12:10:46Z",
+      "first_name": "Ilya",
+      "last_name": "Mulyarchuk",
+      "nationality": "UA",
+      "image_url": "https://cdn-api.pandascore.co/images/player/image/30258/ezgif_7a5a895029465e7b.png",
+      "current_videogame": {
+        "id": 4,
+        "name": "Dota 2",
+        "slug": "dota-2"
+      },
+      "current_team": {
+        "id": 1669,
+        "name": "Team Spirit",
+        "location": "RU",
+        "slug": "team-spirit",
+        "modified_at": "2026-08-16T12:10:52Z",
+        "acronym": "TS",
+        "image_url": "https://cdn-api.pandascore.co/images/team/image/1669/153px_team_spirit_2022_lightmode.png",
+        "dark_mode_image_url": "https://cdn-api.pandascore.co/dark_images/team/dark_image/1669/153px_team_spirit_2022_darkmode.png"
+      }
+    }
+  ]
+}

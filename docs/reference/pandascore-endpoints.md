@@ -25,3 +25,11 @@ games. Keep that runtime-scoped snapshot behind the opaque Match locator; only
 a cold locator falls back to `GET /matches/{id}`. This avoids treating an
 unverified endpoint as a normal navigation step while preserving sanitized
 provider errors for genuine fallback failures.
+
+## Raw response snapshots
+
+Bounded raw responses for every endpoint used by the adapter are stored under
+[`pandascore-snapshots/`](pandascore-snapshots/). Each dated capture has a
+`manifest.json` with its request path, non-sensitive parameters, and capture
+status. The snapshots exclude headers and credentials and are observations of
+the configured account, not a stable API contract.
