@@ -16,6 +16,7 @@ from typing import Any
 from uuid import uuid4
 
 from app.vnext.agent.runtime import AgentRuntime
+from app.vnext.agent.trace import AgentTraceCollector
 from app.vnext.composition import VNextSettings, build_vnext_runtime, build_vnext_services
 from app.vnext.llm.protocol import (
     AssistantMessage,
@@ -212,6 +213,7 @@ class _ConversationTrace:
         calls: list[ToolCall],
         results: list[ToolResultMessage],
         events: list[dict[str, Any]],
+        agent_trace: dict[str, Any],
     ) -> Path:
         self.turns.append(
             {
@@ -226,6 +228,7 @@ class _ConversationTrace:
                 ),
                 "model_steps": model_steps,
                 "trace": _trace_rows(calls, results, events),
+                "agent_trace": agent_trace,
                 "events": events,
             }
         )
@@ -268,6 +271,7 @@ async def _run_turn(
     result_start = len(tool_trace.results) if tool_trace is not None else None
     events: list[dict[str, Any]] = []
     recorder = conversation or _ConversationTrace(name=result_name)
+    trace_collector = AgentTraceCollector()
 
     def record_event(event: Any) -> None:
         events.append(event.model_dump(mode="json"))
@@ -276,6 +280,7 @@ async def _run_turn(
         final = await runtime.run(
             [*history, UserMessage(content=prompt)],
             event_sink=record_event,
+            trace_collector=trace_collector,
         )
     except Exception as exc:
         calls = _tool_calls(model, start=response_start)
@@ -292,6 +297,7 @@ async def _run_turn(
             calls=calls,
             results=results,
             events=events,
+            agent_trace=trace_collector.snapshot(),
         )
         return None, list(history), destination, exc
 
@@ -309,6 +315,7 @@ async def _run_turn(
         calls=calls,
         results=results,
         events=events,
+        agent_trace=trace_collector.snapshot(),
     )
     return final, [*model.requests[-1].messages, final], destination, None
 

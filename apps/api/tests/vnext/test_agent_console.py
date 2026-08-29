@@ -39,6 +39,7 @@ def test_console_conversation_preserves_full_tool_results_across_turns(tmp_path:
         calls=[call],
         results=[result],
         events=[],
+        agent_trace={"steps": [{"step": 1}]},
     )
 
     conversation.append_turn(
@@ -49,6 +50,7 @@ def test_console_conversation_preserves_full_tool_results_across_turns(tmp_path:
         calls=[],
         results=[],
         events=[],
+        agent_trace={"steps": [{"step": 1, "terminal": "final"}]},
     )
 
     payload = json.loads(destination.read_text(encoding="utf-8"))
@@ -56,6 +58,7 @@ def test_console_conversation_preserves_full_tool_results_across_turns(tmp_path:
     assert len(payload["turns"]) == 2
     assert payload["turns"][0]["terminal_status"] == "final"
     assert payload["turns"][0]["answer"] == "found it"
+    assert payload["turns"][0]["agent_trace"] == {"steps": [{"step": 1}]}
     assert payload["turns"][0]["trace"] == [
         {
             "tool_call_id": "call-1",
