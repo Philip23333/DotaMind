@@ -203,6 +203,38 @@ def test_esports_search_navigates_league_series_match_and_game() -> None:
         for result in (discovery, series, matches, games)
     )
     assert {record["kind"] for record in games.content["records"]} == {"game"}
+    assert panda.get_calls == []
+
+
+def test_esports_search_cold_match_locator_fetches_once_then_reuses_snapshot() -> None:
+    series_service, match_service, panda, opendota = fixture_services()
+    registry = build_vnext_registry(
+        fixture_vnext_services(series_service, match_service, panda, opendota)
+    )
+    locator = match_service.locator_index.make("match", 30004)
+
+    async def exercise():
+        games = await registry.execute(
+            ToolCall(
+                id="cold-match-games",
+                name="esports.search",
+                arguments={"within": locator.model_dump()},
+            )
+        )
+        detail = await registry.execute(
+            ToolCall(
+                id="cold-match-detail",
+                name="matches.get_detail",
+                arguments={"locator": locator.model_dump()},
+            )
+        )
+        return games, detail
+
+    games, detail = asyncio.run(exercise())
+
+    assert games.status == detail.status == "ok"
+    assert len(games.content["records"]) == 3
+    assert panda.get_calls == [30004]
 
 
 def test_esports_search_rejects_unknown_or_wrong_source_locators() -> None:

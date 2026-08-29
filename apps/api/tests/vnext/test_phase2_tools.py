@@ -202,7 +202,7 @@ def test_registry_game_locator_selects_only_game_two_without_provider_ids() -> N
     assert len(game_two.content["games"]) == 1
     assert game_two.content["games"][0]["position"] == 2
     assert opendota.detail_calls == [40003]
-    assert panda.get_calls == [30004, 30004]
+    assert panda.get_calls == []
 
     serialized = json.dumps(
         [discovery.content, games.content, game_two.content],

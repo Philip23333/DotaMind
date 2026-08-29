@@ -301,7 +301,7 @@ class PandaScoreAdapter:
         )
 
     async def get_match(self, provider_match_id: int) -> ProviderObject[PandaScoreMatch]:
-        path = f"/dota2/matches/{provider_match_id}"
+        path = f"/matches/{provider_match_id}"
         payload, fetched_at, _ = await self._get_json(path)
         if not isinstance(payload, dict):
             raise PandaScoreSchemaError(f"PandaScore response at {path} must be an object")

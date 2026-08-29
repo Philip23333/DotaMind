@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Literal
 
 from app.vnext.domain.common.models import normalize_text
@@ -78,7 +79,12 @@ class PandaScoreEsportsSearch:
             if related.has_more:
                 break
         for item in match_batch.items:
-            self._append(records, seen, self._match_record(item), limit)
+            self._append(
+                records,
+                seen,
+                self._match_record(item, fetched_at=match_batch.fetched_at),
+                limit,
+            )
         truncated = len(records) >= limit and (
             series_batch.has_more is not False
             or league_batch.has_more is not False
@@ -107,15 +113,27 @@ class PandaScoreEsportsSearch:
                 limit=limit,
             )
             return EsportsSearchResult(
-                records=[self._match_record(item) for item in matches.items],
+                records=[
+                    self._match_record(item, fetched_at=matches.fetched_at)
+                    for item in matches.items
+                ],
                 truncated=matches.has_more is not False,
             )
         if resolved.kind == "match":
-            match = await self._provider.get_match(resolved.provider_id)
-            games = match.item.games[:limit]
+            snapshot = self._locators.match_snapshot(resolved.provider_id)
+            if snapshot is None:
+                fetched = await self._provider.get_match(resolved.provider_id)
+                self._locators.remember_match(
+                    resolved.provider_id,
+                    fetched.item,
+                    fetched.fetched_at,
+                )
+                snapshot = self._locators.match_snapshot(resolved.provider_id)
+            assert snapshot is not None
+            games = snapshot.match.games[:limit]
             return EsportsSearchResult(
-                records=[self._game_record(item, match.item) for item in games],
-                truncated=len(match.item.games) > limit,
+                records=[self._game_record(item, snapshot.match) for item in games],
+                truncated=len(snapshot.match.games) > limit,
             )
         raise SourceLocatorError(
             "source locator kind does not support esports navigation",
@@ -164,7 +182,7 @@ class PandaScoreEsportsSearch:
                 if len(records) >= limit:
                     truncated = True
                     continue
-                records.append(self._match_record(item))
+                records.append(self._match_record(item, fetched_at=batch.fetched_at))
             if len(records) >= limit:
                 truncated = truncated or batch.has_more is not False
                 break
@@ -217,7 +235,8 @@ class PandaScoreEsportsSearch:
             },
         )
 
-    def _match_record(self, item: PandaScoreMatch) -> SourceRecord:
+    def _match_record(self, item: PandaScoreMatch, *, fetched_at: datetime) -> SourceRecord:
+        self._locators.remember_match(item.provider_id, item, fetched_at)
         return SourceRecord(
             source=_SOURCE,
             kind="match",

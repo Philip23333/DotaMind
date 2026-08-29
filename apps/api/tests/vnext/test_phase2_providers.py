@@ -38,7 +38,7 @@ def _panda_match(provider_id: int) -> dict[str, Any]:
     }
 
 
-def test_pandascore_adapter_uses_bearer_pagination_and_dota_paths() -> None:
+def test_pandascore_adapter_uses_bearer_pagination_and_match_detail_path() -> None:
     seen: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -60,7 +60,7 @@ def test_pandascore_adapter_uses_bearer_pagination_and_dota_paths() -> None:
                     )
                 },
             )
-        if request.url.path == "/dota2/matches/30001":
+        if request.url.path == "/matches/30001":
             return _json_response(request, load_fixture("pandascore", "match_30001.json"))
         raise AssertionError(request.url)
 
@@ -87,6 +87,30 @@ def test_pandascore_adapter_uses_bearer_pagination_and_dota_paths() -> None:
     assert seen[0].url.params["page[number]"] == "1"
     assert seen[0].url.params["filter[year]"] == "2026"
     assert seen[1].url.params["filter[serie_id]"] == "20001"
+    assert seen[2].url.path == "/matches/30001"
+
+
+def test_pandascore_adapter_get_match_uses_source_match_endpoint() -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return _json_response(request, _panda_match(1638249))
+
+    async def exercise() -> Any:
+        adapter = PandaScoreAdapter(
+            base_url="https://pandascore.test",
+            token="test-token",
+            transport=httpx.MockTransport(handler),
+        )
+        result = await adapter.get_match(1638249)
+        await adapter.aclose()
+        return result
+
+    result = asyncio.run(exercise())
+
+    assert result.item.provider_id == 1638249
+    assert seen[0].url.path == "/matches/1638249"
 
 
 def test_pandascore_adapter_translates_http_and_schema_failures() -> None:

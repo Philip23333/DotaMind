@@ -43,7 +43,10 @@ from app.vnext.domain.team_player_index import TeamPlayerRefIndex
 from app.vnext.providers.opendota.adapter import OpenDotaAdapter, OpenDotaProviderError
 from app.vnext.providers.opendota.models import OpenDotaMatchDetail
 from app.vnext.providers.pandascore.adapter import PandaScoreAdapter
-from app.vnext.providers.pandascore.locator import PandaScoreLocatorIndex
+from app.vnext.providers.pandascore.locator import (
+    PandaScoreLocatorIndex,
+    PandaScoreMatchSnapshot,
+)
 from app.vnext.providers.pandascore.models import PandaScoreMatch, PandaScoreTeam
 
 _TEAM_SEARCH_LIMIT = 20
@@ -384,12 +387,12 @@ class MatchService:
                 details={"source": locator.source, "kind": locator.kind},
             )
 
-        provider_match = await self.pandascore.get_match(provider_match_id)
+        provider_match = await self._provider_match_for_locator(provider_match_id)
         normalized = _normalize_search_match(
-            provider_match.item,
+            provider_match.match,
             fetched_at=provider_match.fetched_at,
         )
-        self._remember(provider_match.item, normalized, provider_match.fetched_at)
+        self._remember(provider_match.match, normalized, provider_match.fetched_at)
         known = self._matches[normalized.summary.ref.value]
         if requested_game_id is None:
             return known, known.normalized.games
@@ -402,6 +405,23 @@ class MatchService:
             "game source locator is not present in its PandaScore match",
             details={"source": locator.source, "kind": locator.kind},
         )
+
+    async def _provider_match_for_locator(
+        self,
+        provider_match_id: int,
+    ) -> PandaScoreMatchSnapshot:
+        snapshot = self.locator_index.match_snapshot(provider_match_id)
+        if snapshot is not None:
+            return snapshot
+        provider_match = await self.pandascore.get_match(provider_match_id)
+        self.locator_index.remember_match(
+            provider_match_id,
+            provider_match.item,
+            provider_match.fetched_at,
+        )
+        snapshot = self.locator_index.match_snapshot(provider_match_id)
+        assert snapshot is not None
+        return snapshot
 
     async def _resolve_games(
         self,

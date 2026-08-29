@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from hashlib import sha256
 
 from app.vnext.domain.source import SourceLocator, SourceLocatorError
+from app.vnext.providers.pandascore.models import PandaScoreMatch
 
 _SOURCE = "pandascore"
 
@@ -19,11 +21,20 @@ class ResolvedPandaScoreLocator:
     parent_match_provider_id: int | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class PandaScoreMatchSnapshot:
+    """A source match already obtained during this runtime's discovery flow."""
+
+    match: PandaScoreMatch
+    fetched_at: datetime
+
+
 class PandaScoreLocatorIndex:
     """Keep process-local PandaScore locator state shared by vNext capabilities."""
 
     def __init__(self) -> None:
         self._entries: dict[str, ResolvedPandaScoreLocator] = {}
+        self._match_snapshots: dict[int, PandaScoreMatchSnapshot] = {}
 
     def make(self, kind: str, provider_id: int) -> SourceLocator:
         value = _locator_value(kind, provider_id)
@@ -37,6 +48,20 @@ class PandaScoreLocatorIndex:
             provider_id=game_provider_id,
             parent_match_provider_id=match_provider_id,
         )
+
+    def remember_match(
+        self,
+        provider_match_id: int,
+        match: PandaScoreMatch,
+        fetched_at: datetime,
+    ) -> None:
+        self._match_snapshots[provider_match_id] = PandaScoreMatchSnapshot(
+            match=match,
+            fetched_at=fetched_at,
+        )
+
+    def match_snapshot(self, provider_match_id: int) -> PandaScoreMatchSnapshot | None:
+        return self._match_snapshots.get(provider_match_id)
 
     def resolve(self, locator: SourceLocator) -> ResolvedPandaScoreLocator:
         if locator.source != _SOURCE:
@@ -63,4 +88,8 @@ def _locator_value(kind: str, provider_id: int) -> str:
     return f"src:{sha256(payload).hexdigest()[:24]}"
 
 
-__all__ = ["PandaScoreLocatorIndex", "ResolvedPandaScoreLocator"]
+__all__ = [
+    "PandaScoreLocatorIndex",
+    "PandaScoreMatchSnapshot",
+    "ResolvedPandaScoreLocator",
+]
