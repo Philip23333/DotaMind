@@ -27,7 +27,7 @@ import { siDota2 } from "simple-icons";
 import { cancelChatRun } from "@/lib/chat-run-api";
 import { DOTAMIND_ASSISTANT_METADATA_KEY } from "@/lib/assistant-ui/migration-contract";
 import { downloadTrace, TraceExpiredError } from "@/lib/trace-download";
-import { useRef, useState, type FC } from "react";
+import { useMemo, useRef, useState, type FC } from "react";
 
 export const Thread: FC<{ browserId?: string }> = ({ browserId }) => {
   return (
@@ -107,7 +107,8 @@ const UserMessage: FC = () => (
 
 const AssistantMessage: FC<{ browserId?: string }> = ({ browserId }) => {
   const messageId = useAuiState((state) => state.message.id);
-  const trace = useAuiState((state) => traceFromMetadata(state.message.metadata?.custom));
+  const metadata = useAuiState((state) => state.message.metadata?.custom);
+  const trace = useMemo(() => traceFromMetadata(metadata), [metadata]);
   const runtimeInfo = useRuntimeInfo(messageId);
 
   return (
