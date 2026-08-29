@@ -92,6 +92,7 @@ may conceptually expose:
 source
 kind
 locator
+artifact_ref
 facts
 ```
 
@@ -100,10 +101,13 @@ where:
 - `source` is explicit provenance such as `pandascore` or `opendota`;
 - `kind` is a source-defined object kind such as PandaScore `series` or `match`;
 - `locator` is an opaque `SourceLocator` used to revisit the same source object;
-- `facts` are bounded validated source-backed facts and may remain source-shaped.
+- `artifact_ref` addresses the validated stored source document when the
+  capability externalizes it;
+- `facts` is a generic bounded observation derived from that same source
+  document, not a hand-authored business preview DTO.
 
-This envelope is for composition and provenance. It is not a universal esports
-entity model.
+This envelope is for composition, provenance, and bounded observation. It is not
+a universal esports entity model.
 
 ## SourceLocator
 
@@ -120,7 +124,7 @@ SourceLocator
 ```
 
 The opaque value may be backed internally by a provider-private ID, but the raw
-ID is not exposed as agent language. The locator asserts only:
+ID is not exposed as agent navigation language. The locator asserts only:
 
 > this is the same object in this source
 
@@ -147,6 +151,21 @@ universal ontology that every future provider must implement.
 The search capability may support a text query, bounded time scope, an optional
 `within` source locator, and a result limit. PandaScore-specific search/list
 operations remain internal implementation choices.
+
+For each discovered PandaScore source object, the provider implementation keeps
+the validated provider-shaped business document outside model context and
+returns:
+
+```text
+SourceLocator
+ArtifactRef
+bounded structural facts
+```
+
+The bounded facts are produced by one generic observation policy. DotaMind does
+not maintain separate `LeaguePreview`, `SeriesPreview`, `MatchPreview`, or
+`GamePreview` schemas. The model uses `artifact.grep/read` when it needs facts
+that are not present in the bounded observation.
 
 The current `series.search`, `series.list_matches`, and `matches.search` tools
 are migration-era surfaces and should converge into `esports.search` after
@@ -178,18 +197,28 @@ Cross-source resolution remains deterministic application code. Ambiguous or
 unresolved mappings stay explicit and are not guessed by the model or hidden by
 fallbacks.
 
-## Source-shaped facts, not raw payloads
+## Source-shaped facts, not raw transport
 
-"Source-shaped" does not mean exposing raw provider JSON.
+"Source-shaped" means retaining the provider's business fact structure without
+forcing it through a DotaMind universal business DTO. It does not mean storing
+the HTTP transport envelope.
 
 Provider implementations still:
 
-- validate upstream schemas;
-- remove transport-only metadata;
-- preserve documented null/missing semantics;
-- omit or encapsulate raw provider-private IDs;
-- bound lists and result size;
+- validate known upstream schema/types and source-specific null/missing
+  semantics;
+- remove credentials, headers, pagination envelopes, and transport-only
+  metadata;
+- preserve additional provider business fields when they can be safely carried;
+- omit provider-private identity values from bounded model-facing observations;
 - expose explicit source and provider failure state.
+
+A stored source-document Artifact may retain provider-private IDs as source-local
+evidence. Those values are not supported capability identity or cross-source
+identity; navigation continues to use `SourceLocator`.
+
+Bounding is applied at the model-facing observation/read boundary rather than by
+discarding provider facts solely because no current scenario uses them.
 
 What is intentionally avoided is the next layer that renames every provider
 concept into a universal DotaMind League/Series/Tournament/Match/Game schema
@@ -226,7 +255,7 @@ capability provider implementation
   -> ArtifactStore
   -> ArtifactRef
 
-bounded result + ArtifactRef
+bounded observation + ArtifactRef
   -> model context
 ```
 
@@ -239,7 +268,7 @@ A source-backed Artifact may conceptually contain:
 source
 kind
 canonical_ids    # only when truly shared, e.g. valve_match_id
-facts            # validated source-shaped document
+facts            # complete validated provider-shaped document
 ```
 
 Do not merge PandaScore event facts and OpenDota game facts into one universal
@@ -247,10 +276,9 @@ schema merely to make them searchable. Their relationship can be retained by
 source locators, canonical Valve identity, bounded capability results, and
 Artifact scope/membership where useful.
 
-Historical GameSummary schemas v3/v4/v5 remain frozen. The next Artifact schema
-or artifact type should be chosen only after the capability migration proves the
-minimum stable document envelope; do not assume the answer must be a
-provider-neutral GameSummary v6.
+Historical GameSummary schemas v3/v4/v5 remain frozen. Source-backed documents
+use a separate Artifact contract rather than silently mutating those historical
+schemas.
 
 ## Artifact exploration
 
@@ -261,6 +289,10 @@ Artifacts form a structured corpus outside model context.
   content.
 - `artifact.read` is schema-neutral bounded depth retrieval by ArtifactRef and
   structural path.
+
+An ArtifactRef may come directly from another capability such as
+`esports.search`; it does not have to be rediscovered through
+`artifact.search`.
 
 Search/read do not fetch providers or produce missing Artifacts. They do not
 know PandaScore, OpenDota, Hero, Player, build, or another gameplay scenario.
@@ -296,8 +328,8 @@ Do not widen this migration merely to make all existing tools symmetrical.
 
 ## Context and persistence
 
-The model does not receive raw provider payloads, complete large detail results,
-or entire Artifacts by default.
+The model does not receive transport payloads, complete large detail results, or
+entire Artifacts by default.
 
 Normal model-facing responses contain bounded facts, source attribution,
 locators, canonical Valve IDs when available, ArtifactRefs, and explicit
@@ -313,7 +345,7 @@ conversation context and use separate retention contracts.
 - one tool per PandaScore League/Series/Tournament/Match operation
 - forcing every provider into one canonical esports hierarchy
 - forcing every game-detail provider into one `UnifiedGameDetail` DTO
-- provider-private IDs as model-facing identity
+- provider-private IDs as model-facing capability identity
 - one construction Ref type per Hero, Item, Ability, slot, purchase, or event
 - mandatory catalog enrichment inside dynamic game documents
 - one Artifact search adapter/projector per provider or schema
