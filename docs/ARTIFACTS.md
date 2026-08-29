@@ -2,390 +2,369 @@
 
 ## Status
 
-This document owns the vNext target contract for artifacts, artifact storage,
-and generic artifact exploration. The current code still contains the heavier
-`GameConstructionContext` / construction-Ref / catalog-enrichment pipeline; that
-implementation is transitional. Where older architecture text describes that
-pipeline as the target, this document supersedes it.
+This document owns the vNext target contract for large-result externalization,
+Artifact storage, and generic Artifact exploration.
 
-The simplification is intentionally based on the original reason artifacts were
-introduced: large tool results must not be copied wholesale into model context.
+The current code still contains the heavier `GameConstructionContext` /
+construction-Ref / catalog-enrichment pipeline and a provider-neutral
+`GameSummaryArtifact` production path. Those are transitional. The target no
+longer requires different detail providers to fit one universal GameSummary
+schema before their data can be stored or explored.
 
 ## Why Artifact exists
 
-An Artifact exists to externalize a complete, potentially large tool result
-outside model context while keeping that result searchable and readable by the
-model.
+Artifact exists for one primary reason:
 
-The core flow is:
+> complete tool/provider results can be too large to place directly in model
+> context.
 
-```text
-Tool / application capability
-  -> collect complete source-backed facts
-  -> light canonical normalization
-  -> store JSON-like document
-  -> return ArtifactRef plus a bounded result
-
-Model
-  -> artifact.grep when breadth discovery is useful
-  -> artifact.read when deeper evidence is useful
-```
-
-Artifact is not a second domain model, an object graph, or a requirement to
-create a typed reference for every Dota concept inside a game.
-
-## Three fact spaces
-
-DotaMind keeps three fact spaces deliberately separate.
-
-### 1. Esports navigation facts
-
-PandaScore is the current navigation and event-context source:
+The target flow is:
 
 ```text
-League -> Series -> Tournament -> Match -> Game
+model-facing capability
+  -> provider implementation obtains complete validated result
+  -> store large result outside context
+  -> return bounded facts + ArtifactRef
+
+model
+  -> artifact.grep for breadth
+  -> artifact.read for depth
 ```
 
-Navigation refs exist only where the model must carry a locator between calls,
-for example `SeriesRef`, `MatchRef`, or `GameRef`. Provider-private PandaScore
-IDs remain below the domain boundary.
+Artifact is therefore a document-storage/retrieval boundary, not a second Dota
+business model.
 
-### 2. Game facts
+## Source-backed document model
 
-After a PandaScore Game is resolved to a canonical Valve match ID, OpenDota is
-the current game-detail source. The Game Artifact stores recorded game facts as
-canonical JSON-like data.
+A stored Artifact should have only the stable outer structure required for
+retention, provenance, identity, and generic exploration.
 
-Valve-native identities remain ordinary scalar facts in the document:
+Conceptually:
+
+```text
+Artifact
+  source
+  kind
+  canonical_ids?
+  facts
+```
+
+- `source` identifies the source implementation such as `opendota`;
+- `kind` identifies the source/document kind;
+- `canonical_ids` contains only genuinely shared identities when useful, such as
+  `valve_match_id`;
+- `facts` is a validated, bounded-at-tool-boundary, source-backed JSON-like
+  document and may remain source-shaped.
+
+"Source-shaped" does not mean raw provider payload. Transport-only metadata,
+raw provider-private IDs, invalid/unbounded structures, and undocumented source
+fields remain below the provider boundary.
+
+## No universal detail schema requirement
+
+The Artifact Store and `artifact.grep/read` do not need OpenDota and a future
+game-detail provider to expose the same fields.
+
+Prefer:
+
+```text
+OpenDota detail
+  -> source-backed Artifact A
+
+Future detail source
+  -> source-backed Artifact B
+
+artifact.grep/read
+  -> works on both JSON-like documents
+```
+
+over:
+
+```text
+OpenDota detail ----\
+                    -> UnifiedGameDetail -> Artifact
+Future provider ----/
+```
+
+A shared business schema should be introduced only when a concrete deterministic
+consumer actually requires one.
+
+## Capability relationship
+
+Artifact production is subordinate to the capability that obtained the large
+result.
+
+Current target examples:
+
+```text
+esports.search
+  -> PandaScore implementation
+  -> bounded source-backed search facts
+
+game.detail
+  -> resolve valve_match_id when needed
+  -> OpenDota implementation
+  -> large complete detail stored as Artifact
+  -> bounded result + ArtifactRef
+```
+
+The model does not need a normal `artifact.produce` tool. Production happens as
+part of a capability's successful data path when externalization is useful.
+
+## SourceLocator and ArtifactRef
+
+`SourceLocator` and `ArtifactRef` solve different problems.
+
+```text
+SourceLocator
+  = revisit one object inside one provider/source
+
+ArtifactRef
+  = revisit one stored document inside DotaMind's Artifact corpus
+```
+
+A source locator is provider-scoped and opaque. An ArtifactRef is storage-scoped
+and versioned according to the stored document contract.
+
+Neither needs to become a canonical DotaMind League/Series/Match identity.
+
+## Canonical Valve identities
+
+Valve-native identities may cross source boundaries directly:
 
 - `valve_match_id`
-- `valve_team_id`
-- `steam_account_id`
+- Valve team ID
+- Steam account ID
 - `hero_id`
 - `item_id`
 - `ability_id`
 
-They do not require construction-layer `HeroRef`, `ItemRef`, `AbilityUpgradeRef`,
-`ItemSlotRef`, `PurchaseEventRef`, or `DraftEventRef` wrappers.
+These are Dota-native facts, not DotaMind wrappers.
 
-### 3. Static Dota catalog facts
+A Game-detail Artifact may preserve them directly inside `facts` or the small
+`canonical_ids` envelope. They do not require `HeroRef`, `ItemRef`,
+`AbilityUpgradeRef`, `ItemSlotRef`, `PurchaseEventRef`, or `DraftEventRef` merely
+to enter the document.
 
-The committed Valve catalog owns the stable mapping between Valve-native IDs
-and static entity facts such as names and localization.
+## Static catalog separation
 
-Artifact production should not duplicate those static facts into every game
-document by default. The model receives small catalog capabilities instead:
-
-- `catalog.search`: user-facing name/alias -> candidate Valve-native IDs
-- `catalog.lookup`: batch Valve-native IDs -> static catalog facts
-
-Catalog lookup is deterministic, local, bounded, and independent from Artifact
-production.
-
-## Artifact definition
-
-A canonical Artifact is a stable, provider-neutral, JSON-like document that
-preserves the complete facts needed for later model exploration without placing
-the full payload in context by default.
-
-A Game Artifact should look conceptually like:
+Static Valve ID -> entity translation is a separate fact space.
 
 ```text
-GameSummaryArtifact
-  event
-    league
-    series
-    tournament
-    match
-    game_position
-  game
-    valve_match_id
-    start_time
-    duration_seconds
-    winner
-    game_mode_id
-    lobby_type_id
-  teams
-    radiant
-      valve_team_id
-      name
-      score
-    dire
-      valve_team_id
-      name
-      score
-  players[]
-    steam_account_id
-    registered_name
-    persona_name
-    side
-    player_slot
-    hero_id
-    stats
-    economy
-    items
-      inventory[] { slot, item_id }
-      backpack[] { slot, item_id }
-      neutral_items[] { slot, item_id }
-    purchase_history[] { time_seconds, item_id }
-    ability_upgrades[] { ability_id, level, time_seconds }
-  draft
-    picks[] { order, side, hero_id }
-    bans[] { order, side, hero_id }
+dynamic source-backed Artifact
+  -> hero_id / item_id / ability_id
+
+local Valve catalog
+  -> catalog.search
+  -> catalog.lookup
+  -> names/localization/reference facts
 ```
 
-Readable PandaScore event context may be embedded because it tells the model
-what game the document represents. PandaScore resource IDs and DotaMind
-navigation refs do not enter the Artifact.
+Do not require Artifact production to duplicate catalog names into every stored
+game result.
 
-## Ref rule
+## Relationship between PandaScore and OpenDota
 
-A `Ref` is a locator, not a generic wrapper around an ID or event structure.
+PandaScore esports/event facts and OpenDota recorded-game facts do not need to be
+merged into one universal Artifact.
 
-Create a Ref only when another capability may need to receive it later to
-locate the same object. Typical retained refs are:
-
-- `SeriesRef`, `MatchRef`, `GameRef` and other necessary navigation locators
-- `TeamRef` and `PlayerRef` where cross-capability navigation requires them
-- `ArtifactRef`
-
-Do not create a Ref merely because a value has an identity field. A hero ID,
-item ID, ability ID, inventory slot, purchase event, draft event, or ability
-upgrade inside an Artifact is content, not a locator.
-
-Provider entity -> canonical navigation Ref construction must have one owner and
-one deterministic rule. Different services must not invent their own hash
-recipes for the same source entity.
-
-## ArtifactRef
-
-`ArtifactRef` is the stable locator for a stored Artifact. For GameSummary it is
-derived from canonical Valve game identity plus schema version, for example:
+The target relationship can be expressed through:
 
 ```text
-game_summary:6:8960577698
+PandaScore SourceLocator
+  -> deterministic source-to-Valve resolution
+  -> valve_match_id
+  -> OpenDota detail Artifact
 ```
 
-Artifact identity is independent from PandaScore IDs and from catalog names.
+The bounded `game.detail` result may retain the source locator and resolved Valve
+identity. Generic Artifact scope may associate the resulting Artifact with the
+source locator when useful.
 
-## Production target
+Readable PandaScore hierarchy/context is copied into the detail Artifact only if
+a concrete consumer demonstrates that storing the duplication is valuable.
 
-The target production path is deliberately short:
+## Artifact exploration
+
+Artifacts form a generic JSON-like corpus outside model context.
+
+### `artifact.search`
+
+Exact availability lookup where useful. It never fetches providers or creates a
+missing Artifact.
+
+### `artifact.grep`
+
+Schema-neutral breadth discovery over serialized scalar content. It returns:
 
 ```text
-PandaScore navigation
-  -> resolve concrete Game
-  -> Valve match_id
-
-OpenDota game detail
-  + already-known readable PandaScore event context
-  -> thin canonical normalization
-  -> GameSummaryArtifact
-  -> ArtifactStore.put
-  -> ArtifactRef
+ArtifactRef
+structural path
+bounded preview
 ```
 
-The normalization layer may rename fields, preserve missing-data semantics,
-normalize side/status values, validate canonical Valve identity, and combine
-source-backed PandaScore event context with OpenDota game facts. It should not
-build a parallel graph of construction refs or translate every Valve-native ID
-through the catalog.
+It does not know source-specific or gameplay-specific dimensions.
 
-A capability that obtains a large result may store the complete Artifact before
-returning success. The model receives a bounded tool result and a locator rather
-than the complete document. A separate model-facing `artifact.produce` tool is
-not required for ordinary match-detail flow.
+### `artifact.read`
 
-## Retrieval and discovery
+Bounded depth retrieval by exact ArtifactRef plus structural path. It does not
+interpret provider semantics.
 
-Artifacts form a structured corpus outside model context.
-
-- `artifact.search` is exact Artifact availability lookup where useful.
-- `artifact.grep` is schema-neutral breadth discovery over serialized scalar
-  content and returns `ArtifactRef`, structural path, and bounded preview.
-- `artifact.read` is schema-neutral bounded depth retrieval by `ArtifactRef` and
-  structural path.
-
-Search and read do not fetch providers or create missing Artifacts. The model
-chooses when they are useful; they are not a mandatory workflow.
-
-The search implementation may later move from scanning to a generic index, but
-that index must remain schema-neutral. Do not add one search adapter per Artifact
-type or scenario-specific tools such as `artifact.find_player_hero_games`.
+Search/read are independent observation primitives; no fixed grep-then-read
+workflow is required.
 
 ## Scope
 
-`ArtifactScopeStore` remains a generic corpus-membership mechanism:
+`ArtifactScopeStore` remains a generic membership mechanism:
 
 ```text
 ArtifactScopeRef -> ArtifactRef[]
 ```
 
-Search does not know whether a scope represents a League, Series, Tournament,
-Match, temporary collection, or another future grouping.
+Scope must not depend on a universal esports ontology.
 
-Known PandaScore navigation ancestry may register an Artifact after the Artifact
-write succeeds. Membership is never inferred by parsing Artifact content.
-Scoped search covers only currently materialized Artifacts and must preserve
-`materialized_only` semantics.
+A capability may register an Artifact under an already-known opaque
+`SourceLocator`-derived scope or another explicit collection. The scope store
+itself does not know whether the locator represents a PandaScore Series, Match,
+future-provider event, or another grouping.
 
-Because scope identity depends on navigation refs, provider entity -> Domain Ref
-construction must be consistent before those refs are trusted as scope keys.
+The current League/Series/Tournament/Match Ref registrations are transitional.
+Do not expand that hierarchy as the target solution.
 
-## Catalog capabilities
-
-The target catalog surface is intentionally small.
-
-`catalog.search` resolves human-facing text to static Dota catalog candidates.
-Example inputs include `Earth Spirit`, `土猫`, or an item name. It may accept a
-bounded type filter such as hero/item/ability.
-
-`catalog.lookup` accepts bounded batches of Valve-native IDs, for example:
-
-```json
-{
-  "heroes": [107],
-  "items": [50, 63],
-  "abilities": [5601, 5602]
-}
-```
-
-and returns static catalog facts such as canonical English and Chinese names.
-It performs no provider call and no gameplay interpretation.
-
-This keeps responsibilities orthogonal:
-
-```text
-Artifact = dynamic recorded game facts
-Catalog  = static Valve ID -> entity facts
-Model    = combines both when useful
-```
-
-## Schema evolution
+## Historical GameSummary artifacts
 
 GameSummary schema versions 3, 4, and 5 remain frozen historical contracts.
-They are not silently mutated.
+They proved useful infrastructure:
 
-The simplified representation should be introduced as a new schema version
-(currently expected to be v6) because removing duplicated catalog names and
-construction-driven shapes changes the Artifact contract materially.
+- large result storage outside model context;
+- deterministic ArtifactRef identity;
+- memory/Redis retention;
+- bounded `artifact.read`;
+- generic `artifact.grep`;
+- basic scope membership.
 
-The v6 design should be source-backed and intentionally minimal. Do not add new
-coverage, provenance, completeness, timeline, analytics, or indexing fields
-unless an observed consumer requires them and the source semantics are verified.
+They also accumulated a heavier provider-neutral construction graph and catalog
+enrichment that are no longer required by the target architecture.
+
+Do not silently mutate v3/v4/v5.
+
+The replacement does **not** need to be called `GameSummaryArtifactV6`. First
+prove the capability and source-backed document boundary, then introduce the
+smallest stable Artifact type/version required by the production path.
 
 ## Migration route
 
-The current code should move to the simplified target in small commits.
+### Commit A — introduce source-backed capability contracts
 
-### Commit A — stabilize navigation identity
+Define the minimum shared contracts needed by the new tool layer:
 
-Fix the existing canonical navigation identity defect before relying on scope:
+- `SourceLocator`;
+- thin source-attributed result envelope;
+- target `esports.search` contract;
+- no generic provider registry/framework yet.
 
-- one PandaScore entity -> one Domain Ref construction rule
-- eliminate the current divergent SeriesRef recipes
-- keep the change limited to navigation identity and reverse mapping
-- do not introduce a generic identity framework
+Implement `esports.search` with PandaScore using existing verified provider
+operations internally. Keep old Series/Match tools temporarily while focused
+evals compare behavior.
 
-### Commit B — add minimal catalog tools
+### Commit B — migrate esports discovery to `esports.search`
 
-Expose the existing local catalog through small model-facing capabilities:
+Cover current use cases of:
 
-- `catalog.search`
-- `catalog.lookup` with bounded batch inputs
+- `series.search`;
+- `series.list_matches`;
+- `matches.search`.
 
-Do not change Artifact schema in this commit.
+Use `within: SourceLocator` where continued source-local navigation is needed.
+After focused and real-model acceptance, remove the old registrations and the
+canonical PandaScore navigation Ref machinery that no retained consumer needs.
 
-### Commit C — define simplified GameSummary v6
+Do not add `league.search` or another ontology-shaped replacement.
 
-Add a new frozen schema contract that:
+### Commit C — introduce `game.detail`
 
-- preserves readable PandaScore event context
-- preserves OpenDota/Valve game facts
-- stores Valve-native hero/item/ability IDs directly
-- removes duplicated catalog-localized names from dynamic game facts
-- contains no provider-private IDs and no construction refs
+Create the model-facing detail capability using existing deterministic
+PandaScore-to-Valve resolution and the OpenDota detail implementation.
 
-Schema and tests only.
+Accept a source locator and/or canonical `valve_match_id` according to the
+smallest contract required by evals. Return bounded source-attributed facts and
+externalize the complete large detail result as an Artifact.
 
-### Commit D — replace heavy construction with thin normalization
+After acceptance, retire `matches.get_detail` as the model-facing detail tool.
 
-Create the smallest mapping from verified provider models plus event context to
-v6. Avoid a second domain object graph. Plain typed event/value structures are
-allowed where they protect field semantics, but they are content models rather
-than `Ref` types.
+### Commit D — add minimal Catalog capabilities
 
-Do not delete the old v4/v5 path until v6 production is proven.
+Expose the local Valve catalog through:
 
-### Commit E — switch production to v6
+- `catalog.search`;
+- bounded batch `catalog.lookup`.
 
-Change GameSummary production to:
+Keep catalog mapping outside dynamic Artifact production.
 
-```text
-Valve match_id
-  -> OpenDota fetch
-  -> thin normalization + PandaScore event context
-  -> v6 document
-  -> ArtifactStore
-  -> ArtifactRef
-```
+### Commit E — simplify Artifact production
 
-Keep automatic production on the successful match-detail path. Keep
-`artifact.grep` and `artifact.read` contracts generic and unchanged except for
-schema-version compatibility where required.
+Replace the old construction-Ref/catalog-enrichment graph with direct storage of
+the validated source-backed detail document plus only necessary stable envelope
+metadata and true canonical Valve IDs.
 
-### Commit F — delete obsolete construction machinery
+Do not create a new universal game schema unless a demonstrated consumer
+requires it.
 
-After v6 fixture and product-path tests pass, remove code that exists only for
-the old heavy pipeline, including construction-only Ref wrappers, catalog
-resolvers used solely to enrich dynamic Artifacts, and builders or contexts no
-longer on the production path.
+### Commit F — remove obsolete normalization machinery
 
-Delete rather than preserve compatibility shims when no retained consumer uses
-them.
+Delete construction-only Ref types, builders, resolvers, canonical navigation
+DTOs, and compatibility code that no accepted capability still uses.
 
-### Commit G — real model acceptance
+Delete incrementally after the replacement path is tested; do not preserve dead
+machinery for hypothetical future providers.
 
-Validate representative questions through the actual tool surface. One required
-case is a tournament-scoped player/hero question where the model must compose:
+### Commit G — real model acceptance and second-source readiness
+
+Validate representative questions through:
 
 ```text
-navigation
--> catalog.search(name -> hero_id)
--> artifact.grep / artifact.read
--> catalog.lookup(item_id / ability_id -> names)
--> answer
+esports.search
+-> game.detail
+-> artifact.grep/read
+-> catalog.search/lookup when needed
+-> model reasoning
 ```
 
-The acceptance target is not a fixed call sequence. It is that the available
-small capabilities are sufficient and the runtime does not encode the scenario.
+Acceptance is about capability sufficiency, not a required call sequence.
+
+A future second provider should be addable as another implementation of
+`esports.search` or `game.detail` without first changing every existing source
+record into a universal DTO.
 
 ## Non-goals
 
-The simplification does not add:
+The target does not add:
 
-- one Ref type per Dota value
-- an Artifact object graph or entity registry
-- provider-private IDs in Artifacts
-- catalog-name duplication as a requirement for dynamic game documents
-- semantic/vector search
-- scenario-specific Artifact search helpers
-- automatic provider fetch from `artifact.grep` or `artifact.read`
-- a model-facing produce tool for normal match-detail production
-- provisional Ref hierarchies or a generalized identity framework
+- one model-facing tool per provider endpoint;
+- one tool per League/Series/Tournament/Match type;
+- a provider-neutral esports ontology as a prerequisite for search;
+- a universal game-detail DTO as a prerequisite for storage;
+- provider-private raw IDs in model-facing facts;
+- one Ref type per nested Dota value;
+- catalog-name duplication as a requirement for stored game data;
+- provider-specific Artifact grep/read adapters;
+- semantic/vector search before demonstrated need;
+- automatic provider fetch from Artifact search/read;
+- a provider plugin/routing framework before a second implementation exists.
 
 ## Acceptance
 
 The migration is complete when:
 
-1. a large resolved match result can be stored without entering model context in
-   full;
-2. the resulting canonical Game document is understandable through generic
-   `grep/read` plus the small catalog capabilities;
-3. Artifact production no longer requires the construction-Ref/catalog-
-   enrichment graph;
-4. provider-private IDs remain below the Artifact boundary;
-5. Valve-native IDs remain directly observable facts;
-6. navigation refs remain few, stable, and reusable as locators;
-7. real model evals can compose navigation, Artifact, and catalog capabilities
-   without scenario-specific orchestration.
+1. the model uses a small capability surface rather than PandaScore ontology
+   tools;
+2. PandaScore can satisfy esports search without becoming a universal Domain
+   hierarchy;
+3. OpenDota can satisfy game detail without being normalized into a synthetic
+   cross-provider DTO;
+4. large provider results stay outside model context and remain generically
+   grep/read-able;
+5. source attribution and provider failures stay explicit;
+6. Valve-native IDs remain directly observable and Catalog remains separate;
+7. a second provider can join an existing capability with source-attributed
+   facts instead of forcing a rewrite of every source schema.

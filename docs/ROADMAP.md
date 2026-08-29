@@ -6,9 +6,6 @@ Status: complete.
 
 Goal: replace the Legacy V3 design tree with a small vNext documentation set.
 
-Acceptance: active vNext work follows the core documents rather than Legacy
-orchestration contracts.
-
 ## Phase 1 — Native Agent Runtime
 
 Status: complete.
@@ -17,146 +14,199 @@ Goal: establish the minimal provider-neutral native tool-calling loop.
 
 Delivered:
 
-- provider-neutral model protocol
-- validated tool registry/dispatch
-- execution limits, deadlines, cancellation, stable errors
-- native streaming
-- session-neutral runtime
+- provider-neutral model protocol;
+- validated tool registry/dispatch;
+- execution limits, deadlines, cancellation, stable errors;
+- native streaming;
+- session-neutral runtime.
 
-## Phase 2 — Esports navigation and match resolution
+## Phase 2 — Esports discovery and match resolution
 
-Status: complete, with one identity-correctness follow-up pending.
-
-Goal: make esports discovery and resolved match/game detail useful without
-scenario orchestration.
+Status: implemented in the older domain-tool shape; now entering capability
+simplification.
 
 Delivered:
 
-- Series and Match capabilities
-- canonical PandaScore navigation semantics
-- deterministic PandaScore Game -> Valve match resolution
-- OpenDota resolved-game detail
+- PandaScore-backed Series/Match discovery tools;
+- deterministic PandaScore Game -> Valve match resolution;
+- OpenDota resolved-game detail;
+- Team/Player source-backed capabilities.
 
-Pending correctness follow-up:
+The existing `League -> Series -> Tournament -> Match -> Game` Domain hierarchy
+and its object-specific refs are no longer the target abstraction for future
+providers. The verified PandaScore source semantics and resolver remain useful;
+the model-facing tool boundary is being simplified.
 
-- make PandaScore entity -> Domain Ref construction single-source and fix the
-  current divergent SeriesRef recipes before scoped Artifact membership is
-  considered reliable
-
-## Phase 2.x — Simplified Artifact corpus
+## Phase 2.x — Source-backed capability and Artifact simplification
 
 Status: in progress.
 
-Goal: keep complete large game results outside model context while making them
-generically searchable/readable, without maintaining a second Dota object graph
-inside Artifact construction.
+Goal: expose a small set of broad observation capabilities, keep provider facts
+source-attributed, and externalize large results without building a universal
+cross-provider object model.
 
-Historical implementation already delivered:
+Historical infrastructure already delivered:
 
-- GameSummary schema versions 3, 4, and 5
-- ArtifactStore memory/Redis retention
-- deterministic versioned `ArtifactRef`
-- automatic resolved-game production from match detail
-- `artifact.search`, `artifact.grep`, and `artifact.read`
-- generic `ArtifactScopeStore`
-- V5 readable PandaScore event context
+- GameSummary schema versions 3, 4, and 5;
+- ArtifactStore memory/Redis retention;
+- deterministic versioned ArtifactRef;
+- automatic resolved-game Artifact production;
+- `artifact.search`, `artifact.grep`, and `artifact.read`;
+- generic ArtifactScopeStore.
 
-These contracts proved the externalized-corpus model, but the current production
-path became heavier than needed through construction-only Ref wrappers and
-catalog enrichment.
+These pieces proved the externalized-document model. The next work changes the
+Tool/Provider boundary before extending the current canonical Domain/Artifact
+schemas.
 
-### Simplification migration
+### Migration sequence
 
-The next implementation sequence is frozen in `ARTIFACTS.md` and should be
-executed incrementally:
+#### Commit A — source-backed `esports.search`
 
-1. Stabilize PandaScore navigation identity and SeriesRef reverse mapping.
-2. Add minimal local `catalog.search` and batch `catalog.lookup` tools.
-3. Define a new simplified GameSummary schema version (expected v6).
-4. Keep readable PandaScore event context but store Valve-native hero/item/
-   ability IDs directly instead of duplicated catalog names.
-5. Replace the construction-Ref/catalog-enrichment graph with thin canonical
-   normalization from verified provider models to the v6 document.
-6. Switch automatic GameSummary production to v6 while keeping generic
-   `artifact.grep/read` contracts.
-7. Delete obsolete construction-only refs/resolvers/builders after the new path
-   is proven.
-8. Validate the composition with real model questions that require navigation,
-   catalog lookup, Artifact grep/read, and reasoning without scenario-specific
-   runtime code.
+Define and implement the first capability contract:
 
-Target exploration model:
+- add opaque provider-scoped `SourceLocator`;
+- add a thin source-attributed result envelope;
+- expose one model-facing `esports.search` capability;
+- use PandaScore as the only implementation;
+- reuse existing verified PandaScore search/list methods internally;
+- keep old Series/Match search tools temporarily for comparison/evals;
+- do not add a provider registry/framework with only one implementation.
+
+Acceptance: representative Series/Match discovery questions can be answered
+through `esports.search`, source attribution is explicit, and no universal
+League/Series/Tournament/Match DTO is required by the new tool.
+
+#### Commit B — retire ontology-shaped esports tools
+
+Migrate current uses of:
+
+- `series.search`;
+- `series.list_matches`;
+- `matches.search`.
+
+Use `SourceLocator` plus an optional `within` search constraint for continued
+source-local navigation. After focused and real-model acceptance, remove old
+tool registrations and canonical PandaScore navigation Ref machinery that no
+remaining consumer needs.
+
+Do not add `league.search`, `tournament.search`, or a replacement tool family.
+
+#### Commit C — source-backed `game.detail`
+
+Add one model-facing detailed-game capability:
 
 ```text
-navigation tools
-  -> locate Game / scope
-
-large game facts
-  -> ArtifactStore
-  -> ArtifactRef
-
-model
-  -> artifact.grep / artifact.read
-  -> catalog.search / catalog.lookup when static ID meaning is needed
-  -> answer
+SourceLocator or valve_match_id
+  -> deterministic source-to-Valve resolution when needed
+  -> OpenDota detail implementation
+  -> bounded result + ArtifactRef
 ```
 
-Non-goals:
+Reuse the current resolver evidence rules. Keep OpenDota as an implementation
+detail and return explicit `source=opendota` provenance.
 
-- one Ref type per nested Dota value
-- one tool per Artifact section or scenario
-- raw provider JSON in model context
-- provider-private IDs in Artifacts
-- semantic/vector search before demonstrated need
-- automatic provider fetch from Artifact search/read
-- a separate model-facing produce tool for normal match-detail production
+After focused acceptance, retire `matches.get_detail` as the model-facing detail
+surface.
 
-Acceptance:
+#### Commit D — minimal Catalog tools
 
-- complete large game data stays outside model context by default;
-- a stored v6 Game document is understandable through generic Artifact tools
-  plus small catalog tools;
-- Artifact production no longer depends on construction-only Ref/catalog
-  enrichment machinery;
-- scoped corpus membership uses stable navigation identity;
-- representative real-model questions work through capability composition rather
-  than hard-coded workflows.
+Add:
 
-## Phase 3 — Team, player, and static catalog capabilities
+- `catalog.search`;
+- bounded batch `catalog.lookup`.
 
-Status: team/player complete; minimal catalog tool surface pending as part of the
-Artifact simplification.
+Dynamic game-detail facts keep Valve-native IDs directly. Do not require
+Artifact construction to translate every ID into localized names.
 
-Delivered:
+#### Commit E — simplify large-result externalization
 
-- PandaScore-backed team search/detail
-- PandaScore-backed player search/detail
-- shared runtime-scoped TeamRef/PlayerRef navigation identity
+Replace the old GameConstructionContext/construction-Ref/catalog-enrichment path
+with the smallest source-backed Artifact document contract required by
+`game.detail`.
 
-Pending:
+Do not assume the replacement must be `GameSummaryArtifactV6`. Prefer a stable
+outer document envelope with explicit source plus validated source-shaped facts.
 
-- `catalog.search`
-- bounded batch `catalog.lookup`
-- additional team/player capabilities only when real evals show an independent
-  fact-space gap
+Keep `artifact.grep` and `artifact.read` generic and provider-blind.
 
-Non-goal: add player-build/performance scenario tools when generic Match,
-Artifact, and catalog composition is sufficient.
+#### Commit F — delete obsolete normalization and identity machinery
+
+After the replacement capabilities are accepted, delete unused:
+
+- construction-only Hero/Item/Ability/event Ref wrappers;
+- catalog resolvers used solely for old Artifact enrichment;
+- canonical PandaScore navigation DTO/ref code with no retained consumer;
+- old Series/Match tool handlers;
+- compatibility glue no longer exercised by product/evals.
+
+Delete incrementally. Do not retain dead abstractions for hypothetical future
+providers.
+
+#### Commit G — real-model acceptance and future-source test
+
+Validate representative research questions through the actual capability
+surface:
+
+```text
+esports.search
+-> game.detail
+-> artifact.grep/read
+-> catalog.search/lookup when useful
+-> answer
+```
+
+The model may choose another order. No fixed scenario workflow is added.
+
+As an architecture acceptance test, document how a hypothetical second esports
+or game-detail provider would join the existing capability while keeping its own
+source-shaped facts. Do not implement a fake provider framework.
+
+### Non-goals
+
+- one model-facing tool namespace per provider;
+- one tool per PandaScore hierarchy object;
+- universal cross-provider League/Series/Tournament/Match DTOs;
+- universal cross-provider game-detail DTOs;
+- raw provider-private IDs as model-facing identity;
+- semantic/vector search before demonstrated need;
+- provider-specific Artifact grep/read logic;
+- provider routing/plugin infrastructure before a second real provider exists.
+
+### Acceptance
+
+Phase 2.x is accepted when:
+
+- PandaScore participates through `esports.search` rather than ontology-shaped
+  model-facing tools;
+- OpenDota participates through `game.detail` rather than an OpenDota-named tool
+  or a mandatory universal detail DTO;
+- large detail results remain outside model context and are generically
+  searchable/readable;
+- source provenance and provider failures remain explicit;
+- Valve-native IDs and local Catalog remain separate reusable fact spaces;
+- old construction/identity machinery is removed after replacement coverage is
+  proven.
+
+## Phase 3 — Team, player, and Catalog
+
+Status: Team/Player capabilities implemented; minimal Catalog tools pending as
+part of Phase 2.x.
+
+Do not widen the current migration merely to make Team/Player symmetrical with
+the new esports tool. Apply the same source-backed capability rule when a real
+second provider or a concrete simplification need appears.
 
 ## Phase 3.5 — vNext Product Integration
 
 Status: complete.
 
-Goal: expose vNext through the existing browser chat product without importing
-Legacy orchestration.
-
 Delivered:
 
-- request-bound vNext AgentRuntime streaming endpoint
-- browser-owned PostgreSQL session/transcript persistence
-- persisted User and Final Assistant dialogue
-- process-lifetime shared vNext services
-- deterministic visual entity enrichment after the model response
+- request-bound vNext AgentRuntime streaming endpoint;
+- browser-owned PostgreSQL session/transcript persistence;
+- persisted User and Final Assistant dialogue;
+- process-lifetime shared vNext services;
+- deterministic visual enrichment after model response.
 
 ## Phase 4 — Conversation reliability and eval expansion
 
@@ -164,16 +214,16 @@ Status: in progress.
 
 Delivered:
 
-- bounded ConversationContextBuilder over the complete PostgreSQL transcript
-- failed-run trace retention and downloadable debugging evidence
+- bounded ConversationContextBuilder over the complete PostgreSQL transcript;
+- failed-run trace retention and downloadable debugging evidence.
 
 Add compaction, durable AgentRun/reconnect/replay, and broader provider-drift
 infrastructure only when observed product failures justify them.
 
 ## Phase 5 — Product UX
 
-Goal: present facts, sources, uncertainty, and structured data clearly without
-moving gameplay reasoning out of the model.
+Goal: present source-attributed facts, uncertainty, and structured data clearly
+without moving gameplay reasoning out of the model.
 
 ## Phase 6 — Legacy deletion
 
