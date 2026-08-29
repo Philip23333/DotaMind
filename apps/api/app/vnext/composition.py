@@ -71,7 +71,7 @@ class VNextSettings:
     trace_ttl_seconds: int = 72 * 60 * 60
 
     @classmethod
-    def from_env(cls) -> "VNextSettings":
+    def from_env(cls) -> VNextSettings:
         defaults = cls()
         file_values = dotenv_values(_VNEXT_ENV_PATH)
         return cls(
@@ -91,15 +91,13 @@ class VNextSettings:
                 "DOTAMIND_PANDASCORE_BASE_URL",
                 defaults.pandascore_base_url,
                 file_values,
-            )
-            or defaults.pandascore_base_url,
+            ),
             pandascore_token=_env_value("DOTAMIND_PANDASCORE_TOKEN", None, file_values),
             opendota_base_url=_env_value(
                 "DOTAMIND_OPENDOTA_BASE_URL",
                 defaults.opendota_base_url,
                 file_values,
-            )
-            or defaults.opendota_base_url,
+            ),
             opendota_api_key=_env_value("DOTAMIND_OPENDOTA_API_KEY", None, file_values),
             pandascore_timeout_seconds=float(
                 _env_value("DOTAMIND_PANDASCORE_TIMEOUT_SECONDS", "20", file_values)
