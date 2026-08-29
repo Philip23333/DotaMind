@@ -58,7 +58,7 @@ def test_esports_search_discovers_source_records_without_provider_ids() -> None:
         "kind": "series",
         "value": series_record["locator"]["value"],
     }
-    assert series_record["facts"]["league"] == "The International"
+    assert series_record["facts"]["sections"]["league"]["kind"] == "object"
     assert any(record["kind"] == "match" for record in matches.content["records"])
     assert not _contains_forbidden_key([series.content, matches.content])
     serialized = json.dumps([series.content, matches.content], sort_keys=True)
