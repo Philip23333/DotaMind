@@ -20,10 +20,12 @@ SourceDocumentArtifact
   facts
 ```
 
-`facts` is the complete validated provider business document.  It can preserve
+`facts` is the complete validated provider business document. It can preserve
 provider-private IDs as evidence, but those IDs are not model-facing inputs.
-Transport headers, credentials, request tokens, and pagination envelopes never
-enter the document.
+Pydantic may perform lossless structural normalization, but DotaMind does not
+proactively remove business fields; allowed unknown provider fields and complete
+Match `games[]` remain in the document. Transport headers, credentials, request
+tokens, and pagination envelopes never enter it.
 
 For PandaScore Match documents, the retained game rows additionally contain the
 deterministic Valve-resolution outcome:
@@ -51,8 +53,11 @@ arguments, deduplicates, applies the final limit, and externalizes only those
 final records.
 
 Artifact storage is therefore owned by the Service, not by the PandaScore
-Provider.  A storage failure returns `artifact_error`; it must never silently
-return a record without an ArtifactRef.
+Provider. A failed final write never creates a record without an ArtifactRef.
+If at least one final write succeeds, search returns those valid records with
+`partial=true` and one sanitized `artifact_externalization_failed` warning per
+failed entity. If every final write fails, search returns `artifact_error`.
+Already written Artifacts are retained; there is no transaction or rollback.
 
 For the same provider source, kind, and source identity, an unchanged identity
 produces the same ArtifactRef.  A later fetch replaces the document at that
@@ -67,6 +72,8 @@ source
 kind
 artifact_ref
 facts
+partial
+warnings
 ```
 
 `facts` is a generic bounded observation:
@@ -99,8 +106,9 @@ artifact_error
 ```
 
 Provider failures expose attribution such as `source` and `kind`, but not URLs,
-credentials, raw upstream payloads, or exception traces.  Artifact failures
-likewise expose only source and kind.
+credentials, raw upstream payloads, or exception traces. A partial-success
+warning exposes only stable `code`, `source`, and `kind`; a complete Artifact
+externalization failure likewise exposes only source and kind.
 
 ## Historical contracts
 

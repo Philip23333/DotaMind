@@ -60,11 +60,21 @@ class SourceRecord(DomainModel):
     facts: dict[str, Any] = Field(default_factory=dict)
 
 
+class EsportsSearchWarning(DomainModel):
+    """A stable warning about one record that could not be delivered."""
+
+    code: Literal["artifact_externalization_failed"]
+    source: str
+    kind: EsportsKind
+
+
 class EsportsSearchResult(DomainModel):
     """Bounded records from the configured esports-search implementation."""
 
     records: list[SourceRecord] = Field(default_factory=list)
     truncated: bool = False
+    partial: bool = False
+    warnings: list[EsportsSearchWarning] = Field(default_factory=list)
 
 
 __all__ = [
@@ -72,6 +82,7 @@ __all__ = [
     "EsportsSearchProvider",
     "EsportsSearchRequest",
     "EsportsSearchResult",
+    "EsportsSearchWarning",
     "ProviderEntity",
     "ProviderSearchBatch",
     "SourceRecord",

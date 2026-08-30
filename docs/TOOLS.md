@@ -26,8 +26,8 @@ Purpose: search professional Dota 2 esports entities by one requested kind.
 PandaScore is its current implementation, not a model-facing namespace.
 
 ```text
-kind        required: league | series | tournament | match | team | player
-query       optional text discovery
+kind        required DotaMind vocabulary: league | series | tournament | match | team | player
+query       optional complete-source-document text discovery
 teams       optional Match-only team constraints, interpreted with AND semantics
 time_scope  optional: upcoming | running | past; Series/Tournament/Match only
 limit       1..50
@@ -51,6 +51,14 @@ truncated
 identity values. `artifact_ref` is always present and points to the complete
 validated source document. Use generic Artifact tools for deeper reads.
 
+For Series, Tournament, and Match lifecycle requests, the selected PandaScore
+lifecycle endpoint is authoritative; its rows are not rejected by a second
+status filter. `query` matches the complete source business document, so it is
+not narrowed to PandaScore `search[name]`. Match Team constraints first require
+one exact source Team identity per supplied name: not-found or ambiguous identity
+resolution is `invalid_arguments`; no shared Match after successful resolution
+is normal empty success.
+
 ### Match results
 
 A Match Artifact preserves the provider's complete Match document. Each item in
@@ -63,6 +71,16 @@ resolution     deterministic resolution status
 
 This does not make `game` an `esports.search` kind. The target `game.detail`
 capability accepts the canonical Valve ID when recorded-game facts are needed.
+If the OpenDota-dependent enrichment is unavailable, Match discovery still
+returns the PandaScore document; each game reports `valve_game_id=null` and
+`resolution="unavailable"` rather than pretending it was not found.
+
+### Partial Artifact delivery
+
+When one or more final documents are stored, a response remains successful. It
+contains only records with valid ArtifactRefs plus `partial=true` and sanitized
+warnings with `code`, `source`, and `kind`. `artifact_error` is reserved for the
+case where no final document could be stored.
 
 ### Errors
 
@@ -70,7 +88,7 @@ capability accepts the canonical Valve ID when recorded-game facts are needed.
   `teams` with `kind="team"`.
 - `provider_error`: PandaScore or required Match enrichment cannot satisfy a
   valid request.
-- `artifact_error`: a final complete source document could not be stored.
+- `artifact_error`: no final complete source document could be stored.
 
 `records=[]` is normal success. `truncated=true` means more qualifying records
 may exist than the Provider scan or final limit returned.

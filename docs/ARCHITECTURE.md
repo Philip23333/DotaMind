@@ -74,6 +74,13 @@ valid only for `match`, with AND semantics. Empty results are a normal successfu
 observation. A query names exactly one source kind; it never fans out into mixed
 League/Series/Match results.
 
+`query` is textual discovery over complete source business facts, rather than a
+provider `search[name]` parameter. A native source filter is permitted only when
+it preserves that broader result set. A Team name used by `teams` must resolve to
+exactly one source Team; not-found and ambiguous resolution are
+`invalid_arguments`, whereas no shared Match after successful resolution is
+normal empty success.
+
 There is no model-facing `within`, `SourceLocator`, provider selector, sort,
 pagination, `recent`, `all`, or esports `game` kind. Source-locator infrastructure
 may remain internally for transitional capabilities, but `esports.search` does
@@ -99,8 +106,10 @@ PandaScore is the current `EsportsSearchProvider`. Its allowed endpoint surface
 is defined by [the endpoint guide](reference/pandascore-endpoints.md), not by
 whatever endpoint happens to work in a development account.
 
-For lifecycle discovery, the Provider maps PandaScore source fields into the
-capability order:
+For lifecycle discovery, a dedicated PandaScore lifecycle endpoint is
+authoritative. The Provider does not apply a second entity status filter to its
+rows; it applies local lifecycle filtering only to Team-to-Matches. It maps source
+time fields into the capability order:
 
 - `past`: actual end, otherwise actual start, otherwise planned start;
   descending;
@@ -128,9 +137,10 @@ resolution     the complete deterministic resolution status
 ```
 
 An unresolved game is normal source uncertainty and does not discard its Match.
-An OpenDota transport, configuration, or schema failure is a Provider failure,
-not a fabricated `not_found` resolution. The Provider must not call PandaScore
-Game detail endpoints.
+An OpenDota transport, configuration, or schema failure degrades the enrichment:
+the Match remains available and each game has `valve_game_id=null` with
+`resolution="unavailable"`. The Provider must not call PandaScore Game detail
+endpoints.
 
 ## Artifact boundary
 
@@ -146,8 +156,11 @@ facts  # complete validated provider-shaped document
 
 and returns a bounded observation derived from `facts`. A repeat search of the
 same source identity uses the same ArtifactRef; the latest write replaces the
-stored document. If any final Artifact write fails, the whole search returns
-`artifact_error`; it does not expose partial records.
+stored document. Failed final writes do not create invalid records. If at least
+one document is stored, the result is successful with `partial=true` and one
+sanitized `artifact_externalization_failed` warning per failed entity. Only a
+complete final-write failure returns `artifact_error`; successful writes are not
+rolled back.
 
 `artifact.read` and `artifact.grep` are provider-blind stored-document
 operations. They never fetch PandaScore.
@@ -160,7 +173,7 @@ Expected `esports.search` failures are model-visible and sanitized:
 | --- | --- |
 | `invalid_arguments` | A request violates a cross-field capability rule. |
 | `provider_error` | A source adapter or required enrichment dependency could not satisfy a valid request. |
-| `artifact_error` | A final source document could not be stored. |
+| `artifact_error` | No final source document could be stored. |
 
 Details may identify source, kind, argument, or capability. They must never
 include credentials, authorization headers, or a traceback. Unexpected defects
@@ -184,4 +197,6 @@ tool.
 - provider-private IDs as capability inputs;
 - a provider router/plugin framework before a second provider exists;
 - PandaScore Game detail endpoints outside the allowlist;
-- partial successful records after an Artifact externalization failure.
+- provider-native filtering that can exclude a capability-level query match.
+- turning an unavailable enrichment dependency into a false `not_found`.
+- invalid ArtifactRefs or rollback after a partial Artifact externalization failure.

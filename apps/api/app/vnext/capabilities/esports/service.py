@@ -14,6 +14,7 @@ from .models import (
     EsportsSearchProvider,
     EsportsSearchRequest,
     EsportsSearchResult,
+    EsportsSearchWarning,
     ProviderEntity,
     SourceRecord,
 )
@@ -32,8 +33,28 @@ class EsportsSearchService:
         entities = self._deduplicate(batch.entities)
         final_entities = entities[: request.limit]
         truncated = batch.truncated or len(entities) > request.limit
-        records = [await self._externalize(entity) for entity in final_entities]
-        return EsportsSearchResult(records=records, truncated=truncated)
+        records: list[SourceRecord] = []
+        warnings: list[EsportsSearchWarning] = []
+        for entity in final_entities:
+            try:
+                records.append(await self._externalize(entity))
+            except ArtifactExternalizationError:
+                warnings.append(
+                    EsportsSearchWarning(
+                        code="artifact_externalization_failed",
+                        source=entity.source,
+                        kind=entity.kind,
+                    )
+                )
+        if final_entities and not records:
+            first = final_entities[0]
+            raise ArtifactExternalizationError(source=first.source, kind=first.kind)
+        return EsportsSearchResult(
+            records=records,
+            truncated=truncated,
+            partial=bool(warnings),
+            warnings=warnings,
+        )
 
     @staticmethod
     def _validate(request: EsportsSearchRequest) -> None:

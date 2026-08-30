@@ -15,7 +15,8 @@ facts
 ```
 
 - `source` identifies the provider;
-- `kind` is the provider-defined object type exposed by the capability;
+- `kind` is DotaMind's esports capability vocabulary; each provider maps its
+  source entities into it;
 - `artifact_ref` addresses the complete stored document;
 - `facts` is a bounded observation of that document.
 
@@ -38,10 +39,17 @@ obtained through `game.detail` after a canonical Valve match ID is available.
 exact PandaScore team identity, then returns only matches containing every
 resolved team.  It is not a replacement for `kind="team"`.
 
-`time_scope` is available only for Series, Tournament, and Match.  Its values
-are `upcoming`, `running`, and `past`; provider pages are scanned, filtering and
-ordering are deterministic, and `truncated` remains explicit when the bounded
-scan cannot prove completeness.
+`time_scope` is available only for Series, Tournament, and Match. Its values are
+`upcoming`, `running`, and `past`. For a dedicated PandaScore lifecycle endpoint,
+the endpoint selects the lifecycle; the Provider does not reject its entities by
+a second status filter. Team-to-Matches is the exception: that relationship
+endpoint is filtered locally. `truncated` remains explicit when a bounded scan
+cannot prove completeness.
+
+`query` is capability-level textual discovery over complete provider business
+facts, not an alias for PandaScore `search[name]`. Provider-native name search
+may be used only when it cannot exclude a document that would match this wider
+contract.
 
 ## Source document versus observation
 

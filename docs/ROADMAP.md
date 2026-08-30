@@ -24,8 +24,11 @@ Keep `esports.search` as the sole broad esports discovery entry point.
 - Require `kind`: League, Series, Tournament, Match, Team, or Player.
 - Keep `teams` as a Match-only exact-identity AND constraint.
 - Keep `time_scope` only for Series, Tournament, and Match.
+- Keep query as complete source-document textual discovery; do not narrow it to
+  provider name search unless that is provably semantics-preserving.
 - Store final result documents as Artifacts and return ArtifactRefs plus bounded
-  observations.
+  observations. Preserve usable records as partial success when only some final
+  Artifact writes fail.
 - Preserve PandaScore source-shaped facts; do not reintroduce canonical
   League/Series/Match/Team DTOs or source-locator navigation.
 - Enrich Match game rows with a canonical Valve ID only through the existing

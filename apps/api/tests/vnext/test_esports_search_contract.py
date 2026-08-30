@@ -37,6 +37,13 @@ class FailingStore(MemoryArtifactStore):
         raise RuntimeError("store unavailable")
 
 
+class OneFailureStore(MemoryArtifactStore):
+    async def put(self, ref, artifact) -> None:  # type: ignore[no-untyped-def]
+        if artifact.facts.get("id") == 2:
+            raise RuntimeError("store unavailable")
+        await super().put(ref, artifact)
+
+
 def _entity(identity: int | str, name: str, *, source: str = "pandascore") -> ProviderEntity:
     return ProviderEntity(
         source=source,
@@ -93,7 +100,11 @@ def test_tool_maps_provider_and_artifact_failures_to_explicit_errors() -> None:
         )
     )
     artifact_registry = _registry(
-        StubProvider(ProviderSearchBatch([_entity(1, "Team Spirit")])),
+        StubProvider(
+            ProviderSearchBatch(
+                [_entity(1, "Team Spirit"), _entity(2, "Team Liquid"), _entity(3, "Team Falcons")]
+            )
+        ),
         FailingStore(),
     )
 
@@ -134,12 +145,59 @@ def test_service_deduplicates_exact_identity_and_externalizes_only_final_records
 
     assert [record.facts["name"] for record in result.records] == ["Team Spirit", "Team Liquid"]
     assert result.truncated is True
+    assert result.partial is False
+    assert result.warnings == []
     assert all(record.artifact_ref is not None for record in result.records)
 
     async def source_document_count() -> int:
         return len([ref async for ref in store.iter_refs(["source_document"])])
 
     assert asyncio.run(source_document_count()) == 2
+
+
+def test_service_reports_non_partial_when_all_final_artifacts_are_written() -> None:
+    service = EsportsSearchService(
+        StubProvider(
+            ProviderSearchBatch(
+                [_entity(1, "Team Spirit"), _entity(2, "Team Liquid"), _entity(3, "Team Falcons")]
+            )
+        ),
+        MemoryArtifactStore(),
+    )
+
+    result = asyncio.run(service.search(EsportsSearchRequest(kind="team", limit=3)))
+
+    assert len(result.records) == 3
+    assert result.partial is False
+    assert result.warnings == []
+
+
+def test_tool_returns_partial_success_when_one_final_artifact_write_fails() -> None:
+    registry = _registry(
+        StubProvider(
+            ProviderSearchBatch(
+                [_entity(1, "Team Spirit"), _entity(2, "Team Liquid"), _entity(3, "Team Falcons")]
+            )
+        ),
+        OneFailureStore(),
+    )
+
+    result = asyncio.run(
+        registry.execute(ToolCall(id="partial", name="esports.search", arguments={"kind": "team"}))
+    )
+
+    assert result.status == "ok"
+    assert result.content["partial"] is True
+    assert result.content["warnings"] == [
+        {
+            "code": "artifact_externalization_failed",
+            "source": "pandascore",
+            "kind": "team",
+        }
+    ]
+    records = result.content["records"]
+    assert [record["facts"]["name"] for record in records] == ["Team Spirit", "Team Falcons"]
+    assert all(record["artifact_ref"] for record in records)
 
 
 def test_same_source_identity_reuses_its_artifact_reference_and_overwrites_document() -> None:
