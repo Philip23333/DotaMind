@@ -54,7 +54,20 @@ DotaMind 当前允许使用
 | 查询已经结束的 Dota 2 比赛 | [`GET /dota2/matches/past`](https://developers.pandascore.co/reference/get_dota2_matches_past) | All plans | 允许 |
 | 查询正在进行的 Dota 2 比赛 | [`GET /dota2/matches/running`](https://developers.pandascore.co/reference/get_dota2_matches_running) | All plans | 允许 |
 
-### 2.2 Context & reference data
+### 2.2 Series 与 Tournament discovery
+
+| 用途 | Endpoint | PandaScore Plan | DotaMind |
+| --- | --- | --- | --- |
+| 查询 / 搜索 Dota 2 Series | [`GET /dota2/series`](https://developers.pandascore.co/reference/get_dota2_series) | All plans | 允许 |
+| 查询即将开始的 Dota 2 Series | [`GET /dota2/series/upcoming`](https://developers.pandascore.co/reference/get_dota2_series_upcoming) | All plans | 允许 |
+| 查询正在进行的 Dota 2 Series | [`GET /dota2/series/running`](https://developers.pandascore.co/reference/get_dota2_series_running) | All plans | 允许 |
+| 查询已经结束的 Dota 2 Series | [`GET /dota2/series/past`](https://developers.pandascore.co/reference/get_dota2_series_past) | All plans | 允许 |
+| 查询 / 搜索 Dota 2 Tournament | [`GET /dota2/tournaments`](https://developers.pandascore.co/reference/get_dota2_tournaments) | All plans | 允许 |
+| 查询即将开始的 Dota 2 Tournament | [`GET /dota2/tournaments/upcoming`](https://developers.pandascore.co/reference/get_dota2_tournaments_upcoming) | All plans | 允许 |
+| 查询正在进行的 Dota 2 Tournament | [`GET /dota2/tournaments/running`](https://developers.pandascore.co/reference/get_dota2_tournaments_running) | All plans | 允许 |
+| 查询已经结束的 Dota 2 Tournament | [`GET /dota2/tournaments/past`](https://developers.pandascore.co/reference/get_dota2_tournaments_past) | All plans | 允许 |
+
+### 2.3 Context & reference data
 
 | 用途 | Endpoint | PandaScore Plan | DotaMind |
 | --- | --- | --- | --- |
@@ -66,7 +79,7 @@ DotaMind 当前允许使用
 | 获取 / 搜索 Dota 2 选手 | [`GET /dota2/players`](https://developers.pandascore.co/reference/get_dota2_players) | All plans | 允许 |
 | 获取 / 搜索 Dota 2 战队 | [`GET /dota2/teams`](https://developers.pandascore.co/reference/get_dota2_teams) | All plans | 允许 |
 | 获取 / 搜索 Dota 2 联赛 | [`GET /dota2/leagues`](https://developers.pandascore.co/reference/get_dota2_leagues) | All plans | 允许 |
-| 查询即将开始的 Dota 2 tournaments | [`GET /dota2/tournaments/upcoming`](https://developers.pandascore.co/reference/get_dota2_tournaments_upcoming) | All plans | 允许 |
+| 查询指定 Team 的比赛 | [`GET /teams/{team_id_or_slug}/matches`](https://developers.pandascore.co/reference/get_teams_teamidorslug_matches) | All plans | 允许 |
 
 `GET /dota2/teams` 返回的 Team source object 可以包含当前 roster (`players`)。因此，DotaMind 不应仅仅为了获得战队阵容，就假定必须调用额外的 Team detail endpoint。
 
@@ -118,6 +131,7 @@ match
 
 team
   -> /dota2/teams
+  -> /teams/{team_id_or_slug}/matches（仅用于 Match 的 teams AND 约束）
 
 player
   -> /dota2/players
@@ -126,7 +140,16 @@ league
   -> /dota2/leagues
 
 tournament
+  -> /dota2/tournaments
   -> /dota2/tournaments/upcoming
+  -> /dota2/tournaments/running
+  -> /dota2/tournaments/past
+
+series
+  -> /dota2/series
+  -> /dota2/series/upcoming
+  -> /dota2/series/running
+  -> /dota2/series/past
 ```
 
 这些 endpoint 返回的完整 provider source objects 可以写入 source artifact。模型侧应通过 `esports.search`、`artifact.read` 和 `artifact.grep` 探索这些 source facts，而不是通过增加依赖 `Historical` endpoint 的 provider-specific detail 工具来绕过当前套餐边界。
@@ -175,7 +198,20 @@ An endpoint must not be treated as a stable DotaMind dependency merely because i
 | List past Dota 2 matches | [`GET /dota2/matches/past`](https://developers.pandascore.co/reference/get_dota2_matches_past) | All plans | Allowed |
 | List running Dota 2 matches | [`GET /dota2/matches/running`](https://developers.pandascore.co/reference/get_dota2_matches_running) | All plans | Allowed |
 
-### 2.2 Context & reference data
+### 2.2 Series and tournament discovery
+
+| Purpose | Endpoint | PandaScore Plan | DotaMind |
+| --- | --- | --- | --- |
+| List or search Dota 2 series | [`GET /dota2/series`](https://developers.pandascore.co/reference/get_dota2_series) | All plans | Allowed |
+| List upcoming Dota 2 series | [`GET /dota2/series/upcoming`](https://developers.pandascore.co/reference/get_dota2_series_upcoming) | All plans | Allowed |
+| List running Dota 2 series | [`GET /dota2/series/running`](https://developers.pandascore.co/reference/get_dota2_series_running) | All plans | Allowed |
+| List past Dota 2 series | [`GET /dota2/series/past`](https://developers.pandascore.co/reference/get_dota2_series_past) | All plans | Allowed |
+| List or search Dota 2 tournaments | [`GET /dota2/tournaments`](https://developers.pandascore.co/reference/get_dota2_tournaments) | All plans | Allowed |
+| List upcoming Dota 2 tournaments | [`GET /dota2/tournaments/upcoming`](https://developers.pandascore.co/reference/get_dota2_tournaments_upcoming) | All plans | Allowed |
+| List running Dota 2 tournaments | [`GET /dota2/tournaments/running`](https://developers.pandascore.co/reference/get_dota2_tournaments_running) | All plans | Allowed |
+| List past Dota 2 tournaments | [`GET /dota2/tournaments/past`](https://developers.pandascore.co/reference/get_dota2_tournaments_past) | All plans | Allowed |
+
+### 2.3 Context & reference data
 
 | Purpose | Endpoint | PandaScore Plan | DotaMind |
 | --- | --- | --- | --- |
@@ -187,7 +223,7 @@ An endpoint must not be treated as a stable DotaMind dependency merely because i
 | List or search Dota 2 players | [`GET /dota2/players`](https://developers.pandascore.co/reference/get_dota2_players) | All plans | Allowed |
 | List or search Dota 2 teams | [`GET /dota2/teams`](https://developers.pandascore.co/reference/get_dota2_teams) | All plans | Allowed |
 | List or search Dota 2 leagues | [`GET /dota2/leagues`](https://developers.pandascore.co/reference/get_dota2_leagues) | All plans | Allowed |
-| List upcoming Dota 2 tournaments | [`GET /dota2/tournaments/upcoming`](https://developers.pandascore.co/reference/get_dota2_tournaments_upcoming) | All plans | Allowed |
+| List matches for a team | [`GET /teams/{team_id_or_slug}/matches`](https://developers.pandascore.co/reference/get_teams_teamidorslug_matches) | All plans | Allowed |
 
 A Team source object returned by `GET /dota2/teams` may already contain its current roster in `players`. DotaMind therefore must not assume that an additional Team detail endpoint is required merely to retrieve the roster.
 
@@ -239,6 +275,7 @@ match
 
 team
   -> /dota2/teams
+  -> /teams/{team_id_or_slug}/matches (only for Match `teams` AND constraints)
 
 player
   -> /dota2/players
@@ -247,7 +284,16 @@ league
   -> /dota2/leagues
 
 tournament
+  -> /dota2/tournaments
   -> /dota2/tournaments/upcoming
+  -> /dota2/tournaments/running
+  -> /dota2/tournaments/past
+
+series
+  -> /dota2/series
+  -> /dota2/series/upcoming
+  -> /dota2/series/running
+  -> /dota2/series/past
 ```
 
 Complete provider source objects returned by these endpoints may be persisted as source artifacts. The model should explore these facts through `esports.search`, `artifact.read`, and `artifact.grep`, rather than by introducing provider-specific detail tools that depend on `Historical` endpoints outside the current plan boundary.
