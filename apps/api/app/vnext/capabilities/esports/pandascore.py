@@ -16,7 +16,7 @@ from app.vnext.providers.opendota.adapter import OpenDotaProviderError
 from app.vnext.providers.pandascore.adapter import PandaScoreAdapter, PandaScoreProviderError
 from app.vnext.providers.pandascore.models import PandaScoreMatch, PandaScoreTeam
 
-from .errors import EsportsProviderError
+from .errors import EsportsInvalidArgumentsError, EsportsProviderError
 from .models import (
     EsportsKind,
     EsportsSearchRequest,
@@ -61,7 +61,7 @@ class PandaScoreEsportsProvider:
     async def _search_leagues(self, request: EsportsSearchRequest) -> ProviderSearchBatch:
         items, truncated = await self._collect(
             lambda page, size: self._adapter.search_leagues(
-                query=request.query,
+                query=None,
                 limit=size,
                 page_number=page,
             ),
@@ -71,9 +71,10 @@ class PandaScoreEsportsProvider:
 
     async def _search_series(self, request: EsportsSearchRequest) -> ProviderSearchBatch:
         if request.time_scope is None:
+
             async def fetch(page: int, size: int) -> ProviderBatch[BaseModel]:
                 return await self._adapter.search_series(
-                    query=request.query,
+                    query=None,
                     limit=size,
                     page_number=page,
                 )
@@ -84,19 +85,17 @@ class PandaScoreEsportsProvider:
             order = None
             reverse = False
         else:
+
             async def fetch(page: int, size: int) -> ProviderBatch[BaseModel]:
                 return await self._adapter.list_series(
                     request.time_scope,
-                    query=request.query,
+                    query=None,
                     limit=size,
                     page_number=page,
                 )
 
             def predicate(item: BaseModel) -> bool:
-                return _matches_query(item, request.query) and _in_scope(
-                    item,
-                    request.time_scope,
-                )
+                return _matches_query(item, request.query)
 
             order, reverse = _lifecycle_sort(request.time_scope)
         items, truncated = await self._collect(fetch, predicate, order_key=order, reverse=reverse)
@@ -104,9 +103,10 @@ class PandaScoreEsportsProvider:
 
     async def _search_tournaments(self, request: EsportsSearchRequest) -> ProviderSearchBatch:
         if request.time_scope is None:
+
             async def fetch(page: int, size: int) -> ProviderBatch[BaseModel]:
                 return await self._adapter.search_tournaments(
-                    query=request.query,
+                    query=None,
                     limit=size,
                     page_number=page,
                 )
@@ -117,19 +117,17 @@ class PandaScoreEsportsProvider:
             order = None
             reverse = False
         else:
+
             async def fetch(page: int, size: int) -> ProviderBatch[BaseModel]:
                 return await self._adapter.list_tournaments(
                     request.time_scope,
-                    query=request.query,
+                    query=None,
                     limit=size,
                     page_number=page,
                 )
 
             def predicate(item: BaseModel) -> bool:
-                return _matches_query(item, request.query) and _in_scope(
-                    item,
-                    request.time_scope,
-                )
+                return _matches_query(item, request.query)
 
             order, reverse = _lifecycle_sort(request.time_scope)
         items, truncated = await self._collect(fetch, predicate, order_key=order, reverse=reverse)
@@ -138,7 +136,7 @@ class PandaScoreEsportsProvider:
     async def _search_teams(self, request: EsportsSearchRequest) -> ProviderSearchBatch:
         items, truncated = await self._collect(
             lambda page, size: self._adapter.search_teams(
-                query=request.query,
+                query=None,
                 limit=size,
                 page_number=page,
             ),
@@ -149,7 +147,7 @@ class PandaScoreEsportsProvider:
     async def _search_players(self, request: EsportsSearchRequest) -> ProviderSearchBatch:
         items, truncated = await self._collect(
             lambda page, size: self._adapter.search_players(
-                query=request.query,
+                query=None,
                 limit=size,
                 page_number=page,
             ),
@@ -165,14 +163,11 @@ class PandaScoreEsportsProvider:
             items, truncated = await self._collect(
                 lambda page, size: self._adapter.list_matches(
                     scope=scope,
-                    query=request.query,
+                    query=None,
                     limit=size,
                     page_number=page,
                 ),
-                lambda item: _matches_query(item, request.query) and _in_scope(
-                    item,
-                    request.time_scope,
-                ),
+                lambda item: _matches_query(item, request.query),
                 order_key=_lifecycle_sort(request.time_scope)[0],
                 reverse=_lifecycle_sort(request.time_scope)[1],
             )
@@ -205,8 +200,25 @@ class PandaScoreEsportsProvider:
                 limit=_TEAM_SEARCH_LIMIT,
             )
             matches = _exact_team_matches(team_query, batch.items)
-            if len(matches) != 1:
-                return [], False
+            if not matches:
+                raise EsportsInvalidArgumentsError(
+                    "team did not resolve to a PandaScore identity",
+                    details={
+                        "argument": "teams",
+                        "team": team_query,
+                        "reason": "not_found",
+                    },
+                )
+            if len(matches) > 1:
+                raise EsportsInvalidArgumentsError(
+                    "team resolved to multiple PandaScore identities",
+                    details={
+                        "argument": "teams",
+                        "team": team_query,
+                        "reason": "ambiguous",
+                        "candidate_count": len(matches),
+                    },
+                )
             team_ids.append(matches[0].provider_id)
         required_team_ids = set(team_ids)
         if not required_team_ids:
@@ -219,9 +231,11 @@ class PandaScoreEsportsProvider:
                 page_size=size,
                 sort="scheduled_at" if request.time_scope == "upcoming" else "-scheduled_at",
             ),
-            lambda item: _has_provider_teams(item, required_team_ids)
-            and _matches_query(item, request.query)
-            and _in_scope(item, request.time_scope),
+            lambda item: (
+                _has_provider_teams(item, required_team_ids)
+                and _matches_query(item, request.query)
+                and _in_scope(item, request.time_scope)
+            ),
             order_key=order_key,
             reverse=reverse,
         )
@@ -238,9 +252,7 @@ class PandaScoreEsportsProvider:
         complete = False
         for page_number in range(1, _MAX_SCAN_PAGES + 1):
             batch = await fetch(page_number, _PAGE_SIZE)
-            collected.extend(
-                (item, batch.fetched_at) for item in batch.items if predicate(item)
-            )
+            collected.extend((item, batch.fetched_at) for item in batch.items if predicate(item))
             if batch.has_more is False:
                 complete = True
                 break
@@ -265,11 +277,19 @@ class PandaScoreEsportsProvider:
         if not match.games:
             return document
         normalized = normalize_panda_match(match, fetched_at=fetched_at)
-        decisions = await self._resolver.resolve_many(normalized, normalized.games)
-        if len(decisions) != len(match.games):
-            raise EsportsProviderError(source=_SOURCE, kind="match")
         games = document.get("games")
         if not isinstance(games, list):
+            raise EsportsProviderError(source=_SOURCE, kind="match")
+        try:
+            decisions = await self._resolver.resolve_many(normalized, normalized.games)
+        except OpenDotaProviderError:
+            for game in games:
+                if not isinstance(game, dict):
+                    raise EsportsProviderError(source=_SOURCE, kind="match") from None
+                game["valve_game_id"] = None
+                game["resolution"] = "unavailable"
+            return document
+        if len(decisions) != len(match.games):
             raise EsportsProviderError(source=_SOURCE, kind="match")
         for game, decision in zip(games, decisions, strict=True):
             if not isinstance(game, dict):
@@ -354,7 +374,7 @@ def _in_scope(item: BaseModel, scope: TimeScope | None) -> bool:
     if scope is None:
         return True
     document = item.model_dump(mode="json", by_alias=True)
-    status = normalize_text(str(document.get("status") or ""))
+    status = normalize_text(str(document.get("status") or "").replace("_", " "))
     if scope == "upcoming":
         return status in {"not started", "scheduled", "upcoming"}
     if scope == "running":
@@ -375,10 +395,7 @@ def _lifecycle_sort(scope: TimeScope | None) -> tuple[Callable[[BaseModel], str]
 def _past_time(item: BaseModel) -> str:
     document = item.model_dump(mode="json", by_alias=True)
     return str(
-        document.get("end_at")
-        or document.get("begin_at")
-        or document.get("scheduled_at")
-        or ""
+        document.get("end_at") or document.get("begin_at") or document.get("scheduled_at") or ""
     )
 
 

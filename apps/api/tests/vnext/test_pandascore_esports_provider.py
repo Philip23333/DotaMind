@@ -6,12 +6,19 @@ import asyncio
 from datetime import datetime, timezone
 
 import httpx
+import pytest
 
 from app.vnext.artifacts import ArtifactReader, MemoryArtifactStore
+from app.vnext.capabilities.esports.errors import EsportsInvalidArgumentsError
 from app.vnext.capabilities.esports.models import EsportsSearchRequest
 from app.vnext.capabilities.esports.pandascore import PandaScoreEsportsProvider
 from app.vnext.capabilities.esports.service import EsportsSearchService
 from app.vnext.domain.matches.resolution import ResolutionDecision
+from app.vnext.providers.opendota.adapter import (
+    OpenDotaConfigurationError,
+    OpenDotaSchemaError,
+    OpenDotaTimeoutError,
+)
 from app.vnext.providers.pandascore.adapter import PandaScoreAdapter
 
 
@@ -74,6 +81,7 @@ def test_all_esports_kinds_use_one_provider_contract_and_allowed_discovery_endpo
 
     def handler(request: httpx.Request) -> httpx.Response:
         calls.append(request.url.path)
+        assert "search[name]" not in request.url.params
         return httpx.Response(200, json=payloads[request.url.path], headers={"X-Total": "1"})
 
     adapter = _adapter(handler)
@@ -313,3 +321,208 @@ def test_match_search_externalizes_full_enriched_document_for_artifact_read() ->
     assert artifact.value[0]["resolution"] == "resolved"
     assert artifact.value[1]["valve_game_id"] is None
     assert artifact.value[1]["resolution"] == "not_found"
+
+
+def test_dedicated_lifecycle_endpoints_do_not_apply_status_filtering() -> None:
+    payloads = {
+        "/dota2/series/upcoming": [{"id": 51, "name": "Upcoming series", "status": "not_started"}],
+        "/dota2/tournaments/running": [{"id": 52, "name": "Running tournament"}],
+        "/dota2/matches/upcoming": [_match(53, name="Upcoming match", status="not_started")],
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=payloads[request.url.path], headers={"X-Total": "1"})
+
+    adapter = _adapter(handler)
+    provider = PandaScoreEsportsProvider(adapter, NoResolver())  # type: ignore[arg-type]
+
+    async def exercise() -> list[int]:
+        try:
+            requests = [
+                EsportsSearchRequest(kind="series", time_scope="upcoming"),
+                EsportsSearchRequest(kind="tournament", time_scope="running"),
+                EsportsSearchRequest(kind="match", time_scope="upcoming"),
+            ]
+            batches = [await provider.search(request) for request in requests]
+            return [batch.entities[0].source_identity for batch in batches]
+        finally:
+            await adapter.aclose()
+
+    assert asyncio.run(exercise()) == [51, 52, 53]
+
+
+def test_match_query_uses_full_document_without_native_name_prefilter() -> None:
+    raw_match = _match(61, name="Grand final: VSN vs TS")
+    raw_match["league"] = {"id": 1, "name": "The International"}
+    raw_match["serie"] = {"id": 2, "full_name": "The International 2026"}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/dota2/matches/past"
+        assert "search[name]" not in request.url.params
+        return httpx.Response(200, json=[raw_match], headers={"X-Total": "1"})
+
+    adapter = _adapter(handler)
+    provider = PandaScoreEsportsProvider(adapter, NoResolver())  # type: ignore[arg-type]
+
+    async def exercise():
+        try:
+            return await provider.search(
+                EsportsSearchRequest(
+                    kind="match",
+                    time_scope="past",
+                    query="The International 2026",
+                )
+            )
+        finally:
+            await adapter.aclose()
+
+    batch = asyncio.run(exercise())
+    assert [entity.source_identity for entity in batch.entities] == [61]
+
+
+def test_team_relationship_matches_use_local_lifecycle_filtering() -> None:
+    alpha = _team(71, "Alpha")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/dota2/teams":
+            return httpx.Response(200, json=[alpha], headers={"X-Total": "1"})
+        if request.url.path == "/teams/71/matches":
+            return httpx.Response(
+                200,
+                json=[_match(72, name="Alpha upcoming", status="not_started", teams=[alpha])],
+                headers={"X-Total": "1"},
+            )
+        raise AssertionError(request.url.path)
+
+    adapter = _adapter(handler)
+    provider = PandaScoreEsportsProvider(adapter, NoResolver())  # type: ignore[arg-type]
+
+    async def exercise():
+        try:
+            return await provider.search(
+                EsportsSearchRequest(kind="match", teams=["Alpha"], time_scope="upcoming")
+            )
+        finally:
+            await adapter.aclose()
+
+    batch = asyncio.run(exercise())
+    assert [entity.source_identity for entity in batch.entities] == [72]
+
+
+@pytest.mark.parametrize(
+    ("team_payload", "expected_details"),
+    [
+        (
+            [],
+            {"argument": "teams", "team": "XG", "reason": "not_found"},
+        ),
+        (
+            [_team(81, "XG"), _team(82, "XG")],
+            {
+                "argument": "teams",
+                "team": "XG",
+                "reason": "ambiguous",
+                "candidate_count": 2,
+            },
+        ),
+    ],
+)
+def test_team_identity_resolution_reports_not_found_or_ambiguous(
+    team_payload: list[dict[str, object]],
+    expected_details: dict[str, object],
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/dota2/teams"
+        return httpx.Response(200, json=team_payload, headers={"X-Total": str(len(team_payload))})
+
+    adapter = _adapter(handler)
+    provider = PandaScoreEsportsProvider(adapter, NoResolver())  # type: ignore[arg-type]
+
+    async def exercise() -> None:
+        try:
+            await provider.search(EsportsSearchRequest(kind="match", teams=["XG"]))
+        finally:
+            await adapter.aclose()
+
+    with pytest.raises(EsportsInvalidArgumentsError) as exc_info:
+        asyncio.run(exercise())
+    assert exc_info.value.details == expected_details
+
+
+def test_unique_team_identities_without_a_common_match_return_no_records() -> None:
+    alpha = _team(91, "Alpha")
+    beta = _team(92, "Beta")
+    gamma = _team(93, "Gamma")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/dota2/teams":
+            query = request.url.params["search[name]"]
+            return httpx.Response(
+                200,
+                json=[alpha if query == "Alpha" else beta],
+                headers={"X-Total": "1"},
+            )
+        if request.url.path == "/teams/91/matches":
+            return httpx.Response(
+                200,
+                json=[_match(94, name="Alpha vs Gamma", teams=[alpha, gamma])],
+                headers={"X-Total": "1"},
+            )
+        raise AssertionError(request.url.path)
+
+    adapter = _adapter(handler)
+    provider = PandaScoreEsportsProvider(adapter, NoResolver())  # type: ignore[arg-type]
+
+    async def exercise():
+        try:
+            return await provider.search(
+                EsportsSearchRequest(kind="match", teams=["Alpha", "Beta"])
+            )
+        finally:
+            await adapter.aclose()
+
+    assert asyncio.run(exercise()).entities == []
+
+
+class UnavailableResolver:
+    def __init__(
+        self, error: OpenDotaTimeoutError | OpenDotaConfigurationError | OpenDotaSchemaError
+    ):
+        self._error = error
+
+    async def resolve_many(self, match, games):  # type: ignore[no-untyped-def]
+        raise self._error
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        OpenDotaTimeoutError("timeout"),
+        OpenDotaConfigurationError("configuration"),
+        OpenDotaSchemaError("schema"),
+    ],
+)
+def test_opendota_enrichment_failures_degrade_match_games(
+    error: OpenDotaTimeoutError | OpenDotaConfigurationError | OpenDotaSchemaError,
+) -> None:
+    raw_match = _match(101, name="Degraded match")
+    raw_match["games"] = [{"id": 102, "status": "finished", "provider_extra": "kept"}]
+
+    class InlineAdapter:
+        async def list_matches(self, **kwargs):  # type: ignore[no-untyped-def]
+            from app.vnext.providers.common import ProviderBatch
+            from app.vnext.providers.pandascore.models import PandaScoreMatch
+
+            return ProviderBatch(
+                [PandaScoreMatch.model_validate(raw_match)],
+                datetime(2026, 8, 30, tzinfo=timezone.utc),
+                has_more=False,
+            )
+
+    provider = PandaScoreEsportsProvider(InlineAdapter(), UnavailableResolver(error))  # type: ignore[arg-type]
+    batch = asyncio.run(provider.search(EsportsSearchRequest(kind="match", time_scope="past")))
+
+    game = batch.entities[0].document["games"][0]
+    assert game["provider_extra"] == "kept"
+    assert game["valve_game_id"] is None
+    assert game["resolution"] == "unavailable"
