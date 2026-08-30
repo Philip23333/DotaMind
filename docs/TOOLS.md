@@ -2,246 +2,95 @@
 
 ## Design rules
 
-Agent-visible tools describe broad observation capabilities. They are not a
-mirror of provider endpoints and not an ontology-shaped API where every
-League/Series/Tournament/Match object gets its own tool family.
+Agent-visible tools describe broad observation capabilities, not provider
+endpoints or a provider ontology. A tool result remains source-attributed, while
+complete provider documents stay outside model context as Artifacts.
 
-The model owns ordinary reasoning and decides which capabilities to compose.
-Provider implementations stay below the tool boundary; provider names remain
-visible as provenance in results.
-
-Different providers implementing the same capability may return different
-source-shaped fact payloads. DotaMind should not invent a field-by-field
-universal DTO unless a concrete cross-source consumer requires one.
-
-Complete provider results stay outside model context when they are larger than a
-useful search observation. A capability stores the validated source document as
-an Artifact, returns a generic bounded observation plus an `ArtifactRef`, and
-lets the model use generic Artifact grep/read for depth.
-
-No tool description should prescribe a fixed workflow or claim that a locator
-must have come from one specific preceding tool.
+Tool descriptions state a capability; they do not prescribe a fixed workflow.
 
 ## Current implemented surface
 
-The current branch exposes these migration-era tools:
-
-| Tool | Current purpose | Target disposition |
+| Tool | Purpose | Target disposition |
 | --- | --- | --- |
-| `esports.search` | Navigate PandaScore-backed esports source facts | Retain as the broad discovery capability |
-| `matches.get_detail` | Transitional SourceLocator-to-detail bridge | Replace with `game.detail` |
-| `teams.search` / `teams.get_detail` | Team discovery/detail | Keep during this migration; revisit only when another source requires it |
-| `players.search` / `players.get_detail` | Player discovery/detail | Keep during this migration; revisit only when another source requires it |
-| `artifact.search` | Exact stored Artifact availability lookup | Retain |
-| `artifact.grep` | Generic Artifact content search | Retain |
-| `artifact.read` | Generic bounded Artifact read | Retain |
+| `esports.search` | Discover one selected kind of professional Dota 2 esports entity | Retain |
+| `matches.get_detail` | Transitional locator-based detail bridge | Replace with `game.detail` |
+| `teams.search` / `teams.get_detail` | Transitional Team discovery and detail | Keep only until the replacement path is accepted |
+| `players.search` / `players.get_detail` | Transitional Player discovery and detail | Keep only until the replacement path is accepted |
+| `artifact.search` | Exact stored-Artifact availability lookup | Retain |
+| `artifact.grep` | Generic stored-document breadth search | Retain |
+| `artifact.read` | Generic stored-document depth read | Retain |
 
-The old `series.search`, `series.list_matches`, and `matches.search` tools are
-no longer model-visible. Their Ref-based internals remain only where the
-transitional detail and Artifact path still needs them.
+## `esports.search`
 
-## Target capability surface
-
-### `esports.search`
-
-Purpose: search the esports/event/match fact space without exposing one tool per
-provider object type.
-
-Current implementation: PandaScore.
-
-Future implementations: any source that can provide esports discovery. A new
-source joins this capability instead of creating a parallel provider-named tool
-tree by default.
-
-The initial contract should stay small. Conceptually useful inputs are:
+Purpose: search professional Dota 2 esports entities by one requested kind.
+PandaScore is its current implementation, not a model-facing namespace.
 
 ```text
-query        optional user text
-within       optional SourceLocator
-teams        optional exact PandaScore team-name constraint
-time_scope   optional bounded temporal scope
-limit        bounded result count
+kind        required: league | series | tournament | match | team | player
+query       optional text discovery
+teams       optional Match-only team constraints, interpreted with AND semantics
+time_scope  optional: upcoming | running | past; Series/Tournament/Match only
+limit       1..50
 ```
 
-The exact first-version input should be no broader than demonstrated evals
-require.
+The input intentionally has no `within`, `SourceLocator`, provider selector,
+sort/order, pagination, `recent`, `all`, or `game` kind.
 
-A result record uses a thin envelope:
+A successful response is:
 
 ```text
-source
-kind
-locator
-artifact_ref
-facts
+records[]
+  source
+  kind
+  artifact_ref
+  facts
+truncated
 ```
 
-For PandaScore, `kind` may be its own vocabulary such as `league`, `series`,
-`tournament`, `match`, or `game`. Another source may use different terms.
+`facts` is a bounded structural observation. It does not contain provider-private
+identity values. `artifact_ref` is always present and points to the complete
+validated source document. Use generic Artifact tools for deeper reads.
 
-`facts` is not a hand-written `MatchPreview`, `SeriesPreview`, or another
-business DTO. It is a generic bounded structural observation derived from the
-same validated source document stored behind `artifact_ref`. The current
-observation keeps safe top-level scalar facts and structural information such as
-nested object/collection counts while omitting provider-private identity values.
-The complete source-shaped facts remain available through `artifact.read` and
-`artifact.grep`.
+### Match results
 
-An optional `within` locator lets the same broad search capability continue
-inside a source object. The current PandaScore implementation supports:
+A Match Artifact preserves the provider's complete Match document. Each item in
+`facts.games[]` additionally has:
 
 ```text
-league -> series
-series -> match
-match  -> game
+valve_game_id  canonical Valve/OpenDota match ID when resolved, otherwise null
+resolution     deterministic resolution status
 ```
 
-Unknown locators, a locator from another source, and locator-kind mismatches are
-explicit tool errors; they are not equivalent to an empty search result. The
-model does not need a separate `series.list_matches` tool.
+This does not make `game` an `esports.search` kind. The target `game.detail`
+capability accepts the canonical Valve ID when recorded-game facts are needed.
 
-The first implementation does not need a provider-routing framework or explicit
-model-selected source list. With only PandaScore configured, `esports.search`
-simply uses it. If a second implementation arrives, add the smallest aggregation
-or source-selection rule justified by real use.
+### Errors
 
-### `game.detail`
+- `invalid_arguments`: invalid kind/limit or a cross-field violation such as
+  `teams` with `kind="team"`.
+- `provider_error`: PandaScore or required Match enrichment cannot satisfy a
+  valid request.
+- `artifact_error`: a final complete source document could not be stored.
 
-Purpose: obtain detailed recorded-game facts after a game is identified.
-
-Current detail implementation: OpenDota.
-
-The capability may accept either:
-
-- a canonical `valve_match_id` when already known; or
-- a `SourceLocator` for a discovered source object that can be deterministically
-  resolved to a Valve match identity.
-
-Current composition remains internal:
-
-```text
-PandaScore locator
-  -> deterministic PandaScore-to-Valve resolver
-  -> valve_match_id
-  -> OpenDota detail implementation
-```
-
-The tool returns bounded source-attributed facts. If the complete detail is
-large, it is stored as an Artifact and the result includes an `ArtifactRef`.
-
-If another game-detail source is added later, `game.detail` may return multiple
-source-attributed detail results or use an explicit selection policy. Do not
-merge different detail schemas into one synthetic universal object merely to
-share the tool name.
-
-## SourceLocator
-
-A `SourceLocator` is the reusable locator for a provider-backed source object.
-Conceptually:
-
-```json
-{
-  "source": "pandascore",
-  "kind": "series",
-  "value": "opaque:..."
-}
-```
-
-The raw PandaScore/provider resource ID remains internal to source navigation.
-The locator means "this object in this source"; it is not a claim that DotaMind
-has established a cross-source canonical Series/Match identity.
-
-A locator returned by one capability may be passed to any capability that
-explicitly accepts a `SourceLocator`. Tool descriptions should describe the
-accepted locator semantics, not name one mandatory producing tool.
-
-## Source attribution and failure
-
-When several provider implementations eventually participate in one capability,
-results remain source-attributed.
-
-A provider failure must remain distinguishable from:
-
-- no result in another source;
-- an ambiguous source object;
-- failed source-to-Valve resolution;
-- missing Artifact data.
-
-Do not silently fall back to another provider and present the result as though it
-came from the failed source.
-
-## Catalog capabilities
-
-Static Valve ID translation is a separate fact space:
-
-| Tool | Purpose | Boundary |
-| --- | --- | --- |
-| `catalog.search` | Resolve human-facing hero/item/ability text to Valve-native candidates | Local static catalog only |
-| `catalog.lookup` | Batch-resolve Valve-native IDs to names/localization/reference facts | Local deterministic lookup; no provider call |
-
-Dynamic game-detail results may keep `hero_id`, `item_id`, and `ability_id` as
-plain Valve-native facts. The model uses Catalog when it needs readable static
-meaning.
-
-Do not create separate `catalog.get_hero`, `catalog.get_item`, and
-`catalog.get_ability` tools unless the two generic capabilities prove
-insufficient.
+`records=[]` is normal success. `truncated=true` means more qualifying records
+may exist than the Provider scan or final limit returned.
 
 ## Artifact tools
 
-Artifact exploration remains generic and provider-blind:
-
 | Tool | Purpose | Boundary |
 | --- | --- | --- |
-| `artifact.search` | Exact stored-document availability lookup | No provider fetch or production |
-| `artifact.grep` | Literal/schema-neutral scalar search over stored documents | Returns ArtifactRef + structural path + preview |
+| `artifact.search` | Exact stored-document availability lookup | Does not fetch or produce a document |
+| `artifact.grep` | Schema-neutral scalar search | Returns ArtifactRef, path, and bounded preview |
 | `artifact.read` | Bounded structural read | Exact ArtifactRef/path; no provider semantics |
 
-An `ArtifactRef` may be returned directly by a source capability such as
-`esports.search`; it does not have to be rediscovered through
-`artifact.search`. A new source-backed Artifact becomes grep/read-able because
-it is a JSON-like stored document, not because a provider-specific search
-adapter is added.
+Artifacts are a generic JSON-like corpus. `artifact.read` and `artifact.grep`
+must not learn PandaScore, OpenDota, Team, Player, or gameplay-scenario logic.
 
-Future generic path constraints are acceptable when real usage requires them.
-Business dimensions such as hero, player, build, PandaScore Series, or OpenDota
-player schema do not belong in the Artifact-search contract.
+## Rejected shapes
 
-## Provider implementation rule
-
-Prefer:
-
-```text
-esports.search
-  -> PandaScore implementation
-
-game.detail
-  -> OpenDota implementation
-```
-
-over:
-
-```text
-pandascore.search_series
-pandascore.list_matches
-opendota.get_match
-future_provider.get_match
-```
-
-The provider implementation may use source-specific methods internally. The
-model should see the broad fact-space capability unless provider-specific
-behavior itself becomes a genuine user-facing need.
-
-## Rejected tool shapes
-
-Do not add:
-
-- `league.search` merely because PandaScore has League objects;
-- separate Series/Tournament/Match tool families to mirror PandaScore;
-- one model-facing provider namespace per source by default;
-- a universal cross-provider esports DTO as a prerequisite for search;
-- a universal cross-provider game-detail DTO as a prerequisite for detail;
-- `artifact.find_player_hero_games`, `artifact.find_build`, or similar scenario
-  helpers;
-- a model-facing `artifact.produce` tool for ordinary detail externalization;
-- a provider router/plugin framework before a second implementation requires it.
+- separate League/Series/Tournament/Match/Team model tools;
+- a `pandascore.*` model-facing namespace;
+- a model-facing source-navigation locator for `esports.search`;
+- provider-specific Artifact read or grep helpers;
+- an `artifact.produce` tool;
+- a workflow prompt that forces a particular discovery sequence.

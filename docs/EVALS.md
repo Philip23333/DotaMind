@@ -1,96 +1,57 @@
 # Evals
 
-## Role
+## Goal
 
-Scenarios belong in evaluations, not runtime branches, prompt workflows, or
-tool descriptions. An eval checks whether a general-purpose agent can select
-the needed domain capabilities, use conversation context, and respect data
-boundaries.
+vNext evaluation checks externally visible capability behavior, source/provider
+boundaries, bounded Artifact observation, and failure semantics.  A passing
+tool execution is not enough: tests must assert the useful business result and
+the provenance-bearing stored document.
 
-## Evaluation dimensions
+## Deterministic test style
 
-- Correct domain-tool selection
-- Coherent tool sequence without hard-coded workflow support
-- Correct entity and follow-up reference resolution
-- Factual answer quality and source disclosure
-- Explicit handling of ambiguity, missing data, and unsupported requests
-- Tool-call efficiency and general budget compliance
+Provider contract tests use small inline PandaScore-shaped payloads and
+`httpx.MockTransport`.  They do not depend on deleted large fixture directories
+or on a live PandaScore account.  Each test owns only the source fields needed
+to express its rule.
 
-## Deterministic behavioral evals
+The core search suite covers:
 
-These evals are fixture-backed and CI-friendly. They protect general agent
-behavior and architecture boundaries; they do not depend on a provider's
-current schedule, result, or match count.
+| Concern | Required assertion |
+| --- | --- |
+| Public schema | `kind` required; exactly six kinds; no legacy `within`, locator, `recent`, `all`, or Game discovery input |
+| Endpoint allowlist | each kind reaches its intended PandaScore discovery route; no Game discovery endpoint is called |
+| Lifecycle | pagination, local scope filtering, deterministic order, and explicit `truncated` |
+| Team constraint | exact team identity and AND semantics across `/teams/{id}/matches` results |
+| Match enrichment | a single Match-level resolver call; every retained game has `valve_game_id` and `resolution` |
+| Artifact boundary | only final, deduplicated results are externalized; repeated source identity keeps its ArtifactRef while facts refresh |
+| Error mapping | invalid arguments, provider failure, and artifact failure map to the documented tool codes without secrets |
 
-| Area | User request | Expected behavior |
-| --- | --- | --- |
-| Tournament status | 这项赛事现在是什么状态？ | Resolve the fixture competition, inspect its schedule or results, and distinguish current facts from stale data |
-| Tournament schedule | 下一场什么时候开始？ | Use the resolved fixture competition and return the next scheduled match with time context |
-| Match detail | Spirit 和 Falcons 最近一次交手？ | Find fixture candidate matches, resolve ambiguity, and return a grounded match summary |
-| Game follow-up | 第二局详细说说。 | Reuse only valid conversation context, obtain game detail, and answer with available data |
-| Player performance | Malr1ne 那局表现怎么样？ | Resolve the player and match/game, then retrieve available recorded game facts through existing match/artifact capabilities |
-| Player build | 他那局出了什么、怎么加点？ | Resolve the referenced player and game, then use bounded artifact retrieval for items and ability upgrades |
-| Earlier match | 那他上一场呢？ | Resolve the follow-up reference and query a separate record when needed |
-| Unsupported scope | 给我当前版本全英雄强度排行 | State that ranked-meta ranking is outside vNext Core without inventing an alternative |
-| Ambiguous identity | 查一下 Nigma 最近比赛 | Ask for clarification or expose candidates when identity cannot be uniquely resolved |
+Focused implementation tests live under `apps/api/tests/vnext/` alongside the
+capability.  Run the focused set before the full vNext non-agent-eval suite.
 
-## Fixture-backed agent evals
+## Live smoke tests
 
-These opt-in evaluations run a real configured model against fixture-backed
-PandaScore and OpenDota adapters, the real `AgentRuntime`, and the current
-domain-tool registry. They test autonomous agent behavior without allowing a volatile live
-provider response to determine the result.
+Live PandaScore smoke tests are separate from deterministic acceptance.  They
+may validate a current endpoint, plan entitlement, pagination behavior, or a
+real source payload captured under `docs/reference/`; they must not turn a
+provider outage, expired credential, or changing esports schedule into a
+deterministic unit-test failure.
 
-- Tool sequences are observed rather than prescribed. The model decides whether
-  it needs match detail or bounded artifact retrieval.
-- Assertions cover fixture-grounded facts, unavailable-data boundaries,
-  provider-private ID exclusion, and general tool-call budgets.
-- A multi-turn eval passes the prior transcript into a fresh runtime call, so
-  follow-up references must be resolved from actual conversation context.
-- `DOTAMIND_AGENT_EVAL_BASE_URL` and `DOTAMIND_AGENT_EVAL_MODEL` are required;
-  `DOTAMIND_AGENT_EVAL_API_KEY` is optional for compatible endpoints.
-- They are marked `agent_eval`, skipped without explicit model configuration,
-  and excluded from the ordinary deterministic CI acceptance path.
-- The manual console writes one JSON record per console process under
-  `apps/api/tests/vnext/testResult/`. It appends each completed or terminated
-  turn to that record and retains the complete tool result content and
-  structured error, so the directory is local-only and must not be shared.
+When recording a live result, retain only sanitized provider business facts.
+Never commit credentials, Authorization headers, raw request tokens, or a
+complete response that contains material user data.
 
-Scripted behavioral tests are deterministic runtime regressions; they are not
-autonomous real-model agent evals.
+## Agent evaluations
 
-## Manual vNext console
+Agent evaluations test composition and answer behavior after deterministic tool
+contracts are already protected.  They should request source-backed facts,
+follow returned ArtifactRefs with `artifact.read/grep` where details are needed,
+and distinguish:
 
-Run `python -m scripts.vnext_agent_console --direct "<question>"` from
-`apps/api` to exercise the configured vNext chain: local vNext configuration,
-the model adapter, `AgentRuntime`, the domain-tool registry, and real provider
-adapters. `--direct` only disables proxy environment variables in that console
-process. Each console process writes one timestamped conversation record to
-`tests/vnext/testResult/`; interactive mode appends follow-up turns to that
-same file and preserves complete tool results.
+- execution status;
+- source business result and candidate count;
+- resolution status for Valve IDs;
+- whether the required evidence reached the final answer.
 
-## Live provider smoke evals
-
-These checks exercise real provider integrations. They verify that a provider
-response can be fetched, normalized, attributed, and surfaced with its
-freshness or uncertainty. They are not exact-value assertions and do not make a
-provider-data change a core architecture regression.
-
-- Search a current competition and list a small schedule or results window.
-- Search a current professional team and retrieve its available roster facts.
-- Search a current professional player, preserve ambiguity, and retrieve the
-  selected player's current-team identity.
-- Resolve a current match candidate and request available detail.
-- Retrieve a static catalog item and verify its committed snapshot provenance.
-
-## Acceptance
-
-Deterministic behavioral evals pass only when the final answer is supported by
-fixture tool results, preserves identity and provider uncertainty, avoids
-unsupported claims, and does not rely on a scenario-specific runtime branch.
-Live smoke evals pass when the integration succeeds with appropriate source,
-freshness, and uncertainty disclosure. Exact live provider values and match
-counts are never fixed assertions because esports data changes.
-
-New functionality adds or updates an eval before it adds a new special-case
-execution path.
+Model knowledge does not substitute for a fresh source observation when the
+question asks for current esports information.
