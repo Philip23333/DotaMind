@@ -1,50 +1,27 @@
-"""Thin model-facing esports discovery capability."""
+"""Model-facing esports discovery capability."""
 
-from typing import Literal
-
-from pydantic import Field
-
-from app.vnext.capabilities.esports import EsportsSearchResult, EsportsSearchService
-from app.vnext.domain.common.models import DomainModel
-from app.vnext.domain.source import SourceLocator
+from app.vnext.capabilities.esports import (
+    EsportsSearchRequest,
+    EsportsSearchResult,
+    EsportsSearchService,
+)
 from app.vnext.tools.definition import ToolDefinition
 from app.vnext.tools.registry import ToolRegistry
 
-
-class EsportsSearchInput(DomainModel):
-    query: str | None = None
-    within: SourceLocator | None = None
-    teams: list[str] = Field(
-        default_factory=list,
-        max_length=2,
-        description=(
-            "Optional exact professional team-name constraint for match, schedule, and result "
-            "discovery. Supply team names directly; a TeamRef is not required."
-        ),
-    )
-    time_scope: Literal["upcoming", "recent", "running", "all"] = "all"
-    limit: int = Field(default=10, ge=1, le=50)
+EsportsSearchInput = EsportsSearchRequest
 
 
 def register_esports_tools(registry: ToolRegistry, service: EsportsSearchService) -> None:
     async def search(args: EsportsSearchInput) -> EsportsSearchResult:
-        return await service.search(
-            query=args.query,
-            within=args.within,
-            teams=args.teams,
-            time_scope=args.time_scope,
-            limit=args.limit,
-        )
+        return await service.search(args)
 
     registry.register(
         ToolDefinition(
             name="esports.search",
             description=(
-                "Search professional Dota 2 esports source facts, including match, schedule, "
-                "and result discovery by exact team name. Use within with a returned league, "
-                "series, or match locator to continue source-local navigation. Each record "
-                "contains bounded structural facts and, when externalized, an ArtifactRef for "
-                "the complete validated source document."
+                "Search professional Dota 2 esports entities by kind. Returned records "
+                "contain bounded source facts and an ArtifactRef to the complete validated "
+                "source document."
             ),
             input_model=EsportsSearchInput,
             output_model=EsportsSearchResult,

@@ -1,317 +1,395 @@
-"""PandaScore implementation of the broad esports-search capability."""
+"""PandaScore provider implementation for broad esports discovery."""
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from datetime import datetime
-from typing import Literal
+from typing import TypeVar
 
 from pydantic import BaseModel
 
-from app.vnext.artifacts import (
-    ArtifactStore,
-    SourceDocumentArtifact,
-    bounded_source_observation,
-    source_document_artifact_ref,
-)
 from app.vnext.domain.common.models import normalize_text
-from app.vnext.domain.source import SourceLocator, SourceLocatorError
-from app.vnext.providers.pandascore.adapter import PandaScoreAdapter
-from app.vnext.providers.pandascore.locator import PandaScoreLocatorIndex
-from app.vnext.providers.pandascore.models import (
-    PandaScoreGame,
-    PandaScoreMatch,
-    PandaScoreTeam,
+from app.vnext.domain.matches.normalization import normalize_panda_match
+from app.vnext.domain.matches.valve_match_id_resolver import ValveMatchIdResolver
+from app.vnext.providers.common import ProviderBatch
+from app.vnext.providers.opendota.adapter import OpenDotaProviderError
+from app.vnext.providers.pandascore.adapter import PandaScoreAdapter, PandaScoreProviderError
+from app.vnext.providers.pandascore.models import PandaScoreMatch, PandaScoreTeam
+
+from .errors import EsportsProviderError
+from .models import (
+    EsportsKind,
+    EsportsSearchRequest,
+    ProviderEntity,
+    ProviderSearchBatch,
+    TimeScope,
 )
 
-from .models import EsportsSearchResult, SourceRecord
-
-TimeScope = Literal["upcoming", "recent", "running", "all"]
 _SOURCE = "pandascore"
-_TEAM_SEARCH_LIMIT = 20
-_TEAM_MATCH_PAGE_SIZE = 100
-_TEAM_MATCH_MAX_PAGES = 5
+_PAGE_SIZE = 100
+_MAX_SCAN_PAGES = 5
+_TEAM_SEARCH_LIMIT = 100
+_T = TypeVar("_T", bound=BaseModel)
+_PageFetcher = Callable[[int, int], Awaitable[ProviderBatch[_T]]]
 
 
-class PandaScoreEsportsSearch:
-    """Discover PandaScore objects and externalize their source-shaped documents."""
+class PandaScoreEsportsProvider:
+    """Select, filter, order, and enrich PandaScore entities below the capability boundary."""
 
-    def __init__(
-        self,
-        provider: PandaScoreAdapter,
-        locators: PandaScoreLocatorIndex,
-        artifact_store: ArtifactStore | None = None,
-    ) -> None:
-        self._provider = provider
-        self._locators = locators
-        self._artifact_store = artifact_store
+    def __init__(self, adapter: PandaScoreAdapter, resolver: ValveMatchIdResolver) -> None:
+        self._adapter = adapter
+        self._resolver = resolver
 
-    async def search(
-        self,
-        *,
-        query: str | None,
-        within: SourceLocator | None,
-        teams: list[str],
-        time_scope: TimeScope,
-        limit: int,
-    ) -> EsportsSearchResult:
-        if within is not None:
-            return await self._search_within(
-                query=query,
-                within=within,
-                time_scope=time_scope,
-                limit=limit,
-            )
-        if teams:
-            return await self._search_by_teams(
-                query=query,
-                teams=teams,
-                time_scope=time_scope,
-                limit=limit,
-            )
+    async def search(self, request: EsportsSearchRequest) -> ProviderSearchBatch:
+        try:
+            if request.kind == "league":
+                return await self._search_leagues(request)
+            if request.kind == "series":
+                return await self._search_series(request)
+            if request.kind == "tournament":
+                return await self._search_tournaments(request)
+            if request.kind == "match":
+                return await self._search_matches(request)
+            if request.kind == "team":
+                return await self._search_teams(request)
+            return await self._search_players(request)
+        except EsportsProviderError:
+            raise
+        except (OpenDotaProviderError, PandaScoreProviderError) as exc:
+            raise EsportsProviderError(source=_SOURCE, kind=request.kind) from exc
 
-        series_batch = await self._provider.search_series(query=query, limit=limit)
-        league_batch = await self._provider.search_leagues(query=query, limit=limit)
-        match_batch = await self._provider.list_matches(
-            scope=time_scope,
-            query=query,
-            limit=limit,
+    async def _search_leagues(self, request: EsportsSearchRequest) -> ProviderSearchBatch:
+        items, truncated = await self._collect(
+            lambda page, size: self._adapter.search_leagues(
+                query=request.query,
+                limit=size,
+                page_number=page,
+            ),
+            lambda item: _matches_query(item, request.query),
         )
-        records: list[SourceRecord] = []
-        seen: set[tuple[str, int]] = set()
-        for item in series_batch.items:
-            record = await self._record("series", item, series_batch.fetched_at)
-            self._append(records, seen, record, limit)
-        for item in league_batch.items:
-            record = await self._record("league", item, league_batch.fetched_at)
-            self._append(records, seen, record, limit)
-        for league in league_batch.items:
-            if len(records) >= limit:
-                break
-            related = await self._provider.list_league_series(league.provider_id, limit=limit)
-            for item in related.items:
-                record = await self._record("series", item, related.fetched_at)
-                self._append(records, seen, record, limit)
-            if related.has_more:
-                break
-        for item in match_batch.items:
-            record = await self._match_record(item, fetched_at=match_batch.fetched_at)
-            self._append(records, seen, record, limit)
-        truncated = len(records) >= limit and (
-            series_batch.has_more is not False
-            or league_batch.has_more is not False
-            or match_batch.has_more is not False
-        )
-        return EsportsSearchResult(records=records, truncated=truncated)
+        return _entity_batch("league", items, request.limit, truncated)
 
-    async def _search_within(
-        self,
-        *,
-        query: str | None,
-        within: SourceLocator,
-        time_scope: TimeScope,
-        limit: int,
-    ) -> EsportsSearchResult:
-        resolved = self._locators.resolve(within)
-        if resolved.kind == "league":
-            series = await self._provider.list_league_series(resolved.provider_id, limit=limit)
-            records = [
-                await self._record("series", item, series.fetched_at)
-                for item in series.items
-            ]
-            return EsportsSearchResult(records=records, truncated=series.has_more is not False)
-        if resolved.kind == "series":
-            matches = await self._provider.list_matches(
-                scope=time_scope,
-                series_id=resolved.provider_id,
-                query=query,
-                limit=limit,
-            )
-            records = [
-                await self._match_record(item, fetched_at=matches.fetched_at)
-                for item in matches.items
-            ]
-            return EsportsSearchResult(records=records, truncated=matches.has_more is not False)
-        if resolved.kind == "match":
-            snapshot = self._locators.match_snapshot(resolved.provider_id)
-            if snapshot is None:
-                fetched = await self._provider.get_match(resolved.provider_id)
-                self._locators.remember_match(
-                    resolved.provider_id,
-                    fetched.item,
-                    fetched.fetched_at,
+    async def _search_series(self, request: EsportsSearchRequest) -> ProviderSearchBatch:
+        if request.time_scope is None:
+            async def fetch(page: int, size: int) -> ProviderBatch[BaseModel]:
+                return await self._adapter.search_series(
+                    query=request.query,
+                    limit=size,
+                    page_number=page,
                 )
-                snapshot = self._locators.match_snapshot(resolved.provider_id)
-            assert snapshot is not None
-            games = snapshot.match.games[:limit]
-            records = [
-                await self._game_record(item, snapshot.match, snapshot.fetched_at)
-                for item in games
-            ]
-            return EsportsSearchResult(
-                records=records,
-                truncated=len(snapshot.match.games) > limit,
-            )
-        raise SourceLocatorError(
-            "source locator kind does not support esports navigation",
-            details={"source": within.source, "kind": within.kind},
-        )
 
-    async def _search_by_teams(
+            def predicate(item: BaseModel) -> bool:
+                return _matches_query(item, request.query)
+
+            order = None
+            reverse = False
+        else:
+            async def fetch(page: int, size: int) -> ProviderBatch[BaseModel]:
+                return await self._adapter.list_series(
+                    request.time_scope,
+                    query=request.query,
+                    limit=size,
+                    page_number=page,
+                )
+
+            def predicate(item: BaseModel) -> bool:
+                return _matches_query(item, request.query) and _in_scope(
+                    item,
+                    request.time_scope,
+                )
+
+            order, reverse = _lifecycle_sort(request.time_scope)
+        items, truncated = await self._collect(fetch, predicate, order_key=order, reverse=reverse)
+        return _entity_batch("series", items, request.limit, truncated)
+
+    async def _search_tournaments(self, request: EsportsSearchRequest) -> ProviderSearchBatch:
+        if request.time_scope is None:
+            async def fetch(page: int, size: int) -> ProviderBatch[BaseModel]:
+                return await self._adapter.search_tournaments(
+                    query=request.query,
+                    limit=size,
+                    page_number=page,
+                )
+
+            def predicate(item: BaseModel) -> bool:
+                return _matches_query(item, request.query)
+
+            order = None
+            reverse = False
+        else:
+            async def fetch(page: int, size: int) -> ProviderBatch[BaseModel]:
+                return await self._adapter.list_tournaments(
+                    request.time_scope,
+                    query=request.query,
+                    limit=size,
+                    page_number=page,
+                )
+
+            def predicate(item: BaseModel) -> bool:
+                return _matches_query(item, request.query) and _in_scope(
+                    item,
+                    request.time_scope,
+                )
+
+            order, reverse = _lifecycle_sort(request.time_scope)
+        items, truncated = await self._collect(fetch, predicate, order_key=order, reverse=reverse)
+        return _entity_batch("tournament", items, request.limit, truncated)
+
+    async def _search_teams(self, request: EsportsSearchRequest) -> ProviderSearchBatch:
+        items, truncated = await self._collect(
+            lambda page, size: self._adapter.search_teams(
+                query=request.query,
+                limit=size,
+                page_number=page,
+            ),
+            lambda item: _matches_query(item, request.query),
+        )
+        return _entity_batch("team", items, request.limit, truncated)
+
+    async def _search_players(self, request: EsportsSearchRequest) -> ProviderSearchBatch:
+        items, truncated = await self._collect(
+            lambda page, size: self._adapter.search_players(
+                query=request.query,
+                limit=size,
+                page_number=page,
+            ),
+            lambda item: _matches_query(item, request.query),
+        )
+        return _entity_batch("player", items, request.limit, truncated)
+
+    async def _search_matches(self, request: EsportsSearchRequest) -> ProviderSearchBatch:
+        if request.teams:
+            items, truncated = await self._team_match_items(request)
+        else:
+            scope = request.time_scope or "all"
+            items, truncated = await self._collect(
+                lambda page, size: self._adapter.list_matches(
+                    scope=scope,
+                    query=request.query,
+                    limit=size,
+                    page_number=page,
+                ),
+                lambda item: _matches_query(item, request.query) and _in_scope(
+                    item,
+                    request.time_scope,
+                ),
+                order_key=_lifecycle_sort(request.time_scope)[0],
+                reverse=_lifecycle_sort(request.time_scope)[1],
+            )
+        selected, over_limit = _final_provider_items(items, request.limit)
+        entities = [
+            ProviderEntity(
+                source=_SOURCE,
+                kind="match",
+                source_identity=item.provider_id,
+                fetched_at=fetched_at,
+                document=await self._enrich_match(item, fetched_at),
+            )
+            for item, fetched_at in selected
+        ]
+        return ProviderSearchBatch(entities=entities, truncated=truncated or over_limit)
+
+    async def _team_match_items(
         self,
-        *,
-        query: str | None,
-        teams: list[str],
-        time_scope: TimeScope,
-        limit: int,
-    ) -> EsportsSearchResult:
-        normalized_teams = [item.strip() for item in teams if item.strip()]
-        if len(normalized_teams) != len(teams):
-            return EsportsSearchResult()
-        resolved_ids: set[int] = set()
-        for team_query in normalized_teams:
-            batch = await self._provider.search_teams(query=team_query, limit=_TEAM_SEARCH_LIMIT)
+        request: EsportsSearchRequest,
+    ) -> tuple[list[tuple[PandaScoreMatch, datetime]], bool]:
+        team_ids: list[int] = []
+        seen_queries: set[str] = set()
+        for team_query in request.teams:
+            normalized_query = normalize_text(team_query)
+            if normalized_query in seen_queries:
+                continue
+            seen_queries.add(normalized_query)
+            batch = await self._adapter.search_teams(
+                query=team_query,
+                limit=_TEAM_SEARCH_LIMIT,
+            )
             matches = _exact_team_matches(team_query, batch.items)
             if len(matches) != 1:
-                return EsportsSearchResult()
-            resolved_ids.add(matches[0].provider_id)
-        if len(resolved_ids) != len(normalized_teams):
-            return EsportsSearchResult()
+                return [], False
+            team_ids.append(matches[0].provider_id)
+        required_team_ids = set(team_ids)
+        if not required_team_ids:
+            return [], False
+        order_key, reverse = _lifecycle_sort(request.time_scope)
+        return await self._collect(
+            lambda page, size: self._adapter.list_team_matches(
+                team_ids[0],
+                page_number=page,
+                page_size=size,
+                sort="scheduled_at" if request.time_scope == "upcoming" else "-scheduled_at",
+            ),
+            lambda item: _has_provider_teams(item, required_team_ids)
+            and _matches_query(item, request.query)
+            and _in_scope(item, request.time_scope),
+            order_key=order_key,
+            reverse=reverse,
+        )
 
-        records: list[SourceRecord] = []
-        seen: set[int] = set()
-        truncated = False
-        for page_number in range(1, _TEAM_MATCH_MAX_PAGES + 1):
-            batch = await self._provider.list_team_matches(
-                next(iter(resolved_ids)),
-                page_number=page_number,
-                page_size=_TEAM_MATCH_PAGE_SIZE,
-                sort="scheduled_at" if time_scope == "upcoming" else "-scheduled_at",
+    async def _collect(
+        self,
+        fetch: _PageFetcher[_T],
+        predicate: Callable[[_T], bool],
+        *,
+        order_key: Callable[[_T], str] | None = None,
+        reverse: bool = False,
+    ) -> tuple[list[tuple[_T, datetime]], bool]:
+        collected: list[tuple[_T, datetime]] = []
+        complete = False
+        for page_number in range(1, _MAX_SCAN_PAGES + 1):
+            batch = await fetch(page_number, _PAGE_SIZE)
+            collected.extend(
+                (item, batch.fetched_at) for item in batch.items if predicate(item)
             )
-            for item in batch.items:
-                if not _has_provider_teams(item, resolved_ids):
-                    continue
-                if not _time_scope_matches(item, time_scope) or not _match_query(item, query):
-                    continue
-                if item.provider_id in seen:
-                    continue
-                seen.add(item.provider_id)
-                if len(records) >= limit:
-                    truncated = True
-                    continue
-                records.append(await self._match_record(item, fetched_at=batch.fetched_at))
-            if len(records) >= limit:
-                truncated = truncated or batch.has_more is not False
-                break
             if batch.has_more is False:
+                complete = True
                 break
-            if page_number == _TEAM_MATCH_MAX_PAGES:
-                truncated = True
-        return EsportsSearchResult(records=records, truncated=truncated)
+        unique: list[tuple[_T, datetime]] = []
+        identities: set[int] = set()
+        for item, fetched_at in collected:
+            provider_id = item.provider_id
+            if provider_id in identities:
+                continue
+            identities.add(provider_id)
+            unique.append((item, fetched_at))
+        if order_key is not None:
+            unique.sort(key=lambda pair: order_key(pair[0]), reverse=reverse)
+        return unique, not complete
 
-    def _append(
+    async def _enrich_match(
         self,
-        records: list[SourceRecord],
-        seen: set[tuple[str, int]],
-        record: SourceRecord,
-        limit: int,
-    ) -> None:
-        locator = record.locator
-        if locator is None:
-            return
-        provider_id = self._locators.resolve(locator).provider_id
-        key = (record.kind, provider_id)
-        if key not in seen and len(records) < limit:
-            seen.add(key)
-            records.append(record)
-
-    async def _match_record(self, item: PandaScoreMatch, *, fetched_at: datetime) -> SourceRecord:
-        self._locators.remember_match(item.provider_id, item, fetched_at)
-        return await self._record("match", item, fetched_at)
-
-    async def _game_record(
-        self,
-        item: PandaScoreGame,
         match: PandaScoreMatch,
         fetched_at: datetime,
-    ) -> SourceRecord:
-        locator = self._locators.make("game", item.provider_id)
-        self._locators.remember_game_parent(item.provider_id, match.provider_id)
-        return await self._record(
-            "game",
-            item,
-            fetched_at,
-            locator=locator,
-        )
-
-    async def _record(
-        self,
-        kind: str,
-        item: BaseModel,
-        fetched_at: datetime,
-        *,
-        locator: SourceLocator | None = None,
-    ) -> SourceRecord:
-        provider_id = item.provider_id
-        source_locator = locator or self._locators.make(kind, provider_id)
-        document = item.model_dump(mode="json", by_alias=True)
-        ref = source_document_artifact_ref(_SOURCE, kind, provider_id)
-        if self._artifact_store is not None:
-            await self._artifact_store.put(
-                ref,
-                SourceDocumentArtifact(
-                    source=_SOURCE,
-                    kind=kind,
-                    fetched_at=fetched_at,
-                    facts=document,
-                ),
+    ) -> dict[str, object]:
+        document = match.model_dump(mode="json", by_alias=True)
+        if not match.games:
+            return document
+        normalized = normalize_panda_match(match, fetched_at=fetched_at)
+        decisions = await self._resolver.resolve_many(normalized, normalized.games)
+        if len(decisions) != len(match.games):
+            raise EsportsProviderError(source=_SOURCE, kind="match")
+        games = document.get("games")
+        if not isinstance(games, list):
+            raise EsportsProviderError(source=_SOURCE, kind="match")
+        for game, decision in zip(games, decisions, strict=True):
+            if not isinstance(game, dict):
+                raise EsportsProviderError(source=_SOURCE, kind="match")
+            game["valve_game_id"] = (
+                decision.resolved_provider_match_id if decision.status == "resolved" else None
             )
-        else:
-            ref = None
-        return SourceRecord(
-            source=_SOURCE,
-            kind=kind,
-            locator=source_locator,
-            artifact_ref=ref,
-            facts=bounded_source_observation(document),
-        )
+            game["resolution"] = decision.status
+        return document
+
+
+def _entity_batch(
+    kind: EsportsKind,
+    items: list[tuple[BaseModel, datetime]],
+    limit: int,
+    truncated: bool,
+) -> ProviderSearchBatch:
+    selected, over_limit = _final_provider_items(items, limit)
+    return ProviderSearchBatch(
+        entities=[
+            ProviderEntity(
+                source=_SOURCE,
+                kind=kind,
+                source_identity=item.provider_id,
+                fetched_at=fetched_at,
+                document=item.model_dump(mode="json", by_alias=True),
+            )
+            for item, fetched_at in selected
+        ],
+        truncated=truncated or over_limit,
+    )
+
+
+def _final_provider_items(
+    items: list[tuple[_T, datetime]],
+    limit: int,
+) -> tuple[list[tuple[_T, datetime]], bool]:
+    return items[: limit + 1], len(items) > limit
 
 
 def _exact_team_matches(query: str, candidates: list[PandaScoreTeam]) -> list[PandaScoreTeam]:
     needle = normalize_text(query)
     matches: dict[int, PandaScoreTeam] = {}
     for candidate in candidates:
-        values = (candidate.name, candidate.acronym, candidate.slug)
-        if any(value and normalize_text(value) == needle for value in values):
+        if any(
+            value and normalize_text(value) == needle
+            for value in (candidate.name, candidate.acronym, candidate.slug)
+        ):
             matches[candidate.provider_id] = candidate
     return list(matches.values())
 
 
-def _has_provider_teams(row: PandaScoreMatch, team_ids: set[int]) -> bool:
-    return team_ids.issubset({item.opponent.provider_id for item in row.opponents})
+def _has_provider_teams(match: PandaScoreMatch, team_ids: set[int]) -> bool:
+    return team_ids.issubset({item.opponent.provider_id for item in match.opponents})
 
 
-def _time_scope_matches(row: PandaScoreMatch, time_scope: TimeScope) -> bool:
-    if time_scope == "recent":
-        return row.status == "finished"
-    if time_scope == "upcoming":
-        return row.status == "not_started"
-    if time_scope == "running":
-        return row.status == "running"
-    return True
-
-
-def _match_query(row: PandaScoreMatch, query: str | None) -> bool:
-    if not query:
+def _matches_query(item: BaseModel, query: str | None) -> bool:
+    if not query or not query.strip():
         return True
     tokens = [
         token
         for token in normalize_text(query).split()
         if token not in {"and", "vs", "v", "versus", "against"}
     ]
-    values = [row.name, *(item.opponent.name for item in row.opponents)]
-    if row.series is not None:
-        values.extend([row.series.name or "", row.series.full_name or ""])
-    return all(token in normalize_text(" ".join(values)) for token in tokens)
+    if not tokens:
+        return True
+    text = normalize_text(" ".join(_document_strings(item.model_dump(mode="json", by_alias=True))))
+    return all(token in text for token in tokens)
 
 
-__all__ = ["PandaScoreEsportsSearch", "TimeScope"]
+def _document_strings(value: object) -> list[str]:
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, dict):
+        return [part for child in value.values() for part in _document_strings(child)]
+    if isinstance(value, list):
+        return [part for child in value for part in _document_strings(child)]
+    return []
+
+
+def _in_scope(item: BaseModel, scope: TimeScope | None) -> bool:
+    if scope is None:
+        return True
+    document = item.model_dump(mode="json", by_alias=True)
+    status = normalize_text(str(document.get("status") or ""))
+    if scope == "upcoming":
+        return status in {"not started", "scheduled", "upcoming"}
+    if scope == "running":
+        return status in {"running", "live", "in progress"}
+    return status not in {"not started", "scheduled", "upcoming", "running", "live", "in progress"}
+
+
+def _lifecycle_sort(scope: TimeScope | None) -> tuple[Callable[[BaseModel], str] | None, bool]:
+    if scope == "past":
+        return _past_time, True
+    if scope == "upcoming":
+        return _upcoming_time, False
+    if scope == "running":
+        return _running_time, True
+    return None, False
+
+
+def _past_time(item: BaseModel) -> str:
+    document = item.model_dump(mode="json", by_alias=True)
+    return str(
+        document.get("end_at")
+        or document.get("begin_at")
+        or document.get("scheduled_at")
+        or ""
+    )
+
+
+def _upcoming_time(item: BaseModel) -> str:
+    document = item.model_dump(mode="json", by_alias=True)
+    return str(document.get("scheduled_at") or document.get("begin_at") or "~")
+
+
+def _running_time(item: BaseModel) -> str:
+    document = item.model_dump(mode="json", by_alias=True)
+    return str(document.get("begin_at") or document.get("scheduled_at") or "")
+
+
+__all__ = ["PandaScoreEsportsProvider"]

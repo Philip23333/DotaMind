@@ -17,9 +17,11 @@ from app.vnext.providers.pandascore.models import (
     PandaScorePlayer,
     PandaScoreSeries,
     PandaScoreTeam,
+    PandaScoreTournament,
 )
 
-PandaMatchScope = Literal["upcoming", "recent", "running", "all"]
+PandaLifecycleScope = Literal["upcoming", "running", "past"]
+PandaMatchScope = Literal["upcoming", "running", "past", "recent", "all"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,8 +96,9 @@ class PandaScoreAdapter:
         query: str | None = None,
         year: int | None = None,
         limit: int = 20,
+        page_number: int = 1,
     ) -> ProviderBatch[PandaScoreSeries]:
-        params: dict[str, Any] = self._page_params(limit)
+        params: dict[str, Any] = self._page_params(limit, page_number=page_number)
         if query:
             params["search[name]"] = query
         if year is not None:
@@ -109,13 +112,35 @@ class PandaScoreAdapter:
             has_more=pagination.has_more,
         )
 
+    async def list_series(
+        self,
+        scope: PandaLifecycleScope,
+        *,
+        query: str | None = None,
+        limit: int = 20,
+        page_number: int = 1,
+    ) -> ProviderBatch[PandaScoreSeries]:
+        path = f"/dota2/series/{scope}"
+        params: dict[str, Any] = self._page_params(limit, page_number=page_number)
+        if query:
+            params["search[name]"] = query
+        payload, fetched_at, pagination = await self._get_json(path, params=params)
+        rows = self._require_list(payload, path)
+        pagination = _complete_pagination(pagination, len(rows))
+        return ProviderBatch(
+            items=[self._parse(PandaScoreSeries, row, path) for row in rows],
+            fetched_at=fetched_at,
+            has_more=pagination.has_more,
+        )
+
     async def search_leagues(
         self,
         *,
         query: str | None = None,
         limit: int = 20,
+        page_number: int = 1,
     ) -> ProviderBatch[PandaScoreLeague]:
-        params: dict[str, Any] = self._page_params(limit)
+        params: dict[str, Any] = self._page_params(limit, page_number=page_number)
         if query:
             params["search[name]"] = query
         payload, fetched_at, pagination = await self._get_json("/dota2/leagues", params=params)
@@ -152,8 +177,9 @@ class PandaScoreAdapter:
         *,
         query: str | None = None,
         limit: int = 20,
+        page_number: int = 1,
     ) -> ProviderBatch[PandaScoreTeam]:
-        params = self._page_params(limit)
+        params = self._page_params(limit, page_number=page_number)
         if query:
             params["search[name]"] = query
         path = "/dota2/teams"
@@ -181,8 +207,9 @@ class PandaScoreAdapter:
         *,
         query: str | None = None,
         limit: int = 20,
+        page_number: int = 1,
     ) -> ProviderBatch[PandaScorePlayer]:
-        params = self._page_params(limit)
+        params = self._page_params(limit, page_number=page_number)
         if query:
             params["search[name]"] = query
         path = "/dota2/players"
@@ -191,6 +218,47 @@ class PandaScoreAdapter:
         pagination = _complete_pagination(pagination, len(rows))
         return ProviderBatch(
             items=[self._parse(PandaScorePlayer, row, path) for row in rows],
+            fetched_at=fetched_at,
+            has_more=pagination.has_more,
+        )
+
+    async def search_tournaments(
+        self,
+        *,
+        query: str | None = None,
+        limit: int = 20,
+        page_number: int = 1,
+    ) -> ProviderBatch[PandaScoreTournament]:
+        path = "/dota2/tournaments"
+        params = self._page_params(limit, page_number=page_number)
+        if query:
+            params["search[name]"] = query
+        payload, fetched_at, pagination = await self._get_json(path, params=params)
+        rows = self._require_list(payload, path)
+        pagination = _complete_pagination(pagination, len(rows))
+        return ProviderBatch(
+            items=[self._parse(PandaScoreTournament, row, path) for row in rows],
+            fetched_at=fetched_at,
+            has_more=pagination.has_more,
+        )
+
+    async def list_tournaments(
+        self,
+        scope: PandaLifecycleScope,
+        *,
+        query: str | None = None,
+        limit: int = 20,
+        page_number: int = 1,
+    ) -> ProviderBatch[PandaScoreTournament]:
+        path = f"/dota2/tournaments/{scope}"
+        params = self._page_params(limit, page_number=page_number)
+        if query:
+            params["search[name]"] = query
+        payload, fetched_at, pagination = await self._get_json(path, params=params)
+        rows = self._require_list(payload, path)
+        pagination = _complete_pagination(pagination, len(rows))
+        return ProviderBatch(
+            items=[self._parse(PandaScoreTournament, row, path) for row in rows],
             fetched_at=fetched_at,
             has_more=pagination.has_more,
         )
@@ -212,19 +280,23 @@ class PandaScoreAdapter:
         series_id: int | None = None,
         query: str | None = None,
         limit: int = 20,
+        page_number: int = 1,
+        sort: str | None = None,
     ) -> ProviderBatch[PandaScoreMatch]:
-        scopes = ("upcoming", "running", "recent") if scope == "all" else (scope,)
+        scopes = ("upcoming", "running", "past") if scope == "all" else (scope,)
         all_items: dict[int, PandaScoreMatch] = {}
         fetched_at = datetime.now(timezone.utc)
         pages: list[_PandaScorePagination] = []
         for item_scope in scopes:
             path_scope = "past" if item_scope == "recent" else item_scope
-            params: dict[str, Any] = self._page_params(limit)
+            params: dict[str, Any] = self._page_params(limit, page_number=page_number)
             if series_id is not None:
                 params["filter[serie_id]"] = series_id
             if query:
                 params["search[name]"] = query
-            params["sort"] = "-scheduled_at" if item_scope == "recent" else "scheduled_at"
+            params["sort"] = sort or (
+                "-scheduled_at" if item_scope in {"recent", "past"} else "scheduled_at"
+            )
             payload, page_fetched_at, pagination = await self._get_json(
                 f"/dota2/matches/{path_scope}",
                 params=params,
@@ -457,6 +529,7 @@ def _link_has_next(value: str | None) -> bool | None:
 
 
 __all__ = [
+    "PandaLifecycleScope",
     "PandaMatchScope",
     "PandaScoreAdapter",
     "PandaScoreConfigurationError",

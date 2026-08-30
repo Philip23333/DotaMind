@@ -9,6 +9,8 @@ from pydantic import BaseModel, ConfigDict, Field
 ToolErrorCode = Literal[
     "unknown_tool",
     "invalid_arguments",
+    "provider_error",
+    "artifact_error",
     "tool_timeout",
     "tool_execution_error",
     "invalid_tool_output",

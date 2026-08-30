@@ -24,9 +24,11 @@ from app.vnext.artifacts import (
     MemoryArtifactStore,
 )
 from app.vnext.artifacts.game_summary_builder_v5 import GameSummaryBuilderV5
-from app.vnext.capabilities.esports.pandascore import PandaScoreEsportsSearch
+from app.vnext.capabilities.esports.pandascore import PandaScoreEsportsProvider
 from app.vnext.capabilities.esports.service import EsportsSearchService
+from app.vnext.domain.matches.resolution import MatchResolutionService
 from app.vnext.domain.matches.service import MatchService
+from app.vnext.domain.matches.valve_match_id_resolver import ValveMatchIdResolver
 from app.vnext.domain.players.service import PlayerService
 from app.vnext.domain.series.service import SeriesService
 from app.vnext.domain.team_player_index import TeamPlayerRefIndex
@@ -220,7 +222,17 @@ def build_vnext_services(
     series_service = SeriesService(panda_adapter)
     locator_index = PandaScoreLocatorIndex()
     esports_service = EsportsSearchService(
-        PandaScoreEsportsSearch(panda_adapter, locator_index, store)
+        PandaScoreEsportsProvider(
+            panda_adapter,
+            ValveMatchIdResolver(
+                open_adapter,
+                resolver=MatchResolutionService(
+                    start_time_tolerance_seconds=config.resolution_start_tolerance_seconds,
+                    duration_tolerance_seconds=config.resolution_duration_tolerance_seconds,
+                ),
+            ),
+        ),
+        store,
     )
     team_player_index = TeamPlayerRefIndex()
     team_service = TeamService(panda_adapter, team_player_index)
