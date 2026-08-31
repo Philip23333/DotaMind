@@ -23,7 +23,7 @@ The core search suite covers:
 | Lifecycle | dedicated lifecycle endpoint rows are not status-filtered again; Team-to-Matches uses correct local filtering; ordering and `truncated` stay explicit |
 | Query | full source-document text can match embedded League/Series/Tournament/Opponent facts; native name filtering cannot cause a false negative |
 | Team constraint | exact Team identity reports not-found/ambiguous argument errors; unique identities use AND semantics across `/teams/{id}/matches` results |
-| Match enrichment | a single Match-level resolver call; deterministic outcomes are retained and OpenDota failure degrades every game to `resolution="unavailable"` |
+| Match enrichment | batch-scoped shared OpenDota evidence is loaded once per search/unique league; deterministic outcomes are retained and unavailable evidence degrades only dependent games to `resolution="unavailable"` |
 | Artifact boundary | only final, deduplicated results are externalized; all writes success is non-partial; partial success contains valid records and warnings; all writes failing is `artifact_error` |
 | Error mapping | invalid arguments, provider failure, and artifact failure map to the documented tool codes without secrets |
 

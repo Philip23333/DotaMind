@@ -136,8 +136,10 @@ endpoint and applies AND filtering locally.
 ## Match Game -> Valve ID enrichment
 
 PandaScore Match documents retain their complete `games[]` source facts. Before
-the document leaves the Provider, it reuses `ValveMatchIdResolver.resolve_many()`
-once per Match. Each source game gets:
+the final documents leave the Provider, `ValveMatchIdResolver` resolves the
+selected Matches as one batch: global OpenDota evidence is shared once per
+`esports.search` invocation, and league-match evidence is loaded once per unique
+league. Each source game gets:
 
 ```text
 valve_game_id  canonical OpenDota/Valve match ID when resolved, otherwise null

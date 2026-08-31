@@ -14,6 +14,7 @@ from app.vnext.capabilities.esports.models import EsportsSearchRequest
 from app.vnext.capabilities.esports.pandascore import PandaScoreEsportsProvider
 from app.vnext.capabilities.esports.service import EsportsSearchService
 from app.vnext.domain.matches.resolution import ResolutionDecision
+from app.vnext.domain.matches.valve_match_id_resolver import MatchResolutionOutcome
 from app.vnext.providers.opendota.adapter import (
     OpenDotaConfigurationError,
     OpenDotaSchemaError,
@@ -23,7 +24,7 @@ from app.vnext.providers.pandascore.adapter import PandaScoreAdapter
 
 
 class NoResolver:
-    async def resolve_many(self, match, games):  # type: ignore[no-untyped-def]
+    async def resolve_many_matches(self, matches):  # type: ignore[no-untyped-def]
         raise AssertionError("matches without games must not invoke the resolver")
 
 
@@ -49,6 +50,25 @@ def _match(
         "opponents": [{"type": "Team", "opponent": team} for team in teams or []],
         "games": [],
     }
+
+
+def _resolvable_match(identifier: int) -> dict[str, object]:
+    alpha = _team(11, "Alpha")
+    beta = _team(12, "Beta")
+    match = _match(identifier, name=f"Match {identifier}", teams=[alpha, beta])
+    match["serie"] = {"id": 99, "name": "The International", "year": 2026}
+    match["games"] = [
+        {
+            "id": identifier * 10,
+            "position": 1,
+            "status": "finished",
+            "begin_at": "2026-08-20T08:05:00Z",
+            "end_at": "2026-08-20T08:45:00Z",
+            "length": 2400,
+            "winner": {"id": 11},
+        }
+    ]
+    return match
 
 
 def _adapter(handler) -> PandaScoreAdapter:  # type: ignore[no-untyped-def]
@@ -156,9 +176,49 @@ def test_past_match_search_over_fetches_orders_by_event_time_and_marks_truncatio
 
     batch = asyncio.run(exercise())
 
-    assert [entity.document["name"] for entity in batch.entities] == ["Newer", "Older"]
+    assert [entity.document["name"] for entity in batch.entities] == ["Newer"]
     assert batch.truncated is True
     assert len(calls) == 2
+
+
+def test_match_enrichment_only_receives_final_limit_of_candidates() -> None:
+    class InlineAdapter:
+        async def list_matches(self, **kwargs):  # type: ignore[no-untyped-def]
+            from app.vnext.providers.common import ProviderBatch
+            from app.vnext.providers.pandascore.models import PandaScoreMatch
+
+            return ProviderBatch(
+                [
+                    PandaScoreMatch.model_validate(_resolvable_match(index))
+                    for index in range(1, 22)
+                ],
+                datetime(2026, 8, 30, tzinfo=timezone.utc),
+                has_more=False,
+            )
+
+    class LimitRecordingResolver:
+        def __init__(self) -> None:
+            self.match_count = 0
+
+        async def resolve_many_matches(self, matches):  # type: ignore[no-untyped-def]
+            self.match_count = len(matches)
+            return [
+                MatchResolutionOutcome(
+                    decisions=tuple(ResolutionDecision(status="not_found") for _ in match.games)
+                )
+                for match in matches
+            ]
+
+    resolver = LimitRecordingResolver()
+    provider = PandaScoreEsportsProvider(InlineAdapter(), resolver)  # type: ignore[arg-type]
+
+    batch = asyncio.run(
+        provider.search(EsportsSearchRequest(kind="match", time_scope="past", limit=20))
+    )
+
+    assert len(batch.entities) == 20
+    assert batch.truncated is True
+    assert resolver.match_count == 20
 
 
 def test_match_team_constraints_use_exact_identity_and_and_semantics() -> None:
@@ -201,12 +261,17 @@ class RecordingResolver:
     def __init__(self) -> None:
         self.calls = 0
 
-    async def resolve_many(self, match, games):  # type: ignore[no-untyped-def]
+    async def resolve_many_matches(self, matches):  # type: ignore[no-untyped-def]
         self.calls += 1
-        assert len(games) == 2
+        assert len(matches) == 1
+        assert len(matches[0].games) == 2
         return [
-            ResolutionDecision(status="resolved", resolved_provider_match_id=9001),
-            ResolutionDecision(status="not_found"),
+            MatchResolutionOutcome(
+                decisions=(
+                    ResolutionDecision(status="resolved", resolved_provider_match_id=9001),
+                    ResolutionDecision(status="not_found"),
+                )
+            )
         ]
 
 
@@ -620,7 +685,7 @@ class UnavailableResolver:
     ):
         self._error = error
 
-    async def resolve_many(self, match, games):  # type: ignore[no-untyped-def]
+    async def resolve_many_matches(self, matches):  # type: ignore[no-untyped-def]
         raise self._error
 
 

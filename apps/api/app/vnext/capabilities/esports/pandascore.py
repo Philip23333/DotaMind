@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import datetime
 from typing import TypeVar
 
@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from app.vnext.domain.common.models import normalize_text
 from app.vnext.domain.matches.normalization import normalize_panda_match
+from app.vnext.domain.matches.resolution import ResolutionDecision
 from app.vnext.domain.matches.valve_match_id_resolver import ValveMatchIdResolver
 from app.vnext.providers.common import ProviderBatch
 from app.vnext.providers.opendota.adapter import OpenDotaProviderError
@@ -171,15 +172,16 @@ class PandaScoreEsportsProvider:
                 reverse=_lifecycle_sort(request.time_scope)[1],
             )
         selected, over_limit = _final_provider_items(items, request.limit)
+        documents = await self._enrich_matches(selected)
         entities = [
             ProviderEntity(
                 source=_SOURCE,
                 kind="match",
                 source_identity=item.provider_id,
                 fetched_at=fetched_at,
-                document=await self._enrich_match(item, fetched_at),
+                document=document,
             )
-            for item, fetched_at in selected
+            for (item, fetched_at), document in zip(selected, documents, strict=True)
         ]
         return ProviderSearchBatch(entities=entities, truncated=truncated or over_limit)
 
@@ -283,37 +285,39 @@ class PandaScoreEsportsProvider:
             unique.sort(key=lambda pair: order_key(pair[0]), reverse=reverse)
         return unique, not complete
 
-    async def _enrich_match(
+    async def _enrich_matches(
         self,
-        match: PandaScoreMatch,
-        fetched_at: datetime,
-    ) -> dict[str, object]:
-        document = match.model_dump(mode="json", by_alias=True)
-        if not match.games:
-            return document
-        normalized = normalize_panda_match(match, fetched_at=fetched_at)
-        games = document.get("games")
-        if not isinstance(games, list):
-            raise EsportsProviderError(source=_SOURCE, kind="match")
+        selected: list[tuple[PandaScoreMatch, datetime]],
+    ) -> list[dict[str, object]]:
+        """Enrich selected Match documents through one batch resolver invocation."""
+
+        documents = [match.model_dump(mode="json", by_alias=True) for match, _ in selected]
+        resolution_inputs = [
+            (index, normalize_panda_match(match, fetched_at=fetched_at))
+            for index, (match, fetched_at) in enumerate(selected)
+            if match.games
+        ]
+        if not resolution_inputs:
+            return documents
         try:
-            decisions = await self._resolver.resolve_many(normalized, normalized.games)
-        except OpenDotaProviderError:
-            for game in games:
-                if not isinstance(game, dict):
-                    raise EsportsProviderError(source=_SOURCE, kind="match") from None
-                game["valve_game_id"] = None
-                game["resolution"] = "unavailable"
-            return document
-        if len(decisions) != len(match.games):
-            raise EsportsProviderError(source=_SOURCE, kind="match")
-        for game, decision in zip(games, decisions, strict=True):
-            if not isinstance(game, dict):
-                raise EsportsProviderError(source=_SOURCE, kind="match")
-            game["valve_game_id"] = (
-                decision.resolved_provider_match_id if decision.status == "resolved" else None
+            outcomes = await self._resolver.resolve_many_matches(
+                [normalized for _, normalized in resolution_inputs]
             )
-            game["resolution"] = decision.status
-        return document
+        except OpenDotaProviderError:
+            for index, _ in resolution_inputs:
+                _mark_games_unavailable(documents[index])
+            return documents
+        if len(outcomes) != len(resolution_inputs):
+            raise EsportsProviderError(source=_SOURCE, kind="match")
+        for (index, normalized), outcome in zip(resolution_inputs, outcomes, strict=True):
+            if outcome.unavailable:
+                _mark_games_unavailable(documents[index])
+                continue
+            decisions = outcome.decisions
+            if decisions is None or len(decisions) != len(normalized.games):
+                raise EsportsProviderError(source=_SOURCE, kind="match")
+            _apply_game_decisions(documents[index], decisions)
+        return documents
 
 
 def _entity_batch(
@@ -342,7 +346,35 @@ def _final_provider_items(
     items: list[tuple[_T, datetime]],
     limit: int,
 ) -> tuple[list[tuple[_T, datetime]], bool]:
-    return items[: limit + 1], len(items) > limit
+    return items[:limit], len(items) > limit
+
+
+def _mark_games_unavailable(document: dict[str, object]) -> None:
+    games = _document_games(document)
+    for game in games:
+        game["valve_game_id"] = None
+        game["resolution"] = "unavailable"
+
+
+def _apply_game_decisions(
+    document: dict[str, object],
+    decisions: Sequence[ResolutionDecision],
+) -> None:
+    games = _document_games(document)
+    if len(games) != len(decisions):
+        raise EsportsProviderError(source=_SOURCE, kind="match")
+    for game, decision in zip(games, decisions, strict=True):
+        game["valve_game_id"] = (
+            decision.resolved_provider_match_id if decision.status == "resolved" else None
+        )
+        game["resolution"] = decision.status
+
+
+def _document_games(document: dict[str, object]) -> list[dict[str, object]]:
+    games = document.get("games")
+    if not isinstance(games, list) or not all(isinstance(game, dict) for game in games):
+        raise EsportsProviderError(source=_SOURCE, kind="match")
+    return games
 
 
 def _is_exact_team_match(query: str, candidate: PandaScoreTeam) -> bool:

@@ -91,6 +91,9 @@ resolution: resolved | not_found | ambiguous | …
 
 The existing deterministic resolver establishes this relationship.  It does not
 invent a DotaMind-wide replacement ID when resolution is unavailable.
+For one `esports.search` invocation, the resolver shares its OpenDota evidence
+across selected Matches while preserving the same per-game deterministic status
+or `unavailable` outcome in each stored source document.
 
 ## Recorded-game detail documents
 
