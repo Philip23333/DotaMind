@@ -1,6 +1,7 @@
 """Default model-visible vNext tool surface contracts."""
 
 import asyncio
+import json
 from datetime import datetime, timezone
 
 from app.vnext.artifacts import (
@@ -33,6 +34,9 @@ def test_default_registry_exposes_only_current_capabilities() -> None:
             "players.search",
             "players.get_detail",
         }
+    )
+    assert "game_summary" not in json.dumps(
+        [tool.model_dump(mode="json") for tool in registry.schemas()]
     )
 
 

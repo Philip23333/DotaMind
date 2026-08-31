@@ -10,16 +10,9 @@ class ArtifactRef(BaseModel):
         frozen=True,
         json_schema_extra={
             "description": (
-                "Artifact reference object. Pass the complete object returned by another tool. "
-                "Do not pass one field as a bare string or JSON-encode this object into a string."
+                "Artifact reference object. Pass the complete object returned by another "
+                "tool unchanged."
             ),
-            "examples": [
-                {
-                    "id": "game_summary:5:8123456789",
-                    "artifact_type": "game_summary",
-                    "schema_version": "5",
-                }
-            ],
         },
     )
 
