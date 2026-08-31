@@ -86,13 +86,21 @@ pagination, `recent`, `all`, or esports `game` kind. Source-locator infrastructu
 may remain internally for transitional capabilities, but `esports.search` does
 not depend on or expose it.
 
-The public result envelope is intentionally thin:
+The public result has a thin per-record envelope and explicit search-level
+delivery state:
 
 ```text
-source
-kind
-artifact_ref
-facts
+records[]
+  source
+  kind
+  artifact_ref
+  facts
+truncated
+partial
+warnings[]
+  code
+  source
+  kind
 ```
 
 Every successful record has an `ArtifactRef`. `facts` is a generic bounded
@@ -172,7 +180,7 @@ Expected `esports.search` failures are model-visible and sanitized:
 | Code | Meaning |
 | --- | --- |
 | `invalid_arguments` | A request violates a cross-field capability rule. |
-| `provider_error` | A source adapter or required enrichment dependency could not satisfy a valid request. |
+| `provider_error` | A source discovery, validation, or other non-degradable Provider failure could not satisfy a valid request. |
 | `artifact_error` | No final source document could be stored. |
 
 Details may identify source, kind, argument, or capability. They must never

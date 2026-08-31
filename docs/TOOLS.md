@@ -45,6 +45,11 @@ records[]
   artifact_ref
   facts
 truncated
+partial
+warnings[]
+  code
+  source
+  kind
 ```
 
 `facts` is a bounded structural observation. It does not contain provider-private
@@ -86,8 +91,8 @@ case where no final document could be stored.
 
 - `invalid_arguments`: invalid kind/limit or a cross-field violation such as
   `teams` with `kind="team"`.
-- `provider_error`: PandaScore or required Match enrichment cannot satisfy a
-  valid request.
+- `provider_error`: PandaScore discovery, validation, or another non-degradable
+  Provider failure cannot satisfy a valid request.
 - `artifact_error`: no final complete source document could be stored.
 
 `records=[]` is normal success. `truncated=true` means more qualifying records
