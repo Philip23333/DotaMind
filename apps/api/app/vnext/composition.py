@@ -26,6 +26,7 @@ from app.vnext.artifacts import (
 from app.vnext.artifacts.game_summary_builder_v5 import GameSummaryBuilderV5
 from app.vnext.capabilities.esports.pandascore import PandaScoreEsportsProvider
 from app.vnext.capabilities.esports.service import EsportsSearchService
+from app.vnext.capabilities.game_detail.service import GameDetailService
 from app.vnext.domain.matches.resolution import MatchResolutionService
 from app.vnext.domain.matches.service import MatchService
 from app.vnext.domain.matches.valve_match_id_resolver import ValveMatchIdResolver
@@ -46,6 +47,7 @@ from app.vnext.providers.pandascore.adapter import PandaScoreAdapter
 from app.vnext.providers.pandascore.locator import PandaScoreLocatorIndex
 from app.vnext.tools.artifacts import register_artifact_tools
 from app.vnext.tools.domain.esports import register_esports_tools
+from app.vnext.tools.domain.game import register_game_tools
 from app.vnext.tools.registry import ToolRegistry
 
 _VNEXT_ENV_PATH = Path(__file__).with_name(".env")
@@ -146,6 +148,7 @@ class VNextServices:
     pandascore: PandaScoreAdapter
     opendota: OpenDotaAdapter
     esports: EsportsSearchService
+    game_detail: GameDetailService
     series: SeriesService
     matches: MatchService
     teams: TeamService
@@ -231,6 +234,7 @@ def build_vnext_services(
         ),
         store,
     )
+    game_detail_service = GameDetailService(open_adapter, store)
     team_player_index = TeamPlayerRefIndex()
     team_service = TeamService(panda_adapter, team_player_index)
     player_service = PlayerService(panda_adapter, team_player_index)
@@ -257,6 +261,7 @@ def build_vnext_services(
         pandascore=panda_adapter,
         opendota=open_adapter,
         esports=esports_service,
+        game_detail=game_detail_service,
         series=series_service,
         matches=match_service,
         teams=team_service,
@@ -278,6 +283,7 @@ def build_vnext_registry(
     resolved_services = services or build_vnext_services(settings)
     registry = ToolRegistry()
     register_esports_tools(registry, resolved_services.esports)
+    register_game_tools(registry, resolved_services.game_detail)
     register_artifact_tools(
         registry,
         resolved_services.artifact_searcher,

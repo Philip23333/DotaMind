@@ -11,4 +11,5 @@ def test_default_registry_hides_transitional_tools() -> None:
         "artifact.read",
         "artifact.search",
         "esports.search",
+        "game.detail",
     }

@@ -13,12 +13,14 @@ Tool descriptions state a capability; they do not prescribe a fixed workflow.
 | Tool | Purpose | Target disposition |
 | --- | --- | --- |
 | `esports.search` | Discover one selected kind of professional Dota 2 esports entity | Retain |
-| `matches.get_detail` | Transitional locator-based detail bridge | Replace with `game.detail` |
-| `teams.search` / `teams.get_detail` | Transitional Team discovery and detail | Keep only until the replacement path is accepted |
-| `players.search` / `players.get_detail` | Transitional Player discovery and detail | Keep only until the replacement path is accepted |
+| `game.detail` | Fetch one detailed recorded game by canonical Valve game ID | Retain |
 | `artifact.search` | Exact stored-Artifact availability lookup | Retain |
 | `artifact.grep` | Generic stored-document breadth search | Retain |
 | `artifact.read` | Generic stored-document depth read | Retain |
+
+The default Agent runtime exposes exactly these five tools. Historical
+`matches.get_detail`, `teams.*`, and `players.*` modules remain migration code
+but are not model-visible.
 
 ## `esports.search`
 
@@ -74,8 +76,8 @@ valve_game_id  canonical Valve/OpenDota match ID when resolved, otherwise null
 resolution     deterministic resolution status
 ```
 
-This does not make `game` an `esports.search` kind. The target `game.detail`
-capability accepts the canonical Valve ID when recorded-game facts are needed.
+This does not make `game` an `esports.search` kind. `game.detail` accepts the
+canonical Valve ID when recorded-game facts are needed.
 If the OpenDota-dependent enrichment is unavailable, Match discovery still
 returns the PandaScore document; each game reports `valve_game_id=null` and
 `resolution="unavailable"` rather than pretending it was not found.
@@ -97,6 +99,31 @@ case where no final document could be stored.
 
 `records=[]` is normal success. `truncated=true` means more qualifying records
 may exist than the Provider scan or final limit returned.
+
+## `game.detail`
+
+Purpose: fetch detailed facts for one recorded Dota game identified by its Valve
+game ID.
+
+```text
+input
+  valve_game_id  required, positive integer
+
+result
+  source
+  valve_game_id
+  artifact_ref    game_detail:1:<valve_game_id>
+  facts           bounded observation
+```
+
+The Artifact is a complete validated OpenDota-shaped source document with
+`artifact_type="game_detail"` and `schema_version="1"`. This capability does
+not produce a GameSummary. It has no provider selector, source match ID,
+field-selection, include, scope, or event-context input.
+
+`provider_error` means OpenDota could not fetch, validate, or confirm the
+requested Valve ID. `artifact_error` means the complete detail document could
+not be stored; there is no partial-success detail result.
 
 ## Artifact tools
 

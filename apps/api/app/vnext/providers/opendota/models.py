@@ -69,6 +69,14 @@ class OpenDotaMatchDetail(OpenDotaModel):
     lobby_type: int | None = None
 
 
+class OpenDotaGameDetailDocument(BaseModel):
+    """Source-preserving OpenDota document for the game.detail capability."""
+
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
+
+    match_id: int = Field(gt=0)
+
+
 class OpenDotaGameConstructionTeam(OpenDotaModel):
     """OpenDota team facts used only for construction input."""
 
@@ -184,6 +192,7 @@ __all__ = [
     "OpenDotaGameConstructionPlayer",
     "OpenDotaGameConstructionPurchaseEvent",
     "OpenDotaGameConstructionTeam",
+    "OpenDotaGameDetailDocument",
     "OpenDotaLeague",
     "OpenDotaLeagueMatch",
     "OpenDotaMatchDetail",

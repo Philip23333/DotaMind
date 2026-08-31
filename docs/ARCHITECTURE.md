@@ -2,10 +2,10 @@
 
 ## Status
 
-This document defines the vNext target architecture. The current branch has the
-source-backed `esports.search` capability and still contains transitional Team,
-Player, and `matches.get_detail` tools. Those remaining tools do not enlarge the
-`esports.search` contract.
+This document defines the vNext target architecture. The default model-visible
+surface has source-backed `esports.search` and `game.detail` capabilities.
+Transitional Team, Player, and `matches.get_detail` code remains internally for
+migration, but those tools are not registered in the default Agent runtime.
 
 ## Principles
 
@@ -36,8 +36,8 @@ User
                   -> ArtifactStore
        <-> artifact.search / artifact.grep / artifact.read
              -> ArtifactStore
-       <-> game.detail (target)
-             -> canonical valve_game_id -> OpenDota detail
+       <-> game.detail
+             -> GameDetailService -> OpenDotaAdapter -> ArtifactStore
 ```
 
 `esports.search` has three deliberately separate layers:
@@ -173,6 +173,28 @@ rolled back.
 `artifact.read` and `artifact.grep` are provider-blind stored-document
 operations. They never fetch PandaScore.
 
+## Recorded-game detail
+
+`game.detail(valve_game_id)` is an exact single-object capability. It fetches a
+complete validated OpenDota-shaped document and writes:
+
+```text
+GameDetailArtifact
+  artifact_type = game_detail
+  schema_version = 1
+  source = opendota
+  valve_game_id
+  facts
+```
+
+The canonical ArtifactRef is `game_detail:1:<valve_game_id>`. The immediate
+result contains a generic bounded observation plus that ArtifactRef; complete
+facts are explored with `artifact.read` or `artifact.grep`.
+
+This path does not invoke GameSummary construction, catalog enrichment, or a
+provider router. An OpenDota fetch/validation failure is `provider_error`; an
+Artifact write failure is `artifact_error`, and neither returns a partial detail.
+
 ## Errors
 
 Expected `esports.search` failures are model-visible and sanitized:
@@ -189,9 +211,10 @@ continue to use the generic runtime error contract.
 
 ## Transitional boundaries
 
-The legacy `PandaScoreLocatorIndex` and Ref-oriented MatchService remain only
-where current transitional detail tools still consume them. They are not part of
-the new `esports.search` path and must not be expanded for compatibility.
+The legacy `PandaScoreLocatorIndex`, Ref-oriented MatchService, TeamService, and
+PlayerService remain only where historical tests or migration code consume them.
+They are not registered in the default Agent runtime and must not be expanded for
+compatibility.
 
 The target detailed-game path consumes the canonical `valve_game_id` retained in
 a Match Artifact. It does not reintroduce PandaScore Game discovery as a model

@@ -92,13 +92,24 @@ resolution: resolved | not_found | ambiguous | …
 The existing deterministic resolver establishes this relationship.  It does not
 invent a DotaMind-wide replacement ID when resolution is unavailable.
 
+## Recorded-game detail documents
+
+`game.detail` uses canonical `valve_game_id` directly and stores a
+`GameDetailArtifact` at `game_detail:1:<valve_game_id>`. Its `facts` field is the
+complete validated OpenDota-shaped document. The source model validates only the
+returned `match_id` identity and retains allowed unknown top-level and nested
+business facts; it does not turn the response into a GameSummary DTO.
+
+The immediate capability result exposes the canonical Valve ID and a bounded
+observation. Generic Artifact retrieval exposes the complete document later.
+
 ## Provider roles
 
 - PandaScore implements esports discovery and source documents.
 - The PandaScore-to-Valve resolver establishes concrete recorded-game identity
   when its evidence supports it.
-- OpenDota implements detailed recorded-game facts for a resolved
-  `valve_match_id`.
+- OpenDota implements detailed recorded-game facts for a canonical
+  `valve_game_id`.
 - The local Valve catalog provides static hero, item, and ability facts.
 
 Keep static catalog facts separate from dynamic source documents.  Use

@@ -1,5 +1,6 @@
 """Generic artifact storage contracts for the vNext foundation."""
 
+from .game_detail import GameDetailArtifact, game_detail_artifact_ref
 from .game_summary import GameSummaryArtifact
 from .game_summary_producer import GameSummaryArtifactProducer
 from .game_summary_v4 import GameSummaryArtifactV4
@@ -54,6 +55,7 @@ __all__ = [
     "ArtifactStoreUnavailableError",
     "ArtifactTypeMismatchError",
     "GameSummaryArtifact",
+    "GameDetailArtifact",
     "GameSummaryArtifactV4",
     "GameSummaryArtifactV5",
     "GameSummaryArtifactProducer",
@@ -64,5 +66,6 @@ __all__ = [
     "SourceDocumentArtifact",
     "bounded_source_observation",
     "game_summary_artifact_ref",
+    "game_detail_artifact_ref",
     "source_document_artifact_ref",
 ]

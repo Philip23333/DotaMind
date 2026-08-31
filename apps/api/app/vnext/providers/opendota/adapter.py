@@ -29,6 +29,7 @@ from app.vnext.providers.opendota.models import (
     OpenDotaGameConstructionMatch,
     OpenDotaGameConstructionPlayer,
     OpenDotaGameConstructionTeam,
+    OpenDotaGameDetailDocument,
     OpenDotaLeague,
     OpenDotaLeagueMatch,
     OpenDotaMatchDetail,
@@ -156,11 +157,7 @@ class OpenDotaGameConstructionAdapter:
                     item_key=event.key,
                 )
                 for event in source.purchase_log
-                if (
-                    event.time is not None
-                    and isinstance(event.key, str)
-                    and event.key.strip()
-                )
+                if (event.time is not None and isinstance(event.key, str) and event.key.strip())
             ],
             ability_upgrades=[
                 AbilityUpgradeRef(
@@ -267,6 +264,21 @@ class OpenDotaAdapter:
             fetched_at=fetched_at,
         )
 
+    async def get_game_detail(
+        self,
+        match_id: int,
+    ) -> ProviderObject[OpenDotaGameDetailDocument]:
+        """Fetch the complete source document for one canonical Valve game ID."""
+
+        path = f"/matches/{match_id}"
+        payload, fetched_at = await self._get_json(path)
+        if not isinstance(payload, dict):
+            raise OpenDotaSchemaError(f"OpenDota response at {path} must be an object")
+        document = self._parse(OpenDotaGameDetailDocument, payload, path)
+        if document.match_id != match_id:
+            raise OpenDotaSchemaError(f"OpenDota response at {path} does not match requested game")
+        return ProviderObject(item=document, fetched_at=fetched_at)
+
     async def get_game_construction_match(
         self,
         match_id: int,
@@ -282,9 +294,7 @@ class OpenDotaAdapter:
         if item.match_id is None:
             raise OpenDotaSchemaError(f"OpenDota response at {path} is missing match_id")
         if item.match_id != match_id:
-            raise OpenDotaSchemaError(
-                f"OpenDota response at {path} does not match requested match"
-            )
+            raise OpenDotaSchemaError(f"OpenDota response at {path} does not match requested match")
 
         return ProviderObject(item=item, fetched_at=fetched_at)
 

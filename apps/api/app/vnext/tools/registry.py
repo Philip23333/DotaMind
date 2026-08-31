@@ -16,6 +16,10 @@ from app.vnext.capabilities.esports.errors import (
     EsportsInvalidArgumentsError,
     EsportsProviderError,
 )
+from app.vnext.capabilities.game_detail.errors import (
+    GameDetailArtifactError,
+    GameDetailProviderError,
+)
 from app.vnext.domain.source import SourceLocatorError
 from app.vnext.llm.protocol import ModelTool, ToolCall, ToolResultMessage
 from app.vnext.tools.definition import ToolDefinition
@@ -145,6 +149,20 @@ class ToolRegistry:
                 str(exc),
                 exc.details,
             )
+        except GameDetailProviderError as exc:
+            return self._error_result(
+                call,
+                "provider_error",
+                str(exc),
+                exc.details,
+            )
+        except GameDetailArtifactError as exc:
+            return self._error_result(
+                call,
+                "artifact_error",
+                str(exc),
+                exc.details,
+            )
         except Exception:
             return self._error_result(
                 call,
@@ -203,9 +221,7 @@ class ToolRegistry:
                     end += 1
                 group = calls[index:end]
                 results.extend(
-                    await asyncio.gather(
-                        *(self.execute(item, timeout=timeout) for item in group)
-                    )
+                    await asyncio.gather(*(self.execute(item, timeout=timeout) for item in group))
                 )
                 index = end
             else:

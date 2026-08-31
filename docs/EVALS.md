@@ -30,6 +30,16 @@ The core search suite covers:
 Focused implementation tests live under `apps/api/tests/vnext/` alongside the
 capability.  Run the focused set before the full vNext non-agent-eval suite.
 
+The recorded-game detail suite additionally checks:
+
+| Concern | Required assertion |
+| --- | --- |
+| Default tool surface | Only `esports.search`, `game.detail`, and generic Artifact tools are model-visible |
+| Public schema | `game.detail` accepts exactly one positive `valve_game_id` |
+| Source fidelity | Unknown top-level and nested OpenDota business fields survive Adapter, Artifact, and `artifact.read` |
+| Identity and failures | Returned `match_id` mismatch and OpenDota timeout/HTTP/schema failure are `provider_error`; write failure is `artifact_error` |
+| Artifact identity | `game_detail:1:<valve_game_id>` is stable; public and professional games use the same Artifact type |
+
 ## Live smoke tests
 
 Live PandaScore smoke tests are separate from deterministic acceptance.  They

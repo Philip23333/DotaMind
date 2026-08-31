@@ -38,6 +38,22 @@ resolution: <resolver decision status>
 This is an enrichment of the retained source document, not a synthetic
 GameSummary schema.
 
+`GameDetailArtifact` is the separate exact-game form:
+
+```text
+artifact_type = game_detail
+schema_version = 1
+source = opendota
+valve_game_id
+fetched_at
+facts  # complete validated OpenDota-shaped document
+```
+
+Its canonical reference is `game_detail:1:<valve_game_id>`. The source model
+validates identity while retaining allowed unknown business fields, including
+nested OpenDota facts. It is not a GameSummary or an input to a GameSummary
+builder.
+
 ## Production boundary
 
 `esports.search` has three distinct layers:
@@ -94,6 +110,9 @@ artifact.search(query, scope?)
 
 They observe stored documents only.  They do not understand esports-specific
 semantics and never make a new PandaScore request.
+
+The same generic read and grep primitives explore GameDetailArtifacts. They do
+not re-fetch OpenDota.
 
 ## Failure semantics
 
