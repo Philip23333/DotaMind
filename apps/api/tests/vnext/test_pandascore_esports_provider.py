@@ -168,10 +168,8 @@ def test_match_team_constraints_use_exact_identity_and_and_semantics() -> None:
 
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/dota2/teams":
-            query = request.url.params["search[name]"]
-            return httpx.Response(
-                200, json=[alpha if query == "Alpha" else beta], headers={"X-Total": "1"}
-            )
+            assert "search[name]" not in request.url.params
+            return httpx.Response(200, json=[alpha, beta], headers={"X-Total": "2"})
         if request.url.path == "/teams/11/matches":
             return httpx.Response(
                 200,
@@ -409,6 +407,42 @@ def test_team_relationship_matches_use_local_lifecycle_filtering() -> None:
     assert [entity.source_identity for entity in batch.entities] == [72]
 
 
+def test_team_identity_resolution_accepts_exact_acronym_and_slug_without_name_search() -> None:
+    xg = {
+        "id": 73,
+        "name": "Xtreme Gaming",
+        "acronym": "XG",
+        "slug": "xtreme-gaming",
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/dota2/teams":
+            assert "search[name]" not in request.url.params
+            return httpx.Response(200, json=[xg], headers={"X-Total": "1"})
+        if request.url.path == "/teams/73/matches":
+            return httpx.Response(
+                200,
+                json=[_match(74, name="XG match", teams=[xg])],
+                headers={"X-Total": "1"},
+            )
+        raise AssertionError(request.url.path)
+
+    adapter = _adapter(handler)
+    provider = PandaScoreEsportsProvider(adapter, NoResolver())  # type: ignore[arg-type]
+
+    async def exercise() -> list[int]:
+        try:
+            acronym = await provider.search(EsportsSearchRequest(kind="match", teams=["XG"]))
+            slug = await provider.search(
+                EsportsSearchRequest(kind="match", teams=["xtreme-gaming"])
+            )
+            return [acronym.entities[0].source_identity, slug.entities[0].source_identity]
+        finally:
+            await adapter.aclose()
+
+    assert asyncio.run(exercise()) == [74, 74]
+
+
 @pytest.mark.parametrize(
     ("team_payload", "expected_details"),
     [
@@ -456,12 +490,8 @@ def test_unique_team_identities_without_a_common_match_return_no_records() -> No
 
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/dota2/teams":
-            query = request.url.params["search[name]"]
-            return httpx.Response(
-                200,
-                json=[alpha if query == "Alpha" else beta],
-                headers={"X-Total": "1"},
-            )
+            assert "search[name]" not in request.url.params
+            return httpx.Response(200, json=[alpha, beta], headers={"X-Total": "2"})
         if request.url.path == "/teams/91/matches":
             return httpx.Response(
                 200,

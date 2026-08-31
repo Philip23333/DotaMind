@@ -28,7 +28,6 @@ from .models import (
 _SOURCE = "pandascore"
 _PAGE_SIZE = 100
 _MAX_SCAN_PAGES = 5
-_TEAM_SEARCH_LIMIT = 100
 _T = TypeVar("_T", bound=BaseModel)
 _PageFetcher = Callable[[int, int], Awaitable[ProviderBatch[_T]]]
 
@@ -195,11 +194,18 @@ class PandaScoreEsportsProvider:
             if normalized_query in seen_queries:
                 continue
             seen_queries.add(normalized_query)
-            batch = await self._adapter.search_teams(
-                query=team_query,
-                limit=_TEAM_SEARCH_LIMIT,
+            candidates, _ = await self._collect(
+                lambda page, size: self._adapter.search_teams(
+                    query=None,
+                    limit=size,
+                    page_number=page,
+                ),
+                lambda candidate, team_query=team_query: _is_exact_team_match(
+                    team_query,
+                    candidate,
+                ),
             )
-            matches = _exact_team_matches(team_query, batch.items)
+            matches = [candidate for candidate, _ in candidates]
             if not matches:
                 raise EsportsInvalidArgumentsError(
                     "team did not resolve to a PandaScore identity",
@@ -330,16 +336,12 @@ def _final_provider_items(
     return items[: limit + 1], len(items) > limit
 
 
-def _exact_team_matches(query: str, candidates: list[PandaScoreTeam]) -> list[PandaScoreTeam]:
+def _is_exact_team_match(query: str, candidate: PandaScoreTeam) -> bool:
     needle = normalize_text(query)
-    matches: dict[int, PandaScoreTeam] = {}
-    for candidate in candidates:
-        if any(
-            value and normalize_text(value) == needle
-            for value in (candidate.name, candidate.acronym, candidate.slug)
-        ):
-            matches[candidate.provider_id] = candidate
-    return list(matches.values())
+    return any(
+        value and normalize_text(value) == needle
+        for value in (candidate.name, candidate.acronym, candidate.slug)
+    )
 
 
 def _has_provider_teams(match: PandaScoreMatch, team_ids: set[int]) -> bool:
