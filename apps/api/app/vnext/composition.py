@@ -286,7 +286,6 @@ def build_vnext_registry(
     register_game_tools(registry, resolved_services.game_detail)
     register_artifact_tools(
         registry,
-        resolved_services.artifact_searcher,
         resolved_services.artifact_reader,
         resolved_services.artifact_grepper,
     )

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Literal
-
 from pydantic import Field, field_validator
 
 from app.vnext.artifacts import (
@@ -12,8 +10,6 @@ from app.vnext.artifacts import (
     ArtifactReader,
     ArtifactReadResult,
     ArtifactScopeRef,
-    ArtifactSearcher,
-    ArtifactSearchResult,
 )
 from app.vnext.artifacts.models import ArtifactRef
 from app.vnext.domain.common.models import DomainModel
@@ -21,17 +17,12 @@ from app.vnext.tools.definition import ToolDefinition
 from app.vnext.tools.registry import ToolRegistry
 
 
-class ArtifactSearchInput(DomainModel):
-    artifact_type: Literal["game_summary"]
-    valve_match_ids: list[int] = Field(max_length=100)
-
-
 class ArtifactReadInput(DomainModel):
     ref: ArtifactRef = Field(
         description=(
-            "Exact ArtifactRef object returned by esports.search, artifact.search, "
-            "artifact.grep, or another capability. Pass the whole object unchanged; "
-            "do not pass its id as a bare string or JSON-encode the object."
+            "Exact ArtifactRef object returned by a capability or artifact.grep. "
+            "Pass the whole object unchanged; do not pass its id as a bare string "
+            "or JSON-encode the object."
         )
     )
     path: str | None = None
@@ -69,13 +60,9 @@ class ArtifactGrepInput(DomainModel):
 
 def register_artifact_tools(
     registry: ToolRegistry,
-    searcher: ArtifactSearcher,
     reader: ArtifactReader,
     grepper: ArtifactGrepper,
 ) -> None:
-    async def search(args: ArtifactSearchInput) -> ArtifactSearchResult:
-        return await searcher.search(args.artifact_type, args.valve_match_ids)
-
     async def read(args: ArtifactReadInput) -> ArtifactReadResult:
         fields_set = args.model_fields_set
         return await reader.read(
@@ -89,20 +76,6 @@ def register_artifact_tools(
     async def grep(args: ArtifactGrepInput) -> ArtifactGrepResult:
         return await grepper.grep(args.pattern, args.artifact_types, args.limit, args.scope)
 
-    registry.register(
-        ToolDefinition(
-            name="artifact.search",
-            description=(
-                "Find stored GameSummary artifacts by canonical Valve match ID. "
-                "Returns references and missing IDs in input order; does not produce "
-                "or read artifacts."
-            ),
-            input_model=ArtifactSearchInput,
-            output_model=ArtifactSearchResult,
-            handler=search,
-            parallel_safe=True,
-        )
-    )
     registry.register(
         ToolDefinition(
             name="artifact.grep",
@@ -136,6 +109,5 @@ def register_artifact_tools(
 __all__ = [
     "ArtifactGrepInput",
     "ArtifactReadInput",
-    "ArtifactSearchInput",
     "register_artifact_tools",
 ]

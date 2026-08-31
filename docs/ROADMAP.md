@@ -36,7 +36,7 @@ Keep `esports.search` as the sole broad esports discovery entry point.
 
 ### 2. Recorded-game detail
 
-Use `game.detail(valve_match_id)` for full recorded-game data.  It is a separate
+Use `game.detail(valve_game_id)` for full recorded-game data.  It is a separate
 capability from esports discovery and is currently implemented by OpenDota after
 the required PandaScore-to-Valve resolution.
 
@@ -46,8 +46,8 @@ endpoint.
 
 ### 3. Generic Artifact exploration
 
-Keep `artifact.read`, `artifact.grep`, and `artifact.search` generic.  They
-retrieve already stored evidence and never perform hidden provider fetches.
+Keep `artifact.read` and `artifact.grep` generic. They retrieve already stored
+evidence and never perform hidden provider fetches.
 
 Use them before adding a source-specific detail tool.  A new tool needs a
 distinct capability need, not merely a different field path in an Artifact.

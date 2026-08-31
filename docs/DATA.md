@@ -5,7 +5,7 @@
 vNext keeps provider facts source-backed.  It does not require every esports or
 game-data source to fit one DotaMind business DTO.
 
-The stable capability envelope is deliberately small:
+The `esports.search` per-record envelope is deliberately small:
 
 ```text
 source
@@ -33,7 +33,7 @@ league | series | tournament | match | team | player
 ```
 
 `kind` is required.  `game` is not a discovery kind: recorded game detail is
-obtained through `game.detail` after a canonical Valve match ID is available.
+obtained through `game.detail` after a canonical Valve game ID is available.
 
 `teams` is a Match-only constraint.  It resolves each supplied team name to an
 exact PandaScore team identity, then returns only matches containing every
@@ -79,7 +79,7 @@ Provider identity and Dota identity are different.
   behind the Adapter/Provider boundary.
 - The source identity is used internally to produce a stable ArtifactRef for
   the same source object.  It is not model-facing navigation syntax.
-- Valve-native facts, including `valve_match_id`, `hero_id`, `item_id`, and
+- Valve-native facts, including `valve_game_id`, `hero_id`, `item_id`, and
   `ability_id`, are canonical Dota facts and may be visible directly.
 
 For a PandaScore Match, each retained game is enriched with:

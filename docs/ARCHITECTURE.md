@@ -34,7 +34,7 @@ User
                        -> PandaScoreAdapter
                        -> ValveMatchIdResolver -> OpenDotaAdapter
                   -> ArtifactStore
-       <-> artifact.search / artifact.grep / artifact.read
+       <-> artifact.grep / artifact.read
              -> ArtifactStore
        <-> game.detail
              -> GameDetailService -> OpenDotaAdapter -> ArtifactStore
@@ -172,6 +172,22 @@ rolled back.
 
 `artifact.read` and `artifact.grep` are provider-blind stored-document
 operations. They never fetch PandaScore.
+
+The model uses the following discovery and continuation boundary:
+
+```text
+new external fact space
+  -> semantic capability: esports.search / game.detail
+
+known ArtifactRef
+  -> artifact.read
+
+unknown location inside stored corpus
+  -> artifact.grep
+```
+
+The historical GameSummary-specific `artifact.search` remains internal migration
+code only; it is not a current model-facing operation.
 
 ## Recorded-game detail
 

@@ -14,13 +14,12 @@ Tool descriptions state a capability; they do not prescribe a fixed workflow.
 | --- | --- | --- |
 | `esports.search` | Discover one selected kind of professional Dota 2 esports entity | Retain |
 | `game.detail` | Fetch one detailed recorded game by canonical Valve game ID | Retain |
-| `artifact.search` | Exact stored-Artifact availability lookup | Retain |
 | `artifact.grep` | Generic stored-document breadth search | Retain |
 | `artifact.read` | Generic stored-document depth read | Retain |
 
-The default Agent runtime exposes exactly these five tools. Historical
-`matches.get_detail`, `teams.*`, and `players.*` modules remain migration code
-but are not model-visible.
+The default Agent runtime exposes exactly these four tools. Historical
+`artifact.search`, `matches.get_detail`, `teams.*`, and `players.*` modules
+remain migration code but are not model-visible.
 
 ## `esports.search`
 
@@ -129,12 +128,13 @@ not be stored; there is no partial-success detail result.
 
 | Tool | Purpose | Boundary |
 | --- | --- | --- |
-| `artifact.search` | Exact stored-document availability lookup | Does not fetch or produce a document |
 | `artifact.grep` | Schema-neutral scalar search | Returns ArtifactRef, path, and bounded preview |
 | `artifact.read` | Bounded structural read | Exact ArtifactRef/path; no provider semantics |
 
 Artifacts are a generic JSON-like corpus. `artifact.read` and `artifact.grep`
 must not learn PandaScore, OpenDota, Team, Player, or gameplay-scenario logic.
+The historical GameSummary-specific `artifact.search` tool is not model-visible;
+exact recorded-game retrieval uses `game.detail(valve_game_id)`.
 
 ## Rejected shapes
 

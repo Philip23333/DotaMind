@@ -34,11 +34,12 @@ The recorded-game detail suite additionally checks:
 
 | Concern | Required assertion |
 | --- | --- |
-| Default tool surface | Only `esports.search`, `game.detail`, and generic Artifact tools are model-visible |
+| Default tool surface | Exactly `esports.search`, `game.detail`, `artifact.grep`, and `artifact.read` are model-visible; legacy `artifact.search` is `unknown_tool` |
 | Public schema | `game.detail` accepts exactly one positive `valve_game_id` |
 | Source fidelity | Unknown top-level and nested OpenDota business fields survive Adapter, Artifact, and `artifact.read` |
 | Identity and failures | Returned `match_id` mismatch and OpenDota timeout/HTTP/schema failure are `provider_error`; write failure is `artifact_error` |
 | Artifact identity | `game_detail:1:<valve_game_id>` is stable; public and professional games use the same Artifact type |
+| Generic retrieval | `artifact.read` and `artifact.grep` read source-document and game-detail Artifacts without source-specific behavior |
 
 ## Live smoke tests
 
