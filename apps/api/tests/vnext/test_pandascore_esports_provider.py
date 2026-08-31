@@ -443,6 +443,106 @@ def test_team_identity_resolution_accepts_exact_acronym_and_slug_without_name_se
     assert asyncio.run(exercise()) == [74, 74]
 
 
+def test_team_identity_resolution_scans_past_five_pages_before_not_found() -> None:
+    xg = {
+        "id": 601,
+        "name": "Xtreme Gaming",
+        "acronym": "XG",
+        "slug": "xtreme-gaming",
+    }
+    team_pages: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/dota2/teams":
+            assert "search[name]" not in request.url.params
+            page = int(request.url.params["page[number]"])
+            team_pages.append(page)
+            if page < 6:
+                return httpx.Response(
+                    200,
+                    json=[],
+                    headers={
+                        "Link": (
+                            "<https://pandascore.test/dota2/teams?"
+                            f'page[number]={page + 1}>; rel="next"'
+                        )
+                    },
+                )
+            return httpx.Response(200, json=[xg])
+        if request.url.path == "/teams/601/matches":
+            return httpx.Response(
+                200,
+                json=[_match(602, name="XG match", teams=[xg])],
+                headers={"X-Total": "1"},
+            )
+        raise AssertionError(request.url.path)
+
+    adapter = _adapter(handler)
+    provider = PandaScoreEsportsProvider(adapter, NoResolver())  # type: ignore[arg-type]
+
+    async def exercise():
+        try:
+            return await provider.search(EsportsSearchRequest(kind="match", teams=["XG"]))
+        finally:
+            await adapter.aclose()
+
+    batch = asyncio.run(exercise())
+    assert team_pages == [1, 2, 3, 4, 5, 6]
+    assert [entity.source_identity for entity in batch.entities] == [602]
+
+
+def test_team_identity_resolution_scans_past_five_pages_before_unique() -> None:
+    first_xg = {"id": 611, "name": "Xtreme A", "acronym": "XG", "slug": "xtreme-a"}
+    second_xg = {"id": 612, "name": "Xtreme B", "acronym": "XG", "slug": "xtreme-b"}
+    team_pages: list[int] = []
+    match_requests: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/dota2/teams":
+            page = int(request.url.params["page[number]"])
+            team_pages.append(page)
+            if page == 1:
+                body = [first_xg]
+            elif page == 6:
+                body = [second_xg]
+            else:
+                body = []
+            headers = (
+                {}
+                if page == 6
+                else {
+                    "Link": (
+                        f'<https://pandascore.test/dota2/teams?page[number]={page + 1}>; rel="next"'
+                    )
+                }
+            )
+            return httpx.Response(200, json=body, headers=headers)
+        if request.url.path.startswith("/teams/"):
+            match_requests.append(request.url.path)
+            raise AssertionError("ambiguous Team identity must not query matches")
+        raise AssertionError(request.url.path)
+
+    adapter = _adapter(handler)
+    provider = PandaScoreEsportsProvider(adapter, NoResolver())  # type: ignore[arg-type]
+
+    async def exercise() -> None:
+        try:
+            await provider.search(EsportsSearchRequest(kind="match", teams=["XG"]))
+        finally:
+            await adapter.aclose()
+
+    with pytest.raises(EsportsInvalidArgumentsError) as exc_info:
+        asyncio.run(exercise())
+    assert team_pages == [1, 2, 3, 4, 5, 6]
+    assert match_requests == []
+    assert exc_info.value.details == {
+        "argument": "teams",
+        "team": "XG",
+        "reason": "ambiguous",
+        "candidate_count": 2,
+    }
+
+
 @pytest.mark.parametrize(
     ("team_payload", "expected_details"),
     [

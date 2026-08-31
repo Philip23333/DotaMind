@@ -194,18 +194,7 @@ class PandaScoreEsportsProvider:
             if normalized_query in seen_queries:
                 continue
             seen_queries.add(normalized_query)
-            candidates, _ = await self._collect(
-                lambda page, size: self._adapter.search_teams(
-                    query=None,
-                    limit=size,
-                    page_number=page,
-                ),
-                lambda candidate, team_query=team_query: _is_exact_team_match(
-                    team_query,
-                    candidate,
-                ),
-            )
-            matches = [candidate for candidate, _ in candidates]
+            matches = await self._resolve_team_identity_candidates(team_query)
             if not matches:
                 raise EsportsInvalidArgumentsError(
                     "team did not resolve to a PandaScore identity",
@@ -245,6 +234,26 @@ class PandaScoreEsportsProvider:
             order_key=order_key,
             reverse=reverse,
         )
+
+    async def _resolve_team_identity_candidates(self, team_query: str) -> list[PandaScoreTeam]:
+        """Scan all Team pages before declaring an exact identity cardinality."""
+
+        matches: dict[int, PandaScoreTeam] = {}
+        page_number = 1
+        while True:
+            batch = await self._adapter.search_teams(
+                query=None,
+                limit=_PAGE_SIZE,
+                page_number=page_number,
+            )
+            for candidate in batch.items:
+                if _is_exact_team_match(team_query, candidate):
+                    matches[candidate.provider_id] = candidate
+            if batch.has_more is False:
+                return list(matches.values())
+            if batch.has_more is None:
+                raise EsportsProviderError(source=_SOURCE, kind="team")
+            page_number += 1
 
     async def _collect(
         self,
