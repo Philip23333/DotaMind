@@ -46,9 +46,6 @@ from app.vnext.providers.pandascore.adapter import PandaScoreAdapter
 from app.vnext.providers.pandascore.locator import PandaScoreLocatorIndex
 from app.vnext.tools.artifacts import register_artifact_tools
 from app.vnext.tools.domain.esports import register_esports_tools
-from app.vnext.tools.domain.matches import register_match_tools
-from app.vnext.tools.domain.players import register_player_tools
-from app.vnext.tools.domain.teams import register_team_tools
 from app.vnext.tools.registry import ToolRegistry
 
 _VNEXT_ENV_PATH = Path(__file__).with_name(".env")
@@ -281,13 +278,6 @@ def build_vnext_registry(
     resolved_services = services or build_vnext_services(settings)
     registry = ToolRegistry()
     register_esports_tools(registry, resolved_services.esports)
-    register_match_tools(
-        registry,
-        resolved_services.matches,
-        resolved_services.game_summary_producer,
-    )
-    register_team_tools(registry, resolved_services.teams)
-    register_player_tools(registry, resolved_services.players)
     register_artifact_tools(
         registry,
         resolved_services.artifact_searcher,
