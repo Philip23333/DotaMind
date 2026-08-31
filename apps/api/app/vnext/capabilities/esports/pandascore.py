@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable, Sequence
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import TypeVar
 
 from pydantic import BaseModel
@@ -25,10 +26,12 @@ from .models import (
     ProviderSearchBatch,
     TimeScope,
 )
+from .team_identity_index import TeamIdentityIndex
 
 _SOURCE = "pandascore"
 _PAGE_SIZE = 100
 _MAX_SCAN_PAGES = 5
+_TEAM_IDENTITY_INDEX_TTL = timedelta(minutes=30)
 _T = TypeVar("_T", bound=BaseModel)
 _PageFetcher = Callable[[int, int], Awaitable[ProviderBatch[_T]]]
 
@@ -36,9 +39,21 @@ _PageFetcher = Callable[[int, int], Awaitable[ProviderBatch[_T]]]
 class PandaScoreEsportsProvider:
     """Select, filter, order, and enrich PandaScore entities below the capability boundary."""
 
-    def __init__(self, adapter: PandaScoreAdapter, resolver: ValveMatchIdResolver) -> None:
+    def __init__(
+        self,
+        adapter: PandaScoreAdapter,
+        resolver: ValveMatchIdResolver,
+        *,
+        team_identity_index_ttl: timedelta = _TEAM_IDENTITY_INDEX_TTL,
+        clock: Callable[[], datetime] | None = None,
+    ) -> None:
         self._adapter = adapter
         self._resolver = resolver
+        self._team_identity_index_ttl = team_identity_index_ttl
+        self._clock = clock or (lambda: datetime.now(timezone.utc))
+        self._team_identity_index: TeamIdentityIndex | None = None
+        self._team_identity_index_expires_at: datetime | None = None
+        self._team_identity_index_lock = asyncio.Lock()
 
     async def search(self, request: EsportsSearchRequest) -> ProviderSearchBatch:
         try:
@@ -238,9 +253,34 @@ class PandaScoreEsportsProvider:
         )
 
     async def _resolve_team_identity_candidates(self, team_query: str) -> list[PandaScoreTeam]:
-        """Scan all Team pages before declaring an exact identity cardinality."""
+        """Look up exact candidates from a complete cached Team identity corpus."""
 
-        matches: dict[int, PandaScoreTeam] = {}
+        return (await self._get_team_identity_index()).lookup(team_query)
+
+    async def _get_team_identity_index(self) -> TeamIdentityIndex:
+        now = self._clock()
+        if self._has_valid_team_identity_index(now):
+            return self._team_identity_index
+        async with self._team_identity_index_lock:
+            now = self._clock()
+            if self._has_valid_team_identity_index(now):
+                return self._team_identity_index
+            index = await self._build_team_identity_index()
+            self._team_identity_index = index
+            self._team_identity_index_expires_at = now + self._team_identity_index_ttl
+            return index
+
+    def _has_valid_team_identity_index(self, now: datetime) -> bool:
+        return (
+            self._team_identity_index is not None
+            and self._team_identity_index_expires_at is not None
+            and now < self._team_identity_index_expires_at
+        )
+
+    async def _build_team_identity_index(self) -> TeamIdentityIndex:
+        """Scan every Team page before making exact identity claims."""
+
+        teams: list[PandaScoreTeam] = []
         page_number = 1
         while True:
             batch = await self._adapter.search_teams(
@@ -248,11 +288,9 @@ class PandaScoreEsportsProvider:
                 limit=_PAGE_SIZE,
                 page_number=page_number,
             )
-            for candidate in batch.items:
-                if _is_exact_team_match(team_query, candidate):
-                    matches[candidate.provider_id] = candidate
+            teams.extend(batch.items)
             if batch.has_more is False:
-                return list(matches.values())
+                return TeamIdentityIndex.build(teams)
             if batch.has_more is None:
                 raise EsportsProviderError(source=_SOURCE, kind="team")
             page_number += 1
@@ -375,14 +413,6 @@ def _document_games(document: dict[str, object]) -> list[dict[str, object]]:
     if not isinstance(games, list) or not all(isinstance(game, dict) for game in games):
         raise EsportsProviderError(source=_SOURCE, kind="match")
     return games
-
-
-def _is_exact_team_match(query: str, candidate: PandaScoreTeam) -> bool:
-    needle = normalize_text(query)
-    return any(
-        value and normalize_text(value) == needle
-        for value in (candidate.name, candidate.acronym, candidate.slug)
-    )
 
 
 def _has_provider_teams(match: PandaScoreMatch, team_ids: set[int]) -> bool:

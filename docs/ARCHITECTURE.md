@@ -131,7 +131,9 @@ whenever qualifying results may remain outside its scan or the final limit.
 For Match `teams`, the Provider searches each supplied Team source identity using
 exact normalized name, acronym, or slug matching. It never chooses arbitrarily
 among multiple exact candidates. It then queries the allowed Team-to-Matches
-endpoint and applies AND filtering locally.
+endpoint and applies AND filtering locally. Exact identity always derives from a
+complete PandaScore Team corpus; the Provider retains a TTL-bounded complete
+identity index so repeated constraints do not rescan every Team page.
 
 ## Match Game -> Valve ID enrichment
 

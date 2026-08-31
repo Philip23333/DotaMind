@@ -37,7 +37,9 @@ obtained through `game.detail` after a canonical Valve game ID is available.
 
 `teams` is a Match-only constraint.  It resolves each supplied team name to an
 exact PandaScore team identity, then returns only matches containing every
-resolved team.  It is not a replacement for `kind="team"`.
+resolved team. The Provider's complete Team identity corpus may be reused for
+repeated constraints, but it never treats a partial corpus as exact identity
+evidence. `teams` is not a replacement for `kind="team"`.
 
 `time_scope` is available only for Series, Tournament, and Match. Its values are
 `upcoming`, `running`, and `past`. For a dedicated PandaScore lifecycle endpoint,
