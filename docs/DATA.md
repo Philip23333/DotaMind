@@ -5,8 +5,7 @@
 vNext keeps provider facts source-backed.  It does not require every esports or
 game-data source to fit one DotaMind business DTO.
 
-The esports discovery capability envelope (when the new tool seam is
-implemented) stays deliberately small:
+The esports discovery capability envelope stays deliberately small:
 
 ```text
 source
@@ -65,6 +64,11 @@ The model normally receives only `facts`, a generic bounded observation.  It
 can inspect the retained document later with `artifact.read` or
 `artifact.grep`.  A provider-private ID may be evidence inside that document;
 it is never a supported tool input.
+
+Large `esports.search` responses use a related dynamic Artifact form with the
+complete normalized query and complete provider-shaped response page under
+`query` and `result`. The immediate tool result keeps a generic preview of row
+scalars and structural pointers using `artifact.read`'s dotted path syntax.
 
 ## Identity
 

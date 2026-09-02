@@ -41,8 +41,11 @@ The seam is designed as an agent-facing capability layer:
 
 Input accepts a resource, normal lifecycle scope, native `filter`, `search`,
 `range`, `sort`, and bounded pagination. Unsupported fields and scopes return
-structured errors. Output retains the source-shaped row dictionaries and their
-source IDs without exposing provider names or endpoint paths.
+structured errors. Small results retain their complete source-shaped row
+dictionaries. Large results return a bounded structural preview, `total_rows`,
+and an ArtifactRef to the complete query/result envelope; use `artifact.read`
+or `artifact.grep` to inspect omitted fields. This does not alter the source
+query or provider request.
 
 Do not reintroduce a search-engine abstraction, a universal search DTO, or
 scenario-specific query plumbing while the new seam is pending.

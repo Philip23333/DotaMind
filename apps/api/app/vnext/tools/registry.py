@@ -26,6 +26,7 @@ from app.vnext.providers.pandascore.adapter import (
 )
 from app.vnext.providers.pandascore.capabilities import PandaScoreQueryValidationError
 from app.vnext.tools.definition import ToolDefinition
+from app.vnext.tools.domain.esports_observation import EsportsSearchArtifactError
 from app.vnext.tools.errors import ToolError, ToolErrorCode
 
 
@@ -139,6 +140,13 @@ class ToolRegistry:
                 exc.details,
             )
         except GameDetailArtifactError as exc:
+            return self._error_result(
+                call,
+                "artifact_error",
+                str(exc),
+                exc.details,
+            )
+        except EsportsSearchArtifactError as exc:
             return self._error_result(
                 call,
                 "artifact_error",

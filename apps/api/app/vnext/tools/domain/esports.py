@@ -6,10 +6,13 @@ from typing import Any, Literal
 
 from pydantic import Field
 
+from app.vnext.artifacts import ArtifactRef
 from app.vnext.domain.common.models import DomainModel
 from app.vnext.providers.pandascore.query import PandaScoreNativeQueryExecutor
 from app.vnext.tools.definition import ToolDefinition
 from app.vnext.tools.registry import ToolRegistry
+
+from .esports_observation import EsportsSearchObservationBuilder
 
 
 class EsportsSearchInput(DomainModel):
@@ -28,16 +31,26 @@ class EsportsSearchOutput(DomainModel):
     scope: str
     rows: list[dict[str, Any]]
     has_more: bool | None = None
+    truncated: bool = False
+    artifact_ref: ArtifactRef | None = None
+    total_rows: int | None = None
 
 
-def build_esports_search_tool(executor: PandaScoreNativeQueryExecutor) -> ToolDefinition:
+def build_esports_search_tool(
+    executor: PandaScoreNativeQueryExecutor,
+    observation_builder: EsportsSearchObservationBuilder,
+) -> ToolDefinition:
     async def search(args: EsportsSearchInput) -> EsportsSearchOutput:
         result = await executor.execute(args.model_dump(exclude_none=True))
+        observation = await observation_builder.build(result, args)
         return EsportsSearchOutput(
-            resource=result.resource,
-            scope=result.scope,
-            rows=result.rows,
-            has_more=result.has_more,
+            resource=observation.resource,
+            scope=observation.scope,
+            rows=observation.rows,
+            has_more=observation.has_more,
+            truncated=observation.truncated,
+            artifact_ref=observation.artifact_ref,
+            total_rows=observation.total_rows,
         )
 
     return ToolDefinition(
@@ -47,7 +60,9 @@ def build_esports_search_tool(executor: PandaScoreNativeQueryExecutor) -> ToolDe
             "optionally use its supported filter, search, range, sort, lifecycle scope, and "
             "pagination fields. Different resources support different fields; unsupported fields "
             "or scopes return structured alternatives so the query can be corrected. When unsure "
-            "about supported fields, read manual:pandascore:index with artifact.read."
+            "about supported fields, read manual:pandascore:index with artifact.read. "
+            "Large results may be returned as bounded previews with an artifact_ref; "
+            "use artifact.read or artifact.grep to inspect omitted data."
         ),
         input_model=EsportsSearchInput,
         output_model=EsportsSearchOutput,
@@ -56,9 +71,11 @@ def build_esports_search_tool(executor: PandaScoreNativeQueryExecutor) -> ToolDe
 
 
 def register_esports_tools(
-    registry: ToolRegistry, executor: PandaScoreNativeQueryExecutor
+    registry: ToolRegistry,
+    executor: PandaScoreNativeQueryExecutor,
+    observation_builder: EsportsSearchObservationBuilder,
 ) -> None:
-    registry.register(build_esports_search_tool(executor))
+    registry.register(build_esports_search_tool(executor, observation_builder))
 
 
 __all__ = [

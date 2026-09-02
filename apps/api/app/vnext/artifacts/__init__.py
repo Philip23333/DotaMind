@@ -1,5 +1,9 @@
 """Generic artifact storage contracts for the vNext foundation."""
 
+from .esports_search_result import (
+    EsportsSearchResultArtifact,
+    esports_search_result_artifact_ref,
+)
 from .game_detail import GameDetailArtifact, game_detail_artifact_ref
 from .game_summary import GameSummaryArtifact
 from .game_summary_producer import GameSummaryArtifactProducer
@@ -57,6 +61,7 @@ __all__ = [
     "ArtifactTypeMismatchError",
     "GameSummaryArtifact",
     "GameDetailArtifact",
+    "EsportsSearchResultArtifact",
     "GameSummaryArtifactV4",
     "GameSummaryArtifactV5",
     "GameSummaryArtifactProducer",
@@ -70,5 +75,6 @@ __all__ = [
     "bounded_source_observation",
     "game_summary_artifact_ref",
     "game_detail_artifact_ref",
+    "esports_search_result_artifact_ref",
     "source_document_artifact_ref",
 ]

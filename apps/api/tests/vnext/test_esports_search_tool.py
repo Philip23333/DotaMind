@@ -6,12 +6,14 @@ from typing import Any
 
 import httpx
 
+from app.vnext.artifacts import MemoryArtifactStore
 from app.vnext.composition import VNextSettings, build_vnext_registry, build_vnext_services
 from app.vnext.llm.protocol import ToolCall
 from app.vnext.providers.pandascore.adapter import PandaScoreAdapter
 from app.vnext.providers.pandascore.capabilities import PandaScoreCapabilities
 from app.vnext.providers.pandascore.query import PandaScoreNativeQueryExecutor
 from app.vnext.tools.domain.esports import build_esports_search_tool, register_esports_tools
+from app.vnext.tools.domain.esports_observation import EsportsSearchObservationBuilder
 from app.vnext.tools.registry import ToolRegistry
 
 
@@ -23,7 +25,11 @@ def _registry(handler) -> tuple[ToolRegistry, PandaScoreAdapter]:
     )
     registry = ToolRegistry()
     executor = PandaScoreNativeQueryExecutor(PandaScoreCapabilities.load(), adapter)
-    register_esports_tools(registry, executor)
+    register_esports_tools(
+        registry,
+        executor,
+        EsportsSearchObservationBuilder(MemoryArtifactStore()),
+    )
     return registry, adapter
 
 
@@ -37,12 +43,16 @@ def test_esports_search_tool_schema_is_compact_and_model_visible() -> None:
 
     adapter = PandaScoreAdapter(token="test-token", transport=httpx.MockTransport(handler))
     executor = PandaScoreNativeQueryExecutor(PandaScoreCapabilities.load(), adapter)
-    tool = build_esports_search_tool(executor)
+    tool = build_esports_search_tool(
+        executor,
+        EsportsSearchObservationBuilder(MemoryArtifactStore()),
+    )
     schema = tool.schema().input_schema
     properties = schema["properties"]
 
     assert tool.name == "esports.search"
     assert tool.read_only is True
+    assert "bounded previews with an artifact_ref" in tool.description
     assert set(properties) == {
         "resource",
         "scope",
@@ -100,6 +110,9 @@ def test_esports_search_handler_preserves_source_shaped_rows() -> None:
         "scope": "all",
         "rows": [{"id": 21545, "name": "Group Stage", "serie_id": 10828}],
         "has_more": False,
+        "truncated": False,
+        "artifact_ref": None,
+        "total_rows": None,
     }
 
 

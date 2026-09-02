@@ -24,7 +24,7 @@ The core search suite covers:
 | Query | full source-document text can match embedded League/Series/Tournament/Opponent facts; native name filtering cannot cause a false negative |
 | Team constraint | exact Team identity uses a complete source corpus, reports not-found/ambiguous argument errors, and reuses a Provider-local bounded-lifetime index for repeated constraints; unique identities use AND semantics across `/teams/{id}/matches` results |
 | Match enrichment | batch-scoped shared OpenDota evidence is loaded once per search/unique league; deterministic outcomes are retained and unavailable evidence degrades only dependent games to `resolution="unavailable"` |
-| Artifact boundary | only final, deduplicated results are externalized; all writes success is non-partial; partial success contains valid records and warnings; all writes failing is `artifact_error` |
+| Artifact boundary | oversized final response pages are externalized once with their complete source-shaped rows and query provenance; previews retain discovery scalars and readable structural paths; a failed required write is `artifact_error` |
 | Error mapping | invalid arguments, provider failure, and artifact failure map to the documented tool codes without secrets |
 
 Focused implementation tests live under `apps/api/tests/vnext/` alongside the
@@ -61,7 +61,8 @@ complete response that contains material user data.
 
 Agent evaluations test composition and answer behavior after deterministic tool
 contracts are already protected.  They should request source-backed facts,
-follow returned ArtifactRefs with `artifact.read/grep` where details are needed,
+follow returned ArtifactRefs with `artifact.read/grep` when a bounded
+`esports.search` preview omits needed details,
 and distinguish:
 
 - execution status;

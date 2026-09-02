@@ -54,6 +54,27 @@ validates identity while retaining allowed unknown business fields, including
 nested OpenDota facts. It is not a GameSummary or an input to a GameSummary
 builder.
 
+## Esports search-result documents
+
+An oversized `esports.search` page produces one `esports_search_result` Artifact:
+
+```text
+artifact_type = esports_search_result
+schema_version = 1
+source = pandascore
+fetched_at
+kind = esports_search_result
+query     # complete validated public query
+result    # complete source-shaped response page
+```
+
+The tool returns a bounded structural preview, `total_rows`, and the exact
+ArtifactRef. Preview pointers use `artifact.read` dotted paths such as
+`result.rows.2.matches`; the full response remains available through generic
+read and grep. A failed write returns `artifact_error` rather than an
+unrecoverable truncated result. Small pages stay inline and do not create an
+Artifact.
+
 ## Production boundary
 
 The recorded-game capability has three distinct layers:
@@ -67,17 +88,16 @@ validates public arguments, fetches through the Adapter, and externalizes the
 complete validated document. Artifact storage is owned by the Service, not by
 the Provider or Adapter.
 
-The future esports discovery seam will follow the same boundary:
+The esports discovery seam follows the same boundary:
 
 ```text
 Tool -> EsportsService -> EsportsProvider -> PandaScoreAdapter
 ```
 
 The Provider chooses the allowed PandaScore discovery endpoint, filters, orders,
-and enriches; the Service validates public arguments, deduplicates, applies the
-final limit, and externalizes only final records. A failed final write must
-never create a record without an ArtifactRef, and a partial delivery is
-expressed with stable warnings, never with rollback.
+and enriches; the capability tool validates public arguments and externalizes an
+oversized final response page. A failed final write must never produce a
+truncated observation without an ArtifactRef.
 
 For the same provider source, kind, and source identity, an unchanged identity
 produces the same ArtifactRef.  A later fetch replaces the document at that

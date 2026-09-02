@@ -31,8 +31,9 @@ PandaScore-oriented tool seam provides validated native collection queries:
   capability boundary. The PandaScore HTTP client lives at
   `app/vnext/providers/pandascore/` and is not deleted.
 - Preserve PandaScore source-shaped rows; do not reintroduce canonical
-  League/Series/Match/Team DTOs or source-locator navigation. Artifact
-  externalization remains a separate extension of this seam.
+  League/Series/Match/Team DTOs or source-locator navigation. Oversized
+  response pages are externalized once as complete query/result Artifacts and
+  exposed as bounded structural previews.
 - Do not reintroduce the removed kind/`time_scope`/`teams` unified contract as
   the new schema; design from the current endpoint allowlist in
   `docs/reference/pandascore-endpoints.md`.

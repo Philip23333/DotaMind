@@ -41,8 +41,10 @@ User
 ```
 
 `esports.search` keeps provider endpoints and endpoint-local fields below the
-tool boundary. Its result is one bounded, source-shaped collection page; it
-does not expose provider names or endpoint paths.
+tool boundary. A small source-shaped collection page remains inline. For a
+large page, it stores one complete source-shaped search-result Artifact and
+returns a bounded structural preview plus its ArtifactRef; it does not expose
+provider endpoints or paths.
 
 ## Capability pattern
 
@@ -78,8 +80,9 @@ Adapter owns only provider HTTP transport and provider schema parsing.
 The esports discovery seam uses one small semantic model-facing contract;
 provider names, endpoints, pagination transport syntax, and private IDs remain
 below that contract. It does not encode scenario-specific workflows or a
-universal search DTO. Its current bounded page result preserves source-shaped
-rows; Artifact externalization remains a later boundary extension.
+universal search DTO. Its observation policy preserves complete source-shaped
+rows in one Artifact when the serialized response is large, while keeping
+discovery scalars and structural pointers in the immediate bounded result.
 
 ## PandaScore provider surface (preserved)
 

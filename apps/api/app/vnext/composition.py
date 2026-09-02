@@ -46,6 +46,7 @@ from app.vnext.providers.pandascore.locator import PandaScoreLocatorIndex
 from app.vnext.providers.pandascore.query import PandaScoreNativeQueryExecutor
 from app.vnext.tools.artifacts import register_artifact_tools
 from app.vnext.tools.domain.esports import register_esports_tools
+from app.vnext.tools.domain.esports_observation import EsportsSearchObservationBuilder
 from app.vnext.tools.domain.game import register_game_tools
 from app.vnext.tools.registry import ToolRegistry
 
@@ -159,6 +160,7 @@ class VNextServices:
     artifact_searcher: ArtifactSearcher
     artifact_reader: ArtifactReader
     artifact_grepper: ArtifactGrepper
+    esports_search_observation_builder: EsportsSearchObservationBuilder
     artifact_scope_store: MemoryArtifactScopeStore | None = None
 
     async def aclose(self) -> None:
@@ -248,6 +250,7 @@ def build_vnext_services(
     artifact_searcher = ArtifactSearcher(store)
     artifact_reader = ArtifactReader(store, static_artifacts)
     artifact_grepper = ArtifactGrepper(store, scope_store, static_artifacts)
+    esports_search_observation_builder = EsportsSearchObservationBuilder(store)
     return VNextServices(
         pandascore=panda_adapter,
         pandascore_capabilities=panda_capabilities,
@@ -264,6 +267,7 @@ def build_vnext_services(
         artifact_searcher=artifact_searcher,
         artifact_reader=artifact_reader,
         artifact_grepper=artifact_grepper,
+        esports_search_observation_builder=esports_search_observation_builder,
         artifact_scope_store=scope_store,
     )
 
@@ -281,7 +285,11 @@ def build_vnext_registry(
         resolved_services.artifact_reader,
         resolved_services.artifact_grepper,
     )
-    register_esports_tools(registry, resolved_services.pandascore_native_queries)
+    register_esports_tools(
+        registry,
+        resolved_services.pandascore_native_queries,
+        resolved_services.esports_search_observation_builder,
+    )
     return registry
 
 
