@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from pydantic import Field, field_validator
+from typing import Literal
+
+from pydantic import Field, field_validator, model_validator
 
 from app.vnext.artifacts import (
     ArtifactGrepper,
@@ -22,9 +24,22 @@ class ArtifactReadInput(DomainModel):
             "manual:pandascore:index."
         )
     )
+    mode: Literal["outline", "read"] = Field(
+        description="outline inspects root structure; read resolves one explicit dotted path."
+    )
     path: str | None = None
-    offset: int = Field(default=0, ge=0)
-    limit: int = Field(default=50, ge=1, le=100)
+    offset: int | None = Field(default=None, ge=0)
+    limit: int | None = Field(default=None, ge=1, le=100)
+
+    @model_validator(mode="after")
+    def _validate_mode_arguments(self) -> ArtifactReadInput:
+        if self.mode == "outline":
+            if self.path is not None or self.offset is not None or self.limit is not None:
+                raise ValueError("outline mode does not accept path, offset, or limit")
+            return self
+        if self.path is None:
+            raise ValueError("read mode requires path")
+        return self
 
 
 class ArtifactGrepInput(DomainModel):
@@ -55,14 +70,10 @@ def register_artifact_tools(
     grepper: ArtifactGrepper,
 ) -> None:
     async def read(args: ArtifactReadInput) -> ArtifactReadResult:
-        fields_set = args.model_fields_set
-        return await reader.read(
-            args.ref,
-            path=args.path,
-            offset=args.offset,
-            limit=args.limit,
-            pagination_requested=bool({"offset", "limit"} & fields_set),
-        )
+        if args.mode == "outline":
+            return await reader.outline(args.ref)
+        assert args.path is not None
+        return await reader.read(args.ref, args.path, offset=args.offset, limit=args.limit)
 
     async def grep(args: ArtifactGrepInput) -> ArtifactGrepResult:
         return await grepper.grep(
@@ -88,9 +99,12 @@ def register_artifact_tools(
         ToolDefinition(
             name="artifact.read",
             description=(
-                "Read a bounded serialized view of exactly one opaque tool response ref or "
-                "documented static manual ref. Supports structural dotted paths and bounded list "
-                "slices only."
+                "Read one exact manual or temporary tool-response artifact. Use mode='outline' "
+                "to inspect root structure; do not provide path, offset, or limit in outline mode. "
+                "Use mode='read' with one required dotted path to read a value. If a tool response "
+                "contains _artifact_path, copy it exactly into path with mode='read'. "
+                "Offset and limit only slice the selected list value; they do not control "
+                "overall artifact response size."
             ),
             input_model=ArtifactReadInput,
             output_model=ArtifactReadResult,

@@ -145,7 +145,7 @@ def test_dynamic_ref_is_not_visible_to_a_second_session_registry() -> None:
                 ToolCall(
                     id="other-session",
                     name="artifact.read",
-                    arguments={"ref": produced.content["artifact_ref"]},
+                    arguments={"ref": produced.content["artifact_ref"], "mode": "outline"},
                 )
             )
         finally:

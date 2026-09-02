@@ -21,7 +21,7 @@ def test_all_pandascore_manual_refs_read_generated_content() -> None:
     async def exercise() -> dict[str, str]:
         reader = ArtifactReader(SessionArtifactStore(), ManualResolver())
         results = {
-            ref: (await reader.read(ref)).value for ref in PANDASCORE_MANUAL_REFS
+            ref: (await reader.read(ref, "content")).value for ref in PANDASCORE_MANUAL_REFS
         }
         return results
 
@@ -45,7 +45,18 @@ def test_static_manuals_work_through_registry_tools() -> None:
                 ToolCall(
                     id="manual-read",
                     name="artifact.read",
-                    arguments={"ref": "manual:pandascore:tournament"},
+                    arguments={
+                        "ref": "manual:pandascore:tournament",
+                        "mode": "read",
+                        "path": "content",
+                    },
+                )
+            )
+            outline = await registry.execute(
+                ToolCall(
+                    id="manual-outline",
+                    name="artifact.read",
+                    arguments={"ref": "manual:pandascore:tournament", "mode": "outline"},
                 )
             )
             grep = await registry.execute(
@@ -62,32 +73,43 @@ def test_static_manuals_work_through_registry_tools() -> None:
                 ToolCall(
                     id="manual-missing",
                     name="artifact.read",
-                    arguments={"ref": "manual:pandascore:hero"},
+                    arguments={
+                        "ref": "manual:pandascore:hero",
+                        "mode": "outline",
+                    },
                 )
             )
             traversal = await registry.execute(
                 ToolCall(
                     id="manual-traversal",
                     name="artifact.read",
-                    arguments={"ref": "manual:pandascore:../README"},
+                    arguments={
+                        "ref": "manual:pandascore:../README",
+                        "mode": "outline",
+                    },
                 )
             )
             nested_traversal = await registry.execute(
                 ToolCall(
                     id="manual-nested-traversal",
                     name="artifact.read",
-                    arguments={"ref": "manual:pandascore:../../secret"},
+                    arguments={
+                        "ref": "manual:pandascore:../../secret",
+                        "mode": "outline",
+                    },
                 )
             )
-            return registry, read, grep, missing, traversal, nested_traversal
+            return registry, read, outline, grep, missing, traversal, nested_traversal
         finally:
             await services.aclose()
 
-    registry, read, grep, missing, traversal, nested_traversal = asyncio.run(exercise())
+    registry, read, outline, grep, missing, traversal, nested_traversal = asyncio.run(exercise())
 
     assert read.status == "ok"
     assert read.content["ref"] == "manual:pandascore:tournament"
     assert "does not support `league_id`" in read.content["value"]
+    assert outline.status == "ok"
+    assert outline.content["value"] == {"sections": {"content": {"kind": "text"}}}
     assert grep.status == "ok"
     assert grep.content["matches"] == [
         {
@@ -124,7 +146,11 @@ def test_manual_read_and_esports_search_share_one_composed_registry() -> None:
                 ToolCall(
                     id="manual",
                     name="artifact.read",
-                    arguments={"ref": "manual:pandascore:tournament"},
+                    arguments={
+                        "ref": "manual:pandascore:tournament",
+                        "mode": "read",
+                        "path": "content",
+                    },
                 )
             )
             search = await registry.execute(

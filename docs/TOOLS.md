@@ -80,12 +80,15 @@ not be stored; there is no partial-success detail result.
 | Tool | Purpose | Boundary |
 | --- | --- | --- |
 | `artifact.grep` | Schema-neutral scalar search | Requires one exact temporary-tool or documented manual ref |
-| `artifact.read` | Bounded structural read | Requires one exact temporary-tool or documented manual ref/path |
+| `artifact.read` | Explicit outline or bounded path read | Requires one exact ref and `mode="outline"` or `mode="read"`; path is required only for read mode |
 
 Artifacts are session-local JSON-like documents, not a corpus. `artifact.read`
 and `artifact.grep` must not learn PandaScore, OpenDota, Team, Player, or
 gameplay-scenario logic. Both accept an exact string ref returned by another
 tool; manual refs remain documented static allowlist entries.
+`artifact.read` uses `outline` only for root structure and `read` only for an
+explicit dotted path. Offset and limit slice a selected list, never the whole
+response.
 PandaScore query manuals are exposed as static read-only artifacts; start with
 `manual:pandascore:index` and read the relevant resource ref from that index.
 The historical GameSummary-specific `artifact.search` tool is not model-visible;

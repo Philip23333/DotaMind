@@ -10,7 +10,10 @@ from typing import Any
 from pydantic import BaseModel, ValidationError
 
 from app.vnext.artifacts import ToolResponseArtifactError
-from app.vnext.artifacts.retrieval import ArtifactPathNotFoundError
+from app.vnext.artifacts.retrieval import (
+    ArtifactPathNotFoundError,
+    ArtifactReadValidationError,
+)
 from app.vnext.artifacts.store import ArtifactNotFoundError, InvalidArtifactRefError
 from app.vnext.capabilities.game_detail.errors import GameDetailProviderError
 from app.vnext.domain.source import SourceLocatorError
@@ -133,6 +136,13 @@ class ToolRegistry:
             return self._error_result(
                 call,
                 "artifact_error",
+                str(exc),
+                {},
+            )
+        except ArtifactReadValidationError as exc:
+            return self._error_result(
+                call,
+                "invalid_arguments",
                 str(exc),
                 {},
             )

@@ -45,44 +45,46 @@ class ArtifactReader:
         self._store = store
         self._manuals = manuals
 
+    async def outline(self, ref: str) -> ArtifactReadResult:
+        """Return a structural root view without reading a selected path."""
+
+        if ref.startswith("manual:pandascore:"):
+            self._manual_content(ref)
+            return ArtifactReadResult(
+                ref=ref,
+                path=None,
+                value={"sections": {"content": {"kind": "text"}}},
+            )
+        return ArtifactReadResult(ref=ref, path=None, value=_outline(await self._store.get(ref)))
+
     async def read(
         self,
         ref: str,
-        path: str | None = None,
-        offset: int = 0,
-        limit: int = 50,
+        path: str,
         *,
-        pagination_requested: bool | None = None,
+        offset: int | None = None,
+        limit: int | None = None,
     ) -> ArtifactReadResult:
-        if pagination_requested is None:
-            pagination_requested = offset != 0 or limit != 50
-        _validate_pagination(offset, limit)
-        if path is None and pagination_requested:
-            raise ArtifactReadValidationError(
-                "pagination is only valid when the final value is a list"
-            )
+        """Read one explicit path, slicing only when its final value is a list."""
 
+        payload: Any
         if ref.startswith("manual:pandascore:"):
-            if self._manuals is None:
-                raise ArtifactNotFoundError(f"artifact not found: {ref}")
-            if path not in (None, "content"):
-                raise ArtifactPathNotFoundError(f"artifact path not found: {path!r}")
-            return ArtifactReadResult(
-                ref=ref,
-                path=path,
-                value=self._manuals.read(ref),
-            )
-
-        payload = await self._store.get(ref)
-        value = _outline(payload) if path is None else _resolve_path(payload, path)
+            payload = {"content": self._manual_content(ref)}
+        else:
+            payload = await self._store.get(ref)
+        value = _resolve_path(payload, path)
+        pagination_requested = offset is not None or limit is not None
         if isinstance(value, list):
-            end = offset + limit
+            resolved_offset = 0 if offset is None else offset
+            resolved_limit = 50 if limit is None else limit
+            _validate_pagination(resolved_offset, resolved_limit)
+            end = resolved_offset + resolved_limit
             return ArtifactReadResult(
                 ref=ref,
                 path=path,
-                value=value[offset:end],
-                offset=offset,
-                limit=limit,
+                value=value[resolved_offset:end],
+                offset=resolved_offset,
+                limit=resolved_limit,
                 total=len(value),
                 truncated=end < len(value),
             )
@@ -91,6 +93,11 @@ class ArtifactReader:
                 "pagination is only valid when the final value is a list"
             )
         return ArtifactReadResult(ref=ref, path=path, value=value)
+
+    def _manual_content(self, ref: str) -> str:
+        if self._manuals is None:
+            raise ArtifactNotFoundError(f"artifact not found: {ref}")
+        return self._manuals.read(ref)
 
 
 def _validate_pagination(offset: int, limit: int) -> None:
@@ -118,7 +125,7 @@ def _outline(payload: Any) -> Any:
     return outline
 
 
-def _resolve_path(payload: dict[str, Any], path: str) -> Any:
+def _resolve_path(payload: Any, path: str) -> Any:
     if not path or any(segment == "" for segment in path.split(".")):
         raise ArtifactPathNotFoundError(f"artifact path not found: {path!r}")
 

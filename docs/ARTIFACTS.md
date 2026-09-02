@@ -48,14 +48,31 @@ the `manual:pandascore:*` references above and do not belong to a chat session.
 The only generic inspection tools are:
 
 ```text
-artifact.read(ref, path?, offset?, limit?)
+artifact.read(ref, mode, path?, offset?, limit?)
 artifact.grep(ref, pattern, limit?)
 ```
 
-Both require one exact reference. `artifact.read` supports dotted paths and
-bounded list slices. `artifact.grep` is a literal, case-insensitive search in
-that one document; there is no corpus search, Artifact type filter, or scope.
-Neither tool fetches a provider.
+Both require one exact reference. `artifact.read` has explicit modes:
+
+```text
+mode="outline"
+  inspect root structure
+  path, offset, and limit must be omitted
+
+mode="read"
+  read one required dotted path
+  offset and limit slice only when that final value is a list
+```
+
+When a list slice is not supplied, `artifact.read` uses offset `0` and limit
+`50` as runtime policy. A preview's `_artifact_path` is copied unchanged into
+`path` with `mode="read"`; `limit` never controls the overall response size.
+Manuals use the same contract: `outline` reports a `content` text section and
+`read` uses `path="content"`.
+
+`artifact.grep` is a literal, case-insensitive search in that one document;
+there is no corpus search, Artifact type filter, or scope. Neither tool fetches
+a provider.
 
 ## Non-goals
 
