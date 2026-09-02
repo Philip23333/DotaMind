@@ -79,11 +79,13 @@ not be stored; there is no partial-success detail result.
 
 | Tool | Purpose | Boundary |
 | --- | --- | --- |
-| `artifact.grep` | Schema-neutral scalar search | Returns artifact references, paths, and bounded previews |
+| `artifact.grep` | Schema-neutral scalar search | An exact ArtifactRef searches one stored document; without one it returns corpus references, paths, and bounded previews |
 | `artifact.read` | Bounded structural read | Exact ArtifactRef/path or documented static manual ref; no provider semantics |
 
 Artifacts are a generic JSON-like corpus. `artifact.read` and `artifact.grep`
 must not learn PandaScore, OpenDota, Team, Player, or gameplay-scenario logic.
+`artifact.grep` accepts an exact ArtifactRef returned by another capability to
+search only that stored document; string refs remain documented static manuals.
 PandaScore query manuals are exposed as static read-only artifacts; start with
 `manual:pandascore:index` and read the relevant resource ref from that index.
 The historical GameSummary-specific `artifact.search` tool is not model-visible;

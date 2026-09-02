@@ -128,13 +128,14 @@ To inspect the full document, use the generic Artifact primitives:
 
 ```text
 artifact.read(artifact_ref, path?)
-artifact.grep(pattern, artifact_types?, scope?)
+artifact.grep(pattern, artifact_types?, scope?, ref?)
 ```
 
 Artifact exploration has two generic model-facing primitives: read for known
-ArtifactRefs and grep for corpus/content discovery. They observe stored documents
-only, do not understand esports-specific semantics, and never make a provider
-request. The historical GameSummary-specific `artifact.search` is not
+ArtifactRefs and grep for corpus/content discovery. Grep may also receive an
+exact ArtifactRef to search only that stored document. They observe stored
+documents only, do not understand esports-specific semantics, and never make a
+provider request. The historical GameSummary-specific `artifact.search` is not
 model-visible; exact recorded-game retrieval uses `game.detail(valve_game_id)`.
 
 The same generic read and grep primitives explore GameDetailArtifacts. They do

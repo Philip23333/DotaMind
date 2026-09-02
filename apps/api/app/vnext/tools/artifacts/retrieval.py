@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 from app.vnext.artifacts import (
     ArtifactGrepper,
@@ -44,11 +44,12 @@ class ArtifactGrepInput(DomainModel):
         default=None,
         description="Optional opaque corpus scope. It only constrains stored artifact search.",
     )
-    ref: str | None = Field(
+    ref: ArtifactRef | str | None = Field(
         default=None,
         description=(
-            "Optional documented static manual reference. When set, search only that "
-            "read-only document."
+            "Optional exact target. Pass an ArtifactRef returned by another capability to search "
+            "only that stored artifact; pass a documented static manual string to search only "
+            "that read-only document. Omit it to search the stored corpus."
         ),
     )
     limit: int = Field(
@@ -63,6 +64,12 @@ class ArtifactGrepInput(DomainModel):
         if value.isspace():
             raise ValueError("pattern must not be blank")
         return value
+
+    @model_validator(mode="after")
+    def _reject_ambiguous_exact_target(self) -> ArtifactGrepInput:
+        if self.ref is not None and (self.artifact_types is not None or self.scope is not None):
+            raise ValueError("ref cannot be combined with artifact_types or scope")
+        return self
 
 
 def register_artifact_tools(
@@ -93,10 +100,10 @@ def register_artifact_tools(
         ToolDefinition(
             name="artifact.grep",
             description=(
-                "Find case-insensitive literal text in stored artifact content. "
-                "A documented static manual ref can be searched directly. "
-                "Returns bounded artifact-reference and structural-path observations "
-                "without fetching or producing artifacts."
+                "Search case-insensitive literal text in artifact content. Pass an exact "
+                "ArtifactRef returned by another capability to search only that stored artifact. "
+                "Pass a documented static manual ref to search that manual. Omit ref to search "
+                "the available stored corpus."
             ),
             input_model=ArtifactGrepInput,
             output_model=ArtifactGrepResult,

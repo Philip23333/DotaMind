@@ -59,10 +59,20 @@ class ArtifactGrepper:
         artifact_types: list[str] | None = None,
         limit: int = DEFAULT_LIMIT,
         scope: ArtifactScopeRef | None = None,
-        ref: str | None = None,
+        ref: ArtifactRef | str | None = None,
     ) -> ArtifactGrepResult:
         _validate_search(pattern, limit)
         normalized_pattern = pattern.casefold()
+        if ref is not None and (artifact_types is not None or scope is not None):
+            raise ValueError("ref cannot be combined with artifact_types or scope")
+        if isinstance(ref, ArtifactRef):
+            artifact = await self._store.get(ref)
+            return _grep_stored_artifact(
+                ref,
+                _serialize_artifact(artifact),
+                normalized_pattern,
+                limit,
+            )
         if ref is not None:
             if self._static_resolver is None:
                 raise ArtifactNotFoundError(f"artifact not found: {ref}")
@@ -123,6 +133,37 @@ class ArtifactGrepper:
             returned=len(matches),
             truncated=False,
         )
+
+
+def _grep_stored_artifact(
+    ref: ArtifactRef,
+    payload: dict[str, Any],
+    normalized_pattern: str,
+    limit: int,
+) -> ArtifactGrepResult:
+    matches: list[ArtifactGrepMatch] = []
+    for path, value in _scalar_leaves(payload):
+        match_index = value.casefold().find(normalized_pattern)
+        if match_index < 0:
+            continue
+        matches.append(
+            ArtifactGrepMatch(
+                ref=ref,
+                path=path,
+                preview=_preview(value, match_index),
+            )
+        )
+        if len(matches) > limit:
+            return ArtifactGrepResult(
+                matches=matches[:limit],
+                returned=limit,
+                truncated=True,
+            )
+    return ArtifactGrepResult(
+        matches=matches,
+        returned=len(matches),
+        truncated=False,
+    )
 
 
 def _validate_search(pattern: str, limit: int) -> None:

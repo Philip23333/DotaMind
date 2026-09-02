@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from typing import Any
 
 import httpx
@@ -12,12 +13,18 @@ from app.vnext.llm.protocol import ToolCall
 from app.vnext.providers.pandascore.adapter import PandaScoreAdapter
 from app.vnext.providers.pandascore.capabilities import PandaScoreCapabilities
 from app.vnext.providers.pandascore.query import PandaScoreNativeQueryExecutor
+from app.vnext.tools.artifacts import register_artifact_tools
 from app.vnext.tools.domain.esports import register_esports_tools
-from app.vnext.tools.domain.esports_observation import EsportsSearchObservationBuilder
+from app.vnext.tools.domain.esports_observation import (
+    MAX_INLINE_NESTED_BYTES,
+    MAX_PREVIEW_BYTES,
+    MAX_PREVIEW_ROW_BYTES,
+    EsportsSearchObservationBuilder,
+)
 from app.vnext.tools.registry import ToolRegistry
 
 
-def _large_tournaments() -> list[dict[str, Any]]:
+def _large_tournaments(*, match_prefix: str = "Grand final") -> list[dict[str, Any]]:
     return [
         {
             "id": tournament_id,
@@ -28,7 +35,7 @@ def _large_tournaments() -> list[dict[str, Any]]:
             "matches": [
                 {
                     "id": tournament_id * 100 + match_index,
-                    "name": f"Grand final detail {match_index}",
+                    "name": f"{match_prefix} detail {match_index}",
                     "streams_list": [{"embed_url": "https://example.test/" + "x" * 300}],
                 }
                 for match_index in range(20)
@@ -55,12 +62,17 @@ def _registry(
         transport=httpx.MockTransport(handler),
     )
     registry = ToolRegistry()
+    register_artifact_tools(registry, ArtifactReader(store), ArtifactGrepper(store))
     register_esports_tools(
         registry,
         PandaScoreNativeQueryExecutor(PandaScoreCapabilities.load(), adapter),
         EsportsSearchObservationBuilder(store),
     )
     return registry, adapter
+
+
+def _serialized_size(value: Any) -> int:
+    return len(json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
 
 
 def _refs(store: MemoryArtifactStore) -> list[ArtifactRef]:
@@ -233,3 +245,166 @@ def test_query_identity_is_stable_for_the_same_search_input() -> None:
 
     assert first.content["artifact_ref"] == second.content["artifact_ref"]
     assert len(_refs(store)) == 1
+
+
+def test_exact_dynamic_artifact_grep_isolated_from_other_search_artifacts() -> None:
+    store = MemoryArtifactStore()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        name = request.url.params["filter[name]"]
+        return httpx.Response(
+            200,
+            json=_large_tournaments(match_prefix=f"Grand final {name}"),
+            request=request,
+        )
+
+    registry, adapter = _registry(handler, store)
+
+    async def exercise():
+        try:
+            alpha = await registry.execute(
+                ToolCall(
+                    id="alpha-search",
+                    name="esports.search",
+                    arguments={"resource": "tournament", "filter": {"name": "Alpha"}},
+                )
+            )
+            beta = await registry.execute(
+                ToolCall(
+                    id="beta-search",
+                    name="esports.search",
+                    arguments={"resource": "tournament", "filter": {"name": "Beta"}},
+                )
+            )
+            alpha_grep = await registry.execute(
+                ToolCall(
+                    id="alpha-grep",
+                    name="artifact.grep",
+                    arguments={"pattern": "Grand final", "ref": alpha.content["artifact_ref"]},
+                )
+            )
+            beta_grep = await registry.execute(
+                ToolCall(
+                    id="beta-grep",
+                    name="artifact.grep",
+                    arguments={"pattern": "Grand final", "ref": beta.content["artifact_ref"]},
+                )
+            )
+            corpus_grep = await registry.execute(
+                ToolCall(
+                    id="corpus-grep",
+                    name="artifact.grep",
+                    arguments={
+                        "pattern": "Grand final",
+                        "artifact_types": ["esports_search_result"],
+                        "limit": 100,
+                    },
+                )
+            )
+            ambiguous = await registry.execute(
+                ToolCall(
+                    id="ambiguous-grep",
+                    name="artifact.grep",
+                    arguments={
+                        "pattern": "Grand final",
+                        "ref": alpha.content["artifact_ref"],
+                        "artifact_types": ["esports_search_result"],
+                    },
+                )
+            )
+            return alpha, beta, alpha_grep, beta_grep, corpus_grep, ambiguous
+        finally:
+            await adapter.aclose()
+
+    alpha, beta, alpha_grep, beta_grep, corpus_grep, ambiguous = asyncio.run(exercise())
+    alpha_ref = alpha.content["artifact_ref"]
+    beta_ref = beta.content["artifact_ref"]
+
+    assert alpha_grep.status == "ok"
+    assert beta_grep.status == "ok"
+    assert alpha_grep.content["returned"] == 20
+    assert beta_grep.content["returned"] == 20
+    assert {match["ref"]["id"] for match in alpha_grep.content["matches"]} == {alpha_ref["id"]}
+    assert {match["ref"]["id"] for match in beta_grep.content["matches"]} == {beta_ref["id"]}
+    assert all("Alpha" in match["preview"] for match in alpha_grep.content["matches"])
+    assert all("Beta" in match["preview"] for match in beta_grep.content["matches"])
+    assert {match["ref"]["id"] for match in corpus_grep.content["matches"]} == {
+        alpha_ref["id"],
+        beta_ref["id"],
+    }
+    assert ambiguous.status == "error"
+    assert ambiguous.error is not None
+    assert ambiguous.error.code == "invalid_arguments"
+
+
+def test_root_preview_uses_the_full_row_budget_without_unbounding_nested_data() -> None:
+    store = MemoryArtifactStore()
+    scalar_heavy_row = {
+        "id": 21545,
+        "name": "Group Stage",
+        **{f"scalar_{index}": "x" * 160 for index in range(10)},
+        "matches": [{"name": "Grand final", "detail": "m" * 800} for _ in range(20)],
+        "large_nested": {"detail": "n" * (MAX_INLINE_NESTED_BYTES + 1)},
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=[scalar_heavy_row], request=request)
+
+    registry, adapter = _registry(handler, store)
+
+    async def exercise():
+        try:
+            return await registry.execute(
+                ToolCall(
+                    id="root-budget",
+                    name="esports.search",
+                    arguments={"resource": "tournament"},
+                )
+            )
+        finally:
+            await adapter.aclose()
+
+    result = asyncio.run(exercise())
+    preview = result.content["rows"][0]
+
+    assert result.status == "ok"
+    assert MAX_INLINE_NESTED_BYTES < _serialized_size(preview) <= MAX_PREVIEW_ROW_BYTES
+    assert preview["matches"] == {
+        "_artifact_path": "result.rows.0.matches",
+        "_count": 20,
+    }
+    assert preview["large_nested"] == {"_artifact_path": "result.rows.0.large_nested"}
+
+
+def test_large_multi_row_preview_stays_within_the_total_observation_budget() -> None:
+    store = MemoryArtifactStore()
+    row = {
+        "name": "Group Stage",
+        **{f"scalar_{index}": "x" * 160 for index in range(10)},
+        "matches": [{"detail": "m" * 800} for _ in range(20)],
+    }
+    rows = [{"id": 21500 + index, **row} for index in range(20)]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=rows, request=request)
+
+    registry, adapter = _registry(handler, store)
+
+    async def exercise():
+        try:
+            return await registry.execute(
+                ToolCall(
+                    id="total-budget",
+                    name="esports.search",
+                    arguments={"resource": "tournament"},
+                )
+            )
+        finally:
+            await adapter.aclose()
+
+    result = asyncio.run(exercise())
+
+    assert result.status == "ok"
+    assert result.content["total_rows"] == 20
+    assert len(result.content["rows"]) < 20
+    assert _serialized_size(result.content) <= MAX_PREVIEW_BYTES

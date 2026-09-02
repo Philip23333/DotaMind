@@ -97,6 +97,7 @@ class EsportsSearchObservationBuilder:
                 resource=result.resource,
                 scope=result.scope,
                 has_more=result.has_more,
+                artifact_ref=ref,
             ),
             has_more=result.has_more,
             truncated=True,
@@ -111,12 +112,12 @@ def _build_rows_preview(
     resource: str,
     scope: str,
     has_more: bool | None,
+    artifact_ref: ArtifactRef,
 ) -> list[dict[str, Any]]:
     preview_rows: list[dict[str, Any]] = []
     for index, row in enumerate(rows[:MAX_PREVIEW_ROWS]):
         preview = _build_preview(row, f"result.rows.{index}", depth=0)
         assert isinstance(preview, dict)
-        preview = _bound_mapping(preview, MAX_PREVIEW_ROW_BYTES)
         candidate = [*preview_rows, preview]
         if _serialized_size(
             {
@@ -126,6 +127,7 @@ def _build_rows_preview(
                 "has_more": has_more,
                 "truncated": True,
                 "total_rows": len(rows),
+                "artifact_ref": artifact_ref.model_dump(mode="json"),
             }
         ) > MAX_PREVIEW_BYTES:
             break
@@ -154,7 +156,8 @@ def _build_preview(value: Any, path: str, *, depth: int) -> Any:
             key: _build_preview(child, f"{path}.{key}", depth=depth + 1)
             for key, child in _ordered_items(value)
         }
-        return _bound_mapping(preview, MAX_INLINE_NESTED_BYTES)
+        mapping_budget = MAX_PREVIEW_ROW_BYTES if depth == 0 else MAX_INLINE_NESTED_BYTES
+        return _bound_mapping(preview, mapping_budget)
     return {"_artifact_path": path}
 
 
