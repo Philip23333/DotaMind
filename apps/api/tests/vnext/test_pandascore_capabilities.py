@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from scripts.generate_pandascore_capabilities import build_capabilities, serialize_capabilities
+from scripts.generate_pandascore_capabilities import (
+    build_capabilities,
+    render_agent_manual,
+    serialize_capabilities,
+    write_agent_manual,
+)
 
 
 def test_generated_capabilities_preserve_endpoint_local_query_fields() -> None:
@@ -62,3 +67,51 @@ def test_generation_is_deterministic() -> None:
 def test_generation_rejects_an_incomplete_endpoint_fact_directory(tmp_path) -> None:
     with pytest.raises(ValueError, match="Expected 16 endpoint fact files, found 0"):
         build_capabilities(tmp_path)
+
+
+def test_agent_manual_generation_is_complete_and_deterministic(tmp_path) -> None:
+    capabilities = build_capabilities()
+    first_render = render_agent_manual(capabilities)
+    second_render = render_agent_manual(capabilities)
+
+    assert first_render == second_render
+    assert set(first_render) == {
+        "INDEX.md",
+        "league.md",
+        "serie.md",
+        "tournament.md",
+        "match.md",
+        "team.md",
+        "player.md",
+    }
+    write_agent_manual(capabilities, tmp_path)
+    assert {path.name for path in tmp_path.iterdir()} == set(first_render)
+    assert (tmp_path / "tournament.md").read_text(encoding="utf-8") == first_render["tournament.md"]
+
+
+def test_agent_manual_preserves_capability_fields_and_limitations() -> None:
+    capabilities = build_capabilities()
+    manual = render_agent_manual(capabilities)
+
+    for resource, resource_capabilities in capabilities["resources"].items():
+        content = manual[f"{resource}.md"]
+        for scope in resource_capabilities["scopes"].values():
+            for operator in ("filter", "search", "range"):
+                for field in scope[operator]:
+                    assert field in content
+
+    tournament = manual["tournament.md"]
+    assert "The following fields are supported by all scopes:" in tournament
+    assert "`serie_id`" in tournament
+    assert "`name`" in tournament
+    assert "does not support `league_id`" in tournament
+    assert "does not support `year`" in tournament
+
+    assert "`league_id`" in manual["serie.md"]
+    assert "`year`" in manual["serie.md"]
+    assert "`league_id`" in manual["match.md"]
+    assert "`serie_id`" in manual["match.md"]
+    assert "`tournament_id`" in manual["match.md"]
+    assert "/dota2/series/{serie_id_or_slug}/teams" in manual["team.md"]
+    assert "`serie_id_or_slug`" in manual["team.md"]
+    assert "by_serie" not in manual["INDEX.md"]

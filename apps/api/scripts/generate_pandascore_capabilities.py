@@ -18,7 +18,35 @@ _SOURCE_DIRECTORY = (
 _OUTPUT_PATH = (
     _REPOSITORY_ROOT / "docs" / "reference" / "pandascore-generated" / "capabilities.json"
 )
+_MANUAL_OUTPUT_DIRECTORY = (
+    _REPOSITORY_ROOT / "docs" / "reference" / "pandascore-generated" / "agent-manual"
+)
 _GENERATED_FROM = "docs/reference/pandascore-snapshots/PandaScore_endpoint_detection"
+_MANUAL_RESOURCES = ("league", "serie", "tournament", "match", "team", "player")
+_LIFECYCLE_SCOPES = {"all", "past", "running", "upcoming"}
+_MANUAL_HEADER = "<!--\nDO NOT EDIT.\nGenerated from PandaScore endpoint snapshots.\n-->\n"
+_FIELD_OPERATORS = (
+    ("filter", "Filter fields"),
+    ("search", "Search fields"),
+    ("range", "Range fields"),
+)
+
+_QUERY_EXAMPLES = {
+    "league": {"resource": "league", "search": {"name": "The International"}},
+    "serie": {"resource": "serie", "filter": {"league_id": 4106, "year": 2026}},
+    "tournament": {
+        "resource": "tournament",
+        "filter": {"serie_id": 10828, "name": "Group Stage"},
+    },
+    "match": {
+        "resource": "match",
+        "scope": "past",
+        "filter": {"tournament_id": 21698},
+        "search": {"name": "Grand Final"},
+    },
+    "team": {"resource": "team", "search": {"name": "Team Spirit"}},
+    "player": {"resource": "player", "search": {"name": "..."}},
+}
 
 ENDPOINT_MAP = {
     "get_dota2_leagues": {"resource": "league", "scope": "all"},
@@ -240,11 +268,279 @@ def serialize_capabilities(capabilities: dict[str, Any]) -> str:
     return json.dumps(capabilities, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
 
 
+def _normal_scopes(resource: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    return {
+        scope: capability
+        for scope, capability in resource["scopes"].items()
+        if scope in _LIFECYCLE_SCOPES
+    }
+
+
+def _render_field_table(fields: dict[str, dict[str, Any]]) -> list[str]:
+    if not fields:
+        return ["None."]
+
+    lines = [
+        "| Field | Type | Multiple | Enum | Format |",
+        "| --- | --- | --- | --- | --- |",
+    ]
+    for field, specification in fields.items():
+        field_type = specification.get("raw_type", specification["type"])
+        enum = ", ".join(str(value) for value in specification["enum"] or [])
+        multiple = "yes" if specification["multiple"] else "no"
+        lines.append(
+            f"| {field} | `{field_type}` | {multiple} | {enum} | {specification['format'] or ''} |"
+        )
+    return lines
+
+
+def _render_scope_fields(
+    scopes: dict[str, dict[str, Any]], operator: str
+) -> list[str]:
+    scope_capabilities = list(scopes.values())
+    first_fields = scope_capabilities[0][operator]
+    if all(capability[operator] == first_fields for capability in scope_capabilities[1:]):
+        return [
+            "The following fields are supported by all scopes:",
+            "",
+            *_render_field_table(first_fields),
+            "",
+        ]
+
+    lines: list[str] = []
+    for scope, capability in scopes.items():
+        lines.extend([f"### {scope}", ""])
+        lines.extend(_render_field_table(capability[operator]))
+        lines.append("")
+    return lines
+
+
+def _render_sort_fields(scopes: dict[str, dict[str, Any]]) -> list[str]:
+    scope_capabilities = list(scopes.values())
+    first_sort = scope_capabilities[0]["sort"]
+    if all(capability["sort"] == first_sort for capability in scope_capabilities[1:]):
+        return _render_sort_values(first_sort, "all scopes")
+
+    lines: list[str] = []
+    for scope, capability in scopes.items():
+        lines.extend(_render_sort_values(capability["sort"], scope))
+    return lines
+
+
+def _render_sort_values(sort: list[str | dict[str, str]], scope: str) -> list[str]:
+    lines = [f"### {scope}", ""]
+    if not sort:
+        return [*lines, "None.", ""]
+    for field in sort:
+        if isinstance(field, str):
+            lines.append(f"- `{field}`")
+        else:
+            lines.append(
+                "- "
+                f"`{field['field']}` (ascending: `{field['ascending']}`, "
+                f"descending: `{field['descending']}`)"
+            )
+    return [*lines, "", "Prefix a field with `-` for descending order.", ""]
+
+
+def _render_special_route(capability: dict[str, Any]) -> list[str]:
+    lines = [
+        "### Teams by serie",
+        "",
+        f"Path: `{capability['path']}`",
+        "",
+        "Path parameters:",
+        "",
+    ]
+    for name, specification in capability["path_params"].items():
+        requirement = "required" if specification["required"] else "optional"
+        lines.append(f"- `{name}`: {specification['type']}, {requirement}")
+    lines.extend(["", "This route lists teams for a specific serie.", ""])
+    for operator, title in _FIELD_OPERATORS:
+        lines.extend([f"#### {title}", ""])
+        lines.extend(_render_field_table(capability[operator]))
+        lines.append("")
+    lines.extend(["#### Sort fields", ""])
+    if not capability["sort"]:
+        lines.append("None.")
+    else:
+        for field in capability["sort"]:
+            lines.append(f"- `{field}`" if isinstance(field, str) else f"- `{field['field']}`")
+        lines.append("")
+        lines.append("Prefix a field with `-` for descending order.")
+    return lines
+
+
+def _require_filter_fields(capabilities: dict[str, Any], resource: str, *fields: str) -> None:
+    available = capabilities["resources"][resource]["scopes"]["all"]["filter"]
+    missing = set(fields) - set(available)
+    if missing:
+        raise ValueError(
+            f"{resource} manual guidance requires unavailable fields: {sorted(missing)}"
+        )
+
+
+def _render_limitations(capabilities: dict[str, Any], resource: str) -> list[str]:
+    if resource == "tournament":
+        _require_filter_fields(capabilities, resource, "serie_id")
+        fields = capabilities["resources"][resource]["scopes"]["all"]["filter"]
+        if "league_id" in fields or "year" in fields:
+            raise ValueError("Tournament manual limitation no longer matches capabilities")
+        return [
+            "Tournament supports `serie_id` as a filter field.",
+            "",
+            "Tournament does not support `league_id` as a filter field.",
+            "",
+            "Tournament does not support `year` as a filter field.",
+            "",
+            "If those constraints are known at league or edition level, obtain the corresponding "
+            "serie ID before querying tournaments by `serie_id`.",
+        ]
+    if resource == "serie":
+        _require_filter_fields(capabilities, resource, "league_id", "year")
+        return [
+            "Serie supports both `league_id` and `year` filter fields, which can be used "
+            "together to identify a league edition."
+        ]
+    if resource == "match":
+        _require_filter_fields(capabilities, resource, "league_id", "serie_id", "tournament_id")
+        return [
+            "Matches can be narrowed using `league_id`, `serie_id`, or `tournament_id`. "
+            "Use the narrowest identifier already known."
+        ]
+    if resource == "league":
+        fields = capabilities["resources"][resource]["scopes"]["all"]["filter"]
+        if "year" in fields:
+            raise ValueError("League manual limitation no longer matches capabilities")
+        return ["League does not support a `year` filter."]
+    return ["Use only the fields listed above for the selected scope."]
+
+
+def _validate_example(capabilities: dict[str, Any], resource: str, example: dict[str, Any]) -> None:
+    if example["resource"] != resource:
+        raise ValueError(f"Example resource mismatch for {resource}")
+    resource_capabilities = capabilities["resources"][resource]
+    scope = example.get("scope", "all")
+    if scope not in _normal_scopes(resource_capabilities):
+        raise ValueError(f"Example uses unsupported {resource} scope {scope!r}")
+    scope_capability = resource_capabilities["scopes"][scope]
+    for operator in ("filter", "search", "range"):
+        fields = set(example.get(operator, {}))
+        if not fields <= set(scope_capability[operator]):
+            raise ValueError(
+                f"Example uses unsupported {resource} {operator} fields: {sorted(fields)}"
+            )
+
+
+def _render_resource_manual(capabilities: dict[str, Any], resource: str) -> str:
+    resource_capabilities = capabilities["resources"][resource]
+    normal_scopes = _normal_scopes(resource_capabilities)
+    if not normal_scopes:
+        raise ValueError(f"{resource} has no normal query scopes")
+    example = _QUERY_EXAMPLES[resource]
+    _validate_example(capabilities, resource, example)
+
+    lines = [
+        _MANUAL_HEADER.rstrip(),
+        "",
+        f"# {resource.capitalize()}",
+        "",
+        "## Supported scopes",
+        "",
+    ]
+    lines.extend(f"- `{scope}`" for scope in normal_scopes)
+    for operator, title in _FIELD_OPERATORS:
+        lines.extend(["", f"## {title}", ""])
+        lines.extend(_render_scope_fields(normal_scopes, operator))
+    lines.extend(["## Sort fields", ""])
+    lines.extend(_render_sort_fields(normal_scopes))
+    lines.extend(["## Special routes", ""])
+    special_route = resource_capabilities["scopes"].get("by_serie")
+    if special_route is None:
+        lines.append("None.")
+    else:
+        lines.extend(_render_special_route(special_route))
+    lines.extend(["", "## Query examples", "", "```json", json.dumps(example, indent=2), "```"])
+    lines.extend(["", "## Important limitations", ""])
+    lines.extend(_render_limitations(capabilities, resource))
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def _render_index(capabilities: dict[str, Any]) -> str:
+    lines = [
+        _MANUAL_HEADER.rstrip(),
+        "",
+        "# PandaScore Dota 2 Query Manual",
+        "",
+        "Use this manual when constructing esports search queries.",
+        "",
+        "## Query model",
+        "",
+        "Supported query operators:",
+        "",
+        "- resource",
+        "- scope",
+        "- filter",
+        "- search",
+        "- range",
+        "- sort",
+        "- pagination",
+        "",
+        "Different resources support different fields.",
+        "",
+        "## Resources",
+        "",
+        "| Resource | Supported scopes |",
+        "| --- | --- |",
+    ]
+    for resource in _MANUAL_RESOURCES:
+        scopes = ", ".join(_normal_scopes(capabilities["resources"][resource]))
+        lines.append(f"| [{resource}]({resource}.md) | {scopes} |")
+    lines.extend(
+        [
+            "",
+            "## General rules",
+            "",
+            "- `filter` uses exact/value filtering.",
+            "- `search` uses PandaScore search semantics.",
+            "- `range[field]` takes two values.",
+            "- Use `-field` for descending sort.",
+            "- IDs returned by previous results can be reused in later queries.",
+            "- Do not assume a field supported by one resource exists on another.",
+            "- When unsure, read the resource manual before querying.",
+        ]
+    )
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def render_agent_manual(capabilities: dict[str, Any]) -> dict[str, str]:
+    missing_resources = set(_MANUAL_RESOURCES) - set(capabilities["resources"])
+    if missing_resources:
+        raise ValueError(f"Manual resources are missing: {sorted(missing_resources)}")
+    manual = {"INDEX.md": _render_index(capabilities)}
+    manual.update(
+        {
+            f"{resource}.md": _render_resource_manual(capabilities, resource)
+            for resource in _MANUAL_RESOURCES
+        }
+    )
+    return manual
+
+
+def write_agent_manual(
+    capabilities: dict[str, Any], output_directory: Path = _MANUAL_OUTPUT_DIRECTORY
+) -> None:
+    output_directory.mkdir(parents=True, exist_ok=True)
+    for filename, content in render_agent_manual(capabilities).items():
+        (output_directory / filename).write_text(content, encoding="utf-8")
+
+
 def main() -> int:
     capabilities = build_capabilities()
     _OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     _OUTPUT_PATH.write_text(serialize_capabilities(capabilities), encoding="utf-8")
-    print(f"Generated {_OUTPUT_PATH}")
+    write_agent_manual(capabilities)
+    print(f"Generated {_OUTPUT_PATH} and {_MANUAL_OUTPUT_DIRECTORY}")
     return 0
 
 
