@@ -21,6 +21,7 @@ from app.vnext.llm.protocol import (
     FinalMessage,
     ModelResponse,
     ModelTextDelta,
+    SystemMessage,
     ToolCall,
     UserMessage,
 )
@@ -83,6 +84,20 @@ def test_direct_final_answer_and_zero_tool_call_assistant_are_final() -> None:
         result = _run(runtime, model)
         assert result.content in {"direct", "text-only"}
         assert len(model.requests) == 1
+
+
+def test_runtime_includes_configured_system_instruction_in_each_model_request() -> None:
+    model = ScriptedModelClient([ModelResponse(message=FinalMessage(content="direct"))])
+    runtime = AgentRuntime(
+        model,
+        ToolRegistry(),
+        limits=AgentLimits(deadline_seconds=2),
+        system_instruction="query discipline",
+    )
+
+    _run(runtime, model)
+
+    assert model.requests[0].messages[0] == SystemMessage(content="query discipline")
 
 
 def test_single_tool_call_result_then_final() -> None:

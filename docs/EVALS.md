@@ -70,5 +70,12 @@ and distinguish:
 - resolution status for Valve IDs;
 - whether the required evidence reached the final answer.
 
+For esports query discipline, record the number of tool calls, model steps,
+`unsupported_field`, `invalid_arguments`, and resource-manual reads. A query
+must not guess an unestablished resource field before reading that resource's
+manual, and must not retry an `unsupported_field` or `unsupported_scope` idea
+without that manual. The index manual is not evidence for resource-specific
+field support.
+
 Model knowledge does not substitute for a fresh source observation when the
 question asks for current esports information.

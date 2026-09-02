@@ -43,6 +43,7 @@ from app.vnext.llm.protocol import (
     ModelResponse,
     ModelTextDelta,
     StreamingModelClient,
+    SystemMessage,
     ToolCall,
     ToolResultMessage,
 )
@@ -106,11 +107,13 @@ class AgentRuntime:
         *,
         limits: AgentLimits | None = None,
         event_sink: EventSink | None = None,
+        system_instruction: str | None = None,
     ) -> None:
         self.model = model
         self.tools = tools
         self.limits = limits or AgentLimits()
         self.event_sink = event_sink
+        self.system_instruction = system_instruction
 
     async def run(
         self,
@@ -154,6 +157,8 @@ class AgentRuntime:
 
         try:
             request_messages = list(messages)
+            if self.system_instruction is not None:
+                request_messages.insert(0, SystemMessage(content=self.system_instruction))
             # Validate the initial transcript before model dispatch.  This also
             # makes a defensive copy so a caller's list is never mutated.
             request_messages = ModelRequest(messages=request_messages, tools=[]).messages

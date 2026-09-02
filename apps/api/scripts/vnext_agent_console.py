@@ -326,7 +326,12 @@ async def _run(args: argparse.Namespace) -> int:
     base_runtime = build_vnext_runtime(settings, services=services)
     model = _TracingModelClient(base_runtime.model)
     tool_trace = _TracingToolRegistry(base_runtime.tools)
-    runtime = AgentRuntime(model, tool_trace, limits=base_runtime.limits)
+    runtime = AgentRuntime(
+        model,
+        tool_trace,
+        limits=base_runtime.limits,
+        system_instruction=base_runtime.system_instruction,
+    )
     try:
         conversation = _ConversationTrace(name=args.result_name or _new_result_name())
         if args.prompt:

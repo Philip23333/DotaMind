@@ -56,14 +56,31 @@ resource to another. Unsupported fields and scopes return structured errors.
 Small results retain their complete source-shaped row dictionaries. Large
 results return a bounded structural preview, `returned_rows`, and a fresh opaque
 `artifact:tool:*` string to the complete logical response. `returned_rows` is
-the row count in that call's full stored response, while `has_more` says whether
-the provider has a later page. `truncated=true` means only the model-facing
+always the row count in that call's complete logical response, while `has_more`
+says whether the provider has a later page. `truncated=true` means only the model-facing
 preview was bounded, not that provider rows are missing. Use the returned
 `_artifact_path` directly as `artifact.read(mode="read", path=...)` with that
 exact ref. This does not alter the source query or provider request.
 
 Do not reintroduce a search-engine abstraction, a universal search DTO, or
 scenario-specific query plumbing while the new seam is pending.
+
+### Query discipline
+
+The production agent policy permits direct basic entity discovery with a name
+search and default scope. It forbids a query using `filter`, `range`, `sort`, a
+non-default `scope`, or a resource relation until those capabilities are
+established for that resource by the current conversation or a successful tool
+result. Otherwise, it reads `manual:pandascore:<resource>` before the search. A
+manual outline only exposes its copyable `content` path; the policy requires
+reading that path with `artifact.read(mode="read")` before treating its fields
+as established.
+
+After `unsupported_field` or `unsupported_scope`, the agent must not retry the
+same idea with another operator; it reads the corresponding resource manual
+first. `manual:pandascore:index` only discovers available manuals, while a
+resource manual decides its actual query fields. Manuals decide what query is
+legal; `_artifact_path` values inspect data returned by a previous tool call.
 
 ## `game.detail`
 
