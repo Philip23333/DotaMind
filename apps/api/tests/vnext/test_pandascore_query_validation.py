@@ -144,3 +144,27 @@ def test_validator_rejects_special_team_route_as_normal_scope() -> None:
         "scope": "by_serie",
         "supported_scopes": ["all"],
     }
+
+
+def test_validator_normalizes_and_validates_pagination() -> None:
+    capabilities = PandaScoreCapabilities.load()
+
+    normalized = capabilities.validate_query({"resource": "league", "page": 2, "page_size": 25})
+    assert normalized.page == 2
+    assert normalized.page_size == 25
+
+    with pytest.raises(PandaScoreQueryValidationError) as page_error:
+        capabilities.validate_query({"resource": "league", "page": 0})
+    assert _error(page_error) == {
+        "code": "invalid_value",
+        "field": "page",
+        "reason": "page_must_be_positive_integer",
+    }
+
+    with pytest.raises(PandaScoreQueryValidationError) as page_size_error:
+        capabilities.validate_query({"resource": "league", "page_size": 101})
+    assert _error(page_size_error) == {
+        "code": "invalid_value",
+        "field": "page_size",
+        "reason": "page_size_out_of_range",
+    }

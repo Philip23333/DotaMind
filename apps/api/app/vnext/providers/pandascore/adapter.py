@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import httpx
 from pydantic import ValidationError
@@ -19,6 +19,9 @@ from app.vnext.providers.pandascore.models import (
     PandaScoreTeam,
     PandaScoreTournament,
 )
+
+if TYPE_CHECKING:
+    from app.vnext.providers.pandascore.query import CompiledPandaScoreQuery, PandaScoreNativeResult
 
 PandaLifecycleScope = Literal["upcoming", "running", "past"]
 PandaMatchScope = Literal["upcoming", "running", "past", "recent", "all"]
@@ -380,6 +383,34 @@ class PandaScoreAdapter:
         return ProviderObject(
             item=self._parse(PandaScoreMatch, payload, path),
             fetched_at=fetched_at,
+        )
+
+    async def execute_native_query(
+        self,
+        compiled: CompiledPandaScoreQuery,
+        *,
+        resource: str,
+        scope: str,
+    ) -> PandaScoreNativeResult:
+        """Fetch one compiled collection query without projecting source-shaped rows."""
+
+        from app.vnext.providers.pandascore.query import PandaScoreNativeResult
+
+        payload, fetched_at, pagination = await self._get_json(
+            compiled.path, params=dict(compiled.params)
+        )
+        rows = self._require_list(payload, compiled.path)
+        if not all(isinstance(row, dict) for row in rows):
+            raise PandaScoreSchemaError(
+                f"PandaScore response at {compiled.path} must contain object rows"
+            )
+        completed_pagination = _complete_pagination(pagination, len(rows))
+        return PandaScoreNativeResult(
+            resource=resource,
+            scope=scope,
+            rows=rows,
+            fetched_at=fetched_at,
+            has_more=completed_pagination.has_more,
         )
 
     async def _get_json(

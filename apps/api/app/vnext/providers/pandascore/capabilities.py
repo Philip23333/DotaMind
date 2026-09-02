@@ -41,6 +41,8 @@ class EsportsSearchQuery:
     search: Mapping[str, Any] | None = None
     range: Mapping[str, Any] | None = None
     sort: Sequence[str] | None = None
+    page: int = 1
+    page_size: int = 10
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,13 +113,16 @@ class PandaScoreCapabilities:
             )
         return self._endpoint_capability(resource, scope, scope_document)
 
-    def validate_query(self, query: EsportsSearchQuery | Mapping[str, Any]) -> None:
-        normalized_query = _coerce_query(query)
+    def validate_query(
+        self, query: EsportsSearchQuery | Mapping[str, Any]
+    ) -> EsportsSearchQuery:
+        normalized_query = normalize_query(query)
         endpoint = self.endpoint(normalized_query.resource, normalized_query.scope)
         self._validate_operator(endpoint, "filter", normalized_query.filter)
         self._validate_operator(endpoint, "search", normalized_query.search)
         self._validate_operator(endpoint, "range", normalized_query.range)
         self._validate_sort(endpoint, normalized_query.sort)
+        return normalized_query
 
     @staticmethod
     def _endpoint_capability(
@@ -270,29 +275,45 @@ class PandaScoreCapabilities:
                 )
 
 
-def _coerce_query(query: EsportsSearchQuery | Mapping[str, Any]) -> EsportsSearchQuery:
+def normalize_query(query: EsportsSearchQuery | Mapping[str, Any]) -> EsportsSearchQuery:
     if isinstance(query, EsportsSearchQuery):
-        return query
-    if not isinstance(query, Mapping):
+        normalized_query = query
+    elif not isinstance(query, Mapping):
         raise PandaScoreQueryValidationError("invalid_value", reason="query_requires_object")
-    resource = query.get("resource")
-    if not isinstance(resource, str):
-        raise PandaScoreQueryValidationError(
-            "invalid_value", field="resource", reason="resource_requires_string"
+    else:
+        resource = query.get("resource")
+        if not isinstance(resource, str):
+            raise PandaScoreQueryValidationError(
+                "invalid_value", field="resource", reason="resource_requires_string"
+            )
+        scope = query.get("scope", "all")
+        if not isinstance(scope, str):
+            raise PandaScoreQueryValidationError(
+                "invalid_value", field="scope", reason="scope_requires_string"
+            )
+        normalized_query = EsportsSearchQuery(
+            resource=resource,
+            scope=scope,
+            filter=query.get("filter"),
+            search=query.get("search"),
+            range=query.get("range"),
+            sort=query.get("sort"),
+            page=query.get("page", 1),
+            page_size=query.get("page_size", 10),
         )
-    scope = query.get("scope", "all")
-    if not isinstance(scope, str):
+    _validate_pagination(normalized_query)
+    return normalized_query
+
+
+def _validate_pagination(query: EsportsSearchQuery) -> None:
+    if not _is_plain_integer(query.page) or query.page < 1:
         raise PandaScoreQueryValidationError(
-            "invalid_value", field="scope", reason="scope_requires_string"
+            "invalid_value", field="page", reason="page_must_be_positive_integer"
         )
-    return EsportsSearchQuery(
-        resource=resource,
-        scope=scope,
-        filter=query.get("filter"),
-        search=query.get("search"),
-        range=query.get("range"),
-        sort=query.get("sort"),
-    )
+    if not _is_plain_integer(query.page_size) or not 1 <= query.page_size <= 100:
+        raise PandaScoreQueryValidationError(
+            "invalid_value", field="page_size", reason="page_size_out_of_range"
+        )
 
 
 def _invalid_value_error(
@@ -319,7 +340,7 @@ def _is_value_sequence(value: Any) -> bool:
 
 def _value_matches_type(value: Any, value_type: Any) -> bool:
     if value_type == "integer":
-        return isinstance(value, int) and not isinstance(value, bool)
+        return _is_plain_integer(value)
     if value_type == "number":
         return isinstance(value, int | float) and not isinstance(value, bool)
     if value_type == "string":
@@ -327,6 +348,10 @@ def _value_matches_type(value: Any, value_type: Any) -> bool:
     if value_type == "boolean":
         return isinstance(value, bool)
     return True
+
+
+def _is_plain_integer(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
 
 
 def _sort_fields(sort: Sequence[str | Mapping[str, str]]) -> set[str]:
