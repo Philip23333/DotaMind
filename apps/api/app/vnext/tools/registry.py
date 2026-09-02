@@ -9,12 +9,10 @@ from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
+from app.vnext.artifacts import ToolResponseArtifactError
 from app.vnext.artifacts.retrieval import ArtifactPathNotFoundError
-from app.vnext.artifacts.store import ArtifactNotFoundError, ArtifactTypeMismatchError
-from app.vnext.capabilities.game_detail.errors import (
-    GameDetailArtifactError,
-    GameDetailProviderError,
-)
+from app.vnext.artifacts.store import ArtifactNotFoundError, InvalidArtifactRefError
+from app.vnext.capabilities.game_detail.errors import GameDetailProviderError
 from app.vnext.domain.source import SourceLocatorError
 from app.vnext.llm.protocol import ModelTool, ToolCall, ToolResultMessage
 from app.vnext.providers.pandascore.adapter import (
@@ -26,7 +24,6 @@ from app.vnext.providers.pandascore.adapter import (
 )
 from app.vnext.providers.pandascore.capabilities import PandaScoreQueryValidationError
 from app.vnext.tools.definition import ToolDefinition
-from app.vnext.tools.domain.esports_observation import EsportsSearchArtifactError
 from app.vnext.tools.errors import ToolError, ToolErrorCode
 
 
@@ -104,7 +101,7 @@ class ToolRegistry:
             )
         except asyncio.CancelledError:
             raise
-        except ArtifactNotFoundError:
+        except (ArtifactNotFoundError, InvalidArtifactRefError):
             return self._error_result(
                 call,
                 "artifact_not_found",
@@ -116,13 +113,6 @@ class ToolRegistry:
                 call,
                 "artifact_path_not_found",
                 f"artifact path not found: {call.name}",
-                {},
-            )
-        except ArtifactTypeMismatchError:
-            return self._error_result(
-                call,
-                "artifact_type_mismatch",
-                f"artifact reference metadata mismatch: {call.name}",
                 {},
             )
         except SourceLocatorError as exc:
@@ -139,19 +129,12 @@ class ToolRegistry:
                 str(exc),
                 exc.details,
             )
-        except GameDetailArtifactError as exc:
+        except ToolResponseArtifactError as exc:
             return self._error_result(
                 call,
                 "artifact_error",
                 str(exc),
-                exc.details,
-            )
-        except EsportsSearchArtifactError as exc:
-            return self._error_result(
-                call,
-                "artifact_error",
-                str(exc),
-                exc.details,
+                {},
             )
         except PandaScoreQueryValidationError as exc:
             return self._error_result(

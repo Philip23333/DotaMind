@@ -2,27 +2,24 @@
 
 from __future__ import annotations
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, field_validator
 
 from app.vnext.artifacts import (
     ArtifactGrepper,
     ArtifactGrepResult,
     ArtifactReader,
     ArtifactReadResult,
-    ArtifactScopeRef,
 )
-from app.vnext.artifacts.models import ArtifactRef
 from app.vnext.domain.common.models import DomainModel
 from app.vnext.tools.definition import ToolDefinition
 from app.vnext.tools.registry import ToolRegistry
 
 
 class ArtifactReadInput(DomainModel):
-    ref: ArtifactRef | str = Field(
+    ref: str = Field(
         description=(
-            "Exact ArtifactRef object returned by a capability or artifact.grep. "
-            "Pass the whole object unchanged. The only supported string references are "
-            "documented static manuals such as manual:pandascore:index."
+            "Exact opaque reference returned by a tool, or a documented manual ref such as "
+            "manual:pandascore:index."
         )
     )
     path: str | None = None
@@ -31,26 +28,13 @@ class ArtifactReadInput(DomainModel):
 
 
 class ArtifactGrepInput(DomainModel):
+    ref: str = Field(
+        description="Exact opaque tool response or documented manual reference to search."
+    )
     pattern: str = Field(
         min_length=1,
         max_length=ArtifactGrepper.MAX_PATTERN_LENGTH,
-        description="Case-insensitive literal text to find in canonical artifact scalar values.",
-    )
-    artifact_types: list[str] | None = Field(
-        default=None,
-        description="Optional generic artifact-type restriction; omit to search the whole corpus.",
-    )
-    scope: ArtifactScopeRef | None = Field(
-        default=None,
-        description="Optional opaque corpus scope. It only constrains stored artifact search.",
-    )
-    ref: ArtifactRef | str | None = Field(
-        default=None,
-        description=(
-            "Optional exact target. Pass an ArtifactRef returned by another capability to search "
-            "only that stored artifact; pass a documented static manual string to search only "
-            "that read-only document. Omit it to search the stored corpus."
-        ),
+        description="Case-insensitive literal text to find in the referenced document.",
     )
     limit: int = Field(
         default=ArtifactGrepper.DEFAULT_LIMIT,
@@ -64,13 +48,6 @@ class ArtifactGrepInput(DomainModel):
         if value.isspace():
             raise ValueError("pattern must not be blank")
         return value
-
-    @model_validator(mode="after")
-    def _reject_ambiguous_exact_target(self) -> ArtifactGrepInput:
-        if self.ref is not None and (self.artifact_types is not None or self.scope is not None):
-            raise ValueError("ref cannot be combined with artifact_types or scope")
-        return self
-
 
 def register_artifact_tools(
     registry: ToolRegistry,
@@ -89,21 +66,17 @@ def register_artifact_tools(
 
     async def grep(args: ArtifactGrepInput) -> ArtifactGrepResult:
         return await grepper.grep(
-            args.pattern,
-            args.artifact_types,
-            args.limit,
-            args.scope,
             args.ref,
+            args.pattern,
+            args.limit,
         )
 
     registry.register(
         ToolDefinition(
             name="artifact.grep",
             description=(
-                "Search case-insensitive literal text in artifact content. Pass an exact "
-                "ArtifactRef returned by another capability to search only that stored artifact. "
-                "Pass a documented static manual ref to search that manual. Omit ref to search "
-                "the available stored corpus."
+                "Search case-insensitive literal text in exactly one opaque tool response ref or "
+                "documented static manual ref."
             ),
             input_model=ArtifactGrepInput,
             output_model=ArtifactGrepResult,
@@ -115,10 +88,9 @@ def register_artifact_tools(
         ToolDefinition(
             name="artifact.read",
             description=(
-                "Read a bounded serialized view of an exact ArtifactRef returned by another "
-                "capability, or a documented static manual ref. Source documents keep complete "
-                "provider-shaped facts under the facts field. Supports structural dotted paths "
-                "and bounded list slices only."
+                "Read a bounded serialized view of exactly one opaque tool response ref or "
+                "documented static manual ref. Supports structural dotted paths and bounded list "
+                "slices only."
             ),
             input_model=ArtifactReadInput,
             output_model=ArtifactReadResult,

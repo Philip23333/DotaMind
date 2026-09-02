@@ -1,12 +1,12 @@
 """Detailed recorded-game capability."""
 
-from .errors import GameDetailArtifactError, GameDetailError, GameDetailProviderError
-from .models import GameDetailRequest, GameDetailResult
+from .errors import GameDetailError, GameDetailProviderError
+from .models import GameDetailPayload, GameDetailRequest, GameDetailResult
 from .service import GameDetailService
 
 __all__ = [
-    "GameDetailArtifactError",
     "GameDetailError",
+    "GameDetailPayload",
     "GameDetailProviderError",
     "GameDetailRequest",
     "GameDetailResult",

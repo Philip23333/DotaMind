@@ -2,22 +2,15 @@
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from app.vnext.artifacts import (
-    ArtifactRef,
-    ArtifactStore,
-    EsportsSearchResultArtifact,
-    esports_search_result_artifact_ref,
+    ToolResponseExternalizer,
+    serialized_size,
 )
 from app.vnext.providers.pandascore.query import PandaScoreNativeResult
 
-if TYPE_CHECKING:
-    from .esports import EsportsSearchInput
-
-INLINE_RESULT_MAX_BYTES = 12 * 1024
 MAX_PREVIEW_BYTES = 12 * 1024
 MAX_PREVIEW_ROWS = 10
 MAX_PREVIEW_ROW_BYTES = 3 * 1024
@@ -27,14 +20,6 @@ MAX_PREVIEW_DEPTH = 2
 MAX_INLINE_STRING_BYTES = 1024
 
 
-class EsportsSearchArtifactError(RuntimeError):
-    """A complete large search response could not be made recoverable."""
-
-    def __init__(self, *, resource: str, scope: str) -> None:
-        super().__init__("esports search artifact could not be stored")
-        self.details = {"source": "pandascore", "resource": resource, "scope": scope}
-
-
 @dataclass(frozen=True, slots=True)
 class EsportsSearchObservation:
     resource: str
@@ -42,20 +27,19 @@ class EsportsSearchObservation:
     rows: list[dict[str, Any]]
     has_more: bool | None
     truncated: bool
-    artifact_ref: ArtifactRef | None
+    artifact_ref: str | None
     total_rows: int | None
 
 
 class EsportsSearchObservationBuilder:
-    """Persist oversized source responses and project a generic bounded preview."""
+    """Externalize oversized responses and project a generic bounded preview."""
 
-    def __init__(self, artifact_store: ArtifactStore) -> None:
-        self._artifact_store = artifact_store
+    def __init__(self, externalizer: ToolResponseExternalizer) -> None:
+        self._externalizer = externalizer
 
     async def build(
         self,
         result: PandaScoreNativeResult,
-        query: EsportsSearchInput,
     ) -> EsportsSearchObservation:
         result_payload = {
             "resource": result.resource,
@@ -63,7 +47,8 @@ class EsportsSearchObservationBuilder:
             "rows": result.rows,
             "has_more": result.has_more,
         }
-        if _serialized_size(result_payload) <= INLINE_RESULT_MAX_BYTES:
+        externalized = await self._externalizer.externalize(result_payload)
+        if not externalized.spilled:
             return EsportsSearchObservation(
                 resource=result.resource,
                 scope=result.scope,
@@ -74,20 +59,7 @@ class EsportsSearchObservationBuilder:
                 total_rows=None,
             )
 
-        query_payload = query.model_dump(mode="json")
-        ref = esports_search_result_artifact_ref(query_payload)
-        artifact = EsportsSearchResultArtifact(
-            fetched_at=result.fetched_at,
-            query=query_payload,
-            result=result_payload,
-        )
-        try:
-            await self._artifact_store.put(ref, artifact)
-        except Exception as exc:
-            raise EsportsSearchArtifactError(
-                resource=result.resource,
-                scope=result.scope,
-            ) from exc
+        assert externalized.artifact_ref is not None
 
         return EsportsSearchObservation(
             resource=result.resource,
@@ -97,11 +69,11 @@ class EsportsSearchObservationBuilder:
                 resource=result.resource,
                 scope=result.scope,
                 has_more=result.has_more,
-                artifact_ref=ref,
+                artifact_ref=externalized.artifact_ref,
             ),
             has_more=result.has_more,
             truncated=True,
-            artifact_ref=ref,
+            artifact_ref=externalized.artifact_ref,
             total_rows=len(result.rows),
         )
 
@@ -112,14 +84,14 @@ def _build_rows_preview(
     resource: str,
     scope: str,
     has_more: bool | None,
-    artifact_ref: ArtifactRef,
+    artifact_ref: str,
 ) -> list[dict[str, Any]]:
     preview_rows: list[dict[str, Any]] = []
     for index, row in enumerate(rows[:MAX_PREVIEW_ROWS]):
-        preview = _build_preview(row, f"result.rows.{index}", depth=0)
+        preview = _build_preview(row, f"rows.{index}", depth=0)
         assert isinstance(preview, dict)
         candidate = [*preview_rows, preview]
-        if _serialized_size(
+        if serialized_size(
             {
                 "resource": resource,
                 "scope": scope,
@@ -127,7 +99,7 @@ def _build_rows_preview(
                 "has_more": has_more,
                 "truncated": True,
                 "total_rows": len(rows),
-                "artifact_ref": artifact_ref.model_dump(mode="json"),
+                "artifact_ref": artifact_ref,
             }
         ) > MAX_PREVIEW_BYTES:
             break
@@ -143,13 +115,13 @@ def _build_preview(value: Any, path: str, *, depth: int) -> Any:
             depth < MAX_PREVIEW_DEPTH
             and len(value) <= MAX_INLINE_COLLECTION_ITEMS
             and all(_is_scalar(item) for item in value)
-            and _serialized_size(value) <= MAX_INLINE_NESTED_BYTES
+            and serialized_size(value) <= MAX_INLINE_NESTED_BYTES
         ):
             return [_bounded_scalar(item) for item in value]
         return {"_artifact_path": path, "_count": len(value)}
     if isinstance(value, dict):
         if depth >= MAX_PREVIEW_DEPTH or (
-            depth > 0 and _serialized_size(value) > MAX_INLINE_NESTED_BYTES
+            depth > 0 and serialized_size(value) > MAX_INLINE_NESTED_BYTES
         ):
             return {"_artifact_path": path}
         preview = {
@@ -172,7 +144,7 @@ def _bound_mapping(value: dict[str, Any], budget: int) -> dict[str, Any]:
     bounded: dict[str, Any] = {}
     for key, child in _ordered_items(value):
         candidate = {**bounded, key: child}
-        if _serialized_size(candidate) > budget:
+        if serialized_size(candidate) > budget:
             break
         bounded[key] = child
     return bounded
@@ -189,17 +161,9 @@ def _bounded_scalar(value: Any) -> Any:
     return truncated + "…"
 
 
-def _serialized_size(value: Any) -> int:
-    return len(
-        json.dumps(value, ensure_ascii=False, separators=(",", ":"), default=str).encode("utf-8")
-    )
-
-
 __all__ = [
-    "EsportsSearchArtifactError",
     "EsportsSearchObservation",
     "EsportsSearchObservationBuilder",
-    "INLINE_RESULT_MAX_BYTES",
     "MAX_INLINE_COLLECTION_ITEMS",
     "MAX_PREVIEW_BYTES",
     "MAX_PREVIEW_DEPTH",

@@ -4,7 +4,7 @@
 
 Agent-visible tools describe broad observation capabilities, not provider
 endpoints or a provider ontology. A tool result remains source-attributed, while
-complete provider documents stay outside model context as Artifacts.
+oversized complete tool responses stay outside model context as temporary Artifacts.
 
 Tool descriptions state a capability; they do not prescribe a fixed workflow.
 
@@ -43,9 +43,9 @@ Input accepts a resource, normal lifecycle scope, native `filter`, `search`,
 `range`, `sort`, and bounded pagination. Unsupported fields and scopes return
 structured errors. Small results retain their complete source-shaped row
 dictionaries. Large results return a bounded structural preview, `total_rows`,
-and an ArtifactRef to the complete query/result envelope; use `artifact.read`
-or `artifact.grep` to inspect omitted fields. This does not alter the source
-query or provider request.
+and a fresh opaque `artifact:tool:*` string to the complete logical response;
+use `artifact.read` or `artifact.grep` with that exact ref to inspect omitted
+fields. This does not alter the source query or provider request.
 
 Do not reintroduce a search-engine abstraction, a universal search DTO, or
 scenario-specific query plumbing while the new seam is pending.
@@ -62,13 +62,13 @@ input
 result
   source
   valve_game_id
-  artifact_ref    game_detail:1:<valve_game_id>
-  facts           bounded observation
+  artifact_ref    artifact:tool:<uuid4-hex> | null
+  facts           complete inline facts or bounded observation
 ```
 
-The Artifact is a complete validated OpenDota-shaped source document with
-`artifact_type="game_detail"` and `schema_version="1"`. This capability does
-not produce a GameSummary. It has no provider selector, source match ID,
+When oversized, the complete logical tool response is held in the current chat
+session and `facts` becomes a bounded observation. This capability does not
+produce a GameSummary. It has no provider selector, source match ID,
 field-selection, include, scope, or event-context input.
 
 `provider_error` means OpenDota could not fetch, validate, or confirm the
@@ -79,13 +79,13 @@ not be stored; there is no partial-success detail result.
 
 | Tool | Purpose | Boundary |
 | --- | --- | --- |
-| `artifact.grep` | Schema-neutral scalar search | An exact ArtifactRef searches one stored document; without one it returns corpus references, paths, and bounded previews |
-| `artifact.read` | Bounded structural read | Exact ArtifactRef/path or documented static manual ref; no provider semantics |
+| `artifact.grep` | Schema-neutral scalar search | Requires one exact temporary-tool or documented manual ref |
+| `artifact.read` | Bounded structural read | Requires one exact temporary-tool or documented manual ref/path |
 
-Artifacts are a generic JSON-like corpus. `artifact.read` and `artifact.grep`
-must not learn PandaScore, OpenDota, Team, Player, or gameplay-scenario logic.
-`artifact.grep` accepts an exact ArtifactRef returned by another capability to
-search only that stored document; string refs remain documented static manuals.
+Artifacts are session-local JSON-like documents, not a corpus. `artifact.read`
+and `artifact.grep` must not learn PandaScore, OpenDota, Team, Player, or
+gameplay-scenario logic. Both accept an exact string ref returned by another
+tool; manual refs remain documented static allowlist entries.
 PandaScore query manuals are exposed as static read-only artifacts; start with
 `manual:pandascore:index` and read the relevant resource ref from that index.
 The historical GameSummary-specific `artifact.search` tool is not model-visible;

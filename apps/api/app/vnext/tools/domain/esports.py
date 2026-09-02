@@ -6,7 +6,6 @@ from typing import Any, Literal
 
 from pydantic import Field
 
-from app.vnext.artifacts import ArtifactRef
 from app.vnext.domain.common.models import DomainModel
 from app.vnext.providers.pandascore.query import PandaScoreNativeQueryExecutor
 from app.vnext.tools.definition import ToolDefinition
@@ -32,7 +31,7 @@ class EsportsSearchOutput(DomainModel):
     rows: list[dict[str, Any]]
     has_more: bool | None = None
     truncated: bool = False
-    artifact_ref: ArtifactRef | None = None
+    artifact_ref: str | None = None
     total_rows: int | None = None
 
 
@@ -42,7 +41,7 @@ def build_esports_search_tool(
 ) -> ToolDefinition:
     async def search(args: EsportsSearchInput) -> EsportsSearchOutput:
         result = await executor.execute(args.model_dump(exclude_none=True))
-        observation = await observation_builder.build(result, args)
+        observation = await observation_builder.build(result)
         return EsportsSearchOutput(
             resource=observation.resource,
             scope=observation.scope,

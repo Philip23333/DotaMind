@@ -35,16 +35,16 @@ User
        <-> esports.search
              -> PandaScoreNativeQueryExecutor -> PandaScoreAdapter
        <-> artifact.grep / artifact.read
-             -> ArtifactStore
+             -> session Artifact store
        <-> game.detail
-             -> GameDetailService -> OpenDotaAdapter -> ArtifactStore
+             -> GameDetailService -> OpenDotaAdapter
 ```
 
 `esports.search` keeps provider endpoints and endpoint-local fields below the
 tool boundary. A small source-shaped collection page remains inline. For a
-large page, it stores one complete source-shaped search-result Artifact and
-returns a bounded structural preview plus its ArtifactRef; it does not expose
-provider endpoints or paths.
+large page, it stores the complete logical response in the current session and
+returns a bounded structural preview plus a fresh opaque string ref; it does not
+expose provider endpoints or paths.
 
 ## Capability pattern
 
@@ -58,7 +58,7 @@ Model
   -> Provider implementation
   -> Provider Adapter / transport
   -> complete validated source document
-       -> Source Artifact + bounded observation
+       -> complete logical tool response + bounded observation when oversized
 ```
 
 `game.detail` is the current reference implementation of this pattern:
@@ -69,11 +69,11 @@ Model
   -> GameDetailService
   -> OpenDota implementation / adapter (match_id internally)
   -> complete validated OpenDota game response
-  -> GameDetailArtifact + bounded observation
+  -> complete logical game.detail response + bounded observation when oversized
 ```
 
-The Service owns capability validation, Artifact externalization, bounded
-observations, and result assembly. A Provider owns source endpoint selection,
+The Tool owns session Artifact externalization, bounded observations, and result
+assembly. A Service owns capability validation and source retrieval. A Provider owns source endpoint selection,
 source filtering, pagination, ordering, and source-specific enrichment. An
 Adapter owns only provider HTTP transport and provider schema parsing.
 
@@ -81,7 +81,7 @@ The esports discovery seam uses one small semantic model-facing contract;
 provider names, endpoints, pagination transport syntax, and private IDs remain
 below that contract. It does not encode scenario-specific workflows or a
 universal search DTO. Its observation policy preserves complete source-shaped
-rows in one Artifact when the serialized response is large, while keeping
+rows in one temporary response document when the serialized response is large, while keeping
 discovery scalars and structural pointers in the immediate bounded result.
 
 ## PandaScore provider surface (preserved)
@@ -126,47 +126,20 @@ to `resolution="unavailable"` rather than a false `not_found`.
 
 ## Artifact boundary
 
-Artifacts are stored, validated, source-backed JSON-like documents. A stable
-source document ArtifactRef is derived from `(source, kind, source_identity)`;
-a repeat write of the same source identity uses the same ArtifactRef and the
-latest write replaces the stored document.
-
-`artifact.read` and `artifact.grep` are provider-blind stored-document
-operations. They never fetch PandaScore or OpenDota.
-
-The model uses the following discovery and continuation boundary:
-
-```text
-new external fact space
-  -> semantic capability (e.g. game.detail; future esports discovery seam)
-
-known ArtifactRef
-  -> artifact.read
-
-unknown location inside stored corpus
-  -> artifact.grep
-```
-
-The historical GameSummary-specific `artifact.search` remains internal migration
-code only; it is not a current model-facing operation.
+Artifacts are temporary session-owned JSON-like tool responses. Each oversized
+response receives a fresh opaque `artifact:tool:<uuid4-hex>` ref; it has no
+stable source identity and is never shared with another session. `artifact.read`
+and `artifact.grep` require that exact ref (or a documented static manual) and
+never fetch PandaScore or OpenDota. There is no Artifact corpus, type, schema,
+scope, or model-facing `artifact.search` operation.
 
 ## Recorded-game detail
 
 `game.detail(valve_game_id)` is an exact single-object capability. It fetches a
-complete validated OpenDota-shaped document and writes:
-
-```text
-GameDetailArtifact
-  artifact_type = game_detail
-  schema_version = 1
-  source = opendota
-  valve_game_id
-  facts
-```
-
-The canonical ArtifactRef is `game_detail:1:<valve_game_id>`. The immediate
-result contains a generic bounded observation plus that ArtifactRef; complete
-facts are explored with `artifact.read` or `artifact.grep`.
+complete validated OpenDota-shaped document. Small logical responses remain
+inline; large ones receive a fresh session ref and return a generic bounded
+observation. Complete facts are then explored with `artifact.read` or
+`artifact.grep` using that exact ref.
 
 This path does not invoke GameSummary construction, catalog enrichment, or a
 provider router. An OpenDota fetch/validation failure is `provider_error`; an
@@ -208,5 +181,5 @@ not reintroduce PandaScore Game discovery as a model tool.
 - PandaScore Game detail endpoints outside the allowlist;
 - provider-native filtering that can exclude a capability-level query match;
 - turning an unavailable enrichment dependency into a false `not_found`;
-- invalid ArtifactRefs or rollback after a partial Artifact externalization
-  failure.
+- typed/stable Artifact identities, corpus discovery, or persistence for a
+  partial Artifact externalization failure.

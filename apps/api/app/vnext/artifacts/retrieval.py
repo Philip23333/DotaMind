@@ -1,17 +1,13 @@
-"""Bounded retrieval capabilities for stored canonical artifacts."""
+"""Bounded inspection of a manual or one session tool response."""
 
 from __future__ import annotations
 
-import asyncio
-from typing import Any, Literal
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
-from .models import ArtifactRef, game_summary_artifact_ref
-from .static import StaticArtifactResolver
-from .store import ArtifactNotFoundError, ArtifactStore
-
-ArtifactType = Literal["game_summary"]
+from .manuals import ManualResolver
+from .store import ArtifactNotFoundError, SessionArtifactStore
 
 
 class ArtifactPathNotFoundError(LookupError):
@@ -22,21 +18,12 @@ class ArtifactReadValidationError(ValueError):
     """Raised when a read request violates bounded retrieval rules."""
 
 
-class ArtifactSearchResult(BaseModel):
-    """References found for a bounded set of canonical Valve match IDs."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    refs: list[ArtifactRef] = Field(default_factory=list)
-    missing_valve_match_ids: list[int] = Field(default_factory=list)
-
-
 class ArtifactReadResult(BaseModel):
-    """A serialized outline or bounded value from one canonical artifact."""
+    """A serialized outline or bounded value from one referenced document."""
 
     model_config = ConfigDict(extra="forbid")
 
-    ref: ArtifactRef | str
+    ref: str
     path: str | None
     value: Any
     offset: int | None = None
@@ -45,59 +32,22 @@ class ArtifactReadResult(BaseModel):
     truncated: bool = False
 
 
-class ArtifactSearcher:
-    """Find existing GameSummary artifact references without reading content."""
-
-    def __init__(self, store: ArtifactStore) -> None:
-        self._store = store
-
-    async def search(
-        self,
-        artifact_type: ArtifactType,
-        valve_match_ids: list[int],
-    ) -> ArtifactSearchResult:
-        if artifact_type != "game_summary":
-            raise ValueError(f"unsupported artifact type: {artifact_type}")
-        if len(valve_match_ids) > 100:
-            raise ValueError("at most 100 valve match IDs may be searched")
-
-        seen: set[int] = set()
-        unique_ids: list[int] = []
-        for valve_match_id in valve_match_ids:
-            if valve_match_id in seen:
-                continue
-            seen.add(valve_match_id)
-            unique_ids.append(valve_match_id)
-
-        exists = await asyncio.gather(
-            *(self._store.exists(game_summary_artifact_ref(match_id)) for match_id in unique_ids)
-        )
-        refs: list[ArtifactRef] = []
-        missing: list[int] = []
-        for valve_match_id, found in zip(unique_ids, exists, strict=True):
-            if found:
-                refs.append(game_summary_artifact_ref(valve_match_id))
-            else:
-                missing.append(valve_match_id)
-        return ArtifactSearchResult(refs=refs, missing_valve_match_ids=missing)
-
-
 class ArtifactReader:
-    """Read serialized, bounded views from stored canonical artifacts."""
+    """Read a manual or a temporary tool response by exact opaque reference."""
 
     MAX_LIMIT = 100
 
     def __init__(
         self,
-        store: ArtifactStore,
-        static_resolver: StaticArtifactResolver | None = None,
+        store: SessionArtifactStore,
+        manuals: ManualResolver | None = None,
     ) -> None:
         self._store = store
-        self._static_resolver = static_resolver
+        self._manuals = manuals
 
     async def read(
         self,
-        ref: ArtifactRef | str,
+        ref: str,
         path: str | None = None,
         offset: int = 0,
         limit: int = 50,
@@ -112,19 +62,18 @@ class ArtifactReader:
                 "pagination is only valid when the final value is a list"
             )
 
-        if isinstance(ref, str):
-            if self._static_resolver is None:
+        if ref.startswith("manual:pandascore:"):
+            if self._manuals is None:
                 raise ArtifactNotFoundError(f"artifact not found: {ref}")
             if path not in (None, "content"):
                 raise ArtifactPathNotFoundError(f"artifact path not found: {path!r}")
             return ArtifactReadResult(
                 ref=ref,
                 path=path,
-                value=self._static_resolver.read(ref),
+                value=self._manuals.read(ref),
             )
 
-        artifact = await self._store.get(ref)
-        payload = _serialize_artifact(artifact)
+        payload = await self._store.get(ref)
         value = _outline(payload) if path is None else _resolve_path(payload, path)
         if isinstance(value, list):
             end = offset + limit
@@ -153,16 +102,9 @@ def _validate_pagination(offset: int, limit: int) -> None:
         )
 
 
-def _serialize_artifact(artifact: object) -> dict[str, Any]:
-    if not isinstance(artifact, BaseModel):
-        raise TypeError("stored artifact must be a Pydantic model")
-    payload = artifact.model_dump(mode="json")
+def _outline(payload: Any) -> Any:
     if not isinstance(payload, dict):
-        raise TypeError("serialized artifact must be an object")
-    return payload
-
-
-def _outline(payload: dict[str, Any]) -> dict[str, Any]:
+        return payload
     outline: dict[str, Any] = {}
     sections: dict[str, dict[str, Any]] = {}
     for key, value in payload.items():
@@ -204,6 +146,4 @@ __all__ = [
     "ArtifactReadResult",
     "ArtifactReadValidationError",
     "ArtifactReader",
-    "ArtifactSearchResult",
-    "ArtifactSearcher",
 ]

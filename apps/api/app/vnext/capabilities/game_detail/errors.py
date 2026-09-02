@@ -23,14 +23,4 @@ class GameDetailProviderError(GameDetailError):
         )
 
 
-class GameDetailArtifactError(GameDetailError):
-    """The complete detailed-game document could not be externalized."""
-
-    def __init__(self, *, source: str, valve_game_id: int) -> None:
-        super().__init__(
-            "game detail artifact could not be stored",
-            details={"source": source, "valve_game_id": valve_game_id},
-        )
-
-
-__all__ = ["GameDetailArtifactError", "GameDetailError", "GameDetailProviderError"]
+__all__ = ["GameDetailError", "GameDetailProviderError"]

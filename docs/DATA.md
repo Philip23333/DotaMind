@@ -60,15 +60,16 @@ The document excludes HTTP headers, credentials, request tokens, and pagination
 envelopes.  It retains provider business fields, including newly added fields
 that the source model allows but DotaMind does not yet consume.
 
-The model normally receives only `facts`, a generic bounded observation.  It
-can inspect the retained document later with `artifact.read` or
-`artifact.grep`.  A provider-private ID may be evidence inside that document;
-it is never a supported tool input.
+The model receives the complete response inline when it is small. For a large
+logical tool response it receives a generic bounded observation and a temporary
+session ref, then inspects that one response with `artifact.read` or
+`artifact.grep`. A provider-private ID may be evidence inside a response; it is
+never a supported tool input.
 
-Large `esports.search` responses use a related dynamic Artifact form with the
-complete normalized query and complete provider-shaped response page under
-`query` and `result`. The immediate tool result keeps a generic preview of row
-scalars and structural pointers using `artifact.read`'s dotted path syntax.
+Large `esports.search` responses store the complete source-shaped logical page
+at the Artifact root (`resource`, `scope`, `rows`, `has_more`), not under query
+or result envelopes. Preview pointers therefore use paths such as
+`rows.0.matches`.
 
 ## Identity
 
@@ -76,8 +77,6 @@ Provider identity and Dota identity are different.
 
 - Provider-private IDs identify a record only inside that provider and stay
   behind the Adapter/Provider boundary.
-- The source identity is used internally to produce a stable ArtifactRef for
-  the same source object.  It is not model-facing navigation syntax.
 - Valve-native facts, including `valve_game_id`, `hero_id`, `item_id`, and
   `ability_id`, are canonical Dota facts and may be visible directly.
 
@@ -96,11 +95,11 @@ selected Matches while preserving the same per-game deterministic status or
 
 ## Recorded-game detail documents
 
-`game.detail` uses canonical `valve_game_id` directly and stores a
-`GameDetailArtifact` at `game_detail:1:<valve_game_id>`. Its `facts` field is the
-complete validated OpenDota-shaped document. The source model validates only the
-returned `match_id` identity and retains allowed unknown top-level and nested
-business facts; it does not turn the response into a GameSummary DTO.
+`game.detail` uses canonical `valve_game_id` directly. Its complete logical
+response contains the validated OpenDota-shaped facts; it is externalized only
+when large with a fresh `artifact:tool:*` reference. The source model validates
+only the returned `match_id` identity and retains allowed unknown top-level and
+nested business facts; it does not turn the response into a GameSummary DTO.
 
 The immediate capability result exposes the canonical Valve ID and a bounded
 observation. Generic Artifact retrieval exposes the complete document later.

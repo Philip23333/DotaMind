@@ -6,14 +6,12 @@ from uuid import uuid4
 from app.agentic.conversation.models import DialogueTurn
 from app.application.chat_repository import ChatDialogueTurnResult
 from app.vnext.agent.events import AgentCancelled, AgentCompleted, AgentFailed, TextDelta
-from app.vnext.artifacts import ArtifactRef
 from app.vnext.llm.protocol import FinalMessage, UserMessage
 from app.vnext.product.chat import (
     ProductChatCompleted,
     ProductChatDelta,
     ProductChatError,
     VNextChatService,
-    _artifact_refs,
 )
 from app.vnext.product.context import ConversationContextBuilder
 from app.vnext.product.presentation import ProductVisualEntity
@@ -396,26 +394,40 @@ def test_product_chat_replay_returns_persisted_visual_metadata() -> None:
     assert visual_entity_enricher.received == []
 
 
-def test_trace_artifact_refs_exclude_schema_examples_and_keep_execution_evidence() -> None:
-    schema_example = {
-        "id": "game_summary:4:8123456789",
-        "artifact_type": "game_summary",
-        "schema_version": "4",
-    }
-    used_ref = {
-        "id": "game_summary:4:8960577698",
-        "artifact_type": "game_summary",
-        "schema_version": "4",
-    }
-    trace = {
-        "tool_schemas": [{"examples": [schema_example]}],
-        "steps": [
-            {
-                "model_request": {"tools": [{"examples": [schema_example]}]},
-                "model_response": {"message": {"tool_calls": [{"arguments": {"ref": used_ref}}]}},
-                "tool_results": [{"result": {"content": {"refs": [used_ref]}}}],
-            }
-        ],
-    }
+def test_product_chat_runtime_factory_reuses_one_runtime_per_session() -> None:
+    created: list[_Runtime] = []
 
-    assert _artifact_refs(trace) == [ArtifactRef.model_validate(used_ref)]
+    def factory() -> _Runtime:
+        runtime = _Runtime([AgentCompleted(duration=0.1, final=FinalMessage(content="done"))])
+        created.append(runtime)
+        return runtime
+
+    service = VNextChatService(  # type: ignore[arg-type]
+        _Repository(),
+        _Runtime([]),
+        ConversationContextBuilder(),
+        _VisualEntityEnricher(),
+        runtime_factory=factory,
+    )
+    browser_id = str(uuid4())
+    first_session = uuid4()
+
+    for session_id in (first_session, first_session, uuid4()):
+        _collect(
+            service,
+            browser_id=browser_id,
+            session_id=session_id,
+            request_id=uuid4(),
+            query="query",
+        )
+
+    assert len(created) == 2
+    service.discard_session(first_session)
+    _collect(
+        service,
+        browser_id=browser_id,
+        session_id=first_session,
+        request_id=uuid4(),
+        query="query",
+    )
+    assert len(created) == 3

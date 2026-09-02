@@ -23,7 +23,7 @@ PANDASCORE_MANUAL_REFS: Mapping[str, str] = {
 }
 
 
-class StaticArtifactResolver:
+class ManualResolver:
     """Resolve the small allowlist of generated PandaScore manuals."""
 
     def __init__(self, manual_directory: Path = _PANDASCORE_MANUAL_DIRECTORY) -> None:
@@ -41,4 +41,4 @@ class StaticArtifactResolver:
             raise ArtifactNotFoundError(f"artifact not found: {ref}") from exc
 
 
-__all__ = ["PANDASCORE_MANUAL_REFS", "StaticArtifactResolver"]
+__all__ = ["ManualResolver", "PANDASCORE_MANUAL_REFS"]

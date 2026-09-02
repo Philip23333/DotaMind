@@ -9,8 +9,8 @@ import httpx
 from app.vnext.artifacts import (
     PANDASCORE_MANUAL_REFS,
     ArtifactReader,
-    MemoryArtifactStore,
-    StaticArtifactResolver,
+    ManualResolver,
+    SessionArtifactStore,
 )
 from app.vnext.composition import VNextSettings, build_vnext_registry, build_vnext_services
 from app.vnext.llm.protocol import ToolCall
@@ -19,7 +19,7 @@ from app.vnext.providers.pandascore.adapter import PandaScoreAdapter
 
 def test_all_pandascore_manual_refs_read_generated_content() -> None:
     async def exercise() -> dict[str, str]:
-        reader = ArtifactReader(MemoryArtifactStore(), StaticArtifactResolver())
+        reader = ArtifactReader(SessionArtifactStore(), ManualResolver())
         results = {
             ref: (await reader.read(ref)).value for ref in PANDASCORE_MANUAL_REFS
         }
@@ -89,7 +89,6 @@ def test_static_manuals_work_through_registry_tools() -> None:
     assert read.content["ref"] == "manual:pandascore:tournament"
     assert "does not support `league_id`" in read.content["value"]
     assert grep.status == "ok"
-    assert grep.content["coverage"] == "static_only"
     assert grep.content["matches"] == [
         {
             "ref": "manual:pandascore:tournament",

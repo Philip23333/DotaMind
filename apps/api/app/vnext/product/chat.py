@@ -6,7 +6,7 @@ import hashlib
 import io
 import json
 import zipfile
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Literal
@@ -19,7 +19,6 @@ from app.application.postgres_chat_repository import PostgresChatRepository
 from app.vnext.agent.events import AgentCancelled, AgentCompleted, AgentFailed, TextDelta
 from app.vnext.agent.runtime import AgentRuntime
 from app.vnext.agent.trace import AgentTraceCollector
-from app.vnext.artifacts import ArtifactNotFoundError, ArtifactRef, ArtifactStore
 from app.vnext.llm.protocol import FinalMessage, Message
 
 from .context import ConversationContextBuilder
@@ -76,7 +75,7 @@ class VNextChatService:
         visual_entity_enricher: DotaVisualEntityEnricher,
         *,
         trace_store: TraceStore | None = None,
-        artifact_store: ArtifactStore | None = None,
+        runtime_factory: Callable[[], AgentRuntime] | None = None,
         trace_ttl_seconds: int = 72 * 60 * 60,
     ) -> None:
         self._repository = repository
@@ -84,7 +83,8 @@ class VNextChatService:
         self._context_builder = context_builder
         self._visual_entity_enricher = visual_entity_enricher
         self._trace_store = trace_store
-        self._artifact_store = artifact_store
+        self._runtime_factory = runtime_factory
+        self._session_runtimes: dict[UUID, AgentRuntime] = {}
         self._trace_ttl_seconds = trace_ttl_seconds
 
     async def prepare_turn(
@@ -137,10 +137,11 @@ class VNextChatService:
         final: FinalMessage | None = None
         trace_collector = AgentTraceCollector() if self._trace_store is not None else None
         try:
+            runtime = self._runtime_for(prepared.session_id)
             stream = (
-                self._runtime.run_stream(prepared.history, trace_collector=trace_collector)
+                runtime.run_stream(prepared.history, trace_collector=trace_collector)
                 if trace_collector is not None
-                else self._runtime.run_stream(prepared.history)
+                else runtime.run_stream(prepared.history)
             )
             async for event in stream:
                 if isinstance(event, TextDelta):
@@ -196,21 +197,21 @@ class VNextChatService:
         trace = await self._trace_store.get(trace_id)
         if trace.browser_id_hash != _browser_hash(browser_id):
             raise PermissionError("trace does not belong to this browser")
-        manifest: dict[str, list[dict[str, str]]] = {"included": [], "missing": []}
         stream = io.BytesIO()
         with zipfile.ZipFile(stream, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
             archive.writestr("trace.json", trace.model_dump_json(indent=2))
-            for ref in _artifact_refs(trace.trace):
-                try:
-                    artifact = await self._artifact(ref)
-                except ArtifactNotFoundError:
-                    manifest["missing"].append(ref.model_dump())
-                    continue
-                artifact_id = ref.id.rsplit(":", 1)[-1]
-                filename = f"artifacts/{ref.artifact_type}_{ref.schema_version}_{artifact_id}.json"
-                archive.writestr(filename, artifact.model_dump_json(indent=2))
-                manifest["included"].append({"ref": ref.model_dump(), "path": filename})
-            archive.writestr("artifact-manifest.json", json.dumps(manifest, indent=2))
+            archive.writestr(
+                "artifact-manifest.json",
+                json.dumps(
+                    {
+                        "included": [],
+                        "note": (
+                            "Temporary session tool responses are not persisted in trace bundles."
+                        ),
+                    },
+                    indent=2,
+                ),
+            )
         return stream.getvalue()
 
     async def _save_failed_trace(
@@ -236,61 +237,23 @@ class VNextChatService:
             return None
         return ProductTraceRef(trace_id=trace_id, expires_at=expires_at)
 
-    async def _artifact(self, ref):
-        if self._artifact_store is None:
-            raise ArtifactNotFoundError(ref.id)
-        return await self._artifact_store.get(ref)
+    def _runtime_for(self, session_id: UUID) -> AgentRuntime:
+        if self._runtime_factory is None:
+            return self._runtime
+        runtime = self._session_runtimes.get(session_id)
+        if runtime is None:
+            runtime = self._runtime_factory()
+            self._session_runtimes[session_id] = runtime
+        return runtime
+
+    def discard_session(self, session_id: UUID) -> None:
+        """Drop temporary tool responses when the durable chat session is deleted."""
+
+        self._session_runtimes.pop(session_id, None)
 
 
 def _browser_hash(browser_id: str) -> str:
     return hashlib.sha256(browser_id.encode("utf-8")).hexdigest()
-
-
-def _artifact_refs(trace: object) -> list[ArtifactRef]:
-    """Extract references from executed tool calls and results only.
-
-    Trace tool schemas and model requests can contain illustrative ArtifactRef
-    JSON Schema examples. Those examples are not evidence that this run used an
-    artifact and must never affect a downloaded bundle.
-    """
-    found: dict[str, ArtifactRef] = {}
-
-    def visit(item: object) -> None:
-        if isinstance(item, dict):
-            if {"id", "artifact_type", "schema_version"} <= item.keys():
-                try:
-                    ref = ArtifactRef.model_validate(item)
-                    found[ref.id] = ref
-                except ValueError:
-                    pass
-            for child in item.values():
-                visit(child)
-        elif isinstance(item, list):
-            for child in item:
-                visit(child)
-
-    if not isinstance(trace, dict):
-        return []
-    steps = trace.get("steps")
-    if not isinstance(steps, list):
-        return []
-    for step in steps:
-        if not isinstance(step, dict):
-            continue
-        response = step.get("model_response")
-        message = response.get("message") if isinstance(response, dict) else None
-        tool_calls = message.get("tool_calls") if isinstance(message, dict) else None
-        if isinstance(tool_calls, list):
-            for call in tool_calls:
-                if isinstance(call, dict):
-                    visit(call.get("arguments"))
-        results = step.get("tool_results")
-        if isinstance(results, list):
-            for item in results:
-                result = item.get("result") if isinstance(item, dict) else None
-                if isinstance(result, dict):
-                    visit(result.get("content"))
-    return list(found.values())
 
 
 __all__ = [

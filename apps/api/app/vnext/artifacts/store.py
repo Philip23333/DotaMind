@@ -1,57 +1,43 @@
-"""Artifact store contract and shared storage errors."""
+"""Temporary, session-owned storage for externalized tool responses."""
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
-from typing import Protocol, runtime_checkable
-
-from .models import ArtifactRef
-from .protocol import Artifact
-
-
-def validate_artifact_reference(ref: ArtifactRef, artifact: Artifact) -> None:
-    """Ensure stored artifact metadata agrees with its canonical reference."""
-
-    if (
-        ref.artifact_type != artifact.artifact_type
-        or ref.schema_version != artifact.schema_version
-    ):
-        raise ArtifactTypeMismatchError(
-            f"artifact {ref.id!r} does not match its reference: "
-            f"expected type={ref.artifact_type!r}, "
-            f"schema_version={ref.schema_version!r}; "
-            f"received type={artifact.artifact_type!r}, "
-            f"schema_version={artifact.schema_version!r}"
-        )
-
-
-@runtime_checkable
-class ArtifactStore(Protocol):
-    """Storage interface for typed artifacts."""
-
-    async def put(self, ref: ArtifactRef, artifact: Artifact) -> None:
-        """Store an artifact under its reference."""
-
-    async def get(self, ref: ArtifactRef) -> Artifact:
-        """Return the artifact stored under a reference."""
-
-    async def exists(self, ref: ArtifactRef) -> bool:
-        """Return whether an artifact exists under a reference."""
-
-    async def iter_refs(
-        self,
-        artifact_types: list[str] | None = None,
-    ) -> AsyncIterator[ArtifactRef]:
-        """Yield stored references, optionally limited to artifact types."""
+from typing import Any
+from uuid import uuid4
 
 
 class ArtifactNotFoundError(LookupError):
-    """Raised when a requested artifact reference has no stored value."""
+    """Raised when a requested session artifact has no stored value."""
 
 
-class ArtifactTypeMismatchError(ValueError):
-    """Raised when an artifact does not match its reference metadata."""
+class InvalidArtifactRefError(ValueError):
+    """Raised when a model-facing artifact reference has an unsupported shape."""
 
 
-class ArtifactStoreUnavailableError(RuntimeError):
-    """Raised when the configured artifact store cannot be reached."""
+class SessionArtifactStore:
+    """In-memory artifacts that exist only for one chat-session runtime."""
+
+    PREFIX = "artifact:tool:"
+
+    def __init__(self) -> None:
+        self._documents: dict[str, Any] = {}
+
+    async def put(self, document: Any) -> str:
+        ref = f"{self.PREFIX}{uuid4().hex}"
+        self._documents[ref] = document
+        return ref
+
+    async def get(self, ref: str) -> Any:
+        self._validate_ref(ref)
+        try:
+            return self._documents[ref]
+        except KeyError as exc:
+            raise ArtifactNotFoundError(f"artifact not found: {ref}") from exc
+
+    @classmethod
+    def _validate_ref(cls, ref: str) -> None:
+        if not ref.startswith(cls.PREFIX) or len(ref) != len(cls.PREFIX) + 32:
+            raise InvalidArtifactRefError(f"invalid artifact reference: {ref!r}")
+        token = ref[len(cls.PREFIX) :]
+        if any(char not in "0123456789abcdef" for char in token):
+            raise InvalidArtifactRefError(f"invalid artifact reference: {ref!r}")

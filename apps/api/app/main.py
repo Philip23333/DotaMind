@@ -31,7 +31,6 @@ from app.persistence.database import (
     create_database_resources,
     ping_database,
 )
-from app.vnext.artifacts import RedisArtifactStore
 from app.vnext.composition import VNextSettings, build_vnext_runtime, build_vnext_services
 from app.vnext.product import (
     ConversationContextBuilder,
@@ -91,24 +90,18 @@ async def lifespan(app: FastAPI):
 
     app.state.chat_repository = PostgresChatRepository(database.session_factory)
     vnext_redis = None
-    artifact_store = None
     trace_store = None
     if settings.redis_url:
         from redis.asyncio import from_url
 
         vnext_redis = from_url(settings.redis_url, decode_responses=True)
         await vnext_redis.ping()
-        artifact_store = RedisArtifactStore(
-            vnext_redis,
-            ttl_seconds=VNextSettings.from_env().artifact_ttl_seconds,
-        )
         trace_store = RedisTraceStore(
             vnext_redis,
             ttl_seconds=VNextSettings.from_env().trace_ttl_seconds,
         )
-    vnext_services = build_vnext_services(
-        VNextSettings.from_env(), artifact_store=artifact_store
-    )
+    vnext_settings = VNextSettings.from_env()
+    vnext_services = build_vnext_services(vnext_settings)
     app.state.vnext_services = vnext_services
     app.state.vnext_runtime = build_vnext_runtime(services=vnext_services)
     app.state.vnext_chat_service = VNextChatService(
@@ -117,8 +110,8 @@ async def lifespan(app: FastAPI):
         ConversationContextBuilder(),
         DotaVisualEntityEnricher(),
         trace_store=trace_store,
-        artifact_store=vnext_services.artifact_store,
-        trace_ttl_seconds=VNextSettings.from_env().trace_ttl_seconds,
+        runtime_factory=lambda: build_vnext_runtime(services=vnext_services),
+        trace_ttl_seconds=vnext_settings.trace_ttl_seconds,
     )
     app.state.chat_run_repository = PostgresChatRunRepository(database.session_factory)
     app.state.session_store = store

@@ -32,8 +32,8 @@ PandaScore-oriented tool seam provides validated native collection queries:
   `app/vnext/providers/pandascore/` and is not deleted.
 - Preserve PandaScore source-shaped rows; do not reintroduce canonical
   League/Series/Match/Team DTOs or source-locator navigation. Oversized
-  response pages are externalized once as complete query/result Artifacts and
-  exposed as bounded structural previews.
+  logical responses are externalized once as temporary session documents and
+  exposed as bounded structural previews with fresh opaque refs.
 - Do not reintroduce the removed kind/`time_scope`/`teams` unified contract as
   the new schema; design from the current endpoint allowlist in
   `docs/reference/pandascore-endpoints.md`.
@@ -44,14 +44,14 @@ Use `game.detail(valve_game_id)` for full recorded-game data.  It is a separate
 capability from esports discovery and is currently implemented by OpenDota after
 the required PandaScore-to-Valve resolution.
 
-Keep provider-specific document shapes under the shared Artifact substrate.
+Keep provider-specific document shapes in complete logical tool responses.
 Do not create an esports discovery `kind="game"` merely to reproduce a provider
 endpoint.
 
 ### 3. Generic Artifact exploration
 
-Keep `artifact.read` and `artifact.grep` generic. They retrieve already stored
-evidence and never perform hidden provider fetches.
+Keep `artifact.read` and `artifact.grep` generic. They retrieve one exact stored
+session response or manual and never perform hidden provider fetches.
 
 Use them before adding a source-specific detail tool.  A new tool needs a
 distinct capability need, not merely a different field path in an Artifact.

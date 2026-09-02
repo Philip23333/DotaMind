@@ -1,4 +1,4 @@
-"""Generic bounded literal search over stored canonical artifact content."""
+"""Generic bounded literal search inside one referenced document."""
 
 from __future__ import annotations
 
@@ -8,35 +8,32 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .models import ArtifactRef
-from .scope import ArtifactScopeRef, ArtifactScopeStore
-from .static import StaticArtifactResolver
-from .store import ArtifactNotFoundError, ArtifactStore
+from .manuals import ManualResolver
+from .store import ArtifactNotFoundError, SessionArtifactStore
 
 
 class ArtifactGrepMatch(BaseModel):
-    """One searchable scalar leaf inside a canonical artifact."""
+    """One searchable scalar leaf inside one referenced document."""
 
     model_config = ConfigDict(extra="forbid")
 
-    ref: ArtifactRef | str
+    ref: str
     path: str
     preview: str
 
 
 class ArtifactGrepResult(BaseModel):
-    """A bounded set of generic canonical content observations."""
+    """A bounded set of generic document observations."""
 
     model_config = ConfigDict(extra="forbid")
 
     matches: list[ArtifactGrepMatch] = Field(default_factory=list)
     returned: int
     truncated: bool
-    coverage: str = "materialized_only"
 
 
 class ArtifactGrepper:
-    """Search scalar leaves without interpreting artifact-specific domain data."""
+    """Search scalar leaves without interpreting a tool response."""
 
     MAX_PATTERN_LENGTH = 256
     DEFAULT_LIMIT = 20
@@ -45,38 +42,24 @@ class ArtifactGrepper:
 
     def __init__(
         self,
-        store: ArtifactStore,
-        scope_store: ArtifactScopeStore | None = None,
-        static_resolver: StaticArtifactResolver | None = None,
+        store: SessionArtifactStore,
+        manuals: ManualResolver | None = None,
     ) -> None:
         self._store = store
-        self._scope_store = scope_store
-        self._static_resolver = static_resolver
+        self._manuals = manuals
 
     async def grep(
         self,
+        ref: str,
         pattern: str,
-        artifact_types: list[str] | None = None,
         limit: int = DEFAULT_LIMIT,
-        scope: ArtifactScopeRef | None = None,
-        ref: ArtifactRef | str | None = None,
     ) -> ArtifactGrepResult:
         _validate_search(pattern, limit)
         normalized_pattern = pattern.casefold()
-        if ref is not None and (artifact_types is not None or scope is not None):
-            raise ValueError("ref cannot be combined with artifact_types or scope")
-        if isinstance(ref, ArtifactRef):
-            artifact = await self._store.get(ref)
-            return _grep_stored_artifact(
-                ref,
-                _serialize_artifact(artifact),
-                normalized_pattern,
-                limit,
-            )
-        if ref is not None:
-            if self._static_resolver is None:
+        if ref.startswith("manual:pandascore:"):
+            if self._manuals is None:
                 raise ArtifactNotFoundError(f"artifact not found: {ref}")
-            value = self._static_resolver.read(ref)
+            value = self._manuals.read(ref)
             match_index = value.casefold().find(normalized_pattern)
             matches = (
                 [
@@ -93,51 +76,13 @@ class ArtifactGrepper:
                 matches=matches,
                 returned=len(matches),
                 truncated=False,
-                coverage="static_only",
             )
-        matches: list[ArtifactGrepMatch] = []
-
-        refs = (
-            self._scope_store.iter_refs(scope)
-            if scope is not None and self._scope_store is not None
-            else self._store.iter_refs(artifact_types)
-        )
-        async for ref in refs:
-            if artifact_types is not None and ref.artifact_type not in artifact_types:
-                continue
-            try:
-                artifact = await self._store.get(ref)
-            except ArtifactNotFoundError:
-                continue
-            payload = _serialize_artifact(artifact)
-            for path, value in _scalar_leaves(payload):
-                match_index = value.casefold().find(normalized_pattern)
-                if match_index < 0:
-                    continue
-                matches.append(
-                    ArtifactGrepMatch(
-                        ref=ref,
-                        path=path,
-                        preview=_preview(value, match_index),
-                    )
-                )
-                if len(matches) > limit:
-                    return ArtifactGrepResult(
-                        matches=matches[:limit],
-                        returned=limit,
-                        truncated=True,
-                    )
-
-        return ArtifactGrepResult(
-            matches=matches,
-            returned=len(matches),
-            truncated=False,
-        )
+        return _grep_document(ref, await self._store.get(ref), normalized_pattern, limit)
 
 
-def _grep_stored_artifact(
-    ref: ArtifactRef,
-    payload: dict[str, Any],
+def _grep_document(
+    ref: str,
+    payload: Any,
     normalized_pattern: str,
     limit: int,
 ) -> ArtifactGrepResult:
@@ -177,15 +122,6 @@ def _validate_search(pattern: str, limit: int) -> None:
         raise ValueError(
             f"artifact grep limit must be between 1 and {ArtifactGrepper.MAX_LIMIT}"
         )
-
-
-def _serialize_artifact(artifact: object) -> dict[str, Any]:
-    if not isinstance(artifact, BaseModel):
-        raise TypeError("stored artifact must be a Pydantic model")
-    payload = artifact.model_dump(mode="json")
-    if not isinstance(payload, dict):
-        raise TypeError("serialized artifact must be an object")
-    return payload
 
 
 def _scalar_leaves(value: Any, path: str = "") -> Iterator[tuple[str, str]]:

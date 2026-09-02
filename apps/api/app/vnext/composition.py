@@ -12,34 +12,22 @@ from pathlib import Path
 
 from dotenv import dotenv_values
 
-from app.integrations.valve.catalog_repository import load_default_catalog_repository
 from app.vnext.agent.runtime import AgentRuntime
 from app.vnext.artifacts import (
     ArtifactGrepper,
     ArtifactReader,
-    ArtifactSearcher,
-    ArtifactStore,
-    GameSummaryArtifactProducer,
-    MemoryArtifactScopeStore,
-    MemoryArtifactStore,
-    StaticArtifactResolver,
+    ManualResolver,
+    SessionArtifactStore,
+    ToolResponseExternalizer,
 )
-from app.vnext.artifacts.game_summary_builder_v5 import GameSummaryBuilderV5
 from app.vnext.capabilities.game_detail.service import GameDetailService
 from app.vnext.domain.matches.service import MatchService
 from app.vnext.domain.players.service import PlayerService
 from app.vnext.domain.series.service import SeriesService
 from app.vnext.domain.team_player_index import TeamPlayerRefIndex
 from app.vnext.domain.teams.service import TeamService
-from app.vnext.identity.ability_v4 import AbilityResolverV4
-from app.vnext.identity.hero_v4 import HeroResolverV4
-from app.vnext.identity.item_v4 import ItemResolverV4
-from app.vnext.identity.localized import LocalizedName
 from app.vnext.llm.openai_compatible import OpenAICompatibleModelClient
-from app.vnext.providers.opendota.adapter import (
-    OpenDotaAdapter,
-    OpenDotaGameConstructionAdapter,
-)
+from app.vnext.providers.opendota.adapter import OpenDotaAdapter
 from app.vnext.providers.pandascore.adapter import PandaScoreAdapter
 from app.vnext.providers.pandascore.capabilities import PandaScoreCapabilities
 from app.vnext.providers.pandascore.locator import PandaScoreLocatorIndex
@@ -68,7 +56,6 @@ class VNextSettings:
     pandascore_max_page_size: int = 100
     resolution_start_tolerance_seconds: int = 1800
     resolution_duration_tolerance_seconds: int = 5
-    artifact_ttl_seconds: int = 7 * 24 * 60 * 60
     trace_ttl_seconds: int = 72 * 60 * 60
 
     @classmethod
@@ -123,9 +110,6 @@ class VNextSettings:
                     file_values,
                 )
             ),
-            artifact_ttl_seconds=int(
-                _env_value("DOTAMIND_VNEXT_ARTIFACT_TTL_SECONDS", "604800", file_values)
-            ),
             trace_ttl_seconds=int(
                 _env_value("DOTAMIND_VNEXT_TRACE_TTL_SECONDS", "259200", file_values)
             ),
@@ -154,52 +138,10 @@ class VNextServices:
     matches: MatchService
     teams: TeamService
     players: PlayerService
-    artifact_store: ArtifactStore
-    static_artifacts: StaticArtifactResolver
-    game_summary_producer: GameSummaryArtifactProducer
-    artifact_searcher: ArtifactSearcher
-    artifact_reader: ArtifactReader
-    artifact_grepper: ArtifactGrepper
-    esports_search_observation_builder: EsportsSearchObservationBuilder
-    artifact_scope_store: MemoryArtifactScopeStore | None = None
 
     async def aclose(self) -> None:
         await self.pandascore.aclose()
         await self.opendota.aclose()
-
-
-def _build_game_summary_builder() -> GameSummaryBuilderV5:
-    catalog = load_default_catalog_repository()
-    return GameSummaryBuilderV5(
-        hero_resolver=HeroResolverV4(
-            {
-                hero.hero_id: LocalizedName(
-                    name_en=hero.name_en or None,
-                    name_zh=hero.name_zh or None,
-                )
-                for hero in catalog.list_heroes()
-            }
-        ),
-        item_resolver=ItemResolverV4(
-            {
-                item.item_id: LocalizedName(
-                    name_en=item.name_en or None,
-                    name_zh=item.name_zh or None,
-                )
-                for item in catalog.list_items()
-            },
-            item_key_to_id=catalog.item_key_index(),
-        ),
-        ability_resolver=AbilityResolverV4(
-            {
-                ability.ability_id: LocalizedName(
-                    name_en=ability.name_en or None,
-                    name_zh=ability.name_zh or None,
-                )
-                for ability in catalog.list_abilities()
-            }
-        ),
-    )
 
 
 def build_vnext_services(
@@ -207,7 +149,6 @@ def build_vnext_services(
     *,
     pandascore: PandaScoreAdapter | None = None,
     opendota: OpenDotaAdapter | None = None,
-    artifact_store: ArtifactStore | None = None,
 ) -> VNextServices:
     config = settings or VNextSettings.from_env()
     panda_adapter = pandascore or PandaScoreAdapter(
@@ -223,11 +164,9 @@ def build_vnext_services(
         api_key=config.opendota_api_key,
         request_timeout_seconds=config.opendota_timeout_seconds,
     )
-    store = artifact_store if artifact_store is not None else MemoryArtifactStore()
-    static_artifacts = StaticArtifactResolver()
     series_service = SeriesService(panda_adapter)
     locator_index = PandaScoreLocatorIndex()
-    game_detail_service = GameDetailService(open_adapter, store)
+    game_detail_service = GameDetailService(open_adapter)
     team_player_index = TeamPlayerRefIndex()
     team_service = TeamService(panda_adapter, team_player_index)
     player_service = PlayerService(panda_adapter, team_player_index)
@@ -239,18 +178,6 @@ def build_vnext_services(
         team_player_index=team_player_index,
     )
     series_service.set_match_cache(match_service.remember_fixture)
-    scope_store = MemoryArtifactScopeStore()
-    producer = GameSummaryArtifactProducer(
-        opendota=open_adapter,
-        construction_adapter=OpenDotaGameConstructionAdapter(),
-        builder=_build_game_summary_builder(),
-        store=store,
-        scope_store=scope_store,
-    )
-    artifact_searcher = ArtifactSearcher(store)
-    artifact_reader = ArtifactReader(store, static_artifacts)
-    artifact_grepper = ArtifactGrepper(store, scope_store, static_artifacts)
-    esports_search_observation_builder = EsportsSearchObservationBuilder(store)
     return VNextServices(
         pandascore=panda_adapter,
         pandascore_capabilities=panda_capabilities,
@@ -261,14 +188,6 @@ def build_vnext_services(
         matches=match_service,
         teams=team_service,
         players=player_service,
-        artifact_store=store,
-        static_artifacts=static_artifacts,
-        game_summary_producer=producer,
-        artifact_searcher=artifact_searcher,
-        artifact_reader=artifact_reader,
-        artifact_grepper=artifact_grepper,
-        esports_search_observation_builder=esports_search_observation_builder,
-        artifact_scope_store=scope_store,
     )
 
 
@@ -279,16 +198,19 @@ def build_vnext_registry(
 ) -> ToolRegistry:
     resolved_services = services or build_vnext_services(settings)
     registry = ToolRegistry()
-    register_game_tools(registry, resolved_services.game_detail)
+    artifact_store = SessionArtifactStore()
+    manuals = ManualResolver()
+    externalizer = ToolResponseExternalizer(artifact_store)
+    register_game_tools(registry, resolved_services.game_detail, externalizer)
     register_artifact_tools(
         registry,
-        resolved_services.artifact_reader,
-        resolved_services.artifact_grepper,
+        ArtifactReader(artifact_store, manuals),
+        ArtifactGrepper(artifact_store, manuals),
     )
     register_esports_tools(
         registry,
         resolved_services.pandascore_native_queries,
-        resolved_services.esports_search_observation_builder,
+        EsportsSearchObservationBuilder(externalizer),
     )
     return registry
 

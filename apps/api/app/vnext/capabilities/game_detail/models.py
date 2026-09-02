@@ -6,7 +6,6 @@ from typing import Any
 
 from pydantic import Field
 
-from app.vnext.artifacts import ArtifactRef
 from app.vnext.domain.common.models import DomainModel
 
 
@@ -16,13 +15,21 @@ class GameDetailRequest(DomainModel):
     valve_game_id: int = Field(gt=0)
 
 
-class GameDetailResult(DomainModel):
-    """Bounded observation plus the complete detailed-game ArtifactRef."""
+class GameDetailPayload(DomainModel):
+    """Complete source-backed result before the tool applies its size boundary."""
 
     source: str
     valve_game_id: int = Field(gt=0)
-    artifact_ref: ArtifactRef
     facts: dict[str, Any] = Field(default_factory=dict)
 
 
-__all__ = ["GameDetailRequest", "GameDetailResult"]
+class GameDetailResult(DomainModel):
+    """Inline facts or a bounded observation of one complete tool response."""
+
+    source: str
+    valve_game_id: int = Field(gt=0)
+    artifact_ref: str | None = None
+    facts: dict[str, Any] = Field(default_factory=dict)
+
+
+__all__ = ["GameDetailPayload", "GameDetailRequest", "GameDetailResult"]

@@ -6,7 +6,7 @@ from typing import Any
 
 import httpx
 
-from app.vnext.artifacts import MemoryArtifactStore
+from app.vnext.artifacts import SessionArtifactStore, ToolResponseExternalizer
 from app.vnext.composition import VNextSettings, build_vnext_registry, build_vnext_services
 from app.vnext.llm.protocol import ToolCall
 from app.vnext.providers.pandascore.adapter import PandaScoreAdapter
@@ -28,7 +28,7 @@ def _registry(handler) -> tuple[ToolRegistry, PandaScoreAdapter]:
     register_esports_tools(
         registry,
         executor,
-        EsportsSearchObservationBuilder(MemoryArtifactStore()),
+        EsportsSearchObservationBuilder(ToolResponseExternalizer(SessionArtifactStore())),
     )
     return registry, adapter
 
@@ -45,7 +45,7 @@ def test_esports_search_tool_schema_is_compact_and_model_visible() -> None:
     executor = PandaScoreNativeQueryExecutor(PandaScoreCapabilities.load(), adapter)
     tool = build_esports_search_tool(
         executor,
-        EsportsSearchObservationBuilder(MemoryArtifactStore()),
+        EsportsSearchObservationBuilder(ToolResponseExternalizer(SessionArtifactStore())),
     )
     schema = tool.schema().input_schema
     properties = schema["properties"]

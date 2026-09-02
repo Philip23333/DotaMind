@@ -128,6 +128,9 @@ async def delete_session(
             # touching PostgreSQL. The lock is released by normal context exit.
             store.current_fencing_token(str(session_id))
             await _repository(request).delete_session(x_dotamind_browser_id, session_id)
+            vnext_chat = getattr(request.app.state, "vnext_chat_service", None)
+            if vnext_chat is not None:
+                vnext_chat.discard_session(session_id)
             try:
                 await store.clear_session_data(str(session_id))
             except SessionStoreError as exc:
