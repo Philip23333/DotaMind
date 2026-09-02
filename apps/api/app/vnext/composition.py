@@ -40,8 +40,11 @@ from app.vnext.providers.opendota.adapter import (
     OpenDotaGameConstructionAdapter,
 )
 from app.vnext.providers.pandascore.adapter import PandaScoreAdapter
+from app.vnext.providers.pandascore.capabilities import PandaScoreCapabilities
 from app.vnext.providers.pandascore.locator import PandaScoreLocatorIndex
+from app.vnext.providers.pandascore.query import PandaScoreNativeQueryExecutor
 from app.vnext.tools.artifacts import register_artifact_tools
+from app.vnext.tools.domain.esports import register_esports_tools
 from app.vnext.tools.domain.game import register_game_tools
 from app.vnext.tools.registry import ToolRegistry
 
@@ -141,6 +144,8 @@ def _env_value(
 @dataclass(slots=True)
 class VNextServices:
     pandascore: PandaScoreAdapter
+    pandascore_capabilities: PandaScoreCapabilities
+    pandascore_native_queries: PandaScoreNativeQueryExecutor
     opendota: OpenDotaAdapter
     game_detail: GameDetailService
     series: SeriesService
@@ -207,6 +212,8 @@ def build_vnext_services(
         request_timeout_seconds=config.pandascore_timeout_seconds,
         max_page_size=config.pandascore_max_page_size,
     )
+    panda_capabilities = PandaScoreCapabilities.load()
+    panda_native_queries = PandaScoreNativeQueryExecutor(panda_capabilities, panda_adapter)
     open_adapter = opendota or OpenDotaAdapter(
         base_url=config.opendota_base_url,
         api_key=config.opendota_api_key,
@@ -240,6 +247,8 @@ def build_vnext_services(
     artifact_grepper = ArtifactGrepper(store, scope_store)
     return VNextServices(
         pandascore=panda_adapter,
+        pandascore_capabilities=panda_capabilities,
+        pandascore_native_queries=panda_native_queries,
         opendota=open_adapter,
         game_detail=game_detail_service,
         series=series_service,
@@ -268,6 +277,7 @@ def build_vnext_registry(
         resolved_services.artifact_reader,
         resolved_services.artifact_grepper,
     )
+    register_esports_tools(registry, resolved_services.pandascore_native_queries)
     return registry
 
 

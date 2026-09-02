@@ -17,22 +17,22 @@ esports DTO until a second real provider demonstrates that need.
 
 ## Current capability path
 
-### 1. Esports discovery (tool-seam redesign)
+### 1. Esports discovery (PandaScore-oriented tool seam)
 
-The former unified `esports.search` implementation has been removed as part of
-the vNext cleanup so that the new design is not constrained by it. The next
-design unit is a PandaScore-oriented agent tool seam:
+The former unified `esports.search` implementation was removed as part of the
+vNext cleanup so the replacement is not constrained by it. The current
+PandaScore-oriented tool seam provides validated native collection queries:
 
 - One small semantic model-facing contract; no search-engine abstraction, no
   universal search DTO, no scenario routers.
-- The model chooses entity types and composes multiple calls; the tool maps
-  requests to providers and normalizes responses.
+- The model chooses entity types and composes multiple calls; the tool validates
+  native query grammar and performs one provider request.
 - Provider names, endpoints, pagination, and private IDs stay below the
   capability boundary. The PandaScore HTTP client lives at
   `app/vnext/providers/pandascore/` and is not deleted.
-- Preserve PandaScore source-shaped facts through complete Artifacts plus
-  bounded observations; do not reintroduce canonical League/Series/Match/Team
-  DTOs or source-locator navigation.
+- Preserve PandaScore source-shaped rows; do not reintroduce canonical
+  League/Series/Match/Team DTOs or source-locator navigation. Artifact
+  externalization remains a separate extension of this seam.
 - Do not reintroduce the removed kind/`time_scope`/`teams` unified contract as
   the new schema; design from the current endpoint allowlist in
   `docs/reference/pandascore-endpoints.md`.

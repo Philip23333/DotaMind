@@ -22,12 +22,12 @@ def test_default_registry_exposes_only_current_capabilities() -> None:
     assert tool_names == {
         "artifact.grep",
         "artifact.read",
+        "esports.search",
         "game.detail",
     }
     assert not tool_names.intersection(
         {
             "artifact.search",
-            "esports.search",
             "matches.get_detail",
             "teams.search",
             "teams.get_detail",

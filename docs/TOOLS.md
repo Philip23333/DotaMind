@@ -12,32 +12,37 @@ Tool descriptions state a capability; they do not prescribe a fixed workflow.
 
 | Tool | Purpose | Target disposition |
 | --- | --- | --- |
+| `esports.search` | Search PandaScore-backed Dota 2 esports resources with validated native query fields | Retain |
 | `game.detail` | Fetch one detailed recorded game by canonical Valve game ID | Retain |
 | `artifact.grep` | Generic stored-document breadth search | Retain |
 | `artifact.read` | Generic stored-document depth read | Retain |
 
-The default Agent runtime exposes exactly these three tools. Historical
-`esports.search`, `artifact.search`, `matches.get_detail`, `teams.*`, and
-`players.*` modules remain migration code but are not model-visible.
+The default Agent runtime exposes exactly these four tools. Historical
+`artifact.search`, `matches.get_detail`, `teams.*`, and `players.*` modules
+remain migration code but are not model-visible.
 
 ## Esports discovery
 
 The previous `esports.search` implementation (kind-based unified search over
-League, Series, Tournament, Match, Team, Player) has been removed in the vNext
-cleanup phase. It is being replaced by a PandaScore-oriented agent tool seam;
-the new schema is not implemented yet.
+League, Series, Tournament, Match, Team, Player) was removed in the vNext
+cleanup phase. The replacement is a PandaScore-oriented agent tool seam.
 
 The seam is designed as an agent-facing capability layer:
 
 - The model is responsible for understanding user intent, selecting entity
   types, and composing multiple tool calls; it never talks to provider APIs.
-- The tool is responsible for a stable discovery interface, mapping requests to
-  data providers, and normalizing provider responses.
-- Provider-specific fields, endpoints, pagination, and private IDs stay inside
-  provider implementations. The PandaScore HTTP client remains at
-  `app/vnext/providers/pandascore/` below the future capability boundary.
+- The tool is responsible for a stable discovery interface, validation against
+  generated capabilities, and one native PandaScore collection request.
+- Provider-specific fields, endpoints, pagination transport syntax, and private
+  IDs stay inside provider implementations. The PandaScore HTTP client remains
+  at `app/vnext/providers/pandascore/` below the capability boundary.
 - The tool does not attempt to solve complete user tasks; complex workflows
   are completed through multiple tool calls.
+
+Input accepts a resource, normal lifecycle scope, native `filter`, `search`,
+`range`, `sort`, and bounded pagination. Unsupported fields and scopes return
+structured errors. Output retains the source-shaped row dictionaries and their
+source IDs without exposing provider names or endpoint paths.
 
 Do not reintroduce a search-engine abstraction, a universal search DTO, or
 scenario-specific query plumbing while the new seam is pending.

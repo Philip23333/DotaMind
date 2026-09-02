@@ -18,6 +18,14 @@ ToolErrorCode = Literal[
     "artifact_not_found",
     "artifact_path_not_found",
     "artifact_type_mismatch",
+    "unsupported_resource",
+    "unsupported_scope",
+    "unsupported_field",
+    "invalid_value",
+    "configuration_error",
+    "provider_timeout",
+    "provider_http_error",
+    "provider_schema_error",
 ]
 
 

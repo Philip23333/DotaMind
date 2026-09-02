@@ -3,13 +3,13 @@
 ## Status
 
 This document defines the vNext target architecture. The default model-visible
-surface is `game.detail`, `artifact.grep`, and `artifact.read`.
+surface is `esports.search`, `game.detail`, `artifact.grep`, and `artifact.read`.
 
-The previous unified `esports.search` capability was removed in the vNext
-cleanup phase; esports discovery is being redesigned as a PandaScore-oriented
-agent tool seam and is not implemented yet (see `ROADMAP.md`). Transitional
-Team, Player, Series, and `matches.get_detail` code remains internally for
-migration, but those tools are not registered in the default Agent runtime.
+`esports.search` is a PandaScore-backed semantic discovery capability. Its
+compact query grammar is validated against the generated PandaScore capability
+document before one native collection request runs. Transitional Team, Player,
+Series, and `matches.get_detail` code remains internally for migration, but
+those tools are not registered in the default Agent runtime.
 
 ## Principles
 
@@ -32,15 +32,17 @@ User
   -> Product Chat API
   -> Agent Runtime
   -> LLM
+       <-> esports.search
+             -> PandaScoreNativeQueryExecutor -> PandaScoreAdapter
        <-> artifact.grep / artifact.read
              -> ArtifactStore
        <-> game.detail
              -> GameDetailService -> OpenDotaAdapter -> ArtifactStore
 ```
 
-Esports discovery will rejoin this boundary as one small semantic capability
-once the new tool seam is designed. Until then, no esports discovery tool is
-model-visible.
+`esports.search` keeps provider endpoints and endpoint-local fields below the
+tool boundary. Its result is one bounded, source-shaped collection page; it
+does not expose provider names or endpoint paths.
 
 ## Capability pattern
 
@@ -73,11 +75,11 @@ observations, and result assembly. A Provider owns source endpoint selection,
 source filtering, pagination, ordering, and source-specific enrichment. An
 Adapter owns only provider HTTP transport and provider schema parsing.
 
-The future esports discovery seam must follow the same pattern: one small
-semantic model-facing contract; provider names, endpoints, pagination, and
-private IDs below that contract; complete source documents externalized as
-Artifacts with bounded observations returned; no scenario-specific workflows or
-universal search DTO.
+The esports discovery seam uses one small semantic model-facing contract;
+provider names, endpoints, pagination transport syntax, and private IDs remain
+below that contract. It does not encode scenario-specific workflows or a
+universal search DTO. Its current bounded page result preserves source-shaped
+rows; Artifact externalization remains a later boundary extension.
 
 ## PandaScore provider surface (preserved)
 
