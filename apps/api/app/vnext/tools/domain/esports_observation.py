@@ -28,7 +28,7 @@ class EsportsSearchObservation:
     has_more: bool | None
     truncated: bool
     artifact_ref: str | None
-    total_rows: int | None
+    returned_rows: int | None
 
 
 class EsportsSearchObservationBuilder:
@@ -56,7 +56,7 @@ class EsportsSearchObservationBuilder:
                 has_more=result.has_more,
                 truncated=False,
                 artifact_ref=None,
-                total_rows=None,
+                returned_rows=None,
             )
 
         assert externalized.artifact_ref is not None
@@ -74,7 +74,7 @@ class EsportsSearchObservationBuilder:
             has_more=result.has_more,
             truncated=True,
             artifact_ref=externalized.artifact_ref,
-            total_rows=len(result.rows),
+            returned_rows=len(result.rows),
         )
 
 
@@ -98,7 +98,7 @@ def _build_rows_preview(
                 "rows": candidate,
                 "has_more": has_more,
                 "truncated": True,
-                "total_rows": len(rows),
+                "returned_rows": len(rows),
                 "artifact_ref": artifact_ref,
             }
         ) > MAX_PREVIEW_BYTES:

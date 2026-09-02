@@ -70,8 +70,28 @@ def test_large_search_spills_complete_logical_response_under_fresh_string_ref() 
                 ToolCall(id="second", name="esports.search", arguments={"resource": "tournament"})
             )
             ref = first.content["artifact_ref"]
-            matches = await ArtifactReader(store).read(ref, "rows.0.matches")
-            future = await ArtifactReader(store).read(ref, "rows.0.unknown_future_field.deep")
+            matches = await registry.execute(
+                ToolCall(
+                    id="matches-read",
+                    name="artifact.read",
+                    arguments={
+                        "ref": ref,
+                        "mode": "read",
+                        "path": first.content["rows"][0]["matches"]["_artifact_path"],
+                    },
+                )
+            )
+            future = await registry.execute(
+                ToolCall(
+                    id="future-read",
+                    name="artifact.read",
+                    arguments={
+                        "ref": ref,
+                        "mode": "read",
+                        "path": "rows.0.unknown_future_field.deep",
+                    },
+                )
+            )
             grep = await ArtifactGrepper(store).grep(ref, "Grand final")
             return first, second, matches, future, grep
         finally:
@@ -83,9 +103,10 @@ def test_large_search_spills_complete_logical_response_under_fresh_string_ref() 
     assert first.content["truncated"] is True
     assert first.content["artifact_ref"].startswith("artifact:tool:")
     assert first.content["artifact_ref"] != second.content["artifact_ref"]
+    assert first.content["returned_rows"] == len(rows)
     assert first.content["rows"][0]["matches"] == {"_artifact_path": "rows.0.matches", "_count": 20}
-    assert matches.value == rows[0]["matches"]
-    assert future.value == [1, 2, 3]
+    assert matches.content["value"] == rows[0]["matches"]
+    assert future.content["value"] == [1, 2, 3]
     assert grep.returned == 20
     assert {match.ref for match in grep.matches} == {first.content["artifact_ref"]}
 
@@ -122,6 +143,7 @@ def test_small_search_stays_inline_and_unknown_ref_is_rejected() -> None:
     small, unknown, corpus = asyncio.run(exercise())
 
     assert small.content["artifact_ref"] is None
+    assert small.content["returned_rows"] is None
     assert small.content["rows"] == [{"id": 4106, "name": "The International"}]
     assert unknown.error is not None and unknown.error.code == "artifact_not_found"
     assert corpus.error is not None and corpus.error.code == "invalid_arguments"

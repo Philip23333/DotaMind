@@ -123,7 +123,7 @@ def test_static_manuals_work_through_registry_tools() -> None:
     assert traversal.error is not None and traversal.error.code == "artifact_not_found"
     assert nested_traversal.error is not None
     assert nested_traversal.error.code == "artifact_not_found"
-    assert "manual:pandascore:index" in registry.get("esports.search").description
+    assert "resource-specific" in registry.get("esports.search").description
 
 
 def test_manual_read_and_esports_search_share_one_composed_registry() -> None:

@@ -12,7 +12,11 @@ from app.vnext.llm.protocol import ToolCall
 from app.vnext.providers.pandascore.adapter import PandaScoreAdapter
 from app.vnext.providers.pandascore.capabilities import PandaScoreCapabilities
 from app.vnext.providers.pandascore.query import PandaScoreNativeQueryExecutor
-from app.vnext.tools.domain.esports import build_esports_search_tool, register_esports_tools
+from app.vnext.tools.domain.esports import (
+    EsportsSearchOutput,
+    build_esports_search_tool,
+    register_esports_tools,
+)
 from app.vnext.tools.domain.esports_observation import EsportsSearchObservationBuilder
 from app.vnext.tools.registry import ToolRegistry
 
@@ -52,7 +56,9 @@ def test_esports_search_tool_schema_is_compact_and_model_visible() -> None:
 
     assert tool.name == "esports.search"
     assert tool.read_only is True
-    assert "bounded previews with an artifact_ref" in tool.description
+    assert "resource-specific" in tool.description
+    assert "not interchangeable" in tool.description
+    assert "small page_size" in tool.description
     assert set(properties) == {
         "resource",
         "scope",
@@ -72,6 +78,18 @@ def test_esports_search_tool_schema_is_compact_and_model_visible() -> None:
         "player",
     ]
     assert properties["scope"]["enum"] == ["all", "past", "running", "upcoming"]
+    assert "lifecycle endpoint" in properties["scope"]["description"]
+    assert "Exact native filtering" in properties["filter"]["description"]
+    assert "not interchangeable" in properties["filter"]["description"]
+    assert "text-search" in properties["search"]["description"]
+    assert "'-field'" in properties["sort"]["description"]
+    assert "not 'begin_at desc'" in properties["sort"]["description"]
+    assert "Provider-side rows" in properties["page_size"]["description"]
+    output_properties = EsportsSearchOutput.model_json_schema()["properties"]
+    assert "returned_rows" in output_properties
+    assert "total_rows" not in output_properties
+    assert "bounded preview" in output_properties["truncated"]["description"]
+    assert "opaque ref" in output_properties["artifact_ref"]["description"].casefold()
     schema_text = json.dumps(schema)
     endpoint_fields = {"league_id", "serie_id", "tournament_id", "year", "tier"}
     assert not endpoint_fields & set(schema_text.split('"'))
@@ -112,7 +130,7 @@ def test_esports_search_handler_preserves_source_shaped_rows() -> None:
         "has_more": False,
         "truncated": False,
         "artifact_ref": None,
-        "total_rows": None,
+        "returned_rows": None,
     }
 
 

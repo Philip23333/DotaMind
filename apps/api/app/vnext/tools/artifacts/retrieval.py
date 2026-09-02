@@ -103,6 +103,8 @@ def register_artifact_tools(
                 "to inspect root structure; do not provide path, offset, or limit in outline mode. "
                 "Use mode='read' with one required dotted path to read a value. If a tool response "
                 "contains _artifact_path, copy it exactly into path with mode='read'. "
+                "When _artifact_path is already provided, use mode='read' directly. "
+                "Outline is only needed when the document structure is unknown. "
                 "Offset and limit only slice the selected list value; they do not control "
                 "overall artifact response size."
             ),

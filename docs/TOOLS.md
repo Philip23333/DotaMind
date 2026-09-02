@@ -39,13 +39,28 @@ The seam is designed as an agent-facing capability layer:
 - The tool does not attempt to solve complete user tasks; complex workflows
   are completed through multiple tool calls.
 
-Input accepts a resource, normal lifecycle scope, native `filter`, `search`,
-`range`, `sort`, and bounded pagination. Unsupported fields and scopes return
-structured errors. Small results retain their complete source-shaped row
-dictionaries. Large results return a bounded structural preview, `total_rows`,
-and a fresh opaque `artifact:tool:*` string to the complete logical response;
-use `artifact.read` or `artifact.grep` with that exact ref to inspect omitted
-fields. This does not alter the source query or provider request.
+Input accepts a resource, lifecycle scope, native `filter`, `search`, `range`,
+`sort`, and bounded pagination. Their meanings are distinct:
+
+- `filter` is native exact filtering, commonly for IDs, relationships, and exact
+  values; `search` is provider text-search and is not a substitute for it.
+- `range` and `sort` only accept fields supported by the selected resource.
+  Sort uses `field` for ascending and `-field` for descending; `field desc` is
+  invalid.
+- `scope` selects a provider lifecycle endpoint; it does not mean “recent”.
+- `page_size` is the provider-side row count for this call. Keep it small when a
+  task needs only a few results.
+
+Fields are resource-specific: do not invent fields or transfer a field from one
+resource to another. Unsupported fields and scopes return structured errors.
+Small results retain their complete source-shaped row dictionaries. Large
+results return a bounded structural preview, `returned_rows`, and a fresh opaque
+`artifact:tool:*` string to the complete logical response. `returned_rows` is
+the row count in that call's full stored response, while `has_more` says whether
+the provider has a later page. `truncated=true` means only the model-facing
+preview was bounded, not that provider rows are missing. Use the returned
+`_artifact_path` directly as `artifact.read(mode="read", path=...)` with that
+exact ref. This does not alter the source query or provider request.
 
 Do not reintroduce a search-engine abstraction, a universal search DTO, or
 scenario-specific query plumbing while the new seam is pending.
@@ -89,8 +104,8 @@ tool; manual refs remain documented static allowlist entries.
 `artifact.read` uses `outline` only for root structure and `read` only for an
 explicit dotted path. Offset and limit slice a selected list, never the whole
 response.
-PandaScore query manuals are exposed as static read-only artifacts; start with
-`manual:pandascore:index` and read the relevant resource ref from that index.
+PandaScore query manuals are exposed as static read-only artifacts under
+`manual:pandascore:*`.
 The historical GameSummary-specific `artifact.search` tool is not model-visible;
 exact recorded-game retrieval uses `game.detail(valve_game_id)`.
 

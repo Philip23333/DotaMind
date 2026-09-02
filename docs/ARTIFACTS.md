@@ -40,6 +40,13 @@ It has no Artifact envelope, query copy, source/kind wrapper, schema version, or
 synthetic domain DTO. Preview paths therefore start at `rows`, for example
 `rows.0.matches`.
 
+For an externalized esports search, `returned_rows` is the number of rows in
+that complete stored response. It is not a provider-wide total; `has_more`
+indicates whether a later provider page exists. `truncated=true` means only the
+model-facing preview was bounded. When a preview supplies `_artifact_path`, use
+that value directly with `artifact.read(mode="read", path=...)`; `outline` is
+only for an unknown document structure.
+
 ## Manuals and retrieval
 
 Generated PandaScore manuals are a small explicit read-only allowlist. They use
