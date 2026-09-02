@@ -22,6 +22,7 @@ from app.vnext.artifacts import (
     GameSummaryArtifactProducer,
     MemoryArtifactScopeStore,
     MemoryArtifactStore,
+    StaticArtifactResolver,
 )
 from app.vnext.artifacts.game_summary_builder_v5 import GameSummaryBuilderV5
 from app.vnext.capabilities.game_detail.service import GameDetailService
@@ -153,6 +154,7 @@ class VNextServices:
     teams: TeamService
     players: PlayerService
     artifact_store: ArtifactStore
+    static_artifacts: StaticArtifactResolver
     game_summary_producer: GameSummaryArtifactProducer
     artifact_searcher: ArtifactSearcher
     artifact_reader: ArtifactReader
@@ -220,6 +222,7 @@ def build_vnext_services(
         request_timeout_seconds=config.opendota_timeout_seconds,
     )
     store = artifact_store if artifact_store is not None else MemoryArtifactStore()
+    static_artifacts = StaticArtifactResolver()
     series_service = SeriesService(panda_adapter)
     locator_index = PandaScoreLocatorIndex()
     game_detail_service = GameDetailService(open_adapter, store)
@@ -243,8 +246,8 @@ def build_vnext_services(
         scope_store=scope_store,
     )
     artifact_searcher = ArtifactSearcher(store)
-    artifact_reader = ArtifactReader(store)
-    artifact_grepper = ArtifactGrepper(store, scope_store)
+    artifact_reader = ArtifactReader(store, static_artifacts)
+    artifact_grepper = ArtifactGrepper(store, scope_store, static_artifacts)
     return VNextServices(
         pandascore=panda_adapter,
         pandascore_capabilities=panda_capabilities,
@@ -256,6 +259,7 @@ def build_vnext_services(
         teams=team_service,
         players=player_service,
         artifact_store=store,
+        static_artifacts=static_artifacts,
         game_summary_producer=producer,
         artifact_searcher=artifact_searcher,
         artifact_reader=artifact_reader,

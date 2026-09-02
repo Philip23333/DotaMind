@@ -18,11 +18,11 @@ from app.vnext.tools.registry import ToolRegistry
 
 
 class ArtifactReadInput(DomainModel):
-    ref: ArtifactRef = Field(
+    ref: ArtifactRef | str = Field(
         description=(
             "Exact ArtifactRef object returned by a capability or artifact.grep. "
-            "Pass the whole object unchanged; do not pass its id as a bare string "
-            "or JSON-encode the object."
+            "Pass the whole object unchanged. The only supported string references are "
+            "documented static manuals such as manual:pandascore:index."
         )
     )
     path: str | None = None
@@ -43,6 +43,13 @@ class ArtifactGrepInput(DomainModel):
     scope: ArtifactScopeRef | None = Field(
         default=None,
         description="Optional opaque corpus scope. It only constrains stored artifact search.",
+    )
+    ref: str | None = Field(
+        default=None,
+        description=(
+            "Optional documented static manual reference. When set, search only that "
+            "read-only document."
+        ),
     )
     limit: int = Field(
         default=ArtifactGrepper.DEFAULT_LIMIT,
@@ -74,15 +81,22 @@ def register_artifact_tools(
         )
 
     async def grep(args: ArtifactGrepInput) -> ArtifactGrepResult:
-        return await grepper.grep(args.pattern, args.artifact_types, args.limit, args.scope)
+        return await grepper.grep(
+            args.pattern,
+            args.artifact_types,
+            args.limit,
+            args.scope,
+            args.ref,
+        )
 
     registry.register(
         ToolDefinition(
             name="artifact.grep",
             description=(
                 "Find case-insensitive literal text in stored artifact content. "
-                "Returns bounded ArtifactRef and structural-path observations without fetching "
-                "or producing artifacts."
+                "A documented static manual ref can be searched directly. "
+                "Returns bounded artifact-reference and structural-path observations "
+                "without fetching or producing artifacts."
             ),
             input_model=ArtifactGrepInput,
             output_model=ArtifactGrepResult,
@@ -95,8 +109,9 @@ def register_artifact_tools(
             name="artifact.read",
             description=(
                 "Read a bounded serialized view of an exact ArtifactRef returned by another "
-                "capability. Source documents keep complete provider-shaped facts under the "
-                "facts field. Supports structural dotted paths and bounded list slices only."
+                "capability, or a documented static manual ref. Source documents keep complete "
+                "provider-shaped facts under the facts field. Supports structural dotted paths "
+                "and bounded list slices only."
             ),
             input_model=ArtifactReadInput,
             output_model=ArtifactReadResult,

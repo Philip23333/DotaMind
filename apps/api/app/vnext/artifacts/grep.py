@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .models import ArtifactRef
 from .scope import ArtifactScopeRef, ArtifactScopeStore
+from .static import StaticArtifactResolver
 from .store import ArtifactNotFoundError, ArtifactStore
 
 
@@ -18,7 +19,7 @@ class ArtifactGrepMatch(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    ref: ArtifactRef
+    ref: ArtifactRef | str
     path: str
     preview: str
 
@@ -42,9 +43,15 @@ class ArtifactGrepper:
     MAX_LIMIT = 100
     MAX_PREVIEW_LENGTH = 200
 
-    def __init__(self, store: ArtifactStore, scope_store: ArtifactScopeStore | None = None) -> None:
+    def __init__(
+        self,
+        store: ArtifactStore,
+        scope_store: ArtifactScopeStore | None = None,
+        static_resolver: StaticArtifactResolver | None = None,
+    ) -> None:
         self._store = store
         self._scope_store = scope_store
+        self._static_resolver = static_resolver
 
     async def grep(
         self,
@@ -52,9 +59,32 @@ class ArtifactGrepper:
         artifact_types: list[str] | None = None,
         limit: int = DEFAULT_LIMIT,
         scope: ArtifactScopeRef | None = None,
+        ref: str | None = None,
     ) -> ArtifactGrepResult:
         _validate_search(pattern, limit)
         normalized_pattern = pattern.casefold()
+        if ref is not None:
+            if self._static_resolver is None:
+                raise ArtifactNotFoundError(f"artifact not found: {ref}")
+            value = self._static_resolver.read(ref)
+            match_index = value.casefold().find(normalized_pattern)
+            matches = (
+                [
+                    ArtifactGrepMatch(
+                        ref=ref,
+                        path="content",
+                        preview=_preview(value, match_index),
+                    )
+                ]
+                if match_index >= 0
+                else []
+            )
+            return ArtifactGrepResult(
+                matches=matches,
+                returned=len(matches),
+                truncated=False,
+                coverage="static_only",
+            )
         matches: list[ArtifactGrepMatch] = []
 
         refs = (

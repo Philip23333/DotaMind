@@ -8,7 +8,8 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from .models import ArtifactRef, game_summary_artifact_ref
-from .store import ArtifactStore
+from .static import StaticArtifactResolver
+from .store import ArtifactNotFoundError, ArtifactStore
 
 ArtifactType = Literal["game_summary"]
 
@@ -35,7 +36,7 @@ class ArtifactReadResult(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    ref: ArtifactRef
+    ref: ArtifactRef | str
     path: str | None
     value: Any
     offset: int | None = None
@@ -86,12 +87,17 @@ class ArtifactReader:
 
     MAX_LIMIT = 100
 
-    def __init__(self, store: ArtifactStore) -> None:
+    def __init__(
+        self,
+        store: ArtifactStore,
+        static_resolver: StaticArtifactResolver | None = None,
+    ) -> None:
         self._store = store
+        self._static_resolver = static_resolver
 
     async def read(
         self,
-        ref: ArtifactRef,
+        ref: ArtifactRef | str,
         path: str | None = None,
         offset: int = 0,
         limit: int = 50,
@@ -104,6 +110,17 @@ class ArtifactReader:
         if path is None and pagination_requested:
             raise ArtifactReadValidationError(
                 "pagination is only valid when the final value is a list"
+            )
+
+        if isinstance(ref, str):
+            if self._static_resolver is None:
+                raise ArtifactNotFoundError(f"artifact not found: {ref}")
+            if path not in (None, "content"):
+                raise ArtifactPathNotFoundError(f"artifact path not found: {path!r}")
+            return ArtifactReadResult(
+                ref=ref,
+                path=path,
+                value=self._static_resolver.read(ref),
             )
 
         artifact = await self._store.get(ref)

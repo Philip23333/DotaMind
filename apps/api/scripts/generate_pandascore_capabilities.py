@@ -490,12 +490,12 @@ def _render_index(capabilities: dict[str, Any]) -> str:
         "",
         "## Resources",
         "",
-        "| Resource | Supported scopes |",
-        "| --- | --- |",
+        "| Resource | Manual ref | Supported scopes |",
+        "| --- | --- | --- |",
     ]
     for resource in _MANUAL_RESOURCES:
         scopes = ", ".join(_normal_scopes(capabilities["resources"][resource]))
-        lines.append(f"| [{resource}]({resource}.md) | {scopes} |")
+        lines.append(f"| {resource} | `manual:pandascore:{resource}` | {scopes} |")
     lines.extend(
         [
             "",

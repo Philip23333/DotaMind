@@ -29,6 +29,7 @@ from .source_document import (
     bounded_source_observation,
     source_document_artifact_ref,
 )
+from .static import PANDASCORE_MANUAL_REFS, StaticArtifactResolver
 from .store import (
     ArtifactNotFoundError,
     ArtifactStore,
@@ -63,7 +64,9 @@ __all__ = [
     "MemoryArtifactScopeStore",
     "RedisArtifactStore",
     "RedisArtifactScopeStore",
+    "PANDASCORE_MANUAL_REFS",
     "SourceDocumentArtifact",
+    "StaticArtifactResolver",
     "bounded_source_observation",
     "game_summary_artifact_ref",
     "game_detail_artifact_ref",

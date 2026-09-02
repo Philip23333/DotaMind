@@ -46,7 +46,8 @@ def build_esports_search_tool(executor: PandaScoreNativeQueryExecutor) -> ToolDe
             "Search Dota 2 esports data using native query capabilities. Choose a resource and "
             "optionally use its supported filter, search, range, sort, lifecycle scope, and "
             "pagination fields. Different resources support different fields; unsupported fields "
-            "or scopes return structured alternatives so the query can be corrected."
+            "or scopes return structured alternatives so the query can be corrected. When unsure "
+            "about supported fields, read manual:pandascore:index with artifact.read."
         ),
         input_model=EsportsSearchInput,
         output_model=EsportsSearchOutput,

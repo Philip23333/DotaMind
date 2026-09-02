@@ -115,3 +115,5 @@ def test_agent_manual_preserves_capability_fields_and_limitations() -> None:
     assert "/dota2/series/{serie_id_or_slug}/teams" in manual["team.md"]
     assert "`serie_id_or_slug`" in manual["team.md"]
     assert "by_serie" not in manual["INDEX.md"]
+    for resource in ("league", "serie", "tournament", "match", "team", "player"):
+        assert f"`manual:pandascore:{resource}`" in manual["INDEX.md"]

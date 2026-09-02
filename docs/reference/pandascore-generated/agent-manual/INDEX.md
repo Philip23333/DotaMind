@@ -23,14 +23,14 @@ Different resources support different fields.
 
 ## Resources
 
-| Resource | Supported scopes |
-| --- | --- |
-| [league](league.md) | all |
-| [serie](serie.md) | all, past, running, upcoming |
-| [tournament](tournament.md) | all, past, running, upcoming |
-| [match](match.md) | all, past, running, upcoming |
-| [team](team.md) | all |
-| [player](player.md) | all |
+| Resource | Manual ref | Supported scopes |
+| --- | --- | --- |
+| league | `manual:pandascore:league` | all |
+| serie | `manual:pandascore:serie` | all, past, running, upcoming |
+| tournament | `manual:pandascore:tournament` | all, past, running, upcoming |
+| match | `manual:pandascore:match` | all, past, running, upcoming |
+| team | `manual:pandascore:team` | all |
+| player | `manual:pandascore:player` | all |
 
 ## General rules
 
