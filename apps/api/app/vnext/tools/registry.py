@@ -11,11 +11,6 @@ from pydantic import BaseModel, ValidationError
 
 from app.vnext.artifacts.retrieval import ArtifactPathNotFoundError
 from app.vnext.artifacts.store import ArtifactNotFoundError, ArtifactTypeMismatchError
-from app.vnext.capabilities.esports.errors import (
-    ArtifactExternalizationError,
-    EsportsInvalidArgumentsError,
-    EsportsProviderError,
-)
 from app.vnext.capabilities.game_detail.errors import (
     GameDetailArtifactError,
     GameDetailProviderError,
@@ -125,27 +120,6 @@ class ToolRegistry:
             return self._error_result(
                 call,
                 "invalid_source_locator",
-                str(exc),
-                exc.details,
-            )
-        except EsportsInvalidArgumentsError as exc:
-            return self._error_result(
-                call,
-                "invalid_arguments",
-                str(exc),
-                exc.details,
-            )
-        except EsportsProviderError as exc:
-            return self._error_result(
-                call,
-                "provider_error",
-                str(exc),
-                exc.details,
-            )
-        except ArtifactExternalizationError as exc:
-            return self._error_result(
-                call,
-                "artifact_error",
                 str(exc),
                 exc.details,
             )

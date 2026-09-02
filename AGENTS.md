@@ -70,25 +70,29 @@ capability contract, not on PandaScore/OpenDota endpoint vocabulary or provider
 DTOs. The Provider decides how to satisfy that contract from its source. An
 Adapter should remain focused on provider transport and source validation.
 
-`esports.search` is the accepted reference implementation for this pattern:
+`game.detail` is the accepted reference implementation for this pattern:
 
 ```text
 Model
   ↓
-esports.search
+game.detail(valve_game_id)
   ↓
-EsportsSearchService
+GameDetailService
   ↓
-PandaScoreEsportsProvider
-  ↓
-PandaScoreAdapter
+OpenDota implementation / adapter (`match_id` internally)
   ↓
 complete validated source entity
   ↓
-Source Artifact + bounded observation
+Game Artifact + bounded observation
 ```
 
-When adding or replacing a capability, study `esports.search` before introducing
+Esports discovery is currently being redesigned as a PandaScore-oriented agent
+tool seam; the previous unified `esports.search` capability (tool, service,
+provider, search models, and its contract tests) was removed so the new design
+is not constrained by it. Do not rebuild the removed kind/`time_scope`/`teams`
+unified contract.
+
+When adding or replacing a capability, study `game.detail` before introducing
 new architecture. Reuse the same ideas unless the new capability has a verified
 reason to differ:
 
@@ -155,8 +159,9 @@ capability boundary itself is the required seam.
 
 The target model-facing capability layer is intentionally small.
 
-- `esports.search` is the broad esports discovery capability. PandaScore is its
-  current implementation, not a separate model-facing namespace.
+- Esports discovery is an agent-facing capability seam under redesign as a
+  PandaScore-oriented tool; it is not currently registered. PandaScore is the
+  provider, not a separate model-facing namespace.
 - `game.detail` is the detailed recorded-game capability. Its public identity is
   `valve_game_id`; OpenDota is its current implementation and may use `match_id`
   internally.
@@ -166,8 +171,8 @@ The target model-facing capability layer is intentionally small.
 - Capability results should expose a small stable semantic envelope. Large source
   facts live behind `artifact_ref`; the immediate `facts` value is a bounded
   observation rather than a second domain DTO.
-- `kind` in `esports.search` is DotaMind capability vocabulary, not a provider-
-  defined object type.
+- Entity-kind vocabulary in esports discovery is DotaMind capability vocabulary,
+  not a provider-defined object type.
 - Add provider-selection/routing machinery only after a second real provider
   demonstrates the need. One implementation does not justify a plugin system.
 
@@ -235,9 +240,9 @@ while preserving generic search/read access.
 - `ArtifactRef` is the continuation handle for an entity/fact space already
   externalized by a capability. Use `artifact.read` / `artifact.grep` to explore
   it.
-- If the model needs a new remote esports entity, use another semantic
-  `esports.search` call rather than exposing provider navigation IDs or a generic
-  model-facing SourceLocator.
+- If the model needs a new remote esports entity, use another semantic esports
+  discovery call (once the seam is implemented) rather than exposing provider
+  navigation IDs or a generic model-facing SourceLocator.
 - Transitional/internal SourceLocator machinery may exist during migration, but
   it is not the target agent language and must not shape new capability APIs.
 - Do not synthesize cross-source identity from names/year merely to avoid a

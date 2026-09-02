@@ -5,7 +5,8 @@
 vNext keeps provider facts source-backed.  It does not require every esports or
 game-data source to fit one DotaMind business DTO.
 
-The `esports.search` per-record envelope is deliberately small:
+The esports discovery capability envelope (when the new tool seam is
+implemented) stays deliberately small:
 
 ```text
 source
@@ -21,37 +22,29 @@ facts
 - `facts` is a bounded observation of that document.
 
 The envelope preserves provenance and lets capabilities compose.  It is not a
-canonical League, Series, Match, Team, or Player model.
+canonical League, Series, Match, Team, or Player model. The removed unified
+`esports.search` contract must not be rebuilt as the new schema.
 
 ## Esports discovery vocabulary
 
-PandaScore has a richer source hierarchy, including games.  The public
-`esports.search` contract intentionally exposes only:
+PandaScore has a richer source hierarchy, including games.  The future
+discovery capability must decide its own model-facing vocabulary from the
+current endpoint allowlist; `game` is not a discovery kind: recorded game
+detail is obtained through `game.detail` after a canonical Valve game ID is
+available.
 
-```text
-league | series | tournament | match | team | player
-```
+Preserved source semantics for the redesign:
 
-`kind` is required.  `game` is not a discovery kind: recorded game detail is
-obtained through `game.detail` after a canonical Valve game ID is available.
-
-`teams` is a Match-only constraint.  It resolves each supplied team name to an
-exact PandaScore team identity, then returns only matches containing every
-resolved team. The Provider's complete Team identity corpus may be reused for
-repeated constraints, but it never treats a partial corpus as exact identity
-evidence. `teams` is not a replacement for `kind="team"`.
-
-`time_scope` is available only for Series, Tournament, and Match. Its values are
-`upcoming`, `running`, and `past`. For a dedicated PandaScore lifecycle endpoint,
-the endpoint selects the lifecycle; the Provider does not reject its entities by
-a second status filter. Team-to-Matches is the exception: that relationship
-endpoint is filtered locally. `truncated` remains explicit when a bounded scan
-cannot prove completeness.
-
-`query` is capability-level textual discovery over complete provider business
-facts, not an alias for PandaScore `search[name]`. Provider-native name search
-may be used only when it cannot exclude a document that would match this wider
-contract.
+- exact Team identity derives from the complete PandaScore Team corpus (never a
+  partial corpus), with a TTL-bounded identity index for repeated constraints;
+- dedicated PandaScore lifecycle endpoints select the lifecycle; the Provider
+  must not reject their entities by a second status filter (Team-to-Matches is
+  the local-filtering exception);
+- `truncated` remains explicit when a bounded scan cannot prove completeness;
+- capability-level text discovery runs over complete provider business facts,
+  not as an alias for PandaScore `search[name]`; provider-native name search may
+  be used only when it cannot exclude a document that would match the wider
+  contract.
 
 ## Source document versus observation
 
@@ -93,9 +86,9 @@ resolution: resolved | not_found | ambiguous | …
 
 The existing deterministic resolver establishes this relationship.  It does not
 invent a DotaMind-wide replacement ID when resolution is unavailable.
-For one `esports.search` invocation, the resolver shares its OpenDota evidence
-across selected Matches while preserving the same per-game deterministic status
-or `unavailable` outcome in each stored source document.
+For one discovery invocation, the resolver shares its OpenDota evidence across
+selected Matches while preserving the same per-game deterministic status or
+`unavailable` outcome in each stored source document.
 
 ## Recorded-game detail documents
 
@@ -110,7 +103,8 @@ observation. Generic Artifact retrieval exposes the complete document later.
 
 ## Provider roles
 
-- PandaScore implements esports discovery and source documents.
+- PandaScore implements esports discovery and source documents for the future
+  discovery seam; its HTTP client and endpoint allowlist are preserved.
 - The PandaScore-to-Valve resolver establishes concrete recorded-game identity
   when its evidence supports it.
 - OpenDota implements detailed recorded-game facts for a canonical

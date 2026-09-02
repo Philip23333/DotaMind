@@ -37,7 +37,7 @@ def register_match_tools(
             name="matches.get_detail",
             description=(
                 "Return normalized series facts and available game detail for a match or game "
-                "SourceLocator returned by esports.search. "
+                "SourceLocator. "
                 "Resolved games include their canonical Valve match ID and a stored local "
                 "GameSummary artifact. Cross-source mapping and coverage limits remain explicit."
             ),

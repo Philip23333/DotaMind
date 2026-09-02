@@ -56,24 +56,28 @@ builder.
 
 ## Production boundary
 
-`esports.search` has three distinct layers:
+The recorded-game capability has three distinct layers:
 
 ```text
-Tool -> EsportsSearchService -> EsportsSearchProvider -> PandaScoreAdapter
+Tool -> GameDetailService -> OpenDotaAdapter
 ```
 
-The Adapter performs transport and source-model validation.  The Provider
-chooses the allowed PandaScore discovery endpoint, filters, orders, enriches
-Match games, and returns internal source entities.  The Service validates public
-arguments, deduplicates, applies the final limit, and externalizes only those
-final records.
+The Adapter performs transport and source-model validation.  The Service
+validates public arguments, fetches through the Adapter, and externalizes the
+complete validated document. Artifact storage is owned by the Service, not by
+the Provider or Adapter.
 
-Artifact storage is therefore owned by the Service, not by the PandaScore
-Provider. A failed final write never creates a record without an ArtifactRef.
-If at least one final write succeeds, search returns those valid records with
-`partial=true` and one sanitized `artifact_externalization_failed` warning per
-failed entity. If every final write fails, search returns `artifact_error`.
-Already written Artifacts are retained; there is no transaction or rollback.
+The future esports discovery seam will follow the same boundary:
+
+```text
+Tool -> EsportsService -> EsportsProvider -> PandaScoreAdapter
+```
+
+The Provider chooses the allowed PandaScore discovery endpoint, filters, orders,
+and enriches; the Service validates public arguments, deduplicates, applies the
+final limit, and externalizes only final records. A failed final write must
+never create a record without an ArtifactRef, and a partial delivery is
+expressed with stable warnings, never with rollback.
 
 For the same provider source, kind, and source identity, an unchanged identity
 produces the same ArtifactRef.  A later fetch replaces the document at that
@@ -81,7 +85,7 @@ stable address with the current validated facts.
 
 ## Model-facing observation
 
-The `esports.search` result contains:
+An esports discovery result (when the seam is implemented) will contain:
 
 ```text
 source

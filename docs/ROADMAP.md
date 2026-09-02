@@ -17,22 +17,25 @@ esports DTO until a second real provider demonstrates that need.
 
 ## Current capability path
 
-### 1. Esports discovery
+### 1. Esports discovery (tool-seam redesign)
 
-Keep `esports.search` as the sole broad esports discovery entry point.
+The former unified `esports.search` implementation has been removed as part of
+the vNext cleanup so that the new design is not constrained by it. The next
+design unit is a PandaScore-oriented agent tool seam:
 
-- Require `kind`: League, Series, Tournament, Match, Team, or Player.
-- Keep `teams` as a Match-only exact-identity AND constraint.
-- Keep `time_scope` only for Series, Tournament, and Match.
-- Keep query as complete source-document textual discovery; do not narrow it to
-  provider name search unless that is provably semantics-preserving.
-- Store final result documents as Artifacts and return ArtifactRefs plus bounded
-  observations. Preserve usable records as partial success when only some final
-  Artifact writes fail.
-- Preserve PandaScore source-shaped facts; do not reintroduce canonical
-  League/Series/Match/Team DTOs or source-locator navigation.
-- Enrich Match game rows with a canonical Valve ID only through the existing
-  deterministic resolver.
+- One small semantic model-facing contract; no search-engine abstraction, no
+  universal search DTO, no scenario routers.
+- The model chooses entity types and composes multiple calls; the tool maps
+  requests to providers and normalizes responses.
+- Provider names, endpoints, pagination, and private IDs stay below the
+  capability boundary. The PandaScore HTTP client lives at
+  `app/vnext/providers/pandascore/` and is not deleted.
+- Preserve PandaScore source-shaped facts through complete Artifacts plus
+  bounded observations; do not reintroduce canonical League/Series/Match/Team
+  DTOs or source-locator navigation.
+- Do not reintroduce the removed kind/`time_scope`/`teams` unified contract as
+  the new schema; design from the current endpoint allowlist in
+  `docs/reference/pandascore-endpoints.md`.
 
 ### 2. Recorded-game detail
 
@@ -41,7 +44,7 @@ capability from esports discovery and is currently implemented by OpenDota after
 the required PandaScore-to-Valve resolution.
 
 Keep provider-specific document shapes under the shared Artifact substrate.
-Do not create `esports.search(kind="game")` merely to reproduce a provider
+Do not create an esports discovery `kind="game"` merely to reproduce a provider
 endpoint.
 
 ### 3. Generic Artifact exploration

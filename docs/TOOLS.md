@@ -12,92 +12,35 @@ Tool descriptions state a capability; they do not prescribe a fixed workflow.
 
 | Tool | Purpose | Target disposition |
 | --- | --- | --- |
-| `esports.search` | Discover one selected kind of professional Dota 2 esports entity | Retain |
 | `game.detail` | Fetch one detailed recorded game by canonical Valve game ID | Retain |
 | `artifact.grep` | Generic stored-document breadth search | Retain |
 | `artifact.read` | Generic stored-document depth read | Retain |
 
-The default Agent runtime exposes exactly these four tools. Historical
-`artifact.search`, `matches.get_detail`, `teams.*`, and `players.*` modules
-remain migration code but are not model-visible.
+The default Agent runtime exposes exactly these three tools. Historical
+`esports.search`, `artifact.search`, `matches.get_detail`, `teams.*`, and
+`players.*` modules remain migration code but are not model-visible.
 
-## `esports.search`
+## Esports discovery
 
-Purpose: search professional Dota 2 esports entities by one requested kind.
-PandaScore is its current implementation, not a model-facing namespace.
+The previous `esports.search` implementation (kind-based unified search over
+League, Series, Tournament, Match, Team, Player) has been removed in the vNext
+cleanup phase. It is being replaced by a PandaScore-oriented agent tool seam;
+the new schema is not implemented yet.
 
-```text
-kind        required DotaMind vocabulary: league | series | tournament | match | team | player
-query       optional complete-source-document text discovery
-teams       optional Match-only team constraints, interpreted with AND semantics
-time_scope  optional: upcoming | running | past; Series/Tournament/Match only
-limit       1..50
-```
+The seam is designed as an agent-facing capability layer:
 
-The input intentionally has no `within`, `SourceLocator`, provider selector,
-sort/order, pagination, `recent`, `all`, or `game` kind.
+- The model is responsible for understanding user intent, selecting entity
+  types, and composing multiple tool calls; it never talks to provider APIs.
+- The tool is responsible for a stable discovery interface, mapping requests to
+  data providers, and normalizing provider responses.
+- Provider-specific fields, endpoints, pagination, and private IDs stay inside
+  provider implementations. The PandaScore HTTP client remains at
+  `app/vnext/providers/pandascore/` below the future capability boundary.
+- The tool does not attempt to solve complete user tasks; complex workflows
+  are completed through multiple tool calls.
 
-A successful response is:
-
-```text
-records[]
-  source
-  kind
-  artifact_ref
-  facts
-truncated
-partial
-warnings[]
-  code
-  source
-  kind
-```
-
-`facts` is a bounded structural observation. It does not contain provider-private
-identity values. `artifact_ref` is always present and points to the complete
-validated source document. Use generic Artifact tools for deeper reads.
-
-For Series, Tournament, and Match lifecycle requests, the selected PandaScore
-lifecycle endpoint is authoritative; its rows are not rejected by a second
-status filter. `query` matches the complete source business document, so it is
-not narrowed to PandaScore `search[name]`. Match Team constraints first require
-one exact source Team identity per supplied name: not-found or ambiguous identity
-resolution is `invalid_arguments`; no shared Match after successful resolution
-is normal empty success.
-
-### Match results
-
-A Match Artifact preserves the provider's complete Match document. Each item in
-`facts.games[]` additionally has:
-
-```text
-valve_game_id  canonical Valve/OpenDota match ID when resolved, otherwise null
-resolution     deterministic resolution status
-```
-
-This does not make `game` an `esports.search` kind. `game.detail` accepts the
-canonical Valve ID when recorded-game facts are needed.
-If the OpenDota-dependent enrichment is unavailable, Match discovery still
-returns the PandaScore document; each game reports `valve_game_id=null` and
-`resolution="unavailable"` rather than pretending it was not found.
-
-### Partial Artifact delivery
-
-When one or more final documents are stored, a response remains successful. It
-contains only records with valid ArtifactRefs plus `partial=true` and sanitized
-warnings with `code`, `source`, and `kind`. `artifact_error` is reserved for the
-case where no final document could be stored.
-
-### Errors
-
-- `invalid_arguments`: invalid kind/limit or a cross-field violation such as
-  `teams` with `kind="team"`.
-- `provider_error`: PandaScore discovery, validation, or another non-degradable
-  Provider failure cannot satisfy a valid request.
-- `artifact_error`: no final complete source document could be stored.
-
-`records=[]` is normal success. `truncated=true` means more qualifying records
-may exist than the Provider scan or final limit returned.
+Do not reintroduce a search-engine abstraction, a universal search DTO, or
+scenario-specific query plumbing while the new seam is pending.
 
 ## `game.detail`
 
@@ -140,7 +83,8 @@ exact recorded-game retrieval uses `game.detail(valve_game_id)`.
 
 - separate League/Series/Tournament/Match/Team model tools;
 - a `pandascore.*` model-facing namespace;
-- a model-facing source-navigation locator for `esports.search`;
+- a model-facing source-navigation locator for esports discovery;
 - provider-specific Artifact read or grep helpers;
 - an `artifact.produce` tool;
-- a workflow prompt that forces a particular discovery sequence.
+- a workflow prompt that forces a particular discovery sequence;
+- a universal search DTO that merges provider-specific entity schemas.

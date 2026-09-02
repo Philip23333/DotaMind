@@ -119,9 +119,9 @@ DotaMind 当前允许使用
 
 能力设计必须从当前白名单出发，而不是从 PandaScore 完整商业 API 能力出发。
 
-## 5. 与 `esports.search` 的关系
+## 5. 与 esports discovery 工具接缝的关系
 
-当前 `esports` source discovery 能力应建立在允许使用的 `All plans` endpoint 上。例如：
+未来的 esports source discovery 工具接缝应建立在允许使用的 `All plans` endpoint 上。例如：
 
 ```text
 match
@@ -152,7 +152,7 @@ series
   -> /dota2/series/past
 ```
 
-这些 endpoint 返回的完整 provider source objects 可以写入 source artifact。模型侧应通过 `esports.search`、`artifact.read` 和 `artifact.grep` 探索这些 source facts，而不是通过增加依赖 `Historical` endpoint 的 provider-specific detail 工具来绕过当前套餐边界。
+这些 endpoint 返回的完整 provider source objects 可以写入 source artifact。模型侧应通过未来的 esports discovery 工具、`artifact.read` 和 `artifact.grep` 探索这些 source facts，而不是通过增加依赖 `Historical` endpoint 的 provider-specific detail 工具来绕过当前套餐边界。旧的统一 `esports.search` 合同已删除，重建新合同时必须从本白名单出发。
 
 ---
 
@@ -263,9 +263,9 @@ For example, the official existence of `GET /dota2/matches/{id}` does not make r
 
 DotaMind capabilities must be designed from the current endpoint allowlist rather than from the complete commercial PandaScore API surface.
 
-## 5. Relationship to `esports.search`
+## 5. Relationship to the future esports discovery tool seam
 
-The `esports` source-discovery capability should be built on the allowed `All plans` endpoints. For example:
+The esports source-discovery tool seam should be built on the allowed `All plans` endpoints. For example:
 
 ```text
 match
@@ -296,7 +296,7 @@ series
   -> /dota2/series/past
 ```
 
-Complete provider source objects returned by these endpoints may be persisted as source artifacts. The model should explore these facts through `esports.search`, `artifact.read`, and `artifact.grep`, rather than by introducing provider-specific detail tools that depend on `Historical` endpoints outside the current plan boundary.
+Complete provider source objects returned by these endpoints may be persisted as source artifacts. The model should explore these facts through the future esports discovery tool, `artifact.read`, and `artifact.grep`, rather than by introducing provider-specific detail tools that depend on `Historical` endpoints outside the current plan boundary. The previous unified `esports.search` contract has been removed; any new contract must be designed from this allowlist.
 
 ---
 
