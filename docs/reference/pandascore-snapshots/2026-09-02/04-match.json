@@ -1,0 +1,259 @@
+{
+  "request": "https://api.pandascore.co/tournaments/21698/matches?search%5Bname%5D=Grand+Final&page%5Bsize%5D=5&page%5Bnumber%5D=1",
+  "response": [
+    {
+      "match_type": "best_of",
+      "serie": {
+        "id": 10828,
+        "name": "",
+        "year": 2026,
+        "slug": "the-international-2026",
+        "begin_at": "2026-08-12T22:00:00Z",
+        "end_at": "2026-08-23T13:32:00Z",
+        "winner_id": null,
+        "winner_type": "Team",
+        "modified_at": "2026-08-23T17:14:01Z",
+        "league_id": 4106,
+        "season": null,
+        "full_name": "2026"
+      },
+      "modified_at": "2026-08-23T13:43:58Z",
+      "winner_type": "Team",
+      "game_advantage": null,
+      "begin_at": "2026-08-23T06:19:11Z",
+      "opponents": [
+        {
+          "type": "Team",
+          "opponent": {
+            "id": 138839,
+            "name": "TEAM VISION",
+            "location": "RU",
+            "slug": "team-vision-dota-2",
+            "modified_at": "2026-08-16T12:10:53Z",
+            "acronym": "VSN",
+            "image_url": "https://cdn-api.pandascore.co/images/team/image/138839/619px_team_vision_allmode.png",
+            "dark_mode_image_url": "https://cdn-api.pandascore.co/dark_images/team/dark_image/138839/619px_team_vision_allmode.png"
+          }
+        },
+        {
+          "type": "Team",
+          "opponent": {
+            "id": 1669,
+            "name": "Team Spirit",
+            "location": "RU",
+            "slug": "team-spirit",
+            "modified_at": "2026-08-16T12:10:52Z",
+            "acronym": "TS",
+            "image_url": "https://cdn-api.pandascore.co/images/team/image/1669/153px_team_spirit_2022_lightmode.png",
+            "dark_mode_image_url": "https://cdn-api.pandascore.co/dark_images/team/dark_image/1669/153px_team_spirit_2022_darkmode.png"
+          }
+        }
+      ],
+      "videogame_title": null,
+      "slug": "team-vision-2026-08-23",
+      "tournament": {
+        "id": 21698,
+        "name": "Playoffs",
+        "type": "offline",
+        "country": null,
+        "slug": "the-international-2026-playoffs",
+        "begin_at": "2026-08-20T02:00:00Z",
+        "detailed_stats": true,
+        "end_at": "2026-08-23T13:32:00Z",
+        "winner_id": 1669,
+        "winner_type": "Team",
+        "serie_id": 10828,
+        "modified_at": "2026-08-23T17:14:01Z",
+        "league_id": 4106,
+        "prizepool": "3061178 United States Dollar",
+        "tier": "s",
+        "has_bracket": true,
+        "region": "ASIA",
+        "live_supported": true
+      },
+      "end_at": "2026-08-23T13:32:59Z",
+      "games": [
+        {
+          "complete": true,
+          "id": 738793,
+          "position": 1,
+          "status": "finished",
+          "length": 2775,
+          "finished": true,
+          "match_id": 1638249,
+          "begin_at": "2026-08-23T06:19:11Z",
+          "detailed_stats": true,
+          "end_at": "2026-08-23T07:20:26Z",
+          "forfeit": false,
+          "winner_type": "Team",
+          "winner": {
+            "id": 1669,
+            "type": "Team"
+          }
+        },
+        {
+          "complete": true,
+          "id": 738794,
+          "position": 2,
+          "status": "finished",
+          "length": 3869,
+          "finished": true,
+          "match_id": 1638249,
+          "begin_at": "2026-08-23T07:38:57Z",
+          "detailed_stats": true,
+          "end_at": "2026-08-23T08:59:33Z",
+          "forfeit": false,
+          "winner_type": "Team",
+          "winner": {
+            "id": 138839,
+            "type": "Team"
+          }
+        },
+        {
+          "complete": true,
+          "id": 738795,
+          "position": 3,
+          "status": "finished",
+          "length": 2756,
+          "finished": true,
+          "match_id": 1638249,
+          "begin_at": "2026-08-23T09:16:39Z",
+          "detailed_stats": true,
+          "end_at": "2026-08-23T10:18:45Z",
+          "forfeit": false,
+          "winner_type": "Team",
+          "winner": {
+            "id": 1669,
+            "type": "Team"
+          }
+        },
+        {
+          "complete": true,
+          "id": 738796,
+          "position": 4,
+          "status": "finished",
+          "length": 2658,
+          "finished": true,
+          "match_id": 1638249,
+          "begin_at": "2026-08-23T10:52:14Z",
+          "detailed_stats": true,
+          "end_at": "2026-08-23T11:51:58Z",
+          "forfeit": false,
+          "winner_type": "Team",
+          "winner": {
+            "id": 138839,
+            "type": "Team"
+          }
+        },
+        {
+          "complete": true,
+          "id": 738797,
+          "position": 5,
+          "status": "finished",
+          "length": 3862,
+          "finished": true,
+          "match_id": 1638249,
+          "begin_at": "2026-08-23T12:10:53Z",
+          "detailed_stats": true,
+          "end_at": "2026-08-23T13:32:59Z",
+          "forfeit": false,
+          "winner_type": "Team",
+          "winner": {
+            "id": 1669,
+            "type": "Team"
+          }
+        }
+      ],
+      "results": [
+        {
+          "team_id": 138839,
+          "score": 2
+        },
+        {
+          "team_id": 1669,
+          "score": 3
+        }
+      ],
+      "status": "finished",
+      "videogame": {
+        "id": 4,
+        "name": "Dota 2",
+        "slug": "dota-2"
+      },
+      "live": {
+        "supported": true,
+        "url": "wss://live.pandascore.co/matches/1638249",
+        "opens_at": "2026-08-23T06:00:00.000000Z"
+      },
+      "forfeit": false,
+      "detailed_stats": true,
+      "rescheduled": true,
+      "tournament_id": 21698,
+      "number_of_games": 5,
+      "streams_list": [
+        {
+          "main": false,
+          "language": "es",
+          "embed_url": "https://www.youtube.com/embed/aHQX_XwTpUo",
+          "official": false,
+          "raw_url": "https://www.youtube.com/watch?v=aHQX_XwTpUo"
+        },
+        {
+          "main": false,
+          "language": "ru",
+          "embed_url": "https://www.youtube.com/embed/JHCLQvjnm3E",
+          "official": false,
+          "raw_url": "https://www.youtube.com/watch?v=JHCLQvjnm3E"
+        },
+        {
+          "main": false,
+          "language": "en",
+          "embed_url": "https://www.youtube.com/embed/GMbjTK8UVks",
+          "official": false,
+          "raw_url": "https://www.youtube.com/watch?v=GMbjTK8UVks"
+        },
+        {
+          "main": true,
+          "language": "en",
+          "embed_url": "https://player.twitch.tv/?channel=dota2ti",
+          "official": true,
+          "raw_url": "https://www.twitch.tv/dota2ti"
+        },
+        {
+          "main": false,
+          "language": "ru",
+          "embed_url": "https://player.twitch.tv/?channel=dota2ti_ru",
+          "official": true,
+          "raw_url": "https://www.twitch.tv/dota2ti_ru"
+        }
+      ],
+      "serie_id": 10828,
+      "id": 1638249,
+      "winner": {
+        "id": 1669,
+        "name": "Team Spirit",
+        "location": "RU",
+        "slug": "team-spirit",
+        "modified_at": "2026-08-16T12:10:52Z",
+        "acronym": "TS",
+        "image_url": "https://cdn-api.pandascore.co/images/team/image/1669/153px_team_spirit_2022_lightmode.png",
+        "dark_mode_image_url": "https://cdn-api.pandascore.co/dark_images/team/dark_image/1669/153px_team_spirit_2022_darkmode.png"
+      },
+      "name": "Grand final: VSN vs TS",
+      "videogame_version": null,
+      "league_id": 4106,
+      "draw": false,
+      "original_scheduled_at": "2026-08-23T05:00:00Z",
+      "league": {
+        "id": 4106,
+        "name": "The International",
+        "url": null,
+        "slug": "the-international",
+        "modified_at": "2024-04-17T21:12:22Z",
+        "image_url": "https://cdn-api.pandascore.co/images/league/image/4106/1200px-the_international_2023_lightmode-png"
+      },
+      "winner_id": 1669,
+      "scheduled_at": "2026-08-23T06:15:00Z"
+    }
+  ]
+}
