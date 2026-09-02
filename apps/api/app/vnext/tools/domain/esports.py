@@ -42,8 +42,9 @@ class EsportsSearchInput(DomainModel):
     )
     sort: list[str] | None = Field(
         default=None,
-        description="Native sort fields: 'field' is ascending and '-field' is descending. Use "
-        "'-begin_at', not 'begin_at desc'; fields must be supported by the resource.",
+        description="Native sort must be an array of strings. 'field' is ascending and '-field' "
+        "is descending; example: ['-begin_at']. Do not pass '-begin_at' as a string or use "
+        "'begin_at desc'; fields must be supported by the resource.",
     )
     page: int = Field(default=1, ge=1, description="One-based provider result-page number.")
     page_size: int = Field(
@@ -76,10 +77,10 @@ class EsportsSearchOutput(DomainModel):
         description="Opaque ref to this call's complete logical response when truncated is true. "
         "Use artifact.read or artifact.grep with this exact ref.",
     )
-    returned_rows: int | None = Field(
-        default=None,
-        description="Row count in this call's complete logical response when a large response was "
-        "externalized. Combine with has_more to reason about later provider pages.",
+    returned_rows: int = Field(
+        ge=0,
+        description="Row count in this call's complete logical response, whether rows remain "
+        "inline or are externalized. Combine with has_more to reason about later provider pages.",
     )
 
 

@@ -28,7 +28,7 @@ class EsportsSearchObservation:
     has_more: bool | None
     truncated: bool
     artifact_ref: str | None
-    returned_rows: int | None
+    returned_rows: int
 
 
 class EsportsSearchObservationBuilder:
@@ -56,7 +56,7 @@ class EsportsSearchObservationBuilder:
                 has_more=result.has_more,
                 truncated=False,
                 artifact_ref=None,
-                returned_rows=None,
+                returned_rows=len(result.rows),
             )
 
         assert externalized.artifact_ref is not None

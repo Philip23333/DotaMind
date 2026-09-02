@@ -47,7 +47,7 @@ def test_outline_and_explicit_read_modes_are_unambiguous() -> None:
     assert outline.content["path"] is None
     assert outline.content["value"] == {
         "resource": "tournament",
-        "sections": {"rows": {"kind": "collection", "count": 60}},
+        "paths": [{"path": "rows", "kind": "collection", "count": 60}],
     }
     assert nested.status == "ok"
     assert nested.content["value"] == [{"name": "Game 0"}]

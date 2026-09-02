@@ -83,7 +83,9 @@ def test_esports_search_tool_schema_is_compact_and_model_visible() -> None:
     assert "not interchangeable" in properties["filter"]["description"]
     assert "text-search" in properties["search"]["description"]
     assert "'-field'" in properties["sort"]["description"]
-    assert "not 'begin_at desc'" in properties["sort"]["description"]
+    assert "use 'begin_at desc'" in properties["sort"]["description"]
+    assert "array of strings" in properties["sort"]["description"]
+    assert "Do not pass '-begin_at' as a string" in properties["sort"]["description"]
     assert "Provider-side rows" in properties["page_size"]["description"]
     output_properties = EsportsSearchOutput.model_json_schema()["properties"]
     assert "returned_rows" in output_properties
@@ -130,7 +132,7 @@ def test_esports_search_handler_preserves_source_shaped_rows() -> None:
         "has_more": False,
         "truncated": False,
         "artifact_ref": None,
-        "returned_rows": None,
+        "returned_rows": 1,
     }
 
 

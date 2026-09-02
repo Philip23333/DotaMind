@@ -109,7 +109,7 @@ def test_static_manuals_work_through_registry_tools() -> None:
     assert read.content["ref"] == "manual:pandascore:tournament"
     assert "does not support `league_id`" in read.content["value"]
     assert outline.status == "ok"
-    assert outline.content["value"] == {"sections": {"content": {"kind": "text"}}}
+    assert outline.content["value"] == {"paths": [{"path": "content", "kind": "text"}]}
     assert grep.status == "ok"
     assert grep.content["matches"] == [
         {

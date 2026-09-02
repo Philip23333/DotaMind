@@ -143,7 +143,7 @@ def test_small_search_stays_inline_and_unknown_ref_is_rejected() -> None:
     small, unknown, corpus = asyncio.run(exercise())
 
     assert small.content["artifact_ref"] is None
-    assert small.content["returned_rows"] is None
+    assert small.content["returned_rows"] == 1
     assert small.content["rows"] == [{"id": 4106, "name": "The International"}]
     assert unknown.error is not None and unknown.error.code == "artifact_not_found"
     assert corpus.error is not None and corpus.error.code == "invalid_arguments"

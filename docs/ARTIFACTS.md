@@ -40,9 +40,9 @@ It has no Artifact envelope, query copy, source/kind wrapper, schema version, or
 synthetic domain DTO. Preview paths therefore start at `rows`, for example
 `rows.0.matches`.
 
-For an externalized esports search, `returned_rows` is the number of rows in
-that complete stored response. It is not a provider-wide total; `has_more`
-indicates whether a later provider page exists. `truncated=true` means only the
+For every esports search, `returned_rows` is the number of rows in that call's
+complete logical response. It is not a provider-wide total; `has_more` indicates
+whether a later provider page exists. `truncated=true` means only the
 model-facing preview was bounded. When a preview supplies `_artifact_path`, use
 that value directly with `artifact.read(mode="read", path=...)`; `outline` is
 only for an unknown document structure.
@@ -63,7 +63,7 @@ Both require one exact reference. `artifact.read` has explicit modes:
 
 ```text
 mode="outline"
-  inspect root structure
+  inspect root structure as copyable paths
   path, offset, and limit must be omitted
 
 mode="read"
@@ -74,7 +74,7 @@ mode="read"
 When a list slice is not supplied, `artifact.read` uses offset `0` and limit
 `50` as runtime policy. A preview's `_artifact_path` is copied unchanged into
 `path` with `mode="read"`; `limit` never controls the overall response size.
-Manuals use the same contract: `outline` reports a `content` text section and
+Manuals use the same contract: `outline` reports a copyable `content` text path and
 `read` uses `path="content"`.
 
 `artifact.grep` is a literal, case-insensitive search in that one document;

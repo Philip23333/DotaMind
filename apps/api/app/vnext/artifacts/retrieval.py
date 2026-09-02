@@ -53,7 +53,7 @@ class ArtifactReader:
             return ArtifactReadResult(
                 ref=ref,
                 path=None,
-                value={"sections": {"content": {"kind": "text"}}},
+                value={"paths": [{"path": "content", "kind": "text"}]},
             )
         return ArtifactReadResult(ref=ref, path=None, value=_outline(await self._store.get(ref)))
 
@@ -113,15 +113,15 @@ def _outline(payload: Any) -> Any:
     if not isinstance(payload, dict):
         return payload
     outline: dict[str, Any] = {}
-    sections: dict[str, dict[str, Any]] = {}
+    paths: list[dict[str, Any]] = []
     for key, value in payload.items():
         if isinstance(value, dict):
-            sections[key] = {"kind": "object"}
+            paths.append({"path": key, "kind": "object"})
         elif isinstance(value, list):
-            sections[key] = {"kind": "collection", "count": len(value)}
+            paths.append({"path": key, "kind": "collection", "count": len(value)})
         else:
             outline[key] = value
-    outline["sections"] = sections
+    outline["paths"] = paths
     return outline
 
 
