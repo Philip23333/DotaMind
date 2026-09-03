@@ -64,6 +64,9 @@ def test_esports_search_tool_schema_is_compact_and_model_visible() -> None:
     assert "not a fixed query workflow" in properties["resource"]["description"]
     assert "not interchangeable" in tool.description
     assert "small page_size" in tool.description
+    assert "does not mean status='finished'" in properties["scope"]["description"]
+    assert "canceled" in properties["scope"]["description"]
+    assert "finished/status filter" in properties["filter"]["description"]
     assert set(properties) == {
         "resource",
         "scope",
@@ -96,6 +99,9 @@ def test_esports_search_tool_schema_is_compact_and_model_visible() -> None:
     assert "returned_rows" in output_properties
     assert "total_rows" not in output_properties
     assert "bounded preview" in output_properties["truncated"]["description"]
+    assert "not necessarily all returned rows" in output_properties["truncated"]["description"]
+    assert "do not infer totals" in output_properties["truncated"]["description"]
+    assert "including rows omitted" in output_properties["returned_rows"]["description"]
     assert "opaque ref" in output_properties["artifact_ref"]["description"].casefold()
     schema_text = json.dumps(schema)
     endpoint_fields = {"league_id", "serie_id", "tournament_id", "year", "tier"}

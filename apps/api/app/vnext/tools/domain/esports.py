@@ -29,14 +29,23 @@ class EsportsSearchInput(DomainModel):
     )
     scope: Literal["all", "past", "running", "upcoming"] = Field(
         default="all",
-        description="Selects the provider lifecycle endpoint. It is not a relative-time or "
-        "'most recent' selector; use supported sort fields for ordering.",
+        description=(
+            "Selects the provider lifecycle endpoint. 'past' means the provider's past lifecycle "
+            "collection; it does not mean status='finished'. For match queries, past results may "
+            "include canceled or other non-finished records. If completed match results are "
+            "required, use a supported finished/status filter in addition to scope when needed. "
+            "'running' and 'upcoming' likewise select lifecycle collections; scope does not "
+            "replace resource-specific status filters, date filters, or sorting. It is not a "
+            "relative-time or 'most recent' selector."
+        ),
     )
     filter: dict[str, Any] | None = Field(
         default=None,
         description="Exact native filtering, commonly for IDs, relationships, and exact values. "
         "Only fields supported by this resource are allowed; filter is not interchangeable with "
-        "provider text search.",
+        "provider text search. For matches, exact lifecycle/status requirements such as finished "
+        "results should use the supported finished/status filter rather than being inferred from "
+        "scope='past'.",
     )
     search: dict[str, Any] | None = Field(
         default=None,
@@ -77,8 +86,15 @@ class EsportsSearchOutput(DomainModel):
     )
     truncated: bool = Field(
         default=False,
-        description="True only when model-facing rows are a bounded preview; it does not mean the "
-        "provider omitted rows from this call.",
+        description=(
+            "True means this model-facing response is only a bounded preview of the complete "
+            "logical tool result. When true, inline rows are not necessarily all returned rows; "
+            "returned_rows refers to the complete logical result for this call; do not infer "
+            "totals, exhaustive lists, 'all matches', or 'there were N' from the preview alone. "
+            "Use artifact_ref and any provided _artifact_path to inspect the complete result "
+            "before exhaustive claims. False means the logical result is represented completely "
+            "inline."
+        ),
     )
     artifact_ref: str | None = Field(
         default=None,
@@ -87,8 +103,8 @@ class EsportsSearchOutput(DomainModel):
     )
     returned_rows: int = Field(
         ge=0,
-        description="Row count in this call's complete logical response, whether rows remain "
-        "inline or are externalized. Combine with has_more to reason about later provider pages.",
+        description="Number of rows in the complete logical result returned by this query, "
+        "including rows omitted from a truncated model-facing preview.",
     )
 
 

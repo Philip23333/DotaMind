@@ -126,6 +126,9 @@ def test_composed_esports_instructions_cover_patterns_completion_and_evidence() 
     assert "Do not resolve a raw winner_id" in ESPORTS_AGENT_INSTRUCTION
     assert "to a name from model knowledge" in ESPORTS_AGENT_INSTRUCTION
     assert "not an aggregation engine" in ESPORTS_AGENT_INSTRUCTION
+    assert "do not widen the page" in ESPORTS_AGENT_INSTRUCTION
+    assert "Relative-time wording" in ESPORTS_AGENT_INSTRUCTION
+    assert "Preserve source stage labels" in ESPORTS_AGENT_INSTRUCTION
 
 
 def test_single_tool_call_result_then_final() -> None:

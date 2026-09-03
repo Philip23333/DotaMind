@@ -32,6 +32,19 @@ def _call(arguments: dict[str, object]) -> ToolCall:
     return ToolCall(id="artifact-read", name="artifact.read", arguments=arguments)
 
 
+def test_artifact_read_schema_explains_granularity_choices() -> None:
+    store = SessionArtifactStore()
+    registry = ToolRegistry()
+    register_artifact_tools(registry, ArtifactReader(store), ArtifactGrepper(store))
+    schema = registry.get("artifact.read").schema().input_schema
+    properties = schema["properties"]
+
+    assert "narrowest useful read granularity" in registry.get("artifact.read").description
+    assert "parent collection such as rows" in properties["path"]["description"]
+    assert "six complete adjacent rows" in properties["offset"]["description"]
+    assert "one bounded parent-list read" in properties["limit"]["description"]
+
+
 def test_outline_and_explicit_read_modes_are_unambiguous() -> None:
     async def exercise():
         registry, ref = await _registry_with_document()

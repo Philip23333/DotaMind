@@ -34,6 +34,12 @@ IDs.
   use sort ["begin_at"]; for running use the running scope, where sorting is
   usually unnecessary. Keep page_size small and stop once the requested recent
   matches are supported; do not enumerate the entire series history.
+- If a broad recent-match result is dominated by null begin_at values,
+  canceled/non-relevant records, or unrelated qualifiers, do not widen the page.
+  Reuse explicit serie or tournament IDs already present in the returned rows to
+  narrow to the most relevant recent coherent edition or stage, then query
+  matches within that narrower scope. Prefer source-side narrowing over fetching
+  more broad rows.
 - A specific edition or stage: resolve league to the requested serie edition,
   then the tournament or stage, then its matches. Use the stage's explicit ID
   to retrieve the requested results and stop when that request is supported.
@@ -75,6 +81,10 @@ Esports evidence discipline:
   Do not repeatedly grep/read a dataset to compute standings or other aggregates.
   If complete aggregation is not supported by the collected evidence, answer
   only the supported facts or state that the requested aggregate is unavailable.
+- Relative-time wording such as "just finished", "currently", "today", or
+  "recently" requires explicit timestamps relative to the current request time.
+- Preserve source stage labels. Do not relabel Playoffs, Group Stage, qualifier,
+  or another stage unless collected evidence explicitly supports the new label.
 
 Never answer at a finer granularity than the evidence supports.
 """

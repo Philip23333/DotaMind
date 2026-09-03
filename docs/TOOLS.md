@@ -48,6 +48,10 @@ Input accepts a resource, lifecycle scope, native `filter`, `search`, `range`,
   Sort uses `field` for ascending and `-field` for descending; `field desc` is
   invalid.
 - `scope` selects a provider lifecycle endpoint; it does not mean “recent”.
+  `past` is the provider's past collection, not necessarily `status="finished"`;
+  match results can include canceled or other non-finished records. Use a
+  supported status/finished filter when completed results are required. Scope
+  does not replace resource-specific status/date filters or sorting.
 - `page_size` is the provider-side row count for this call. Keep it small when a
   task needs only a few results.
 
@@ -57,10 +61,13 @@ Small results retain their complete source-shaped row dictionaries. Large
 results return a bounded structural preview, `returned_rows`, and a fresh opaque
 `artifact:tool:*` string to the complete logical response. `returned_rows` is
 always the row count in that call's complete logical response, while `has_more`
-says whether the provider has a later page. `truncated=true` means only the model-facing
-preview was bounded, not that provider rows are missing. Use the returned
-`_artifact_path` directly as `artifact.read(mode="read", path=...)` with that
-exact ref. This does not alter the source query or provider request.
+says whether the provider has a later page. `truncated=true` means the
+model-facing response is only a bounded preview: inline rows are not necessarily
+all returned rows, so do not infer totals or exhaustive claims from them. Use
+`artifact_ref` and any returned `_artifact_path` to inspect the complete result
+before making such claims. `truncated=false` means the logical result is
+represented completely inline. Use the returned `_artifact_path` directly as
+`artifact.read(mode="read", path=...)` with that exact ref.
 
 Do not reintroduce a search-engine abstraction, a universal search DTO, or
 scenario-specific query plumbing while the new seam is pending.
@@ -92,11 +99,14 @@ workflow: recent league matches use league discovery followed by a confirmed
 match relation; `past` uses `sort=["-begin_at"]`, `upcoming` uses
 `sort=["begin_at"]`, and `running` uses the running scope where sorting is
 usually unnecessary. Keep the page size small and stop once enough recent
-matches are supported. A specific edition or stage resolves league -> serie ->
-tournament -> match; latest tournament status resolves the current edition and
-stage, then reads only enough key matches to answer. These patterns contain no
-provider-specific IDs and do not require a full history or bracket
-reconstruction.
+matches are supported. If broad recent-match rows are dominated by null
+`begin_at`, canceled/non-relevant records, or unrelated qualifiers, do not widen
+the page: reuse explicit `serie` or `tournament` IDs already returned to narrow
+to the most relevant recent coherent edition/stage. A specific edition or stage
+resolves league -> serie -> tournament -> match; latest tournament status
+resolves the current edition and stage, then reads only enough key matches to
+answer. These patterns contain no provider-specific IDs and do not require a
+full history or bracket reconstruction.
 
 Before every additional call, the agent checks whether the requested answer is
 already supported by collected evidence. It stops once the target and requested
@@ -111,7 +121,11 @@ require explicit results or scores and cannot be inferred from
 `number_of_games`, match format, or winner alone. Team/opponent and game-level
 claims require their respective explicit evidence. `artifact.grep` locates
 known text or paths; it is not an aggregation engine for standings or other
-multi-row calculations. Answers must not be more specific than their evidence.
+multi-row calculations. Relative-time wording such as “just finished”,
+“currently”, “today”, or “recently” requires explicit timestamps relative to
+the current request time. Preserve source stage labels; do not relabel Playoffs,
+Group Stage, qualifier, or another stage without explicit supporting evidence.
+Answers must not be more specific than their evidence.
 
 ## `game.detail`
 
@@ -150,8 +164,13 @@ and `artifact.grep` must not learn PandaScore, OpenDota, Team, Player, or
 gameplay-scenario logic. Both accept an exact string ref returned by another
 tool; manual refs remain documented static allowlist entries.
 `artifact.read` uses `outline` only for root structure and `read` only for an
-explicit dotted path. Offset and limit slice a selected list, never the whole
-response.
+explicit dotted path. Choose the narrowest useful read granularity: read one
+nested value such as `rows.3.results` when one value is needed; when several
+adjacent rows are needed, read the parent collection such as `rows` once with
+`offset`/`limit` rather than issuing many sibling reads. The stored artifact
+contains the complete logical response, so a parent row/list read can expose
+data replaced by `_artifact_path` pointers in the bounded preview. Offset and
+limit slice a selected list, never the whole response.
 PandaScore query manuals are exposed as static read-only artifacts under
 `manual:pandascore:*`.
 The historical GameSummary-specific `artifact.search` tool is not model-visible;
