@@ -89,11 +89,14 @@ legal; `_artifact_path` values inspect data returned by a previous tool call.
 
 The production agent receives three reusable search shapes, not a fixed
 workflow: recent league matches use league discovery followed by a confirmed
-match relation and small descending `begin_at` results; a specific edition or
-stage resolves league -> serie -> tournament -> match; latest tournament status
-resolves the current edition and stage, then reads only enough key matches to
-answer. These patterns contain no provider-specific IDs and do not require a
-full history or bracket reconstruction.
+match relation; `past` uses `sort=["-begin_at"]`, `upcoming` uses
+`sort=["begin_at"]`, and `running` uses the running scope where sorting is
+usually unnecessary. Keep the page size small and stop once enough recent
+matches are supported. A specific edition or stage resolves league -> serie ->
+tournament -> match; latest tournament status resolves the current edition and
+stage, then reads only enough key matches to answer. These patterns contain no
+provider-specific IDs and do not require a full history or bracket
+reconstruction.
 
 Before every additional call, the agent checks whether the requested answer is
 already supported by collected evidence. It stops once the target and requested
@@ -101,12 +104,14 @@ freshness/scope are established with enough evidence for the intended claims.
 
 ### Evidence discipline
 
-Winners require explicit winner data. Exact series scores require explicit
-results or scores and cannot be inferred from `number_of_games`, match format,
-or winner alone. Team/opponent and game-level claims require their respective
-explicit evidence. `artifact.grep` locates known text or paths; it is not an
-aggregation engine for standings or other multi-row calculations. Answers must
-not be more specific than their evidence.
+An explicit `winner` or `winner_id` establishes the winning entity ID. Naming
+the winning team or player requires an explicit collected identity mapping for
+that ID; never resolve a raw ID from model knowledge. Exact series scores
+require explicit results or scores and cannot be inferred from
+`number_of_games`, match format, or winner alone. Team/opponent and game-level
+claims require their respective explicit evidence. `artifact.grep` locates
+known text or paths; it is not an aggregation engine for standings or other
+multi-row calculations. Answers must not be more specific than their evidence.
 
 ## `game.detail`
 

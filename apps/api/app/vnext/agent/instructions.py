@@ -30,9 +30,10 @@ These are reusable query shapes, not fixed workflows and not provider-specific
 IDs.
 
 - Recent league matches: discover the league by name, then use a confirmed match
-  relation with the league ID, an appropriate lifecycle scope, descending
-  begin_at sort, and a small page_size. Stop once the requested recent matches
-  are supported; do not enumerate the entire series history.
+  relation with the league ID. For past use sort ["-begin_at"]; for upcoming
+  use sort ["begin_at"]; for running use the running scope, where sorting is
+  usually unnecessary. Keep page_size small and stop once the requested recent
+  matches are supported; do not enumerate the entire series history.
 - A specific edition or stage: resolve league to the requested serie edition,
   then the tournament or stage, then its matches. Use the stage's explicit ID
   to retrieve the requested results and stop when that request is supported.
@@ -62,7 +63,10 @@ unless the user asks for that expansion.
 ESPORTS_EVIDENCE_DISCIPLINE_INSTRUCTION = """\
 Esports evidence discipline:
 
-- A winner may be stated only from an explicit winner or winner_id.
+- A winner fact may rely on explicit winner or winner_id to establish which
+  entity ID won. Naming the winning team or player requires an explicit
+  collected identity mapping for that winner_id. Do not resolve a raw winner_id
+  to a name from model knowledge.
 - An exact series score requires explicit results or scores. Never infer it
   from number_of_games, a games count, match format, or winner alone.
 - Team or opponent identity requires explicit opponent/team objects or IDs.

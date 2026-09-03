@@ -115,10 +115,16 @@ def test_esports_query_discipline_allows_only_name_search_without_a_manual() -> 
 
 def test_composed_esports_instructions_cover_patterns_completion_and_evidence() -> None:
     assert "Recent league matches" in ESPORTS_AGENT_INSTRUCTION
+    assert 'past use sort ["-begin_at"]' in ESPORTS_AGENT_INSTRUCTION
+    assert 'for upcoming' in ESPORTS_AGENT_INSTRUCTION
+    assert 'sort ["begin_at"]' in ESPORTS_AGENT_INSTRUCTION
+    assert "running use the running scope" in ESPORTS_AGENT_INSTRUCTION
     assert "A specific edition or stage" in ESPORTS_AGENT_INSTRUCTION
     assert "Latest tournament status" in ESPORTS_AGENT_INSTRUCTION
     assert "Before every additional tool call" in ESPORTS_AGENT_INSTRUCTION
-    assert "Never infer it" in ESPORTS_AGENT_INSTRUCTION
+    assert "Naming the winning team or player requires an explicit" in ESPORTS_AGENT_INSTRUCTION
+    assert "Do not resolve a raw winner_id" in ESPORTS_AGENT_INSTRUCTION
+    assert "to a name from model knowledge" in ESPORTS_AGENT_INSTRUCTION
     assert "not an aggregation engine" in ESPORTS_AGENT_INSTRUCTION
 
 

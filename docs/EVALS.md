@@ -82,7 +82,10 @@ edition/stage, latest tournament status, and a multi-row result where
 `artifact.grep` must not be used as an aggregation engine.
 
 The evidence checks must reject exact scores inferred from counts, formats, or
-a winner alone, and reject game-level claims without game-level evidence.
+a winner alone, and reject game-level claims without game-level evidence. Recent
+match checks must verify scope-aware ordering: `past` descending,
+`upcoming` ascending, and `running` with the running scope. Winner-name checks
+must distinguish an explicit winner ID fact from an explicit ID-to-name mapping.
 
 Model knowledge does not substitute for a fresh source observation when the
 question asks for current esports information.
