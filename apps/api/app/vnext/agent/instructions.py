@@ -23,4 +23,71 @@ Esports query discipline:
   artifact.read with mode='read' instead of reading an outline first.
 """
 
-__all__ = ["ESPORTS_QUERY_DISCIPLINE_INSTRUCTION"]
+ESPORTS_SEARCH_PATTERNS_INSTRUCTION = """\
+Esports search patterns:
+
+These are reusable query shapes, not fixed workflows and not provider-specific
+IDs.
+
+- Recent league matches: discover the league by name, then use a confirmed match
+  relation with the league ID, an appropriate lifecycle scope, descending
+  begin_at sort, and a small page_size. Stop once the requested recent matches
+  are supported; do not enumerate the entire series history.
+- A specific edition or stage: resolve league to the requested serie edition,
+  then the tournament or stage, then its matches. Use the stage's explicit ID
+  to retrieve the requested results and stop when that request is supported.
+- Latest tournament status: locate the current or most recent edition, establish
+  its status, find the last or current stage, and retrieve only enough key
+  matches to answer. Do not rebuild the full bracket unless asked.
+
+The semantic shape is league (brand) -> serie (edition) -> tournament (stage)
+-> match (game series). Confirm resource-specific fields from the resource
+manual before using relation, filter, range, sort, or non-default scope.
+"""
+
+ESPORTS_COMPLETION_DISCIPLINE_INSTRUCTION = """\
+Esports completion discipline:
+
+Before every additional tool call, ask whether the user's requested answer is
+already supported by the evidence collected. If it is, answer now; do not keep
+searching merely to make the answer more exhaustive.
+
+Stop when the target entity or stage is resolved, the requested freshness or
+scope is established, and enough source evidence exists for the claims planned
+for the answer. Do not expand recent matches into full tournament history,
+latest status into a full bracket, or a winner into every preceding match
+unless the user asks for that expansion.
+"""
+
+ESPORTS_EVIDENCE_DISCIPLINE_INSTRUCTION = """\
+Esports evidence discipline:
+
+- A winner may be stated only from an explicit winner or winner_id.
+- An exact series score requires explicit results or scores. Never infer it
+  from number_of_games, a games count, match format, or winner alone.
+- Team or opponent identity requires explicit opponent/team objects or IDs.
+- Game-level claims require game-level evidence.
+- artifact.grep locates known text or paths; it is not an aggregation engine.
+  Do not repeatedly grep/read a dataset to compute standings or other aggregates.
+  If complete aggregation is not supported by the collected evidence, answer
+  only the supported facts or state that the requested aggregate is unavailable.
+
+Never answer at a finer granularity than the evidence supports.
+"""
+
+ESPORTS_AGENT_INSTRUCTION = "\n\n".join(
+    (
+        ESPORTS_QUERY_DISCIPLINE_INSTRUCTION,
+        ESPORTS_SEARCH_PATTERNS_INSTRUCTION,
+        ESPORTS_COMPLETION_DISCIPLINE_INSTRUCTION,
+        ESPORTS_EVIDENCE_DISCIPLINE_INSTRUCTION,
+    )
+)
+
+__all__ = [
+    "ESPORTS_AGENT_INSTRUCTION",
+    "ESPORTS_COMPLETION_DISCIPLINE_INSTRUCTION",
+    "ESPORTS_EVIDENCE_DISCIPLINE_INSTRUCTION",
+    "ESPORTS_QUERY_DISCIPLINE_INSTRUCTION",
+    "ESPORTS_SEARCH_PATTERNS_INSTRUCTION",
+]

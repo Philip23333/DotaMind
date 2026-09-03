@@ -13,7 +13,10 @@ from app.vnext.agent.errors import (
     MaxToolCallsExceeded,
 )
 from app.vnext.agent.events import AgentCompleted, TextDelta
-from app.vnext.agent.instructions import ESPORTS_QUERY_DISCIPLINE_INSTRUCTION
+from app.vnext.agent.instructions import (
+    ESPORTS_AGENT_INSTRUCTION,
+    ESPORTS_QUERY_DISCIPLINE_INSTRUCTION,
+)
 from app.vnext.agent.limits import AgentLimits
 from app.vnext.agent.runtime import AgentRuntime, CancellationToken
 from app.vnext.agent.trace import AgentTraceCollector
@@ -108,6 +111,15 @@ def test_esports_query_discipline_allows_only_name_search_without_a_manual() -> 
     assert "or any other search field is present, it is not direct discovery" in instruction
     assert "search.name is the only search field allowed for direct discovery" in instruction
     assert "Do not outline a known manual:pandascore:* ref" in instruction
+
+
+def test_composed_esports_instructions_cover_patterns_completion_and_evidence() -> None:
+    assert "Recent league matches" in ESPORTS_AGENT_INSTRUCTION
+    assert "A specific edition or stage" in ESPORTS_AGENT_INSTRUCTION
+    assert "Latest tournament status" in ESPORTS_AGENT_INSTRUCTION
+    assert "Before every additional tool call" in ESPORTS_AGENT_INSTRUCTION
+    assert "Never infer it" in ESPORTS_AGENT_INSTRUCTION
+    assert "not an aggregation engine" in ESPORTS_AGENT_INSTRUCTION
 
 
 def test_single_tool_call_result_then_final() -> None:

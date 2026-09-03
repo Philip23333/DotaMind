@@ -85,6 +85,29 @@ first. `manual:pandascore:index` only discovers available manuals, while a
 resource manual decides its actual query fields. Manuals decide what query is
 legal; `_artifact_path` values inspect data returned by a previous tool call.
 
+### Search patterns and completion
+
+The production agent receives three reusable search shapes, not a fixed
+workflow: recent league matches use league discovery followed by a confirmed
+match relation and small descending `begin_at` results; a specific edition or
+stage resolves league -> serie -> tournament -> match; latest tournament status
+resolves the current edition and stage, then reads only enough key matches to
+answer. These patterns contain no provider-specific IDs and do not require a
+full history or bracket reconstruction.
+
+Before every additional call, the agent checks whether the requested answer is
+already supported by collected evidence. It stops once the target and requested
+freshness/scope are established with enough evidence for the intended claims.
+
+### Evidence discipline
+
+Winners require explicit winner data. Exact series scores require explicit
+results or scores and cannot be inferred from `number_of_games`, match format,
+or winner alone. Team/opponent and game-level claims require their respective
+explicit evidence. `artifact.grep` locates known text or paths; it is not an
+aggregation engine for standings or other multi-row calculations. Answers must
+not be more specific than their evidence.
+
 ## `game.detail`
 
 Purpose: fetch detailed facts for one recorded Dota game identified by its Valve

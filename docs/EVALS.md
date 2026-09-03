@@ -75,7 +75,14 @@ For esports query discipline, record the number of tool calls, model steps,
 must not guess an unestablished resource field before reading that resource's
 manual, and must not retry an `unsupported_field` or `unsupported_scope` idea
 without that manual. The index manual is not evidence for resource-specific
-field support.
+field support. Layer 3 agent evaluations additionally record calls made after
+sufficient evidence and unsupported claims in the final answer. The target for
+both metrics is zero. They should cover recent league matches, a specific
+edition/stage, latest tournament status, and a multi-row result where
+`artifact.grep` must not be used as an aggregation engine.
+
+The evidence checks must reject exact scores inferred from counts, formats, or
+a winner alone, and reject game-level claims without game-level evidence.
 
 Model knowledge does not substitute for a fresh source observation when the
 question asks for current esports information.

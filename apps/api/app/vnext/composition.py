@@ -12,7 +12,7 @@ from pathlib import Path
 
 from dotenv import dotenv_values
 
-from app.vnext.agent.instructions import ESPORTS_QUERY_DISCIPLINE_INSTRUCTION
+from app.vnext.agent.instructions import ESPORTS_AGENT_INSTRUCTION
 from app.vnext.agent.runtime import AgentRuntime
 from app.vnext.artifacts import (
     ArtifactGrepper,
@@ -233,7 +233,7 @@ def build_vnext_runtime(
     return AgentRuntime(
         model,
         build_vnext_registry(services, settings=config),
-        system_instruction=ESPORTS_QUERY_DISCIPLINE_INSTRUCTION,
+        system_instruction=ESPORTS_AGENT_INSTRUCTION,
     )
 
 
