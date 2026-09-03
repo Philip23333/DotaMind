@@ -67,14 +67,17 @@ scenario-specific query plumbing while the new seam is pending.
 
 ### Query discipline
 
-The production agent policy permits direct basic entity discovery using
-`search.name` and default scope. Any other resource-specific `search` field,
-`filter`, `range`, `sort`, non-default `scope`, or resource relation must already
-be established for that resource by the current conversation or a successful
-tool result. Otherwise, it reads `manual:pandascore:<resource>` before the
-search. A manual outline only exposes its copyable `content` path; the policy
-requires reading that path with `artifact.read(mode="read")` before treating its
-fields as established.
+Direct discovery means only `resource`, `search.name`, default `scope`, and an
+optional small `page` or `page_size`. If `filter`, `range`, `sort`, non-default
+`scope`, a resource relation, or any other `search` field is present, it is not
+direct discovery. `search.name` is the only search field allowed for direct
+discovery. Any other resource-specific `search` field, `filter`, `range`,
+`sort`, non-default `scope`, or resource relation must already be established
+for that resource by the current conversation or a successful tool result.
+Otherwise, it reads `manual:pandascore:<resource>` before the search.
+
+The static `manual:pandascore:*` refs are a known contract: do not read their
+outline. Read `path="content"` directly with `artifact.read(mode="read")`.
 
 After `unsupported_field` or `unsupported_scope`, the agent must not retry the
 same idea with another operator; it reads the corresponding resource manual

@@ -104,8 +104,10 @@ def test_runtime_includes_configured_system_instruction_in_each_model_request() 
 def test_esports_query_discipline_allows_only_name_search_without_a_manual() -> None:
     instruction = ESPORTS_QUERY_DISCIPLINE_INSTRUCTION
 
-    assert "using search.name with default scope" in instruction
-    assert "Any other resource-specific search field, filter, range, sort" in instruction
+    assert "only resource, search.name, default scope" in instruction
+    assert "or any other search field is present, it is not direct discovery" in instruction
+    assert "search.name is the only search field allowed for direct discovery" in instruction
+    assert "Do not outline a known manual:pandascore:* ref" in instruction
 
 
 def test_single_tool_call_result_then_final() -> None:
