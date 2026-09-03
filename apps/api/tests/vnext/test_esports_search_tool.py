@@ -57,6 +57,11 @@ def test_esports_search_tool_schema_is_compact_and_model_visible() -> None:
     assert tool.name == "esports.search"
     assert tool.read_only is True
     assert "resource-specific" in tool.description
+    assert "Choose resource by entity level" in tool.description
+    assert "league = competition brand/family" in properties["resource"]["description"]
+    assert "serie is the 2026 edition" in properties["resource"]["description"]
+    assert "tournament is 'Group Stage'" in properties["resource"]["description"]
+    assert "not a fixed query workflow" in properties["resource"]["description"]
     assert "not interchangeable" in tool.description
     assert "small page_size" in tool.description
     assert set(properties) == {

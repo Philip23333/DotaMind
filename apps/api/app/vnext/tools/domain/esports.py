@@ -16,8 +16,16 @@ from .esports_observation import EsportsSearchObservationBuilder
 
 class EsportsSearchInput(DomainModel):
     resource: Literal["league", "serie", "tournament", "match", "team", "player"] = Field(
-        description="Resource to query. Fields are resource-specific; do not assume a field works "
-        "for another resource or invent fields."
+        description=(
+            "Entity level to query. league = competition brand/family; serie = a specific "
+            "edition or season of that league; tournament = a stage, group, or bracket within "
+            "a serie; match = one match series between opponents; team/player = participant "
+            "entities. Example: for 'TI 2026 Group Stage', league is 'The International', "
+            "serie is the 2026 edition, tournament is 'Group Stage', and match is an individual "
+            "group-stage match such as 'Round 1: VSN vs TR'. This illustrates entity levels, "
+            "not a fixed query workflow. Fields are resource-specific; do not assume a field "
+            "works for another resource or invent fields."
+        )
     )
     scope: Literal["all", "past", "running", "upcoming"] = Field(
         default="all",
@@ -105,7 +113,8 @@ def build_esports_search_tool(
         name="esports.search",
         description=(
             "Search Dota 2 esports data through one resource-specific native query. Do not invent "
-            "fields or assume fields transfer between resources. filter, search, range, and sort "
+            "fields or assume fields transfer between resources. Choose resource by entity level: "
+            "league -> serie -> tournament -> match. filter, search, range, and sort "
             "have distinct provider semantics and are not interchangeable. Prefer supported "
             "source-side filter, sort, and a small page_size to narrow a request. "
             "scope selects a lifecycle endpoint, not recency. A large result returns a bounded "
