@@ -67,14 +67,14 @@ scenario-specific query plumbing while the new seam is pending.
 
 ### Query discipline
 
-The production agent policy permits direct basic entity discovery with a name
-search and default scope. It forbids a query using `filter`, `range`, `sort`, a
-non-default `scope`, or a resource relation until those capabilities are
-established for that resource by the current conversation or a successful tool
-result. Otherwise, it reads `manual:pandascore:<resource>` before the search. A
-manual outline only exposes its copyable `content` path; the policy requires
-reading that path with `artifact.read(mode="read")` before treating its fields
-as established.
+The production agent policy permits direct basic entity discovery using
+`search.name` and default scope. Any other resource-specific `search` field,
+`filter`, `range`, `sort`, non-default `scope`, or resource relation must already
+be established for that resource by the current conversation or a successful
+tool result. Otherwise, it reads `manual:pandascore:<resource>` before the
+search. A manual outline only exposes its copyable `content` path; the policy
+requires reading that path with `artifact.read(mode="read")` before treating its
+fields as established.
 
 After `unsupported_field` or `unsupported_scope`, the agent must not retry the
 same idea with another operator; it reads the corresponding resource manual

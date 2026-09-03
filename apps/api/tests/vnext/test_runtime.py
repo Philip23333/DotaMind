@@ -13,6 +13,7 @@ from app.vnext.agent.errors import (
     MaxToolCallsExceeded,
 )
 from app.vnext.agent.events import AgentCompleted, TextDelta
+from app.vnext.agent.instructions import ESPORTS_QUERY_DISCIPLINE_INSTRUCTION
 from app.vnext.agent.limits import AgentLimits
 from app.vnext.agent.runtime import AgentRuntime, CancellationToken
 from app.vnext.agent.trace import AgentTraceCollector
@@ -98,6 +99,13 @@ def test_runtime_includes_configured_system_instruction_in_each_model_request() 
     _run(runtime, model)
 
     assert model.requests[0].messages[0] == SystemMessage(content="query discipline")
+
+
+def test_esports_query_discipline_allows_only_name_search_without_a_manual() -> None:
+    instruction = ESPORTS_QUERY_DISCIPLINE_INSTRUCTION
+
+    assert "using search.name with default scope" in instruction
+    assert "Any other resource-specific search field, filter, range, sort" in instruction
 
 
 def test_single_tool_call_result_then_final() -> None:
