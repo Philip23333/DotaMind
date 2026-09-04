@@ -8,14 +8,13 @@ Esports query discipline:
   read a PandaScore manual merely to discover fields already present in those
   typed schemas.
 - esports.search is a temporary fallback for serie, tournament, team, and player.
-  For that fallback, direct discovery means only resource, search.name, default
-  scope, and an optional small page or page_size. If filter, range, sort,
-  non-default scope, a relation, or any other search field is present, it is not
-  direct discovery.
-- For the fallback, search.name is the only search field allowed for direct
-  discovery. Any other resource-specific search field, filter, range, sort,
-  non-default scope, or relation must already be established for that resource by
-  the current conversation or a successful tool result. Otherwise, first read
+  For that fallback, direct discovery means only resource, search.name, default scope,
+  and an optional small page or page_size. If filter, range, sort, non-default scope,
+  a relation, or any other search field is present, it is not direct discovery.
+- For the fallback, search.name is the only search field allowed for direct discovery.
+  Any other resource-specific search field, filter, range, sort, non-default scope,
+  or relation must already be established for that resource by the current
+  conversation or a successful tool result. Otherwise, first read
   manual:pandascore:<resource>'s content path with artifact.read(mode='read').
 - Do not probe unsupported field/operator combinations by trial and error. After
   unsupported_field or unsupported_scope from the fallback, read that resource's
@@ -37,11 +36,10 @@ These are reusable query shapes, not fixed workflows and not provider-specific
 IDs.
 
 - Recent league matches: discover the league by name with esports.league.search,
-  then query esports.match.search with the league ID. For past use sort
-  ["-begin_at"]; for upcoming use sort ["begin_at"]; for running use the running
-  scope, where sorting is usually unnecessary. Keep page_size small and stop
-  once the requested recent matches are supported; do not enumerate the entire
-  series history.
+  then query esports.match.search with the league ID. For past use sort ["-begin_at"];
+  for upcoming use sort ["begin_at"]; for running use the running scope, where
+  sorting is usually unnecessary. Keep page_size small and stop once the requested
+  recent matches are supported; do not enumerate the entire series history.
 - If a broad recent-match result is dominated by null begin_at values,
   canceled/non-relevant records, or unrelated qualifiers, do not widen the page.
   Reuse explicit serie or tournament IDs already present in the returned rows to
