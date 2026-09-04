@@ -1,4 +1,4 @@
-"""Model-facing PandaScore-backed esports discovery capability."""
+"""Temporary generic PandaScore-backed esports discovery fallback."""
 
 from __future__ import annotations
 
@@ -12,64 +12,56 @@ from app.vnext.tools.definition import ToolDefinition
 from app.vnext.tools.registry import ToolRegistry
 
 from .esports_observation import EsportsSearchObservationBuilder
+from .esports_resources import register_esports_resource_tools
 
 
 class EsportsSearchInput(DomainModel):
-    resource: Literal["league", "serie", "tournament", "match", "team", "player"] = Field(
+    resource: Literal["serie", "tournament", "team", "player"] = Field(
         description=(
-            "Entity level to query. league = competition brand/family; serie = a specific "
-            "edition or season of that league; tournament = a stage, group, or bracket within "
-            "a serie; match = one match series between opponents; team/player = participant "
-            "entities. Example: for 'TI 2026 Group Stage', league is 'The International', "
-            "serie is the 2026 edition, tournament is 'Group Stage', and match is an individual "
-            "group-stage match such as 'Round 1: VSN vs TR'. This illustrates entity levels, "
-            "not a fixed query workflow. Fields are resource-specific; do not assume a field "
-            "works for another resource or invent fields."
+            "Temporary generic fallback for esports resources not yet split into typed tools. "
+            "Use esports.league.search for league and esports.match.search for match."
         )
     )
     scope: Literal["all", "past", "running", "upcoming"] = Field(
         default="all",
         description=(
             "Selects the provider lifecycle endpoint. 'past' means the provider's past lifecycle "
-            "collection; it does not mean status='finished'. For match queries, past results may "
-            "include canceled or other non-finished records. If completed match results are "
-            "required, use a supported finished/status filter in addition to scope when needed. "
-            "'running' and 'upcoming' likewise select lifecycle collections; scope does not "
-            "replace resource-specific status filters, date filters, or sorting. It is not a "
-            "relative-time or 'most recent' selector."
+            "collection; it does not imply a resource-specific finished state. 'running' and "
+            "'upcoming' likewise select lifecycle collections. It is not a relative-time or "
+            "'most recent' selector."
         ),
     )
     filter: dict[str, Any] | None = Field(
         default=None,
-        description="Exact native filtering, commonly for IDs, relationships, and exact values. "
-        "Only fields supported by this resource are allowed; filter is not interchangeable with "
-        "provider text search. For matches, exact lifecycle/status requirements such as finished "
-        "results should use the supported finished/status filter rather than being inferred from "
-        "scope='past'.",
+        description=(
+            "Exact native filtering for this temporary fallback. Fields remain resource-specific; "
+            "use the corresponding manual before a nontrivial fallback query."
+        ),
     )
     search: dict[str, Any] | None = Field(
         default=None,
-        description="Provider text-search fields. It is not a replacement for exact native filter "
-        "fields and only supports fields available for this resource.",
+        description=(
+            "Provider text-search fields for the selected fallback resource. It is not a "
+            "replacement for exact native filter fields."
+        ),
     )
     range: dict[str, list[Any]] | None = Field(
         default=None,
-        description="Native range constraints. Each range field must be explicitly supported by "
-        "the selected resource.",
+        description="Native range constraints for the selected fallback resource.",
     )
     sort: list[str] | None = Field(
         default=None,
-        description="Native sort must be an array of strings. 'field' is ascending and '-field' "
-        "is descending; example: ['-begin_at']. Do not pass '-begin_at' as a string or use "
-        "'begin_at desc'; fields must be supported by the resource.",
+        description=(
+            "Native sort must be an array of strings. 'field' is ascending and '-field' is "
+            "descending; fields must be supported by the selected fallback resource."
+        ),
     )
     page: int = Field(default=1, ge=1, description="One-based provider result-page number.")
     page_size: int = Field(
         default=10,
         ge=1,
         le=100,
-        description="Provider-side rows returned for this call. Keep it small when only a few "
-        "results are needed.",
+        description="Provider-side rows returned for this call. Keep it small when possible.",
     )
 
 
@@ -128,15 +120,10 @@ def build_esports_search_tool(
     return ToolDefinition(
         name="esports.search",
         description=(
-            "Search Dota 2 esports data through one resource-specific native query. Do not invent "
-            "fields or assume fields transfer between resources. Choose resource by entity level: "
-            "league -> serie -> tournament -> match. filter, search, range, and sort "
-            "have distinct provider semantics and are not interchangeable. Prefer supported "
-            "source-side filter, sort, and a small page_size to narrow a request. "
-            "scope selects a lifecycle endpoint, not recency. A large result returns a bounded "
-            "preview, not missing provider data. Its complete response is available through "
-            "artifact_ref, and any _artifact_path can be read directly with artifact.read "
-            "mode='read'."
+            "Temporary generic fallback for serie, tournament, team, and player discovery while "
+            "the resource-shaped esports tool surface is introduced. Do not use it for league or "
+            "match; use esports.league.search or esports.match.search instead. Fallback fields "
+            "remain resource-specific and are validated against generated PandaScore capabilities."
         ),
         input_model=EsportsSearchInput,
         output_model=EsportsSearchOutput,
@@ -149,6 +136,7 @@ def register_esports_tools(
     executor: PandaScoreNativeQueryExecutor,
     observation_builder: EsportsSearchObservationBuilder,
 ) -> None:
+    register_esports_resource_tools(registry, executor, observation_builder)
     registry.register(build_esports_search_tool(executor, observation_builder))
 
 

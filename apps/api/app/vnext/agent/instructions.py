@@ -3,24 +3,31 @@
 ESPORTS_QUERY_DISCIPLINE_INSTRUCTION = """\
 Esports query discipline:
 
-- Direct discovery means only resource, search.name, default scope, and an
-  optional small page or page_size. If filter, range, sort, non-default scope,
-  a relation, or any other search field is present, it is not direct discovery.
-- search.name is the only search field allowed for direct discovery. Any other
-  resource-specific search field, filter, range, sort, non-default scope, or
-  relation must already be established for that resource by the current
-  conversation or a successful tool result. Otherwise, first read
+- Prefer esports.league.search for league resources and esports.match.search for
+  match resources. Their input schemas directly expose legal query fields; do not
+  read a PandaScore manual merely to discover fields already present in those
+  typed schemas.
+- esports.search is a temporary fallback for serie, tournament, team, and player.
+  For that fallback, direct discovery means only resource, search.name, default
+  scope, and an optional small page or page_size. If filter, range, sort,
+  non-default scope, a relation, or any other search field is present, it is not
+  direct discovery.
+- For the fallback, search.name is the only search field allowed for direct
+  discovery. Any other resource-specific search field, filter, range, sort,
+  non-default scope, or relation must already be established for that resource by
+  the current conversation or a successful tool result. Otherwise, first read
   manual:pandascore:<resource>'s content path with artifact.read(mode='read').
 - Do not probe unsupported field/operator combinations by trial and error. After
-  unsupported_field or unsupported_scope, read that resource's manual before
-  another esports.search call for the same idea.
+  unsupported_field or unsupported_scope from the fallback, read that resource's
+  manual before another esports.search call for the same idea.
 - Do not outline a known manual:pandascore:* ref. Read path='content' directly
   with artifact.read(mode='read'). manual:pandascore:index only discovers
-  available manuals. Use manual:pandascore:<resource> to decide that resource's
-  actual query fields.
-- Manuals answer which query is legal. Artifact _artifact_path values answer
-  which data a previous tool call returned; copy an existing _artifact_path into
-  artifact.read with mode='read' instead of reading an outline first.
+  available manuals. Use manual:pandascore:<resource> to decide fields that are
+  not already explicit in a typed resource tool schema.
+- Manuals answer which fallback query is legal. Artifact _artifact_path values
+  answer which data a previous tool call returned; copy an existing
+  _artifact_path into artifact.read with mode='read' instead of reading an
+  outline first.
 """
 
 ESPORTS_SEARCH_PATTERNS_INSTRUCTION = """\
@@ -29,11 +36,12 @@ Esports search patterns:
 These are reusable query shapes, not fixed workflows and not provider-specific
 IDs.
 
-- Recent league matches: discover the league by name, then use a confirmed match
-  relation with the league ID. For past use sort ["-begin_at"]; for upcoming
-  use sort ["begin_at"]; for running use the running scope, where sorting is
-  usually unnecessary. Keep page_size small and stop once the requested recent
-  matches are supported; do not enumerate the entire series history.
+- Recent league matches: discover the league by name with esports.league.search,
+  then query esports.match.search with the league ID. For past use sort
+  ["-begin_at"]; for upcoming use sort ["begin_at"]; for running use the running
+  scope, where sorting is usually unnecessary. Keep page_size small and stop
+  once the requested recent matches are supported; do not enumerate the entire
+  series history.
 - If a broad recent-match result is dominated by null begin_at values,
   canceled/non-relevant records, or unrelated qualifiers, do not widen the page.
   Reuse explicit serie or tournament IDs already present in the returned rows to
@@ -48,8 +56,9 @@ IDs.
   matches to answer. Do not rebuild the full bracket unless asked.
 
 The semantic shape is league (brand) -> serie (edition) -> tournament (stage)
--> match (game series). Confirm resource-specific fields from the resource
-manual before using relation, filter, range, sort, or non-default scope.
+-> match (game series). For typed league/match tools, use their schema directly.
+For remaining fallback resources, confirm nontrivial resource-specific fields
+from the resource manual before use.
 """
 
 ESPORTS_COMPLETION_DISCIPLINE_INSTRUCTION = """\

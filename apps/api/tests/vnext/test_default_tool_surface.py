@@ -14,6 +14,8 @@ def test_default_registry_exposes_only_current_capabilities() -> None:
     assert tool_names == {
         "artifact.grep",
         "artifact.read",
+        "esports.league.search",
+        "esports.match.search",
         "esports.search",
         "game.detail",
     }
