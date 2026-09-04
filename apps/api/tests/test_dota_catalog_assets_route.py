@@ -23,7 +23,7 @@ def test_dota_catalog_image_routes_serve_committed_assets() -> None:
 def test_catalog_resolvers_return_deterministic_local_image_paths() -> None:
     repository = load_default_catalog_repository()
 
-    hero = repository.resolve_hero("敌法师")["hero"]
+    hero = repository.find_hero("敌法师")["hero"]
     item = repository.resolve_item("闪烁匕首")["item"]
 
     assert hero["image_path"] == "/api/v1/assets/dota/heroes/1.png"

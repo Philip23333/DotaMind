@@ -3,11 +3,10 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from app.agentic.evidence import EvidenceGraph, EvidenceItem
+from app.agentic.evidence import EvidenceGraph
 from app.agentic.models import ExecutionPlan
 from app.agentic.planning.contracts import (
     NATURAL_LANGUAGE_CONTRACT,
-    STRUCTURED_OUTPUT_CONTRACTS,
     get_contract,
 )
 from app.agentic.prompts.answer import render_natural_language_answer_messages
@@ -88,10 +87,7 @@ class AnswerSynthesizer:
         current_query: str | None = None,
         on_delta: Callable[[str], None] | None = None,
     ) -> AnswerSynthesisResult:
-        structured = plan.output_contract in STRUCTURED_OUTPUT_CONTRACTS
         contract = get_contract(plan.output_contract)
-        if structured:
-            return self.structured.synthesize(plan, graph)
         if contract is not None and contract.name == NATURAL_LANGUAGE_CONTRACT:
             return await self.natural.synthesize(
                 plan,
@@ -108,149 +104,7 @@ class StructuredReportSynthesizer:
         plan: ExecutionPlan,
         graph: EvidenceGraph,
     ) -> AnswerSynthesisResult:
-        if plan.output_contract == "patch_impact_report":
-            return self._patch_impact_report(plan, graph)
-        if plan.output_contract == "role_meta_report":
-            return self._role_meta_report(plan, graph)
-        if plan.output_contract == "team_recent_report":
-            return self._team_recent_report(plan, graph)
         return unsupported_contract(plan, graph)
-
-    def _patch_impact_report(
-        self,
-        plan: ExecutionPlan,
-        graph: EvidenceGraph,
-    ) -> AnswerSynthesisResult:
-        records = items(graph, "patch_records")
-        if graph.missing or not records:
-            return insufficient(plan, graph, "Patch impact report needs patch_records evidence.")
-        patch = records[0]
-        hero = first_item(graph, "hero_patch_changes")
-        item = first_item(graph, "item_patch_changes")
-        claims = [
-            AnswerClaim(
-                claim=(
-                    f"Patch {patch.value.get('patch')} has "
-                    f"{patch.value.get('change_count')} recorded changes."
-                ),
-                evidence_refs=[patch.id],
-            )
-        ]
-        if hero:
-            claims.append(
-                AnswerClaim(
-                    claim=(
-                        f"Hero changes: {hero.value.get('change_count')} changes "
-                        f"across {hero.value.get('hero_count')} heroes."
-                    ),
-                    evidence_refs=[hero.id],
-                )
-            )
-        if item:
-            claims.append(
-                AnswerClaim(
-                    claim=f"Item-related changes: {item.value.get('change_count')} changes.",
-                    evidence_refs=[item.id],
-                )
-            )
-        return AnswerSynthesisResult(
-            answer_type=plan.output_contract,
-            status="ok",
-            summary=f"Patch {patch.value.get('patch')} impact data is available.",
-            claims=claims,
-            limitations=[
-                AnswerLimitation(
-                    code="minimal_report",
-                    detail=(
-                        "This is a first-pass structured patch summary, not a "
-                        "full impact ranking."
-                    ),
-                )
-            ],
-            data_notes=data_notes(graph),
-            confidence=confidence(graph, has_output=True),
-        )
-
-    def _role_meta_report(
-        self,
-        plan: ExecutionPlan,
-        graph: EvidenceGraph,
-    ) -> AnswerSynthesisResult:
-        stats = first_item(graph, "hero_stats")
-        if graph.missing or not stats:
-            return insufficient(plan, graph, "Role meta report needs hero_stats evidence.")
-        heroes = stats.value.get("heroes", [])[:5]
-        recommendations = [
-            AnswerRecommendation(
-                subject=str(hero.get("localized_name") or hero.get("hero_id")),
-                recommendation_type="role_meta_candidate",
-                score=hero.get("win_rate") or hero.get("pro_win_rate"),
-                evidence_refs=[stats.id],
-                rationale="Selected from OpenDota role-filtered hero stats.",
-            )
-            for hero in heroes
-            if isinstance(hero, dict)
-        ]
-        return AnswerSynthesisResult(
-            answer_type=plan.output_contract,
-            status="ok" if recommendations else "insufficient_evidence",
-            summary=f"Found {len(recommendations)} role meta candidates.",
-            recommendations=recommendations,
-            limitations=[
-                AnswerLimitation(
-                    code="minimal_report",
-                    detail=(
-                        "This ranks available role-filtered rows only; it does "
-                        "not yet combine patch or lane context."
-                    ),
-                )
-            ],
-            data_notes=data_notes(graph),
-            confidence=confidence(graph, has_output=bool(recommendations)),
-        )
-
-    def _team_recent_report(
-        self,
-        plan: ExecutionPlan,
-        graph: EvidenceGraph,
-    ) -> AnswerSynthesisResult:
-        team = first_item(graph, "team_identity")
-        matches = first_item(graph, "recent_matches")
-        if graph.missing or not team or not matches:
-            return insufficient(
-                plan,
-                graph,
-                "Team recent report needs team_identity and recent_matches evidence.",
-            )
-        return AnswerSynthesisResult(
-            answer_type=plan.output_contract,
-            status="ok",
-            summary=(
-                f"{team.subject}: {matches.value.get('recent_record')} "
-                f"over {matches.value.get('days')} days."
-            ),
-            claims=[
-                AnswerClaim(
-                    claim=f"Resolved team as {team.subject}.",
-                    evidence_refs=[team.id],
-                ),
-                AnswerClaim(
-                    claim=f"Recent record: {matches.value.get('recent_record')}.",
-                    evidence_refs=[matches.id],
-                ),
-            ],
-            limitations=[
-                AnswerLimitation(
-                    code="minimal_report",
-                    detail=(
-                        "This is evidence summary only; full tactical team "
-                        "analysis is not migrated yet."
-                    ),
-                )
-            ],
-            data_notes=data_notes(graph),
-            confidence=confidence(graph, has_output=True),
-        )
 
 
 class NaturalLanguageAnswerSynthesizer:
@@ -402,30 +256,6 @@ def insufficient(
     )
 
 
-def hero_identity_claims(graph: EvidenceGraph) -> list[AnswerClaim]:
-    claims = []
-    for item in graph.evidence:
-        if item.kind != "hero_identity":
-            continue
-        localized_name = item.value.get("localized_name") or item.subject
-        hero_id = item.value.get("hero_id")
-        claims.append(
-            AnswerClaim(
-                claim=f"Resolved target hero as {localized_name} (hero_id={hero_id}).",
-                evidence_refs=[item.id],
-            )
-        )
-    return claims
-
-
-def items(graph: EvidenceGraph, kind: str) -> list[EvidenceItem]:
-    return [item for item in graph.evidence if item.kind == kind]
-
-
-def first_item(graph: EvidenceGraph, kind: str) -> EvidenceItem | None:
-    return next((item for item in graph.evidence if item.kind == kind), None)
-
-
 def missing_limitations(graph: EvidenceGraph) -> list[AnswerLimitation]:
     return [
         AnswerLimitation(
@@ -444,14 +274,6 @@ def data_notes(graph: EvidenceGraph) -> list[AnswerDataNote]:
             metadata={"completeness": graph.data_quality.completeness},
         )
     ]
-    if graph.data_quality.min_sample_size is not None:
-        notes.append(
-            AnswerDataNote(
-                code="minimum_sample_size",
-                detail=f"Minimum observed sample size is {graph.data_quality.min_sample_size}.",
-                metadata={"min_sample_size": graph.data_quality.min_sample_size},
-            )
-        )
     if graph.data_quality.mock_used:
         notes.append(
             AnswerDataNote(
@@ -467,9 +289,6 @@ def confidence(graph: EvidenceGraph, *, has_output: bool) -> float:
     value = graph.data_quality.completeness
     if graph.data_quality.mock_used:
         value = min(value, 0.2)
-    if graph.data_quality.min_sample_size is not None:
-        sample_factor = min(graph.data_quality.min_sample_size / 100, 1.0)
-        value = min(value, 0.4 + sample_factor * 0.5)
     if not has_output:
         value = min(value, 0.35)
     return round(value, 2)

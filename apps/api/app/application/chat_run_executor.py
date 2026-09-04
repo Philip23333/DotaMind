@@ -13,7 +13,6 @@ from uuid import UUID
 from app.agentic.conversation.models import DialogueTurn
 from app.agentic.graph import AgentGraphRunner
 from app.agentic.runtime.checkpoint import CheckpointSnapshot
-from app.agentic.runtime.checkpoint_adapters import apply_match_selection
 from app.agentic.runtime.models import RunContext
 from app.agentic.runtime.streaming import (
     CheckpointStreamEvent,
@@ -284,25 +283,13 @@ class ChatRunExecutor:
         if running.checkpoint_state is None:
             raise ChatRunRepositoryError("checkpoint_missing")
         snapshot = CheckpointSnapshot.model_validate(running.checkpoint_state)
-        try:
-            plan = apply_match_selection(
-                snapshot.plan,
-                snapshot.checkpoint,
-                snapshot.selected_option_id,
-            )
-        except ValueError as exc:
-            raise ChatRunRepositoryError(str(exc)) from exc
-        source_tool_call_id = snapshot.checkpoint.source_tool_call_id
+        plan = snapshot.plan
         # Snapshot records remain durable audit data, but a resumed execution
         # state starts with fresh result/dispatch collections. The tools node
         # traverses the plan again: preceding calls reuse the fingerprint cache
         # and emit one fresh cache-reuse record, while the selected ambiguous
         # call reruns with its patched arguments.
-        executed_call_fingerprints = {
-            fingerprint: cached
-            for fingerprint, cached in snapshot.executed_call_fingerprints.items()
-            if cached.call_id != source_tool_call_id
-        }
+        executed_call_fingerprints = dict(snapshot.executed_call_fingerprints)
         started_at = running.started_at or datetime.now(UTC)
         run_context = RunContext(
             run_id=request.run_id,

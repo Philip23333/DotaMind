@@ -161,7 +161,7 @@ def test_adapter_maps_provider_unsafe_tool_names_at_its_boundary() -> None:
                                     "id": "call-2",
                                     "type": "function",
                                     "function": {
-                                        "name": "matches_search",
+                                        "name": "sample_lookup",
                                         "arguments": '{"query":"Grand Final"}',
                                     },
                                 }
@@ -175,7 +175,7 @@ def test_adapter_maps_provider_unsafe_tool_names_at_its_boundary() -> None:
         )
 
     tool = ModelTool(
-        name="matches.search",
+        name="sample.lookup",
         description="search matches",
         input_schema={"type": "object"},
     )
@@ -184,7 +184,7 @@ def test_adapter_maps_provider_unsafe_tool_names_at_its_boundary() -> None:
             UserMessage(content="find a match"),
             AssistantMessage(
                 content=None,
-                tool_calls=[ToolCall(id="call-1", name="matches.search", arguments={})],
+                tool_calls=[ToolCall(id="call-1", name="sample.lookup", arguments={})],
             ),
             ToolResultMessage(tool_call_id="call-1", content={"matches": []}),
         ],
@@ -193,13 +193,13 @@ def test_adapter_maps_provider_unsafe_tool_names_at_its_boundary() -> None:
 
     result = asyncio.run(_adapter(handler).complete(request))
 
-    assert seen["payload"]["tools"][0]["function"]["name"] == "matches_search"
+    assert seen["payload"]["tools"][0]["function"]["name"] == "sample_lookup"
     assert (
         seen["payload"]["messages"][1]["tool_calls"][0]["function"]["name"]
-        == "matches_search"
+        == "sample_lookup"
     )
     assert isinstance(result.message, AssistantMessage)
-    assert result.message.tool_calls[0].name == "matches.search"
+    assert result.message.tool_calls[0].name == "sample.lookup"
 
 
 def _sse_body(*chunks: dict[str, Any]) -> str:
@@ -314,7 +314,7 @@ def test_adapter_maps_streamed_provider_tool_names_back_to_agent_names() -> None
                                         "id": "call-1",
                                         "type": "function",
                                         "function": {
-                                            "name": "matches_search",
+                                            "name": "sample_lookup",
                                             "arguments": "{}",
                                         },
                                     }
@@ -334,7 +334,7 @@ def test_adapter_maps_streamed_provider_tool_names_back_to_agent_names() -> None
             [UserMessage(content="go")],
             [
                 ModelTool(
-                    name="matches.search",
+                    name="sample.lookup",
                     description="search matches",
                     input_schema={"type": "object"},
                 )
@@ -342,10 +342,10 @@ def test_adapter_maps_streamed_provider_tool_names_back_to_agent_names() -> None
         ),
     )
 
-    assert seen["payload"]["tools"][0]["function"]["name"] == "matches_search"
+    assert seen["payload"]["tools"][0]["function"]["name"] == "sample_lookup"
     assert isinstance(items[0], ModelResponse)
     assert isinstance(items[0].message, AssistantMessage)
-    assert items[0].message.tool_calls[0].name == "matches.search"
+    assert items[0].message.tool_calls[0].name == "sample.lookup"
 
 
 def test_adapter_rejects_malformed_sse_and_missing_done_marker() -> None:

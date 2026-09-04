@@ -26,14 +26,14 @@ def test_resume_route_accepts_option_id_and_keeps_run_id() -> None:
             f"/chat/runs/{run_id}/resume",
             headers={"X-DotaMind-Browser-Id": str(uuid4())},
             json={
-                "checkpoint_type": "pandascore_match_selection",
+                "checkpoint_type": "selection",
                 "option_id": "playoffs_2026_08_20",
             },
         )
 
     assert response.status_code == 202
     assert response.json()["run"]["run_id"] == str(run_id)
-    assert runtime.selected == ("pandascore_match_selection", "playoffs_2026_08_20")
+    assert runtime.selected == ("selection", "playoffs_2026_08_20")
 
 
 def test_resume_route_rejects_client_parameter_patch() -> None:
@@ -46,7 +46,7 @@ def test_resume_route_rejects_client_parameter_patch() -> None:
             f"/chat/runs/{uuid4()}/resume",
             headers={"X-DotaMind-Browser-Id": str(uuid4())},
             json={
-                "checkpoint_type": "pandascore_match_selection",
+                "checkpoint_type": "selection",
                 "option_id": "playoffs_2026_08_20",
                 "scheduled_date": "2026-08-20",
             },
@@ -66,7 +66,7 @@ def test_resume_route_maps_invalid_option_to_422() -> None:
             f"/chat/runs/{run_id}/resume",
             headers={"X-DotaMind-Browser-Id": str(uuid4())},
             json={
-                "checkpoint_type": "pandascore_match_selection",
+                "checkpoint_type": "selection",
                 "option_id": "unknown",
             },
         )

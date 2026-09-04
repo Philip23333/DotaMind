@@ -96,14 +96,14 @@ def test_runtime_resumes_same_run_after_checkpoint_validation() -> None:
         result = await runtime.resume_run(
             browser_id=str(uuid4()),
             run_id=run_id,
-            checkpoint_type="pandascore_match_selection",
+            checkpoint_type="selection",
             option_id="playoffs_2026_08_20",
         )
 
         assert result.run.run_id == run_id
         assert manager.submitted == [run_id]
         assert repository.args == {
-            "checkpoint_type": "pandascore_match_selection",
+            "checkpoint_type": "selection",
             "option_id": "playoffs_2026_08_20",
         }
 

@@ -18,7 +18,7 @@ from scripts.vnext_agent_console import (
 
 
 def test_console_conversation_preserves_full_tool_results_across_turns(tmp_path: Path) -> None:
-    call = ToolCall(id="call-1", name="matches.search", arguments={"query": "Grand Final"})
+    call = ToolCall(id="call-1", name="sample.lookup", arguments={"query": "Grand Final"})
     result = ToolResultMessage(
         tool_call_id="call-1",
         content={
@@ -62,7 +62,7 @@ def test_console_conversation_preserves_full_tool_results_across_turns(tmp_path:
     assert payload["turns"][0]["trace"] == [
         {
             "tool_call_id": "call-1",
-            "tool": "matches.search",
+            "tool": "sample.lookup",
             "arguments": {"query": "Grand Final"},
             "status": "ok",
             "error": None,

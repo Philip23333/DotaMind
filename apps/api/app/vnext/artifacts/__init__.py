@@ -8,7 +8,7 @@ from .externalize import (
     serialized_size,
 )
 from .grep import ArtifactGrepMatch, ArtifactGrepper, ArtifactGrepResult
-from .manuals import PANDASCORE_MANUAL_REFS, ManualResolver
+from .manuals import DOCUMENTED_MANUAL_REFS, MANUAL_REFS, ManualResolver
 from .retrieval import (
     ArtifactPathNotFoundError,
     ArtifactReader,
@@ -30,7 +30,8 @@ __all__ = [
     "INLINE_TOOL_RESPONSE_MAX_BYTES",
     "InvalidArtifactRefError",
     "ManualResolver",
-    "PANDASCORE_MANUAL_REFS",
+    "DOCUMENTED_MANUAL_REFS",
+    "MANUAL_REFS",
     "SessionArtifactStore",
     "ToolResponseArtifactError",
     "ToolResponseExternalizer",

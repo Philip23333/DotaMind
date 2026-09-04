@@ -16,7 +16,6 @@ from app.agentic.planning.decisions import (
 )
 from app.agentic.state import AgentRunState
 from app.agentic.tools import ToolDefinition, ToolRegistry
-from app.agentic.tools.conversation_tools import register_conversation_tools
 
 
 class FakeController:
@@ -134,7 +133,18 @@ class _NoArgs(BaseModel):
 
 def test_controller_context_plan_cannot_mix_destinations_or_request_evidence() -> None:
     registry = ToolRegistry()
-    register_conversation_tools(registry)
+    class _HistoryInput(BaseModel):
+        query_text: str
+
+    registry.register(
+        ToolDefinition(
+            name="context.lookup",
+            description="Return bounded conversation context.",
+            input_model=_HistoryInput,
+            handler=lambda args, context: {"messages": []},
+            result_destination="controller_context",
+        )
+    )
     registry.register(
         ToolDefinition(
             name="debug.evidence",
@@ -150,7 +160,7 @@ def test_controller_context_plan_cannot_mix_destinations_or_request_evidence() -
         tool_calls=[
             ToolCall(
                 id="history",
-                tool="conversation.history_lookup",
+                    tool="context.lookup",
                 args={"query_text": "技能冷却"},
             )
         ],

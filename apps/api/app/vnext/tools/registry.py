@@ -15,17 +15,7 @@ from app.vnext.artifacts.retrieval import (
     ArtifactReadValidationError,
 )
 from app.vnext.artifacts.store import ArtifactNotFoundError, InvalidArtifactRefError
-from app.vnext.capabilities.game_detail.errors import GameDetailProviderError
-from app.vnext.domain.source import SourceLocatorError
 from app.vnext.llm.protocol import ModelTool, ToolCall, ToolResultMessage
-from app.vnext.providers.pandascore.adapter import (
-    PandaScoreConfigurationError,
-    PandaScoreHTTPError,
-    PandaScoreProviderError,
-    PandaScoreSchemaError,
-    PandaScoreTimeoutError,
-)
-from app.vnext.providers.pandascore.capabilities import PandaScoreQueryValidationError
 from app.vnext.tools.definition import ToolDefinition
 from app.vnext.tools.errors import ToolError, ToolErrorCode
 
@@ -118,20 +108,6 @@ class ToolRegistry:
                 f"artifact path not found: {call.name}",
                 {},
             )
-        except SourceLocatorError as exc:
-            return self._error_result(
-                call,
-                "invalid_source_locator",
-                str(exc),
-                exc.details,
-            )
-        except GameDetailProviderError as exc:
-            return self._error_result(
-                call,
-                "provider_error",
-                str(exc),
-                exc.details,
-            )
         except ToolResponseArtifactError as exc:
             return self._error_result(
                 call,
@@ -144,48 +120,6 @@ class ToolRegistry:
                 call,
                 "invalid_arguments",
                 str(exc),
-                {},
-            )
-        except PandaScoreQueryValidationError as exc:
-            return self._error_result(
-                call,
-                exc.code,
-                f"invalid esports search query: {exc.code}",
-                exc.details,
-            )
-        except PandaScoreConfigurationError:
-            return self._error_result(
-                call,
-                "configuration_error",
-                "PandaScore is not configured for esports search",
-                {},
-            )
-        except PandaScoreTimeoutError:
-            return self._error_result(
-                call,
-                "provider_timeout",
-                "PandaScore request timed out",
-                {},
-            )
-        except PandaScoreHTTPError as exc:
-            return self._error_result(
-                call,
-                "provider_http_error",
-                "PandaScore returned an unsuccessful response",
-                {"status_code": exc.status_code},
-            )
-        except PandaScoreSchemaError:
-            return self._error_result(
-                call,
-                "provider_schema_error",
-                "PandaScore returned an invalid response",
-                {},
-            )
-        except PandaScoreProviderError:
-            return self._error_result(
-                call,
-                "provider_error",
-                "PandaScore request failed",
                 {},
             )
         except Exception:

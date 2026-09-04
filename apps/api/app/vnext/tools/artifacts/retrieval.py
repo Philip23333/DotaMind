@@ -20,8 +20,7 @@ from app.vnext.tools.registry import ToolRegistry
 class ArtifactReadInput(DomainModel):
     ref: str = Field(
         description=(
-            "Exact opaque reference returned by a tool, or a documented manual ref such as "
-            "manual:pandascore:index."
+            "Exact opaque reference returned by a tool, or a documented manual ref."
         )
     )
     mode: Literal["outline", "read"] = Field(

@@ -5,7 +5,7 @@ from app.application.redis_run_event_bus import _parse_event
 def test_checkpoint_event_round_trips_through_event_parser() -> None:
     event = CheckpointStreamEvent(
         checkpoint={
-            "checkpoint_type": "pandascore_match_selection",
+            "checkpoint_type": "selection",
             "question": "请选择比赛。",
             "options": [],
             "source_tool_call_id": "resolve_games",

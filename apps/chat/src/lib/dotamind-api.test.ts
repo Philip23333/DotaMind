@@ -44,7 +44,7 @@ describe("formatPlanResponse", () => {
             tool_call_statuses: [
               {
                 tool_call_id: "matches",
-                tool: "pandascore.list_matches",
+                tool: "artifact.read",
                 status: "error",
                 latency_ms: 0,
                 reused: false,
@@ -105,7 +105,7 @@ describe("formatPlanResponse", () => {
     );
   });
 
-  it("decorates nested OpenDota entities in tables, BP lists, and normal lists", () => {
+  it("decorates nested game entities in tables, BP lists, and normal lists", () => {
     const formatted = formatPlanResponse({
       status: "ok",
       answer: {
@@ -391,7 +391,7 @@ describe("formatPlanResponse", () => {
     expect(formatted).toContain("- 10级：+5秒 战吼持续时间");
   });
 
-  it("renders local PandaScore team icons without allowing remote image URLs", () => {
+  it("renders local team icons without allowing remote image URLs", () => {
     const formatted = formatPlanResponse({
       status: "ok",
       answer: { summary: "# Team Alpha vs Team Beta" },
@@ -417,7 +417,6 @@ describe("formatPlanResponse", () => {
     expect(formatted).toContain(
       "![Team Beta](http://localhost:8001/api/v1/assets/esports/teams/2.jpg#dota-size=lg)Team Beta",
     );
-    expect(formatted).not.toContain("pandascore.co");
   });
 
   it("does not decorate a player name from a stale hero visual alias", () => {

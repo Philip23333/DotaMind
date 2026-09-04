@@ -8,7 +8,6 @@ from pydantic import ValidationError
 from app.agentic.models import ExecutionPlan, ToolCall
 from app.agentic.references import parse_reference
 from app.agentic.tools import ArgContract, ToolDefinition, ToolRegistry
-from app.core.config import get_policy
 
 NATURAL_LANGUAGE_CONTRACT = "natural_language_answer"
 
@@ -32,33 +31,6 @@ class ContractSpec:
 
 
 CONTRACT_REGISTRY = {
-    "patch_impact_report": ContractSpec(
-        name="patch_impact_report",
-        route="structured",
-        required_evidence=frozenset({"patch_records"}),
-        required_tools=frozenset({"patch.get_records"}),
-    ),
-    "role_meta_report": ContractSpec(
-        name="role_meta_report",
-        route="structured",
-        required_evidence=frozenset({"hero_stats"}),
-        allowed_evidence=frozenset({"hero_stats", "role_fit", "sample_size"}),
-    ),
-    "team_recent_report": ContractSpec(
-        name="team_recent_report",
-        route="structured",
-        required_evidence=frozenset({"team_identity", "recent_matches"}),
-        allowed_evidence=frozenset(
-            {
-                "team_identity",
-                "recent_matches",
-                "current_players",
-                "team_hero_usage",
-                "match_detail_sample",
-                "sample_size",
-            }
-        ),
-    ),
     NATURAL_LANGUAGE_CONTRACT: ContractSpec(
         name=NATURAL_LANGUAGE_CONTRACT,
         route="natural_language",
@@ -173,39 +145,8 @@ def validate_plan_against_catalog(
 
 
 def validate_context_scope(plan: ExecutionPlan) -> list[str]:
-    """Validate plan.context against policy. The weeks_back lower bound is
-    enforced by pydantic on QueryContext; this checks the policy-driven upper
-    bound so an out-of-range value surfaces as a Controller retry signal. Also
-    enforces that region_ids/game_mode_ids (only supported by hero_daily_trends
-    per STRATZ schema) are not silently handed to other tools."""
-    errors: list[str] = []
-    weeks_back = plan.context.weeks_back
-    if weeks_back is not None:
-        max_weeks = get_policy().stratz.weeks_back_max
-        if weeks_back > max_weeks:
-            errors.append(
-                f"context.weeks_back={weeks_back} exceeds stratz.weeks_back_max"
-                f"={max_weeks}; use 1..{max_weeks}"
-            )
-    has_region_or_mode = bool(plan.context.region_ids) or bool(
-        plan.context.game_mode_ids
-    )
-    if has_region_or_mode:
-        non_daily = sorted(
-            {
-                call.tool
-                for call in plan.tool_calls
-                if call.tool != "stratz.hero_daily_trends"
-            }
-        )
-        if non_daily:
-            errors.append(
-                "context.region_ids/game_mode_ids are only supported by "
-                "stratz.hero_daily_trends (STRATZ schema); do not set them "
-                "alongside other tools — the handler would silently ignore them. "
-                f"Non-daily tools in plan: {non_daily}"
-            )
-    return errors
+    """QueryContext is intentionally empty until a cross-tool need is defined."""
+    return []
 
 
 def validate_registry_contracts(registry: ToolRegistry) -> list[str]:

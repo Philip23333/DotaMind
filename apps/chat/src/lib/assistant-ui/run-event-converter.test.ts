@@ -34,7 +34,7 @@ describe("streamDotaMindRun Checkpoint events", () => {
         event: {
           type: "checkpoint",
           checkpoint: {
-            checkpoint_type: "pandascore_match_selection",
+            checkpoint_type: "selection",
             question: "请选择比赛",
             options: [{ id: "match-a", label: "8 月 20 日", value: { scheduled_date: "2026-08-20" } }],
             source_tool_call_id: "resolve_games",
@@ -68,7 +68,7 @@ describe("streamDotaMindRun Checkpoint events", () => {
       runtime: {
         status: "waiting_input",
         lastSequence: 5,
-        checkpoint: { checkpoint_type: "pandascore_match_selection" },
+        checkpoint: { checkpoint_type: "selection" },
       },
     });
     expect(markUnreadMock).not.toHaveBeenCalled();

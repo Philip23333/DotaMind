@@ -48,7 +48,7 @@ class ArtifactReader:
     async def outline(self, ref: str) -> ArtifactReadResult:
         """Return a structural root view without reading a selected path."""
 
-        if ref.startswith("manual:pandascore:"):
+        if ref.startswith("manual:"):
             self._manual_content(ref)
             return ArtifactReadResult(
                 ref=ref,
@@ -68,7 +68,7 @@ class ArtifactReader:
         """Read one explicit path, slicing only when its final value is a list."""
 
         payload: Any
-        if ref.startswith("manual:pandascore:"):
+        if ref.startswith("manual:"):
             payload = {"content": self._manual_content(ref)}
         else:
             payload = await self._store.get(ref)

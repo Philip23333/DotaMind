@@ -1,4 +1,4 @@
-"""Explicit read-only generated documents available through artifact retrieval."""
+"""Resolver for explicitly documented static artifact references."""
 
 from __future__ import annotations
 
@@ -7,38 +7,29 @@ from pathlib import Path
 
 from .store import ArtifactNotFoundError
 
-_REPOSITORY_ROOT = Path(__file__).resolve().parents[5]
-_PANDASCORE_MANUAL_DIRECTORY = (
-    _REPOSITORY_ROOT / "docs" / "reference" / "pandascore-generated" / "agent-manual"
-)
-
-PANDASCORE_MANUAL_REFS: Mapping[str, str] = {
-    "manual:pandascore:index": "INDEX.md",
-    "manual:pandascore:league": "league.md",
-    "manual:pandascore:serie": "serie.md",
-    "manual:pandascore:tournament": "tournament.md",
-    "manual:pandascore:match": "match.md",
-    "manual:pandascore:team": "team.md",
-    "manual:pandascore:player": "player.md",
-}
+DOCUMENTED_MANUAL_REFS: Mapping[str, str] = {}
 
 
 class ManualResolver:
-    """Resolve the small allowlist of generated PandaScore manuals."""
+    """Resolve only an explicit allowlist of static documents."""
 
-    def __init__(self, manual_directory: Path = _PANDASCORE_MANUAL_DIRECTORY) -> None:
+    def __init__(self, manual_directory: Path | None = None) -> None:
         self._manual_directory = manual_directory
 
     def read(self, ref: str) -> str:
         try:
-            filename = PANDASCORE_MANUAL_REFS[ref]
+            filename = DOCUMENTED_MANUAL_REFS[ref]
         except KeyError as exc:
             raise ArtifactNotFoundError(f"artifact not found: {ref}") from exc
-
+        if self._manual_directory is None:
+            raise ArtifactNotFoundError(f"artifact not found: {ref}")
         try:
             return (self._manual_directory / filename).read_text(encoding="utf-8")
         except FileNotFoundError as exc:
             raise ArtifactNotFoundError(f"artifact not found: {ref}") from exc
 
 
-__all__ = ["ManualResolver", "PANDASCORE_MANUAL_REFS"]
+# Backward-compatible import name for generic artifact callers.
+MANUAL_REFS = DOCUMENTED_MANUAL_REFS
+
+__all__ = ["DOCUMENTED_MANUAL_REFS", "MANUAL_REFS", "ManualResolver"]

@@ -13,10 +13,6 @@ from app.vnext.agent.errors import (
     MaxToolCallsExceeded,
 )
 from app.vnext.agent.events import AgentCompleted, TextDelta
-from app.vnext.agent.instructions import (
-    ESPORTS_AGENT_INSTRUCTION,
-    ESPORTS_QUERY_DISCIPLINE_INSTRUCTION,
-)
 from app.vnext.agent.limits import AgentLimits
 from app.vnext.agent.runtime import AgentRuntime, CancellationToken
 from app.vnext.agent.trace import AgentTraceCollector
@@ -102,26 +98,6 @@ def test_runtime_includes_configured_system_instruction_in_each_model_request() 
     _run(runtime, model)
 
     assert model.requests[0].messages[0] == SystemMessage(content="query discipline")
-
-
-def test_esports_query_discipline_allows_only_name_search_without_a_manual() -> None:
-    instruction = ESPORTS_QUERY_DISCIPLINE_INSTRUCTION
-
-    assert "only resource, search.name, default scope" in instruction
-    assert "or any other search field is present, it is not direct discovery" in instruction
-    assert "search.name is the only search field allowed for direct discovery" in instruction
-    assert "Do not outline a known manual:pandascore:* ref" in instruction
-
-
-def test_active_esports_instructions_keep_only_completion_and_evidence() -> None:
-    assert "Recent league matches" not in ESPORTS_AGENT_INSTRUCTION
-    assert "A specific edition or stage" not in ESPORTS_AGENT_INSTRUCTION
-    assert "Latest tournament status" not in ESPORTS_AGENT_INSTRUCTION
-    assert "Before every additional tool call" in ESPORTS_AGENT_INSTRUCTION
-    assert "Naming the winning team or player requires an explicit" in ESPORTS_AGENT_INSTRUCTION
-    assert "Do not resolve a raw winner_id" in ESPORTS_AGENT_INSTRUCTION
-    assert "to a name from model knowledge" in ESPORTS_AGENT_INSTRUCTION
-    assert "not an aggregation engine" in ESPORTS_AGENT_INSTRUCTION
 
 
 def test_single_tool_call_result_then_final() -> None:

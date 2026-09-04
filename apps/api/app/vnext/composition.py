@@ -1,8 +1,4 @@
-"""Lightweight Phase 2 composition root.
-
-Importing this module only defines configuration and factories; no HTTP client
-is created until an adapter receives its first request.
-"""
+"""Composition root for the artifact-only vNext runtime."""
 
 from __future__ import annotations
 
@@ -12,29 +8,16 @@ from pathlib import Path
 
 from dotenv import dotenv_values
 
-from app.vnext.agent.instructions import ESPORTS_AGENT_INSTRUCTION
+from app.vnext.agent.instructions import AGENT_INSTRUCTION
 from app.vnext.agent.runtime import AgentRuntime
 from app.vnext.artifacts import (
     ArtifactGrepper,
     ArtifactReader,
     ManualResolver,
     SessionArtifactStore,
-    ToolResponseExternalizer,
 )
-from app.vnext.capabilities.game_detail.service import GameDetailService
-from app.vnext.domain.matches.service import MatchService
-from app.vnext.domain.players.service import PlayerService
-from app.vnext.domain.series.service import SeriesService
-from app.vnext.domain.team_player_index import TeamPlayerRefIndex
-from app.vnext.domain.teams.service import TeamService
 from app.vnext.llm.openai_compatible import OpenAICompatibleModelClient
-from app.vnext.providers.opendota.adapter import OpenDotaAdapter
-from app.vnext.providers.pandascore.adapter import PandaScoreAdapter
-from app.vnext.providers.pandascore.capabilities import PandaScoreCapabilities
-from app.vnext.providers.pandascore.locator import PandaScoreLocatorIndex
-from app.vnext.providers.pandascore.query import PandaScoreNativeQueryExecutor
 from app.vnext.tools.artifacts import register_artifact_tools
-from app.vnext.tools.domain.game import register_game_tools
 from app.vnext.tools.registry import ToolRegistry
 
 _VNEXT_ENV_PATH = Path(__file__).with_name(".env")
@@ -46,15 +29,6 @@ class VNextSettings:
     llm_base_url: str = "https://api.deepseek.com"
     llm_model: str = "deepseek-chat"
     llm_timeout_seconds: float = 90.0
-    pandascore_base_url: str = "https://api.pandascore.co"
-    pandascore_token: str | None = None
-    opendota_base_url: str = "https://api.opendota.com/api"
-    opendota_api_key: str | None = None
-    pandascore_timeout_seconds: float = 20.0
-    opendota_timeout_seconds: float = 20.0
-    pandascore_max_page_size: int = 100
-    resolution_start_tolerance_seconds: int = 1800
-    resolution_duration_tolerance_seconds: int = 5
     trace_ttl_seconds: int = 72 * 60 * 60
 
     @classmethod
@@ -64,50 +38,13 @@ class VNextSettings:
         return cls(
             llm_api_key=_env_value("DOTAMIND_LLM_API_KEY", "", file_values) or "",
             llm_base_url=_env_value(
-                "DOTAMIND_LLM_BASE_URL",
-                defaults.llm_base_url,
-                file_values,
+                "DOTAMIND_LLM_BASE_URL", defaults.llm_base_url, file_values
             )
             or defaults.llm_base_url,
             llm_model=_env_value("DOTAMIND_LLM_MODEL", defaults.llm_model, file_values)
             or defaults.llm_model,
             llm_timeout_seconds=float(
                 _env_value("DOTAMIND_LLM_TIMEOUT_SECONDS", "90", file_values)
-            ),
-            pandascore_base_url=_env_value(
-                "DOTAMIND_PANDASCORE_BASE_URL",
-                defaults.pandascore_base_url,
-                file_values,
-            ),
-            pandascore_token=_env_value("DOTAMIND_PANDASCORE_TOKEN", None, file_values),
-            opendota_base_url=_env_value(
-                "DOTAMIND_OPENDOTA_BASE_URL",
-                defaults.opendota_base_url,
-                file_values,
-            ),
-            opendota_api_key=_env_value("DOTAMIND_OPENDOTA_API_KEY", None, file_values),
-            pandascore_timeout_seconds=float(
-                _env_value("DOTAMIND_PANDASCORE_TIMEOUT_SECONDS", "20", file_values)
-            ),
-            opendota_timeout_seconds=float(
-                _env_value("DOTAMIND_OPENDOTA_TIMEOUT_SECONDS", "20", file_values)
-            ),
-            pandascore_max_page_size=int(
-                _env_value("DOTAMIND_PANDASCORE_MAX_PAGE_SIZE", "100", file_values)
-            ),
-            resolution_start_tolerance_seconds=int(
-                _env_value(
-                    "DOTAMIND_RESOLUTION_START_TOLERANCE_SECONDS",
-                    "1800",
-                    file_values,
-                )
-            ),
-            resolution_duration_tolerance_seconds=int(
-                _env_value(
-                    "DOTAMIND_RESOLUTION_DURATION_TOLERANCE_SECONDS",
-                    "5",
-                    file_values,
-                )
             ),
             trace_ttl_seconds=int(
                 _env_value("DOTAMIND_VNEXT_TRACE_TTL_SECONDS", "259200", file_values)
@@ -128,66 +65,18 @@ def _env_value(
 
 @dataclass(slots=True)
 class VNextServices:
-    pandascore: PandaScoreAdapter
-    pandascore_capabilities: PandaScoreCapabilities
-    pandascore_native_queries: PandaScoreNativeQueryExecutor
-    opendota: OpenDotaAdapter
-    game_detail: GameDetailService
-    series: SeriesService
-    matches: MatchService
-    teams: TeamService
-    players: PlayerService
+    """Lifecycle container retained for the application composition seam."""
 
     async def aclose(self) -> None:
-        await self.pandascore.aclose()
-        await self.opendota.aclose()
+        return None
 
 
 def build_vnext_services(
     settings: VNextSettings | None = None,
-    *,
-    pandascore: PandaScoreAdapter | None = None,
-    opendota: OpenDotaAdapter | None = None,
+    **_: object,
 ) -> VNextServices:
-    config = settings or VNextSettings.from_env()
-    panda_adapter = pandascore or PandaScoreAdapter(
-        base_url=config.pandascore_base_url,
-        token=config.pandascore_token,
-        request_timeout_seconds=config.pandascore_timeout_seconds,
-        max_page_size=config.pandascore_max_page_size,
-    )
-    panda_capabilities = PandaScoreCapabilities.load()
-    panda_native_queries = PandaScoreNativeQueryExecutor(panda_capabilities, panda_adapter)
-    open_adapter = opendota or OpenDotaAdapter(
-        base_url=config.opendota_base_url,
-        api_key=config.opendota_api_key,
-        request_timeout_seconds=config.opendota_timeout_seconds,
-    )
-    series_service = SeriesService(panda_adapter)
-    locator_index = PandaScoreLocatorIndex()
-    game_detail_service = GameDetailService(open_adapter)
-    team_player_index = TeamPlayerRefIndex()
-    team_service = TeamService(panda_adapter, team_player_index)
-    player_service = PlayerService(panda_adapter, team_player_index)
-    match_service = MatchService(
-        panda_adapter,
-        open_adapter,
-        series_service=series_service,
-        locator_index=locator_index,
-        team_player_index=team_player_index,
-    )
-    series_service.set_match_cache(match_service.remember_fixture)
-    return VNextServices(
-        pandascore=panda_adapter,
-        pandascore_capabilities=panda_capabilities,
-        pandascore_native_queries=panda_native_queries,
-        opendota=open_adapter,
-        game_detail=game_detail_service,
-        series=series_service,
-        matches=match_service,
-        teams=team_service,
-        players=player_service,
-    )
+    del settings
+    return VNextServices()
 
 
 def build_vnext_registry(
@@ -195,12 +84,10 @@ def build_vnext_registry(
     *,
     settings: VNextSettings | None = None,
 ) -> ToolRegistry:
-    resolved_services = services or build_vnext_services(settings)
+    del services, settings
     registry = ToolRegistry()
     artifact_store = SessionArtifactStore()
     manuals = ManualResolver()
-    externalizer = ToolResponseExternalizer(artifact_store)
-    register_game_tools(registry, resolved_services.game_detail, externalizer)
     register_artifact_tools(
         registry,
         ArtifactReader(artifact_store, manuals),
@@ -214,8 +101,9 @@ def build_vnext_runtime(
     *,
     services: VNextServices | None = None,
 ) -> AgentRuntime:
-    """Compose the configured provider-neutral model client and vNext tool surface."""
+    """Compose the configured model client and artifact-only tool surface."""
 
+    del services
     config = settings or VNextSettings.from_env()
     model = OpenAICompatibleModelClient(
         api_key=config.llm_api_key,
@@ -225,8 +113,8 @@ def build_vnext_runtime(
     )
     return AgentRuntime(
         model,
-        build_vnext_registry(services, settings=config),
-        system_instruction=ESPORTS_AGENT_INSTRUCTION,
+        build_vnext_registry(settings=config),
+        system_instruction=AGENT_INSTRUCTION,
     )
 
 

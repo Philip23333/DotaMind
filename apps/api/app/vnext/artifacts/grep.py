@@ -56,7 +56,7 @@ class ArtifactGrepper:
     ) -> ArtifactGrepResult:
         _validate_search(pattern, limit)
         normalized_pattern = pattern.casefold()
-        if ref.startswith("manual:pandascore:"):
+        if ref.startswith("manual:"):
             if self._manuals is None:
                 raise ArtifactNotFoundError(f"artifact not found: {ref}")
             value = self._manuals.read(ref)

@@ -18,9 +18,8 @@ from app.agentic.graph import AgentGraphRunner
 from app.agentic.planning.contracts import validate_registry_contracts
 from app.agentic.planning.controller import AgentController
 from app.agentic.state import AgentRunState
-from app.agentic.tools.stratz_tools import build_default_tool_registry
+from app.agentic.tools import build_default_tool_registry
 from app.core.config import get_policy, get_settings
-from app.integrations.valve.catalog_repository import load_default_catalog_repository
 
 
 @dataclass(frozen=True)
@@ -53,13 +52,8 @@ class PlanService:
             raise RuntimeError(
                 "invalid tool registry contracts: " + "; ".join(registry_errors)
             )
-        catalog = load_default_catalog_repository()
         self.controller = controller or AgentController(
             self.registry,
-            runtime_context={
-                "current_catalog_patch": catalog.manifest.patch,
-                "catalog_snapshot_generated_at": catalog.manifest.generated_at.isoformat(),
-            },
         )
         # Compile graph once; AgentGraphRunner.run() is concurrency-safe across
         # sessions because executor/critic/synthesizer carry no per-request state.

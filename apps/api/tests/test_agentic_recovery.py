@@ -374,7 +374,6 @@ def test_recovery_requires_enough_tool_budget_for_complete_producer_cover() -> N
     ("mutation", "message"),
     [
         ("old_call", "exact prefix"),
-        ("context", "plan.context"),
         ("contract", "plan.output_contract"),
         ("constraints", "plan.constraints"),
         ("required", "required_evidence exactly"),
@@ -394,10 +393,8 @@ def test_replan_validator_rejects_prefix_and_scope_changes(
     candidate = _decision(recovered=True)
     if mutation == "old_call":
         candidate.plan.tool_calls[0].args = {"value": 9}
-    elif mutation == "context":
-        candidate.plan.context.weeks_back = 1
     elif mutation == "contract":
-        candidate.plan.output_contract = "role_meta_report"
+        candidate.plan.output_contract = "other_contract"
     elif mutation == "constraints":
         candidate.plan.constraints.max_tool_calls = 5
     elif mutation == "required":
@@ -446,19 +443,14 @@ def test_replan_validator_rejects_irrelevant_appended_tool() -> None:
     assert "replan appended tools must produce missing evidence: debug.other" in errors
 
 
-def test_tool_fingerprint_is_canonical_and_context_sensitive() -> None:
-    context = QueryContext(weeks_back=1)
+def test_tool_fingerprint_is_canonical_and_context_neutral() -> None:
+    context = QueryContext()
 
     first = tool_call_fingerprint("debug.base", {"a": 1, "b": 2}, context)
     reordered = tool_call_fingerprint("debug.base", {"b": 2, "a": 1}, context)
 
     assert first == reordered
     assert first != tool_call_fingerprint("debug.base", {"a": 2, "b": 2}, context)
-    assert first != tool_call_fingerprint(
-        "debug.base",
-        {"a": 1, "b": 2},
-        QueryContext(weeks_back=2),
-    )
 
 
 def test_duplicate_fingerprint_with_new_call_id_is_budget_error() -> None:

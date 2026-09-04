@@ -15,7 +15,7 @@ from app.api.v1.chat_run_schemas import ChatRunResumeRequest
 
 def test_checkpoint_selection_contract_keeps_server_value_structured() -> None:
     checkpoint = Checkpoint(
-        checkpoint_type="pandascore_match_selection",
+        checkpoint_type="selection",
         question="请选择要查看详情的比赛。",
         source_tool_call_id="resolve_games",
         resume_node="tools",
@@ -35,7 +35,7 @@ def test_checkpoint_selection_contract_keeps_server_value_structured() -> None:
 def test_checkpoint_snapshot_excludes_prompt_and_answer_fields() -> None:
     snapshot = CheckpointSnapshot(
         checkpoint=Checkpoint(
-            checkpoint_type="pandascore_match_selection",
+            checkpoint_type="selection",
             question="请选择比赛。",
             source_tool_call_id="resolve_games",
             resume_node="tools",
@@ -64,12 +64,12 @@ def test_checkpoint_snapshot_excludes_prompt_and_answer_fields() -> None:
 
 def test_resume_request_accepts_only_checkpoint_identity_and_option() -> None:
     request = ChatRunResumeRequest(
-        checkpoint_type="pandascore_match_selection",
+        checkpoint_type="selection",
         option_id="playoffs_2026_08_20",
     )
 
     assert request.model_dump() == {
-        "checkpoint_type": "pandascore_match_selection",
+        "checkpoint_type": "selection",
         "option_id": "playoffs_2026_08_20",
     }
 
@@ -77,7 +77,7 @@ def test_resume_request_accepts_only_checkpoint_identity_and_option() -> None:
 def test_resume_request_rejects_client_plan_patches() -> None:
     with pytest.raises(ValidationError):
         ChatRunResumeRequest(
-            checkpoint_type="pandascore_match_selection",
+            checkpoint_type="selection",
             option_id="playoffs_2026_08_20",
             scheduled_date="2026-08-20",
         )

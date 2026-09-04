@@ -13,7 +13,7 @@ describe("chat-run resume API", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(
-      resumeChatRun("browser-a", "run-a", "pandascore_match_selection", "playoffs_2026_08_20"),
+      resumeChatRun("browser-a", "run-a", "selection", "option-a"),
     ).resolves.toEqual({ run_id: "run-a", status: "queued" });
 
     expect(fetchMock).toHaveBeenCalledWith(
@@ -21,8 +21,8 @@ describe("chat-run resume API", () => {
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({
-          checkpoint_type: "pandascore_match_selection",
-          option_id: "playoffs_2026_08_20",
+          checkpoint_type: "selection",
+          option_id: "option-a",
         }),
         headers: {
           "Content-Type": "application/json",

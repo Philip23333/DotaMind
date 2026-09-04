@@ -70,7 +70,7 @@ class PauseRunner:
         )
         state.run_budget = RunBudget()
         state.checkpoint = Checkpoint(
-            checkpoint_type="pandascore_match_selection",
+            checkpoint_type="selection",
             question="请选择比赛。",
             source_tool_call_id="resolve_games",
             resume_node="tools",

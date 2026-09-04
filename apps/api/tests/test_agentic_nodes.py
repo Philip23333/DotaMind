@@ -331,7 +331,7 @@ def test_response_node_maps_structured_report() -> None:
 
     _finalize_response(state)
 
-    assert state.response["response_type"] == "role_meta_report"
+    assert state.response["response_type"] == "raw_tool_results"
 
 
 def _debug_plan() -> ExecutionPlan:
@@ -340,7 +340,7 @@ def _debug_plan() -> ExecutionPlan:
         goal="Resolve a hero then fetch matchups.",
         output_contract="tool_results",
         tool_calls=[
-            ToolCall(id="resolve_target", tool="debug.resolve_hero", args={"query": "Lina"}),
+            ToolCall(id="resolve_target", tool="debug.lookup", args={"query": "Lina"}),
             ToolCall(
                 id="get_matchups",
                 tool="debug.matchups",
@@ -354,7 +354,7 @@ def _registry() -> ToolRegistry:
     registry = ToolRegistry()
     registry.register(
         ToolDefinition(
-            name="debug.resolve_hero",
+            name="debug.lookup",
             description="Resolve a fake hero.",
             input_model=HeroLookupInput,
             handler=lambda args, context: {"hero": {"hero_id": 25, "name": args.query}},
@@ -376,7 +376,7 @@ def _registry() -> ToolRegistry:
                 "hero_id": ArgContract(
                     accepts_refs=(
                         AcceptedRef(
-                            from_tool="debug.resolve_hero",
+                            from_tool="debug.lookup",
                             path="data.hero.hero_id",
                             type="int",
                         ),

@@ -19,7 +19,6 @@ from app.agentic.planning.decisions import (
     validate_controller_decision,
 )
 from app.agentic.planning.recovery import validate_replan_decision
-from app.agentic.planning.sample_policy import apply_sample_policy
 from app.agentic.prompts.controller import (
     ControllerPromptBundle,
     build_controller_prompt,
@@ -297,12 +296,8 @@ class AgentController:
 
             decision = normalize_controller_decision(decision)
             if isinstance(decision, ToolPlanDecision):
-                # Preserve the established ordering: sample policy mutates the
-                # final executable plan exactly once, before its first validation.
-                final_plan = apply_sample_policy(decision.plan, self.policy)
-                decision = decision.model_copy(update={"plan": final_plan})
                 evidence = resolve_required_evidence(
-                    final_plan,
+                    decision.plan,
                     self.registry,
                 )
             else:

@@ -19,7 +19,6 @@ class EvidenceItem(BaseModel):
 
 class EvidenceDataQuality(BaseModel):
     mock_used: bool = False
-    min_sample_size: int | None = None
     completeness: float = Field(ge=0, le=1)
 
 
@@ -118,7 +117,6 @@ def build_evidence_graph(
                 result.source is not None and result.source.status == "mocked"
                 for result in tool_results
             ),
-            min_sample_size=_min_sample_size(evidence),
             completeness=_completeness(
                 global_required,
                 mandatory_by_call,
@@ -162,17 +160,6 @@ def _mandatory_evidence_by_call(
         if mandatory:
             result[call.id] = mandatory
     return result
-
-
-def _min_sample_size(evidence: list[EvidenceItem]) -> int | None:
-    samples = [
-        int(item.value["sample_size"])
-        for item in evidence
-        if item.kind == "sample_size" and item.value.get("sample_size") is not None
-    ]
-    if not samples:
-        return None
-    return min(samples)
 
 
 def _completeness(

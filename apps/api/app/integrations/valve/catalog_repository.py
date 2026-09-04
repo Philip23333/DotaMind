@@ -384,7 +384,7 @@ class DotaCatalogRepository:
             tree.append(tier.model_copy(deep=True))
         return tree
 
-    def resolve_hero(self, query: str) -> dict[str, Any]:
+    def find_hero(self, query: str) -> dict[str, Any]:
         return self._hero_resolver.resolve(query)
 
     def resolve_item(self, query: str) -> dict[str, Any]:

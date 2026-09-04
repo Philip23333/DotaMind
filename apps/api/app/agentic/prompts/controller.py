@@ -12,7 +12,6 @@ from app.agentic.conversation.models import (
     ConversationMessage,
 )
 from app.agentic.planning.contracts import render_controller_contracts, render_controller_tools
-from app.agentic.planning.sample_policy import render_sample_policy
 from app.agentic.prompts import controller_rules
 from app.agentic.prompts.versions import build_prompt_versions
 from app.agentic.tools import ToolRegistry
@@ -27,15 +26,13 @@ class ControllerPromptBundle:
 
 def build_controller_prompt(
     registry: ToolRegistry,
-    policy: AppPolicy,
+    _policy: AppPolicy,
 ) -> ControllerPromptBundle:
     tools = render_controller_tools(registry)
     rendered_contracts = render_controller_contracts(registry)
-    sample_policy = render_sample_policy(policy, registry)
     base = (
         controller_rules.PLANNER_SYSTEM_PROMPT.replace("{tools}", tools)
         .replace("{contracts}", rendered_contracts)
-        .replace("{sample_policy}", sample_policy)
     )
     system_prompt = controller_rules.CONVERSATION_HISTORY_RULES + base
     return ControllerPromptBundle(

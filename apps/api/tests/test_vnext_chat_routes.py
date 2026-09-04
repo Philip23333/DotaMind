@@ -36,7 +36,12 @@ def test_message_route_streams_the_small_product_contract() -> None:
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("application/x-ndjson")
-    assert response.json() == {"type": "completed", "content": "done", "turn_index": 1}
+    assert response.json() == {
+        "type": "completed",
+        "content": "done",
+        "turn_index": 1,
+        "catalog_visual_entities": [],
+    }
     assert service.prepared["session_id"] == session_id
 
 

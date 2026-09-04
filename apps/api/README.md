@@ -1,9 +1,8 @@
-# Legacy API
+# API
 
-This directory contains the Legacy V3 FastAPI backend. It remains runnable
-during the vNext rewrite, but it is not the architecture authority and will be
-replaced incrementally. The vNext target is defined in the repository's
-[core documentation](../../docs/README.md).
+This directory contains the FastAPI application and the artifact-only
+model-facing tool baseline. The vNext target is defined in the repository's
+core documentation.
 
 ## Run locally
 
@@ -36,12 +35,15 @@ Useful local pages:
 - `http://localhost:8001/docs`
 - `http://localhost:8001/debug/plan`
 
-## Current Legacy surface
+## Current surface
 
 The currently running service exposes `GET /health`, the stateless
 `/api/v1/plan` debug endpoints, Chat Session and Chat Run endpoints under
 `/api/v1/chat`, and `GET /debug/plan`. This list is operational context only;
-it does not define new vNext contracts.
+it does not define future domain capability contracts.
+
+The default Agent tool registry is currently an Artifact-only clean-slate
+baseline. No domain tool is retained through a compatibility alias.
 
 Runtime configuration and implementation details remain in the code until the
 corresponding vNext capability replaces them. Do not add new vNext architecture

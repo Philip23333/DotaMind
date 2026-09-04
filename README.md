@@ -16,19 +16,24 @@ it is historical context, not a compatibility contract for new work.
 - [Data](docs/DATA.md) — identity, providers, normalization, and provenance
 - [Evals](docs/EVALS.md) — behavioral and live-integration acceptance
 - [Roadmap](docs/ROADMAP.md) — implementation order
-- [Reference facts](docs/reference/) — expensive-to-rediscover provider knowledge
 
 Read these documents before changing vNext architecture or product behavior.
 
 ## Current repository state
 
-`apps/api` and `apps/chat` currently contain Legacy V3 implementations. They
-remain runnable for development and are being replaced incrementally; their
-current behavior does not define the vNext target architecture.
+`apps/api` and `apps/chat` provide the current development surfaces. The
+model-facing capability layer is intentionally at an artifact-only baseline;
+domain capabilities will be rebuilt behind explicit contracts.
+
+## Tool surface
+
+The vNext tool layer is currently being rebuilt. The active default registry
+exposes only Artifact-management tools. Domain tools will be added
+incrementally behind explicit domain contracts.
 
 ## Local development
 
-Start the current Legacy API:
+Start the API:
 
 ```bash
 cd apps/api
@@ -59,9 +64,8 @@ npm run lint
 npm run build
 ```
 
-See [the API README](apps/api/README.md) and
-[the chat README](apps/chat/README.md) for the current Legacy services' local
-run and test details.
+See [the API README](apps/api/README.md) and [the chat README](apps/chat/README.md)
+for local run and test details.
 
 ## License
 

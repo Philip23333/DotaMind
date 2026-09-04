@@ -174,9 +174,9 @@ def test_repository_resolvers_support_exact_fuzzy_and_recipe_scope(tmp_path) -> 
     _write_bundle(tmp_path, _bundle())
     repository = DotaCatalogRepository(tmp_path)
 
-    assert repository.resolve_hero("测试")["hero"]["hero_id"] == 1
-    assert repository.resolve_hero("test her")["status"] == "resolved"
-    assert repository.resolve_hero("unknown")["status"] == "not_found"
+    assert repository.find_hero("测试")["hero"]["hero_id"] == 1
+    assert repository.find_hero("test her")["status"] == "resolved"
+    assert repository.find_hero("unknown")["status"] == "not_found"
     assert repository.resolve_item("测试物品")["item"]["item_id"] == 3
     assert repository.resolve_item("测试物品图纸")["item"]["item_id"] == 2
 
@@ -184,31 +184,8 @@ def test_repository_resolvers_support_exact_fuzzy_and_recipe_scope(tmp_path) -> 
 def test_repository_fails_fast_for_missing_or_inconsistent_snapshot(tmp_path) -> None:
     with pytest.raises(CatalogSnapshotError, match="missing"):
         DotaCatalogRepository(tmp_path)
-
     bundle = _bundle()
     bundle.manifest.entity_counts["items"] = 2
     _write_bundle(tmp_path, bundle)
     with pytest.raises(CatalogSnapshotError, match="invalid Dota catalog snapshot"):
         DotaCatalogRepository(tmp_path)
-
-
-def test_catalog_tool_registration_uses_snapshot_source_and_contract(tmp_path) -> None:
-    from app.agentic.models import QueryContext
-    from app.agentic.tools import ToolRegistry
-    from app.agentic.tools.dota_catalog_tools import (
-        ResolveHeroInput,
-        register_dota_catalog_tools,
-    )
-
-    _write_bundle(tmp_path, _bundle())
-    repository = DotaCatalogRepository(tmp_path)
-    registry = ToolRegistry()
-    register_dota_catalog_tools(registry, repository)
-    definition = registry.get("resolve_hero")
-    result = definition.handler(ResolveHeroInput(query="测试"), QueryContext())
-
-    assert result["hero"]["hero_id"] == 1
-    assert definition.source is not None
-    assert definition.source.kind == "official_snapshot"
-    assert definition.output_paths["hero_id"].path == "data.hero.hero_id"
-    assert definition.mandatory_evidence == ("hero_identity",)

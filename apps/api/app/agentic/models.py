@@ -17,23 +17,9 @@ class ExecutionConstraints(BaseModel):
 
 
 class QueryContext(BaseModel):
-    """Cross-cutting scope filters shared across all tool calls in a plan.
-
-    Set once at plan level. Tool input_models do not carry these fields;
-    handlers receive context as a second argument and apply it internally.
-    """
+    """Plan-level context reserved for future cross-tool concerns."""
 
     model_config = ConfigDict(extra="forbid")
-
-    bracket: list[str] | None = None
-    # STRATZ-only. Relative count of recent *completed* STRATZ weeks to fetch as
-    # per-week buckets (1 week = one STRATZ week, 604800s-aligned). null is
-    # resolved by STRATZ handlers to the policy default (1 = latest completed
-    # week); the LLM never emits a raw week epoch.
-    weeks_back: int | None = Field(default=None, ge=1)
-    position_ids: list[str] | None = None
-    region_ids: list[str] | None = None
-    game_mode_ids: list[str] | None = None
 
 
 class ExecutionPlan(BaseModel):
@@ -44,9 +30,6 @@ class ExecutionPlan(BaseModel):
     tool_calls: list[ToolCall] = Field(default_factory=list)
     required_evidence: list[str] = Field(default_factory=list)
     constraints: ExecutionConstraints = Field(default_factory=ExecutionConstraints)
-    # Post-process provenance for Controller-level policy decisions (e.g. which
-    # sample-size args were backfilled by apply_sample_policy). Backward
-    # compatible: defaults to empty, so existing fixtures unpickle fine.
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 

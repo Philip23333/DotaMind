@@ -133,7 +133,7 @@ def test_validator_failure_uses_sentinel_free_public_envelope():
         intent="bad",
         goal=SENTINEL,
         output_contract="natural_language_answer",
-        tool_calls=[ToolCall(id="bad", tool="resolve_hero", args={"query": SENTINEL})],
+        tool_calls=[ToolCall(id="bad", tool="lookup", args={"query": SENTINEL})],
     )
     state = AgentRunState(
         query="current query",

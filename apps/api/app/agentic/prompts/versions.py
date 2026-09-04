@@ -11,7 +11,6 @@ _COMPONENT_VERSIONS = {
     "controller.conversation_rules": "v3",
     "controller.catalog_renderer": "v1",
     "controller.contract_renderer": "v1",
-    "controller.sample_policy_renderer": "v1",
     "controller.conversation_messages_renderer": "v1",
     "controller.validation_retry": "v2",
     "controller.recovery_rules": RECOVERY_RULES_VERSION,

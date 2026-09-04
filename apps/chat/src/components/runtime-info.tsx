@@ -36,30 +36,8 @@ const phaseLabels: Record<RuntimeInfo["phase"], string> = {
 };
 
 const toolLabels: Record<string, string> = {
-  resolve_hero: "识别英雄",
-  "stratz.pair_lane_outcome": "查询对线结果",
-  "stratz.hero_matchup_ranking": "查询英雄克制数据",
-  "stratz.hero_synergy_ranking": "查询英雄配合数据",
-  "stratz.lane_meta_global": "查询全局对线数据",
-  "stratz.hero_position_stats": "查询位置数据",
-  "stratz.hero_daily_trends": "查询每日趋势",
-  "stratz.filter_heroes_by_position": "筛选位置英雄",
-  "stratz.player_profile": "查询玩家资料",
-  "stratz.player_recent_matches": "查询近期比赛",
-  "stratz.player_hero_performance": "查询英雄表现",
-  "patch.get_records": "查询版本记录",
-  "patch.hero_changes": "查询英雄改动",
-  "patch.item_changes": "查询物品改动",
-  "opendota.resolve_team": "识别战队",
-  "opendota.team_recent_matches": "查询战队近期比赛",
-  "opendota.team_players": "查询战队阵容",
-  "opendota.team_heroes": "查询战队英雄池",
-  "opendota.hero_stats_by_role": "查询位置英雄数据",
-  "pandascore.resolve_competition": "识别赛事",
-  "pandascore.list_matches": "查询赛程与战况",
-  "pandascore.resolve_match_games": "定位系列赛对局",
-  "dota.resolve_valve_matches": "关联 Valve 比赛",
-  "opendota.match_details": "查询单局详情与 BP",
+  "artifact.grep": "检索存档内容",
+  "artifact.read": "读取存档内容",
 };
 
 const statusLabel: Record<RunStatus, string> = {

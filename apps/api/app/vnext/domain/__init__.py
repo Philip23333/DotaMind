@@ -1,3 +1,3 @@
-"""Provider-neutral Dota domain contracts and services."""
+"""Provider-neutral contracts used by generic artifact helpers."""
 
-__all__ = ["common", "matches", "series"]
+__all__ = ["common"]

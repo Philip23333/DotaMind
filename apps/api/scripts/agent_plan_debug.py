@@ -28,7 +28,7 @@ from app.agentic.nodes import (
 from app.agentic.runtime.clock import SystemClock
 from app.agentic.state import AgentRunState
 from app.agentic.tools import ToolExecutor
-from app.agentic.tools.stratz_tools import build_default_tool_registry
+from app.agentic.tools import build_default_tool_registry
 from app.core.config import RuntimePolicy, get_settings
 
 

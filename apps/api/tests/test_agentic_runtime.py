@@ -710,7 +710,7 @@ def _private_plan() -> ExecutionPlan:
         intent="private-intent",
         goal=SENTINEL,
         output_contract="natural_language_answer",
-        context=QueryContext(bracket=[SENTINEL]),
+            context=QueryContext(),
         tool_calls=[ToolCall(id="call", tool="private.tool", args={"value": SENTINEL})],
         metadata={"private": SENTINEL},
     )
