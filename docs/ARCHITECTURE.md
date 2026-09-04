@@ -3,8 +3,9 @@
 ## Status
 
 The tool layer is in a clean-slate rebuild. The default LLM-facing registry
-currently contains only the generic Artifact tools. Domain capabilities are
-introduced later as independent, closed contracts.
+currently contains the generic Artifact tools and the closed
+`esports.match.search` capability. Additional domain capabilities are
+introduced later as independent contracts.
 
 ## Principles
 
@@ -26,6 +27,10 @@ User
   -> LLM
        <-> artifact.grep / artifact.read
              -> session Artifact store
+       <-> esports.match.search
+             -> match capability contract
+             -> PandaScore adapter/client
+             -> validated match observations
 ```
 
 Future domain capabilities follow this seam:
@@ -47,10 +52,16 @@ plugin framework.
 ## Tool registry boundary
 
 `ToolRegistry`, `ToolDefinition`, and `ToolExecutor` are generic runtime
-primitives. The default builder lives in its own module and registers only the
-Artifact implementation. Domain modules must not own the application registry
-builder, and removed capabilities must not be kept as aliases or hidden
-registrations.
+primitives. The default builder lives in the composition root and explicitly
+registers Artifact tools plus accepted domain capabilities. Domain modules must
+not own the application registry builder, and removed capabilities must not be
+kept as aliases or hidden registrations.
+
+The current esports boundary is `esports.match.search`: the capability contract
+owns semantic match inputs and outputs, while the PandaScore adapter translates
+those inputs into provider requests and normalizes complete validated match
+facts. Provider routes and query parameter names stay below the model-facing
+schema.
 
 ## Artifact boundary
 
@@ -70,7 +81,7 @@ as received; no provider-specific or sample-size mutation is applied afterward.
 
 ## Migration order
 
-1. Keep the Artifact-only registry baseline green.
+1. Keep the Artifact baseline green.
 2. Add one domain capability with its own input/output contract and tests.
 3. Register it explicitly after its boundary is accepted.
 4. Delete transitional code instead of preserving compatibility shims.

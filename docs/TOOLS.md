@@ -7,16 +7,24 @@ endpoints or provider implementation details. Large complete responses remain
 outside model context as temporary Artifacts and are explored through generic
 Artifact tools.
 
-The clean-slate default registry currently exposes only:
+The clean-slate default registry currently exposes:
 
 ```text
 artifact.grep
 artifact.read
+esports.match.search
 ```
 
-No domain tool is registered while the capability layer is rebuilt. Future
-domain tools must be added explicitly with a closed schema and focused tests;
-the registry must not grow a universal open selector or deprecated aliases.
+`esports.match.search` is a closed semantic match-search capability. Its input
+uses `id`, `league_id`, `series_id`, `tournament_id`, `team_id`, `name`,
+`lifecycle`, `sort`, `page`, and `limit`. The schema intentionally does not
+expose provider query syntax or provider-private field names. One invocation
+maps to one bounded provider collection request; this first implementation does
+not externalize results as an Artifact.
+
+Future domain tools must be added explicitly with a closed schema and focused
+tests; the registry must not grow a universal open selector or deprecated
+aliases.
 
 ## Artifact tools
 

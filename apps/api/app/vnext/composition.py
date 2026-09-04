@@ -1,8 +1,9 @@
-"""Composition root for the artifact-only vNext runtime."""
+"""Composition root for the vNext runtime and its explicit tool surface."""
 
 from __future__ import annotations
 
 import os
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -16,8 +17,12 @@ from app.vnext.artifacts import (
     ManualResolver,
     SessionArtifactStore,
 )
+from app.vnext.capabilities.esports.match import MatchSearchInput, MatchSearchResult
 from app.vnext.llm.openai_compatible import OpenAICompatibleModelClient
+from app.vnext.providers.pandascore.client import PandaScoreClient
+from app.vnext.providers.pandascore.match_adapter import PandaScoreMatchAdapter
 from app.vnext.tools.artifacts import register_artifact_tools
+from app.vnext.tools.esports import register_match_tool
 from app.vnext.tools.registry import ToolRegistry
 
 _VNEXT_ENV_PATH = Path(__file__).with_name(".env")
@@ -29,6 +34,9 @@ class VNextSettings:
     llm_base_url: str = "https://api.deepseek.com"
     llm_model: str = "deepseek-chat"
     llm_timeout_seconds: float = 90.0
+    pandascore_base_url: str = "https://api.pandascore.co"
+    pandascore_token: str = ""
+    pandascore_timeout_seconds: float = 20.0
     trace_ttl_seconds: int = 72 * 60 * 60
 
     @classmethod
@@ -45,6 +53,17 @@ class VNextSettings:
             or defaults.llm_model,
             llm_timeout_seconds=float(
                 _env_value("DOTAMIND_LLM_TIMEOUT_SECONDS", "90", file_values)
+            ),
+            pandascore_base_url=_env_value(
+                "DOTAMIND_PANDASCORE_BASE_URL", defaults.pandascore_base_url, file_values
+            )
+            or defaults.pandascore_base_url,
+            pandascore_token=_env_value(
+                "DOTAMIND_PANDASCORE_TOKEN", defaults.pandascore_token, file_values
+            )
+            or defaults.pandascore_token,
+            pandascore_timeout_seconds=float(
+                _env_value("DOTAMIND_PANDASCORE_TIMEOUT_SECONDS", "20", file_values)
             ),
             trace_ttl_seconds=int(
                 _env_value("DOTAMIND_VNEXT_TRACE_TTL_SECONDS", "259200", file_values)
@@ -67,6 +86,8 @@ def _env_value(
 class VNextServices:
     """Lifecycle container retained for the application composition seam."""
 
+    match_search: Callable[[MatchSearchInput], Awaitable[MatchSearchResult]] | None = None
+
     async def aclose(self) -> None:
         return None
 
@@ -75,8 +96,14 @@ def build_vnext_services(
     settings: VNextSettings | None = None,
     **_: object,
 ) -> VNextServices:
-    del settings
-    return VNextServices()
+    config = settings or VNextSettings.from_env()
+    client = PandaScoreClient(
+        base_url=config.pandascore_base_url,
+        token=config.pandascore_token,
+        timeout_seconds=config.pandascore_timeout_seconds,
+    )
+    adapter = PandaScoreMatchAdapter(client)
+    return VNextServices(match_search=adapter.search)
 
 
 def build_vnext_registry(
@@ -84,7 +111,8 @@ def build_vnext_registry(
     *,
     settings: VNextSettings | None = None,
 ) -> ToolRegistry:
-    del services, settings
+    config = settings or VNextSettings.from_env()
+    resolved_services = services or build_vnext_services(config)
     registry = ToolRegistry()
     artifact_store = SessionArtifactStore()
     manuals = ManualResolver()
@@ -93,6 +121,8 @@ def build_vnext_registry(
         ArtifactReader(artifact_store, manuals),
         ArtifactGrepper(artifact_store, manuals),
     )
+    if resolved_services.match_search is not None:
+        register_match_tool(registry, resolved_services.match_search)
     return registry
 
 
@@ -101,10 +131,10 @@ def build_vnext_runtime(
     *,
     services: VNextServices | None = None,
 ) -> AgentRuntime:
-    """Compose the configured model client and artifact-only tool surface."""
+    """Compose the configured model client and current vNext tool surface."""
 
-    del services
     config = settings or VNextSettings.from_env()
+    resolved_services = services or build_vnext_services(config)
     model = OpenAICompatibleModelClient(
         api_key=config.llm_api_key,
         base_url=config.llm_base_url,
@@ -113,7 +143,7 @@ def build_vnext_runtime(
     )
     return AgentRuntime(
         model,
-        build_vnext_registry(settings=config),
+        build_vnext_registry(resolved_services, settings=config),
         system_instruction=AGENT_INSTRUCTION,
     )
 

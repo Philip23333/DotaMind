@@ -17,11 +17,22 @@ before a second concrete implementation demonstrates the need.
 
 ## Commit 1: clean-slate tool layer
 
-- Keep the default model-facing registry artifact-only.
+- Establish an artifact-only default model-facing registry baseline.
 - Remove legacy domain tools, provider integrations, sample-policy mutation,
   provider prompt rules, and compatibility aliases.
 - Preserve generic registry, executor, Controller, execution, tracing,
   persistence, and Artifact runtime primitives.
+
+## Commit 2: semantic esports match search (implemented / under acceptance)
+
+- Add the closed `esports.match.search` capability contract.
+- Connect the contract to a thin PandaScore client and match adapter.
+- Keep provider query syntax, transport details, and provider-private field
+  names below the model-facing tool schema.
+- Preserve complete validated match facts in the capability result without
+  adding Artifact externalization to this first bounded implementation.
+- Protect the input/output boundary, request mapping, endpoint selection, and
+  registry inventory with focused tests.
 
 ## Subsequent capability work
 
