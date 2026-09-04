@@ -1,4 +1,4 @@
-"""Model-facing PandaScore-backed esports discovery capability."""
+"""Legacy PandaScore-backed esports discovery capability retained for migration."""
 
 from __future__ import annotations
 

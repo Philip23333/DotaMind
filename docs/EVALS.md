@@ -14,18 +14,13 @@ Provider contract tests use small inline PandaScore-shaped payloads and
 or on a live PandaScore account.  Each test owns only the source fields needed
 to express its rule.
 
-The isolated legacy universal-search suite covers the retained implementation:
-
-| Concern | Required assertion |
-| --- | --- |
-| Public schema | `kind` required; exactly six kinds; no legacy `within`, locator, `recent`, `all`, or Game discovery input |
-| Endpoint allowlist | each kind reaches its intended PandaScore discovery route; no Game discovery endpoint is called |
-| Lifecycle | dedicated lifecycle endpoint rows are not status-filtered again; Team-to-Matches uses correct local filtering; ordering and `truncated` stay explicit |
-| Query | full source-document text can match embedded League/Series/Tournament/Opponent facts; native name filtering cannot cause a false negative |
-| Team constraint | exact Team identity uses a complete source corpus, reports not-found/ambiguous argument errors, and reuses a Provider-local bounded-lifetime index for repeated constraints; unique identities use AND semantics across `/teams/{id}/matches` results |
-| Match enrichment | batch-scoped shared OpenDota evidence is loaded once per search/unique league; deterministic outcomes are retained and unavailable evidence degrades only dependent games to `resolution="unavailable"` |
-| Artifact boundary | oversized final logical tool responses are externalized once in the current session under a fresh opaque ref; previews retain readable structural paths; a failed required write is `artifact_error` |
-| Error mapping | invalid arguments, provider failure, and artifact failure map to the documented tool codes without secrets |
+The isolated legacy `esports.search` suite preserves the retained native-query
+implementation. It is not target-architecture acceptance and must not be read as
+the public Agent contract. Its implementation-preservation coverage is kept in
+`test_esports_search_tool.py`, `test_esports_search_observation.py`,
+`test_pandascore_native_query.py`, `test_pandascore_query_validation.py`, and
+`test_pandascore_manual_artifacts.py`, including source routing, native query
+validation, bounded observations, Artifact externalization, and stable errors.
 
 Focused implementation tests live under `apps/api/tests/vnext/` alongside the
 capability.  Run the focused set before the full vNext non-agent-eval suite.
@@ -60,10 +55,11 @@ complete response that contains material user data.
 ## Agent evaluations
 
 Agent evaluations test composition and answer behavior after deterministic tool
-contracts are already protected.  They should request source-backed facts,
-follow returned opaque Artifact refs with `artifact.read/grep` when a bounded
-`esports.search` preview omits needed details,
-and distinguish:
+contracts are already protected. During Phase A/B there is no
+esports-discovery Agent acceptance because no esports discovery tool is
+model-visible. Agent-level esports acceptance resumes after the six
+resource-shaped tools are registered in Phase C. The currently visible Agent
+surface should request source-backed facts and distinguish:
 
 - execution status;
 - source business result and candidate count;

@@ -5,31 +5,30 @@
 vNext keeps provider facts source-backed.  It does not require every esports or
 game-data source to fit one DotaMind business DTO.
 
-The legacy universal esports discovery envelope is deliberately small:
+Esports discovery is in migration. The retained legacy `esports.search`
+implementation is internal-only and preserves a source-shaped logical result:
 
 ```text
-source
-kind
+resource
+scope
+rows
+has_more
+truncated
 artifact_ref
-facts
+returned_rows
 ```
 
-- `source` identifies the provider;
-- `kind` is DotaMind's esports capability vocabulary; each provider maps its
-  source entities into it;
-- `artifact_ref` addresses the complete stored document;
-- `facts` is a bounded observation of that document.
-
-The envelope preserves provenance and lets the legacy implementation compose.
-It is not a canonical League, Series, Match, Team, or Player model. The target
-resource-shaped tools may expose closed resource/source semantics instead of
-this universal `resource` selector.
+`returned_rows` counts rows in the complete logical response for that call;
+`has_more` reports whether the provider has a later page; `truncated` only
+describes the bounded model-facing preview. This is not a canonical League,
+Series, Match, Team, or Player model. The target resource-shaped tools will
+expose closed resource/source semantics instead of this universal selector.
 
 ## Esports discovery vocabulary
 
 PandaScore has a richer source hierarchy, including games.  The future
 discovery capability must decide its own model-facing vocabulary from the
-current endpoint allowlist; `game` is not a discovery kind: recorded game
+current endpoint allowlist; `game` is not a discovery resource: recorded game
 detail is obtained through `game.detail` after a canonical Valve game ID is
 available.
 

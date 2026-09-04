@@ -113,9 +113,9 @@ legal; `_artifact_path` values inspect data returned by a previous tool call.
 
 ### Search patterns and completion (future agent guidance)
 
-The production agent receives three reusable search shapes, not a fixed
-workflow: recent league matches use league discovery followed by a confirmed
-match relation; `past` uses `sort=["-begin_at"]`, `upcoming` uses
+Future resource-shaped agent guidance may reuse three search shapes, not a
+fixed workflow: recent league matches use league discovery followed by a
+confirmed match relation; `past` uses `sort=["-begin_at"]`, `upcoming` uses
 `sort=["begin_at"]`, and `running` uses the running scope where sorting is
 usually unnecessary. Keep the page size small and stop once enough recent
 matches are supported. If broad recent-match rows are dominated by null
