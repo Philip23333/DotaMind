@@ -30,7 +30,8 @@ that response stays inline. If it is too large, the complete response is stored
 at the Artifact root and the tool returns a bounded observation plus
 `artifact_ref`.
 
-For example, an externalized `esports.search` response is exactly:
+For example, during the resource-shaped migration, an externalized legacy
+`esports.search` response is exactly:
 
 ```json
 {"resource":"tournament","scope":"all","rows":[...],"has_more":false}
@@ -38,7 +39,8 @@ For example, an externalized `esports.search` response is exactly:
 
 It has no Artifact envelope, query copy, source/kind wrapper, schema version, or
 synthetic domain DTO. Preview paths therefore start at `rows`, for example
-`rows.0.matches`.
+`rows.0.matches`. This describes retained internal migration behavior, not the
+target model-facing API.
 
 For every esports search, `returned_rows` is the number of rows in that call's
 complete logical response. It is not a provider-wide total; `has_more` indicates

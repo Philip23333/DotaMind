@@ -194,11 +194,11 @@ def test_esports_search_sanitizes_provider_http_errors() -> None:
     assert "test-token" not in json.dumps(result.model_dump(mode="json"))
 
 
-def test_registry_and_composition_expose_esports_search_without_network_calls() -> None:
+def test_composition_hides_esports_search_but_preserves_native_query_services() -> None:
     services = build_vnext_services(settings=VNextSettings())
     registry = build_vnext_registry(services)
 
-    assert registry.get("esports.search").name == "esports.search"
+    assert "esports.search" not in {tool.name for tool in registry.schemas()}
     assert services.pandascore_capabilities.endpoint("match", "running")
     assert services.pandascore_native_queries is not None
     asyncio.run(services.aclose())

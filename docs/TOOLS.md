@@ -8,39 +8,59 @@ oversized complete tool responses stay outside model context as temporary Artifa
 
 Tool descriptions state a capability; they do not prescribe a fixed workflow.
 
-## Current implemented surface
+## Current temporary model-visible surface
 
 | Tool | Purpose | Target disposition |
 | --- | --- | --- |
-| `esports.search` | Search PandaScore-backed Dota 2 esports resources with validated native query fields | Retain |
 | `game.detail` | Fetch one detailed recorded game by canonical Valve game ID | Retain |
 | `artifact.grep` | Generic stored-document breadth search | Retain |
 | `artifact.read` | Generic stored-document depth read | Retain |
 
-The default Agent runtime exposes exactly these four tools. Historical
-`artifact.search`, `matches.get_detail`, `teams.*`, and `players.*` modules
-remain migration code but are not model-visible.
+The default Agent runtime currently exposes exactly these three tools.
+The legacy `esports.search` implementation remains available to isolated tests
+and internal migration code, but is not registered or model-visible.
 
-## Esports discovery
+## Target esports surface
 
-The previous `esports.search` implementation (kind-based unified search over
-League, Series, Tournament, Match, Team, Player) was removed in the vNext
-cleanup phase. The replacement is a PandaScore-oriented agent tool seam.
+The target model-facing esports surface is six resource-shaped tools:
+
+```text
+esports.league.search
+esports.serie.search
+esports.tournament.search
+esports.match.search
+esports.team.search
+esports.player.search
+```
+
+These tools are not implemented or registered yet. Their closed resource
+schemas will be defined in the next migration phase from the generated
+PandaScore capabilities. Historical `artifact.search`, `matches.get_detail`,
+`teams.*`, and `players.*` modules remain migration code and are not
+model-visible.
+
+## Legacy `esports.search` (internal migration)
+
+The current `esports.search` implementation is a temporary universal resource
+selector over PandaScore resources. It is retained internally so its native
+executor, capabilities, observations, Artifact behavior, and isolated tests
+remain usable during migration. It is not part of the default Agent registry
+and is not the target model-facing contract.
 
 The seam is designed as an agent-facing capability layer:
 
-- The model is responsible for understanding user intent, selecting entity
-  types, and composing multiple tool calls; it never talks to provider APIs.
-- The tool is responsible for a stable discovery interface, validation against
-  generated capabilities, and one native PandaScore collection request.
+- Internal callers may use the implementation for capability validation against
+  generated capabilities and one native PandaScore collection request.
 - Provider-specific fields, endpoints, pagination transport syntax, and private
   IDs stay inside provider implementations. The PandaScore HTTP client remains
   at `app/vnext/providers/pandascore/` below the capability boundary.
-- The tool does not attempt to solve complete user tasks; complex workflows
-  are completed through multiple tool calls.
 
-Input accepts a resource, lifecycle scope, native `filter`, `search`, `range`,
-`sort`, and bounded pagination. Their meanings are distinct:
+Do not treat this universal selector as the target API. The target resource
+tools will expose only their own closed, resource-specific vocabularies.
+
+For internal migration tests, the legacy input accepts a resource, lifecycle
+scope, native `filter`, `search`, `range`, `sort`, and bounded pagination. Their
+meanings are distinct:
 
 - `filter` is native exact filtering, commonly for IDs, relationships, and exact
   values; `search` is provider text-search and is not a substitute for it.
@@ -69,8 +89,7 @@ before making such claims. `truncated=false` means the logical result is
 represented completely inline. Use the returned `_artifact_path` directly as
 `artifact.read(mode="read", path=...)` with that exact ref.
 
-Do not reintroduce a search-engine abstraction, a universal search DTO, or
-scenario-specific query plumbing while the new seam is pending.
+Do not expand this legacy selector or use it to define a universal search DTO.
 
 ### Query discipline
 
@@ -92,7 +111,7 @@ first. `manual:pandascore:index` only discovers available manuals, while a
 resource manual decides its actual query fields. Manuals decide what query is
 legal; `_artifact_path` values inspect data returned by a previous tool call.
 
-### Search patterns and completion
+### Search patterns and completion (future agent guidance)
 
 The production agent receives three reusable search shapes, not a fixed
 workflow: recent league matches use league discovery followed by a confirmed
@@ -178,8 +197,9 @@ exact recorded-game retrieval uses `game.detail(valve_game_id)`.
 
 ## Rejected shapes
 
-- separate League/Series/Tournament/Match/Team model tools;
-- a `pandascore.*` model-facing namespace;
+- a universal `esports.search` with an open `resource` selector and shared
+  filter/search/range vocabulary as the target API;
+- provider-named `pandascore.*` model-facing namespace;
 - a model-facing source-navigation locator for esports discovery;
 - provider-specific Artifact read or grep helpers;
 - an `artifact.produce` tool;

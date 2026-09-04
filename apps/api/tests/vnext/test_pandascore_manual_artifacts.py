@@ -8,13 +8,19 @@ import httpx
 
 from app.vnext.artifacts import (
     PANDASCORE_MANUAL_REFS,
+    ArtifactGrepper,
     ArtifactReader,
     ManualResolver,
     SessionArtifactStore,
+    ToolResponseExternalizer,
 )
 from app.vnext.composition import VNextSettings, build_vnext_registry, build_vnext_services
 from app.vnext.llm.protocol import ToolCall
 from app.vnext.providers.pandascore.adapter import PandaScoreAdapter
+from app.vnext.tools.artifacts import register_artifact_tools
+from app.vnext.tools.domain.esports import register_esports_tools
+from app.vnext.tools.domain.esports_observation import EsportsSearchObservationBuilder
+from app.vnext.tools.registry import ToolRegistry
 
 
 def test_all_pandascore_manual_refs_read_generated_content() -> None:
@@ -123,10 +129,10 @@ def test_static_manuals_work_through_registry_tools() -> None:
     assert traversal.error is not None and traversal.error.code == "artifact_not_found"
     assert nested_traversal.error is not None
     assert nested_traversal.error.code == "artifact_not_found"
-    assert "resource-specific" in registry.get("esports.search").description
+    assert "esports.search" not in {tool.name for tool in registry.schemas()}
 
 
-def test_manual_read_and_esports_search_share_one_composed_registry() -> None:
+def test_manual_read_and_legacy_esports_search_can_share_internal_services() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/dota2/tournaments"
         assert request.url.params["filter[serie_id]"] == "10828"
@@ -140,7 +146,18 @@ def test_manual_read_and_esports_search_share_one_composed_registry() -> None:
 
     async def exercise():
         services = build_vnext_services(settings=VNextSettings(), pandascore=adapter)
-        registry = build_vnext_registry(services)
+        store = SessionArtifactStore()
+        registry = ToolRegistry()
+        register_artifact_tools(
+            registry,
+            ArtifactReader(store, ManualResolver()),
+            ArtifactGrepper(store, ManualResolver()),
+        )
+        register_esports_tools(
+            registry,
+            services.pandascore_native_queries,
+            EsportsSearchObservationBuilder(ToolResponseExternalizer(store)),
+        )
         try:
             manual = await registry.execute(
                 ToolCall(

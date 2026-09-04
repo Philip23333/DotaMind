@@ -17,26 +17,28 @@ esports DTO until a second real provider demonstrates that need.
 
 ## Current capability path
 
-### 1. Esports discovery (PandaScore-oriented tool seam)
+### 1. Esports discovery (resource-shaped migration)
 
-The former unified `esports.search` implementation was removed as part of the
-vNext cleanup so the replacement is not constrained by it. The current
-PandaScore-oriented tool seam provides validated native collection queries:
+The migration proceeds in four phases:
 
-- One small semantic model-facing contract; no search-engine abstraction, no
-  universal search DTO, no scenario routers.
-- The model chooses entity types and composes multiple calls; the tool validates
-  native query grammar and performs one provider request.
-- Provider names, endpoints, pagination, and private IDs stay below the
-  capability boundary. The PandaScore HTTP client lives at
-  `app/vnext/providers/pandascore/` and is not deleted.
-- Preserve PandaScore source-shaped rows; do not reintroduce canonical
-  League/Series/Match/Team DTOs or source-locator navigation. Oversized
-  logical responses are externalized once as temporary session documents and
-  exposed as bounded structural previews with fresh opaque refs.
-- Do not reintroduce the removed kind/`time_scope`/`teams` unified contract as
-  the new schema; design from the current endpoint allowlist in
-  `docs/reference/pandascore-endpoints.md`.
+- Phase A: hide the legacy universal `esports.search` entry from the default
+  Agent registry while retaining its executor, capabilities, observations,
+  Artifact behavior, and isolated tests.
+- Phase B: define one closed schema per PandaScore resource from the generated
+  capability manuals. Resource relation IDs may be inputs only where the
+  corresponding resource contract supports them.
+- Phase C: register the six resource-shaped tools:
+  `esports.league.search`, `esports.serie.search`,
+  `esports.tournament.search`, `esports.match.search`,
+  `esports.team.search`, and `esports.player.search`.
+- Phase D: after the new path is accepted, remove the legacy universal search
+  implementation and its migration-only runtime discipline.
+
+The target keeps provider names, HTTP routes, auth, wire pagination, and adapter
+details below the capability boundary. It preserves complete PandaScore
+source-shaped facts and uses bounded temporary Artifacts for oversized results.
+Do not build a provider router, universal esports DTO, or scenario workflow as a
+substitute for the six closed resource contracts.
 
 ### 2. Recorded-game detail
 

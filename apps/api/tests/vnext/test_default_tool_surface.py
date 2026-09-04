@@ -14,9 +14,9 @@ def test_default_registry_exposes_only_current_capabilities() -> None:
     assert tool_names == {
         "artifact.grep",
         "artifact.read",
-        "esports.search",
         "game.detail",
     }
+    assert "esports.search" not in tool_names
     assert "game_summary" not in json.dumps(
         [tool.model_dump(mode="json") for tool in registry.schemas()]
     )

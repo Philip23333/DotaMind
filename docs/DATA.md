@@ -5,7 +5,7 @@
 vNext keeps provider facts source-backed.  It does not require every esports or
 game-data source to fit one DotaMind business DTO.
 
-The esports discovery capability envelope stays deliberately small:
+The legacy universal esports discovery envelope is deliberately small:
 
 ```text
 source
@@ -20,9 +20,10 @@ facts
 - `artifact_ref` addresses the complete stored document;
 - `facts` is a bounded observation of that document.
 
-The envelope preserves provenance and lets capabilities compose.  It is not a
-canonical League, Series, Match, Team, or Player model. The removed unified
-`esports.search` contract must not be rebuilt as the new schema.
+The envelope preserves provenance and lets the legacy implementation compose.
+It is not a canonical League, Series, Match, Team, or Player model. The target
+resource-shaped tools may expose closed resource/source semantics instead of
+this universal `resource` selector.
 
 ## Esports discovery vocabulary
 
@@ -63,20 +64,26 @@ that the source model allows but DotaMind does not yet consume.
 The model receives the complete response inline when it is small. For a large
 logical tool response it receives a generic bounded observation and a temporary
 session ref, then inspects that one response with `artifact.read` or
-`artifact.grep`. A provider-private ID may be evidence inside a response; it is
-never a supported tool input.
+`artifact.grep`. In the legacy implementation, provider-private IDs may remain
+evidence inside a response; the target contracts distinguish those from the
+resource relation IDs described below.
 
-Large `esports.search` responses store the complete source-shaped logical page
-at the Artifact root (`resource`, `scope`, `rows`, `has_more`), not under query
-or result envelopes. Preview pointers therefore use paths such as
-`rows.0.matches`.
+During migration, legacy `esports.search` responses store the complete
+source-shaped logical page at the Artifact root (`resource`, `scope`, `rows`,
+`has_more`), not under query or result envelopes. Preview pointers therefore
+use paths such as `rows.0.matches`. This is internal migration behavior, not the
+target resource-tool API.
 
 ## Identity
 
 Provider identity and Dota identity are different.
 
-- Provider-private IDs identify a record only inside that provider and stay
-  behind the Adapter/Provider boundary.
+- HTTP paths, auth tokens, transport fields, and other provider-private
+  transport data stay behind the Adapter/Provider boundary.
+- Resource relation IDs such as `league_id`, `serie_id`, `tournament_id`, and
+  `opponent_id` may be model-facing inputs when explicitly defined by the
+  corresponding closed resource tool contract. They are not cross-provider
+  canonical IDs.
 - Valve-native facts, including `valve_game_id`, `hero_id`, `item_id`, and
   `ability_id`, are canonical Dota facts and may be visible directly.
 

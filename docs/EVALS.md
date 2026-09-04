@@ -14,7 +14,7 @@ Provider contract tests use small inline PandaScore-shaped payloads and
 or on a live PandaScore account.  Each test owns only the source fields needed
 to express its rule.
 
-The core search suite covers:
+The isolated legacy universal-search suite covers the retained implementation:
 
 | Concern | Required assertion |
 | --- | --- |
@@ -34,16 +34,16 @@ The recorded-game detail suite additionally checks:
 
 | Concern | Required assertion |
 | --- | --- |
-| Default tool surface | Exactly `esports.search`, `game.detail`, `artifact.grep`, and `artifact.read` are model-visible; `artifact.search` is `unknown_tool` |
+| Default tool surface | Exactly `game.detail`, `artifact.grep`, and `artifact.read` are model-visible; legacy `esports.search` and `artifact.search` are `unknown_tool` |
 | Public schema | `game.detail` accepts exactly one positive `valve_game_id` |
 | Source fidelity | Unknown top-level and nested OpenDota business fields survive Adapter and the complete logical response retrieved by `artifact.read` |
 | Identity and failures | Returned `match_id` mismatch and OpenDota timeout/HTTP/schema failure are `provider_error`; externalization failure is `artifact_error` |
 | Session isolation | Each oversized response receives a new `artifact:tool:*` ref; another session cannot read it |
 | Generic retrieval | `artifact.read` and `artifact.grep` require one exact response/manual ref and have no source-specific behavior |
 
-Esports-discovery acceptance returns when the new PandaScore-oriented tool seam
-is implemented; it must not be rebuilt around the removed unified-search
-contract.
+The default-surface acceptance covers the temporary three-tool runtime. The
+legacy `esports.search` tests remain isolated and are not model-surface
+acceptance for the target resource-shaped migration.
 
 ## Live smoke tests
 
@@ -70,14 +70,12 @@ and distinguish:
 - resolution status for Valve IDs;
 - whether the required evidence reached the final answer.
 
-For esports query discipline, record the number of tool calls, model steps,
-`unsupported_field`, `invalid_arguments`, and resource-manual reads. A query
-must not guess an unestablished resource field before reading that resource's
-manual, and must not retry an `unsupported_field` or `unsupported_scope` idea
-without that manual. The index manual is not evidence for resource-specific
-field support. Layer 3 agent evaluations additionally record calls made after
-sufficient evidence and unsupported claims in the final answer. The target for
-both metrics is zero. They should cover recent league matches, a specific
+Layer 3 evaluations may still record tool calls, model steps, invalid arguments,
+and unsupported claims for migration comparison, but manual-first behavior is
+not a future target contract. The target resource-shaped acceptance records
+whether each tool's own JSON Schema expresses only its supported fields, has no
+open `resource` selector, and exposes cross-resource relation fields only where
+that resource supports them. It should cover recent league matches, a specific
 edition/stage, latest tournament status, and a multi-row result where
 `artifact.grep` must not be used as an aggregation engine.
 

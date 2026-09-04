@@ -34,8 +34,6 @@ from app.vnext.providers.pandascore.capabilities import PandaScoreCapabilities
 from app.vnext.providers.pandascore.locator import PandaScoreLocatorIndex
 from app.vnext.providers.pandascore.query import PandaScoreNativeQueryExecutor
 from app.vnext.tools.artifacts import register_artifact_tools
-from app.vnext.tools.domain.esports import register_esports_tools
-from app.vnext.tools.domain.esports_observation import EsportsSearchObservationBuilder
 from app.vnext.tools.domain.game import register_game_tools
 from app.vnext.tools.registry import ToolRegistry
 
@@ -207,11 +205,6 @@ def build_vnext_registry(
         registry,
         ArtifactReader(artifact_store, manuals),
         ArtifactGrepper(artifact_store, manuals),
-    )
-    register_esports_tools(
-        registry,
-        resolved_services.pandascore_native_queries,
-        EsportsSearchObservationBuilder(externalizer),
     )
     return registry
 

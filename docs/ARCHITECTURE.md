@@ -2,28 +2,32 @@
 
 ## Status
 
-This document defines the vNext target architecture. The default model-visible
-surface is `esports.search`, `game.detail`, `artifact.grep`, and `artifact.read`.
+This document defines the vNext target architecture. The temporary default
+model-visible surface is `game.detail`, `artifact.grep`, and `artifact.read`.
+The legacy universal `esports.search` implementation remains internal during
+migration. The target esports surface is six resource-shaped search tools that
+are not yet registered.
 
-`esports.search` is a PandaScore-backed semantic discovery capability. Its
-compact query grammar is validated against the generated PandaScore capability
-document before one native collection request runs. Transitional Team, Player,
-Series, and `matches.get_detail` code remains internally for migration, but
-those tools are not registered in the default Agent runtime.
+The legacy `esports.search` implementation is a PandaScore-backed internal
+migration capability. Its compact query grammar is validated against the
+generated PandaScore capability document before one native collection request
+runs. It is not registered in the default Agent runtime. Transitional Team,
+Player, Series, and `matches.get_detail` code remains internally for migration.
 
 ## Principles
 
 - The model chooses which broad capability observations to combine; application
   code does not encode question-specific workflows.
-- Model-facing tools describe capabilities, never PandaScore endpoints or one
-  tool per provider object type.
+- Model-facing tools may express stable esports resource/source semantics; they
+  still never expose PandaScore endpoints or transport details.
 - A source implementation preserves validated, source-shaped business facts. It
   is not required to fit a universal League/Series/Tournament/Match DTO.
 - Deterministic code owns transport, schema validation, source filtering,
   canonical Valve identity resolution, Artifact persistence, bounds, and stable
   errors.
-- Raw provider IDs remain source evidence inside a stored document, not a
-  model-facing tool language.
+- Transport-private provider IDs remain source evidence inside stored documents,
+  not a model-facing tool language. Resource relation IDs may be model-facing
+  only when a corresponding closed resource contract explicitly defines them.
 
 ## System boundary
 
@@ -32,19 +36,25 @@ User
   -> Product Chat API
   -> Agent Runtime
   -> LLM
-       <-> esports.search
-             -> PandaScoreNativeQueryExecutor -> PandaScoreAdapter
-       <-> artifact.grep / artifact.read
-             -> session Artifact store
        <-> game.detail
              -> GameDetailService -> OpenDotaAdapter
+       <-> artifact.grep / artifact.read
+             -> session Artifact store
 ```
 
-`esports.search` keeps provider endpoints and endpoint-local fields below the
-tool boundary. A small source-shaped collection page remains inline. For a
-large page, it stores the complete logical response in the current session and
-returns a bounded structural preview plus a fresh opaque string ref; it does not
-expose provider endpoints or paths.
+Target after resource-shaped migration:
+
+```text
+LLM
+  <-> esports.<resource>.search (six closed resource contracts)
+        -> resource-specific capability/query layer -> PandaScore implementation
+```
+
+The target `esports.<resource>.search` tools keep provider endpoints, auth, wire
+pagination, and adapter details below the tool boundary. The legacy
+`esports.search` implementation still stores complete logical responses and
+returns bounded observations for internal migration tests; it is not registered
+in the default Agent runtime.
 
 ## Capability pattern
 
@@ -77,12 +87,13 @@ assembly. A Service owns capability validation and source retrieval. A Provider 
 source filtering, pagination, ordering, and source-specific enrichment. An
 Adapter owns only provider HTTP transport and provider schema parsing.
 
-The esports discovery seam uses one small semantic model-facing contract;
-provider names, endpoints, pagination transport syntax, and private IDs remain
-below that contract. It does not encode scenario-specific workflows or a
-universal search DTO. Its observation policy preserves complete source-shaped
-rows in one temporary response document when the serialized response is large, while keeping
-discovery scalars and structural pointers in the immediate bounded result.
+The target esports discovery seam uses one closed model-facing contract per
+resource. Each contract may expose validated resource/source semantics and
+resource relation IDs, while provider names, endpoints, wire pagination, auth,
+and adapter details remain below it. The six contracts do not form a universal
+open resource selector or encode scenario-specific workflows. During migration,
+the legacy implementation preserves complete source-shaped rows in temporary
+Artifacts and bounded observations for its isolated tests.
 
 ## PandaScore provider surface (preserved)
 
@@ -172,11 +183,13 @@ not reintroduce PandaScore Game discovery as a model tool.
 ## Rejected designs
 
 - provider-named model tool namespaces;
-- a model-facing League -> Series -> Match -> Game navigation workflow;
+- a model-facing League -> Series -> Match -> Game navigation workflow hard-coded
+  into a universal tool;
 - a universal cross-provider esports DTO;
-- a unified search-engine abstraction with kind/`time_scope`/`teams` plumbing
-  rebuilt from the removed `esports.search` contract;
-- provider-private IDs as capability inputs;
+- a universal open `esports.search` resource selector with shared
+  filter/search/range plumbing as the target contract;
+- transport-private provider IDs as capability inputs; resource relation IDs may
+  be inputs when explicitly defined by the corresponding resource contract;
 - a provider router/plugin framework before a second provider exists;
 - PandaScore Game detail endpoints outside the allowlist;
 - provider-native filtering that can exclude a capability-level query match;

@@ -113,22 +113,15 @@ def test_esports_query_discipline_allows_only_name_search_without_a_manual() -> 
     assert "Do not outline a known manual:pandascore:* ref" in instruction
 
 
-def test_composed_esports_instructions_cover_patterns_completion_and_evidence() -> None:
-    assert "Recent league matches" in ESPORTS_AGENT_INSTRUCTION
-    assert 'past use sort ["-begin_at"]' in ESPORTS_AGENT_INSTRUCTION
-    assert 'for upcoming' in ESPORTS_AGENT_INSTRUCTION
-    assert 'sort ["begin_at"]' in ESPORTS_AGENT_INSTRUCTION
-    assert "running use the running scope" in ESPORTS_AGENT_INSTRUCTION
-    assert "A specific edition or stage" in ESPORTS_AGENT_INSTRUCTION
-    assert "Latest tournament status" in ESPORTS_AGENT_INSTRUCTION
+def test_active_esports_instructions_keep_only_completion_and_evidence() -> None:
+    assert "Recent league matches" not in ESPORTS_AGENT_INSTRUCTION
+    assert "A specific edition or stage" not in ESPORTS_AGENT_INSTRUCTION
+    assert "Latest tournament status" not in ESPORTS_AGENT_INSTRUCTION
     assert "Before every additional tool call" in ESPORTS_AGENT_INSTRUCTION
     assert "Naming the winning team or player requires an explicit" in ESPORTS_AGENT_INSTRUCTION
     assert "Do not resolve a raw winner_id" in ESPORTS_AGENT_INSTRUCTION
     assert "to a name from model knowledge" in ESPORTS_AGENT_INSTRUCTION
     assert "not an aggregation engine" in ESPORTS_AGENT_INSTRUCTION
-    assert "do not widen the page" in ESPORTS_AGENT_INSTRUCTION
-    assert "Relative-time wording" in ESPORTS_AGENT_INSTRUCTION
-    assert "Preserve source stage labels" in ESPORTS_AGENT_INSTRUCTION
 
 
 def test_single_tool_call_result_then_final() -> None:
