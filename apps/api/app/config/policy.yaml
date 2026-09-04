@@ -88,7 +88,7 @@ conversation:
 planning:
   runtime:
     max_replans: 1
-    max_tool_calls_total: 16
+    max_tool_calls_total: 32
     max_controller_calls: 2
     max_answer_calls: 2
     max_elapsed_seconds: 60
