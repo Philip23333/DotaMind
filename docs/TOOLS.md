@@ -17,6 +17,7 @@ artifact.read
 esports.league.search
 esports.series.search
 esports.tournament.search
+esports.tournament.rosters
 esports.match.search
 esports.team.search
 esports.player.search
@@ -52,6 +53,7 @@ Capability status:
 League: implemented
 Series: implemented
 Tournament: implemented
+Tournament rosters: implemented
 Match: implemented
 Team: implemented
 Player: implemented
@@ -72,6 +74,14 @@ league summary. Use `league_id` and `year` for a bounded edition lookup.
 accepts `id`, `series_id`, `name`, `page`, and `limit`, and returns the semantic
 `series_id` together with stage timing. Provider-private `serie_id` is not part
 of the model-facing contract.
+
+`esports.tournament.rosters` returns tournament-time rosters for one known
+tournament stage. It requires `tournament_id` from `esports.tournament.search`
+and accepts an optional `team_id` to filter the normalized response to one team.
+This is not the team's current contracted roster, and it does not prove the
+exact five players who appeared in every individual match. Use this capability
+for tournament roster facts instead of reconstructing historical rosters with
+`esports.player.search(team_id=...)`.
 
 `esports.match.search` is a closed semantic match-search capability. Its input
 uses `id`, `league_id`, `series_id`, `tournament_id`, `team_id`, `name`,

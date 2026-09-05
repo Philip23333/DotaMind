@@ -6,7 +6,10 @@ from typing import Any
 import httpx
 import pytest
 
-from app.vnext.capabilities.esports.tournament import TournamentSearchInput
+from app.vnext.capabilities.esports.tournament import (
+    TournamentRostersInput,
+    TournamentSearchInput,
+)
 from app.vnext.providers.pandascore.client import PandaScoreClient
 from app.vnext.providers.pandascore.tournament_adapter import PandaScoreTournamentAdapter
 
@@ -33,6 +36,30 @@ def _row(**overrides: Any) -> dict[str, Any]:
     }
     row.update(overrides)
     return row
+
+
+def _roster_row(
+    team_id: int = 128329,
+    team_name: str = "Xtreme Gaming",
+    acronym: str = "XG",
+    players: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    return {
+        "team": {"id": team_id, "name": team_name, "acronym": acronym},
+        "players": players
+        if players is not None
+        else [
+            {
+                "id": 123 + index,
+                "name": name,
+                "first_name": None if index == 0 else f"First{index}",
+                "last_name": None if index == 0 else f"Last{index}",
+                "role": None if index == 0 else "player",
+                "current_team": {"id": team_id, "name": team_name},
+            }
+            for index, name in enumerate(("Ame", "Xm", "NothingToSay", "Pyw", "XinQ"))
+        ],
+    }
 
 
 def test_tournament_mapping_uses_one_collection_request() -> None:
@@ -88,3 +115,66 @@ def test_tournament_normalization_translates_series_identity(row: dict[str, Any]
     assert not hasattr(item, "slug")
     assert not hasattr(item, "tier")
     assert not hasattr(item, "prizepool")
+
+
+def test_tournament_rosters_uses_tournament_roster_endpoint() -> None:
+    calls: list[tuple[str, dict[str, str]]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append((request.url.path, dict(request.url.params)))
+        return httpx.Response(200, json=[_roster_row()], request=request)
+
+    result = asyncio.run(
+        _adapter(handler).rosters(TournamentRostersInput(tournament_id=14384))
+    )
+
+    assert calls == [("/tournaments/14384/rosters", {})]
+    roster = result.items[0]
+    assert roster.team.model_dump() == {
+        "id": 128329,
+        "name": "Xtreme Gaming",
+        "acronym": "XG",
+    }
+    assert len(roster.players) == 5
+    assert roster.players[0].model_dump() == {
+        "id": 123,
+        "name": "Ame",
+        "first_name": None,
+        "last_name": None,
+        "role": None,
+    }
+    assert not hasattr(roster.players[0], "current_team")
+
+
+def test_tournament_rosters_filters_team_locally() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json=[
+                _roster_row(),
+                _roster_row(team_id=999, team_name="Example Team", acronym="EX"),
+            ],
+            request=request,
+        )
+
+    result = asyncio.run(
+        _adapter(handler).rosters(
+            TournamentRostersInput(tournament_id=14384, team_id=999)
+        )
+    )
+
+    assert len(result.items) == 1
+    assert result.items[0].team.id == 999
+
+
+def test_tournament_rosters_missing_team_returns_empty_result() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=[_roster_row()], request=request)
+
+    result = asyncio.run(
+        _adapter(handler).rosters(
+            TournamentRostersInput(tournament_id=14384, team_id=404)
+        )
+    )
+
+    assert result.items == []

@@ -25,6 +25,8 @@ from app.vnext.capabilities.esports.player import PlayerSearchInput, PlayerSearc
 from app.vnext.capabilities.esports.series import SeriesSearchInput, SeriesSearchResult
 from app.vnext.capabilities.esports.team import TeamSearchInput, TeamSearchResult
 from app.vnext.capabilities.esports.tournament import (
+    TournamentRostersInput,
+    TournamentRostersResult,
     TournamentSearchInput,
     TournamentSearchResult,
 )
@@ -43,6 +45,7 @@ from app.vnext.tools.esports import (
     register_player_tool,
     register_series_tool,
     register_team_tool,
+    register_tournament_rosters_tool,
     register_tournament_tool,
 )
 from app.vnext.tools.registry import ToolRegistry
@@ -53,6 +56,9 @@ LeagueSearchService = Callable[[LeagueSearchInput], Awaitable[LeagueSearchResult
 SeriesSearchService = Callable[[SeriesSearchInput], Awaitable[SeriesSearchResult]]
 TournamentSearchService = Callable[
     [TournamentSearchInput], Awaitable[TournamentSearchResult]
+]
+TournamentRostersService = Callable[
+    [TournamentRostersInput], Awaitable[TournamentRostersResult]
 ]
 MatchSearchService = Callable[[MatchSearchInput], Awaitable[MatchSearchResult]]
 PlayerSearchService = Callable[[PlayerSearchInput], Awaitable[PlayerSearchResult]]
@@ -123,6 +129,7 @@ class VNextServices:
     match_search: MatchSearchService | None = None
     team_search: TeamSearchService | None = None
     player_search: PlayerSearchService | None = None
+    tournament_rosters: TournamentRostersService | None = None
 
     async def aclose(self) -> None:
         return None
@@ -148,6 +155,7 @@ def build_vnext_services(
         league_search=league_adapter.search,
         series_search=series_adapter.search,
         tournament_search=tournament_adapter.search,
+        tournament_rosters=tournament_adapter.rosters,
         match_search=match_adapter.search,
         team_search=team_adapter.search,
         player_search=player_adapter.search,
@@ -179,6 +187,11 @@ def build_vnext_registry(
         register_series_tool(registry, resolved_services.series_search)
     if resolved_services.tournament_search is not None:
         register_tournament_tool(registry, resolved_services.tournament_search)
+    if resolved_services.tournament_rosters is not None:
+        register_tournament_rosters_tool(
+            registry,
+            resolved_services.tournament_rosters,
+        )
     if resolved_services.match_search is not None:
         register_match_tool(registry, resolved_services.match_search)
     if resolved_services.team_search is not None:

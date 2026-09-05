@@ -68,6 +68,17 @@ before a second concrete implementation demonstrates the need.
 - Protect one-request mapping, normalization, composability, and the exact
   eight-tool registry inventory with focused tests.
 
+## Commit 6: tournament-time roster capability (implemented / under acceptance)
+
+- Add the closed `esports.tournament.rosters` capability for a known tournament
+  stage with an optional deterministic `team_id` filter.
+- Use the PandaScore `/tournaments/{tournament_id}/rosters` collection and
+  normalize only tournament-time team/player roster facts.
+- Keep current team membership and exact per-match lineups outside this
+  capability's contract.
+- Reuse the shared result processor and protect the endpoint path, normalization,
+  local filtering, schema boundary, and nine-tool registry inventory.
+
 ## Subsequent capability work
 
 1. Define one closed semantic capability contract.

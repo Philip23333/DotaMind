@@ -28,6 +28,11 @@ from .team import TeamItem, TeamModel, TeamSearchInput, TeamSearchResult
 from .tournament import (
     TournamentItem,
     TournamentModel,
+    TournamentRosterItem,
+    TournamentRosterPlayer,
+    TournamentRostersInput,
+    TournamentRostersResult,
+    TournamentRosterTeam,
     TournamentSearchInput,
     TournamentSearchResult,
 )
@@ -59,6 +64,11 @@ __all__ = [
     "TeamSummary",
     "TournamentItem",
     "TournamentModel",
+    "TournamentRosterItem",
+    "TournamentRosterPlayer",
+    "TournamentRosterTeam",
+    "TournamentRostersInput",
+    "TournamentRostersResult",
     "TournamentSearchInput",
     "TournamentSearchResult",
 ]

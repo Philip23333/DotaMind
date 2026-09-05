@@ -5,8 +5,9 @@
 The tool layer is in a clean-slate rebuild. The default LLM-facing registry
 currently contains the generic Artifact tools and the closed
 `esports.league.search`, `esports.series.search`,
-`esports.tournament.search`, `esports.match.search`, `esports.team.search`, and
-`esports.player.search` capabilities.
+`esports.tournament.search`, `esports.tournament.rosters`,
+`esports.match.search`, `esports.team.search`, and `esports.player.search`
+capabilities.
 Additional domain capabilities are introduced later as independent contracts.
 
 ## Principles
@@ -41,6 +42,10 @@ User
              -> tournament capability contract
              -> PandaScore adapter/client
              -> tournament observations
+       <-> esports.tournament.rosters
+             -> tournament roster capability contract
+             -> PandaScore adapter/client
+             -> tournament-time roster observations
        <-> esports.match.search
              -> match capability contract
              -> PandaScore adapter/client
@@ -86,8 +91,9 @@ application registry builder, and removed capabilities must not be kept as
 aliases or hidden registrations.
 
 The current esports boundaries are `esports.league.search`,
-`esports.series.search`, `esports.tournament.search`, `esports.match.search`,
-`esports.team.search`, and `esports.player.search`. Each capability owns
+`esports.series.search`, `esports.tournament.search`,
+`esports.tournament.rosters`, `esports.match.search`, `esports.team.search`,
+and `esports.player.search`. Each capability owns
 semantic inputs and outputs, while its thin PandaScore adapter translates those
 inputs into one provider request and normalizes validated facts. All six
 adapters share one `PandaScoreClient` at composition time; provider routes and

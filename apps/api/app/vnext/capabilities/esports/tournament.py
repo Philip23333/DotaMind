@@ -57,9 +57,52 @@ class TournamentSearchResult(TournamentModel):
     limit: int
 
 
+class TournamentRostersInput(TournamentModel):
+    tournament_id: int = Field(
+        gt=0,
+        description="Exact tournament ID whose tournament-time rosters should be returned.",
+    )
+    team_id: int | None = Field(
+        default=None,
+        gt=0,
+        description=(
+            "Optional exact team ID. When provided, only return that team's "
+            "tournament roster."
+        ),
+    )
+
+
+class TournamentRosterPlayer(TournamentModel):
+    id: int
+    name: str
+    first_name: str | None = None
+    last_name: str | None = None
+    role: str | None = None
+
+
+class TournamentRosterTeam(TournamentModel):
+    id: int
+    name: str
+    acronym: str | None = None
+
+
+class TournamentRosterItem(TournamentModel):
+    team: TournamentRosterTeam
+    players: list[TournamentRosterPlayer]
+
+
+class TournamentRostersResult(TournamentModel):
+    items: list[TournamentRosterItem]
+
+
 __all__ = [
     "TournamentItem",
     "TournamentModel",
+    "TournamentRosterItem",
+    "TournamentRosterPlayer",
+    "TournamentRosterTeam",
+    "TournamentRostersInput",
+    "TournamentRostersResult",
     "TournamentSearchInput",
     "TournamentSearchResult",
 ]

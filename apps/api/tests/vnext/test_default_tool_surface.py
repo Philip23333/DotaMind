@@ -17,6 +17,7 @@ def test_default_registry_exposes_only_current_capabilities() -> None:
         "esports.league.search",
         "esports.series.search",
         "esports.tournament.search",
+        "esports.tournament.rosters",
         "esports.match.search",
         "esports.team.search",
         "esports.player.search",
