@@ -12,7 +12,7 @@ class PandaScoreConfigurationError(RuntimeError):
 
 
 class PandaScoreProtocolError(RuntimeError):
-    """Raised when a collection endpoint returns an unexpected payload."""
+    """Raised when an endpoint returns an unexpected payload."""
 
 
 class PandaScoreClient:
@@ -57,6 +57,29 @@ class PandaScoreClient:
             )
 
         return [item for item in payload if isinstance(item, dict)]
+
+    async def get_object(self, path: str) -> dict[str, Any]:
+        """Fetch a PandaScore endpoint whose response must be a JSON object."""
+        if not self.token:
+            raise PandaScoreConfigurationError("PandaScore token is not configured")
+
+        async with httpx.AsyncClient(
+            base_url=self.base_url,
+            headers={
+                "Authorization": f"Bearer {self.token}",
+                "Accept": "application/json",
+            },
+            timeout=self.timeout_seconds,
+            transport=self.transport,
+        ) as client:
+            response = await client.get(path)
+            response.raise_for_status()
+            payload = response.json()
+
+        if not isinstance(payload, dict):
+            raise PandaScoreProtocolError("expected object response")
+
+        return payload
 
 
 __all__ = [

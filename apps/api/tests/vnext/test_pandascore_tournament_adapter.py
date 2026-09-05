@@ -10,7 +10,10 @@ from app.vnext.capabilities.esports.tournament import (
     TournamentRostersInput,
     TournamentSearchInput,
 )
-from app.vnext.providers.pandascore.client import PandaScoreClient
+from app.vnext.providers.pandascore.client import (
+    PandaScoreClient,
+    PandaScoreProtocolError,
+)
 from app.vnext.providers.pandascore.tournament_adapter import PandaScoreTournamentAdapter
 
 
@@ -45,7 +48,9 @@ def _roster_row(
     players: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     return {
-        "team": {"id": team_id, "name": team_name, "acronym": acronym},
+        "id": team_id,
+        "name": team_name,
+        "acronym": acronym,
         "players": players
         if players is not None
         else [
@@ -122,7 +127,11 @@ def test_tournament_rosters_uses_tournament_roster_endpoint() -> None:
 
     def handler(request: httpx.Request) -> httpx.Response:
         calls.append((request.url.path, dict(request.url.params)))
-        return httpx.Response(200, json=[_roster_row()], request=request)
+        return httpx.Response(
+            200,
+            json={"rosters": [_roster_row()], "type": "Team"},
+            request=request,
+        )
 
     result = asyncio.run(
         _adapter(handler).rosters(TournamentRostersInput(tournament_id=14384))
@@ -150,10 +159,13 @@ def test_tournament_rosters_filters_team_locally() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
             200,
-            json=[
-                _roster_row(),
-                _roster_row(team_id=999, team_name="Example Team", acronym="EX"),
-            ],
+            json={
+                "rosters": [
+                    _roster_row(),
+                    _roster_row(team_id=999, team_name="Example Team", acronym="EX"),
+                ],
+                "type": "Team",
+            },
             request=request,
         )
 
@@ -169,7 +181,11 @@ def test_tournament_rosters_filters_team_locally() -> None:
 
 def test_tournament_rosters_missing_team_returns_empty_result() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json=[_roster_row()], request=request)
+        return httpx.Response(
+            200,
+            json={"rosters": [_roster_row()], "type": "Team"},
+            request=request,
+        )
 
     result = asyncio.run(
         _adapter(handler).rosters(
@@ -178,3 +194,37 @@ def test_tournament_rosters_missing_team_returns_empty_result() -> None:
     )
 
     assert result.items == []
+
+
+def test_tournament_rosters_rejects_unsupported_roster_type() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"rosters": [], "type": "Player"},
+            request=request,
+        )
+
+    with pytest.raises(
+        PandaScoreProtocolError,
+        match="unsupported tournament roster type: 'Player'",
+    ):
+        asyncio.run(
+            _adapter(handler).rosters(TournamentRostersInput(tournament_id=14384))
+        )
+
+
+def test_tournament_rosters_rejects_non_list_rosters() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"rosters": {}, "type": "Team"},
+            request=request,
+        )
+
+    with pytest.raises(
+        PandaScoreProtocolError,
+        match="expected tournament roster response to contain a rosters list",
+    ):
+        asyncio.run(
+            _adapter(handler).rosters(TournamentRostersInput(tournament_id=14384))
+        )

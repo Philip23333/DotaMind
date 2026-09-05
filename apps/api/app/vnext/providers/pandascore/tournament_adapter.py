@@ -15,7 +15,7 @@ from app.vnext.capabilities.esports.tournament import (
     TournamentSearchResult,
 )
 
-from .client import PandaScoreClient
+from .client import PandaScoreClient, PandaScoreProtocolError
 
 
 class PandaScoreTournamentAdapter:
@@ -34,10 +34,20 @@ class PandaScoreTournamentAdapter:
         )
 
     async def rosters(self, query: TournamentRostersInput) -> TournamentRostersResult:
-        rows = await self.client.get_list(
-            f"/tournaments/{query.tournament_id}/rosters",
-            params={},
+        payload = await self.client.get_object(
+            f"/tournaments/{query.tournament_id}/rosters"
         )
+        rows = payload.get("rosters")
+        if not isinstance(rows, list):
+            raise PandaScoreProtocolError(
+                "expected tournament roster response to contain a rosters list"
+            )
+        roster_type = payload.get("type")
+        if roster_type != "Team":
+            raise PandaScoreProtocolError(
+                f"unsupported tournament roster type: {roster_type!r}"
+            )
+
         items = [self._normalize_roster(row) for row in rows]
         if query.team_id is not None:
             items = [item for item in items if item.team.id == query.team_id]
@@ -75,16 +85,14 @@ class PandaScoreTournamentAdapter:
 
     @classmethod
     def _normalize_roster(cls, row: dict[str, Any]) -> TournamentRosterItem:
-        team = row["team"]
-        if not isinstance(team, dict):
-            raise ValueError("tournament roster team must be an object")
+        team = TournamentRosterTeam(
+            id=int(row["id"]),
+            name=str(row["name"]),
+            acronym=row.get("acronym"),
+        )
         return TournamentRosterItem(
-            team=TournamentRosterTeam(
-                id=int(team["id"]),
-                name=str(team["name"]),
-                acronym=team.get("acronym"),
-            ),
-            players=cls._normalize_roster_players(row.get("players")),
+            team=team,
+            players=cls._normalize_roster_players(row.get("players") or []),
         )
 
     @staticmethod
