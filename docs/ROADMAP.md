@@ -55,6 +55,19 @@ before a second concrete implementation demonstrates the need.
 - Protect single-request mapping, normalization, contract composability, and
   the exact six-tool registry inventory with focused tests.
 
+## Commit 5: semantic esports team and player search (implemented / under acceptance)
+
+- Add closed `esports.team.search` and `esports.player.search` capability
+  contracts for participant identity and current-team discovery.
+- Reuse the shared PandaScore client through explicit team and player collection
+  adapters using `/dota2/teams` and `/dota2/players`.
+- Keep provider query syntax and roster payloads below the model-facing schemas;
+  `Team.players` is intentionally omitted from team identity output.
+- Inherit the generic Artifact result processor without capability-specific
+  externalization logic.
+- Protect one-request mapping, normalization, composability, and the exact
+  eight-tool registry inventory with focused tests.
+
 ## Subsequent capability work
 
 1. Define one closed semantic capability contract.

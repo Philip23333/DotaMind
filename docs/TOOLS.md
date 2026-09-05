@@ -18,6 +18,8 @@ esports.league.search
 esports.series.search
 esports.tournament.search
 esports.match.search
+esports.team.search
+esports.player.search
 ```
 
 ## Esports search capabilities
@@ -25,6 +27,8 @@ esports.match.search
 The current entity hierarchy is:
 
 ```text
+Competition entities
+
 League
   ↓
 Series
@@ -32,6 +36,14 @@ Series
 Tournament
   ↓
 Match
+  ↕
+Team
+
+Participant entities
+
+Player
+  ↓ current team
+Team
 ```
 
 Capability status:
@@ -41,6 +53,8 @@ League: implemented
 Series: implemented
 Tournament: implemented
 Match: implemented
+Team: implemented
+Player: implemented
 ```
 
 `esports.league.search` resolves a recurring competition identity to its
@@ -66,6 +80,23 @@ expose provider query syntax or provider-private field names. One invocation
 maps to one bounded provider collection request. If its complete validated
 response exceeds the inline bound, the generic registry result processor stores
 that response as an Artifact and returns a bounded observation instead.
+
+`esports.team.search` resolves a Dota 2 team name, acronym, or exact ID to team
+identity. Its closed input contains only `id`, `name`, `acronym`, `page`, and
+`limit`; the output contains `id`, `name`, `acronym`, and `location`. Provider
+roster fields are intentionally omitted. Use `esports.player.search` with the
+known team ID for player discovery.
+
+`esports.player.search` resolves professional or real-name player identity and
+supports roster discovery through `team_id` and `active`. Its closed input
+contains `id`, `team_id`, `name`, `first_name`, `last_name`, `active`, `page`,
+and `limit`. The output includes player identity, active status, optional
+nationality and role, and an optional `current_team` summary. A missing
+`current_team` is valid for a free agent.
+
+Both participant tools use one semantic collection request and inherit the
+generic result processor for oversized responses. `Team.players` is not copied
+into `esports.team.search`; use `esports.player.search(team_id=...)` instead.
 
 Future domain tools must be added explicitly with a closed schema and focused
 tests; the registry must not grow a universal open selector or deprecated

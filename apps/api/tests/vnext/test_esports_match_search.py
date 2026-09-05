@@ -83,4 +83,6 @@ def test_default_vnext_registry_contains_artifacts_and_esports_search_tools() ->
         "esports.series.search",
         "esports.tournament.search",
         "esports.match.search",
+        "esports.team.search",
+        "esports.player.search",
     }

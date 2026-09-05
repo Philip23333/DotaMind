@@ -5,7 +5,8 @@
 The tool layer is in a clean-slate rebuild. The default LLM-facing registry
 currently contains the generic Artifact tools and the closed
 `esports.league.search`, `esports.series.search`,
-`esports.tournament.search`, and `esports.match.search` capabilities.
+`esports.tournament.search`, `esports.match.search`, `esports.team.search`, and
+`esports.player.search` capabilities.
 Additional domain capabilities are introduced later as independent contracts.
 
 ## Principles
@@ -44,6 +45,14 @@ User
              -> match capability contract
              -> PandaScore adapter/client
              -> validated match observations
+       <-> esports.team.search
+             -> team capability contract
+             -> PandaScore adapter/client
+             -> team identity observations
+       <-> esports.player.search
+             -> player capability contract
+             -> PandaScore adapter/client
+             -> player identity/current-team observations
        oversized tool result
              -> generic result processor
              -> complete session Artifact + bounded observation
@@ -77,12 +86,12 @@ application registry builder, and removed capabilities must not be kept as
 aliases or hidden registrations.
 
 The current esports boundaries are `esports.league.search`,
-`esports.series.search`, `esports.tournament.search`, and
-`esports.match.search`. Each capability owns semantic inputs and outputs, while
-its thin PandaScore adapter translates those inputs into one provider request
-and normalizes validated facts. All four adapters share one `PandaScoreClient`
-at composition time; provider routes and query parameter names stay below the
-model-facing schemas.
+`esports.series.search`, `esports.tournament.search`, `esports.match.search`,
+`esports.team.search`, and `esports.player.search`. Each capability owns
+semantic inputs and outputs, while its thin PandaScore adapter translates those
+inputs into one provider request and normalizes validated facts. All six
+adapters share one `PandaScoreClient` at composition time; provider routes and
+query parameter names stay below the model-facing schemas.
 
 The adapter tree is intentionally explicit:
 
@@ -91,7 +100,9 @@ PandaScoreClient
   ├── LeagueAdapter
   ├── SeriesAdapter
   ├── TournamentAdapter
-  └── MatchAdapter
+  ├── MatchAdapter
+  ├── TeamAdapter
+  └── PlayerAdapter
 ```
 
 Provider-private `serie_id` is translated to semantic `series_id` only inside
