@@ -2,8 +2,9 @@
 
 This directory contains the FastAPI application and the vNext model-facing
 tool layer. The current default surface includes Artifact management,
-`esports.league.search`, and `esports.match.search`; the target is defined in
-the repository's core documentation.
+`esports.league.search`, `esports.series.search`,
+`esports.tournament.search`, and `esports.match.search`; the target is defined
+in the repository's core documentation.
 
 ## Run locally
 
@@ -44,8 +45,9 @@ The currently running service exposes `GET /health`, the stateless
 it does not define future domain capability contracts.
 
 The default Agent tool registry currently includes Artifact tools and the
-closed `esports.league.search` and `esports.match.search` capabilities. No
-domain tool is retained through a compatibility alias.
+closed `esports.league.search`, `esports.series.search`,
+`esports.tournament.search`, and `esports.match.search` capabilities. No domain
+tool is retained through a compatibility alias.
 
 Runtime configuration and implementation details remain in the code until the
 corresponding vNext capability replaces them. Do not add new vNext architecture

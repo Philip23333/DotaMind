@@ -4,8 +4,9 @@
 
 The tool layer is in a clean-slate rebuild. The default LLM-facing registry
 currently contains the generic Artifact tools and the closed
-`esports.league.search` and `esports.match.search` capabilities. Additional
-domain capabilities are introduced later as independent contracts.
+`esports.league.search`, `esports.series.search`,
+`esports.tournament.search`, and `esports.match.search` capabilities.
+Additional domain capabilities are introduced later as independent contracts.
 
 ## Principles
 
@@ -31,6 +32,14 @@ User
              -> league capability contract
              -> PandaScore adapter/client
              -> league observations
+       <-> esports.series.search
+             -> series capability contract
+             -> PandaScore adapter/client
+             -> series observations
+       <-> esports.tournament.search
+             -> tournament capability contract
+             -> PandaScore adapter/client
+             -> tournament observations
        <-> esports.match.search
              -> match capability contract
              -> PandaScore adapter/client
@@ -61,12 +70,26 @@ registers Artifact tools plus accepted domain capabilities. Domain modules must
 not own the application registry builder, and removed capabilities must not be
 kept as aliases or hidden registrations.
 
-The current esports boundaries are `esports.league.search` and
+The current esports boundaries are `esports.league.search`,
+`esports.series.search`, `esports.tournament.search`, and
 `esports.match.search`. Each capability owns semantic inputs and outputs, while
 its thin PandaScore adapter translates those inputs into one provider request
-and normalizes validated facts. Both adapters share one `PandaScoreClient` at
-composition time; provider routes and query parameter names stay below the
+and normalizes validated facts. All four adapters share one `PandaScoreClient`
+at composition time; provider routes and query parameter names stay below the
 model-facing schemas.
+
+The adapter tree is intentionally explicit:
+
+```text
+PandaScoreClient
+  ├── LeagueAdapter
+  ├── SeriesAdapter
+  ├── TournamentAdapter
+  └── MatchAdapter
+```
+
+Provider-private `serie_id` is translated to semantic `series_id` only inside
+PandaScore adapters.
 
 ## Artifact boundary
 

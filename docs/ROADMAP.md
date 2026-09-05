@@ -43,6 +43,17 @@ before a second concrete implementation demonstrates the need.
 - Protect one-request mapping, strict `id`/`name` normalization, and the exact
   four-tool registry inventory with focused tests.
 
+## Commit 4: semantic esports series and tournament search (implemented / under acceptance)
+
+- Add closed `esports.series.search` and `esports.tournament.search`
+  capability contracts.
+- Reuse the existing PandaScore client through explicit series and tournament
+  adapters using their collection endpoints.
+- Preserve the League → Series → Tournament → Match discovery boundaries while
+  keeping provider-private query fields below the model-facing schemas.
+- Protect single-request mapping, normalization, contract composability, and
+  the exact six-tool registry inventory with focused tests.
+
 ## Subsequent capability work
 
 1. Define one closed semantic capability contract.

@@ -15,6 +15,8 @@ def test_default_registry_exposes_only_current_capabilities() -> None:
         "artifact.grep",
         "artifact.read",
         "esports.league.search",
+        "esports.series.search",
+        "esports.tournament.search",
         "esports.match.search",
     }
     assert "game_summary" not in json.dumps(

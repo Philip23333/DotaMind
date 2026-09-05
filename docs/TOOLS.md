@@ -13,6 +13,8 @@ The clean-slate default registry currently exposes:
 artifact.grep
 artifact.read
 esports.league.search
+esports.series.search
+esports.tournament.search
 esports.match.search
 ```
 
@@ -34,8 +36,8 @@ Capability status:
 
 ```text
 League: implemented
-Series: not yet implemented
-Tournament: not yet implemented
+Series: implemented
+Tournament: implemented
 Match: implemented
 ```
 
@@ -44,6 +46,16 @@ numeric league ID. Its closed input contains only `id`, `name`, `page`, and
 `limit`; a year, season, or edition belongs to a future series capability. The
 result intentionally exposes only each league's `id` and `name` so the ID can
 be passed to a later capability.
+
+`esports.series.search` resolves a specific edition or season of a league. It
+accepts `id`, `league_id`, `name`, `season`, `year`, `page`, and `limit`, and
+returns edition identity and timing fields together with an optional parent
+league summary. Use `league_id` and `year` for a bounded edition lookup.
+
+`esports.tournament.search` resolves a competition stage within one series. It
+accepts `id`, `series_id`, `name`, `page`, and `limit`, and returns the semantic
+`series_id` together with stage timing. Provider-private `serie_id` is not part
+of the model-facing contract.
 
 `esports.match.search` is a closed semantic match-search capability. Its input
 uses `id`, `league_id`, `series_id`, `tournament_id`, `team_id`, `name`,
