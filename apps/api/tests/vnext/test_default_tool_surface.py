@@ -11,7 +11,12 @@ def test_default_registry_exposes_only_current_capabilities() -> None:
     registry = build_vnext_registry(settings=VNextSettings())
 
     tool_names = {tool.name for tool in registry.schemas()}
-    assert tool_names == {"artifact.grep", "artifact.read", "esports.match.search"}
+    assert tool_names == {
+        "artifact.grep",
+        "artifact.read",
+        "esports.league.search",
+        "esports.match.search",
+    }
     assert "game_summary" not in json.dumps(
         [tool.model_dump(mode="json") for tool in registry.schemas()]
     )

@@ -22,15 +22,16 @@ Read these documents before changing vNext architecture or product behavior.
 ## Current repository state
 
 `apps/api` and `apps/chat` provide the current development surfaces. The
-model-facing capability layer currently exposes Artifact management and a
-closed esports match-search capability; additional domains will be rebuilt
-behind explicit contracts.
+model-facing capability layer currently exposes Artifact management and closed
+esports league- and match-search capabilities; additional domains will be
+rebuilt behind explicit contracts.
 
 ## Tool surface
 
 The vNext tool layer is currently being rebuilt. The active default registry
-exposes Artifact-management tools and `esports.match.search`. Domain tools will
-be added incrementally behind explicit domain contracts.
+exposes Artifact-management tools, `esports.league.search`, and
+`esports.match.search`. Domain tools will be added incrementally behind explicit
+domain contracts.
 
 ## Local development
 

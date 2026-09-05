@@ -34,6 +34,15 @@ before a second concrete implementation demonstrates the need.
 - Protect the input/output boundary, request mapping, endpoint selection, and
   registry inventory with focused tests.
 
+## Commit 3: semantic esports league search (implemented / under acceptance)
+
+- Add the closed `esports.league.search` capability for recurring competition
+  identity discovery.
+- Reuse the existing PandaScore client through a second thin league adapter.
+- Keep edition, season, and provider-specific fields out of the league schema.
+- Protect one-request mapping, strict `id`/`name` normalization, and the exact
+  four-tool registry inventory with focused tests.
+
 ## Subsequent capability work
 
 1. Define one closed semantic capability contract.
@@ -45,7 +54,7 @@ before a second concrete implementation demonstrates the need.
 
 ## Not planned in the baseline
 
-- any domain tool implementation;
+- a complete domain tool suite before each capability contract is accepted;
 - provider selection or routing machinery;
 - a universal esports hierarchy or cross-provider DTO;
 - hidden provider fetches from Artifact tools;

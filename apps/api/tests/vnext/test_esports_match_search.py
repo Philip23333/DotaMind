@@ -73,11 +73,12 @@ def test_match_search_tool_validates_and_returns_contract_output() -> None:
     assert seen[0].tournament_id == 3
 
 
-def test_default_vnext_registry_contains_artifacts_and_match_search() -> None:
+def test_default_vnext_registry_contains_artifacts_and_esports_search_tools() -> None:
     registry = build_vnext_registry(settings=VNextSettings())
 
     assert {tool.name for tool in registry.list()} == {
         "artifact.grep",
         "artifact.read",
+        "esports.league.search",
         "esports.match.search",
     }

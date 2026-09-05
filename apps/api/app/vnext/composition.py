@@ -17,15 +17,20 @@ from app.vnext.artifacts import (
     ManualResolver,
     SessionArtifactStore,
 )
+from app.vnext.capabilities.esports.league import LeagueSearchInput, LeagueSearchResult
 from app.vnext.capabilities.esports.match import MatchSearchInput, MatchSearchResult
 from app.vnext.llm.openai_compatible import OpenAICompatibleModelClient
 from app.vnext.providers.pandascore.client import PandaScoreClient
+from app.vnext.providers.pandascore.league_adapter import PandaScoreLeagueAdapter
 from app.vnext.providers.pandascore.match_adapter import PandaScoreMatchAdapter
 from app.vnext.tools.artifacts import register_artifact_tools
-from app.vnext.tools.esports import register_match_tool
+from app.vnext.tools.esports import register_league_tool, register_match_tool
 from app.vnext.tools.registry import ToolRegistry
 
 _VNEXT_ENV_PATH = Path(__file__).with_name(".env")
+
+LeagueSearchService = Callable[[LeagueSearchInput], Awaitable[LeagueSearchResult]]
+MatchSearchService = Callable[[MatchSearchInput], Awaitable[MatchSearchResult]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,7 +91,8 @@ def _env_value(
 class VNextServices:
     """Lifecycle container retained for the application composition seam."""
 
-    match_search: Callable[[MatchSearchInput], Awaitable[MatchSearchResult]] | None = None
+    league_search: LeagueSearchService | None = None
+    match_search: MatchSearchService | None = None
 
     async def aclose(self) -> None:
         return None
@@ -102,8 +108,12 @@ def build_vnext_services(
         token=config.pandascore_token,
         timeout_seconds=config.pandascore_timeout_seconds,
     )
-    adapter = PandaScoreMatchAdapter(client)
-    return VNextServices(match_search=adapter.search)
+    league_adapter = PandaScoreLeagueAdapter(client)
+    match_adapter = PandaScoreMatchAdapter(client)
+    return VNextServices(
+        league_search=league_adapter.search,
+        match_search=match_adapter.search,
+    )
 
 
 def build_vnext_registry(
@@ -121,6 +131,8 @@ def build_vnext_registry(
         ArtifactReader(artifact_store, manuals),
         ArtifactGrepper(artifact_store, manuals),
     )
+    if resolved_services.league_search is not None:
+        register_league_tool(registry, resolved_services.league_search)
     if resolved_services.match_search is not None:
         register_match_tool(registry, resolved_services.match_search)
     return registry

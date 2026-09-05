@@ -1,5 +1,6 @@
 """Closed semantic esports capability contracts."""
 
+from .league import LeagueItem, LeagueSearchInput, LeagueSearchResult
 from .match import (
     CompetitionSummary,
     MatchItem,
@@ -12,6 +13,9 @@ from .match import (
 
 __all__ = [
     "CompetitionSummary",
+    "LeagueItem",
+    "LeagueSearchInput",
+    "LeagueSearchResult",
     "MatchItem",
     "MatchScore",
     "MatchSearchInput",

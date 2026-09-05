@@ -12,8 +12,38 @@ The clean-slate default registry currently exposes:
 ```text
 artifact.grep
 artifact.read
+esports.league.search
 esports.match.search
 ```
+
+## Esports search capabilities
+
+The current entity hierarchy is:
+
+```text
+League
+  ↓
+Series
+  ↓
+Tournament
+  ↓
+Match
+```
+
+Capability status:
+
+```text
+League: implemented
+Series: not yet implemented
+Tournament: not yet implemented
+Match: implemented
+```
+
+`esports.league.search` resolves a recurring competition identity to its
+numeric league ID. Its closed input contains only `id`, `name`, `page`, and
+`limit`; a year, season, or edition belongs to a future series capability. The
+result intentionally exposes only each league's `id` and `name` so the ID can
+be passed to a later capability.
 
 `esports.match.search` is a closed semantic match-search capability. Its input
 uses `id`, `league_id`, `series_id`, `tournament_id`, `team_id`, `name`,
