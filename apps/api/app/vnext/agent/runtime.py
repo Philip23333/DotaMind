@@ -156,6 +156,12 @@ class AgentRuntime:
         tool_calls_used = 0
 
         try:
+            if self.system_instruction is not None and any(
+                isinstance(message, SystemMessage) for message in messages
+            ):
+                raise ModelProtocolError(
+                    "system messages are runtime-owned when system_instruction is configured"
+                )
             request_messages = list(messages)
             if self.system_instruction is not None:
                 request_messages.insert(0, SystemMessage(content=self.system_instruction))

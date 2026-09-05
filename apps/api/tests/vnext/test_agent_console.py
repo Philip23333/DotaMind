@@ -6,18 +6,30 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-from app.vnext.llm.protocol import ToolCall, ToolResultMessage
+from app.vnext.agent.runtime import AgentRuntime
+from app.vnext.llm.protocol import (
+    AssistantMessage,
+    FinalMessage,
+    ModelResponse,
+    SystemMessage,
+    ToolCall,
+    ToolResultMessage,
+    UserMessage,
+)
 from app.vnext.tools.definition import ToolDefinition
 from app.vnext.tools.registry import ToolRegistry
 from scripts.vnext_agent_console import (
     _console_text,
     _ConversationTrace,
+    _run_turn,
     _trace_rows,
+    _TracingModelClient,
     _TracingToolRegistry,
 )
+from tests.vnext.fakes import ScriptedModelClient
 
 
-def test_console_conversation_preserves_full_tool_results_across_turns(tmp_path: Path) -> None:
+def test_console_trace_preserves_full_tool_results_for_debugging(tmp_path: Path) -> None:
     call = ToolCall(id="call-1", name="sample.lookup", arguments={"query": "Grand Final"})
     result = ToolResultMessage(
         tool_call_id="call-1",
@@ -76,6 +88,104 @@ def test_console_conversation_preserves_full_tool_results_across_turns(tmp_path:
         }
     ]
     assert "full artifact body" in destination.read_text(encoding="utf-8")
+
+
+def test_console_does_not_replay_runtime_transcript_across_turns(tmp_path: Path) -> None:
+    class Input(BaseModel):
+        value: int
+
+    class Output(BaseModel):
+        value: int
+
+    call = ToolCall(id="call-1", name="test.echo", arguments={"value": 1})
+    model = _TracingModelClient(
+        ScriptedModelClient(
+            [
+                ModelResponse(
+                    message=AssistantMessage(content=None, tool_calls=[call])
+                ),
+                ModelResponse(message=FinalMessage(content="final1")),
+                ModelResponse(message=FinalMessage(content="final2")),
+            ]
+        )
+    )
+    registry = ToolRegistry()
+    registry.register(
+        ToolDefinition(
+            name="test.echo",
+            description="Return the input.",
+            input_model=Input,
+            output_model=Output,
+            handler=lambda args: Output(value=args.value),
+        )
+    )
+    traced_tools = _TracingToolRegistry(registry)
+    runtime = AgentRuntime(
+        model,
+        traced_tools,
+        system_instruction="runtime system",
+    )
+    conversation = _ConversationTrace(name="two_turns", result_dir=tmp_path)
+
+    async def exercise() -> tuple[
+        list[UserMessage | FinalMessage], list[UserMessage | FinalMessage]
+    ]:
+        _, first_history, _, first_error = await _run_turn(
+            runtime,
+            model,
+            [],
+            "user1",
+            conversation.name,
+            conversation=conversation,
+            tool_trace=traced_tools,
+        )
+        assert first_error is None
+        _, second_history, _, second_error = await _run_turn(
+            runtime,
+            model,
+            first_history,
+            "user2",
+            conversation.name,
+            conversation=conversation,
+            tool_trace=traced_tools,
+        )
+        assert second_error is None
+        return first_history, second_history
+
+    first_history, second_history = asyncio.run(exercise())
+
+    assert [message.role for message in first_history] == ["user", "final"]
+    assert [message.role for message in second_history] == [
+        "user",
+        "final",
+        "user",
+        "final",
+    ]
+
+    first_turn_requests = model.requests[:2]
+    assert isinstance(first_turn_requests[1].messages[-2], AssistantMessage)
+    assert first_turn_requests[1].messages[-2].tool_calls
+    assert isinstance(first_turn_requests[1].messages[-1], ToolResultMessage)
+
+    second_turn_first_request = model.requests[2]
+    assert [message.role for message in second_turn_first_request.messages] == [
+        "system",
+        "user",
+        "final",
+        "user",
+    ]
+    assert sum(
+        isinstance(message, SystemMessage)
+        for message in second_turn_first_request.messages
+    ) == 1
+    assert not any(
+        isinstance(message, ToolResultMessage)
+        for message in second_turn_first_request.messages
+    )
+    assert not any(
+        isinstance(message, AssistantMessage) and message.tool_calls
+        for message in second_turn_first_request.messages
+    )
 
 
 def test_console_trace_uses_terminal_tool_event_when_no_next_model_turn() -> None:

@@ -11,6 +11,7 @@ from app.vnext.agent.errors import (
     AgentDeadlineExceeded,
     MaxStepsExceeded,
     MaxToolCallsExceeded,
+    ModelProtocolError,
 )
 from app.vnext.agent.events import AgentCompleted, TextDelta
 from app.vnext.agent.limits import AgentLimits
@@ -98,6 +99,28 @@ def test_runtime_includes_configured_system_instruction_in_each_model_request() 
     _run(runtime, model)
 
     assert model.requests[0].messages[0] == SystemMessage(content="query discipline")
+
+
+def test_runtime_rejects_caller_system_message_when_system_instruction_is_configured() -> None:
+    model = ScriptedModelClient([ModelResponse(message=FinalMessage(content="never"))])
+    runtime = AgentRuntime(
+        model,
+        ToolRegistry(),
+        limits=AgentLimits(deadline_seconds=2),
+        system_instruction="runtime system",
+    )
+
+    with pytest.raises(ModelProtocolError):
+        asyncio.run(
+            runtime.run(
+                [
+                    SystemMessage(content="caller system"),
+                    UserMessage(content="hello"),
+                ]
+            )
+        )
+
+    assert model.requests == []
 
 
 def test_single_tool_call_result_then_final() -> None:

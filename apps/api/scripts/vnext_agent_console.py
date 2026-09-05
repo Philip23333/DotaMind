@@ -317,7 +317,12 @@ async def _run_turn(
         events=events,
         agent_trace=trace_collector.snapshot(),
     )
-    return final, [*model.requests[-1].messages, final], destination, None
+    next_history = [
+        *history,
+        UserMessage(content=prompt),
+        final,
+    ]
+    return final, next_history, destination, None
 
 
 async def _run(args: argparse.Namespace) -> int:
