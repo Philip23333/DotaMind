@@ -10,6 +10,7 @@ from typing import Any
 from pydantic import BaseModel, ValidationError
 
 from app.vnext.artifacts import ToolResponseArtifactError
+from app.vnext.artifacts.processor import ToolResultProcessor
 from app.vnext.artifacts.retrieval import (
     ArtifactPathNotFoundError,
     ArtifactReadValidationError,
@@ -21,8 +22,9 @@ from app.vnext.tools.errors import ToolError, ToolErrorCode
 
 
 class ToolRegistry:
-    def __init__(self) -> None:
+    def __init__(self, *, result_processor: ToolResultProcessor | None = None) -> None:
         self._tools: dict[str, ToolDefinition] = {}
+        self._result_processor = result_processor
 
     def register(self, tool: ToolDefinition) -> None:
         if tool.name in self._tools:
@@ -133,6 +135,10 @@ class ToolRegistry:
         try:
             validated_output = definition.output_model.model_validate(raw_output)
             output = validated_output.model_dump(mode="json")
+            content = output
+            if self._result_processor is not None and definition.externalize_result:
+                processed = await self._result_processor.process(output)
+                content = processed.content
         except ValidationError as exc:
             details = {
                 "validation_errors": [
@@ -149,6 +155,13 @@ class ToolRegistry:
                 f"invalid output from tool: {call.name}",
                 details,
             )
+        except ToolResponseArtifactError as exc:
+            return self._error_result(
+                call,
+                "artifact_error",
+                str(exc),
+                {},
+            )
         except (TypeError, ValueError):
             return self._error_result(
                 call,
@@ -158,7 +171,7 @@ class ToolRegistry:
             )
         return ToolResultMessage(
             tool_call_id=call.id,
-            content=output,
+            content=content,
             status="ok",
         )
 

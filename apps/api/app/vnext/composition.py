@@ -12,10 +12,12 @@ from dotenv import dotenv_values
 from app.vnext.agent.instructions import AGENT_INSTRUCTION
 from app.vnext.agent.runtime import AgentRuntime
 from app.vnext.artifacts import (
+    ArtifactBackedToolResultProcessor,
     ArtifactGrepper,
     ArtifactReader,
     ManualResolver,
     SessionArtifactStore,
+    ToolResponseExternalizer,
 )
 from app.vnext.capabilities.esports.league import LeagueSearchInput, LeagueSearchResult
 from app.vnext.capabilities.esports.match import MatchSearchInput, MatchSearchResult
@@ -145,9 +147,13 @@ def build_vnext_registry(
 ) -> ToolRegistry:
     config = settings or VNextSettings.from_env()
     resolved_services = services or build_vnext_services(config)
-    registry = ToolRegistry()
     artifact_store = SessionArtifactStore()
     manuals = ManualResolver()
+    registry = ToolRegistry(
+        result_processor=ArtifactBackedToolResultProcessor(
+            ToolResponseExternalizer(artifact_store)
+        )
+    )
     register_artifact_tools(
         registry,
         ArtifactReader(artifact_store, manuals),

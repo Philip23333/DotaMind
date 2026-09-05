@@ -44,6 +44,9 @@ User
              -> match capability contract
              -> PandaScore adapter/client
              -> validated match observations
+       oversized tool result
+             -> generic result processor
+             -> complete session Artifact + bounded observation
 ```
 
 Future domain capabilities follow this seam:
@@ -66,9 +69,12 @@ plugin framework.
 
 `ToolRegistry`, `ToolDefinition`, and `ToolExecutor` are generic runtime
 primitives. The default builder lives in the composition root and explicitly
-registers Artifact tools plus accepted domain capabilities. Domain modules must
-not own the application registry builder, and removed capabilities must not be
-kept as aliases or hidden registrations.
+registers Artifact tools plus accepted domain capabilities. A generic result
+processor is attached at registry composition time: it stores complete
+oversized non-Artifact outputs and returns bounded observations, while each
+Artifact retrieval tool opts out explicitly. Domain modules must not own the
+application registry builder, and removed capabilities must not be kept as
+aliases or hidden registrations.
 
 The current esports boundaries are `esports.league.search`,
 `esports.series.search`, `esports.tournament.search`, and
@@ -97,7 +103,8 @@ Artifacts are temporary session-owned JSON-like documents. Each oversized
 response receives a fresh opaque reference. `artifact.read` and `artifact.grep`
 accept one exact reference and never fetch a provider or perform business
 aggregation. Complete source facts and bounded model observations are separate
-concerns.
+concerns; the generic result processor enforces that separation for ordinary
+tools.
 
 ## Runtime boundary
 

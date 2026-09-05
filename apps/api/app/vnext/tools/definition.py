@@ -24,6 +24,7 @@ class ToolDefinition:
     read_only: bool = True
     parallel_safe: bool = False
     metadata: Mapping[str, Any] = field(default_factory=dict)
+    externalize_result: bool = True
 
     def __post_init__(self) -> None:
         if not self.name:

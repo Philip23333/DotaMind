@@ -22,7 +22,11 @@ Tools first construct their complete logical response. Small responses stay
 inline. Large responses are stored at the Artifact root and return a bounded
 structural observation plus `artifact_ref`. A preview's `_artifact_path` is
 copied unchanged into `artifact.read(mode="read", path=...)`; `outline` is only
-needed when the document structure is unknown.
+needed when the document structure is unknown. The default registry uses
+`INLINE_TOOL_RESPONSE_MAX_BYTES` (12 KiB) as the spill threshold and caps the
+model-facing observation at `MAX_MODEL_TOOL_OBSERVATION_BYTES` (8 KiB). Artifact
+retrieval tools explicitly bypass this processor so their read/grep payloads
+remain directly usable.
 
 ## Retrieval contract
 

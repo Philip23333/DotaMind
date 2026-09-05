@@ -114,6 +114,7 @@ def register_artifact_tools(
             output_model=ArtifactGrepResult,
             handler=grep,
             parallel_safe=True,
+            externalize_result=False,
         )
     )
     registry.register(
@@ -140,6 +141,7 @@ def register_artifact_tools(
             output_model=ArtifactReadResult,
             handler=read,
             parallel_safe=True,
+            externalize_result=False,
         )
     )
 

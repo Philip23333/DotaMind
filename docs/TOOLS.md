@@ -5,7 +5,9 @@
 Agent-visible tools describe stable observation capabilities, not transport
 endpoints or provider implementation details. Large complete responses remain
 outside model context as temporary Artifacts and are explored through generic
-Artifact tools.
+Artifact tools. The default registry automatically externalizes an oversized
+non-Artifact result and returns only a bounded structural observation together
+with its opaque Artifact reference; Artifact retrieval tools remain inline.
 
 The clean-slate default registry currently exposes:
 
@@ -61,8 +63,9 @@ of the model-facing contract.
 uses `id`, `league_id`, `series_id`, `tournament_id`, `team_id`, `name`,
 `lifecycle`, `sort`, `page`, and `limit`. The schema intentionally does not
 expose provider query syntax or provider-private field names. One invocation
-maps to one bounded provider collection request; this first implementation does
-not externalize results as an Artifact.
+maps to one bounded provider collection request. If its complete validated
+response exceeds the inline bound, the generic registry result processor stores
+that response as an Artifact and returns a bounded observation instead.
 
 Future domain tools must be added explicitly with a closed schema and focused
 tests; the registry must not grow a universal open selector or deprecated

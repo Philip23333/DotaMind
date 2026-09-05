@@ -29,8 +29,9 @@ before a second concrete implementation demonstrates the need.
 - Connect the contract to a thin PandaScore client and match adapter.
 - Keep provider query syntax, transport details, and provider-private field
   names below the model-facing tool schema.
-- Preserve complete validated match facts in the capability result without
-  adding Artifact externalization to this first bounded implementation.
+- Preserve complete validated match facts in the capability result; the generic
+  registry result processor externalizes only oversized responses while keeping
+  small observations inline.
 - Protect the input/output boundary, request mapping, endpoint selection, and
   registry inventory with focused tests.
 
@@ -62,6 +63,16 @@ before a second concrete implementation demonstrates the need.
    deterministic tests.
 4. Register the capability only after its focused acceptance passes.
 5. Remove transitional code once the replacement is accepted.
+
+## Follow-up: generic tool-result externalization (implemented / under acceptance)
+
+- Attach one session-scoped result processor at registry composition time.
+- Keep complete validated non-Artifact outputs in the session Artifact store
+  when they exceed the inline bound.
+- Return a deterministic bounded structural observation and opaque reference to
+  the model while leaving `artifact.read` and `artifact.grep` inline.
+- Protect the spill threshold, observation bound, full-result recovery, and
+  Artifact-tool bypass with focused tests.
 
 ## Not planned in the baseline
 
