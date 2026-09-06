@@ -407,6 +407,273 @@ def test_runtime_streams_deltas_then_continues_tool_loop_without_repeating_text(
     assert events[-1].final.content == "done"  # type: ignore[union-attr]
 
 
+def test_soft_deadline_during_model_exploration_forces_tool_free_finalization() -> None:
+    async def slow_response() -> ModelResponse:
+        await asyncio.sleep(0.5)
+        return ModelResponse.from_final("too late")
+
+    model = ScriptedModelClient([slow_response(), ModelResponse.from_final("partial")])
+    runtime = AgentRuntime(
+        model,
+        _registry(),
+        limits=AgentLimits(deadline_seconds=0.5, finalize_reserve_seconds=0.3),
+    )
+
+    result = _run(runtime, model)
+
+    assert result.content == "partial"
+    assert len(model.requests) == 2
+    assert model.requests[0].tools
+    assert model.requests[1].tools == []
+    assert any(
+        isinstance(message, SystemMessage)
+        and "Tool-use time budget is exhausted" in message.content
+        for message in model.requests[1].messages
+    )
+
+
+def test_soft_deadline_during_tool_execution_forces_finalization() -> None:
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def blocked(args: EchoInput) -> EchoOutput:
+        started.set()
+        await release.wait()
+        return EchoOutput(value=args.value)
+
+    async def exercise() -> tuple[FinalMessage, ScriptedModelClient]:
+        model = ScriptedModelClient(
+            [_tool_turn(_call()), ModelResponse.from_final("partial")]
+        )
+        runtime = AgentRuntime(
+            model,
+            _registry(handler=blocked),
+            limits=AgentLimits(deadline_seconds=0.5, finalize_reserve_seconds=0.3),
+        )
+        task = asyncio.create_task(runtime.run([UserMessage(content="go")]))
+        await asyncio.wait_for(started.wait(), timeout=1)
+        result = await task
+        return result, model
+
+    result, model = asyncio.run(exercise())
+
+    assert result.content == "partial"
+    assert len(model.requests) == 2
+    assert model.requests[1].tools == []
+    assert isinstance(model.requests[1].messages[-1], UserMessage)
+
+
+def test_interrupted_tool_call_turn_is_absent_from_finalization_transcript() -> None:
+    second_started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def handler(args: EchoInput) -> EchoOutput:
+        if args.value == 2:
+            second_started.set()
+            await release.wait()
+        return EchoOutput(value=args.value)
+
+    async def exercise() -> tuple[FinalMessage, ScriptedModelClient]:
+        model = ScriptedModelClient(
+            [
+                _tool_turn(_call("one", 1)),
+                _tool_turn(_call("two", 2)),
+                ModelResponse.from_final("partial"),
+            ]
+        )
+        runtime = AgentRuntime(
+            model,
+            _registry(handler=handler),
+            limits=AgentLimits(deadline_seconds=0.6, finalize_reserve_seconds=0.35),
+        )
+        task = asyncio.create_task(runtime.run([UserMessage(content="go")]))
+        await asyncio.wait_for(second_started.wait(), timeout=1)
+        result = await task
+        return result, model
+
+    result, model = asyncio.run(exercise())
+
+    assert result.content == "partial"
+    assert len(model.requests) == 3
+    final_messages = model.requests[2].messages
+    assistant_one = next(
+        message
+        for message in final_messages
+        if isinstance(message, AssistantMessage)
+    )
+    assert [call.id for call in assistant_one.tool_calls] == ["one"]
+    tool_one = next(message for message in final_messages if hasattr(message, "tool_call_id"))
+    assert tool_one.tool_call_id == "one"  # type: ignore[union-attr]
+    assert all(
+        not isinstance(message, AssistantMessage)
+        or all(call.id != "two" for call in message.tool_calls)
+        for message in final_messages
+    )
+    assert all(
+        not hasattr(message, "tool_call_id") or message.tool_call_id != "two"
+        for message in final_messages
+    )
+    assert model.requests[2].tools == []
+
+
+def test_partially_completed_multi_call_turn_is_discarded_as_a_whole() -> None:
+    second_started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def handler(args: EchoInput) -> EchoOutput:
+        if args.value == 2:
+            second_started.set()
+            await release.wait()
+        return EchoOutput(value=args.value)
+
+    async def exercise() -> tuple[FinalMessage, ScriptedModelClient]:
+        model = ScriptedModelClient(
+            [_tool_turn(_call("a", 1), _call("b", 2)), ModelResponse.from_final("partial")]
+        )
+        runtime = AgentRuntime(
+            model,
+            _registry(handler=handler),
+            limits=AgentLimits(deadline_seconds=0.6, finalize_reserve_seconds=0.35),
+        )
+        task = asyncio.create_task(runtime.run([UserMessage(content="go")]))
+        await asyncio.wait_for(second_started.wait(), timeout=1)
+        result = await task
+        return result, model
+
+    result, model = asyncio.run(exercise())
+
+    assert result.content == "partial"
+    assert len(model.requests) == 2
+    assert model.requests[1].tools == []
+    assert len(model.requests[1].messages) == 2
+    assert isinstance(model.requests[1].messages[-1], UserMessage)
+
+
+def test_hard_deadline_still_wins_during_forced_finalization() -> None:
+    async def slow_response() -> ModelResponse:
+        await asyncio.sleep(0.5)
+        return ModelResponse.from_final("late")
+
+    model = ScriptedModelClient([slow_response(), slow_response()])
+    runtime = AgentRuntime(
+        model,
+        ToolRegistry(),
+        limits=AgentLimits(deadline_seconds=0.35, finalize_reserve_seconds=0.2),
+    )
+
+    with pytest.raises(AgentDeadlineExceeded):
+        _run(runtime, model)
+
+    assert len(model.requests) == 2
+    assert model.requests[1].tools == []
+
+
+def test_zero_reserve_preserves_single_hard_deadline_behavior() -> None:
+    async def slow_response() -> ModelResponse:
+        await asyncio.sleep(0.2)
+        return ModelResponse.from_final("late")
+
+    model = ScriptedModelClient([slow_response()])
+    runtime = AgentRuntime(
+        model,
+        ToolRegistry(),
+        limits=AgentLimits(deadline_seconds=0.08, finalize_reserve_seconds=0),
+    )
+
+    with pytest.raises(AgentDeadlineExceeded):
+        _run(runtime, model)
+
+    assert len(model.requests) == 1
+
+
+def test_reserve_at_or_above_deadline_disables_soft_finalization() -> None:
+    async def slow_response() -> ModelResponse:
+        await asyncio.sleep(0.2)
+        return ModelResponse.from_final("late")
+
+    model = ScriptedModelClient([slow_response()])
+    runtime = AgentRuntime(
+        model,
+        ToolRegistry(),
+        limits=AgentLimits(deadline_seconds=0.08, finalize_reserve_seconds=0.08),
+    )
+
+    with pytest.raises(AgentDeadlineExceeded):
+        _run(runtime, model)
+
+    assert len(model.requests) == 1
+
+
+def test_finalization_tool_request_is_a_protocol_error_without_execution() -> None:
+    invoked = False
+
+    def handler(args: EchoInput) -> EchoOutput:
+        nonlocal invoked
+        invoked = True
+        return EchoOutput(value=args.value)
+
+    async def slow_response() -> ModelResponse:
+        await asyncio.sleep(0.2)
+        return ModelResponse.from_final("too late")
+
+    model = ScriptedModelClient([slow_response(), _tool_turn(_call())])
+    runtime = AgentRuntime(
+        model,
+        _registry(handler=handler),
+        limits=AgentLimits(deadline_seconds=0.35, finalize_reserve_seconds=0.2),
+    )
+
+    with pytest.raises(ModelProtocolError, match="requested tools during forced finalization"):
+        _run(runtime, model)
+
+    assert len(model.requests) == 2
+    assert model.requests[1].tools == []
+    assert invoked is False
+
+
+def test_finalization_instruction_is_temporary_and_does_not_mutate_runtime_state() -> None:
+    async def slow_response() -> ModelResponse:
+        await asyncio.sleep(0.2)
+        return ModelResponse.from_final("too late")
+
+    model = ScriptedModelClient([slow_response(), ModelResponse.from_final("partial")])
+    runtime = AgentRuntime(
+        model,
+        ToolRegistry(),
+        limits=AgentLimits(deadline_seconds=0.35, finalize_reserve_seconds=0.2),
+        system_instruction="base instruction",
+    )
+
+    result = _run(runtime, model)
+
+    assert result.content == "partial"
+    assert runtime.system_instruction == "base instruction"
+    assert model.requests[0].messages[0] == SystemMessage(content="base instruction")
+    assert model.requests[1].messages[0].content.startswith("base instruction\n\n")  # type: ignore[union-attr]
+    assert "Tool-use time budget is exhausted" in model.requests[1].messages[0].content  # type: ignore[union-attr]
+
+
+def test_soft_deadline_supports_streaming_model_finalization() -> None:
+    async def slow_response() -> ModelResponse:
+        await asyncio.sleep(0.2)
+        return ModelResponse.from_final("too late")
+
+    model = ScriptedStreamingModelClient(
+        [[slow_response()], [ModelResponse.from_final("partial")]]
+    )
+    runtime = AgentRuntime(
+        model,
+        ToolRegistry(),
+        limits=AgentLimits(deadline_seconds=0.35, finalize_reserve_seconds=0.2),
+    )
+
+    result = _run(runtime, model)
+
+    assert result.content == "partial"
+    assert len(model.requests) == 2
+    assert model.requests[1].tools == []
+
+
 def test_vnext_runtime_has_no_legacy_or_langgraph_import_dependency() -> None:
     root = Path(__file__).parents[2] / "app" / "vnext"
     source = "\n".join(

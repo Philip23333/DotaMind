@@ -51,6 +51,12 @@ from app.vnext.tools.registry import ToolRegistry
 
 EventSink = Callable[[AgentEvent], Awaitable[None] | None]
 
+_FINALIZATION_INSTRUCTION = (
+    "Tool-use time budget is exhausted. Answer now using the evidence already collected. "
+    "If the evidence is incomplete, provide the best supported partial answer and clearly "
+    "state what remains uncertain."
+)
+
 
 class CancellationToken:
     """A small asyncio-compatible cancellation primitive owned by the caller."""
@@ -74,8 +80,8 @@ class CancellationToken:
 
 
 class _Deadline:
-    def __init__(self, seconds: float | None) -> None:
-        self.started = monotonic()
+    def __init__(self, seconds: float | None, *, started: float | None = None) -> None:
+        self.started = monotonic() if started is None else started
         self.expires_at = self.started + seconds if seconds is not None else None
 
     @property
@@ -150,10 +156,24 @@ class AgentRuntime:
 
         token = cancellation_token or CancellationToken()
         sink = event_sink
-        deadline = _Deadline(self.limits.deadline_seconds)
-        started_at = deadline.started
+        hard_deadline = _Deadline(self.limits.deadline_seconds)
+        soft_finalization_enabled = (
+            self.limits.deadline_seconds is not None
+            and self.limits.finalize_reserve_seconds > 0
+            and self.limits.finalize_reserve_seconds < self.limits.deadline_seconds
+        )
+        exploration_deadline = (
+            _Deadline(
+                self.limits.deadline_seconds - self.limits.finalize_reserve_seconds,
+                started=hard_deadline.started,
+            )
+            if soft_finalization_enabled
+            else None
+        )
+        started_at = hard_deadline.started
         step = 0
         tool_calls_used = 0
+        finalizing = False
 
         try:
             if self.system_instruction is not None and any(
@@ -180,95 +200,114 @@ class AgentRuntime:
                 step += 1
                 if step > self.limits.max_steps:
                     raise MaxStepsExceeded(self.limits.max_steps)
-                self._check_controls(token, deadline)
+                active_deadline = (
+                    hard_deadline if finalizing else exploration_deadline or hard_deadline
+                )
+                try:
+                    self._check_controls(token, active_deadline)
+                except AgentDeadlineExceeded:
+                    if not finalizing and exploration_deadline is not None:
+                        finalizing = True
+                        continue
+                    raise
 
+                finalization = (
+                    _with_finalization_instruction(request_messages) if finalizing else None
+                )
                 request = ModelRequest(
-                    messages=request_messages,
-                    tools=self.tools.schemas(),
+                    messages=finalization or request_messages,
+                    tools=[] if finalizing else self.tools.schemas(),
                     step=step,
                 )
                 if trace_collector is not None:
                     trace_collector.model_request(request)
                 event = ModelRequested(
                     step=step,
-                    message_count=len(request_messages),
+                    message_count=len(request.messages),
                     tool_count=len(request.tools),
                 )
                 yield await self._publish(event, sink)
 
                 model_started = monotonic()
                 try:
-                    stream = getattr(self.model, "stream", None)
-                    if callable(stream):
-                        response = None
-                        model_stream = stream(request)
-                        if inspect.isawaitable(model_stream):
-                            model_stream = await self._await_controlled(
-                                model_stream,
+                    try:
+                        stream = getattr(self.model, "stream", None)
+                        if callable(stream):
+                            response = None
+                            model_stream = stream(request)
+                            if inspect.isawaitable(model_stream):
+                                model_stream = await self._await_controlled(
+                                    model_stream,
+                                    token,
+                                    active_deadline,
+                                )
+                            if not hasattr(model_stream, "__anext__"):
+                                raise ModelProtocolError(
+                                    "streaming model client did not return an async iterator"
+                                )
+                            try:
+                                while True:
+                                    try:
+                                        item = await self._await_controlled(
+                                            anext(model_stream),
+                                            token,
+                                            active_deadline,
+                                        )
+                                    except StopAsyncIteration:
+                                        break
+                                    if isinstance(item, ModelTextDelta):
+                                        if trace_collector is not None:
+                                            trace_collector.text_delta(step, item.text)
+                                        if response is not None:
+                                            raise ModelProtocolError(
+                                                "stream emitted text after its terminal response"
+                                            )
+                                        event = TextDelta(step=step, text=item.text)
+                                        yield await self._publish(event, sink)
+                                    elif isinstance(item, ModelResponse):
+                                        if response is not None:
+                                            raise ModelProtocolError(
+                                                "stream emitted more than one terminal response"
+                                            )
+                                        response = self._normalize_response(item)
+                                    else:
+                                        raise ModelProtocolError(
+                                            "stream emitted an unsupported model item"
+                                        )
+                            finally:
+                                close = getattr(model_stream, "aclose", None)
+                                if callable(close):
+                                    result = close()
+                                    if inspect.isawaitable(result):
+                                        await result
+                            if response is None:
+                                raise ModelProtocolError(
+                                    "stream ended without a terminal model response"
+                                )
+                        else:
+                            raw_response = await self._await_controlled(
+                                self.model.complete(request),
                                 token,
-                                deadline,
+                                active_deadline,
                             )
-                        if not hasattr(model_stream, "__anext__"):
-                            raise ModelProtocolError(
-                                "streaming model client did not return an async iterator"
-                            )
-                        try:
-                            while True:
-                                try:
-                                    item = await self._await_controlled(
-                                        anext(model_stream),
-                                        token,
-                                        deadline,
-                                    )
-                                except StopAsyncIteration:
-                                    break
-                                if isinstance(item, ModelTextDelta):
-                                    if trace_collector is not None:
-                                        trace_collector.text_delta(step, item.text)
-                                    if response is not None:
-                                        raise ModelProtocolError(
-                                            "stream emitted text after its terminal response"
-                                        )
-                                    event = TextDelta(step=step, text=item.text)
-                                    yield await self._publish(event, sink)
-                                elif isinstance(item, ModelResponse):
-                                    if response is not None:
-                                        raise ModelProtocolError(
-                                            "stream emitted more than one terminal response"
-                                        )
-                                    response = self._normalize_response(item)
-                                else:
-                                    raise ModelProtocolError(
-                                        "stream emitted an unsupported model item"
-                                    )
-                        finally:
-                            close = getattr(model_stream, "aclose", None)
-                            if callable(close):
-                                result = close()
-                                if inspect.isawaitable(result):
-                                    await result
-                        if response is None:
-                            raise ModelProtocolError(
-                                "stream ended without a terminal model response"
-                            )
-                    else:
-                        raw_response = await self._await_controlled(
-                            self.model.complete(request),
-                            token,
-                            deadline,
-                        )
-                        response = self._normalize_response(raw_response)
-                except (AgentCancelledError, AgentDeadlineExceeded):
-                    raise
-                except AgentRuntimeError:
-                    raise
-                except Exception as exc:
-                    raise ModelProviderError(
-                        f"model provider request failed: {exc}",
-                        cause=exc,
-                    ) from exc
+                            response = self._normalize_response(raw_response)
+                    except (AgentCancelledError, AgentDeadlineExceeded):
+                        raise
+                    except AgentRuntimeError:
+                        raise
+                    except Exception as exc:
+                        raise ModelProviderError(
+                            f"model provider request failed: {exc}",
+                            cause=exc,
+                        ) from exc
 
-                self._check_controls(token, deadline)
+                    self._check_controls(token, active_deadline)
+                except AgentDeadlineExceeded:
+                    if not finalizing and exploration_deadline is not None:
+                        finalizing = True
+                        continue
+                    raise
+
                 assistant = response.message
                 has_tool_calls = isinstance(assistant, AssistantMessage) and bool(
                     assistant.tool_calls
@@ -284,6 +323,9 @@ class AgentRuntime:
                     )
                 yield await self._publish(event, sink)
 
+                if finalizing and isinstance(assistant, AssistantMessage) and assistant.tool_calls:
+                    raise ModelProtocolError("model requested tools during forced finalization")
+
                 if isinstance(assistant, FinalMessage):
                     if trace_collector is not None:
                         trace_collector.terminal(
@@ -297,7 +339,6 @@ class AgentRuntime:
                     yield await self._publish(event, sink)
                     return
 
-                request_messages.append(assistant)
                 calls = assistant.tool_calls
                 if not calls:
                     # Some compatible providers omit a distinct finish marker.
@@ -330,18 +371,31 @@ class AgentRuntime:
                 tool_calls_used += len(calls)
 
                 results: list[ToolResultMessage] = []
-                async for tool_event in self._execute_tools_stream(
-                    calls,
-                    step,
-                    token,
-                    deadline,
-                    sink,
-                    results,
-                    trace_collector,
-                ):
-                    yield tool_event
+                try:
+                    async for tool_event in self._execute_tools_stream(
+                        calls,
+                        step,
+                        token,
+                        active_deadline,
+                        sink,
+                        results,
+                        trace_collector,
+                    ):
+                        yield tool_event
+                except AgentDeadlineExceeded:
+                    if not finalizing and exploration_deadline is not None:
+                        finalizing = True
+                        continue
+                    raise
+                try:
+                    self._check_controls(token, active_deadline)
+                except AgentDeadlineExceeded:
+                    if not finalizing and exploration_deadline is not None:
+                        finalizing = True
+                        continue
+                    raise
+                request_messages.append(assistant)
                 request_messages.extend(results)
-                self._check_controls(token, deadline)
 
         except AgentCancelledError as exc:
             if trace_collector is not None:
@@ -546,6 +600,20 @@ class AgentRuntime:
             if inspect.isawaitable(result):
                 await result
         return event
+
+
+def _with_finalization_instruction(messages: Sequence[Message]) -> list[Message]:
+    """Build a temporary finalization transcript without mutating stable state."""
+
+    finalization_messages = list(messages)
+    for index, message in enumerate(finalization_messages):
+        if isinstance(message, SystemMessage):
+            finalization_messages[index] = message.model_copy(
+                update={"content": f"{message.content}\n\n{_FINALIZATION_INSTRUCTION}"}
+            )
+            return finalization_messages
+    finalization_messages.insert(0, SystemMessage(content=_FINALIZATION_INSTRUCTION))
+    return finalization_messages
 
 
 __all__ = ["AgentRuntime", "CancellationToken", "EventSink"]
