@@ -23,8 +23,6 @@ from app.vnext.tools.registry import ToolRegistry
         {"range": {"year": {"gte": 2026}}},
         {"slug": "the-international-2026"},
         {"modified_at": "2026-09-01"},
-        {"winner_id": 1},
-        {"tournament_id": 21545},
         {"serie_id": 10828},
     ],
 )
@@ -37,9 +35,13 @@ def test_series_search_input_accepts_closed_semantic_fields() -> None:
     query = SeriesSearchInput(
         id=10828,
         league_id=4106,
+        tournament_id=21545,
+        team_id=123,
         name="The International",
         season="2026",
         year=2026,
+        winner_id=123,
+        tier="s",
         page=2,
         limit=50,
     )
@@ -60,9 +62,13 @@ def test_series_search_schema_is_semantic_and_closed() -> None:
     assert {
         "id",
         "league_id",
+        "tournament_id",
+        "team_id",
         "name",
         "season",
         "year",
+        "winner_id",
+        "tier",
         "page",
         "limit",
     }.issubset(schema.input_schema["properties"])
@@ -72,8 +78,6 @@ def test_series_search_schema_is_semantic_and_closed() -> None:
         "range[",
         "slug",
         "modified_at",
-        "winner_id",
-        "tournament_id",
         "serie_id",
         "PandaScore",
     ):

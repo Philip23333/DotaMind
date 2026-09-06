@@ -37,10 +37,35 @@ class MatchSearchInput(MatchModel):
         gt=0,
         description="Only return matches involving this team.",
     )
+    opponent_id: int | None = Field(
+        default=None,
+        gt=0,
+        description="Only return matches involving this opponent.",
+    )
     name: str | None = Field(
         default=None,
         min_length=1,
         description="Match name to search for. Prefer known entity IDs when available.",
+    )
+    status: str | None = Field(
+        default=None,
+        min_length=1,
+        description="Match lifecycle status, such as finished or canceled.",
+    )
+    match_type: str | None = Field(
+        default=None,
+        min_length=1,
+        description="Match format/type filter.",
+    )
+    winner_id: int | None = Field(
+        default=None,
+        gt=0,
+        description="Only return matches won by this entity.",
+    )
+    winner_type: str | None = Field(
+        default=None,
+        min_length=1,
+        description="Winner entity type filter.",
     )
     lifecycle: Literal["past", "running", "upcoming"] | None = Field(
         default=None,

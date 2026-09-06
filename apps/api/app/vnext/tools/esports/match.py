@@ -23,6 +23,12 @@ tournament_id > series_id > league_id.
 Use team_id to find matches involving a known team. Use lifecycle to distinguish
 past, currently running, and upcoming matches.
 
+Use relationship filters such as team_id, series_id, tournament_id, or league_id
+whenever the related entity is already known.
+
+For match history or result queries, prefer filtering to completed matches rather
+than retrieving all past records.
+
 When looking for the latest or final match in a known event, prefer the known
 event ID with lifecycle="past" and sort="begin_at_desc" rather than relying only
 on match-name search. Use id when the exact match ID is already known.

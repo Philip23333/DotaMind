@@ -39,8 +39,16 @@ class PandaScoreSeriesAdapter:
             params["filter[id]"] = query.id
         if query.league_id is not None:
             params["filter[league_id]"] = query.league_id
+        if query.tournament_id is not None:
+            params["filter[tournament_id]"] = query.tournament_id
+        if query.team_id is not None:
+            params["filter[opponent_id]"] = query.team_id
         if query.year is not None:
             params["filter[year]"] = query.year
+        if query.winner_id is not None:
+            params["filter[winner_id]"] = query.winner_id
+        if query.tier is not None:
+            params["filter[tier]"] = query.tier
         if query.name is not None:
             params["search[name]"] = query.name
         if query.season is not None:

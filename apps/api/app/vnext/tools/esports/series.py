@@ -17,6 +17,10 @@ A series is one specific season or edition of a recurring league.
 
 Use league_id when the parent league is already known.
 
+Use team_id when finding competitions or series involving a specific team.
+
+Combine team_id with league_id or year when the competition scope is known.
+
 Use year when the user refers to a specific yearly edition, such as
 The International 2026.
 

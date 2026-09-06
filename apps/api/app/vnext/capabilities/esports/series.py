@@ -22,6 +22,16 @@ class SeriesSearchInput(SeriesModel):
         gt=0,
         description="Only return series belonging to this league.",
     )
+    tournament_id: int | None = Field(
+        default=None,
+        gt=0,
+        description="Only return series associated with this tournament.",
+    )
+    team_id: int | None = Field(
+        default=None,
+        gt=0,
+        description="Only return series involving this team.",
+    )
     name: str | None = Field(
         default=None,
         min_length=1,
@@ -40,6 +50,16 @@ class SeriesSearchInput(SeriesModel):
         ge=2000,
         le=2100,
         description="Calendar year of the series edition.",
+    )
+    winner_id: int | None = Field(
+        default=None,
+        gt=0,
+        description="Only return series won by this entity.",
+    )
+    tier: str | None = Field(
+        default=None,
+        min_length=1,
+        description="Competition tier filter.",
     )
     page: int = Field(
         default=1,

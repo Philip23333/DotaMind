@@ -82,20 +82,20 @@ def test_search_uses_one_lifecycle_collection_request(lifecycle: str | None, pat
     result = asyncio.run(_adapter(handler).search(query))
 
     assert len(calls) == 1
-    assert calls[0] == (
-        path,
-        {
-            "page": "2",
-            "per_page": "7",
-            "filter[id]": "42",
-            "filter[league_id]": "1",
-            "filter[serie_id]": "2",
-            "filter[tournament_id]": "3",
-            "filter[opponent_id]": "10",
-            "search[name]": "Final",
-            "sort": "-begin_at",
-        },
-    )
+    expected_params = {
+        "page": "2",
+        "per_page": "7",
+        "filter[id]": "42",
+        "filter[league_id]": "1",
+        "filter[serie_id]": "2",
+        "filter[tournament_id]": "3",
+        "filter[opponent_id]": "10",
+        "search[name]": "Final",
+        "sort": "-begin_at",
+    }
+    if lifecycle == "past":
+        expected_params["filter[status]"] = "finished"
+    assert calls[0] == (path, expected_params)
     assert result.page == 2
     assert result.limit == 7
 
@@ -116,6 +116,27 @@ def test_adapter_normalizes_source_wrappers_into_semantic_match_result() -> None
     assert [(score.team_id, score.score) for score in item.results] == [(10, 2), (11, 1)]
     assert item.winner_id == 10
     assert not hasattr(item, "serie")
+
+
+def test_match_default_finished_filter_and_explicit_status_override() -> None:
+    calls: list[dict[str, str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(dict(request.url.params))
+        return httpx.Response(200, json=[], request=request)
+
+    adapter = _adapter(handler)
+    asyncio.run(adapter.search(MatchSearchInput(team_id=123, lifecycle="past")))
+    asyncio.run(
+        adapter.search(
+            MatchSearchInput(team_id=123, lifecycle="past", status="canceled")
+        )
+    )
+
+    assert calls[0]["filter[opponent_id]"] == "123"
+    assert calls[0]["filter[status]"] == "finished"
+    assert calls[1]["filter[opponent_id]"] == "123"
+    assert calls[1]["filter[status]"] == "canceled"
 
 
 def test_client_rejects_missing_token_and_non_collection_payload() -> None:
