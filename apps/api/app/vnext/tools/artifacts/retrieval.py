@@ -47,8 +47,9 @@ class ArtifactReadInput(DomainModel):
         ge=1,
         le=100,
         description=(
-            "Maximum items from the selected list. Prefer one bounded parent-list read over "
-            "many sibling reads when several adjacent rows are required."
+            "Maximum logical items from the selected list; the actual number returned may be "
+            "lower because of the fixed model observation-size budget. Prefer one bounded "
+            "parent-list read over many sibling reads when several adjacent rows are required."
         ),
     )
 
@@ -134,8 +135,11 @@ def register_artifact_tools(
                 "rows.0.results, rows.0.opponents, rows.1.results, rows.1.opponents. The stored "
                 "artifact contains the complete logical tool response, so a parent row/list read "
                 "can expose data replaced by _artifact_path pointers in the bounded preview. "
-                "Offset and limit only slice the selected list value; they do not control "
-                "overall artifact response size."
+                "Offset and limit bound a list logically, but artifact reads also have a fixed "
+                "model observation-size budget, so fewer complete items than limit may be "
+                "returned. "
+                "When continuing, advance offset by the number of items actually returned. If one "
+                "selected value or item is too large, read a narrower nested path."
             ),
             input_model=ArtifactReadInput,
             output_model=ArtifactReadResult,

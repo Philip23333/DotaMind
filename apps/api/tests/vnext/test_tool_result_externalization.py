@@ -139,9 +139,30 @@ def test_externalized_full_output_is_retrievable_through_artifact_tool() -> None
     )
 
     assert read.status == "ok"
-    assert read.content["value"] == payload["items"][:10]
+    returned_items = read.content["value"]
+    assert 0 < len(returned_items) <= 10
+    assert returned_items == payload["items"][: len(returned_items)]
     assert read.content["total"] == 100
     assert read.content["truncated"] is True
+    assert serialized_size(read.content) <= MAX_MODEL_TOOL_OBSERVATION_BYTES
+
+    continuation = asyncio.run(
+        registry.execute(
+            ToolCall(
+                id="read-continuation-call",
+                name="artifact.read",
+                arguments={
+                    "ref": ref,
+                    "mode": "read",
+                    "path": "items",
+                    "offset": len(returned_items),
+                    "limit": 10,
+                },
+            )
+        )
+    )
+    assert continuation.status == "ok"
+    assert continuation.content["value"][0] == payload["items"][len(returned_items)]
 
 
 def test_artifact_tools_bypass_result_externalization() -> None:

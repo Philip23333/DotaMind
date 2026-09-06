@@ -6,7 +6,9 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
+from .externalize import serialized_size
 from .manuals import ManualResolver
+from .observation import MAX_MODEL_TOOL_OBSERVATION_BYTES
 from .store import ArtifactNotFoundError, SessionArtifactStore
 
 
@@ -50,12 +52,14 @@ class ArtifactReader:
 
         if ref.startswith("manual:"):
             self._manual_content(ref)
-            return ArtifactReadResult(
+            result = ArtifactReadResult(
                 ref=ref,
                 path=None,
                 value={"paths": [{"path": "content", "kind": "text"}]},
             )
-        return ArtifactReadResult(ref=ref, path=None, value=_outline(await self._store.get(ref)))
+            return _fit_result_to_model_budget(result)
+        result = ArtifactReadResult(ref=ref, path=None, value=_outline(await self._store.get(ref)))
+        return _fit_result_to_model_budget(result)
 
     async def read(
         self,
@@ -79,7 +83,7 @@ class ArtifactReader:
             resolved_limit = 50 if limit is None else limit
             _validate_pagination(resolved_offset, resolved_limit)
             end = resolved_offset + resolved_limit
-            return ArtifactReadResult(
+            result = ArtifactReadResult(
                 ref=ref,
                 path=path,
                 value=value[resolved_offset:end],
@@ -88,11 +92,12 @@ class ArtifactReader:
                 total=len(value),
                 truncated=end < len(value),
             )
+            return _fit_list_result_to_model_budget(result)
         if pagination_requested:
             raise ArtifactReadValidationError(
                 "pagination is only valid when the final value is a list"
             )
-        return ArtifactReadResult(ref=ref, path=path, value=value)
+        return _fit_result_to_model_budget(ArtifactReadResult(ref=ref, path=path, value=value))
 
     def _manual_content(self, ref: str) -> str:
         if self._manuals is None:
@@ -107,6 +112,40 @@ def _validate_pagination(offset: int, limit: int) -> None:
         raise ArtifactReadValidationError(
             f"limit must be between 1 and {ArtifactReader.MAX_LIMIT}"
         )
+
+
+def _fit_result_to_model_budget(result: ArtifactReadResult) -> ArtifactReadResult:
+    """Ensure a successful artifact result fits the model observation budget."""
+
+    if serialized_size(result.model_dump(mode="json")) <= MAX_MODEL_TOOL_OBSERVATION_BYTES:
+        return result
+    raise ArtifactReadValidationError(
+        "selected artifact value exceeds the model observation budget; "
+        "read a narrower nested path"
+    )
+
+
+def _fit_list_result_to_model_budget(result: ArtifactReadResult) -> ArtifactReadResult:
+    """Drop only trailing complete list items until the result fits the budget."""
+
+    if serialized_size(result.model_dump(mode="json")) <= MAX_MODEL_TOOL_OBSERVATION_BYTES:
+        return result
+
+    empty_result = result.model_copy(update={"value": [], "truncated": True})
+    if serialized_size(empty_result.model_dump(mode="json")) > MAX_MODEL_TOOL_OBSERVATION_BYTES:
+        return _fit_result_to_model_budget(empty_result)
+
+    candidate = list(result.value)
+    while candidate:
+        fitted = result.model_copy(update={"value": candidate, "truncated": True})
+        if serialized_size(fitted.model_dump(mode="json")) <= MAX_MODEL_TOOL_OBSERVATION_BYTES:
+            return fitted
+        candidate.pop()
+
+    raise ArtifactReadValidationError(
+        "selected artifact item exceeds the model observation budget; "
+        "read a narrower nested path"
+    )
 
 
 def _outline(payload: Any) -> Any:
