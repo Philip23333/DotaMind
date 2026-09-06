@@ -40,10 +40,7 @@ class SeriesSearchInput(SeriesModel):
     season: str | None = Field(
         default=None,
         min_length=1,
-        description=(
-            "Season or edition label to search for, "
-            "such as '28' or 'Season 28'."
-        ),
+        description=("Season or edition label to search for, such as '28' or 'Season 28'."),
     )
     year: int | None = Field(
         default=None,
@@ -96,10 +93,44 @@ class SeriesSearchResult(SeriesModel):
     limit: int
 
 
+class SeriesTeamsInput(SeriesModel):
+    series_id: int = Field(
+        gt=0,
+        description="Exact series ID whose participating teams should be returned.",
+    )
+    page: int = Field(
+        default=1,
+        ge=1,
+        description="Result page number.",
+    )
+    limit: int = Field(
+        default=20,
+        ge=1,
+        le=100,
+        description="Maximum number of participating teams to return.",
+    )
+
+
+class SeriesTeamItem(SeriesModel):
+    id: int
+    name: str
+    acronym: str | None = None
+    location: str | None = None
+
+
+class SeriesTeamsResult(SeriesModel):
+    items: list[SeriesTeamItem]
+    page: int
+    limit: int
+
+
 __all__ = [
     "LeagueSummary",
     "SeriesItem",
     "SeriesModel",
     "SeriesSearchInput",
     "SeriesSearchResult",
+    "SeriesTeamItem",
+    "SeriesTeamsInput",
+    "SeriesTeamsResult",
 ]

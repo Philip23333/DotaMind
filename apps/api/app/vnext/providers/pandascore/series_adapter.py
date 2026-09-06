@@ -9,6 +9,9 @@ from app.vnext.capabilities.esports.series import (
     SeriesItem,
     SeriesSearchInput,
     SeriesSearchResult,
+    SeriesTeamItem,
+    SeriesTeamsInput,
+    SeriesTeamsResult,
 )
 
 from .client import PandaScoreClient
@@ -25,6 +28,17 @@ class PandaScoreSeriesAdapter:
         )
         return SeriesSearchResult(
             items=[self._normalize(row) for row in rows],
+            page=query.page,
+            limit=query.limit,
+        )
+
+    async def teams(self, query: SeriesTeamsInput) -> SeriesTeamsResult:
+        rows = await self.client.get_list(
+            f"/dota2/series/{query.series_id}/teams",
+            params={"page": query.page, "per_page": query.limit},
+        )
+        return SeriesTeamsResult(
+            items=[self._normalize_team(row) for row in rows],
             page=query.page,
             limit=query.limit,
         )
@@ -76,6 +90,15 @@ class PandaScoreSeriesAdapter:
         if entity_id is None:
             return None
         return LeagueSummary(id=int(entity_id), name=value.get("name"))
+
+    @staticmethod
+    def _normalize_team(row: dict[str, Any]) -> SeriesTeamItem:
+        return SeriesTeamItem(
+            id=int(row["id"]),
+            name=str(row["name"]),
+            acronym=row.get("acronym"),
+            location=row.get("location"),
+        )
 
 
 __all__ = ["PandaScoreSeriesAdapter"]

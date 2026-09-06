@@ -6,16 +6,11 @@ from typing import Any
 
 from app.vnext.capabilities.esports.tournament import (
     TournamentItem,
-    TournamentRosterItem,
-    TournamentRosterPlayer,
-    TournamentRostersInput,
-    TournamentRostersResult,
-    TournamentRosterTeam,
     TournamentSearchInput,
     TournamentSearchResult,
 )
 
-from .client import PandaScoreClient, PandaScoreProtocolError
+from .client import PandaScoreClient
 
 
 class PandaScoreTournamentAdapter:
@@ -32,26 +27,6 @@ class PandaScoreTournamentAdapter:
             page=query.page,
             limit=query.limit,
         )
-
-    async def rosters(self, query: TournamentRostersInput) -> TournamentRostersResult:
-        payload = await self.client.get_object(
-            f"/tournaments/{query.tournament_id}/rosters"
-        )
-        rows = payload.get("rosters")
-        if not isinstance(rows, list):
-            raise PandaScoreProtocolError(
-                "expected tournament roster response to contain a rosters list"
-            )
-        roster_type = payload.get("type")
-        if roster_type != "Team":
-            raise PandaScoreProtocolError(
-                f"unsupported tournament roster type: {roster_type!r}"
-            )
-
-        items = [self._normalize_roster(row) for row in rows]
-        if query.team_id is not None:
-            items = [item for item in items if item.team.id == query.team_id]
-        return TournamentRostersResult(items=items)
 
     @staticmethod
     def _params(query: TournamentSearchInput) -> dict[str, Any]:
@@ -82,39 +57,6 @@ class PandaScoreTournamentAdapter:
             begin_at=row.get("begin_at"),
             end_at=row.get("end_at"),
         )
-
-    @classmethod
-    def _normalize_roster(cls, row: dict[str, Any]) -> TournamentRosterItem:
-        team = TournamentRosterTeam(
-            id=int(row["id"]),
-            name=str(row["name"]),
-            acronym=row.get("acronym"),
-        )
-        return TournamentRosterItem(
-            team=team,
-            players=cls._normalize_roster_players(row.get("players") or []),
-        )
-
-    @staticmethod
-    def _normalize_roster_players(value: Any) -> list[TournamentRosterPlayer]:
-        if not isinstance(value, list):
-            return []
-        players: list[TournamentRosterPlayer] = []
-        for player in value:
-            if not isinstance(player, dict):
-                continue
-            if player.get("id") is None or player.get("name") is None:
-                continue
-            players.append(
-                TournamentRosterPlayer(
-                    id=int(player["id"]),
-                    name=str(player["name"]),
-                    first_name=player.get("first_name"),
-                    last_name=player.get("last_name"),
-                    role=player.get("role"),
-                )
-            )
-        return players
 
 
 __all__ = ["PandaScoreTournamentAdapter"]

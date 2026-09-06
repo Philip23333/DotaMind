@@ -50,9 +50,7 @@ def test_league_search_schema_is_semantic_and_closed() -> None:
     schema = registry.schemas()[0]
     rendered = json.dumps(schema.model_dump(mode="json"), ensure_ascii=False)
 
-    assert {"id", "name", "page", "limit"}.issubset(
-        schema.input_schema["properties"]
-    )
+    assert {"id", "name", "page", "limit"}.issubset(schema.input_schema["properties"])
     for forbidden in (
         "filter[",
         "search[",
@@ -105,7 +103,7 @@ def test_default_vnext_registry_includes_league_and_match_search() -> None:
         "esports.league.search",
         "esports.series.search",
         "esports.tournament.search",
-        "esports.tournament.rosters",
+        "esports.series.teams",
         "esports.match.search",
         "esports.team.search",
         "esports.player.search",

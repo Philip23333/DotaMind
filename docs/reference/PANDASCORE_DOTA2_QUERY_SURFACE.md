@@ -300,20 +300,18 @@ series_id -> filter[serie_id]
 
 No current trace requires tournament sort or additional tournament filters.
 
-## `/tournaments/{tournament_id}/rosters`
+## `/dota2/series/{series_id}/teams`
 
-Tournament roster endpoint:
+Series participant-team endpoint:
 
 ```text
-GET /tournaments/{tournament_id}/rosters
+GET /dota2/series/{series_id}/teams
 ```
 
-The vNext capability is `esports.tournament.rosters`. It returns the
-tournament-time roster associated with the requested tournament stage, not the
-team's current contracted-player list and not an exact per-match lineup.
-`team_id` is an optional DotaMind-side deterministic filter applied after the
-complete endpoint response is normalized. A missing team match returns an
-empty result rather than a not-found claim.
+The vNext capability is `esports.series.teams`. It returns participating team
+identities for one known series. Its required `series_id` is a semantic
+capability input; it becomes the endpoint path segment inside the adapter.
+`page` and `limit` remain bounded collection controls.
 
 ## `/dota2/matches`
 
@@ -449,14 +447,14 @@ result schema is changed by this document.
 | `esports.league.search` | `id`, `name`, `page`, `limit` | sort, range, modified-at, slug, URL |
 | `esports.series.search` | `id`, `league_id`, `name`, `season`, `year`, `page`, `limit` | sort, time filters/ranges, winner fields, slug |
 | `esports.tournament.search` | `id`, `series_id`, `name`, `page`, `limit` | sort, time filters/ranges, tier, winner, live/bracket flags, prizepool |
-| `esports.tournament.rosters` | `tournament_id`, optional `team_id` | provider roster fields outside the normalized tournament-time roster contract |
+| `esports.series.teams` | `series_id`, `page`, `limit` | additional provider filtering and sorting |
 | `esports.match.search` | IDs, `team_id`, `name`, `lifecycle`, begin-at sort, pagination | many status/time/winner/stat filters and broader sorting |
 
 ## Current decision
 
-The provider query inventory remains reference-only. The roster capability is a
-separate closed semantic contract and does not expose the provider's broader
-roster payload or relationship-query syntax.
+The provider query inventory remains reference-only. The series participant-team
+capability is a separate closed semantic contract and does not expose provider
+relationship-query syntax.
 
 The discovery result should be used later as a provider-capability reference. Future
 expansion should still require a concrete trace or product need and should add the

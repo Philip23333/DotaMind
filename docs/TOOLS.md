@@ -16,8 +16,8 @@ artifact.grep
 artifact.read
 esports.league.search
 esports.series.search
+esports.series.teams
 esports.tournament.search
-esports.tournament.rosters
 esports.match.search
 esports.team.search
 esports.player.search
@@ -75,13 +75,9 @@ accepts `id`, `series_id`, `name`, `page`, and `limit`, and returns the semantic
 `series_id` together with stage timing. Provider-private `serie_id` is not part
 of the model-facing contract.
 
-`esports.tournament.rosters` returns tournament-time rosters for one known
-tournament stage. It requires `tournament_id` from `esports.tournament.search`
-and accepts an optional `team_id` to filter the normalized response to one team.
-This is not the team's current contracted roster, and it does not prove the
-exact five players who appeared in every individual match. Use this capability
-for tournament roster facts instead of reconstructing historical rosters with
-`esports.player.search(team_id=...)`.
+`esports.series.teams` returns participating team identities for one known
+series. It requires `series_id` from `esports.series.search` and accepts
+optional `page` and `limit` bounds.
 
 `esports.match.search` is a closed semantic match-search capability. Its input
 uses `id`, `league_id`, `series_id`, `tournament_id`, `team_id`, `name`,

@@ -22,14 +22,14 @@ from app.vnext.artifacts import (
 from app.vnext.capabilities.esports.league import LeagueSearchInput, LeagueSearchResult
 from app.vnext.capabilities.esports.match import MatchSearchInput, MatchSearchResult
 from app.vnext.capabilities.esports.player import PlayerSearchInput, PlayerSearchResult
-from app.vnext.capabilities.esports.series import SeriesSearchInput, SeriesSearchResult
-from app.vnext.capabilities.esports.team import TeamSearchInput, TeamSearchResult
-from app.vnext.capabilities.esports.tournament import (
-    TournamentRostersInput,
-    TournamentRostersResult,
-    TournamentSearchInput,
-    TournamentSearchResult,
+from app.vnext.capabilities.esports.series import (
+    SeriesSearchInput,
+    SeriesSearchResult,
+    SeriesTeamsInput,
+    SeriesTeamsResult,
 )
+from app.vnext.capabilities.esports.team import TeamSearchInput, TeamSearchResult
+from app.vnext.capabilities.esports.tournament import TournamentSearchInput, TournamentSearchResult
 from app.vnext.llm.openai_compatible import OpenAICompatibleModelClient
 from app.vnext.providers.pandascore.client import PandaScoreClient
 from app.vnext.providers.pandascore.league_adapter import PandaScoreLeagueAdapter
@@ -43,9 +43,9 @@ from app.vnext.tools.esports import (
     register_league_tool,
     register_match_tool,
     register_player_tool,
+    register_series_teams_tool,
     register_series_tool,
     register_team_tool,
-    register_tournament_rosters_tool,
     register_tournament_tool,
 )
 from app.vnext.tools.registry import ToolRegistry
@@ -54,12 +54,8 @@ _VNEXT_ENV_PATH = Path(__file__).with_name(".env")
 
 LeagueSearchService = Callable[[LeagueSearchInput], Awaitable[LeagueSearchResult]]
 SeriesSearchService = Callable[[SeriesSearchInput], Awaitable[SeriesSearchResult]]
-TournamentSearchService = Callable[
-    [TournamentSearchInput], Awaitable[TournamentSearchResult]
-]
-TournamentRostersService = Callable[
-    [TournamentRostersInput], Awaitable[TournamentRostersResult]
-]
+SeriesTeamsService = Callable[[SeriesTeamsInput], Awaitable[SeriesTeamsResult]]
+TournamentSearchService = Callable[[TournamentSearchInput], Awaitable[TournamentSearchResult]]
 MatchSearchService = Callable[[MatchSearchInput], Awaitable[MatchSearchResult]]
 PlayerSearchService = Callable[[PlayerSearchInput], Awaitable[PlayerSearchResult]]
 TeamSearchService = Callable[[TeamSearchInput], Awaitable[TeamSearchResult]]
@@ -125,11 +121,11 @@ class VNextServices:
 
     league_search: LeagueSearchService | None = None
     series_search: SeriesSearchService | None = None
+    series_teams: SeriesTeamsService | None = None
     tournament_search: TournamentSearchService | None = None
     match_search: MatchSearchService | None = None
     team_search: TeamSearchService | None = None
     player_search: PlayerSearchService | None = None
-    tournament_rosters: TournamentRostersService | None = None
 
     async def aclose(self) -> None:
         return None
@@ -154,8 +150,8 @@ def build_vnext_services(
     return VNextServices(
         league_search=league_adapter.search,
         series_search=series_adapter.search,
+        series_teams=series_adapter.teams,
         tournament_search=tournament_adapter.search,
-        tournament_rosters=tournament_adapter.rosters,
         match_search=match_adapter.search,
         team_search=team_adapter.search,
         player_search=player_adapter.search,
@@ -185,13 +181,10 @@ def build_vnext_registry(
         register_league_tool(registry, resolved_services.league_search)
     if resolved_services.series_search is not None:
         register_series_tool(registry, resolved_services.series_search)
+    if resolved_services.series_teams is not None:
+        register_series_teams_tool(registry, resolved_services.series_teams)
     if resolved_services.tournament_search is not None:
         register_tournament_tool(registry, resolved_services.tournament_search)
-    if resolved_services.tournament_rosters is not None:
-        register_tournament_rosters_tool(
-            registry,
-            resolved_services.tournament_rosters,
-        )
     if resolved_services.match_search is not None:
         register_match_tool(registry, resolved_services.match_search)
     if resolved_services.team_search is not None:

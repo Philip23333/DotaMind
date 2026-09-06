@@ -5,7 +5,7 @@ from typing import Any
 
 import httpx
 
-from app.vnext.capabilities.esports.series import SeriesSearchInput
+from app.vnext.capabilities.esports.series import SeriesSearchInput, SeriesTeamsInput
 from app.vnext.providers.pandascore.client import PandaScoreClient
 from app.vnext.providers.pandascore.series_adapter import PandaScoreSeriesAdapter
 
@@ -31,6 +31,16 @@ def _row() -> dict[str, Any]:
         "league": {"id": 4106, "name": "The International"},
         "slug": "the-international-2026",
         "modified_at": "2026-09-01T00:00:00Z",
+    }
+
+
+def _team_row() -> dict[str, Any]:
+    return {
+        "id": 128329,
+        "name": "Xtreme Gaming",
+        "acronym": "XG",
+        "location": "cn",
+        "players": [{"id": 123, "name": "Ame"}],
     }
 
 
@@ -85,9 +95,7 @@ def test_series_team_and_league_filters_are_compiled_together() -> None:
         calls.append(dict(request.url.params))
         return httpx.Response(200, json=[], request=request)
 
-    asyncio.run(
-        _adapter(handler).search(SeriesSearchInput(team_id=123, league_id=456))
-    )
+    asyncio.run(_adapter(handler).search(SeriesSearchInput(team_id=123, league_id=456)))
 
     assert calls == [
         {
@@ -106,9 +114,7 @@ def test_series_ti_discovery_filters_parent_and_year() -> None:
         calls.append(dict(request.url.params))
         return httpx.Response(200, json=[], request=request)
 
-    asyncio.run(
-        _adapter(handler).search(SeriesSearchInput(league_id=4106, year=2026))
-    )
+    asyncio.run(_adapter(handler).search(SeriesSearchInput(league_id=4106, year=2026)))
 
     assert calls == [
         {
@@ -138,3 +144,34 @@ def test_series_normalization_preserves_edition_identity_without_provider_clutte
     }
     assert not hasattr(item, "slug")
     assert not hasattr(item, "modified_at")
+
+
+def test_series_teams_uses_supported_series_participants_endpoint() -> None:
+    calls: list[tuple[str, dict[str, str]]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append((request.url.path, dict(request.url.params)))
+        return httpx.Response(200, json=[_team_row()], request=request)
+
+    result = asyncio.run(
+        _adapter(handler).teams(SeriesTeamsInput(series_id=10828, page=2, limit=50))
+    )
+
+    assert calls == [
+        (
+            "/dota2/series/10828/teams",
+            {"page": "2", "per_page": "50"},
+        )
+    ]
+    assert result.model_dump(mode="json") == {
+        "items": [
+            {
+                "id": 128329,
+                "name": "Xtreme Gaming",
+                "acronym": "XG",
+                "location": "cn",
+            }
+        ],
+        "page": 2,
+        "limit": 50,
+    }
