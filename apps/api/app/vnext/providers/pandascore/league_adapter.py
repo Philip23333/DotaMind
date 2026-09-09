@@ -42,9 +42,16 @@ class PandaScoreLeagueAdapter:
         return LeagueDTO(
             id=int(row["id"]),
             name=str(row["name"]),
-            slug=str(row["slug"]),
-            image_url=str(row["image_url"]),
+            slug=PandaScoreLeagueAdapter._optional_text(row.get("slug")),
+            image_url=PandaScoreLeagueAdapter._optional_text(row.get("image_url")),
         )
+
+    @staticmethod
+    def _optional_text(value: Any) -> str | None:
+        if not isinstance(value, str):
+            return None
+        normalized = value.strip()
+        return normalized or None
 
 
 __all__ = ["PandaScoreLeagueAdapter"]

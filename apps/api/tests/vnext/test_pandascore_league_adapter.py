@@ -113,3 +113,49 @@ def test_normalization_exposes_frozen_league_fields_only() -> None:
         "image_url": "https://example.test/league.png",
     }
     assert not hasattr(item, "modified_at")
+
+
+def test_normalization_preserves_nullable_optional_league_metadata() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    "id": 4106,
+                    "name": "The International",
+                    "slug": None,
+                    "image_url": "   ",
+                }
+            ],
+            request=request,
+        )
+
+    item = asyncio.run(_adapter(handler).search(LeagueSearchInput())).items[0]
+
+    assert item.model_dump() == {
+        "id": 4106,
+        "name": "The International",
+        "slug": None,
+        "image_url": None,
+    }
+
+
+def test_normalization_trims_present_optional_league_metadata() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    "id": 4106,
+                    "name": "The International",
+                    "slug": "  dota-2-the-international  ",
+                    "image_url": " https://example.test/league.png ",
+                }
+            ],
+            request=request,
+        )
+
+    item = asyncio.run(_adapter(handler).search(LeagueSearchInput())).items[0]
+
+    assert item.slug == "dota-2-the-international"
+    assert item.image_url == "https://example.test/league.png"

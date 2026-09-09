@@ -12,8 +12,8 @@ class LeagueDTO(BaseModel):
 
     id: int
     name: str
-    slug: str
-    image_url: str
+    slug: str | None = None
+    image_url: str | None = None
 
 
 __all__ = ["LeagueDTO"]

@@ -58,6 +58,13 @@ def test_league_dto_is_strict_and_has_frozen_fields() -> None:
             url="https://example.test/league",
         )
 
+    assert LeagueDTO(id=4106, name="The International").model_dump() == {
+        "id": 4106,
+        "name": "The International",
+        "slug": None,
+        "image_url": None,
+    }
+
 
 def test_league_search_schema_is_semantic_and_closed() -> None:
     registry = ToolRegistry()
