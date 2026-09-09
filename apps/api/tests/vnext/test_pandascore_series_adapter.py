@@ -54,8 +54,6 @@ def test_series_mapping_compiles_all_criteria_into_one_request() -> None:
     query = SeriesSearchInput(
         id=10828,
         league_id=4106,
-        tournament_id=21545,
-        team_id=123,
         year=2026,
         name="The International",
         season="2026",
@@ -74,13 +72,11 @@ def test_series_mapping_compiles_all_criteria_into_one_request() -> None:
                 "per_page": "50",
                 "filter[id]": "10828",
                 "filter[league_id]": "4106",
-                "filter[tournament_id]": "21545",
-                "filter[opponent_id]": "123",
+                "filter[season]": "2026",
                 "filter[year]": "2026",
                 "filter[winner_id]": "123",
                 "filter[tier]": "s",
                 "search[name]": "The International",
-                "search[season]": "2026",
             },
         )
     ]
@@ -88,21 +84,21 @@ def test_series_mapping_compiles_all_criteria_into_one_request() -> None:
     assert result.limit == 50
 
 
-def test_series_team_and_league_filters_are_compiled_together() -> None:
+def test_series_season_uses_filter_not_search() -> None:
     calls: list[dict[str, str]] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         calls.append(dict(request.url.params))
         return httpx.Response(200, json=[], request=request)
 
-    asyncio.run(_adapter(handler).search(SeriesSearchInput(team_id=123, league_id=456)))
+    asyncio.run(_adapter(handler).search(SeriesSearchInput(season="17", league_id=456)))
 
     assert calls == [
         {
             "page": "1",
             "per_page": "20",
             "filter[league_id]": "456",
-            "filter[opponent_id]": "123",
+            "filter[season]": "17",
         }
     ]
 

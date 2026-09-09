@@ -52,23 +52,14 @@ class PandaScoreMatchAdapter:
             params["filter[serie_id]"] = query.series_id
         if query.tournament_id is not None:
             params["filter[tournament_id]"] = query.tournament_id
-        opponent_id = query.opponent_id if query.opponent_id is not None else query.team_id
-        if opponent_id is not None:
-            params["filter[opponent_id]"] = opponent_id
+        if query.team_id is not None:
+            params["filter[opponent_id]"] = query.team_id
         if query.name is not None:
             params["search[name]"] = query.name
         if query.status is not None:
             params["filter[status]"] = query.status
-        elif query.lifecycle == "past":
-            # PandaScore's finished lifecycle has a concrete begin_at; this is
-            # the provider-supported equivalent of excluding null begin_at.
-            params["filter[status]"] = "finished"
-        if query.match_type is not None:
-            params["filter[match_type]"] = query.match_type
         if query.winner_id is not None:
             params["filter[winner_id]"] = query.winner_id
-        if query.winner_type is not None:
-            params["filter[winner_type]"] = query.winner_type
         if query.sort == "begin_at_asc":
             params["sort"] = "begin_at"
         elif query.sort == "begin_at_desc":

@@ -20,14 +20,18 @@ teams. Use known entity IDs to narrow the search whenever possible.
 Prefer the most specific known competition context:
 tournament_id > series_id > league_id.
 
-Use team_id to find matches involving a known team. Use lifecycle to distinguish
-past, currently running, and upcoming matches.
+Use team_id to find matches involving a known team, and winner_id to find
+matches won by a known team. Use lifecycle to distinguish past, currently
+running, and upcoming matches.
 
 Use relationship filters such as team_id, series_id, tournament_id, or league_id
 whenever the related entity is already known.
 
-For match history or result queries, prefer filtering to completed matches rather
-than retrieving all past records.
+The past collection includes canceled and other non-finished past matches. To
+find completed matches, combine lifecycle="past" with status="finished".
+
+There is no native two-team intersection filter. Inspect the returned opponents
+when a specific matchup is needed.
 
 When looking for the latest or final match in a known event, prefer the known
 event ID with lifecycle="past" and sort="begin_at_desc" rather than relying only

@@ -18,6 +18,8 @@ from app.vnext.tools.registry import ToolRegistry
 @pytest.mark.parametrize(
     "arguments",
     [
+        {"tournament_id": 21545},
+        {"team_id": 1669},
         {"filter": {"league_id": 4106}},
         {"search": {"name": "The International"}},
         {"range": {"year": {"gte": 2026}}},
@@ -35,8 +37,6 @@ def test_series_search_input_accepts_closed_semantic_fields() -> None:
     query = SeriesSearchInput(
         id=10828,
         league_id=4106,
-        tournament_id=21545,
-        team_id=123,
         name="The International",
         season="2026",
         year=2026,
@@ -62,8 +62,6 @@ def test_series_search_schema_is_semantic_and_closed() -> None:
     assert {
         "id",
         "league_id",
-        "tournament_id",
-        "team_id",
         "name",
         "season",
         "year",

@@ -74,6 +74,7 @@ def test_search_uses_one_lifecycle_collection_request(lifecycle: str | None, pat
         series_id=2,
         tournament_id=3,
         team_id=10,
+        winner_id=11,
         name="Final",
         sort="begin_at_desc",
         page=2,
@@ -90,11 +91,10 @@ def test_search_uses_one_lifecycle_collection_request(lifecycle: str | None, pat
         "filter[serie_id]": "2",
         "filter[tournament_id]": "3",
         "filter[opponent_id]": "10",
+        "filter[winner_id]": "11",
         "search[name]": "Final",
         "sort": "-begin_at",
     }
-    if lifecycle == "past":
-        expected_params["filter[status]"] = "finished"
     assert calls[0] == (path, expected_params)
     assert result.page == 2
     assert result.limit == 7
@@ -118,7 +118,7 @@ def test_adapter_normalizes_source_wrappers_into_semantic_match_result() -> None
     assert not hasattr(item, "serie")
 
 
-def test_match_default_finished_filter_and_explicit_status_override() -> None:
+def test_past_does_not_implicitly_filter_finished_and_explicit_status_is_preserved() -> None:
     calls: list[dict[str, str]] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -129,14 +129,14 @@ def test_match_default_finished_filter_and_explicit_status_override() -> None:
     asyncio.run(adapter.search(MatchSearchInput(team_id=123, lifecycle="past")))
     asyncio.run(
         adapter.search(
-            MatchSearchInput(team_id=123, lifecycle="past", status="canceled")
+            MatchSearchInput(team_id=123, lifecycle="past", status="finished")
         )
     )
 
     assert calls[0]["filter[opponent_id]"] == "123"
-    assert calls[0]["filter[status]"] == "finished"
+    assert "filter[status]" not in calls[0]
     assert calls[1]["filter[opponent_id]"] == "123"
-    assert calls[1]["filter[status]"] == "canceled"
+    assert calls[1]["filter[status]"] == "finished"
 
 
 def test_client_rejects_missing_token_and_non_collection_payload() -> None:

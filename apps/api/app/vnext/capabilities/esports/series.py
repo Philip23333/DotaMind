@@ -22,16 +22,6 @@ class SeriesSearchInput(SeriesModel):
         gt=0,
         description="Only return series belonging to this league.",
     )
-    tournament_id: int | None = Field(
-        default=None,
-        gt=0,
-        description="Only return series associated with this tournament.",
-    )
-    team_id: int | None = Field(
-        default=None,
-        gt=0,
-        description="Only return series involving this team.",
-    )
     name: str | None = Field(
         default=None,
         min_length=1,

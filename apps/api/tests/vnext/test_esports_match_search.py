@@ -17,12 +17,18 @@ def test_match_search_input_is_closed_and_bounded() -> None:
         MatchSearchInput.model_validate({"filter": {"id": 1}})
     with pytest.raises(ValueError):
         MatchSearchInput.model_validate({"search": {"name": "final"}})
-        with pytest.raises(ValueError):
-            MatchSearchInput.model_validate({"range": {"begin_at": "today"}})
-        with pytest.raises(ValueError):
-            MatchSearchInput.model_validate({"serie_id": 1})
-        with pytest.raises(ValueError):
-            MatchSearchInput.model_validate({"page": 0})
+    with pytest.raises(ValueError):
+        MatchSearchInput.model_validate({"range": {"begin_at": "today"}})
+    with pytest.raises(ValueError):
+        MatchSearchInput.model_validate({"serie_id": 1})
+    with pytest.raises(ValueError):
+        MatchSearchInput.model_validate({"opponent_id": 1})
+    with pytest.raises(ValueError):
+        MatchSearchInput.model_validate({"match_type": "best_of"})
+    with pytest.raises(ValueError):
+        MatchSearchInput.model_validate({"winner_type": "Team"})
+    with pytest.raises(ValueError):
+        MatchSearchInput.model_validate({"page": 0})
     with pytest.raises(ValueError):
         MatchSearchInput.model_validate({"limit": 101})
 
@@ -44,11 +50,12 @@ def test_match_search_tool_schema_exposes_only_semantic_fields() -> None:
     assert "league_id" in schema
     assert "series_id" in schema
     assert "tournament_id" in schema
-    assert "opponent_id" in schema
+    assert "team_id" in schema
     assert "status" in schema
-    assert "match_type" in schema
     assert "winner_id" in schema
-    assert "winner_type" in schema
+    assert "opponent_id" not in schema
+    assert "match_type" not in schema
+    assert "winner_type" not in schema
 
 
 def test_match_search_tool_validates_and_returns_contract_output() -> None:
@@ -78,19 +85,13 @@ def test_match_search_tool_validates_and_returns_contract_output() -> None:
 def test_match_search_accepts_relationship_and_result_filters() -> None:
     query = MatchSearchInput(
         team_id=123,
-        opponent_id=456,
         status="canceled",
-        match_type="best_of",
         winner_id=456,
-        winner_type="Team",
     )
 
     assert query.team_id == 123
-    assert query.opponent_id == 456
     assert query.status == "canceled"
-    assert query.match_type == "best_of"
     assert query.winner_id == 456
-    assert query.winner_type == "Team"
 
 
 def test_default_vnext_registry_contains_artifacts_and_esports_search_tools() -> None:

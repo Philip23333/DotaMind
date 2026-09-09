@@ -17,17 +17,19 @@ A series is one specific season or edition of a recurring league.
 
 Use league_id when the parent league is already known.
 
-Use team_id when finding competitions or series involving a specific team.
-
-Combine team_id with league_id or year when the competition scope is known.
-
 Use year when the user refers to a specific yearly edition, such as
 The International 2026.
 
 Use season for season-style editions such as DreamLeague Season 28.
 
-Use name only for a series-specific name. Do not use this tool to search for
-tournament stages such as Group Stage or Playoffs.
+Use year or season to narrow the result, but do not assume either is unique.
+
+Use name only for fuzzy discovery of a series name. Do not use this tool to
+search for tournament stages such as Group Stage or Playoffs; use
+esports.tournament.search with series_id instead.
+
+Use esports.series.teams with series_id to find the teams participating in a
+known series.
 
 Use id when the exact series ID is already known.
 """
