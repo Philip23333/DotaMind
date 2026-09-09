@@ -22,6 +22,12 @@ match capabilities when needed.
 
 name is the player's professional name or handle. first_name and last_name
 refer to real-name fields. Use id when the exact player ID is already known.
+
+The result is the player's current state: PlayerDTO fields include id, name,
+active, optional role(s), identity metadata, and an optional current_team
+TeamRefDTO. Mixed PandaScore positions such as "1/2" are normalized to
+multiple semantic roles such as ["carry", "mid"]. current_team is only a
+lightweight current-team reference; it does not embed a roster.
 """
 
 

@@ -117,9 +117,12 @@ filter or discovery task is needed.
 `esports.player.search` resolves professional or real-name player identity and
 supports roster discovery through `team_id` and `active`. Its closed input
 contains `id`, `team_id`, `name`, `first_name`, `last_name`, `active`, `page`,
-and `limit`. The output includes player identity, active status, optional
-nationality and role, and an optional `current_team` summary. A missing
-`current_team` is valid for a free agent.
+and `limit`. The output is a `PlayerDTO` containing `id`, `name`, `active`,
+optional semantic `role` values, player identity metadata, and an optional
+`current_team` `TeamRefDTO`. Mixed PandaScore positions such as `"1/2"` map
+to multiple roles such as `["carry", "mid"]`; `current_team` is a lightweight
+current-team reference and does not embed a roster. A missing `current_team`
+is valid for a free agent.
 
 Both participant tools use one semantic collection request and inherit the
 generic result processor for oversized responses. `TeamDTO.current_roster`

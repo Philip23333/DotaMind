@@ -99,6 +99,27 @@ class TeamDTO(BaseModel):
     current_roster: list[CurrentRosterPlayerDTO] = Field(default_factory=list)
 
 
+class PlayerDTO(BaseModel):
+    """Stable DotaMind representation of a current Player entity."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    name: str
+
+    active: bool
+    role: tuple[PlayerRole, ...] | None = None
+
+    first_name: str | None = None
+    last_name: str | None = None
+    nationality: str | None = None
+
+    slug: str | None = None
+    image_url: str | None = None
+
+    current_team: TeamRefDTO | None = None
+
+
 class TournamentRosterPlayerDTO(BaseModel):
     """A player identity as captured in a tournament-context roster."""
 
@@ -221,6 +242,7 @@ __all__ = [
     "MatchDTO",
     "MatchGameDTO",
     "MatchParticipantDTO",
+    "PlayerDTO",
     "PlayerRole",
     "SeriesDTO",
     "TeamRefDTO",

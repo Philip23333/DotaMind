@@ -4,7 +4,9 @@ import asyncio
 from typing import Any
 
 import httpx
+import pytest
 
+from app.vnext.capabilities.esports.dtos import PlayerRole
 from app.vnext.capabilities.esports.player import PlayerSearchInput
 from app.vnext.providers.pandascore.client import PandaScoreClient
 from app.vnext.providers.pandascore.player_adapter import PandaScorePlayerAdapter
@@ -23,14 +25,14 @@ def _row(*, current_team: Any = None) -> dict[str, Any]:
     return {
         "id": 1669,
         "name": "Ame",
-        "first_name": "Wang",
-        "last_name": "Chunyu",
+        "first_name": " Wang ",
+        "last_name": " Chunyu ",
         "active": True,
-        "nationality": "CN",
-        "role": "carry",
+        "nationality": " CN ",
+        "role": " 1 / 2 ",
         "current_team": current_team,
-        "slug": "ame",
-        "image_url": "https://example.test/ame.png",
+        "slug": " ame ",
+        "image_url": " https://example.test/ame.png ",
         "modified_at": "2026-09-01T00:00:00Z",
         "birthday": "2000-01-01",
         "current_videogame": {"id": 4, "name": "Dota 2"},
@@ -50,6 +52,7 @@ def test_player_search_maps_all_semantic_fields_in_one_request() -> None:
                         "id": 1647,
                         "name": "Team Liquid",
                         "acronym": "TL",
+                        "location": " NL ",
                         "slug": "team-liquid",
                         "image_url": "https://example.test/liquid.png",
                         "modified_at": "2026-09-01T00:00:00Z",
@@ -93,7 +96,7 @@ def test_player_search_maps_all_semantic_fields_in_one_request() -> None:
     assert result.limit == 50
 
 
-def test_player_normalization_keeps_current_team_summary() -> None:
+def test_player_normalization_projects_current_team_and_drops_provider_clutter() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
             200,
@@ -103,7 +106,9 @@ def test_player_normalization_keeps_current_team_summary() -> None:
                         "id": 1647,
                         "name": "Team Liquid",
                         "acronym": "TL",
+                        "location": " NL ",
                         "slug": "team-liquid",
+                        "image_url": " https://example.test/liquid.png ",
                     }
                 )
             ],
@@ -112,18 +117,25 @@ def test_player_normalization_keeps_current_team_summary() -> None:
 
     item = asyncio.run(_adapter(handler).search(PlayerSearchInput())).items[0]
 
-    assert item.model_dump() == {
+    assert item.model_dump(mode="json") == {
         "id": 1669,
         "name": "Ame",
         "first_name": "Wang",
         "last_name": "Chunyu",
         "active": True,
         "nationality": "CN",
-        "role": "carry",
-        "current_team": {"id": 1647, "name": "Team Liquid", "acronym": "TL"},
+        "role": ["carry", "mid"],
+        "slug": "ame",
+        "image_url": "https://example.test/ame.png",
+        "current_team": {
+            "id": 1647,
+            "name": "Team Liquid",
+            "acronym": "TL",
+            "location": "NL",
+            "slug": "team-liquid",
+            "image_url": "https://example.test/liquid.png",
+        },
     }
-    assert not hasattr(item, "slug")
-    assert not hasattr(item, "image_url")
     assert not hasattr(item, "modified_at")
     assert not hasattr(item, "birthday")
     assert not hasattr(item, "current_videogame")
@@ -136,3 +148,54 @@ def test_player_without_current_team_is_valid() -> None:
     item = asyncio.run(_adapter(handler).search(PlayerSearchInput())).items[0]
 
     assert item.current_team is None
+
+
+def test_player_role_mapping_supports_single_and_mixed_positions(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    assert PandaScorePlayerAdapter._player_role(1) == (PlayerRole.carry,)
+    assert PandaScorePlayerAdapter._player_role("1") == (PlayerRole.carry,)
+    assert PandaScorePlayerAdapter._player_role(2) == (PlayerRole.mid,)
+    assert PandaScorePlayerAdapter._player_role("1/2") == (
+        PlayerRole.carry,
+        PlayerRole.mid,
+    )
+    assert PandaScorePlayerAdapter._player_role(" 3 / 4 ") == (
+        PlayerRole.offlane,
+        PlayerRole.soft_support,
+    )
+    assert PandaScorePlayerAdapter._player_role(None) is None
+
+    invalid_values = [0, 6, True, False, "", "carry", "mid", "1/6", "1/x"]
+    with caplog.at_level("WARNING"):
+        assert all(
+            PandaScorePlayerAdapter._player_role(value) is None
+            for value in invalid_values
+        )
+    for value in invalid_values:
+        assert repr(value) in caplog.text
+
+
+def test_player_active_is_required() -> None:
+    row = _row()
+    row.pop("active")
+
+    with pytest.raises(KeyError, match="active"):
+        PandaScorePlayerAdapter._normalize(row)
+
+
+@pytest.mark.parametrize("value", [None, "invalid", 123])
+def test_player_current_team_non_dict_defaults_to_none(value: Any) -> None:
+    assert (
+        PandaScorePlayerAdapter._normalize(_row(current_team=value)).current_team
+        is None
+    )
+
+
+@pytest.mark.parametrize("missing", ["id", "name"])
+def test_player_current_team_required_identity_is_strict(missing: str) -> None:
+    current_team = {"id": 1647, "name": "Team Liquid"}
+    current_team.pop(missing)
+
+    with pytest.raises(KeyError, match=missing):
+        PandaScorePlayerAdapter._normalize(_row(current_team=current_team))

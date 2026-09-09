@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .dtos import PlayerDTO
+
 
 class PlayerModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -52,33 +54,15 @@ class PlayerSearchInput(PlayerModel):
     )
 
 
-class PlayerTeamSummary(PlayerModel):
-    id: int
-    name: str
-    acronym: str | None = None
-
-
-class PlayerItem(PlayerModel):
-    id: int
-    name: str
-    first_name: str | None = None
-    last_name: str | None = None
-    active: bool
-    nationality: str | None = None
-    role: str | None = None
-    current_team: PlayerTeamSummary | None = None
-
-
 class PlayerSearchResult(PlayerModel):
-    items: list[PlayerItem]
+    items: list[PlayerDTO]
     page: int
     limit: int
 
 
 __all__ = [
-    "PlayerItem",
+    "PlayerDTO",
     "PlayerModel",
     "PlayerSearchInput",
     "PlayerSearchResult",
-    "PlayerTeamSummary",
 ]

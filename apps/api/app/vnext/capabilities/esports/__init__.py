@@ -6,6 +6,7 @@ from .dtos import (
     MatchDTO,
     MatchGameDTO,
     MatchParticipantDTO,
+    PlayerDTO,
     PlayerRole,
     SeriesDTO,
     TeamDTO,
@@ -21,11 +22,9 @@ from .match import (
     MatchSearchResult,
 )
 from .player import (
-    PlayerItem,
     PlayerModel,
     PlayerSearchInput,
     PlayerSearchResult,
-    PlayerTeamSummary,
 )
 from .series import (
     SeriesModel,
@@ -52,11 +51,10 @@ __all__ = [
     "MatchSearchInput",
     "MatchSearchResult",
     "CurrentRosterPlayerDTO",
-    "PlayerItem",
+    "PlayerDTO",
     "PlayerModel",
     "PlayerSearchInput",
     "PlayerSearchResult",
-    "PlayerTeamSummary",
     "PlayerRole",
     "SeriesDTO",
     "SeriesModel",

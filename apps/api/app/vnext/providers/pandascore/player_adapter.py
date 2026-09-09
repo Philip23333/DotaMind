@@ -2,16 +2,30 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
+from app.vnext.capabilities.esports.dtos import (
+    PlayerDTO,
+    PlayerRole,
+    TeamRefDTO,
+)
 from app.vnext.capabilities.esports.player import (
-    PlayerItem,
     PlayerSearchInput,
     PlayerSearchResult,
-    PlayerTeamSummary,
 )
 
 from .client import PandaScoreClient
+
+logger = logging.getLogger(__name__)
+
+_PLAYER_ROLE_BY_POSITION = {
+    "1": PlayerRole.carry,
+    "2": PlayerRole.mid,
+    "3": PlayerRole.offlane,
+    "4": PlayerRole.soft_support,
+    "5": PlayerRole.hard_support,
+}
 
 
 class PandaScorePlayerAdapter:
@@ -50,26 +64,58 @@ class PandaScorePlayerAdapter:
         return params
 
     @classmethod
-    def _normalize(cls, row: dict[str, Any]) -> PlayerItem:
-        return PlayerItem(
+    def _normalize(cls, row: dict[str, Any]) -> PlayerDTO:
+        return PlayerDTO(
             id=int(row["id"]),
-            name=str(row["name"]),
-            first_name=row.get("first_name"),
-            last_name=row.get("last_name"),
-            active=bool(row["active"]),
-            nationality=row.get("nationality"),
-            role=row.get("role"),
+            name=row["name"],
+            active=row["active"],
+            role=cls._player_role(row.get("role")),
+            first_name=cls._optional_text(row.get("first_name")),
+            last_name=cls._optional_text(row.get("last_name")),
+            nationality=cls._optional_text(row.get("nationality")),
+            slug=cls._optional_text(row.get("slug")),
+            image_url=cls._optional_text(row.get("image_url")),
             current_team=cls._current_team(row.get("current_team")),
         )
 
     @staticmethod
-    def _current_team(value: Any) -> PlayerTeamSummary | None:
-        if not isinstance(value, dict) or value.get("id") is None or value.get("name") is None:
+    def _optional_text(value: Any) -> str | None:
+        if not isinstance(value, str):
             return None
-        return PlayerTeamSummary(
+        normalized = value.strip()
+        return normalized or None
+
+    @staticmethod
+    def _player_role(value: Any) -> tuple[PlayerRole, ...] | None:
+        if value is None:
+            return None
+        if isinstance(value, bool):
+            logger.warning("Unknown PandaScore player role value=%r", value)
+            return None
+        if isinstance(value, int):
+            tokens = [str(value)]
+        elif isinstance(value, str):
+            tokens = [token.strip() for token in value.split("/")]
+        else:
+            logger.warning("Unknown PandaScore player role value=%r", value)
+            return None
+
+        if not tokens or any(token not in _PLAYER_ROLE_BY_POSITION for token in tokens):
+            logger.warning("Unknown PandaScore player role value=%r", value)
+            return None
+        return tuple(_PLAYER_ROLE_BY_POSITION[token] for token in tokens)
+
+    @classmethod
+    def _current_team(cls, value: Any) -> TeamRefDTO | None:
+        if value is None or not isinstance(value, dict):
+            return None
+        return TeamRefDTO(
             id=int(value["id"]),
-            name=str(value["name"]),
-            acronym=value.get("acronym"),
+            name=value["name"],
+            acronym=cls._optional_text(value.get("acronym")),
+            location=cls._optional_text(value.get("location")),
+            slug=cls._optional_text(value.get("slug")),
+            image_url=cls._optional_text(value.get("image_url")),
         )
 
 

@@ -5,12 +5,8 @@ import json
 
 import pytest
 
-from app.vnext.capabilities.esports.player import (
-    PlayerItem,
-    PlayerSearchInput,
-    PlayerSearchResult,
-    PlayerTeamSummary,
-)
+from app.vnext.capabilities.esports.dtos import PlayerDTO, PlayerRole, TeamRefDTO
+from app.vnext.capabilities.esports.player import PlayerSearchInput, PlayerSearchResult
 from app.vnext.llm.protocol import ToolCall
 from app.vnext.tools.esports import register_player_tool
 from app.vnext.tools.registry import ToolRegistry
@@ -95,6 +91,40 @@ def test_player_search_schema_is_semantic_and_closed() -> None:
         assert forbidden not in rendered
 
 
+def test_player_dto_has_frozen_fields_and_nullable_metadata() -> None:
+    assert set(PlayerDTO.model_fields) == {
+        "id",
+        "name",
+        "active",
+        "role",
+        "first_name",
+        "last_name",
+        "nationality",
+        "slug",
+        "image_url",
+        "current_team",
+    }
+    item = PlayerDTO(id=1669, name="Ame", active=True)
+    assert item.role is None
+    assert item.current_team is None
+    for extra_field in ("modified_at", "birthday"):
+        with pytest.raises(ValueError):
+            PlayerDTO(
+                id=1669,
+                name="Ame",
+                active=True,
+                **{extra_field: "today"},
+            )
+
+    mixed = PlayerDTO(
+        id=1669,
+        name="Ame",
+        active=True,
+        role=(PlayerRole.carry, PlayerRole.mid),
+    )
+    assert mixed.model_dump(mode="json")["role"] == ["carry", "mid"]
+
+
 def test_player_search_returns_identity_and_current_team() -> None:
     seen: list[PlayerSearchInput] = []
     registry = ToolRegistry()
@@ -103,15 +133,12 @@ def test_player_search_returns_identity_and_current_team() -> None:
         seen.append(query)
         return PlayerSearchResult(
             items=[
-                PlayerItem(
+                PlayerDTO(
                     id=1669,
                     name="Ame",
-                    first_name="Wang",
-                    last_name="Chunyu",
                     active=True,
-                    nationality="CN",
-                    role="carry",
-                    current_team=PlayerTeamSummary(
+                    role=(PlayerRole.mid,),
+                    current_team=TeamRefDTO(
                         id=1647,
                         name="Team Liquid",
                         acronym="TL",
@@ -134,9 +161,23 @@ def test_player_search_returns_identity_and_current_team() -> None:
     )
 
     assert result.status == "ok"
-    assert result.content["items"][0]["current_team"] == {
-        "id": 1647,
-        "name": "Team Liquid",
-        "acronym": "TL",
+    assert result.content["items"][0] == {
+        "id": 1669,
+        "name": "Ame",
+        "active": True,
+        "role": ["mid"],
+        "first_name": None,
+        "last_name": None,
+        "nationality": None,
+        "slug": None,
+        "image_url": None,
+        "current_team": {
+            "id": 1647,
+            "name": "Team Liquid",
+            "acronym": "TL",
+            "location": None,
+            "slug": None,
+            "image_url": None,
+        },
     }
     assert seen[0].name == "Ame"
