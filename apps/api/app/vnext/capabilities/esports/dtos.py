@@ -108,8 +108,74 @@ class TournamentDTO(BaseModel):
     participants: list[TournamentParticipantDTO] = Field(default_factory=list)
 
 
+class MatchParticipantDTO(BaseModel):
+    """A team participating in a match and its provider-reported score."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    team: TeamRefDTO
+    score: int | None = None
+
+
+class MatchGameDTO(BaseModel):
+    """A single game within a match."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    position: int
+    status: str
+
+    begin_at: datetime | None = None
+    end_at: datetime | None = None
+    length: int | None = None
+
+    winner_id: int | None = None
+
+    complete: bool
+    forfeit: bool
+
+
+class MatchDTO(BaseModel):
+    """Stable DotaMind representation of a PandaScore match."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    name: str
+    slug: str | None = None
+
+    status: str
+    match_type: str | None = None
+    number_of_games: int | None = None
+
+    begin_at: datetime | None = None
+    end_at: datetime | None = None
+
+    scheduled_at: datetime | None = None
+    original_scheduled_at: datetime | None = None
+
+    league_id: int | None = None
+    series_id: int | None = None
+    tournament_id: int | None = None
+
+    participants: list[MatchParticipantDTO] = Field(default_factory=list)
+
+    winner_id: int | None = None
+    winner: TeamRefDTO | None = None
+
+    games: list[MatchGameDTO] = Field(default_factory=list)
+
+    draw: bool
+    forfeit: bool
+    rescheduled: bool
+
+
 __all__ = [
     "LeagueDTO",
+    "MatchDTO",
+    "MatchGameDTO",
+    "MatchParticipantDTO",
     "SeriesDTO",
     "TeamRefDTO",
     "TournamentDTO",

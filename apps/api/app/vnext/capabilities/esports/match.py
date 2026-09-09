@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from .dtos import MatchDTO
 
 
 class MatchModel(BaseModel):
@@ -69,59 +70,15 @@ class MatchSearchInput(MatchModel):
     )
 
 
-class CompetitionSummary(MatchModel):
-    id: int
-    name: str | None = None
-
-
-class SeriesSummary(MatchModel):
-    id: int
-    name: str | None = None
-    full_name: str | None = None
-    year: int | None = None
-
-
-class TeamSummary(MatchModel):
-    id: int
-    name: str | None = None
-    acronym: str | None = None
-
-
-class MatchScore(MatchModel):
-    team_id: int
-    score: int
-
-
-class MatchItem(MatchModel):
-    id: int
-    name: str | None = None
-    status: str | None = None
-    scheduled_at: datetime | None = None
-    begin_at: datetime | None = None
-    end_at: datetime | None = None
-    match_type: str | None = None
-    number_of_games: int | None = None
-    league: CompetitionSummary | None = None
-    series: SeriesSummary | None = None
-    tournament: CompetitionSummary | None = None
-    opponents: list[TeamSummary] = Field(default_factory=list)
-    results: list[MatchScore] = Field(default_factory=list)
-    winner_id: int | None = None
-
-
 class MatchSearchResult(MatchModel):
-    items: list[MatchItem]
+    items: list[MatchDTO]
     page: int
     limit: int
 
 
 __all__ = [
-    "CompetitionSummary",
-    "MatchItem",
-    "MatchScore",
+    "MatchDTO",
     "MatchSearchInput",
     "MatchSearchResult",
     "MatchModel",
-    "SeriesSummary",
-    "TeamSummary",
 ]

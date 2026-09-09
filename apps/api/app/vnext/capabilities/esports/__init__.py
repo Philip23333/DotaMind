@@ -2,6 +2,9 @@
 
 from .dtos import (
     LeagueDTO,
+    MatchDTO,
+    MatchGameDTO,
+    MatchParticipantDTO,
     SeriesDTO,
     TeamRefDTO,
     TournamentDTO,
@@ -10,13 +13,9 @@ from .dtos import (
 )
 from .league import LeagueSearchInput, LeagueSearchResult
 from .match import (
-    CompetitionSummary,
-    MatchItem,
-    MatchScore,
+    MatchModel,
     MatchSearchInput,
     MatchSearchResult,
-    SeriesSummary,
-    TeamSummary,
 )
 from .player import (
     PlayerItem,
@@ -40,12 +39,13 @@ from .tournament import (
 )
 
 __all__ = [
-    "CompetitionSummary",
     "LeagueDTO",
     "LeagueSearchInput",
     "LeagueSearchResult",
-    "MatchItem",
-    "MatchScore",
+    "MatchDTO",
+    "MatchGameDTO",
+    "MatchModel",
+    "MatchParticipantDTO",
     "MatchSearchInput",
     "MatchSearchResult",
     "PlayerItem",
@@ -60,12 +60,10 @@ __all__ = [
     "TeamRefDTO",
     "SeriesTeamsInput",
     "SeriesTeamsResult",
-    "SeriesSummary",
     "TeamItem",
     "TeamModel",
     "TeamSearchInput",
     "TeamSearchResult",
-    "TeamSummary",
     "TournamentDTO",
     "TournamentModel",
     "TournamentParticipantDTO",

@@ -19,12 +19,17 @@ def _row() -> dict[str, Any]:
     return {
         "id": 42,
         "name": "Grand Final",
+        "slug": " grand-final ",
         "status": "finished",
+        "match_type": " best_of ",
+        "number_of_games": 3,
         "scheduled_at": "2026-09-01T10:00:00Z",
+        "original_scheduled_at": "2026-09-01T09:30:00Z",
         "begin_at": "2026-09-01T10:05:00Z",
         "end_at": "2026-09-01T12:00:00Z",
-        "match_type": "best_of",
-        "number_of_games": 3,
+        "league_id": 1,
+        "serie_id": 2,
+        "tournament_id": 3,
         "league": {"id": 1, "name": "The International"},
         "serie": {
             "id": 2,
@@ -34,11 +39,69 @@ def _row() -> dict[str, Any]:
         },
         "tournament": {"id": 3, "name": "Group Stage"},
         "opponents": [
-            {"opponent": {"id": 10, "name": "Alpha", "acronym": "ALP"}},
-            {"opponent": {"id": 11, "name": "Beta", "acronym": "BET"}},
+            {
+                "opponent": {
+                    "id": 10,
+                    "name": "Alpha",
+                    "acronym": " ALP ",
+                    "location": " us ",
+                    "slug": " alpha ",
+                    "image_url": " https://example.test/alpha.png ",
+                    "players": [{"id": 100, "name": "Current"}],
+                    "modified_at": "2026-09-01T00:00:00Z",
+                }
+            },
+            {
+                "opponent": {
+                    "id": 11,
+                    "name": "Beta",
+                    "acronym": " BET ",
+                    "location": " ca ",
+                    "slug": " beta ",
+                    "image_url": " https://example.test/beta.png ",
+                    "players": [],
+                    "modified_at": "2026-09-01T00:00:00Z",
+                }
+            },
         ],
         "results": [{"team_id": 10, "score": 2}, {"team_id": 11, "score": 1}],
         "winner_id": 10,
+        "winner": {
+            "id": 10,
+            "name": "Alpha",
+            "acronym": " ALP ",
+            "location": " us ",
+            "slug": " alpha ",
+            "image_url": " https://example.test/alpha.png ",
+        },
+        "games": [
+            {
+                "id": 9001,
+                "position": 1,
+                "status": "finished",
+                "begin_at": "2026-09-01T10:05:00Z",
+                "end_at": "2026-09-01T10:45:00Z",
+                "length": 2400,
+                "winner": {"id": 10, "type": "Team"},
+                "complete": True,
+                "forfeit": False,
+                "match_id": 42,
+                "finished": True,
+                "detailed_stats": True,
+            }
+        ],
+        "draw": False,
+        "forfeit": False,
+        "rescheduled": False,
+        "winner_type": "Team",
+        "modified_at": "2026-09-01T00:00:00Z",
+        "videogame": {"id": 4},
+        "videogame_title": None,
+        "videogame_version": "7.39",
+        "streams_list": [],
+        "live": {"opens_at": None},
+        "detailed_stats": True,
+        "game_advantage": None,
     }
 
 
@@ -100,7 +163,7 @@ def test_search_uses_one_lifecycle_collection_request(lifecycle: str | None, pat
     assert result.limit == 7
 
 
-def test_adapter_normalizes_source_wrappers_into_semantic_match_result() -> None:
+def test_adapter_normalizes_complete_match_projection() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json=[_row()], request=request)
 
@@ -108,14 +171,148 @@ def test_adapter_normalizes_source_wrappers_into_semantic_match_result() -> None
         _adapter(handler).search(MatchSearchInput())
     ).items[0]
 
-    assert item.id == 42
-    assert item.series is not None
-    assert item.series.id == 2
-    assert item.series.year == 2026
-    assert [team.id for team in item.opponents] == [10, 11]
-    assert [(score.team_id, score.score) for score in item.results] == [(10, 2), (11, 1)]
+    assert item.model_dump(mode="json") == {
+        "id": 42,
+        "name": "Grand Final",
+        "slug": "grand-final",
+        "status": "finished",
+        "match_type": "best_of",
+        "number_of_games": 3,
+        "begin_at": "2026-09-01T10:05:00Z",
+        "end_at": "2026-09-01T12:00:00Z",
+        "scheduled_at": "2026-09-01T10:00:00Z",
+        "original_scheduled_at": "2026-09-01T09:30:00Z",
+        "league_id": 1,
+        "series_id": 2,
+        "tournament_id": 3,
+        "participants": [
+            {
+                "team": {
+                    "id": 10,
+                    "name": "Alpha",
+                    "acronym": "ALP",
+                    "location": "us",
+                    "slug": "alpha",
+                    "image_url": "https://example.test/alpha.png",
+                },
+                "score": 2,
+            },
+            {
+                "team": {
+                    "id": 11,
+                    "name": "Beta",
+                    "acronym": "BET",
+                    "location": "ca",
+                    "slug": "beta",
+                    "image_url": "https://example.test/beta.png",
+                },
+                "score": 1,
+            },
+        ],
+        "winner_id": 10,
+        "winner": {
+            "id": 10,
+            "name": "Alpha",
+            "acronym": "ALP",
+            "location": "us",
+            "slug": "alpha",
+            "image_url": "https://example.test/alpha.png",
+        },
+        "games": [
+            {
+                "id": 9001,
+                "position": 1,
+                "status": "finished",
+                "begin_at": "2026-09-01T10:05:00Z",
+                "end_at": "2026-09-01T10:45:00Z",
+                "length": 2400,
+                "winner_id": 10,
+                "complete": True,
+                "forfeit": False,
+            }
+        ],
+        "draw": False,
+        "forfeit": False,
+        "rescheduled": False,
+    }
+    for field in (
+        "league",
+        "serie",
+        "series",
+        "tournament",
+        "opponents",
+        "results",
+        "winner_type",
+        "modified_at",
+        "videogame",
+        "streams_list",
+        "live",
+    ):
+        assert not hasattr(item, field)
+
+
+def test_match_participants_preserve_missing_and_zero_scores() -> None:
+    missing_score_row = _row()
+    missing_score_row["results"] = [{"team_id": 10, "score": 2}]
+    missing_score_item = PandaScoreMatchAdapter._normalize(missing_score_row)
+    assert [participant.score for participant in missing_score_item.participants] == [2, None]
+
+    zero_score_row = _row()
+    zero_score_row["status"] = "canceled"
+    zero_score_row["results"] = [{"team_id": 10, "score": 0}, {"team_id": 11, "score": 0}]
+    zero_score_item = PandaScoreMatchAdapter._normalize(zero_score_row)
+    assert [participant.score for participant in zero_score_item.participants] == [0, 0]
+
+
+def test_orphan_match_result_is_ignored_and_logged(caplog: pytest.LogCaptureFixture) -> None:
+    row = _row()
+    row["results"] = [
+        {"team_id": 10, "score": 2},
+        {"team_id": 11, "score": 1},
+        {"team_id": 123, "score": 9},
+    ]
+
+    with caplog.at_level("WARNING"):
+        item = PandaScoreMatchAdapter._normalize(row)
+
+    assert [participant.team.id for participant in item.participants] == [10, 11]
+    assert "team_id=123" in caplog.text
+    assert "match id=42" in caplog.text
+
+
+def test_winner_id_is_preserved_when_winner_object_is_missing() -> None:
+    row = _row()
+    row["winner"] = None
+
+    item = PandaScoreMatchAdapter._normalize(row)
+
     assert item.winner_id == 10
-    assert not hasattr(item, "serie")
+    assert item.winner is None
+
+
+def test_parent_ids_do_not_fallback_to_nested_objects() -> None:
+    row = _row()
+    row.pop("league_id")
+    row.pop("serie_id")
+    row.pop("tournament_id")
+
+    item = PandaScoreMatchAdapter._normalize(row)
+
+    assert item.league_id is None
+    assert item.series_id is None
+    assert item.tournament_id is None
+
+
+def test_required_match_and_game_booleans_are_not_defaulted() -> None:
+    missing_match_boolean = _row()
+    missing_match_boolean.pop("draw")
+    with pytest.raises(KeyError, match="draw"):
+        PandaScoreMatchAdapter._normalize(missing_match_boolean)
+
+    missing_game_boolean = _row()
+    missing_game_boolean["games"][0].pop("complete")
+    with pytest.raises(KeyError, match="complete"):
+        PandaScoreMatchAdapter._normalize(missing_game_boolean)
 
 
 def test_past_does_not_implicitly_filter_finished_and_explicit_status_is_preserved() -> None:

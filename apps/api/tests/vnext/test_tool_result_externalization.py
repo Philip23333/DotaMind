@@ -14,7 +14,8 @@ from app.vnext.artifacts import (
     ToolResponseExternalizer,
     serialized_size,
 )
-from app.vnext.capabilities.esports.match import MatchItem, MatchSearchResult
+from app.vnext.capabilities.esports.dtos import MatchDTO
+from app.vnext.capabilities.esports.match import MatchSearchResult
 from app.vnext.llm.protocol import ToolCall
 from app.vnext.tools.artifacts import register_artifact_tools
 from app.vnext.tools.definition import ToolDefinition
@@ -176,7 +177,17 @@ def test_artifact_tools_bypass_result_externalization() -> None:
 def test_match_search_result_is_externalized_without_field_selection() -> None:
     store = SessionArtifactStore()
     registry = _registry(store)
-    items = [MatchItem(id=index) for index in range(100)]
+    items = [
+        MatchDTO(
+            id=index,
+            name=f"Match {index}",
+            status="finished",
+            draw=False,
+            forfeit=False,
+            rescheduled=False,
+        )
+        for index in range(100)
+    ]
     expected = MatchSearchResult(items=items, page=1, limit=100).model_dump(mode="json")
     registry.register(
         ToolDefinition(

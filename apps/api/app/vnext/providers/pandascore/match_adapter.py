@@ -2,19 +2,20 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
-from app.vnext.capabilities.esports.match import (
-    CompetitionSummary,
-    MatchItem,
-    MatchScore,
-    MatchSearchInput,
-    MatchSearchResult,
-    SeriesSummary,
-    TeamSummary,
+from app.vnext.capabilities.esports.dtos import (
+    MatchDTO,
+    MatchGameDTO,
+    MatchParticipantDTO,
+    TeamRefDTO,
 )
+from app.vnext.capabilities.esports.match import MatchSearchInput, MatchSearchResult
 
 from .client import PandaScoreClient
+
+logger = logging.getLogger(__name__)
 
 
 class PandaScoreMatchAdapter:
@@ -67,74 +68,143 @@ class PandaScoreMatchAdapter:
         return params
 
     @classmethod
-    def _normalize(cls, row: dict[str, Any]) -> MatchItem:
-        return MatchItem(
+    def _normalize(cls, row: dict[str, Any]) -> MatchDTO:
+        return MatchDTO(
             id=int(row["id"]),
-            name=row.get("name"),
-            status=row.get("status"),
-            scheduled_at=row.get("scheduled_at"),
+            name=row["name"],
+            slug=cls._optional_text(row.get("slug")),
+            status=row["status"],
+            match_type=cls._optional_text(row.get("match_type")),
+            number_of_games=row.get("number_of_games"),
             begin_at=row.get("begin_at"),
             end_at=row.get("end_at"),
-            match_type=row.get("match_type"),
-            number_of_games=row.get("number_of_games"),
-            league=cls._competition(row.get("league")),
-            series=cls._series(row.get("serie")),
-            tournament=cls._competition(row.get("tournament")),
-            opponents=cls._opponents(row.get("opponents")),
-            results=cls._results(row.get("results")),
+            scheduled_at=row.get("scheduled_at"),
+            original_scheduled_at=row.get("original_scheduled_at"),
+            league_id=(
+                int(row["league_id"]) if row.get("league_id") is not None else None
+            ),
+            series_id=(
+                int(row["serie_id"]) if row.get("serie_id") is not None else None
+            ),
+            tournament_id=(
+                int(row["tournament_id"])
+                if row.get("tournament_id") is not None
+                else None
+            ),
+            participants=cls._participants(
+                row.get("opponents"),
+                row.get("results"),
+                int(row["id"]),
+            ),
             winner_id=row.get("winner_id"),
+            winner=cls._winner(row.get("winner")),
+            games=cls._games(row.get("games")),
+            draw=row["draw"],
+            forfeit=row["forfeit"],
+            rescheduled=row["rescheduled"],
         )
 
     @staticmethod
-    def _competition(value: Any) -> CompetitionSummary | None:
-        if not isinstance(value, dict) or value.get("id") is None:
+    def _optional_text(value: Any) -> str | None:
+        if not isinstance(value, str):
             return None
-        return CompetitionSummary(id=int(value["id"]), name=value.get("name"))
+        normalized = value.strip()
+        return normalized or None
 
-    @staticmethod
-    def _series(value: Any) -> SeriesSummary | None:
-        if not isinstance(value, dict) or value.get("id") is None:
-            return None
-        return SeriesSummary(
-            id=int(value["id"]),
-            name=value.get("name"),
-            full_name=value.get("full_name"),
-            year=value.get("year"),
+    @classmethod
+    def _map_team_ref(cls, row: dict[str, Any]) -> TeamRefDTO:
+        return TeamRefDTO(
+            id=int(row["id"]),
+            name=row["name"],
+            acronym=cls._optional_text(row.get("acronym")),
+            location=cls._optional_text(row.get("location")),
+            slug=cls._optional_text(row.get("slug")),
+            image_url=cls._optional_text(row.get("image_url")),
         )
 
-    @staticmethod
-    def _opponents(value: Any) -> list[TeamSummary]:
-        if not isinstance(value, list):
-            return []
-        result: list[TeamSummary] = []
-        for wrapper in value:
+    @classmethod
+    def _participants(
+        cls,
+        opponents_value: Any,
+        results_value: Any,
+        match_id: int,
+    ) -> list[MatchParticipantDTO]:
+        score_by_team_id: dict[int, int | None] = {}
+        result_team_ids: set[int] = set()
+        results = results_value if isinstance(results_value, list) else []
+        for item in results:
+            if not isinstance(item, dict):
+                continue
+            team_id = item.get("team_id")
+            score = item.get("score")
+            if team_id is None:
+                continue
+            normalized_team_id = int(team_id)
+            result_team_ids.add(normalized_team_id)
+            if score is not None:
+                score_by_team_id[normalized_team_id] = int(score)
+
+        participants: list[MatchParticipantDTO] = []
+        opponent_team_ids: set[int] = set()
+        opponents = opponents_value if isinstance(opponents_value, list) else []
+        for wrapper in opponents:
             if not isinstance(wrapper, dict):
                 continue
             opponent = wrapper.get("opponent")
             if not isinstance(opponent, dict) or opponent.get("id") is None:
                 continue
-            result.append(
-                TeamSummary(
-                    id=int(opponent["id"]),
-                    name=opponent.get("name"),
-                    acronym=opponent.get("acronym"),
+            team = cls._map_team_ref(opponent)
+            opponent_team_ids.add(team.id)
+            participants.append(
+                MatchParticipantDTO(
+                    team=team,
+                    score=score_by_team_id.get(team.id),
                 )
             )
-        return result
+
+        for team_id in result_team_ids:
+            if team_id not in opponent_team_ids:
+                logger.warning(
+                    "Ignoring Match result for unknown opponent team_id=%s in match id=%s",
+                    team_id,
+                    match_id,
+                )
+
+        return participants
+
+    @classmethod
+    def _winner(cls, value: Any) -> TeamRefDTO | None:
+        if not isinstance(value, dict) or value.get("id") is None:
+            return None
+        return cls._map_team_ref(value)
 
     @staticmethod
-    def _results(value: Any) -> list[MatchScore]:
+    def _games(value: Any) -> list[MatchGameDTO]:
         if not isinstance(value, list):
             return []
-        result: list[MatchScore] = []
-        for item in value:
-            if not isinstance(item, dict):
+        result: list[MatchGameDTO] = []
+        for game in value:
+            if not isinstance(game, dict):
                 continue
-            team_id = item.get("team_id")
-            score = item.get("score")
-            if team_id is None or score is None:
-                continue
-            result.append(MatchScore(team_id=int(team_id), score=int(score)))
+            winner = game.get("winner")
+            winner_id = (
+                int(winner["id"])
+                if isinstance(winner, dict) and winner.get("id") is not None
+                else None
+            )
+            result.append(
+                MatchGameDTO(
+                    id=int(game["id"]),
+                    position=int(game["position"]),
+                    status=game["status"],
+                    begin_at=game.get("begin_at"),
+                    end_at=game.get("end_at"),
+                    length=game.get("length"),
+                    winner_id=winner_id,
+                    complete=game["complete"],
+                    forfeit=game["forfeit"],
+                )
+            )
         return result
 
 

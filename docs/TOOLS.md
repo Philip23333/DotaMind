@@ -93,11 +93,16 @@ reflect a current roster snapshot.
 
 `esports.match.search` is a closed semantic match-search capability. Its input
 uses `id`, `league_id`, `series_id`, `tournament_id`, `team_id`, `name`,
-`lifecycle`, `sort`, `page`, and `limit`. The schema intentionally does not
-expose provider query syntax or provider-private field names. One invocation
-maps to one bounded provider collection request. If its complete validated
-response exceeds the inline bound, the generic registry result processor stores
-that response as an Artifact and returns a bounded observation instead.
+`winner_id`, `status`, `lifecycle`, `sort`, `page`, and `limit`. It returns a
+`MatchDTO`: parent competition objects are represented by IDs only;
+`opponents[]` and `results[]` become ordered `participants[]`, `winner{}` is a
+`TeamRefDTO`, and `games[]` becomes `MatchGameDTO[]`. A missing provider result
+maps to `score=None`, while an explicit provider score of `0` remains `0`. The
+schema intentionally does not expose provider query syntax or provider-private
+field names. One invocation maps to one bounded provider collection request. If
+its complete validated response exceeds the inline bound, the generic registry
+result processor stores that response as an Artifact and returns a bounded
+observation instead.
 
 `esports.team.search` resolves a Dota 2 team name, acronym, or exact ID to team
 identity. Its closed input contains only `id`, `name`, `acronym`, `page`, and

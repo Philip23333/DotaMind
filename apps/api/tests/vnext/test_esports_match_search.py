@@ -5,6 +5,7 @@ import json
 
 import pytest
 
+from app.vnext.capabilities.esports.dtos import MatchDTO, MatchGameDTO, MatchParticipantDTO
 from app.vnext.capabilities.esports.match import MatchSearchInput, MatchSearchResult
 from app.vnext.composition import VNextSettings, build_vnext_registry
 from app.vnext.llm.protocol import ToolCall
@@ -92,6 +93,128 @@ def test_match_search_accepts_relationship_and_result_filters() -> None:
     assert query.team_id == 123
     assert query.status == "canceled"
     assert query.winner_id == 456
+
+
+def test_match_dtos_are_strict_and_have_frozen_fields() -> None:
+    assert set(MatchParticipantDTO.model_fields) == {"team", "score"}
+    assert set(MatchGameDTO.model_fields) == {
+        "id",
+        "position",
+        "status",
+        "begin_at",
+        "end_at",
+        "length",
+        "winner_id",
+        "complete",
+        "forfeit",
+    }
+    assert set(MatchDTO.model_fields) == {
+        "id",
+        "name",
+        "slug",
+        "status",
+        "match_type",
+        "number_of_games",
+        "begin_at",
+        "end_at",
+        "scheduled_at",
+        "original_scheduled_at",
+        "league_id",
+        "series_id",
+        "tournament_id",
+        "participants",
+        "winner_id",
+        "winner",
+        "games",
+        "draw",
+        "forfeit",
+        "rescheduled",
+    }
+
+    match = MatchDTO(
+        id=42,
+        name="Grand Final",
+        status="finished",
+        draw=False,
+        forfeit=False,
+        rescheduled=False,
+    )
+    assert match.participants == []
+    assert match.games == []
+    assert match.winner is None
+    assert match.league_id is None
+    assert match.series_id is None
+    assert match.tournament_id is None
+    with pytest.raises(ValueError):
+        MatchDTO(
+            id=42,
+            name="Grand Final",
+            status="finished",
+            draw=False,
+            forfeit=False,
+            rescheduled=False,
+            opponents=[],
+        )
+
+
+def test_match_search_tool_returns_new_match_dto_shape() -> None:
+    registry = ToolRegistry()
+
+    async def search(query: MatchSearchInput) -> MatchSearchResult:
+        return MatchSearchResult(
+            items=[
+                MatchDTO(
+                    id=42,
+                    name="Grand Final",
+                    status="finished",
+                    league_id=1,
+                    series_id=2,
+                    tournament_id=3,
+                    draw=False,
+                    forfeit=False,
+                    rescheduled=False,
+                )
+            ],
+            page=query.page,
+            limit=query.limit,
+        )
+
+    register_match_tool(registry, search)
+    result = asyncio.run(
+        registry.execute(
+            ToolCall(
+                id="match-dto-call",
+                name="esports.match.search",
+                arguments={"tournament_id": 3},
+            )
+        )
+    )
+
+    assert result.status == "ok"
+    assert result.content["items"] == [
+        {
+            "id": 42,
+            "name": "Grand Final",
+            "slug": None,
+            "status": "finished",
+            "match_type": None,
+            "number_of_games": None,
+            "begin_at": None,
+            "end_at": None,
+            "scheduled_at": None,
+            "original_scheduled_at": None,
+            "league_id": 1,
+            "series_id": 2,
+            "tournament_id": 3,
+            "participants": [],
+            "winner_id": None,
+            "winner": None,
+            "games": [],
+            "draw": False,
+            "forfeit": False,
+            "rescheduled": False,
+        }
+    ]
 
 
 def test_default_vnext_registry_contains_artifacts_and_esports_search_tools() -> None:
