@@ -127,7 +127,8 @@ CurrentRosterPlayerDTO
 
 ## 4. PlayerRole
 
-PandaScore may return Player role as either integers or numeric strings.
+PandaScore may return Player role as integers, numeric strings, or mixed
+position notation such as `"1/2"`.
 
 DotaMind normalizes both into a domain enum:
 
@@ -143,14 +144,32 @@ class PlayerRole(str, Enum):
 Mapping:
 
 ```text
-1 / "1" → carry
-2 / "2" → mid
-3 / "3" → offlane
-4 / "4" → soft_support
-5 / "5" → hard_support
+1 / "1" → (carry,)
+2 / "2" → (mid,)
+3 / "3" → (offlane,)
+4 / "4" → (soft_support,)
+5 / "5" → (hard_support,)
+
+"1/2" → (carry, mid)
+"3/4" → (offlane, soft_support)
+"4/5" → (soft_support, hard_support)
 ```
 
-Unknown or null values map to `None` and should emit warning/telemetry. Unknown provider strings must not pass through the enum.
+The adapter parses provider position notation and preserves its order while
+normalizing it into one or more DotaMind semantic roles. A mixed value is
+accepted only when every position token is recognized; an invalid token rejects
+the complete role rather than producing a partial guess.
+
+```text
+Python domain value: (PlayerRole.carry, PlayerRole.mid)
+Model-facing JSON:   ["carry", "mid"]
+```
+
+`None` means PandaScore did not provide a trusted role and does not emit a
+warning. Invalid values such as `0`, `6`, `True`, `"carry"`, `"1/6"`, or
+`"1/x"` map to `None` and emit a warning. The names `carry`, `mid`, `offlane`,
+`soft_support`, and `hard_support` are DotaMind semantic normalization; they do
+not claim to be PandaScore's raw position field values.
 
 ## 5. TeamRefDTO
 
@@ -736,7 +755,7 @@ class CurrentRosterPlayerDTO(BaseModel):
     name: str
 
     active: bool
-    role: PlayerRole | None = None
+    role: tuple[PlayerRole, ...] | None = None
 
     first_name: str | None = None
     last_name: str | None = None
@@ -808,7 +827,7 @@ class PlayerDTO(BaseModel):
     name: str
 
     active: bool
-    role: PlayerRole | None = None
+    role: tuple[PlayerRole, ...] | None = None
 
     first_name: str | None = None
     last_name: str | None = None
