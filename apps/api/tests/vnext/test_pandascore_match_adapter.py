@@ -161,6 +161,49 @@ def test_search_uses_one_lifecycle_collection_request(lifecycle: str | None, pat
     assert calls[0] == (path, expected_params)
     assert result.page == 2
     assert result.limit == 7
+    assert result.anomalies == []
+
+
+def test_match_search_skips_malformed_top_level_items() -> None:
+    first = _row()
+    second = _row()
+    second["id"] = 43
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=[first, "bad-row", second], request=request)
+
+    result = asyncio.run(_adapter(handler).search(MatchSearchInput()))
+
+    assert [item.id for item in result.items] == [42, 43]
+    assert len(result.anomalies) == 1
+    assert result.anomalies[0].path == "items[1]"
+    assert result.anomalies[0].reason == "provider item is not an object"
+    assert result.anomalies[0].provider_id is None
+
+
+def test_match_games_have_partial_success() -> None:
+    row = _row()
+    template = row["games"][0]
+    row["games"] = [
+        {**template, "id": 9001},
+        {**template, "id": 9002, "position": 2},
+        {"id": 9003},
+        {**template, "id": 9004, "position": 4},
+        {**template, "id": 9005, "position": 5},
+    ]
+
+    anomalies = []
+    item = PandaScoreMatchAdapter._normalize(
+        row,
+        path="items[0]",
+        anomalies=anomalies,
+    )
+
+    assert len(item.games) == 4
+    assert len(anomalies) == 1
+    assert "games" in anomalies[0].path
+    assert anomalies[0].reason
+    assert anomalies[0].provider_id == 9003
 
 
 def test_adapter_normalizes_complete_match_projection() -> None:
@@ -273,11 +316,15 @@ def test_orphan_match_result_is_ignored_and_logged(caplog: pytest.LogCaptureFixt
     ]
 
     with caplog.at_level("WARNING"):
-        item = PandaScoreMatchAdapter._normalize(row)
+        anomalies = []
+        item = PandaScoreMatchAdapter._normalize(row, anomalies=anomalies)
 
     assert [participant.team.id for participant in item.participants] == [10, 11]
     assert "team_id=123" in caplog.text
     assert "match id=42" in caplog.text
+    assert anomalies[0].path == "item.results[2]"
+    assert anomalies[0].reason == "result references unknown opponent"
+    assert anomalies[0].provider_id == 123
 
 
 def test_winner_id_is_preserved_when_winner_object_is_missing() -> None:
@@ -311,8 +358,15 @@ def test_required_match_and_game_booleans_are_not_defaulted() -> None:
 
     missing_game_boolean = _row()
     missing_game_boolean["games"][0].pop("complete")
-    with pytest.raises(KeyError, match="complete"):
-        PandaScoreMatchAdapter._normalize(missing_game_boolean)
+    anomalies = []
+    item = PandaScoreMatchAdapter._normalize(
+        missing_game_boolean,
+        path="items[0]",
+        anomalies=anomalies,
+    )
+    assert item.games == []
+    assert anomalies[0].path == "items[0].games[0]"
+    assert "complete" in anomalies[0].reason
 
 
 def test_past_does_not_implicitly_filter_finished_and_explicit_status_is_preserved() -> None:

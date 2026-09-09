@@ -34,7 +34,7 @@ class PandaScoreClient:
         path: str,
         *,
         params: dict[str, Any],
-    ) -> list[dict[str, Any]]:
+    ) -> list[Any]:
         if not self.token:
             raise PandaScoreConfigurationError("PandaScore token is not configured")
 
@@ -56,7 +56,7 @@ class PandaScoreClient:
                 "PandaScore collection response must be a JSON list"
             )
 
-        return [item for item in payload if isinstance(item, dict)]
+        return payload
 
     async def get_object(self, path: str) -> dict[str, Any]:
         """Fetch a PandaScore endpoint whose response must be a JSON object."""

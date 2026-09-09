@@ -175,7 +175,17 @@ def test_team_current_roster_missing_players_defaults_to_empty() -> None:
 
 def test_current_roster_active_is_required() -> None:
     row = _row()
+    row["players"].append({**row["players"][1], "id": 88888})
     row["players"][0].pop("active")
 
-    with pytest.raises(KeyError, match="active"):
-        PandaScoreTeamAdapter._normalize(row)
+    anomalies = []
+    item = PandaScoreTeamAdapter._normalize(
+        row,
+        path="items[0]",
+        anomalies=anomalies,
+    )
+
+    assert len(item.current_roster) == 2
+    assert [player.id for player in item.current_roster] == [99999, 88888]
+    assert anomalies[0].path == "items[0].players[0]"
+    assert "active" in anomalies[0].reason

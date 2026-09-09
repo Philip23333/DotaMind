@@ -252,6 +252,27 @@ def test_tournament_collections_default_to_empty_lists() -> None:
     assert item.participants == []
 
 
+def test_tournament_roster_has_partial_success() -> None:
+    row = _row()
+    row["expected_roster"][1]["players"] = [
+        row["expected_roster"][1]["players"][0],
+        {"id": 28012},
+    ]
+    anomalies = []
+
+    item = PandaScoreTournamentAdapter._normalize(
+        row,
+        path="items[0]",
+        anomalies=anomalies,
+    )
+
+    assert item.participants[1].team.id == 102
+    assert [player.id for player in item.participants[1].expected_roster] == [28010]
+    assert len(anomalies) == 1
+    assert anomalies[0].path == "items[0].expected_roster[1].players[1]"
+    assert anomalies[0].provider_id == 28012
+
+
 def test_tournament_required_series_id_does_not_fallback_to_nested_serie() -> None:
     with pytest.raises(KeyError, match="serie_id"):
         PandaScoreTournamentAdapter._normalize(

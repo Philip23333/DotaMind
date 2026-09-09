@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
-from app.vnext.capabilities.esports.dtos import SeriesDTO, TeamRefDTO
+from app.vnext.capabilities.esports.dtos import (
+    ResponseAnomaly,
+    SeriesDTO,
+    TeamRefDTO,
+)
 from app.vnext.capabilities.esports.series import (
     SeriesSearchInput,
     SeriesSearchResult,
@@ -13,6 +18,8 @@ from app.vnext.capabilities.esports.series import (
 )
 
 from .client import PandaScoreClient
+
+logger = logging.getLogger(__name__)
 
 
 class PandaScoreSeriesAdapter:
@@ -24,10 +31,31 @@ class PandaScoreSeriesAdapter:
             "/dota2/series",
             params=self._params(query),
         )
+        items: list[SeriesDTO] = []
+        anomalies: list[ResponseAnomaly] = []
+        for index, row in enumerate(rows):
+            path = f"items[{index}]"
+            if not isinstance(row, dict):
+                anomalies.append(
+                    ResponseAnomaly(path=path, reason="provider item is not an object")
+                )
+                continue
+            try:
+                items.append(self._normalize(row))
+            except (KeyError, TypeError, ValueError) as exc:
+                logger.warning("Failed to map PandaScore series item", exc_info=exc)
+                anomalies.append(
+                    ResponseAnomaly(
+                        path=path,
+                        reason=self._mapping_reason(exc),
+                        provider_id=self._provider_id(row.get("id")),
+                    )
+                )
         return SeriesSearchResult(
-            items=[self._normalize(row) for row in rows],
+            items=items,
             page=query.page,
             limit=query.limit,
+            anomalies=anomalies,
         )
 
     async def teams(self, query: SeriesTeamsInput) -> SeriesTeamsResult:
@@ -35,10 +63,31 @@ class PandaScoreSeriesAdapter:
             f"/dota2/series/{query.series_id}/teams",
             params={"page": query.page, "per_page": query.limit},
         )
+        items: list[TeamRefDTO] = []
+        anomalies: list[ResponseAnomaly] = []
+        for index, row in enumerate(rows):
+            path = f"items[{index}]"
+            if not isinstance(row, dict):
+                anomalies.append(
+                    ResponseAnomaly(path=path, reason="provider item is not an object")
+                )
+                continue
+            try:
+                items.append(self._normalize_team(row))
+            except (KeyError, TypeError, ValueError) as exc:
+                logger.warning("Failed to map PandaScore series team item", exc_info=exc)
+                anomalies.append(
+                    ResponseAnomaly(
+                        path=path,
+                        reason=self._mapping_reason(exc),
+                        provider_id=self._provider_id(row.get("id")),
+                    )
+                )
         return SeriesTeamsResult(
-            items=[self._normalize_team(row) for row in rows],
+            items=items,
             page=query.page,
             limit=query.limit,
+            anomalies=anomalies,
         )
 
     @staticmethod
@@ -85,6 +134,21 @@ class PandaScoreSeriesAdapter:
             return None
         normalized = value.strip()
         return normalized or None
+
+    @staticmethod
+    def _provider_id(value: Any) -> int | None:
+        if isinstance(value, bool) or value is None:
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _mapping_reason(exc: Exception) -> str:
+        if isinstance(exc, KeyError) and exc.args:
+            return f"missing required field: {exc.args[0]}"
+        return "failed to map provider item"
 
     @classmethod
     def _normalize_team(cls, row: dict[str, Any]) -> TeamRefDTO:

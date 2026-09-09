@@ -194,6 +194,7 @@ def test_series_teams_uses_supported_series_participants_endpoint() -> None:
         ],
         "page": 2,
         "limit": 50,
+        "anomalies": [],
     }
     for field in ("players", "modified_at", "dark_mode_image_url", "current_videogame"):
         assert not hasattr(result.items[0], field)

@@ -8,6 +8,7 @@ from typing import Any
 from app.vnext.capabilities.esports.dtos import (
     PlayerDTO,
     PlayerRole,
+    ResponseAnomaly,
     TeamRefDTO,
 )
 from app.vnext.capabilities.esports.player import (
@@ -37,10 +38,31 @@ class PandaScorePlayerAdapter:
             "/dota2/players",
             params=self._params(query),
         )
+        items: list[PlayerDTO] = []
+        anomalies: list[ResponseAnomaly] = []
+        for index, row in enumerate(rows):
+            path = f"items[{index}]"
+            if not isinstance(row, dict):
+                anomalies.append(
+                    ResponseAnomaly(path=path, reason="provider item is not an object")
+                )
+                continue
+            try:
+                items.append(self._normalize(row, path=path, anomalies=anomalies))
+            except (KeyError, TypeError, ValueError) as exc:
+                logger.warning("Failed to map PandaScore player item", exc_info=exc)
+                anomalies.append(
+                    ResponseAnomaly(
+                        path=path,
+                        reason=self._mapping_reason(exc),
+                        provider_id=self._provider_id(row.get("id")),
+                    )
+                )
         return PlayerSearchResult(
-            items=[self._normalize(row) for row in rows],
+            items=items,
             page=query.page,
             limit=query.limit,
+            anomalies=anomalies,
         )
 
     @staticmethod
@@ -64,7 +86,14 @@ class PandaScorePlayerAdapter:
         return params
 
     @classmethod
-    def _normalize(cls, row: dict[str, Any]) -> PlayerDTO:
+    def _normalize(
+        cls,
+        row: dict[str, Any],
+        *,
+        path: str = "item",
+        anomalies: list[ResponseAnomaly] | None = None,
+    ) -> PlayerDTO:
+        anomaly_list = anomalies if anomalies is not None else []
         return PlayerDTO(
             id=int(row["id"]),
             name=row["name"],
@@ -75,7 +104,11 @@ class PandaScorePlayerAdapter:
             nationality=cls._optional_text(row.get("nationality")),
             slug=cls._optional_text(row.get("slug")),
             image_url=cls._optional_text(row.get("image_url")),
-            current_team=cls._current_team(row.get("current_team")),
+            current_team=cls._current_team(
+                row.get("current_team"),
+                path=f"{path}.current_team",
+                anomalies=anomaly_list,
+            ),
         )
 
     @staticmethod
@@ -106,17 +139,55 @@ class PandaScorePlayerAdapter:
         return tuple(_PLAYER_ROLE_BY_POSITION[token] for token in tokens)
 
     @classmethod
-    def _current_team(cls, value: Any) -> TeamRefDTO | None:
-        if value is None or not isinstance(value, dict):
+    def _current_team(
+        cls,
+        value: Any,
+        *,
+        path: str = "current_team",
+        anomalies: list[ResponseAnomaly] | None = None,
+    ) -> TeamRefDTO | None:
+        if value is None:
             return None
-        return TeamRefDTO(
-            id=int(value["id"]),
-            name=value["name"],
-            acronym=cls._optional_text(value.get("acronym")),
-            location=cls._optional_text(value.get("location")),
-            slug=cls._optional_text(value.get("slug")),
-            image_url=cls._optional_text(value.get("image_url")),
-        )
+        anomaly_list = anomalies if anomalies is not None else []
+        if not isinstance(value, dict):
+            anomaly_list.append(
+                ResponseAnomaly(path=path, reason="invalid current_team relation")
+            )
+            return None
+        try:
+            return TeamRefDTO(
+                id=int(value["id"]),
+                name=value["name"],
+                acronym=cls._optional_text(value.get("acronym")),
+                location=cls._optional_text(value.get("location")),
+                slug=cls._optional_text(value.get("slug")),
+                image_url=cls._optional_text(value.get("image_url")),
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            logger.warning("Failed to map PandaScore current_team relation", exc_info=exc)
+            anomaly_list.append(
+                ResponseAnomaly(
+                    path=path,
+                    reason="invalid current_team relation",
+                    provider_id=cls._provider_id(value.get("id")),
+                )
+            )
+            return None
+
+    @staticmethod
+    def _provider_id(value: Any) -> int | None:
+        if isinstance(value, bool) or value is None:
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _mapping_reason(exc: Exception) -> str:
+        if isinstance(exc, KeyError) and exc.args:
+            return f"missing required field: {exc.args[0]}"
+        return "failed to map provider item"
 
 
 __all__ = ["PandaScorePlayerAdapter"]

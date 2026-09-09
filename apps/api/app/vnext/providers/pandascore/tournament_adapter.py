@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from app.vnext.capabilities.esports.dtos import (
+    ResponseAnomaly,
     TeamRefDTO,
     TournamentDTO,
     TournamentParticipantDTO,
@@ -17,6 +19,8 @@ from app.vnext.capabilities.esports.tournament import (
 
 from .client import PandaScoreClient
 
+logger = logging.getLogger(__name__)
+
 
 class PandaScoreTournamentAdapter:
     def __init__(self, client: PandaScoreClient) -> None:
@@ -27,10 +31,31 @@ class PandaScoreTournamentAdapter:
             "/dota2/tournaments",
             params=self._params(query),
         )
+        items: list[TournamentDTO] = []
+        anomalies: list[ResponseAnomaly] = []
+        for index, row in enumerate(rows):
+            path = f"items[{index}]"
+            if not isinstance(row, dict):
+                anomalies.append(
+                    ResponseAnomaly(path=path, reason="provider item is not an object")
+                )
+                continue
+            try:
+                items.append(self._normalize(row, path=path, anomalies=anomalies))
+            except (KeyError, TypeError, ValueError) as exc:
+                logger.warning("Failed to map PandaScore tournament item", exc_info=exc)
+                anomalies.append(
+                    ResponseAnomaly(
+                        path=path,
+                        reason=self._mapping_reason(exc),
+                        provider_id=self._provider_id(row.get("id")),
+                    )
+                )
         return TournamentSearchResult(
-            items=[self._normalize(row) for row in rows],
+            items=items,
             page=query.page,
             limit=query.limit,
+            anomalies=anomalies,
         )
 
     @staticmethod
@@ -48,7 +73,14 @@ class PandaScoreTournamentAdapter:
         return params
 
     @classmethod
-    def _normalize(cls, row: dict[str, Any]) -> TournamentDTO:
+    def _normalize(
+        cls,
+        row: dict[str, Any],
+        *,
+        path: str = "item",
+        anomalies: list[ResponseAnomaly] | None = None,
+    ) -> TournamentDTO:
+        anomaly_list = anomalies if anomalies is not None else []
         return TournamentDTO(
             id=int(row["id"]),
             series_id=int(row["serie_id"]),
@@ -67,6 +99,8 @@ class PandaScoreTournamentAdapter:
             participants=cls._participants(
                 row.get("teams"),
                 row.get("expected_roster"),
+                path=path,
+                anomalies=anomaly_list,
             ),
         )
 
@@ -104,35 +138,130 @@ class PandaScoreTournamentAdapter:
         cls,
         teams_value: Any,
         expected_roster_value: Any,
+        *,
+        path: str = "item",
+        anomalies: list[ResponseAnomaly] | None = None,
     ) -> list[TournamentParticipantDTO]:
+        anomaly_list = anomalies if anomalies is not None else []
         roster_team_by_id: dict[int, TeamRefDTO] = {}
         roster_players_by_team_id: dict[int, list[TournamentRosterPlayerDTO]] = {}
         roster_team_order: list[int] = []
 
-        expected_roster = (
-            expected_roster_value if isinstance(expected_roster_value, list) else []
-        )
-        for entry in expected_roster:
+        if expected_roster_value is None:
+            expected_roster: list[Any] = []
+        elif isinstance(expected_roster_value, list):
+            expected_roster = expected_roster_value
+        else:
+            anomaly_list.append(
+                ResponseAnomaly(
+                    path=f"{path}.expected_roster",
+                    reason="invalid nested expected_roster collection",
+                )
+            )
+            expected_roster = []
+
+        for index, entry in enumerate(expected_roster):
+            entry_path = f"{path}.expected_roster[{index}]"
             if not isinstance(entry, dict):
+                anomaly_list.append(
+                    ResponseAnomaly(
+                        path=entry_path,
+                        reason="provider item is not an object",
+                    )
+                )
                 continue
-            team_row = entry["team"]
-            team_ref = cls._map_team_ref(team_row)
+            try:
+                team_ref = cls._map_team_ref(entry["team"])
+            except (KeyError, TypeError, ValueError) as exc:
+                logger.warning("Failed to map tournament roster team", exc_info=exc)
+                anomaly_list.append(
+                    ResponseAnomaly(
+                        path=f"{entry_path}.team",
+                        reason=cls._mapping_reason(exc),
+                        provider_id=cls._provider_id(
+                            entry.get("team", {}).get("id")
+                            if isinstance(entry.get("team"), dict)
+                            else None
+                        ),
+                    )
+                )
+                continue
             team_id = team_ref.id
             if team_id not in roster_team_by_id:
                 roster_team_by_id[team_id] = team_ref
                 roster_team_order.append(team_id)
                 roster_players_by_team_id[team_id] = []
             players = entry.get("players")
-            if isinstance(players, list):
-                roster_players_by_team_id[team_id].extend(
-                    cls._map_roster_player(player) for player in players
+            if players is None:
+                continue
+            if not isinstance(players, list):
+                anomaly_list.append(
+                    ResponseAnomaly(
+                        path=f"{entry_path}.players",
+                        reason="invalid nested players collection",
+                    )
                 )
+                continue
+            for player_index, player in enumerate(players):
+                player_path = f"{entry_path}.players[{player_index}]"
+                if not isinstance(player, dict):
+                    anomaly_list.append(
+                        ResponseAnomaly(
+                            path=player_path,
+                            reason="provider item is not an object",
+                        )
+                    )
+                    continue
+                try:
+                    roster_players_by_team_id[team_id].append(
+                        cls._map_roster_player(player)
+                    )
+                except (KeyError, TypeError, ValueError) as exc:
+                    logger.warning("Failed to map tournament roster player", exc_info=exc)
+                    anomaly_list.append(
+                        ResponseAnomaly(
+                            path=player_path,
+                            reason=cls._mapping_reason(exc),
+                            provider_id=cls._provider_id(player.get("id")),
+                        )
+                    )
 
         participants: list[TournamentParticipantDTO] = []
         team_ids: set[int] = set()
-        teams = teams_value if isinstance(teams_value, list) else []
-        for team_row in teams:
-            team_ref = cls._map_team_ref(team_row)
+        if teams_value is None:
+            teams: list[Any] = []
+        elif isinstance(teams_value, list):
+            teams = teams_value
+        else:
+            anomaly_list.append(
+                ResponseAnomaly(
+                    path=f"{path}.teams",
+                    reason="invalid nested teams collection",
+                )
+            )
+            teams = []
+        for index, team_row in enumerate(teams):
+            team_path = f"{path}.teams[{index}]"
+            if not isinstance(team_row, dict):
+                anomaly_list.append(
+                    ResponseAnomaly(
+                        path=team_path,
+                        reason="provider item is not an object",
+                    )
+                )
+                continue
+            try:
+                team_ref = cls._map_team_ref(team_row)
+            except (KeyError, TypeError, ValueError) as exc:
+                logger.warning("Failed to map tournament team", exc_info=exc)
+                anomaly_list.append(
+                    ResponseAnomaly(
+                        path=team_path,
+                        reason=cls._mapping_reason(exc),
+                        provider_id=cls._provider_id(team_row.get("id")),
+                    )
+                )
+                continue
             team_ids.add(team_ref.id)
             participants.append(
                 TournamentParticipantDTO(
@@ -152,6 +281,21 @@ class PandaScoreTournamentAdapter:
             )
 
         return participants
+
+    @staticmethod
+    def _provider_id(value: Any) -> int | None:
+        if isinstance(value, bool) or value is None:
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _mapping_reason(exc: Exception) -> str:
+        if isinstance(exc, KeyError) and exc.args:
+            return f"missing required field: {exc.args[0]}"
+        return "failed to map provider item"
 
 
 __all__ = ["PandaScoreTournamentAdapter"]
