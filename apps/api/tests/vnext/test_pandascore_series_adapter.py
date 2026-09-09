@@ -22,15 +22,22 @@ def _adapter(handler) -> PandaScoreSeriesAdapter:
 def _row() -> dict[str, Any]:
     return {
         "id": 10828,
+        "league_id": 4106,
         "name": "",
         "full_name": "2026",
         "season": "2026",
         "year": 2026,
         "begin_at": "2026-08-01T00:00:00Z",
         "end_at": "2026-09-01T00:00:00Z",
+        "winner_id": 123,
+        "tier": "s",
         "league": {"id": 4106, "name": "The International"},
-        "slug": "the-international-2026",
+        "slug": "  the-international-2026  ",
+        "tournaments": [],
+        "winner_type": "Team",
         "modified_at": "2026-09-01T00:00:00Z",
+        "videogame": {"id": 4},
+        "videogame_title": None,
     }
 
 
@@ -122,7 +129,7 @@ def test_series_ti_discovery_filters_parent_and_year() -> None:
     ]
 
 
-def test_series_normalization_preserves_edition_identity_without_provider_clutter() -> None:
+def test_series_normalization_preserves_frozen_fields_without_provider_clutter() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json=[_row()], request=request)
 
@@ -130,16 +137,26 @@ def test_series_normalization_preserves_edition_identity_without_provider_clutte
 
     assert item.model_dump(mode="json") == {
         "id": 10828,
-        "name": "",
+        "league_id": 4106,
+        "name": None,
         "full_name": "2026",
-        "season": "2026",
         "year": 2026,
+        "season": "2026",
         "begin_at": "2026-08-01T00:00:00Z",
         "end_at": "2026-09-01T00:00:00Z",
-        "league": {"id": 4106, "name": "The International"},
+        "winner_id": 123,
+        "tier": "s",
+        "slug": "the-international-2026",
     }
-    assert not hasattr(item, "slug")
-    assert not hasattr(item, "modified_at")
+    for field in (
+        "league",
+        "winner_type",
+        "modified_at",
+        "tournaments",
+        "videogame",
+        "videogame_title",
+    ):
+        assert not hasattr(item, field)
 
 
 def test_series_teams_uses_supported_series_participants_endpoint() -> None:

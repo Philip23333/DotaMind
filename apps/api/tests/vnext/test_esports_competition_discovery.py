@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
+from app.vnext.capabilities.esports.dtos import SeriesDTO
 from app.vnext.capabilities.esports.league import (
     LeagueDTO,
     LeagueSearchInput,
@@ -9,7 +10,6 @@ from app.vnext.capabilities.esports.league import (
 )
 from app.vnext.capabilities.esports.match import MatchSearchInput, MatchSearchResult
 from app.vnext.capabilities.esports.series import (
-    SeriesItem,
     SeriesSearchInput,
     SeriesSearchResult,
 )
@@ -43,7 +43,7 @@ def test_esports_competition_discovery_contract_is_composable() -> None:
     async def series_search(query: SeriesSearchInput) -> SeriesSearchResult:
         seen.append(("series", query))
         return SeriesSearchResult(
-            items=[SeriesItem(id=10828, full_name="2026", year=2026)],
+            items=[SeriesDTO(id=10828, league_id=4106, full_name="2026", year=2026)],
             page=query.page,
             limit=query.limit,
         )

@@ -5,8 +5,8 @@ import json
 
 import pytest
 
+from app.vnext.capabilities.esports.dtos import SeriesDTO
 from app.vnext.capabilities.esports.series import (
-    SeriesItem,
     SeriesSearchInput,
     SeriesSearchResult,
 )
@@ -82,15 +82,46 @@ def test_series_search_schema_is_semantic_and_closed() -> None:
         assert forbidden not in rendered
 
 
+def test_series_dto_is_strict_and_nullable() -> None:
+    assert set(SeriesDTO.model_fields) == {
+        "id",
+        "league_id",
+        "name",
+        "full_name",
+        "year",
+        "season",
+        "begin_at",
+        "end_at",
+        "winner_id",
+        "tier",
+        "slug",
+    }
+    assert SeriesDTO(id=10828, league_id=4106).model_dump() == {
+        "id": 10828,
+        "league_id": 4106,
+        "name": None,
+        "full_name": None,
+        "year": None,
+        "season": None,
+        "begin_at": None,
+        "end_at": None,
+        "winner_id": None,
+        "tier": None,
+        "slug": None,
+    }
+    with pytest.raises(ValueError):
+        SeriesDTO(id=10828, league_id=4106, modified_at="...")
+
+
 def test_series_search_returns_edition_identity() -> None:
     registry = ToolRegistry()
 
     async def search(query: SeriesSearchInput) -> SeriesSearchResult:
         return SeriesSearchResult(
             items=[
-                SeriesItem(
+                SeriesDTO(
                     id=10828,
-                    name="",
+                    league_id=4106,
                     full_name="2026",
                     season="2026",
                     year=2026,

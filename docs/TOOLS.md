@@ -66,9 +66,12 @@ result exposes the frozen `LeagueDTO` identity fields `id`, `name`, `slug`, and
 `image_url`; nested provider navigation such as `series[]` is not included.
 
 `esports.series.search` resolves a specific edition or season of a league. It
-accepts `id`, `league_id`, `name`, `season`, `year`, `page`, and `limit`, and
-returns edition identity and timing fields together with an optional parent
-league summary. Use `league_id` and `year` for a bounded edition lookup.
+accepts `id`, `league_id`, `name`, `season`, `year`, `winner_id`, `tier`, `page`,
+and `limit`, and returns the frozen `SeriesDTO`: series identity, edition,
+timing, winner, and tier metadata together with `league_id`. It does not expose
+the parent `league{}` object or navigation-only `tournaments[]`; use
+`esports.tournament.search(series_id=...)` for tournament stages. Use
+`league_id` and `year` for a bounded edition lookup.
 
 `esports.tournament.search` resolves a competition stage within one series. It
 accepts `id`, `series_id`, `name`, `page`, and `limit`, and returns the semantic

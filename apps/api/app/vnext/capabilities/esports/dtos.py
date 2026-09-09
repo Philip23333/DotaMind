@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from pydantic import BaseModel, ConfigDict
 
 
@@ -16,4 +18,27 @@ class LeagueDTO(BaseModel):
     image_url: str | None = None
 
 
-__all__ = ["LeagueDTO"]
+class SeriesDTO(BaseModel):
+    """Stable DotaMind representation of a PandaScore series edition."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    league_id: int
+
+    name: str | None = None
+    full_name: str | None = None
+
+    year: int | None = None
+    season: str | None = None
+
+    begin_at: datetime | None = None
+    end_at: datetime | None = None
+
+    winner_id: int | None = None
+    tier: str | None = None
+
+    slug: str | None = None
+
+
+__all__ = ["LeagueDTO", "SeriesDTO"]

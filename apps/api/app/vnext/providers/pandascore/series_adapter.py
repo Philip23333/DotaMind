@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.vnext.capabilities.esports.dtos import SeriesDTO
 from app.vnext.capabilities.esports.series import (
-    LeagueSummary,
-    SeriesItem,
     SeriesSearchInput,
     SeriesSearchResult,
     SeriesTeamItem,
@@ -66,26 +65,27 @@ class PandaScoreSeriesAdapter:
         return params
 
     @classmethod
-    def _normalize(cls, row: dict[str, Any]) -> SeriesItem:
-        return SeriesItem(
+    def _normalize(cls, row: dict[str, Any]) -> SeriesDTO:
+        return SeriesDTO(
             id=int(row["id"]),
-            name=row.get("name"),
-            full_name=row.get("full_name"),
-            season=row.get("season"),
+            league_id=int(row["league_id"]),
+            name=cls._optional_text(row.get("name")),
+            full_name=cls._optional_text(row.get("full_name")),
             year=row.get("year"),
+            season=cls._optional_text(row.get("season")),
             begin_at=row.get("begin_at"),
             end_at=row.get("end_at"),
-            league=cls._league(row.get("league")),
+            winner_id=row.get("winner_id"),
+            tier=cls._optional_text(row.get("tier")),
+            slug=cls._optional_text(row.get("slug")),
         )
 
     @staticmethod
-    def _league(value: Any) -> LeagueSummary | None:
-        if not isinstance(value, dict):
+    def _optional_text(value: Any) -> str | None:
+        if not isinstance(value, str):
             return None
-        entity_id = value.get("id")
-        if entity_id is None:
-            return None
-        return LeagueSummary(id=int(entity_id), name=value.get("name"))
+        normalized = value.strip()
+        return normalized or None
 
     @staticmethod
     def _normalize_team(row: dict[str, Any]) -> SeriesTeamItem:

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-
 from pydantic import BaseModel, ConfigDict, Field
+
+from .dtos import SeriesDTO
 
 
 class SeriesModel(BaseModel):
@@ -61,24 +61,8 @@ class SeriesSearchInput(SeriesModel):
     )
 
 
-class LeagueSummary(SeriesModel):
-    id: int
-    name: str | None = None
-
-
-class SeriesItem(SeriesModel):
-    id: int
-    name: str | None = None
-    full_name: str | None = None
-    season: str | None = None
-    year: int | None = None
-    begin_at: datetime | None = None
-    end_at: datetime | None = None
-    league: LeagueSummary | None = None
-
-
 class SeriesSearchResult(SeriesModel):
-    items: list[SeriesItem]
+    items: list[SeriesDTO]
     page: int
     limit: int
 
@@ -115,9 +99,8 @@ class SeriesTeamsResult(SeriesModel):
 
 
 __all__ = [
-    "LeagueSummary",
-    "SeriesItem",
     "SeriesModel",
+    "SeriesDTO",
     "SeriesSearchInput",
     "SeriesSearchResult",
     "SeriesTeamItem",
