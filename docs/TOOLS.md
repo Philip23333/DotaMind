@@ -134,6 +134,12 @@ Future domain tools must be added explicitly with a closed schema and focused
 tests; the registry must not grow a universal open selector or deprecated
 aliases.
 
+All esports search responses use the envelope `items`, `page`, `limit`, and
+`anomalies`. An anomaly is a short, model-visible description of a local
+provider mapping problem; normal missing data remains `None` or `[]`. A local
+malformed item may be skipped while other valid items are returned. A provider
+response with an invalid top-level shape still fails as a protocol error.
+
 ## Artifact tools
 
 `artifact.grep` searches case-insensitive literal text in one exact opaque

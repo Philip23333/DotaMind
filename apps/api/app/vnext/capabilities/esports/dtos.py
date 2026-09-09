@@ -8,6 +8,16 @@ from enum import Enum
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class ResponseAnomaly(BaseModel):
+    """A model-visible anomaly observed while mapping one provider response."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    path: str
+    reason: str
+    provider_id: int | None = None
+
+
 class LeagueDTO(BaseModel):
     """Stable DotaMind representation of a PandaScore league identity."""
 
@@ -244,6 +254,7 @@ __all__ = [
     "MatchParticipantDTO",
     "PlayerDTO",
     "PlayerRole",
+    "ResponseAnomaly",
     "SeriesDTO",
     "TeamRefDTO",
     "TeamDTO",

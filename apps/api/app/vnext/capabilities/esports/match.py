@@ -6,7 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .dtos import MatchDTO
+from .dtos import MatchDTO, ResponseAnomaly
 
 
 class MatchModel(BaseModel):
@@ -74,6 +74,7 @@ class MatchSearchResult(MatchModel):
     items: list[MatchDTO]
     page: int
     limit: int
+    anomalies: list[ResponseAnomaly] = Field(default_factory=list)
 
 
 __all__ = [

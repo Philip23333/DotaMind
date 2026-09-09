@@ -96,6 +96,7 @@ def test_series_teams_tool_returns_participant_team_contract() -> None:
         ],
         "page": 2,
         "limit": 3,
+        "anomalies": [],
     }
 
 

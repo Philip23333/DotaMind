@@ -130,6 +130,7 @@ def test_league_search_returns_resolved_league_identity() -> None:
         ],
         "page": 1,
         "limit": 20,
+        "anomalies": [],
     }
     assert seen[0].name == "The International"
 

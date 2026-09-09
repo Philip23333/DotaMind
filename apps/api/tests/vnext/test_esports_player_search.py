@@ -180,4 +180,5 @@ def test_player_search_returns_identity_and_current_team() -> None:
             "image_url": None,
         },
     }
+    assert result.content["anomalies"] == []
     assert seen[0].name == "Ame"

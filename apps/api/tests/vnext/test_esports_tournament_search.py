@@ -173,4 +173,5 @@ def test_tournament_search_returns_stage_identity() -> None:
         ],
         "page": 1,
         "limit": 20,
+        "anomalies": [],
     }

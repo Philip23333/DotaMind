@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .dtos import PlayerDTO
+from .dtos import PlayerDTO, ResponseAnomaly
 
 
 class PlayerModel(BaseModel):
@@ -58,6 +58,7 @@ class PlayerSearchResult(PlayerModel):
     items: list[PlayerDTO]
     page: int
     limit: int
+    anomalies: list[ResponseAnomaly] = Field(default_factory=list)
 
 
 __all__ = [

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .dtos import TeamDTO
+from .dtos import ResponseAnomaly, TeamDTO
 
 
 class TeamModel(BaseModel):
@@ -44,6 +44,7 @@ class TeamSearchResult(TeamModel):
     items: list[TeamDTO]
     page: int
     limit: int
+    anomalies: list[ResponseAnomaly] = Field(default_factory=list)
 
 
 __all__ = [

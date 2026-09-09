@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .dtos import LeagueDTO
+from .dtos import LeagueDTO, ResponseAnomaly
 
 
 class LeagueModel(BaseModel):
@@ -42,6 +42,7 @@ class LeagueSearchResult(LeagueModel):
     items: list[LeagueDTO]
     page: int
     limit: int
+    anomalies: list[ResponseAnomaly] = Field(default_factory=list)
 
 
 __all__ = [

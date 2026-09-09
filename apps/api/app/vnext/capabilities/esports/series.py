@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .dtos import SeriesDTO, TeamRefDTO
+from .dtos import ResponseAnomaly, SeriesDTO, TeamRefDTO
 
 
 class SeriesModel(BaseModel):
@@ -65,6 +65,7 @@ class SeriesSearchResult(SeriesModel):
     items: list[SeriesDTO]
     page: int
     limit: int
+    anomalies: list[ResponseAnomaly] = Field(default_factory=list)
 
 
 class SeriesTeamsInput(SeriesModel):
@@ -89,6 +90,7 @@ class SeriesTeamsResult(SeriesModel):
     items: list[TeamRefDTO]
     page: int
     limit: int
+    anomalies: list[ResponseAnomaly] = Field(default_factory=list)
 
 
 __all__ = [

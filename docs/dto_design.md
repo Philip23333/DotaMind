@@ -80,6 +80,23 @@ not nullable collections.
 → no relation data in the current result
 ```
 
+### 2.5 Search response anomalies
+
+Every esports search response uses the same envelope:
+
+```text
+items
+page
+limit
+anomalies
+```
+
+`anomalies` contains only model-visible mapping problems observed in the
+current provider response. Normal missing data is represented by `None` or
+`[]` and does not create an anomaly. A malformed local item may be skipped
+while valid items continue to return. If the top-level provider response is
+not a collection, the provider protocol error remains fatal.
+
 ## 3. Naming Convention
 
 ### Entity DTOs

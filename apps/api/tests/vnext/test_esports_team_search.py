@@ -170,6 +170,7 @@ def test_team_search_returns_team_identity() -> None:
         ],
         "page": 1,
         "limit": 20,
+        "anomalies": [],
     }
     assert seen[0].name == "Team Liquid"
     assert seen[0].acronym == "TL"

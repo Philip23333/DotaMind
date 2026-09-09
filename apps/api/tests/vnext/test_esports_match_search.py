@@ -79,7 +79,12 @@ def test_match_search_tool_validates_and_returns_contract_output() -> None:
     )
 
     assert result.status == "ok"
-    assert result.content == {"items": [], "page": 1, "limit": 5}
+    assert result.content == {
+        "items": [],
+        "page": 1,
+        "limit": 5,
+        "anomalies": [],
+    }
     assert seen[0].tournament_id == 3
 
 
@@ -215,6 +220,7 @@ def test_match_search_tool_returns_new_match_dto_shape() -> None:
             "rescheduled": False,
         }
     ]
+    assert result.content["anomalies"] == []
 
 
 def test_default_vnext_registry_contains_artifacts_and_esports_search_tools() -> None:
