@@ -61,9 +61,9 @@ Player: implemented
 
 `esports.league.search` resolves a recurring competition identity to its
 numeric league ID. Its closed input contains only `id`, `name`, `page`, and
-`limit`; a year, season, or edition belongs to a future series capability. The
-result intentionally exposes only each league's `id` and `name` so the ID can
-be passed to a later capability.
+`limit`; a year, season, or edition belongs to a future series capability. Each
+result exposes the frozen `LeagueDTO` identity fields `id`, `name`, `slug`, and
+`image_url`; nested provider navigation such as `series[]` is not included.
 
 `esports.series.search` resolves a specific edition or season of a league. It
 accepts `id`, `league_id`, `name`, `season`, `year`, `page`, and `limit`, and

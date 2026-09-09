@@ -100,13 +100,16 @@ def test_id_and_name_are_compiled_together() -> None:
     ]
 
 
-def test_normalization_exposes_only_id_and_name() -> None:
+def test_normalization_exposes_frozen_league_fields_only() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json=[_row()], request=request)
 
     item = asyncio.run(_adapter(handler).search(LeagueSearchInput())).items[0]
 
-    assert item.model_dump() == {"id": 4106, "name": "The International"}
-    assert not hasattr(item, "slug")
-    assert not hasattr(item, "image_url")
+    assert item.model_dump() == {
+        "id": 4106,
+        "name": "The International",
+        "slug": "dota-2-the-international",
+        "image_url": "https://example.test/league.png",
+    }
     assert not hasattr(item, "modified_at")

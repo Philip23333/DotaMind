@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .dtos import LeagueDTO
+
 
 class LeagueModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -36,19 +38,14 @@ class LeagueSearchInput(LeagueModel):
     )
 
 
-class LeagueItem(LeagueModel):
-    id: int
-    name: str
-
-
 class LeagueSearchResult(LeagueModel):
-    items: list[LeagueItem]
+    items: list[LeagueDTO]
     page: int
     limit: int
 
 
 __all__ = [
-    "LeagueItem",
+    "LeagueDTO",
     "LeagueModel",
     "LeagueSearchInput",
     "LeagueSearchResult",

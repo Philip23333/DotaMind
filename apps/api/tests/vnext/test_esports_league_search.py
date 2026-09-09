@@ -6,7 +6,7 @@ import json
 import pytest
 
 from app.vnext.capabilities.esports.league import (
-    LeagueItem,
+    LeagueDTO,
     LeagueSearchInput,
     LeagueSearchResult,
 )
@@ -40,6 +40,25 @@ def test_league_search_input_accepts_only_semantic_fields(arguments) -> None:
     LeagueSearchInput.model_validate(arguments)
 
 
+def test_league_dto_is_strict_and_has_frozen_fields() -> None:
+    LeagueDTO(
+        id=4106,
+        name="The International",
+        slug="dota-2-the-international",
+        image_url="https://example.test/league.png",
+    )
+
+    assert set(LeagueDTO.model_fields) == {"id", "name", "slug", "image_url"}
+    with pytest.raises(ValueError):
+        LeagueDTO(
+            id=4106,
+            name="The International",
+            slug="dota-2-the-international",
+            image_url="https://example.test/league.png",
+            url="https://example.test/league",
+        )
+
+
 def test_league_search_schema_is_semantic_and_closed() -> None:
     registry = ToolRegistry()
 
@@ -69,7 +88,14 @@ def test_league_search_returns_resolved_league_identity() -> None:
     async def search(query: LeagueSearchInput) -> LeagueSearchResult:
         seen.append(query)
         return LeagueSearchResult(
-            items=[LeagueItem(id=4106, name="The International")],
+            items=[
+                LeagueDTO(
+                    id=4106,
+                    name="The International",
+                    slug="dota-2-the-international",
+                    image_url="https://example.test/league.png",
+                )
+            ],
             page=query.page,
             limit=query.limit,
         )
@@ -87,7 +113,14 @@ def test_league_search_returns_resolved_league_identity() -> None:
 
     assert result.status == "ok"
     assert result.content == {
-        "items": [{"id": 4106, "name": "The International"}],
+        "items": [
+            {
+                "id": 4106,
+                "name": "The International",
+                "slug": "dota-2-the-international",
+                "image_url": "https://example.test/league.png",
+            }
+        ],
         "page": 1,
         "limit": 20,
     }

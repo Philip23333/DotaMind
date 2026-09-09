@@ -4,11 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.vnext.capabilities.esports.league import (
-    LeagueItem,
-    LeagueSearchInput,
-    LeagueSearchResult,
-)
+from app.vnext.capabilities.esports.dtos import LeagueDTO
+from app.vnext.capabilities.esports.league import LeagueSearchInput, LeagueSearchResult
 
 from .client import PandaScoreClient
 
@@ -41,10 +38,12 @@ class PandaScoreLeagueAdapter:
         return params
 
     @staticmethod
-    def _normalize(row: dict[str, Any]) -> LeagueItem:
-        return LeagueItem(
+    def _normalize(row: dict[str, Any]) -> LeagueDTO:
+        return LeagueDTO(
             id=int(row["id"]),
             name=str(row["name"]),
+            slug=str(row["slug"]),
+            image_url=str(row["image_url"]),
         )
 
 

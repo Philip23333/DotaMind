@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 
 from app.vnext.capabilities.esports.league import (
-    LeagueItem,
+    LeagueDTO,
     LeagueSearchInput,
     LeagueSearchResult,
 )
@@ -28,7 +28,14 @@ def test_esports_competition_discovery_contract_is_composable() -> None:
     async def league_search(query: LeagueSearchInput) -> LeagueSearchResult:
         seen.append(("league", query))
         return LeagueSearchResult(
-            items=[LeagueItem(id=4106, name="The International")],
+            items=[
+                LeagueDTO(
+                    id=4106,
+                    name="The International",
+                    slug="dota-2-the-international",
+                    image_url="https://example.test/league.png",
+                )
+            ],
             page=query.page,
             limit=query.limit,
         )
