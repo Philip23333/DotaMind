@@ -42,7 +42,7 @@ class SeriesDTO(BaseModel):
 
 
 class TeamRefDTO(BaseModel):
-    """Stable team identity used when a series lists its participants."""
+    """Stable lightweight team reference for embedded esports relations."""
 
     model_config = ConfigDict(extra="forbid")
 
