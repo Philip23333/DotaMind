@@ -31,7 +31,7 @@ class PandaScoreMatchAdapter:
         items: list[MatchDTO] = []
         anomalies: list[ResponseAnomaly] = []
         for index, row in enumerate(rows):
-            path = f"items[{index}]"
+            path = f"provider.items[{index}]"
             if not isinstance(row, dict):
                 anomalies.append(
                     ResponseAnomaly(path=path, reason="provider item is not an object")
@@ -94,7 +94,7 @@ class PandaScoreMatchAdapter:
         cls,
         row: dict[str, Any],
         *,
-        path: str = "item",
+        path: str = "provider.items[0]",
         anomalies: list[ResponseAnomaly] | None = None,
     ) -> MatchDTO:
         anomaly_list = anomalies if anomalies is not None else []
@@ -168,7 +168,7 @@ class PandaScoreMatchAdapter:
         results_value: Any,
         match_id: int,
         *,
-        path: str = "item",
+        path: str = "provider.items[0]",
         anomalies: list[ResponseAnomaly] | None = None,
     ) -> list[MatchParticipantDTO]:
         anomaly_list = anomalies if anomalies is not None else []
@@ -292,7 +292,7 @@ class PandaScoreMatchAdapter:
         cls,
         value: Any,
         *,
-        path: str = "winner",
+        path: str = "provider.items[0].winner",
         anomalies: list[ResponseAnomaly] | None = None,
     ) -> TeamRefDTO | None:
         if value is None:
@@ -321,7 +321,7 @@ class PandaScoreMatchAdapter:
         cls,
         value: Any,
         *,
-        path: str = "games",
+        path: str = "provider.items[0].games",
         anomalies: list[ResponseAnomaly] | None = None,
     ) -> list[MatchGameDTO]:
         if value is None:

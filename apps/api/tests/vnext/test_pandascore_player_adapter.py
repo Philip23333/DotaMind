@@ -189,7 +189,7 @@ def test_player_current_team_non_dict_defaults_to_none(value: Any) -> None:
     anomalies = []
     item = PandaScorePlayerAdapter._normalize(
         _row(current_team=value),
-        path="items[0]",
+        path="provider.items[0]",
         anomalies=anomalies,
     )
 
@@ -197,7 +197,7 @@ def test_player_current_team_non_dict_defaults_to_none(value: Any) -> None:
     if value is None:
         assert anomalies == []
     else:
-        assert anomalies[0].path == "items[0].current_team"
+        assert anomalies[0].path == "provider.items[0].current_team"
         assert anomalies[0].reason == "invalid current_team relation"
 
 
@@ -209,11 +209,11 @@ def test_player_current_team_required_identity_is_strict(missing: str) -> None:
     anomalies = []
     item = PandaScorePlayerAdapter._normalize(
         _row(current_team=current_team),
-        path="items[0]",
+        path="provider.items[0]",
         anomalies=anomalies,
     )
 
     assert item.current_team is None
-    assert anomalies[0].path == "items[0].current_team"
+    assert anomalies[0].path == "provider.items[0].current_team"
     assert anomalies[0].reason == "invalid current_team relation"
     assert anomalies[0].provider_id == (None if missing == "id" else 1647)

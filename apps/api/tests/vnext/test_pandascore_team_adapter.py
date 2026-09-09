@@ -181,11 +181,11 @@ def test_current_roster_active_is_required() -> None:
     anomalies = []
     item = PandaScoreTeamAdapter._normalize(
         row,
-        path="items[0]",
+        path="provider.items[0]",
         anomalies=anomalies,
     )
 
     assert len(item.current_roster) == 2
     assert [player.id for player in item.current_roster] == [99999, 88888]
-    assert anomalies[0].path == "items[0].players[0]"
+    assert anomalies[0].path == "provider.items[0].players[0]"
     assert "active" in anomalies[0].reason

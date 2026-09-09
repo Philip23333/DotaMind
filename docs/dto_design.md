@@ -95,7 +95,10 @@ anomalies
 current provider response. Normal missing data is represented by `None` or
 `[]` and does not create an anomaly. A malformed local item may be skipped
 while valid items continue to return. If the top-level provider response is
-not a collection, the provider protocol error remains fatal.
+not a collection, the provider protocol error remains fatal. Each anomaly
+`path` is a location in the provider response, such as
+`provider.items[0].games[2]`; it is not an index into the returned DotaMind
+`items` or nested DTO collections.
 
 ## 3. Naming Convention
 

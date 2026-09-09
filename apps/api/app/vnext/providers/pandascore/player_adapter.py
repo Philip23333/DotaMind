@@ -41,7 +41,7 @@ class PandaScorePlayerAdapter:
         items: list[PlayerDTO] = []
         anomalies: list[ResponseAnomaly] = []
         for index, row in enumerate(rows):
-            path = f"items[{index}]"
+            path = f"provider.items[{index}]"
             if not isinstance(row, dict):
                 anomalies.append(
                     ResponseAnomaly(path=path, reason="provider item is not an object")
@@ -90,7 +90,7 @@ class PandaScorePlayerAdapter:
         cls,
         row: dict[str, Any],
         *,
-        path: str = "item",
+        path: str = "provider.items[0]",
         anomalies: list[ResponseAnomaly] | None = None,
     ) -> PlayerDTO:
         anomaly_list = anomalies if anomalies is not None else []
@@ -143,7 +143,7 @@ class PandaScorePlayerAdapter:
         cls,
         value: Any,
         *,
-        path: str = "current_team",
+        path: str = "provider.items[0].current_team",
         anomalies: list[ResponseAnomaly] | None = None,
     ) -> TeamRefDTO | None:
         if value is None:

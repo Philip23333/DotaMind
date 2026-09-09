@@ -34,7 +34,7 @@ class PandaScoreTournamentAdapter:
         items: list[TournamentDTO] = []
         anomalies: list[ResponseAnomaly] = []
         for index, row in enumerate(rows):
-            path = f"items[{index}]"
+            path = f"provider.items[{index}]"
             if not isinstance(row, dict):
                 anomalies.append(
                     ResponseAnomaly(path=path, reason="provider item is not an object")
@@ -77,7 +77,7 @@ class PandaScoreTournamentAdapter:
         cls,
         row: dict[str, Any],
         *,
-        path: str = "item",
+        path: str = "provider.items[0]",
         anomalies: list[ResponseAnomaly] | None = None,
     ) -> TournamentDTO:
         anomaly_list = anomalies if anomalies is not None else []

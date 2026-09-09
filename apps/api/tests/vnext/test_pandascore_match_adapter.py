@@ -176,7 +176,7 @@ def test_match_search_skips_malformed_top_level_items() -> None:
 
     assert [item.id for item in result.items] == [42, 43]
     assert len(result.anomalies) == 1
-    assert result.anomalies[0].path == "items[1]"
+    assert result.anomalies[0].path == "provider.items[1]"
     assert result.anomalies[0].reason == "provider item is not an object"
     assert result.anomalies[0].provider_id is None
 
@@ -195,7 +195,7 @@ def test_match_games_have_partial_success() -> None:
     anomalies = []
     item = PandaScoreMatchAdapter._normalize(
         row,
-        path="items[0]",
+        path="provider.items[0]",
         anomalies=anomalies,
     )
 
@@ -322,7 +322,7 @@ def test_orphan_match_result_is_ignored_and_logged(caplog: pytest.LogCaptureFixt
     assert [participant.team.id for participant in item.participants] == [10, 11]
     assert "team_id=123" in caplog.text
     assert "match id=42" in caplog.text
-    assert anomalies[0].path == "item.results[2]"
+    assert anomalies[0].path == "provider.items[0].results[2]"
     assert anomalies[0].reason == "result references unknown opponent"
     assert anomalies[0].provider_id == 123
 
@@ -361,11 +361,11 @@ def test_required_match_and_game_booleans_are_not_defaulted() -> None:
     anomalies = []
     item = PandaScoreMatchAdapter._normalize(
         missing_game_boolean,
-        path="items[0]",
+        path="provider.items[0]",
         anomalies=anomalies,
     )
     assert item.games == []
-    assert anomalies[0].path == "items[0].games[0]"
+    assert anomalies[0].path == "provider.items[0].games[0]"
     assert "complete" in anomalies[0].reason
 
 

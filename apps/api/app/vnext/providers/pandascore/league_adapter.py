@@ -25,7 +25,7 @@ class PandaScoreLeagueAdapter:
         items: list[LeagueDTO] = []
         anomalies: list[ResponseAnomaly] = []
         for index, row in enumerate(rows):
-            path = f"items[{index}]"
+            path = f"provider.items[{index}]"
             if not isinstance(row, dict):
                 anomalies.append(
                     ResponseAnomaly(path=path, reason="provider item is not an object")

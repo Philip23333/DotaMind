@@ -32,15 +32,15 @@ def test_esports_search_results_have_uniform_anomaly_envelope(result_type) -> No
 
 def test_response_anomaly_is_strict_and_serializable() -> None:
     anomaly = ResponseAnomaly(
-        path="items[2]",
+        path="provider.items[2]",
         reason="provider item is not an object",
         provider_id=42,
     )
 
     assert anomaly.model_dump(mode="json") == {
-        "path": "items[2]",
+        "path": "provider.items[2]",
         "reason": "provider item is not an object",
         "provider_id": 42,
     }
     with pytest.raises(ValueError):
-        ResponseAnomaly(path="items[2]", reason="bad", raw_payload={})
+        ResponseAnomaly(path="provider.items[2]", reason="bad", raw_payload={})

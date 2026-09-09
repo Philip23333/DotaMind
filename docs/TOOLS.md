@@ -139,6 +139,8 @@ All esports search responses use the envelope `items`, `page`, `limit`, and
 provider mapping problem; normal missing data remains `None` or `[]`. A local
 malformed item may be skipped while other valid items are returned. A provider
 response with an invalid top-level shape still fails as a protocol error.
+Anomaly paths use provider-source locations such as
+`provider.items[0].games[2]`, not indexes into the returned DTO collection.
 
 ## Artifact tools
 
