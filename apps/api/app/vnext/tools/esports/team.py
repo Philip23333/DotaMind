@@ -13,12 +13,15 @@ TeamSearchHandler = Callable[[TeamSearchInput], Awaitable[TeamSearchResult]]
 TEAM_SEARCH_DESCRIPTION = """\
 Search Dota 2 teams.
 
-Use this tool to resolve a team name or acronym to a team ID.
+Use this tool to resolve a team name or acronym to a Team identity and current
+roster snapshot. The result includes `current_roster`; its `role` may contain
+multiple normalized semantic roles, for example ["carry", "mid"].
 
 Use name for names such as "Team Liquid". Use acronym for common competitive
 abbreviations such as "LGD" or "OG". Once a team ID is known, use it with match
-search to find that team's matches, or with player search to find players
-currently associated with the team.
+search to find that team's matches. `current_roster` describes current Team
+membership, not historical roster membership. Use player search with `team_id`
+when a Player-side filter or discovery task is needed.
 
 Use id when the exact team ID is already known.
 """

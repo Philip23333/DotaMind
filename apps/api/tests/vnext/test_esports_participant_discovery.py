@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
+from app.vnext.capabilities.esports.dtos import TeamDTO
 from app.vnext.capabilities.esports.match import MatchSearchInput, MatchSearchResult
 from app.vnext.capabilities.esports.player import (
     PlayerItem,
@@ -9,7 +10,7 @@ from app.vnext.capabilities.esports.player import (
     PlayerSearchResult,
     PlayerTeamSummary,
 )
-from app.vnext.capabilities.esports.team import TeamItem, TeamSearchInput, TeamSearchResult
+from app.vnext.capabilities.esports.team import TeamSearchInput, TeamSearchResult
 from app.vnext.composition import VNextServices, build_vnext_registry
 from app.vnext.llm.protocol import ToolCall
 
@@ -20,7 +21,7 @@ def test_team_identity_composes_with_match_and_player_search() -> None:
     async def team_search(query: TeamSearchInput) -> TeamSearchResult:
         seen.append(("team", query))
         return TeamSearchResult(
-            items=[TeamItem(id=1647, name="Team Liquid", acronym="TL")],
+            items=[TeamDTO(id=1647, name="Team Liquid", acronym="TL")],
             page=query.page,
             limit=query.limit,
         )

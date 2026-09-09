@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -53,6 +54,49 @@ class TeamRefDTO(BaseModel):
     location: str | None = None
     slug: str | None = None
     image_url: str | None = None
+
+
+class PlayerRole(str, Enum):
+    carry = "carry"
+    mid = "mid"
+    offlane = "offlane"
+    soft_support = "soft_support"
+    hard_support = "hard_support"
+
+
+class CurrentRosterPlayerDTO(BaseModel):
+    """A player in a Team's current membership snapshot."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    name: str
+
+    active: bool
+    role: tuple[PlayerRole, ...] | None = None
+
+    first_name: str | None = None
+    last_name: str | None = None
+    nationality: str | None = None
+
+    slug: str | None = None
+    image_url: str | None = None
+
+
+class TeamDTO(BaseModel):
+    """Stable DotaMind representation of a Team and its current roster."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    name: str
+
+    acronym: str | None = None
+    location: str | None = None
+    slug: str | None = None
+    image_url: str | None = None
+
+    current_roster: list[CurrentRosterPlayerDTO] = Field(default_factory=list)
 
 
 class TournamentRosterPlayerDTO(BaseModel):
@@ -172,12 +216,15 @@ class MatchDTO(BaseModel):
 
 
 __all__ = [
+    "CurrentRosterPlayerDTO",
     "LeagueDTO",
     "MatchDTO",
     "MatchGameDTO",
     "MatchParticipantDTO",
+    "PlayerRole",
     "SeriesDTO",
     "TeamRefDTO",
+    "TeamDTO",
     "TournamentDTO",
     "TournamentParticipantDTO",
     "TournamentRosterPlayerDTO",

@@ -5,7 +5,12 @@ import json
 
 import pytest
 
-from app.vnext.capabilities.esports.team import TeamItem, TeamSearchInput, TeamSearchResult
+from app.vnext.capabilities.esports.dtos import (
+    CurrentRosterPlayerDTO,
+    PlayerRole,
+    TeamDTO,
+)
+from app.vnext.capabilities.esports.team import TeamSearchInput, TeamSearchResult
 from app.vnext.llm.protocol import ToolCall
 from app.vnext.tools.esports import register_team_tool
 from app.vnext.tools.registry import ToolRegistry
@@ -63,6 +68,41 @@ def test_team_search_schema_is_semantic_and_closed() -> None:
         assert forbidden not in rendered
 
 
+def test_team_dtos_are_strict_and_have_frozen_fields() -> None:
+    assert set(CurrentRosterPlayerDTO.model_fields) == {
+        "id",
+        "name",
+        "active",
+        "role",
+        "first_name",
+        "last_name",
+        "nationality",
+        "slug",
+        "image_url",
+    }
+    assert set(TeamDTO.model_fields) == {
+        "id",
+        "name",
+        "acronym",
+        "location",
+        "slug",
+        "image_url",
+        "current_roster",
+    }
+    player = CurrentRosterPlayerDTO(
+        id=1,
+        name="Example",
+        active=True,
+        role=(PlayerRole.carry, PlayerRole.mid),
+    )
+    assert player.model_dump(mode="json")["role"] == ["carry", "mid"]
+    assert TeamDTO(id=1647, name="Team Liquid").current_roster == []
+    with pytest.raises(ValueError):
+        TeamDTO(id=1647, name="Team Liquid", players=[])
+    with pytest.raises(ValueError):
+        CurrentRosterPlayerDTO(id=1, name="Example", active=True, unknown=True)
+
+
 def test_team_search_returns_team_identity() -> None:
     seen: list[TeamSearchInput] = []
     registry = ToolRegistry()
@@ -70,7 +110,24 @@ def test_team_search_returns_team_identity() -> None:
     async def search(query: TeamSearchInput) -> TeamSearchResult:
         seen.append(query)
         return TeamSearchResult(
-            items=[TeamItem(id=1647, name="Team Liquid", acronym="TL", location="NL")],
+            items=[
+                TeamDTO(
+                    id=1647,
+                    name="Team Liquid",
+                    acronym="TL",
+                    location="NL",
+                    slug="team-liquid",
+                    image_url="https://example.test/liquid.png",
+                    current_roster=[
+                        CurrentRosterPlayerDTO(
+                            id=1,
+                            name="Example",
+                            active=True,
+                            role=(PlayerRole.mid,),
+                        )
+                    ],
+                )
+            ],
             page=query.page,
             limit=query.limit,
         )
@@ -89,7 +146,27 @@ def test_team_search_returns_team_identity() -> None:
     assert result.status == "ok"
     assert result.content == {
         "items": [
-            {"id": 1647, "name": "Team Liquid", "acronym": "TL", "location": "NL"}
+            {
+                "id": 1647,
+                "name": "Team Liquid",
+                "acronym": "TL",
+                "location": "NL",
+                "slug": "team-liquid",
+                "image_url": "https://example.test/liquid.png",
+                "current_roster": [
+                    {
+                        "id": 1,
+                        "name": "Example",
+                        "active": True,
+                        "role": ["mid"],
+                        "first_name": None,
+                        "last_name": None,
+                        "nationality": None,
+                        "slug": None,
+                        "image_url": None,
+                    }
+                ],
+            }
         ],
         "page": 1,
         "limit": 20,

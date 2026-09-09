@@ -106,9 +106,13 @@ observation instead.
 
 `esports.team.search` resolves a Dota 2 team name, acronym, or exact ID to team
 identity. Its closed input contains only `id`, `name`, `acronym`, `page`, and
-`limit`; the output contains `id`, `name`, `acronym`, and `location`. Provider
-roster fields are intentionally omitted. Use `esports.player.search` with the
-known team ID for player discovery.
+`limit`; the output is a `TeamDTO` containing `id`, `name`, `acronym`,
+`location`, `slug`, `image_url`, and `current_roster`. Provider `players[]` is
+normalized into the current roster snapshot. A single provider position maps to
+one semantic role, while mixed positions such as PandaScore `"1/2"` map to
+multiple roles: `["carry", "mid"]`. This is current Team membership, not a
+historical roster. Use `esports.player.search(team_id=...)` when a Player-side
+filter or discovery task is needed.
 
 `esports.player.search` resolves professional or real-name player identity and
 supports roster discovery through `team_id` and `active`. Its closed input
@@ -118,8 +122,10 @@ nationality and role, and an optional `current_team` summary. A missing
 `current_team` is valid for a free agent.
 
 Both participant tools use one semantic collection request and inherit the
-generic result processor for oversized responses. `Team.players` is not copied
-into `esports.team.search`; use `esports.player.search(team_id=...)` instead.
+generic result processor for oversized responses. `TeamDTO.current_roster`
+preserves the current membership snapshot while
+`TournamentParticipantDTO.expected_roster` remains the historical/expected
+tournament-context relation.
 
 Future domain tools must be added explicitly with a closed schema and focused
 tests; the registry must not grow a universal open selector or deprecated

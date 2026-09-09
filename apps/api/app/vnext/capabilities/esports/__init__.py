@@ -1,11 +1,14 @@
 """Closed semantic esports capability contracts."""
 
 from .dtos import (
+    CurrentRosterPlayerDTO,
     LeagueDTO,
     MatchDTO,
     MatchGameDTO,
     MatchParticipantDTO,
+    PlayerRole,
     SeriesDTO,
+    TeamDTO,
     TeamRefDTO,
     TournamentDTO,
     TournamentParticipantDTO,
@@ -31,7 +34,7 @@ from .series import (
     SeriesTeamsInput,
     SeriesTeamsResult,
 )
-from .team import TeamItem, TeamModel, TeamSearchInput, TeamSearchResult
+from .team import TeamModel, TeamSearchInput, TeamSearchResult
 from .tournament import (
     TournamentModel,
     TournamentSearchInput,
@@ -48,19 +51,21 @@ __all__ = [
     "MatchParticipantDTO",
     "MatchSearchInput",
     "MatchSearchResult",
+    "CurrentRosterPlayerDTO",
     "PlayerItem",
     "PlayerModel",
     "PlayerSearchInput",
     "PlayerSearchResult",
     "PlayerTeamSummary",
+    "PlayerRole",
     "SeriesDTO",
     "SeriesModel",
     "SeriesSearchInput",
     "SeriesSearchResult",
     "TeamRefDTO",
+    "TeamDTO",
     "SeriesTeamsInput",
     "SeriesTeamsResult",
-    "TeamItem",
     "TeamModel",
     "TeamSearchInput",
     "TeamSearchResult",

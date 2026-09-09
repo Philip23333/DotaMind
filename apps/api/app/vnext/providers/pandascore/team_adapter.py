@@ -2,15 +2,30 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
+from app.vnext.capabilities.esports.dtos import (
+    CurrentRosterPlayerDTO,
+    PlayerRole,
+    TeamDTO,
+)
 from app.vnext.capabilities.esports.team import (
-    TeamItem,
     TeamSearchInput,
     TeamSearchResult,
 )
 
 from .client import PandaScoreClient
+
+logger = logging.getLogger(__name__)
+
+_PLAYER_ROLE_BY_POSITION = {
+    "1": PlayerRole.carry,
+    "2": PlayerRole.mid,
+    "3": PlayerRole.offlane,
+    "4": PlayerRole.soft_support,
+    "5": PlayerRole.hard_support,
+}
 
 
 class PandaScoreTeamAdapter:
@@ -42,14 +57,68 @@ class PandaScoreTeamAdapter:
             params["search[acronym]"] = query.acronym
         return params
 
-    @staticmethod
-    def _normalize(row: dict[str, Any]) -> TeamItem:
-        return TeamItem(
+    @classmethod
+    def _normalize(cls, row: dict[str, Any]) -> TeamDTO:
+        return TeamDTO(
             id=int(row["id"]),
-            name=str(row["name"]),
-            acronym=row.get("acronym"),
-            location=row.get("location"),
+            name=row["name"],
+            acronym=cls._optional_text(row.get("acronym")),
+            location=cls._optional_text(row.get("location")),
+            slug=cls._optional_text(row.get("slug")),
+            image_url=cls._optional_text(row.get("image_url")),
+            current_roster=cls._current_roster(row.get("players")),
         )
+
+    @staticmethod
+    def _optional_text(value: Any) -> str | None:
+        if not isinstance(value, str):
+            return None
+        normalized = value.strip()
+        return normalized or None
+
+    @staticmethod
+    def _player_role(value: Any) -> tuple[PlayerRole, ...] | None:
+        if value is None:
+            return None
+        if isinstance(value, bool):
+            logger.warning("Unknown PandaScore player role value=%r", value)
+            return None
+        if isinstance(value, int):
+            tokens = [str(value)]
+        elif isinstance(value, str):
+            tokens = [token.strip() for token in value.split("/")]
+        else:
+            logger.warning("Unknown PandaScore player role value=%r", value)
+            return None
+
+        if not tokens or any(token not in _PLAYER_ROLE_BY_POSITION for token in tokens):
+            logger.warning("Unknown PandaScore player role value=%r", value)
+            return None
+        return tuple(_PLAYER_ROLE_BY_POSITION[token] for token in tokens)
+
+    @classmethod
+    def _map_current_roster_player(cls, row: dict[str, Any]) -> CurrentRosterPlayerDTO:
+        return CurrentRosterPlayerDTO(
+            id=int(row["id"]),
+            name=row["name"],
+            active=row["active"],
+            role=cls._player_role(row.get("role")),
+            first_name=cls._optional_text(row.get("first_name")),
+            last_name=cls._optional_text(row.get("last_name")),
+            nationality=cls._optional_text(row.get("nationality")),
+            slug=cls._optional_text(row.get("slug")),
+            image_url=cls._optional_text(row.get("image_url")),
+        )
+
+    @classmethod
+    def _current_roster(cls, value: Any) -> list[CurrentRosterPlayerDTO]:
+        if not isinstance(value, list):
+            return []
+        return [
+            cls._map_current_roster_player(row)
+            for row in value
+            if isinstance(row, dict)
+        ]
 
 
 __all__ = ["PandaScoreTeamAdapter"]
