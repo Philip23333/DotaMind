@@ -41,4 +41,18 @@ class SeriesDTO(BaseModel):
     slug: str | None = None
 
 
-__all__ = ["LeagueDTO", "SeriesDTO"]
+class TeamRefDTO(BaseModel):
+    """Stable team identity used when a series lists its participants."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    name: str
+
+    acronym: str | None = None
+    location: str | None = None
+    slug: str | None = None
+    image_url: str | None = None
+
+
+__all__ = ["LeagueDTO", "SeriesDTO", "TeamRefDTO"]

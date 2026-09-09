@@ -45,9 +45,14 @@ def _team_row() -> dict[str, Any]:
     return {
         "id": 128329,
         "name": "Xtreme Gaming",
-        "acronym": "XG",
-        "location": "cn",
+        "acronym": " XG ",
+        "location": " cn ",
+        "slug": " xtreme-gaming ",
+        "image_url": " https://example.test/xg.png ",
         "players": [{"id": 123, "name": "Ame"}],
+        "modified_at": "2026-09-01T00:00:00Z",
+        "dark_mode_image_url": "https://example.test/dark.png",
+        "current_videogame": {"id": 4},
     }
 
 
@@ -183,8 +188,12 @@ def test_series_teams_uses_supported_series_participants_endpoint() -> None:
                 "name": "Xtreme Gaming",
                 "acronym": "XG",
                 "location": "cn",
+                "slug": "xtreme-gaming",
+                "image_url": "https://example.test/xg.png",
             }
         ],
         "page": 2,
         "limit": 50,
     }
+    for field in ("players", "modified_at", "dark_mode_image_url", "current_videogame"):
+        assert not hasattr(result.items[0], field)

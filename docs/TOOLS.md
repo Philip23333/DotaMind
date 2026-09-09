@@ -80,7 +80,10 @@ of the model-facing contract.
 
 `esports.series.teams` returns participating team identities for one known
 series. It requires `series_id` from `esports.series.search` and accepts
-optional `page` and `limit` bounds.
+optional `page` and `limit` bounds. Each item is a `TeamRefDTO` containing
+`id`, `name`, `acronym`, `location`, `slug`, and `image_url`; `players[]` is not
+exposed because series participation is historical while embedded Team players
+reflect a current roster snapshot.
 
 `esports.match.search` is a closed semantic match-search capability. Its input
 uses `id`, `league_id`, `series_id`, `tournament_id`, `team_id`, `name`,

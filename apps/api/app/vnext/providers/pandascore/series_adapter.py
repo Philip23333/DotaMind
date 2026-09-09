@@ -4,11 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.vnext.capabilities.esports.dtos import SeriesDTO
+from app.vnext.capabilities.esports.dtos import SeriesDTO, TeamRefDTO
 from app.vnext.capabilities.esports.series import (
     SeriesSearchInput,
     SeriesSearchResult,
-    SeriesTeamItem,
     SeriesTeamsInput,
     SeriesTeamsResult,
 )
@@ -87,13 +86,15 @@ class PandaScoreSeriesAdapter:
         normalized = value.strip()
         return normalized or None
 
-    @staticmethod
-    def _normalize_team(row: dict[str, Any]) -> SeriesTeamItem:
-        return SeriesTeamItem(
+    @classmethod
+    def _normalize_team(cls, row: dict[str, Any]) -> TeamRefDTO:
+        return TeamRefDTO(
             id=int(row["id"]),
-            name=str(row["name"]),
-            acronym=row.get("acronym"),
-            location=row.get("location"),
+            name=row["name"],
+            acronym=cls._optional_text(row.get("acronym")),
+            location=cls._optional_text(row.get("location")),
+            slug=cls._optional_text(row.get("slug")),
+            image_url=cls._optional_text(row.get("image_url")),
         )
 
 

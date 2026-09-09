@@ -4,8 +4,8 @@ import asyncio
 
 import pytest
 
+from app.vnext.capabilities.esports.dtos import TeamRefDTO
 from app.vnext.capabilities.esports.series import (
-    SeriesTeamItem,
     SeriesTeamsInput,
     SeriesTeamsResult,
 )
@@ -60,7 +60,7 @@ def test_series_teams_tool_returns_participant_team_contract() -> None:
         assert query.limit == 3
         return SeriesTeamsResult(
             items=[
-                SeriesTeamItem(
+                TeamRefDTO(
                     id=128329,
                     name="Xtreme Gaming",
                     acronym="XG",
@@ -90,6 +90,8 @@ def test_series_teams_tool_returns_participant_team_contract() -> None:
                 "name": "Xtreme Gaming",
                 "acronym": "XG",
                 "location": "cn",
+                "slug": None,
+                "image_url": None,
             }
         ],
         "page": 2,
@@ -99,7 +101,7 @@ def test_series_teams_tool_returns_participant_team_contract() -> None:
 
 def test_series_teams_inherits_generic_externalization() -> None:
     teams = [
-        SeriesTeamItem(
+        TeamRefDTO(
             id=index,
             name=f"Team {index} {'x' * 200}",
         )
@@ -147,3 +149,24 @@ def test_series_teams_inherits_generic_externalization() -> None:
     assert read.status == "ok"
     assert read.content["total"] == 100
     assert read.content["value"] == [team.model_dump(mode="json") for team in teams[:3]]
+
+
+def test_team_ref_dto_is_strict_with_optional_metadata() -> None:
+    assert set(TeamRefDTO.model_fields) == {
+        "id",
+        "name",
+        "acronym",
+        "location",
+        "slug",
+        "image_url",
+    }
+    assert TeamRefDTO(id=128329, name="Xtreme Gaming").model_dump() == {
+        "id": 128329,
+        "name": "Xtreme Gaming",
+        "acronym": None,
+        "location": None,
+        "slug": None,
+        "image_url": None,
+    }
+    with pytest.raises(ValueError):
+        TeamRefDTO(id=128329, name="Xtreme Gaming", players=[])

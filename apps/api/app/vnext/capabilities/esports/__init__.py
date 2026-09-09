@@ -1,6 +1,6 @@
 """Closed semantic esports capability contracts."""
 
-from .dtos import LeagueDTO, SeriesDTO
+from .dtos import LeagueDTO, SeriesDTO, TeamRefDTO
 from .league import LeagueSearchInput, LeagueSearchResult
 from .match import (
     CompetitionSummary,
@@ -22,7 +22,6 @@ from .series import (
     SeriesModel,
     SeriesSearchInput,
     SeriesSearchResult,
-    SeriesTeamItem,
     SeriesTeamsInput,
     SeriesTeamsResult,
 )
@@ -52,7 +51,7 @@ __all__ = [
     "SeriesModel",
     "SeriesSearchInput",
     "SeriesSearchResult",
-    "SeriesTeamItem",
+    "TeamRefDTO",
     "SeriesTeamsInput",
     "SeriesTeamsResult",
     "SeriesSummary",

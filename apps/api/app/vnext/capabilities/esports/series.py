@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .dtos import SeriesDTO
+from .dtos import SeriesDTO, TeamRefDTO
 
 
 class SeriesModel(BaseModel):
@@ -85,15 +85,8 @@ class SeriesTeamsInput(SeriesModel):
     )
 
 
-class SeriesTeamItem(SeriesModel):
-    id: int
-    name: str
-    acronym: str | None = None
-    location: str | None = None
-
-
 class SeriesTeamsResult(SeriesModel):
-    items: list[SeriesTeamItem]
+    items: list[TeamRefDTO]
     page: int
     limit: int
 
@@ -103,7 +96,7 @@ __all__ = [
     "SeriesDTO",
     "SeriesSearchInput",
     "SeriesSearchResult",
-    "SeriesTeamItem",
+    "TeamRefDTO",
     "SeriesTeamsInput",
     "SeriesTeamsResult",
 ]
