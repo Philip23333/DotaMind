@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-
 from pydantic import BaseModel, ConfigDict, Field
+
+from .dtos import TournamentDTO
 
 
 class TournamentModel(BaseModel):
@@ -40,22 +40,14 @@ class TournamentSearchInput(TournamentModel):
     )
 
 
-class TournamentItem(TournamentModel):
-    id: int
-    name: str
-    series_id: int | None = None
-    begin_at: datetime | None = None
-    end_at: datetime | None = None
-
-
 class TournamentSearchResult(TournamentModel):
-    items: list[TournamentItem]
+    items: list[TournamentDTO]
     page: int
     limit: int
 
 
 __all__ = [
-    "TournamentItem",
+    "TournamentDTO",
     "TournamentModel",
     "TournamentSearchInput",
     "TournamentSearchResult",

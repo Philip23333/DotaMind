@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
-from app.vnext.capabilities.esports.dtos import SeriesDTO
+from app.vnext.capabilities.esports.dtos import SeriesDTO, TournamentDTO
 from app.vnext.capabilities.esports.league import (
     LeagueDTO,
     LeagueSearchInput,
@@ -14,7 +14,6 @@ from app.vnext.capabilities.esports.series import (
     SeriesSearchResult,
 )
 from app.vnext.capabilities.esports.tournament import (
-    TournamentItem,
     TournamentSearchInput,
     TournamentSearchResult,
 )
@@ -51,7 +50,14 @@ def test_esports_competition_discovery_contract_is_composable() -> None:
     async def tournament_search(query: TournamentSearchInput) -> TournamentSearchResult:
         seen.append(("tournament", query))
         return TournamentSearchResult(
-            items=[TournamentItem(id=21545, name="Group Stage", series_id=query.series_id)],
+            items=[
+                TournamentDTO(
+                    id=21545,
+                    series_id=10828,
+                    league_id=4106,
+                    name="Group Stage",
+                )
+            ],
             page=query.page,
             limit=query.limit,
         )

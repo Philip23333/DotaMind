@@ -5,8 +5,12 @@ import json
 
 import pytest
 
+from app.vnext.capabilities.esports.dtos import (
+    TournamentDTO,
+    TournamentParticipantDTO,
+    TournamentRosterPlayerDTO,
+)
 from app.vnext.capabilities.esports.tournament import (
-    TournamentItem,
     TournamentSearchInput,
     TournamentSearchResult,
 )
@@ -68,16 +72,67 @@ def test_tournament_search_schema_is_semantic_and_closed() -> None:
         assert forbidden not in rendered
 
 
+def test_tournament_dtos_are_strict_and_have_frozen_fields() -> None:
+    assert set(TournamentRosterPlayerDTO.model_fields) == {
+        "id",
+        "name",
+        "first_name",
+        "last_name",
+        "nationality",
+        "slug",
+    }
+    assert set(TournamentParticipantDTO.model_fields) == {"team", "expected_roster"}
+    assert set(TournamentDTO.model_fields) == {
+        "id",
+        "series_id",
+        "league_id",
+        "name",
+        "type",
+        "country",
+        "region",
+        "begin_at",
+        "end_at",
+        "winner_id",
+        "tier",
+        "prizepool",
+        "has_bracket",
+        "slug",
+        "participants",
+    }
+
+    tournament = TournamentDTO(
+        id=21545,
+        series_id=10828,
+        league_id=4106,
+        name="Group Stage",
+    )
+    assert tournament.participants == []
+    assert TournamentParticipantDTO(
+        team={"id": 128329, "name": "Xtreme Gaming"}
+    ).expected_roster == []
+    with pytest.raises(ValueError):
+        TournamentDTO(
+            id=21545,
+            series_id=10828,
+            league_id=4106,
+            name="Group Stage",
+            matches=[],
+        )
+    with pytest.raises(ValueError):
+        TournamentRosterPlayerDTO(id=1, name="Player", active=True)
+
+
 def test_tournament_search_returns_stage_identity() -> None:
     registry = ToolRegistry()
 
     async def search(query: TournamentSearchInput) -> TournamentSearchResult:
         return TournamentSearchResult(
             items=[
-                TournamentItem(
+                TournamentDTO(
                     id=21545,
+                    series_id=10828,
+                    league_id=4106,
                     name="Group Stage",
-                    series_id=query.series_id,
                 )
             ],
             page=query.page,
@@ -100,10 +155,20 @@ def test_tournament_search_returns_stage_identity() -> None:
         "items": [
             {
                 "id": 21545,
-                "name": "Group Stage",
                 "series_id": 10828,
+                "league_id": 4106,
+                "name": "Group Stage",
+                "type": None,
+                "country": None,
+                "region": None,
                 "begin_at": None,
                 "end_at": None,
+                "winner_id": None,
+                "tier": None,
+                "prizepool": None,
+                "has_bracket": None,
+                "slug": None,
+                "participants": [],
             }
         ],
         "page": 1,

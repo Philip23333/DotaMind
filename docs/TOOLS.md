@@ -74,9 +74,15 @@ the parent `league{}` object or navigation-only `tournaments[]`; use
 `league_id` and `year` for a bounded edition lookup.
 
 `esports.tournament.search` resolves a competition stage within one series. It
-accepts `id`, `series_id`, `name`, `page`, and `limit`, and returns the semantic
-`series_id` together with stage timing. Provider-private `serie_id` is not part
-of the model-facing contract.
+accepts `id`, `series_id`, `name`, `page`, and `limit`, and returns a
+`TournamentDTO`. Provider `serie_id` is exposed as `series_id`, while the
+top-level `league_id` is preserved. Provider `matches[]` is not exposed;
+navigate through `esports.match.search(tournament_id=...)` instead. Provider
+`teams[]` and `expected_roster[]` are normalized into `participants[]`, whose
+`team` is the tournament-level participation identity and whose
+`expected_roster` represents tournament-context expected or historical roster
+membership. It does not assert an exact starting five or historical `role` or
+`active` values.
 
 `esports.series.teams` returns participating team identities for one known
 series. It requires `series_id` from `esports.series.search` and accepts

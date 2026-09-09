@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class LeagueDTO(BaseModel):
@@ -55,4 +55,64 @@ class TeamRefDTO(BaseModel):
     image_url: str | None = None
 
 
-__all__ = ["LeagueDTO", "SeriesDTO", "TeamRefDTO"]
+class TournamentRosterPlayerDTO(BaseModel):
+    """A player identity as captured in a tournament-context roster."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    name: str
+
+    first_name: str | None = None
+    last_name: str | None = None
+    nationality: str | None = None
+
+    slug: str | None = None
+
+
+class TournamentParticipantDTO(BaseModel):
+    """A team participating in a tournament and its expected roster."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    team: TeamRefDTO
+    expected_roster: list[TournamentRosterPlayerDTO] = Field(default_factory=list)
+
+
+class TournamentDTO(BaseModel):
+    """Stable DotaMind representation of a PandaScore tournament stage."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    series_id: int
+    league_id: int
+
+    name: str
+    type: str | None = None
+
+    country: str | None = None
+    region: str | None = None
+
+    begin_at: datetime | None = None
+    end_at: datetime | None = None
+
+    winner_id: int | None = None
+
+    tier: str | None = None
+    prizepool: str | None = None
+    has_bracket: bool | None = None
+
+    slug: str | None = None
+
+    participants: list[TournamentParticipantDTO] = Field(default_factory=list)
+
+
+__all__ = [
+    "LeagueDTO",
+    "SeriesDTO",
+    "TeamRefDTO",
+    "TournamentDTO",
+    "TournamentParticipantDTO",
+    "TournamentRosterPlayerDTO",
+]
