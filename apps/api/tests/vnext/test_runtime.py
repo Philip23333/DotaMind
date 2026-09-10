@@ -9,7 +9,6 @@ from pydantic import BaseModel, ConfigDict
 from app.vnext.agent.errors import (
     AgentCancelledError,
     AgentDeadlineExceeded,
-    MaxStepsExceeded,
     MaxToolCallsExceeded,
     ModelProtocolError,
 )
@@ -24,6 +23,7 @@ from app.vnext.llm.protocol import (
     ModelTextDelta,
     SystemMessage,
     ToolCall,
+    ToolResultMessage,
     UserMessage,
 )
 from app.vnext.tools import ToolDefinition, ToolRegistry
@@ -98,7 +98,10 @@ def test_runtime_includes_configured_system_instruction_in_each_model_request() 
 
     _run(runtime, model)
 
-    assert model.requests[0].messages[0] == SystemMessage(content="query discipline")
+    system = model.requests[0].messages[0]
+    assert isinstance(system, SystemMessage)
+    assert system.content.startswith("query discipline\n\nRuntime budget:")
+    assert "Current turn: 1 of 20" in system.content
 
 
 def test_runtime_rejects_caller_system_message_when_system_instruction_is_configured() -> None:
@@ -185,9 +188,9 @@ def test_multiple_reasoning_turns_are_sent_as_a_complete_transcript() -> None:
     runtime = AgentRuntime(model, _registry(), limits=AgentLimits(deadline_seconds=2))
     assert _run(runtime, model).content == "finished"
     assert len(model.requests) == 3
-    assert isinstance(model.requests[2].messages[1], AssistantMessage)
-    assert isinstance(model.requests[2].messages[2], object)
-    assert isinstance(model.requests[2].messages[3], AssistantMessage)
+    assert isinstance(model.requests[2].messages[2], AssistantMessage)
+    assert isinstance(model.requests[2].messages[3], object)
+    assert isinstance(model.requests[2].messages[4], AssistantMessage)
 
 
 def test_tool_local_errors_are_results_and_model_can_continue() -> None:
@@ -237,15 +240,82 @@ def test_total_tool_call_budget_is_runtime_failure() -> None:
         _run(runtime, model)
 
 
-def test_max_steps_is_runtime_failure_after_allowed_tool_turn() -> None:
-    model = ScriptedModelClient([_tool_turn(_call())])
+def test_default_max_steps_reserves_twentieth_turn_for_final_answer() -> None:
+    model = ScriptedModelClient(
+        [
+            *(_tool_turn(_call(str(index), index)) for index in range(1, 20)),
+            ModelResponse(message=FinalMessage(content="done")),
+        ]
+    )
     runtime = AgentRuntime(
         model,
         _registry(),
+        limits=AgentLimits(deadline_seconds=2),
+    )
+
+    result = _run(runtime, model)
+
+    assert result.content == "done"
+    assert len(model.requests) == 20
+    assert model.requests[0].tools
+    assert model.requests[18].tools
+    assert model.requests[19].tools == []
+    first_system = model.requests[0].messages[0]
+    final_system = model.requests[19].messages[0]
+    assert isinstance(first_system, SystemMessage)
+    assert isinstance(final_system, SystemMessage)
+    assert "Current turn: 1 of 20" in first_system.content
+    assert "Turns remaining including this turn: 20" in first_system.content
+    assert "Tools are available this turn: yes" in first_system.content
+    turn_nineteen_system = model.requests[18].messages[0]
+    assert isinstance(turn_nineteen_system, SystemMessage)
+    assert "Current turn: 19 of 20" in turn_nineteen_system.content
+    assert "Turns remaining including this turn: 2" in turn_nineteen_system.content
+    assert "Tools are available this turn: yes" in turn_nineteen_system.content
+    assert "Current turn: 20 of 20" in final_system.content
+    assert "Turns remaining including this turn: 1" in final_system.content
+    assert "Tools are available this turn: no" in final_system.content
+    assert "This is the reserved final-answer turn." in final_system.content
+    assert "Current turn: 19 of 20" not in final_system.content
+    assert any(
+        isinstance(message, ToolResultMessage)
+        and message.tool_call_id == "19"
+        and message.content == {"value": 19}
+        for message in model.requests[19].messages
+    )
+
+
+def test_early_final_answer_does_not_fill_runtime_budget() -> None:
+    model = ScriptedModelClient([ModelResponse(message=FinalMessage(content="done"))])
+    runtime = AgentRuntime(model, ToolRegistry(), limits=AgentLimits(deadline_seconds=2))
+
+    result = _run(runtime, model)
+
+    assert result.content == "done"
+    assert len(model.requests) == 1
+
+
+def test_reserved_final_turn_rejects_tool_request_without_execution() -> None:
+    invoked = False
+
+    def handler(args: EchoInput) -> EchoOutput:
+        nonlocal invoked
+        invoked = True
+        return EchoOutput(value=args.value)
+
+    model = ScriptedModelClient([_tool_turn(_call())])
+    runtime = AgentRuntime(
+        model,
+        _registry(handler=handler),
         limits=AgentLimits(max_steps=1, deadline_seconds=2),
     )
-    with pytest.raises(MaxStepsExceeded):
+
+    with pytest.raises(ModelProtocolError, match="forced finalization"):
         _run(runtime, model)
+
+    assert len(model.requests) == 1
+    assert model.requests[0].tools == []
+    assert invoked is False
 
 
 def test_overall_deadline_is_not_a_tool_success() -> None:
@@ -648,7 +718,9 @@ def test_finalization_instruction_is_temporary_and_does_not_mutate_runtime_state
 
     assert result.content == "partial"
     assert runtime.system_instruction == "base instruction"
-    assert model.requests[0].messages[0] == SystemMessage(content="base instruction")
+    first_system = model.requests[0].messages[0]
+    assert isinstance(first_system, SystemMessage)
+    assert first_system.content.startswith("base instruction\n\nRuntime budget:")
     assert model.requests[1].messages[0].content.startswith("base instruction\n\n")  # type: ignore[union-attr]
     assert "Tool-use time budget is exhausted" in model.requests[1].messages[0].content  # type: ignore[union-attr]
 

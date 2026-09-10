@@ -200,8 +200,12 @@ class AgentRuntime:
                 step += 1
                 if step > self.limits.max_steps:
                     raise MaxStepsExceeded(self.limits.max_steps)
+                final_turn = step == self.limits.max_steps
+                tools_enabled = not finalizing and not final_turn
                 active_deadline = (
-                    hard_deadline if finalizing else exploration_deadline or hard_deadline
+                    hard_deadline
+                    if finalizing or final_turn
+                    else exploration_deadline or hard_deadline
                 )
                 try:
                     self._check_controls(token, active_deadline)
@@ -211,12 +215,18 @@ class AgentRuntime:
                         continue
                     raise
 
-                finalization = (
-                    _with_finalization_instruction(request_messages) if finalizing else None
+                turn_messages = _with_runtime_budget_instruction(
+                    request_messages,
+                    current_turn=step,
+                    max_turns=self.limits.max_steps,
+                    tools_enabled=tools_enabled,
+                    final_turn=final_turn,
                 )
+                if finalizing:
+                    turn_messages = _with_finalization_instruction(turn_messages)
                 request = ModelRequest(
-                    messages=finalization or request_messages,
-                    tools=[] if finalizing else self.tools.schemas(),
+                    messages=turn_messages,
+                    tools=self.tools.schemas() if tools_enabled else [],
                     step=step,
                 )
                 if trace_collector is not None:
@@ -323,7 +333,11 @@ class AgentRuntime:
                     )
                 yield await self._publish(event, sink)
 
-                if finalizing and isinstance(assistant, AssistantMessage) and assistant.tool_calls:
+                if (
+                    (finalizing or final_turn)
+                    and isinstance(assistant, AssistantMessage)
+                    and assistant.tool_calls
+                ):
                     raise ModelProtocolError("model requested tools during forced finalization")
 
                 if isinstance(assistant, FinalMessage):
@@ -605,14 +619,63 @@ class AgentRuntime:
 def _with_finalization_instruction(messages: Sequence[Message]) -> list[Message]:
     """Build a temporary finalization transcript without mutating stable state."""
 
+    return _append_system_instruction(messages, _FINALIZATION_INSTRUCTION)
+
+
+def _with_runtime_budget_instruction(
+    messages: Sequence[Message],
+    *,
+    current_turn: int,
+    max_turns: int,
+    tools_enabled: bool,
+    final_turn: bool,
+) -> list[Message]:
+    """Build one ephemeral model-turn budget block without mutating history."""
+
+    remaining_turns = max_turns - current_turn + 1
+    lines = [
+        "Runtime budget:",
+        f"- Current turn: {current_turn} of {max_turns}",
+        f"- Turns remaining including this turn: {remaining_turns}",
+        f"- Tools are available this turn: {'yes' if tools_enabled else 'no'}",
+        "- Final answer turn is reserved: yes",
+    ]
+    if final_turn:
+        lines.extend(
+            [
+                "- This is the reserved final-answer turn.",
+                "- Produce the best user-facing answer now using the information "
+                "already available.",
+                "- Do not describe the runtime budget or internal step limit.",
+                "- If some requested information remains unavailable, answer with "
+                "what is supported and state the limitation concisely.",
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                "- The remaining-turn budget is a ceiling, not a target.",
+                "- Do not spend additional turns merely because they are available.",
+                "- Answer immediately once sufficient evidence is available.",
+            ]
+        )
+    return _append_system_instruction(messages, "\n".join(lines))
+
+
+def _append_system_instruction(
+    messages: Sequence[Message],
+    instruction: str,
+) -> list[Message]:
+    """Append an ephemeral instruction to a copied transcript."""
+
     finalization_messages = list(messages)
     for index, message in enumerate(finalization_messages):
         if isinstance(message, SystemMessage):
             finalization_messages[index] = message.model_copy(
-                update={"content": f"{message.content}\n\n{_FINALIZATION_INSTRUCTION}"}
+                update={"content": f"{message.content}\n\n{instruction}"}
             )
             return finalization_messages
-    finalization_messages.insert(0, SystemMessage(content=_FINALIZATION_INSTRUCTION))
+    finalization_messages.insert(0, SystemMessage(content=instruction))
     return finalization_messages
 
 
