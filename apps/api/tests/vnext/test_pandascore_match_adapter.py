@@ -206,6 +206,68 @@ def test_match_games_have_partial_success() -> None:
     assert anomalies[0].provider_id == 9003
 
 
+@pytest.mark.parametrize(
+    ("winner", "expected_winner_id", "expected_anomalies"),
+    [
+        (None, None, 0),
+        ({"id": None}, None, 0),
+        ({"id": 1669}, 1669, 0),
+        ("bad", None, 1),
+        (123, None, 1),
+        ({}, None, 1),
+        ({"id": "bad"}, None, 1),
+    ],
+)
+def test_game_winner_mapping_distinguishes_unknown_from_malformed(
+    winner: Any,
+    expected_winner_id: int | None,
+    expected_anomalies: int,
+) -> None:
+    row = _row()
+    row["games"][0] = {**row["games"][0], "winner": winner}
+    anomalies = []
+
+    item = PandaScoreMatchAdapter._normalize(
+        row,
+        path="provider.items[0]",
+        anomalies=anomalies,
+    )
+
+    assert item.games[0].winner_id == expected_winner_id
+    assert len(anomalies) == expected_anomalies
+    if expected_anomalies:
+        assert anomalies[0].path == "provider.items[0].games[0].winner"
+        assert anomalies[0].reason == "invalid winner relation"
+
+
+def test_canceled_forfeit_match_allows_unplayed_game_without_winner() -> None:
+    row = _row()
+    row["status"] = "canceled"
+    row["forfeit"] = True
+    row["games"][0] = {
+        **row["games"][0],
+        "status": "not_started",
+        "begin_at": None,
+        "end_at": None,
+        "length": None,
+        "winner": {"id": None},
+        "complete": False,
+        "forfeit": False,
+    }
+    anomalies = []
+
+    item = PandaScoreMatchAdapter._normalize(
+        row,
+        path="provider.items[0]",
+        anomalies=anomalies,
+    )
+
+    assert item.status == "canceled"
+    assert item.forfeit is True
+    assert item.games[0].winner_id is None
+    assert anomalies == []
+
+
 def test_adapter_normalizes_complete_match_projection() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json=[_row()], request=request)

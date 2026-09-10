@@ -345,10 +345,26 @@ class PandaScoreMatchAdapter:
                 continue
             winner = game.get("winner")
             winner_id = None
-            if winner is not None:
+            if winner is None:
+                pass
+            elif not isinstance(winner, dict):
+                anomaly_list.append(
+                    ResponseAnomaly(
+                        path=f"{game_path}.winner",
+                        reason="invalid winner relation",
+                    )
+                )
+            elif "id" not in winner:
+                anomaly_list.append(
+                    ResponseAnomaly(
+                        path=f"{game_path}.winner",
+                        reason="invalid winner relation",
+                    )
+                )
+            elif winner["id"] is None:
+                pass
+            else:
                 try:
-                    if not isinstance(winner, dict):
-                        raise TypeError("winner")
                     winner_id = int(winner["id"])
                 except (KeyError, TypeError, ValueError) as exc:
                     logger.warning("Failed to map PandaScore game winner", exc_info=exc)
@@ -356,9 +372,7 @@ class PandaScoreMatchAdapter:
                         ResponseAnomaly(
                             path=f"{game_path}.winner",
                             reason="invalid winner relation",
-                            provider_id=cls._provider_id(
-                                winner.get("id") if isinstance(winner, dict) else None
-                            ),
+                            provider_id=cls._provider_id(winner.get("id")),
                         )
                     )
             try:
