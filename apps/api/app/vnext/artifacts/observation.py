@@ -6,7 +6,7 @@ from typing import Any
 
 from .externalize import serialized_size
 
-MAX_MODEL_TOOL_OBSERVATION_BYTES = 8 * 1024
+MAX_MODEL_TOOL_OBSERVATION_BYTES = 35 * 1024
 
 
 def build_bounded_observation(

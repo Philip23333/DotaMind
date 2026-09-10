@@ -160,7 +160,7 @@ def test_byte_budget_truncates_complete_list_rows_and_supports_continuation() ->
                     {
                         "id": index,
                         "name": f"row-{index}",
-                        "payload": "x" * 700,
+                        "payload": "x" * 1_000,
                     }
                     for index in range(100)
                 ]
@@ -219,7 +219,7 @@ def test_byte_budget_uses_utf8_serialized_size() -> None:
 def test_oversized_first_list_item_requires_narrower_path() -> None:
     async def exercise():
         registry, ref = await _registry_with_payload(
-            {"rows": [{"id": 1, "payload": "x" * 9_000}]}
+            {"rows": [{"id": 1, "payload": "x" * 40_000}]}
         )
         return await registry.execute(
             _call({"ref": ref, "mode": "read", "path": "rows", "limit": 1})
@@ -236,7 +236,7 @@ def test_oversized_first_list_item_requires_narrower_path() -> None:
 def test_oversized_non_list_values_are_rejected() -> None:
     async def exercise():
         registry, ref = await _registry_with_payload(
-            {"large": {"payload": "x" * 9_000}, "large_text": "x" * 9_000}
+            {"large": {"payload": "x" * 40_000}, "large_text": "x" * 40_000}
         )
         large_object = await registry.execute(
             _call({"ref": ref, "mode": "read", "path": "large"})
