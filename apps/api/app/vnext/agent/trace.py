@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from time import monotonic
 from typing import Any
 
+from app.vnext.agent.runtime_context import RuntimeContext
 from app.vnext.llm.protocol import Message, ModelRequest, ModelResponse, ToolResultMessage
 
 
@@ -20,8 +21,25 @@ class AgentTraceCollector:
         self._trace["initial_messages"] = [message.model_dump(mode="json") for message in messages]
         self._trace["tool_schemas"] = tool_schemas
 
-    def model_request(self, request: ModelRequest) -> None:
-        self._step(request.step)["model_request"] = request.model_dump(mode="json")
+    def model_request(
+        self,
+        request: ModelRequest,
+        runtime_context: RuntimeContext | None = None,
+        *,
+        conversation_messages: Sequence[Message] | None = None,
+    ) -> None:
+        """Record one model invocation without persisting its runtime prompt."""
+
+        traced_request = (
+            request.model_copy(update={"messages": list(conversation_messages)})
+            if conversation_messages is not None
+            else request
+        )
+        item = self._step(request.step)
+        item["model_request"] = traced_request.model_dump(mode="json")
+        item["runtime_context"] = (
+            runtime_context_to_dict(runtime_context) if runtime_context is not None else None
+        )
 
     def text_delta(self, step: int, text: str) -> None:
         self._step(step).setdefault("streamed_text", []).append(text)
@@ -58,4 +76,16 @@ class AgentTraceCollector:
         return item
 
 
-__all__ = ["AgentTraceCollector"]
+def runtime_context_to_dict(context: RuntimeContext) -> dict[str, object]:
+    """Convert a RuntimeContext snapshot into JSON-safe trace fields."""
+
+    return {
+        "phase": context.phase.value,
+        "remaining_turns": context.remaining_turns,
+        "time_pressure": context.time_pressure.value,
+        "context_pressure": context.context_pressure.value,
+        "tools_available": context.tools_available,
+    }
+
+
+__all__ = ["AgentTraceCollector", "runtime_context_to_dict"]

@@ -227,7 +227,11 @@ class AgentRuntime:
                     step=step,
                 )
                 if trace_collector is not None:
-                    trace_collector.model_request(request)
+                    trace_collector.model_request(
+                        request,
+                        runtime_context=runtime_context,
+                        conversation_messages=request_messages,
+                    )
                 event = ModelRequested(
                     step=step,
                     message_count=len(request.messages),

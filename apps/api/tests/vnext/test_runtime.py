@@ -167,6 +167,15 @@ def test_trace_collector_records_canonical_model_and_tool_evidence() -> None:
     assert trace["initial_messages"] == [{"role": "user", "content": "hello"}]
     assert trace["tool_schemas"][0]["name"] == "echo"
     assert trace["steps"][0]["model_request"]["step"] == 1
+    assert trace["steps"][0]["runtime_context"] == {
+        "phase": "exploration",
+        "remaining_turns": 19,
+        "time_pressure": "healthy",
+        "context_pressure": "normal",
+        "tools_available": True,
+    }
+    assert trace["steps"][0]["model_request"]["messages"] == trace["initial_messages"]
+    assert "Runtime state:" not in str(trace["steps"][0]["model_request"])
     assert trace["steps"][0]["model_response"]["message"]["tool_calls"][0]["arguments"] == {
         "value": 1
     }
