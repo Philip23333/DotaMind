@@ -100,8 +100,8 @@ def test_runtime_includes_configured_system_instruction_in_each_model_request() 
 
     system = model.requests[0].messages[0]
     assert isinstance(system, SystemMessage)
-    assert system.content.startswith("query discipline\n\nRuntime budget:")
-    assert "Current turn: 1 of 20" in system.content
+    assert system.content.startswith("query discipline\n\nRuntime state:")
+    assert "Execution phase:\nexploration" in system.content
 
 
 def test_runtime_rejects_caller_system_message_when_system_instruction_is_configured() -> None:
@@ -135,6 +135,22 @@ def test_single_tool_call_result_then_final() -> None:
     assert result.content == "done"
     assert model.requests[1].messages[-1].tool_call_id == "call-1"  # type: ignore[union-attr]
     assert model.requests[1].messages[-1].content == {"value": 1}  # type: ignore[union-attr]
+
+
+def test_runtime_prompt_is_recreated_without_accumulating_in_history() -> None:
+    model = ScriptedModelClient(
+        [_tool_turn(_call()), ModelResponse(message=FinalMessage(content="done"))]
+    )
+    runtime = AgentRuntime(model, _registry(), limits=AgentLimits(deadline_seconds=2))
+
+    _run(runtime, model)
+
+    for request in model.requests:
+        system_messages = [
+            message for message in request.messages if isinstance(message, SystemMessage)
+        ]
+        assert len(system_messages) == 1
+        assert system_messages[0].content.count("Runtime state:") == 1
 
 
 def test_trace_collector_records_canonical_model_and_tool_evidence() -> None:
@@ -264,25 +280,57 @@ def test_default_max_steps_reserves_twentieth_turn_for_final_answer() -> None:
     final_system = model.requests[19].messages[0]
     assert isinstance(first_system, SystemMessage)
     assert isinstance(final_system, SystemMessage)
-    assert "Current turn: 1 of 20" in first_system.content
-    assert "Turns remaining including this turn: 20" in first_system.content
-    assert "Tools are available this turn: yes" in first_system.content
+    assert "Execution phase:\nexploration" in first_system.content
+    assert "Remaining turns:\n19" in first_system.content
+    assert "Tools available:\nyes" in first_system.content
     turn_nineteen_system = model.requests[18].messages[0]
     assert isinstance(turn_nineteen_system, SystemMessage)
-    assert "Current turn: 19 of 20" in turn_nineteen_system.content
-    assert "Turns remaining including this turn: 2" in turn_nineteen_system.content
-    assert "Tools are available this turn: yes" in turn_nineteen_system.content
-    assert "Current turn: 20 of 20" in final_system.content
-    assert "Turns remaining including this turn: 1" in final_system.content
-    assert "Tools are available this turn: no" in final_system.content
-    assert "This is the reserved final-answer turn." in final_system.content
-    assert "Current turn: 19 of 20" not in final_system.content
+    assert "Execution phase:\nconverging" in turn_nineteen_system.content
+    assert "Remaining turns:\n1" in turn_nineteen_system.content
+    assert "Tools available:\nyes" in turn_nineteen_system.content
+    assert "Execution phase:\nfinalization" in final_system.content
+    assert "Remaining turns:\n0" in final_system.content
+    assert "Tools available:\nno" in final_system.content
+    assert "Produce the final user-facing answer now." in final_system.content
+    assert "Execution phase:\nconverging" not in final_system.content
+    assert all(
+        isinstance(request.messages[0], SystemMessage)
+        and request.messages[0].content.count("Runtime state:") == 1
+        for request in model.requests
+    )
     assert any(
         isinstance(message, ToolResultMessage)
         and message.tool_call_id == "19"
         and message.content == {"value": 19}
         for message in model.requests[19].messages
     )
+
+
+def test_runtime_prompt_remaining_turns_follow_each_invocation() -> None:
+    model = ScriptedModelClient(
+        [
+            *(_tool_turn(_call(str(index), index)) for index in range(1, 6)),
+            ModelResponse(message=FinalMessage(content="done")),
+        ]
+    )
+    runtime = AgentRuntime(
+        model,
+        _registry(),
+        limits=AgentLimits(max_steps=6, deadline_seconds=2),
+    )
+
+    _run(runtime, model)
+
+    remaining_turns = []
+    for request in model.requests:
+        system = next(
+            message for message in request.messages if isinstance(message, SystemMessage)
+        )
+        remaining_turns.append(
+            system.content.split("Remaining turns:\n", 1)[1].split("\n", 1)[0]
+        )
+    assert remaining_turns == ["5", "4", "3", "2", "1", "0"]
+    assert "Execution phase:\nfinalization" in model.requests[-1].messages[0].content  # type: ignore[union-attr]
 
 
 def test_early_final_answer_does_not_fill_runtime_budget() -> None:
@@ -315,6 +363,10 @@ def test_reserved_final_turn_rejects_tool_request_without_execution() -> None:
 
     assert len(model.requests) == 1
     assert model.requests[0].tools == []
+    final_system = model.requests[0].messages[0]
+    assert isinstance(final_system, SystemMessage)
+    assert "Execution phase:\nfinalization" in final_system.content
+    assert "Tools available:\nno" in final_system.content
     assert invoked is False
 
 
@@ -497,7 +549,7 @@ def test_soft_deadline_during_model_exploration_forces_tool_free_finalization() 
     assert model.requests[1].tools == []
     assert any(
         isinstance(message, SystemMessage)
-        and "Tool-use time budget is exhausted" in message.content
+        and "Further retrieval is unavailable." in message.content
         for message in model.requests[1].messages
     )
 
@@ -701,7 +753,7 @@ def test_finalization_tool_request_is_a_protocol_error_without_execution() -> No
     assert invoked is False
 
 
-def test_finalization_instruction_is_temporary_and_does_not_mutate_runtime_state() -> None:
+def test_runtime_prompt_is_temporary_and_does_not_mutate_runtime_state() -> None:
     async def slow_response() -> ModelResponse:
         await asyncio.sleep(0.2)
         return ModelResponse.from_final("too late")
@@ -720,9 +772,10 @@ def test_finalization_instruction_is_temporary_and_does_not_mutate_runtime_state
     assert runtime.system_instruction == "base instruction"
     first_system = model.requests[0].messages[0]
     assert isinstance(first_system, SystemMessage)
-    assert first_system.content.startswith("base instruction\n\nRuntime budget:")
+    assert first_system.content.startswith("base instruction\n\nRuntime state:")
     assert model.requests[1].messages[0].content.startswith("base instruction\n\n")  # type: ignore[union-attr]
-    assert "Tool-use time budget is exhausted" in model.requests[1].messages[0].content  # type: ignore[union-attr]
+    assert "Runtime state:" in model.requests[1].messages[0].content  # type: ignore[union-attr]
+    assert "Further retrieval is unavailable." in model.requests[1].messages[0].content  # type: ignore[union-attr]
 
 
 def test_soft_deadline_supports_streaming_model_finalization() -> None:

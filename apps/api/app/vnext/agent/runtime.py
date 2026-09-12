@@ -33,6 +33,8 @@ from app.vnext.agent.events import (
     ToolStarted,
 )
 from app.vnext.agent.limits import AgentLimits
+from app.vnext.agent.runtime_context import RuntimeContext
+from app.vnext.agent.runtime_prompt import render_runtime_prompt
 from app.vnext.agent.trace import AgentTraceCollector
 from app.vnext.llm.protocol import (
     AssistantMessage,
@@ -50,12 +52,6 @@ from app.vnext.llm.protocol import (
 from app.vnext.tools.registry import ToolRegistry
 
 EventSink = Callable[[AgentEvent], Awaitable[None] | None]
-
-_FINALIZATION_INSTRUCTION = (
-    "Tool-use time budget is exhausted. Answer now using the evidence already collected. "
-    "If the evidence is incomplete, provide the best supported partial answer and clearly "
-    "state what remains uncertain."
-)
 
 
 class CancellationToken:
@@ -215,15 +211,16 @@ class AgentRuntime:
                         continue
                     raise
 
-                turn_messages = _with_runtime_budget_instruction(
-                    request_messages,
-                    current_turn=step,
-                    max_turns=self.limits.max_steps,
-                    tools_enabled=tools_enabled,
-                    final_turn=final_turn,
+                runtime_context = RuntimeContext.from_state(
+                    current_step=step,
+                    max_steps=self.limits.max_steps,
+                    finalizing=finalizing or final_turn,
+                    tools_available=tools_enabled,
                 )
-                if finalizing:
-                    turn_messages = _with_finalization_instruction(turn_messages)
+                turn_messages = _append_system_instruction(
+                    request_messages,
+                    render_runtime_prompt(runtime_context),
+                )
                 request = ModelRequest(
                     messages=turn_messages,
                     tools=self.tools.schemas() if tools_enabled else [],
@@ -614,52 +611,6 @@ class AgentRuntime:
             if inspect.isawaitable(result):
                 await result
         return event
-
-
-def _with_finalization_instruction(messages: Sequence[Message]) -> list[Message]:
-    """Build a temporary finalization transcript without mutating stable state."""
-
-    return _append_system_instruction(messages, _FINALIZATION_INSTRUCTION)
-
-
-def _with_runtime_budget_instruction(
-    messages: Sequence[Message],
-    *,
-    current_turn: int,
-    max_turns: int,
-    tools_enabled: bool,
-    final_turn: bool,
-) -> list[Message]:
-    """Build one ephemeral model-turn budget block without mutating history."""
-
-    remaining_turns = max_turns - current_turn + 1
-    lines = [
-        "Runtime budget:",
-        f"- Current turn: {current_turn} of {max_turns}",
-        f"- Turns remaining including this turn: {remaining_turns}",
-        f"- Tools are available this turn: {'yes' if tools_enabled else 'no'}",
-        "- Final answer turn is reserved: yes",
-    ]
-    if final_turn:
-        lines.extend(
-            [
-                "- This is the reserved final-answer turn.",
-                "- Produce the best user-facing answer now using the information "
-                "already available.",
-                "- Do not describe the runtime budget or internal step limit.",
-                "- If some requested information remains unavailable, answer with "
-                "what is supported and state the limitation concisely.",
-            ]
-        )
-    else:
-        lines.extend(
-            [
-                "- The remaining-turn budget is a ceiling, not a target.",
-                "- Do not spend additional turns merely because they are available.",
-                "- Answer immediately once sufficient evidence is available.",
-            ]
-        )
-    return _append_system_instruction(messages, "\n".join(lines))
 
 
 def _append_system_instruction(
