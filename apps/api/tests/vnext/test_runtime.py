@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from pydantic import BaseModel, ConfigDict
 
+import app.vnext.agent.runtime as runtime_module
 from app.vnext.agent.errors import (
     AgentCancelledError,
     AgentDeadlineExceeded,
@@ -352,6 +353,86 @@ def test_runtime_prompt_remaining_turns_follow_each_invocation() -> None:
         )
     assert remaining_turns == ["5", "4", "3", "2", "1", "0"]
     assert "Execution phase:\nfinalization" in model.requests[-1].messages[0].content  # type: ignore[union-attr]
+
+
+@pytest.mark.parametrize(
+    ("elapsed", "expected_pressure"),
+    [(30.0, "healthy"), (60.0, "limited"), (80.0, "critical")],
+)
+def test_runtime_maps_wall_clock_pressure_before_turn_threshold(
+    monkeypatch: pytest.MonkeyPatch,
+    elapsed: float,
+    expected_pressure: str,
+) -> None:
+    calls = 0
+
+    def fake_monotonic() -> float:
+        nonlocal calls
+        calls += 1
+        return 0.0 if calls == 1 else elapsed
+
+    monkeypatch.setattr(runtime_module, "monotonic", fake_monotonic)
+    model = ScriptedModelClient([ModelResponse(message=FinalMessage(content="done"))])
+    collector = AgentTraceCollector()
+    runtime = AgentRuntime(
+        model,
+        _registry(),
+        limits=AgentLimits(max_steps=20, deadline_seconds=100, finalize_reserve_seconds=0),
+    )
+
+    result = _run(runtime, model, trace_collector=collector)
+
+    assert result.content == "done"
+    assert model.requests[0].tools
+    system = model.requests[0].messages[0]
+    assert isinstance(system, SystemMessage)
+    expected_phase = "converging" if expected_pressure != "healthy" else "exploration"
+    assert f"Execution phase:\n{expected_phase}" in system.content
+    assert f"Time pressure:\n{expected_pressure}" in system.content
+    assert collector.snapshot()["steps"][0]["runtime_context"] == {
+        "phase": "converging" if expected_pressure != "healthy" else "exploration",
+        "remaining_turns": 19,
+        "time_pressure": expected_pressure,
+        "context_pressure": "normal",
+        "tools_available": True,
+    }
+
+
+def test_exploration_deadline_marks_finalization_time_pressure_critical(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    now = 0.0
+
+    def fake_monotonic() -> float:
+        return now
+
+    async def expire_exploration() -> ModelResponse:
+        nonlocal now
+        now = 81.0
+        return _tool_turn(_call())
+
+    monkeypatch.setattr(runtime_module, "monotonic", fake_monotonic)
+    model = ScriptedModelClient(
+        [expire_exploration(), ModelResponse.from_final("partial")]
+    )
+    collector = AgentTraceCollector()
+    runtime = AgentRuntime(
+        model,
+        _registry(),
+        limits=AgentLimits(max_steps=3, deadline_seconds=100, finalize_reserve_seconds=20),
+    )
+
+    result = _run(runtime, model, trace_collector=collector)
+
+    assert result.content == "partial"
+    assert model.requests[1].tools == []
+    assert collector.snapshot()["steps"][1]["runtime_context"] == {
+        "phase": "finalization",
+        "remaining_turns": 1,
+        "time_pressure": "critical",
+        "context_pressure": "normal",
+        "tools_available": False,
+    }
 
 
 def test_early_final_answer_does_not_fill_runtime_budget() -> None:

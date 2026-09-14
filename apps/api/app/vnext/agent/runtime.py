@@ -32,7 +32,11 @@ from app.vnext.agent.events import (
     ToolStarted,
 )
 from app.vnext.agent.limits import AgentLimits
-from app.vnext.agent.runtime_context import RuntimeContext
+from app.vnext.agent.runtime_context import (
+    RuntimeContext,
+    TimePressure,
+    classify_time_pressure,
+)
 from app.vnext.agent.runtime_prompt import render_runtime_prompt
 from app.vnext.agent.trace import AgentTraceCollector
 from app.vnext.llm.protocol import (
@@ -165,6 +169,11 @@ class AgentRuntime:
             if soft_finalization_enabled
             else None
         )
+        exploration_budget_seconds = (
+            self.limits.deadline_seconds - self.limits.finalize_reserve_seconds
+            if soft_finalization_enabled and self.limits.deadline_seconds is not None
+            else self.limits.deadline_seconds
+        )
         started_at = hard_deadline.started
         step = 0
         finalizing = False
@@ -209,11 +218,24 @@ class AgentRuntime:
                         continue
                     raise
 
+                if finalizing and exploration_deadline is not None:
+                    time_pressure = TimePressure.CRITICAL
+                else:
+                    exploration_remaining = (
+                        exploration_deadline.remaining()
+                        if exploration_deadline is not None
+                        else hard_deadline.remaining()
+                    )
+                    time_pressure = classify_time_pressure(
+                        remaining_seconds=exploration_remaining,
+                        budget_seconds=exploration_budget_seconds,
+                    )
                 runtime_context = RuntimeContext.from_state(
                     current_step=step,
                     max_steps=self.limits.max_steps,
                     finalizing=finalizing or final_turn,
                     tools_available=tools_enabled,
+                    time_pressure=time_pressure,
                 )
                 turn_messages = _append_system_instruction(
                     request_messages,

@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from enum import Enum
 
 CONVERGING_THRESHOLD = 4
+TIME_PRESSURE_LIMITED_THRESHOLD = 0.40
+TIME_PRESSURE_CRITICAL_THRESHOLD = 0.20
 
 
 class RuntimePhase(str, Enum):
@@ -51,7 +53,7 @@ class RuntimeContext:
 
         remaining_turns = max_steps - current_step
         return cls(
-            phase=_phase(finalizing, remaining_turns),
+            phase=_phase(finalizing, remaining_turns, time_pressure),
             remaining_turns=remaining_turns,
             time_pressure=time_pressure,
             context_pressure=context_pressure,
@@ -59,10 +61,34 @@ class RuntimeContext:
         )
 
 
-def _phase(finalizing: bool, remaining_turns: int | None) -> RuntimePhase:
+def classify_time_pressure(
+    *,
+    remaining_seconds: float | None,
+    budget_seconds: float | None,
+) -> TimePressure:
+    if remaining_seconds is None or budget_seconds is None:
+        return TimePressure.HEALTHY
+    if budget_seconds <= 0:
+        return TimePressure.CRITICAL
+
+    ratio = max(0.0, remaining_seconds / budget_seconds)
+    if ratio <= TIME_PRESSURE_CRITICAL_THRESHOLD:
+        return TimePressure.CRITICAL
+    if ratio <= TIME_PRESSURE_LIMITED_THRESHOLD:
+        return TimePressure.LIMITED
+    return TimePressure.HEALTHY
+
+
+def _phase(
+    finalizing: bool,
+    remaining_turns: int | None,
+    time_pressure: TimePressure,
+) -> RuntimePhase:
     if finalizing:
         return RuntimePhase.FINALIZATION
     if remaining_turns is not None and remaining_turns <= CONVERGING_THRESHOLD:
+        return RuntimePhase.CONVERGING
+    if time_pressure in {TimePressure.LIMITED, TimePressure.CRITICAL}:
         return RuntimePhase.CONVERGING
     return RuntimePhase.EXPLORATION
 
@@ -72,5 +98,8 @@ __all__ = [
     "ContextPressure",
     "RuntimeContext",
     "RuntimePhase",
+    "TIME_PRESSURE_CRITICAL_THRESHOLD",
+    "TIME_PRESSURE_LIMITED_THRESHOLD",
     "TimePressure",
+    "classify_time_pressure",
 ]

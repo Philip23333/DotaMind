@@ -276,6 +276,11 @@ elif remaining budget below threshold:
     CONVERGING
 
 
+elif time pressure is limited or critical:
+
+    CONVERGING
+
+
 else:
 
     EXPLORATION
@@ -320,6 +325,24 @@ limited
 critical
 ```
 
+TimePressure derives from the remaining proportion of the
+retrieval/exploration wall-clock budget:
+
+```text
+healthy:
+  >40% exploration budget remains
+
+limited:
+  >20% and <=40%
+
+critical:
+  <=20%
+```
+
+`limited` and `critical` may cause `phase=CONVERGING`, while tools remain
+available. Exploration deadline expiration remains Runtime-owned and causes
+`FINALIZATION` with `tools_available=false`.
+
 目的：
 
 让 Model 感知：
@@ -329,6 +352,9 @@ critical
 而不是：
 
 - 自己计算 deadline
+
+TimePressure is advisory model-visible state. Deadline enforcement remains
+Runtime-owned.
 
 ---
 
