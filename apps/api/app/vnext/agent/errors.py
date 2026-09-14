@@ -40,20 +40,6 @@ class MaxStepsExceeded(AgentRuntimeError):
         )
 
 
-class MaxToolCallsExceeded(AgentRuntimeError):
-    code = "max_tool_calls_exceeded"
-
-    def __init__(self, max_tool_calls: int, requested: int, used: int) -> None:
-        super().__init__(
-            f"agent run exceeded the maximum number of tool calls ({max_tool_calls})",
-            details={
-                "max_tool_calls": max_tool_calls,
-                "requested": requested,
-                "used": used,
-            },
-        )
-
-
 class ModelProviderError(AgentRuntimeError):
     code = "model_provider_error"
 
@@ -73,7 +59,6 @@ class ModelProtocolError(AgentRuntimeError):
 AgentCancelled = AgentCancelledError
 AgentDeadlineExceededError = AgentDeadlineExceeded
 MaxStepsExceededError = MaxStepsExceeded
-MaxToolCallsExceededError = MaxToolCallsExceeded
 
 __all__ = [
     "AgentCancelled",
@@ -83,8 +68,6 @@ __all__ = [
     "AgentRuntimeError",
     "MaxStepsExceeded",
     "MaxStepsExceededError",
-    "MaxToolCallsExceeded",
-    "MaxToolCallsExceededError",
     "ModelProviderError",
     "ModelProtocolError",
 ]

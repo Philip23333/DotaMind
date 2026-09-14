@@ -9,7 +9,6 @@ from pydantic import BaseModel, ConfigDict
 from app.vnext.agent.errors import (
     AgentCancelledError,
     AgentDeadlineExceeded,
-    MaxToolCallsExceeded,
     ModelProtocolError,
 )
 from app.vnext.agent.events import AgentCompleted, TextDelta
@@ -254,15 +253,28 @@ def test_tool_local_errors_are_results_and_model_can_continue() -> None:
         assert tool_result.error.code == expected_code  # type: ignore[union-attr]
 
 
-def test_total_tool_call_budget_is_runtime_failure() -> None:
-    model = ScriptedModelClient([_tool_turn(_call("a"), _call("b"))])
+def test_runtime_does_not_limit_total_tool_call_count() -> None:
+    invoked: list[int] = []
+
+    def handler(args: EchoInput) -> EchoOutput:
+        invoked.append(args.value)
+        return EchoOutput(value=args.value)
+
+    calls = tuple(_call(str(index), index) for index in range(40))
+    model = ScriptedModelClient(
+        [_tool_turn(*calls), ModelResponse(message=FinalMessage(content="done"))]
+    )
     runtime = AgentRuntime(
         model,
-        _registry(),
-        limits=AgentLimits(max_tool_calls=1, deadline_seconds=2),
+        _registry(handler=handler, parallel_safe=True),
+        limits=AgentLimits(max_steps=3, deadline_seconds=2),
     )
-    with pytest.raises(MaxToolCallsExceeded):
-        _run(runtime, model)
+
+    result = _run(runtime, model)
+
+    assert result.content == "done"
+    assert sorted(invoked) == list(range(40))
+    assert len(model.requests) == 2
 
 
 def test_default_max_steps_reserves_twentieth_turn_for_final_answer() -> None:

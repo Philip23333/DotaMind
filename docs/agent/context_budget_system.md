@@ -6,13 +6,15 @@
 
 - execution loop
 - max steps limitation
-- tool call limitation
 - deadline handling
 - exploration deadline
 - finalization state
 - event streaming
 
 Runtime 已经能够感知执行预算状态。
+
+Tool-call count is not treated as an execution budget. The runtime does not
+terminate a run based on the cumulative number of tool calls.
 
 但是目前存在：
 

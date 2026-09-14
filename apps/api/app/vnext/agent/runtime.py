@@ -15,7 +15,6 @@ from app.vnext.agent.errors import (
     AgentDeadlineExceeded,
     AgentRuntimeError,
     MaxStepsExceeded,
-    MaxToolCallsExceeded,
     ModelProtocolError,
     ModelProviderError,
 )
@@ -168,7 +167,6 @@ class AgentRuntime:
         )
         started_at = hard_deadline.started
         step = 0
-        tool_calls_used = 0
         finalizing = False
 
         try:
@@ -376,14 +374,6 @@ class AgentRuntime:
                     )
                     yield await self._publish(event, sink)
                     return
-
-                if tool_calls_used + len(calls) > self.limits.max_tool_calls:
-                    raise MaxToolCallsExceeded(
-                        self.limits.max_tool_calls,
-                        len(calls),
-                        tool_calls_used,
-                    )
-                tool_calls_used += len(calls)
 
                 results: list[ToolResultMessage] = []
                 try:
