@@ -14,10 +14,11 @@ Additional domain capabilities are introduced later as independent contracts.
 
 - The model chooses which broad capability observations to combine.
 - Deterministic code owns validation, bounds, persistence, and stable errors.
-- Provider adapters remain below capability contracts and keep source-shaped
-  business facts intact.
-- Temporary Artifacts externalize complete large responses without becoming
-  domain entities or a searchable corpus.
+- Provider adapters remain below capability contracts; the current Artifact
+  path receives each capability's validated public output rather than raw
+  provider transport payloads.
+- Temporary Artifacts externalize complete large logical tool responses without
+  becoming domain entities or a searchable corpus.
 - A provider-private identifier is evidence, not a model-facing navigation
   language, unless a future capability explicitly defines that input.
 
@@ -60,7 +61,8 @@ User
              -> player identity/current-team observations
        oversized tool result
              -> generic result processor
-             -> complete session Artifact + bounded observation
+             -> complete validated logical tool response in a session Artifact
+             -> bounded observation
 ```
 
 Future domain capabilities follow this seam:
@@ -71,7 +73,7 @@ Model
   -> Capability Service
   -> Provider implementation
   -> Provider Adapter / transport
-  -> complete validated source document
+  -> complete validated capability result
        -> bounded observation when oversized
 ```
 
@@ -116,12 +118,13 @@ PandaScore adapters.
 
 ## Artifact boundary
 
-Artifacts are temporary session-owned JSON-like documents. Each oversized
-response receives a fresh opaque reference. `artifact.read` and `artifact.grep`
-accept one exact reference and never fetch a provider or perform business
-aggregation. Complete source facts and bounded model observations are separate
-concerns; the generic result processor enforces that separation for ordinary
-tools.
+Artifacts are temporary, process-local, session-owned JSON-like documents. Each
+oversized response receives a fresh opaque reference. `artifact.read` and
+`artifact.grep` accept one exact reference and never fetch a provider or
+perform business aggregation. The Artifact content is the complete validated
+logical tool response; the bounded model observation is derived separately by
+the generic result processor for ordinary tools. A stored ref is not
+automatically restored into a later turn's dialogue context.
 
 ## Runtime boundary
 

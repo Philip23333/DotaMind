@@ -3,11 +3,13 @@
 ## Design rules
 
 Agent-visible tools describe stable observation capabilities, not transport
-endpoints or provider implementation details. Large complete responses remain
-outside model context as temporary Artifacts and are explored through generic
-Artifact tools. The default registry automatically externalizes an oversized
-non-Artifact result and returns only a bounded structural observation together
-with its opaque Artifact reference; Artifact retrieval tools remain inline.
+endpoints or provider implementation details. Oversized complete logical tool
+responses are retained as temporary Artifacts and explored through generic
+Artifact tools. The default registry externalizes a validated non-Artifact
+result larger than 12 KiB and returns a bounded structural observation together
+with its opaque Artifact reference. That observation is capped at 35 KiB and
+may still include small scalar leaves. Artifact retrieval tools remain inline;
+`artifact.read` applies its own 35 KiB serialized-result bound.
 
 The clean-slate default registry currently exposes:
 
@@ -159,7 +161,8 @@ artifact.read(ref, mode="read", path=..., offset?, limit?)
 
 If a previous tool result provides `_artifact_path`, copy it exactly and use
 `mode="read"` directly. The Artifact layer does not fetch providers, infer
-business meaning, aggregate rows, or resolve identities.
+business meaning, aggregate rows, resolve identities, or restore a prior turn's
+Artifact references into conversation history.
 
 Tool response references are opaque strings. They locate one temporary session
 document and are not entity identities. Static manuals, when introduced by a
