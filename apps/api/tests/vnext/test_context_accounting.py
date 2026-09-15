@@ -4,6 +4,7 @@ from app.vnext.agent.context_accounting import build_context_accounting
 from app.vnext.agent.trace import AgentTraceCollector
 from app.vnext.llm.protocol import (
     AssistantMessage,
+    Message,
     ModelRequest,
     ModelTool,
     SystemMessage,
@@ -13,13 +14,19 @@ from app.vnext.llm.protocol import (
 )
 
 
-def _stable_messages():
+def _stable_messages() -> list[Message]:
     return [
         SystemMessage(content="Base instruction"),
         UserMessage(content="查一下 TI 比赛"),
         AssistantMessage(
             content=None,
-            tool_calls=[ToolCall(id="call-1", name="match.search", arguments={"year": 2026})],
+            tool_calls=[
+                ToolCall(
+                    id="call-1",
+                    name="match.search",
+                    arguments={"year": 2026},
+                )
+            ],
         ),
         ToolResultMessage(
             tool_call_id="call-1",
@@ -63,7 +70,10 @@ def test_context_accounting_is_deterministic_and_split_by_role() -> None:
     assert first["runtime_prompt"]["serialized_bytes"] > 0
     assert first["effective_request"]["message_count"] == 4
     assert first["effective_request"]["tool_count"] == 1
-    assert first["effective_request"]["serialized_bytes"] > first["stable_messages"]["serialized_bytes"]
+    assert (
+        first["effective_request"]["serialized_bytes"]
+        > first["stable_messages"]["serialized_bytes"]
+    )
 
 
 def test_context_accounting_treats_cjk_as_utf8_bytes_without_token_estimation() -> None:
@@ -89,13 +99,14 @@ def test_trace_records_accounting_without_persisting_runtime_prompt_text() -> No
     collector.model_request(request, conversation_messages=stable)
 
     step = collector.snapshot()["steps"][0]
-    assert step["context_accounting"]["stable_messages"]["count"] == 1
-    assert step["context_accounting"]["stable_messages"]["by_role"]["user"]["count"] == 1
-    assert step["context_accounting"]["tool_schemas"]["count"] == 1
-    assert step["context_accounting"]["runtime_prompt"]["present"] is True
-    assert step["context_accounting"]["runtime_prompt"]["serialized_bytes"] > 0
+    accounting = step["context_accounting"]
+    assert accounting["stable_messages"]["count"] == 1
+    assert accounting["stable_messages"]["by_role"]["user"]["count"] == 1
+    assert accounting["tool_schemas"]["count"] == 1
+    assert accounting["runtime_prompt"]["present"] is True
+    assert accounting["runtime_prompt"]["serialized_bytes"] > 0
     assert "Runtime state: private ephemeral prompt" not in str(step["model_request"])
-    assert "Runtime state: private ephemeral prompt" not in str(step["context_accounting"])
+    assert "Runtime state: private ephemeral prompt" not in str(accounting)
 
 
 def test_legacy_trace_request_has_zero_runtime_prompt_contribution() -> None:
