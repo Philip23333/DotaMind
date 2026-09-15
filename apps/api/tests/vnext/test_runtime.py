@@ -313,7 +313,10 @@ def test_default_max_steps_reserves_twentieth_turn_for_final_answer() -> None:
     assert "Execution phase:\nfinalization" in final_system.content
     assert "Remaining turns:\n0" in final_system.content
     assert "Tools available:\nno" in final_system.content
-    assert "Produce the final user-facing answer now." in final_system.content
+    assert (
+        "Produce the final user-facing answer now using the evidence already available."
+        in final_system.content
+    )
     assert "Execution phase:\nconverging" not in final_system.content
     assert all(
         isinstance(request.messages[0], SystemMessage)

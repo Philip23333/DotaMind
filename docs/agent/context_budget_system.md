@@ -356,6 +356,11 @@ available. Exploration deadline expiration remains Runtime-owned and causes
 TimePressure is advisory model-visible state. Deadline enforcement remains
 Runtime-owned.
 
+With the current defaults, the runtime has a 120-second total deadline and
+reserves 40 seconds for finalization, leaving an 80-second exploration budget.
+The reserve changes the available delivery window without changing the
+time-pressure thresholds or deadline ownership.
+
 ---
 
 # 10. Context Pressure
@@ -501,9 +506,23 @@ Use additional tools only when they materially improve the answer.
 ```
 Further retrieval is unavailable.
 
-Produce the final user-facing answer now.
-Use the information already available.
+Produce the final user-facing answer now using the evidence already available.
+
+Prioritize delivering a useful answer within the remaining execution time.
+
+Preserve the user's requested scope when feasible.
+If the available evidence is incomplete, clearly distinguish verified results
+from parts that could not be completed. Do not infer or fabricate missing facts.
+
+If exhaustive presentation would prevent completing the response, compress the
+presentation while preserving the most important verified results and clearly
+state any omitted coverage.
 ```
+
+Finalization is intended to guarantee a useful user-facing delivery, not to
+force a uniformly short answer. When evidence is incomplete, the model must
+state the verified, partial, and missing portions instead of filling gaps with
+inference.
 
 ---
 

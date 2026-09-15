@@ -9,7 +9,7 @@ class AgentLimits(BaseModel):
     max_steps: int = Field(default=20, ge=1)
     deadline_seconds: float | None = Field(default=120.0, gt=0)
     default_tool_timeout: float | None = Field(default=60.0, gt=0)
-    finalize_reserve_seconds: float = Field(default=20.0, ge=0)
+    finalize_reserve_seconds: float = Field(default=40.0, ge=0)
 
 
 __all__ = ["AgentLimits"]
