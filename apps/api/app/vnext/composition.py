@@ -19,6 +19,7 @@ from app.vnext.artifacts import (
     SessionArtifactStore,
     ToolResponseExternalizer,
 )
+from app.vnext.artifacts.lifecycle import ArtifactObservationTranscriptRewriter
 from app.vnext.capabilities.esports.league import LeagueSearchInput, LeagueSearchResult
 from app.vnext.capabilities.esports.match import MatchSearchInput, MatchSearchResult
 from app.vnext.capabilities.esports.player import PlayerSearchInput, PlayerSearchResult
@@ -213,6 +214,7 @@ def build_vnext_runtime(
         model,
         build_vnext_registry(resolved_services, settings=config),
         system_instruction=AGENT_INSTRUCTION,
+        transcript_rewriter=ArtifactObservationTranscriptRewriter(),
     )
 
 

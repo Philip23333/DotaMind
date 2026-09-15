@@ -28,6 +28,15 @@ _EXPORTS = {
     "ToolCompleted": ("app.vnext.agent.events", "ToolCompleted"),
     "ToolFailed": ("app.vnext.agent.events", "ToolFailed"),
     "ToolStarted": ("app.vnext.agent.events", "ToolStarted"),
+    "TranscriptRewriteEvent": (
+        "app.vnext.agent.transcript_rewrite",
+        "TranscriptRewriteEvent",
+    ),
+    "TranscriptRewriteResult": (
+        "app.vnext.agent.transcript_rewrite",
+        "TranscriptRewriteResult",
+    ),
+    "TranscriptRewriter": ("app.vnext.agent.transcript_rewrite", "TranscriptRewriter"),
 }
 
 

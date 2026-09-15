@@ -8,6 +8,7 @@ from typing import Any
 
 from app.vnext.agent.context_accounting import build_context_accounting
 from app.vnext.agent.runtime_context import RuntimeContext
+from app.vnext.agent.transcript_rewrite import TranscriptRewriteEvent
 from app.vnext.llm.protocol import Message, ModelRequest, ModelResponse, ToolResultMessage
 
 
@@ -58,6 +59,18 @@ class AgentTraceCollector:
         item = self._step(step)
         item.setdefault("tool_results", []).append(
             {"result": result.model_dump(mode="json"), "duration_seconds": duration}
+        )
+
+    def transcript_rewrite(self, step: int, event: TranscriptRewriteEvent) -> None:
+        """Record a transcript replacement without duplicating raw evidence."""
+
+        self._step(step).setdefault("transcript_rewrites", []).append(
+            {
+                "kind": event.kind,
+                "tool_call_id": event.tool_call_id,
+                "reason": event.reason,
+                **event.metadata,
+            }
         )
 
     def terminal(self, *, status: str, error_code: str | None, error_message: str | None) -> None:

@@ -39,6 +39,7 @@ from app.vnext.agent.runtime_context import (
 )
 from app.vnext.agent.runtime_prompt import render_runtime_prompt
 from app.vnext.agent.trace import AgentTraceCollector
+from app.vnext.agent.transcript_rewrite import TranscriptRewriter
 from app.vnext.llm.protocol import (
     AssistantMessage,
     FinalMessage,
@@ -113,12 +114,14 @@ class AgentRuntime:
         limits: AgentLimits | None = None,
         event_sink: EventSink | None = None,
         system_instruction: str | None = None,
+        transcript_rewriter: TranscriptRewriter | None = None,
     ) -> None:
         self.model = model
         self.tools = tools
         self.limits = limits or AgentLimits()
         self.event_sink = event_sink
         self.system_instruction = system_instruction
+        self.transcript_rewriter = transcript_rewriter
 
     async def run(
         self,
@@ -421,8 +424,15 @@ class AgentRuntime:
                         finalizing = True
                         continue
                     raise
-                request_messages.append(assistant)
-                request_messages.extend(results)
+                candidate_messages = [*request_messages, assistant, *results]
+                if self.transcript_rewriter is None:
+                    request_messages = candidate_messages
+                else:
+                    rewrite = self.transcript_rewriter.rewrite(candidate_messages)
+                    request_messages = rewrite.messages
+                    if trace_collector is not None:
+                        for event in rewrite.events:
+                            trace_collector.transcript_rewrite(step, event)
 
         except AgentCancelledError as exc:
             if trace_collector is not None:
