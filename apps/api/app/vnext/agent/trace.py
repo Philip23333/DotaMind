@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from time import monotonic
 from typing import Any
 
+from app.vnext.agent.context_accounting import build_context_accounting
 from app.vnext.agent.runtime_context import RuntimeContext
 from app.vnext.llm.protocol import Message, ModelRequest, ModelResponse, ToolResultMessage
 
@@ -40,6 +41,10 @@ class AgentTraceCollector:
         item["runtime_context"] = (
             runtime_context_to_dict(runtime_context) if runtime_context is not None else None
         )
+        item["context_accounting"] = build_context_accounting(
+            request,
+            stable_messages=conversation_messages,
+        ).to_dict()
 
     def text_delta(self, step: int, text: str) -> None:
         self._step(step).setdefault("streamed_text", []).append(text)
