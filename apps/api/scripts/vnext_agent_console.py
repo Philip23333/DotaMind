@@ -325,18 +325,30 @@ async def _run_turn(
     return final, next_history, destination, None
 
 
+def _build_tracing_runtime(
+    base_runtime: AgentRuntime,
+    model: ModelClient,
+    tools: ToolRegistry,
+) -> AgentRuntime:
+    """Wrap a composed runtime without dropping its lifecycle capabilities."""
+
+    return AgentRuntime(
+        model,
+        tools,
+        limits=base_runtime.limits,
+        system_instruction=base_runtime.system_instruction,
+        transcript_rewriter=base_runtime.transcript_rewriter,
+        task_state_coordinator=base_runtime.task_state_coordinator,
+    )
+
+
 async def _run(args: argparse.Namespace) -> int:
     settings = VNextSettings.from_env()
     services = build_vnext_services(settings)
     base_runtime = build_vnext_runtime(settings, services=services)
     model = _TracingModelClient(base_runtime.model)
     tool_trace = _TracingToolRegistry(base_runtime.tools)
-    runtime = AgentRuntime(
-        model,
-        tool_trace,
-        limits=base_runtime.limits,
-        system_instruction=base_runtime.system_instruction,
-    )
+    runtime = _build_tracing_runtime(base_runtime, model, tool_trace)
     try:
         conversation = _ConversationTrace(name=args.result_name or _new_result_name())
         if args.prompt:

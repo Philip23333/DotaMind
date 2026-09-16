@@ -7,6 +7,8 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from app.vnext.agent.runtime import AgentRuntime
+from app.vnext.agent.task_state import TaskStateCoordinator
+from app.vnext.artifacts import ArtifactObservationTranscriptRewriter
 from app.vnext.llm.protocol import (
     AssistantMessage,
     FinalMessage,
@@ -19,6 +21,7 @@ from app.vnext.llm.protocol import (
 from app.vnext.tools.definition import ToolDefinition
 from app.vnext.tools.registry import ToolRegistry
 from scripts.vnext_agent_console import (
+    _build_tracing_runtime,
     _console_text,
     _ConversationTrace,
     _run_turn,
@@ -244,3 +247,26 @@ def test_console_captures_complete_terminal_tool_result_before_next_model_turn()
 
 def test_console_text_replaces_characters_unsupported_by_windows_gbk() -> None:
     assert _console_text("赛事 🏆", encoding="gbk") == "赛事 ?"
+
+
+def test_console_tracing_runtime_preserves_lifecycle_capabilities() -> None:
+    rewriter = ArtifactObservationTranscriptRewriter()
+    coordinator = TaskStateCoordinator()
+    base_runtime = AgentRuntime(
+        ScriptedModelClient([]),
+        ToolRegistry(),
+        system_instruction="runtime system",
+        transcript_rewriter=rewriter,
+        task_state_coordinator=coordinator,
+    )
+    tracing_model = _TracingModelClient(base_runtime.model)
+    tracing_tools = _TracingToolRegistry(base_runtime.tools)
+
+    tracing_runtime = _build_tracing_runtime(
+        base_runtime,
+        tracing_model,
+        tracing_tools,
+    )
+
+    assert tracing_runtime.transcript_rewriter is rewriter
+    assert tracing_runtime.task_state_coordinator is coordinator

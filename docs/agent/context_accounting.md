@@ -1,4 +1,4 @@
-# Context Accounting v1
+# Context Accounting
 
 ## Purpose
 
@@ -56,6 +56,12 @@ Each model invocation records:
         "user": {"count": 2, "serialized_bytes": 1200}
       }
     },
+    "task_context": {
+      "present": true,
+      "serialized_bytes": 8421,
+      "task_state": {"count": 3, "serialized_bytes": 7210},
+      "active_manifest": {"count": 2, "serialized_bytes": 476}
+    },
     "tool_schemas": {
       "count": 9,
       "serialized_bytes": 18000
@@ -63,6 +69,10 @@ Each model invocation records:
     "runtime_prompt": {
       "present": true,
       "serialized_bytes": 430
+    },
+    "artifact_observations": {
+      "active_raw": {"count": 3, "serialized_bytes": 58720},
+      "receipts": {"count": 9, "serialized_bytes": 1812}
     },
     "effective_request": {
       "message_count": 12,
@@ -79,6 +89,12 @@ Each model invocation records:
 invocations. It excludes the ephemeral Runtime Prompt. Role-level accounting
 makes tool observations directly measurable instead of hiding them inside one
 history total.
+
+`task_context` measures the separate ephemeral TaskState projection. It is
+computed from the intermediate request that contains Task Context but not the
+Runtime Prompt, so its bytes are not misattributed to `runtime_prompt`.
+`task_state` and `active_manifest` are measured from the structured payload
+provided by `TaskStateCoordinator`, not by parsing model-facing text.
 
 ### Tool schemas
 
@@ -99,6 +115,31 @@ Runtime:
 - inserting a temporary system message when no system message exists;
 - appending the temporary instruction to the existing system message.
 
+The Runtime passes both intermediate boundaries to accounting:
+
+```text
+stable conversation messages
+  -> task_context_messages
+  -> effective request messages
+```
+
+Therefore `task_context.serialized_bytes` is the Task Context increment and
+`runtime_prompt.serialized_bytes` is only the Runtime Prompt increment.
+
+### Artifact observation working set
+
+`artifact_observations` is measured over stable conversation messages. A
+successful `artifact.read` result that is not a lifecycle receipt contributes
+to `active_raw`; a result whose `_artifact_observation.state` is
+`receipt_only` contributes to `receipts`. Each byte value is the canonical JSON
+size of the complete `ToolResultMessage`, including role and tool-call pairing.
+
+Lifecycle rewrite events also record `raw_bytes`, `receipt_bytes`, and
+`saved_bytes` (`max(0, raw_bytes - receipt_bytes)`) for duplicate, superseded,
+and checkpointed replacements. Successful and failed `task.checkpoint` tool
+turns add only compact metrics (`checkpoint_id`, key, source count, and value
+bytes) to the trace; checkpoint values and source IDs are not copied there.
+
 ### Effective request
 
 `effective_request.serialized_bytes` measures the provider-neutral logical
@@ -112,17 +153,20 @@ all component values.
 
 ## Trace invariant
 
-The Runtime already passes both values needed by accounting to the trace layer:
+The Runtime passes the request boundaries needed by accounting to the trace layer:
 
 ```text
 actual ModelRequest
 +
 conversation_messages without Runtime Prompt
++
+task_context_messages without Runtime Prompt
 ```
 
 Accounting is computed from those same objects at `model_request` capture time.
 There is no reconstruction from later trace data, and the Runtime Prompt text is
-not added to stable history.
+not added to stable history. Task Context text is likewise not persisted in the
+trace's `model_request`; only its structured byte metrics are retained.
 
 ## Next policy layer
 

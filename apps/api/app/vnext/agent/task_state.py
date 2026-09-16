@@ -80,19 +80,30 @@ class TaskStateCoordinator:
         return checkpoint
 
     def render_context(self) -> str | None:
-        checkpoints = self.store.list()
-        observations = list(self._active_observations.values())
-        if not checkpoints and not observations:
+        payload = self.context_payload()
+        if not payload["task_state"] and not payload["active_manifest"]:
             return None
 
-        task_state = {checkpoint.key: checkpoint.value for checkpoint in checkpoints}
-        manifest = [_manifest_item(observation) for observation in observations]
         return "\n\n".join(
             (
-                "Task state:\n" + _json(task_state),
-                "Checkpointable artifact observations:\n" + _json(manifest),
+                "Task state:\n" + _json(payload["task_state"]),
+                "Checkpointable artifact observations:\n" + _json(
+                    payload["active_manifest"]
+                ),
             )
         )
+
+    def context_payload(self) -> dict[str, Any]:
+        """Return the structured ephemeral payload used by model context."""
+
+        checkpoints = self.store.list()
+        observations = list(self._active_observations.values())
+        return {
+            "task_state": {
+                checkpoint.key: dict(checkpoint.value) for checkpoint in checkpoints
+            },
+            "active_manifest": [_manifest_item(observation) for observation in observations],
+        }
 
     def _validate_checkpoint(
         self,

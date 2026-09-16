@@ -22,14 +22,19 @@ from app.vnext.tools.task import register_task_checkpoint_tool
 from tests.vnext.fakes import ScriptedTranscriptModelClient
 
 
-def _read_registry(coordinator: TaskStateCoordinator) -> ToolRegistry:
+def _read_registry(
+    coordinator: TaskStateCoordinator,
+    *,
+    value: object | None = None,
+) -> ToolRegistry:
     registry = ToolRegistry()
+    read_value = value if value is not None else [{"fact": "A"}]
 
     async def read(args: Any) -> ArtifactReadResult:
         return ArtifactReadResult(
             ref=args.ref,
             path=args.path,
-            value=[{"fact": "A"}],
+            value=read_value,
             offset=0,
             limit=1,
             total=1,
@@ -91,10 +96,11 @@ def _run(
     coordinator: TaskStateCoordinator,
     *,
     trace: AgentTraceCollector | None = None,
+    read_value: object | None = None,
 ) -> AgentRuntime:
     runtime = AgentRuntime(
         model,
-        _read_registry(coordinator),
+        _read_registry(coordinator, value=read_value),
         transcript_rewriter=ArtifactObservationTranscriptRewriter(),
         task_state_coordinator=coordinator,
     )
@@ -257,15 +263,34 @@ def test_flow_e_checkpoint_rewrite_trace_keeps_raw_tool_result() -> None:
         return ModelResponse(message=FinalMessage(content="done"))
 
     model = ScriptedTranscriptModelClient([first, second, third])
-    _run(model, coordinator, trace=trace)
+    read_value = [{"fact": "A" * 2000}]
+    _run(model, coordinator, trace=trace, read_value=read_value)
 
     snapshot = trace.snapshot()
     rewrite = snapshot["steps"][1]["transcript_rewrites"][0]
     assert rewrite["reason"] == "checkpointed"
     assert rewrite["tool_call_id"] == "call-1"
     assert rewrite["checkpoint_id"].startswith("checkpoint:")
+    checkpoint_metric = snapshot["steps"][1]["checkpoint_metrics"][0]
+    assert checkpoint_metric["tool_call_id"] == "checkpoint-call"
+    assert checkpoint_metric["status"] == "ok"
+    assert checkpoint_metric["checkpoint_id"].startswith("checkpoint:")
+    assert checkpoint_metric["key"] == "part"
+    assert checkpoint_metric["source_count"] == 1
+    assert checkpoint_metric["value_bytes"] > 0
+    assert rewrite["raw_bytes"] > rewrite["receipt_bytes"]
+    assert rewrite["saved_bytes"] > 0
     raw_trace_result = snapshot["steps"][1]["tool_results"][0]["result"]
     assert raw_trace_result["tool_call_id"] == "checkpoint-call"
-    assert snapshot["steps"][0]["tool_results"][0]["result"]["content"]["value"] == [
-        {"fact": "A"}
-    ]
+    assert snapshot["steps"][0]["tool_results"][0]["result"]["content"]["value"] == read_value
+    before = snapshot["steps"][1]["context_accounting"]
+    after = snapshot["steps"][2]["context_accounting"]
+    assert before["artifact_observations"]["active_raw"]["count"] == 1
+    assert before["task_context"]["task_state"]["count"] == 0
+    assert after["artifact_observations"]["active_raw"]["count"] == 0
+    assert after["artifact_observations"]["receipts"]["count"] == 1
+    assert after["task_context"]["task_state"]["count"] == 1
+    assert after["task_context"]["task_state"]["serialized_bytes"] > 0
+    assert after["task_context"]["active_manifest"]["count"] == 0
+    assert after["runtime_prompt"]["serialized_bytes"] > 0
+    assert "Task state:" not in str(snapshot["steps"][2]["model_request"])

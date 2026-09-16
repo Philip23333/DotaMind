@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from app.vnext.agent.context_accounting import build_context_accounting
 from app.vnext.agent.trace import AgentTraceCollector
+from app.vnext.artifacts.retrieval import ArtifactReadResult
 from app.vnext.llm.protocol import (
     AssistantMessage,
     Message,
@@ -74,6 +75,16 @@ def test_context_accounting_is_deterministic_and_split_by_role() -> None:
         first["effective_request"]["serialized_bytes"]
         > first["stable_messages"]["serialized_bytes"]
     )
+    assert first["task_context"] == {
+        "present": False,
+        "serialized_bytes": 0,
+        "task_state": {"count": 0, "serialized_bytes": 0},
+        "active_manifest": {"count": 0, "serialized_bytes": 0},
+    }
+    assert first["artifact_observations"] == {
+        "active_raw": {"count": 0, "serialized_bytes": 0},
+        "receipts": {"count": 0, "serialized_bytes": 0},
+    }
 
 
 def test_context_accounting_treats_cjk_as_utf8_bytes_without_token_estimation() -> None:
@@ -118,3 +129,111 @@ def test_legacy_trace_request_has_zero_runtime_prompt_contribution() -> None:
     accounting = collector.snapshot()["steps"][0]["context_accounting"]
     assert accounting["runtime_prompt"] == {"present": False, "serialized_bytes": 0}
     assert accounting["effective_request"]["message_count"] == 1
+
+
+def test_context_accounting_splits_task_context_and_runtime_prompt() -> None:
+    stable = [
+        UserMessage(content="collect"),
+        AssistantMessage(
+            tool_calls=[
+                ToolCall(
+                    id="read-1",
+                    name="artifact.read",
+                    arguments={"ref": "artifact:test", "mode": "read", "path": "rows"},
+                ),
+                ToolCall(
+                    id="read-2",
+                    name="artifact.read",
+                    arguments={"ref": "artifact:test", "mode": "read", "path": "rows"},
+                ),
+            ]
+        ),
+        ToolResultMessage(
+            tool_call_id="read-1",
+            content=ArtifactReadResult(
+                ref="artifact:test", path="rows", value=[{"fact": "raw"}]
+            ).model_dump(mode="json"),
+        ),
+        ToolResultMessage(
+            tool_call_id="read-2",
+            content={
+                "_artifact_observation": {
+                    "state": "receipt_only",
+                    "reason": "checkpointed",
+                    "re_readable": True,
+                    "mode": "read",
+                    "ref": "artifact:test",
+                    "path": "rows",
+                    "offset": 0,
+                    "limit": 1,
+                    "checkpoint_id": "checkpoint:one",
+                }
+            },
+        ),
+    ]
+    task_context = [
+        SystemMessage(
+            content=(
+                'Task state:\n{"part":{"fact":"saved"}}\n\n'
+                'Checkpointable artifact observations:\n[]'
+            )
+        ),
+        *stable,
+    ]
+    effective = [
+        SystemMessage(
+            content=(
+                'Task state:\n{"part":{"fact":"saved"}}\n\n'
+                'Checkpointable artifact observations:\n[]\n\n'
+                'Runtime state:\nexploration'
+            )
+        ),
+        *stable,
+    ]
+    payload = {
+        "task_state": {"part": {"fact": "saved"}},
+        "active_manifest": [],
+    }
+    accounting = build_context_accounting(
+        ModelRequest(messages=effective, tools=[_tool()], step=1),
+        stable_messages=stable,
+        task_context_messages=task_context,
+        task_context_payload=payload,
+    ).to_dict()
+
+    assert accounting["task_context"]["present"] is True
+    assert accounting["task_context"]["serialized_bytes"] > 0
+    assert accounting["task_context"]["task_state"]["count"] == 1
+    assert accounting["task_context"]["task_state"]["serialized_bytes"] > 0
+    assert accounting["task_context"]["active_manifest"] == {
+        "count": 0,
+        "serialized_bytes": 2,
+    }
+    assert accounting["runtime_prompt"]["present"] is True
+    assert accounting["runtime_prompt"]["serialized_bytes"] > 0
+    assert accounting["artifact_observations"]["active_raw"]["count"] == 1
+    assert accounting["artifact_observations"]["active_raw"]["serialized_bytes"] > 0
+    assert accounting["artifact_observations"]["receipts"]["count"] == 1
+    assert accounting["artifact_observations"]["receipts"]["serialized_bytes"] > 0
+
+
+def test_context_accounting_task_context_bytes_are_not_in_runtime_prompt() -> None:
+    stable = [UserMessage(content="hello")]
+    task_context = [SystemMessage(content="Task state:\n{\"a\":1}"), *stable]
+    effective = [
+        SystemMessage(content="Task state:\n{\"a\":1}\n\nRuntime state:\nexploration"),
+        *stable,
+    ]
+    accounting = build_context_accounting(
+        ModelRequest(messages=effective, step=1),
+        stable_messages=stable,
+        task_context_messages=task_context,
+        task_context_payload={"task_state": {"a": 1}, "active_manifest": []},
+    ).to_dict()
+
+    assert accounting["task_context"]["serialized_bytes"] > 0
+    assert accounting["runtime_prompt"]["serialized_bytes"] > 0
+    assert accounting["runtime_prompt"]["serialized_bytes"] < (
+        accounting["task_context"]["serialized_bytes"]
+        + accounting["runtime_prompt"]["serialized_bytes"]
+    )

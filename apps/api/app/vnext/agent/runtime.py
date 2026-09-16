@@ -244,15 +244,21 @@ class AgentRuntime:
                     time_pressure=time_pressure,
                 )
                 turn_messages = request_messages
+                task_context_messages: list[Message] | None = None
+                task_context_payload: dict[str, Any] | None = None
                 if self.task_state_coordinator is not None:
                     self.task_state_coordinator.refresh(request_messages)
                     task_context = self.task_state_coordinator.render_context()
                     if task_context is not None:
                         turn_messages = _append_system_instruction(turn_messages, task_context)
+                        task_context_messages = turn_messages
+                        task_context_payload = self.task_state_coordinator.context_payload()
                 turn_messages = _append_system_instruction(
                     turn_messages,
                     render_runtime_prompt(runtime_context),
                 )
+                if task_context_messages is None:
+                    task_context_messages = list(request_messages)
                 request = ModelRequest(
                     messages=turn_messages,
                     tools=self.tools.schemas() if tools_enabled else [],
@@ -263,6 +269,8 @@ class AgentRuntime:
                         request,
                         runtime_context=runtime_context,
                         conversation_messages=request_messages,
+                        task_context_messages=task_context_messages,
+                        task_context_payload=task_context_payload,
                     )
                 event = ModelRequested(
                     step=step,
@@ -547,7 +555,7 @@ class AgentRuntime:
                 yield await self._publish(event, sink)
                 results.append(result)
                 if trace_collector is not None:
-                    trace_collector.tool_result(step, result, duration)
+                    trace_collector.tool_result(step, result, duration, call=item)
             index += len(group)
 
     def _is_parallel_safe(self, call: ToolCall) -> bool:

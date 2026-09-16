@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -67,6 +68,12 @@ class ArtifactObservationTranscriptRewriter:
                     metadata={
                         "source": _receipt_source(observation),
                         "checkpoint_id": checkpoint_id,
+                        **_rewrite_sizes(
+                            original[message_index],
+                            observation,
+                            "checkpointed",
+                            checkpoint_id,
+                        ),
                     },
                 )
             )
@@ -91,7 +98,15 @@ class ArtifactObservationTranscriptRewriter:
                         kind="artifact_observation",
                         tool_call_id=old.tool_call_id,
                         reason=reason,
-                        metadata={"source": _receipt_source(old)},
+                        metadata={
+                            "source": _receipt_source(old),
+                            **_rewrite_sizes(
+                                original[old.message_index],
+                                old,
+                                reason,
+                                None,
+                            ),
+                        },
                     )
                 )
                 break
@@ -301,6 +316,43 @@ def _receipt(
     if checkpoint_id is not None:
         marker["checkpoint_id"] = checkpoint_id
     return {"_artifact_observation": marker}
+
+
+def _rewrite_sizes(
+    message: Message,
+    observation: ArtifactObservation,
+    reason: str,
+    checkpoint_id: str | None,
+) -> dict[str, int]:
+    if not isinstance(message, ToolResultMessage):
+        return {"raw_bytes": 0, "receipt_bytes": 0, "saved_bytes": 0}
+    raw_bytes = _serialized_size(message.model_dump(mode="json"))
+    receipt = message.model_copy(
+        update={
+            "content": _receipt(
+                observation,
+                reason,
+                checkpoint_id=checkpoint_id,
+            )
+        }
+    )
+    receipt_bytes = _serialized_size(receipt.model_dump(mode="json"))
+    return {
+        "raw_bytes": raw_bytes,
+        "receipt_bytes": receipt_bytes,
+        "saved_bytes": max(0, raw_bytes - receipt_bytes),
+    }
+
+
+def _serialized_size(value: Any) -> int:
+    return len(
+        json.dumps(
+            value,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+    )
 
 
 __all__ = [

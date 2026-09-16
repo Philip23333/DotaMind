@@ -113,6 +113,13 @@ def test_exact_duplicate_keeps_newest_raw_and_is_idempotent() -> None:
     assert result.messages[3].content["value"] == [1, 2]  # type: ignore[index]
     assert result.events[0].tool_call_id == "old"
     assert result.events[0].reason == "duplicate"
+    assert result.events[0].metadata["raw_bytes"] > 0
+    assert result.events[0].metadata["receipt_bytes"] > 0
+    assert result.events[0].metadata["saved_bytes"] == max(
+        0,
+        result.events[0].metadata["raw_bytes"]
+        - result.events[0].metadata["receipt_bytes"],
+    )
     repeated = ArtifactObservationTranscriptRewriter().rewrite(result.messages)
     assert repeated.messages == result.messages
     assert repeated.events == []
@@ -340,6 +347,17 @@ def test_checkpoint_receipt_preserves_locator_requested_range_and_is_rereadable(
     assert marker["offset"] == 4
     assert marker["limit"] == 9
     assert marker["re_readable"] is True
+
+
+def test_rewrite_event_reports_positive_savings_for_large_raw_observation() -> None:
+    result = _rewrite(
+        (_call("old"), _result("old", [{"evidence": "x" * 2000}])),
+        (_call("new"), _result("new", [{"evidence": "x" * 2000}])),
+    )
+
+    event = result.events[0]
+    assert event.metadata["raw_bytes"] > event.metadata["receipt_bytes"]
+    assert event.metadata["saved_bytes"] > 0
 
 
 class ReadInput(BaseModel):

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 from time import monotonic
 from typing import Any
@@ -9,7 +10,13 @@ from typing import Any
 from app.vnext.agent.context_accounting import build_context_accounting
 from app.vnext.agent.runtime_context import RuntimeContext
 from app.vnext.agent.transcript_rewrite import TranscriptRewriteEvent
-from app.vnext.llm.protocol import Message, ModelRequest, ModelResponse, ToolResultMessage
+from app.vnext.llm.protocol import (
+    Message,
+    ModelRequest,
+    ModelResponse,
+    ToolCall,
+    ToolResultMessage,
+)
 
 
 class AgentTraceCollector:
@@ -29,6 +36,8 @@ class AgentTraceCollector:
         runtime_context: RuntimeContext | None = None,
         *,
         conversation_messages: Sequence[Message] | None = None,
+        task_context_messages: Sequence[Message] | None = None,
+        task_context_payload: dict[str, Any] | None = None,
     ) -> None:
         """Record one model invocation without persisting its runtime prompt."""
 
@@ -45,6 +54,8 @@ class AgentTraceCollector:
         item["context_accounting"] = build_context_accounting(
             request,
             stable_messages=conversation_messages,
+            task_context_messages=task_context_messages,
+            task_context_payload=task_context_payload,
         ).to_dict()
 
     def text_delta(self, step: int, text: str) -> None:
@@ -55,11 +66,22 @@ class AgentTraceCollector:
         item["model_response"] = response.model_dump(mode="json")
         item["model_duration_seconds"] = duration
 
-    def tool_result(self, step: int, result: ToolResultMessage, duration: float) -> None:
+    def tool_result(
+        self,
+        step: int,
+        result: ToolResultMessage,
+        duration: float,
+        *,
+        call: ToolCall | None = None,
+    ) -> None:
         item = self._step(step)
         item.setdefault("tool_results", []).append(
             {"result": result.model_dump(mode="json"), "duration_seconds": duration}
         )
+        if call is not None and call.name == "task.checkpoint":
+            item.setdefault("checkpoint_metrics", []).append(
+                _checkpoint_metric(call, result)
+            )
 
     def transcript_rewrite(self, step: int, event: TranscriptRewriteEvent) -> None:
         """Record a transcript replacement without duplicating raw evidence."""
@@ -104,6 +126,47 @@ def runtime_context_to_dict(context: RuntimeContext) -> dict[str, object]:
         "context_pressure": context.context_pressure.value,
         "tools_available": context.tools_available,
     }
+
+
+def _checkpoint_metric(call: ToolCall, result: ToolResultMessage) -> dict[str, Any]:
+    arguments = call.arguments
+    value = arguments.get("value")
+    source_ids = arguments.get("source_tool_call_ids")
+    key = arguments.get("key")
+    checkpoint_id: str | None = None
+    if result.status == "ok" and isinstance(result.content, dict):
+        content = result.content
+        if isinstance(content.get("checkpoint_id"), str):
+            checkpoint_id = content["checkpoint_id"]
+        if isinstance(content.get("key"), str):
+            key = content["key"]
+        accepted = content.get("accepted_source_tool_call_ids")
+        if isinstance(accepted, list):
+            source_ids = accepted
+    metric: dict[str, Any] = {
+        "tool_call_id": call.id,
+        "status": result.status,
+    }
+    if isinstance(checkpoint_id, str):
+        metric["checkpoint_id"] = checkpoint_id
+    if isinstance(key, str):
+        metric["key"] = key
+    if isinstance(source_ids, list):
+        metric["source_count"] = len(source_ids)
+    if value is not None:
+        metric["value_bytes"] = _serialized_size(value)
+    return metric
+
+
+def _serialized_size(value: Any) -> int:
+    return len(
+        json.dumps(
+            value,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+    )
 
 
 __all__ = ["AgentTraceCollector", "runtime_context_to_dict"]
