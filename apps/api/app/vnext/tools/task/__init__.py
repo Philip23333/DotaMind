@@ -5,9 +5,19 @@ from .checkpoint import (
     TaskCheckpointResult,
     register_task_checkpoint_tool,
 )
+from .plan import (
+    TaskPlanInput,
+    TaskPlanItemInput,
+    TaskPlanResult,
+    register_task_plan_tool,
+)
 
 __all__ = [
     "TaskCheckpointInput",
     "TaskCheckpointResult",
     "register_task_checkpoint_tool",
+    "TaskPlanInput",
+    "TaskPlanItemInput",
+    "TaskPlanResult",
+    "register_task_plan_tool",
 ]

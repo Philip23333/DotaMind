@@ -51,7 +51,7 @@ from app.vnext.tools.esports import (
     register_tournament_tool,
 )
 from app.vnext.tools.registry import ToolRegistry
-from app.vnext.tools.task import register_task_checkpoint_tool
+from app.vnext.tools.task import register_task_checkpoint_tool, register_task_plan_tool
 
 _VNEXT_ENV_PATH = Path(__file__).with_name(".env")
 
@@ -196,6 +196,7 @@ def build_vnext_registry(
     if resolved_services.player_search is not None:
         register_player_tool(registry, resolved_services.player_search)
     if task_state_coordinator is not None:
+        register_task_plan_tool(registry, task_state_coordinator)
         register_task_checkpoint_tool(registry, task_state_coordinator)
     return registry
 
