@@ -1,4 +1,4 @@
-"""Stateless lifecycle management for redundant artifact observations."""
+"""Stateless lifecycle management for artifact observations."""
 
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ class ArtifactObservation:
 
 
 class ArtifactObservationTranscriptRewriter:
-    """Replace only duplicate or fully covered older artifact.read results.
+    """Replace checkpointed, duplicate, or fully covered artifact.read results.
 
     The rewriter intentionally has no registry or cross-turn state.  Every call
     scans the complete candidate transcript, which keeps the operation
@@ -45,12 +45,39 @@ class ArtifactObservationTranscriptRewriter:
         original = list(messages)
         calls = _artifact_read_calls(original)
         observations = _artifact_observations(original, calls)
-        replaced: dict[int, str] = {}
+        checkpoint_claims = _checkpoint_claims(original)
+        claimed_observation_ids = {
+            observation.tool_call_id
+            for _, observation in observations
+            if observation.tool_call_id in checkpoint_claims
+        }
+        replaced: dict[int, tuple[str, str | None]] = {}
         events: list[TranscriptRewriteEvent] = []
 
+        for message_index, observation in observations:
+            checkpoint_id = checkpoint_claims.get(observation.tool_call_id)
+            if checkpoint_id is None:
+                continue
+            replaced[message_index] = ("checkpointed", checkpoint_id)
+            events.append(
+                TranscriptRewriteEvent(
+                    kind="artifact_observation",
+                    tool_call_id=observation.tool_call_id,
+                    reason="checkpointed",
+                    metadata={
+                        "source": _receipt_source(observation),
+                        "checkpoint_id": checkpoint_id,
+                    },
+                )
+            )
+
         for old_index, old in observations:
+            if old.tool_call_id in claimed_observation_ids:
+                continue
             for new_index, new in observations:
                 if new_index <= old_index:
+                    continue
+                if new.tool_call_id in claimed_observation_ids:
                     continue
                 reason = _replacement_reason(old, new)
                 if reason is None:
@@ -58,7 +85,7 @@ class ArtifactObservationTranscriptRewriter:
                 # The newest observation remains raw.  Only this earlier
                 # message is replaced, even when it has already been covered
                 # by another later observation.
-                replaced[old.message_index] = reason
+                replaced[old.message_index] = (reason, None)
                 events.append(
                     TranscriptRewriteEvent(
                         kind="artifact_observation",
@@ -74,17 +101,26 @@ class ArtifactObservationTranscriptRewriter:
 
         rewritten: list[Message] = []
         for index, message in enumerate(original):
-            reason = replaced.get(index)
-            if reason is None or not isinstance(message, ToolResultMessage):
+            replacement = replaced.get(index)
+            if replacement is None or not isinstance(message, ToolResultMessage):
                 rewritten.append(message)
                 continue
+            reason, checkpoint_id = replacement
             observation = next(
                 observation
                 for candidate_index, observation in observations
                 if candidate_index == index
             )
             rewritten.append(
-                message.model_copy(update={"content": _receipt(observation, reason)})
+                message.model_copy(
+                    update={
+                        "content": _receipt(
+                            observation,
+                            reason,
+                            checkpoint_id=checkpoint_id,
+                        )
+                    }
+                )
             )
         return TranscriptRewriteResult(messages=rewritten, events=events)
 
@@ -97,6 +133,37 @@ def _artifact_read_calls(messages: Sequence[Message]) -> dict[str, bool]:
         for call in message.tool_calls:
             calls[call.id] = call.name == "artifact.read"
     return calls
+
+
+def _checkpoint_claims(messages: Sequence[Message]) -> dict[str, str]:
+    checkpoint_calls = {
+        call.id
+        for message in messages
+        if isinstance(message, AssistantMessage)
+        for call in message.tool_calls
+        if call.name == "task.checkpoint"
+    }
+    claims: dict[str, str] = {}
+    for message in messages:
+        if not isinstance(message, ToolResultMessage) or message.status != "ok":
+            continue
+        if message.tool_call_id not in checkpoint_calls:
+            continue
+        content = message.content
+        if not isinstance(content, dict):
+            continue
+        checkpoint_id = content.get("checkpoint_id")
+        source_tool_call_ids = content.get("accepted_source_tool_call_ids")
+        if (
+            not isinstance(checkpoint_id, str)
+            or not checkpoint_id
+            or not isinstance(source_tool_call_ids, list)
+            or not all(isinstance(item, str) and item for item in source_tool_call_ids)
+        ):
+            continue
+        for source_tool_call_id in source_tool_call_ids:
+            claims[source_tool_call_id] = checkpoint_id
+    return claims
 
 
 def _artifact_observations(
@@ -218,7 +285,12 @@ def _receipt_source(observation: ArtifactObservation) -> dict[str, Any]:
     return source
 
 
-def _receipt(observation: ArtifactObservation, reason: str) -> dict[str, Any]:
+def _receipt(
+    observation: ArtifactObservation,
+    reason: str,
+    *,
+    checkpoint_id: str | None = None,
+) -> dict[str, Any]:
     marker: dict[str, Any] = {
         "state": "receipt_only",
         "reason": reason,
@@ -226,6 +298,8 @@ def _receipt(observation: ArtifactObservation, reason: str) -> dict[str, Any]:
         "mode": "outline" if observation.kind == "outline" else "read",
         **_receipt_source(observation),
     }
+    if checkpoint_id is not None:
+        marker["checkpoint_id"] = checkpoint_id
     return {"_artifact_observation": marker}
 
 

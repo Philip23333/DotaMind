@@ -122,6 +122,41 @@ def test_checkpoint_validation_is_atomic_and_requires_active_raw_sources() -> No
     assert coordinator.store.get("part") == accepted
 
 
+def test_checkpoint_claims_sources_once_and_refresh_excludes_them() -> None:
+    coordinator = TaskStateCoordinator()
+    messages = _messages(
+        (_read_call("call-1"), _read_result("call-1")),
+        (_read_call("call-2"), _read_result("call-2")),
+    )
+    coordinator.refresh(messages)
+    coordinator.create_checkpoint("part", {"fact": "A"}, ["call-1"])
+
+    with pytest.raises(ValueError, match="already been claimed"):
+        coordinator.create_checkpoint("part-2", {"fact": "A"}, ["call-1"])
+
+    coordinator.refresh(messages)
+    context = coordinator.render_context()
+    assert context is not None
+    assert '"tool_call_id":"call-1"' not in context
+    assert '"tool_call_id":"call-2"' in context
+
+
+def test_checkpoint_can_claim_multiple_sources_atomically() -> None:
+    coordinator = TaskStateCoordinator()
+    messages = _messages(
+        (_read_call("call-1"), _read_result("call-1")),
+        (_read_call("call-2"), _read_result("call-2")),
+    )
+    coordinator.refresh(messages)
+    checkpoint = coordinator.create_checkpoint(
+        "part", {"fact": "A"}, ["call-1", "call-2"]
+    )
+    coordinator.refresh(messages)
+
+    assert checkpoint.source_tool_call_ids == ("call-1", "call-2")
+    assert '"tool_call_id"' not in (coordinator.render_context() or "")
+
+
 @pytest.mark.parametrize(
     "sources",
     [([], "empty"), (["call-1", "call-1"], "duplicates"), (["receipt"], "active raw")],
@@ -145,22 +180,22 @@ def test_rendered_context_has_latest_state_and_locator_only_manifest() -> None:
             (
                 _read_call(),
                 _read_result(value=[{"fact": "秘密"}, {"fact": "第二条"}]),
-            )
+            ),
+            (_read_call("call-2"), _read_result("call-2", value=[{"fact": "第三条"}])),
         )
     )
     coordinator.create_checkpoint("part", {"事实": "已保存"}, ["call-1"])
-    coordinator.create_checkpoint("part", {"事实": "最新"}, ["call-1"])
 
     context = coordinator.render_context()
 
     assert context is not None
-    assert '"part":{"事实":"最新"}' in context
-    assert "已保存" not in context
-    assert '"tool_call_id":"call-1"' in context
+    assert '"part":{"事实":"已保存"}' in context
+    assert '"tool_call_id":"call-2"' in context
+    assert '"tool_call_id":"call-1"' not in context
     assert '"ref":"artifact:test"' in context
     assert '"path":"rows"' in context
     assert '"actual_start":0' in context
-    assert '"actual_end":2' in context
+    assert '"actual_end":1' in context
     assert "秘密" not in context
     assert '"value"' not in context
     assert coordinator.render_context() == context

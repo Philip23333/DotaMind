@@ -12,24 +12,34 @@ from app.vnext.tools.registry import ToolRegistry
 from app.vnext.tools.task import TaskCheckpointInput, register_task_checkpoint_tool
 
 
-def _active_messages() -> list[object]:
-    return [
-        AssistantMessage(
-            tool_calls=[
-                ToolCall(
-                    id="call-1",
-                    name="artifact.read",
-                    arguments={"ref": "artifact:test", "mode": "read", "path": "rows"},
-                )
+def _active_messages(*call_ids: str) -> list[object]:
+    ids = call_ids or ("call-1",)
+    messages: list[object] = []
+    for call_id in ids:
+        messages.extend(
+            [
+                AssistantMessage(
+                    tool_calls=[
+                        ToolCall(
+                            id=call_id,
+                            name="artifact.read",
+                            arguments={
+                                "ref": "artifact:test",
+                                "mode": "read",
+                                "path": "rows",
+                            },
+                        )
+                    ]
+                ),
+                ToolResultMessage(
+                    tool_call_id=call_id,
+                    content=ArtifactReadResult(
+                        ref="artifact:test", path="rows", value=[{"fact": "A"}]
+                    ).model_dump(mode="json"),
+                ),
             ]
-        ),
-        ToolResultMessage(
-            tool_call_id="call-1",
-            content=ArtifactReadResult(
-                ref="artifact:test", path="rows", value=[{"fact": "A"}]
-            ).model_dump(mode="json"),
-        ),
-    ]
+        )
+    return messages
 
 
 def _registry(coordinator: TaskStateCoordinator) -> ToolRegistry:
@@ -124,7 +134,7 @@ def test_checkpoint_tool_rejects_unknown_source_atomically() -> None:
 
 def test_checkpoint_tool_same_key_replaces_whole_value_and_is_not_parallel_safe() -> None:
     coordinator = TaskStateCoordinator()
-    coordinator.refresh(_active_messages())  # type: ignore[arg-type]
+    coordinator.refresh(_active_messages("call-1", "call-2"))  # type: ignore[arg-type]
     registry = _registry(coordinator)
     first = {
         "key": "part",
@@ -132,6 +142,7 @@ def test_checkpoint_tool_same_key_replaces_whole_value_and_is_not_parallel_safe(
         "source_tool_call_ids": ["call-1"],
     }
     second = {**first, "value": {"new": 2}}
+    second["source_tool_call_ids"] = ["call-2"]
 
     asyncio.run(registry.execute(ToolCall(id="first", name="task.checkpoint", arguments=first)))
     asyncio.run(registry.execute(ToolCall(id="second", name="task.checkpoint", arguments=second)))

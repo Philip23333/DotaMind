@@ -56,6 +56,44 @@ def _result(
     )
 
 
+def _checkpoint(
+    call_id: str,
+    source_tool_call_ids: list[str],
+    *,
+    checkpoint_id: str = "checkpoint:one",
+    status: str = "ok",
+    content: object | None = None,
+) -> ToolResultMessage:
+    if content is None:
+        content = {
+            "checkpoint_id": checkpoint_id,
+            "key": "part",
+            "accepted_source_tool_call_ids": source_tool_call_ids,
+        }
+    return ToolResultMessage(
+        tool_call_id=call_id,
+        content=content,
+        status=status,  # type: ignore[arg-type]
+        error=(
+            {"code": "invalid_arguments", "message": "invalid", "details": {}}
+            if status == "error"
+            else None
+        ),
+    )
+
+
+def _checkpoint_call(call_id: str = "checkpoint-call") -> ToolCall:
+    return ToolCall(
+        id=call_id,
+        name="task.checkpoint",
+        arguments={
+            "key": "part",
+            "value": {"fact": "saved"},
+            "source_tool_call_ids": ["old"],
+        },
+    )
+
+
 def _rewrite(*pairs: tuple[ToolCall, ToolResultMessage]):
     messages = []
     for call, result in pairs:
@@ -201,6 +239,107 @@ def test_reread_creates_a_new_raw_observation_after_an_old_receipt() -> None:
     assert "_artifact_observation" in receipts[0].content
     assert "_artifact_observation" in receipts[1].content
     assert receipts[2].content["value"] == [1, 2]  # type: ignore[index]
+
+
+def test_checkpoint_claim_replaces_only_claimed_raw_with_checkpoint_receipt() -> None:
+    messages = [
+        AssistantMessage(tool_calls=[_call("old"), _call("other")]),
+        _result("old", [1, 2]),
+        _result("other", [3, 4], path="other"),
+        AssistantMessage(tool_calls=[_checkpoint_call()]),
+        _checkpoint("checkpoint-call", ["old"], checkpoint_id="checkpoint:one"),
+    ]
+
+    result = ArtifactObservationTranscriptRewriter().rewrite(messages)
+
+    old = result.messages[1]
+    other = result.messages[2]
+    assert old.content == {  # type: ignore[union-attr]
+        "_artifact_observation": {
+            "state": "receipt_only",
+            "reason": "checkpointed",
+            "re_readable": True,
+            "mode": "read",
+            "ref": "artifact:test",
+            "path": "rows",
+            "offset": 0,
+            "limit": 6,
+            "checkpoint_id": "checkpoint:one",
+        }
+    }
+    assert other.content["value"] == [3, 4]  # type: ignore[index]
+    assert result.events[0].reason == "checkpointed"
+    assert result.events[0].metadata["checkpoint_id"] == "checkpoint:one"
+
+
+def test_checkpoint_claim_has_priority_over_redundancy_and_does_not_release_older_raw() -> None:
+    messages = [
+        AssistantMessage(tool_calls=[_call("old"), _call("new")]),
+        _result("old", [1, 2]),
+        _result("new", [1, 2]),
+        AssistantMessage(tool_calls=[_checkpoint_call()]),
+        _checkpoint("checkpoint-call", ["new"]),
+    ]
+
+    result = ArtifactObservationTranscriptRewriter().rewrite(messages)
+
+    assert result.messages[1].content["value"] == [1, 2]  # type: ignore[index]
+    assert result.messages[2].content["_artifact_observation"]["reason"] == "checkpointed"  # type: ignore[index]
+    assert [event.reason for event in result.events] == ["checkpointed"]
+
+
+def test_malformed_or_failed_checkpoint_does_not_claim_observations() -> None:
+    for checkpoint_result in (
+        _checkpoint("checkpoint-call", ["old"], status="error"),
+        _checkpoint(
+            "checkpoint-call",
+            ["old"],
+            content={"checkpoint_id": "", "accepted_source_tool_call_ids": ["old"]},
+        ),
+        _checkpoint(
+            "checkpoint-call",
+            ["old"],
+            content={"checkpoint_id": "checkpoint:one", "accepted_source_tool_call_ids": "old"},
+        ),
+    ):
+        messages = [
+            AssistantMessage(tool_calls=[_call("old")]),
+            _result("old", [1, 2]),
+            AssistantMessage(tool_calls=[_checkpoint_call()]),
+            checkpoint_result,
+        ]
+        result = ArtifactObservationTranscriptRewriter().rewrite(messages)
+        assert result.events == []
+        assert result.messages[1] == messages[1]
+
+
+def test_checkpoint_rewrite_is_idempotent_and_receipt_does_not_claim_again() -> None:
+    messages = [
+        AssistantMessage(tool_calls=[_call("old")]),
+        _result("old", [1, 2]),
+        AssistantMessage(tool_calls=[_checkpoint_call()]),
+        _checkpoint("checkpoint-call", ["old"]),
+    ]
+    first = ArtifactObservationTranscriptRewriter().rewrite(messages)
+    second = ArtifactObservationTranscriptRewriter().rewrite(first.messages)
+    assert second.messages == first.messages
+    assert second.events == []
+
+
+def test_checkpoint_receipt_preserves_locator_requested_range_and_is_rereadable() -> None:
+    messages = [
+        AssistantMessage(tool_calls=[_call("old", offset=4, limit=9)]),
+        _result("old", [4, 5], offset=4, limit=9),
+        AssistantMessage(tool_calls=[_checkpoint_call()]),
+        _checkpoint("checkpoint-call", ["old"]),
+    ]
+    result = ArtifactObservationTranscriptRewriter().rewrite(messages)
+    marker = result.messages[1].content["_artifact_observation"]  # type: ignore[index]
+    assert marker["ref"] == "artifact:test"
+    assert marker["path"] == "rows"
+    assert marker["offset"] == 4
+    assert marker["limit"] == 9
+    assert marker["re_readable"] is True
 
 
 class ReadInput(BaseModel):

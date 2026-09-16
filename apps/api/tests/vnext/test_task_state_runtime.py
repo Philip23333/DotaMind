@@ -5,6 +5,7 @@ from typing import Any
 
 from app.vnext.agent.runtime import AgentRuntime
 from app.vnext.agent.task_state import TaskStateCoordinator
+from app.vnext.agent.trace import AgentTraceCollector
 from app.vnext.artifacts import ArtifactObservationTranscriptRewriter, ArtifactReadResult
 from app.vnext.llm.protocol import (
     AssistantMessage,
@@ -85,14 +86,19 @@ def _tool_response(*calls: ToolCall) -> ModelResponse:
     return ModelResponse(message=AssistantMessage(tool_calls=list(calls)))
 
 
-def _run(model: ScriptedTranscriptModelClient, coordinator: TaskStateCoordinator) -> AgentRuntime:
+def _run(
+    model: ScriptedTranscriptModelClient,
+    coordinator: TaskStateCoordinator,
+    *,
+    trace: AgentTraceCollector | None = None,
+) -> AgentRuntime:
     runtime = AgentRuntime(
         model,
         _read_registry(coordinator),
         transcript_rewriter=ArtifactObservationTranscriptRewriter(),
         task_state_coordinator=coordinator,
     )
-    asyncio.run(runtime.run([UserMessage(content="collect evidence")]))
+    asyncio.run(runtime.run([UserMessage(content="collect evidence")], trace_collector=trace))
     return runtime
 
 
@@ -117,7 +123,7 @@ def test_flow_a_manifest_then_checkpoint_state_next_turn_and_raw_preserved() -> 
     def third(request: ModelRequest) -> ModelResponse:
         system = _system(request)
         assert '"part":{"fact":"A"}' in system
-        assert '"tool_call_id":"call-1"' in system
+        assert '"tool_call_id":"call-1"' not in system
         return ModelResponse(message=FinalMessage(content="done"))
 
     model = ScriptedTranscriptModelClient([first, second, third])
@@ -128,7 +134,10 @@ def test_flow_a_manifest_then_checkpoint_state_next_turn_and_raw_preserved() -> 
         for message in model.requests[2].messages
         if isinstance(message, ToolResultMessage) and message.tool_call_id == "call-1"
     )
-    assert raw_result.content["value"] == [{"fact": "A"}]  # type: ignore[index]
+    assert raw_result.content["_artifact_observation"]["reason"] == "checkpointed"  # type: ignore[index]
+    assert raw_result.content["_artifact_observation"]["checkpoint_id"].startswith(  # type: ignore[index]
+        "checkpoint:"
+    )
     assert coordinator.store.get("part") is not None
 
 
@@ -232,3 +241,31 @@ def test_flow_d_task_context_is_ephemeral_and_does_not_accumulate_in_transcript(
         for message in model.requests[1].messages
         if isinstance(message, UserMessage)
     )
+
+
+def test_flow_e_checkpoint_rewrite_trace_keeps_raw_tool_result() -> None:
+    coordinator = TaskStateCoordinator()
+    trace = AgentTraceCollector()
+
+    def first(_: ModelRequest) -> ModelResponse:
+        return _tool_response(_read_call())
+
+    def second(_: ModelRequest) -> ModelResponse:
+        return _tool_response(_checkpoint_call("checkpoint-call"))
+
+    def third(_: ModelRequest) -> ModelResponse:
+        return ModelResponse(message=FinalMessage(content="done"))
+
+    model = ScriptedTranscriptModelClient([first, second, third])
+    _run(model, coordinator, trace=trace)
+
+    snapshot = trace.snapshot()
+    rewrite = snapshot["steps"][1]["transcript_rewrites"][0]
+    assert rewrite["reason"] == "checkpointed"
+    assert rewrite["tool_call_id"] == "call-1"
+    assert rewrite["checkpoint_id"].startswith("checkpoint:")
+    raw_trace_result = snapshot["steps"][1]["tool_results"][0]["result"]
+    assert raw_trace_result["tool_call_id"] == "checkpoint-call"
+    assert snapshot["steps"][0]["tool_results"][0]["result"]["content"]["value"] == [
+        {"fact": "A"}
+    ]

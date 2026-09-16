@@ -50,11 +50,13 @@ class TaskStateCoordinator:
     def __init__(self, store: TaskStateStore | None = None) -> None:
         self.store = store or TaskStateStore()
         self._active_observations: dict[str, ArtifactObservation] = {}
+        self._claimed_source_tool_call_ids: set[str] = set()
 
     def refresh(self, messages: Sequence[Message]) -> None:
         observations = collect_active_artifact_observations(messages)
         self._active_observations = {
             observation.tool_call_id: observation for observation in observations
+            if observation.tool_call_id not in self._claimed_source_tool_call_ids
         }
 
     def create_checkpoint(
@@ -72,6 +74,9 @@ class TaskStateCoordinator:
             source_tool_call_ids=sources,
         )
         self.store.put(checkpoint)
+        self._claimed_source_tool_call_ids.update(sources)
+        for source in sources:
+            self._active_observations.pop(source, None)
         return checkpoint
 
     def render_context(self) -> str | None:
@@ -110,6 +115,16 @@ class TaskStateCoordinator:
             raise ValueError("checkpoint sources must contain non-empty tool call IDs")
         if len(set(source_tool_call_ids)) != len(source_tool_call_ids):
             raise ValueError("checkpoint sources must not contain duplicates")
+        claimed = [
+            tool_call_id
+            for tool_call_id in source_tool_call_ids
+            if tool_call_id in self._claimed_source_tool_call_ids
+        ]
+        if claimed:
+            raise ValueError(
+                "checkpoint sources have already been claimed: "
+                + ", ".join(claimed)
+            )
         unknown = [
             tool_call_id
             for tool_call_id in source_tool_call_ids
