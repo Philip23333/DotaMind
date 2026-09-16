@@ -16,6 +16,10 @@ Use only the tools declared in the current tool catalog.
   the requested answer can be supported, stop rather than gathering optional
   detail that was not requested.
 - Never claim facts that are not supported by the available evidence.
+- When processing large artifact data in distinct parts, use task.checkpoint after
+  a coherent part is complete and its information needed for the user's request
+  has been preserved in the checkpoint value.
+- Only checkpoint artifact observations you no longer need to inspect directly.
 """
 
 __all__ = ["AGENT_INSTRUCTION"]

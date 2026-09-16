@@ -11,6 +11,7 @@ from dotenv import dotenv_values
 
 from app.vnext.agent.instructions import AGENT_INSTRUCTION
 from app.vnext.agent.runtime import AgentRuntime
+from app.vnext.agent.task_state import TaskStateCoordinator
 from app.vnext.artifacts import (
     ArtifactBackedToolResultProcessor,
     ArtifactGrepper,
@@ -50,6 +51,7 @@ from app.vnext.tools.esports import (
     register_tournament_tool,
 )
 from app.vnext.tools.registry import ToolRegistry
+from app.vnext.tools.task import register_task_checkpoint_tool
 
 _VNEXT_ENV_PATH = Path(__file__).with_name(".env")
 
@@ -163,6 +165,7 @@ def build_vnext_registry(
     services: VNextServices | None = None,
     *,
     settings: VNextSettings | None = None,
+    task_state_coordinator: TaskStateCoordinator | None = None,
 ) -> ToolRegistry:
     config = settings or VNextSettings.from_env()
     resolved_services = services or build_vnext_services(config)
@@ -192,6 +195,8 @@ def build_vnext_registry(
         register_team_tool(registry, resolved_services.team_search)
     if resolved_services.player_search is not None:
         register_player_tool(registry, resolved_services.player_search)
+    if task_state_coordinator is not None:
+        register_task_checkpoint_tool(registry, task_state_coordinator)
     return registry
 
 
@@ -210,11 +215,17 @@ def build_vnext_runtime(
         model=config.llm_model,
         timeout=config.llm_timeout_seconds,
     )
+    task_state_coordinator = TaskStateCoordinator()
     return AgentRuntime(
         model,
-        build_vnext_registry(resolved_services, settings=config),
+        build_vnext_registry(
+            resolved_services,
+            settings=config,
+            task_state_coordinator=task_state_coordinator,
+        ),
         system_instruction=AGENT_INSTRUCTION,
         transcript_rewriter=ArtifactObservationTranscriptRewriter(),
+        task_state_coordinator=task_state_coordinator,
     )
 
 

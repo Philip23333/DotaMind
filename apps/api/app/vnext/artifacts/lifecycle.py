@@ -146,6 +146,17 @@ def _artifact_observations(
     return observations
 
 
+def collect_active_artifact_observations(
+    messages: Sequence[Message],
+) -> list[ArtifactObservation]:
+    """Return successful, raw artifact.read observations from a transcript."""
+
+    return [
+        observation
+        for _, observation in _artifact_observations(messages, _artifact_read_calls(messages))
+    ]
+
+
 def _is_receipt(content: Any) -> bool:
     if not isinstance(content, dict):
         return False
@@ -218,4 +229,8 @@ def _receipt(observation: ArtifactObservation, reason: str) -> dict[str, Any]:
     return {"_artifact_observation": marker}
 
 
-__all__ = ["ArtifactObservation", "ArtifactObservationTranscriptRewriter"]
+__all__ = [
+    "ArtifactObservation",
+    "ArtifactObservationTranscriptRewriter",
+    "collect_active_artifact_observations",
+]

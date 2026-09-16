@@ -38,6 +38,7 @@ from app.vnext.agent.runtime_context import (
     classify_time_pressure,
 )
 from app.vnext.agent.runtime_prompt import render_runtime_prompt
+from app.vnext.agent.task_state import TaskStateCoordinator
 from app.vnext.agent.trace import AgentTraceCollector
 from app.vnext.agent.transcript_rewrite import TranscriptRewriter
 from app.vnext.llm.protocol import (
@@ -115,6 +116,7 @@ class AgentRuntime:
         event_sink: EventSink | None = None,
         system_instruction: str | None = None,
         transcript_rewriter: TranscriptRewriter | None = None,
+        task_state_coordinator: TaskStateCoordinator | None = None,
     ) -> None:
         self.model = model
         self.tools = tools
@@ -122,6 +124,7 @@ class AgentRuntime:
         self.event_sink = event_sink
         self.system_instruction = system_instruction
         self.transcript_rewriter = transcript_rewriter
+        self.task_state_coordinator = task_state_coordinator
 
     async def run(
         self,
@@ -240,8 +243,14 @@ class AgentRuntime:
                     tools_available=tools_enabled,
                     time_pressure=time_pressure,
                 )
+                turn_messages = request_messages
+                if self.task_state_coordinator is not None:
+                    self.task_state_coordinator.refresh(request_messages)
+                    task_context = self.task_state_coordinator.render_context()
+                    if task_context is not None:
+                        turn_messages = _append_system_instruction(turn_messages, task_context)
                 turn_messages = _append_system_instruction(
-                    request_messages,
+                    turn_messages,
                     render_runtime_prompt(runtime_context),
                 )
                 request = ModelRequest(
