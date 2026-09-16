@@ -53,6 +53,7 @@ class RuntimePromptUsage:
 class TaskContextUsage:
     present: bool
     serialized_bytes: int
+    task_plan: ContextSectionUsage
     task_state: ContextSectionUsage
     active_manifest: ContextSectionUsage
 
@@ -60,6 +61,7 @@ class TaskContextUsage:
         return {
             "present": self.present,
             "serialized_bytes": self.serialized_bytes,
+            "task_plan": self.task_plan.to_dict(),
             "task_state": self.task_state.to_dict(),
             "active_manifest": self.active_manifest.to_dict(),
         }
@@ -145,8 +147,15 @@ def build_context_accounting(
     task_context_present = task_context_payloads != stable_payloads
     runtime_prompt_present = task_context_payloads != effective_payloads
     payload = task_context_payload or {}
+    task_plan = payload.get("task_plan")
     task_state = payload.get("task_state", {})
     active_manifest = payload.get("active_manifest", [])
+    task_plan_bytes = (
+        _serialized_size(task_plan)
+        if task_context_present and isinstance(task_plan, dict)
+        else 0
+    )
+    task_plan_items = task_plan.get("items") if isinstance(task_plan, dict) else None
     task_state_bytes = (
         _serialized_size(task_state)
         if task_context_present and isinstance(task_state, dict)
@@ -177,6 +186,10 @@ def build_context_accounting(
                 max(0, task_context_bytes - stable_bytes)
                 if task_context_present
                 else 0
+            ),
+            task_plan=ContextSectionUsage(
+                count=len(task_plan_items) if isinstance(task_plan_items, list) else 0,
+                serialized_bytes=task_plan_bytes,
             ),
             task_state=ContextSectionUsage(
                 count=len(task_state) if isinstance(task_state, dict) else 0,

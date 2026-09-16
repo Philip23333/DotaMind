@@ -151,7 +151,7 @@ def test_plan_context_is_lightweight_and_deterministic() -> None:
 
     rendered = coordinator.render_context()
     assert rendered is not None
-    assert "Task plan:\ncurrent: a" in rendered
+    assert "Task plan:\nCURRENT: a" in rendered
     assert "- a [in_progress] A" in rendered
     assert "- b [pending] B" in rendered
     assert "Task state:\n{}" in rendered

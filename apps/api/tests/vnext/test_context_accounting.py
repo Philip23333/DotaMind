@@ -78,6 +78,7 @@ def test_context_accounting_is_deterministic_and_split_by_role() -> None:
     assert first["task_context"] == {
         "present": False,
         "serialized_bytes": 0,
+        "task_plan": {"count": 0, "serialized_bytes": 0},
         "task_state": {"count": 0, "serialized_bytes": 0},
         "active_manifest": {"count": 0, "serialized_bytes": 0},
     }
@@ -191,6 +192,10 @@ def test_context_accounting_splits_task_context_and_runtime_prompt() -> None:
         *stable,
     ]
     payload = {
+        "task_plan": {
+            "current_key": "part",
+            "items": [{"key": "part", "objective": "save", "status": "in_progress"}],
+        },
         "task_state": {"part": {"fact": "saved"}},
         "active_manifest": [],
     }
@@ -205,6 +210,8 @@ def test_context_accounting_splits_task_context_and_runtime_prompt() -> None:
     assert accounting["task_context"]["serialized_bytes"] > 0
     assert accounting["task_context"]["task_state"]["count"] == 1
     assert accounting["task_context"]["task_state"]["serialized_bytes"] > 0
+    assert accounting["task_context"]["task_plan"]["count"] == 1
+    assert accounting["task_context"]["task_plan"]["serialized_bytes"] > 0
     assert accounting["task_context"]["active_manifest"] == {
         "count": 0,
         "serialized_bytes": 2,

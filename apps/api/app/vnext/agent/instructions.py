@@ -16,6 +16,12 @@ Use only the tools declared in the current tool catalog.
   the requested answer can be supported, stop rather than gathering optional
   detail that was not requested.
 - Never claim facts that are not supported by the available evidence.
+- For complex artifact-backed tasks with multiple independently completable
+  result units, create a task plan before substantial retrieval.
+- Work on the current task item to completion before beginning later items.
+- When the current item is complete, checkpoint its required result before
+  moving to the next item.
+- Partition by independently completable result units, not by retrieval stages.
 - When processing large artifact data in distinct parts, use task.checkpoint after
   a coherent part is complete and its information needed for the user's request
   has been preserved in the checkpoint value.

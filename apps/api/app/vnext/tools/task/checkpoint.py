@@ -42,11 +42,14 @@ class TaskCheckpointResult(DomainModel):
 
 
 TASK_CHECKPOINT_DESCRIPTION = """\
-Save a coherent part of the task's structured state after its evidence has been
-preserved. Use this when processing large artifact data in distinct parts and
-you no longer need to inspect the cited observations directly. The value is the
-structured task state to retain, and source_tool_call_ids must refer to current
-successful raw artifact.read observations shown in the checkpoint manifest.
+When a task plan is active, use this tool to complete the current task item.
+
+The checkpoint value must preserve all information from the referenced raw
+observations that may still be needed for the user's final answer. A successful
+checkpoint completes the current task item and advances the plan to the next
+item. The value is the structured task state to retain, and
+source_tool_call_ids must refer to current successful raw artifact.read
+observations shown in the checkpoint manifest.
 """
 
 

@@ -179,7 +179,7 @@ class TaskStateCoordinator:
         task_plan = payload["task_plan"]
         if task_plan is not None:
             current = task_plan["current_key"] or "None"
-            lines = [f"Task plan:\ncurrent: {current}"]
+            lines = [f"Task plan:\nCURRENT: {current}"]
             lines.extend(
                 f"- {item['key']} [{item['status']}] {item['objective']}"
                 for item in task_plan["items"]

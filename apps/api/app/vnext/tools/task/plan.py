@@ -37,9 +37,12 @@ class TaskPlanResult(DomainModel):
 
 
 TASK_PLAN_DESCRIPTION = """\
-Create a serial plan for a complex artifact-backed task. Each item is an
-independently completable result unit; complete the current item before moving
-to a later item. Use task.checkpoint to preserve the current item's result.
+Create a serial execution plan for a complex artifact-backed task that contains
+multiple independently completable result units.
+
+Partition by result units, such as years, entities, documents, or modules. Do
+not partition by retrieval stages or tool types. Complete the current item
+before moving to the next item, and use task.checkpoint to preserve its result.
 """
 
 

@@ -82,6 +82,10 @@ class AgentTraceCollector:
             item.setdefault("checkpoint_metrics", []).append(
                 _checkpoint_metric(call, result)
             )
+        if call is not None and call.name == "task.plan":
+            item.setdefault("task_plan_metrics", []).append(
+                _task_plan_metric(call, result)
+            )
 
     def transcript_rewrite(self, step: int, event: TranscriptRewriteEvent) -> None:
         """Record a transcript replacement without duplicating raw evidence."""
@@ -155,6 +159,21 @@ def _checkpoint_metric(call: ToolCall, result: ToolResultMessage) -> dict[str, A
         metric["source_count"] = len(source_ids)
     if value is not None:
         metric["value_bytes"] = _serialized_size(value)
+    return metric
+
+
+def _task_plan_metric(call: ToolCall, result: ToolResultMessage) -> dict[str, Any]:
+    metric: dict[str, Any] = {
+        "tool_call_id": call.id,
+        "status": result.status,
+    }
+    if result.status == "ok" and isinstance(result.content, dict):
+        item_count = result.content.get("item_count")
+        current_key = result.content.get("current_key")
+        if isinstance(item_count, int):
+            metric["item_count"] = item_count
+        if isinstance(current_key, str) or current_key is None:
+            metric["current_key"] = current_key
     return metric
 
 
