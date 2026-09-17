@@ -38,6 +38,7 @@ from app.vnext.agent.events import (
 )
 from app.vnext.agent.instructions import ANSWER_INSTRUCTION
 from app.vnext.agent.limits import AgentLimits
+from app.vnext.agent.materialization_budget import MaterializationBudget
 from app.vnext.agent.runtime_context import RuntimeContext, classify_time_pressure
 from app.vnext.agent.runtime_prompt import render_runtime_prompt
 from app.vnext.agent.task_state import TaskStateCoordinator
@@ -165,6 +166,9 @@ class AgentRuntime:
         token = cancellation_token or CancellationToken()
         sink = event_sink
         execution_deadline = _Deadline(self.limits.deadline_seconds)
+        materialization_budget = MaterializationBudget(
+            self.limits.max_materialized_context_bytes
+        )
         started_at = execution_deadline.started
         step = 0
         outcome: ExecutionOutcome | None = None
@@ -286,6 +290,7 @@ class AgentRuntime:
                         sink,
                         results,
                         trace_collector,
+                        materialization_budget,
                     ):
                         yield tool_event
                     self._check_controls(token, execution_deadline)
@@ -298,8 +303,9 @@ class AgentRuntime:
                 else:
                     rewrite = self.transcript_rewriter.rewrite(candidate_messages)
                     request_messages = rewrite.messages
-                    if trace_collector is not None:
-                        for event in rewrite.events:
+                    for event in rewrite.events:
+                        materialization_budget.release(event.tool_call_id)
+                        if trace_collector is not None:
                             trace_collector.transcript_rewrite(step, event)
                 if (
                     self.task_state_coordinator is not None
@@ -504,6 +510,7 @@ class AgentRuntime:
         sink: EventSink | None,
         results: list[ToolResultMessage],
         trace_collector: AgentTraceCollector | None,
+        materialization_budget: MaterializationBudget,
     ) -> AsyncIterator[AgentEvent]:
         index = 0
         while index < len(calls):
@@ -536,6 +543,32 @@ class AgentRuntime:
                 token,
                 deadline,
             )
+            candidates: list[tuple[tuple[int, int], int, ToolCall, ToolResultMessage, int]] = []
+            plan = (
+                self.task_state_coordinator.plan_snapshot()
+                if self.task_state_coordinator is not None
+                else None
+            )
+            for original_index, (item, result) in enumerate(
+                zip(group, group_results, strict=True)
+            ):
+                if result.status != "ok" or not self._is_materializing(item):
+                    continue
+                raw_bytes = _serialized_size(result.model_dump(mode="json"))
+                candidates.append(
+                    (
+                        _materialization_priority(item, original_index, plan),
+                        original_index,
+                        item,
+                        result,
+                        raw_bytes,
+                    )
+                )
+            decisions = {
+                item.id: materialization_budget.admit(item.id, raw_bytes=raw_bytes)
+                for _, _, item, _, raw_bytes in sorted(candidates, key=lambda value: value[0])
+            }
+            raw_bytes_by_id = {item.id: raw_bytes for _, _, item, _, raw_bytes in candidates}
             for item, result in zip(group, group_results, strict=True):
                 duration = max(0.0, monotonic() - started[item.id])
                 if result.status == "ok":
@@ -556,30 +589,30 @@ class AgentRuntime:
                         error_message=result.error.message,
                     )
                 yield await self._publish(event, sink)
-                results.append(result)
                 if trace_collector is not None:
                     trace_collector.tool_result(step, result, duration, call=item)
                 if result.status == "ok":
-                    try:
-                        definition = self.tools.get(item.name)
-                    except KeyError:
-                        definition = None
-                    if (
-                        definition is not None
-                        and definition.context_effect is ToolContextEffect.MATERIALIZING
-                        and self.task_state_coordinator is not None
-                    ):
-                        task_key = item.arguments.get("task_key")
-                        self.task_state_coordinator.record_evidence_lease(
-                            item.id,
-                            task_key=task_key,
-                            raw_bytes=_serialized_size(result.model_dump(mode="json")),
-                        )
-                        if trace_collector is not None:
-                            trace_collector.active_evidence_lease(
-                                step,
-                                self.task_state_coordinator.active_evidence_lease(),
+                    decision = decisions.get(item.id)
+                    if decision is not None and decision.admitted:
+                        if self.task_state_coordinator is not None:
+                            self.task_state_coordinator.record_evidence_lease(
+                                item.id,
+                                task_key=item.arguments.get("task_key"),
+                                raw_bytes=decision.raw_bytes,
                             )
+                            if trace_collector is not None:
+                                trace_collector.active_evidence_lease(
+                                    step,
+                                    self.task_state_coordinator.active_evidence_lease(),
+                                )
+                    elif decision is not None:
+                        result = result.model_copy(
+                            update={
+                                "content": _deferred_materialization(
+                                    raw_bytes_by_id[item.id]
+                                )
+                            }
+                        )
                     if (
                         item.name == "task.checkpoint"
                         and self.task_state_coordinator is not None
@@ -587,7 +620,14 @@ class AgentRuntime:
                         release = self.task_state_coordinator.consume_partition_release()
                         if release is not None and trace_collector is not None:
                             trace_collector.partition_evidence_release(step, release)
+                results.append(result)
             index += len(group)
+
+    def _is_materializing(self, call: ToolCall) -> bool:
+        try:
+            return self.tools.get(call.name).context_effect is ToolContextEffect.MATERIALIZING
+        except KeyError:
+            return False
 
     def _is_parallel_safe(self, call: ToolCall) -> bool:
         try:
@@ -713,6 +753,32 @@ def _answer_conversation(messages: Sequence[Message]) -> list[Message]:
         if not isinstance(message, ToolResultMessage)
         and not (isinstance(message, AssistantMessage) and message.tool_calls)
     ]
+
+
+def _materialization_priority(
+    call: ToolCall,
+    original_index: int,
+    plan: Any,
+) -> tuple[int, int]:
+    if plan is None:
+        return (0, original_index)
+    owner_key = call.arguments.get("task_key") or plan.current_key
+    if isinstance(owner_key, str):
+        for order, item in enumerate(plan.items):
+            if item.key == owner_key and item.status.value != "completed":
+                return (order, original_index)
+    return (len(plan.items), original_index)
+
+
+def _deferred_materialization(raw_bytes: int) -> dict[str, Any]:
+    return {
+        "_context_materialization": {
+            "state": "deferred",
+            "reason": "budget_exceeded",
+            "retryable": True,
+            "raw_bytes": raw_bytes,
+        }
+    }
 
 
 def _serialized_size(value: Any) -> int:
