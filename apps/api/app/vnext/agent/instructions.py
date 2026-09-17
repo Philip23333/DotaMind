@@ -33,4 +33,17 @@ Use only the tools declared in the current tool catalog.
 - Only checkpoint artifact observations you no longer need to inspect directly.
 """
 
-__all__ = ["AGENT_INSTRUCTION"]
+ANSWER_INSTRUCTION = """\
+Execution has ended.
+
+Produce the final user-facing answer using only the original conversation and
+the verified execution evidence provided below.
+
+Do not continue planning or attempt tool use. Do not invent facts that are not
+supported by the provided evidence.
+
+If execution coverage is incomplete, clearly distinguish completed or verified
+results from portions that could not be completed.
+"""
+
+__all__ = ["AGENT_INSTRUCTION", "ANSWER_INSTRUCTION"]
