@@ -22,6 +22,14 @@ Use only the tools declared in the current tool catalog.
 - When the current item is complete, checkpoint its required result before
   moving to the next item.
 - Partition by independently completable result units, not by retrieval stages.
+- For complex artifact-backed tasks whose independent result partitions are
+  already known, create the task plan before materializing substantial artifact
+  content.
+- Lightweight discovery may precede the plan only when it is needed to
+  determine the partition structure.
+- Once a task plan exists, avoid materializing evidence for later task items
+  while working on the current item. Parallel tool use within the current item
+  is allowed when useful.
 - Each task-plan item must be an artifact-backed retrieval unit that is
   checkpointable with task.checkpoint.
 - Do not create plan items for final synthesis, comparison, aggregation, or
