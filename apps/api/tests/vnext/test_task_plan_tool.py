@@ -9,6 +9,7 @@ from app.vnext.agent.task_state import TaskStateCoordinator
 from app.vnext.llm.protocol import ToolCall
 from app.vnext.tools.registry import ToolRegistry
 from app.vnext.tools.task import (
+    TASK_PLAN_DESCRIPTION,
     TaskPlanInput,
     register_task_plan_tool,
 )
@@ -25,6 +26,19 @@ def test_plan_input_schema_has_only_items() -> None:
     assert set(schema["properties"]) == {"items"}
     with pytest.raises(ValidationError):
         TaskPlanInput.model_validate({"items": [{"key": "a", "objective": "A"}]})
+
+
+def test_plan_description_excludes_synthesis_items() -> None:
+    description = TASK_PLAN_DESCRIPTION.lower()
+
+    assert "artifact-backed retrieval unit" in description
+    assert "checkpointable" in description
+    assert "task.checkpoint" in description
+    assert "final synthesis" in description
+    assert "comparison" in description
+    assert "aggregation" in description
+    assert "answer composition" in description
+    assert "checkpointed taskstate" in description
 
 
 def test_plan_tool_creates_plan_and_returns_compact_result() -> None:

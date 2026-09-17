@@ -41,8 +41,12 @@ Create a serial execution plan for a complex artifact-backed task that contains
 multiple independently completable result units.
 
 Partition by result units, such as years, entities, documents, or modules. Do
-not partition by retrieval stages or tool types. Complete the current item
-before moving to the next item, and use task.checkpoint to preserve its result.
+not partition by retrieval stages or tool types. Every item must be an
+artifact-backed retrieval unit that is checkpointable with task.checkpoint and
+can produce an independent checkpoint. Complete the current item before moving
+to the next item. Do not create items for final synthesis, comparison,
+aggregation, or answer composition; perform those after the plan is complete
+using the checkpointed TaskState.
 """
 
 

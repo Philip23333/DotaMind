@@ -22,6 +22,11 @@ Use only the tools declared in the current tool catalog.
 - When the current item is complete, checkpoint its required result before
   moving to the next item.
 - Partition by independently completable result units, not by retrieval stages.
+- Each task-plan item must be an artifact-backed retrieval unit that is
+  checkpointable with task.checkpoint.
+- Do not create plan items for final synthesis, comparison, aggregation, or
+  answer composition. Perform those after the task plan is complete using the
+  checkpointed TaskState.
 - When processing large artifact data in distinct parts, use task.checkpoint after
   a coherent part is complete and its information needed for the user's request
   has been preserved in the checkpoint value.

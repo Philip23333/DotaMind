@@ -49,7 +49,8 @@ observations that may still be needed for the user's final answer. A successful
 checkpoint completes the current task item and advances the plan to the next
 item. The value is the structured task state to retain, and
 source_tool_call_ids must refer to current successful raw artifact.read
-observations shown in the checkpoint manifest.
+observations shown in the checkpoint manifest. Final synthesis after all plan
+items are complete does not require another checkpoint.
 """
 
 
