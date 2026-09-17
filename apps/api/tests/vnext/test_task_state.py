@@ -340,3 +340,105 @@ def test_cross_partition_leases_survive_an_earlier_checkpoint() -> None:
     coordinator.refresh(messages)
     coordinator.create_checkpoint("B", {"fact": "B"}, ["raw-b"])
     assert coordinator.closed_partition_for_tool_call("raw-b") == "B"
+
+
+def test_checkpoint_accepts_source_lease_owned_by_checkpoint_item() -> None:
+    coordinator = TaskStateCoordinator()
+    coordinator.create_plan(
+        [
+            {"key": "A", "objective": "retrieve A"},
+            {"key": "B", "objective": "retrieve B"},
+        ]
+    )
+    coordinator.refresh(_messages((_read_call("raw-a"), _read_result("raw-a"))))
+    coordinator.record_evidence_lease("raw-a", task_key="A", raw_bytes=100)
+
+    coordinator.create_checkpoint("A", {"fact": "A"}, ["raw-a"])
+
+    assert coordinator.store.get("A") is not None
+    assert coordinator.plan_snapshot().current_key == "B"  # type: ignore[union-attr]
+
+
+def test_checkpoint_rejects_source_leased_to_different_task_item_atomically() -> None:
+    coordinator = TaskStateCoordinator()
+    coordinator.create_plan(
+        [
+            {"key": "A", "objective": "retrieve A"},
+            {"key": "B", "objective": "retrieve B"},
+        ]
+    )
+    messages = _messages(
+        (_read_call("raw-a"), _read_result("raw-a")),
+        (_read_call("raw-b"), _read_result("raw-b")),
+    )
+    coordinator.refresh(messages)
+    coordinator.record_evidence_lease("raw-a", task_key="A", raw_bytes=100)
+    coordinator.record_evidence_lease("raw-b", task_key="B", raw_bytes=200)
+
+    with pytest.raises(ValueError, match="different task items: raw-b"):
+        coordinator.create_checkpoint("A", {"fact": "A"}, ["raw-b"])
+
+    assert coordinator.plan_snapshot().current_key == "A"  # type: ignore[union-attr]
+    assert coordinator.store.snapshot() == {}
+    assert {item["tool_call_id"] for item in coordinator.context_payload()["active_manifest"]} == {
+        "raw-a",
+        "raw-b",
+    }
+    assert coordinator.closed_partition_for_tool_call("raw-b") is None
+    assert coordinator.consume_partition_release() is None
+    assert coordinator.active_evidence_lease()["task_key"] is None  # type: ignore[index]
+
+
+def test_mixed_checkpoint_sources_reject_atomically_when_one_lease_mismatches() -> None:
+    coordinator = TaskStateCoordinator()
+    coordinator.create_plan(
+        [
+            {"key": "A", "objective": "retrieve A"},
+            {"key": "B", "objective": "retrieve B"},
+        ]
+    )
+    messages = _messages(
+        (_read_call("raw-a"), _read_result("raw-a")),
+        (_read_call("raw-b"), _read_result("raw-b")),
+    )
+    coordinator.refresh(messages)
+    coordinator.record_evidence_lease("raw-a", task_key="A", raw_bytes=100)
+    coordinator.record_evidence_lease("raw-b", task_key="B", raw_bytes=200)
+
+    with pytest.raises(ValueError, match="different task items: raw-b"):
+        coordinator.create_checkpoint("A", {"fact": "A"}, ["raw-a", "raw-b"])
+
+    assert coordinator.plan_snapshot().current_key == "A"  # type: ignore[union-attr]
+    assert coordinator.store.snapshot() == {}
+    assert coordinator.closed_partition_for_tool_call("raw-a") is None
+    assert coordinator.closed_partition_for_tool_call("raw-b") is None
+    assert coordinator.consume_partition_release() is None
+
+
+def test_rejected_lease_owner_checkpoint_can_retry_a_then_b() -> None:
+    coordinator = TaskStateCoordinator()
+    coordinator.create_plan(
+        [
+            {"key": "A", "objective": "retrieve A"},
+            {"key": "B", "objective": "retrieve B"},
+        ]
+    )
+    messages = _messages(
+        (_read_call("raw-a"), _read_result("raw-a")),
+        (_read_call("raw-b"), _read_result("raw-b")),
+    )
+    coordinator.refresh(messages)
+    coordinator.record_evidence_lease("raw-a", task_key="A", raw_bytes=100)
+    coordinator.record_evidence_lease("raw-b", task_key="B", raw_bytes=200)
+
+    with pytest.raises(ValueError, match="different task items: raw-b"):
+        coordinator.create_checkpoint("A", {"fact": "A"}, ["raw-b"])
+
+    coordinator.create_checkpoint("A", {"fact": "A"}, ["raw-a"])
+    assert coordinator.plan_snapshot().current_key == "B"  # type: ignore[union-attr]
+    assert coordinator.consume_partition_release() is not None
+
+    coordinator.refresh(messages)
+    coordinator.create_checkpoint("B", {"fact": "B"}, ["raw-b"])
+    assert coordinator.plan_snapshot().current_key is None  # type: ignore[union-attr]
+    assert coordinator.closed_partition_for_tool_call("raw-b") == "B"

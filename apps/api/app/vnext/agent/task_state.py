@@ -384,6 +384,19 @@ class TaskStateCoordinator:
                 "checkpoint sources must refer to active raw artifact.read observations: "
                 + ", ".join(unknown)
             )
+        mismatched = [
+            tool_call_id
+            for tool_call_id in source_tool_call_ids
+            if (
+                (lease := self._active_evidence_leases.get(tool_call_id)) is not None
+                and lease.task_key != key
+            )
+        ]
+        if mismatched:
+            raise ValueError(
+                "checkpoint sources are leased to different task items: "
+                + ", ".join(mismatched)
+            )
 
 
 def _manifest_item(
