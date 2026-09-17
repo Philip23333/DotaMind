@@ -26,3 +26,17 @@ def test_task_plan_policy_allows_bounded_cross_partition_batching() -> None:
     assert "checkpoint task items in plan order" in instruction
     assert "do not materialize large amounts of speculative evidence" in instruction
     assert "avoid materializing evidence for later task items" not in instruction
+
+
+def test_deferred_materialization_policy_guides_recovery_without_scheduler_details() -> None:
+    instruction = " ".join(AGENT_INSTRUCTION.lower().split())
+
+    assert "materializing tool may succeed" in instruction
+    assert "deferred result means the tool execution succeeded" in instruction
+    assert "not currently available in model context" in instruction
+    assert "do not use a deferred result as evidence or as a checkpoint source" in instruction
+    assert "checkpointing useful evidence" in instruction
+    assert "retry deferred materialization later" in instruction
+    assert "do not repeatedly retry a deferred materialization" in instruction
+    assert "160 kib" not in instruction
+    assert "available bytes" not in instruction

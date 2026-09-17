@@ -304,9 +304,18 @@ class AgentRuntime:
                     rewrite = self.transcript_rewriter.rewrite(candidate_messages)
                     request_messages = rewrite.messages
                     for event in rewrite.events:
-                        materialization_budget.release(event.tool_call_id)
+                        released_bytes = materialization_budget.release(event.tool_call_id)
                         if trace_collector is not None:
                             trace_collector.transcript_rewrite(step, event)
+                            if released_bytes > 0:
+                                trace_collector.materialization_release(
+                                    step,
+                                    tool_call_id=event.tool_call_id,
+                                    reason=event.reason,
+                                    released_bytes=released_bytes,
+                                    active_after_bytes=materialization_budget.active_bytes,
+                                    limit_bytes=materialization_budget.limit_bytes,
+                                )
                 if (
                     self.task_state_coordinator is not None
                     and self.task_state_coordinator.plan_snapshot() is not None
@@ -564,10 +573,17 @@ class AgentRuntime:
                         raw_bytes,
                     )
                 )
-            decisions = {
-                item.id: materialization_budget.admit(item.id, raw_bytes=raw_bytes)
-                for _, _, item, _, raw_bytes in sorted(candidates, key=lambda value: value[0])
-            }
+            decisions = {}
+            for _, _, item, _, raw_bytes in sorted(candidates, key=lambda value: value[0]):
+                decision = materialization_budget.admit(item.id, raw_bytes=raw_bytes)
+                decisions[item.id] = decision
+                if trace_collector is not None:
+                    trace_collector.materialization_admission(
+                        step,
+                        decision=decision,
+                        task_key=_materialization_telemetry_task_key(item, plan),
+                        limit_bytes=materialization_budget.limit_bytes,
+                    )
             raw_bytes_by_id = {item.id: raw_bytes for _, _, item, _, raw_bytes in candidates}
             for item, result in zip(group, group_results, strict=True):
                 duration = max(0.0, monotonic() - started[item.id])
@@ -768,6 +784,15 @@ def _materialization_priority(
             if item.key == owner_key and item.status.value != "completed":
                 return (order, original_index)
     return (len(plan.items), original_index)
+
+
+def _materialization_telemetry_task_key(call: ToolCall, plan: Any) -> str | None:
+    explicit_key = call.arguments.get("task_key")
+    if isinstance(explicit_key, str):
+        return explicit_key
+    if plan is not None and isinstance(plan.current_key, str):
+        return plan.current_key
+    return None
 
 
 def _deferred_materialization(raw_bytes: int) -> dict[str, Any]:

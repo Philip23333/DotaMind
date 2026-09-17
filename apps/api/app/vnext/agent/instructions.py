@@ -31,6 +31,16 @@ Use only the tools declared in the current tool catalog.
 - When useful, batch or parallelize retrieval for the current item and later
   pending items, provided the amount of materialized evidence remains bounded
   and useful.
+- A materializing tool may succeed while its evidence is deferred because the
+  runtime materialization budget is full.
+- A deferred result means the tool execution succeeded, but its raw evidence
+  is not currently available in model context. Do not use a deferred result as
+  evidence or as a checkpoint source.
+- Prefer checkpointing useful evidence that is already available to release
+  context capacity. Retry deferred materialization later only if the evidence
+  is still needed.
+- Do not repeatedly retry a deferred materialization before context capacity
+  has been released.
 - When materializing artifact evidence for a specific task-plan item, set its
   task_key to that item's key so the runtime can retain it until that item is
   checkpointed.

@@ -284,6 +284,41 @@ def test_runtime_admits_by_plan_priority_defers_then_retries_after_release() -> 
     active = snapshot["steps"][1]["active_evidence_lease"]
     assert active["task_key"] is None
     assert {item["task_key"] for item in active["partitions"]} == {"A", "B"}
+    steps = {item["step"]: item for item in snapshot["steps"]}
+    admissions = steps[2]["materialization_budget"]["admissions"]
+    assert len(admissions) == 3
+    admission_by_id = {item["tool_call_id"]: item for item in admissions}
+    assert admission_by_id["read-a"]["admitted"] is True
+    assert admission_by_id["read-b"]["admitted"] is True
+    assert admission_by_id["read-c"]["admitted"] is False
+    assert admission_by_id["read-c"]["raw_bytes"] > 0
+    assert admission_by_id["read-c"]["active_after_bytes"] == admission_by_id["read-c"][
+        "active_before_bytes"
+    ]
+    release_a = steps[3]["materialization_budget"]["releases"]
+    assert release_a == [
+        {
+            "tool_call_id": "read-a",
+            "reason": "checkpointed",
+            "released_bytes": admission_by_id["read-a"]["raw_bytes"],
+            "active_after_bytes": admission_by_id["read-b"]["raw_bytes"],
+        }
+    ]
+    release_b = steps[4]["materialization_budget"]["releases"]
+    assert release_b[0]["tool_call_id"] == "read-b"
+    assert release_b[0]["reason"] == "checkpointed"
+    assert release_b[0]["released_bytes"] == admission_by_id["read-b"]["raw_bytes"]
+    retry_admission = steps[5]["materialization_budget"]["admissions"]
+    assert retry_admission[0]["tool_call_id"] == "retry-c"
+    assert retry_admission[0]["admitted"] is True
+    assert steps[6]["materialization_budget"]["releases"] == [
+        {
+            "tool_call_id": "retry-c",
+            "reason": "checkpointed",
+            "released_bytes": retry_admission[0]["raw_bytes"],
+            "active_after_bytes": 0,
+        }
+    ]
     assert snapshot["answer_stage"]["active_raw_count"] == 0
 
 
@@ -342,3 +377,75 @@ def test_materialization_budget_applies_without_a_task_plan() -> None:
     assert state.maximum == 2
     assert model.requests[1].messages[-2].content == {"value": "x" * 400}  # type: ignore[union-attr]
     assert model.requests[1].messages[-1].content["_context_materialization"]["state"] == "deferred"  # type: ignore[index]
+
+
+def test_partition_closed_releases_all_admitted_materialization_bytes() -> None:
+    coordinator = TaskStateCoordinator()
+    state = _ReadState()
+    probe = ToolResultMessage(
+        tool_call_id="read-x",
+        content=ArtifactReadResult(
+            ref="artifact:test",
+            path="rows",
+            value=[{"id": 0, "payload": "x" * 400}],
+            offset=0,
+            limit=1,
+            total=3,
+            truncated=False,
+        ).model_dump(mode="json"),
+    )
+    limits = AgentLimits(
+        deadline_seconds=2,
+        answer_timeout_seconds=2,
+        max_materialized_context_bytes=2 * _size(probe.model_dump(mode="json")) + 2,
+    )
+
+    def plan(_: ModelRequest) -> ModelResponse:
+        return ModelResponse(message=AssistantMessage(tool_calls=[_plan_call()]))
+
+    def reads(_: ModelRequest) -> ModelResponse:
+        return ModelResponse(
+            message=AssistantMessage(
+                tool_calls=[
+                    _read_call("raw-1", "A", 0),
+                    _read_call("raw-2", "A", 1),
+                ]
+            )
+        )
+
+    def checkpoint(request: ModelRequest) -> ModelResponse:
+        assert _tool_result(request, "raw-1").content["value"]  # type: ignore[index]
+        assert _tool_result(request, "raw-2").content["value"]  # type: ignore[index]
+        return ModelResponse(
+            message=AssistantMessage(
+                tool_calls=[_checkpoint_call("checkpoint-a", "A", "raw-1")]
+            )
+        )
+
+    model = ScriptedTranscriptModelClient(
+        [plan, reads, checkpoint, lambda _: ModelResponse.from_final("done")]
+    )
+    trace = AgentTraceCollector()
+    runtime = AgentRuntime(
+        model,
+        _read_registry(coordinator, state),
+        limits=limits,
+        transcript_rewriter=ArtifactObservationTranscriptRewriter(
+            closed_partition_lookup=coordinator.closed_partition_for_tool_call
+        ),
+        task_state_coordinator=coordinator,
+    )
+    asyncio.run(
+        runtime.run([UserMessage(content="partition")], trace_collector=trace)
+    )
+
+    snapshot = trace.snapshot()
+    releases = snapshot["steps"][2]["materialization_budget"]["releases"]
+    assert [item["tool_call_id"] for item in releases] == ["raw-1", "raw-2"]
+    assert [item["reason"] for item in releases] == [
+        "checkpointed",
+        "partition_closed",
+    ]
+    assert releases[0]["released_bytes"] > 0
+    assert releases[1]["released_bytes"] > 0
+    assert releases[-1]["active_after_bytes"] == 0
