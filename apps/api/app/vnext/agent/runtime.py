@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import json
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from time import monotonic
 from typing import Any
@@ -55,6 +56,7 @@ from app.vnext.llm.protocol import (
     ToolCall,
     ToolResultMessage,
 )
+from app.vnext.tools.definition import ToolContextEffect
 from app.vnext.tools.registry import ToolRegistry
 
 EventSink = Callable[[AgentEvent], Awaitable[None] | None]
@@ -557,7 +559,33 @@ class AgentRuntime:
                 results.append(result)
                 if trace_collector is not None:
                     trace_collector.tool_result(step, result, duration, call=item)
-            index += len(group)
+                if result.status == "ok":
+                    try:
+                        definition = self.tools.get(item.name)
+                    except KeyError:
+                        definition = None
+                    if (
+                        definition is not None
+                        and definition.context_effect is ToolContextEffect.MATERIALIZING
+                        and self.task_state_coordinator is not None
+                    ):
+                        self.task_state_coordinator.record_evidence_lease(
+                            item.id,
+                            raw_bytes=_serialized_size(result.model_dump(mode="json")),
+                        )
+                        if trace_collector is not None:
+                            trace_collector.active_evidence_lease(
+                                step,
+                                self.task_state_coordinator.active_evidence_lease(),
+                            )
+                    if (
+                        item.name == "task.checkpoint"
+                        and self.task_state_coordinator is not None
+                    ):
+                        release = self.task_state_coordinator.consume_partition_release()
+                        if release is not None and trace_collector is not None:
+                            trace_collector.partition_evidence_release(step, release)
+                index += len(group)
 
     def _is_parallel_safe(self, call: ToolCall) -> bool:
         try:
@@ -683,6 +711,17 @@ def _answer_conversation(messages: Sequence[Message]) -> list[Message]:
         if not isinstance(message, ToolResultMessage)
         and not (isinstance(message, AssistantMessage) and message.tool_calls)
     ]
+
+
+def _serialized_size(value: Any) -> int:
+    return len(
+        json.dumps(
+            value,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+    )
 
 
 __all__ = ["AgentRuntime", "CancellationToken", "EventSink"]

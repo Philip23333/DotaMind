@@ -4,6 +4,7 @@ from importlib import import_module
 from typing import Any
 
 _EXPORTS = {
+    "ToolContextEffect": ("app.vnext.tools.definition", "ToolContextEffect"),
     "ToolDefinition": ("app.vnext.tools.definition", "ToolDefinition"),
     "ToolError": ("app.vnext.tools.errors", "ToolError"),
     "ToolErrorCode": ("app.vnext.tools.errors", "ToolErrorCode"),

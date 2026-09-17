@@ -225,7 +225,9 @@ def build_vnext_runtime(
             task_state_coordinator=task_state_coordinator,
         ),
         system_instruction=AGENT_INSTRUCTION,
-        transcript_rewriter=ArtifactObservationTranscriptRewriter(),
+        transcript_rewriter=ArtifactObservationTranscriptRewriter(
+            closed_partition_lookup=task_state_coordinator.closed_partition_for_tool_call
+        ),
         task_state_coordinator=task_state_coordinator,
     )
 

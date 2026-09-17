@@ -219,3 +219,55 @@ def test_rendered_context_uses_utf8_json_and_omits_ranges_for_scalar_reads() -> 
     assert "actual_start" not in context
     assert "actual_end" not in context
     assert "\\u6700" not in context
+
+
+def test_evidence_lease_is_scoped_to_current_partition_and_released_on_checkpoint() -> None:
+    coordinator = TaskStateCoordinator()
+    coordinator.create_plan(
+        [
+            {"key": "2025", "objective": "retrieve 2025"},
+            {"key": "2026", "objective": "retrieve 2026"},
+        ]
+    )
+    messages = _messages((_read_call("call-1"), _read_result()))
+    coordinator.refresh(messages)
+    coordinator.record_evidence_lease("call-1", raw_bytes=1234)
+
+    assert coordinator.active_evidence_lease() == {
+        "task_key": "2025",
+        "observation_count": 1,
+        "raw_bytes": 1234,
+    }
+    assert coordinator.context_payload()["active_manifest"][0]["lease_key"] == "2025"
+
+    coordinator.create_checkpoint("2025", {"fact": "saved"}, ["call-1"])
+    release = coordinator.consume_partition_release()
+    assert release is not None
+    assert release.task_key == "2025"
+    assert release.checkpointed_count == 1
+    assert release.partition_closed_count == 0
+    assert release.released_bytes == 1234
+    assert coordinator.active_evidence_lease() is None
+    assert coordinator.closed_partition_for_tool_call("call-1") == "2025"
+
+
+def test_failed_checkpoint_keeps_active_evidence_lease() -> None:
+    coordinator = TaskStateCoordinator()
+    coordinator.create_plan(
+        [
+            {"key": "2025", "objective": "retrieve 2025"},
+            {"key": "2026", "objective": "retrieve 2026"},
+        ]
+    )
+    coordinator.refresh(_messages((_read_call("call-1"), _read_result())))
+    coordinator.record_evidence_lease("call-1", raw_bytes=321)
+
+    with pytest.raises(ValueError, match="active raw"):
+        coordinator.create_checkpoint("2025", {"fact": "saved"}, ["missing"])
+
+    assert coordinator.active_evidence_lease() == {
+        "task_key": "2025",
+        "observation_count": 1,
+        "raw_bytes": 321,
+    }
+    assert coordinator.consume_partition_release() is None

@@ -100,6 +100,26 @@ class AgentTraceCollector:
             }
         )
 
+    def active_evidence_lease(
+        self,
+        step: int,
+        payload: dict[str, Any] | None,
+    ) -> None:
+        """Record locator-free active evidence lease accounting."""
+
+        if payload is not None:
+            self._step(step)["active_evidence_lease"] = payload
+
+    def partition_evidence_release(self, step: int, release: Any) -> None:
+        """Record evidence released after a successful partition checkpoint."""
+
+        self._step(step)["partition_evidence_release"] = {
+            "task_key": release.task_key,
+            "checkpointed_count": release.checkpointed_count,
+            "partition_closed_count": release.partition_closed_count,
+            "released_bytes": release.released_bytes,
+        }
+
     def terminal(self, *, status: str, error_code: str | None, error_message: str | None) -> None:
         self._trace["terminal"] = {
             "status": status,

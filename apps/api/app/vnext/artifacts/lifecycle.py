@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -41,6 +41,13 @@ class ArtifactObservationTranscriptRewriter:
     scans the complete candidate transcript, which keeps the operation
     deterministic and makes repeated application idempotent.
     """
+
+    def __init__(
+        self,
+        *,
+        closed_partition_lookup: Callable[[str], str | None] | None = None,
+    ) -> None:
+        self._closed_partition_lookup = closed_partition_lookup or (lambda _tool_call_id: None)
 
     def rewrite(self, messages: Sequence[Message]) -> TranscriptRewriteResult:
         original = list(messages)
@@ -81,10 +88,33 @@ class ArtifactObservationTranscriptRewriter:
         for old_index, old in observations:
             if old.tool_call_id in claimed_observation_ids:
                 continue
+            partition_key = self._closed_partition_lookup(old.tool_call_id)
+            if partition_key is not None:
+                replaced[old.message_index] = ("partition_closed", partition_key)
+                events.append(
+                    TranscriptRewriteEvent(
+                        kind="artifact_observation",
+                        tool_call_id=old.tool_call_id,
+                        reason="partition_closed",
+                        metadata={
+                            "source": _receipt_source(old),
+                            "partition_key": partition_key,
+                            **_rewrite_sizes(
+                                original[old.message_index],
+                                old,
+                                "partition_closed",
+                                partition_key=partition_key,
+                            ),
+                        },
+                    )
+                )
+                continue
             for new_index, new in observations:
                 if new_index <= old_index:
                     continue
                 if new.tool_call_id in claimed_observation_ids:
+                    continue
+                if new.message_index in replaced:
                     continue
                 reason = _replacement_reason(old, new)
                 if reason is None:
@@ -104,7 +134,7 @@ class ArtifactObservationTranscriptRewriter:
                                 original[old.message_index],
                                 old,
                                 reason,
-                                None,
+                                checkpoint_id=None,
                             ),
                         },
                     )
@@ -132,7 +162,12 @@ class ArtifactObservationTranscriptRewriter:
                         "content": _receipt(
                             observation,
                             reason,
-                            checkpoint_id=checkpoint_id,
+                            checkpoint_id=(
+                                checkpoint_id if reason == "checkpointed" else None
+                            ),
+                            partition_key=(
+                                checkpoint_id if reason == "partition_closed" else None
+                            ),
                         )
                     }
                 )
@@ -305,6 +340,7 @@ def _receipt(
     reason: str,
     *,
     checkpoint_id: str | None = None,
+    partition_key: str | None = None,
 ) -> dict[str, Any]:
     marker: dict[str, Any] = {
         "state": "receipt_only",
@@ -315,6 +351,8 @@ def _receipt(
     }
     if checkpoint_id is not None:
         marker["checkpoint_id"] = checkpoint_id
+    if partition_key is not None:
+        marker["partition_key"] = partition_key
     return {"_artifact_observation": marker}
 
 
@@ -322,7 +360,8 @@ def _rewrite_sizes(
     message: Message,
     observation: ArtifactObservation,
     reason: str,
-    checkpoint_id: str | None,
+    checkpoint_id: str | None = None,
+    partition_key: str | None = None,
 ) -> dict[str, int]:
     if not isinstance(message, ToolResultMessage):
         return {"raw_bytes": 0, "receipt_bytes": 0, "saved_bytes": 0}
@@ -333,6 +372,7 @@ def _rewrite_sizes(
                 observation,
                 reason,
                 checkpoint_id=checkpoint_id,
+                partition_key=partition_key,
             )
         }
     )

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel
@@ -11,6 +12,13 @@ from pydantic import BaseModel
 from app.vnext.llm.protocol import ModelTool
 
 ToolHandler = Callable[[BaseModel], Any | Awaitable[Any]]
+
+
+class ToolContextEffect(str, Enum):
+    """How a successful tool result affects model context lifetime."""
+
+    BOUNDED = "bounded"
+    MATERIALIZING = "materializing"
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,6 +33,7 @@ class ToolDefinition:
     parallel_safe: bool = False
     metadata: Mapping[str, Any] = field(default_factory=dict)
     externalize_result: bool = True
+    context_effect: ToolContextEffect = ToolContextEffect.BOUNDED
 
     def __post_init__(self) -> None:
         if not self.name:
@@ -48,4 +57,4 @@ class ToolDefinition:
         )
 
 
-__all__ = ["ToolDefinition", "ToolHandler"]
+__all__ = ["ToolContextEffect", "ToolDefinition", "ToolHandler"]

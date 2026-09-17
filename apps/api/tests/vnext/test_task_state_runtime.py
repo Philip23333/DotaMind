@@ -17,7 +17,7 @@ from app.vnext.llm.protocol import (
     ToolResultMessage,
     UserMessage,
 )
-from app.vnext.tools import ToolDefinition, ToolRegistry
+from app.vnext.tools import ToolContextEffect, ToolDefinition, ToolRegistry
 from app.vnext.tools.task import register_task_checkpoint_tool, register_task_plan_tool
 from tests.vnext.fakes import ScriptedTranscriptModelClient
 
@@ -55,6 +55,7 @@ def _read_registry(
             output_model=ArtifactReadResult,
             handler=read,
             externalize_result=False,
+            context_effect=ToolContextEffect.MATERIALIZING,
         )
     )
     register_task_plan_tool(registry, coordinator)
@@ -115,7 +116,9 @@ def _run(
     runtime = AgentRuntime(
         model,
         _read_registry(coordinator, value=read_value),
-        transcript_rewriter=ArtifactObservationTranscriptRewriter(),
+        transcript_rewriter=ArtifactObservationTranscriptRewriter(
+            closed_partition_lookup=coordinator.closed_partition_for_tool_call
+        ),
         task_state_coordinator=coordinator,
     )
     asyncio.run(runtime.run([UserMessage(content="collect evidence")], trace_collector=trace))
@@ -373,6 +376,15 @@ def test_flow_f_plan_serially_checkpoints_each_result_unit() -> None:
     assert len(snapshot["steps"][4]["transcript_rewrites"]) == 1
     assert snapshot["steps"][2]["transcript_rewrites"][0]["reason"] == "checkpointed"
     assert snapshot["steps"][4]["transcript_rewrites"][0]["reason"] == "checkpointed"
+    active_lease = snapshot["steps"][1]["active_evidence_lease"]
+    assert active_lease["task_key"] == "2025"
+    assert active_lease["observation_count"] == 1
+    assert active_lease["raw_bytes"] > 0
+    release = snapshot["steps"][2]["partition_evidence_release"]
+    assert release["task_key"] == "2025"
+    assert release["checkpointed_count"] == 1
+    assert release["partition_closed_count"] == 0
+    assert release["released_bytes"] > 0
     assert all(
         tool_result["result"]["tool_call_id"] in {"plan-call", "checkpoint-2025", "checkpoint-2026"}
         or tool_result["result"]["tool_call_id"] in {"read-2025", "read-2026"}

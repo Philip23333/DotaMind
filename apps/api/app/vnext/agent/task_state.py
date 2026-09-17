@@ -51,6 +51,25 @@ class TaskPlan:
     current_key: str | None
 
 
+@dataclass(frozen=True, slots=True)
+class EvidenceLease:
+    """Context lifetime ownership for one materialized artifact observation."""
+
+    tool_call_id: str
+    task_key: str
+    raw_bytes: int
+
+
+@dataclass(frozen=True, slots=True)
+class PartitionEvidenceRelease:
+    """Evidence released when one task partition is checkpointed successfully."""
+
+    task_key: str
+    checkpointed_count: int
+    partition_closed_count: int
+    released_bytes: int
+
+
 class TaskStateStore:
     """In-memory latest-value storage for one runtime invocation."""
 
@@ -78,13 +97,16 @@ class TaskStateCoordinator:
         self.plan: TaskPlan | None = None
         self._active_observations: dict[str, ArtifactObservation] = {}
         self._claimed_source_tool_call_ids: set[str] = set()
+        self._active_evidence_leases: dict[str, EvidenceLease] = {}
+        self._closed_evidence_leases: dict[str, EvidenceLease] = {}
+        self._last_partition_release: PartitionEvidenceRelease | None = None
 
     def refresh(self, messages: Sequence[Message]) -> None:
         observations = collect_active_artifact_observations(messages)
         self._active_observations = {
             observation.tool_call_id: observation for observation in observations
             if observation.tool_call_id not in self._claimed_source_tool_call_ids
-            }
+        }
 
     def create_plan(self, items: Sequence[Mapping[str, Any]]) -> TaskPlan:
         """Create the one serial plan allowed for this runtime invocation."""
@@ -143,12 +165,69 @@ class TaskStateCoordinator:
 
         return self.plan
 
+    def record_evidence_lease(self, tool_call_id: str, *, raw_bytes: int) -> None:
+        """Associate one successful materializing observation with the current item."""
+
+        current = self.current_item()
+        if current is None:
+            return
+        if not isinstance(tool_call_id, str) or not tool_call_id:
+            raise ValueError("evidence lease tool call ID must not be empty")
+        if raw_bytes < 0:
+            raise ValueError("evidence lease raw bytes must not be negative")
+        self._active_evidence_leases[tool_call_id] = EvidenceLease(
+            tool_call_id=tool_call_id,
+            task_key=current.key,
+            raw_bytes=raw_bytes,
+        )
+
+    def active_evidence_lease(self) -> dict[str, Any] | None:
+        """Return compact active lease accounting for trace telemetry."""
+
+        if not self._active_evidence_leases:
+            return None
+        grouped: dict[str, list[EvidenceLease]] = {}
+        for lease in self._active_evidence_leases.values():
+            grouped.setdefault(lease.task_key, []).append(lease)
+        if len(grouped) == 1:
+            task_key, leases = next(iter(grouped.items()))
+            return {
+                "task_key": task_key,
+                "observation_count": len(leases),
+                "raw_bytes": sum(lease.raw_bytes for lease in leases),
+            }
+        return {
+            "task_key": None,
+            "observation_count": len(self._active_evidence_leases),
+            "raw_bytes": sum(lease.raw_bytes for lease in self._active_evidence_leases.values()),
+            "partitions": [
+                {
+                    "task_key": task_key,
+                    "observation_count": len(leases),
+                    "raw_bytes": sum(lease.raw_bytes for lease in leases),
+                }
+                for task_key, leases in sorted(grouped.items())
+            ],
+        }
+
+    def closed_partition_for_tool_call(self, tool_call_id: str) -> str | None:
+        """Return the task partition whose lease has expired for one observation."""
+
+        lease = self._closed_evidence_leases.get(tool_call_id)
+        return lease.task_key if lease is not None else None
+
+    def consume_partition_release(self) -> PartitionEvidenceRelease | None:
+        release = self._last_partition_release
+        self._last_partition_release = None
+        return release
+
     def create_checkpoint(
         self,
         key: str,
         value: dict[str, Any],
         source_tool_call_ids: Sequence[str],
     ) -> TaskCheckpoint:
+        self._last_partition_release = None
         sources = tuple(source_tool_call_ids)
         self._validate_checkpoint(key, value, sources)
         next_plan = _advance_plan(self.plan) if self.plan is not None else None
@@ -162,6 +241,11 @@ class TaskStateCoordinator:
         self._claimed_source_tool_call_ids.update(sources)
         for source in sources:
             self._active_observations.pop(source, None)
+        if self.plan is not None and self.plan.current_key is not None:
+            self._last_partition_release = self._close_partition_leases(
+                self.plan.current_key,
+                sources,
+            )
         if next_plan is not None:
             self.plan = next_plan
         return checkpoint
@@ -202,8 +286,39 @@ class TaskStateCoordinator:
             "task_state": {
                 checkpoint.key: dict(checkpoint.value) for checkpoint in checkpoints
             },
-            "active_manifest": [_manifest_item(observation) for observation in observations],
+            "active_manifest": [
+                _manifest_item(
+                    observation,
+                    lease_key=(
+                        self._active_evidence_leases[observation.tool_call_id].task_key
+                        if observation.tool_call_id in self._active_evidence_leases
+                        else None
+                    ),
+                )
+                for observation in observations
+            ],
         }
+
+    def _close_partition_leases(
+        self,
+        task_key: str,
+        source_tool_call_ids: Sequence[str],
+    ) -> PartitionEvidenceRelease:
+        source_ids = set(source_tool_call_ids)
+        leases = [
+            lease
+            for lease in self._active_evidence_leases.values()
+            if lease.task_key == task_key
+        ]
+        for lease in leases:
+            self._active_evidence_leases.pop(lease.tool_call_id, None)
+            self._closed_evidence_leases[lease.tool_call_id] = lease
+        return PartitionEvidenceRelease(
+            task_key=task_key,
+            checkpointed_count=sum(lease.tool_call_id in source_ids for lease in leases),
+            partition_closed_count=sum(lease.tool_call_id not in source_ids for lease in leases),
+            released_bytes=sum(lease.raw_bytes for lease in leases),
+        )
 
     def _validate_checkpoint(
         self,
@@ -256,7 +371,11 @@ class TaskStateCoordinator:
             )
 
 
-def _manifest_item(observation: ArtifactObservation) -> dict[str, Any]:
+def _manifest_item(
+    observation: ArtifactObservation,
+    *,
+    lease_key: str | None,
+) -> dict[str, Any]:
     item: dict[str, Any] = {
         "tool_call_id": observation.tool_call_id,
         "ref": observation.ref,
@@ -266,6 +385,8 @@ def _manifest_item(observation: ArtifactObservation) -> dict[str, Any]:
         item["actual_start"] = observation.actual_start
     if observation.actual_end is not None:
         item["actual_end"] = observation.actual_end
+    if lease_key is not None:
+        item["lease_key"] = lease_key
     return item
 
 
@@ -316,6 +437,8 @@ def _json(value: Any) -> str:
 
 
 __all__ = [
+    "EvidenceLease",
+    "PartitionEvidenceRelease",
     "TaskCheckpoint",
     "TaskItem",
     "TaskItemStatus",

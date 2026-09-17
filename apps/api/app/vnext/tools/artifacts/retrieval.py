@@ -13,7 +13,7 @@ from app.vnext.artifacts import (
     ArtifactReadResult,
 )
 from app.vnext.domain.common.models import DomainModel
-from app.vnext.tools.definition import ToolDefinition
+from app.vnext.tools.definition import ToolContextEffect, ToolDefinition
 from app.vnext.tools.registry import ToolRegistry
 
 
@@ -146,6 +146,7 @@ def register_artifact_tools(
             handler=read,
             parallel_safe=True,
             externalize_result=False,
+            context_effect=ToolContextEffect.MATERIALIZING,
         )
     )
 

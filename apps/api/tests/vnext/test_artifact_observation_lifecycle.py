@@ -349,6 +349,47 @@ def test_checkpoint_receipt_preserves_locator_requested_range_and_is_rereadable(
     assert marker["re_readable"] is True
 
 
+def test_closed_partition_replaces_unclaimed_reads_and_keeps_newer_partition_raw() -> None:
+    messages = [
+        AssistantMessage(tool_calls=[_call("old"), _call("new")]),
+        _result("old", [1, 2]),
+        _result("new", [3, 4], offset=2),
+    ]
+    result = ArtifactObservationTranscriptRewriter(
+        closed_partition_lookup=lambda tool_call_id: "2025" if tool_call_id == "old" else None
+    ).rewrite(messages)
+
+    marker = result.messages[1].content["_artifact_observation"]  # type: ignore[index]
+    assert marker == {
+        "state": "receipt_only",
+        "reason": "partition_closed",
+        "re_readable": True,
+        "mode": "read",
+        "ref": "artifact:test",
+        "path": "rows",
+        "offset": 0,
+        "limit": 6,
+        "partition_key": "2025",
+    }
+    assert result.messages[2].content["value"] == [3, 4]  # type: ignore[index]
+    assert result.events[0].reason == "partition_closed"
+
+
+def test_closed_partition_has_precedence_over_duplicate_rewrite() -> None:
+    result = ArtifactObservationTranscriptRewriter(
+        closed_partition_lookup=lambda tool_call_id: "2025" if tool_call_id == "old" else None
+    ).rewrite(
+        [
+            AssistantMessage(tool_calls=[_call("old"), _call("new")]),
+            _result("old", [1, 2]),
+            _result("new", [1, 2]),
+        ]
+    )
+
+    assert result.messages[1].content["_artifact_observation"]["reason"] == "partition_closed"  # type: ignore[index]
+    assert result.messages[2].content["value"] == [1, 2]  # type: ignore[index]
+
+
 def test_rewrite_event_reports_positive_savings_for_large_raw_observation() -> None:
     result = _rewrite(
         (_call("old"), _result("old", [{"evidence": "x" * 2000}])),
