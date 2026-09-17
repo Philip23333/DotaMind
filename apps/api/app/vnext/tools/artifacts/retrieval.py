@@ -52,6 +52,16 @@ class ArtifactReadInput(DomainModel):
             "parent-list read over many sibling reads when several adjacent rows are required."
         ),
     )
+    task_key: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=128,
+        description=(
+            "Optional task-plan item key that this materialized evidence is intended "
+            "to support. When omitted during an active task plan, the current task "
+            "item is used."
+        ),
+    )
 
     @model_validator(mode="after")
     def _validate_mode_arguments(self) -> ArtifactReadInput:

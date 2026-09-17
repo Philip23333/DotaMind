@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -10,6 +11,7 @@ from app.vnext.artifacts import (
     MAX_MODEL_TOOL_OBSERVATION_BYTES,
     ArtifactGrepper,
     ArtifactReader,
+    ArtifactReadResult,
     SessionArtifactStore,
     serialized_size,
 )
@@ -58,6 +60,8 @@ def test_artifact_read_schema_explains_granularity_choices() -> None:
     assert "max_bytes" not in properties
     assert "max_tokens" not in properties
     assert "budget" not in properties
+    assert "task_key" in properties
+    assert "intended to support" in properties["task_key"]["description"]
 
 
 def test_outline_and_explicit_read_modes_are_unambiguous() -> None:
@@ -81,6 +85,38 @@ def test_outline_and_explicit_read_modes_are_unambiguous() -> None:
     assert nested.content["value"] == [{"name": "Game 0"}]
     assert nested.content["offset"] == 0
     assert nested.content["limit"] == 50
+
+
+def test_task_key_is_consumed_by_artifact_tool_without_polluting_reader_api() -> None:
+    reader = AsyncMock()
+    reader.read.return_value = ArtifactReadResult(
+        ref="artifact:test",
+        path="rows",
+        value=[{"id": 1}],
+        offset=0,
+        limit=1,
+        total=1,
+    )
+    registry = ToolRegistry()
+    register_artifact_tools(registry, reader, ArtifactGrepper(SessionArtifactStore()))
+
+    result = asyncio.run(
+        registry.execute(
+            _call(
+                {
+                    "ref": "artifact:test",
+                    "mode": "read",
+                    "path": "rows",
+                    "offset": 0,
+                    "limit": 3,
+                    "task_key": "B",
+                }
+            )
+        )
+    )
+
+    assert result.status == "ok"
+    reader.read.assert_awaited_once_with("artifact:test", "rows", offset=0, limit=3)
 
 
 def test_read_list_uses_default_and_explicit_slices() -> None:

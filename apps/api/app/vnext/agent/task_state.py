@@ -53,7 +53,7 @@ class TaskPlan:
 
 @dataclass(frozen=True, slots=True)
 class EvidenceLease:
-    """Context lifetime ownership for one materialized artifact observation."""
+    """Context-lifetime ownership of one materialized observation by a task-plan item."""
 
     tool_call_id: str
     task_key: str
@@ -165,19 +165,34 @@ class TaskStateCoordinator:
 
         return self.plan
 
-    def record_evidence_lease(self, tool_call_id: str, *, raw_bytes: int) -> None:
-        """Associate one successful materializing observation with the current item."""
+    def record_evidence_lease(
+        self,
+        tool_call_id: str,
+        *,
+        task_key: str | None,
+        raw_bytes: int,
+    ) -> None:
+        """Associate one successful materializing observation with its intended item."""
 
+        plan = self.plan
         current = self.current_item()
-        if current is None:
+        if plan is None or current is None:
             return
         if not isinstance(tool_call_id, str) or not tool_call_id:
             raise ValueError("evidence lease tool call ID must not be empty")
         if raw_bytes < 0:
             raise ValueError("evidence lease raw bytes must not be negative")
+        owner_key = current.key if task_key is None else task_key
+        if not isinstance(owner_key, str) or not owner_key:
+            raise ValueError("evidence lease task key must be a non-empty string")
+        owner = next((item for item in plan.items if item.key == owner_key), None)
+        if owner is None:
+            raise ValueError("evidence lease task key is not in the active task plan: " + owner_key)
+        if owner.status is TaskItemStatus.COMPLETED:
+            raise ValueError("evidence lease task key is already completed: " + owner_key)
         self._active_evidence_leases[tool_call_id] = EvidenceLease(
             tool_call_id=tool_call_id,
-            task_key=current.key,
+            task_key=owner_key,
             raw_bytes=raw_bytes,
         )
 

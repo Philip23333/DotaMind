@@ -231,7 +231,7 @@ def test_evidence_lease_is_scoped_to_current_partition_and_released_on_checkpoin
     )
     messages = _messages((_read_call("call-1"), _read_result()))
     coordinator.refresh(messages)
-    coordinator.record_evidence_lease("call-1", raw_bytes=1234)
+    coordinator.record_evidence_lease("call-1", task_key=None, raw_bytes=1234)
 
     assert coordinator.active_evidence_lease() == {
         "task_key": "2025",
@@ -260,7 +260,7 @@ def test_failed_checkpoint_keeps_active_evidence_lease() -> None:
         ]
     )
     coordinator.refresh(_messages((_read_call("call-1"), _read_result())))
-    coordinator.record_evidence_lease("call-1", raw_bytes=321)
+    coordinator.record_evidence_lease("call-1", task_key=None, raw_bytes=321)
 
     with pytest.raises(ValueError, match="active raw"):
         coordinator.create_checkpoint("2025", {"fact": "saved"}, ["missing"])
@@ -271,3 +271,72 @@ def test_failed_checkpoint_keeps_active_evidence_lease() -> None:
         "raw_bytes": 321,
     }
     assert coordinator.consume_partition_release() is None
+
+
+def test_explicit_future_task_key_owns_lease_instead_of_current_item() -> None:
+    coordinator = TaskStateCoordinator()
+    coordinator.create_plan(
+        [
+            {"key": "A", "objective": "retrieve A"},
+            {"key": "B", "objective": "retrieve B"},
+        ]
+    )
+    coordinator.record_evidence_lease("future", task_key="B", raw_bytes=456)
+
+    assert coordinator.active_evidence_lease() == {
+        "task_key": "B",
+        "observation_count": 1,
+        "raw_bytes": 456,
+    }
+
+
+def test_unknown_and_completed_task_keys_are_rejected_without_creating_leases() -> None:
+    coordinator = TaskStateCoordinator()
+    coordinator.create_plan(
+        [
+            {"key": "A", "objective": "retrieve A"},
+            {"key": "B", "objective": "retrieve B"},
+        ]
+    )
+
+    with pytest.raises(ValueError, match="not in the active task plan"):
+        coordinator.record_evidence_lease("unknown", task_key="missing", raw_bytes=1)
+    assert coordinator.active_evidence_lease() is None
+
+    coordinator.refresh(_messages((_read_call("raw-a"), _read_result("raw-a"))))
+    coordinator.create_checkpoint("A", {"fact": "saved"}, ["raw-a"])
+
+    with pytest.raises(ValueError, match="already completed"):
+        coordinator.record_evidence_lease("completed", task_key="A", raw_bytes=1)
+    assert coordinator.active_evidence_lease() is None
+
+
+def test_cross_partition_leases_survive_an_earlier_checkpoint() -> None:
+    coordinator = TaskStateCoordinator()
+    coordinator.create_plan(
+        [
+            {"key": "A", "objective": "retrieve A"},
+            {"key": "B", "objective": "retrieve B"},
+        ]
+    )
+    messages = _messages(
+        (_read_call("raw-a"), _read_result("raw-a")),
+        (_read_call("raw-b"), _read_result("raw-b", value=[{"fact": "B"}])),
+    )
+    coordinator.refresh(messages)
+    coordinator.record_evidence_lease("raw-a", task_key="A", raw_bytes=100)
+    coordinator.record_evidence_lease("raw-b", task_key="B", raw_bytes=200)
+
+    coordinator.create_checkpoint("A", {"fact": "A"}, ["raw-a"])
+    assert coordinator.closed_partition_for_tool_call("raw-a") == "A"
+    assert coordinator.closed_partition_for_tool_call("raw-b") is None
+    assert coordinator.active_evidence_lease() == {
+        "task_key": "B",
+        "observation_count": 1,
+        "raw_bytes": 200,
+    }
+    assert coordinator.plan_snapshot().current_key == "B"  # type: ignore[union-attr]
+
+    coordinator.refresh(messages)
+    coordinator.create_checkpoint("B", {"fact": "B"}, ["raw-b"])
+    assert coordinator.closed_partition_for_tool_call("raw-b") == "B"

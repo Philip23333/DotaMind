@@ -569,8 +569,10 @@ class AgentRuntime:
                         and definition.context_effect is ToolContextEffect.MATERIALIZING
                         and self.task_state_coordinator is not None
                     ):
+                        task_key = item.arguments.get("task_key")
                         self.task_state_coordinator.record_evidence_lease(
                             item.id,
+                            task_key=task_key,
                             raw_bytes=_serialized_size(result.model_dump(mode="json")),
                         )
                         if trace_collector is not None:

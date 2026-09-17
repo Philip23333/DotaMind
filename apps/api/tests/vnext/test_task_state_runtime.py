@@ -63,11 +63,19 @@ def _read_registry(
     return registry
 
 
-def _read_call(call_id: str = "call-1", path: str = "rows") -> ToolCall:
+def _read_call(
+    call_id: str = "call-1",
+    path: str = "rows",
+    *,
+    task_key: str | None = None,
+) -> ToolCall:
+    arguments: dict[str, Any] = {"ref": "artifact:test", "mode": "read", "path": path}
+    if task_key is not None:
+        arguments["task_key"] = task_key
     return ToolCall(
         id=call_id,
         name="artifact.read",
-        arguments={"ref": "artifact:test", "mode": "read", "path": path},
+        arguments=arguments,
     )
 
 
@@ -428,6 +436,55 @@ def test_flow_g_wrong_plan_key_does_not_advance_or_claim_raw() -> None:
         if isinstance(message, ToolResultMessage) and message.tool_call_id == "read-2025"
     )
     assert result.content["value"] == [{"fact": "A"}]  # type: ignore[index]
+
+
+def test_flow_i_future_partition_leases_survive_earlier_checkpoint() -> None:
+    coordinator = TaskStateCoordinator()
+
+    def first(_: ModelRequest) -> ModelResponse:
+        return _tool_response(_plan_call())
+
+    def second(_: ModelRequest) -> ModelResponse:
+        return _tool_response(
+            _read_call("read-a", "A", task_key="2025"),
+            _read_call("read-b", "B", task_key="2026"),
+        )
+
+    def third(_: ModelRequest) -> ModelResponse:
+        return _tool_response(
+            _checkpoint_call("checkpoint-a", key="2025", source=["read-a"])
+        )
+
+    def fourth(request: ModelRequest) -> ModelResponse:
+        system = _system(request)
+        assert "CURRENT: 2026" in system
+        assert '"tool_call_id":"read-b"' in system
+        assert '"lease_key":"2026"' in system
+        assert any(
+            isinstance(message, ToolResultMessage)
+            and message.tool_call_id == "read-a"
+            and message.content["_artifact_observation"]["reason"] == "checkpointed"  # type: ignore[index]
+            for message in request.messages
+        )
+        return _tool_response(
+            _checkpoint_call("checkpoint-b", key="2026", source=["read-b"])
+        )
+
+    model = ScriptedTranscriptModelClient(
+        [
+            first,
+            second,
+            third,
+            fourth,
+            lambda _: ModelResponse(message=FinalMessage(content="done")),
+        ]
+    )
+    _run(model, coordinator)
+
+    plan = coordinator.plan_snapshot()
+    assert plan is not None and plan.current_key is None
+    assert coordinator.closed_partition_for_tool_call("read-a") == "2025"
+    assert coordinator.closed_partition_for_tool_call("read-b") == "2026"
 
 
 def test_flow_h_invalid_plan_source_does_not_advance_or_claim_raw() -> None:
