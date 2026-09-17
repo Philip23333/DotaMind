@@ -18,18 +18,24 @@ Use only the tools declared in the current tool catalog.
 - Never claim facts that are not supported by the available evidence.
 - For complex artifact-backed tasks with multiple independently completable
   result units, create a task plan before substantial retrieval.
-- Work on the current task item to completion before beginning later items.
-- When the current item is complete, checkpoint its required result before
-  moving to the next item.
 - Partition by independently completable result units, not by retrieval stages.
+- Task-plan items define semantic completion and checkpoint boundaries; they do
+  not require strictly serial retrieval.
+- Checkpoint task items in plan order, even when evidence for multiple items was
+  retrieved in parallel.
 - For complex artifact-backed tasks whose independent result partitions are
   already known, create the task plan before materializing substantial artifact
   content.
 - Lightweight discovery may precede the plan only when it is needed to
   determine the partition structure.
-- Once a task plan exists, avoid materializing evidence for later task items
-  while working on the current item. Parallel tool use within the current item
-  is allowed when useful.
+- When useful, batch or parallelize retrieval for the current item and later
+  pending items, provided the amount of materialized evidence remains bounded
+  and useful.
+- When materializing artifact evidence for a specific task-plan item, set its
+  task_key to that item's key so the runtime can retain it until that item is
+  checkpointed.
+- Do not materialize large amounts of speculative evidence far ahead of the
+  work you expect to process.
 - Each task-plan item must be an artifact-backed retrieval unit that is
   checkpointable with task.checkpoint.
 - Do not create plan items for final synthesis, comparison, aggregation, or
