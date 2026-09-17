@@ -352,15 +352,7 @@ def test_flow_f_plan_serially_checkpoints_each_result_unit() -> None:
             )
         )
 
-    def sixth(request: ModelRequest) -> ModelResponse:
-        system = _system(request)
-        assert "CURRENT: None" in system
-        assert "2025 [completed]" in system
-        assert "2026 [completed]" in system
-        assert '"2026":{"year":2026}' in system
-        return ModelResponse(message=FinalMessage(content="complete"))
-
-    model = ScriptedTranscriptModelClient([first, second, third, fourth, fifth, sixth])
+    model = ScriptedTranscriptModelClient([first, second, third, fourth, fifth])
     _run(model, coordinator, trace=trace)
 
     plan = coordinator.plan_snapshot()

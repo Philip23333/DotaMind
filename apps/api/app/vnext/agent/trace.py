@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from time import monotonic
 from typing import Any
 
+from app.vnext.agent.answer_stage import AnswerContext, ExecutionOutcome
 from app.vnext.agent.context_accounting import build_context_accounting
 from app.vnext.agent.runtime_context import RuntimeContext
 from app.vnext.agent.transcript_rewrite import TranscriptRewriteEvent
@@ -105,6 +106,23 @@ class AgentTraceCollector:
             "error_code": error_code,
             "error_message": error_message,
             "duration_seconds": max(0.0, monotonic() - self._started),
+        }
+
+    def execution_outcome(self, outcome: ExecutionOutcome, *, plan_complete: bool) -> None:
+        self._trace["execution_outcome"] = {
+            "reason": outcome.reason.value,
+            "steps": outcome.steps,
+            "plan_complete": plan_complete,
+        }
+
+    def answer_stage(self, request: ModelRequest, context: AnswerContext) -> None:
+        accounting = build_context_accounting(request).to_dict()
+        self._trace["answer_stage"] = {
+            "tool_count": len(request.tools),
+            "task_state_count": len(context.task_state),
+            "active_raw_count": len(context.active_artifact_evidence),
+            "tool_evidence_count": len(context.tool_evidence),
+            "context_bytes": accounting["effective_request"]["serialized_bytes"],
         }
 
     def snapshot(self) -> dict[str, Any]:

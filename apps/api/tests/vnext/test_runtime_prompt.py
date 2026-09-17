@@ -11,7 +11,6 @@ def test_render_runtime_prompt_for_exploration() -> None:
     context = RuntimeContext.from_state(
         current_step=5,
         max_steps=20,
-        finalizing=False,
         tools_available=True,
     )
 
@@ -30,7 +29,6 @@ def test_render_runtime_prompt_for_converging() -> None:
     context = RuntimeContext.from_state(
         current_step=16,
         max_steps=20,
-        finalizing=False,
         tools_available=True,
     )
 
@@ -42,36 +40,10 @@ def test_render_runtime_prompt_for_converging() -> None:
     assert "Use additional tools only when they materially improve the answer." in prompt
 
 
-def test_render_runtime_prompt_for_finalization() -> None:
-    context = RuntimeContext.from_state(
-        current_step=20,
-        max_steps=20,
-        finalizing=True,
-        tools_available=True,
-    )
-
-    prompt = render_runtime_prompt(context)
-
-    assert "Execution phase:\nfinalization" in prompt
-    assert "Remaining turns:\n0" in prompt
-    assert "Tools available:\nno" in prompt
-    assert "Further retrieval is unavailable." in prompt
-    assert (
-        "Produce the final user-facing answer now using the evidence already available."
-        in prompt
-    )
-    assert "Preserve the user's requested scope when feasible." in prompt
-    assert "If the available evidence is incomplete" in prompt
-    assert "Do not infer or fabricate missing facts." in prompt
-    assert "If exhaustive presentation would prevent completing the response" in prompt
-    assert "Tool-use time budget is exhausted." not in prompt
-
-
-def test_converging_prompt_is_not_replaced_by_finalization_guidance() -> None:
+def test_converging_prompt_has_no_finalization_guidance() -> None:
     context = RuntimeContext.from_state(
         current_step=16,
         max_steps=20,
-        finalizing=False,
         tools_available=True,
     )
 

@@ -13,16 +13,23 @@ class ScriptedModelClient:
     def __init__(self, responses: Sequence[ModelResponse | Exception | Awaitable[Any]]) -> None:
         self.responses = list(responses)
         self.requests: list[ModelRequest] = []
+        self._last_final_content: str | None = None
 
     async def complete(self, request: ModelRequest) -> ModelResponse:
         self.requests.append(request)
         if not self.responses:
+            if not request.tools:
+                return ModelResponse.from_final(self._last_final_content or "answer")
             raise AssertionError("scripted model ran out of responses")
         response = self.responses.pop(0)
         if isinstance(response, Exception):
             raise response
         if inspect.isawaitable(response):
             response = await response
+        from app.vnext.llm.protocol import FinalMessage
+
+        if isinstance(response, ModelResponse) and isinstance(response.message, FinalMessage):
+            self._last_final_content = response.message.content
         return response
 
 
@@ -36,13 +43,22 @@ class ScriptedTranscriptModelClient:
         self.responders = list(responders)
         self.requests: list[ModelRequest] = []
         self.responses: list[ModelResponse] = []
+        self._last_final_content: str | None = None
 
     async def complete(self, request: ModelRequest) -> ModelResponse:
         self.requests.append(request)
         if not self.responders:
+            if not request.tools:
+                response = ModelResponse.from_final(self._last_final_content or "answer")
+                self.responses.append(response)
+                return response
             raise AssertionError("scripted transcript model ran out of responses")
         response = self.responders.pop(0)(request)
         self.responses.append(response)
+        from app.vnext.llm.protocol import FinalMessage
+
+        if isinstance(response.message, FinalMessage):
+            self._last_final_content = response.message.content
         return response
 
 
@@ -57,6 +73,7 @@ class ScriptedStreamingModelClient:
     ) -> None:
         self.streams = [list(stream) for stream in streams]
         self.requests: list[ModelRequest] = []
+        self._last_final_content: str | None = None
 
     def stream(
         self,
@@ -64,8 +81,12 @@ class ScriptedStreamingModelClient:
     ) -> AsyncIterator[ModelTextDelta | ModelResponse]:
         self.requests.append(request)
         if not self.streams:
-            raise AssertionError("scripted streaming model ran out of streams")
-        items = self.streams.pop(0)
+            if not request.tools:
+                items = [ModelResponse.from_final(self._last_final_content or "answer")]
+            else:
+                raise AssertionError("scripted streaming model ran out of streams")
+        else:
+            items = self.streams.pop(0)
 
         async def emit() -> AsyncIterator[ModelTextDelta | ModelResponse]:
             for item in items:
@@ -75,6 +96,11 @@ class ScriptedStreamingModelClient:
                     item = await item
                 if not isinstance(item, (ModelTextDelta, ModelResponse)):
                     raise AssertionError("scripted stream item has an invalid type")
+                if isinstance(item, ModelResponse):
+                    from app.vnext.llm.protocol import FinalMessage
+
+                    if isinstance(item.message, FinalMessage):
+                        self._last_final_content = item.message.content
                 yield item
 
         return emit()

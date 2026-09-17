@@ -13,7 +13,6 @@ TIME_PRESSURE_CRITICAL_THRESHOLD = 0.20
 class RuntimePhase(str, Enum):
     EXPLORATION = "exploration"
     CONVERGING = "converging"
-    FINALIZATION = "finalization"
 
 
 class TimePressure(str, Enum):
@@ -44,8 +43,7 @@ class RuntimeContext:
         *,
         current_step: int,
         max_steps: int,
-        finalizing: bool,
-        tools_available: bool,
+        tools_available: bool = True,
         time_pressure: TimePressure = TimePressure.HEALTHY,
         context_pressure: ContextPressure = ContextPressure.NORMAL,
     ) -> RuntimeContext:
@@ -53,11 +51,11 @@ class RuntimeContext:
 
         remaining_turns = max_steps - current_step
         return cls(
-            phase=_phase(finalizing, remaining_turns, time_pressure),
+            phase=_phase(remaining_turns, time_pressure),
             remaining_turns=remaining_turns,
             time_pressure=time_pressure,
             context_pressure=context_pressure,
-            tools_available=False if finalizing else tools_available,
+            tools_available=tools_available,
         )
 
 
@@ -80,12 +78,9 @@ def classify_time_pressure(
 
 
 def _phase(
-    finalizing: bool,
     remaining_turns: int | None,
     time_pressure: TimePressure,
 ) -> RuntimePhase:
-    if finalizing:
-        return RuntimePhase.FINALIZATION
     if remaining_turns is not None and remaining_turns <= CONVERGING_THRESHOLD:
         return RuntimePhase.CONVERGING
     if time_pressure in {TimePressure.LIMITED, TimePressure.CRITICAL}:

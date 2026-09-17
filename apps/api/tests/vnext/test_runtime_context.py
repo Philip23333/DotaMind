@@ -42,7 +42,6 @@ def test_runtime_context_is_exploring_with_remaining_budget() -> None:
     context = RuntimeContext.from_state(
         current_step=5,
         max_steps=20,
-        finalizing=False,
         tools_available=True,
     )
 
@@ -57,7 +56,6 @@ def test_runtime_context_is_converging_at_threshold() -> None:
     context = RuntimeContext.from_state(
         current_step=16,
         max_steps=20,
-        finalizing=False,
         tools_available=True,
     )
 
@@ -69,7 +67,6 @@ def test_limited_time_pressure_converges_before_turn_threshold() -> None:
     context = RuntimeContext.from_state(
         current_step=5,
         max_steps=20,
-        finalizing=False,
         tools_available=True,
         time_pressure=TimePressure.LIMITED,
     )
@@ -83,7 +80,6 @@ def test_critical_time_pressure_converges_before_turn_threshold() -> None:
     context = RuntimeContext.from_state(
         current_step=5,
         max_steps=20,
-        finalizing=False,
         tools_available=True,
         time_pressure=TimePressure.CRITICAL,
     )
@@ -97,7 +93,6 @@ def test_healthy_time_pressure_stays_exploratory_before_turn_threshold() -> None
     context = RuntimeContext.from_state(
         current_step=5,
         max_steps=20,
-        finalizing=False,
         tools_available=True,
         time_pressure=TimePressure.HEALTHY,
     )
@@ -106,26 +101,13 @@ def test_healthy_time_pressure_stays_exploratory_before_turn_threshold() -> None
     assert context.phase is RuntimePhase.EXPLORATION
 
 
-def test_runtime_context_forces_tools_off_during_finalization() -> None:
+def test_runtime_context_keeps_tools_available_at_step_limit() -> None:
     context = RuntimeContext.from_state(
-        current_step=5,
+        current_step=20,
         max_steps=20,
-        finalizing=True,
         tools_available=True,
     )
 
-    assert context.phase is RuntimePhase.FINALIZATION
-    assert context.tools_available is False
-
-
-def test_finalization_has_priority_over_time_pressure() -> None:
-    context = RuntimeContext.from_state(
-        current_step=5,
-        max_steps=20,
-        finalizing=True,
-        tools_available=True,
-        time_pressure=TimePressure.HEALTHY,
-    )
-
-    assert context.phase is RuntimePhase.FINALIZATION
-    assert context.time_pressure is TimePressure.HEALTHY
+    assert context.phase is RuntimePhase.CONVERGING
+    assert context.remaining_turns == 0
+    assert context.tools_available is True

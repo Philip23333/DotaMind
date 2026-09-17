@@ -15,10 +15,8 @@ from app.vnext.agent.runtime_context import (
 from app.vnext.agent.trace import AgentTraceCollector, runtime_context_to_dict
 from app.vnext.llm.protocol import (
     AssistantMessage,
-    FinalMessage,
     ModelRequest,
     ModelResponse,
-    SystemMessage,
     ToolCall,
     UserMessage,
 )
@@ -34,14 +32,8 @@ class EchoOutput(BaseModel):
     value: int
 
 
-def _call(call_id: str = "call-1", value: int = 1) -> ToolCall:
-    return ToolCall(id=call_id, name="echo", arguments={"value": value})
-
-
-def _tool_turn(*calls: ToolCall) -> ModelResponse:
-    return ModelResponse(
-        message=AssistantMessage(content=None, tool_calls=list(calls))
-    )
+def _call() -> ToolCall:
+    return ToolCall(id="call-1", name="echo", arguments={"value": 1})
 
 
 def _registry() -> ToolRegistry:
@@ -58,97 +50,86 @@ def _registry() -> ToolRegistry:
     return registry
 
 
-def test_trace_records_the_first_runtime_context_snapshot() -> None:
-    model = ScriptedModelClient([ModelResponse(message=FinalMessage(content="done"))])
+def _run(runtime: AgentRuntime, collector: AgentTraceCollector) -> None:
+    asyncio.run(runtime.run([UserMessage(content="hello")], trace_collector=collector))
+
+
+def test_trace_records_execution_context_and_answer_stage_metrics() -> None:
+    model = ScriptedModelClient(
+        [ModelResponse.from_final("execution"), ModelResponse.from_final("answer")]
+    )
     collector = AgentTraceCollector()
-    runtime = AgentRuntime(
-        model,
-        _registry(),
-        limits=AgentLimits(max_steps=20, deadline_seconds=2),
+    _run(
+        AgentRuntime(
+            model,
+            _registry(),
+            limits=AgentLimits(max_steps=20, deadline_seconds=2),
+        ),
+        collector,
     )
 
-    _run_with_trace(runtime, collector)
-
-    step = collector.snapshot()["steps"][0]
-    assert step["runtime_context"] == {
+    snapshot = collector.snapshot()
+    assert snapshot["steps"][0]["runtime_context"] == {
         "phase": "exploration",
         "remaining_turns": 19,
         "time_pressure": "healthy",
         "context_pressure": "normal",
         "tools_available": True,
     }
+    assert snapshot["execution_outcome"] == {
+        "reason": "model_done",
+        "steps": 1,
+        "plan_complete": False,
+    }
+    assert snapshot["answer_stage"]["tool_count"] == 0
+    assert snapshot["answer_stage"]["context_bytes"] > 0
 
 
-def test_trace_runtime_context_updates_for_each_model_invocation() -> None:
+def test_trace_context_updates_until_max_steps_without_finalization_phase() -> None:
     model = ScriptedModelClient(
         [
-            *(_tool_turn(_call(str(index), index)) for index in range(1, 6)),
-            ModelResponse(message=FinalMessage(content="done")),
+            *(
+                ModelResponse(
+                    message=AssistantMessage(
+                        content=None,
+                        tool_calls=[
+                            ToolCall(
+                                id=f"call-{index}",
+                                name="echo",
+                                arguments={"value": index},
+                            )
+                        ],
+                    )
+                )
+                for index in range(1, 4)
+            ),
+            ModelResponse.from_final("answer"),
         ]
     )
     collector = AgentTraceCollector()
-    runtime = AgentRuntime(
-        model,
-        _registry(),
-        limits=AgentLimits(max_steps=6, deadline_seconds=2),
+    _run(
+        AgentRuntime(
+            model,
+            _registry(),
+            limits=AgentLimits(max_steps=3, deadline_seconds=2),
+        ),
+        collector,
     )
 
-    _run_with_trace(runtime, collector)
-
-    steps = collector.snapshot()["steps"]
-    assert [step["runtime_context"]["remaining_turns"] for step in steps] == [
-        5,
-        4,
-        3,
-        2,
-        1,
-        0,
+    steps = [
+        step for step in collector.snapshot()["steps"] if step["runtime_context"] is not None
     ]
-    assert steps[-1]["runtime_context"]["phase"] == "finalization"
-    assert steps[-1]["runtime_context"]["tools_available"] is False
+    assert [step["runtime_context"]["remaining_turns"] for step in steps] == [2, 1, 0]
+    assert all(step["runtime_context"]["tools_available"] for step in steps)
+    assert collector.snapshot()["execution_outcome"]["reason"] == "max_steps"
 
 
-def test_trace_runtime_context_matches_the_prompt_snapshot() -> None:
-    model = ScriptedModelClient(
-        [_tool_turn(_call()), ModelResponse(message=FinalMessage(content="done"))]
-    )
+def test_trace_keeps_legacy_model_request_calls_compatible() -> None:
     collector = AgentTraceCollector()
-    runtime = AgentRuntime(
-        model,
-        _registry(),
-        limits=AgentLimits(max_steps=5, deadline_seconds=2),
-    )
 
-    _run_with_trace(runtime, collector)
+    collector.model_request(ModelRequest(messages=[UserMessage(content="hello")], step=1))
 
-    prompt = next(
-        message for message in model.requests[0].messages if isinstance(message, SystemMessage)
-    )
-    trace_context = collector.snapshot()["steps"][0]["runtime_context"]
-    assert "Execution phase:\nconverging" in prompt.content
-    assert "Remaining turns:\n4" in prompt.content
-    assert trace_context["phase"] == "converging"
-    assert trace_context["remaining_turns"] == 4
-
-
-def test_trace_stores_structured_context_without_runtime_prompt_text() -> None:
-    model = ScriptedModelClient([ModelResponse(message=FinalMessage(content="done"))])
-    collector = AgentTraceCollector()
-    runtime = AgentRuntime(
-        model,
-        _registry(),
-        limits=AgentLimits(max_steps=20, deadline_seconds=2),
-    )
-
-    _run_with_trace(runtime, collector)
-
-    step = collector.snapshot()["steps"][0]
-    assert "runtime_prompt" not in step
-    assert "Runtime state:" not in str(step["model_request"])
-
-
-def _run_with_trace(runtime: AgentRuntime, collector: AgentTraceCollector) -> None:
-    asyncio.run(runtime.run([UserMessage(content="hello")], trace_collector=collector))
+    assert collector.snapshot()["steps"][0]["runtime_context"] is None
 
 
 def test_trace_context_conversion_accepts_dataclass_values() -> None:
@@ -167,13 +148,3 @@ def test_trace_context_conversion_accepts_dataclass_values() -> None:
         "context_pressure": "normal",
         "tools_available": True,
     }
-
-
-def test_trace_keeps_legacy_model_request_calls_compatible() -> None:
-    collector = AgentTraceCollector()
-
-    collector.model_request(
-        ModelRequest(messages=[UserMessage(content="hello")], step=1)
-    )
-
-    assert collector.snapshot()["steps"][0]["runtime_context"] is None

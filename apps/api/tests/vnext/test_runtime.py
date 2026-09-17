@@ -1,29 +1,21 @@
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
 
 import pytest
 from pydantic import BaseModel, ConfigDict
 
-import app.vnext.agent.runtime as runtime_module
-from app.vnext.agent.errors import (
-    AgentCancelledError,
-    AgentDeadlineExceeded,
-    ModelProtocolError,
-)
+from app.vnext.agent.errors import AgentCancelledError, ModelProtocolError
 from app.vnext.agent.events import AgentCompleted, TextDelta
 from app.vnext.agent.limits import AgentLimits
 from app.vnext.agent.runtime import AgentRuntime, CancellationToken
 from app.vnext.agent.trace import AgentTraceCollector
 from app.vnext.llm.protocol import (
     AssistantMessage,
-    FinalMessage,
     ModelResponse,
     ModelTextDelta,
     SystemMessage,
     ToolCall,
-    ToolResultMessage,
     UserMessage,
 )
 from app.vnext.tools import ToolDefinition, ToolRegistry
@@ -40,16 +32,11 @@ class EchoOutput(BaseModel):
     value: int
 
 
-def _call(call_id: str = "call-1", value: int = 1, name: str = "echo") -> ToolCall:
-    return ToolCall(id=call_id, name=name, arguments={"value": value})
+def _call(call_id: str = "call-1", value: int = 1) -> ToolCall:
+    return ToolCall(id=call_id, name="echo", arguments={"value": value})
 
 
-def _registry(
-    handler=None,
-    *,
-    parallel_safe: bool = False,
-    timeout: float | None = None,
-) -> ToolRegistry:
+def _registry(handler=None, *, parallel_safe: bool = False) -> ToolRegistry:
     registry = ToolRegistry()
     registry.register(
         ToolDefinition(
@@ -59,36 +46,143 @@ def _registry(
             output_model=EchoOutput,
             handler=handler or (lambda args: EchoOutput(value=args.value)),
             parallel_safe=parallel_safe,
-            timeout=timeout,
         )
     )
     return registry
 
 
 def _tool_turn(*calls: ToolCall) -> ModelResponse:
-    return ModelResponse(
-        message=AssistantMessage(content=None, tool_calls=list(calls))
-    )
+    return ModelResponse(message=AssistantMessage(content=None, tool_calls=list(calls)))
 
 
-def _run(runtime: AgentRuntime, model: ScriptedModelClient, **kwargs):
+def _run(runtime: AgentRuntime, **kwargs):
     return asyncio.run(runtime.run([UserMessage(content="hello")], **kwargs))
 
 
-def test_direct_final_answer_and_zero_tool_call_assistant_are_final() -> None:
-    for response in (
-        ModelResponse(message=FinalMessage(content="direct")),
-        ModelResponse(message=AssistantMessage(content="text-only")),
-    ):
-        model = ScriptedModelClient([response])
-        runtime = AgentRuntime(model, ToolRegistry(), limits=AgentLimits(deadline_seconds=2))
-        result = _run(runtime, model)
-        assert result.content in {"direct", "text-only"}
-        assert len(model.requests) == 1
+def test_execution_final_is_discarded_and_answer_stage_is_user_visible() -> None:
+    model = ScriptedModelClient(
+        [ModelResponse.from_final("execution draft"), ModelResponse.from_final("answer")]
+    )
+    runtime = AgentRuntime(model, ToolRegistry(), limits=AgentLimits(deadline_seconds=2))
+
+    result = _run(runtime)
+
+    assert result.content == "answer"
+    assert len(model.requests) == 2
+    assert model.requests[1].tools == []
+    assert model.requests[1].messages[0].content.startswith("Execution has ended.")
 
 
-def test_runtime_includes_configured_system_instruction_in_each_model_request() -> None:
-    model = ScriptedModelClient([ModelResponse(message=FinalMessage(content="direct"))])
+def test_tool_execution_is_followed_by_tool_free_answer_request() -> None:
+    model = ScriptedModelClient(
+        [
+            _tool_turn(_call()),
+            ModelResponse.from_final("execution done"),
+            ModelResponse.from_final("answer"),
+        ]
+    )
+    runtime = AgentRuntime(model, _registry(), limits=AgentLimits(deadline_seconds=2))
+
+    assert _run(runtime).content == "answer"
+    assert len(model.requests) == 3
+    assert model.requests[1].messages[-1].tool_call_id == "call-1"  # type: ignore[union-attr]
+    assert model.requests[2].tools == []
+    assert "Other verified tool evidence" in model.requests[2].messages[-1].content
+
+
+def test_runtime_always_keeps_tools_enabled_on_last_execution_turn() -> None:
+    model = ScriptedModelClient([_tool_turn(_call()), ModelResponse.from_final("answer")])
+    runtime = AgentRuntime(
+        model,
+        _registry(),
+        limits=AgentLimits(max_steps=1, deadline_seconds=2),
+    )
+
+    assert _run(runtime).content == "answer"
+    assert model.requests[0].tools
+    assert len(model.requests) == 2
+
+
+def test_execution_text_deltas_are_traced_but_not_published() -> None:
+    model = ScriptedStreamingModelClient(
+        [
+            [ModelTextDelta(text="internal "), ModelResponse.from_final("draft")],
+            [ModelTextDelta(text="visible "), ModelResponse.from_final("answer")],
+        ]
+    )
+    events = []
+    runtime = AgentRuntime(model, ToolRegistry(), limits=AgentLimits(deadline_seconds=2))
+
+    async def collect() -> None:
+        async for event in runtime.run_stream([UserMessage(content="hello")]):
+            events.append(event)
+
+    asyncio.run(collect())
+
+    assert [event.text for event in events if isinstance(event, TextDelta)] == ["visible "]
+    assert isinstance(events[-1], AgentCompleted)
+
+
+def test_answer_stage_rejects_structured_tool_calls() -> None:
+    model = ScriptedModelClient(
+        [ModelResponse.from_final("execution"), _tool_turn(_call())]
+    )
+    runtime = AgentRuntime(model, _registry(), limits=AgentLimits(deadline_seconds=2))
+
+    with pytest.raises(ModelProtocolError):
+        _run(runtime)
+
+
+def test_deadline_freezes_execution_and_runs_independent_answer_stage() -> None:
+    async def slow() -> ModelResponse:
+        await asyncio.sleep(0.2)
+        return ModelResponse.from_final("late")
+
+    model = ScriptedModelClient([slow(), ModelResponse.from_final("deadline answer")])
+    collector = AgentTraceCollector()
+    runtime = AgentRuntime(
+        model,
+        ToolRegistry(),
+        limits=AgentLimits(deadline_seconds=0.03, answer_timeout_seconds=1),
+    )
+
+    assert _run(runtime, trace_collector=collector).content == "deadline answer"
+    trace = collector.snapshot()
+    assert trace["execution_outcome"] == {
+        "reason": "deadline",
+        "steps": 1,
+        "plan_complete": False,
+    }
+    assert trace["answer_stage"]["tool_count"] == 0
+
+
+def test_cancellation_during_execution_skips_answer_stage() -> None:
+    token = CancellationToken()
+
+    async def slow() -> ModelResponse:
+        await asyncio.sleep(1)
+        return ModelResponse.from_final("late")
+
+    model = ScriptedModelClient([slow(), ModelResponse.from_final("never")])
+    runtime = AgentRuntime(model, ToolRegistry(), limits=AgentLimits(deadline_seconds=2))
+
+    async def run_and_cancel() -> None:
+        task = asyncio.create_task(
+            runtime.run([UserMessage(content="hello")], cancellation_token=token)
+        )
+        await asyncio.sleep(0.01)
+        token.cancel()
+        with pytest.raises(AgentCancelledError):
+            await task
+
+    asyncio.run(run_and_cancel())
+    assert len(model.requests) == 1
+
+
+def test_system_instruction_is_execution_only() -> None:
+    model = ScriptedModelClient(
+        [ModelResponse.from_final("execution"), ModelResponse.from_final("answer")]
+    )
     runtime = AgentRuntime(
         model,
         ToolRegistry(),
@@ -96,16 +190,33 @@ def test_runtime_includes_configured_system_instruction_in_each_model_request() 
         system_instruction="query discipline",
     )
 
-    _run(runtime, model)
+    _run(runtime)
 
-    system = model.requests[0].messages[0]
-    assert isinstance(system, SystemMessage)
-    assert system.content.startswith("query discipline\n\nRuntime state:")
-    assert "Execution phase:\nexploration" in system.content
+    assert model.requests[0].messages[0].content.startswith(
+        "query discipline\n\nRuntime state:"
+    )
+    assert model.requests[1].messages[0].content.startswith("Execution has ended.")
+    assert "query discipline" not in model.requests[1].messages[0].content
 
 
-def test_runtime_rejects_caller_system_message_when_system_instruction_is_configured() -> None:
-    model = ScriptedModelClient([ModelResponse(message=FinalMessage(content="never"))])
+def test_trace_records_execution_outcome_and_answer_metrics() -> None:
+    model = ScriptedModelClient(
+        [ModelResponse.from_final("execution"), ModelResponse.from_final("answer")]
+    )
+    collector = AgentTraceCollector()
+    runtime = AgentRuntime(model, ToolRegistry(), limits=AgentLimits(deadline_seconds=2))
+
+    _run(runtime, trace_collector=collector)
+
+    trace = collector.snapshot()
+    assert trace["execution_outcome"]["reason"] == "model_done"
+    assert trace["execution_outcome"]["steps"] == 1
+    assert trace["answer_stage"]["tool_count"] == 0
+    assert trace["answer_stage"]["context_bytes"] > 0
+
+
+def test_runtime_rejects_caller_system_message_when_system_instruction_configured() -> None:
+    model = ScriptedModelClient([ModelResponse.from_final("never")])
     runtime = AgentRuntime(
         model,
         ToolRegistry(),
@@ -116,807 +227,7 @@ def test_runtime_rejects_caller_system_message_when_system_instruction_is_config
     with pytest.raises(ModelProtocolError):
         asyncio.run(
             runtime.run(
-                [
-                    SystemMessage(content="caller system"),
-                    UserMessage(content="hello"),
-                ]
+                [SystemMessage(content="caller system"), UserMessage(content="hello")]
             )
         )
-
     assert model.requests == []
-
-
-def test_single_tool_call_result_then_final() -> None:
-    model = ScriptedModelClient(
-        [_tool_turn(_call()), ModelResponse(message=FinalMessage(content="done"))]
-    )
-    runtime = AgentRuntime(model, _registry(), limits=AgentLimits(deadline_seconds=2))
-    result = _run(runtime, model)
-    assert result.content == "done"
-    assert model.requests[1].messages[-1].tool_call_id == "call-1"  # type: ignore[union-attr]
-    assert model.requests[1].messages[-1].content == {"value": 1}  # type: ignore[union-attr]
-
-
-def test_runtime_prompt_is_recreated_without_accumulating_in_history() -> None:
-    model = ScriptedModelClient(
-        [_tool_turn(_call()), ModelResponse(message=FinalMessage(content="done"))]
-    )
-    runtime = AgentRuntime(model, _registry(), limits=AgentLimits(deadline_seconds=2))
-
-    _run(runtime, model)
-
-    for request in model.requests:
-        system_messages = [
-            message for message in request.messages if isinstance(message, SystemMessage)
-        ]
-        assert len(system_messages) == 1
-        assert system_messages[0].content.count("Runtime state:") == 1
-
-
-def test_trace_collector_records_canonical_model_and_tool_evidence() -> None:
-    model = ScriptedModelClient(
-        [_tool_turn(_call()), ModelResponse(message=FinalMessage(content="done"))]
-    )
-    collector = AgentTraceCollector()
-    runtime = AgentRuntime(model, _registry(), limits=AgentLimits(deadline_seconds=2))
-
-    result = _run(runtime, model, trace_collector=collector)
-
-    trace = collector.snapshot()
-    assert result.content == "done"
-    assert trace["initial_messages"] == [{"role": "user", "content": "hello"}]
-    assert trace["tool_schemas"][0]["name"] == "echo"
-    assert trace["steps"][0]["model_request"]["step"] == 1
-    assert trace["steps"][0]["runtime_context"] == {
-        "phase": "exploration",
-        "remaining_turns": 19,
-        "time_pressure": "healthy",
-        "context_pressure": "normal",
-        "tools_available": True,
-    }
-    assert trace["steps"][0]["model_request"]["messages"] == trace["initial_messages"]
-    assert "Runtime state:" not in str(trace["steps"][0]["model_request"])
-    assert trace["steps"][0]["model_response"]["message"]["tool_calls"][0]["arguments"] == {
-        "value": 1
-    }
-    assert trace["steps"][0]["tool_results"][0]["result"]["content"] == {"value": 1}
-    assert trace["terminal"]["status"] == "completed"
-
-
-def test_multiple_tool_calls_preserve_assistant_and_result_order_and_ids() -> None:
-    model = ScriptedModelClient(
-        [
-            _tool_turn(_call("a", 1), _call("b", 2)),
-            ModelResponse(message=FinalMessage(content="done")),
-        ]
-    )
-    runtime = AgentRuntime(
-        model,
-        _registry(parallel_safe=True),
-        limits=AgentLimits(deadline_seconds=2),
-    )
-    _run(runtime, model)
-    transcript = model.requests[1].messages
-    assert isinstance(transcript[-3], AssistantMessage)
-    assert [call.id for call in transcript[-3].tool_calls] == ["a", "b"]
-    assert [message.tool_call_id for message in transcript[-2:]] == ["a", "b"]  # type: ignore[attr-defined]
-
-
-def test_multiple_reasoning_turns_are_sent_as_a_complete_transcript() -> None:
-    model = ScriptedModelClient(
-        [
-            _tool_turn(_call("one", 1)),
-            _tool_turn(_call("two", 2)),
-            ModelResponse(message=FinalMessage(content="finished")),
-        ]
-    )
-    runtime = AgentRuntime(model, _registry(), limits=AgentLimits(deadline_seconds=2))
-    assert _run(runtime, model).content == "finished"
-    assert len(model.requests) == 3
-    assert isinstance(model.requests[2].messages[2], AssistantMessage)
-    assert isinstance(model.requests[2].messages[3], object)
-    assert isinstance(model.requests[2].messages[4], AssistantMessage)
-
-
-def test_tool_local_errors_are_results_and_model_can_continue() -> None:
-    cases = [
-        ("unknown", _tool_turn(_call(name="missing")), "unknown_tool"),
-        (
-            "invalid",
-            _tool_turn(ToolCall(id="bad", name="echo", arguments={"value": "x"})),
-            "invalid_arguments",
-        ),
-        ("handler", _tool_turn(_call()), "tool_execution_error"),
-        ("output", _tool_turn(_call()), "invalid_tool_output"),
-        ("timeout", _tool_turn(_call()), "tool_timeout"),
-    ]
-    for label, first_response, expected_code in cases:
-        if label == "handler":
-            registry = _registry(handler=lambda args: (_ for _ in ()).throw(RuntimeError("boom")))
-        elif label == "output":
-            registry = _registry(handler=lambda args: {"wrong": args.value})
-        elif label == "timeout":
-            async def slow(args: EchoInput) -> EchoOutput:
-                await asyncio.sleep(0.03)
-                return EchoOutput(value=args.value)
-
-            registry = _registry(handler=slow, timeout=0.001)
-        else:
-            registry = _registry()
-        model = ScriptedModelClient(
-            [first_response, ModelResponse(message=FinalMessage(content=label))]
-        )
-        runtime = AgentRuntime(model, registry, limits=AgentLimits(deadline_seconds=2))
-        result = _run(runtime, model)
-        tool_result = model.requests[1].messages[-1]
-        assert result.content == label
-        assert tool_result.status == "error"  # type: ignore[union-attr]
-        assert tool_result.error.code == expected_code  # type: ignore[union-attr]
-
-
-def test_runtime_does_not_limit_total_tool_call_count() -> None:
-    invoked: list[int] = []
-
-    def handler(args: EchoInput) -> EchoOutput:
-        invoked.append(args.value)
-        return EchoOutput(value=args.value)
-
-    calls = tuple(_call(str(index), index) for index in range(40))
-    model = ScriptedModelClient(
-        [_tool_turn(*calls), ModelResponse(message=FinalMessage(content="done"))]
-    )
-    runtime = AgentRuntime(
-        model,
-        _registry(handler=handler, parallel_safe=True),
-        limits=AgentLimits(max_steps=3, deadline_seconds=2),
-    )
-
-    result = _run(runtime, model)
-
-    assert result.content == "done"
-    assert sorted(invoked) == list(range(40))
-    assert len(model.requests) == 2
-
-
-def test_default_max_steps_reserves_twentieth_turn_for_final_answer() -> None:
-    model = ScriptedModelClient(
-        [
-            *(_tool_turn(_call(str(index), index)) for index in range(1, 20)),
-            ModelResponse(message=FinalMessage(content="done")),
-        ]
-    )
-    runtime = AgentRuntime(
-        model,
-        _registry(),
-        limits=AgentLimits(deadline_seconds=2),
-    )
-
-    result = _run(runtime, model)
-
-    assert result.content == "done"
-    assert len(model.requests) == 20
-    assert model.requests[0].tools
-    assert model.requests[18].tools
-    assert model.requests[19].tools == []
-    first_system = model.requests[0].messages[0]
-    final_system = model.requests[19].messages[0]
-    assert isinstance(first_system, SystemMessage)
-    assert isinstance(final_system, SystemMessage)
-    assert "Execution phase:\nexploration" in first_system.content
-    assert "Remaining turns:\n19" in first_system.content
-    assert "Tools available:\nyes" in first_system.content
-    turn_nineteen_system = model.requests[18].messages[0]
-    assert isinstance(turn_nineteen_system, SystemMessage)
-    assert "Execution phase:\nconverging" in turn_nineteen_system.content
-    assert "Remaining turns:\n1" in turn_nineteen_system.content
-    assert "Tools available:\nyes" in turn_nineteen_system.content
-    assert "Execution phase:\nfinalization" in final_system.content
-    assert "Remaining turns:\n0" in final_system.content
-    assert "Tools available:\nno" in final_system.content
-    assert (
-        "Produce the final user-facing answer now using the evidence already available."
-        in final_system.content
-    )
-    assert "Execution phase:\nconverging" not in final_system.content
-    assert all(
-        isinstance(request.messages[0], SystemMessage)
-        and request.messages[0].content.count("Runtime state:") == 1
-        for request in model.requests
-    )
-    assert any(
-        isinstance(message, ToolResultMessage)
-        and message.tool_call_id == "19"
-        and message.content == {"value": 19}
-        for message in model.requests[19].messages
-    )
-
-
-def test_runtime_prompt_remaining_turns_follow_each_invocation() -> None:
-    model = ScriptedModelClient(
-        [
-            *(_tool_turn(_call(str(index), index)) for index in range(1, 6)),
-            ModelResponse(message=FinalMessage(content="done")),
-        ]
-    )
-    runtime = AgentRuntime(
-        model,
-        _registry(),
-        limits=AgentLimits(max_steps=6, deadline_seconds=2),
-    )
-
-    _run(runtime, model)
-
-    remaining_turns = []
-    for request in model.requests:
-        system = next(
-            message for message in request.messages if isinstance(message, SystemMessage)
-        )
-        remaining_turns.append(
-            system.content.split("Remaining turns:\n", 1)[1].split("\n", 1)[0]
-        )
-    assert remaining_turns == ["5", "4", "3", "2", "1", "0"]
-    assert "Execution phase:\nfinalization" in model.requests[-1].messages[0].content  # type: ignore[union-attr]
-
-
-@pytest.mark.parametrize(
-    ("elapsed", "expected_pressure"),
-    [(30.0, "healthy"), (60.0, "limited"), (80.0, "critical")],
-)
-def test_runtime_maps_wall_clock_pressure_before_turn_threshold(
-    monkeypatch: pytest.MonkeyPatch,
-    elapsed: float,
-    expected_pressure: str,
-) -> None:
-    calls = 0
-
-    def fake_monotonic() -> float:
-        nonlocal calls
-        calls += 1
-        return 0.0 if calls == 1 else elapsed
-
-    monkeypatch.setattr(runtime_module, "monotonic", fake_monotonic)
-    model = ScriptedModelClient([ModelResponse(message=FinalMessage(content="done"))])
-    collector = AgentTraceCollector()
-    runtime = AgentRuntime(
-        model,
-        _registry(),
-        limits=AgentLimits(max_steps=20, deadline_seconds=100, finalize_reserve_seconds=0),
-    )
-
-    result = _run(runtime, model, trace_collector=collector)
-
-    assert result.content == "done"
-    assert model.requests[0].tools
-    system = model.requests[0].messages[0]
-    assert isinstance(system, SystemMessage)
-    expected_phase = "converging" if expected_pressure != "healthy" else "exploration"
-    assert f"Execution phase:\n{expected_phase}" in system.content
-    assert f"Time pressure:\n{expected_pressure}" in system.content
-    assert collector.snapshot()["steps"][0]["runtime_context"] == {
-        "phase": "converging" if expected_pressure != "healthy" else "exploration",
-        "remaining_turns": 19,
-        "time_pressure": expected_pressure,
-        "context_pressure": "normal",
-        "tools_available": True,
-    }
-
-
-def test_exploration_deadline_marks_finalization_time_pressure_critical(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    now = 0.0
-
-    def fake_monotonic() -> float:
-        return now
-
-    async def expire_exploration() -> ModelResponse:
-        nonlocal now
-        now = 81.0
-        return _tool_turn(_call())
-
-    monkeypatch.setattr(runtime_module, "monotonic", fake_monotonic)
-    model = ScriptedModelClient(
-        [expire_exploration(), ModelResponse.from_final("partial")]
-    )
-    collector = AgentTraceCollector()
-    runtime = AgentRuntime(
-        model,
-        _registry(),
-        limits=AgentLimits(max_steps=3, deadline_seconds=100, finalize_reserve_seconds=20),
-    )
-
-    result = _run(runtime, model, trace_collector=collector)
-
-    assert result.content == "partial"
-    assert model.requests[1].tools == []
-    assert collector.snapshot()["steps"][1]["runtime_context"] == {
-        "phase": "finalization",
-        "remaining_turns": 1,
-        "time_pressure": "critical",
-        "context_pressure": "normal",
-        "tools_available": False,
-    }
-
-
-def test_early_final_answer_does_not_fill_runtime_budget() -> None:
-    model = ScriptedModelClient([ModelResponse(message=FinalMessage(content="done"))])
-    runtime = AgentRuntime(model, ToolRegistry(), limits=AgentLimits(deadline_seconds=2))
-
-    result = _run(runtime, model)
-
-    assert result.content == "done"
-    assert len(model.requests) == 1
-
-
-def test_reserved_final_turn_rejects_tool_request_without_execution() -> None:
-    invoked = False
-
-    def handler(args: EchoInput) -> EchoOutput:
-        nonlocal invoked
-        invoked = True
-        return EchoOutput(value=args.value)
-
-    model = ScriptedModelClient([_tool_turn(_call())])
-    runtime = AgentRuntime(
-        model,
-        _registry(handler=handler),
-        limits=AgentLimits(max_steps=1, deadline_seconds=2),
-    )
-
-    with pytest.raises(ModelProtocolError, match="forced finalization"):
-        _run(runtime, model)
-
-    assert len(model.requests) == 1
-    assert model.requests[0].tools == []
-    final_system = model.requests[0].messages[0]
-    assert isinstance(final_system, SystemMessage)
-    assert "Execution phase:\nfinalization" in final_system.content
-    assert "Tools available:\nno" in final_system.content
-    assert invoked is False
-
-
-def test_overall_deadline_is_not_a_tool_success() -> None:
-    async def slow_model(request):
-        await asyncio.sleep(0.03)
-        return ModelResponse(message=FinalMessage(content="late"))
-
-    model = ScriptedModelClient([slow_model(None)])
-    runtime = AgentRuntime(
-        model,
-        ToolRegistry(),
-        limits=AgentLimits(deadline_seconds=0.001),
-    )
-    with pytest.raises(AgentDeadlineExceeded):
-        _run(runtime, model)
-
-
-def test_cancellation_before_model_call() -> None:
-    model = ScriptedModelClient([ModelResponse(message=FinalMessage(content="never"))])
-    token = CancellationToken()
-    token.cancel()
-    runtime = AgentRuntime(model, ToolRegistry(), limits=AgentLimits(deadline_seconds=2))
-    with pytest.raises(AgentCancelledError):
-        _run(runtime, model, cancellation_token=token)
-    assert model.requests == []
-
-
-def test_cancellation_during_tool_execution_is_runtime_failure() -> None:
-    started = asyncio.Event()
-    release = asyncio.Event()
-
-    async def blocked(args: EchoInput) -> EchoOutput:
-        started.set()
-        await release.wait()
-        return EchoOutput(value=args.value)
-
-    async def exercise() -> None:
-        model = ScriptedModelClient(
-            [_tool_turn(_call()), ModelResponse(message=FinalMessage(content="never"))]
-        )
-        token = CancellationToken()
-        runtime = AgentRuntime(
-            model,
-            _registry(handler=blocked),
-            limits=AgentLimits(deadline_seconds=2),
-        )
-        task = asyncio.create_task(
-            runtime.run([UserMessage(content="go")], cancellation_token=token)
-        )
-        await asyncio.wait_for(started.wait(), timeout=1)
-        token.cancel()
-        with pytest.raises(AgentCancelledError):
-            await task
-        assert len(model.requests) == 1
-
-    asyncio.run(exercise())
-
-
-def test_runtime_event_order_and_streaming() -> None:
-    model = ScriptedModelClient(
-        [_tool_turn(_call()), ModelResponse(message=FinalMessage(content="done"))]
-    )
-    runtime = AgentRuntime(model, _registry(), limits=AgentLimits(deadline_seconds=2))
-
-    async def collect():
-        return [
-            event
-            async for event in runtime.run_stream([UserMessage(content="go")])
-        ]
-
-    events = asyncio.run(collect())
-    assert [event.kind for event in events] == [
-        "agent_started",
-        "model_requested",
-        "model_responded",
-        "tool_started",
-        "tool_completed",
-        "model_requested",
-        "model_responded",
-        "agent_completed",
-    ]
-    assert isinstance(events[-1], AgentCompleted)
-    assert events[-1].final.content == "done"  # type: ignore[union-attr]
-
-
-def test_runtime_streams_text_deltas_before_model_response_and_final() -> None:
-    model = ScriptedStreamingModelClient(
-        [
-            [
-                ModelTextDelta(text="Hel"),
-                ModelTextDelta(text="lo"),
-                ModelResponse.from_final("Hello"),
-            ]
-        ]
-    )
-    runtime = AgentRuntime(model, ToolRegistry(), limits=AgentLimits(deadline_seconds=2))
-
-    async def collect():
-        return [
-            event
-            async for event in runtime.run_stream([UserMessage(content="go")])
-        ]
-
-    events = asyncio.run(collect())
-    assert [event.kind for event in events] == [
-        "agent_started",
-        "model_requested",
-        "text_delta",
-        "text_delta",
-        "model_responded",
-        "agent_completed",
-    ]
-    assert [event.text for event in events if isinstance(event, TextDelta)] == ["Hel", "lo"]
-    assert isinstance(events[-1], AgentCompleted)
-    assert events[-1].final.content == "Hello"
-
-
-def test_runtime_streams_deltas_then_continues_tool_loop_without_repeating_text() -> None:
-    model = ScriptedStreamingModelClient(
-        [
-            [
-                ModelTextDelta(text="checking "),
-                ModelResponse(
-                    message=AssistantMessage(
-                        content="checking ",
-                        tool_calls=[_call()],
-                    )
-                ),
-            ],
-            [ModelTextDelta(text="done"), ModelResponse.from_final("done")],
-        ]
-    )
-    runtime = AgentRuntime(model, _registry(), limits=AgentLimits(deadline_seconds=2))
-
-    async def collect():
-        return [
-            event
-            async for event in runtime.run_stream([UserMessage(content="go")])
-        ]
-
-    events = asyncio.run(collect())
-    assert [event.kind for event in events] == [
-        "agent_started",
-        "model_requested",
-        "text_delta",
-        "model_responded",
-        "tool_started",
-        "tool_completed",
-        "model_requested",
-        "text_delta",
-        "model_responded",
-        "agent_completed",
-    ]
-    assert [event.text for event in events if isinstance(event, TextDelta)] == [
-        "checking ",
-        "done",
-    ]
-    assert model.requests[1].messages[-1].content == {"value": 1}  # type: ignore[union-attr]
-    assert events[-1].final.content == "done"  # type: ignore[union-attr]
-
-
-def test_soft_deadline_during_model_exploration_forces_tool_free_finalization() -> None:
-    async def slow_response() -> ModelResponse:
-        await asyncio.sleep(0.5)
-        return ModelResponse.from_final("too late")
-
-    model = ScriptedModelClient([slow_response(), ModelResponse.from_final("partial")])
-    runtime = AgentRuntime(
-        model,
-        _registry(),
-        limits=AgentLimits(deadline_seconds=0.5, finalize_reserve_seconds=0.3),
-    )
-
-    result = _run(runtime, model)
-
-    assert result.content == "partial"
-    assert len(model.requests) == 2
-    assert model.requests[0].tools
-    assert model.requests[1].tools == []
-    assert any(
-        isinstance(message, SystemMessage)
-        and "Further retrieval is unavailable." in message.content
-        for message in model.requests[1].messages
-    )
-
-
-def test_soft_deadline_during_tool_execution_forces_finalization() -> None:
-    started = asyncio.Event()
-    release = asyncio.Event()
-
-    async def blocked(args: EchoInput) -> EchoOutput:
-        started.set()
-        await release.wait()
-        return EchoOutput(value=args.value)
-
-    async def exercise() -> tuple[FinalMessage, ScriptedModelClient]:
-        model = ScriptedModelClient(
-            [_tool_turn(_call()), ModelResponse.from_final("partial")]
-        )
-        runtime = AgentRuntime(
-            model,
-            _registry(handler=blocked),
-            limits=AgentLimits(deadline_seconds=0.5, finalize_reserve_seconds=0.3),
-        )
-        task = asyncio.create_task(runtime.run([UserMessage(content="go")]))
-        await asyncio.wait_for(started.wait(), timeout=1)
-        result = await task
-        return result, model
-
-    result, model = asyncio.run(exercise())
-
-    assert result.content == "partial"
-    assert len(model.requests) == 2
-    assert model.requests[1].tools == []
-    assert isinstance(model.requests[1].messages[-1], UserMessage)
-
-
-def test_interrupted_tool_call_turn_is_absent_from_finalization_transcript() -> None:
-    second_started = asyncio.Event()
-    release = asyncio.Event()
-
-    async def handler(args: EchoInput) -> EchoOutput:
-        if args.value == 2:
-            second_started.set()
-            await release.wait()
-        return EchoOutput(value=args.value)
-
-    async def exercise() -> tuple[FinalMessage, ScriptedModelClient]:
-        model = ScriptedModelClient(
-            [
-                _tool_turn(_call("one", 1)),
-                _tool_turn(_call("two", 2)),
-                ModelResponse.from_final("partial"),
-            ]
-        )
-        runtime = AgentRuntime(
-            model,
-            _registry(handler=handler),
-            limits=AgentLimits(deadline_seconds=0.6, finalize_reserve_seconds=0.35),
-        )
-        task = asyncio.create_task(runtime.run([UserMessage(content="go")]))
-        await asyncio.wait_for(second_started.wait(), timeout=1)
-        result = await task
-        return result, model
-
-    result, model = asyncio.run(exercise())
-
-    assert result.content == "partial"
-    assert len(model.requests) == 3
-    final_messages = model.requests[2].messages
-    assistant_one = next(
-        message
-        for message in final_messages
-        if isinstance(message, AssistantMessage)
-    )
-    assert [call.id for call in assistant_one.tool_calls] == ["one"]
-    tool_one = next(message for message in final_messages if hasattr(message, "tool_call_id"))
-    assert tool_one.tool_call_id == "one"  # type: ignore[union-attr]
-    assert all(
-        not isinstance(message, AssistantMessage)
-        or all(call.id != "two" for call in message.tool_calls)
-        for message in final_messages
-    )
-    assert all(
-        not hasattr(message, "tool_call_id") or message.tool_call_id != "two"
-        for message in final_messages
-    )
-    assert model.requests[2].tools == []
-
-
-def test_partially_completed_multi_call_turn_is_discarded_as_a_whole() -> None:
-    second_started = asyncio.Event()
-    release = asyncio.Event()
-
-    async def handler(args: EchoInput) -> EchoOutput:
-        if args.value == 2:
-            second_started.set()
-            await release.wait()
-        return EchoOutput(value=args.value)
-
-    async def exercise() -> tuple[FinalMessage, ScriptedModelClient]:
-        model = ScriptedModelClient(
-            [_tool_turn(_call("a", 1), _call("b", 2)), ModelResponse.from_final("partial")]
-        )
-        runtime = AgentRuntime(
-            model,
-            _registry(handler=handler),
-            limits=AgentLimits(deadline_seconds=0.6, finalize_reserve_seconds=0.35),
-        )
-        task = asyncio.create_task(runtime.run([UserMessage(content="go")]))
-        await asyncio.wait_for(second_started.wait(), timeout=1)
-        result = await task
-        return result, model
-
-    result, model = asyncio.run(exercise())
-
-    assert result.content == "partial"
-    assert len(model.requests) == 2
-    assert model.requests[1].tools == []
-    assert len(model.requests[1].messages) == 2
-    assert isinstance(model.requests[1].messages[-1], UserMessage)
-
-
-def test_hard_deadline_still_wins_during_forced_finalization() -> None:
-    async def slow_response() -> ModelResponse:
-        await asyncio.sleep(0.5)
-        return ModelResponse.from_final("late")
-
-    model = ScriptedModelClient([slow_response(), slow_response()])
-    runtime = AgentRuntime(
-        model,
-        ToolRegistry(),
-        limits=AgentLimits(deadline_seconds=0.35, finalize_reserve_seconds=0.2),
-    )
-
-    with pytest.raises(AgentDeadlineExceeded):
-        _run(runtime, model)
-
-    assert len(model.requests) == 2
-    assert model.requests[1].tools == []
-
-
-def test_zero_reserve_preserves_single_hard_deadline_behavior() -> None:
-    async def slow_response() -> ModelResponse:
-        await asyncio.sleep(0.2)
-        return ModelResponse.from_final("late")
-
-    model = ScriptedModelClient([slow_response()])
-    runtime = AgentRuntime(
-        model,
-        ToolRegistry(),
-        limits=AgentLimits(deadline_seconds=0.08, finalize_reserve_seconds=0),
-    )
-
-    with pytest.raises(AgentDeadlineExceeded):
-        _run(runtime, model)
-
-    assert len(model.requests) == 1
-
-
-def test_reserve_at_or_above_deadline_disables_soft_finalization() -> None:
-    async def slow_response() -> ModelResponse:
-        await asyncio.sleep(0.2)
-        return ModelResponse.from_final("late")
-
-    model = ScriptedModelClient([slow_response()])
-    runtime = AgentRuntime(
-        model,
-        ToolRegistry(),
-        limits=AgentLimits(deadline_seconds=0.08, finalize_reserve_seconds=0.08),
-    )
-
-    with pytest.raises(AgentDeadlineExceeded):
-        _run(runtime, model)
-
-    assert len(model.requests) == 1
-
-
-def test_finalization_tool_request_is_a_protocol_error_without_execution() -> None:
-    invoked = False
-
-    def handler(args: EchoInput) -> EchoOutput:
-        nonlocal invoked
-        invoked = True
-        return EchoOutput(value=args.value)
-
-    async def slow_response() -> ModelResponse:
-        await asyncio.sleep(0.2)
-        return ModelResponse.from_final("too late")
-
-    model = ScriptedModelClient([slow_response(), _tool_turn(_call())])
-    runtime = AgentRuntime(
-        model,
-        _registry(handler=handler),
-        limits=AgentLimits(deadline_seconds=0.35, finalize_reserve_seconds=0.2),
-    )
-
-    with pytest.raises(ModelProtocolError, match="requested tools during forced finalization"):
-        _run(runtime, model)
-
-    assert len(model.requests) == 2
-    assert model.requests[1].tools == []
-    assert invoked is False
-
-
-def test_runtime_prompt_is_temporary_and_does_not_mutate_runtime_state() -> None:
-    async def slow_response() -> ModelResponse:
-        await asyncio.sleep(0.2)
-        return ModelResponse.from_final("too late")
-
-    model = ScriptedModelClient([slow_response(), ModelResponse.from_final("partial")])
-    runtime = AgentRuntime(
-        model,
-        ToolRegistry(),
-        limits=AgentLimits(deadline_seconds=0.35, finalize_reserve_seconds=0.2),
-        system_instruction="base instruction",
-    )
-
-    result = _run(runtime, model)
-
-    assert result.content == "partial"
-    assert runtime.system_instruction == "base instruction"
-    first_system = model.requests[0].messages[0]
-    assert isinstance(first_system, SystemMessage)
-    assert first_system.content.startswith("base instruction\n\nRuntime state:")
-    assert model.requests[1].messages[0].content.startswith("base instruction\n\n")  # type: ignore[union-attr]
-    assert "Runtime state:" in model.requests[1].messages[0].content  # type: ignore[union-attr]
-    assert "Further retrieval is unavailable." in model.requests[1].messages[0].content  # type: ignore[union-attr]
-
-
-def test_soft_deadline_supports_streaming_model_finalization() -> None:
-    async def slow_response() -> ModelResponse:
-        await asyncio.sleep(0.2)
-        return ModelResponse.from_final("too late")
-
-    model = ScriptedStreamingModelClient(
-        [[slow_response()], [ModelResponse.from_final("partial")]]
-    )
-    runtime = AgentRuntime(
-        model,
-        ToolRegistry(),
-        limits=AgentLimits(deadline_seconds=0.35, finalize_reserve_seconds=0.2),
-    )
-
-    result = _run(runtime, model)
-
-    assert result.content == "partial"
-    assert len(model.requests) == 2
-    assert model.requests[1].tools == []
-
-
-def test_vnext_runtime_has_no_legacy_or_langgraph_import_dependency() -> None:
-    root = Path(__file__).parents[2] / "app" / "vnext"
-    source = "\n".join(
-        path.read_text(encoding="utf-8")
-        for path in root.rglob("*.py")
-        if "product" not in path.relative_to(root).parts
-    )
-    forbidden = (
-        "app.agentic",
-        "langgraph",
-        "ExecutionPlan",
-        "EvidenceGraph",
-        "Controller",
-        "Scenario Router",
-    )
-    assert not any(term in source for term in forbidden)

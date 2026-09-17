@@ -10,11 +10,15 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from app.vnext.agent.answer_stage import (
+    AnswerContextBuilder,
+    ExecutionOutcome,
+    ExecutionStopReason,
+)
 from app.vnext.agent.errors import (
     AgentCancelledError,
     AgentDeadlineExceeded,
     AgentRuntimeError,
-    MaxStepsExceeded,
     ModelProtocolError,
     ModelProviderError,
 )
@@ -31,12 +35,9 @@ from app.vnext.agent.events import (
     ToolFailed,
     ToolStarted,
 )
+from app.vnext.agent.instructions import ANSWER_INSTRUCTION
 from app.vnext.agent.limits import AgentLimits
-from app.vnext.agent.runtime_context import (
-    RuntimeContext,
-    TimePressure,
-    classify_time_pressure,
-)
+from app.vnext.agent.runtime_context import RuntimeContext, classify_time_pressure
 from app.vnext.agent.runtime_prompt import render_runtime_prompt
 from app.vnext.agent.task_state import TaskStateCoordinator
 from app.vnext.agent.trace import AgentTraceCollector
@@ -161,28 +162,11 @@ class AgentRuntime:
 
         token = cancellation_token or CancellationToken()
         sink = event_sink
-        hard_deadline = _Deadline(self.limits.deadline_seconds)
-        soft_finalization_enabled = (
-            self.limits.deadline_seconds is not None
-            and self.limits.finalize_reserve_seconds > 0
-            and self.limits.finalize_reserve_seconds < self.limits.deadline_seconds
-        )
-        exploration_deadline = (
-            _Deadline(
-                self.limits.deadline_seconds - self.limits.finalize_reserve_seconds,
-                started=hard_deadline.started,
-            )
-            if soft_finalization_enabled
-            else None
-        )
-        exploration_budget_seconds = (
-            self.limits.deadline_seconds - self.limits.finalize_reserve_seconds
-            if soft_finalization_enabled and self.limits.deadline_seconds is not None
-            else self.limits.deadline_seconds
-        )
-        started_at = hard_deadline.started
+        execution_deadline = _Deadline(self.limits.deadline_seconds)
+        started_at = execution_deadline.started
         step = 0
-        finalizing = False
+        outcome: ExecutionOutcome | None = None
+        request_messages: list[Message] = []
 
         try:
             if self.system_instruction is not None and any(
@@ -194,53 +178,29 @@ class AgentRuntime:
             request_messages = list(messages)
             if self.system_instruction is not None:
                 request_messages.insert(0, SystemMessage(content=self.system_instruction))
-            # Validate the initial transcript before model dispatch.  This also
-            # makes a defensive copy so a caller's list is never mutated.
             request_messages = ModelRequest(messages=request_messages, tools=[]).messages
             if trace_collector is not None:
                 trace_collector.begin(
                     request_messages,
                     [schema.model_dump(mode="json") for schema in self.tools.schemas()],
                 )
-            event = AgentStarted()
-            yield await self._publish(event, sink)
+            yield await self._publish(AgentStarted(), sink)
 
-            while True:
+            while step < self.limits.max_steps:
                 step += 1
-                if step > self.limits.max_steps:
-                    raise MaxStepsExceeded(self.limits.max_steps)
-                final_turn = step == self.limits.max_steps
-                tools_enabled = not finalizing and not final_turn
-                active_deadline = (
-                    hard_deadline
-                    if finalizing or final_turn
-                    else exploration_deadline or hard_deadline
-                )
                 try:
-                    self._check_controls(token, active_deadline)
+                    self._check_controls(token, execution_deadline)
                 except AgentDeadlineExceeded:
-                    if not finalizing and exploration_deadline is not None:
-                        finalizing = True
-                        continue
-                    raise
-
-                if finalizing and exploration_deadline is not None:
-                    time_pressure = TimePressure.CRITICAL
-                else:
-                    exploration_remaining = (
-                        exploration_deadline.remaining()
-                        if exploration_deadline is not None
-                        else hard_deadline.remaining()
-                    )
-                    time_pressure = classify_time_pressure(
-                        remaining_seconds=exploration_remaining,
-                        budget_seconds=exploration_budget_seconds,
-                    )
+                    outcome = ExecutionOutcome(ExecutionStopReason.DEADLINE, step)
+                    break
+                time_pressure = classify_time_pressure(
+                    remaining_seconds=execution_deadline.remaining(),
+                    budget_seconds=self.limits.deadline_seconds,
+                )
                 runtime_context = RuntimeContext.from_state(
                     current_step=step,
                     max_steps=self.limits.max_steps,
-                    finalizing=finalizing or final_turn,
-                    tools_available=tools_enabled,
+                    tools_available=True,
                     time_pressure=time_pressure,
                 )
                 turn_messages = request_messages
@@ -261,7 +221,7 @@ class AgentRuntime:
                     task_context_messages = list(request_messages)
                 request = ModelRequest(
                     messages=turn_messages,
-                    tools=self.tools.schemas() if tools_enabled else [],
+                    tools=self.tools.schemas(),
                     step=step,
                 )
                 if trace_collector is not None:
@@ -272,175 +232,64 @@ class AgentRuntime:
                         task_context_messages=task_context_messages,
                         task_context_payload=task_context_payload,
                     )
-                event = ModelRequested(
-                    step=step,
-                    message_count=len(request.messages),
-                    tool_count=len(request.tools),
+                yield await self._publish(
+                    ModelRequested(
+                        step=step,
+                        message_count=len(request.messages),
+                        tool_count=len(request.tools),
+                    ),
+                    sink,
                 )
-                yield await self._publish(event, sink)
 
-                model_started = monotonic()
                 try:
-                    try:
-                        stream = getattr(self.model, "stream", None)
-                        if callable(stream):
-                            response = None
-                            model_stream = stream(request)
-                            if inspect.isawaitable(model_stream):
-                                model_stream = await self._await_controlled(
-                                    model_stream,
-                                    token,
-                                    active_deadline,
-                                )
-                            if not hasattr(model_stream, "__anext__"):
-                                raise ModelProtocolError(
-                                    "streaming model client did not return an async iterator"
-                                )
-                            try:
-                                while True:
-                                    try:
-                                        item = await self._await_controlled(
-                                            anext(model_stream),
-                                            token,
-                                            active_deadline,
-                                        )
-                                    except StopAsyncIteration:
-                                        break
-                                    if isinstance(item, ModelTextDelta):
-                                        if trace_collector is not None:
-                                            trace_collector.text_delta(step, item.text)
-                                        if response is not None:
-                                            raise ModelProtocolError(
-                                                "stream emitted text after its terminal response"
-                                            )
-                                        event = TextDelta(step=step, text=item.text)
-                                        yield await self._publish(event, sink)
-                                    elif isinstance(item, ModelResponse):
-                                        if response is not None:
-                                            raise ModelProtocolError(
-                                                "stream emitted more than one terminal response"
-                                            )
-                                        response = self._normalize_response(item)
-                                    else:
-                                        raise ModelProtocolError(
-                                            "stream emitted an unsupported model item"
-                                        )
-                            finally:
-                                close = getattr(model_stream, "aclose", None)
-                                if callable(close):
-                                    result = close()
-                                    if inspect.isawaitable(result):
-                                        await result
-                            if response is None:
-                                raise ModelProtocolError(
-                                    "stream ended without a terminal model response"
-                                )
-                        else:
-                            raw_response = await self._await_controlled(
-                                self.model.complete(request),
-                                token,
-                                active_deadline,
-                            )
-                            response = self._normalize_response(raw_response)
-                    except (AgentCancelledError, AgentDeadlineExceeded):
-                        raise
-                    except AgentRuntimeError:
-                        raise
-                    except Exception as exc:
-                        raise ModelProviderError(
-                            f"model provider request failed: {exc}",
-                            cause=exc,
-                        ) from exc
-
-                    self._check_controls(token, active_deadline)
-                except AgentDeadlineExceeded:
-                    if not finalizing and exploration_deadline is not None:
-                        finalizing = True
-                        continue
-                    raise
-
-                assistant = response.message
-                has_tool_calls = isinstance(assistant, AssistantMessage) and bool(
-                    assistant.tool_calls
-                )
-                event = ModelResponded(
-                    step=step,
-                    has_tool_calls=has_tool_calls,
-                    duration=max(0.0, monotonic() - model_started),
-                )
-                if trace_collector is not None:
-                    trace_collector.model_response(
-                        step, response, max(0.0, monotonic() - model_started)
+                    response, duration, _ = await self._invoke_model(
+                        request,
+                        token=token,
+                        deadline=execution_deadline,
+                        step=step,
+                        trace_collector=trace_collector,
+                        publish_text=False,
                     )
-                yield await self._publish(event, sink)
-
-                if (
-                    (finalizing or final_turn)
-                    and isinstance(assistant, AssistantMessage)
-                    and assistant.tool_calls
-                ):
-                    raise ModelProtocolError("model requested tools during forced finalization")
+                except AgentDeadlineExceeded:
+                    outcome = ExecutionOutcome(ExecutionStopReason.DEADLINE, step)
+                    break
+                assistant = response.message
+                if trace_collector is not None:
+                    trace_collector.model_response(step, response, duration)
+                yield await self._publish(
+                    ModelResponded(
+                        step=step,
+                        has_tool_calls=isinstance(assistant, AssistantMessage)
+                        and bool(assistant.tool_calls),
+                        duration=duration,
+                    ),
+                    sink,
+                )
 
                 if isinstance(assistant, FinalMessage):
-                    if trace_collector is not None:
-                        trace_collector.terminal(
-                            status="completed", error_code=None, error_message=None
-                        )
-                    event = AgentCompleted(
-                        step=step,
-                        duration=max(0.0, monotonic() - started_at),
-                        final=assistant,
-                    )
-                    yield await self._publish(event, sink)
-                    return
-
+                    outcome = ExecutionOutcome(ExecutionStopReason.MODEL_DONE, step)
+                    break
                 calls = assistant.tool_calls
                 if not calls:
-                    # Some compatible providers omit a distinct finish marker.
-                    # A text-only assistant response is still a final answer at
-                    # this boundary; the adapter normally already maps it to
-                    # FinalMessage, but native fakes can use AssistantMessage.
-                    if assistant.content is None:
-                        raise ModelProtocolError(
-                            "assistant response had neither content nor tool calls"
-                        )
-                    final = FinalMessage(content=assistant.content)
-                    if trace_collector is not None:
-                        trace_collector.terminal(
-                            status="completed", error_code=None, error_message=None
-                        )
-                    event = AgentCompleted(
-                        step=step,
-                        duration=max(0.0, monotonic() - started_at),
-                        final=final,
+                    raise ModelProtocolError(
+                        "execution model response had neither content nor tool calls"
                     )
-                    yield await self._publish(event, sink)
-                    return
-
                 results: list[ToolResultMessage] = []
                 try:
                     async for tool_event in self._execute_tools_stream(
                         calls,
                         step,
                         token,
-                        active_deadline,
+                        execution_deadline,
                         sink,
                         results,
                         trace_collector,
                     ):
                         yield tool_event
+                    self._check_controls(token, execution_deadline)
                 except AgentDeadlineExceeded:
-                    if not finalizing and exploration_deadline is not None:
-                        finalizing = True
-                        continue
-                    raise
-                try:
-                    self._check_controls(token, active_deadline)
-                except AgentDeadlineExceeded:
-                    if not finalizing and exploration_deadline is not None:
-                        finalizing = True
-                        continue
-                    raise
+                    outcome = ExecutionOutcome(ExecutionStopReason.DEADLINE, step)
+                    break
                 candidate_messages = [*request_messages, assistant, *results]
                 if self.transcript_rewriter is None:
                     request_messages = candidate_messages
@@ -450,7 +299,84 @@ class AgentRuntime:
                     if trace_collector is not None:
                         for event in rewrite.events:
                             trace_collector.transcript_rewrite(step, event)
+                if (
+                    self.task_state_coordinator is not None
+                    and self.task_state_coordinator.plan_snapshot() is not None
+                    and self.task_state_coordinator.plan_snapshot().current_key is None
+                ):
+                    outcome = ExecutionOutcome(ExecutionStopReason.PLAN_COMPLETE, step)
+                    break
 
+            if outcome is None:
+                outcome = ExecutionOutcome(ExecutionStopReason.MAX_STEPS, step)
+            plan_complete = (
+                self.task_state_coordinator is not None
+                and self.task_state_coordinator.plan_snapshot() is not None
+                and self.task_state_coordinator.plan_snapshot().current_key is None
+            )
+            if trace_collector is not None:
+                trace_collector.execution_outcome(outcome, plan_complete=plan_complete)
+
+            answer_context = AnswerContextBuilder().build(
+                execution_messages=request_messages,
+                outcome=outcome,
+                task_state_coordinator=self.task_state_coordinator,
+            )
+            answer_messages = [
+                SystemMessage(content=ANSWER_INSTRUCTION),
+                *_answer_conversation(messages),
+                SystemMessage(content=answer_context.render()),
+            ]
+            answer_step = step + 1
+            answer_request = ModelRequest(messages=answer_messages, tools=[], step=answer_step)
+            if trace_collector is not None:
+                trace_collector.model_request(answer_request)
+                trace_collector.answer_stage(answer_request, answer_context)
+            yield await self._publish(
+                ModelRequested(
+                    step=answer_step,
+                    message_count=len(answer_request.messages),
+                    tool_count=0,
+                ),
+                sink,
+            )
+            answer_deadline = _Deadline(self.limits.answer_timeout_seconds)
+            response, duration, answer_text_events = await self._invoke_model(
+                answer_request,
+                token=token,
+                deadline=answer_deadline,
+                step=answer_step,
+                trace_collector=trace_collector,
+                publish_text=True,
+            )
+            for text_event in answer_text_events:
+                yield await self._publish(text_event, sink)
+            answer = response.message
+            if trace_collector is not None:
+                trace_collector.model_response(answer_step, response, duration)
+            yield await self._publish(
+                ModelResponded(
+                    step=answer_step,
+                    has_tool_calls=isinstance(answer, AssistantMessage)
+                    and bool(answer.tool_calls),
+                    duration=duration,
+                ),
+                sink,
+            )
+            if not isinstance(answer, FinalMessage):
+                raise ModelProtocolError("answer stage model requested tools")
+            if trace_collector is not None:
+                trace_collector.terminal(
+                    status="completed", error_code=None, error_message=None
+                )
+            yield await self._publish(
+                AgentCompleted(
+                    step=answer_step,
+                    duration=max(0.0, monotonic() - started_at),
+                    final=answer,
+                ),
+                sink,
+            )
         except AgentCancelledError as exc:
             if trace_collector is not None:
                 trace_collector.terminal(
@@ -491,6 +417,81 @@ class AgentRuntime:
             )
             yield await self._publish(event, sink)
             raise wrapped from exc
+
+    async def _invoke_model(
+        self,
+        request: ModelRequest,
+        *,
+        token: CancellationToken,
+        deadline: _Deadline,
+        step: int,
+        trace_collector: AgentTraceCollector | None,
+        publish_text: bool,
+    ) -> tuple[ModelResponse, float, list[TextDelta]]:
+        """Invoke one model request and optionally expose its text deltas."""
+
+        started = monotonic()
+        text_events: list[TextDelta] = []
+        try:
+            stream = getattr(self.model, "stream", None)
+            if callable(stream):
+                response = None
+                model_stream = stream(request)
+                if inspect.isawaitable(model_stream):
+                    model_stream = await self._await_controlled(model_stream, token, deadline)
+                if not hasattr(model_stream, "__anext__"):
+                    raise ModelProtocolError(
+                        "streaming model client did not return an async iterator"
+                    )
+                try:
+                    while True:
+                        try:
+                            item = await self._await_controlled(
+                                anext(model_stream), token, deadline
+                            )
+                        except StopAsyncIteration:
+                            break
+                        if isinstance(item, ModelTextDelta):
+                            if trace_collector is not None:
+                                trace_collector.text_delta(step, item.text)
+                            if response is not None:
+                                raise ModelProtocolError(
+                                    "stream emitted text after its terminal response"
+                                )
+                            if publish_text:
+                                text_events.append(TextDelta(step=step, text=item.text))
+                        elif isinstance(item, ModelResponse):
+                            if response is not None:
+                                raise ModelProtocolError(
+                                    "stream emitted more than one terminal response"
+                                )
+                            response = self._normalize_response(item)
+                        else:
+                            raise ModelProtocolError("stream emitted an unsupported model item")
+                finally:
+                    close = getattr(model_stream, "aclose", None)
+                    if callable(close):
+                        result = close()
+                        if inspect.isawaitable(result):
+                            await result
+                if response is None:
+                    raise ModelProtocolError("stream ended without a terminal model response")
+            else:
+                raw_response = await self._await_controlled(
+                    self.model.complete(request), token, deadline
+                )
+                response = self._normalize_response(raw_response)
+            self._check_controls(token, deadline)
+            return response, max(0.0, monotonic() - started), text_events
+        except (AgentCancelledError, AgentDeadlineExceeded):
+            raise
+        except AgentRuntimeError:
+            raise
+        except Exception as exc:
+            raise ModelProviderError(
+                f"model provider request failed: {exc}",
+                cause=exc,
+            ) from exc
 
     async def _execute_tools_stream(
         self,
@@ -662,15 +663,26 @@ def _append_system_instruction(
 ) -> list[Message]:
     """Append an ephemeral instruction to a copied transcript."""
 
-    finalization_messages = list(messages)
-    for index, message in enumerate(finalization_messages):
+    instruction_messages = list(messages)
+    for index, message in enumerate(instruction_messages):
         if isinstance(message, SystemMessage):
-            finalization_messages[index] = message.model_copy(
+            instruction_messages[index] = message.model_copy(
                 update={"content": f"{message.content}\n\n{instruction}"}
             )
-            return finalization_messages
-    finalization_messages.insert(0, SystemMessage(content=instruction))
-    return finalization_messages
+            return instruction_messages
+    instruction_messages.insert(0, SystemMessage(content=instruction))
+    return instruction_messages
+
+
+def _answer_conversation(messages: Sequence[Message]) -> list[Message]:
+    """Keep the caller conversation while excluding execution tool history."""
+
+    return [
+        message
+        for message in messages
+        if not isinstance(message, ToolResultMessage)
+        and not (isinstance(message, AssistantMessage) and message.tool_calls)
+    ]
 
 
 __all__ = ["AgentRuntime", "CancellationToken", "EventSink"]

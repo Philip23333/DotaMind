@@ -15,17 +15,6 @@ _GUIDANCE: dict[RuntimePhase, str] = {
         "Avoid optional exploration or redundant verification.\n\n"
         "Use additional tools only when they materially improve the answer."
     ),
-    RuntimePhase.FINALIZATION: (
-        "Further retrieval is unavailable.\n\n"
-        "Produce the final user-facing answer now using the evidence already available.\n\n"
-        "Prioritize delivering a useful answer within the remaining execution time.\n\n"
-        "Preserve the user's requested scope when feasible.\n"
-        "If the available evidence is incomplete, clearly distinguish verified results\n"
-        "from parts that could not be completed. Do not infer or fabricate missing facts.\n\n"
-        "If exhaustive presentation would prevent completing the response, compress the\n"
-        "presentation while preserving the most important verified results and clearly\n"
-        "state any omitted coverage."
-    ),
 }
 
 

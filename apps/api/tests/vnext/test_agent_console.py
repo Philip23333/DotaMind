@@ -108,7 +108,9 @@ def test_console_does_not_replay_runtime_transcript_across_turns(tmp_path: Path)
                     message=AssistantMessage(content=None, tool_calls=[call])
                 ),
                 ModelResponse(message=FinalMessage(content="final1")),
+                ModelResponse(message=FinalMessage(content="answer1")),
                 ModelResponse(message=FinalMessage(content="final2")),
+                ModelResponse(message=FinalMessage(content="answer2")),
             ]
         )
     )
@@ -170,7 +172,7 @@ def test_console_does_not_replay_runtime_transcript_across_turns(tmp_path: Path)
     assert first_turn_requests[1].messages[-2].tool_calls
     assert isinstance(first_turn_requests[1].messages[-1], ToolResultMessage)
 
-    second_turn_first_request = model.requests[2]
+    second_turn_first_request = model.requests[3]
     assert [message.role for message in second_turn_first_request.messages] == [
         "system",
         "user",
