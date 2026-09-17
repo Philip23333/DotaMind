@@ -585,7 +585,7 @@ class AgentRuntime:
                         release = self.task_state_coordinator.consume_partition_release()
                         if release is not None and trace_collector is not None:
                             trace_collector.partition_evidence_release(step, release)
-                index += len(group)
+            index += len(group)
 
     def _is_parallel_safe(self, call: ToolCall) -> bool:
         try:

@@ -199,6 +199,67 @@ def test_system_instruction_is_execution_only() -> None:
     assert "query discipline" not in model.requests[1].messages[0].content
 
 
+def test_parallel_group_advances_once_and_runs_following_serial_call() -> None:
+    state = {"active": 0, "maximum": 0, "serial_started_with_active": None}
+
+    async def parallel_handler(args: EchoInput) -> EchoOutput:
+        state["active"] += 1
+        state["maximum"] = max(state["maximum"], state["active"])
+        await asyncio.sleep(0.01)
+        state["active"] -= 1
+        return EchoOutput(value=args.value)
+
+    async def serial_handler(args: EchoInput) -> EchoOutput:
+        state["serial_started_with_active"] = state["active"]
+        return EchoOutput(value=args.value)
+
+    registry = ToolRegistry()
+    for name in ("parallel_a", "parallel_b"):
+        registry.register(
+            ToolDefinition(
+                name=name,
+                description=name,
+                input_model=EchoInput,
+                output_model=EchoOutput,
+                handler=parallel_handler,
+                parallel_safe=True,
+            )
+        )
+    registry.register(
+        ToolDefinition(
+            name="serial_c",
+            description="serial_c",
+            input_model=EchoInput,
+            output_model=EchoOutput,
+            handler=serial_handler,
+            parallel_safe=False,
+        )
+    )
+    model = ScriptedModelClient(
+        [
+            _tool_turn(
+                ToolCall(id="a", name="parallel_a", arguments={"value": 1}),
+                ToolCall(id="b", name="parallel_b", arguments={"value": 2}),
+                ToolCall(id="c", name="serial_c", arguments={"value": 3}),
+            ),
+            ModelResponse.from_final("execution"),
+            ModelResponse.from_final("answer"),
+        ]
+    )
+
+    assert (
+        _run(AgentRuntime(model, registry, limits=AgentLimits(deadline_seconds=2))).content
+        == "answer"
+    )
+
+    tool_results = [
+        message for message in model.requests[1].messages if hasattr(message, "tool_call_id")
+    ]
+    assert [message.tool_call_id for message in tool_results] == ["a", "b", "c"]
+    assert state["maximum"] == 2
+    assert state["serial_started_with_active"] == 0
+
+
 def test_trace_records_execution_outcome_and_answer_metrics() -> None:
     model = ScriptedModelClient(
         [ModelResponse.from_final("execution"), ModelResponse.from_final("answer")]
