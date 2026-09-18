@@ -37,6 +37,11 @@ Agent-level checks must verify that the model follows the rendered catalog,
 uses only declared arguments and output references, stops when evidence is
 sufficient, and does not claim facts unsupported by collected observations.
 
+Task-plan generalization is evaluated across temporal, entity, player,
+competition, hybrid, and single-deep cases. The eval does not prescribe exact
+task keys or a fixed execution sequence; it evaluates bounded,
+independently-completable result units.
+
 ## Live smoke tests
 
 Live smoke tests are separate from deterministic acceptance. They may validate a

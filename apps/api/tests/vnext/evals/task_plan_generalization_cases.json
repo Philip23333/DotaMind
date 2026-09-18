@@ -1,0 +1,50 @@
+[
+  {
+    "id": "temporal_team_history",
+    "category": "temporal",
+    "prompt": "分析 Xtreme Gaming 在 2023、2024、2025、2026 四个年度的主要国际赛事成绩与阵容变化。",
+    "plan_expected": true,
+    "acceptable_partition_axes": ["year", "season"],
+    "review_notes": "Independent time periods should normally form bounded completion units."
+  },
+  {
+    "id": "entity_team_rosters",
+    "category": "entity",
+    "prompt": "比较 Team Spirit、Xtreme Gaming、Team Liquid、Tundra Esports、PARIVISION、BetBoom Team、Team Falcons、Aurora Gaming、Nigma Galaxy 和 Gaimin Gladiators 的人员构成。",
+    "plan_expected": true,
+    "acceptable_partition_axes": ["team"],
+    "review_notes": "The plan should follow independently completable team entities, not years or retrieval stages."
+  },
+  {
+    "id": "player_entities",
+    "category": "player",
+    "prompt": "比较 Ame、Yatoro、miCKe、watson、Nightfall 和 skiter 当前所属战队与选手信息。",
+    "plan_expected": true,
+    "acceptable_partition_axes": ["player"],
+    "review_notes": "Player entities are the natural result units."
+  },
+  {
+    "id": "competition_units",
+    "category": "competition",
+    "prompt": "分别总结 Xtreme Gaming 在 Riyadh Masters 2023、DreamLeague Season 21、The International 2023 和 ESL One Kuala Lumpur 2023 的比赛结果。",
+    "plan_expected": true,
+    "acceptable_partition_axes": ["competition", "series", "tournament"],
+    "review_notes": "Competition entities should form independently completable result units."
+  },
+  {
+    "id": "hybrid_team_time",
+    "category": "hybrid",
+    "prompt": "比较 Xtreme Gaming、Team Spirit 和 Team Liquid 在 2024、2025、2026 三个年度的国际赛事表现。",
+    "plan_expected": true,
+    "acceptable_partition_axes": ["team", "year", "team_year"],
+    "review_notes": "Multiple decompositions are acceptable if every item is bounded and independently completable."
+  },
+  {
+    "id": "single_deep_entity",
+    "category": "single_deep",
+    "prompt": "深入分析 Xtreme Gaming 在 2025 年的主要国际赛事成绩和阵容构成。",
+    "plan_expected": false,
+    "acceptable_partition_axes": ["none", "results_and_roster"],
+    "review_notes": "Do not create a plan merely because previous evals used one. A plan is optional unless distinct result units materially help."
+  }
+]
