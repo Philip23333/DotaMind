@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from app.vnext.agent.answer_stage import (
     AnswerContextBuilder,
+    AnswerProjectionMode,
     AnswerResolution,
     AnswerResolutionMode,
     ExecutionOutcome,
@@ -205,6 +206,12 @@ def test_projection_includes_task_state_plan_and_active_artifact_range() -> None
         execution_messages=messages,
         outcome=_outcome(),
         task_state_coordinator=coordinator,
+        resolution=AnswerResolution(
+            mode=AnswerResolutionMode.FULL,
+            total_items=3,
+            completed_keys=("2021", "2022", "2023"),
+            remaining_keys=(),
+        ),
     )
 
     assert context.task_plan["current_key"] == "2021"  # type: ignore[index]
@@ -219,7 +226,7 @@ def test_projection_includes_task_state_plan_and_active_artifact_range() -> None
     ]
 
 
-def test_projection_contains_checkpointed_state_active_raw_and_pending_coverage() -> None:
+def test_partial_projection_contains_checkpointed_state_and_pending_coverage() -> None:
     coordinator = TaskStateCoordinator()
     coordinator.create_plan(
         [
@@ -265,15 +272,124 @@ def test_projection_contains_checkpointed_state_active_raw_and_pending_coverage(
         execution_messages=rewritten,
         outcome=_outcome(),
         task_state_coordinator=coordinator,
+        resolution=resolve_answer(
+            outcome=_outcome(), task_state_coordinator=coordinator
+        ),
     )
 
     assert context.task_state == {"2021": {"series_count": 22}}
-    assert [item["value"] for item in context.active_artifact_evidence] == [[{"year": 2022}]]
+    assert context.active_artifact_evidence == []
+    assert context.tool_evidence == []
     assert [item["status"] for item in context.task_plan["items"]] == [  # type: ignore[index]
         "completed",
         "in_progress",
         "pending",
     ]
+
+
+def test_resolution_aware_projection_matrix() -> None:
+    coordinator = _coordinator_for_resolution(
+        [
+            ("A", TaskItemStatus.COMPLETED),
+            ("B", TaskItemStatus.IN_PROGRESS),
+        ],
+        ["A"],
+    )
+    messages = [
+        AssistantMessage(
+            tool_calls=[
+                _call("read-B", "artifact.read"),
+                _call("team", "esports.team.search"),
+            ]
+        ),
+        _result(
+            "read-B",
+            ArtifactReadResult(
+                ref="artifact:ti", path="matches", value=[{"year": 2022}]
+            ).model_dump(mode="json"),
+        ),
+        _result("team", {"teams": [{"id": 1}]}),
+    ]
+    partial = resolve_answer(
+        outcome=_outcome(ExecutionStopReason.DEADLINE),
+        task_state_coordinator=coordinator,
+    )
+    full = AnswerResolution(
+        mode=AnswerResolutionMode.FULL,
+        total_items=2,
+        completed_keys=("A",),
+        remaining_keys=("B",),
+    )
+    builder = AnswerContextBuilder()
+
+    full_primary = builder.build(
+        execution_messages=messages,
+        outcome=_outcome(ExecutionStopReason.PLAN_COMPLETE),
+        task_state_coordinator=coordinator,
+        resolution=full,
+        projection_mode=AnswerProjectionMode.PRIMARY,
+    )
+    partial_primary = builder.build(
+        execution_messages=messages,
+        outcome=_outcome(ExecutionStopReason.DEADLINE),
+        task_state_coordinator=coordinator,
+        resolution=partial,
+        projection_mode=AnswerProjectionMode.PRIMARY,
+    )
+    full_degraded = builder.build(
+        execution_messages=messages,
+        outcome=_outcome(ExecutionStopReason.PLAN_COMPLETE),
+        task_state_coordinator=coordinator,
+        resolution=full,
+        projection_mode=AnswerProjectionMode.DEGRADED,
+    )
+    no_plan_degraded = builder.build(
+        execution_messages=messages,
+        outcome=_outcome(ExecutionStopReason.MODEL_DONE),
+        task_state_coordinator=None,
+        resolution=resolve_answer(
+            outcome=_outcome(ExecutionStopReason.MODEL_DONE),
+            task_state_coordinator=None,
+        ),
+        projection_mode=AnswerProjectionMode.DEGRADED,
+    )
+
+    assert full_primary.active_artifact_evidence
+    assert full_primary.tool_evidence
+    assert partial_primary.task_state == {"A": {"key": "A"}}
+    assert partial_primary.active_artifact_evidence == []
+    assert partial_primary.tool_evidence == []
+    assert full_degraded.task_state == {"A": {"key": "A"}}
+    assert full_degraded.active_artifact_evidence == []
+    assert full_degraded.tool_evidence == []
+    assert no_plan_degraded.active_artifact_evidence
+    assert no_plan_degraded.tool_evidence
+
+
+def test_projection_task_state_uses_only_completed_resolution_keys() -> None:
+    coordinator = _coordinator_for_resolution(
+        [
+            ("A", TaskItemStatus.COMPLETED),
+            ("B", TaskItemStatus.COMPLETED),
+        ],
+        ["A", "B"],
+    )
+    messages: list[object] = []
+    resolution = AnswerResolution(
+        mode=AnswerResolutionMode.FULL,
+        total_items=2,
+        completed_keys=("A",),
+        remaining_keys=("B",),
+    )
+
+    context = AnswerContextBuilder().build(
+        execution_messages=messages,  # type: ignore[arg-type]
+        outcome=_outcome(ExecutionStopReason.MODEL_DONE),
+        task_state_coordinator=coordinator,
+        resolution=resolution,
+    )
+
+    assert context.task_state == {"A": {"key": "A"}}
 
 
 def test_projection_includes_successful_normal_tools_and_excludes_control_or_failed_results(
@@ -305,6 +421,10 @@ def test_projection_includes_successful_normal_tools_and_excludes_control_or_fai
         execution_messages=messages,
         outcome=_outcome(ExecutionStopReason.MODEL_DONE),
         task_state_coordinator=None,
+        resolution=resolve_answer(
+            outcome=_outcome(ExecutionStopReason.MODEL_DONE),
+            task_state_coordinator=None,
+        ),
     )
 
     assert context.tool_evidence == [
@@ -326,11 +446,19 @@ def test_projection_without_coordinator_and_render_are_deterministic() -> None:
         execution_messages=messages,
         outcome=_outcome(ExecutionStopReason.MAX_STEPS),
         task_state_coordinator=None,
+        resolution=resolve_answer(
+            outcome=_outcome(ExecutionStopReason.MAX_STEPS),
+            task_state_coordinator=None,
+        ),
     )
     second = builder.build(
         execution_messages=messages,
         outcome=_outcome(ExecutionStopReason.MAX_STEPS),
         task_state_coordinator=None,
+        resolution=resolve_answer(
+            outcome=_outcome(ExecutionStopReason.MAX_STEPS),
+            task_state_coordinator=None,
+        ),
     )
 
     assert first.task_plan is None

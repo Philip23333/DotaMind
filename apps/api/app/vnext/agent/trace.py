@@ -213,6 +213,26 @@ class AgentTraceCollector:
             "context_bytes": accounting["effective_request"]["serialized_bytes"],
         }
 
+    def answer_projection(
+        self,
+        request: ModelRequest,
+        context: AnswerContext,
+        *,
+        kind: str,
+        resolution: AnswerResolution,
+    ) -> None:
+        accounting = build_context_accounting(request).to_dict()
+        self._trace.setdefault("answer_projections", []).append(
+            {
+                "kind": kind,
+                "resolution": resolution.mode.value,
+                "task_state_count": len(context.task_state),
+                "active_raw_count": len(context.active_artifact_evidence),
+                "tool_evidence_count": len(context.tool_evidence),
+                "context_bytes": accounting["effective_request"]["serialized_bytes"],
+            }
+        )
+
     def answer_attempt(
         self,
         *,

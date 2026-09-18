@@ -34,6 +34,13 @@ class AnswerResolutionMode(str, Enum):
     FAILURE = "failure"
 
 
+class AnswerProjectionMode(str, Enum):
+    """Which evidence projection is being built for an Answer attempt."""
+
+    PRIMARY = "primary"
+    DEGRADED = "degraded"
+
+
 @dataclass(frozen=True, slots=True)
 class ExecutionOutcome:
     """Small termination record passed from execution to answering."""
@@ -213,22 +220,48 @@ class AnswerContextBuilder:
         execution_messages: Sequence[Message],
         outcome: ExecutionOutcome,
         task_state_coordinator: TaskStateCoordinator | None,
+        resolution: AnswerResolution,
+        projection_mode: AnswerProjectionMode = AnswerProjectionMode.PRIMARY,
     ) -> AnswerContext:
         payload = (
             task_state_coordinator.context_payload()
             if task_state_coordinator is not None
             else {"task_plan": None, "task_state": {}, "active_manifest": []}
         )
+        task_plan = payload.get("task_plan")
+        has_plan = isinstance(task_plan, dict)
+        task_state_payload = payload.get("task_state", {})
+        if not isinstance(task_state_payload, dict):
+            task_state_payload = {}
+        task_state = (
+            {
+                key: deepcopy(task_state_payload[key])
+                for key in resolution.completed_keys
+                if key in task_state_payload
+            }
+            if has_plan
+            else deepcopy(task_state_payload)
+        )
+        restricted = has_plan and (
+            resolution.mode is AnswerResolutionMode.PARTIAL
+            or projection_mode is AnswerProjectionMode.DEGRADED
+        )
         return AnswerContext(
             execution_reason=outcome.reason,
             execution_steps=outcome.steps,
-            task_plan=deepcopy(payload.get("task_plan")),
-            task_state=deepcopy(payload.get("task_state", {})),
-            active_artifact_evidence=[
-                _artifact_evidence(observation)
-                for observation in collect_active_artifact_observations(execution_messages)
-            ],
-            tool_evidence=_tool_evidence(execution_messages),
+            task_plan=deepcopy(task_plan),
+            task_state=task_state,
+            active_artifact_evidence=(
+                []
+                if restricted
+                else [
+                    _artifact_evidence(observation)
+                    for observation in collect_active_artifact_observations(
+                        execution_messages
+                    )
+                ]
+            ),
+            tool_evidence=[] if restricted else _tool_evidence(execution_messages),
         )
 
 
@@ -302,6 +335,7 @@ def _json(value: Any) -> str:
 __all__ = [
     "AnswerContext",
     "AnswerContextBuilder",
+    "AnswerProjectionMode",
     "AnswerResolution",
     "AnswerResolutionMode",
     "ExecutionOutcome",

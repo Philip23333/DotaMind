@@ -17,6 +17,7 @@ from app.vnext.agent.task_state import (
     TaskStateCoordinator,
 )
 from app.vnext.agent.trace import AgentTraceCollector
+from app.vnext.artifacts import ArtifactReadResult
 from app.vnext.llm.protocol import (
     AssistantMessage,
     ModelResponse,
@@ -25,7 +26,8 @@ from app.vnext.llm.protocol import (
     ToolCall,
     UserMessage,
 )
-from app.vnext.tools import ToolDefinition, ToolRegistry
+from app.vnext.tools import ToolContextEffect, ToolDefinition, ToolRegistry
+from app.vnext.tools.artifacts.retrieval import ArtifactReadInput
 from tests.vnext.fakes import ScriptedModelClient, ScriptedStreamingModelClient
 
 
@@ -60,6 +62,43 @@ def _registry(handler=None, *, parallel_safe: bool = False) -> ToolRegistry:
 
 def _tool_turn(*calls: ToolCall) -> ModelResponse:
     return ModelResponse(message=AssistantMessage(content=None, tool_calls=list(calls)))
+
+
+def _projection_registry() -> ToolRegistry:
+    registry = ToolRegistry()
+
+    async def read(args: ArtifactReadInput) -> ArtifactReadResult:
+        return ArtifactReadResult(
+            ref=args.ref,
+            path=args.path,
+            value=[{"id": 1, "payload": "x" * 500}],
+            offset=args.offset or 0,
+            limit=args.limit,
+            total=1,
+            truncated=False,
+        )
+
+    registry.register(
+        ToolDefinition(
+            name="artifact.read",
+            description="Read artifact evidence.",
+            input_model=ArtifactReadInput,
+            output_model=ArtifactReadResult,
+            handler=read,
+            externalize_result=False,
+            context_effect=ToolContextEffect.BOUNDED,
+        )
+    )
+    registry.register(
+        ToolDefinition(
+            name="echo",
+            description="Return the input.",
+            input_model=EchoInput,
+            output_model=EchoOutput,
+            handler=lambda args: EchoOutput(value=args.value),
+        )
+    )
+    return registry
 
 
 def _run(runtime: AgentRuntime, **kwargs):
@@ -421,6 +460,167 @@ def test_partial_task_state_still_runs_answer_stage() -> None:
     trace = collector.snapshot()
     assert trace["answer_resolution"]["mode"] == "partial"
     assert "answer_stage" in trace
+
+
+def test_partial_primary_request_excludes_uncheckpointed_evidence() -> None:
+    coordinator = TaskStateCoordinator()
+    coordinator.plan = TaskPlan(
+        items=(
+            TaskItem("A", "Collect A", TaskItemStatus.COMPLETED),
+            TaskItem("B", "Collect B", TaskItemStatus.IN_PROGRESS),
+        ),
+        current_key="B",
+    )
+    coordinator.store.put(
+        TaskCheckpoint(
+            checkpoint_id="checkpoint:A",
+            key="A",
+            value={"fact": "A"},
+            source_tool_call_ids=(),
+        )
+    )
+    model = ScriptedModelClient(
+        [
+            _tool_turn(
+                ToolCall(
+                    id="read-B",
+                    name="artifact.read",
+                    arguments={
+                        "ref": "artifact:test",
+                        "mode": "read",
+                        "path": "rows",
+                        "task_key": "B",
+                    },
+                ),
+                _call("team", value=1),
+            ),
+            ModelResponse.from_final("execution"),
+            ModelResponse.from_final("partial answer"),
+        ]
+    )
+    runtime = AgentRuntime(
+        model,
+        _projection_registry(),
+        limits=AgentLimits(deadline_seconds=2),
+        task_state_coordinator=coordinator,
+    )
+
+    assert _run(runtime).content == "partial answer"
+    context = model.requests[2].messages[-1].content
+    assert '"fact":"A"' in context
+    assert "Uncheckpointed verified artifact evidence:\n[]" in context
+    assert "Other verified tool evidence:\n[]" in context
+
+
+def test_degraded_plan_projection_is_smaller_than_primary() -> None:
+    async def slow() -> ModelResponse:
+        await asyncio.sleep(0.2)
+        return ModelResponse.from_final("late")
+
+    coordinator = TaskStateCoordinator()
+    coordinator.plan = TaskPlan(
+        items=(
+            TaskItem("A", "Collect A", TaskItemStatus.COMPLETED),
+            TaskItem("B", "Collect B", TaskItemStatus.COMPLETED),
+        ),
+        current_key="A",
+    )
+    for key in ("A", "B"):
+        coordinator.store.put(
+            TaskCheckpoint(
+                checkpoint_id=f"checkpoint:{key}",
+                key=key,
+                value={"fact": key},
+                source_tool_call_ids=(),
+            )
+        )
+    model = ScriptedModelClient(
+        [
+            _tool_turn(
+                ToolCall(
+                    id="read-A",
+                    name="artifact.read",
+                    arguments={
+                        "ref": "artifact:test",
+                        "mode": "read",
+                        "path": "rows",
+                        "task_key": "A",
+                    },
+                ),
+                _call("team", value=1),
+            ),
+            ModelResponse.from_final("execution"),
+            slow(),
+            ModelResponse.from_final("compact"),
+        ]
+    )
+    collector = AgentTraceCollector()
+    runtime = AgentRuntime(
+        model,
+        _projection_registry(),
+        limits=AgentLimits(
+            deadline_seconds=2,
+            answer_timeout_seconds=0.03,
+            degraded_answer_timeout_seconds=1,
+        ),
+        task_state_coordinator=coordinator,
+    )
+
+    assert _run(runtime, trace_collector=collector).content == "compact"
+    primary_context = model.requests[2].messages[-1].content
+    degraded_context = model.requests[3].messages[-1].content
+    assert "Uncheckpointed verified artifact evidence:" in primary_context
+    assert "Other verified tool evidence:" in primary_context
+    assert "Uncheckpointed verified artifact evidence:\n[]" in degraded_context
+    assert "Other verified tool evidence:\n[]" in degraded_context
+    projections = collector.snapshot()["answer_projections"]
+    assert projections[0]["active_raw_count"] > 0
+    assert projections[1]["active_raw_count"] == 0
+    assert projections[1]["tool_evidence_count"] == 0
+    assert projections[1]["context_bytes"] < projections[0]["context_bytes"]
+
+
+def test_degraded_no_plan_projection_preserves_verified_evidence() -> None:
+    async def slow() -> ModelResponse:
+        await asyncio.sleep(0.2)
+        return ModelResponse.from_final("late")
+
+    model = ScriptedModelClient(
+        [
+            _tool_turn(
+                ToolCall(
+                    id="read",
+                    name="artifact.read",
+                    arguments={
+                        "ref": "artifact:test",
+                        "mode": "read",
+                        "path": "rows",
+                    },
+                ),
+                _call("team", value=1),
+            ),
+            ModelResponse.from_final("execution"),
+            slow(),
+            ModelResponse.from_final("compact"),
+        ]
+    )
+    collector = AgentTraceCollector()
+    runtime = AgentRuntime(
+        model,
+        _projection_registry(),
+        limits=AgentLimits(
+            deadline_seconds=2,
+            answer_timeout_seconds=0.03,
+            degraded_answer_timeout_seconds=1,
+        ),
+    )
+
+    assert _run(runtime, trace_collector=collector).content == "compact"
+    degraded_context = model.requests[3].messages[-1].content
+    assert "artifact:test" in degraded_context
+    assert '"tool":"echo"' in degraded_context
+    assert collector.snapshot()["answer_projections"][1]["active_raw_count"] > 0
+    assert collector.snapshot()["answer_projections"][1]["tool_evidence_count"] > 0
 
 
 def test_cancellation_during_execution_skips_answer_stage() -> None:

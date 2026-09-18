@@ -13,6 +13,7 @@ from pydantic import ValidationError
 
 from app.vnext.agent.answer_stage import (
     AnswerContextBuilder,
+    AnswerProjectionMode,
     AnswerResolutionMode,
     ExecutionOutcome,
     ExecutionStopReason,
@@ -366,20 +367,29 @@ class AgentRuntime:
                 )
                 return
 
-            answer_context = AnswerContextBuilder().build(
+            answer_context_builder = AnswerContextBuilder()
+            primary_context = answer_context_builder.build(
                 execution_messages=request_messages,
                 outcome=outcome,
                 task_state_coordinator=self.task_state_coordinator,
+                resolution=resolution,
+                projection_mode=AnswerProjectionMode.PRIMARY,
             )
             answer_request = _build_answer_request(
                 instruction=ANSWER_INSTRUCTION,
                 messages=messages,
-                context=answer_context,
+                context=primary_context,
                 step=answer_step,
             )
             if trace_collector is not None:
                 trace_collector.model_request(answer_request)
-                trace_collector.answer_stage(answer_request, answer_context)
+                trace_collector.answer_stage(answer_request, primary_context)
+                trace_collector.answer_projection(
+                    answer_request,
+                    primary_context,
+                    kind="primary",
+                    resolution=resolution,
+                )
             yield await self._publish(
                 ModelRequested(
                     step=answer_step,
@@ -434,14 +444,27 @@ class AgentRuntime:
                     )
 
                 degraded_step = answer_step + 1
+                degraded_context = answer_context_builder.build(
+                    execution_messages=request_messages,
+                    outcome=outcome,
+                    task_state_coordinator=self.task_state_coordinator,
+                    resolution=resolution,
+                    projection_mode=AnswerProjectionMode.DEGRADED,
+                )
                 degraded_request = _build_answer_request(
                     instruction=DEGRADED_ANSWER_INSTRUCTION,
                     messages=messages,
-                    context=answer_context,
+                    context=degraded_context,
                     step=degraded_step,
                 )
                 if trace_collector is not None:
                     trace_collector.model_request(degraded_request)
+                    trace_collector.answer_projection(
+                        degraded_request,
+                        degraded_context,
+                        kind="degraded",
+                        resolution=resolution,
+                    )
                 yield await self._publish(
                     ModelRequested(
                         step=degraded_step,
