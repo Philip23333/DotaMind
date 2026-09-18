@@ -92,6 +92,12 @@ def test_trace_records_execution_context_and_answer_stage_metrics() -> None:
     }
     assert snapshot["answer_stage"]["tool_count"] == 0
     assert snapshot["answer_stage"]["context_bytes"] > 0
+    assert len(snapshot["answer_attempts"]) == 1
+    assert snapshot["answer_attempts"][0]["kind"] == "primary"
+    assert snapshot["answer_attempts"][0]["step"] == 2
+    assert snapshot["answer_attempts"][0]["status"] == "completed"
+    assert snapshot["answer_attempts"][0]["error_code"] is None
+    assert snapshot["answer_fallback"] == "none"
 
 
 def test_trace_context_updates_until_max_steps_without_finalization_phase() -> None:

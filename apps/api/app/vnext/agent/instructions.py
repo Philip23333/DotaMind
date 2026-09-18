@@ -70,4 +70,17 @@ If execution coverage is incomplete, clearly distinguish completed or verified
 results from portions that could not be completed.
 """
 
-__all__ = ["AGENT_INSTRUCTION", "ANSWER_INSTRUCTION"]
+DEGRADED_ANSWER_INSTRUCTION = """\
+Execution has ended.
+
+Produce a concise user-facing answer using only the original conversation and
+the verified execution evidence provided below.
+
+Prioritize the main result and completed coverage. Do not expand every
+underlying record unless necessary. If execution coverage is incomplete,
+clearly state what was completed and what remains incomplete.
+
+Do not continue planning, attempt tool use, or invent unsupported facts.
+"""
+
+__all__ = ["AGENT_INSTRUCTION", "ANSWER_INSTRUCTION", "DEGRADED_ANSWER_INSTRUCTION"]

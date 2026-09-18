@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from app.vnext.agent.answer_stage import (
     AnswerContextBuilder,
+    AnswerResolution,
     AnswerResolutionMode,
     ExecutionOutcome,
     ExecutionStopReason,
+    build_answer_fallback,
     resolve_answer,
 )
 from app.vnext.agent.task_state import (
@@ -140,6 +142,39 @@ def test_resolve_completed_plan_without_state_is_not_full() -> None:
     assert resolution.mode is AnswerResolutionMode.FAILURE
     assert resolution.completed_keys == ()
     assert resolution.remaining_keys == ("A",)
+
+
+def test_build_answer_fallback_distinguishes_full_partial_and_no_plan() -> None:
+    full = AnswerResolution(
+        mode=AnswerResolutionMode.FULL,
+        total_items=2,
+        completed_keys=("A", "B"),
+        remaining_keys=(),
+    )
+    partial = AnswerResolution(
+        mode=AnswerResolutionMode.PARTIAL,
+        total_items=3,
+        completed_keys=("A",),
+        remaining_keys=("B", "C"),
+    )
+    no_plan = AnswerResolution(
+        mode=AnswerResolutionMode.FULL,
+        total_items=None,
+        completed_keys=(),
+        remaining_keys=(),
+    )
+
+    assert "2 of 2 planned parts were completed" in build_answer_fallback(
+        full, _outcome(ExecutionStopReason.PLAN_COMPLETE)
+    ).content
+    partial_text = build_answer_fallback(
+        partial, _outcome(ExecutionStopReason.DEADLINE)
+    ).content
+    assert "1 of 3 planned parts were completed" in partial_text
+    assert "won't infer or fill them in" in partial_text
+    assert "planned parts" not in build_answer_fallback(
+        no_plan, _outcome(ExecutionStopReason.MODEL_DONE)
+    ).content
 
 
 def test_projection_includes_task_state_plan_and_active_artifact_range() -> None:

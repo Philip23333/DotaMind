@@ -143,6 +143,42 @@ def build_failure_answer(
     return FinalMessage(content="\n\n".join(lines))
 
 
+def build_answer_fallback(
+    resolution: AnswerResolution,
+    outcome: ExecutionOutcome,
+) -> FinalMessage:
+    """Explain that durable execution finished but answer rendering did not."""
+
+    del outcome
+    if resolution.total_items is None:
+        return FinalMessage(
+            content=(
+                "The task execution completed, but I wasn't able to generate the "
+                "detailed final response within the response limit."
+            )
+        )
+
+    completed = len(resolution.completed_keys)
+    coverage = f"{completed} of {resolution.total_items} planned parts were completed."
+    if resolution.mode is AnswerResolutionMode.FULL:
+        return FinalMessage(
+            content=(
+                "The requested data processing was completed, but I wasn't able "
+                "to generate the detailed final response within the response "
+                "limit.\n\n"
+                f"{coverage}"
+            )
+        )
+    return FinalMessage(
+        content=(
+            "I wasn't able to generate the detailed final response within the "
+            "response limit.\n\n"
+            f"{coverage} The remaining parts were not completed, so I won't "
+            "infer or fill them in."
+        )
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class AnswerContext:
     """Evidence-only projection consumed by one Answer Stage invocation."""
@@ -270,6 +306,7 @@ __all__ = [
     "AnswerResolutionMode",
     "ExecutionOutcome",
     "ExecutionStopReason",
+    "build_answer_fallback",
     "build_failure_answer",
     "render_answer_context",
     "resolve_answer",

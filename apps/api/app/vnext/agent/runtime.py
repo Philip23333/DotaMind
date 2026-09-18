@@ -16,6 +16,7 @@ from app.vnext.agent.answer_stage import (
     AnswerResolutionMode,
     ExecutionOutcome,
     ExecutionStopReason,
+    build_answer_fallback,
     build_failure_answer,
     resolve_answer,
 )
@@ -39,7 +40,7 @@ from app.vnext.agent.events import (
     ToolFailed,
     ToolStarted,
 )
-from app.vnext.agent.instructions import ANSWER_INSTRUCTION
+from app.vnext.agent.instructions import ANSWER_INSTRUCTION, DEGRADED_ANSWER_INSTRUCTION
 from app.vnext.agent.limits import AgentLimits
 from app.vnext.agent.materialization_budget import MaterializationBudget
 from app.vnext.agent.runtime_context import RuntimeContext, classify_time_pressure
@@ -370,12 +371,12 @@ class AgentRuntime:
                 outcome=outcome,
                 task_state_coordinator=self.task_state_coordinator,
             )
-            answer_messages = [
-                SystemMessage(content=ANSWER_INSTRUCTION),
-                *_answer_conversation(messages),
-                SystemMessage(content=answer_context.render()),
-            ]
-            answer_request = ModelRequest(messages=answer_messages, tools=[], step=answer_step)
+            answer_request = _build_answer_request(
+                instruction=ANSWER_INSTRUCTION,
+                messages=messages,
+                context=answer_context,
+                step=answer_step,
+            )
             if trace_collector is not None:
                 trace_collector.model_request(answer_request)
                 trace_collector.answer_stage(answer_request, answer_context)
@@ -387,43 +388,183 @@ class AgentRuntime:
                 ),
                 sink,
             )
-            answer_deadline = _Deadline(self.limits.answer_timeout_seconds)
-            response, duration, answer_text_events = await self._invoke_model(
-                answer_request,
-                token=token,
-                deadline=answer_deadline,
-                step=answer_step,
-                trace_collector=trace_collector,
-                publish_text=True,
-            )
-            for text_event in answer_text_events:
-                yield await self._publish(text_event, sink)
-            answer = response.message
-            if trace_collector is not None:
-                trace_collector.model_response(answer_step, response, duration)
-            yield await self._publish(
-                ModelResponded(
+            primary_started = monotonic()
+            try:
+                response, duration, answer_text_events = await self._invoke_model(
+                    answer_request,
+                    token=token,
+                    deadline=_Deadline(self.limits.answer_timeout_seconds),
                     step=answer_step,
-                    has_tool_calls=isinstance(answer, AssistantMessage)
-                    and bool(answer.tool_calls),
-                    duration=duration,
-                ),
-                sink,
-            )
-            if not isinstance(answer, FinalMessage):
-                raise ModelProtocolError("answer stage model requested tools")
-            if trace_collector is not None:
-                trace_collector.terminal(
-                    status="completed", error_code=None, error_message=None
+                    trace_collector=trace_collector,
+                    publish_text=True,
                 )
-            yield await self._publish(
-                AgentCompleted(
-                    step=answer_step,
-                    duration=max(0.0, monotonic() - started_at),
-                    final=answer,
-                ),
-                sink,
-            )
+                answer = response.message
+                if not isinstance(answer, FinalMessage):
+                    if trace_collector is not None:
+                        trace_collector.model_response(answer_step, response, duration)
+                    yield await self._publish(
+                        ModelResponded(
+                            step=answer_step,
+                            has_tool_calls=bool(answer.tool_calls),
+                            duration=duration,
+                        ),
+                        sink,
+                    )
+                    raise ModelProtocolError("answer stage model requested tools")
+                for text_event in answer_text_events:
+                    yield await self._publish(text_event, sink)
+                if trace_collector is not None:
+                    trace_collector.model_response(answer_step, response, duration)
+                yield await self._publish(
+                    ModelResponded(
+                        step=answer_step,
+                        has_tool_calls=False,
+                        duration=duration,
+                    ),
+                    sink,
+                )
+            except (AgentDeadlineExceeded, ModelProviderError, ModelProtocolError) as exc:
+                if trace_collector is not None:
+                    trace_collector.answer_attempt(
+                        kind="primary",
+                        step=answer_step,
+                        status=_answer_attempt_status(exc),
+                        duration_seconds=max(0.0, monotonic() - primary_started),
+                        error_code=exc.code,
+                    )
+
+                degraded_step = answer_step + 1
+                degraded_request = _build_answer_request(
+                    instruction=DEGRADED_ANSWER_INSTRUCTION,
+                    messages=messages,
+                    context=answer_context,
+                    step=degraded_step,
+                )
+                if trace_collector is not None:
+                    trace_collector.model_request(degraded_request)
+                yield await self._publish(
+                    ModelRequested(
+                        step=degraded_step,
+                        message_count=len(degraded_request.messages),
+                        tool_count=0,
+                    ),
+                    sink,
+                )
+                degraded_started = monotonic()
+                try:
+                    (
+                        degraded_response,
+                        degraded_duration,
+                        degraded_text_events,
+                    ) = await self._invoke_model(
+                        degraded_request,
+                        token=token,
+                        deadline=_Deadline(self.limits.degraded_answer_timeout_seconds),
+                        step=degraded_step,
+                        trace_collector=trace_collector,
+                        publish_text=True,
+                    )
+                    degraded_answer = degraded_response.message
+                    if not isinstance(degraded_answer, FinalMessage):
+                        if trace_collector is not None:
+                            trace_collector.model_response(
+                                degraded_step, degraded_response, degraded_duration
+                            )
+                        yield await self._publish(
+                            ModelResponded(
+                                step=degraded_step,
+                                has_tool_calls=bool(degraded_answer.tool_calls),
+                                duration=degraded_duration,
+                            ),
+                            sink,
+                        )
+                        raise ModelProtocolError("answer stage model requested tools")
+                    for text_event in degraded_text_events:
+                        yield await self._publish(text_event, sink)
+                    if trace_collector is not None:
+                        trace_collector.model_response(
+                            degraded_step, degraded_response, degraded_duration
+                        )
+                    yield await self._publish(
+                        ModelResponded(
+                            step=degraded_step,
+                            has_tool_calls=False,
+                            duration=degraded_duration,
+                        ),
+                        sink,
+                    )
+                    if trace_collector is not None:
+                        trace_collector.answer_attempt(
+                            kind="degraded",
+                            step=degraded_step,
+                            status="completed",
+                            duration_seconds=degraded_duration,
+                            error_code=None,
+                        )
+                        trace_collector.answer_fallback("degraded_model")
+                    if trace_collector is not None:
+                        trace_collector.terminal(
+                            status="completed", error_code=None, error_message=None
+                        )
+                    yield await self._publish(
+                        AgentCompleted(
+                            step=degraded_step,
+                            duration=max(0.0, monotonic() - started_at),
+                            final=degraded_answer,
+                        ),
+                        sink,
+                    )
+                    return
+                except (
+                    AgentDeadlineExceeded,
+                    ModelProviderError,
+                    ModelProtocolError,
+                ) as degraded_exc:
+                    if trace_collector is not None:
+                        trace_collector.answer_attempt(
+                            kind="degraded",
+                            step=degraded_step,
+                            status=_answer_attempt_status(degraded_exc),
+                            duration_seconds=max(0.0, monotonic() - degraded_started),
+                            error_code=degraded_exc.code,
+                        )
+                        trace_collector.answer_fallback("deterministic")
+                    final = build_answer_fallback(resolution, outcome)
+                    if trace_collector is not None:
+                        trace_collector.terminal(
+                            status="completed", error_code=None, error_message=None
+                        )
+                    yield await self._publish(
+                        AgentCompleted(
+                            step=degraded_step,
+                            duration=max(0.0, monotonic() - started_at),
+                            final=final,
+                        ),
+                        sink,
+                    )
+                    return
+            else:
+                if trace_collector is not None:
+                    trace_collector.answer_attempt(
+                        kind="primary",
+                        step=answer_step,
+                        status="completed",
+                        duration_seconds=duration,
+                        error_code=None,
+                    )
+                    trace_collector.answer_fallback("none")
+                if trace_collector is not None:
+                    trace_collector.terminal(
+                        status="completed", error_code=None, error_message=None
+                    )
+                yield await self._publish(
+                    AgentCompleted(
+                        step=answer_step,
+                        duration=max(0.0, monotonic() - started_at),
+                        final=answer,
+                    ),
+                    sink,
+                )
         except AgentCancelledError as exc:
             if trace_collector is not None:
                 trace_collector.terminal(
@@ -788,6 +929,30 @@ def _append_system_instruction(
             return instruction_messages
     instruction_messages.insert(0, SystemMessage(content=instruction))
     return instruction_messages
+
+
+def _build_answer_request(
+    *,
+    instruction: str,
+    messages: Sequence[Message],
+    context: Any,
+    step: int,
+) -> ModelRequest:
+    return ModelRequest(
+        messages=[
+            SystemMessage(content=instruction),
+            *_answer_conversation(messages),
+            SystemMessage(content=context.render()),
+        ],
+        tools=[],
+        step=step,
+    )
+
+
+def _answer_attempt_status(error: AgentRuntimeError) -> str:
+    if isinstance(error, AgentDeadlineExceeded):
+        return "timeout"
+    return "error"
 
 
 def _answer_conversation(messages: Sequence[Message]) -> list[Message]:

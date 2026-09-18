@@ -213,6 +213,28 @@ class AgentTraceCollector:
             "context_bytes": accounting["effective_request"]["serialized_bytes"],
         }
 
+    def answer_attempt(
+        self,
+        *,
+        kind: str,
+        step: int,
+        status: str,
+        duration_seconds: float,
+        error_code: str | None,
+    ) -> None:
+        self._trace.setdefault("answer_attempts", []).append(
+            {
+                "kind": kind,
+                "step": step,
+                "status": status,
+                "duration_seconds": duration_seconds,
+                "error_code": error_code,
+            }
+        )
+
+    def answer_fallback(self, kind: str) -> None:
+        self._trace["answer_fallback"] = kind
+
     def snapshot(self) -> dict[str, Any]:
         return self._trace.copy()
 

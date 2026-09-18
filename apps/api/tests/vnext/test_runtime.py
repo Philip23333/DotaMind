@@ -131,14 +131,223 @@ def test_execution_text_deltas_are_traced_but_not_published() -> None:
     assert isinstance(events[-1], AgentCompleted)
 
 
-def test_answer_stage_rejects_structured_tool_calls() -> None:
+def test_primary_answer_protocol_failure_retries_with_degraded_answer() -> None:
     model = ScriptedModelClient(
         [ModelResponse.from_final("execution"), _tool_turn(_call())]
     )
     runtime = AgentRuntime(model, _registry(), limits=AgentLimits(deadline_seconds=2))
 
-    with pytest.raises(ModelProtocolError):
-        _run(runtime)
+    assert _run(runtime).content == "execution"
+    assert len(model.requests) == 3
+    assert model.requests[1].tools == []
+    assert model.requests[2].tools == []
+
+
+def test_primary_timeout_retries_with_degraded_answer() -> None:
+    async def slow() -> ModelResponse:
+        await asyncio.sleep(0.2)
+        return ModelResponse.from_final("late")
+
+    model = ScriptedModelClient(
+        [ModelResponse.from_final("execution"), slow(), ModelResponse.from_final("compact")]
+    )
+    collector = AgentTraceCollector()
+    runtime = AgentRuntime(
+        model,
+        ToolRegistry(),
+        limits=AgentLimits(
+            deadline_seconds=2,
+            answer_timeout_seconds=0.03,
+            degraded_answer_timeout_seconds=1,
+        ),
+    )
+
+    assert _run(runtime, trace_collector=collector).content == "compact"
+    assert len(model.requests) == 3
+    assert collector.snapshot()["answer_attempts"][0]["status"] == "timeout"
+    assert collector.snapshot()["answer_attempts"][1]["status"] == "completed"
+    assert collector.snapshot()["answer_fallback"] == "degraded_model"
+    assert collector.snapshot()["terminal"]["status"] == "completed"
+
+
+def test_primary_and_degraded_timeout_use_deterministic_fallback() -> None:
+    async def slow() -> ModelResponse:
+        await asyncio.sleep(0.2)
+        return ModelResponse.from_final("late")
+
+    model = ScriptedModelClient([ModelResponse.from_final("execution"), slow(), slow()])
+    collector = AgentTraceCollector()
+    runtime = AgentRuntime(
+        model,
+        ToolRegistry(),
+        limits=AgentLimits(
+            deadline_seconds=2,
+            answer_timeout_seconds=0.03,
+            degraded_answer_timeout_seconds=0.03,
+        ),
+    )
+
+    result = _run(runtime, trace_collector=collector)
+
+    assert "detailed final response" in result.content
+    assert len(model.requests) == 3
+    assert collector.snapshot()["answer_fallback"] == "deterministic"
+    assert collector.snapshot()["terminal"]["status"] == "completed"
+
+
+def test_partial_double_answer_failure_reports_completed_coverage() -> None:
+    async def slow() -> ModelResponse:
+        await asyncio.sleep(0.2)
+        return ModelResponse.from_final("late")
+
+    coordinator = TaskStateCoordinator()
+    coordinator.plan = TaskPlan(
+        items=(
+            TaskItem("A", "Collect A", TaskItemStatus.COMPLETED),
+            TaskItem("B", "Collect B", TaskItemStatus.IN_PROGRESS),
+            TaskItem("C", "Collect C", TaskItemStatus.PENDING),
+        ),
+        current_key="B",
+    )
+    coordinator.store.put(
+        TaskCheckpoint(
+            checkpoint_id="checkpoint:A",
+            key="A",
+            value={"fact": "A"},
+            source_tool_call_ids=(),
+        )
+    )
+    model = ScriptedModelClient([ModelResponse.from_final("execution"), slow(), slow()])
+    runtime = AgentRuntime(
+        model,
+        ToolRegistry(),
+        limits=AgentLimits(
+            deadline_seconds=2,
+            answer_timeout_seconds=0.03,
+            degraded_answer_timeout_seconds=0.03,
+        ),
+        task_state_coordinator=coordinator,
+    )
+
+    result = _run(runtime)
+
+    assert "1 of 3 planned parts were completed" in result.content
+    assert "won't infer or fill them in" in result.content
+
+
+def test_full_double_answer_failure_reports_completed_coverage() -> None:
+    async def slow() -> ModelResponse:
+        await asyncio.sleep(0.2)
+        return ModelResponse.from_final("late")
+
+    coordinator = TaskStateCoordinator()
+    coordinator.plan = TaskPlan(
+        items=(
+            TaskItem("A", "Collect A", TaskItemStatus.COMPLETED),
+            TaskItem("B", "Collect B", TaskItemStatus.COMPLETED),
+        ),
+        current_key=None,
+    )
+    for key in ("A", "B"):
+        coordinator.store.put(
+            TaskCheckpoint(
+                checkpoint_id=f"checkpoint:{key}",
+                key=key,
+                value={"fact": key},
+                source_tool_call_ids=(),
+            )
+        )
+    model = ScriptedModelClient([ModelResponse.from_final("execution"), slow(), slow()])
+    runtime = AgentRuntime(
+        model,
+        ToolRegistry(),
+        limits=AgentLimits(
+            deadline_seconds=2,
+            answer_timeout_seconds=0.03,
+            degraded_answer_timeout_seconds=0.03,
+        ),
+        task_state_coordinator=coordinator,
+    )
+
+    result = _run(runtime)
+
+    assert "2 of 2 planned parts were completed" in result.content
+    assert "remaining parts were not completed" not in result.content
+
+
+def test_primary_provider_failure_retries_with_degraded_answer() -> None:
+    model = ScriptedModelClient(
+        [
+            ModelResponse.from_final("execution"),
+            ValueError("provider down"),
+            ModelResponse.from_final("compact"),
+        ]
+    )
+    runtime = AgentRuntime(model, ToolRegistry(), limits=AgentLimits(deadline_seconds=2))
+
+    assert _run(runtime).content == "compact"
+    assert len(model.requests) == 3
+
+
+def test_failed_primary_stream_text_is_not_published() -> None:
+    model = ScriptedStreamingModelClient(
+        [
+            [ModelResponse.from_final("execution")],
+            [
+                ModelTextDelta(text="bad partial"),
+                _tool_turn(_call()),
+            ],
+            [
+                ModelTextDelta(text="good compact"),
+                ModelResponse.from_final("good compact"),
+            ],
+        ]
+    )
+    events = []
+    collector = AgentTraceCollector()
+    runtime = AgentRuntime(model, _registry(), limits=AgentLimits(deadline_seconds=2))
+
+    async def collect() -> None:
+        async for event in runtime.run_stream(
+            [UserMessage(content="hello")], trace_collector=collector
+        ):
+            events.append(event)
+
+    asyncio.run(collect())
+
+    assert [event.text for event in events if isinstance(event, TextDelta)] == [
+        "good compact"
+    ]
+    assert collector.snapshot()["steps"][1]["streamed_text"] == ["bad partial"]
+
+
+def test_cancellation_during_primary_answer_skips_degraded_retry() -> None:
+    token = CancellationToken()
+    primary_started = asyncio.Event()
+
+    async def slow() -> ModelResponse:
+        primary_started.set()
+        await asyncio.sleep(1)
+        return ModelResponse.from_final("late")
+
+    model = ScriptedModelClient([ModelResponse.from_final("execution"), slow()])
+    runtime = AgentRuntime(
+        model,
+        ToolRegistry(),
+        limits=AgentLimits(deadline_seconds=2, answer_timeout_seconds=1),
+    )
+
+    async def run_and_cancel() -> None:
+        task = asyncio.create_task(
+            runtime.run([UserMessage(content="hello")], cancellation_token=token)
+        )
+        await primary_started.wait()
+        token.cancel()
+        with pytest.raises(AgentCancelledError):
+            await task
+
+    asyncio.run(run_and_cancel())
+    assert len(model.requests) == 2
 
 
 def test_deadline_without_durable_state_closes_with_failure_answer() -> None:
