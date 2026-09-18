@@ -6,9 +6,10 @@ from typing import Any
 
 from pydantic import Field, field_validator
 
-from app.vnext.agent.task_state import TaskStateCoordinator
+from app.vnext.agent.task_state import CheckpointSourceError, TaskStateCoordinator
 from app.vnext.domain.common.models import DomainModel
 from app.vnext.tools.definition import ToolDefinition
+from app.vnext.tools.errors import StructuredToolError
 from app.vnext.tools.registry import ToolRegistry
 
 
@@ -59,11 +60,18 @@ def register_task_checkpoint_tool(
     coordinator: TaskStateCoordinator,
 ) -> None:
     async def checkpoint(args: TaskCheckpointInput) -> TaskCheckpointResult:
-        result = coordinator.create_checkpoint(
-            args.key,
-            args.value,
-            args.source_tool_call_ids,
-        )
+        try:
+            result = coordinator.create_checkpoint(
+                args.key,
+                args.value,
+                args.source_tool_call_ids,
+            )
+        except CheckpointSourceError as exc:
+            raise StructuredToolError(
+                "invalid_checkpoint_source",
+                str(exc),
+                exc.details,
+            ) from exc
         return TaskCheckpointResult(
             checkpoint_id=result.checkpoint_id,
             key=result.key,

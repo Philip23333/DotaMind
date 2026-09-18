@@ -22,6 +22,7 @@ ToolErrorCode = Literal[
     "unsupported_scope",
     "unsupported_field",
     "invalid_value",
+    "invalid_checkpoint_source",
     "configuration_error",
     "provider_timeout",
     "provider_http_error",
@@ -39,4 +40,18 @@ class ToolError(BaseModel):
     details: dict[str, Any] = Field(default_factory=dict)
 
 
-__all__ = ["ToolError", "ToolErrorCode"]
+class StructuredToolError(Exception):
+    """A sanitized, structured failure raised from a tool handler."""
+
+    def __init__(
+        self,
+        code: ToolErrorCode,
+        message: str,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.details = details or {}
+
+
+__all__ = ["StructuredToolError", "ToolError", "ToolErrorCode"]

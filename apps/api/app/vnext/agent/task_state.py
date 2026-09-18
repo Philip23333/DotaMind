@@ -60,6 +60,25 @@ class EvidenceLease:
     raw_bytes: int
 
 
+class CheckpointSourceError(ValueError):
+    """A recoverable checkpoint source validation failure."""
+
+    def __init__(
+        self,
+        *,
+        checkpoint_key: str,
+        invalid_sources: Sequence[str],
+        available_sources: Sequence[str],
+        message: str,
+    ) -> None:
+        self.details = {
+            "checkpoint_key": checkpoint_key,
+            "invalid_sources": list(invalid_sources),
+            "available_sources": list(available_sources),
+        }
+        super().__init__(message)
+
+
 @dataclass(frozen=True, slots=True)
 class PartitionEvidenceRelease:
     """Evidence released when one task partition is checkpointed successfully."""
@@ -376,9 +395,14 @@ class TaskStateCoordinator:
             if tool_call_id in self._claimed_source_tool_call_ids
         ]
         if claimed:
-            raise ValueError(
-                "checkpoint sources have already been claimed: "
-                + ", ".join(claimed)
+            raise CheckpointSourceError(
+                checkpoint_key=key,
+                invalid_sources=claimed,
+                available_sources=self._available_checkpoint_source_ids(key),
+                message=(
+                    "checkpoint sources have already been claimed: "
+                    + ", ".join(claimed)
+                ),
             )
         unknown = [
             tool_call_id
@@ -386,9 +410,15 @@ class TaskStateCoordinator:
             if tool_call_id not in self._active_observations
         ]
         if unknown:
-            raise ValueError(
-                "checkpoint sources must refer to active raw artifact.read observations: "
-                + ", ".join(unknown)
+            raise CheckpointSourceError(
+                checkpoint_key=key,
+                invalid_sources=unknown,
+                available_sources=self._available_checkpoint_source_ids(key),
+                message=(
+                    "checkpoint sources must refer to active raw artifact.read "
+                    "observations: "
+                    + ", ".join(unknown)
+                ),
             )
         mismatched = [
             tool_call_id
@@ -399,10 +429,25 @@ class TaskStateCoordinator:
             )
         ]
         if mismatched:
-            raise ValueError(
-                "checkpoint sources are leased to different task items: "
-                + ", ".join(mismatched)
+            raise CheckpointSourceError(
+                checkpoint_key=key,
+                invalid_sources=mismatched,
+                available_sources=self._available_checkpoint_source_ids(key),
+                message=(
+                    "checkpoint sources are leased to different task items: "
+                    + ", ".join(mismatched)
+                ),
             )
+
+    def _available_checkpoint_source_ids(self, key: str) -> list[str]:
+        return [
+            tool_call_id
+            for tool_call_id in self._active_observations
+            if (
+                (lease := self._active_evidence_leases.get(tool_call_id)) is None
+                or lease.task_key == key
+            )
+        ]
 
 
 def _manifest_item(
@@ -496,6 +541,7 @@ def _json(value: Any) -> str:
 
 
 __all__ = [
+    "CheckpointSourceError",
     "EvidenceLease",
     "PartitionEvidenceRelease",
     "TaskCheckpoint",

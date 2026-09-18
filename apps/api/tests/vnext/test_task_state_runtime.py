@@ -46,6 +46,7 @@ def _read_registry(
         ref: str
         mode: str
         path: str
+        task_key: str | None = None
 
     registry.register(
         ToolDefinition(
@@ -203,6 +204,58 @@ def test_flow_b_invalid_source_returns_error_leaves_state_empty_and_raw() -> Non
         if isinstance(message, ToolResultMessage) and message.tool_call_id == "call-1"
     )
     assert raw_result.status == "ok"
+
+
+def test_flow_j_checkpoint_source_error_recovers_with_available_candidate() -> None:
+    coordinator = TaskStateCoordinator()
+    trace = AgentTraceCollector()
+
+    def first(_: ModelRequest) -> ModelResponse:
+        return _tool_response(_plan_call())
+
+    def second(_: ModelRequest) -> ModelResponse:
+        return _tool_response(_read_call("read-2025", task_key="2025"))
+
+    def third(request: ModelRequest) -> ModelResponse:
+        system = _system(request)
+        assert "Checkpoint candidates:" in system
+        assert '"tool_call_id":"read-2025"' in system
+        assert '"status":"ACTIVE_RAW"' in system
+        return _tool_response(
+            _checkpoint_call("bad-checkpoint", key="2025", source=["wrong-id"])
+        )
+
+    def fourth(request: ModelRequest) -> ModelResponse:
+        error = next(
+            message
+            for message in request.messages
+            if isinstance(message, ToolResultMessage)
+            and message.tool_call_id == "bad-checkpoint"
+        )
+        assert error.error is not None
+        assert error.error.code == "invalid_checkpoint_source"
+        assert error.error.details == {
+            "checkpoint_key": "2025",
+            "invalid_sources": ["wrong-id"],
+            "available_sources": ["read-2025"],
+        }
+        assert '"tool_call_id":"read-2025"' in _system(request)
+        return _tool_response(
+            _checkpoint_call("good-checkpoint", key="2025", source=["read-2025"])
+        )
+
+    def fifth(request: ModelRequest) -> ModelResponse:
+        system = _system(request)
+        assert "CURRENT: 2026" in system
+        assert "Checkpoint candidates:\n[]" in system
+        return ModelResponse(message=FinalMessage(content="partial"))
+
+    model = ScriptedTranscriptModelClient([first, second, third, fourth, fifth])
+    _run(model, coordinator, trace=trace)
+
+    assert coordinator.plan_snapshot().current_key == "2026"  # type: ignore[union-attr]
+    assert "partition_evidence_release" not in trace.snapshot()["steps"][2]
+    assert trace.snapshot()["steps"][3]["partition_evidence_release"]["task_key"] == "2025"
 
 
 def test_flow_c_same_key_replaced_and_new_key_is_latest_context() -> None:

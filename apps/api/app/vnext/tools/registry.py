@@ -18,7 +18,7 @@ from app.vnext.artifacts.retrieval import (
 from app.vnext.artifacts.store import ArtifactNotFoundError, InvalidArtifactRefError
 from app.vnext.llm.protocol import ModelTool, ToolCall, ToolResultMessage
 from app.vnext.tools.definition import ToolDefinition
-from app.vnext.tools.errors import ToolError, ToolErrorCode
+from app.vnext.tools.errors import StructuredToolError, ToolError, ToolErrorCode
 
 
 class ToolRegistry:
@@ -124,6 +124,8 @@ class ToolRegistry:
                 str(exc),
                 {},
             )
+        except StructuredToolError as exc:
+            return self._error_result(call, exc.code, str(exc), exc.details)
         except Exception:
             return self._error_result(
                 call,

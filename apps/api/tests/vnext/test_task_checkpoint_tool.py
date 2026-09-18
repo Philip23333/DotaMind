@@ -132,6 +132,87 @@ def test_checkpoint_tool_rejects_unknown_source_atomically() -> None:
     assert coordinator.store.get("part").value == {"fact": "A"}  # type: ignore[union-attr]
 
 
+def test_checkpoint_source_error_exposes_recovery_candidates_and_allows_retry() -> None:
+    coordinator = TaskStateCoordinator()
+    coordinator.create_plan(
+        [
+            {"key": "A", "objective": "retrieve A"},
+            {"key": "B", "objective": "retrieve B"},
+        ]
+    )
+    messages = _active_messages("raw-a", "raw-b")
+    coordinator.refresh(messages)  # type: ignore[arg-type]
+    coordinator.record_evidence_lease("raw-a", task_key="A", raw_bytes=100)
+    coordinator.record_evidence_lease("raw-b", task_key="B", raw_bytes=200)
+    registry = _registry(coordinator)
+
+    bad = asyncio.run(
+        registry.execute(
+            ToolCall(
+                id="bad",
+                name="task.checkpoint",
+                arguments={
+                    "key": "A",
+                    "value": {"fact": "A"},
+                    "source_tool_call_ids": ["wrong-id"],
+                },
+            )
+        )
+    )
+
+    assert bad.status == "error"
+    assert bad.error is not None
+    assert bad.error.code == "invalid_checkpoint_source"
+    assert bad.error.details == {
+        "checkpoint_key": "A",
+        "invalid_sources": ["wrong-id"],
+        "available_sources": ["raw-a"],
+    }
+    assert coordinator.plan_snapshot().current_key == "A"  # type: ignore[union-attr]
+    assert coordinator.store.snapshot() == {}
+    assert coordinator.active_evidence_lease() == {
+        "task_key": None,
+        "observation_count": 2,
+        "raw_bytes": 300,
+        "partitions": [
+            {"task_key": "A", "observation_count": 1, "raw_bytes": 100},
+            {"task_key": "B", "observation_count": 1, "raw_bytes": 200},
+        ],
+    }
+    assert coordinator.consume_partition_release() is None
+
+    good_a = asyncio.run(
+        registry.execute(
+            ToolCall(
+                id="good-a",
+                name="task.checkpoint",
+                arguments={
+                    "key": "A",
+                    "value": {"fact": "A"},
+                    "source_tool_call_ids": ["raw-a"],
+                },
+            )
+        )
+    )
+    assert good_a.status == "ok"
+    coordinator.refresh(messages)  # type: ignore[arg-type]
+    good_b = asyncio.run(
+        registry.execute(
+            ToolCall(
+                id="good-b",
+                name="task.checkpoint",
+                arguments={
+                    "key": "B",
+                    "value": {"fact": "B"},
+                    "source_tool_call_ids": ["raw-b"],
+                },
+            )
+        )
+    )
+    assert good_b.status == "ok"
+    assert coordinator.plan_snapshot().current_key is None  # type: ignore[union-attr]
+
+
 def test_checkpoint_tool_same_key_replaces_whole_value_and_is_not_parallel_safe() -> None:
     coordinator = TaskStateCoordinator()
     coordinator.refresh(_active_messages("call-1", "call-2"))  # type: ignore[arg-type]
