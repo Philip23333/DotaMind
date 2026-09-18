@@ -316,6 +316,13 @@ class TaskStateCoordinator:
                 for item in task_plan["items"]
             )
             sections.append("\n".join(lines))
+        focus_context = _focus_context(
+            self.plan,
+            payload["checkpoint_candidates"],
+            self._active_evidence_leases,
+        )
+        if focus_context is not None:
+            sections.append(focus_context)
         sections.append("Task state:\n" + _json(payload["task_state"]))
         sections.append(
             "Checkpointable artifact observations:\n"
@@ -521,6 +528,83 @@ def _checkpoint_candidates(
             }
         )
     return candidates
+
+
+def _focus_context(
+    plan: TaskPlan | None,
+    checkpoint_candidates: Sequence[Mapping[str, Any]],
+    leases: Mapping[str, EvidenceLease],
+) -> str | None:
+    if plan is None or plan.current_key is None:
+        return None
+
+    current_key = plan.current_key
+    current = next(
+        (item for item in plan.items if item.key == current_key),
+        None,
+    )
+    if current is None:
+        return None
+
+    candidate_bytes = sum(
+        int(candidate.get("bytes", 0))
+        for candidate in checkpoint_candidates
+        if candidate.get("task_key") == current_key
+    )
+    future_leases = [
+        lease
+        for lease in leases.values()
+        if lease.task_key != current_key
+    ]
+
+    lines = [
+        "Task focus:",
+        f"CURRENT: {current.key}",
+        f"Objective: {current.objective}",
+        "CURRENT is the primary execution focus, not an exclusive scope.",
+        (
+            "Prioritize actions that materially advance CURRENT. Later pending "
+            "items may be explored opportunistically, but should not displace "
+            "progress on CURRENT."
+        ),
+        (
+            "Preserve CURRENT's established entity, time, version, edition, and "
+            "competition constraints in downstream queries whenever available "
+            "tool fields can express them."
+        ),
+        "",
+        "Current progress:",
+        f"checkpoint_candidates: {len(checkpoint_candidates)}",
+        f"checkpoint_candidate_bytes: {candidate_bytes}",
+        f"future_owned_active_observations: {len(future_leases)}",
+    ]
+
+    if checkpoint_candidates:
+        lines.extend(
+            [
+                "",
+                (
+                    "CURRENT has checkpointable raw evidence. If it already "
+                    "satisfies the objective, checkpoint it. Otherwise gather "
+                    "the specifically missing evidence needed to complete it."
+                ),
+            ]
+        )
+
+    if future_leases:
+        lines.extend(
+            [
+                "",
+                (
+                    "Later-task evidence is already active while CURRENT remains "
+                    "incomplete. Avoid expanding later tasks unless doing so also "
+                    "materially advances CURRENT or the evidence is obtained "
+                    "incidentally by an efficient bounded request."
+                ),
+            ]
+        )
+
+    return "\n".join(lines)
 
 
 def _advance_plan(plan: TaskPlan) -> TaskPlan:

@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-
 _CASES = Path(__file__).parent / "evals" / "task_plan_generalization_cases.json"
 
 

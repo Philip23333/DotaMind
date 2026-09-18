@@ -565,3 +565,68 @@ def test_flow_h_invalid_plan_source_does_not_advance_or_claim_raw() -> None:
 
     assert coordinator.plan_snapshot().current_key == "2025"  # type: ignore[union-attr]
     assert coordinator.store.snapshot() == {}
+
+
+def test_task_context_marks_current_as_primary_nonexclusive_focus() -> None:
+    coordinator = TaskStateCoordinator()
+    coordinator.create_plan(
+        [
+            {"key": "team-a", "objective": "Collect Team A roster"},
+            {"key": "team-b", "objective": "Collect Team B roster"},
+        ]
+    )
+
+    rendered = coordinator.render_context()
+
+    assert rendered is not None
+    assert "Task focus:" in rendered
+    assert "CURRENT: team-a" in rendered
+    assert "Objective: Collect Team A roster" in rendered
+    assert "primary execution focus, not an exclusive scope" in rendered
+    assert "Preserve CURRENT's established entity, time, version" in rendered
+
+
+def test_current_checkpoint_candidate_adds_completion_guidance() -> None:
+    coordinator = TaskStateCoordinator()
+
+    def first(_: ModelRequest) -> ModelResponse:
+        return _tool_response(_plan_call())
+
+    def second(_: ModelRequest) -> ModelResponse:
+        return _tool_response(_read_call("read-current", task_key="2025"))
+
+    def third(request: ModelRequest) -> ModelResponse:
+        system = _system(request)
+        assert "checkpoint_candidates: 1" in system
+        assert "checkpoint_candidate_bytes:" in system
+        assert "CURRENT has checkpointable raw evidence" in system
+        assert "If it already satisfies the objective, checkpoint it." in system
+        return ModelResponse(message=FinalMessage(content="partial"))
+
+    model = ScriptedTranscriptModelClient([first, second, third])
+    _run(model, coordinator)
+
+
+def test_future_evidence_is_allowed_but_does_not_replace_current_focus() -> None:
+    coordinator = TaskStateCoordinator()
+
+    def first(_: ModelRequest) -> ModelResponse:
+        return _tool_response(_plan_call())
+
+    def second(_: ModelRequest) -> ModelResponse:
+        return _tool_response(_read_call("read-future", task_key="2026"))
+
+    def third(request: ModelRequest) -> ModelResponse:
+        system = _system(request)
+        assert "CURRENT: 2025" in system
+        assert "future_owned_active_observations: 1" in system
+        assert "Later-task evidence is already active" in system
+        assert "Avoid expanding later tasks" in system
+        return ModelResponse(message=FinalMessage(content="partial"))
+
+    model = ScriptedTranscriptModelClient([first, second, third])
+    _run(model, coordinator)
+
+    lease = coordinator.active_evidence_lease()
+    assert lease is not None
+    assert lease["task_key"] == "2026"

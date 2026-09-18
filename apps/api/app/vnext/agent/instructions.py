@@ -31,6 +31,26 @@ Use only the tools declared in the current tool catalog.
 - When useful, batch or parallelize retrieval for the current item and later
   pending items, provided the amount of materialized evidence remains bounded
   and useful.
+- Treat the current task-plan item as the primary execution focus, not as an
+  exclusive permission boundary. Actions for later pending items are allowed,
+  but should not displace progress needed to complete the current item.
+- Preserve the current item's established entity, time, version, edition, and
+  competition scope in downstream queries whenever available tool fields can
+  express those constraints.
+- Evidence for later items may be retained when it is returned incidentally by
+  an efficient bounded request. Do not spend substantial additional retrieval
+  or context expanding later items while the current item still lacks required
+  evidence.
+- General examples:
+  - GOOD: A current item already establishes an entity and bounded period. Keep
+    both constraints in later queries whenever the tool schema supports them.
+  - BAD: Drop the bounded period, retrieve a broad historical collection, and
+    manually filter it afterwards even though the scope could be preserved in
+    the query.
+  - GOOD: Keep useful later-item evidence returned incidentally by a bounded
+    batch while continuing to prioritize the current item.
+  - BAD: Spend several turns deliberately expanding later pending items while
+    the current item remains incomplete.
 - A materializing tool may succeed while its evidence is deferred because the
   runtime materialization budget is full.
 - A deferred result means the tool execution succeeded, but its raw evidence
