@@ -407,6 +407,7 @@ series_id
 tournament_id
 team_id
 name
+begin_at
 lifecycle
 sort = begin_at_asc | begin_at_desc
 page
@@ -421,6 +422,10 @@ team_id   -> filter[opponent_id]
 ```
 
 and semantic lifecycle routing to the corresponding collection endpoint.
+
+`begin_at` is a semantic UTC calendar-date filter compiled to
+`filter[begin_at]`. Provider range syntax remains hidden from the
+model-facing contract.
 
 The current restricted match schema remains appropriate until agent evals demonstrate a
 need for additional status, winner, time-range, or detailed-stats filters.

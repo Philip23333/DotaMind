@@ -48,6 +48,7 @@ def test_match_search_tool_schema_exposes_only_semantic_fields() -> None:
     assert "search[" not in schema
     assert "range[" not in schema
     assert "serie_id" not in schema
+    assert "begin_at" in schema
     assert "league_id" in schema
     assert "series_id" in schema
     assert "tournament_id" in schema
@@ -57,6 +58,19 @@ def test_match_search_tool_schema_exposes_only_semantic_fields() -> None:
     assert "opponent_id" not in schema
     assert "match_type" not in schema
     assert "winner_type" not in schema
+
+
+def test_match_search_accepts_semantic_begin_at_date() -> None:
+    query = MatchSearchInput.model_validate(
+        {
+            "team_id": 123,
+            "begin_at": "2023-07-30",
+            "lifecycle": "past",
+        }
+    )
+
+    assert query.begin_at is not None
+    assert query.begin_at.isoformat() == "2023-07-30"
 
 
 def test_match_search_tool_validates_and_returns_contract_output() -> None:

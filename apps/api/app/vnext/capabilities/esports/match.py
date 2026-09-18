@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -52,6 +53,14 @@ class MatchSearchInput(MatchModel):
         default=None,
         gt=0,
         description="Only return matches won by this entity.",
+    )
+    begin_at: date | None = Field(
+        default=None,
+        description=(
+            "Only return matches whose actual start date is this UTC calendar date. "
+            "When the requested scope already identifies a specific date, preserve "
+            "that date in the query instead of retrieving a broader historical set."
+        ),
     )
     lifecycle: Literal["past", "running", "upcoming"] | None = Field(
         default=None,

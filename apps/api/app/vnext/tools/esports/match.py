@@ -24,6 +24,11 @@ Use team_id to find matches involving a known team, and winner_id to find
 matches won by a known team. Use lifecycle to distinguish past, currently
 running, and upcoming matches.
 
+Use begin_at when the requested scope identifies a specific UTC calendar date.
+Preserve known entity, competition, and time constraints together whenever the
+available fields can express them instead of broadening to unrelated historical
+matches and filtering them manually afterwards.
+
 Use relationship filters such as team_id, series_id, tournament_id, or league_id
 whenever the related entity is already known.
 

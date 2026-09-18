@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import date
 from typing import Any
 
 import httpx
@@ -139,6 +140,7 @@ def test_search_uses_one_lifecycle_collection_request(lifecycle: str | None, pat
         team_id=10,
         winner_id=11,
         name="Final",
+        begin_at=date(2026, 9, 1),
         sort="begin_at_desc",
         page=2,
         limit=7,
@@ -154,6 +156,7 @@ def test_search_uses_one_lifecycle_collection_request(lifecycle: str | None, pat
         "filter[serie_id]": "2",
         "filter[tournament_id]": "3",
         "filter[opponent_id]": "10",
+        "filter[begin_at]": "2026-09-01",
         "filter[winner_id]": "11",
         "search[name]": "Final",
         "sort": "-begin_at",
@@ -162,6 +165,33 @@ def test_search_uses_one_lifecycle_collection_request(lifecycle: str | None, pat
     assert result.page == 2
     assert result.limit == 7
     assert result.anomalies == []
+
+
+def test_match_begin_at_uses_provider_date_filter() -> None:
+    calls: list[dict[str, str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(dict(request.url.params))
+        return httpx.Response(200, json=[], request=request)
+
+    asyncio.run(
+        _adapter(handler).search(
+            MatchSearchInput(
+                team_id=123,
+                begin_at=date(2023, 7, 30),
+                lifecycle="past",
+            )
+        )
+    )
+
+    assert calls == [
+        {
+            "page": "1",
+            "per_page": "20",
+            "filter[opponent_id]": "123",
+            "filter[begin_at]": "2023-07-30",
+        }
+    ]
 
 
 def test_match_search_skips_malformed_top_level_items() -> None:

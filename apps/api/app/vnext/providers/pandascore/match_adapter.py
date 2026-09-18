@@ -77,6 +77,8 @@ class PandaScoreMatchAdapter:
             params["filter[tournament_id]"] = query.tournament_id
         if query.team_id is not None:
             params["filter[opponent_id]"] = query.team_id
+        if query.begin_at is not None:
+            params["filter[begin_at]"] = query.begin_at.isoformat()
         if query.name is not None:
             params["search[name]"] = query.name
         if query.status is not None:
