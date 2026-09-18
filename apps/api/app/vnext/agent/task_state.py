@@ -289,6 +289,7 @@ class TaskStateCoordinator:
             "Checkpointable artifact observations:\n"
             + _json(payload["active_manifest"])
         )
+        sections.append("Checkpoint candidates:\n" + _json(payload["checkpoint_candidates"]))
         return "\n\n".join(sections)
 
     def context_payload(self) -> dict[str, Any]:
@@ -312,6 +313,11 @@ class TaskStateCoordinator:
                 )
                 for observation in observations
             ],
+            "checkpoint_candidates": _checkpoint_candidates(
+                self.plan,
+                observations,
+                self._active_evidence_leases,
+            ),
         }
 
     def _close_partition_leases(
@@ -432,6 +438,31 @@ def _plan_payload(plan: TaskPlan | None) -> dict[str, Any] | None:
             for item in plan.items
         ],
     }
+
+
+def _checkpoint_candidates(
+    plan: TaskPlan | None,
+    observations: Sequence[ArtifactObservation],
+    leases: Mapping[str, EvidenceLease],
+) -> list[dict[str, Any]]:
+    """Project only current-task raw observations that can be checkpointed."""
+
+    if plan is None or plan.current_key is None:
+        return []
+    candidates: list[dict[str, Any]] = []
+    for observation in observations:
+        lease = leases.get(observation.tool_call_id)
+        if lease is None or lease.task_key != plan.current_key:
+            continue
+        candidates.append(
+            {
+                "tool_call_id": observation.tool_call_id,
+                "task_key": lease.task_key,
+                "status": "ACTIVE_RAW",
+                "bytes": lease.raw_bytes,
+            }
+        )
+    return candidates
 
 
 def _advance_plan(plan: TaskPlan) -> TaskPlan:

@@ -290,6 +290,94 @@ def test_explicit_future_task_key_owns_lease_instead_of_current_item() -> None:
     }
 
 
+def test_checkpoint_candidates_filter_to_current_task_active_raw_sources() -> None:
+    coordinator = TaskStateCoordinator()
+    coordinator.create_plan(
+        [
+            {"key": "A", "objective": "retrieve A"},
+            {"key": "B", "objective": "retrieve B"},
+        ]
+    )
+    messages = _messages(
+        (_read_call("raw-a"), _read_result("raw-a")),
+        (_read_call("raw-b"), _read_result("raw-b")),
+        (
+            _read_call("receipt"),
+            ToolResultMessage(
+                tool_call_id="receipt",
+                content={"_artifact_observation": {"state": "receipt_only"}},
+            ),
+        ),
+    )
+    coordinator.refresh(messages)
+    coordinator.record_evidence_lease("raw-a", task_key="A", raw_bytes=100)
+    coordinator.record_evidence_lease("raw-b", task_key="B", raw_bytes=200)
+
+    assert coordinator.context_payload()["checkpoint_candidates"] == [
+        {
+            "tool_call_id": "raw-a",
+            "task_key": "A",
+            "status": "ACTIVE_RAW",
+            "bytes": 100,
+        }
+    ]
+    rendered = coordinator.render_context()
+    assert rendered is not None
+    candidates = rendered.split("Checkpoint candidates:\n", 1)[1]
+    assert '"tool_call_id":"raw-a"' in candidates
+    assert '"status":"ACTIVE_RAW"' in candidates
+    assert '"tool_call_id":"raw-b"' not in candidates
+
+
+def test_checkpoint_candidates_disappear_after_checkpoint_claim() -> None:
+    coordinator = TaskStateCoordinator()
+    coordinator.create_plan(
+        [
+            {"key": "A", "objective": "retrieve A"},
+            {"key": "B", "objective": "retrieve B"},
+        ]
+    )
+    messages = _messages((_read_call("raw-a"), _read_result("raw-a")))
+    coordinator.refresh(messages)
+    coordinator.record_evidence_lease("raw-a", task_key="A", raw_bytes=100)
+    candidates = coordinator.context_payload()["checkpoint_candidates"]
+    assert [item["tool_call_id"] for item in candidates] == ["raw-a"]
+
+    coordinator.create_checkpoint("A", {"fact": "A"}, ["raw-a"])
+    coordinator.refresh(messages)
+
+    assert coordinator.context_payload()["checkpoint_candidates"] == []
+
+
+def test_checkpoint_candidates_follow_current_partition_after_batched_reads() -> None:
+    coordinator = TaskStateCoordinator()
+    coordinator.create_plan(
+        [
+            {"key": "A", "objective": "retrieve A"},
+            {"key": "B", "objective": "retrieve B"},
+            {"key": "C", "objective": "retrieve C"},
+        ]
+    )
+    messages = _messages(
+        (_read_call("raw-a"), _read_result("raw-a")),
+        (_read_call("raw-b"), _read_result("raw-b")),
+        (_read_call("raw-c"), _read_result("raw-c")),
+    )
+    coordinator.refresh(messages)
+    coordinator.record_evidence_lease("raw-a", task_key="A", raw_bytes=100)
+    coordinator.record_evidence_lease("raw-b", task_key="B", raw_bytes=200)
+    coordinator.record_evidence_lease("raw-c", task_key="C", raw_bytes=300)
+
+    candidates = coordinator.context_payload()["checkpoint_candidates"]
+    assert [item["tool_call_id"] for item in candidates] == ["raw-a"]
+
+    coordinator.create_checkpoint("A", {"fact": "A"}, ["raw-a"])
+    coordinator.refresh(messages)
+
+    candidates = coordinator.context_payload()["checkpoint_candidates"]
+    assert [item["tool_call_id"] for item in candidates] == ["raw-b"]
+
+
 def test_unknown_and_completed_task_keys_are_rejected_without_creating_leases() -> None:
     coordinator = TaskStateCoordinator()
     coordinator.create_plan(
