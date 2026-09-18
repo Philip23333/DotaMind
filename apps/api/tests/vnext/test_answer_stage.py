@@ -2,10 +2,18 @@ from __future__ import annotations
 
 from app.vnext.agent.answer_stage import (
     AnswerContextBuilder,
+    AnswerResolutionMode,
     ExecutionOutcome,
     ExecutionStopReason,
+    resolve_answer,
 )
-from app.vnext.agent.task_state import TaskStateCoordinator
+from app.vnext.agent.task_state import (
+    TaskCheckpoint,
+    TaskItem,
+    TaskItemStatus,
+    TaskPlan,
+    TaskStateCoordinator,
+)
 from app.vnext.artifacts.retrieval import ArtifactReadResult
 from app.vnext.llm.protocol import AssistantMessage, ToolCall, ToolResultMessage
 
@@ -29,6 +37,109 @@ def _result(call_id: str, content: object, *, status: str = "ok") -> ToolResultM
 
 def _outcome(reason: ExecutionStopReason = ExecutionStopReason.DEADLINE) -> ExecutionOutcome:
     return ExecutionOutcome(reason=reason, steps=7)
+
+
+def _coordinator_for_resolution(
+    statuses: list[tuple[str, TaskItemStatus]],
+    state_keys: list[str],
+) -> TaskStateCoordinator:
+    coordinator = TaskStateCoordinator()
+    coordinator.plan = TaskPlan(
+        items=tuple(TaskItem(key, f"Collect {key}", status) for key, status in statuses),
+        current_key=next(
+            (key for key, status in statuses if status is not TaskItemStatus.COMPLETED),
+            None,
+        ),
+    )
+    for key in state_keys:
+        coordinator.store.put(
+            TaskCheckpoint(
+                checkpoint_id=f"checkpoint:{key}",
+                key=key,
+                value={"key": key},
+                source_tool_call_ids=(),
+            )
+        )
+    return coordinator
+
+
+def test_resolve_complete_plan_requires_durable_state() -> None:
+    coordinator = _coordinator_for_resolution(
+        [("A", TaskItemStatus.COMPLETED), ("B", TaskItemStatus.COMPLETED)],
+        ["A", "B"],
+    )
+
+    resolution = resolve_answer(
+        outcome=_outcome(ExecutionStopReason.PLAN_COMPLETE),
+        task_state_coordinator=coordinator,
+    )
+
+    assert resolution.mode is AnswerResolutionMode.FULL
+    assert resolution.completed_keys == ("A", "B")
+    assert resolution.remaining_keys == ()
+
+
+def test_resolve_partial_plan_reports_remaining_items() -> None:
+    coordinator = _coordinator_for_resolution(
+        [
+            ("A", TaskItemStatus.COMPLETED),
+            ("B", TaskItemStatus.IN_PROGRESS),
+            ("C", TaskItemStatus.PENDING),
+        ],
+        ["A"],
+    )
+
+    resolution = resolve_answer(
+        outcome=_outcome(ExecutionStopReason.DEADLINE),
+        task_state_coordinator=coordinator,
+    )
+
+    assert resolution.mode is AnswerResolutionMode.PARTIAL
+    assert resolution.completed_keys == ("A",)
+    assert resolution.remaining_keys == ("B", "C")
+
+
+def test_resolve_plan_with_raw_only_is_failure() -> None:
+    coordinator = _coordinator_for_resolution(
+        [("A", TaskItemStatus.IN_PROGRESS), ("B", TaskItemStatus.PENDING)],
+        [],
+    )
+
+    resolution = resolve_answer(
+        outcome=_outcome(ExecutionStopReason.DEADLINE),
+        task_state_coordinator=coordinator,
+    )
+
+    assert resolution.mode is AnswerResolutionMode.FAILURE
+    assert resolution.completed_keys == ()
+    assert resolution.remaining_keys == ("A", "B")
+
+
+def test_resolve_without_plan_preserves_simple_model_done_and_closes_deadline() -> None:
+    assert resolve_answer(
+        outcome=_outcome(ExecutionStopReason.MODEL_DONE),
+        task_state_coordinator=None,
+    ).mode is AnswerResolutionMode.FULL
+    assert resolve_answer(
+        outcome=_outcome(ExecutionStopReason.DEADLINE),
+        task_state_coordinator=None,
+    ).mode is AnswerResolutionMode.FAILURE
+
+
+def test_resolve_completed_plan_without_state_is_not_full() -> None:
+    coordinator = _coordinator_for_resolution(
+        [("A", TaskItemStatus.COMPLETED)],
+        [],
+    )
+
+    resolution = resolve_answer(
+        outcome=_outcome(ExecutionStopReason.PLAN_COMPLETE),
+        task_state_coordinator=coordinator,
+    )
+
+    assert resolution.mode is AnswerResolutionMode.FAILURE
+    assert resolution.completed_keys == ()
+    assert resolution.remaining_keys == ("A",)
 
 
 def test_projection_includes_task_state_plan_and_active_artifact_range() -> None:

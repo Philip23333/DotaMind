@@ -7,7 +7,12 @@ from collections.abc import Sequence
 from time import monotonic
 from typing import Any
 
-from app.vnext.agent.answer_stage import AnswerContext, ExecutionOutcome
+from app.vnext.agent.answer_stage import (
+    AnswerContext,
+    AnswerResolution,
+    ExecutionOutcome,
+    ExecutionStopReason,
+)
 from app.vnext.agent.context_accounting import build_context_accounting
 from app.vnext.agent.materialization_budget import MaterializationDecision
 from app.vnext.agent.runtime_context import RuntimeContext
@@ -180,6 +185,22 @@ class AgentTraceCollector:
             "reason": outcome.reason.value,
             "steps": outcome.steps,
             "plan_complete": plan_complete,
+        }
+
+    def answer_resolution(
+        self,
+        resolution: AnswerResolution,
+        *,
+        execution_reason: ExecutionStopReason,
+    ) -> None:
+        self._trace["answer_resolution"] = {
+            "mode": resolution.mode.value,
+            "execution_reason": execution_reason.value,
+            "total_items": resolution.total_items,
+            "completed_count": len(resolution.completed_keys),
+            "remaining_count": len(resolution.remaining_keys),
+            "completed_keys": list(resolution.completed_keys),
+            "remaining_keys": list(resolution.remaining_keys),
         }
 
     def answer_stage(self, request: ModelRequest, context: AnswerContext) -> None:

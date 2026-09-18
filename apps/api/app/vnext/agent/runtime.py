@@ -13,8 +13,11 @@ from pydantic import ValidationError
 
 from app.vnext.agent.answer_stage import (
     AnswerContextBuilder,
+    AnswerResolutionMode,
     ExecutionOutcome,
     ExecutionStopReason,
+    build_failure_answer,
+    resolve_answer,
 )
 from app.vnext.agent.errors import (
     AgentCancelledError,
@@ -334,6 +337,34 @@ class AgentRuntime:
             if trace_collector is not None:
                 trace_collector.execution_outcome(outcome, plan_complete=plan_complete)
 
+            resolution = resolve_answer(
+                outcome=outcome,
+                task_state_coordinator=self.task_state_coordinator,
+            )
+            if trace_collector is not None:
+                trace_collector.answer_resolution(
+                    resolution,
+                    execution_reason=outcome.reason,
+                )
+            answer_step = step + 1
+            if resolution.mode is AnswerResolutionMode.FAILURE:
+                final = build_failure_answer(resolution, outcome)
+                if trace_collector is not None:
+                    trace_collector.terminal(
+                        status="completed",
+                        error_code=None,
+                        error_message=None,
+                    )
+                yield await self._publish(
+                    AgentCompleted(
+                        step=answer_step,
+                        duration=max(0.0, monotonic() - started_at),
+                        final=final,
+                    ),
+                    sink,
+                )
+                return
+
             answer_context = AnswerContextBuilder().build(
                 execution_messages=request_messages,
                 outcome=outcome,
@@ -344,7 +375,6 @@ class AgentRuntime:
                 *_answer_conversation(messages),
                 SystemMessage(content=answer_context.render()),
             ]
-            answer_step = step + 1
             answer_request = ModelRequest(messages=answer_messages, tools=[], step=answer_step)
             if trace_collector is not None:
                 trace_collector.model_request(answer_request)

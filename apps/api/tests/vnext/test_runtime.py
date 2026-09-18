@@ -9,6 +9,13 @@ from app.vnext.agent.errors import AgentCancelledError, ModelProtocolError
 from app.vnext.agent.events import AgentCompleted, TextDelta
 from app.vnext.agent.limits import AgentLimits
 from app.vnext.agent.runtime import AgentRuntime, CancellationToken
+from app.vnext.agent.task_state import (
+    TaskCheckpoint,
+    TaskItem,
+    TaskItemStatus,
+    TaskPlan,
+    TaskStateCoordinator,
+)
 from app.vnext.agent.trace import AgentTraceCollector
 from app.vnext.llm.protocol import (
     AssistantMessage,
@@ -90,7 +97,7 @@ def test_tool_execution_is_followed_by_tool_free_answer_request() -> None:
     assert "Other verified tool evidence" in model.requests[2].messages[-1].content
 
 
-def test_runtime_always_keeps_tools_enabled_on_last_execution_turn() -> None:
+def test_max_steps_without_durable_state_closes_with_failure_answer() -> None:
     model = ScriptedModelClient([_tool_turn(_call()), ModelResponse.from_final("answer")])
     runtime = AgentRuntime(
         model,
@@ -98,9 +105,10 @@ def test_runtime_always_keeps_tools_enabled_on_last_execution_turn() -> None:
         limits=AgentLimits(max_steps=1, deadline_seconds=2),
     )
 
-    assert _run(runtime).content == "answer"
+    result = _run(runtime)
+    assert "reliable answer" in result.content
     assert model.requests[0].tools
-    assert len(model.requests) == 2
+    assert len(model.requests) == 1
 
 
 def test_execution_text_deltas_are_traced_but_not_published() -> None:
@@ -133,12 +141,12 @@ def test_answer_stage_rejects_structured_tool_calls() -> None:
         _run(runtime)
 
 
-def test_deadline_freezes_execution_and_runs_independent_answer_stage() -> None:
+def test_deadline_without_durable_state_closes_with_failure_answer() -> None:
     async def slow() -> ModelResponse:
         await asyncio.sleep(0.2)
         return ModelResponse.from_final("late")
 
-    model = ScriptedModelClient([slow(), ModelResponse.from_final("deadline answer")])
+    model = ScriptedModelClient([slow(), ModelResponse.from_final("unexpected answer")])
     collector = AgentTraceCollector()
     runtime = AgentRuntime(
         model,
@@ -146,14 +154,64 @@ def test_deadline_freezes_execution_and_runs_independent_answer_stage() -> None:
         limits=AgentLimits(deadline_seconds=0.03, answer_timeout_seconds=1),
     )
 
-    assert _run(runtime, trace_collector=collector).content == "deadline answer"
+    result = _run(runtime, trace_collector=collector)
+    assert "reliable answer" in result.content
+    assert len(model.requests) == 1
     trace = collector.snapshot()
     assert trace["execution_outcome"] == {
         "reason": "deadline",
         "steps": 1,
         "plan_complete": False,
     }
-    assert trace["answer_stage"]["tool_count"] == 0
+    assert trace["answer_resolution"] == {
+        "mode": "failure",
+        "execution_reason": "deadline",
+        "total_items": None,
+        "completed_count": 0,
+        "remaining_count": 0,
+        "completed_keys": [],
+        "remaining_keys": [],
+    }
+    assert "answer_stage" not in trace
+    assert trace["terminal"]["status"] == "completed"
+    assert trace["terminal"]["error_code"] is None
+    assert trace["terminal"]["error_message"] is None
+
+
+def test_partial_task_state_still_runs_answer_stage() -> None:
+    coordinator = TaskStateCoordinator()
+    coordinator.plan = TaskPlan(
+        items=(
+            TaskItem("A", "Collect A", TaskItemStatus.COMPLETED),
+            TaskItem("B", "Collect B", TaskItemStatus.IN_PROGRESS),
+        ),
+        current_key="B",
+    )
+    coordinator.store.put(
+        TaskCheckpoint(
+            checkpoint_id="checkpoint:A",
+            key="A",
+            value={"fact": "A"},
+            source_tool_call_ids=(),
+        )
+    )
+    model = ScriptedModelClient(
+        [ModelResponse.from_final("execution"), ModelResponse.from_final("partial answer")]
+    )
+    collector = AgentTraceCollector()
+    runtime = AgentRuntime(
+        model,
+        ToolRegistry(),
+        limits=AgentLimits(deadline_seconds=2),
+        task_state_coordinator=coordinator,
+    )
+
+    assert _run(runtime, trace_collector=collector).content == "partial answer"
+    assert len(model.requests) == 2
+    assert model.requests[1].tools == []
+    trace = collector.snapshot()
+    assert trace["answer_resolution"]["mode"] == "partial"
+    assert "answer_stage" in trace
 
 
 def test_cancellation_during_execution_skips_answer_stage() -> None:

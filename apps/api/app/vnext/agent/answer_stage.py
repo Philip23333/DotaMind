@@ -14,7 +14,7 @@ from app.vnext.artifacts.lifecycle import (
     ArtifactObservation,
     collect_active_artifact_observations,
 )
-from app.vnext.llm.protocol import AssistantMessage, Message, ToolResultMessage
+from app.vnext.llm.protocol import AssistantMessage, FinalMessage, Message, ToolResultMessage
 
 
 class ExecutionStopReason(str, Enum):
@@ -26,12 +26,121 @@ class ExecutionStopReason(str, Enum):
     MAX_STEPS = "max_steps"
 
 
+class AnswerResolutionMode(str, Enum):
+    """Whether execution produced enough durable state for Answer Stage."""
+
+    FULL = "full"
+    PARTIAL = "partial"
+    FAILURE = "failure"
+
+
 @dataclass(frozen=True, slots=True)
 class ExecutionOutcome:
     """Small termination record passed from execution to answering."""
 
     reason: ExecutionStopReason
     steps: int
+
+
+@dataclass(frozen=True, slots=True)
+class AnswerResolution:
+    """Deterministic execution coverage classification for answering."""
+
+    mode: AnswerResolutionMode
+    total_items: int | None
+    completed_keys: tuple[str, ...]
+    remaining_keys: tuple[str, ...]
+
+
+def resolve_answer(
+    *,
+    outcome: ExecutionOutcome,
+    task_state_coordinator: TaskStateCoordinator | None,
+) -> AnswerResolution:
+    """Classify durable execution coverage without inspecting raw evidence."""
+
+    payload = (
+        task_state_coordinator.context_payload()
+        if task_state_coordinator is not None
+        else {"task_plan": None, "task_state": {}}
+    )
+    task_plan = payload.get("task_plan")
+    if not isinstance(task_plan, dict):
+        mode = (
+            AnswerResolutionMode.FULL
+            if outcome.reason
+            in {ExecutionStopReason.MODEL_DONE, ExecutionStopReason.PLAN_COMPLETE}
+            else AnswerResolutionMode.FAILURE
+        )
+        return AnswerResolution(
+            mode=mode,
+            total_items=None,
+            completed_keys=(),
+            remaining_keys=(),
+        )
+
+    items = task_plan.get("items")
+    task_state = payload.get("task_state")
+    if not isinstance(items, list) or not isinstance(task_state, dict):
+        return AnswerResolution(
+            mode=AnswerResolutionMode.FAILURE,
+            total_items=0,
+            completed_keys=(),
+            remaining_keys=(),
+        )
+
+    completed_keys = tuple(
+        item["key"]
+        for item in items
+        if isinstance(item, dict)
+        and isinstance(item.get("key"), str)
+        and item.get("status") == "completed"
+        and item["key"] in task_state
+    )
+    completed_set = set(completed_keys)
+    remaining_keys = tuple(
+        item["key"]
+        for item in items
+        if isinstance(item, dict)
+        and isinstance(item.get("key"), str)
+        and item["key"] not in completed_set
+    )
+    total_items = len(items)
+    if total_items > 0 and len(completed_keys) == total_items:
+        mode = AnswerResolutionMode.FULL
+    elif completed_keys:
+        mode = AnswerResolutionMode.PARTIAL
+    else:
+        mode = AnswerResolutionMode.FAILURE
+    return AnswerResolution(
+        mode=mode,
+        total_items=total_items,
+        completed_keys=completed_keys,
+        remaining_keys=remaining_keys,
+    )
+
+
+def build_failure_answer(
+    resolution: AnswerResolution,
+    outcome: ExecutionOutcome,
+) -> FinalMessage:
+    """Close an execution with no durable result without invoking another model."""
+
+    lines = [
+        "I wasn't able to complete enough verified parts of this request "
+        "to produce a reliable answer.",
+    ]
+    if resolution.total_items is not None:
+        lines.append(
+            f"{len(resolution.completed_keys)} of {resolution.total_items} planned "
+            "parts were completed."
+        )
+    elif outcome.reason in {
+        ExecutionStopReason.DEADLINE,
+        ExecutionStopReason.MAX_STEPS,
+    }:
+        lines.append("The execution stopped before a verified result was completed.")
+    return FinalMessage(content="\n\n".join(lines))
 
 
 @dataclass(frozen=True, slots=True)
@@ -157,7 +266,11 @@ def _json(value: Any) -> str:
 __all__ = [
     "AnswerContext",
     "AnswerContextBuilder",
+    "AnswerResolution",
+    "AnswerResolutionMode",
     "ExecutionOutcome",
     "ExecutionStopReason",
+    "build_failure_answer",
     "render_answer_context",
+    "resolve_answer",
 ]

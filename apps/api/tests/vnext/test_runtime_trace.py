@@ -81,6 +81,15 @@ def test_trace_records_execution_context_and_answer_stage_metrics() -> None:
         "steps": 1,
         "plan_complete": False,
     }
+    assert snapshot["answer_resolution"] == {
+        "mode": "full",
+        "execution_reason": "model_done",
+        "total_items": None,
+        "completed_count": 0,
+        "remaining_count": 0,
+        "completed_keys": [],
+        "remaining_keys": [],
+    }
     assert snapshot["answer_stage"]["tool_count"] == 0
     assert snapshot["answer_stage"]["context_bytes"] > 0
 
