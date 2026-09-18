@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Literal
 
 from pydantic import Field, field_validator, model_validator
@@ -14,6 +15,7 @@ from app.vnext.artifacts import (
 )
 from app.vnext.domain.common.models import DomainModel
 from app.vnext.tools.definition import ToolContextEffect, ToolDefinition
+from app.vnext.tools.errors import StructuredToolError
 from app.vnext.tools.registry import ToolRegistry
 
 
@@ -100,8 +102,18 @@ def register_artifact_tools(
     registry: ToolRegistry,
     reader: ArtifactReader,
     grepper: ArtifactGrepper,
+    *,
+    completed_task_lookup: Callable[[str | None], dict[str, str] | None] | None = None,
 ) -> None:
     async def read(args: ArtifactReadInput) -> ArtifactReadResult:
+        if completed_task_lookup is not None:
+            completed = completed_task_lookup(args.task_key)
+            if completed is not None:
+                raise StructuredToolError(
+                    "task_already_completed",
+                    "task partition is already completed and cannot accept new evidence",
+                    completed,
+                )
         if args.mode == "outline":
             return await reader.outline(args.ref)
         assert args.path is not None

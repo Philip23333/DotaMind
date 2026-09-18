@@ -180,6 +180,11 @@ def build_vnext_registry(
         registry,
         ArtifactReader(artifact_store, manuals),
         ArtifactGrepper(artifact_store, manuals),
+        completed_task_lookup=(
+            task_state_coordinator.completed_materialization_task
+            if task_state_coordinator is not None
+            else None
+        ),
     )
     if resolved_services.league_search is not None:
         register_league_tool(registry, resolved_services.league_search)

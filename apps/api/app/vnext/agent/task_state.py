@@ -179,6 +179,19 @@ class TaskStateCoordinator:
             None,
         )
 
+    def completed_materialization_task(self, task_key: str | None) -> dict[str, str] | None:
+        """Return completed task metadata when materialization must be rejected."""
+
+        if self.plan is None:
+            return None
+        resolved_key = task_key or self.plan.current_key
+        if resolved_key is None:
+            return None
+        item = next((item for item in self.plan.items if item.key == resolved_key), None)
+        if item is None or item.status is not TaskItemStatus.COMPLETED:
+            return None
+        return {"task_key": item.key, "state": item.status.value}
+
     def plan_snapshot(self) -> TaskPlan | None:
         """Return the immutable active-plan snapshot."""
 

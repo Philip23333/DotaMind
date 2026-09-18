@@ -7,6 +7,12 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from app.vnext.agent.task_state import (
+    TaskItem,
+    TaskItemStatus,
+    TaskPlan,
+    TaskStateCoordinator,
+)
 from app.vnext.artifacts import (
     MAX_MODEL_TOOL_OBSERVATION_BYTES,
     ArtifactGrepper,
@@ -38,6 +44,19 @@ async def _registry_with_payload(payload: dict[str, object]) -> tuple[ToolRegist
     registry = ToolRegistry()
     register_artifact_tools(registry, ArtifactReader(store), ArtifactGrepper(store))
     return registry, ref
+
+
+def _completed_partition_coordinator() -> TaskStateCoordinator:
+    coordinator = TaskStateCoordinator()
+    coordinator.plan = TaskPlan(
+        items=(
+            TaskItem("A", "completed partition", TaskItemStatus.COMPLETED),
+            TaskItem("B", "pending partition", TaskItemStatus.IN_PROGRESS),
+        ),
+        current_key="B",
+    )
+    coordinator.record_evidence_lease("raw-b", task_key="B", raw_bytes=42)
+    return coordinator
 
 
 def _call(arguments: dict[str, object]) -> ToolCall:
@@ -117,6 +136,63 @@ def test_task_key_is_consumed_by_artifact_tool_without_polluting_reader_api() ->
 
     assert result.status == "ok"
     reader.read.assert_awaited_once_with("artifact:test", "rows", offset=0, limit=3)
+
+
+def test_completed_task_read_is_rejected_without_state_or_reader_side_effects() -> None:
+    async def exercise():
+        store = SessionArtifactStore()
+        ref = await store.put({"rows": [{"id": 1}]})
+        coordinator = _completed_partition_coordinator()
+        before_plan = coordinator.plan_snapshot()
+        before_lease = coordinator.active_evidence_lease()
+        registry = ToolRegistry()
+        reader = AsyncMock(wraps=ArtifactReader(store))
+        register_artifact_tools(
+            registry,
+            reader,
+            ArtifactGrepper(store),
+            completed_task_lookup=coordinator.completed_materialization_task,
+        )
+        result = await registry.execute(
+            _call({"ref": ref, "mode": "read", "path": "rows", "task_key": "A"})
+        )
+        return result, coordinator, before_plan, before_lease, reader
+
+    result, coordinator, before_plan, before_lease, reader = asyncio.run(exercise())
+
+    assert result.status == "error"
+    assert result.error is not None
+    assert result.error.code == "task_already_completed"
+    assert result.error.message == (
+        "task partition is already completed and cannot accept new evidence"
+    )
+    assert result.error.details == {"task_key": "A", "state": "completed"}
+    assert coordinator.plan_snapshot() == before_plan
+    assert coordinator.active_evidence_lease() == before_lease
+    reader.read.assert_not_awaited()
+
+
+def test_pending_and_future_task_reads_remain_allowed() -> None:
+    async def exercise():
+        store = SessionArtifactStore()
+        ref = await store.put({"rows": [{"id": 1}]})
+        coordinator = _completed_partition_coordinator()
+        registry = ToolRegistry()
+        register_artifact_tools(
+            registry,
+            ArtifactReader(store),
+            ArtifactGrepper(store),
+            completed_task_lookup=coordinator.completed_materialization_task,
+        )
+        result = await registry.execute(
+            _call({"ref": ref, "mode": "read", "path": "rows", "task_key": "B"})
+        )
+        return result
+
+    result = asyncio.run(exercise())
+
+    assert result.status == "ok"
+    assert result.content["value"] == [{"id": 1}]
 
 
 def test_read_list_uses_default_and_explicit_slices() -> None:
