@@ -257,6 +257,21 @@ class TaskStateCoordinator:
             ],
         }
 
+    def active_evidence_leases_snapshot(self) -> list[dict[str, Any]]:
+        """Return individual active leases for checkpoint lifecycle diagnostics."""
+
+        return [
+            {
+                "tool_call_id": lease.tool_call_id,
+                "task_key": lease.task_key,
+                "raw_bytes": lease.raw_bytes,
+            }
+            for lease in sorted(
+                self._active_evidence_leases.values(),
+                key=lambda lease: lease.tool_call_id,
+            )
+        ]
+
     def closed_partition_for_tool_call(self, tool_call_id: str) -> str | None:
         """Return the task partition whose lease has expired for one observation."""
 

@@ -126,6 +126,20 @@ class AgentTraceCollector:
             "released_bytes": release.released_bytes,
         }
 
+    def checkpoint_lease_snapshot(
+        self,
+        step: int,
+        *,
+        checkpoint_key: str | None,
+        active_leases: list[dict[str, Any]],
+    ) -> None:
+        """Record individual leases remaining after a successful checkpoint."""
+
+        self._step(step)["active_leases_after_checkpoint"] = {
+            "checkpoint_key": checkpoint_key,
+            "leases": active_leases,
+        }
+
     def materialization_admission(
         self,
         step: int,

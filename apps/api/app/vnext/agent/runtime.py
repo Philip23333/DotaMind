@@ -830,6 +830,14 @@ class AgentRuntime:
                         release = self.task_state_coordinator.consume_partition_release()
                         if release is not None and trace_collector is not None:
                             trace_collector.partition_evidence_release(step, release)
+                        if result.status == "ok" and trace_collector is not None:
+                            trace_collector.checkpoint_lease_snapshot(
+                                step,
+                                checkpoint_key=item.arguments.get("key"),
+                                active_leases=(
+                                    self.task_state_coordinator.active_evidence_leases_snapshot()
+                                ),
+                            )
                 results.append(result)
             index += len(group)
 

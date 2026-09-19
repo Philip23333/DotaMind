@@ -446,6 +446,10 @@ def test_flow_f_plan_serially_checkpoints_each_result_unit() -> None:
     assert release["checkpointed_count"] == 1
     assert release["partition_closed_count"] == 0
     assert release["released_bytes"] > 0
+    assert snapshot["steps"][2]["active_leases_after_checkpoint"] == {
+        "checkpoint_key": "2025",
+        "leases": [],
+    }
     assert all(
         tool_result["result"]["tool_call_id"] in {"plan-call", "checkpoint-2025", "checkpoint-2026"}
         or tool_result["result"]["tool_call_id"] in {"read-2025", "read-2026"}
