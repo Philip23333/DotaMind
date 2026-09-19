@@ -27,6 +27,24 @@ class SummaryClaimStatus(str, Enum):
 
 
 @dataclass(frozen=True, slots=True)
+class SummaryClaimCandidate:
+    """Model-produced claim before Runtime source canonicalization."""
+
+    dimension: str
+    value: Any
+    status: SummaryClaimStatus
+    source_tool_call_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class EvidenceSummaryCandidate:
+    """Model-produced summary candidate awaiting Runtime validation."""
+
+    compression_request_id: str
+    claims: tuple[SummaryClaimCandidate, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class EvidenceSourceRef:
     """Canonical reference to one raw observation or observation slice."""
 
@@ -117,9 +135,11 @@ class EvidenceSummaryStore:
 __all__ = [
     "CompressionReason",
     "CompressionRequest",
+    "EvidenceSummaryCandidate",
     "EvidenceSourceRef",
     "EvidenceSummary",
     "EvidenceSummaryStore",
     "SummaryClaim",
+    "SummaryClaimCandidate",
     "SummaryClaimStatus",
 ]
