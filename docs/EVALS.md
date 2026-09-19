@@ -42,6 +42,13 @@ competition, hybrid, and single-deep cases. The eval does not prescribe exact
 task keys or a fixed execution sequence; it evaluates bounded,
 independently-completable result units.
 
+Context Governance evaluations additionally measure Summary commit validity,
+independent Artifact release, retained raw evidence, pressure-triggered
+compression, and AnswerContext coverage. They must distinguish current
+implementation behavior from target phases not yet accepted; the governing
+design is
+[`agent/context_governance_evidence_lifecycle.md`](agent/context_governance_evidence_lifecycle.md).
+
 ## Live smoke tests
 
 Live smoke tests are separate from deterministic acceptance. They may validate a

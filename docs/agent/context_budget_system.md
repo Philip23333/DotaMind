@@ -1,5 +1,12 @@
 # Context Budget System Design
 
+> **Scope note:** This document defines the original RuntimeContext and
+> model-visible budget-state baseline. Context compaction, Artifact lifecycle,
+> and pressure-triggered compression are now extended by the authoritative
+> [`context_governance_evidence_lifecycle.md`](context_governance_evidence_lifecycle.md).
+> The exclusions below remain true for the currently implemented Budget v1;
+> they are not a rejection of the later governance phases.
+
 ## 1. Overview
 
 当前 Agent Runtime 已具备：
@@ -365,6 +372,12 @@ time-pressure thresholds or deadline ownership.
 
 # 10. Context Pressure
 
+The Context Governance design extends this state-only interface in a later
+phase. See [`context_governance_evidence_lifecycle.md`](context_governance_evidence_lifecycle.md)
+for the `ContextPressureController`, compression triggers, selector, and
+hard-wall fallback. No automatic compression is claimed by this current-runtime
+document until that phase is implemented and accepted.
+
 当前版本只提供状态接口。
 
 等级：
@@ -659,12 +672,12 @@ After:
 
 # 18. Future Extensions
 
-当前冻结。
+当前 RuntimeContext v1 冻结；Context Governance 的后续目标已经单独定义。
 
 未来可能方向：
 
-- context compaction
-- artifact lifecycle management
+- context compaction（见 Context Governance 主设计）
+- artifact lifecycle management（见 Context Governance 主设计）
 - tool cost awareness
 - planner integration
 

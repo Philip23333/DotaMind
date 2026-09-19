@@ -1,5 +1,12 @@
 # Artifact Observation Lifecycle v1
 
+This document freezes the redundant-observation primitive. The broader target
+for semantic compression and independent Raw Evidence release is defined by the
+authoritative
+[`context_governance_evidence_lifecycle.md`](context_governance_evidence_lifecycle.md).
+The v1 receipt rewrite remains valid and is not replaced by Summary lifecycle
+semantics.
+
 ## Scope
 
 Artifact Observation Lifecycle v1 governs only redundant `artifact.read`
@@ -121,4 +128,6 @@ FINALIZATION
 v1 prevents redundant evidence retention; it does not bound the working set of
 a task whose distinct evidence itself is large. A T8-style sequence of
 different, non-overlapping reads therefore remains raw and is expected to keep
-its context footprint.
+its context footprint under the current v1 implementation. Future Summary
+compression and Artifact-level release are governed by the Context Governance
+design and must preserve the invariants stated there.

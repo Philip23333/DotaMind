@@ -87,6 +87,16 @@ before a second concrete implementation demonstrates the need.
 4. Register the capability only after its focused acceptance passes.
 5. Remove transitional code once the replacement is accepted.
 
+## Context Governance / Evidence Lifecycle (design baseline)
+
+The next context-management phase is defined by
+[`agent/context_governance_evidence_lifecycle.md`](agent/context_governance_evidence_lifecycle.md).
+It introduces Evidence Summary and independent Raw Evidence lifecycle decisions
+without changing the current Checkpoint, Lease, or Budget semantics before the
+corresponding acceptance phase. Implementation proceeds in the documented order:
+Summary foundation, manual compression, Answer Resolver integration, pressure
+integration, and finally weakening the Checkpoint-to-cleanup association.
+
 ## Follow-up: generic tool-result externalization (implemented / under acceptance)
 
 - Attach one session-scoped result processor at registry composition time.

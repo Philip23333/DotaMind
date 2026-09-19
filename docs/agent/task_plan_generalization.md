@@ -1,5 +1,10 @@
 # Task Plan Generalization
 
+TaskPlan generalization is the evaluation companion to the authoritative
+[`context_governance_evidence_lifecycle.md`](context_governance_evidence_lifecycle.md).
+The plan remains a Coverage Map when Evidence Summary and compression phases
+are introduced; it must not become a context-cleanup workflow.
+
 TaskPlan is a coverage map, not an execution script.
 
 A good task item should satisfy four properties:
