@@ -87,15 +87,27 @@ before a second concrete implementation demonstrates the need.
 4. Register the capability only after its focused acceptance passes.
 5. Remove transitional code once the replacement is accepted.
 
-## Context Governance / Evidence Lifecycle (design baseline)
+## Context Governance: working summary and recoverable release (target)
 
 The next context-management phase is defined by
 [`agent/context_governance_evidence_lifecycle.md`](agent/context_governance_evidence_lifecycle.md).
-It introduces Evidence Summary and independent Raw Evidence lifecycle decisions
-without changing the current Checkpoint, Lease, or Budget semantics before the
-corresponding acceptance phase. Implementation proceeds in the documented order:
-Summary foundation, manual compression, Answer Resolver integration, pressure
-integration, and finally weakening the Checkpoint-to-cleanup association.
+The target uses one current working summary per live session, observation-level
+release independent of Summary or task completion, and deterministic Raw release
+under context pressure. Same-session follow-up continuity is included while the
+owning service process retains the session; restart persistence is excluded.
+
+Implementation follows the outline's stage exits:
+
+1. Working-summary replacement and actual execution/answer context integration.
+2. Independent release and reread, removing conflicting task/checkpoint gates.
+3. Same-session continuation with fresh per-question execution state.
+4. Full-input pressure, one model cleanup opportunity, deterministic Raw release,
+   and bounded capacity failure.
+5. End-to-end evaluation and removal of superseded behavior.
+
+These are target phases, not claims of completed implementation. Acceptance
+requires the full update/release/reread/follow-up loop, not only Summary schemas
+and commit validation.
 
 ## Follow-up: generic tool-result externalization (implemented / under acceptance)
 

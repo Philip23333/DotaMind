@@ -3,8 +3,8 @@
 Context Accounting is the measurement layer for the authoritative
 [`context_governance_evidence_lifecycle.md`](context_governance_evidence_lifecycle.md)
 design. Its v1 behavior remains measurement-only; later governance phases may
-consume these measurements to trigger compression without changing the meaning
-of the recorded metrics.
+consume these measurements for working-summary updates and independent Raw
+release without changing the meaning of the recorded metrics.
 
 ## Purpose
 
@@ -19,8 +19,9 @@ v1 is measurement only. It does not:
 - change `RuntimeContext.context_pressure`;
 - change phase transitions, tool availability, or model guidance.
 
-`context_pressure` therefore remains `normal` until a later policy layer is
-explicitly designed and validated.
+`context_pressure` therefore remains `normal` in this measurement-only baseline.
+The linked governance implementation outline defines the subsequent pressure
+integration; it does not require a separate policy engine.
 
 ## Measurement
 

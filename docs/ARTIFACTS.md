@@ -1,11 +1,10 @@
 # Artifacts
 
 Artifact storage and retrieval remain governed by this document. The target
-Evidence Lifecycle that decides when a complete Artifact becomes releasable is
-defined in
+working-summary and recoverable observation-release lifecycle is defined in
 [`agent/context_governance_evidence_lifecycle.md`](agent/context_governance_evidence_lifecycle.md);
-that target does not change the current process-local storage contract until its
-implementation phase is accepted.
+release removes an observation from active context, not the stored Artifact.
+The target retains the process-local, session-owned storage contract.
 
 ## Purpose
 
@@ -63,7 +62,9 @@ Artifacts do not define stable entity identities, domain schemas, provider
 navigation, cross-turn context restoration, hidden durable persistence, or
 scenario-specific aggregation. There is no Artifact TTL, eviction, or memory
 budget in the current store; its lifecycle is process-local and session-bound.
-The Context Governance design describes future Artifact-level release decisions,
-not a currently implemented TTL or eviction policy.
+The Context Governance target adds observation-level release and same-session
+summary/source continuation at the Runtime/product layer. It does not add
+Artifact deletion, TTL, or restart persistence; retain bodies while their
+references are promised to be re-readable.
 Failed-run traces may retain bounded observations without archiving temporary
 Artifact bodies.

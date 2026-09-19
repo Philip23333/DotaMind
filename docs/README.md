@@ -17,7 +17,8 @@ preserve transitional vNext structure merely because it already exists.
 4. `ARTIFACTS.md` when work touches large-result externalization, Artifact
    storage, corpus search/read, or the current simplification migration
 5. `agent/context_governance_evidence_lifecycle.md` for Context Governance,
-   Evidence Summary, and Raw Evidence lifecycle work
+   the single working summary, recoverable observation release, same-session
+   continuation, and their implementation outline
 6. `EVALS.md`
 7. `ROADMAP.md`
 
@@ -36,7 +37,7 @@ copy it.
 | Agent-visible capability contracts | `TOOLS.md` |
 | Source identity, locators, provider facts, Valve identity, and normalization | `DATA.md` |
 | Large-result externalization, Artifact storage, corpus, and migration | `ARTIFACTS.md` |
-| Context Governance, Evidence Summary, and Raw Evidence lifecycle | `agent/context_governance_evidence_lifecycle.md` |
+| Context Governance design and implementation outline: working summary, recoverable release, and same-session continuation | `agent/context_governance_evidence_lifecycle.md` |
 | Behavioral and integration acceptance | `EVALS.md` |
 | Delivery order | `ROADMAP.md` |
 | Costly external implementation facts | `reference/` |

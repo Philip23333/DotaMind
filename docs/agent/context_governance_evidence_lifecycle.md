@@ -1,615 +1,278 @@
-# Context Governance / Evidence Lifecycle
+# Context Governance：工作摘要与可恢复释放实现大纲
 
-## Status and authority
+## 1. 状态与设计目标
 
-This document is the design baseline for the next Context Governance phase.
-When a later implementation design conflicts with an older v1 document, this
-document defines the target semantics. The older documents remain useful for
-the currently implemented boundaries and link back here where their scope is
-extended.
+本文是 Context Governance 的目标设计与实现大纲，定义单份工作摘要与可恢复释放。
+它替代原先以 coverage / required dimensions 组织 Evidence Summary、
+再由 Summary commit 授予 Raw 释放资格的设计。旧方案由 Git 历史保留。
 
-The design deliberately separates the current implementation from the target:
-the existing Artifact Observation Lifecycle, Context Accounting, Lease, Budget,
-Checkpoint, and Answer Resolver behavior remains valid until the corresponding
-phase below is implemented and accepted.
+本文落地的是设计，不代表下述能力已经实现。代码的当前行为以代码和测试为准；
+[Observation Lifecycle v1](artifact_observation_lifecycle.md)、
+[Context Accounting](context_accounting.md) 与
+[Budget v1](context_budget_system.md) 继续说明可复用的基础。
 
-## 1. Background
+首要目标是让 Agent 在有限上下文中持续求解，并在需要时找回已移出的资料。
+优先灵活、轻量和可恢复；不要求模型完美判断未来是否还会使用某段内容。
+验收看完整 Agent 行为、回答质量和资源消耗，不能只看摘要是否通过结构校验。
 
-The Agent Runtime already has:
+## 2. 已确认的核心决策
 
-- TaskPlan / TaskItem;
-- the Artifact system;
-- Evidence Lease;
-- Materialization Budget;
-- Checkpoint;
-- Answer Resolver; and
-- Current Task Focus.
-
-These components have established that plans can cover complex questions,
-Artifacts and leases can manage large results, the materialization budget can
-bound active raw evidence, and Answer Resolver can close FULL, PARTIAL, and
-FAILURE executions.
-
-The remaining architectural problem is that context lifetime is implicitly
-bound to task completion:
-
-```text
-TaskPlan -> TaskItem -> task completion -> Checkpoint -> release raw
-```
-
-Models naturally continue querying to avoid omissions. Task completion is
-therefore not a stable context-cleanup signal. Checkpoints can arrive late,
-multiple task items can accumulate raw retrieval before the first checkpoint,
-and the Materialization Budget can degrade into a hard blocker for hybrid work.
-
-The goal of this design is:
-
-> Decouple context lifetime from Task Completion and govern it through an
-> Evidence Lifecycle.
-
-## 2. Core decision
-
-The old abstraction is:
-
-```text
-Task Completion Checkpoint
-```
-
-The new abstraction is:
-
-```text
-Evidence Compression + Evidence Lifecycle
-```
-
-Raw Evidence may leave active context when it has been reliably absorbed into a
-traceable Evidence Summary. Summary Commit and Raw Release are separate events.
-
-```text
-Raw Evidence
-    | semantic compression
-    v
-Evidence Summary
-    | runtime validation
-    v
-Summary Committed
-    | independent raw lifecycle decision
-    v
-Raw retained or released
-```
-
-## 3. Three context layers
-
-### 3.1 Raw Evidence
-
-Raw Evidence is data directly produced or materialized by a tool: match JSON,
-series collections, roster results, or tournament data. It is large, often low
-density, useful for local analysis, and should have a short active lifetime.
-Artifacts remain available for later generic retrieval or audit.
-
-The first lifecycle states are:
-
-```text
-ACTIVE_RAW
-RELEASED
-```
-
-Raw Evidence must not be the default primary input to Answer Context.
-
-### 3.2 Evidence Summary
-
-An Evidence Summary is the structured knowledge state the Agent has absorbed
-from raw observations. It is much smaller, can remain active across later
-retrieval, preserves source references, and can be used directly by Answer
-Context. It is not an untyped model note; it is a traceable intermediate
-knowledge state.
-
-### 3.3 Answer State
-
-Answer State is the evidence view consumed by the final answer:
-
-```text
-Evidence Summaries
-    + Coverage / Gap State
-    + a small amount of still-necessary Raw Evidence
-```
-
-The final answer should not default to re-reading every raw Artifact.
-
-## 4. TaskPlan positioning
-
-TaskPlan remains, but its semantic role is a Coverage Map rather than an
-execution script. It describes the knowledge dimensions the user's question
-needs, guides acquisition and summarization, and helps Answer Resolver classify
-FULL or PARTIAL coverage.
-
-For example, a multi-year team question may have coverage units `xg_2023`
-through `xg_2026`, each with dimensions such as `tournament_results`,
-`ti_result`, and `roster`. The plan does not require the model to execute these
-nodes in rigid serial order.
-
-TaskPlan must not become a workflow scheduler. Partitioning remains aligned with
-independently completable result units, not retrieval stages.
-
-## 5. Evidence Summary model
-
-The first Summary model is intentionally small:
-
-```python
-EvidenceSummary:
-    id
-    coverage_key
-    claims
-    source_refs
-    created_at
-
-SummaryClaim:
-    dimension
-    value
-    source_refs
-    status
-```
-
-Example:
-
-```json
-{
-  "dimension": "ti_result",
-  "value": {"placement": "7th-8th"},
-  "status": "confirmed",
-  "source_refs": [{"artifact_id": "artifact_ti_2023"}]
-}
-```
-
-The first version must not collapse to `summary: str`; Runtime needs to know
-which dimensions were compressed, which remain missing, and which Artifact
-facts support each claim.
-
-## 6. Semantic and Runtime boundaries
-
-The Model owns semantic reasoning:
-
-```text
-Raw Evidence -> understanding -> Structured Claims
-```
-
-It identifies events, seasons, rosters, results, and aggregate claims.
-
-Runtime owns deterministic validation:
-
-- source Artifacts exist;
-- sources belong to the CompressionRequest;
-- source references are legal;
-- required dimensions are represented;
-- Summary schema is valid; and
-- lifecycle state permits the commit.
-
-Semantic correctness belongs to the Model. Referential correctness belongs to
-Runtime.
-
-## 7. CompressionRequest
-
-Compression is requested through a typed request, not natural-language pressure
-instructions:
-
-```python
-CompressionRequest:
-    id
-    reason
-    coverage_key
-    source_artifact_ids
-    required_dimensions
-    target_bytes | None
-```
-
-The initial reasons are:
-
-```text
-coverage_ready
-context_pressure
-answer_finalization
-manual
-```
-
-`preserve_raw_ids` is deliberately not part of v1. The current Artifact
-lifecycle is artifact-granular, not fragment-granular. Until Artifact slicing,
-derived Artifacts, or partial materialization exist, Runtime can only keep or
-release a whole Artifact.
-
-## 8. Summary Commit is not Raw Release
-
-Summary Commit makes source Artifacts release-eligible; it does not release all
-sources automatically.
-
-```text
-SummaryCommitted
-    -> source Artifacts become release-eligible
-    -> Runtime evaluates each Artifact independently
-    -> KEEP or RELEASE
-```
-
-An Artifact that is still needed for direct inspection remains `ACTIVE_RAW` even
-after its Summary is committed. An already-consumed Artifact may be released.
-
-The smallest release unit is always a complete Artifact:
-
-```text
-artifact_a -> keep
-artifact_b -> release
-```
-
-This version does not release `artifact_a[0:95]` while retaining
-`artifact_a[95:100]`.
-
-## 9. Two-phase Summary Commit
-
-Summary generation and release follow this protocol:
-
-```text
-CompressionRequest
-        |
-        v
-SummaryCandidate
-        |
-        v
-Runtime Validation
-     +--+--+
-     |     |
-   fail   pass
-     |     |
-     |     v
-     | SummaryCommitted
-     |     |
-     |     v
-     | release eligibility evaluation
-     |
-     v
-keep ACTIVE_RAW
-```
-
-If validation fails, the source raw evidence remains available.
-
-Summary lifecycle states are:
-
-```text
-PENDING
-ACTIVE
-INVALID
-```
-
-## 10. Compression triggers
-
-The first design has three Runtime triggers plus a manual trigger.
-
-### Coverage-ready
-
-When a coverage unit has a stable, semantically useful group of raw evidence,
-Runtime may issue `CompressionRequest(reason=coverage_ready)`. This does not
-mean the TaskItem is complete; it means a durable knowledge state is worth
-creating.
-
-### Context pressure
-
-The Materialization Budget evolves from only a hard limiter into a pressure
-signal:
-
-```text
-pressure high
-    -> find compressible evidence
-    -> CompressionRequest
-    -> release eligible raw
-    -> retry admission
-```
-
-The hard limit remains the final guardrail. If nothing is compressible or the
-compressed state still exceeds the bound, the existing deny/defer behavior is
-retained.
-
-### Answer finalization
-
-Before Answer Resolver, Runtime may convert a large raw working set into
-Evidence Summaries plus a small retained raw set to reduce Answer token
-variance.
-
-### Manual
-
-Phase 1 implementation starts with manual compression to validate the complete
-closed loop. Automatic triggers are subsequent phases.
-
-## 11. ContextPressureController
-
-ContextPressureController answers only whether proactive compression is needed.
-It does not generate summaries, judge claims, decide task completion, or release
-Artifacts.
-
-Its inputs may include active materialized bytes, incoming estimate, current
-focus, Artifact size and age, coverage key, and Summary availability. Its output
-is one of:
-
-```text
-NONE
-NORMAL
-HIGH
-CRITICAL
-```
-
-Current Task Focus remains a retention and compression-selection signal, not a
-task-completion signal.
-
-## 12. Compression selection
-
-Pressure handling must not simply evict the largest Artifact; that may be the
-Artifact currently being analyzed. The selector considers:
-
-```text
-current_focus_key
-coverage_key
-artifact_size
-materialization_age
-existing_summary
-```
-
-Recommended priority:
-
-```text
-stable raw set from the same coverage
-    > non-current-focus evidence
-    > evidence already read and understood
-    > large Artifact
-    > old Artifact
-```
-
-## 13. Coverage runtime state
-
-No large Coverage Manager is introduced in v1. Existing TaskItem runtime
-metadata may grow into:
-
-```python
-TaskItemRuntimeState:
-    key
-    available_dimensions
-    summarized_dimensions
-    active_raw_ids
-    summary_ids
-```
-
-This lets Runtime distinguish what is available, summarized, still raw, and
-missing without inferring those facts from prose.
-
-## 14. Answer Resolver
-
-Answer Resolver evolves from raw-oriented to summary-oriented input:
-
-```python
-AnswerContext:
-    summaries
-    retained_raw
-    coverage
-    gaps
-```
-
-The existing `FULL`, `PARTIAL`, and `FAILURE` resolution states remain. The
-resolver prefers Evidence Summaries and supplements them with retained raw only
-when needed. Source references remain available for traceability.
-
-## 15. Runtime events
-
-The first event vocabulary stays intentionally small:
-
-```text
-CompressionRequested
-SummaryProduced
-SummaryCommitted
-RawEvidenceReleased
-```
-
-Do not add workflow-style progress events such as
-`CompressionStarted`, `CompressionCandidateSelected`, or
-`SummaryValidated` unless a concrete diagnostic need is demonstrated.
-
-## 16. Mapping from current to target abstractions
-
-| Current abstraction | Target positioning |
+| 关注点 | 第一版决策 |
 | --- | --- |
-| TaskPlan | Coverage Map |
-| TaskItem | Coverage Unit |
-| Checkpoint | Progress semantics; no longer the core context cleanup boundary |
-| Artifact | Raw Evidence Container |
-| Evidence Lease | Raw access / ownership lifecycle |
-| Materialization Budget | Context pressure plus hard-wall fallback |
-| Current Task Focus | Retention / compression selection signal |
-| Evidence Summary | Persistent intermediate knowledge |
-| Answer Resolver | Summary-oriented evidence resolver |
+| 工作摘要 | 每个有效会话最多一份当前工作摘要，可包含多个主题 |
+| 摘要更新 | 模型完整重写下一版；Runtime 保存成功后替换当前版本 |
+| 摘要内容 | 自然语言工作笔记，允许局部收获、推断、疑问和待核对事项 |
+| 任务关系 | 不要求 coverage_key、required dimensions 或按维度提交 claims |
+| Raw release | 与摘要更新、任务完成独立；不需要先生成摘要 |
+| 释放粒度 | 一次进入上下文的可恢复 Raw observation，底层 Artifact 不删除 |
+| 正常运行 | 模型看得见压力，自主决定是否更新摘要、是否释放 |
+| 高压兜底 | 先给模型一次腾挪机会，仍不足则 Runtime 确定性释放可恢复 Raw |
+| 恢复 | 保留可辨认的资料线索与重读入口，允许释放后再次读取 |
+| 连续追问 | 同一会话、承载会话状态的服务进程存续期间延续摘要与来源 |
+| 职责 | 模型负责语义取舍；Runtime 负责机械校验、来源、资源、生命周期和恢复 |
 
-## 17. Checkpoint positioning
+Summary 的来源引用表达证据关系，不定义释放范围。
+任务检查负责判断用户问题是否得到回答，不作为摘要保存或 Raw 释放的前置条件。
 
-Checkpoint remains useful for task and execution progress. It is not removed in
-the first phase, but its raw cleanup responsibility is progressively removed.
+## 3. 范围与状态归属
 
-Old association:
+### 第一版包含
 
-```text
-Task complete -> checkpoint -> release raw
-```
+- 单份当前工作摘要、完整替换、失败保留旧版和历史版本追溯。
+- 模型主动释放、压力展示、Runtime 释放兜底及精确到 observation 的重读。
+- 同一会话连续追问时注入当前摘要，并保留仍然有效的来源与恢复线索。
+- 调整旧的任务完成、Checkpoint、Evidence Lease 与上下文清理之间的耦合。
+- 执行阶段与最终回答阶段一致使用当前摘要和有效证据。
+- 必要的 trace、确定性测试与端到端评估。
 
-Target association:
+### 状态边界
 
-```text
-Evidence compressed -> Summary committed -> raw independently released
-```
+| 随会话保留 | 每次用户问题重新开始 |
+| --- | --- |
+| 当前摘要、已提交摘要历史、来源定位与恢复线索、Artifact 内容 | 本轮任务计划和进度、执行步数、时间预算、当前请求的资源核算 |
 
-Task Completion and Context Lifecycle become separate state transitions.
+摘要历史和已释放正文保存在活跃上下文之外。资源核算每轮根据实际请求重建；
+会话中保留了 Artifact，不代表这些正文仍占据本轮模型上下文。
 
-## 18. Materialization Budget semantics
+第一版沿用进程内、会话隔离的资料存储语义。服务重启、会话状态丢失或会话删除后，
+不承诺恢复旧摘要和旧 Artifact；不能只恢复摘要文本，却继续宣称失效引用可重读。
+新会话不继承其他会话的工作摘要。
 
-The hard invariant remains:
+不包含跨会话共享记忆、服务重启后的持久化恢复、自动多摘要管理、
+语义去重或冲突裁决、摘要合并器、复杂 policy engine、subagent、
+automatic replan、任意文本片段裁剪，以及由模型删除底层 Artifact。
+进程内资料保留会增加存储占用，需观测；第一版不以隐藏 TTL 破坏重读承诺。
 
-```text
-materialized bytes <= hard budget
-```
+## 4. 工作摘要：只让模型决定值得继续记住什么
 
-The target control flow is:
+### 内容契约
 
-```text
-incoming materialization
-    -> soft pressure threshold exceeded?
-    -> request compression
-    -> retry admission
-    -> hard bound still exceeded?
-    -> deny / defer
-```
+摘要是可追溯的工作笔记，保留后续推理需要的事实、解释、限制和未解决问题。
+允许跨任务、跨年份组织认识，不要求填齐用户问题的所有维度。
+事实、推断和未知应在文字中分清，这是模型指引和评估要求，不做 Runtime 语义审批。
 
-Budget becomes a governor while retaining its final protection role. This
-document does not authorize removing the current hard admission bound.
+最小外层只需承载摘要内容、所引用的来源，以及 Runtime 管理的版本和记录信息。
+具体 DTO 与工具名称在实现时确定，不另建一套领域知识模型。
+纯用户要求或工作提醒不必伪造 Artifact 引用；证据性陈述应保留相应来源。
+来源关联可在正文中表达，不要求逐条套用固定 dimension / status 结构。
 
-## 19. Explicit v1 non-goals
+模型只面对“更新当前工作摘要”一个动作。没有选择摘要对象、新建主题档案、
+合并多个摘要、管理版本号的日常义务。不要求每次读取或每次回答都生成摘要。
 
-The first lifecycle implementation does not include:
+### 更新与替换
 
-- recursive summaries;
-- summaries of summaries;
-- cross-coverage Summary merge;
-- Summary aging, expiry, or refresh;
-- semantic deduplication;
-- cross-task shared summaries;
-- Artifact slicing;
-- derived Artifacts;
-- partial Artifact release;
-- automatic replan;
-- complex subagents;
-- token-level optimization; or
-- model-controlled Artifact deletion.
+1. 模型结合旧摘要和当前可见信息，生成完整的新版本并给出实际使用的来源。
+2. Runtime 检查结构、大小、来源真实性、会话归属及恢复定位。
+3. 保存成功后原子地切换当前版本，并把旧版本留在上下文之外。
+4. 保存失败则保留旧版本，反馈具体机械错误，不自动释放任何 Raw。
+5. 下一次执行请求和回答请求仅携带当前版本正文，不累计旧版本正文。
 
-These remain future work until the basic Evidence Lifecycle is accepted.
+旧摘要的重要限制和疑问应在仍有意义时保留。新证据可以修正旧认识；
+Runtime 不判断结论哪一个更可信，也不要求证明改写完全无损。
 
-## 20. Implementation phases
+来源随当前内容调整，不自动把所有历史来源并入每一版。
+被保留的结论应继续可追溯到原始证据；不能只留下需要无限逐层展开的摘要引用链。
+已观察过且仍可定位的来源不因 Raw 已释放而失去引用资格。
+“Artifact 存在”也不足以证明模型观察过它：校验须保留真实观察的 provenance，
+并支持来自同一会话前轮观察或旧摘要的来源。
 
-### Phase 1 — Summary foundation
+旧正文可能藏在摘要提交的工具参数、工具返回或历史消息中。
+上下文构建必须处理这些入口，让旧版留在外部记录中，避免重复注入。
+保持模型协议要求的调用与返回配对，不能只修改摘要存储而忽略实际请求。
 
-Add `EvidenceSummary`, `SummaryClaim`, a Summary Store, and deterministic
-validation. Do not change Budget or TaskPlan behavior and do not automatically
-release raw evidence.
+### 示例
 
-### Phase 2 — Manual compression loop
+旧版：“换人后胜率上升，但尚未核对对手强弱。”
 
-Implement:
+新版：“换人后胜率上升，同时对手更弱；现有资料不能证明改善由换人造成。
+仍需比较对同等强度对手的表现。来源 A、B、C。”
 
-```text
-CompressionRequest -> Evidence Summary -> Runtime validation
-    -> Summary Commit -> Artifact-level release decision
-```
+模型只交付新版认识；版本保存、切换和历史恢复由 Runtime 处理。
 
-Prove that Summary Commit does not automatically release all source raw.
+## 5. Raw release：复用 observation → receipt
 
-### Phase 3 — Answer Resolver integration
+一次工具返回或 Artifact 读取形成一个 observation。一次读取 30 场就是一个单位；
+分三次读取则是三个可独立释放的单位。不对同一返回内部任意挑选几行保留。
 
-Make Answer Resolver prefer Summary and supplement with ACTIVE_RAW as needed.
-Validate answer quality, FULL/PARTIAL/FAILURE, and source traceability.
+复用现有 Artifact observation 和 receipt 改写机制。
+可释放对象必须已有可靠的资料保存与恢复定位。
+第一批以已有 artifact.read 观察为基础；其他工具观察只有具备等价恢复条件才可纳入。
+没有可恢复副本的普通 inline 内容不能被当作可恢复 Raw 直接丢弃。
 
-### Phase 4 — Context pressure integration
+模型显式指定要释放的观察；Runtime 校验定位、替换正文并更新实际占用。
+已经释放的观察再次释放应是无副作用操作。定位失效时保留正文并返回可操作的错误。
+任务未完成、没有 Summary、Summary 未引用该来源，都不是拒绝释放的原因。
 
-Connect Materialization Budget to ContextPressureController:
+receipt 至少保留：
 
-```text
-pressure high -> compression -> retry admission -> fallback defer
-```
+- 可辨认的资料主题或范围，优先复用已有工具说明、参数和读取元数据；
+- Artifact 引用、读取方式和实际返回的路径 / 范围；
+- 简短释放原因：Runtime 原因可机械生成，模型补充说明可选。
 
-### Phase 5 — Weaken Checkpoint dependency
+原因只用于理解和诊断，不作为需要审核的语义条件。
+实际返回范围可能小于请求 limit，不能把未返回内容记成已观察证据。
 
-After the lifecycle is stable, reduce the association between Task Completion
-and Raw release. Checkpoint retains progress semantics but no longer owns the
-Raw lifecycle.
+同一次观察的释放状态幂等更新，历史操作留在 trace。
+重新读取会产生新的实际观察并重新计入上下文；不要把每次动作扩展成长篇历史记录。
+跨轮所需定位与恢复线索随会话保留，不能只存在于上一轮局部消息列表。
+历史痕迹不能全部无限注入下一轮；保持紧凑线索及通用的恢复入口，
+具体承载复用现有 Artifact / 会话记录能力，不引入语义记忆检索框架。
 
-## 21. Live evaluation goals
+保留 duplicate / verified full-superset 的确定性冗余清理。
+移除“任务完成才能释放”及“任务完成后不能重读”的约束；
+Checkpoint 可以保留进度语义，但不再拥有上下文清理权。
 
-The existing live matrix remains the acceptance surface.
+## 6. 压力处理与安全边界
 
-### Full T8
+### 衡量实际请求
 
-In addition to first checkpoint step, measure the first useful compression step.
-It should occur materially earlier than Task Completion.
+压力针对下一次实际发给模型的完整输入：
+指令、工具说明、对话、任务信息、当前摘要、Raw 和 receipts 都要计入。
+摘要有可配置的大小上限。生成摘要可能暂时增加占用，不等于已经释放空间。
 
-### Team temporal
+现有 Context Accounting 的 UTF-8 序列化字节统计继续保留其含义。
+它不是 token 数，不能直接当成模型窗口百分比。
+实现时按配置模型采用合适的计数 / 估算方式，并明确估算与实测的区别；
+不把统一 bytes / 4 假设伪装成精确计数。
 
-The target is:
+在达到模型硬上限之前预留整理调用、受限工具返回和最终输出所需余量。
+工具批量返回的风险也要受已有结果边界与 admission 机制约束。
+保留必要的硬边界，不要求估算百分之百准确。
 
-```text
-xg_2023 raw -> xg_2023 Summary -> release unnecessary raw -> xg_2024
-```
+### 控制流程
 
-### 10-team roster
+1. 正常水位下展示占用或压力信号，模型自主工作；Runtime 不主动强制摘要。
+2. 达到安全水位后，给模型一次明确的腾挪机会和缩减目标。
+   模型可以更新摘要、主动 release，或组合使用，不能把完成任务设为腾挪条件。
+3. 重新计算实际请求。仍不足时，按最早进入上下文的顺序释放可恢复 Raw，
+   直到达到目标或可释放集合耗尽；不做重要性评分和当前焦点语义保护。
+4. 无足够可释放内容时，结束继续扩张。若能在预算内生成说明或部分回答，
+   使用现有结束路径；否则返回容量错误，不发送明知超限的请求。
 
-Raw cleanup should not require the model to find one special checkpoint source.
-The model should produce a legal Summary while Runtime validates references.
+这次模型机会必须在硬边界内可执行；无法安全调用模型时直接走机械兜底或容量出口。
+对同一次未解决压力不反复追加整理重试。新工作再次积累压力后可进入下一轮处理。
 
-### Hybrid
+Runtime 强制释放权只覆盖可恢复 Raw，不直接丢弃用户要求、系统指令或当前摘要。
+时间、步数、取消与上下文是不同约束，不能让整理绕过现有执行限制。
 
-Hybrid is the core acceptance case. The target is continued retrieval through
-multiple compression/release cycles even before the first TaskItem is complete.
+## 7. 同一会话的连续追问
 
-## 22. Core invariants
+沿用产品层已有的会话隔离与 Artifact 保留基础，延续一份当前工作摘要及来源。
+每次用户追问都基于新的用户要求启动新的执行状态，不能沿用旧任务的完成结论、
+关闭状态或预算计数。旧摘要是背景知识，不是覆盖新用户要求的指令。
 
-1. Summary validation failure leaves source Raw available.
-2. Summary Commit is not automatic source Raw release.
-3. Raw release unit is a complete Artifact until slicing exists.
-4. Runtime validates references; the Model interprets semantics.
-5. Context pressure may trigger compression, but the hard resource limit remains
-   the final guardrail.
-6. TaskPlan guides coverage, summarization, and answer gap detection without
-   becoming a rigid workflow scheduler.
+下一轮携带正常对话上下文和当前摘要，不恢复上一轮全部 Raw。
+需要细节时通过有效来源重读。没有摘要时正常开始，不强制额外调用模型补写摘要。
+用户换话题时也不新增主题路由器；模型可在后续更新中调整工作笔记。
 
-## 23. Target architecture
+确保跨轮 source / observation 定位不因局部 ID 重用混淆。
+沿用或补齐同一会话执行的一致性边界，防止并发请求相互覆盖当前摘要，
+不因此引入跨会话编排。失败或取消不会产生半份摘要；已成功提交的版本保持一致。
 
-```text
-Coverage Map
-      |
-      v
-Evidence Acquisition
-      |
-      v
-Raw Evidence
-      |
-      +-----------------------+
-      |                       |
-coverage value         context pressure
-      |                       |
-      +-----------+-----------+
-                  |
-                  v
-        CompressionRequest
-                  |
-                  v
-         Evidence Summary
-                  |
-                  v
-        Runtime Validation
-                  |
-                  v
-        Summary Committed
-                  |
-                  v
-       Raw Lifecycle Decision
-            /           \
-         retain        release
-            \           /
-             v         v
-           Knowledge State
-                  |
-                  v
-             AnswerContext
-                  |
-                  v
-            Answer Resolver
-```
+旧版本可追溯应有实际可用的恢复方式，不能仅依赖偶尔保存的失败 trace。
+优先复用通用读取能力和会话内记录；历史恢复不等于重新注入全部历史。
 
-The goal is not to make the Agent execute a stricter workflow. It is to let
-Runtime continuously answer:
+## 8. 现有实现的改造位置
 
-```text
-What raw evidence is still needed?
-What knowledge has already been absorbed?
-What coverage is missing?
-What can safely leave active context?
-```
+以下路径相对 apps/api/app/vnext/，用于定位实现入口，
+不要求保留现有类或增加对应 manager。
 
-Evidence Lifecycle, rather than Task Completion, is the next Context Governance
-design baseline.
+| 现有位置 | 复用或调整方向 |
+| --- | --- |
+| agent/evidence_summary.py、evidence_summary_lifecycle.py | 改为单份工作摘要及完整版本替换，移除 coverage / dimensions 和 ACTIVE_RAW 提交门槛 |
+| artifacts/lifecycle.py、agent/transcript_rewrite.py | 复用 observation、receipt 和配对保留；接入主动释放与容量兜底 |
+| agent/runtime.py、runtime_context.py、runtime_prompt.py | 注入当前摘要、展示真实压力、执行一次模型腾挪与机械兜底 |
+| agent/context_accounting.py、materialization_budget.py、limits.py | 维持测量含义，统一实际占用与释放核算，配置摘要和请求预算 |
+| agent/task_state.py、tools/artifacts/retrieval.py | 解除 task / checkpoint 对释放和重读的控制，保持必要任务进度能力 |
+| agent/answer_stage.py、instructions.py | 最终回答使用当前摘要和有效证据；按用户问题检查完整性 |
+| product/chat.py、product/context.py、composition.py | 分开会话记忆与本轮执行状态，支持隔离的连续追问 |
+
+替换已不合适的抽象及测试预期，不叠加兼容旧 Summary 管道的 policy 层。
+工具输入/输出结构校验、来源校验、工具边界、鉴权、稳定错误及资源硬约束继续保留。
+
+## 9. 实施顺序与阶段出口
+
+### 阶段 A：工作摘要与实际上下文接通
+
+- 落实单份当前摘要、完整更新、来源规范化、大小边界和外部历史。
+- 注册模型可用的更新动作，接入执行与最终回答的上下文。
+- 去掉按 coverage / required dimensions 验收的旧摘要路径。
+- 阶段出口：连续两次更新后，请求中只有当前版正文；失败保持旧版；
+  合法已释放来源可继续引用，伪造和跨会话来源被拒绝。
+
+### 阶段 B：独立 release 与重读闭环
+
+- 复用 receipt 替换，加入模型主动 release；释放与摘要更新独立。
+- 对齐 observation 定位、实际节省量和重读后的占用。
+- 去除任务完成才能清理、任务关闭禁止重读等冲突。
+- 阶段出口：未完成任务、未生成摘要也能释放；同 Artifact 的其他观察不受影响；
+  释放后可重读，已完成任务的旧证据也可重新检查。
+
+### 阶段 C：连续追问与会话边界
+
+- 当前摘要、历史和来源随有效会话延续，本轮执行状态重新创建或重置。
+- 保证前轮来源可重读、会话之间隔离，并覆盖失败、取消和请求重放路径。
+- 阶段出口：下一轮使用前轮摘要继续分析，旧任务状态不阻塞新问题；
+  会话清理后不再宣称原资料可恢复。
+
+### 阶段 D：压力控制与兜底
+
+- 接入完整输入测量、可配置水位、输出及工具结果余量。
+- 实现一次模型腾挪机会、确定性 Raw 释放与容量不足出口。
+- 阶段出口：无需先完成任务或成功摘要就能腾出空间；
+  没有可释放 Raw 时不无限循环，也不越权删除其他上下文。
+
+### 阶段 E：端到端验证与收尾
+
+- 运行长任务、多次摘要修订、释放后反查和连续追问场景。
+- 对比回答质量、请求峰值、延迟、token 消耗和重读成本。
+- 删除被替代的旧行为与测试契约，更新当前能力说明。
+- 阶段出口：完整循环得到验证，不能只以 DTO 或单元校验通过作为完成标准。
+
+阶段用于组织提交和验证，不改变模型的执行自由度。
+具体工具名、DTO 字段、阈值和模块拆分是实现选择，不需要再增加架构审批流程。
+
+## 10. 验收矩阵
+
+| 场景 | 必须观察到的行为 |
+| --- | --- |
+| 三次读取同一个 Artifact | 释放其中一次只改变对应观察；重读范围准确 |
+| 没有摘要的主动释放 | 成功留下可辨认 receipt，底层资料仍可读 |
+| 摘要成功但不 release | 原 Raw 保留，资源统计反映实际增加的摘要开销 |
+| 多次修订工作摘要 | 仅当前正文进入后续请求和最终回答；旧版本可按需追溯 |
+| 摘要提交失败或取消 | 不破坏已提交版本，不连带释放 Raw |
+| 先释放再更新摘要 | 真实已观察来源仍可用，不要求恢复全部 Raw 后才能提交 |
+| 长任务高压且模型未腾出足够空间 | Runtime 确定性释放可恢复 Raw，保持调用 / 返回结构 |
+| 反复重读与释放 | 核算正确、状态幂等、不把重读内容立即当成同一次旧释放 |
+| 没有可释放 Raw | 有界结束扩张，不靠反复摘要或重读消耗预算 |
+| 连续追问旧证据 | 当前摘要延续，前轮来源可读，新任务正常启动 |
+| 不同会话、删除或丢失会话状态 | 不串用记忆，不把失效引用标成可恢复 |
+| 新资料纠正旧认识 | 后续回答采用修订后的认识，关键疑问和证据仍可追溯 |
+
+确定性测试验证机械边界；真实模型 traces / evals 验证语义和行为稳定性。
+至少记录：回答质量和重要遗漏、完整输入峰值、整理与兜底次数、
+摘要 / receipts 自身开销、重读次数与反复释放、总 token 与延迟。
+
+第一版不承诺任意长任务都能无限运行，也不承诺摘要无损。
+只有真实 traces / evals 表明单份工作摘要或简单释放规则不够时，
+再讨论多摘要管理、自动合并、更多保留策略或持久化记忆。

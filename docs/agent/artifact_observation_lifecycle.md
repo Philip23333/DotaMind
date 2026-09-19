@@ -4,8 +4,9 @@ This document freezes the redundant-observation primitive. The broader target
 for semantic compression and independent Raw Evidence release is defined by the
 authoritative
 [`context_governance_evidence_lifecycle.md`](context_governance_evidence_lifecycle.md).
-The v1 receipt rewrite remains valid and is not replaced by Summary lifecycle
-semantics.
+The v1 receipt rewrite remains valid. The target reuses observation-level
+replacement for model-directed and pressure-driven release without requiring a
+Summary. The v1-only trigger restrictions below do not constrain that target.
 
 ## Scope
 
@@ -128,6 +129,7 @@ FINALIZATION
 v1 prevents redundant evidence retention; it does not bound the working set of
 a task whose distinct evidence itself is large. A T8-style sequence of
 different, non-overlapping reads therefore remains raw and is expected to keep
-its context footprint under the current v1 implementation. Future Summary
-compression and Artifact-level release are governed by the Context Governance
-design and must preserve the invariants stated there.
+its context footprint under the v1 redundant-observation baseline. Working
+summary updates, independent observation release, and same-session recovery are
+governed by the Context Governance implementation outline. They retain the
+receipt/retrieval and tool-pairing guarantees, while extending release triggers.

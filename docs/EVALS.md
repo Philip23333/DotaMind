@@ -42,11 +42,26 @@ competition, hybrid, and single-deep cases. The eval does not prescribe exact
 task keys or a fixed execution sequence; it evaluates bounded,
 independently-completable result units.
 
-Context Governance evaluations additionally measure Summary commit validity,
-independent Artifact release, retained raw evidence, pressure-triggered
-compression, and AnswerContext coverage. They must distinguish current
-implementation behavior from target phases not yet accepted; the governing
-design is
+Context Governance evaluations cover current working-summary replacement,
+independent observation release, source recovery after release, full-input
+pressure and deterministic fallback, and same-session follow-up continuity.
+Artifact bodies remain stored; release removes Raw observations from active
+context. A successful Summary update does not automatically release Raw.
+
+Check that only the current summary body reaches execution and final-answer
+requests, failed updates preserve the old version, and completed tasks cannot
+prevent later evidence rereads. Follow-ups must receive the current summary
+without inheriting the previous question's execution state. Verify session
+isolation and honest behavior when process-local session data is lost.
+
+Measure answer quality and important omissions together with peak input size,
+summary/receipt overhead, reread churn, cleanup/fallback frequency, total tokens,
+and latency. Deterministic tests cover mechanical invariants; model traces and
+evals assess information retention and behavior. Current byte accounting must
+not be presented as a precise token count.
+
+Distinguish current behavior from target phases not yet accepted. The design,
+stage exits, and acceptance matrix are maintained in
 [`agent/context_governance_evidence_lifecycle.md`](agent/context_governance_evidence_lifecycle.md).
 
 ## Live smoke tests
