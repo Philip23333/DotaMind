@@ -105,7 +105,8 @@ def test_store_put_get_list_and_snapshot_are_deterministic() -> None:
     store.put(first)
     store.put(second)
 
-    assert store.get("summary:b") is first
+    assert store.get("summary:b") == first
+    assert store.get("summary:b") is not first
     assert store.get("missing") is None
     assert store.list() == [second, first]
     assert list(store.snapshot()) == ["summary:a", "summary:b"]
@@ -135,4 +136,30 @@ def test_store_rejects_duplicate_summary_id_without_replacement() -> None:
     with pytest.raises(ValueError, match="summary:one"):
         store.put(replacement)
 
-    assert store.get("summary:one") is original
+    assert store.get("summary:one") == original
+    assert store.get("summary:one") is not original
+
+
+def test_store_defensively_copies_mutable_values_on_put() -> None:
+    summary = _summary("summary:one")
+    store = EvidenceSummaryStore()
+    store.put(summary)
+
+    summary.claims[0].value["placement"] = "changed"
+
+    stored = store.get("summary:one")
+    assert stored is not None
+    assert stored.claims[0].value == {"placement": "7th-8th"}
+
+
+def test_store_defensively_copies_mutable_values_on_read() -> None:
+    store = EvidenceSummaryStore()
+    store.put(_summary("summary:one"))
+
+    returned = store.get("summary:one")
+    assert returned is not None
+    returned.claims[0].value["placement"] = "changed"
+
+    stored = store.get("summary:one")
+    assert stored is not None
+    assert stored.claims[0].value == {"placement": "7th-8th"}

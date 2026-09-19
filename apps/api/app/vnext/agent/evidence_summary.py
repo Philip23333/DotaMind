@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import Enum
@@ -88,23 +89,27 @@ class EvidenceSummaryStore:
 
         if summary.summary_id in self._summaries:
             raise ValueError(f"evidence summary already exists: {summary.summary_id}")
-        self._summaries[summary.summary_id] = summary
+        self._summaries[summary.summary_id] = deepcopy(summary)
 
     def get(self, summary_id: str) -> EvidenceSummary | None:
         """Return one summary by ID, or ``None`` when it is not stored."""
 
-        return self._summaries.get(summary_id)
+        summary = self._summaries.get(summary_id)
+        return deepcopy(summary) if summary is not None else None
 
     def list(self) -> list[EvidenceSummary]:
         """Return summaries in stable summary-ID order."""
 
-        return [self._summaries[summary_id] for summary_id in sorted(self._summaries)]
+        return [
+            deepcopy(self._summaries[summary_id])
+            for summary_id in sorted(self._summaries)
+        ]
 
     def snapshot(self) -> dict[str, EvidenceSummary]:
-        """Return a stable shallow copy keyed in summary-ID order."""
+        """Return a stable defensive copy keyed in summary-ID order."""
 
         return {
-            summary_id: self._summaries[summary_id]
+            summary_id: deepcopy(self._summaries[summary_id])
             for summary_id in sorted(self._summaries)
         }
 
