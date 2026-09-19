@@ -19,8 +19,40 @@ not preserve Legacy or transitional vNext structure merely because it exists.
 
 # Architecture Rules
 
-- The model owns ordinary Dota reasoning and decides which capabilities and
-  observations to compose.
+## Architecture decision principles
+
+- Optimize for DotaMind's end-to-end Agent behavior and system outcomes, not
+  the correctness or convenience of one component. Identify the highest-level
+  system goal, relevant boundaries, and constraints before designing a local
+  change.
+- Prefer designs that are flexible, lightweight, and robust. Do not require
+  perfect semantic classification, timing, or lifecycle decisions when a
+  simpler design can fail safely and recover.
+- Prefer reversible and recoverable operations over complex preconditions meant
+  to make every decision correct in advance. Information leaving active context
+  must remain discoverable and recoverable when the system requires it.
+- When a problem reveals a wrong abstraction, a confused responsibility, or
+  harmful coupling, reshape or delete that architecture. Do not accumulate
+  guards, heuristics, managers, state machines, or compatibility layers as a
+  substitute for correcting the boundary.
+- vNext is a pre-launch, clean-slate design. Existing experimental,
+  transitional, or Legacy code is evidence to evaluate, not an immutable
+  constraint; make justified breaking architectural changes without preserving
+  obsolete behavior.
+- The model owns ordinary Dota and other semantic reasoning, including which
+  observations to compose. Keep the Runtime generic and deterministic: it owns
+  mechanical invariants, provenance, resource accounting, lifecycle, and
+  recoverability.
+- Resist premature abstraction. Add policy engines, semantic validators,
+  orchestration managers, summary-merging logic, subagents, or automatic
+  replanning only when real traces or evaluations demonstrate a concrete need.
+- Evaluate designs with end-to-end Agent behavior and system-level measures,
+  including recovery and context pressure, rather than component-level
+  correctness alone.
+- Treat every proposed solution, including a user's, as a design hypothesis.
+  Assess it against the system goal, make trade-offs explicit, and recommend a
+  different direction when it better serves the architecture.
+
 - Model-facing tools describe capabilities, not provider endpoints. Current
   provider implementations stay below the tool contract.
 - Provider names are valid provenance in results. Provider implementation detail
@@ -30,9 +62,9 @@ not preserve Legacy or transitional vNext structure merely because it exists.
   business facts when their schemas genuinely differ.
 - Do not add scenario-specific workflows, routers, prompt recipes, ExecutionPlan
   DSLs, or model-authored evidence obligations.
-- Deterministic code protects provider transport, validation, canonical Valve
-  identity, cross-source resolution, authorization, persistence, bounds, and
-  stable errors.
+- Within that Runtime boundary, deterministic code protects provider transport,
+  validation, canonical Valve identity, cross-source resolution,
+  authorization, persistence, bounds, and stable errors.
 - Raw provider-private IDs are not an agent language. Externalized entities are
   continued through ArtifactRef and generic Artifact access; new remote entities
   are discovered through semantic capabilities again.
@@ -223,9 +255,6 @@ while preserving generic search/read access.
 - Follow: architecture confirmation -> one design unit -> implementation ->
   acceptance.
 - State scope, non-goals, and layer boundaries before code changes.
-- Prefer the smallest design that satisfies a verified need.
-- Do not add abstractions, extension points, or workflows for hypothetical
-  future providers.
 - Record material decisions as `Decision`, `Reason`, and `Not included` when
   useful for preserving a boundary.
 
