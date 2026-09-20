@@ -3,6 +3,63 @@
 This branch is the DotaMind vNext clean-slate rewrite. The Legacy V3 baseline is
 frozen at Git tag `pre-vnext-rewrite`.
 
+## Project context and design priorities
+
+DotaMind is a student's independently designed project and their first relatively
+complete Agent system. The primary use case is conversational analysis of Dota 2
+esports information. Scope and acceptance should be grounded in that use case.
+
+The architectural goal is a robust, small, and elegant system: clean boundaries,
+a reasonably complete core user journey, and an implementation one developer can
+understand, build, evaluate, and maintain. Prefer a working end-to-end loop over
+broad feature coverage. Perfection and exhaustive handling of hypothetical edge
+cases are not first-version requirements.
+
+- Give established, mature designs greater weight than custom mechanisms. For
+  a common Agent problem, first examine a relevant implementation such as Pi,
+  explain its default behavior and trade-offs accurately, and use it as the
+  starting point. Adapt it where DotaMind's actual requirements differ; maturity
+  is evidence, not a reason to copy unrelated features or an entire framework.
+- Justify departures and added mechanisms with a concrete esports use case,
+  observed failure, or evaluation result. Prefer a small adaptation or an
+  explicit limitation when it achieves the required behavior.
+- Treat robustness as predictable control flow, consistent state, bounded
+  failure, and recovery where needed. Avoid making essential resource or
+  lifecycle management depend on the model volunteering the right action at
+  the right time when a simple Runtime rule can own it.
+- Include implementation, debugging, and maintenance costs in design decisions.
+  Extra tools, state, policies, and abstractions must earn their place. Retaining
+  history does not by itself require model-facing history search; recoverability
+  does not by itself require a general memory system.
+- Keep flexibility through clear boundaries and reversible choices, rather than
+  speculative extension points. Defer advanced capabilities until the basic
+  query, analysis, answer, and follow-up loop demonstrates a need for them.
+
+## Design collaboration
+
+Act as an equal, friendly design partner with independent judgment. Do not
+unconditionally agree with the user's proposal or defend an earlier assistant
+proposal merely because it has already been discussed.
+
+- Establish the mature baseline before proposing a custom solution. Clearly
+  distinguish verified reference behavior, DotaMind's current implementation,
+  documented targets, and new proposals.
+- Make meaningful trade-offs explicit before recommending or treating a choice
+  as settled. Explain when existing behavior already covers the need, and
+  recommend a simpler or different direction when appropriate.
+- Keep the overall design in view during component discussions. Do not quietly
+  omit existing mechanisms and then add new ones to solve the apparent gap.
+- During architecture discussion, explain responsibilities, data flow,
+  implementation order, and failure behavior using concrete scenarios. Discuss
+  one design unit at a time and keep code-level detail proportional to the
+  question. Clearly separate first-version necessities from optional later work.
+- Respect explicit user decisions, while raising new evidence or contradictions
+  candidly. Record long-term technical contracts in their owner documents;
+  this file holds enduring project and collaboration guidance, not a discussion
+  transcript.
+
+## Required reading
+
 Before architecture or product work, read:
 
 1. `docs/PRODUCT.md`
