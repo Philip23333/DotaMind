@@ -36,6 +36,47 @@ domain contracts.
 
 ## Local development
 
+### Run everything in Docker on WSL
+
+Start Docker Desktop with its Linux engine. Copy `.env.example` to `.env`
+(or migrate your existing `.env`) and configure your model/provider credentials.
+Enable `DOTAMIND_LLM_ENABLED` and `DOTAMIND_LIVE_DATA_ENABLED` for live use.
+No local Python or Node installation is required.
+
+```bash
+./scripts/compose-wsl.sh up -d --build --wait
+./scripts/compose-wsl.sh ps
+```
+
+Open `http://localhost:3000` for chat and `http://localhost:8001/docs` for
+the API. Nginx forwards the browser's `/api/` requests to the API, including
+streaming responses. Override `DOTAMIND_WEB_PORT` or `DOTAMIND_API_PORT` in
+`.env` if these ports are occupied. Ports bind to the laptop's loopback interface.
+
+The script uses the WSL Docker CLI when available, or Docker Desktop's Windows
+CLI through WSL interop. With WSL Integration enabled, the equivalent command is
+`docker compose -f compose.wsl.yml up -d --build --wait`.
+
+This configuration uses the `dotamind` Compose project and its existing
+`dotamind_postgres-data` / `dotamind_redis-data` volumes. The database password
+must match the existing volume (`dotamind` by default; override with
+`DOTAMIND_POSTGRES_PASSWORD`). The API runs Alembic migrations on startup;
+back up an existing database before first use. PostgreSQL and Redis are accessed
+inside the Docker network, without publishing their ports.
+
+```bash
+./scripts/compose-wsl.sh logs --tail=100 api chat nginx
+./scripts/compose-wsl.sh stop
+# Rebuild after changing source code:
+./scripts/compose-wsl.sh up -d --build --wait
+```
+
+Containers run built images; source changes require rebuilding. Use `stop` or
+`down` to stop the stack; `down -v` also deletes its database and Redis volumes.
+The separate `compose.prod.yml` remains the server deployment configuration.
+
+### Run the processes locally
+
 Start the API:
 
 ```bash
