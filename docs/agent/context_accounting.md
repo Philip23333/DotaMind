@@ -3,8 +3,8 @@
 Context Accounting is the measurement layer for the authoritative
 [`context_governance_evidence_lifecycle.md`](context_governance_evidence_lifecycle.md)
 design. Its v1 behavior remains measurement-only; later governance phases may
-consume these measurements for working-summary updates and independent Raw
-release without changing the meaning of the recorded metrics.
+consume these measurements for Runtime-driven history compaction without
+changing the meaning of the recorded metrics.
 
 ## Purpose
 
@@ -177,7 +177,8 @@ trace's `model_request`; only its structured byte metrics are retained.
 
 ## Next policy layer
 
-The Context Governance design now defines that later policy: classify
-`context_pressure`, issue typed `CompressionRequest` values, and keep the hard
-Materialization Budget as the final guardrail. Those phases are target design,
-not an assertion that Context Accounting v1 already changes runtime behavior.
+The Context Governance target uses full-request pressure to trigger a dedicated
+summary call and rebuild context from the current summary and retained history.
+Summary and FIFO locator overhead must be measured too. Existing hard resource
+bounds remain guardrails. The target does not mandate a CompressionRequest
+entity or a policy controller; v1 accounting itself remains measurement-only.

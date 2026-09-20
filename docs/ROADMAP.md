@@ -87,27 +87,26 @@ before a second concrete implementation demonstrates the need.
 4. Register the capability only after its focused acceptance passes.
 5. Remove transitional code once the replacement is accepted.
 
-## Context Governance: working summary and recoverable release (target)
+## Context Governance: Runtime-driven history compaction (target)
 
-The next context-management phase is defined by
+The next phase is defined by
 [`agent/context_governance_evidence_lifecycle.md`](agent/context_governance_evidence_lifecycle.md).
-The target uses one current working summary per live session, observation-level
-release independent of Summary or task completion, and deterministic Raw release
-under context pressure. Same-session follow-up continuity is included while the
-owning service process retains the session; restart persistence is excluded.
+Runtime summarizes older execution history, retains recent raw messages, and
+commits the current summary and kept boundary together. Bounded FIFO Artifact
+locators support rereads. Follow-ups retain effective history with fresh
+execution state. Storage remains process-local; restart recovery is excluded.
 
-Implementation follows the outline's stage exits:
+Implementation follows four stage exits:
 
-1. Working-summary replacement and actual execution/answer context integration.
-2. Independent release and reread, removing conflicting task/checkpoint gates.
-3. Same-session continuation with fresh per-question execution state.
-4. Full-input pressure, one model cleanup opportunity, deterministic Raw release,
-   and bounded capacity failure.
-5. End-to-end evaluation and removal of superseded behavior.
+1. Session execution records and shared execution/answer context construction.
+2. One compaction loop, atomic summary/boundary replacement, and FIFO locators.
+3. Full-input pressure, automatic compaction, bounded failure, and one overflow
+   compact-and-retry recovery attempt.
+4. Esports evaluations and removal of superseded summary/release gates.
 
-These are target phases, not claims of completed implementation. Acceptance
-requires the full update/release/reread/follow-up loop, not only Summary schemas
-and commit validation.
+These are target phases, not completed capabilities. Acceptance covers long
+single tasks, repeated compaction, rereads, follow-ups, and failures. No
+model-directed summary/release tools or general history-search tools are required.
 
 ## Follow-up: generic tool-result externalization (implemented / under acceptance)
 

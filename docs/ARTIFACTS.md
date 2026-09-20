@@ -1,9 +1,9 @@
 # Artifacts
 
 Artifact storage and retrieval remain governed by this document. The target
-working-summary and recoverable observation-release lifecycle is defined in
+Runtime-driven history-compaction lifecycle is defined in
 [`agent/context_governance_evidence_lifecycle.md`](agent/context_governance_evidence_lifecycle.md);
-release removes an observation from active context, not the stored Artifact.
+compaction changes active context, not the stored Artifact or original history.
 The target retains the process-local, session-owned storage contract.
 
 ## Purpose
@@ -62,9 +62,8 @@ Artifacts do not define stable entity identities, domain schemas, provider
 navigation, cross-turn context restoration, hidden durable persistence, or
 scenario-specific aggregation. There is no Artifact TTL, eviction, or memory
 budget in the current store; its lifecycle is process-local and session-bound.
-The Context Governance target adds observation-level release and same-session
-summary/source continuation at the Runtime/product layer. It does not add
-Artifact deletion, TTL, or restart persistence; retain bodies while their
-references are promised to be re-readable.
-Failed-run traces may retain bounded observations without archiving temporary
-Artifact bodies.
+The Context Governance target adds history compaction, a bounded FIFO locator
+list, and same-session effective-history continuation at the Runtime/product
+layer. Locator eviction does not delete bodies. It does not add Artifact
+TTL, restart persistence, or general history-search tools. Known valid references
+remain readable, but not every historical reference stays discoverable.

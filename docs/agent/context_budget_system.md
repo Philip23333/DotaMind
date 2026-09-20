@@ -374,9 +374,10 @@ time-pressure thresholds or deadline ownership.
 
 The Context Governance design extends this state-only interface in a later
 phase. See [`context_governance_evidence_lifecycle.md`](context_governance_evidence_lifecycle.md)
-for the `ContextPressureController`, compression triggers, selector, and
-hard-wall fallback. No automatic compression is claimed by this current-runtime
-document until that phase is implemented and accepted.
+for Runtime-triggered history compaction, recent-message budgets, bounded
+failure, and one overflow recovery attempt. No dedicated controller class is
+required. No automatic compression is claimed by this current-runtime document
+until that phase is implemented and accepted.
 
 当前版本只提供状态接口。
 

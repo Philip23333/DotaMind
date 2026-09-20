@@ -42,23 +42,26 @@ competition, hybrid, and single-deep cases. The eval does not prescribe exact
 task keys or a fixed execution sequence; it evaluates bounded,
 independently-completable result units.
 
-Context Governance evaluations cover current working-summary replacement,
-independent observation release, source recovery after release, full-input
-pressure and deterministic fallback, and same-session follow-up continuity.
-Artifact bodies remain stored; release removes Raw observations from active
-context. A successful Summary update does not automatically release Raw.
+Context Governance evaluations cover Runtime-triggered compaction within one
+long user task, summary/boundary replacement, recent-message retention, bounded
+FIFO Artifact locators, and same-session follow-ups. Original history and
+Artifact bodies remain stored outside active context.
 
-Check that only the current summary body reaches execution and final-answer
-requests, failed updates preserve the old version, and completed tasks cannot
-prevent later evidence rereads. Follow-ups must receive the current summary
-without inheriting the previous question's execution state. Verify session
-isolation and honest behavior when process-local session data is lost.
+Check that only the current summary reaches execution and answer requests,
+the current user message remains verbatim exactly once, and tool call/result
+pairs stay valid. Failed or cancelled candidates must not change the effective
+boundary. Locator eviction must not delete Artifacts; completed tasks must not
+block rereads. Follow-ups retain recent observations with fresh execution state.
+Verify session isolation and honest behavior when process-local state is lost.
+Overflow recovery is bounded to one attempt for the unresolved incident and
+must not repeat completed business tools.
 
-Measure answer quality and important omissions together with peak input size,
-summary/receipt overhead, reread churn, cleanup/fallback frequency, total tokens,
-and latency. Deterministic tests cover mechanical invariants; model traces and
-evals assess information retention and behavior. Current byte accounting must
-not be presented as a precise token count.
+Measure answer quality and omissions, complete-input peaks, summary/locator
+cost, compaction/recovery counts, rereads, total tokens, and latency. Compare
+against feasible uncompacted task baselines. Deterministic tests cover state
+and protocol invariants; model traces assess summary quality and recovery.
+Byte accounting is not a precise token count. No structured semantic summary
+entities are added without evidence of a concrete behavioral failure.
 
 Distinguish current behavior from target phases not yet accepted. The design,
 stage exits, and acceptance matrix are maintained in

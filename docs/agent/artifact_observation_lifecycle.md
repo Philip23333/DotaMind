@@ -1,12 +1,12 @@
 # Artifact Observation Lifecycle v1
 
 This document freezes the redundant-observation primitive. The broader target
-for semantic compression and independent Raw Evidence release is defined by the
-authoritative
+for Runtime-driven history compaction is defined by
 [`context_governance_evidence_lifecycle.md`](context_governance_evidence_lifecycle.md).
-The v1 receipt rewrite remains valid. The target reuses observation-level
-replacement for model-directed and pressure-driven release without requiring a
-Summary. The v1-only trigger restrictions below do not constrain that target.
+The v1 receipt rewrite remains a deterministic redundancy optimization of the
+context projection; original session records must remain intact. The target
+compacts older history after successful summarization and does not add
+model-directed release or pressure-driven unsummarized Raw eviction.
 
 ## Scope
 
@@ -129,7 +129,7 @@ FINALIZATION
 v1 prevents redundant evidence retention; it does not bound the working set of
 a task whose distinct evidence itself is large. A T8-style sequence of
 different, non-overlapping reads therefore remains raw and is expected to keep
-its context footprint under the v1 redundant-observation baseline. Working
-summary updates, independent observation release, and same-session recovery are
-governed by the Context Governance implementation outline. They retain the
-receipt/retrieval and tool-pairing guarantees, while extending release triggers.
+its context footprint under the v1 redundant-observation baseline. Runtime
+history compaction and same-session continuation are governed by the Context
+Governance outline. They preserve tool pairing and Artifact retrieval without
+turning this redundancy primitive into a separate capacity-release policy.
