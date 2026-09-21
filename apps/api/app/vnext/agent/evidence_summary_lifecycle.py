@@ -8,10 +8,13 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.vnext.agent.evidence_summary import HistoryCompactionRange
+from app.vnext.agent.instructions import COMPACTION_INSTRUCTION
 from app.vnext.llm.protocol import (
     AssistantMessage,
     FinalMessage,
     Message,
+    ModelRequest,
+    ModelResponse,
     SystemMessage,
     ToolResultMessage,
     UserMessage,
@@ -24,6 +27,26 @@ class HistoryCompactionRangeError(ValueError):
     _messages = {
         "invalid_recent_history_budget": "recent history budget must be a positive integer",
         "invalid_history_structure": "history contains an invalid or incomplete message structure",
+    }
+
+    def __init__(self, code: str) -> None:
+        self.code = code
+        super().__init__(self._messages.get(code, code))
+
+
+class CompactionSummaryError(ValueError):
+    """A compaction request or response violated its explicit contract."""
+
+    _messages = {
+        "invalid_summary_budget": "summary byte budget must be a positive integer",
+        "empty_compaction_history": "compaction history must contain source material",
+        "invalid_current_user_position": "current user position is not valid for compaction",
+        "summary_input_too_large": "compaction request exceeds its input byte budget",
+        "invalid_summary_response": "compaction response must be a final message",
+        "summary_output_truncated": "compaction summary was truncated",
+        "summary_completion_unconfirmed": "compaction completion was not confirmed",
+        "empty_summary": "compaction summary must not be blank",
+        "summary_output_too_large": "compaction summary exceeds its output byte budget",
     }
 
     def __init__(self, code: str) -> None:
@@ -152,4 +175,107 @@ def _message_bytes(message: Message) -> int:
         raise HistoryCompactionRangeError("invalid_history_structure") from exc
 
 
-__all__ = ["HistoryCompactionRangeError", "select_compaction_range"]
+def build_compaction_request(
+    *,
+    previous_summary: str | None,
+    current_user_message: UserMessage,
+    prefix_messages: Sequence[Message],
+    current_user_prefix_index: int | None,
+    max_input_bytes: int,
+) -> ModelRequest:
+    """Build the model-only request used to replace one active summary."""
+
+    _validate_summary_budget(max_input_bytes)
+    if not prefix_messages:
+        raise CompactionSummaryError("empty_compaction_history")
+
+    # The selector owns the canonical message-group validation.  Its result is
+    # intentionally ignored because this function receives the already chosen
+    # prefix and must not select or split it again.
+    select_compaction_range(prefix_messages, recent_history_bytes=1)
+
+    history = list(prefix_messages)
+    if current_user_prefix_index is not None:
+        if (
+            type(current_user_prefix_index) is not int
+            or current_user_prefix_index < 0
+            or current_user_prefix_index >= len(history)
+        ):
+            raise CompactionSummaryError("invalid_current_user_position")
+        indexed_message = history[current_user_prefix_index]
+        if not isinstance(indexed_message, UserMessage) or indexed_message != current_user_message:
+            raise CompactionSummaryError("invalid_current_user_position")
+        history.pop(current_user_prefix_index)
+
+    if not history:
+        raise CompactionSummaryError("empty_compaction_history")
+
+    payload = {
+        "current_user_message": current_user_message.content,
+        "previous_summary": previous_summary,
+        "history": [message.model_dump(mode="json") for message in history],
+    }
+    serialized_payload = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    request = ModelRequest(
+        messages=[
+            SystemMessage(content=COMPACTION_INSTRUCTION),
+            UserMessage(content=serialized_payload),
+        ],
+        tools=[],
+        step=None,
+        metadata={"purpose": "context_compaction"},
+    )
+    if _serialized_request_bytes(request) > max_input_bytes:
+        raise CompactionSummaryError("summary_input_too_large")
+    return request
+
+
+def validate_compaction_response(
+    response: ModelResponse,
+    *,
+    max_summary_bytes: int,
+) -> str:
+    """Validate one complete, bounded summary response without rewriting it."""
+
+    _validate_summary_budget(max_summary_bytes)
+    if not isinstance(response.message, FinalMessage):
+        raise CompactionSummaryError("invalid_summary_response")
+    if response.finish_reason == "length":
+        raise CompactionSummaryError("summary_output_truncated")
+    if response.finish_reason != "stop":
+        raise CompactionSummaryError("summary_completion_unconfirmed")
+    summary = response.message.content
+    if not summary.strip():
+        raise CompactionSummaryError("empty_summary")
+    if len(summary.encode("utf-8")) > max_summary_bytes:
+        raise CompactionSummaryError("summary_output_too_large")
+    return summary
+
+
+def _validate_summary_budget(value: int) -> None:
+    if type(value) is not int or value <= 0:
+        raise CompactionSummaryError("invalid_summary_budget")
+
+
+def _serialized_request_bytes(request: ModelRequest) -> int:
+    serialized = json.dumps(
+        request.model_dump(mode="json"),
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return len(serialized.encode("utf-8"))
+
+
+__all__ = [
+    "CompactionSummaryError",
+    "HistoryCompactionRangeError",
+    "build_compaction_request",
+    "select_compaction_range",
+    "validate_compaction_response",
+]
