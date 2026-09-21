@@ -245,19 +245,29 @@ def test_query_hint_serialization_failure_is_empty() -> None:
 def test_locator_state_is_independent_from_context_state_and_records() -> None:
     history = SessionExecutionHistory()
     request_id = uuid4()
-    history.begin_request(request_id, "question", initial_messages=[])
+    history.begin_request(
+        request_id,
+        "question",
+        initial_messages=[UserMessage(content="old")],
+    )
     call = _call()
     history.remember_artifact_locators(call, _result(call, _observation(_ref(1))))
     locators_before = history.artifact_locators
     records_before = history.records
     revision_before = history.revision
 
-    history.set_effective([FinalMessage(content="answer")])
+    history.set_effective(
+        [
+            UserMessage(content="old"),
+            UserMessage(content="question"),
+            FinalMessage(content="answer"),
+        ]
+    )
     history.commit_compaction(
         request_id=request_id,
         base_revision=history.revision,
         summary="summary",
-        retained_messages=[UserMessage(content="retained")],
+        cut_index=2,
     )
 
     assert history.artifact_locators == locators_before

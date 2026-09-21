@@ -7,6 +7,7 @@ import pytest
 from app.vnext.agent.evidence_summary_lifecycle import (
     HistoryCompactionRangeError,
     select_compaction_range,
+    validate_compaction_cut,
 )
 from app.vnext.llm.protocol import (
     AssistantMessage,
@@ -241,3 +242,42 @@ def test_retained_bytes_use_utf8_serialized_message_size() -> None:
     assert selected is not None
     assert selected.retained_bytes == _message_bytes(latest)
     assert selected.retained_bytes > len(latest.content)
+
+
+def test_validate_compaction_cut_accepts_plain_and_tool_group_boundaries() -> None:
+    messages = [
+        UserMessage(content="old"),
+        *_tool_group("one"),
+        UserMessage(content="new"),
+    ]
+
+    validate_compaction_cut(messages, cut_index=1)
+    validate_compaction_cut(messages, cut_index=3)
+
+
+def test_validate_compaction_cut_rejects_tool_call_and_return_boundaries() -> None:
+    messages = [UserMessage(content="old"), *_tool_group("one", "two"), UserMessage(content="new")]
+
+    for cut_index in (2, 3):
+        with pytest.raises(HistoryCompactionRangeError) as error:
+            validate_compaction_cut(messages, cut_index=cut_index)
+        assert error.value.code == "invalid_compaction_boundary"
+
+
+@pytest.mark.parametrize("cut_index", [0, 5, 6, -1, True, False])
+def test_validate_compaction_cut_rejects_invalid_indices(cut_index: object) -> None:
+    messages = [UserMessage(content="old"), *_tool_group("one"), UserMessage(content="new")]
+
+    with pytest.raises(HistoryCompactionRangeError) as error:
+        validate_compaction_cut(messages, cut_index=cut_index)  # type: ignore[arg-type]
+
+    assert error.value.code == "invalid_compaction_boundary"
+
+
+def test_validate_compaction_cut_preserves_existing_invalid_history_error() -> None:
+    messages = [AssistantMessage(tool_calls=[_call("orphan")]), UserMessage(content="new")]
+
+    with pytest.raises(HistoryCompactionRangeError) as error:
+        validate_compaction_cut(messages, cut_index=1)
+
+    assert error.value.code == "invalid_history_structure"

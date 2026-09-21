@@ -27,6 +27,7 @@ class HistoryCompactionRangeError(ValueError):
     _messages = {
         "invalid_recent_history_budget": "recent history budget must be a positive integer",
         "invalid_history_structure": "history contains an invalid or incomplete message structure",
+        "invalid_compaction_boundary": "compaction cut is not a complete message-group boundary",
     }
 
     def __init__(self, code: str) -> None:
@@ -106,6 +107,25 @@ def select_compaction_range(
         retained_messages=retained,
         retained_bytes=retained_bytes,
     )
+
+
+def validate_compaction_cut(
+    messages: Sequence[Message],
+    *,
+    cut_index: int,
+) -> None:
+    """Validate one caller-provided cut without selecting another boundary."""
+
+    groups = _group_history(messages)
+    if type(cut_index) is not int or not 0 < cut_index < len(messages):
+        raise HistoryCompactionRangeError("invalid_compaction_boundary")
+
+    boundary = 0
+    for group in groups:
+        boundary += len(group.messages)
+        if boundary == cut_index:
+            return
+    raise HistoryCompactionRangeError("invalid_compaction_boundary")
 
 
 def _group_history(messages: Sequence[Message]) -> list[_MessageGroup]:
@@ -280,5 +300,6 @@ __all__ = [
     "HistoryCompactionRangeError",
     "build_compaction_request",
     "select_compaction_range",
+    "validate_compaction_cut",
     "validate_compaction_response",
 ]
