@@ -747,6 +747,7 @@ class AgentRuntime:
         step: int,
         trace_collector: AgentTraceCollector | None,
         publish_text: bool,
+        on_response: Callable[[ModelResponse], None] | None = None,
     ) -> tuple[ModelResponse, float, list[TextDelta]]:
         """Invoke one model request and optionally expose its text deltas."""
 
@@ -785,7 +786,10 @@ class AgentRuntime:
                                 raise ModelProtocolError(
                                     "stream emitted more than one terminal response"
                                 )
-                            response = self._normalize_response(item)
+                            normalized = self._normalize_response(item)
+                            if on_response is not None:
+                                on_response(normalized)
+                            response = normalized
                         else:
                             raise ModelProtocolError("stream emitted an unsupported model item")
                 finally:
@@ -801,6 +805,8 @@ class AgentRuntime:
                     self.model.complete(request), token, deadline
                 )
                 response = self._normalize_response(raw_response)
+                if on_response is not None:
+                    on_response(response)
             self._check_controls(token, deadline)
             return response, max(0.0, monotonic() - started), text_events
         except (AgentCancelledError, AgentDeadlineExceeded):
@@ -828,6 +834,11 @@ class AgentRuntime:
         started = monotonic()
         response: ModelResponse | None = None
         usage: dict[str, Any] = {}
+
+        def capture_response(received: ModelResponse) -> None:
+            nonlocal usage
+            usage = deepcopy(received.usage)
+
         try:
             self._check_controls(token, deadline)
             _validate_compaction_call(request, max_summary_bytes)
@@ -838,8 +849,8 @@ class AgentRuntime:
                 step=step,
                 trace_collector=None,
                 publish_text=False,
+                on_response=capture_response,
             )
-            usage = deepcopy(response.usage)
             self._check_controls(token, deadline)
             summary = validate_compaction_response(
                 response,
@@ -867,7 +878,7 @@ class AgentRuntime:
                 step=step,
                 status="cancelled",
                 started=started,
-                usage=usage if response is not None else {},
+                usage=usage,
                 error_code=exc.code,
             )
             raise
@@ -877,7 +888,7 @@ class AgentRuntime:
                 step=step,
                 status="deadline_exceeded",
                 started=started,
-                usage=usage if response is not None else {},
+                usage=usage,
                 error_code=exc.code,
             )
             raise
@@ -887,7 +898,7 @@ class AgentRuntime:
                 step=step,
                 status="failed",
                 started=started,
-                usage=usage if response is not None else {},
+                usage=usage,
                 error_code=getattr(exc, "code", None),
             )
             raise

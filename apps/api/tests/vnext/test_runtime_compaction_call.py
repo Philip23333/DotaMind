@@ -212,6 +212,7 @@ def test_compaction_call_cancels_an_in_flight_model_request() -> None:
     model, trace = asyncio.run(exercise())
 
     assert model.cleaned is True
+    assert trace.snapshot()["compaction_calls"][0]["usage"] == {}
     assert trace.snapshot()["compaction_calls"][0]["status"] == "cancelled"
 
 
@@ -282,15 +283,16 @@ def test_cancellation_after_provider_return_does_not_deliver_a_summary() -> None
         def __init__(self, token: CancellationToken) -> None:
             self.token = token
             self.requests: list[ModelRequest] = []
+            self.response = ModelResponse.from_final(
+                "valid summary",
+                finish_reason="stop",
+                usage={"completion_tokens": 7, "details": {"count": 1}},
+            )
 
         async def complete(self, request: ModelRequest) -> ModelResponse:
             self.requests.append(request)
             self.token.cancel()
-            return ModelResponse.from_final(
-                "valid summary",
-                finish_reason="stop",
-                usage={"completion_tokens": 2},
-            )
+            return self.response
 
     async def exercise() -> tuple[CancelOnResponseModel, AgentTraceCollector]:
         token = CancellationToken()
@@ -310,7 +312,168 @@ def test_cancellation_after_provider_return_does_not_deliver_a_summary() -> None
     model, trace = asyncio.run(exercise())
 
     assert len(model.requests) == 1
+    assert trace.snapshot()["compaction_calls"][0]["usage"] == {
+        "completion_tokens": 7,
+        "details": {"count": 1},
+    }
+    model.response.usage["details"]["count"] = 99
+    assert trace.snapshot()["compaction_calls"][0]["usage"]["details"]["count"] == 1
+    assert trace.snapshot()["steps"] == []
     assert trace.snapshot()["compaction_calls"][0]["status"] == "cancelled"
+
+
+def test_deadline_after_provider_return_preserves_usage_without_a_candidate() -> None:
+    class DeadlineAfterResponseModel:
+        def __init__(self, deadline: _Deadline) -> None:
+            self.deadline = deadline
+            self.requests: list[ModelRequest] = []
+            self.response = ModelResponse.from_final(
+                "valid summary",
+                finish_reason="stop",
+                usage={"completion_tokens": 8, "details": {"count": 2}},
+            )
+
+        async def complete(self, request: ModelRequest) -> ModelResponse:
+            self.requests.append(request)
+            self.deadline.expires_at = self.deadline.started - 1
+            return self.response
+
+    async def exercise() -> tuple[DeadlineAfterResponseModel, AgentTraceCollector]:
+        deadline = _Deadline(2)
+        model = DeadlineAfterResponseModel(deadline)
+        trace = AgentTraceCollector()
+        with pytest.raises(AgentDeadlineExceeded):
+            await _runtime(model)._generate_compaction_summary(
+                _request(),
+                token=CancellationToken(),
+                deadline=deadline,
+                step=7,
+                max_summary_bytes=10_000,
+                trace_collector=trace,
+            )
+        return model, trace
+
+    model, trace = asyncio.run(exercise())
+
+    assert len(model.requests) == 1
+    assert trace.snapshot()["compaction_calls"] == [
+        {
+            "step": 7,
+            "status": "deadline_exceeded",
+            "duration_seconds": trace.snapshot()["compaction_calls"][0][
+                "duration_seconds"
+            ],
+            "usage": {"completion_tokens": 8, "details": {"count": 2}},
+            "error_code": "deadline_exceeded",
+        }
+    ]
+    model.response.usage["details"]["count"] = 100
+    assert trace.snapshot()["compaction_calls"][0]["usage"]["details"]["count"] == 2
+
+
+def test_stream_cancellation_after_terminal_response_preserves_usage_and_cleans_up() -> None:
+    class StreamingCancelModel:
+        def __init__(self, token: CancellationToken) -> None:
+            self.token = token
+            self.requests: list[ModelRequest] = []
+            self.cleaned = False
+            self.response = ModelResponse.from_final(
+                "streamed summary",
+                finish_reason="stop",
+                usage={"completion_tokens": 9, "details": {"count": 3}},
+            )
+
+        def stream(self, request: ModelRequest):
+            self.requests.append(request)
+
+            async def generate():
+                try:
+                    yield self.response
+                    self.token.cancel()
+                finally:
+                    self.cleaned = True
+
+            return generate()
+
+    async def exercise() -> tuple[StreamingCancelModel, AgentTraceCollector]:
+        token = CancellationToken()
+        model = StreamingCancelModel(token)
+        trace = AgentTraceCollector()
+        with pytest.raises(AgentCancelledError):
+            await asyncio.wait_for(
+                _runtime(model)._generate_compaction_summary(
+                    _request(),
+                    token=token,
+                    deadline=_Deadline(2),
+                    step=8,
+                    max_summary_bytes=10_000,
+                    trace_collector=trace,
+                ),
+                timeout=1,
+            )
+        return model, trace
+
+    model, trace = asyncio.run(exercise())
+
+    assert model.cleaned is True
+    assert trace.snapshot()["compaction_calls"][0]["usage"] == {
+        "completion_tokens": 9,
+        "details": {"count": 3},
+    }
+    assert trace.snapshot()["steps"] == []
+    assert trace.snapshot()["compaction_calls"][0]["status"] == "cancelled"
+
+
+def test_stream_deadline_after_terminal_response_preserves_usage_and_cleans_up() -> None:
+    class StreamingDeadlineModel:
+        def __init__(self, deadline: _Deadline) -> None:
+            self.deadline = deadline
+            self.requests: list[ModelRequest] = []
+            self.cleaned = False
+            self.response = ModelResponse.from_final(
+                "streamed summary",
+                finish_reason="stop",
+                usage={"completion_tokens": 10, "details": {"count": 4}},
+            )
+
+        def stream(self, request: ModelRequest):
+            self.requests.append(request)
+
+            async def generate():
+                try:
+                    yield self.response
+                    self.deadline.expires_at = self.deadline.started - 1
+                finally:
+                    self.cleaned = True
+
+            return generate()
+
+    async def exercise() -> tuple[StreamingDeadlineModel, AgentTraceCollector]:
+        deadline = _Deadline(2)
+        model = StreamingDeadlineModel(deadline)
+        trace = AgentTraceCollector()
+        with pytest.raises(AgentDeadlineExceeded):
+            await asyncio.wait_for(
+                _runtime(model)._generate_compaction_summary(
+                    _request(),
+                    token=CancellationToken(),
+                    deadline=deadline,
+                    step=9,
+                    max_summary_bytes=10_000,
+                    trace_collector=trace,
+                ),
+                timeout=1,
+            )
+        return model, trace
+
+    model, trace = asyncio.run(exercise())
+
+    assert model.cleaned is True
+    assert trace.snapshot()["compaction_calls"][0]["usage"] == {
+        "completion_tokens": 10,
+        "details": {"count": 4},
+    }
+    assert trace.snapshot()["compaction_calls"][0]["status"] == "deadline_exceeded"
 
 
 @pytest.mark.parametrize(
