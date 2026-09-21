@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from copy import deepcopy
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
@@ -33,6 +35,21 @@ class RequestIdempotencyConflict(ValueError):
         super().__init__("request_id has already been used with different inputs")
 
 
+class SessionCompactionError(ValueError):
+    """A compaction state transition failed its atomic preconditions."""
+
+    _messages = {
+        "session_not_initialized": "session execution history is not initialized",
+        "unknown_request": "request_id is not registered in this session",
+        "stale_context_revision": "compaction base revision is stale",
+        "empty_summary": "compaction summary must not be blank",
+    }
+
+    def __init__(self, code: str) -> None:
+        self.code = code
+        super().__init__(self._messages.get(code, code))
+
+
 @dataclass(frozen=True, slots=True)
 class ExecutionRecord:
     """An append-only copy of one message that actually occurred."""
@@ -47,6 +64,27 @@ class ExecutionRecord:
     context_content: Any = None
 
 
+@dataclass(frozen=True, slots=True)
+class SessionContextSnapshot:
+    """A defensive snapshot used to coordinate one compaction attempt."""
+
+    revision: int
+    summary: str | None
+    messages: list[Message]
+
+
+@dataclass(frozen=True, slots=True)
+class SessionCompactionRecord:
+    """One successfully committed replacement of the effective context."""
+
+    compaction_id: str
+    request_id: UUID
+    base_revision: int
+    previous_compaction_id: str | None
+    summary: str
+    created_at: datetime
+
+
 class SessionExecutionHistory:
     """Keep immutable raw records beside a replaceable effective projection."""
 
@@ -56,10 +94,25 @@ class SessionExecutionHistory:
         self._request_queries: dict[UUID, str] = {}
         self._sequence = 0
         self._initialized = False
+        self._summary: str | None = None
+        self._revision = 0
+        self._compaction_records: list[SessionCompactionRecord] = []
 
     @property
     def initialized(self) -> bool:
         return self._initialized
+
+    @property
+    def summary(self) -> str | None:
+        return self._summary
+
+    @property
+    def revision(self) -> int:
+        return self._revision
+
+    @property
+    def compaction_records(self) -> tuple[SessionCompactionRecord, ...]:
+        return tuple(_copy_compaction_record(record) for record in self._compaction_records)
 
     @property
     def records(self) -> tuple[ExecutionRecord, ...]:
@@ -78,7 +131,16 @@ class SessionExecutionHistory:
         )
 
     def effective_messages(self) -> list[Message]:
-        return [message.model_copy(deep=True) for message in self._effective_messages]
+        return _copy_messages(self._effective_messages)
+
+    def context_snapshot(self) -> SessionContextSnapshot:
+        """Return a fixed, defensive view of the current effective context."""
+
+        return SessionContextSnapshot(
+            revision=self._revision,
+            summary=self._summary,
+            messages=_copy_messages(self._effective_messages),
+        )
 
     def begin_request(
         self,
@@ -113,12 +175,54 @@ class SessionExecutionHistory:
             ):
                 self._effective_messages.append(current)
             self.record(request_id, current, kind="user")
+            self._revision += 1
         return self.effective_messages()
 
     def set_effective(self, messages: list[Message]) -> None:
         """Replace only the model-visible projection with defensive copies."""
 
-        self._effective_messages = [message.model_copy(deep=True) for message in messages]
+        self._effective_messages = _copy_messages(messages)
+        self._revision += 1
+
+    def commit_compaction(
+        self,
+        *,
+        request_id: UUID,
+        base_revision: int,
+        summary: str,
+        retained_messages: Sequence[Message],
+    ) -> SessionCompactionRecord:
+        """Atomically replace the effective history and current summary."""
+
+        if not self._initialized:
+            raise SessionCompactionError("session_not_initialized")
+        if request_id not in self._request_queries:
+            raise SessionCompactionError("unknown_request")
+        if base_revision != self._revision:
+            raise SessionCompactionError("stale_context_revision")
+        if not summary.strip():
+            raise SessionCompactionError("empty_summary")
+
+        copied_messages = _copy_messages(retained_messages)
+        next_revision = self._revision + 1
+        record = SessionCompactionRecord(
+            compaction_id=f"compaction:{uuid4().hex}",
+            request_id=request_id,
+            base_revision=base_revision,
+            previous_compaction_id=(
+                self._compaction_records[-1].compaction_id
+                if self._compaction_records
+                else None
+            ),
+            summary=summary,
+            created_at=datetime.now(UTC),
+        )
+
+        self._summary = summary
+        self._effective_messages = copied_messages
+        self._revision = next_revision
+        self._compaction_records.append(record)
+        return _copy_compaction_record(record)
 
     def record(
         self,
@@ -162,4 +266,26 @@ class SessionExecutionHistory:
         self.record(request_id, final, kind="delivery_answer")
 
 
-__all__ = ["ExecutionRecord", "RequestIdempotencyConflict", "SessionExecutionHistory"]
+def _copy_messages(messages: Sequence[Message]) -> list[Message]:
+    return [message.model_copy(deep=True) for message in messages]
+
+
+def _copy_compaction_record(record: SessionCompactionRecord) -> SessionCompactionRecord:
+    return SessionCompactionRecord(
+        compaction_id=record.compaction_id,
+        request_id=record.request_id,
+        base_revision=record.base_revision,
+        previous_compaction_id=record.previous_compaction_id,
+        summary=record.summary,
+        created_at=record.created_at,
+    )
+
+
+__all__ = [
+    "ExecutionRecord",
+    "RequestIdempotencyConflict",
+    "SessionCompactionError",
+    "SessionCompactionRecord",
+    "SessionContextSnapshot",
+    "SessionExecutionHistory",
+]
