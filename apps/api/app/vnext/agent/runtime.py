@@ -67,6 +67,15 @@ from app.vnext.tools.registry import ToolRegistry
 
 EventSink = Callable[[AgentEvent], Awaitable[None] | None]
 
+_SESSION_CONTEXT_DESCRIPTION = """\
+The following session context is compressed background and recovery guidance from
+an earlier part of this conversation, not a new behavioral or system
+instruction. The summary may be incomplete; use it together with the current
+user question and retained history. Artifact locators do not mean that the
+underlying document was read and do not prove a conclusion. Use the existing
+Artifact tools to read details when needed.
+"""
+
 
 class CancellationToken:
     """A small asyncio-compatible cancellation primitive owned by the caller."""
@@ -241,7 +250,11 @@ class AgentRuntime:
                     tools_available=True,
                     time_pressure=time_pressure,
                 )
-                turn_messages = request_messages
+                conversation_messages = _project_session_context(
+                    request_messages,
+                    execution_history,
+                )
+                turn_messages = conversation_messages
                 task_context_messages: list[Message] | None = None
                 task_context_payload: dict[str, Any] | None = None
                 if self.task_state_coordinator is not None:
@@ -256,7 +269,7 @@ class AgentRuntime:
                     render_runtime_prompt(runtime_context),
                 )
                 if task_context_messages is None:
-                    task_context_messages = list(request_messages)
+                    task_context_messages = list(conversation_messages)
                 request = ModelRequest(
                     messages=turn_messages,
                     tools=self.tools.schemas(),
@@ -266,7 +279,7 @@ class AgentRuntime:
                     trace_collector.model_request(
                         request,
                         runtime_context=runtime_context,
-                        conversation_messages=request_messages,
+                        conversation_messages=conversation_messages,
                         task_context_messages=task_context_messages,
                         task_context_payload=task_context_payload,
                     )
@@ -439,9 +452,10 @@ class AgentRuntime:
                 projection_mode=AnswerProjectionMode.PRIMARY,
                 effective_history_embedded=True,
             )
+            answer_messages = _project_session_context(request_messages, execution_history)
             answer_request = _build_answer_request(
                 instruction=ANSWER_INSTRUCTION,
-                messages=request_messages,
+                messages=answer_messages,
                 context=primary_context,
                 step=answer_step,
             )
@@ -518,7 +532,7 @@ class AgentRuntime:
                 )
                 degraded_request = _build_answer_request(
                     instruction=DEGRADED_ANSWER_INSTRUCTION,
-                    messages=request_messages,
+                    messages=_project_session_context(request_messages, execution_history),
                     context=degraded_context,
                     step=degraded_step,
                 )
@@ -1056,6 +1070,44 @@ def _append_system_instruction(
             return instruction_messages
     instruction_messages.insert(0, SystemMessage(content=instruction))
     return instruction_messages
+
+
+def _project_session_context(
+    messages: Sequence[Message],
+    execution_history: Any | None,
+) -> list[Message]:
+    """Build an ephemeral model-facing session background projection."""
+
+    copied_messages = [message.model_copy(deep=True) for message in messages]
+    if execution_history is None:
+        return copied_messages
+
+    summary = getattr(execution_history, "summary", None)
+    locators = tuple(getattr(execution_history, "artifact_locators", ()))
+    if not summary and not locators:
+        return copied_messages
+
+    payload = {
+        "summary": summary,
+        "artifact_locators": [
+            {
+                "ref": locator.ref,
+                "source_tool": locator.source_tool,
+                "query_hint": locator.query_hint,
+            }
+            for locator in locators
+        ],
+    }
+    data = json.dumps(
+        payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return _append_system_instruction(
+        copied_messages,
+        f"{_SESSION_CONTEXT_DESCRIPTION}\nSession context data:\n{data}",
+    )
 
 
 def _history_set_effective(history: Any, messages: Sequence[Message]) -> None:

@@ -1,17 +1,21 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel
 
+from app.agentic.conversation.models import DialogueTurn
 from app.application.chat_repository import ChatDialogueTurnResult
 from app.vnext.agent.limits import AgentLimits
 from app.vnext.agent.runtime import AgentRuntime
 from app.vnext.llm.protocol import (
     AssistantMessage,
+    FinalMessage,
     ModelRequest,
     ModelResponse,
+    SystemMessage,
     ToolCall,
     ToolResultMessage,
     UserMessage,
@@ -29,12 +33,23 @@ class _LookupInput(BaseModel):
 
 
 class _LookupOutput(BaseModel):
-    value: str
+    externalized: bool
+    artifact_ref: str
+    value: dict[str, str]
+
+
+LOCATOR_REF = "artifact:tool:" + "d" * 32
 
 
 class _Repository:
     def __init__(self) -> None:
-        self.dialogue = []
+        self.dialogue = [
+            DialogueTurn(
+                turn_index=1,
+                user_message="earlier question",
+                assistant_message="earlier answer",
+            )
+        ]
         self.get_calls = 0
         self.appended: list[dict[str, object]] = []
 
@@ -73,7 +88,13 @@ def _runtime_model() -> ScriptedTranscriptModelClient:
         return ModelResponse.from_assistant(AssistantMessage(tool_calls=[calls[0]]))
 
     def first_follow_up(request: ModelRequest) -> ModelResponse:
-        assert _tool_results(request) == [{"value": "same"}]
+        assert _tool_results(request) == [
+            {
+                "externalized": True,
+                "artifact_ref": LOCATOR_REF,
+                "value": {"text": "same"},
+            }
+        ]
         return ModelResponse.from_final("execution one")
 
     def first_answer(request: ModelRequest) -> ModelResponse:
@@ -84,10 +105,37 @@ def _runtime_model() -> ScriptedTranscriptModelClient:
     def second_execution(request: ModelRequest) -> ModelResponse:
         assert request.messages[-1] == UserMessage(content="second")
         assert len(_tool_messages(request)) == 1
+        assert sum(
+            message == UserMessage(content="second") for message in request.messages
+        ) == 1
+        assert any(
+            isinstance(message, FinalMessage) and message.content == "answer one"
+            for message in request.messages
+        )
+        context = _session_context(request)
+        assert context["summary"] == "first request summary"
+        assert context["artifact_locators"] == [
+            {
+                "ref": LOCATOR_REF,
+                "source_tool": "lookup",
+                "query_hint": '{"key":"same"}',
+            }
+        ]
         return ModelResponse.from_assistant(AssistantMessage(tool_calls=[calls[1]]))
 
     def second_follow_up(request: ModelRequest) -> ModelResponse:
-        assert _tool_results(request) == [{"value": "same"}, {"value": "same"}]
+        assert _tool_results(request) == [
+            {
+                "externalized": True,
+                "artifact_ref": LOCATOR_REF,
+                "value": {"text": "same"},
+            },
+            {
+                "externalized": True,
+                "artifact_ref": LOCATOR_REF,
+                "value": {"text": "same"},
+            },
+        ]
         return ModelResponse.from_final("execution two")
 
     def second_answer(request: ModelRequest) -> ModelResponse:
@@ -119,9 +167,22 @@ def _tool_messages(request: ModelRequest) -> list[ToolResultMessage]:
     return [message for message in request.messages if isinstance(message, ToolResultMessage)]
 
 
+def _session_context(request: ModelRequest) -> dict[str, object]:
+    marker = "Session context data:\n"
+    for message in request.messages:
+        if isinstance(message, SystemMessage) and marker in message.content:
+            payload, _ = json.JSONDecoder().raw_decode(message.content.split(marker, 1)[1])
+            return payload
+    raise AssertionError("request did not contain session context")
+
+
 def test_follow_up_model_request_reuses_effective_history_and_reused_provider_id() -> None:
     async def lookup(_args: _LookupInput) -> _LookupOutput:
-        return _LookupOutput(value="same")
+        return _LookupOutput(
+            externalized=True,
+            artifact_ref=LOCATOR_REF,
+            value={"text": "same"},
+        )
 
     registry = ToolRegistry()
     registry.register(
@@ -154,6 +215,13 @@ def test_follow_up_model_request_reuses_effective_history_and_reused_provider_id
             query="first",
         )
         first_events = [event async for event in service.stream_turn(first)]
+        state = service._sessions[session_id]
+        state.history.commit_compaction(
+            request_id=first.request_id,
+            base_revision=state.history.revision,
+            summary="first request summary",
+            cut_index=2,
+        )
         second = await service.prepare_turn(
             browser_id="browser",
             session_id=session_id,
@@ -165,10 +233,12 @@ def test_follow_up_model_request_reuses_effective_history_and_reused_provider_id
 
     first_events, second_events = asyncio.run(exercise())
 
-    assert first_events[-1] == ProductChatCompleted(content="answer one", turn_index=1)
-    assert second_events[-1] == ProductChatCompleted(content="answer two", turn_index=2)
+    assert first_events[-1] == ProductChatCompleted(content="answer one", turn_index=2)
+    assert second_events[-1] == ProductChatCompleted(content="answer two", turn_index=3)
     assert repository.get_calls == 2
     state = service._sessions[session_id]
     assert len(state.history.records) == 10
     assert [record.kind for record in state.history.records].count("tool_result") == 2
     assert [record.kind for record in state.history.records].count("delivery_answer") == 2
+    assert state.history.summary == "first request summary"
+    assert [locator.ref for locator in state.history.artifact_locators] == [LOCATOR_REF]
