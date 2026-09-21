@@ -8,6 +8,11 @@ import httpx
 import pytest
 from pydantic import BaseModel, ValidationError
 
+from app.vnext.agent.evidence_summary_lifecycle import (
+    CompactionSummaryError,
+    build_compaction_request,
+    validate_compaction_response,
+)
 from app.vnext.llm.openai_compatible import (
     MalformedToolArgumentsError,
     OpenAICompatibleModelClient,
@@ -46,8 +51,19 @@ def _adapter(handler) -> OpenAICompatibleModelClient:
     )
 
 
-def _request(messages, tools=None) -> ModelRequest:
-    return ModelRequest(messages=messages, tools=tools or [])
+def _request(
+    messages,
+    tools=None,
+    *,
+    max_output_tokens: int | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> ModelRequest:
+    return ModelRequest(
+        messages=messages,
+        tools=tools or [],
+        max_output_tokens=max_output_tokens,
+        metadata={} if metadata is None else metadata,
+    )
 
 
 def test_protocol_supports_nullable_assistant_and_multiple_calls() -> None:
@@ -67,6 +83,32 @@ def test_protocol_supports_nullable_assistant_and_multiple_calls() -> None:
     assert ModelResponse.model_validate(response.model_dump()) == response
     assert "final" not in ModelResponse.model_fields
     assert "assistant" not in ModelResponse.model_fields
+
+
+@pytest.mark.parametrize("value", [0, -1, True, False, 1.5, "256"])
+def test_model_request_rejects_invalid_output_token_limits(value: object) -> None:
+    with pytest.raises(ValidationError):
+        ModelRequest(
+            messages=[UserMessage(content="hello")],
+            max_output_tokens=value,  # type: ignore[arg-type]
+        )
+
+
+def test_model_request_output_token_limit_is_nullable_strict_and_round_trips() -> None:
+    omitted = ModelRequest(messages=[UserMessage(content="hello")])
+    explicit_none = ModelRequest(
+        messages=[UserMessage(content="hello")],
+        max_output_tokens=None,
+    )
+    request = ModelRequest(
+        messages=[UserMessage(content="hello")],
+        max_output_tokens=256,
+    )
+
+    assert omitted.max_output_tokens is None
+    assert explicit_none.max_output_tokens is None
+    assert request.max_output_tokens == 256
+    assert ModelRequest.model_validate(request.model_dump(mode="json")) == request
 
 
 def test_model_tool_is_generic_and_forbids_provider_wrapper_fields() -> None:
@@ -141,7 +183,77 @@ def test_adapter_serializes_messages_tools_and_tool_result_ids() -> None:
     assert request.tools[0].name == "echo"
     assert "type" not in request.tools[0].model_dump()
     assert "function" not in request.tools[0].model_dump()
+    assert "max_tokens" not in payload
+    assert "max_output_tokens" not in payload
+    assert "max_completion_tokens" not in payload
     assert seen["headers"]["authorization"] == "Bearer test-key"
+
+
+def test_adapter_complete_maps_explicit_output_limit_to_provider_payload() -> None:
+    seen: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["payload"] = json.loads(request.read())
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}]},
+            request=request,
+        )
+
+    result = asyncio.run(
+        _adapter(handler).complete(
+            _request([UserMessage(content="go")], max_output_tokens=256)
+        )
+    )
+
+    assert result.message == FinalMessage(content="ok")
+    assert seen["payload"]["max_tokens"] == 256
+    assert "max_output_tokens" not in seen["payload"]
+    assert "max_completion_tokens" not in seen["payload"]
+
+
+def test_adapter_does_not_read_metadata_for_output_limit() -> None:
+    seen: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["payload"] = json.loads(request.read())
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}]},
+            request=request,
+        )
+
+    asyncio.run(
+        _adapter(handler).complete(
+            _request(
+                [UserMessage(content="go")],
+                metadata={"max_output_tokens": 999},
+            )
+        )
+    )
+
+    assert "max_tokens" not in seen["payload"]
+
+
+def test_adapter_output_limit_is_request_scoped() -> None:
+    payloads: list[dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        payloads.append(json.loads(request.read()))
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}]},
+            request=request,
+        )
+
+    client = _adapter(handler)
+    asyncio.run(
+        client.complete(_request([UserMessage(content="first")], max_output_tokens=256))
+    )
+    asyncio.run(client.complete(_request([UserMessage(content="second")])))
+
+    assert payloads[0]["max_tokens"] == 256
+    assert "max_tokens" not in payloads[1]
 
 
 def test_adapter_maps_provider_unsafe_tool_names_at_its_boundary() -> None:
@@ -233,11 +345,39 @@ def test_adapter_streams_text_deltas_and_emits_one_final_response() -> None:
             request=request,
         )
 
-    items = _collect_stream(_adapter(handler), _request([UserMessage(content="go")]))
+    items = _collect_stream(
+        _adapter(handler),
+        _request([UserMessage(content="go")], max_output_tokens=256),
+    )
     assert [item.text for item in items if isinstance(item, ModelTextDelta)] == ["Hel", "lo"]
     assert isinstance(items[-1], ModelResponse)
     assert items[-1].message == FinalMessage(content="Hello")  # type: ignore[union-attr]
     assert seen["payload"]["stream"] is True
+    assert seen["payload"]["max_tokens"] == 256
+    assert "max_output_tokens" not in seen["payload"]
+    assert "max_completion_tokens" not in seen["payload"]
+
+
+def test_adapter_stream_omits_output_limit_when_request_does_not_set_one() -> None:
+    seen: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["payload"] = json.loads(request.read())
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            text=_sse_body(
+                {"choices": [{"delta": {"content": "ok"}, "finish_reason": None}]},
+                {"choices": [{"delta": {}, "finish_reason": "stop"}]},
+            ),
+            request=request,
+        )
+
+    items = _collect_stream(_adapter(handler), _request([UserMessage(content="go")]))
+
+    assert items[-1].message == FinalMessage(content="ok")  # type: ignore[union-attr]
+    assert seen["payload"]["stream"] is True
+    assert "max_tokens" not in seen["payload"]
 
 
 def test_adapter_assembles_streamed_tool_call_fragments() -> None:
@@ -453,3 +593,61 @@ def test_adapter_rejects_malformed_arguments_http_errors_and_protocol_shapes() -
 
     with pytest.raises(ProviderProtocolError):
         asyncio.run(_adapter(malformed_response).complete(_request([])))
+
+
+def test_compaction_request_limit_reaches_http_and_length_is_rejected() -> None:
+    seen: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["payload"] = json.loads(request.read())
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {"message": {"content": "partial"}, "finish_reason": "length"}
+                ]
+            },
+            request=request,
+        )
+
+    request = build_compaction_request(
+        previous_summary=None,
+        current_user_message=UserMessage(content="current"),
+        prefix_messages=[UserMessage(content="history")],
+        current_user_prefix_index=None,
+        max_input_bytes=100_000,
+        max_output_tokens=256,
+    )
+    assert request.tools == []
+
+    response = asyncio.run(_adapter(handler).complete(request))
+
+    assert seen["payload"]["max_tokens"] == 256
+    with pytest.raises(CompactionSummaryError) as error:
+        validate_compaction_response(response, max_summary_bytes=100)
+    assert error.value.code == "summary_output_truncated"
+
+
+def test_compaction_request_normal_stop_returns_valid_summary() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {"message": {"content": "complete summary"}, "finish_reason": "stop"}
+                ]
+            },
+            request=request,
+        )
+
+    request = build_compaction_request(
+        previous_summary="old",
+        current_user_message=UserMessage(content="current"),
+        prefix_messages=[UserMessage(content="history")],
+        current_user_prefix_index=None,
+        max_input_bytes=100_000,
+        max_output_tokens=256,
+    )
+    response = asyncio.run(_adapter(handler).complete(request))
+
+    assert validate_compaction_response(response, max_summary_bytes=100) == "complete summary"

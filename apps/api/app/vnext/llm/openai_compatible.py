@@ -143,6 +143,8 @@ class OpenAICompatibleModelClient:
                 for message in request.messages
             ],
         }
+        if request.max_output_tokens is not None:
+            payload["max_tokens"] = request.max_output_tokens
         if request.tools:
             payload["tools"] = [
                 self._serialize_tool(tool, agent_to_provider[tool.name])

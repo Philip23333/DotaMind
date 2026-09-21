@@ -75,6 +75,15 @@ class ModelRequest(_Message):
     tools: list[ModelTool] = Field(default_factory=list)
     step: int | None = Field(default=None, ge=1)
     metadata: dict[str, Any] = Field(default_factory=dict)
+    max_output_tokens: int | None = Field(
+        default=None,
+        strict=True,
+        gt=0,
+        description=(
+            "Request-level generated-token limit using provider semantics; "
+            "not a UTF-8 byte limit for a compaction summary."
+        ),
+    )
 
 
 class ModelResponse(_Message):

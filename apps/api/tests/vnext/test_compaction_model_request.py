@@ -47,6 +47,7 @@ def _build(
     prefix: list | None = None,
     current_index: int | None = None,
     max_input_bytes: int = 100_000,
+    max_output_tokens: int = 256,
 ) -> ModelRequest:
     return build_compaction_request(
         previous_summary=previous_summary,
@@ -56,6 +57,7 @@ def _build(
         ),
         current_user_prefix_index=current_index,
         max_input_bytes=max_input_bytes,
+        max_output_tokens=max_output_tokens,
     )
 
 
@@ -94,6 +96,13 @@ def test_compaction_request_has_only_instruction_and_data_without_tools() -> Non
     assert request.tools == []
     assert request.step is None
     assert request.metadata == {"purpose": "context_compaction"}
+    assert request.max_output_tokens == 256
+
+
+def test_compaction_request_preserves_explicit_output_token_limit() -> None:
+    request = _build(max_output_tokens=1234)
+
+    assert request.max_output_tokens == 1234
 
 
 def test_tool_messages_are_serialized_as_history_data_with_relationships() -> None:
@@ -225,6 +234,7 @@ def test_input_budget_includes_the_complete_request_and_allows_exact_boundary() 
     request = _build()
     budget = _request_bytes(request)
 
+    assert request.model_dump(mode="json")["max_output_tokens"] == 256
     assert _request_bytes(_build(max_input_bytes=budget)) == budget
     with pytest.raises(CompactionSummaryError) as error:
         _build(max_input_bytes=budget - 1)
@@ -282,6 +292,16 @@ def test_invalid_summary_budgets_are_rejected(budget: object) -> None:
             max_summary_bytes=budget,  # type: ignore[arg-type]
         )
     assert response_error.value.code == "invalid_summary_budget"
+
+
+@pytest.mark.parametrize("max_output_tokens", [0, -1, True, False, 1.5, "256"])
+def test_invalid_compaction_output_token_limits_are_rejected(
+    max_output_tokens: object,
+) -> None:
+    with pytest.raises(CompactionSummaryError) as error:
+        _build(max_output_tokens=max_output_tokens)  # type: ignore[arg-type]
+
+    assert error.value.code == "invalid_summary_budget"
 
 
 def test_valid_summary_returns_original_text_without_rewriting() -> None:

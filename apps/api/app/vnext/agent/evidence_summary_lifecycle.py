@@ -182,10 +182,12 @@ def build_compaction_request(
     prefix_messages: Sequence[Message],
     current_user_prefix_index: int | None,
     max_input_bytes: int,
+    max_output_tokens: int,
 ) -> ModelRequest:
     """Build the model-only request used to replace one active summary."""
 
     _validate_summary_budget(max_input_bytes)
+    _validate_summary_budget(max_output_tokens)
     if not prefix_messages:
         raise CompactionSummaryError("empty_compaction_history")
 
@@ -229,6 +231,7 @@ def build_compaction_request(
         tools=[],
         step=None,
         metadata={"purpose": "context_compaction"},
+        max_output_tokens=max_output_tokens,
     )
     if _serialized_request_bytes(request) > max_input_bytes:
         raise CompactionSummaryError("summary_input_too_large")
