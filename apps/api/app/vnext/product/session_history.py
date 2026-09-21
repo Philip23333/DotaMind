@@ -24,6 +24,15 @@ RecordKind = Literal[
 ]
 
 
+class RequestIdempotencyConflict(ValueError):
+    """A request id cannot be reused with different input text."""
+
+    code = "idempotency_conflict"
+
+    def __init__(self) -> None:
+        super().__init__("request_id has already been used with different inputs")
+
+
 @dataclass(frozen=True, slots=True)
 class ExecutionRecord:
     """An append-only copy of one message that actually occurred."""
@@ -44,7 +53,7 @@ class SessionExecutionHistory:
     def __init__(self) -> None:
         self._records: list[ExecutionRecord] = []
         self._effective_messages: list[Message] = []
-        self._request_ids: set[UUID] = set()
+        self._request_queries: dict[UUID, str] = {}
         self._sequence = 0
         self._initialized = False
 
@@ -80,19 +89,28 @@ class SessionExecutionHistory:
     ) -> list[Message]:
         """Start a request without rebuilding an already-active session."""
 
-        if not self._initialized:
+        if request_id in self._request_queries and self._request_queries[request_id] != query:
+            raise RequestIdempotencyConflict
+
+        initializing = not self._initialized
+        if initializing:
             self._effective_messages = [
                 message.model_copy(deep=True)
                 for message in (initial_messages or [])
             ]
             self._initialized = True
 
-        if request_id not in self._request_ids:
-            self._request_ids.add(request_id)
+        if request_id not in self._request_queries:
+            self._request_queries[request_id] = query
             current = UserMessage(content=query)
-            # ConversationContextBuilder includes the bootstrap query.  For a
-            # live session the query is appended here exactly once.
-            if not self._effective_messages or self._effective_messages[-1] != current:
+            # ConversationContextBuilder includes the bootstrap query.  Remove
+            # that one attached copy only while initializing; every later new
+            # request appends its user message even when the text is repeated.
+            if not (
+                initializing
+                and initial_messages
+                and initial_messages[-1] == current
+            ):
                 self._effective_messages.append(current)
             self.record(request_id, current, kind="user")
         return self.effective_messages()
@@ -144,4 +162,4 @@ class SessionExecutionHistory:
         self.record(request_id, final, kind="delivery_answer")
 
 
-__all__ = ["ExecutionRecord", "SessionExecutionHistory"]
+__all__ = ["ExecutionRecord", "RequestIdempotencyConflict", "SessionExecutionHistory"]

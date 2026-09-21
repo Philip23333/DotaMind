@@ -49,8 +49,10 @@ class _Runtime:
     def __init__(self, events) -> None:
         self.events = events
         self.messages = None
+        self.run_count = 0
 
     async def run_stream(self, messages, *, trace_collector=None):
+        self.run_count += 1
         self.messages = messages
         for event in self.events:
             yield event
@@ -153,6 +155,70 @@ def test_product_chat_failure_does_not_create_a_dialogue_turn() -> None:
 
     assert events == [ProductChatError(error_code="max_steps_exceeded", reason="too many steps")]
     assert repository.appended == []
+
+
+def test_product_chat_rejects_changed_query_for_failed_request_without_rerunning() -> None:
+    repository = _Repository()
+    runtime = _Runtime(
+        [AgentFailed(duration=0.1, error_code="agent_failed", error_message="failed")]
+    )
+    service = VNextChatService(  # type: ignore[arg-type]
+        repository,
+        runtime,
+        ConversationContextBuilder(),
+        _VisualEntityEnricher(),
+    )
+    browser_id = str(uuid4())
+    session_id = uuid4()
+    request_id = uuid4()
+
+    async def exercise():
+        first = await service.prepare_turn(
+            browser_id=browser_id,
+            session_id=session_id,
+            request_id=request_id,
+            query="first",
+        )
+        first_events = [event async for event in service.stream_turn(first)]
+        state = service._sessions[session_id]
+        records_after_failure = state.history.records
+        effective_after_failure = state.history.effective_messages()
+
+        second = await service.prepare_turn(
+            browser_id=browser_id,
+            session_id=session_id,
+            request_id=request_id,
+            query="changed",
+        )
+        second_events = [event async for event in service.stream_turn(second)]
+        return (
+            first_events,
+            second_events,
+            records_after_failure,
+            effective_after_failure,
+            state.history.records,
+            state.history.effective_messages(),
+        )
+
+    (
+        first_events,
+        second_events,
+        records_after_failure,
+        effective_after_failure,
+        records_after_conflict,
+        effective_after_conflict,
+    ) = asyncio.run(exercise())
+
+    assert first_events == [ProductChatError(error_code="agent_failed", reason="failed")]
+    assert second_events == [
+        ProductChatError(
+            error_code="idempotency_conflict",
+            reason="request_id has already been used with different inputs",
+        )
+    ]
+    assert runtime.run_count == 1
+    assert records_after_conflict == records_after_failure
+    assert effective_after_conflict == effective_after_failure
 
 
 def test_product_chat_persists_only_failed_runs_and_preserves_original_error_on_store_failure() -> (

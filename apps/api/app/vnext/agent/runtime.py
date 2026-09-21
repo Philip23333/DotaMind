@@ -333,6 +333,8 @@ class AgentRuntime:
                         results,
                         trace_collector,
                         materialization_budget,
+                        execution_history=execution_history,
+                        request_id=request_id,
                     ):
                         yield tool_event
                     self._check_controls(token, execution_deadline)
@@ -340,8 +342,6 @@ class AgentRuntime:
                     outcome = ExecutionOutcome(ExecutionStopReason.DEADLINE, step)
                     break
                 candidate_messages = [*request_messages, assistant, *results]
-                if execution_history is not None and request_id is not None:
-                    execution_history.record_tool_results(request_id, results)
                 if self.transcript_rewriter is None:
                     request_messages = candidate_messages
                 else:
@@ -803,7 +803,15 @@ class AgentRuntime:
         results: list[ToolResultMessage],
         trace_collector: AgentTraceCollector | None,
         materialization_budget: MaterializationBudget,
+        execution_history: Any | None = None,
+        request_id: Any | None = None,
     ) -> AsyncIterator[AgentEvent]:
+        async def execute_and_record(item: ToolCall) -> ToolResultMessage:
+            result = await self.tools.execute(item, timeout=self._tool_timeout(item, deadline))
+            if execution_history is not None and request_id is not None:
+                execution_history.record(request_id, result, kind="tool_result")
+            return result
+
         index = 0
         while index < len(calls):
             self._check_controls(token, deadline)
@@ -826,10 +834,7 @@ class AgentRuntime:
                 yield await self._publish(event, sink)
 
             started = {item.id: monotonic() for item in group}
-            operations = [
-                self.tools.execute(item, timeout=self._tool_timeout(item, deadline))
-                for item in group
-            ]
+            operations = [execute_and_record(item) for item in group]
             group_results = await self._await_controlled(
                 asyncio.gather(*operations),
                 token,
@@ -920,9 +925,6 @@ class AgentRuntime:
                         item.name == "task.checkpoint"
                         and self.task_state_coordinator is not None
                     ):
-                        release = self.task_state_coordinator.consume_partition_release()
-                        if release is not None and trace_collector is not None:
-                            trace_collector.partition_evidence_release(step, release)
                         if result.status == "ok" and trace_collector is not None:
                             trace_collector.checkpoint_lease_snapshot(
                                 step,
@@ -1107,11 +1109,11 @@ def _initial_materialization_entries(
 
     entries: list[tuple[str, int]] = []
     for index, message in enumerate(messages):
-        if not isinstance(message, ToolResultMessage) or message.status != "ok":
+        if not isinstance(message, ToolResultMessage):
             continue
         names = tool_names.get(message.tool_call_id)
         tool_name = names.pop(0) if names else None
-        if tool_name is None:
+        if message.status != "ok" or tool_name is None:
             continue
         try:
             materializing = tools.get(tool_name).context_effect is ToolContextEffect.MATERIALIZING

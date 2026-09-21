@@ -179,7 +179,7 @@ def test_checkpoint_source_error_exposes_recovery_candidates_and_allows_retry() 
             {"task_key": "B", "observation_count": 1, "raw_bytes": 200},
         ],
     }
-    assert coordinator.consume_partition_release() is None
+    assert coordinator.plan_snapshot().current_key == "A"  # type: ignore[union-attr]
 
     good_a = asyncio.run(
         registry.execute(

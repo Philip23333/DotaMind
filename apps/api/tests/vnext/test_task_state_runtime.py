@@ -125,9 +125,7 @@ def _run(
     runtime = AgentRuntime(
         model,
         _read_registry(coordinator, value=read_value),
-        transcript_rewriter=ArtifactObservationTranscriptRewriter(
-            closed_partition_lookup=coordinator.closed_partition_for_tool_call
-        ),
+        transcript_rewriter=ArtifactObservationTranscriptRewriter(),
         task_state_coordinator=coordinator,
     )
     asyncio.run(runtime.run([UserMessage(content="collect evidence")], trace_collector=trace))
@@ -166,10 +164,7 @@ def test_flow_a_manifest_then_checkpoint_state_next_turn_and_raw_preserved() -> 
         for message in model.requests[2].messages
         if isinstance(message, ToolResultMessage) and message.tool_call_id == "call-1"
     )
-    assert raw_result.content["_artifact_observation"]["reason"] == "checkpointed"  # type: ignore[index]
-    assert raw_result.content["_artifact_observation"]["checkpoint_id"].startswith(  # type: ignore[index]
-        "checkpoint:"
-    )
+    assert raw_result.content["value"] == [{"fact": "A"}]  # type: ignore[index]
     assert coordinator.store.get("part") is not None
 
 
@@ -254,8 +249,10 @@ def test_flow_j_checkpoint_source_error_recovers_with_available_candidate() -> N
     _run(model, coordinator, trace=trace)
 
     assert coordinator.plan_snapshot().current_key == "2026"  # type: ignore[union-attr]
-    assert "partition_evidence_release" not in trace.snapshot()["steps"][2]
-    assert trace.snapshot()["steps"][3]["partition_evidence_release"]["task_key"] == "2025"
+    assert all(
+        "partition_evidence_release" not in step
+        for step in trace.snapshot()["steps"]
+    )
 
 
 def test_flow_c_same_key_replaced_and_new_key_is_latest_context() -> None:
@@ -345,10 +342,7 @@ def test_flow_e_checkpoint_rewrite_trace_keeps_raw_tool_result() -> None:
     _run(model, coordinator, trace=trace, read_value=read_value)
 
     snapshot = trace.snapshot()
-    rewrite = snapshot["steps"][1]["transcript_rewrites"][0]
-    assert rewrite["reason"] == "checkpointed"
-    assert rewrite["tool_call_id"] == "call-1"
-    assert rewrite["checkpoint_id"].startswith("checkpoint:")
+    assert snapshot["steps"][1].get("transcript_rewrites", []) == []
     checkpoint_metric = snapshot["steps"][1]["checkpoint_metrics"][0]
     assert checkpoint_metric["tool_call_id"] == "checkpoint-call"
     assert checkpoint_metric["status"] == "ok"
@@ -356,8 +350,6 @@ def test_flow_e_checkpoint_rewrite_trace_keeps_raw_tool_result() -> None:
     assert checkpoint_metric["key"] == "part"
     assert checkpoint_metric["source_count"] == 1
     assert checkpoint_metric["value_bytes"] > 0
-    assert rewrite["raw_bytes"] > rewrite["receipt_bytes"]
-    assert rewrite["saved_bytes"] > 0
     raw_trace_result = snapshot["steps"][1]["tool_results"][0]["result"]
     assert raw_trace_result["tool_call_id"] == "checkpoint-call"
     assert snapshot["steps"][0]["tool_results"][0]["result"]["content"]["value"] == read_value
@@ -365,8 +357,8 @@ def test_flow_e_checkpoint_rewrite_trace_keeps_raw_tool_result() -> None:
     after = snapshot["steps"][2]["context_accounting"]
     assert before["artifact_observations"]["active_raw"]["count"] == 1
     assert before["task_context"]["task_state"]["count"] == 0
-    assert after["artifact_observations"]["active_raw"]["count"] == 0
-    assert after["artifact_observations"]["receipts"]["count"] == 1
+    assert after["artifact_observations"]["active_raw"]["count"] == 1
+    assert after["artifact_observations"]["receipts"]["count"] == 0
     assert after["task_context"]["task_state"]["count"] == 1
     assert after["task_context"]["task_state"]["serialized_bytes"] > 0
     assert after["task_context"]["active_manifest"]["count"] == 0
@@ -403,7 +395,7 @@ def test_flow_f_plan_serially_checkpoints_each_result_unit() -> None:
         assert any(
             isinstance(message, ToolResultMessage)
             and message.tool_call_id == "read-2025"
-            and message.content["_artifact_observation"]["state"] == "receipt_only"  # type: ignore[index]
+            and message.content["value"] == [{"fact": "A"}]  # type: ignore[index]
             for message in request.messages
         )
         return _tool_response(_read_call("read-2026", "2026"))
@@ -433,19 +425,16 @@ def test_flow_f_plan_serially_checkpoints_each_result_unit() -> None:
             "current_key": "2025",
         }
     ]
-    assert len(snapshot["steps"][2]["transcript_rewrites"]) == 1
-    assert len(snapshot["steps"][4]["transcript_rewrites"]) == 1
-    assert snapshot["steps"][2]["transcript_rewrites"][0]["reason"] == "checkpointed"
-    assert snapshot["steps"][4]["transcript_rewrites"][0]["reason"] == "checkpointed"
+    assert snapshot["steps"][2].get("transcript_rewrites", []) == []
+    assert snapshot["steps"][4].get("transcript_rewrites", []) == []
     active_lease = snapshot["steps"][1]["active_evidence_lease"]
     assert active_lease["task_key"] == "2025"
     assert active_lease["observation_count"] == 1
     assert active_lease["raw_bytes"] > 0
-    release = snapshot["steps"][2]["partition_evidence_release"]
-    assert release["task_key"] == "2025"
-    assert release["checkpointed_count"] == 1
-    assert release["partition_closed_count"] == 0
-    assert release["released_bytes"] > 0
+    assert all(
+        "partition_evidence_release" not in step
+        for step in snapshot["steps"]
+    )
     assert snapshot["steps"][2]["active_leases_after_checkpoint"] == {
         "checkpoint_key": "2025",
         "leases": [],
@@ -520,7 +509,7 @@ def test_flow_i_future_partition_leases_survive_earlier_checkpoint() -> None:
         assert any(
             isinstance(message, ToolResultMessage)
             and message.tool_call_id == "read-a"
-            and message.content["_artifact_observation"]["reason"] == "checkpointed"  # type: ignore[index]
+            and message.content["value"] == [{"fact": "A"}]  # type: ignore[index]
             for message in request.messages
         )
         return _tool_response(
@@ -540,8 +529,7 @@ def test_flow_i_future_partition_leases_survive_earlier_checkpoint() -> None:
 
     plan = coordinator.plan_snapshot()
     assert plan is not None and plan.current_key is None
-    assert coordinator.closed_partition_for_tool_call("read-a") == "2025"
-    assert coordinator.closed_partition_for_tool_call("read-b") == "2026"
+    assert coordinator.active_evidence_lease() is None
 
 
 def test_flow_h_invalid_plan_source_does_not_advance_or_claim_raw() -> None:

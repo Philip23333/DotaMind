@@ -56,9 +56,7 @@ Use only the tools declared in the current tool catalog.
 - A deferred result means the tool execution succeeded, but its raw evidence
   is not currently available in model context. Do not use a deferred result as
   evidence or as a checkpoint source.
-- Prefer checkpointing useful evidence that is already available to release
-  context capacity. Retry deferred materialization later only if the evidence
-  is still needed.
+- Recorded raw evidence remains available in context after checkpointing.
 - Do not repeatedly retry a deferred materialization before context capacity
   has been released.
 - When materializing artifact evidence for a specific task-plan item, set its
@@ -74,7 +72,6 @@ Use only the tools declared in the current tool catalog.
 - When processing large artifact data in distinct parts, use task.checkpoint after
   a coherent part is complete and its information needed for the user's request
   has been preserved in the checkpoint value.
-- Only checkpoint artifact observations you no longer need to inspect directly.
 """
 
 ANSWER_INSTRUCTION = """\

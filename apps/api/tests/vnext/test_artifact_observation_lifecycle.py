@@ -248,7 +248,7 @@ def test_reread_creates_a_new_raw_observation_after_an_old_receipt() -> None:
     assert receipts[2].content["value"] == [1, 2]  # type: ignore[index]
 
 
-def test_checkpoint_claim_replaces_only_claimed_raw_with_checkpoint_receipt() -> None:
+def test_checkpoint_claim_keeps_claimed_raw_observation() -> None:
     messages = [
         AssistantMessage(tool_calls=[_call("old"), _call("other")]),
         _result("old", [1, 2]),
@@ -259,27 +259,12 @@ def test_checkpoint_claim_replaces_only_claimed_raw_with_checkpoint_receipt() ->
 
     result = ArtifactObservationTranscriptRewriter().rewrite(messages)
 
-    old = result.messages[1]
-    other = result.messages[2]
-    assert old.content == {  # type: ignore[union-attr]
-        "_artifact_observation": {
-            "state": "receipt_only",
-            "reason": "checkpointed",
-            "re_readable": True,
-            "mode": "read",
-            "ref": "artifact:test",
-            "path": "rows",
-            "offset": 0,
-            "limit": 6,
-            "checkpoint_id": "checkpoint:one",
-        }
-    }
-    assert other.content["value"] == [3, 4]  # type: ignore[index]
-    assert result.events[0].reason == "checkpointed"
-    assert result.events[0].metadata["checkpoint_id"] == "checkpoint:one"
+    assert result.messages[1] == messages[1]
+    assert result.messages[2] == messages[2]
+    assert result.events == []
 
 
-def test_checkpoint_claim_has_priority_over_redundancy_and_does_not_release_older_raw() -> None:
+def test_checkpoint_claim_does_not_change_duplicate_rewrite() -> None:
     messages = [
         AssistantMessage(tool_calls=[_call("old"), _call("new")]),
         _result("old", [1, 2]),
@@ -290,9 +275,9 @@ def test_checkpoint_claim_has_priority_over_redundancy_and_does_not_release_olde
 
     result = ArtifactObservationTranscriptRewriter().rewrite(messages)
 
-    assert result.messages[1].content["value"] == [1, 2]  # type: ignore[index]
-    assert result.messages[2].content["_artifact_observation"]["reason"] == "checkpointed"  # type: ignore[index]
-    assert [event.reason for event in result.events] == ["checkpointed"]
+    assert result.messages[1].content["_artifact_observation"]["reason"] == "duplicate"  # type: ignore[index]
+    assert result.messages[2].content["value"] == [1, 2]  # type: ignore[index]
+    assert [event.reason for event in result.events] == ["duplicate"]
 
 
 def test_malformed_or_failed_checkpoint_does_not_claim_observations() -> None:
@@ -320,7 +305,7 @@ def test_malformed_or_failed_checkpoint_does_not_claim_observations() -> None:
         assert result.messages[1] == messages[1]
 
 
-def test_checkpoint_rewrite_is_idempotent_and_receipt_does_not_claim_again() -> None:
+def test_checkpoint_does_not_rewrite_or_claim_again() -> None:
     messages = [
         AssistantMessage(tool_calls=[_call("old")]),
         _result("old", [1, 2]),
@@ -329,11 +314,12 @@ def test_checkpoint_rewrite_is_idempotent_and_receipt_does_not_claim_again() -> 
     ]
     first = ArtifactObservationTranscriptRewriter().rewrite(messages)
     second = ArtifactObservationTranscriptRewriter().rewrite(first.messages)
-    assert second.messages == first.messages
+    assert first.messages == messages
+    assert second.messages == messages
     assert second.events == []
 
 
-def test_checkpoint_receipt_preserves_locator_requested_range_and_is_rereadable() -> None:
+def test_checkpoint_preserves_raw_locator_requested_range() -> None:
     messages = [
         AssistantMessage(tool_calls=[_call("old", offset=4, limit=9)]),
         _result("old", [4, 5], offset=4, limit=9),
@@ -341,52 +327,37 @@ def test_checkpoint_receipt_preserves_locator_requested_range_and_is_rereadable(
         _checkpoint("checkpoint-call", ["old"]),
     ]
     result = ArtifactObservationTranscriptRewriter().rewrite(messages)
-    marker = result.messages[1].content["_artifact_observation"]  # type: ignore[index]
-    assert marker["ref"] == "artifact:test"
-    assert marker["path"] == "rows"
-    assert marker["offset"] == 4
-    assert marker["limit"] == 9
-    assert marker["re_readable"] is True
+    assert result.messages[1] == messages[1]
+    assert result.events == []
 
 
-def test_closed_partition_replaces_unclaimed_reads_and_keeps_newer_partition_raw() -> None:
+def test_checkpoint_does_not_close_unclaimed_reads() -> None:
     messages = [
         AssistantMessage(tool_calls=[_call("old"), _call("new")]),
         _result("old", [1, 2]),
         _result("new", [3, 4], offset=2),
+        AssistantMessage(tool_calls=[_checkpoint_call()]),
+        _checkpoint("checkpoint-call", ["old"]),
     ]
-    result = ArtifactObservationTranscriptRewriter(
-        closed_partition_lookup=lambda tool_call_id: "2025" if tool_call_id == "old" else None
-    ).rewrite(messages)
+    result = ArtifactObservationTranscriptRewriter().rewrite(messages)
 
-    marker = result.messages[1].content["_artifact_observation"]  # type: ignore[index]
-    assert marker == {
-        "state": "receipt_only",
-        "reason": "partition_closed",
-        "re_readable": True,
-        "mode": "read",
-        "ref": "artifact:test",
-        "path": "rows",
-        "offset": 0,
-        "limit": 6,
-        "partition_key": "2025",
-    }
+    assert result.messages[1] == messages[1]
     assert result.messages[2].content["value"] == [3, 4]  # type: ignore[index]
-    assert result.events[0].reason == "partition_closed"
+    assert result.events == []
 
 
-def test_closed_partition_has_precedence_over_duplicate_rewrite() -> None:
-    result = ArtifactObservationTranscriptRewriter(
-        closed_partition_lookup=lambda tool_call_id: "2025" if tool_call_id == "old" else None
-    ).rewrite(
+def test_duplicate_rewrite_remains_effective_after_partition_completion() -> None:
+    result = ArtifactObservationTranscriptRewriter().rewrite(
         [
             AssistantMessage(tool_calls=[_call("old"), _call("new")]),
             _result("old", [1, 2]),
             _result("new", [1, 2]),
+            AssistantMessage(tool_calls=[_checkpoint_call()]),
+            _checkpoint("checkpoint-call", ["old"]),
         ]
     )
 
-    assert result.messages[1].content["_artifact_observation"]["reason"] == "partition_closed"  # type: ignore[index]
+    assert result.messages[1].content["_artifact_observation"]["reason"] == "duplicate"  # type: ignore[index]
     assert result.messages[2].content["value"] == [1, 2]  # type: ignore[index]
 
 

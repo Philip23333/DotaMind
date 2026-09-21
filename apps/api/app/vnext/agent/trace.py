@@ -116,16 +116,6 @@ class AgentTraceCollector:
         if payload is not None:
             self._step(step)["active_evidence_lease"] = payload
 
-    def partition_evidence_release(self, step: int, release: Any) -> None:
-        """Record evidence released after a successful partition checkpoint."""
-
-        self._step(step)["partition_evidence_release"] = {
-            "task_key": release.task_key,
-            "checkpointed_count": release.checkpointed_count,
-            "partition_closed_count": release.partition_closed_count,
-            "released_bytes": release.released_bytes,
-        }
-
     def checkpoint_lease_snapshot(
         self,
         step: int,

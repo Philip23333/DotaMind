@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -35,19 +35,14 @@ class ArtifactObservation:
 
 
 class ArtifactObservationTranscriptRewriter:
-    """Replace checkpointed, duplicate, or fully covered artifact.read results.
+    """Replace duplicate or fully covered artifact.read results.
 
     The rewriter intentionally has no registry or cross-turn state.  Every call
     scans the complete candidate transcript, which keeps the operation
     deterministic and makes repeated application idempotent.
     """
 
-    def __init__(
-        self,
-        *,
-        closed_partition_lookup: Callable[[str], str | None] | None = None,
-    ) -> None:
-        self._closed_partition_lookup = closed_partition_lookup or (lambda _tool_call_id: None)
+    def __init__(self) -> None:
         self._request_start = 0
 
     def set_request_scope(self, message_index: int) -> None:
@@ -57,70 +52,14 @@ class ArtifactObservationTranscriptRewriter:
         original = list(messages)
         calls = _artifact_read_calls(original)
         observations = _artifact_observations(original, calls)
-        checkpoint_claims = _checkpoint_claims(original, start_index=self._request_start)
-        claimed_observation_ids = {
-            observation.tool_call_id
-            for _, observation in observations
-            if observation.tool_call_id in checkpoint_claims
-        }
-        replaced: dict[int, tuple[str, str | None]] = {}
+        replaced: dict[int, str] = {}
         events: list[TranscriptRewriteEvent] = []
-
-        for message_index, observation in observations:
-            if observation.message_index < self._request_start:
-                continue
-            checkpoint_id = checkpoint_claims.get(observation.tool_call_id)
-            if checkpoint_id is None:
-                continue
-            replaced[message_index] = ("checkpointed", checkpoint_id)
-            events.append(
-                TranscriptRewriteEvent(
-                    kind="artifact_observation",
-                    tool_call_id=observation.tool_call_id,
-                    reason="checkpointed",
-                    metadata={
-                        "source": _receipt_source(observation),
-                        "checkpoint_id": checkpoint_id,
-                        **_rewrite_sizes(
-                            original[message_index],
-                            observation,
-                            "checkpointed",
-                            checkpoint_id,
-                        ),
-                    },
-                )
-            )
 
         for old_index, old in observations:
             if old.message_index < self._request_start:
                 continue
-            if old.tool_call_id in claimed_observation_ids:
-                continue
-            partition_key = self._closed_partition_lookup(old.tool_call_id)
-            if partition_key is not None:
-                replaced[old.message_index] = ("partition_closed", partition_key)
-                events.append(
-                    TranscriptRewriteEvent(
-                        kind="artifact_observation",
-                        tool_call_id=old.tool_call_id,
-                        reason="partition_closed",
-                        metadata={
-                            "source": _receipt_source(old),
-                            "partition_key": partition_key,
-                            **_rewrite_sizes(
-                                original[old.message_index],
-                                old,
-                                "partition_closed",
-                                partition_key=partition_key,
-                            ),
-                        },
-                    )
-                )
-                continue
             for new_index, new in observations:
                 if new_index <= old_index:
-                    continue
-                if new.tool_call_id in claimed_observation_ids:
                     continue
                 if new.message_index in replaced:
                     continue
@@ -130,7 +69,7 @@ class ArtifactObservationTranscriptRewriter:
                 # The newest observation remains raw.  Only this earlier
                 # message is replaced, even when it has already been covered
                 # by another later observation.
-                replaced[old.message_index] = (reason, None)
+                replaced[old.message_index] = reason
                 events.append(
                     TranscriptRewriteEvent(
                         kind="artifact_observation",
@@ -142,7 +81,6 @@ class ArtifactObservationTranscriptRewriter:
                                 original[old.message_index],
                                 old,
                                 reason,
-                                checkpoint_id=None,
                             ),
                         },
                     )
@@ -158,7 +96,7 @@ class ArtifactObservationTranscriptRewriter:
             if replacement is None or not isinstance(message, ToolResultMessage):
                 rewritten.append(message)
                 continue
-            reason, checkpoint_id = replacement
+            reason = replacement
             observation = next(
                 observation
                 for candidate_index, observation in observations
@@ -167,16 +105,7 @@ class ArtifactObservationTranscriptRewriter:
             rewritten.append(
                 message.model_copy(
                     update={
-                        "content": _receipt(
-                            observation,
-                            reason,
-                            checkpoint_id=(
-                                checkpoint_id if reason == "checkpointed" else None
-                            ),
-                            partition_key=(
-                                checkpoint_id if reason == "partition_closed" else None
-                            ),
-                        )
+                        "content": _receipt(observation, reason)
                     }
                 )
             )
@@ -191,42 +120,6 @@ def _artifact_read_calls(messages: Sequence[Message]) -> dict[str, list[bool]]:
         for call in message.tool_calls:
             calls.setdefault(call.id, []).append(call.name == "artifact.read")
     return calls
-
-
-def _checkpoint_claims(
-    messages: Sequence[Message],
-    *,
-    start_index: int = 0,
-) -> dict[str, str]:
-    checkpoint_calls: dict[str, list[bool]] = {}
-    for message in messages:
-        if not isinstance(message, AssistantMessage):
-            continue
-        for call in message.tool_calls:
-            checkpoint_calls.setdefault(call.id, []).append(call.name == "task.checkpoint")
-    claims: dict[str, str] = {}
-    for message_index, message in enumerate(messages):
-        if not isinstance(message, ToolResultMessage):
-            continue
-        call_kinds = checkpoint_calls.get(message.tool_call_id)
-        is_checkpoint = call_kinds.pop(0) if call_kinds else False
-        if message_index < start_index or message.status != "ok" or not is_checkpoint:
-            continue
-        content = message.content
-        if not isinstance(content, dict):
-            continue
-        checkpoint_id = content.get("checkpoint_id")
-        source_tool_call_ids = content.get("accepted_source_tool_call_ids")
-        if (
-            not isinstance(checkpoint_id, str)
-            or not checkpoint_id
-            or not isinstance(source_tool_call_ids, list)
-            or not all(isinstance(item, str) and item for item in source_tool_call_ids)
-        ):
-            continue
-        for source_tool_call_id in source_tool_call_ids:
-            claims[source_tool_call_id] = checkpoint_id
-    return claims
 
 
 def _artifact_observations(
@@ -353,9 +246,6 @@ def _receipt_source(observation: ArtifactObservation) -> dict[str, Any]:
 def _receipt(
     observation: ArtifactObservation,
     reason: str,
-    *,
-    checkpoint_id: str | None = None,
-    partition_key: str | None = None,
 ) -> dict[str, Any]:
     marker: dict[str, Any] = {
         "state": "receipt_only",
@@ -364,10 +254,6 @@ def _receipt(
         "mode": "outline" if observation.kind == "outline" else "read",
         **_receipt_source(observation),
     }
-    if checkpoint_id is not None:
-        marker["checkpoint_id"] = checkpoint_id
-    if partition_key is not None:
-        marker["partition_key"] = partition_key
     return {"_artifact_observation": marker}
 
 
@@ -375,8 +261,6 @@ def _rewrite_sizes(
     message: Message,
     observation: ArtifactObservation,
     reason: str,
-    checkpoint_id: str | None = None,
-    partition_key: str | None = None,
 ) -> dict[str, int]:
     if not isinstance(message, ToolResultMessage):
         return {
@@ -391,8 +275,6 @@ def _rewrite_sizes(
             "content": _receipt(
                 observation,
                 reason,
-                checkpoint_id=checkpoint_id,
-                partition_key=partition_key,
             )
         }
     )

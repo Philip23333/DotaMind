@@ -35,8 +35,8 @@ def test_deferred_materialization_policy_guides_recovery_without_scheduler_detai
     assert "deferred result means the tool execution succeeded" in instruction
     assert "not currently available in model context" in instruction
     assert "do not use a deferred result as evidence or as a checkpoint source" in instruction
-    assert "checkpointing useful evidence" in instruction
-    assert "retry deferred materialization later" in instruction
+    assert "recorded raw evidence remains available in context after checkpointing" in instruction
+    assert "retry deferred materialization later" not in instruction
     assert "do not repeatedly retry a deferred materialization" in instruction
     assert "160 kib" not in instruction
     assert "available bytes" not in instruction

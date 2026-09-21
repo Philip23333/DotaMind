@@ -221,7 +221,7 @@ def test_rendered_context_uses_utf8_json_and_omits_ranges_for_scalar_reads() -> 
     assert "\\u6700" not in context
 
 
-def test_evidence_lease_is_scoped_to_current_partition_and_released_on_checkpoint() -> None:
+def test_evidence_lease_is_scoped_to_current_partition_and_cleared_on_checkpoint() -> None:
     coordinator = TaskStateCoordinator()
     coordinator.create_plan(
         [
@@ -241,14 +241,8 @@ def test_evidence_lease_is_scoped_to_current_partition_and_released_on_checkpoin
     assert coordinator.context_payload()["active_manifest"][0]["lease_key"] == "2025"
 
     coordinator.create_checkpoint("2025", {"fact": "saved"}, ["call-1"])
-    release = coordinator.consume_partition_release()
-    assert release is not None
-    assert release.task_key == "2025"
-    assert release.checkpointed_count == 1
-    assert release.partition_closed_count == 0
-    assert release.released_bytes == 1234
+    assert coordinator.plan_snapshot().current_key == "2026"  # type: ignore[union-attr]
     assert coordinator.active_evidence_lease() is None
-    assert coordinator.closed_partition_for_tool_call("call-1") == "2025"
 
 
 def test_failed_checkpoint_keeps_active_evidence_lease() -> None:
@@ -270,7 +264,6 @@ def test_failed_checkpoint_keeps_active_evidence_lease() -> None:
         "observation_count": 1,
         "raw_bytes": 321,
     }
-    assert coordinator.consume_partition_release() is None
 
 
 def test_explicit_future_task_key_owns_lease_instead_of_current_item() -> None:
@@ -416,8 +409,6 @@ def test_cross_partition_leases_survive_an_earlier_checkpoint() -> None:
     coordinator.record_evidence_lease("raw-b", task_key="B", raw_bytes=200)
 
     coordinator.create_checkpoint("A", {"fact": "A"}, ["raw-a"])
-    assert coordinator.closed_partition_for_tool_call("raw-a") == "A"
-    assert coordinator.closed_partition_for_tool_call("raw-b") is None
     assert coordinator.active_evidence_lease() == {
         "task_key": "B",
         "observation_count": 1,
@@ -427,7 +418,8 @@ def test_cross_partition_leases_survive_an_earlier_checkpoint() -> None:
 
     coordinator.refresh(messages)
     coordinator.create_checkpoint("B", {"fact": "B"}, ["raw-b"])
-    assert coordinator.closed_partition_for_tool_call("raw-b") == "B"
+    assert coordinator.plan_snapshot().current_key is None  # type: ignore[union-attr]
+    assert coordinator.active_evidence_lease() is None
 
 
 def test_checkpoint_accepts_source_lease_owned_by_checkpoint_item() -> None:
@@ -472,8 +464,6 @@ def test_checkpoint_rejects_source_leased_to_different_task_item_atomically() ->
         "raw-a",
         "raw-b",
     }
-    assert coordinator.closed_partition_for_tool_call("raw-b") is None
-    assert coordinator.consume_partition_release() is None
     assert coordinator.active_evidence_lease()["task_key"] is None  # type: ignore[index]
 
 
@@ -498,9 +488,7 @@ def test_mixed_checkpoint_sources_reject_atomically_when_one_lease_mismatches() 
 
     assert coordinator.plan_snapshot().current_key == "A"  # type: ignore[union-attr]
     assert coordinator.store.snapshot() == {}
-    assert coordinator.closed_partition_for_tool_call("raw-a") is None
-    assert coordinator.closed_partition_for_tool_call("raw-b") is None
-    assert coordinator.consume_partition_release() is None
+    assert coordinator.active_evidence_lease() is not None
 
 
 def test_rejected_lease_owner_checkpoint_can_retry_a_then_b() -> None:
@@ -524,9 +512,13 @@ def test_rejected_lease_owner_checkpoint_can_retry_a_then_b() -> None:
 
     coordinator.create_checkpoint("A", {"fact": "A"}, ["raw-a"])
     assert coordinator.plan_snapshot().current_key == "B"  # type: ignore[union-attr]
-    assert coordinator.consume_partition_release() is not None
+    assert coordinator.active_evidence_lease() == {
+        "task_key": "B",
+        "observation_count": 1,
+        "raw_bytes": 200,
+    }
 
     coordinator.refresh(messages)
     coordinator.create_checkpoint("B", {"fact": "B"}, ["raw-b"])
     assert coordinator.plan_snapshot().current_key is None  # type: ignore[union-attr]
-    assert coordinator.closed_partition_for_tool_call("raw-b") == "B"
+    assert coordinator.active_evidence_lease() is None

@@ -149,7 +149,7 @@ def _read_registry(coordinator: TaskStateCoordinator, state: _ReadState) -> Tool
     return registry
 
 
-def test_runtime_admits_by_plan_priority_defers_then_retries_after_release() -> None:
+def test_runtime_keeps_checkpointed_materialization_and_defers_over_budget_reread() -> None:
     coordinator = TaskStateCoordinator()
     state = _ReadState()
     probe = ToolResultMessage(
@@ -208,7 +208,7 @@ def test_runtime_admits_by_plan_priority_defers_then_retries_after_release() -> 
         read_a = _tool_result(request, "read-a").content
         read_b = _tool_result(request, "read-b").content
         read_c = _tool_result(request, "read-c").content
-        assert read_a["_artifact_observation"]["reason"] == "checkpointed"  # type: ignore[index]
+        assert read_a["value"]  # type: ignore[index]
         assert read_b["value"]  # type: ignore[index]
         assert read_c["_context_materialization"]["state"] == "deferred"  # type: ignore[index]
         return ModelResponse(
@@ -225,12 +225,9 @@ def test_runtime_admits_by_plan_priority_defers_then_retries_after_release() -> 
         )
 
     def sixth(request: ModelRequest) -> ModelResponse:
-        assert _tool_result(request, "retry-c").content["value"]  # type: ignore[index]
-        return ModelResponse(
-            message=AssistantMessage(
-                tool_calls=[_checkpoint_call("checkpoint-c", "C", "retry-c")]
-            )
-        )
+        retry = _tool_result(request, "retry-c").content
+        assert retry["_context_materialization"]["state"] == "deferred"  # type: ignore[index]
+        return ModelResponse(message=FinalMessage(content="done"))
 
     model = ScriptedTranscriptModelClient(
         [
@@ -253,9 +250,7 @@ def test_runtime_admits_by_plan_priority_defers_then_retries_after_release() -> 
         model,
         _read_registry(coordinator, state),
         limits=limits,
-        transcript_rewriter=ArtifactObservationTranscriptRewriter(
-            closed_partition_lookup=coordinator.closed_partition_for_tool_call
-        ),
+        transcript_rewriter=ArtifactObservationTranscriptRewriter(),
         task_state_coordinator=coordinator,
     )
     result = asyncio.run(
@@ -279,7 +274,7 @@ def test_runtime_admits_by_plan_priority_defers_then_retries_after_release() -> 
         "read-a",
         "read-b",
     ]
-    assert coordinator.plan_snapshot().current_key is None  # type: ignore[union-attr]
+    assert coordinator.plan_snapshot().current_key == "C"  # type: ignore[union-attr]
     snapshot = trace.snapshot()
     active = snapshot["steps"][1]["active_evidence_lease"]
     assert active["task_key"] is None
@@ -295,30 +290,15 @@ def test_runtime_admits_by_plan_priority_defers_then_retries_after_release() -> 
     assert admission_by_id["read-c"]["active_after_bytes"] == admission_by_id["read-c"][
         "active_before_bytes"
     ]
-    release_a = steps[3]["materialization_budget"]["releases"]
-    assert release_a == [
-        {
-            "tool_call_id": "read-a",
-            "reason": "checkpointed",
-            "released_bytes": admission_by_id["read-a"]["raw_bytes"],
-            "active_after_bytes": admission_by_id["read-b"]["raw_bytes"],
-        }
-    ]
-    release_b = steps[4]["materialization_budget"]["releases"]
-    assert release_b[0]["tool_call_id"] == "read-b"
-    assert release_b[0]["reason"] == "checkpointed"
-    assert release_b[0]["released_bytes"] == admission_by_id["read-b"]["raw_bytes"]
+    assert steps[3].get("materialization_budget", {}).get("releases", []) == []
+    assert steps[4].get("materialization_budget", {}).get("releases", []) == []
     retry_admission = steps[5]["materialization_budget"]["admissions"]
     assert retry_admission[0]["tool_call_id"] == "retry-c"
-    assert retry_admission[0]["admitted"] is True
-    assert steps[6]["materialization_budget"]["releases"] == [
-        {
-            "tool_call_id": "retry-c",
-            "reason": "checkpointed",
-            "released_bytes": retry_admission[0]["raw_bytes"],
-            "active_after_bytes": 0,
-        }
-    ]
+    assert retry_admission[0]["admitted"] is False
+    assert retry_admission[0]["active_before_bytes"] == (
+        admission_by_id["read-a"]["raw_bytes"] + admission_by_id["read-b"]["raw_bytes"]
+    )
+    assert steps[6].get("materialization_budget", {}).get("releases", []) == []
     assert snapshot["answer_stage"]["active_raw_count"] == 0
 
 
@@ -379,7 +359,7 @@ def test_materialization_budget_applies_without_a_task_plan() -> None:
     assert model.requests[1].messages[-1].content["_context_materialization"]["state"] == "deferred"  # type: ignore[index]
 
 
-def test_partition_closed_releases_all_admitted_materialization_bytes() -> None:
+def test_completed_task_keeps_raw_materialization_available_for_reread() -> None:
     coordinator = TaskStateCoordinator()
     state = _ReadState()
     probe = ToolResultMessage(
@@ -422,17 +402,20 @@ def test_partition_closed_releases_all_admitted_materialization_bytes() -> None:
             )
         )
 
+    def reread(request: ModelRequest) -> ModelResponse:
+        assert _tool_result(request, "raw-1").content["value"]  # type: ignore[index]
+        assert _tool_result(request, "raw-2").content["value"]  # type: ignore[index]
+        return ModelResponse(message=AssistantMessage(tool_calls=[_read_call("raw-3", "A", 2)]))
+
     model = ScriptedTranscriptModelClient(
-        [plan, reads, checkpoint, lambda _: ModelResponse.from_final("done")]
+        [plan, reads, checkpoint, reread, lambda _: ModelResponse.from_final("done")]
     )
     trace = AgentTraceCollector()
     runtime = AgentRuntime(
         model,
         _read_registry(coordinator, state),
         limits=limits,
-        transcript_rewriter=ArtifactObservationTranscriptRewriter(
-            closed_partition_lookup=coordinator.closed_partition_for_tool_call
-        ),
+        transcript_rewriter=ArtifactObservationTranscriptRewriter(),
         task_state_coordinator=coordinator,
     )
     asyncio.run(
@@ -440,12 +423,9 @@ def test_partition_closed_releases_all_admitted_materialization_bytes() -> None:
     )
 
     snapshot = trace.snapshot()
-    releases = snapshot["steps"][2]["materialization_budget"]["releases"]
-    assert [item["tool_call_id"] for item in releases] == ["raw-1", "raw-2"]
-    assert [item["reason"] for item in releases] == [
-        "checkpointed",
-        "partition_closed",
-    ]
-    assert releases[0]["released_bytes"] > 0
-    assert releases[1]["released_bytes"] > 0
-    assert releases[-1]["active_after_bytes"] == 0
+    assert snapshot["steps"][2].get("materialization_budget", {}).get("releases", []) == []
+    assert snapshot["steps"][3]["materialization_budget"]["admissions"][0]["admitted"] is False
+    assert all(
+        "partition_evidence_release" not in step
+        for step in snapshot["steps"]
+    )
