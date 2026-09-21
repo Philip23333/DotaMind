@@ -48,12 +48,16 @@ class ArtifactObservationTranscriptRewriter:
         closed_partition_lookup: Callable[[str], str | None] | None = None,
     ) -> None:
         self._closed_partition_lookup = closed_partition_lookup or (lambda _tool_call_id: None)
+        self._request_start = 0
+
+    def set_request_scope(self, message_index: int) -> None:
+        self._request_start = max(0, message_index)
 
     def rewrite(self, messages: Sequence[Message]) -> TranscriptRewriteResult:
         original = list(messages)
         calls = _artifact_read_calls(original)
         observations = _artifact_observations(original, calls)
-        checkpoint_claims = _checkpoint_claims(original)
+        checkpoint_claims = _checkpoint_claims(original, start_index=self._request_start)
         claimed_observation_ids = {
             observation.tool_call_id
             for _, observation in observations
@@ -63,6 +67,8 @@ class ArtifactObservationTranscriptRewriter:
         events: list[TranscriptRewriteEvent] = []
 
         for message_index, observation in observations:
+            if observation.message_index < self._request_start:
+                continue
             checkpoint_id = checkpoint_claims.get(observation.tool_call_id)
             if checkpoint_id is None:
                 continue
@@ -86,6 +92,8 @@ class ArtifactObservationTranscriptRewriter:
             )
 
         for old_index, old in observations:
+            if old.message_index < self._request_start:
+                continue
             if old.tool_call_id in claimed_observation_ids:
                 continue
             partition_key = self._closed_partition_lookup(old.tool_call_id)
@@ -175,29 +183,34 @@ class ArtifactObservationTranscriptRewriter:
         return TranscriptRewriteResult(messages=rewritten, events=events)
 
 
-def _artifact_read_calls(messages: Sequence[Message]) -> dict[str, bool]:
-    calls: dict[str, bool] = {}
+def _artifact_read_calls(messages: Sequence[Message]) -> dict[str, list[bool]]:
+    calls: dict[str, list[bool]] = {}
     for message in messages:
         if not isinstance(message, AssistantMessage):
             continue
         for call in message.tool_calls:
-            calls[call.id] = call.name == "artifact.read"
+            calls.setdefault(call.id, []).append(call.name == "artifact.read")
     return calls
 
 
-def _checkpoint_claims(messages: Sequence[Message]) -> dict[str, str]:
-    checkpoint_calls = {
-        call.id
-        for message in messages
-        if isinstance(message, AssistantMessage)
-        for call in message.tool_calls
-        if call.name == "task.checkpoint"
-    }
-    claims: dict[str, str] = {}
+def _checkpoint_claims(
+    messages: Sequence[Message],
+    *,
+    start_index: int = 0,
+) -> dict[str, str]:
+    checkpoint_calls: dict[str, list[bool]] = {}
     for message in messages:
-        if not isinstance(message, ToolResultMessage) or message.status != "ok":
+        if not isinstance(message, AssistantMessage):
             continue
-        if message.tool_call_id not in checkpoint_calls:
+        for call in message.tool_calls:
+            checkpoint_calls.setdefault(call.id, []).append(call.name == "task.checkpoint")
+    claims: dict[str, str] = {}
+    for message_index, message in enumerate(messages):
+        if not isinstance(message, ToolResultMessage):
+            continue
+        call_kinds = checkpoint_calls.get(message.tool_call_id)
+        is_checkpoint = call_kinds.pop(0) if call_kinds else False
+        if message_index < start_index or message.status != "ok" or not is_checkpoint:
             continue
         content = message.content
         if not isinstance(content, dict):
@@ -218,13 +231,15 @@ def _checkpoint_claims(messages: Sequence[Message]) -> dict[str, str]:
 
 def _artifact_observations(
     messages: Sequence[Message],
-    calls: dict[str, bool],
+    calls: dict[str, list[bool]],
 ) -> list[tuple[int, ArtifactObservation]]:
     observations: list[tuple[int, ArtifactObservation]] = []
     for message_index, message in enumerate(messages):
-        if not isinstance(message, ToolResultMessage) or message.status != "ok":
+        if not isinstance(message, ToolResultMessage):
             continue
-        if not calls.get(message.tool_call_id, False) or _is_receipt(message.content):
+        call_kinds = calls.get(message.tool_call_id)
+        is_artifact_read = call_kinds.pop(0) if call_kinds else False
+        if message.status != "ok" or not is_artifact_read or _is_receipt(message.content):
             continue
         try:
             result = ArtifactReadResult.model_validate(message.content)
@@ -364,7 +379,12 @@ def _rewrite_sizes(
     partition_key: str | None = None,
 ) -> dict[str, int]:
     if not isinstance(message, ToolResultMessage):
-        return {"raw_bytes": 0, "receipt_bytes": 0, "saved_bytes": 0}
+        return {
+            "message_index": observation.message_index,
+            "raw_bytes": 0,
+            "receipt_bytes": 0,
+            "saved_bytes": 0,
+        }
     raw_bytes = _serialized_size(message.model_dump(mode="json"))
     receipt = message.model_copy(
         update={
@@ -378,6 +398,7 @@ def _rewrite_sizes(
     )
     receipt_bytes = _serialized_size(receipt.model_dump(mode="json"))
     return {
+        "message_index": observation.message_index,
         "raw_bytes": raw_bytes,
         "receipt_bytes": receipt_bytes,
         "saved_bytes": max(0, raw_bytes - receipt_bytes),

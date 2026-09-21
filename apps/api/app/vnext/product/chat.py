@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 import io
 import json
 import zipfile
+from asyncio import Lock
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -19,10 +21,11 @@ from app.application.postgres_chat_repository import PostgresChatRepository
 from app.vnext.agent.events import AgentCancelled, AgentCompleted, AgentFailed, TextDelta
 from app.vnext.agent.runtime import AgentRuntime
 from app.vnext.agent.trace import AgentTraceCollector
-from app.vnext.llm.protocol import FinalMessage, Message
+from app.vnext.llm.protocol import FinalMessage, Message, UserMessage
 
 from .context import ConversationContextBuilder
 from .presentation import DotaVisualEntityEnricher, ProductVisualEntity
+from .session_history import SessionExecutionHistory
 from .trace_store import FailedRunTrace, TraceNotFoundError, TraceStore
 
 
@@ -64,6 +67,21 @@ class PreparedVNextChatTurn:
     replay: ChatDialogueTurnResult | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class _CompletedRequest:
+    query: str
+    final: FinalMessage
+    visual_entities: tuple[ProductVisualEntity, ...]
+
+
+@dataclass(slots=True)
+class _SessionState:
+    runtime: AgentRuntime
+    history: SessionExecutionHistory
+    lock: Lock
+    completed: dict[UUID, _CompletedRequest]
+
+
 class VNextChatService:
     """Compose durable dialogue with one request-bound AgentRuntime execution."""
 
@@ -85,6 +103,7 @@ class VNextChatService:
         self._trace_store = trace_store
         self._runtime_factory = runtime_factory
         self._session_runtimes: dict[UUID, AgentRuntime] = {}
+        self._sessions: dict[UUID, _SessionState] = {}
         self._trace_ttl_seconds = trace_ttl_seconds
 
     async def prepare_turn(
@@ -110,86 +129,127 @@ class VNextChatService:
                 history=[],
                 replay=replay,
         )
-        dialogue, _ = await self._repository.get_all_dialogue_turns(browser_id, session_id)
+        state = self._session_for(session_id)
+        if state.history.initialized:
+            history = state.history.effective_messages()
+            history.append(UserMessage(content=query))
+        else:
+            dialogue, _ = await self._repository.get_all_dialogue_turns(browser_id, session_id)
+            history = self._context_builder.build(dialogue, query)
         return PreparedVNextChatTurn(
             browser_id=browser_id,
             session_id=session_id,
             request_id=request_id,
             query=query,
-            history=self._context_builder.build(dialogue, query),
+            history=history,
         )
 
     async def stream_turn(
         self,
         prepared: PreparedVNextChatTurn,
     ) -> AsyncIterator[ProductChatDelta | ProductChatCompleted | ProductChatError]:
-        if prepared.replay is not None:
-            yield ProductChatCompleted(
-                content=prepared.replay.assistant_message,
-                turn_index=prepared.replay.turn_index,
-                catalog_visual_entities=[
-                    ProductVisualEntity.model_validate(entity)
-                    for entity in prepared.replay.catalog_visual_entities
-                ],
-            )
-            return
+        state = self._session_for(prepared.session_id)
+        async with state.lock:
+            try:
+                replay = await self._repository.lookup_dialogue_request(
+                    prepared.browser_id,
+                    prepared.session_id,
+                    prepared.request_id,
+                    prepared.query,
+                )
+            except Exception as exc:
+                yield ProductChatError(
+                    error_code=getattr(exc, "code", "chat_store_error"), reason=str(exc)
+                )
+                return
+            if replay is not None:
+                yield self._completed_event(replay)
+                return
 
-        final: FinalMessage | None = None
-        trace_collector = AgentTraceCollector() if self._trace_store is not None else None
-        try:
-            runtime = self._runtime_for(prepared.session_id)
-            stream = (
-                runtime.run_stream(prepared.history, trace_collector=trace_collector)
-                if trace_collector is not None
-                else runtime.run_stream(prepared.history)
-            )
-            async for event in stream:
-                if isinstance(event, TextDelta):
-                    yield ProductChatDelta(text=event.text)
-                elif isinstance(event, AgentCompleted):
-                    final = event.final
-                elif isinstance(event, (AgentCancelled, AgentFailed)):
-                    trace_ref = None
-                    if isinstance(event, AgentFailed) and trace_collector is not None:
-                        trace_ref = await self._save_failed_trace(prepared, trace_collector)
+            cached = state.completed.get(prepared.request_id)
+            if cached is not None:
+                if cached.query != prepared.query:
                     yield ProductChatError(
-                        error_code=event.error_code,
-                        reason=event.error_message,
-                        trace=trace_ref,
+                        error_code="idempotency_conflict",
+                        reason="request_id has already been used with different inputs",
                     )
                     return
-        except Exception as exc:
-            error_code = getattr(exc, "code", "agent_runtime_error")
-            yield ProductChatError(error_code=error_code, reason=str(exc))
-            return
+                async for event in self._commit_cached(prepared, cached):
+                    yield event
+                return
 
-        if final is None:
-            yield ProductChatError(
-                error_code="agent_runtime_error",
-                reason="agent stream ended without a final message",
+            try:
+                initial: list[Message] | None = None
+                if not state.history.initialized:
+                    dialogue, _ = await self._repository.get_all_dialogue_turns(
+                        prepared.browser_id, prepared.session_id
+                    )
+                    initial = self._context_builder.build(dialogue, prepared.query)
+                messages = state.history.begin_request(
+                    prepared.request_id,
+                    prepared.query,
+                    initial_messages=initial,
+                )
+                reset = getattr(state.runtime, "reset_request_state", None)
+                if callable(reset):
+                    reset()
+                trace_collector = (
+                    AgentTraceCollector() if self._trace_store is not None else None
+                )
+                final: FinalMessage | None = None
+                stream = self._runtime_stream(
+                    state.runtime,
+                    messages,
+                    prepared.request_id,
+                    state.history,
+                    trace_collector,
+                )
+                async for event in stream:
+                    if isinstance(event, TextDelta):
+                        yield ProductChatDelta(text=event.text)
+                    elif isinstance(event, AgentCompleted):
+                        final = event.final
+                    elif isinstance(event, (AgentCancelled, AgentFailed)):
+                        trace_ref = None
+                        if isinstance(event, AgentFailed) and trace_collector is not None:
+                            trace_ref = await self._save_failed_trace(prepared, trace_collector)
+                        yield ProductChatError(
+                            error_code=event.error_code,
+                            reason=event.error_message,
+                            trace=trace_ref,
+                        )
+                        return
+            except Exception as exc:
+                yield ProductChatError(
+                    error_code=getattr(exc, "code", "agent_runtime_error"), reason=str(exc)
+                )
+                return
+
+            if final is None:
+                yield ProductChatError(
+                    error_code="agent_runtime_error",
+                    reason="agent stream ended without a final message",
+                )
+                return
+
+            visual_entities = tuple(self._visual_entity_enricher.match(final.content))
+            state.completed[prepared.request_id] = _CompletedRequest(
+                query=prepared.query,
+                final=final,
+                visual_entities=visual_entities,
             )
-            return
-        visual_entities = self._visual_entity_enricher.match(final.content)
-        try:
-            committed = await self._repository.append_dialogue_turn(
-                browser_id=prepared.browser_id,
-                session_id=prepared.session_id,
-                request_id=prepared.request_id,
-                user_query=prepared.query,
-                assistant_message=final.content,
-                catalog_visual_entities=[entity.model_dump() for entity in visual_entities],
-            )
-        except Exception as exc:
-            yield ProductChatError(error_code="chat_store_error", reason=str(exc))
-            return
-        yield ProductChatCompleted(
-            content=committed.assistant_message,
-            turn_index=committed.turn_index,
-            catalog_visual_entities=[
-                ProductVisualEntity.model_validate(entity)
-                for entity in committed.catalog_visual_entities
-            ],
-        )
+            if not any(
+                record.request_id == prepared.request_id
+                and record.kind == "delivery_answer"
+                for record in state.history.records
+            ):
+                state.history.record_delivery(prepared.request_id, final)
+            effective = state.history.effective_messages()
+            if not effective or effective[-1] != final:
+                state.history.set_effective([*effective, final])
+
+            async for event in self._commit_cached(prepared, state.completed[prepared.request_id]):
+                yield event
 
     async def download_trace_bundle(self, *, browser_id: str, trace_id: str) -> bytes:
         if self._trace_store is None:
@@ -246,10 +306,81 @@ class VNextChatService:
             self._session_runtimes[session_id] = runtime
         return runtime
 
+    def _session_for(self, session_id: UUID) -> _SessionState:
+        state = self._sessions.get(session_id)
+        if state is None:
+            state = _SessionState(
+                runtime=self._runtime_for(session_id),
+                history=SessionExecutionHistory(),
+                lock=Lock(),
+                completed={},
+            )
+            self._sessions[session_id] = state
+        return state
+
+    @staticmethod
+    def _completed_event(replay: ChatDialogueTurnResult) -> ProductChatCompleted:
+        return ProductChatCompleted(
+            content=replay.assistant_message,
+            turn_index=replay.turn_index,
+            catalog_visual_entities=[
+                ProductVisualEntity.model_validate(entity)
+                for entity in replay.catalog_visual_entities
+            ],
+        )
+
+    async def _commit_cached(
+        self,
+        prepared: PreparedVNextChatTurn,
+        cached: _CompletedRequest,
+    ) -> AsyncIterator[ProductChatCompleted | ProductChatError]:
+        try:
+            committed = await self._repository.append_dialogue_turn(
+                browser_id=prepared.browser_id,
+                session_id=prepared.session_id,
+                request_id=prepared.request_id,
+                user_query=cached.query,
+                assistant_message=cached.final.content,
+                catalog_visual_entities=[entity.model_dump() for entity in cached.visual_entities],
+            )
+        except Exception as exc:
+            yield ProductChatError(error_code="chat_store_error", reason=str(exc))
+            return
+        yield ProductChatCompleted(
+            content=committed.assistant_message,
+            turn_index=committed.turn_index,
+            catalog_visual_entities=[
+                ProductVisualEntity.model_validate(entity)
+                for entity in committed.catalog_visual_entities
+            ],
+        )
+
+    @staticmethod
+    def _runtime_stream(
+        runtime: AgentRuntime,
+        messages: list[Message],
+        request_id: UUID,
+        history: SessionExecutionHistory,
+        trace_collector: AgentTraceCollector | None,
+    ) -> AsyncIterator[object]:
+        kwargs: dict[str, object] = {}
+        try:
+            parameters = inspect.signature(runtime.run_stream).parameters
+        except (TypeError, ValueError):
+            parameters = {}
+        if "execution_history" in parameters:
+            kwargs["execution_history"] = history
+        if "request_id" in parameters:
+            kwargs["request_id"] = request_id
+        if trace_collector is not None and "trace_collector" in parameters:
+            kwargs["trace_collector"] = trace_collector
+        return runtime.run_stream(messages, **kwargs)  # type: ignore[return-value, arg-type]
+
     def discard_session(self, session_id: UUID) -> None:
         """Drop temporary tool responses when the durable chat session is deleted."""
 
         self._session_runtimes.pop(session_id, None)
+        self._sessions.pop(session_id, None)
 
 
 def _browser_hash(browser_id: str) -> str:

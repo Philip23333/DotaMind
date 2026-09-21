@@ -234,23 +234,22 @@ def _sum_serialized_bytes(values: Sequence[Any]) -> int:
 def _artifact_observation_usage(
     messages: Sequence[Message],
 ) -> ArtifactObservationsUsage:
-    artifact_read_call_ids = {
-        call.id
-        for message in messages
-        if isinstance(message, AssistantMessage)
-        for call in message.tool_calls
-        if call.name == "artifact.read"
-    }
+    artifact_read_call_ids: dict[str, list[bool]] = {}
+    for message in messages:
+        if not isinstance(message, AssistantMessage):
+            continue
+        for call in message.tool_calls:
+            artifact_read_call_ids.setdefault(call.id, []).append(call.name == "artifact.read")
     active_raw_count = 0
     active_raw_bytes = 0
     receipt_count = 0
     receipt_bytes = 0
     for message in messages:
-        if (
-            not isinstance(message, ToolResultMessage)
-            or message.status != "ok"
-            or message.tool_call_id not in artifact_read_call_ids
-        ):
+        if not isinstance(message, ToolResultMessage):
+            continue
+        call_kinds = artifact_read_call_ids.get(message.tool_call_id)
+        is_artifact_read = call_kinds.pop(0) if call_kinds else False
+        if message.status != "ok" or not is_artifact_read:
             continue
         serialized_bytes = _serialized_size(_model_payload(message))
         if _is_receipt(message.content):

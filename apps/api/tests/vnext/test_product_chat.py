@@ -278,7 +278,10 @@ def test_product_chat_uses_the_injected_context_builder() -> None:
     )
 
     assert context_builder.received == (repository.dialogue, "query")
-    assert runtime.messages == [UserMessage(content="context-sentinel")]
+    assert runtime.messages == [
+        UserMessage(content="context-sentinel"),
+        UserMessage(content="query"),
+    ]
 
 
 def test_product_chat_bounds_runtime_history_without_mutating_durable_dialogue() -> None:

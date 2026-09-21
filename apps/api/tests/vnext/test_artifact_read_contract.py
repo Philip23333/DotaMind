@@ -138,13 +138,11 @@ def test_task_key_is_consumed_by_artifact_tool_without_polluting_reader_api() ->
     reader.read.assert_awaited_once_with("artifact:test", "rows", offset=0, limit=3)
 
 
-def test_completed_task_read_is_rejected_without_state_or_reader_side_effects() -> None:
+def test_completed_task_read_remains_allowed_for_follow_up_evidence() -> None:
     async def exercise():
         store = SessionArtifactStore()
         ref = await store.put({"rows": [{"id": 1}]})
         coordinator = _completed_partition_coordinator()
-        before_plan = coordinator.plan_snapshot()
-        before_lease = coordinator.active_evidence_lease()
         registry = ToolRegistry()
         reader = AsyncMock(wraps=ArtifactReader(store))
         register_artifact_tools(
@@ -156,20 +154,14 @@ def test_completed_task_read_is_rejected_without_state_or_reader_side_effects() 
         result = await registry.execute(
             _call({"ref": ref, "mode": "read", "path": "rows", "task_key": "A"})
         )
-        return result, coordinator, before_plan, before_lease, reader
+        return result, coordinator, ref, reader
 
-    result, coordinator, before_plan, before_lease, reader = asyncio.run(exercise())
+    result, coordinator, ref, reader = asyncio.run(exercise())
 
-    assert result.status == "error"
-    assert result.error is not None
-    assert result.error.code == "task_already_completed"
-    assert result.error.message == (
-        "task partition is already completed and cannot accept new evidence"
-    )
-    assert result.error.details == {"task_key": "A", "state": "completed"}
-    assert coordinator.plan_snapshot() == before_plan
-    assert coordinator.active_evidence_lease() == before_lease
-    reader.read.assert_not_awaited()
+    assert result.status == "ok"
+    assert result.content["value"] == [{"id": 1}]
+    assert coordinator.plan_snapshot() is not None
+    reader.read.assert_awaited_once_with(ref, "rows", offset=None, limit=None)
 
 
 def test_pending_and_future_task_reads_remain_allowed() -> None:

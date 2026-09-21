@@ -107,6 +107,9 @@ class TaskStateStore:
     def snapshot(self) -> dict[str, TaskCheckpoint]:
         return {key: self._checkpoints[key] for key in sorted(self._checkpoints)}
 
+    def clear(self) -> None:
+        self._checkpoints.clear()
+
 
 class TaskStateCoordinator:
     """Coordinate ephemeral checkpoint state with the current raw observations."""
@@ -119,11 +122,29 @@ class TaskStateCoordinator:
         self._active_evidence_leases: dict[str, EvidenceLease] = {}
         self._closed_evidence_leases: dict[str, EvidenceLease] = {}
         self._last_partition_release: PartitionEvidenceRelease | None = None
+        self._request_start = 0
 
-    def refresh(self, messages: Sequence[Message]) -> None:
+    def reset(self) -> None:
+        """Clear request-local state while preserving handler references."""
+
+        self.plan = None
+        self.store.clear()
+        self._active_observations.clear()
+        self._claimed_source_tool_call_ids.clear()
+        self._active_evidence_leases.clear()
+        self._closed_evidence_leases.clear()
+        self._last_partition_release = None
+        self._request_start = 0
+
+    def set_request_scope(self, message_index: int) -> None:
+        self._request_start = max(0, message_index)
+
+    def refresh(self, messages: Sequence[Message], *, start_index: int | None = None) -> None:
+        effective_start = self._request_start if start_index is None else max(0, start_index)
         observations = collect_active_artifact_observations(messages)
         self._active_observations = {
             observation.tool_call_id: observation for observation in observations
+            if observation.message_index >= effective_start
             if observation.tool_call_id not in self._claimed_source_tool_call_ids
         }
 

@@ -222,6 +222,7 @@ class AnswerContextBuilder:
         task_state_coordinator: TaskStateCoordinator | None,
         resolution: AnswerResolution,
         projection_mode: AnswerProjectionMode = AnswerProjectionMode.PRIMARY,
+        effective_history_embedded: bool = False,
     ) -> AnswerContext:
         payload = (
             task_state_coordinator.context_payload()
@@ -246,6 +247,7 @@ class AnswerContextBuilder:
             resolution.mode is AnswerResolutionMode.PARTIAL
             or projection_mode is AnswerProjectionMode.DEGRADED
         )
+        omit_history_evidence = restricted or effective_history_embedded
         return AnswerContext(
             execution_reason=outcome.reason,
             execution_steps=outcome.steps,
@@ -253,7 +255,7 @@ class AnswerContextBuilder:
             task_state=task_state,
             active_artifact_evidence=(
                 []
-                if restricted
+                if omit_history_evidence
                 else [
                     _artifact_evidence(observation)
                     for observation in collect_active_artifact_observations(
@@ -261,7 +263,7 @@ class AnswerContextBuilder:
                     )
                 ]
             ),
-            tool_evidence=[] if restricted else _tool_evidence(execution_messages),
+            tool_evidence=[] if omit_history_evidence else _tool_evidence(execution_messages),
         )
 
 
@@ -294,23 +296,24 @@ def _artifact_evidence(observation: ArtifactObservation) -> dict[str, Any]:
 
 
 def _tool_evidence(messages: Sequence[Message]) -> list[dict[str, Any]]:
-    tool_names = {
-        call.id: call.name
-        for message in messages
-        if isinstance(message, AssistantMessage)
-        for call in message.tool_calls
-    }
+    tool_names: dict[str, list[str]] = {}
+    for message in messages:
+        if isinstance(message, AssistantMessage):
+            for call in message.tool_calls:
+                tool_names.setdefault(call.id, []).append(call.name)
     excluded = {"task.plan", "task.checkpoint", "artifact.read"}
     evidence: list[dict[str, Any]] = []
     for message in messages:
-        if (
-            not isinstance(message, ToolResultMessage)
-            or message.status != "ok"
-            or _is_receipt(message.content)
-        ):
+        if not isinstance(message, ToolResultMessage):
             continue
-        tool_name = tool_names.get(message.tool_call_id)
-        if tool_name is None or tool_name in excluded:
+        names = tool_names.get(message.tool_call_id)
+        tool_name = names.pop(0) if names else None
+        if (
+            message.status != "ok"
+            or _is_receipt(message.content)
+            or tool_name is None
+            or tool_name in excluded
+        ):
             continue
         evidence.append(
             {

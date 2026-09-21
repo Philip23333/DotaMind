@@ -135,6 +135,12 @@ class AgentRuntime:
         self.transcript_rewriter = transcript_rewriter
         self.task_state_coordinator = task_state_coordinator
 
+    def reset_request_state(self) -> None:
+        """Reset stateful execution helpers before a new request."""
+
+        if self.task_state_coordinator is not None:
+            self.task_state_coordinator.reset()
+
     async def run(
         self,
         messages: Sequence[Message],
@@ -142,6 +148,8 @@ class AgentRuntime:
         cancellation_token: CancellationToken | None = None,
         event_sink: EventSink | None = None,
         trace_collector: AgentTraceCollector | None = None,
+        execution_history: Any | None = None,
+        request_id: Any | None = None,
     ) -> FinalMessage:
         """Run to a final message, while ``run_stream`` exposes every event."""
 
@@ -151,6 +159,8 @@ class AgentRuntime:
             cancellation_token=cancellation_token,
             event_sink=event_sink,
             trace_collector=trace_collector,
+            execution_history=execution_history,
+            request_id=request_id,
         ):
             if isinstance(event, AgentCompleted):
                 final = event.final
@@ -165,14 +175,19 @@ class AgentRuntime:
         cancellation_token: CancellationToken | None = None,
         event_sink: EventSink | None = None,
         trace_collector: AgentTraceCollector | None = None,
+        execution_history: Any | None = None,
+        request_id: Any | None = None,
     ) -> AsyncIterator[AgentEvent]:
         """Yield ephemeral runtime events in execution order."""
 
+        if execution_history is not None:
+            self.reset_request_state()
         token = cancellation_token or CancellationToken()
         sink = event_sink
         execution_deadline = _Deadline(self.limits.deadline_seconds)
         materialization_budget = MaterializationBudget(
-            self.limits.max_materialized_context_bytes
+            self.limits.max_materialized_context_bytes,
+            initial_entries=_initial_materialization_entries(messages, self.tools),
         )
         started_at = execution_deadline.started
         step = 0
@@ -190,6 +205,18 @@ class AgentRuntime:
             if self.system_instruction is not None:
                 request_messages.insert(0, SystemMessage(content=self.system_instruction))
             request_messages = ModelRequest(messages=request_messages, tools=[]).messages
+            request_start = len(messages) + (1 if self.system_instruction is not None else 0)
+            if self.transcript_rewriter is not None:
+                set_scope = getattr(self.transcript_rewriter, "set_request_scope", None)
+                if callable(set_scope):
+                    set_scope(request_start)
+            if self.task_state_coordinator is not None:
+                self.task_state_coordinator.set_request_scope(request_start)
+            if execution_history is not None:
+                _history_set_effective(
+                    execution_history,
+                    _persistent_history_messages(request_messages, self.system_instruction),
+                )
             if trace_collector is not None:
                 trace_collector.begin(
                     request_messages,
@@ -265,6 +292,16 @@ class AgentRuntime:
                     outcome = ExecutionOutcome(ExecutionStopReason.DEADLINE, step)
                     break
                 assistant = response.message
+                if execution_history is not None and request_id is not None:
+                    execution_history.record(
+                        request_id,
+                        assistant,
+                        kind=(
+                            "execution_final"
+                            if isinstance(assistant, FinalMessage)
+                            else "assistant_tool_call"
+                        ),
+                    )
                 if trace_collector is not None:
                     trace_collector.model_response(step, response, duration)
                 yield await self._publish(
@@ -303,13 +340,26 @@ class AgentRuntime:
                     outcome = ExecutionOutcome(ExecutionStopReason.DEADLINE, step)
                     break
                 candidate_messages = [*request_messages, assistant, *results]
+                if execution_history is not None and request_id is not None:
+                    execution_history.record_tool_results(request_id, results)
                 if self.transcript_rewriter is None:
                     request_messages = candidate_messages
                 else:
                     rewrite = self.transcript_rewriter.rewrite(candidate_messages)
                     request_messages = rewrite.messages
                     for event in rewrite.events:
-                        released_bytes = materialization_budget.release(event.tool_call_id)
+                        event_index = event.metadata.get("message_index")
+                        release_current = not isinstance(event_index, int) or (
+                            event_index >= request_start
+                        )
+                        released_bytes = (
+                            materialization_budget.release(
+                                event.tool_call_id,
+                                entry_key=f"current:{event.tool_call_id}",
+                            )
+                            if release_current
+                            else 0
+                        )
                         if trace_collector is not None:
                             trace_collector.transcript_rewrite(step, event)
                             if released_bytes > 0:
@@ -321,6 +371,11 @@ class AgentRuntime:
                                     active_after_bytes=materialization_budget.active_bytes,
                                     limit_bytes=materialization_budget.limit_bytes,
                                 )
+                if execution_history is not None:
+                    _history_set_effective(
+                        execution_history,
+                        _persistent_history_messages(request_messages, self.system_instruction),
+                    )
                 if (
                     self.task_state_coordinator is not None
                     and self.task_state_coordinator.plan_snapshot() is not None
@@ -351,6 +406,14 @@ class AgentRuntime:
             answer_step = step + 1
             if resolution.mode is AnswerResolutionMode.FAILURE:
                 final = build_failure_answer(resolution, outcome)
+                if execution_history is not None and request_id is not None:
+                    _record_delivery(
+                        execution_history,
+                        request_id,
+                        final,
+                        request_messages,
+                        self.system_instruction,
+                    )
                 if trace_collector is not None:
                     trace_collector.terminal(
                         status="completed",
@@ -374,10 +437,11 @@ class AgentRuntime:
                 task_state_coordinator=self.task_state_coordinator,
                 resolution=resolution,
                 projection_mode=AnswerProjectionMode.PRIMARY,
+                effective_history_embedded=True,
             )
             answer_request = _build_answer_request(
                 instruction=ANSWER_INSTRUCTION,
-                messages=messages,
+                messages=request_messages,
                 context=primary_context,
                 step=answer_step,
             )
@@ -450,10 +514,11 @@ class AgentRuntime:
                     task_state_coordinator=self.task_state_coordinator,
                     resolution=resolution,
                     projection_mode=AnswerProjectionMode.DEGRADED,
+                    effective_history_embedded=True,
                 )
                 degraded_request = _build_answer_request(
                     instruction=DEGRADED_ANSWER_INSTRUCTION,
-                    messages=messages,
+                    messages=request_messages,
                     context=degraded_context,
                     step=degraded_step,
                 )
@@ -529,6 +594,14 @@ class AgentRuntime:
                         trace_collector.terminal(
                             status="completed", error_code=None, error_message=None
                         )
+                    if execution_history is not None and request_id is not None:
+                        _record_delivery(
+                            execution_history,
+                            request_id,
+                            degraded_answer,
+                            request_messages,
+                            self.system_instruction,
+                        )
                     yield await self._publish(
                         AgentCompleted(
                             step=degraded_step,
@@ -553,6 +626,14 @@ class AgentRuntime:
                         )
                         trace_collector.answer_fallback("deterministic")
                     final = build_answer_fallback(resolution, outcome)
+                    if execution_history is not None and request_id is not None:
+                        _record_delivery(
+                            execution_history,
+                            request_id,
+                            final,
+                            request_messages,
+                            self.system_instruction,
+                        )
                     if trace_collector is not None:
                         trace_collector.terminal(
                             status="completed", error_code=None, error_message=None
@@ -579,6 +660,14 @@ class AgentRuntime:
                 if trace_collector is not None:
                     trace_collector.terminal(
                         status="completed", error_code=None, error_message=None
+                    )
+                if execution_history is not None and request_id is not None:
+                    _record_delivery(
+                        execution_history,
+                        request_id,
+                        answer,
+                        request_messages,
+                        self.system_instruction,
                     )
                 yield await self._publish(
                     AgentCompleted(
@@ -769,7 +858,11 @@ class AgentRuntime:
                 )
             decisions = {}
             for _, _, item, _, raw_bytes in sorted(candidates, key=lambda value: value[0]):
-                decision = materialization_budget.admit(item.id, raw_bytes=raw_bytes)
+                decision = materialization_budget.admit(
+                    item.id,
+                    raw_bytes=raw_bytes,
+                    entry_key=f"current:{item.id}",
+                )
                 decisions[item.id] = decision
                 if trace_collector is not None:
                     trace_collector.materialization_admission(
@@ -962,6 +1055,86 @@ def _append_system_instruction(
     return instruction_messages
 
 
+def _history_set_effective(history: Any, messages: Sequence[Message]) -> None:
+    setter = getattr(history, "set_effective", None)
+    if callable(setter):
+        setter(list(messages))
+
+
+def _persistent_history_messages(
+    messages: Sequence[Message],
+    system_instruction: str | None,
+) -> list[Message]:
+    if system_instruction is None:
+        return [message.model_copy(deep=True) for message in messages]
+    return [
+        message.model_copy(deep=True)
+        for message in messages
+        if not (
+            isinstance(message, SystemMessage)
+            and message.content == system_instruction
+        )
+    ]
+
+
+def _record_delivery(
+    history: Any,
+    request_id: Any,
+    final: FinalMessage,
+    request_messages: Sequence[Message],
+    system_instruction: str | None,
+) -> None:
+    record_delivery = getattr(history, "record_delivery", None)
+    if callable(record_delivery):
+        record_delivery(request_id, final)
+    _history_set_effective(
+        history,
+        [*_persistent_history_messages(request_messages, system_instruction), final],
+    )
+
+
+def _initial_materialization_entries(
+    messages: Sequence[Message],
+    tools: ToolRegistry,
+) -> list[tuple[str, int]]:
+    """Seed the request budget with raw heavyweight results already carried in history."""
+
+    tool_names: dict[str, list[str]] = {}
+    for message in messages:
+        if isinstance(message, AssistantMessage):
+            for call in message.tool_calls:
+                tool_names.setdefault(call.id, []).append(call.name)
+
+    entries: list[tuple[str, int]] = []
+    for index, message in enumerate(messages):
+        if not isinstance(message, ToolResultMessage) or message.status != "ok":
+            continue
+        names = tool_names.get(message.tool_call_id)
+        tool_name = names.pop(0) if names else None
+        if tool_name is None:
+            continue
+        try:
+            materializing = tools.get(tool_name).context_effect is ToolContextEffect.MATERIALIZING
+        except KeyError:
+            materializing = False
+        if not materializing or _is_receipt_content(message.content):
+            continue
+        entries.append(
+            (
+                f"history:{index}:{message.tool_call_id}",
+                _serialized_size(message.model_dump(mode="json")),
+            )
+        )
+    return entries
+
+
+def _is_receipt_content(content: Any) -> bool:
+    if not isinstance(content, dict):
+        return False
+    marker = content.get("_artifact_observation")
+    return isinstance(marker, dict) and marker.get("state") == "receipt_only"
+
+
 def _build_answer_request(
     *,
     instruction: str,
@@ -987,14 +1160,9 @@ def _answer_attempt_status(error: AgentRuntimeError) -> str:
 
 
 def _answer_conversation(messages: Sequence[Message]) -> list[Message]:
-    """Keep the caller conversation while excluding execution tool history."""
+    """Keep the full effective execution transcript for the answer model."""
 
-    return [
-        message
-        for message in messages
-        if not isinstance(message, ToolResultMessage)
-        and not (isinstance(message, AssistantMessage) and message.tool_calls)
-    ]
+    return [message.model_copy(deep=True) for message in messages]
 
 
 def _materialization_priority(

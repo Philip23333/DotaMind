@@ -19,11 +19,16 @@ class MaterializationDecision:
 class MaterializationBudget:
     """Track the active serialized bytes admitted during one runtime invocation."""
 
-    def __init__(self, limit_bytes: int) -> None:
+    def __init__(
+        self,
+        limit_bytes: int,
+        *,
+        initial_entries: list[tuple[str, int]] | None = None,
+    ) -> None:
         if limit_bytes < 1:
             raise ValueError("materialization budget limit must be positive")
         self._limit_bytes = limit_bytes
-        self._active: dict[str, int] = {}
+        self._active: dict[str, int] = dict(initial_entries or [])
 
     @property
     def limit_bytes(self) -> int:
@@ -37,7 +42,13 @@ class MaterializationBudget:
     def active_count(self) -> int:
         return len(self._active)
 
-    def admit(self, tool_call_id: str, *, raw_bytes: int) -> MaterializationDecision:
+    def admit(
+        self,
+        tool_call_id: str,
+        *,
+        raw_bytes: int,
+        entry_key: str | None = None,
+    ) -> MaterializationDecision:
         if not tool_call_id:
             raise ValueError("materialization tool call ID must not be empty")
         if raw_bytes < 0:
@@ -45,7 +56,7 @@ class MaterializationBudget:
         before = self.active_bytes
         admitted = before + raw_bytes <= self._limit_bytes
         if admitted:
-            self._active[tool_call_id] = raw_bytes
+            self._active[entry_key or tool_call_id] = raw_bytes
         return MaterializationDecision(
             tool_call_id=tool_call_id,
             raw_bytes=raw_bytes,
@@ -54,8 +65,8 @@ class MaterializationBudget:
             active_after_bytes=self.active_bytes,
         )
 
-    def release(self, tool_call_id: str) -> int:
-        return self._active.pop(tool_call_id, 0)
+    def release(self, tool_call_id: str, *, entry_key: str | None = None) -> int:
+        return self._active.pop(entry_key or tool_call_id, 0)
 
 
 __all__ = ["MaterializationBudget", "MaterializationDecision"]
