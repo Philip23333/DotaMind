@@ -83,11 +83,13 @@ def _run(
     registry: ToolRegistry | None = None,
     trace_collector: AgentTraceCollector | None = None,
     messages: list[Message] | None = None,
+    system_instruction: str | None = None,
 ) -> FinalMessage:
     runtime = AgentRuntime(
         model,  # type: ignore[arg-type]
         registry or ToolRegistry(),
         limits=AgentLimits(deadline_seconds=2),
+        system_instruction=system_instruction,
     )
     run_messages = messages
     if run_messages is None:
@@ -399,3 +401,34 @@ def test_projection_helper_deep_copies_existing_system_message() -> None:
     assert projected != messages
     assert messages[0].content == "caller-owned system context"
     assert projected[0].content.startswith("caller-owned system context")
+
+
+@pytest.mark.parametrize("system_instruction", [None, "base instruction"])
+def test_projection_does_not_persist_background_with_or_without_base_system_instruction(
+    system_instruction: str | None,
+) -> None:
+    history, request_id = _history(summary="stable summary", locator=True)
+    before_effective = history.effective_messages()
+    before_records = history.records
+    model = ScriptedModelClient(
+        [ModelResponse.from_final("execution"), ModelResponse.from_final("answer")]
+    )
+
+    _run(
+        model,
+        history=history,
+        request_id=request_id,
+        system_instruction=system_instruction,
+    )
+
+    assert history.effective_messages() == [*before_effective, FinalMessage(content="answer")]
+    assert history.records[: len(before_records)] == before_records
+    assert history.summary == "stable summary"
+    assert all(
+        not (
+            isinstance(record.message, SystemMessage)
+            and "Session context data:" in record.message.content
+        )
+        for record in history.records
+    )
+    assert all(len(_context_system_messages(request)) == 1 for request in model.requests)

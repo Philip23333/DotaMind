@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass
+from typing import Any
 
 from app.vnext.llm.protocol import Message
 
@@ -22,4 +24,16 @@ class HistoryCompactionRange:
     retained_bytes: int
 
 
-__all__ = ["HistoryCompactionRange"]
+@dataclass(frozen=True, slots=True)
+class CompactionSummaryResult:
+    """One validated summary candidate returned by a maintenance call."""
+
+    summary: str
+    usage: dict[str, Any]
+    duration_seconds: float
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "usage", deepcopy(self.usage))
+
+
+__all__ = ["CompactionSummaryResult", "HistoryCompactionRange"]

@@ -6,6 +6,7 @@ import asyncio
 import inspect
 import json
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
+from copy import deepcopy
 from time import monotonic
 from typing import Any
 
@@ -40,6 +41,11 @@ from app.vnext.agent.events import (
     ToolCompleted,
     ToolFailed,
     ToolStarted,
+)
+from app.vnext.agent.evidence_summary import CompactionSummaryResult
+from app.vnext.agent.evidence_summary_lifecycle import (
+    CompactionSummaryError,
+    validate_compaction_response,
 )
 from app.vnext.agent.instructions import ANSWER_INSTRUCTION, DEGRADED_ANSWER_INSTRUCTION
 from app.vnext.agent.limits import AgentLimits
@@ -807,6 +813,105 @@ class AgentRuntime:
                 cause=exc,
             ) from exc
 
+    async def _generate_compaction_summary(
+        self,
+        request: ModelRequest,
+        *,
+        token: CancellationToken,
+        deadline: _Deadline,
+        step: int,
+        max_summary_bytes: int,
+        trace_collector: AgentTraceCollector | None,
+    ) -> CompactionSummaryResult:
+        """Generate one validated summary candidate without committing it."""
+
+        started = monotonic()
+        response: ModelResponse | None = None
+        usage: dict[str, Any] = {}
+        try:
+            self._check_controls(token, deadline)
+            _validate_compaction_call(request, max_summary_bytes)
+            response, _, _ = await self._invoke_model(
+                request,
+                token=token,
+                deadline=deadline,
+                step=step,
+                trace_collector=None,
+                publish_text=False,
+            )
+            usage = deepcopy(response.usage)
+            self._check_controls(token, deadline)
+            summary = validate_compaction_response(
+                response,
+                max_summary_bytes=max_summary_bytes,
+            )
+            self._check_controls(token, deadline)
+            duration_seconds = max(0.0, monotonic() - started)
+            result = CompactionSummaryResult(
+                summary=summary,
+                usage=usage,
+                duration_seconds=duration_seconds,
+            )
+            if trace_collector is not None:
+                trace_collector.compaction_call(
+                    step=step,
+                    status="generated",
+                    duration_seconds=duration_seconds,
+                    usage=result.usage,
+                    error_code=None,
+                )
+            return result
+        except AgentCancelledError as exc:
+            self._record_compaction_call(
+                trace_collector,
+                step=step,
+                status="cancelled",
+                started=started,
+                usage=usage if response is not None else {},
+                error_code=exc.code,
+            )
+            raise
+        except AgentDeadlineExceeded as exc:
+            self._record_compaction_call(
+                trace_collector,
+                step=step,
+                status="deadline_exceeded",
+                started=started,
+                usage=usage if response is not None else {},
+                error_code=exc.code,
+            )
+            raise
+        except Exception as exc:
+            self._record_compaction_call(
+                trace_collector,
+                step=step,
+                status="failed",
+                started=started,
+                usage=usage if response is not None else {},
+                error_code=getattr(exc, "code", None),
+            )
+            raise
+
+    @staticmethod
+    def _record_compaction_call(
+        trace_collector: AgentTraceCollector | None,
+        *,
+        step: int,
+        status: str,
+        started: float,
+        usage: dict[str, Any],
+        error_code: str | None,
+    ) -> None:
+        if trace_collector is None:
+            return
+        trace_collector.compaction_call(
+            step=step,
+            status=status,
+            duration_seconds=max(0.0, monotonic() - started),
+            usage=usage,
+            error_code=error_code,
+        )
+
     async def _execute_tools_stream(
         self,
         calls: list[ToolCall],
@@ -1070,6 +1175,18 @@ def _append_system_instruction(
             return instruction_messages
     instruction_messages.insert(0, SystemMessage(content=instruction))
     return instruction_messages
+
+
+def _validate_compaction_call(request: ModelRequest, max_summary_bytes: int) -> None:
+    if type(max_summary_bytes) is not int or max_summary_bytes <= 0:
+        raise CompactionSummaryError("invalid_summary_budget")
+    if (
+        request.tools
+        or request.step is not None
+        or request.max_output_tokens is None
+        or request.metadata.get("purpose") != "context_compaction"
+    ):
+        raise ModelProtocolError("invalid compaction summary request")
 
 
 def _project_session_context(

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
+from copy import deepcopy
 from time import monotonic
 from typing import Any
 
@@ -258,6 +259,25 @@ class AgentTraceCollector:
 
     def answer_fallback(self, kind: str) -> None:
         self._trace["answer_fallback"] = kind
+
+    def compaction_call(
+        self,
+        *,
+        step: int,
+        status: str,
+        duration_seconds: float,
+        usage: dict[str, Any],
+        error_code: str | None,
+    ) -> None:
+        self._trace.setdefault("compaction_calls", []).append(
+            {
+                "step": step,
+                "status": status,
+                "duration_seconds": duration_seconds,
+                "usage": deepcopy(usage),
+                "error_code": error_code,
+            }
+        )
 
     def snapshot(self) -> dict[str, Any]:
         return self._trace.copy()
