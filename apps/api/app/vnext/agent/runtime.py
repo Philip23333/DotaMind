@@ -810,6 +810,7 @@ class AgentRuntime:
             result = await self.tools.execute(item, timeout=self._tool_timeout(item, deadline))
             if execution_history is not None and request_id is not None:
                 execution_history.record(request_id, result, kind="tool_result")
+                execution_history.remember_artifact_locators(item, result)
             return result
 
         index = 0

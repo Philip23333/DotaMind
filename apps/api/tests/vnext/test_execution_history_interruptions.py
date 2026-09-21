@@ -10,6 +10,11 @@ from app.vnext.agent.errors import AgentCancelledError
 from app.vnext.agent.events import ToolCompleted
 from app.vnext.agent.limits import AgentLimits
 from app.vnext.agent.runtime import AgentRuntime, CancellationToken
+from app.vnext.artifacts import (
+    ArtifactBackedToolResultProcessor,
+    SessionArtifactStore,
+    ToolResponseExternalizer,
+)
 from app.vnext.llm.protocol import (
     AssistantMessage,
     Message,
@@ -46,8 +51,10 @@ def _history() -> tuple[SessionExecutionHistory, UUID, list[Message]]:
 
 def _registry(
     definitions: list[ToolDefinition],
+    *,
+    result_processor=None,
 ) -> ToolRegistry:
-    registry = ToolRegistry()
+    registry = ToolRegistry(result_processor=result_processor)
     for definition in definitions:
         registry.register(definition)
     return registry
@@ -59,6 +66,7 @@ def _definition(
     *,
     parallel_safe: bool = False,
     context_effect: ToolContextEffect = ToolContextEffect.BOUNDED,
+    externalize_result: bool = False,
 ) -> ToolDefinition:
     return ToolDefinition(
         name=name,
@@ -68,7 +76,7 @@ def _definition(
         handler=handler,
         parallel_safe=parallel_safe,
         context_effect=context_effect,
-        externalize_result=False,
+        externalize_result=externalize_result,
     )
 
 
@@ -78,6 +86,14 @@ def _tool_results(request: ModelRequest) -> list[ToolResultMessage]:
         for message in request.messages
         if isinstance(message, ToolResultMessage)
     ]
+
+
+def _externalizing_processor(store: SessionArtifactStore) -> ArtifactBackedToolResultProcessor:
+    return ArtifactBackedToolResultProcessor(ToolResponseExternalizer(store))
+
+
+def _large_output() -> str:
+    return "x" * (13 * 1024)
 
 
 def test_tool_completed_cancellation_records_raw_result_and_keeps_effective_history() -> None:
@@ -270,3 +286,102 @@ def test_budget_rejection_records_raw_result_but_next_request_gets_deferred() ->
         result.content["_context_materialization"]["state"] == "deferred"  # type: ignore[index]
         for result in next_results
     )
+
+
+def test_cancellation_preserves_externalized_locator_and_executes_tool_once() -> None:
+    store = SessionArtifactStore()
+    executions = 0
+
+    async def externalize(_: _ToolInput) -> _ToolOutput:
+        nonlocal executions
+        executions += 1
+        return _ToolOutput(value=_large_output())
+
+    model = ScriptedModelClient(
+        [ModelResponse(message=AssistantMessage(tool_calls=[_call("artifact")]))]
+    )
+    runtime = AgentRuntime(
+        model,
+        _registry(
+            [
+                _definition(
+                    "tool",
+                    externalize,
+                    externalize_result=True,
+                )
+            ],
+            result_processor=_externalizing_processor(store),
+        ),
+    )
+    history, request_id, messages = _history()
+    token = CancellationToken()
+
+    async def sink(event: object) -> None:
+        if isinstance(event, ToolCompleted):
+            token.cancel()
+
+    async def exercise() -> None:
+        with pytest.raises(AgentCancelledError):
+            await runtime.run(
+                messages,
+                cancellation_token=token,
+                event_sink=sink,
+                execution_history=history,
+                request_id=request_id,
+            )
+
+    asyncio.run(asyncio.wait_for(exercise(), 2))
+
+    assert executions == 1
+    assert len(history.artifact_locators) == 1
+    ref = history.artifact_locators[0].ref
+    assert asyncio.run(store.get(ref)) == {"value": _large_output()}
+
+
+def test_deferred_materialization_preserves_externalized_locator_and_executes_once() -> None:
+    store = SessionArtifactStore()
+    executions = 0
+
+    async def materialize(_: _ToolInput) -> _ToolOutput:
+        nonlocal executions
+        executions += 1
+        return _ToolOutput(value=_large_output())
+
+    model = ScriptedModelClient(
+        [
+            ModelResponse(message=AssistantMessage(tool_calls=[_call("artifact")])),
+            ModelResponse.from_final("execution"),
+            ModelResponse.from_final("answer"),
+        ]
+    )
+    runtime = AgentRuntime(
+        model,
+        _registry(
+            [
+                _definition(
+                    "tool",
+                    materialize,
+                    context_effect=ToolContextEffect.MATERIALIZING,
+                    externalize_result=True,
+                )
+            ],
+            result_processor=_externalizing_processor(store),
+        ),
+        limits=AgentLimits(max_materialized_context_bytes=1),
+    )
+    history, request_id, messages = _history()
+
+    async def exercise() -> None:
+        result = await runtime.run(
+            messages,
+            execution_history=history,
+            request_id=request_id,
+        )
+        assert result.content == "answer"
+
+    asyncio.run(asyncio.wait_for(exercise(), 2))
+
+    assert executions == 1
+    assert len(history.artifact_locators) == 1
+    next_results = _tool_results(model.requests[1])
+    assert next_results[0].content["_context_materialization"]["state"] == "deferred"  # type: ignore[index]

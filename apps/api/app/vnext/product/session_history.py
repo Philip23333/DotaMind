@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+from collections import OrderedDict
 from collections.abc import Sequence
 from copy import deepcopy
 from dataclasses import dataclass
@@ -9,10 +11,13 @@ from datetime import UTC, datetime
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
+from app.vnext.artifacts.grep import ArtifactGrepResult
+from app.vnext.artifacts.retrieval import ArtifactReadResult
 from app.vnext.llm.protocol import (
     AssistantMessage,
     FinalMessage,
     Message,
+    ToolCall,
     ToolResultMessage,
     UserMessage,
 )
@@ -85,10 +90,28 @@ class SessionCompactionRecord:
     created_at: datetime
 
 
+@dataclass(frozen=True, slots=True)
+class ArtifactLocator:
+    """A bounded, first-seen locator for one session-owned Artifact."""
+
+    ref: str
+    source_tool: str
+    query_hint: str
+
+
 class SessionExecutionHistory:
     """Keep immutable raw records beside a replaceable effective projection."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        artifact_locator_capacity: int = 16,
+        artifact_locator_hint_chars: int = 256,
+    ) -> None:
+        if type(artifact_locator_capacity) is not int or artifact_locator_capacity <= 0:
+            raise ValueError("artifact_locator_capacity must be a positive integer")
+        if type(artifact_locator_hint_chars) is not int or artifact_locator_hint_chars <= 0:
+            raise ValueError("artifact_locator_hint_chars must be a positive integer")
         self._records: list[ExecutionRecord] = []
         self._effective_messages: list[Message] = []
         self._request_queries: dict[UUID, str] = {}
@@ -97,6 +120,9 @@ class SessionExecutionHistory:
         self._summary: str | None = None
         self._revision = 0
         self._compaction_records: list[SessionCompactionRecord] = []
+        self._artifact_locator_capacity = artifact_locator_capacity
+        self._artifact_locator_hint_chars = artifact_locator_hint_chars
+        self._artifact_locators: OrderedDict[str, ArtifactLocator] = OrderedDict()
 
     @property
     def initialized(self) -> bool:
@@ -113,6 +139,10 @@ class SessionExecutionHistory:
     @property
     def compaction_records(self) -> tuple[SessionCompactionRecord, ...]:
         return tuple(_copy_compaction_record(record) for record in self._compaction_records)
+
+    @property
+    def artifact_locators(self) -> tuple[ArtifactLocator, ...]:
+        return tuple(self._artifact_locators.values())
 
     @property
     def records(self) -> tuple[ExecutionRecord, ...]:
@@ -183,6 +213,30 @@ class SessionExecutionHistory:
 
         self._effective_messages = _copy_messages(messages)
         self._revision += 1
+
+    def remember_artifact_locators(
+        self,
+        call: ToolCall,
+        result: ToolResultMessage,
+    ) -> None:
+        """Remember valid session Artifact refs from one real tool return."""
+
+        if result.tool_call_id != call.id or result.status != "ok":
+            return
+        refs = _artifact_refs(call, result)
+        if not refs:
+            return
+        query_hint = _query_hint(call.arguments, self._artifact_locator_hint_chars)
+        for ref in refs:
+            if ref in self._artifact_locators:
+                continue
+            self._artifact_locators[ref] = ArtifactLocator(
+                ref=ref,
+                source_tool=call.name,
+                query_hint=query_hint,
+            )
+            if len(self._artifact_locators) > self._artifact_locator_capacity:
+                self._artifact_locators.popitem(last=False)
 
     def commit_compaction(
         self,
@@ -281,7 +335,59 @@ def _copy_compaction_record(record: SessionCompactionRecord) -> SessionCompactio
     )
 
 
+def _artifact_refs(call: ToolCall, result: ToolResultMessage) -> tuple[str, ...]:
+    content = result.content
+    if call.name == "artifact.read":
+        try:
+            artifact = ArtifactReadResult.model_validate(content)
+        except (TypeError, ValueError):
+            return ()
+        return (artifact.ref,) if _is_session_artifact_ref(artifact.ref) else ()
+    if call.name == "artifact.grep":
+        try:
+            artifact = ArtifactGrepResult.model_validate(content)
+        except (TypeError, ValueError):
+            return ()
+        refs: list[str] = []
+        seen: set[str] = set()
+        for match in artifact.matches:
+            if _is_session_artifact_ref(match.ref) and match.ref not in seen:
+                seen.add(match.ref)
+                refs.append(match.ref)
+        return tuple(refs)
+    if not isinstance(content, dict):
+        return ()
+    ref = content.get("artifact_ref")
+    if content.get("externalized") is True and isinstance(ref, str):
+        return (ref,) if _is_session_artifact_ref(ref) else ()
+    return ()
+
+
+def _is_session_artifact_ref(ref: str) -> bool:
+    prefix = "artifact:tool:"
+    token = ref[len(prefix) :]
+    return (
+        ref.startswith(prefix)
+        and len(token) == 32
+        and all(character in "0123456789abcdef" for character in token)
+    )
+
+
+def _query_hint(arguments: dict[str, Any], limit: int) -> str:
+    try:
+        encoded = json.dumps(
+            arguments,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+    except (TypeError, ValueError):
+        return ""
+    return encoded[:limit]
+
+
 __all__ = [
+    "ArtifactLocator",
     "ExecutionRecord",
     "RequestIdempotencyConflict",
     "SessionCompactionError",
