@@ -87,7 +87,7 @@ before a second concrete implementation demonstrates the need.
 4. Register the capability only after its focused acceptance passes.
 5. Remove transitional code once the replacement is accepted.
 
-## Context Governance: Runtime-driven history compaction (target)
+## Context Governance: Runtime-driven history compaction
 
 The next phase is defined by
 [`agent/context_governance_evidence_lifecycle.md`](agent/context_governance_evidence_lifecycle.md).
@@ -104,9 +104,16 @@ Implementation follows four stage exits:
    compact-and-retry recovery attempt.
 4. Esports evaluations and removal of superseded summary/release gates.
 
-These are target phases, not completed capabilities. Acceptance covers long
-single tasks, repeated compaction, rereads, follow-ups, and failures. No
-model-directed summary/release tools or general history-search tools are required.
+Phase one and phase two are complete. Phase two completion means a deterministic
+explicit-trigger loop: session records and projections are reused, a bounded
+summary is generated and atomically committed, retained context and materialized
+bytes are rebuilt, and Artifact locators support rereads. Acceptance covers long
+single tasks, repeated compaction, rereads, follow-ups, and failed compaction.
+
+Phase three and phase four remain incomplete. No automatic watermark trigger,
+overflow recovery, or real-model summary quality claim is included in phase two.
+No model-directed summary/release tools or general history-search tools are
+required by the current design.
 
 ## Follow-up: generic tool-result externalization (implemented / under acceptance)
 

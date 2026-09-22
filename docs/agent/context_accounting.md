@@ -2,26 +2,18 @@
 
 Context Accounting is the measurement layer for the authoritative
 [`context_governance_evidence_lifecycle.md`](context_governance_evidence_lifecycle.md)
-design. Its v1 behavior remains measurement-only; later governance phases may
-consume these measurements for Runtime-driven history compaction without
-changing the meaning of the recorded metrics.
+design. The same metrics are used by the explicit phase-two compaction loop;
+they retain their measurement-only meaning and are not token estimates.
 
 ## Purpose
 
 Context Accounting makes the model-visible context footprint observable before
 Context Governance starts changing it.
 
-v1 is measurement only. It does not:
-
-- prune or compact history;
-- summarize tool observations;
-- evict artifacts;
-- change `RuntimeContext.context_pressure`;
-- change phase transitions, tool availability, or model guidance.
-
-`context_pressure` therefore remains `normal` in this measurement-only baseline.
-The linked governance implementation outline defines the subsequent pressure
-integration; it does not require a separate policy engine.
+Accounting does not choose policy, evict artifacts, or rewrite raw records. The
+current Runtime accepts an explicit internal `compact_before_steps` trigger and
+rebuilds the actual carried messages after a successful atomic commit. Automatic
+watermark decisions and overflow recovery are not implemented yet.
 
 ## Measurement
 
@@ -158,6 +150,20 @@ Component byte values are diagnostic partitions. The effective request includes
 JSON container/key framing, so it is not required to equal the arithmetic sum of
 all component values.
 
+## Compaction boundary
+
+The summary and FIFO Artifact locator projection are part of the full request
+and therefore contribute to `effective_request.serialized_bytes`. The
+materialization budget is narrower: it counts only successful Raw tool results
+actually carried in messages. Deferred materializations and lifecycle
+`receipt_only` observations contribute no Raw bytes.
+
+After a successful compaction, Runtime rebuilds the materialization budget from
+the retained messages and the new request scope. It does not reset the budget to
+zero, and it does not reconstruct it from removed raw records. Maintenance
+summary usage is recorded on `compaction_calls`; business step numbers and
+business model usage remain separate. Byte metrics are not token counts.
+
 ## Trace invariant
 
 The Runtime passes the request boundaries needed by accounting to the trace layer:
@@ -177,8 +183,8 @@ trace's `model_request`; only its structured byte metrics are retained.
 
 ## Next policy layer
 
-The Context Governance target uses full-request pressure to trigger a dedicated
-summary call and rebuild context from the current summary and retained history.
-Summary and FIFO locator overhead must be measured too. Existing hard resource
-bounds remain guardrails. The target does not mandate a CompressionRequest
-entity or a policy controller; v1 accounting itself remains measurement-only.
+The next phase may consume full-request pressure to choose when to trigger the
+dedicated summary call and may add one bounded overflow recovery attempt.
+Summary and FIFO locator overhead are already measurable. Existing hard resource
+bounds remain guardrails; no separate CompressionRequest entity or policy
+controller is required by this accounting layer.
