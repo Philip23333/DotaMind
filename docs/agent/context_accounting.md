@@ -150,6 +150,26 @@ Component byte values are diagnostic partitions. The effective request includes
 JSON container/key framing, so it is not required to equal the arithmetic sum of
 all component values.
 
+## Capacity estimate
+
+The raw `canonical_json_utf8_bytes` measurement and the capacity helper's token
+estimate are different metrics. `assess_request_capacity()` measures the full
+`messages + tools` request, then applies the configurable integer
+`bytes/token` heuristic with ceiling division. It is an estimate, not tokenizer
+output and not a provider capacity guarantee.
+
+When `context_window_tokens` is unset, no capacity result is produced. When it
+is configured, the calculation reserves either the request's explicit output
+limit or the configured default, subtracts the safety margin, and marks the
+remaining input budget as `NORMAL`, `HIGH`, or local-estimate `CRITICAL` using
+the configured trigger percentage. A local `CRITICAL` does not mean that the
+provider has confirmed an overflow.
+
+This commit provides the pure assessment and strict configuration fields only.
+It does not update `RuntimeContext.context_pressure`, trigger compaction, or
+change product/model configuration wiring. Automatic triggering remains a
+later phase.
+
 ## Compaction boundary
 
 The summary and FIFO Artifact locator projection are part of the full request
@@ -183,8 +203,9 @@ trace's `model_request`; only its structured byte metrics are retained.
 
 ## Next policy layer
 
-The next phase may consume full-request pressure to choose when to trigger the
-dedicated summary call and may add one bounded overflow recovery attempt.
+The next phase may consume the full-request capacity result to choose when to
+trigger the dedicated summary call and may add one bounded overflow recovery
+attempt.
 Summary and FIFO locator overhead are already measurable. Existing hard resource
 bounds remain guardrails; no separate CompressionRequest entity or policy
 controller is required by this accounting layer.

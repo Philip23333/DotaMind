@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from app.vnext.agent.context_accounting import build_context_accounting
+from app.vnext.agent.context_accounting import (
+    build_context_accounting,
+    measure_request_context_bytes,
+)
 from app.vnext.agent.trace import AgentTraceCollector
 from app.vnext.artifacts.retrieval import ArtifactReadResult
 from app.vnext.llm.protocol import (
@@ -86,6 +89,37 @@ def test_context_accounting_is_deterministic_and_split_by_role() -> None:
         "active_raw": {"count": 0, "serialized_bytes": 0},
         "receipts": {"count": 0, "serialized_bytes": 0},
     }
+
+
+def test_measure_request_context_bytes_matches_effective_request_accounting() -> None:
+    request = ModelRequest(messages=_stable_messages(), tools=[_tool()], step=7)
+
+    accounting = build_context_accounting(request).to_dict()
+
+    assert accounting["effective_request"]["serialized_bytes"] == (
+        measure_request_context_bytes(request)
+    )
+
+
+def test_measure_request_context_bytes_uses_utf8_and_ignores_execution_metadata() -> None:
+    base = ModelRequest(
+        messages=[UserMessage(content="中文比赛")],
+        tools=[_tool()],
+        step=1,
+        metadata={"purpose": "business"},
+        max_output_tokens=32,
+    )
+    changed = base.model_copy(
+        update={
+            "step": 99,
+            "metadata": {"purpose": "other", "attempt": 2},
+            "max_output_tokens": 4096,
+        }
+    )
+    ascii_request = ModelRequest(messages=[UserMessage(content="abc")])
+
+    assert measure_request_context_bytes(base) == measure_request_context_bytes(changed)
+    assert measure_request_context_bytes(base) > measure_request_context_bytes(ascii_request)
 
 
 def test_context_accounting_treats_cjk_as_utf8_bytes_without_token_estimation() -> None:

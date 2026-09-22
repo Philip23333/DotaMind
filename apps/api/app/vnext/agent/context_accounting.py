@@ -216,10 +216,19 @@ def build_context_accounting(
         effective_request=EffectiveRequestUsage(
             message_count=len(effective_payloads),
             tool_count=len(tool_payloads),
-            serialized_bytes=_serialized_size(
-                {"messages": effective_payloads, "tools": tool_payloads}
-            ),
+            serialized_bytes=measure_request_context_bytes(request),
         ),
+    )
+
+
+def measure_request_context_bytes(request: ModelRequest) -> int:
+    """Measure the complete provider-neutral request context in UTF-8 bytes."""
+
+    return _serialized_size(
+        {
+            "messages": [message.model_dump(mode="json") for message in request.messages],
+            "tools": [tool.model_dump(mode="json") for tool in request.tools],
+        }
     )
 
 
@@ -292,4 +301,5 @@ __all__ = [
     "TaskContextUsage",
     "ArtifactObservationsUsage",
     "build_context_accounting",
+    "measure_request_context_bytes",
 ]
