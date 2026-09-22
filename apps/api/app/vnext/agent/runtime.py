@@ -45,6 +45,9 @@ from app.vnext.agent.events import (
 from app.vnext.agent.evidence_summary import CompactionSummaryResult
 from app.vnext.agent.evidence_summary_lifecycle import (
     CompactionSummaryError,
+    HistoryCompactionRangeError,
+    build_compaction_request,
+    select_compaction_range,
     validate_compaction_response,
 )
 from app.vnext.agent.instructions import ANSWER_INSTRUCTION, DEGRADED_ANSWER_INSTRUCTION
@@ -67,6 +70,7 @@ from app.vnext.llm.protocol import (
     SystemMessage,
     ToolCall,
     ToolResultMessage,
+    UserMessage,
 )
 from app.vnext.tools.definition import ToolContextEffect
 from app.vnext.tools.registry import ToolRegistry
@@ -902,6 +906,90 @@ class AgentRuntime:
                 error_code=getattr(exc, "code", None),
             )
             raise
+
+    async def _compact_session_history(
+        self,
+        *,
+        execution_history: Any,
+        request_id: Any,
+        token: CancellationToken,
+        deadline: _Deadline,
+        step: int,
+        recent_history_bytes: int,
+        max_input_bytes: int,
+        max_output_tokens: int,
+        max_summary_bytes: int,
+        trace_collector: AgentTraceCollector | None,
+    ) -> bool:
+        """Generate and atomically commit one session-history compaction."""
+
+        self._check_controls(token, deadline)
+        if type(recent_history_bytes) is not int or recent_history_bytes <= 0:
+            raise HistoryCompactionRangeError("invalid_recent_history_budget")
+        for budget in (max_input_bytes, max_output_tokens, max_summary_bytes):
+            if type(budget) is not int or budget <= 0:
+                raise CompactionSummaryError("invalid_summary_budget")
+
+        snapshot_method = getattr(execution_history, "context_snapshot", None)
+        if not callable(snapshot_method):
+            raise ModelProtocolError("execution history does not provide a context snapshot")
+        snapshot = snapshot_method()
+        if not getattr(execution_history, "initialized", False):
+            raise ModelProtocolError("execution history is not initialized")
+        if snapshot.current_request_id != request_id:
+            raise ModelProtocolError("execution history request does not match the active request")
+        current_index = snapshot.current_user_index
+        current_user = snapshot.current_user_message
+        if (
+            current_user is None
+            or type(current_index) is not int
+            or current_index < 0
+            or current_index >= len(snapshot.messages)
+            or snapshot.messages[current_index] != current_user
+            or not isinstance(snapshot.messages[current_index], UserMessage)
+        ):
+            raise ModelProtocolError("execution history has no valid current user message")
+
+        selected = select_compaction_range(
+            snapshot.messages,
+            recent_history_bytes=recent_history_bytes,
+        )
+        if selected is None:
+            return False
+
+        current_user_prefix_index = (
+            current_index if current_index < selected.cut_index else None
+        )
+        prefix_history_count = len(selected.prefix_messages) - (
+            1 if current_user_prefix_index is not None else 0
+        )
+        if prefix_history_count < 1:
+            return False
+
+        request = build_compaction_request(
+            previous_summary=snapshot.summary,
+            current_user_message=current_user,
+            prefix_messages=selected.prefix_messages,
+            current_user_prefix_index=current_user_prefix_index,
+            max_input_bytes=max_input_bytes,
+            max_output_tokens=max_output_tokens,
+        )
+        result = await self._generate_compaction_summary(
+            request,
+            token=token,
+            deadline=deadline,
+            step=step,
+            max_summary_bytes=max_summary_bytes,
+            trace_collector=trace_collector,
+        )
+        self._check_controls(token, deadline)
+        execution_history.commit_compaction(
+            request_id=request_id,
+            base_revision=snapshot.revision,
+            summary=result.summary,
+            cut_index=selected.cut_index,
+        )
+        return True
 
     @staticmethod
     def _record_compaction_call(
