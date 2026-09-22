@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 
 import pytest
 from pydantic import BaseModel
@@ -24,8 +24,15 @@ from app.vnext.agent.runtime import (
     _build_answer_request,
     _project_session_context,
 )
+from app.vnext.agent.task_state import TaskStateCoordinator
 from app.vnext.agent.trace import AgentTraceCollector
-from app.vnext.llm.protocol import AssistantMessage, ModelResponse, ToolResultMessage
+from app.vnext.llm.protocol import (
+    AssistantMessage,
+    FinalMessage,
+    ModelResponse,
+    ToolCall,
+    ToolResultMessage,
+)
 from app.vnext.product.session_history import SessionExecutionHistory
 from app.vnext.tools.definition import ToolDefinition
 from app.vnext.tools.registry import ToolRegistry
@@ -41,6 +48,7 @@ from tests.vnext.test_runtime_auto_compaction import (
     _probe_request,
     _run,
 )
+from tests.vnext.test_runtime_compaction_loop import _compaction_workflow_registry
 
 
 class _LargeInput(BaseModel):
@@ -93,15 +101,19 @@ def _answer_request(
     history: SessionExecutionHistory,
     *,
     limits: AgentLimits,
+    execution_messages: Sequence[object] | None = None,
     instruction: str = ANSWER_INSTRUCTION,
     projection_mode: AnswerProjectionMode = AnswerProjectionMode.PRIMARY,
     reason: ExecutionStopReason = ExecutionStopReason.MODEL_DONE,
     step: int = 2,
 ):
+    projected_messages = (
+        history.effective_messages() if execution_messages is None else execution_messages
+    )
     outcome = ExecutionOutcome(reason=reason, steps=max(1, step - 1))
     resolution = resolve_answer(outcome=outcome, task_state_coordinator=None)
     context = AnswerContextBuilder().build(
-        execution_messages=history.effective_messages(),
+        execution_messages=projected_messages,
         outcome=outcome,
         task_state_coordinator=None,
         resolution=resolution,
@@ -110,7 +122,7 @@ def _answer_request(
     )
     return _build_answer_request(
         instruction=instruction,
-        messages=_project_session_context(history.effective_messages(), history),
+        messages=_project_session_context(projected_messages, history),
         context=context,
         step=step,
         max_output_tokens=(
@@ -347,7 +359,7 @@ def test_execution_capacity_attempt_is_not_repeated_by_primary_answer() -> None:
     assert len(model.requests) == 1
 
 
-def test_progress_after_execution_compaction_allows_primary_compaction() -> None:
+def test_final_message_does_not_reopen_primary_compaction_gate() -> None:
     history, request_id = _history_with_old_groups()
     registry = _echo_registry(output_size=4_000)
     probe_limits = _limits_for_available(100_000, recent_bytes=500, max_steps=2)
@@ -355,12 +367,18 @@ def test_progress_after_execution_compaction_allows_primary_compaction() -> None
     first_compacted = _committed_history(first_compacted, cut_index=3, summary="summary one")
     after_tool, _ = _history_with_new_tool(first_compacted, output_size=4_000)
     final_history = _committed_history(after_tool, cut_index=3, summary="summary two")
+    final_execution = FinalMessage(content="execution")
     requests = {
         "initial": _probe_request(history, registry, limits=probe_limits),
         "after_first": _probe_request(first_compacted, registry, limits=probe_limits),
         "after_tool": _probe_request(after_tool, registry, limits=probe_limits),
         "answer_before": _answer_request(after_tool, limits=probe_limits, step=3),
-        "answer_after": _answer_request(final_history, limits=probe_limits, step=3),
+        "answer_after": _answer_request(
+            final_history,
+            limits=probe_limits,
+            execution_messages=[*final_history.effective_messages(), final_execution],
+            step=3,
+        ),
     }
     estimates = _capacity_estimates(requests, probe_limits=probe_limits)
     limits = _find_limits(
@@ -381,9 +399,8 @@ def test_progress_after_execution_compaction_allows_primary_compaction() -> None
             ModelResponse.from_assistant(
                 AssistantMessage(tool_calls=[_echo_call("new-call", "new")])
             ),
-            ModelResponse.from_final("execution", finish_reason="stop"),
             ModelResponse.from_final("summary two", finish_reason="stop"),
-            ModelResponse.from_final("answer"),
+            ModelResponse.from_final("execution", finish_reason="stop"),
         ]
     )
     trace = AgentTraceCollector()
@@ -395,14 +412,108 @@ def test_progress_after_execution_compaction_allows_primary_compaction() -> None
         trace_collector=trace,
     )
 
-    assert result.content == "answer"
+    assert result.content == "execution"
     assert len(model.requests) == 5
     assert [commit["step"] for commit in trace.snapshot()["compaction_commits"]] == [1, 2]
+    assert [call["step"] for call in trace.snapshot()["compaction_calls"]] == [1, 2]
     assert [
         item["stage"]
         for item in trace.snapshot()["context_capacity_checks"]
         if item["phase"] == "before_compaction"
-    ] == ["execution", "execution", "primary_answer"]
+    ] == ["execution", "execution"]
+    primary_checks = [
+        item
+        for item in trace.snapshot()["context_capacity_checks"]
+        if item["stage"] == "primary_answer"
+    ]
+    assert [item["phase"] for item in primary_checks] == ["before_model"]
+    assert primary_checks[0]["capacity"]["pressure"] in {"normal", "high"}
+    assert trace.snapshot()["compaction_calls"][-1]["step"] == 2
+    assert history.summary == "summary two"
+
+
+def test_new_tool_progress_allows_real_primary_compaction() -> None:
+    history, request_id = _history_with_old_groups()
+    coordinator = TaskStateCoordinator()
+    registry = _compaction_workflow_registry(coordinator)
+    limits = _limits_for_available(16_000, recent_bytes=500, max_steps=3)
+    plan_call = ToolCall(
+        id="plan-call",
+        name="task.plan",
+        arguments={
+            "items": [
+                {"key": "first", "objective": "Collect first evidence"},
+                {"key": "second", "objective": "Collect second evidence"},
+            ]
+        },
+    )
+    read_call = ToolCall(
+        id="read-new",
+        name="artifact.read",
+        arguments={
+            "ref": "artifact:test",
+            "mode": "read",
+            "path": "rows",
+            "task_key": "first",
+        },
+    )
+    checkpoint_call = ToolCall(
+        id="checkpoint-first",
+        name="task.checkpoint",
+        arguments={
+            "key": "first",
+            "value": {"status": "first complete", "details": "x" * 4_500},
+            "source_tool_call_ids": ["read-new"],
+        },
+    )
+    model = ScriptedModelClient(
+        [
+            ModelResponse.from_final("summary before tool", finish_reason="stop"),
+            ModelResponse.from_assistant(AssistantMessage(tool_calls=[plan_call])),
+            ModelResponse.from_assistant(AssistantMessage(tool_calls=[read_call])),
+            ModelResponse.from_assistant(AssistantMessage(tool_calls=[checkpoint_call])),
+            ModelResponse.from_final("summary after tool", finish_reason="stop"),
+            ModelResponse.from_final("answer"),
+        ]
+    )
+    trace = AgentTraceCollector()
+    events: list[object] = []
+
+    async def collect(event: object) -> None:
+        events.append(event)
+
+    result = _run(
+        AgentRuntime(
+            model,
+            registry,
+            limits=limits,
+            task_state_coordinator=coordinator,
+        ),
+        history,
+        request_id,
+        event_sink=collect,
+        trace_collector=trace,
+    )
+
+    snapshot = trace.snapshot()
+    assert result.content == "answer"
+    assert [commit["step"] for commit in snapshot["compaction_commits"]] == [1, 4]
+    assert len(snapshot["compaction_calls"]) == 2
+    assert sum(
+        request.metadata.get("purpose") == "context_compaction"
+        for request in model.requests
+    ) == 2
+    tool_starts = [
+        event.tool_name for event in events if isinstance(event, ToolStarted)
+    ]
+    assert tool_starts.count("artifact.read") == 1
+    assert tool_starts.count("task.checkpoint") == 1
+    assert "summary after tool" in str(model.requests[-1].messages)
+    assert [
+        item["stage"]
+        for item in snapshot["context_capacity_checks"]
+        if item["phase"] == "before_compaction"
+    ] == ["execution", "primary_answer"]
 
 
 def _answer_capacity_case() -> tuple[SessionExecutionHistory, object, AgentLimits]:
@@ -449,7 +560,7 @@ def test_primary_critical_checks_degraded_answer_capacity() -> None:
         trace_collector=trace,
     )
 
-    assert "context budget was exhausted" in result.content
+    assert "available context budget" in result.content
     assert [request.step for request in model.requests] == [1]
     assert [event.step for event in events if isinstance(event, ModelRequested)] == [1]
     attempts = trace.snapshot()["answer_attempts"]
@@ -540,7 +651,7 @@ def test_primary_compaction_and_model_share_one_deadline() -> None:
 
     result = _run(runtime, history, request_id, trace_collector=trace)
 
-    assert "context budget was exhausted" in result.content
+    assert "available context budget" in result.content
     assert len(captured_deadlines) == 1
     assert len(model.requests) == 1
     assert trace.snapshot()["answer_attempts"][0]["error_code"] == "deadline_exceeded"

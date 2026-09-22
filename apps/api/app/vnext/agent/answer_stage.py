@@ -163,19 +163,40 @@ def build_answer_fallback(
     *,
     context_capacity_exhausted: bool = False,
 ) -> FinalMessage:
-    """Explain that durable execution finished but answer rendering did not."""
+    """Build a deterministic fallback for execution or answer-stage limits."""
 
-    capacity_note = (
-        " The execution stopped because the available context budget was exhausted."
-        if context_capacity_exhausted or outcome.reason is ExecutionStopReason.CONTEXT_CAPACITY
-        else ""
+    if outcome.reason is ExecutionStopReason.CONTEXT_CAPACITY:
+        execution_note = (
+            "The execution stopped early because the available context budget was exhausted."
+        )
+        if resolution.total_items is None:
+            return FinalMessage(
+                content=(
+                    execution_note
+                    + " I wasn't able to generate a reliable final response."
+                )
+            )
+        completed = len(resolution.completed_keys)
+        coverage = f"{completed} of {resolution.total_items} planned parts were completed."
+        remaining = (
+            " The remaining parts were not completed, so I won't infer or fill them in."
+            if resolution.remaining_keys
+            else ""
+        )
+        return FinalMessage(content=f"{execution_note}\n\n{coverage}{remaining}")
+
+    answer_capacity_message = (
+        "I wasn't able to generate the detailed final response within the available "
+        "context budget."
+        if context_capacity_exhausted
+        else None
     )
     if resolution.total_items is None:
         return FinalMessage(
-            content=(
+            content=answer_capacity_message
+            or (
                 "The task execution completed, but I wasn't able to generate the "
                 "detailed final response within the response limit."
-                + capacity_note
             )
         )
 
@@ -184,19 +205,27 @@ def build_answer_fallback(
     if resolution.mode is AnswerResolutionMode.FULL:
         return FinalMessage(
             content=(
-                "The requested data processing was completed, but I wasn't able "
-                "to generate the detailed final response within the response "
-                "limit."
-                + capacity_note
+                (
+                    answer_capacity_message
+                    or (
+                        "The requested data processing was completed, but I wasn't able "
+                        "to generate the detailed final response within the response "
+                        "limit."
+                    )
+                )
                 + "\n\n"
                 f"{coverage}"
             )
         )
     return FinalMessage(
         content=(
-            "I wasn't able to generate the detailed final response within the "
-            "response limit."
-            + capacity_note
+            (
+                answer_capacity_message
+                or (
+                    "I wasn't able to generate the detailed final response within "
+                    "the response limit."
+                )
+            )
             + "\n\n"
             f"{coverage} The remaining parts were not completed, so I won't "
             "infer or fill them in."

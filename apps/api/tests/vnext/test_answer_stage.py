@@ -184,11 +184,24 @@ def test_build_answer_fallback_distinguishes_full_partial_and_no_plan() -> None:
 
 
 def test_capacity_stop_is_explained_in_deterministic_answers() -> None:
-    outcome = _outcome(ExecutionStopReason.CONTEXT_CAPACITY)
-    resolution = resolve_answer(outcome=outcome, task_state_coordinator=None)
+    capacity_outcome = _outcome(ExecutionStopReason.CONTEXT_CAPACITY)
+    no_plan = resolve_answer(outcome=capacity_outcome, task_state_coordinator=None)
 
-    assert resolution.mode is AnswerResolutionMode.PARTIAL
-    assert "context budget was exhausted" in build_answer_fallback(resolution, outcome).content
+    execution_stop_text = build_answer_fallback(no_plan, capacity_outcome).content
+    assert "execution stopped early" in execution_stop_text
+    assert "context budget was exhausted" in execution_stop_text
+    assert "task execution completed" not in execution_stop_text
+
+    answer_capacity_text = build_answer_fallback(
+        no_plan,
+        _outcome(ExecutionStopReason.MODEL_DONE),
+        context_capacity_exhausted=True,
+    ).content
+    assert (
+        "I wasn't able to generate the detailed final response within the available "
+        "context budget."
+    ) in answer_capacity_text
+    assert "execution stopped" not in answer_capacity_text
 
     plan_resolution = AnswerResolution(
         mode=AnswerResolutionMode.FAILURE,
@@ -196,9 +209,20 @@ def test_capacity_stop_is_explained_in_deterministic_answers() -> None:
         completed_keys=(),
         remaining_keys=("A", "B"),
     )
+    partial_execution_stop = build_answer_fallback(plan_resolution, capacity_outcome).content
+    assert "0 of 2 planned parts were completed" in partial_execution_stop
+    assert "remaining parts were not completed" in partial_execution_stop
+    assert "2 of 2 planned parts were completed" not in partial_execution_stop
+
+    non_capacity_text = build_answer_fallback(
+        no_plan,
+        _outcome(ExecutionStopReason.MODEL_DONE),
+    ).content
+    assert "task execution completed" in non_capacity_text
+    assert "context budget" not in non_capacity_text
     assert "context budget was exhausted" in build_failure_answer(
         plan_resolution,
-        outcome,
+        capacity_outcome,
     ).content
 
 

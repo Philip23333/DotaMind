@@ -417,7 +417,6 @@ class AgentRuntime:
                 )
 
                 if isinstance(assistant, FinalMessage):
-                    compaction_attempted_since_progress = False
                     outcome = ExecutionOutcome(ExecutionStopReason.MODEL_DONE, step)
                     break
                 calls = assistant.tool_calls
