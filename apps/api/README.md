@@ -53,6 +53,26 @@ Runtime configuration and implementation details remain in the code until the
 corresponding vNext capability replaces them. Do not add new vNext architecture
 to this README; update the relevant document under `docs/` instead.
 
+### Context governance configuration
+
+The normal vNext chat entry point enables automatic context management and
+single overflow recovery when `DOTAMIND_CONTEXT_WINDOW_TOKENS` is set to the
+verified context window of the configured model. Leave it empty to keep this
+feature disabled. The remaining context and compaction limits can be set with
+the `DOTAMIND_CONTEXT_*` and `DOTAMIND_COMPACTION_*` variables shown in the root
+`.env.example`.
+
+Configuration may be supplied through the process environment or
+`apps/api/app/vnext/.env`; process environment values take precedence. The root
+`.env.example` is only a template and is not read directly by the composition
+root. The model window must be established from the actual configured model;
+this project does not infer or provide a model-to-window mapping. A configured
+window enables automatic management for subsequently constructed runtimes,
+while an empty window disables it. Restart the service after changing these
+values. The output reserve also becomes the output-token limit for business
+model calls when capacity management is enabled. The bytes-per-token setting is
+an estimate, and the compaction input byte limit is not a model token window.
+
 ## Test
 
 ```bash

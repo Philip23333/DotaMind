@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import os
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from dotenv import dotenv_values
 
 from app.vnext.agent.instructions import AGENT_INSTRUCTION
+from app.vnext.agent.limits import AgentLimits
 from app.vnext.agent.runtime import AgentRuntime
 from app.vnext.agent.task_state import TaskStateCoordinator
 from app.vnext.artifacts import (
@@ -74,6 +75,7 @@ class VNextSettings:
     pandascore_token: str = ""
     pandascore_timeout_seconds: float = 20.0
     trace_ttl_seconds: int = 72 * 60 * 60
+    agent_limits: AgentLimits = field(default_factory=AgentLimits)
 
     @classmethod
     def from_env(cls) -> VNextSettings:
@@ -104,6 +106,7 @@ class VNextSettings:
             trace_ttl_seconds=int(
                 _env_value("DOTAMIND_VNEXT_TRACE_TTL_SECONDS", "259200", file_values)
             ),
+            agent_limits=_agent_limits_from_env(file_values),
         )
 
 
@@ -116,6 +119,57 @@ def _env_value(
     if value is not None:
         return value
     return file_values.get(name, default)
+
+
+_AGENT_LIMIT_ENV_FIELDS = (
+    ("DOTAMIND_CONTEXT_OUTPUT_RESERVE_TOKENS", "context_output_reserve_tokens"),
+    ("DOTAMIND_CONTEXT_SAFETY_MARGIN_TOKENS", "context_safety_margin_tokens"),
+    ("DOTAMIND_CONTEXT_ESTIMATE_BYTES_PER_TOKEN", "context_estimate_bytes_per_token"),
+    ("DOTAMIND_CONTEXT_COMPACTION_TRIGGER_PERCENT", "context_compaction_trigger_percent"),
+    ("DOTAMIND_COMPACTION_RECENT_HISTORY_BYTES", "compaction_recent_history_bytes"),
+    ("DOTAMIND_COMPACTION_MAX_INPUT_BYTES", "compaction_max_input_bytes"),
+    ("DOTAMIND_COMPACTION_MAX_OUTPUT_TOKENS", "compaction_max_output_tokens"),
+    ("DOTAMIND_COMPACTION_MAX_SUMMARY_BYTES", "compaction_max_summary_bytes"),
+)
+
+
+def _agent_limits_from_env(file_values: dict[str, str | None]) -> AgentLimits:
+    window_name = "DOTAMIND_CONTEXT_WINDOW_TOKENS"
+    window_value = _env_value(window_name, None, file_values)
+    values: dict[str, int | None] = {
+        "context_window_tokens": _parse_window_value(window_name, window_value),
+    }
+    for name, field_name in _AGENT_LIMIT_ENV_FIELDS:
+        raw_value = _env_value(name, None, file_values)
+        if raw_value is None:
+            if name in file_values:
+                raise ValueError(f"{name} must be an integer")
+            continue
+        values[field_name] = _parse_required_integer(name, raw_value)
+    return AgentLimits(**values)
+
+
+def _parse_window_value(name: str, value: str | None) -> int | None:
+    if value is None or not value.strip():
+        return None
+    return _parse_integer(name, value)
+
+
+def _parse_required_integer(name: str, value: str) -> int:
+    if not value.strip():
+        raise ValueError(f"{name} must be an integer")
+    return _parse_integer(name, value)
+
+
+def _parse_integer(name: str, value: str) -> int:
+    stripped = value.strip()
+    signless = stripped[1:] if stripped[:1] in {"+", "-"} else stripped
+    if not signless or not signless.isascii() or not signless.isdecimal():
+        raise ValueError(f"{name} must be an integer")
+    try:
+        return int(stripped, 10)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be an integer") from exc
 
 
 @dataclass(slots=True)
@@ -209,6 +263,7 @@ def build_vnext_runtime(
     """Compose the configured model client and current vNext tool surface."""
 
     config = settings or VNextSettings.from_env()
+    limits = config.agent_limits.model_copy(deep=True)
     resolved_services = services or build_vnext_services(config)
     model = OpenAICompatibleModelClient(
         api_key=config.llm_api_key,
@@ -225,6 +280,7 @@ def build_vnext_runtime(
             task_state_coordinator=task_state_coordinator,
         ),
         system_instruction=AGENT_INSTRUCTION,
+        limits=limits,
         transcript_rewriter=ArtifactObservationTranscriptRewriter(),
         task_state_coordinator=task_state_coordinator,
     )
