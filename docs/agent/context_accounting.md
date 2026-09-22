@@ -15,7 +15,8 @@ an explicit internal `compact_before_steps` trigger, applies automatic
 watermark decisions when a context window is configured, and rebuilds the
 actual carried messages after a successful atomic commit. Execution and primary
 answer requests may each make one bounded compaction attempt when progress has
-made another attempt eligible.
+made another attempt eligible. A provider-confirmed context-window overflow
+may consume one additional recovery attempt for the whole user request.
 
 ## Measurement
 
@@ -206,9 +207,24 @@ There is no reconstruction from later trace data, and the Runtime Prompt text is
 not added to stable history. Task Context text is likewise not persisted in the
 trace's `model_request`; only its structured byte metrics are retained.
 
+## Provider overflow recovery
+
+When `context_window_tokens` is configured and the provider returns the explicit
+`model_context_window_exceeded` error, the Runtime may consume the request's one
+shared recovery allowance. It uses the current execution or primary-answer
+deadline, compacts the existing history through the same atomic workflow, and
+rebuilds the complete request before retrying the failed business model call at
+the same step. The retry does not replay completed tools or create a new
+business step. A watermark compaction does not consume this separate allowance,
+and a previous watermark attempt does not prevent a provider-overflow recovery.
+
+Summary calls and degraded answers never start overflow recovery. A missing
+compaction range, failed summary, a still-critical rebuilt request, cancellation,
+deadline, or a second overflow follows the existing stage failure path. A
+successful compaction remains committed even when the retry cannot complete.
+
 ## Next policy layer
 
 Summary and FIFO locator overhead are already measurable. Existing hard resource
-bounds remain guardrails; provider overflow recovery is a later phase and no
-separate CompressionRequest entity or policy controller is required by this
-accounting layer.
+bounds remain guardrails; no separate CompressionRequest entity or policy
+controller is required by this accounting layer.

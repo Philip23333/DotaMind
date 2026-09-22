@@ -75,6 +75,34 @@ class AgentTraceCollector:
         item["model_response"] = response.model_dump(mode="json")
         item["model_duration_seconds"] = duration
 
+    def archive_failed_model_attempt(self, step: int, *, error_code: str) -> None:
+        """Move the failed request projection aside before recording a retry."""
+
+        item = self._step(step)
+        attempt: dict[str, Any] = {}
+        for field in ("model_request", "runtime_context", "context_accounting", "streamed_text"):
+            if field in item:
+                attempt[field] = deepcopy(item.pop(field))
+        attempt["error_code"] = error_code
+        item.setdefault("failed_model_attempts", []).append(attempt)
+
+    def overflow_recovery(
+        self,
+        *,
+        step: int,
+        stage: Literal["execution", "primary_answer"],
+        status: str,
+        error_code: str | None,
+    ) -> None:
+        self._trace.setdefault("overflow_recoveries", []).append(
+            {
+                "step": step,
+                "stage": stage,
+                "status": status,
+                "error_code": error_code,
+            }
+        )
+
     def tool_result(
         self,
         step: int,

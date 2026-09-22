@@ -224,6 +224,7 @@ class AgentRuntime:
         outcome: ExecutionOutcome | None = None
         request_messages: list[Message] = []
         compaction_attempted_since_progress = False
+        overflow_recovery_used = False
 
         try:
             if self.system_instruction is not None and any(
@@ -366,34 +367,279 @@ class AgentRuntime:
                             step,
                         )
                         break
-                if trace_collector is not None:
-                    trace_collector.model_request(
-                        request,
-                        runtime_context=runtime_context,
-                        conversation_messages=conversation_messages,
-                        task_context_messages=task_context_messages,
-                        task_context_payload=task_context_payload,
+                recovery_pending = False
+                while True:
+                    if trace_collector is not None:
+                        trace_collector.model_request(
+                            request,
+                            runtime_context=runtime_context,
+                            conversation_messages=conversation_messages,
+                            task_context_messages=task_context_messages,
+                            task_context_payload=task_context_payload,
+                        )
+                    yield await self._publish(
+                        ModelRequested(
+                            step=step,
+                            message_count=len(request.messages),
+                            tool_count=len(request.tools),
+                        ),
+                        sink,
                     )
-                yield await self._publish(
-                    ModelRequested(
-                        step=step,
-                        message_count=len(request.messages),
-                        tool_count=len(request.tools),
-                    ),
-                    sink,
-                )
 
-                try:
-                    response, duration, _ = await self._invoke_model(
-                        request,
-                        token=token,
-                        deadline=execution_deadline,
-                        step=step,
-                        trace_collector=trace_collector,
-                        publish_text=False,
-                    )
-                except AgentDeadlineExceeded:
-                    outcome = ExecutionOutcome(ExecutionStopReason.DEADLINE, step)
+                    try:
+                        response, duration, _ = await self._invoke_model(
+                            request,
+                            token=token,
+                            deadline=execution_deadline,
+                            step=step,
+                            trace_collector=trace_collector,
+                            publish_text=False,
+                        )
+                    except AgentCancelledError:
+                        if recovery_pending and trace_collector is not None:
+                            trace_collector.overflow_recovery(
+                                step=step,
+                                stage="execution",
+                                status="cancelled",
+                                error_code=AgentCancelledError.code,
+                            )
+                        raise
+                    except AgentDeadlineExceeded:
+                        if recovery_pending and trace_collector is not None:
+                            trace_collector.overflow_recovery(
+                                step=step,
+                                stage="execution",
+                                status="deadline_exceeded",
+                                error_code=AgentDeadlineExceeded.code,
+                            )
+                        outcome = ExecutionOutcome(ExecutionStopReason.DEADLINE, step)
+                        break
+                    except ModelContextWindowExceeded as overflow_error:
+                        if recovery_pending:
+                            if trace_collector is not None:
+                                trace_collector.overflow_recovery(
+                                    step=step,
+                                    stage="execution",
+                                    status="retry_failed",
+                                    error_code=overflow_error.code,
+                                )
+                            recovery_pending = False
+                            raise
+                        if not auto_compaction_enabled or overflow_recovery_used:
+                            raise
+
+                        overflow_recovery_used = True
+                        recovery_pending = True
+                        compaction_attempted_since_progress = True
+                        materialized_bytes_before = materialization_budget.active_bytes
+                        request_start_before = request_start
+                        try:
+                            self._check_controls(token, execution_deadline)
+                            compacted = await self._compact_session_history(
+                                execution_history=execution_history,
+                                request_id=request_id,
+                                token=token,
+                                deadline=execution_deadline,
+                                step=step,
+                                recent_history_bytes=self.limits.compaction_recent_history_bytes,
+                                max_input_bytes=self.limits.compaction_max_input_bytes,
+                                max_output_tokens=self.limits.compaction_max_output_tokens,
+                                max_summary_bytes=self.limits.compaction_max_summary_bytes,
+                                trace_collector=trace_collector,
+                            )
+                        except AgentCancelledError:
+                            if trace_collector is not None:
+                                trace_collector.overflow_recovery(
+                                    step=step,
+                                    stage="execution",
+                                    status="cancelled",
+                                    error_code=AgentCancelledError.code,
+                                )
+                            recovery_pending = False
+                            raise
+                        except AgentDeadlineExceeded:
+                            if trace_collector is not None:
+                                trace_collector.overflow_recovery(
+                                    step=step,
+                                    stage="execution",
+                                    status="deadline_exceeded",
+                                    error_code=AgentDeadlineExceeded.code,
+                                )
+                            recovery_pending = False
+                            outcome = ExecutionOutcome(ExecutionStopReason.DEADLINE, step)
+                            break
+                        except AgentRuntimeError as recovery_error:
+                            if trace_collector is not None:
+                                trace_collector.overflow_recovery(
+                                    step=step,
+                                    stage="execution",
+                                    status="compaction_failed",
+                                    error_code=getattr(
+                                        recovery_error,
+                                        "code",
+                                        type(recovery_error).__name__,
+                                    ),
+                                )
+                            recovery_pending = False
+                            raise
+                        except Exception as recovery_error:
+                            if trace_collector is not None:
+                                trace_collector.overflow_recovery(
+                                    step=step,
+                                    stage="execution",
+                                    status="compaction_failed",
+                                    error_code=getattr(
+                                        recovery_error,
+                                        "code",
+                                        type(recovery_error).__name__,
+                                    ),
+                                )
+                            recovery_pending = False
+                            raise AgentRuntimeError(
+                                f"session compaction failed: {recovery_error}",
+                                details={
+                                    "code": getattr(
+                                        recovery_error,
+                                        "code",
+                                        type(recovery_error).__name__,
+                                    )
+                                },
+                            ) from recovery_error
+
+                        if not compacted:
+                            if trace_collector is not None:
+                                trace_collector.overflow_recovery(
+                                    step=step,
+                                    stage="execution",
+                                    status="no_compactable_range",
+                                    error_code=overflow_error.code,
+                                )
+                            recovery_pending = False
+                            raise overflow_error
+
+                        try:
+                            request_start, request_messages, materialization_budget = (
+                                self._rebuild_after_compaction(
+                                    execution_history=execution_history,
+                                    request_id=request_id,
+                                    request_start=request_start,
+                                    request_start_before=request_start_before,
+                                    materialized_bytes_before=materialized_bytes_before,
+                                    step=step,
+                                    trigger="overflow",
+                                    trace_collector=trace_collector,
+                                )
+                            )
+                            self._check_controls(token, execution_deadline)
+                        except AgentCancelledError:
+                            if trace_collector is not None:
+                                trace_collector.overflow_recovery(
+                                    step=step,
+                                    stage="execution",
+                                    status="cancelled",
+                                    error_code=AgentCancelledError.code,
+                                )
+                            recovery_pending = False
+                            raise
+                        except AgentDeadlineExceeded:
+                            if trace_collector is not None:
+                                trace_collector.overflow_recovery(
+                                    step=step,
+                                    stage="execution",
+                                    status="deadline_exceeded",
+                                    error_code=AgentDeadlineExceeded.code,
+                                )
+                            recovery_pending = False
+                            outcome = ExecutionOutcome(ExecutionStopReason.DEADLINE, step)
+                            break
+                        except AgentRuntimeError as recovery_error:
+                            if trace_collector is not None:
+                                trace_collector.overflow_recovery(
+                                    step=step,
+                                    stage="execution",
+                                    status="compaction_failed",
+                                    error_code=recovery_error.code,
+                                )
+                            recovery_pending = False
+                            raise
+                        except Exception as recovery_error:
+                            if trace_collector is not None:
+                                trace_collector.overflow_recovery(
+                                    step=step,
+                                    stage="execution",
+                                    status="compaction_failed",
+                                    error_code=getattr(
+                                        recovery_error,
+                                        "code",
+                                        type(recovery_error).__name__,
+                                    ),
+                                )
+                            recovery_pending = False
+                            raise
+                        (
+                            request,
+                            runtime_context,
+                            conversation_messages,
+                            task_context_messages,
+                            task_context_payload,
+                        ) = self._build_execution_request(
+                            request_messages=request_messages,
+                            execution_history=execution_history,
+                            step=step,
+                            deadline=execution_deadline,
+                            auto_compaction_enabled=True,
+                        )
+                        final_capacity = assess_request_capacity(request, self.limits)
+                        assert final_capacity is not None
+                        if trace_collector is not None:
+                            trace_collector.context_capacity_check(
+                                step=step,
+                                stage="execution",
+                                phase="before_model",
+                                capacity=final_capacity,
+                            )
+                        if final_capacity.pressure.value == "critical":
+                            if trace_collector is not None:
+                                trace_collector.overflow_recovery(
+                                    step=step,
+                                    stage="execution",
+                                    status="capacity_exceeded",
+                                    error_code=ContextCapacityExceeded.code,
+                                )
+                            recovery_pending = False
+                            outcome = ExecutionOutcome(
+                                ExecutionStopReason.CONTEXT_CAPACITY,
+                                step,
+                            )
+                            break
+                        if trace_collector is not None:
+                            trace_collector.archive_failed_model_attempt(
+                                step,
+                                error_code=overflow_error.code,
+                            )
+                        continue
+                    except AgentRuntimeError as model_error:
+                        if recovery_pending and trace_collector is not None:
+                            trace_collector.overflow_recovery(
+                                step=step,
+                                stage="execution",
+                                status="retry_failed",
+                                error_code=model_error.code,
+                            )
+                        recovery_pending = False
+                        raise
+                    else:
+                        if recovery_pending and trace_collector is not None:
+                            trace_collector.overflow_recovery(
+                                step=step,
+                                stage="execution",
+                                status="retry_succeeded",
+                                error_code=None,
+                            )
+                        recovery_pending = False
+                        break
+
+                if outcome is not None:
                     break
                 assistant = response.message
                 if execution_history is not None and request_id is not None:
@@ -642,31 +888,270 @@ class AgentRuntime:
                             "answer request exceeds the configured context budget"
                         )
                 self._check_controls(token, primary_deadline)
-                if trace_collector is not None:
-                    trace_collector.model_request(answer_request)
-                    trace_collector.answer_stage(answer_request, primary_context)
-                    trace_collector.answer_projection(
-                        answer_request,
-                        primary_context,
-                        kind="primary",
-                        resolution=resolution,
+                recovery_pending = False
+                while True:
+                    if trace_collector is not None:
+                        trace_collector.model_request(answer_request)
+                        trace_collector.answer_stage(answer_request, primary_context)
+                        trace_collector.answer_projection(
+                            answer_request,
+                            primary_context,
+                            kind="primary",
+                            resolution=resolution,
+                        )
+                    yield await self._publish(
+                        ModelRequested(
+                            step=answer_step,
+                            message_count=len(answer_request.messages),
+                            tool_count=0,
+                        ),
+                        sink,
                     )
-                yield await self._publish(
-                    ModelRequested(
-                        step=answer_step,
-                        message_count=len(answer_request.messages),
-                        tool_count=0,
-                    ),
-                    sink,
-                )
-                response, duration, answer_text_events = await self._invoke_model(
-                    answer_request,
-                    token=token,
-                    deadline=primary_deadline,
-                    step=answer_step,
-                    trace_collector=trace_collector,
-                    publish_text=True,
-                )
+                    try:
+                        response, duration, answer_text_events = await self._invoke_model(
+                            answer_request,
+                            token=token,
+                            deadline=primary_deadline,
+                            step=answer_step,
+                            trace_collector=trace_collector,
+                            publish_text=True,
+                        )
+                    except AgentCancelledError:
+                        if recovery_pending and trace_collector is not None:
+                            trace_collector.overflow_recovery(
+                                step=answer_step,
+                                stage="primary_answer",
+                                status="cancelled",
+                                error_code=AgentCancelledError.code,
+                            )
+                        raise
+                    except AgentDeadlineExceeded:
+                        if recovery_pending and trace_collector is not None:
+                            trace_collector.overflow_recovery(
+                                step=answer_step,
+                                stage="primary_answer",
+                                status="deadline_exceeded",
+                                error_code=AgentDeadlineExceeded.code,
+                            )
+                        raise
+                    except ModelContextWindowExceeded as overflow_error:
+                        if recovery_pending:
+                            if trace_collector is not None:
+                                trace_collector.overflow_recovery(
+                                    step=answer_step,
+                                    stage="primary_answer",
+                                    status="retry_failed",
+                                    error_code=overflow_error.code,
+                                )
+                            recovery_pending = False
+                            raise
+                        if not auto_compaction_enabled or overflow_recovery_used:
+                            raise
+
+                        overflow_recovery_used = True
+                        recovery_pending = True
+                        compaction_attempted_since_progress = True
+                        materialized_bytes_before = materialization_budget.active_bytes
+                        request_start_before = request_start
+                        try:
+                            self._check_controls(token, primary_deadline)
+                            compacted = await self._compact_session_history(
+                                execution_history=execution_history,
+                                request_id=request_id,
+                                token=token,
+                                deadline=primary_deadline,
+                                step=answer_step,
+                                recent_history_bytes=(
+                                    self.limits.compaction_recent_history_bytes
+                                ),
+                                max_input_bytes=self.limits.compaction_max_input_bytes,
+                                max_output_tokens=self.limits.compaction_max_output_tokens,
+                                max_summary_bytes=self.limits.compaction_max_summary_bytes,
+                                trace_collector=trace_collector,
+                            )
+                        except AgentCancelledError:
+                            if trace_collector is not None:
+                                trace_collector.overflow_recovery(
+                                    step=answer_step,
+                                    stage="primary_answer",
+                                    status="cancelled",
+                                    error_code=AgentCancelledError.code,
+                                )
+                            recovery_pending = False
+                            raise
+                        except AgentDeadlineExceeded:
+                            if trace_collector is not None:
+                                trace_collector.overflow_recovery(
+                                    step=answer_step,
+                                    stage="primary_answer",
+                                    status="deadline_exceeded",
+                                    error_code=AgentDeadlineExceeded.code,
+                                )
+                            recovery_pending = False
+                            raise
+                        except Exception as recovery_error:
+                            if trace_collector is not None:
+                                trace_collector.overflow_recovery(
+                                    step=answer_step,
+                                    stage="primary_answer",
+                                    status="compaction_failed",
+                                    error_code=getattr(
+                                        recovery_error,
+                                        "code",
+                                        type(recovery_error).__name__,
+                                    ),
+                                )
+                            recovery_pending = False
+                            if isinstance(recovery_error, CompactionSummaryError):
+                                raise ModelProtocolError(
+                                    f"answer compaction failed: {recovery_error}"
+                                ) from recovery_error
+                            raise
+
+                        if not compacted:
+                            if trace_collector is not None:
+                                trace_collector.overflow_recovery(
+                                    step=answer_step,
+                                    stage="primary_answer",
+                                    status="no_compactable_range",
+                                    error_code=overflow_error.code,
+                                )
+                            recovery_pending = False
+                            raise overflow_error
+
+                        try:
+                            request_start, request_messages, materialization_budget = (
+                                self._rebuild_after_compaction(
+                                    execution_history=execution_history,
+                                    request_id=request_id,
+                                    request_start=request_start,
+                                    request_start_before=request_start_before,
+                                    materialized_bytes_before=materialized_bytes_before,
+                                    step=answer_step,
+                                    trigger="overflow",
+                                    trace_collector=trace_collector,
+                                )
+                            )
+                            self._check_controls(token, primary_deadline)
+                        except AgentCancelledError:
+                            if trace_collector is not None:
+                                trace_collector.overflow_recovery(
+                                    step=answer_step,
+                                    stage="primary_answer",
+                                    status="cancelled",
+                                    error_code=AgentCancelledError.code,
+                                )
+                            recovery_pending = False
+                            raise
+                        except AgentDeadlineExceeded:
+                            if trace_collector is not None:
+                                trace_collector.overflow_recovery(
+                                    step=answer_step,
+                                    stage="primary_answer",
+                                    status="deadline_exceeded",
+                                    error_code=AgentDeadlineExceeded.code,
+                                )
+                            recovery_pending = False
+                            raise
+                        except AgentRuntimeError as recovery_error:
+                            if trace_collector is not None:
+                                trace_collector.overflow_recovery(
+                                    step=answer_step,
+                                    stage="primary_answer",
+                                    status="compaction_failed",
+                                    error_code=recovery_error.code,
+                                )
+                            recovery_pending = False
+                            raise
+
+                        primary_context = answer_context_builder.build(
+                            execution_messages=request_messages,
+                            outcome=outcome,
+                            task_state_coordinator=self.task_state_coordinator,
+                            resolution=resolution,
+                            projection_mode=AnswerProjectionMode.PRIMARY,
+                            effective_history_embedded=True,
+                        )
+                        answer_messages = _project_session_context(
+                            request_messages,
+                            execution_history,
+                        )
+                        answer_request = _build_answer_request(
+                            instruction=ANSWER_INSTRUCTION,
+                            messages=answer_messages,
+                            context=primary_context,
+                            step=answer_step,
+                            max_output_tokens=self.limits.context_output_reserve_tokens,
+                        )
+                        try:
+                            self._check_controls(token, primary_deadline)
+                        except AgentCancelledError:
+                            if trace_collector is not None:
+                                trace_collector.overflow_recovery(
+                                    step=answer_step,
+                                    stage="primary_answer",
+                                    status="cancelled",
+                                    error_code=AgentCancelledError.code,
+                                )
+                            recovery_pending = False
+                            raise
+                        except AgentDeadlineExceeded:
+                            if trace_collector is not None:
+                                trace_collector.overflow_recovery(
+                                    step=answer_step,
+                                    stage="primary_answer",
+                                    status="deadline_exceeded",
+                                    error_code=AgentDeadlineExceeded.code,
+                                )
+                            recovery_pending = False
+                            raise
+                        final_capacity = assess_request_capacity(answer_request, self.limits)
+                        assert final_capacity is not None
+                        if trace_collector is not None:
+                            trace_collector.context_capacity_check(
+                                step=answer_step,
+                                stage="primary_answer",
+                                phase="before_model",
+                                capacity=final_capacity,
+                            )
+                        if final_capacity.pressure.value == "critical":
+                            if trace_collector is not None:
+                                trace_collector.overflow_recovery(
+                                    step=answer_step,
+                                    stage="primary_answer",
+                                    status="capacity_exceeded",
+                                    error_code=ContextCapacityExceeded.code,
+                                )
+                            recovery_pending = False
+                            raise ContextCapacityExceeded(
+                                "answer request exceeds the configured context budget"
+                            ) from None
+                        if trace_collector is not None:
+                            trace_collector.archive_failed_model_attempt(
+                                answer_step,
+                                error_code=overflow_error.code,
+                            )
+                        continue
+                    except AgentRuntimeError as model_error:
+                        if recovery_pending and trace_collector is not None:
+                            trace_collector.overflow_recovery(
+                                step=answer_step,
+                                stage="primary_answer",
+                                status="retry_failed",
+                                error_code=model_error.code,
+                            )
+                        recovery_pending = False
+                        raise
+                    else:
+                        if recovery_pending and trace_collector is not None:
+                            trace_collector.overflow_recovery(
+                                step=answer_step,
+                                stage="primary_answer",
+                                status="retry_succeeded",
+                                error_code=None,
+                            )
+                        recovery_pending = False
+                        break
                 answer = response.message
                 if not isinstance(answer, FinalMessage):
                     if trace_collector is not None:
