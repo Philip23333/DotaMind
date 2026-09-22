@@ -279,6 +279,37 @@ class AgentTraceCollector:
             }
         )
 
+    def compaction_commit(
+        self,
+        *,
+        step: int,
+        compaction_id: str,
+        base_revision: int,
+        new_revision: int,
+        cut_index: int,
+        source_message_count: int,
+        retained_message_count: int,
+        request_start_before: int,
+        request_start_after: int,
+        materialized_bytes_before: int,
+        materialized_bytes_after: int,
+    ) -> None:
+        self._trace.setdefault("compaction_commits", []).append(
+            {
+                "step": step,
+                "compaction_id": compaction_id,
+                "base_revision": base_revision,
+                "new_revision": new_revision,
+                "cut_index": cut_index,
+                "source_message_count": source_message_count,
+                "retained_message_count": retained_message_count,
+                "request_start_before": request_start_before,
+                "request_start_after": request_start_after,
+                "materialized_bytes_before": materialized_bytes_before,
+                "materialized_bytes_after": materialized_bytes_after,
+            }
+        )
+
     def snapshot(self) -> dict[str, Any]:
         return self._trace.copy()
 

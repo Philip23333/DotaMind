@@ -221,6 +221,28 @@ def test_rendered_context_uses_utf8_json_and_omits_ranges_for_scalar_reads() -> 
     assert "\\u6700" not in context
 
 
+def test_retain_evidence_leases_only_filters_leases_without_changing_task_state() -> None:
+    coordinator = TaskStateCoordinator()
+    coordinator.create_plan(
+        [
+            {"key": "first", "objective": "First"},
+            {"key": "second", "objective": "Second"},
+        ]
+    )
+    coordinator.record_evidence_lease("call-1", task_key=None, raw_bytes=10)
+    coordinator.record_evidence_lease("call-2", task_key=None, raw_bytes=20)
+    before_plan = coordinator.plan_snapshot()
+
+    coordinator.retain_evidence_leases({"call-2", "missing"})
+
+    assert coordinator.active_evidence_leases_snapshot() == [
+        {"tool_call_id": "call-2", "task_key": "first", "raw_bytes": 20}
+    ]
+    assert coordinator.plan_snapshot() == before_plan
+    coordinator.retain_evidence_leases(set())
+    assert coordinator.active_evidence_leases_snapshot() == []
+
+
 def test_evidence_lease_is_scoped_to_current_partition_and_cleared_on_checkpoint() -> None:
     coordinator = TaskStateCoordinator()
     coordinator.create_plan(

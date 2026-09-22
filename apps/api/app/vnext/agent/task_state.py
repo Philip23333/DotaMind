@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
@@ -278,6 +278,16 @@ class TaskStateCoordinator:
                 key=lambda lease: lease.tool_call_id,
             )
         ]
+
+    def retain_evidence_leases(self, tool_call_ids: Collection[str]) -> None:
+        """Drop leases whose raw observations no longer remain in context."""
+
+        retained = set(tool_call_ids)
+        self._active_evidence_leases = {
+            tool_call_id: lease
+            for tool_call_id, lease in self._active_evidence_leases.items()
+            if tool_call_id in retained
+        }
 
     def create_checkpoint(
         self,

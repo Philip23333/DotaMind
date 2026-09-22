@@ -169,6 +169,7 @@ class AgentRuntime:
         trace_collector: AgentTraceCollector | None = None,
         execution_history: Any | None = None,
         request_id: Any | None = None,
+        compact_before_steps: Sequence[int] = (),
     ) -> FinalMessage:
         """Run to a final message, while ``run_stream`` exposes every event."""
 
@@ -180,6 +181,7 @@ class AgentRuntime:
             trace_collector=trace_collector,
             execution_history=execution_history,
             request_id=request_id,
+            compact_before_steps=compact_before_steps,
         ):
             if isinstance(event, AgentCompleted):
                 final = event.final
@@ -196,11 +198,17 @@ class AgentRuntime:
         trace_collector: AgentTraceCollector | None = None,
         execution_history: Any | None = None,
         request_id: Any | None = None,
+        compact_before_steps: Sequence[int] = (),
     ) -> AsyncIterator[AgentEvent]:
         """Yield ephemeral runtime events in execution order."""
 
         if execution_history is not None:
             self.reset_request_state()
+        compaction_steps = _normalize_compaction_steps(compact_before_steps)
+        if compaction_steps and (execution_history is None or request_id is None):
+            raise ModelProtocolError(
+                "compact_before_steps requires initialized execution history and request_id"
+            )
         token = cancellation_token or CancellationToken()
         sink = event_sink
         execution_deadline = _Deadline(self.limits.deadline_seconds)
@@ -250,6 +258,89 @@ class AgentRuntime:
                 except AgentDeadlineExceeded:
                     outcome = ExecutionOutcome(ExecutionStopReason.DEADLINE, step)
                     break
+                if step in compaction_steps:
+                    materialized_bytes_before = materialization_budget.active_bytes
+                    request_start_before = request_start
+                    try:
+                        compacted = await self._compact_session_history(
+                            execution_history=execution_history,
+                            request_id=request_id,
+                            token=token,
+                            deadline=execution_deadline,
+                            step=step,
+                            recent_history_bytes=self.limits.compaction_recent_history_bytes,
+                            max_input_bytes=self.limits.compaction_max_input_bytes,
+                            max_output_tokens=self.limits.compaction_max_output_tokens,
+                            max_summary_bytes=self.limits.compaction_max_summary_bytes,
+                            trace_collector=trace_collector,
+                        )
+                    except AgentCancelledError:
+                        raise
+                    except AgentDeadlineExceeded:
+                        outcome = ExecutionOutcome(ExecutionStopReason.DEADLINE, step)
+                        break
+                    except AgentRuntimeError:
+                        raise
+                    except Exception as exc:
+                        raise AgentRuntimeError(
+                            f"session compaction failed: {exc}",
+                            details={"code": getattr(exc, "code", type(exc).__name__)},
+                        ) from exc
+                    if compacted:
+                        record = _latest_compaction_record(execution_history, request_id)
+                        system_offset = 1 if self.system_instruction is not None else 0
+                        old_start = request_start - system_offset
+                        pinned = int(record.current_user_index_before < record.cut_index)
+                        new_start = max(0, old_start - record.cut_index) + pinned
+                        request_start = new_start + system_offset
+                        request_messages = _runtime_history_messages(
+                            execution_history,
+                            self.system_instruction,
+                        )
+                        initial_entries = _initial_materialization_entries(
+                            request_messages,
+                            self.tools,
+                            request_start=request_start,
+                        )
+                        materialization_budget = MaterializationBudget(
+                            self.limits.max_materialized_context_bytes,
+                            initial_entries=initial_entries,
+                        )
+                        current_tool_call_ids = {
+                            key.removeprefix("current:")
+                            for key, _ in initial_entries
+                            if key.startswith("current:")
+                        }
+                        if self.transcript_rewriter is not None:
+                            set_scope = getattr(
+                                self.transcript_rewriter,
+                                "set_request_scope",
+                                None,
+                            )
+                            if callable(set_scope):
+                                set_scope(request_start)
+                        if self.task_state_coordinator is not None:
+                            self.task_state_coordinator.set_request_scope(request_start)
+                            self.task_state_coordinator.retain_evidence_leases(
+                                current_tool_call_ids
+                            )
+                            self.task_state_coordinator.refresh(request_messages)
+                        if trace_collector is not None:
+                            trace_collector.compaction_commit(
+                                step=step,
+                                compaction_id=record.compaction_id,
+                                base_revision=record.base_revision,
+                                new_revision=execution_history.revision,
+                                cut_index=record.cut_index,
+                                source_message_count=record.source_message_count,
+                                retained_message_count=len(
+                                    execution_history.effective_messages()
+                                ),
+                                request_start_before=request_start_before,
+                                request_start_after=request_start,
+                                materialized_bytes_before=materialized_bytes_before,
+                                materialized_bytes_after=materialization_budget.active_bytes,
+                            )
                 time_pressure = classify_time_pressure(
                     remaining_seconds=execution_deadline.remaining(),
                     budget_seconds=self.limits.deadline_seconds,
@@ -1332,6 +1423,29 @@ def _history_set_effective(history: Any, messages: Sequence[Message]) -> None:
         setter(list(messages))
 
 
+def _runtime_history_messages(history: Any, system_instruction: str | None) -> list[Message]:
+    messages = [message.model_copy(deep=True) for message in history.effective_messages()]
+    if system_instruction is not None:
+        messages.insert(0, SystemMessage(content=system_instruction))
+    return messages
+
+
+def _latest_compaction_record(history: Any, request_id: Any) -> Any:
+    records = getattr(history, "compaction_records", ())
+    if not records or records[-1].request_id != request_id:
+        raise ModelProtocolError("compaction commit record is not available")
+    return records[-1]
+
+
+def _normalize_compaction_steps(steps: Sequence[int]) -> frozenset[int]:
+    normalized: set[int] = set()
+    for step in steps:
+        if type(step) is not int or step <= 0:
+            raise ModelProtocolError("compact_before_steps must contain positive integers")
+        normalized.add(step)
+    return frozenset(normalized)
+
+
 def _persistent_history_messages(
     messages: Sequence[Message],
     system_instruction: str | None,
@@ -1367,6 +1481,8 @@ def _record_delivery(
 def _initial_materialization_entries(
     messages: Sequence[Message],
     tools: ToolRegistry,
+    *,
+    request_start: int | None = None,
 ) -> list[tuple[str, int]]:
     """Seed the request budget with raw heavyweight results already carried in history."""
 
@@ -1388,11 +1504,20 @@ def _initial_materialization_entries(
             materializing = tools.get(tool_name).context_effect is ToolContextEffect.MATERIALIZING
         except KeyError:
             materializing = False
-        if not materializing or _is_receipt_content(message.content):
+        if (
+            not materializing
+            or _is_receipt_content(message.content)
+            or _is_deferred_materialization_content(message.content)
+        ):
             continue
+        entry_key = (
+            f"history:{index}:{message.tool_call_id}"
+            if request_start is None or index < request_start
+            else f"current:{message.tool_call_id}"
+        )
         entries.append(
             (
-                f"history:{index}:{message.tool_call_id}",
+                entry_key,
                 _serialized_size(message.model_dump(mode="json")),
             )
         )
@@ -1404,6 +1529,13 @@ def _is_receipt_content(content: Any) -> bool:
         return False
     marker = content.get("_artifact_observation")
     return isinstance(marker, dict) and marker.get("state") == "receipt_only"
+
+
+def _is_deferred_materialization_content(content: Any) -> bool:
+    if not isinstance(content, dict):
+        return False
+    marker = content.get("_context_materialization")
+    return isinstance(marker, dict) and marker.get("state") == "deferred"
 
 
 def _build_answer_request(

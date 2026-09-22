@@ -127,3 +127,34 @@ def test_receipt_only_materializing_result_does_not_count_as_raw_history() -> No
     messages = _messages((_call("materializing"), receipt))
 
     assert _initial_materialization_entries(messages, _registry()) == []
+
+
+def test_request_start_uses_history_and_current_keys_for_same_tool_call_id() -> None:
+    historical_call = _call("materializing", "same")
+    current_call = _call("materializing", "same")
+    messages = _messages(
+        (historical_call, _ok_result("same", {"value": "historical"})),
+        (current_call, _ok_result("same", {"value": "current"})),
+    )
+
+    entries = _initial_materialization_entries(
+        messages,
+        _registry(),
+        request_start=2,
+    )
+
+    assert [key for key, _ in entries] == ["history:1:same", "current:same"]
+
+
+def test_deferred_materializing_result_is_not_rebuilt_as_active_raw() -> None:
+    deferred = _ok_result(
+        content={
+            "_context_materialization": {
+                "state": "deferred",
+                "reason": "budget_exceeded",
+            }
+        }
+    )
+    messages = _messages((_call("materializing"), deferred))
+
+    assert _initial_materialization_entries(messages, _registry()) == []
