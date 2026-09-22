@@ -15,6 +15,7 @@ from app.vnext.agent.answer_stage import (
     ExecutionStopReason,
 )
 from app.vnext.agent.context_accounting import build_context_accounting
+from app.vnext.agent.context_capacity import RequestCapacity
 from app.vnext.agent.materialization_budget import MaterializationDecision
 from app.vnext.agent.runtime_context import RuntimeContext
 from app.vnext.agent.transcript_rewrite import TranscriptRewriteEvent
@@ -283,6 +284,7 @@ class AgentTraceCollector:
         self,
         *,
         step: int,
+        trigger: str = "explicit",
         compaction_id: str,
         base_revision: int,
         new_revision: int,
@@ -297,6 +299,7 @@ class AgentTraceCollector:
         self._trace.setdefault("compaction_commits", []).append(
             {
                 "step": step,
+                "trigger": trigger,
                 "compaction_id": compaction_id,
                 "base_revision": base_revision,
                 "new_revision": new_revision,
@@ -307,6 +310,32 @@ class AgentTraceCollector:
                 "request_start_after": request_start_after,
                 "materialized_bytes_before": materialized_bytes_before,
                 "materialized_bytes_after": materialized_bytes_after,
+            }
+        )
+
+    def context_capacity_check(
+        self,
+        *,
+        step: int,
+        stage: str,
+        capacity: RequestCapacity,
+    ) -> None:
+        self._trace.setdefault("context_capacity_checks", []).append(
+            {
+                "step": step,
+                "stage": "execution",
+                "phase": stage,
+                "capacity": {
+                    "measurement": capacity.measurement,
+                    "context_bytes": capacity.context_bytes,
+                    "estimated_input_tokens": capacity.estimated_input_tokens,
+                    "reserved_output_tokens": capacity.reserved_output_tokens,
+                    "safety_margin_tokens": capacity.safety_margin_tokens,
+                    "context_window_tokens": capacity.context_window_tokens,
+                    "available_input_tokens": capacity.available_input_tokens,
+                    "trigger_input_tokens": capacity.trigger_input_tokens,
+                    "pressure": capacity.pressure.value,
+                },
             }
         )
 

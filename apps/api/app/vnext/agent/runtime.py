@@ -22,6 +22,7 @@ from app.vnext.agent.answer_stage import (
     build_failure_answer,
     resolve_answer,
 )
+from app.vnext.agent.context_capacity import assess_request_capacity
 from app.vnext.agent.errors import (
     AgentCancelledError,
     AgentDeadlineExceeded,
@@ -203,7 +204,8 @@ class AgentRuntime:
         """Yield ephemeral runtime events in execution order."""
 
         compaction_steps = _normalize_compaction_steps(compact_before_steps)
-        if compaction_steps:
+        auto_compaction_enabled = self.limits.context_window_tokens is not None
+        if compaction_steps or auto_compaction_enabled:
             _validate_compaction_entry(execution_history, request_id)
         if execution_history is not None:
             self.reset_request_state()
@@ -256,7 +258,35 @@ class AgentRuntime:
                 except AgentDeadlineExceeded:
                     outcome = ExecutionOutcome(ExecutionStopReason.DEADLINE, step)
                     break
-                if step in compaction_steps:
+                explicit_compaction = step in compaction_steps
+                execution_request_data = None
+                compaction_trigger: str | None = None
+                if auto_compaction_enabled:
+                    execution_request_data = self._build_execution_request(
+                        request_messages=request_messages,
+                        execution_history=execution_history,
+                        step=step,
+                        deadline=execution_deadline,
+                        auto_compaction_enabled=True,
+                    )
+                    candidate_capacity = assess_request_capacity(
+                        execution_request_data[0], self.limits
+                    )
+                    assert candidate_capacity is not None
+                    if explicit_compaction:
+                        compaction_trigger = "explicit"
+                    elif candidate_capacity.pressure.value in {"high", "critical"}:
+                        compaction_trigger = "watermark"
+                    if compaction_trigger is not None and trace_collector is not None:
+                        trace_collector.context_capacity_check(
+                            step=step,
+                            stage="before_compaction",
+                            capacity=candidate_capacity,
+                        )
+                elif explicit_compaction:
+                    compaction_trigger = "explicit"
+
+                if compaction_trigger is not None:
                     materialized_bytes_before = materialization_budget.active_bytes
                     request_start_before = request_start
                     try:
@@ -285,95 +315,49 @@ class AgentRuntime:
                             details={"code": getattr(exc, "code", type(exc).__name__)},
                         ) from exc
                     if compacted:
-                        record = _latest_compaction_record(execution_history, request_id)
-                        system_offset = 1 if self.system_instruction is not None else 0
-                        old_start = request_start - system_offset
-                        pinned = int(record.current_user_index_before < record.cut_index)
-                        new_start = max(0, old_start - record.cut_index) + pinned
-                        request_start = new_start + system_offset
-                        request_messages = _runtime_history_messages(
-                            execution_history,
-                            self.system_instruction,
-                        )
-                        initial_entries = _initial_materialization_entries(
-                            request_messages,
-                            self.tools,
-                            request_start=request_start,
-                        )
-                        materialization_budget = MaterializationBudget(
-                            self.limits.max_materialized_context_bytes,
-                            initial_entries=initial_entries,
-                        )
-                        current_tool_call_ids = {
-                            key.removeprefix("current:")
-                            for key, _ in initial_entries
-                            if key.startswith("current:")
-                        }
-                        if self.transcript_rewriter is not None:
-                            set_scope = getattr(
-                                self.transcript_rewriter,
-                                "set_request_scope",
-                                None,
-                            )
-                            if callable(set_scope):
-                                set_scope(request_start)
-                        if self.task_state_coordinator is not None:
-                            self.task_state_coordinator.set_request_scope(request_start)
-                            self.task_state_coordinator.retain_evidence_leases(
-                                current_tool_call_ids
-                            )
-                            self.task_state_coordinator.refresh(request_messages)
-                        if trace_collector is not None:
-                            trace_collector.compaction_commit(
-                                step=step,
-                                compaction_id=record.compaction_id,
-                                base_revision=record.base_revision,
-                                new_revision=execution_history.revision,
-                                cut_index=record.cut_index,
-                                source_message_count=record.source_message_count,
-                                retained_message_count=len(
-                                    execution_history.effective_messages()
-                                ),
+                        request_start, request_messages, materialization_budget = (
+                            self._rebuild_after_compaction(
+                                execution_history=execution_history,
+                                request_id=request_id,
+                                request_start=request_start,
                                 request_start_before=request_start_before,
-                                request_start_after=request_start,
                                 materialized_bytes_before=materialized_bytes_before,
-                                materialized_bytes_after=materialization_budget.active_bytes,
+                                step=step,
+                                trigger=compaction_trigger,
+                                trace_collector=trace_collector,
                             )
-                time_pressure = classify_time_pressure(
-                    remaining_seconds=execution_deadline.remaining(),
-                    budget_seconds=self.limits.deadline_seconds,
-                )
-                runtime_context = RuntimeContext.from_state(
-                    current_step=step,
-                    max_steps=self.limits.max_steps,
-                    tools_available=True,
-                    time_pressure=time_pressure,
-                )
-                conversation_messages = _project_session_context(
-                    request_messages,
-                    execution_history,
-                )
-                turn_messages = conversation_messages
-                task_context_messages: list[Message] | None = None
-                task_context_payload: dict[str, Any] | None = None
-                if self.task_state_coordinator is not None:
-                    self.task_state_coordinator.refresh(request_messages)
-                    task_context = self.task_state_coordinator.render_context()
-                    if task_context is not None:
-                        turn_messages = _append_system_instruction(turn_messages, task_context)
-                        task_context_messages = turn_messages
-                        task_context_payload = self.task_state_coordinator.context_payload()
-                turn_messages = _append_system_instruction(
-                    turn_messages,
-                    render_runtime_prompt(runtime_context),
-                )
-                if task_context_messages is None:
-                    task_context_messages = list(conversation_messages)
-                request = ModelRequest(
-                    messages=turn_messages,
-                    tools=self.tools.schemas(),
-                    step=step,
-                )
+                        )
+                    execution_request_data = None
+
+                if execution_request_data is None:
+                    execution_request_data = self._build_execution_request(
+                        request_messages=request_messages,
+                        execution_history=execution_history,
+                        step=step,
+                        deadline=execution_deadline,
+                        auto_compaction_enabled=auto_compaction_enabled,
+                    )
+                (
+                    request,
+                    runtime_context,
+                    conversation_messages,
+                    task_context_messages,
+                    task_context_payload,
+                ) = execution_request_data
+                if auto_compaction_enabled:
+                    final_capacity = assess_request_capacity(request, self.limits)
+                    assert final_capacity is not None
+                    if trace_collector is not None:
+                        trace_collector.context_capacity_check(
+                            step=step,
+                            stage="before_model",
+                            capacity=final_capacity,
+                        )
+                    if final_capacity.pressure.value == "critical":
+                        raise AgentRuntimeError(
+                            "execution request exceeds the configured context budget",
+                            details={"code": "context_capacity_exceeded"},
+                        )
                 if trace_collector is not None:
                     trace_collector.model_request(
                         request,
@@ -830,6 +814,134 @@ class AgentRuntime:
             )
             yield await self._publish(event, sink)
             raise wrapped from exc
+
+    def _build_execution_request(
+        self,
+        *,
+        request_messages: Sequence[Message],
+        execution_history: Any | None,
+        step: int,
+        deadline: _Deadline,
+        auto_compaction_enabled: bool,
+    ) -> tuple[
+        ModelRequest,
+        RuntimeContext,
+        list[Message],
+        list[Message],
+        dict[str, Any] | None,
+    ]:
+        """Build one complete execution request and its trace projections."""
+
+        time_pressure = classify_time_pressure(
+            remaining_seconds=deadline.remaining(),
+            budget_seconds=self.limits.deadline_seconds,
+        )
+        runtime_context = RuntimeContext.from_state(
+            current_step=step,
+            max_steps=self.limits.max_steps,
+            tools_available=True,
+            time_pressure=time_pressure,
+        )
+        conversation_messages = _project_session_context(
+            request_messages,
+            execution_history,
+        )
+        turn_messages = conversation_messages
+        task_context_messages: list[Message] | None = None
+        task_context_payload: dict[str, Any] | None = None
+        if self.task_state_coordinator is not None:
+            self.task_state_coordinator.refresh(request_messages)
+            task_context = self.task_state_coordinator.render_context()
+            if task_context is not None:
+                turn_messages = _append_system_instruction(turn_messages, task_context)
+                task_context_messages = turn_messages
+                task_context_payload = self.task_state_coordinator.context_payload()
+        turn_messages = _append_system_instruction(
+            turn_messages,
+            render_runtime_prompt(runtime_context),
+        )
+        if task_context_messages is None:
+            task_context_messages = list(conversation_messages)
+        request = ModelRequest(
+            messages=turn_messages,
+            tools=self.tools.schemas(),
+            step=step,
+            max_output_tokens=(
+                self.limits.context_output_reserve_tokens
+                if auto_compaction_enabled
+                else None
+            ),
+        )
+        return (
+            request,
+            runtime_context,
+            conversation_messages,
+            task_context_messages,
+            task_context_payload,
+        )
+
+    def _rebuild_after_compaction(
+        self,
+        *,
+        execution_history: Any,
+        request_id: Any,
+        request_start: int,
+        request_start_before: int,
+        materialized_bytes_before: int,
+        step: int,
+        trigger: str,
+        trace_collector: AgentTraceCollector | None,
+    ) -> tuple[int, list[Message], MaterializationBudget]:
+        """Rebuild all request-local projections after an atomic compaction."""
+
+        record = _latest_compaction_record(execution_history, request_id)
+        system_offset = 1 if self.system_instruction is not None else 0
+        old_start = request_start - system_offset
+        pinned = int(record.current_user_index_before < record.cut_index)
+        new_start = max(0, old_start - record.cut_index) + pinned
+        request_start = new_start + system_offset
+        request_messages = _runtime_history_messages(
+            execution_history,
+            self.system_instruction,
+        )
+        initial_entries = _initial_materialization_entries(
+            request_messages,
+            self.tools,
+            request_start=request_start,
+        )
+        materialization_budget = MaterializationBudget(
+            self.limits.max_materialized_context_bytes,
+            initial_entries=initial_entries,
+        )
+        current_tool_call_ids = {
+            key.removeprefix("current:")
+            for key, _ in initial_entries
+            if key.startswith("current:")
+        }
+        if self.transcript_rewriter is not None:
+            set_scope = getattr(self.transcript_rewriter, "set_request_scope", None)
+            if callable(set_scope):
+                set_scope(request_start)
+        if self.task_state_coordinator is not None:
+            self.task_state_coordinator.set_request_scope(request_start)
+            self.task_state_coordinator.retain_evidence_leases(current_tool_call_ids)
+            self.task_state_coordinator.refresh(request_messages)
+        if trace_collector is not None:
+            trace_collector.compaction_commit(
+                step=step,
+                trigger=trigger,
+                compaction_id=record.compaction_id,
+                base_revision=record.base_revision,
+                new_revision=execution_history.revision,
+                cut_index=record.cut_index,
+                source_message_count=record.source_message_count,
+                retained_message_count=len(execution_history.effective_messages()),
+                request_start_before=request_start_before,
+                request_start_after=request_start,
+                materialized_bytes_before=materialized_bytes_before,
+                materialized_bytes_after=materialization_budget.active_bytes,
+            )
+        return request_start, request_messages, materialization_budget
 
     async def _invoke_model(
         self,
