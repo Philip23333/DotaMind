@@ -8,12 +8,14 @@ they retain their measurement-only meaning and are not token estimates.
 ## Purpose
 
 Context Accounting makes the model-visible context footprint observable before
-Context Governance starts changing it.
+Context Governance changes it.
 
-Accounting does not choose policy, evict artifacts, or rewrite raw records. The
-current Runtime accepts an explicit internal `compact_before_steps` trigger and
-rebuilds the actual carried messages after a successful atomic commit. Automatic
-watermark decisions and overflow recovery are not implemented yet.
+Accounting does not evict artifacts or rewrite raw records. The Runtime accepts
+an explicit internal `compact_before_steps` trigger, applies automatic
+watermark decisions when a context window is configured, and rebuilds the
+actual carried messages after a successful atomic commit. Execution and primary
+answer requests may each make one bounded compaction attempt when progress has
+made another attempt eligible.
 
 ## Measurement
 
@@ -165,10 +167,13 @@ remaining input budget as `NORMAL`, `HIGH`, or local-estimate `CRITICAL` using
 the configured trigger percentage. A local `CRITICAL` does not mean that the
 provider has confirmed an overflow.
 
-This commit provides the pure assessment and strict configuration fields only.
-It does not update `RuntimeContext.context_pressure`, trigger compaction, or
-change product/model configuration wiring. Automatic triggering remains a
-later phase.
+Capacity checks are recorded for execution, primary-answer, and degraded-answer
+stages. A CRITICAL local estimate prevents the corresponding model request. An
+execution CRITICAL exits through the answer stage; a primary-answer CRITICAL
+falls through to the degraded answer, which never performs another compaction.
+The degraded path has its own bounded deadline and produces a deterministic
+fallback when its request also cannot fit. These checks remain local estimates;
+they do not implement provider overflow retry.
 
 ## Compaction boundary
 
@@ -203,9 +208,7 @@ trace's `model_request`; only its structured byte metrics are retained.
 
 ## Next policy layer
 
-The next phase may consume the full-request capacity result to choose when to
-trigger the dedicated summary call and may add one bounded overflow recovery
-attempt.
 Summary and FIFO locator overhead are already measurable. Existing hard resource
-bounds remain guardrails; no separate CompressionRequest entity or policy
-controller is required by this accounting layer.
+bounds remain guardrails; provider overflow recovery is a later phase and no
+separate CompressionRequest entity or policy controller is required by this
+accounting layer.

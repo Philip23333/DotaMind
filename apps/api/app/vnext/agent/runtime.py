@@ -27,6 +27,7 @@ from app.vnext.agent.errors import (
     AgentCancelledError,
     AgentDeadlineExceeded,
     AgentRuntimeError,
+    ContextCapacityExceeded,
     ModelProtocolError,
     ModelProviderError,
 )
@@ -220,6 +221,7 @@ class AgentRuntime:
         step = 0
         outcome: ExecutionOutcome | None = None
         request_messages: list[Message] = []
+        compaction_attempted_since_progress = False
 
         try:
             if self.system_instruction is not None and any(
@@ -280,13 +282,15 @@ class AgentRuntime:
                     if compaction_trigger is not None and trace_collector is not None:
                         trace_collector.context_capacity_check(
                             step=step,
-                            stage="before_compaction",
+                            stage="execution",
+                            phase="before_compaction",
                             capacity=candidate_capacity,
                         )
                 elif explicit_compaction:
                     compaction_trigger = "explicit"
 
                 if compaction_trigger is not None:
+                    compaction_attempted_since_progress = True
                     materialized_bytes_before = materialization_budget.active_bytes
                     request_start_before = request_start
                     try:
@@ -350,14 +354,16 @@ class AgentRuntime:
                     if trace_collector is not None:
                         trace_collector.context_capacity_check(
                             step=step,
-                            stage="before_model",
+                            stage="execution",
+                            phase="before_model",
                             capacity=final_capacity,
                         )
                     if final_capacity.pressure.value == "critical":
-                        raise AgentRuntimeError(
-                            "execution request exceeds the configured context budget",
-                            details={"code": "context_capacity_exceeded"},
+                        outcome = ExecutionOutcome(
+                            ExecutionStopReason.CONTEXT_CAPACITY,
+                            step,
                         )
+                        break
                 if trace_collector is not None:
                     trace_collector.model_request(
                         request,
@@ -411,6 +417,7 @@ class AgentRuntime:
                 )
 
                 if isinstance(assistant, FinalMessage):
+                    compaction_attempted_since_progress = False
                     outcome = ExecutionOutcome(ExecutionStopReason.MODEL_DONE, step)
                     break
                 calls = assistant.tool_calls
@@ -472,6 +479,7 @@ class AgentRuntime:
                         execution_history,
                         _persistent_history_messages(request_messages, self.system_instruction),
                     )
+                compaction_attempted_since_progress = False
                 if (
                     self.task_state_coordinator is not None
                     and self.task_state_coordinator.plan_snapshot() is not None
@@ -527,44 +535,133 @@ class AgentRuntime:
                 return
 
             answer_context_builder = AnswerContextBuilder()
-            primary_context = answer_context_builder.build(
-                execution_messages=request_messages,
-                outcome=outcome,
-                task_state_coordinator=self.task_state_coordinator,
-                resolution=resolution,
-                projection_mode=AnswerProjectionMode.PRIMARY,
-                effective_history_embedded=True,
-            )
-            answer_messages = _project_session_context(request_messages, execution_history)
-            answer_request = _build_answer_request(
-                instruction=ANSWER_INSTRUCTION,
-                messages=answer_messages,
-                context=primary_context,
-                step=answer_step,
-            )
-            if trace_collector is not None:
-                trace_collector.model_request(answer_request)
-                trace_collector.answer_stage(answer_request, primary_context)
-                trace_collector.answer_projection(
-                    answer_request,
-                    primary_context,
-                    kind="primary",
-                    resolution=resolution,
-                )
-            yield await self._publish(
-                ModelRequested(
-                    step=answer_step,
-                    message_count=len(answer_request.messages),
-                    tool_count=0,
-                ),
-                sink,
-            )
+            primary_deadline = _Deadline(self.limits.answer_timeout_seconds)
             primary_started = monotonic()
             try:
+                primary_context = answer_context_builder.build(
+                    execution_messages=request_messages,
+                    outcome=outcome,
+                    task_state_coordinator=self.task_state_coordinator,
+                    resolution=resolution,
+                    projection_mode=AnswerProjectionMode.PRIMARY,
+                    effective_history_embedded=True,
+                )
+                answer_messages = _project_session_context(request_messages, execution_history)
+                answer_request = _build_answer_request(
+                    instruction=ANSWER_INSTRUCTION,
+                    messages=answer_messages,
+                    context=primary_context,
+                    step=answer_step,
+                    max_output_tokens=(
+                        self.limits.context_output_reserve_tokens
+                        if auto_compaction_enabled
+                        else None
+                    ),
+                )
+                if auto_compaction_enabled:
+                    primary_capacity = assess_request_capacity(answer_request, self.limits)
+                    assert primary_capacity is not None
+                    if (
+                        primary_capacity.pressure.value in {"high", "critical"}
+                        and not compaction_attempted_since_progress
+                    ):
+                        compaction_attempted_since_progress = True
+                        if trace_collector is not None:
+                            trace_collector.context_capacity_check(
+                                step=answer_step,
+                                stage="primary_answer",
+                                phase="before_compaction",
+                                capacity=primary_capacity,
+                            )
+                        materialized_bytes_before = materialization_budget.active_bytes
+                        request_start_before = request_start
+                        try:
+                            compacted = await self._compact_session_history(
+                                execution_history=execution_history,
+                                request_id=request_id,
+                                token=token,
+                                deadline=primary_deadline,
+                                step=answer_step,
+                                recent_history_bytes=(
+                                    self.limits.compaction_recent_history_bytes
+                                ),
+                                max_input_bytes=self.limits.compaction_max_input_bytes,
+                                max_output_tokens=self.limits.compaction_max_output_tokens,
+                                max_summary_bytes=self.limits.compaction_max_summary_bytes,
+                                trace_collector=trace_collector,
+                            )
+                        except CompactionSummaryError as exc:
+                            raise ModelProtocolError(
+                                f"answer compaction failed: {exc}"
+                            ) from exc
+                        if compacted:
+                            request_start, request_messages, materialization_budget = (
+                                self._rebuild_after_compaction(
+                                    execution_history=execution_history,
+                                    request_id=request_id,
+                                    request_start=request_start,
+                                    request_start_before=request_start_before,
+                                    materialized_bytes_before=materialized_bytes_before,
+                                    step=answer_step,
+                                    trigger="watermark",
+                                    trace_collector=trace_collector,
+                                )
+                            )
+                            primary_context = answer_context_builder.build(
+                                execution_messages=request_messages,
+                                outcome=outcome,
+                                task_state_coordinator=self.task_state_coordinator,
+                                resolution=resolution,
+                                projection_mode=AnswerProjectionMode.PRIMARY,
+                                effective_history_embedded=True,
+                            )
+                            answer_messages = _project_session_context(
+                                request_messages,
+                                execution_history,
+                            )
+                            answer_request = _build_answer_request(
+                                instruction=ANSWER_INSTRUCTION,
+                                messages=answer_messages,
+                                context=primary_context,
+                                step=answer_step,
+                                max_output_tokens=self.limits.context_output_reserve_tokens,
+                            )
+                    self._check_controls(token, primary_deadline)
+                    final_capacity = assess_request_capacity(answer_request, self.limits)
+                    assert final_capacity is not None
+                    if trace_collector is not None:
+                        trace_collector.context_capacity_check(
+                            step=answer_step,
+                            stage="primary_answer",
+                            phase="before_model",
+                            capacity=final_capacity,
+                        )
+                    if final_capacity.pressure.value == "critical":
+                        raise ContextCapacityExceeded(
+                            "answer request exceeds the configured context budget"
+                        )
+                self._check_controls(token, primary_deadline)
+                if trace_collector is not None:
+                    trace_collector.model_request(answer_request)
+                    trace_collector.answer_stage(answer_request, primary_context)
+                    trace_collector.answer_projection(
+                        answer_request,
+                        primary_context,
+                        kind="primary",
+                        resolution=resolution,
+                    )
+                yield await self._publish(
+                    ModelRequested(
+                        step=answer_step,
+                        message_count=len(answer_request.messages),
+                        tool_count=0,
+                    ),
+                    sink,
+                )
                 response, duration, answer_text_events = await self._invoke_model(
                     answer_request,
                     token=token,
-                    deadline=_Deadline(self.limits.answer_timeout_seconds),
+                    deadline=primary_deadline,
                     step=answer_step,
                     trace_collector=trace_collector,
                     publish_text=True,
@@ -594,7 +691,13 @@ class AgentRuntime:
                     ),
                     sink,
                 )
-            except (AgentDeadlineExceeded, ModelProviderError, ModelProtocolError) as exc:
+            except (
+                AgentDeadlineExceeded,
+                ContextCapacityExceeded,
+                ModelProviderError,
+                ModelProtocolError,
+            ) as exc:
+                answer_capacity_exhausted = isinstance(exc, ContextCapacityExceeded)
                 if trace_collector is not None:
                     trace_collector.answer_attempt(
                         kind="primary",
@@ -605,6 +708,8 @@ class AgentRuntime:
                     )
 
                 degraded_step = answer_step + 1
+                degraded_deadline = _Deadline(self.limits.degraded_answer_timeout_seconds)
+                degraded_started = monotonic()
                 degraded_context = answer_context_builder.build(
                     execution_messages=request_messages,
                     outcome=outcome,
@@ -618,25 +723,52 @@ class AgentRuntime:
                     messages=_project_session_context(request_messages, execution_history),
                     context=degraded_context,
                     step=degraded_step,
-                )
-                if trace_collector is not None:
-                    trace_collector.model_request(degraded_request)
-                    trace_collector.answer_projection(
-                        degraded_request,
-                        degraded_context,
-                        kind="degraded",
-                        resolution=resolution,
-                    )
-                yield await self._publish(
-                    ModelRequested(
-                        step=degraded_step,
-                        message_count=len(degraded_request.messages),
-                        tool_count=0,
+                    max_output_tokens=(
+                        self.limits.context_output_reserve_tokens
+                        if auto_compaction_enabled
+                        else None
                     ),
-                    sink,
                 )
-                degraded_started = monotonic()
+                degraded_precheck_error: AgentRuntimeError | None = None
+                if auto_compaction_enabled:
+                    degraded_capacity = assess_request_capacity(degraded_request, self.limits)
+                    assert degraded_capacity is not None
+                    if trace_collector is not None:
+                        trace_collector.context_capacity_check(
+                            step=degraded_step,
+                            stage="degraded_answer",
+                            phase="before_model",
+                            capacity=degraded_capacity,
+                        )
+                    if degraded_capacity.pressure.value == "critical":
+                        degraded_precheck_error = ContextCapacityExceeded(
+                            "degraded answer request exceeds the configured context budget"
+                        )
+                if degraded_precheck_error is None:
+                    try:
+                        self._check_controls(token, degraded_deadline)
+                    except AgentDeadlineExceeded as exc:
+                        degraded_precheck_error = exc
+                if degraded_precheck_error is None:
+                    if trace_collector is not None:
+                        trace_collector.model_request(degraded_request)
+                        trace_collector.answer_projection(
+                            degraded_request,
+                            degraded_context,
+                            kind="degraded",
+                            resolution=resolution,
+                        )
+                    yield await self._publish(
+                        ModelRequested(
+                            step=degraded_step,
+                            message_count=len(degraded_request.messages),
+                            tool_count=0,
+                        ),
+                        sink,
+                    )
                 try:
+                    if degraded_precheck_error is not None:
+                        raise degraded_precheck_error
                     (
                         degraded_response,
                         degraded_duration,
@@ -644,7 +776,7 @@ class AgentRuntime:
                     ) = await self._invoke_model(
                         degraded_request,
                         token=token,
-                        deadline=_Deadline(self.limits.degraded_answer_timeout_seconds),
+                        deadline=degraded_deadline,
                         step=degraded_step,
                         trace_collector=trace_collector,
                         publish_text=True,
@@ -710,6 +842,7 @@ class AgentRuntime:
                     return
                 except (
                     AgentDeadlineExceeded,
+                    ContextCapacityExceeded,
                     ModelProviderError,
                     ModelProtocolError,
                 ) as degraded_exc:
@@ -722,7 +855,14 @@ class AgentRuntime:
                             error_code=degraded_exc.code,
                         )
                         trace_collector.answer_fallback("deterministic")
-                    final = build_answer_fallback(resolution, outcome)
+                    final = build_answer_fallback(
+                        resolution,
+                        outcome,
+                        context_capacity_exhausted=(
+                            answer_capacity_exhausted
+                            or isinstance(degraded_exc, ContextCapacityExceeded)
+                        ),
+                    )
                     if execution_history is not None and request_id is not None:
                         _record_delivery(
                             execution_history,
@@ -1669,6 +1809,7 @@ def _build_answer_request(
     messages: Sequence[Message],
     context: Any,
     step: int,
+    max_output_tokens: int | None = None,
 ) -> ModelRequest:
     return ModelRequest(
         messages=[
@@ -1678,6 +1819,7 @@ def _build_answer_request(
         ],
         tools=[],
         step=step,
+        max_output_tokens=max_output_tokens,
     )
 
 

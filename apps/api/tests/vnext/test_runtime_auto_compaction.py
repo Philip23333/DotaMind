@@ -314,9 +314,9 @@ def test_auto_mode_sets_request_output_reserve() -> None:
 
     assert model.requests[0].max_output_tokens == 37
     checks = trace.snapshot()["context_capacity_checks"]
-    assert len(checks) == 1
-    assert checks[0]["phase"] == "before_model"
-    assert checks[0]["capacity"]["pressure"] == "normal"
+    assert [check["stage"] for check in checks] == ["execution", "primary_answer"]
+    assert [check["phase"] for check in checks] == ["before_model", "before_model"]
+    assert all(check["capacity"]["pressure"] == "normal" for check in checks)
 
 
 def test_tool_schemas_are_included_in_runtime_capacity() -> None:
@@ -369,7 +369,7 @@ def test_high_watermark_compacts_once_and_rebuilds_execution_request() -> None:
     model = ScriptedModelClient(
         [
             ModelResponse.from_final(
-                "summary",
+                "compressed background",
                 finish_reason="stop",
                 usage={"input_tokens": 9},
             ),
@@ -386,13 +386,17 @@ def test_high_watermark_compacts_once_and_rebuilds_execution_request() -> None:
         trace_collector=trace,
     )
 
-    assert len(model.requests) == 3
+    assert len(model.requests) == 2
     assert model.requests[0].tools == []
     assert model.requests[1].tools
     assert model.requests[1].max_output_tokens == 64
     assert "old evidence" not in str(model.requests[1].messages)
     snapshot = trace.snapshot()
-    assert [item["phase"] for item in snapshot["context_capacity_checks"]] == [
+    assert [
+        item["phase"]
+        for item in snapshot["context_capacity_checks"]
+        if item["stage"] == "execution"
+    ] == [
         "before_compaction",
         "before_model",
     ]
@@ -411,7 +415,7 @@ def test_explicit_compaction_wins_when_watermark_is_also_high() -> None:
     limits = _limits_for_available(final_capacity.estimated_input_tokens + 1)
     model = ScriptedModelClient(
         [
-            ModelResponse.from_final("summary", finish_reason="stop"),
+            ModelResponse.from_final("compressed background", finish_reason="stop"),
             ModelResponse.from_final("execution"),
             ModelResponse.from_final("answer"),
         ]
@@ -426,7 +430,7 @@ def test_explicit_compaction_wins_when_watermark_is_also_high() -> None:
         trace_collector=trace,
     )
 
-    assert len(model.requests) == 3
+    assert len(model.requests) == 2
     assert len(trace.snapshot()["compaction_calls"]) == 1
     assert trace.snapshot()["compaction_commits"][0]["trigger"] == "explicit"
 
@@ -438,7 +442,7 @@ def test_high_without_a_compactable_range_continues_to_model() -> None:
     candidate = _probe_request(history, registry, limits=probe_limits)
     capacity = assess_request_capacity(candidate, probe_limits)
     assert capacity is not None
-    limits = _limits_for_available(capacity.estimated_input_tokens + 1)
+    limits = _limits_for_available(capacity.estimated_input_tokens + 10)
     model = ScriptedModelClient(
         [ModelResponse.from_final("execution"), ModelResponse.from_final("answer")]
     )
@@ -451,12 +455,18 @@ def test_high_without_a_compactable_range_continues_to_model() -> None:
         trace_collector=trace,
     )
 
-    assert len(model.requests) == 2
+    assert len(model.requests) == 1
+    assert model.requests[0].tools
     assert "compaction_calls" not in trace.snapshot()
-    assert trace.snapshot()["context_capacity_checks"][-1]["capacity"]["pressure"] == "high"
+    execution_checks = [
+        item
+        for item in trace.snapshot()["context_capacity_checks"]
+        if item["stage"] == "execution"
+    ]
+    assert execution_checks[-1]["capacity"]["pressure"] == "high"
 
 
-def test_critical_after_compaction_fails_before_execution_and_does_not_retry() -> None:
+def test_critical_after_compaction_enters_answer_capacity_exit() -> None:
     history, request_id = _history_with_old_group()
     registry = _echo_registry()
     probe_limits = _limits_for_available(100_000)
@@ -471,23 +481,28 @@ def test_critical_after_compaction_fails_before_execution_and_does_not_retry() -
                 "compressed background",
                 finish_reason="stop",
                 usage={"n": 1},
-            )
+            ),
+            ModelResponse.from_final("execution"),
         ]
     )
     trace = AgentTraceCollector()
 
-    with pytest.raises(AgentRuntimeError, match="exceeds the configured context budget") as error:
-        _run(
-            AgentRuntime(model, registry, limits=limits),
-            history,
-            request_id,
-            trace_collector=trace,
-        )
+    result = _run(
+        AgentRuntime(model, registry, limits=limits),
+        history,
+        request_id,
+        trace_collector=trace,
+    )
 
-    assert error.value.details == {"code": "context_capacity_exceeded"}
+    assert "context budget was exhausted" in result.content
     assert len(model.requests) == 1
     assert len(trace.snapshot()["compaction_commits"]) == 1
-    assert [item["phase"] for item in trace.snapshot()["context_capacity_checks"]] == [
+    assert trace.snapshot()["execution_outcome"]["reason"] == "context_capacity"
+    assert [
+        item["phase"]
+        for item in trace.snapshot()["context_capacity_checks"]
+        if item["stage"] == "execution"
+    ] == [
         "before_compaction",
         "before_model",
     ]
@@ -575,9 +590,9 @@ def test_continuous_watermarks_compact_again_after_new_tool_output() -> None:
     )
 
     assert calls == ["new"]
-    assert len(model.requests) == 5
+    assert len(model.requests) == 4
     assert [request.step for request in model.requests[1:4:2]] == [1, 2]
-    assert [event.step for event in events if isinstance(event, ModelRequested)] == [1, 2, 3]
+    assert [event.step for event in events if isinstance(event, ModelRequested)] == [1, 2]
     assert [event.step for event in events if isinstance(event, ToolStarted)] == [1]
 
     snapshot = trace.snapshot()
@@ -591,7 +606,7 @@ def test_continuous_watermarks_compact_again_after_new_tool_output() -> None:
     before_model = [
         item
         for item in snapshot["context_capacity_checks"]
-        if item["phase"] == "before_model"
+        if item["stage"] == "execution" and item["phase"] == "before_model"
     ]
     assert [item["capacity"]["context_bytes"] for item in before_model] == [
         measure_request_context_bytes(model.requests[1]),
@@ -599,7 +614,7 @@ def test_continuous_watermarks_compact_again_after_new_tool_output() -> None:
     ]
     assert [
         item["step"] for item in snapshot["steps"] if "model_request" in item
-    ] == [1, 2, 3]
+    ] == [1, 2]
 
 
 def test_tool_schema_can_cross_the_watermark_trigger_line() -> None:
@@ -658,20 +673,20 @@ def test_critical_without_compactable_range_fails_before_business_execution() ->
     async def collect(event: object) -> None:
         events.append(event)
 
-    with pytest.raises(AgentRuntimeError) as error:
-        _run(
-            AgentRuntime(model, registry, limits=limits),
-            history,
-            request_id,
-            event_sink=collect,
-            trace_collector=trace,
-        )
+    result = _run(
+        AgentRuntime(model, registry, limits=limits),
+        history,
+        request_id,
+        event_sink=collect,
+        trace_collector=trace,
+    )
 
-    assert error.value.details == {"code": "context_capacity_exceeded"}
+    assert "context budget was exhausted" in result.content
     assert model.requests == []
-    assert history.effective_messages() == before_messages
-    assert history.records == before_records
+    assert history.effective_messages()[:-1] == before_messages
+    assert history.records[:-1] == before_records
     assert history.compaction_records == ()
+    assert trace.snapshot()["execution_outcome"]["reason"] == "context_capacity"
     assert not any(isinstance(event, (ModelRequested, ToolStarted)) for event in events)
 
 

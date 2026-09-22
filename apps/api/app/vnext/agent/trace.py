@@ -6,7 +6,7 @@ import json
 from collections.abc import Sequence
 from copy import deepcopy
 from time import monotonic
-from typing import Any
+from typing import Any, Literal
 
 from app.vnext.agent.answer_stage import (
     AnswerContext,
@@ -317,14 +317,15 @@ class AgentTraceCollector:
         self,
         *,
         step: int,
-        stage: str,
+        stage: Literal["execution", "primary_answer", "degraded_answer"],
+        phase: Literal["before_compaction", "before_model"],
         capacity: RequestCapacity,
     ) -> None:
         self._trace.setdefault("context_capacity_checks", []).append(
             {
                 "step": step,
-                "stage": "execution",
-                "phase": stage,
+                "stage": stage,
+                "phase": phase,
                 "capacity": {
                     "measurement": capacity.measurement,
                     "context_bytes": capacity.context_bytes,

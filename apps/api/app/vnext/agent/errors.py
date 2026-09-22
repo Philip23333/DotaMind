@@ -53,6 +53,12 @@ class ModelProtocolError(AgentRuntimeError):
     code = "model_protocol_error"
 
 
+class ContextCapacityExceeded(AgentRuntimeError):
+    """The local request estimate cannot fit within the configured budget."""
+
+    code = "context_capacity_exceeded"
+
+
 # The shorter aliases are useful to callers that want to name failures without
 # the implementation-oriented ``Error`` suffix.  The event named
 # ``AgentCancelled`` intentionally lives in events.py and is not aliased here.
@@ -66,6 +72,7 @@ __all__ = [
     "AgentDeadlineExceeded",
     "AgentDeadlineExceededError",
     "AgentRuntimeError",
+    "ContextCapacityExceeded",
     "MaxStepsExceeded",
     "MaxStepsExceededError",
     "ModelProviderError",

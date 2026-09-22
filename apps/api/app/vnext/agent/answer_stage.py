@@ -24,6 +24,7 @@ class ExecutionStopReason(str, Enum):
     PLAN_COMPLETE = "plan_complete"
     DEADLINE = "deadline"
     MAX_STEPS = "max_steps"
+    CONTEXT_CAPACITY = "context_capacity"
 
 
 class AnswerResolutionMode(str, Enum):
@@ -77,6 +78,8 @@ def resolve_answer(
             AnswerResolutionMode.FULL
             if outcome.reason
             in {ExecutionStopReason.MODEL_DONE, ExecutionStopReason.PLAN_COMPLETE}
+            else AnswerResolutionMode.PARTIAL
+            if outcome.reason is ExecutionStopReason.CONTEXT_CAPACITY
             else AnswerResolutionMode.FAILURE
         )
         return AnswerResolution(
@@ -137,6 +140,10 @@ def build_failure_answer(
         "I wasn't able to complete enough verified parts of this request "
         "to produce a reliable answer.",
     ]
+    if outcome.reason is ExecutionStopReason.CONTEXT_CAPACITY:
+        lines.append(
+            "The execution stopped because the available context budget was exhausted."
+        )
     if resolution.total_items is not None:
         lines.append(
             f"{len(resolution.completed_keys)} of {resolution.total_items} planned "
@@ -153,15 +160,22 @@ def build_failure_answer(
 def build_answer_fallback(
     resolution: AnswerResolution,
     outcome: ExecutionOutcome,
+    *,
+    context_capacity_exhausted: bool = False,
 ) -> FinalMessage:
     """Explain that durable execution finished but answer rendering did not."""
 
-    del outcome
+    capacity_note = (
+        " The execution stopped because the available context budget was exhausted."
+        if context_capacity_exhausted or outcome.reason is ExecutionStopReason.CONTEXT_CAPACITY
+        else ""
+    )
     if resolution.total_items is None:
         return FinalMessage(
             content=(
                 "The task execution completed, but I wasn't able to generate the "
                 "detailed final response within the response limit."
+                + capacity_note
             )
         )
 
@@ -172,14 +186,18 @@ def build_answer_fallback(
             content=(
                 "The requested data processing was completed, but I wasn't able "
                 "to generate the detailed final response within the response "
-                "limit.\n\n"
+                "limit."
+                + capacity_note
+                + "\n\n"
                 f"{coverage}"
             )
         )
     return FinalMessage(
         content=(
             "I wasn't able to generate the detailed final response within the "
-            "response limit.\n\n"
+            "response limit."
+            + capacity_note
+            + "\n\n"
             f"{coverage} The remaining parts were not completed, so I won't "
             "infer or fill them in."
         )

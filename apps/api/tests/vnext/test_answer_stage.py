@@ -8,6 +8,7 @@ from app.vnext.agent.answer_stage import (
     ExecutionOutcome,
     ExecutionStopReason,
     build_answer_fallback,
+    build_failure_answer,
     resolve_answer,
 )
 from app.vnext.agent.task_state import (
@@ -127,6 +128,10 @@ def test_resolve_without_plan_preserves_simple_model_done_and_closes_deadline() 
         outcome=_outcome(ExecutionStopReason.DEADLINE),
         task_state_coordinator=None,
     ).mode is AnswerResolutionMode.FAILURE
+    assert resolve_answer(
+        outcome=_outcome(ExecutionStopReason.CONTEXT_CAPACITY),
+        task_state_coordinator=None,
+    ).mode is AnswerResolutionMode.PARTIAL
 
 
 def test_resolve_completed_plan_without_state_is_not_full() -> None:
@@ -175,6 +180,25 @@ def test_build_answer_fallback_distinguishes_full_partial_and_no_plan() -> None:
     assert "won't infer or fill them in" in partial_text
     assert "planned parts" not in build_answer_fallback(
         no_plan, _outcome(ExecutionStopReason.MODEL_DONE)
+    ).content
+
+
+def test_capacity_stop_is_explained_in_deterministic_answers() -> None:
+    outcome = _outcome(ExecutionStopReason.CONTEXT_CAPACITY)
+    resolution = resolve_answer(outcome=outcome, task_state_coordinator=None)
+
+    assert resolution.mode is AnswerResolutionMode.PARTIAL
+    assert "context budget was exhausted" in build_answer_fallback(resolution, outcome).content
+
+    plan_resolution = AnswerResolution(
+        mode=AnswerResolutionMode.FAILURE,
+        total_items=2,
+        completed_keys=(),
+        remaining_keys=("A", "B"),
+    )
+    assert "context budget was exhausted" in build_failure_answer(
+        plan_resolution,
+        outcome,
     ).content
 
 
