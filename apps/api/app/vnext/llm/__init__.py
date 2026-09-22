@@ -1,5 +1,6 @@
 """Provider-neutral model protocol and transport adapters."""
 
+from app.vnext.llm.errors import ModelContextWindowError
 from app.vnext.llm.openai_compatible import (
     MalformedToolArgumentsError,
     OpenAICompatibleAdapter,
@@ -30,6 +31,7 @@ __all__ = [
     "FinalMessage",
     "MalformedToolArgumentsError",
     "Message",
+    "ModelContextWindowError",
     "ModelClient",
     "ModelRequest",
     "ModelResponse",

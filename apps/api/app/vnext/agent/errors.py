@@ -49,6 +49,28 @@ class ModelProviderError(AgentRuntimeError):
         self.cause = cause
 
 
+class ModelContextWindowExceeded(ModelProviderError):
+    code = "model_context_window_exceeded"
+
+    def __init__(
+        self,
+        *,
+        cause: Exception,
+        provider_code: str,
+        status_code: int | None,
+    ) -> None:
+        super().__init__(
+            "model provider reported a context window limit",
+            cause=cause,
+        )
+        self.details.update(
+            {
+                "provider_code": provider_code,
+                "status_code": status_code,
+            }
+        )
+
+
 class ModelProtocolError(AgentRuntimeError):
     code = "model_protocol_error"
 
@@ -75,6 +97,7 @@ __all__ = [
     "ContextCapacityExceeded",
     "MaxStepsExceeded",
     "MaxStepsExceededError",
+    "ModelContextWindowExceeded",
     "ModelProviderError",
     "ModelProtocolError",
 ]

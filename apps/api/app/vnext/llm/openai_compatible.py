@@ -12,6 +12,7 @@ from typing import Any
 
 import httpx
 
+from app.vnext.llm.errors import ModelContextWindowError
 from app.vnext.llm.protocol import (
     AssistantMessage,
     FinalMessage,
@@ -41,6 +42,10 @@ class ProviderProtocolError(OpenAICompatibleError):
 
 class MalformedToolArgumentsError(ProviderProtocolError):
     """A provider tool call contained invalid JSON or a non-object argument value."""
+
+
+_CONTEXT_WINDOW_HTTP_STATUSES = frozenset({400, 413, 422})
+_CONTEXT_WINDOW_PROVIDER_CODE = "context_length_exceeded"
 
 
 @dataclass
@@ -194,16 +199,54 @@ class OpenAICompatibleModelClient:
     def _url(self) -> str:
         return f"{self.base_url}/chat/completions"
 
-    @staticmethod
-    def _raise_for_status(response: httpx.Response) -> None:
+    @classmethod
+    def _raise_for_status(cls, response: httpx.Response) -> None:
         if response.is_error:
+            context_error = cls._context_window_error_from_response(response)
+            if context_error is not None:
+                raise context_error
             raise ProviderHTTPError(response.status_code, response.text)
 
-    @staticmethod
-    async def _raise_for_status_async(response: httpx.Response) -> None:
+    @classmethod
+    async def _raise_for_status_async(cls, response: httpx.Response) -> None:
         if response.is_error:
             await response.aread()
+            context_error = cls._context_window_error_from_response(response)
+            if context_error is not None:
+                raise context_error
             raise ProviderHTTPError(response.status_code, response.text)
+
+    @classmethod
+    def _context_window_error_from_response(
+        cls,
+        response: httpx.Response,
+    ) -> ModelContextWindowError | None:
+        if response.status_code not in _CONTEXT_WINDOW_HTTP_STATUSES:
+            return None
+        try:
+            data = response.json()
+        except ValueError:
+            return None
+        return cls._context_window_error(data, status_code=response.status_code)
+
+    @staticmethod
+    def _context_window_error(
+        data: Any,
+        *,
+        status_code: int | None,
+    ) -> ModelContextWindowError | None:
+        if not isinstance(data, Mapping):
+            return None
+        error = data.get("error")
+        if not isinstance(error, Mapping):
+            return None
+        provider_code = error.get("code")
+        if provider_code != _CONTEXT_WINDOW_PROVIDER_CODE:
+            return None
+        return ModelContextWindowError(
+            provider_code=provider_code,
+            status_code=status_code,
+        )
 
     @classmethod
     def _parse_response(
@@ -217,6 +260,9 @@ class OpenAICompatibleModelClient:
             raise ProviderProtocolError("model provider returned invalid JSON") from exc
         if not isinstance(data, Mapping):
             raise ProviderProtocolError("model provider response must be a JSON object")
+        context_error = cls._context_window_error(data, status_code=None)
+        if context_error is not None:
+            raise context_error
 
         choices = data.get("choices")
         if not isinstance(choices, list) or not choices:
@@ -265,6 +311,9 @@ class OpenAICompatibleModelClient:
     ) -> tuple[list[ModelTextDelta], str | None, dict[str, Any]]:
         if not isinstance(chunk, Mapping):
             raise ProviderProtocolError("stream data must be a JSON object")
+        context_error = cls._context_window_error(chunk, status_code=None)
+        if context_error is not None:
+            raise context_error
 
         choices = chunk.get("choices")
         if not isinstance(choices, list):
@@ -520,6 +569,7 @@ OpenAICompatibleAdapter = OpenAICompatibleModelClient
 
 __all__ = [
     "MalformedToolArgumentsError",
+    "ModelContextWindowError",
     "OpenAICompatibleAdapter",
     "OpenAICompatibleError",
     "OpenAICompatibleModelClient",

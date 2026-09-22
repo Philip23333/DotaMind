@@ -28,6 +28,7 @@ from app.vnext.agent.errors import (
     AgentDeadlineExceeded,
     AgentRuntimeError,
     ContextCapacityExceeded,
+    ModelContextWindowExceeded,
     ModelProtocolError,
     ModelProviderError,
 )
@@ -60,6 +61,7 @@ from app.vnext.agent.runtime_prompt import render_runtime_prompt
 from app.vnext.agent.task_state import TaskStateCoordinator
 from app.vnext.agent.trace import AgentTraceCollector
 from app.vnext.agent.transcript_rewrite import TranscriptRewriter
+from app.vnext.llm.errors import ModelContextWindowError
 from app.vnext.llm.protocol import (
     AssistantMessage,
     FinalMessage,
@@ -1155,6 +1157,12 @@ class AgentRuntime:
             return response, max(0.0, monotonic() - started), text_events
         except (AgentCancelledError, AgentDeadlineExceeded):
             raise
+        except ModelContextWindowError as exc:
+            raise ModelContextWindowExceeded(
+                cause=exc,
+                provider_code=exc.provider_code,
+                status_code=exc.status_code,
+            ) from exc
         except AgentRuntimeError:
             raise
         except Exception as exc:
