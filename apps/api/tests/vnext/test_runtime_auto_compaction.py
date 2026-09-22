@@ -6,10 +6,13 @@ from uuid import uuid4
 import pytest
 from pydantic import BaseModel
 
+from app.vnext.agent.context_accounting import measure_request_context_bytes
 from app.vnext.agent.context_capacity import assess_request_capacity
 from app.vnext.agent.errors import AgentCancelledError, AgentRuntimeError, ModelProtocolError
+from app.vnext.agent.events import ModelRequested, ToolStarted
 from app.vnext.agent.limits import AgentLimits
 from app.vnext.agent.runtime import AgentRuntime, CancellationToken, _Deadline
+from app.vnext.agent.runtime_context import ContextPressure
 from app.vnext.agent.trace import AgentTraceCollector
 from app.vnext.llm.protocol import (
     AssistantMessage,
@@ -92,6 +95,31 @@ def _history_with_old_group(*, size: int = 8_000) -> tuple[SessionExecutionHisto
     )
 
 
+def _history_with_old_groups(
+    *,
+    first_size: int = 9_000,
+    second_size: int = 1_000,
+) -> tuple[SessionExecutionHistory, object]:
+    first_call = _echo_call("old-call-1", "old-1")
+    second_call = _echo_call("old-call-2", "old-2")
+    return _history(
+        [
+            UserMessage(content="old question"),
+            AssistantMessage(tool_calls=[first_call]),
+            ToolResultMessage(
+                tool_call_id=first_call.id,
+                content={"text": "old evidence one " + ("x" * first_size)},
+            ),
+            AssistantMessage(tool_calls=[second_call]),
+            ToolResultMessage(
+                tool_call_id=second_call.id,
+                content={"text": "old evidence two " + ("x" * second_size)},
+            ),
+            UserMessage(content="current question"),
+        ]
+    )
+
+
 def _committed_history(
     source: SessionExecutionHistory,
     *,
@@ -104,6 +132,34 @@ def _committed_history(
         base_revision=history.revision,
         summary=summary,
         cut_index=cut_index,
+    )
+    return history
+
+
+def _double_compacted_history(source: SessionExecutionHistory) -> SessionExecutionHistory:
+    history, request_id = _history(source.effective_messages())
+    history.commit_compaction(
+        request_id=request_id,  # type: ignore[arg-type]
+        base_revision=history.revision,
+        summary="summary one",
+        cut_index=3,
+    )
+    new_call = _echo_call("new-call", "new")
+    history.set_effective(
+        [
+            *history.effective_messages(),
+            AssistantMessage(tool_calls=[new_call]),
+            ToolResultMessage(
+                tool_call_id=new_call.id,
+                content={"text": "new evidence " + ("x" * 6_000)},
+            ),
+        ]
+    )
+    history.commit_compaction(
+        request_id=request_id,  # type: ignore[arg-type]
+        base_revision=history.revision,
+        summary="summary two",
+        cut_index=3,
     )
     return history
 
@@ -130,6 +186,7 @@ def _limits_for_available(
     *,
     recent_bytes: int = 1,
     max_steps: int = 3,
+    trigger_percent: int = 80,
 ) -> AgentLimits:
     reserve = 64
     margin = 16
@@ -145,6 +202,7 @@ def _limits_for_available(
         context_output_reserve_tokens=reserve,
         context_safety_margin_tokens=margin,
         context_estimate_bytes_per_token=1,
+        context_compaction_trigger_percent=trigger_percent,
     )
 
 
@@ -475,3 +533,182 @@ def test_auto_compaction_cancellation_does_not_commit_or_execute() -> None:
     assert history.compaction_records == ()
     assert trace.snapshot()["compaction_calls"][0]["status"] == "cancelled"
     assert trace.snapshot()["compaction_calls"][0]["usage"] == {"input_tokens": 3}
+
+
+def test_continuous_watermarks_compact_again_after_new_tool_output() -> None:
+    history, request_id = _history_with_old_groups()
+    calls: list[str] = []
+    registry = _echo_registry(output_size=6_000, calls=calls)
+    probe_limits = _limits_for_available(100_000, recent_bytes=500, max_steps=2)
+    compacted = _double_compacted_history(history)
+    final_request = _probe_request(compacted, registry, limits=probe_limits)
+    final_capacity = assess_request_capacity(final_request, probe_limits)
+    assert final_capacity is not None
+    limits = _limits_for_available(
+        final_capacity.estimated_input_tokens + 1,
+        recent_bytes=500,
+        max_steps=2,
+    )
+    model = ScriptedModelClient(
+        [
+            ModelResponse.from_final("summary one", finish_reason="stop"),
+            ModelResponse.from_assistant(
+                AssistantMessage(tool_calls=[_echo_call("new-call", "new")])
+            ),
+            ModelResponse.from_final("summary two", finish_reason="stop"),
+            ModelResponse.from_final("execution final"),
+            ModelResponse.from_final("answer"),
+        ]
+    )
+    trace = AgentTraceCollector()
+    events: list[object] = []
+
+    async def collect(event: object) -> None:
+        events.append(event)
+
+    _run(
+        AgentRuntime(model, registry, limits=limits),
+        history,
+        request_id,
+        event_sink=collect,
+        trace_collector=trace,
+    )
+
+    assert calls == ["new"]
+    assert len(model.requests) == 5
+    assert [request.step for request in model.requests[1:4:2]] == [1, 2]
+    assert [event.step for event in events if isinstance(event, ModelRequested)] == [1, 2, 3]
+    assert [event.step for event in events if isinstance(event, ToolStarted)] == [1]
+
+    snapshot = trace.snapshot()
+    commits = snapshot["compaction_commits"]
+    assert [commit["step"] for commit in commits] == [1, 2]
+    assert all(commit["trigger"] == "watermark" for commit in commits)
+    assert all(
+        commit["materialized_bytes_after"] < commit["materialized_bytes_before"]
+        for commit in commits
+    )
+    before_model = [
+        item
+        for item in snapshot["context_capacity_checks"]
+        if item["phase"] == "before_model"
+    ]
+    assert [item["capacity"]["context_bytes"] for item in before_model] == [
+        measure_request_context_bytes(model.requests[1]),
+        measure_request_context_bytes(model.requests[3]),
+    ]
+    assert [
+        item["step"] for item in snapshot["steps"] if "model_request" in item
+    ] == [1, 2, 3]
+
+
+def test_tool_schema_can_cross_the_watermark_trigger_line() -> None:
+    history, _ = _history()
+    probe_limits = _limits_for_available(100_000)
+    plain_request = _probe_request(history, ToolRegistry(), limits=probe_limits)
+    tool_request = _probe_request(history, _echo_registry(), limits=probe_limits)
+    plain_capacity = assess_request_capacity(plain_request, probe_limits)
+    tool_capacity = assess_request_capacity(tool_request, probe_limits)
+    assert plain_capacity is not None and tool_capacity is not None
+    assert tool_capacity.estimated_input_tokens > plain_capacity.estimated_input_tokens
+
+    crossing: tuple[AgentLimits, object, object] | None = None
+    for trigger_percent in (99, 95, 90, 80):
+        for available in range(
+            plain_capacity.estimated_input_tokens + 1,
+            tool_capacity.estimated_input_tokens * 2 + 1,
+        ):
+            limits = _limits_for_available(
+                available,
+                trigger_percent=trigger_percent,
+            )
+            plain = assess_request_capacity(plain_request, limits)
+            with_tool = assess_request_capacity(tool_request, limits)
+            if (
+                plain is not None
+                and with_tool is not None
+                and plain.pressure is ContextPressure.NORMAL
+                and with_tool.pressure is ContextPressure.HIGH
+            ):
+                crossing = (limits, plain, with_tool)
+                break
+        if crossing is not None:
+            break
+
+    assert crossing is not None
+    _, plain, with_tool = crossing
+    assert plain.pressure is ContextPressure.NORMAL
+    assert with_tool.pressure is ContextPressure.HIGH
+
+
+def test_critical_without_compactable_range_fails_before_business_execution() -> None:
+    history, request_id = _history()
+    registry = _echo_registry()
+    probe_limits = _limits_for_available(100_000)
+    candidate = _probe_request(history, registry, limits=probe_limits)
+    capacity = assess_request_capacity(candidate, probe_limits)
+    assert capacity is not None
+    limits = _limits_for_available(capacity.estimated_input_tokens)
+    before_messages = history.effective_messages()
+    before_records = history.records
+    model = ScriptedModelClient([])
+    trace = AgentTraceCollector()
+    events: list[object] = []
+
+    async def collect(event: object) -> None:
+        events.append(event)
+
+    with pytest.raises(AgentRuntimeError) as error:
+        _run(
+            AgentRuntime(model, registry, limits=limits),
+            history,
+            request_id,
+            event_sink=collect,
+            trace_collector=trace,
+        )
+
+    assert error.value.details == {"code": "context_capacity_exceeded"}
+    assert model.requests == []
+    assert history.effective_messages() == before_messages
+    assert history.records == before_records
+    assert history.compaction_records == ()
+    assert not any(isinstance(event, (ModelRequested, ToolStarted)) for event in events)
+
+
+def test_auto_summary_validation_failure_does_not_commit_or_execute() -> None:
+    history, request_id = _history_with_old_group()
+    registry = _echo_registry()
+    probe_limits = _limits_for_available(100_000)
+    compacted = _committed_history(history, cut_index=3)
+    final_request = _probe_request(compacted, registry, limits=probe_limits)
+    final_capacity = assess_request_capacity(final_request, probe_limits)
+    assert final_capacity is not None
+    limits = _limits_for_available(final_capacity.estimated_input_tokens + 1)
+    before_messages = history.effective_messages()
+    before_records = history.records
+    model = ScriptedModelClient(
+        [ModelResponse.from_final("truncated", finish_reason="length")]
+    )
+    trace = AgentTraceCollector()
+    events: list[object] = []
+
+    async def collect(event: object) -> None:
+        events.append(event)
+
+    with pytest.raises(AgentRuntimeError) as error:
+        _run(
+            AgentRuntime(model, registry, limits=limits),
+            history,
+            request_id,
+            event_sink=collect,
+            trace_collector=trace,
+        )
+
+    assert error.value.details == {"code": "summary_output_truncated"}
+    assert len(model.requests) == 1
+    assert model.requests[0].tools == []
+    assert not any(isinstance(event, (ModelRequested, ToolStarted)) for event in events)
+    assert history.effective_messages() == before_messages
+    assert history.records == before_records
+    assert history.compaction_records == ()
+    assert trace.snapshot()["compaction_calls"][0]["status"] == "failed"
