@@ -104,14 +104,23 @@ Implementation follows four stage exits:
    compact-and-retry recovery attempt.
 4. Esports evaluations and removal of superseded summary/release gates.
 
-Phase one and phase two are complete. Phase two completion means a deterministic
-explicit-trigger loop: session records and projections are reused, a bounded
-summary is generated and atomically committed, retained context and materialized
-bytes are rebuilt, and Artifact locators support rereads. Acceptance covers long
-single tasks, repeated compaction, rereads, follow-ups, and failed compaction.
+Phases one, two, and three are implemented and have passed deterministic
+acceptance. The verified workflows cover session records and projections,
+atomic compaction, automatic full-request watermark checks for execution and
+answering, bounded capacity fallbacks, one provider overflow recovery per user
+request, Artifact rereads, product follow-ups, and recovery after a failed
+summary candidate. The normal product entry passes the context-window
+configuration into the session Runtime; an unset window leaves automatic
+capacity governance disabled. These results do not claim real-model quality.
 
-Phase three and phase four remain incomplete. No automatic watermark trigger,
-overflow recovery, or real-model summary quality claim is included in phase two.
+Phase four has not started: evaluate against real esports tasks and real models,
+tune parameters, and clean up superseded behavior. Token capacity is an
+estimate, provider overflow classification supports only its explicit current
+error code, Artifact locators are bounded, summaries may omit information, and
+session state remains process-local. The system does not promise to continue
+arbitrarily long tasks. No real `.env` value is a project default, and this
+roadmap does not imply that a service has been restarted.
+
 No model-directed summary/release tools or general history-search tools are
 required by the current design.
 

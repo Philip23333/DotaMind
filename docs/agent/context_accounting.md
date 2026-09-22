@@ -2,13 +2,13 @@
 
 Context Accounting is the measurement layer for the authoritative
 [`context_governance_evidence_lifecycle.md`](context_governance_evidence_lifecycle.md)
-design. The same metrics are used by the explicit phase-two compaction loop;
-they retain their measurement-only meaning and are not token estimates.
+design. The same metrics drive and explain configured automatic compaction;
+they remain byte measurements and are not token counts.
 
 ## Purpose
 
 Context Accounting makes the model-visible context footprint observable before
-Context Governance changes it.
+and after Context Governance changes it.
 
 Accounting does not evict artifacts or rewrite raw records. The Runtime accepts
 an explicit internal `compact_before_steps` trigger, applies automatic
@@ -17,6 +17,11 @@ actual carried messages after a successful atomic commit. Execution and primary
 answer requests may each make one bounded compaction attempt when progress has
 made another attempt eligible. A provider-confirmed context-window overflow
 may consume one additional recovery attempt for the whole user request.
+
+The normal product entry reads `DOTAMIND_CONTEXT_WINDOW_TOKENS` and passes a
+valid configured window to the session Runtime. Leaving it unset disables
+automatic capacity governance; setting it and restarting the service enables
+the checks. The value is operator configuration, not a model-window default.
 
 ## Measurement
 
@@ -173,8 +178,9 @@ stages. A CRITICAL local estimate prevents the corresponding model request. An
 execution CRITICAL exits through the answer stage; a primary-answer CRITICAL
 falls through to the degraded answer, which never performs another compaction.
 The degraded path has its own bounded deadline and produces a deterministic
-fallback when its request also cannot fit. These checks remain local estimates;
-they do not implement provider overflow retry.
+fallback when its request also cannot fit. These checks remain local estimates.
+Provider overflow recovery is a separate path requiring the adapter's explicit
+context-window error classification.
 
 ## Compaction boundary
 
