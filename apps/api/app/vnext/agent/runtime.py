@@ -202,13 +202,11 @@ class AgentRuntime:
     ) -> AsyncIterator[AgentEvent]:
         """Yield ephemeral runtime events in execution order."""
 
+        compaction_steps = _normalize_compaction_steps(compact_before_steps)
+        if compaction_steps:
+            _validate_compaction_entry(execution_history, request_id)
         if execution_history is not None:
             self.reset_request_state()
-        compaction_steps = _normalize_compaction_steps(compact_before_steps)
-        if compaction_steps and (execution_history is None or request_id is None):
-            raise ModelProtocolError(
-                "compact_before_steps requires initialized execution history and request_id"
-            )
         token = cancellation_token or CancellationToken()
         sink = event_sink
         execution_deadline = _Deadline(self.limits.deadline_seconds)
@@ -1444,6 +1442,21 @@ def _normalize_compaction_steps(steps: Sequence[int]) -> frozenset[int]:
             raise ModelProtocolError("compact_before_steps must contain positive integers")
         normalized.add(step)
     return frozenset(normalized)
+
+
+def _validate_compaction_entry(history: Any | None, request_id: Any | None) -> None:
+    if history is None or request_id is None:
+        raise ModelProtocolError(
+            "compact_before_steps requires initialized execution history and request_id"
+        )
+    if not getattr(history, "initialized", False):
+        raise ModelProtocolError("execution history is not initialized")
+    snapshot_method = getattr(history, "context_snapshot", None)
+    if not callable(snapshot_method):
+        raise ModelProtocolError("execution history does not provide a context snapshot")
+    snapshot = snapshot_method()
+    if snapshot.current_request_id != request_id:
+        raise ModelProtocolError("execution history request does not match the active request")
 
 
 def _persistent_history_messages(
