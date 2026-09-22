@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
+from time import monotonic
 from uuid import uuid4
 
 import pytest
@@ -405,6 +406,73 @@ def test_primary_answer_overflow_rebuilds_tool_free_request() -> None:
             "stage": "primary_answer",
             "status": "retry_succeeded",
             "error_code": None,
+        }
+    ]
+
+
+def test_rebuild_deadline_expires_before_retry_event_or_request() -> None:
+    history, request_id = _history()
+    model = _PlannedModel([_overflow(), _summary()])
+    trace = AgentTraceCollector()
+    events: list[object] = []
+
+    async def sink(event: object) -> None:
+        events.append(event)
+
+    class DeadlineDuringRebuildRuntime(AgentRuntime):
+        build_count = 0
+
+        def _build_execution_request(self, **kwargs):  # type: ignore[no-untyped-def]
+            self.build_count += 1
+            result = super()._build_execution_request(**kwargs)
+            if self.build_count == 2:
+                deadline = kwargs["deadline"]
+                deadline.expires_at = monotonic() - 1
+            return result
+
+    result = _run(
+        DeadlineDuringRebuildRuntime(model, _registry(), limits=_limits()),
+        history,
+        request_id,
+        trace_collector=trace,
+        event_sink=sink,
+    )
+
+    assert "execution stopped before" in result.content  # type: ignore[union-attr]
+    assert len(model.requests) == 2
+    assert [event.step for event in events if isinstance(event, ModelRequested)] == [1]
+    assert trace.snapshot()["overflow_recoveries"][0]["status"] == "deadline_exceeded"
+
+
+def test_invalid_primary_retry_response_is_not_recorded_as_recovery_success() -> None:
+    history, request_id = _history()
+    model = _PlannedModel(
+        [
+            _final("execution"),
+            _overflow(),
+            _summary(),
+            lambda request: ModelResponse.from_assistant(
+                AssistantMessage(tool_calls=[_call("invalid-answer")])
+            ),
+            _final("degraded"),
+        ]
+    )
+    trace = AgentTraceCollector()
+
+    result = _run(
+        AgentRuntime(model, _registry(), limits=_limits()),
+        history,
+        request_id,
+        trace_collector=trace,
+    )
+
+    assert result.content == "degraded"  # type: ignore[union-attr]
+    assert trace.snapshot()["overflow_recoveries"] == [
+        {
+            "step": 2,
+            "stage": "primary_answer",
+            "status": "retry_failed",
+            "error_code": "model_protocol_error",
         }
     ]
 

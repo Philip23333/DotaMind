@@ -612,6 +612,29 @@ class AgentRuntime:
                                 step,
                             )
                             break
+                        try:
+                            self._check_controls(token, execution_deadline)
+                        except AgentCancelledError:
+                            if trace_collector is not None:
+                                trace_collector.overflow_recovery(
+                                    step=step,
+                                    stage="execution",
+                                    status="cancelled",
+                                    error_code=AgentCancelledError.code,
+                                )
+                            recovery_pending = False
+                            raise
+                        except AgentDeadlineExceeded:
+                            if trace_collector is not None:
+                                trace_collector.overflow_recovery(
+                                    step=step,
+                                    stage="execution",
+                                    status="deadline_exceeded",
+                                    error_code=AgentDeadlineExceeded.code,
+                                )
+                            recovery_pending = False
+                            outcome = ExecutionOutcome(ExecutionStopReason.DEADLINE, step)
+                            break
                         if trace_collector is not None:
                             trace_collector.archive_failed_model_attempt(
                                 step,
@@ -1143,17 +1166,17 @@ class AgentRuntime:
                         recovery_pending = False
                         raise
                     else:
-                        if recovery_pending and trace_collector is not None:
-                            trace_collector.overflow_recovery(
-                                step=answer_step,
-                                stage="primary_answer",
-                                status="retry_succeeded",
-                                error_code=None,
-                            )
-                        recovery_pending = False
                         break
                 answer = response.message
                 if not isinstance(answer, FinalMessage):
+                    if recovery_pending and trace_collector is not None:
+                        trace_collector.overflow_recovery(
+                            step=answer_step,
+                            stage="primary_answer",
+                            status="retry_failed",
+                            error_code=ModelProtocolError.code,
+                        )
+                    recovery_pending = False
                     if trace_collector is not None:
                         trace_collector.model_response(answer_step, response, duration)
                     yield await self._publish(
@@ -1165,6 +1188,14 @@ class AgentRuntime:
                         sink,
                     )
                     raise ModelProtocolError("answer stage model requested tools")
+                if recovery_pending and trace_collector is not None:
+                    trace_collector.overflow_recovery(
+                        step=answer_step,
+                        stage="primary_answer",
+                        status="retry_succeeded",
+                        error_code=None,
+                    )
+                recovery_pending = False
                 for text_event in answer_text_events:
                     yield await self._publish(text_event, sink)
                 if trace_collector is not None:
