@@ -1,78 +1,137 @@
 # Evals
 
-## Goal
+Evaluation separates deterministic mechanical acceptance from real-model
+quality review. A successful tool execution or completed Runtime workflow is
+not, by itself, evidence that an answer is correct.
 
-Evaluation checks externally visible capability behavior, bounded Artifact
-observation, generic runtime boundaries, and stable failure semantics. A passing
-tool execution is not enough: tests must assert the useful result and the
-provenance-bearing stored document.
+## Current tool surface
 
-## Deterministic test style
+The normal vNext registry composes the generic Artifact tools, the currently
+accepted esports capabilities, and request-scoped task planning when a
+`TaskStateCoordinator` is supplied. The model-facing names are:
 
-Tests use small inline payloads and local fakes. They do not depend on provider
-accounts, live schedules, or credentials. Each test owns only the source fields
-needed to express its rule.
+```text
+artifact.grep
+artifact.read
+esports.league.search
+esports.series.search
+esports.series.teams
+esports.tournament.search
+esports.match.search
+esports.team.search
+esports.player.search
+task.plan                 # when task-state coordination is enabled
+task.checkpoint           # when task-state coordination is enabled
+```
 
-The clean-slate baseline requires:
+The Context Governance evaluation adds only its local `fixture.edition.lookup`
+fixture tool to that evaluation's registry. It does not register live esports
+providers, and it does not change the product registry.
 
-| Concern | Required assertion |
-| --- | --- |
-| Registry | The default registry is non-empty and every registered name starts with `artifact.` |
-| Prompt | The Controller renders every registered Artifact tool and contains no removed domain rules |
-| Query context | `ExecutionPlan.context` accepts only `{}` until a cross-tool contract is introduced |
-| Artifact boundary | `artifact.read` and `artifact.grep` require one exact reference and remain schema-neutral |
-| Runtime | Unknown tools, invalid arguments, handler failures, budgets, tracing, and persistence use stable generic behavior |
+## Three evaluation layers
 
-Focused tests live under `apps/api/tests/`. Run the baseline and generic runtime
-tests before the full suite.
+1. **Deterministic tests** use local fakes and fixed payloads to verify schemas,
+   Artifact bounds and retrieval, Runtime state transitions, context accounting,
+   failure behavior, and tracing. They make no provider calls.
+2. **Real model with fixed synthetic data** evaluates model behavior against
+   stable, explicitly synthetic tournament records. The Context Governance
+   harness uses real Runtime, SessionHistory, task-state tools, Artifact
+   externalization, and `artifact.read` / `artifact.grep`; only the model API is
+   live. The fixture is not TI history and must not be reported as real esports
+   evidence.
+3. **Real model with real data sources** evaluates the end-to-end product
+   against live capability providers and current esports data. This is a later
+   evaluation step; provider volatility and outages are not deterministic test
+   failures.
 
-## Agent evaluations
+## Context Governance harness
 
-There is no domain-agent acceptance while the clean-slate registry exposes only
-Artifact tools. Domain acceptance resumes when a new closed capability is
-registered with its own schema, provider boundary, deterministic tests, and
-fresh live smoke coverage where needed.
+Run commands from `apps/api`. Without `--execute`, the command validates the
+selected profile and fixture, prints a redacted run summary, and makes no model
+call or output artifacts:
 
-Agent-level checks must verify that the model follows the rendered catalog,
-uses only declared arguments and output references, stops when evidence is
-sufficient, and does not claim facts unsupported by collected observations.
+```bash
+UV_CACHE_DIR=/tmp/dotamind-uv-cache uv run --locked --no-sync python -m \
+  tests.vnext.evals.context_governance_runner \
+  --profile pressure \
+  --output-dir /tmp/dotamind-context-eval/dry-run
+```
 
-Task-plan generalization is evaluated across temporal, entity, player,
-competition, hybrid, and single-deep cases. The eval does not prescribe exact
-task keys or a fixed execution sequence; it evaluates bounded,
-independently-completable result units.
+To explicitly allow one bounded real-model evaluation, add `--execute` and use
+a new output directory:
 
-Context Governance evaluations cover Runtime-triggered compaction within one
-long user task, summary/boundary replacement, recent-message retention, bounded
-FIFO Artifact locators, and same-session follow-ups. Original history and
-Artifact bodies remain stored outside active context.
+```bash
+UV_CACHE_DIR=/tmp/dotamind-uv-cache uv run --locked --no-sync python -m \
+  tests.vnext.evals.context_governance_runner \
+  --profile pressure \
+  --output-dir /tmp/dotamind-context-eval/run-001 \
+  --execute
+```
 
-Check that only the current summary reaches execution and answer requests,
-the current user message remains verbatim exactly once, and tool call/result
-pairs stay valid. Failed or cancelled candidates must not change the effective
-boundary. Locator eviction must not delete Artifacts; completed tasks must not
-block rereads. Follow-ups retain recent observations with fresh execution state.
-Verify session isolation and honest behavior when process-local state is lost.
-Overflow recovery is bounded to one attempt for the unresolved incident and
-must not repeat completed business tools.
+Each invocation runs exactly one profile (`baseline`, `current`, or `pressure`)
+and the same two fixed follow-up questions in one session. Profiles are not
+automatically iterated. `current` and `pressure` require a configured context
+window. `baseline` disables automatic capacity management but the evaluator
+client applies the same business output-token cap as other profiles. `pressure`
+sets `context_compaction_trigger_percent=1` and
+`compaction_recent_history_bytes=4096`; these are pressure-test overrides, not
+product recommendations.
 
-Measure answer quality and omissions, complete-input peaks, summary/locator
-cost, compaction/recovery counts, rereads, total tokens, and latency. Compare
-against feasible uncompacted task baselines. Deterministic tests cover state
-and protocol invariants; model traces assess summary quality and recovery.
-Byte accounting is not a precise token count. No structured semantic summary
-entities are added without evidence of a concrete behavioral failure.
+The default shared limits are at most 12 model calls (including summary and
+retry calls) and 180 wall-clock seconds for both questions together. CLI
+overrides may lower or raise these bounds for a deliberate run. There are no
+automatic provider retries beyond Runtime behavior, no repeated runs, and no
+automatic profile sweep. Provider usage is reported separately for business
+and summary requests; missing usage is unknown, byte estimates are not token
+counts, and no cost is estimated without price data.
 
-Distinguish current behavior from target phases not yet accepted. The design,
-stage exits, and acceptance matrix are maintained in
+An executed run creates `manifest.json`, `calls.jsonl`, `traces.json`, and
+`report.md`. Existing files with those names are never overwritten. Requests,
+responses, usages, errors (type only), durations, and partial traces are kept
+for review; credentials, authorization headers, full settings, and authenticated
+URLs are not recorded. Failed and budget-terminated runs retain collected
+artifacts and exit nonzero. A pressure run without a successful compaction says
+that it did not evaluate post-compaction model behavior.
+
+Review the actual answers, evidence observations, and traces manually. The
+report's checklist starts as **待人工评审**; a completed workflow does not mark
+the answer correct. For a real-model run, confirm the selected model, configured
+window, output artifacts, and spend limits before passing `--execute`.
+
+The runner reads model and AgentLimits configuration using
+`VNextSettings.from_env()`. It does not edit `.env`, infer a provider's actual
+window, or make the local token heuristic an exact tokenizer. Real evaluation
+results do not become product defaults without a separate review.
+
+## General agent checks
+
+Agent-level evaluation should verify that the model follows the rendered tool
+catalog, uses declared arguments and returned references, stops when evidence
+is sufficient, and does not claim facts unsupported by collected observations.
+Task-plan generalization covers temporal, entity, player, competition, hybrid,
+and single-deep cases without prescribing exact task keys or a fixed retrieval
+sequence.
+
+Context Governance evaluation measures answer omissions, complete-request
+peaks, summary and locator overhead, successful compactions, recovery attempts,
+Artifact rereads, provider-reported tokens, and latency. A provider-confirmed
+context-window overflow has a shared allowance of **at most one recovery per
+user request**; execution and primary answer share it, while summary calls and
+degraded answers do not start recovery. Recovery does not replay completed
+business tools.
+
+Deterministic tests protect state and protocol invariants. Traces from real
+models assess summary quality and recovery behavior; byte accounting remains a
+heuristic input measure rather than a precise token count. The stage status and
+known limitations are maintained in
 [`agent/context_governance_evidence_lifecycle.md`](agent/context_governance_evidence_lifecycle.md).
 
-## Live smoke tests
+## Live source checks
 
-Live smoke tests are separate from deterministic acceptance. They may validate a
-current endpoint or real source payload only when a current integration requires
-it. Provider outages, expired credentials, and changing schedules must not turn
-into deterministic unit-test failures.
+Live source smoke tests are separate from both deterministic tests and the
+fixed-fixture model evaluation. Use them only for a concrete current integration
+question. Provider outages, expired credentials, and changing schedules must
+not turn into deterministic test failures.
 
 Never commit credentials, authorization headers, request tokens, or material
 user data.
