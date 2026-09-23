@@ -12,6 +12,7 @@ from app.vnext.agent.limits import AgentLimits
 from app.vnext.artifacts import SessionArtifactStore
 from app.vnext.composition import VNextSettings
 from app.vnext.llm.errors import ModelContextWindowError
+from app.vnext.llm.openai_compatible import ProviderHTTPError
 from app.vnext.llm.protocol import (
     AssistantMessage,
     ModelRequest,
@@ -35,6 +36,7 @@ from tests.vnext.evals.context_governance_runner import (
     EvaluationBudgetExceeded,
     EvaluationError,
     EvaluationModelClient,
+    _provider_http_diagnostics,
     aggregate_usage,
     build_evaluation_registry,
     main,
@@ -70,6 +72,32 @@ def _call(call_id: str, name: str, arguments: dict[str, Any]) -> ModelResponse:
     return ModelResponse.from_assistant(
         AssistantMessage(tool_calls=[ToolCall(id=call_id, name=name, arguments=arguments)])
     )
+
+
+def _run_provider_http_error(
+    tmp_path: Path,
+    *,
+    name: str,
+    status_code: int,
+    body: str,
+) -> tuple[Any, Any]:
+    class _HTTPErrorClient:
+        def __init__(self) -> None:
+            self.call_count = 0
+
+        async def complete(self, _request: ModelRequest) -> ModelResponse:
+            self.call_count += 1
+            raise ProviderHTTPError(status_code, body)
+
+    provider = _HTTPErrorClient()
+    result = run_evaluation(
+        settings=_settings(),
+        profile="baseline",
+        output_dir=tmp_path / name,
+        execute=True,
+        client_factory=lambda _: provider,
+    )
+    return provider, result
 
 
 class _RecordingClient:
@@ -430,6 +458,7 @@ def test_failure_keeps_manifest_calls_trace_and_report_and_redacts_secrets(tmp_p
     assert result.exit_code != 0
     assert result.manifest["model_call_count"] == 1
     assert len(result.calls) == 1
+    assert "provider_http_error" not in result.calls[0]
     assert len((result.output_dir / "calls.jsonl").read_text(encoding="utf-8").splitlines()) == 1
     assert len(result.traces) == 1
     assert result.traces[0]["trace"]["steps"]
@@ -440,6 +469,185 @@ def test_failure_keeps_manifest_calls_trace_and_report_and_redacts_secrets(tmp_p
     assert "No final answer was delivered." in (result.output_dir / "report.md").read_text(
         encoding="utf-8"
     )
+
+
+def test_provider_http_error_diagnostics_are_written_to_calls_and_report(tmp_path: Path) -> None:
+    body = json.dumps(
+        {
+            "error": {
+                "code": "invalid_request_error",
+                "type": "invalid_request_error",
+                "message": "safe test detail",
+            }
+        }
+    )
+    provider, result = _run_provider_http_error(
+        tmp_path,
+        name="http-400",
+        status_code=400,
+        body=body,
+    )
+
+    record = result.calls[0]
+    jsonl_record = json.loads(
+        (result.output_dir / "calls.jsonl").read_text(encoding="utf-8").splitlines()[0]
+    )
+    report = (result.output_dir / "report.md").read_text(encoding="utf-8")
+
+    assert result.status == "failed"
+    assert result.exit_code == 1
+    assert provider.call_count == result.manifest["model_call_count"] == 1
+    assert record["error_type"] == "ProviderHTTPError"
+    assert record["provider_http_error"] == {
+        "status_code": 400,
+        "provider_code": "invalid_request_error",
+        "provider_type": "invalid_request_error",
+    }
+    assert jsonl_record["provider_http_error"] == record["provider_http_error"]
+    assert "Call 1: ProviderHTTPError" in report
+    assert "HTTP status: 400" in report
+    assert "Provider code: invalid_request_error" in report
+    assert "Provider type: invalid_request_error" in report
+    assert "safe test detail" not in report
+
+
+def test_provider_http_401_retains_status_and_safe_code(tmp_path: Path) -> None:
+    provider, result = _run_provider_http_error(
+        tmp_path,
+        name="http-401",
+        status_code=401,
+        body='{"error":{"code":"invalid_api_key","type":"authentication_error"}}',
+    )
+
+    assert result.status == "failed"
+    assert result.exit_code == 1
+    assert provider.call_count == 1
+    assert result.calls[0]["provider_http_error"] == {
+        "status_code": 401,
+        "provider_code": "invalid_api_key",
+        "provider_type": "authentication_error",
+    }
+    report = (result.output_dir / "report.md").read_text(encoding="utf-8")
+    assert "HTTP status: 401" in report
+    assert "Provider code: invalid_api_key" in report
+
+
+@pytest.mark.parametrize(
+    ("case_name", "body"),
+    (
+        ("non-json", "not JSON"),
+        ("malformed-json", "{malformed"),
+        ("top-level-array", "[]"),
+        ("error-array", '{"error":[]}'),
+        ("error-string", '{"error":"not an object"}'),
+        ("nested-error", '{"details":{"error":{"code":"must_not_be_scanned"}}}'),
+    ),
+)
+def test_provider_http_diagnostics_keep_status_for_unrecognized_bodies(
+    tmp_path: Path,
+    case_name: str,
+    body: str,
+) -> None:
+    provider, result = _run_provider_http_error(
+        tmp_path,
+        name=f"unrecognized-{case_name}",
+        status_code=422,
+        body=body,
+    )
+
+    assert result.status == "failed"
+    assert provider.call_count == result.manifest["model_call_count"] == 1
+    assert result.calls[0]["provider_http_error"] == {"status_code": 422}
+    report = (result.output_dir / "report.md").read_text(encoding="utf-8")
+    assert "HTTP status: 422" in report
+    assert "Provider code: 未提供可记录的结构化错误码" in report
+    assert "must_not_be_scanned" not in report
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("code", 123),
+        ("type", None),
+        ("code", "c" * 81),
+        ("type", "t" * 81),
+        ("code", "invalid request"),
+        ("type", "invalid type"),
+        ("code", "invalid/code"),
+        ("type", "invalid/type"),
+    ),
+)
+def test_provider_http_diagnostics_omit_invalid_code_and_type_values(
+    field: str,
+    value: Any,
+) -> None:
+    body = json.dumps({"error": {field: value}})
+    assert _provider_http_diagnostics(ProviderHTTPError(400, body)) == {"status_code": 400}
+
+
+def test_provider_http_diagnostics_skip_bodies_over_sixteen_kib() -> None:
+    body = json.dumps(
+        {
+            "error": {
+                "code": "must_not_be_parsed",
+                "type": "also_must_not_be_parsed",
+                "message": "x" * (16 * 1024),
+            }
+        }
+    )
+    assert len(body.encode("utf-8")) > 16 * 1024
+    assert _provider_http_diagnostics(ProviderHTTPError(400, body)) == {"status_code": 400}
+
+
+def test_provider_http_diagnostics_validate_status_and_ignore_other_exceptions() -> None:
+    assert _provider_http_diagnostics(RuntimeError("not HTTP")) is None
+    assert _provider_http_diagnostics(ProviderHTTPError(99, "{}")) == {}
+    assert _provider_http_diagnostics(ProviderHTTPError(600, "{}")) == {}
+    assert _provider_http_diagnostics(ProviderHTTPError(True, "{}")) == {}
+
+
+def test_provider_http_body_secrets_are_not_present_in_any_evaluation_artifact(
+    tmp_path: Path,
+) -> None:
+    secret_markers = (
+        "test-provider-key-do-not-record",
+        "Authorization: Bearer test-auth-token-do-not-record",
+        "sensitive-placeholder-do-not-record",
+        "synthetic-test-secret",
+    )
+    body = json.dumps(
+        {
+            "error": {
+                "code": "invalid_api_key",
+                "type": "authentication_error",
+                "message": " | ".join(secret_markers),
+            }
+        }
+    )
+    provider, result = _run_provider_http_error(
+        tmp_path,
+        name="http-sensitive-body",
+        status_code=401,
+        body=body,
+    )
+
+    artifacts = "\n".join(path.read_text(encoding="utf-8") for path in result.output_dir.iterdir())
+    returned_data = json.dumps(
+        {
+            "manifest": result.manifest,
+            "calls": result.calls,
+            "traces": result.traces,
+            "answers": result.answers,
+        },
+        ensure_ascii=False,
+    )
+
+    assert provider.call_count == 1
+    assert result.status == "failed"
+    assert result.exit_code == 1
+    for marker in secret_markers:
+        assert marker not in artifacts
+        assert marker not in returned_data
 
 
 def test_later_request_failure_keeps_the_answer_already_delivered(tmp_path: Path) -> None:

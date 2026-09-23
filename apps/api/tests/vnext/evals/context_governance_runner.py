@@ -10,6 +10,7 @@ import argparse
 import asyncio
 import hashlib
 import json
+import re
 import sys
 from collections.abc import Callable
 from copy import deepcopy
@@ -36,7 +37,7 @@ from app.vnext.artifacts import (
     ToolResponseExternalizer,
 )
 from app.vnext.composition import VNextSettings
-from app.vnext.llm.openai_compatible import OpenAICompatibleModelClient
+from app.vnext.llm.openai_compatible import OpenAICompatibleModelClient, ProviderHTTPError
 from app.vnext.llm.protocol import ModelRequest, ModelResponse
 from app.vnext.product.session_history import SessionExecutionHistory
 from app.vnext.tools.artifacts import register_artifact_tools
@@ -57,6 +58,8 @@ from .context_governance_cases import (
 
 OUTPUT_FILENAMES = ("manifest.json", "calls.jsonl", "traces.json", "report.md")
 PROFILE_NAMES = ("baseline", "current", "pressure")
+_PROVIDER_DIAGNOSTIC_FIELD = re.compile(r"[A-Za-z0-9_.:-]{1,80}")
+_PROVIDER_DIAGNOSTIC_BODY_LIMIT = 16 * 1024
 SYNTHETIC_FIXTURE_NOTE = (
     "The following fixed test fixture is synthetic and is not real TI history. "
     "Available edition identifiers: "
@@ -260,6 +263,9 @@ class EvaluationModelClient:
                 error_type=type(exc).__name__,
                 duration_seconds=max(0.0, self._clock() - call_started),
             )
+            diagnostics = _provider_http_diagnostics(exc)
+            if diagnostics is not None:
+                record["provider_http_error"] = diagnostics
             raise
         else:
             record.update(
@@ -340,6 +346,42 @@ def _append_jsonl(path: Path, value: Any) -> None:
 
 def _write_traces(path: Path, traces: list[dict[str, Any]]) -> None:
     _write_json(path, traces)
+
+
+def _provider_http_diagnostics(error: Exception) -> dict[str, Any] | None:
+    """Extract only validated status/code/type fields from a provider HTTP error."""
+
+    if not isinstance(error, ProviderHTTPError):
+        return None
+
+    diagnostics: dict[str, Any] = {}
+    try:
+        status_code = error.status_code
+        if type(status_code) is int and 100 <= status_code <= 599:
+            diagnostics["status_code"] = status_code
+    except Exception:
+        return diagnostics
+
+    try:
+        body = error.body
+        if not isinstance(body, str) or len(body) > _PROVIDER_DIAGNOSTIC_BODY_LIMIT:
+            return diagnostics
+        if len(body.encode("utf-8")) > _PROVIDER_DIAGNOSTIC_BODY_LIMIT:
+            return diagnostics
+        payload = json.loads(body)
+        if not isinstance(payload, dict):
+            return diagnostics
+        provider_error = payload.get("error")
+        if not isinstance(provider_error, dict):
+            return diagnostics
+        for key, output_key in (("code", "provider_code"), ("type", "provider_type")):
+            value = provider_error.get(key)
+            if isinstance(value, str) and _PROVIDER_DIAGNOSTIC_FIELD.fullmatch(value):
+                diagnostics[output_key] = value
+    except Exception:
+        # Diagnostics must never replace or obscure the original provider error.
+        pass
+    return diagnostics
 
 
 def _safe_trace_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
@@ -502,6 +544,34 @@ def _report_markdown(
         lines.append("")
     if manifest.get("failure_type"):
         lines.extend(["## Failure", "", f"`{manifest['failure_type']}`", ""])
+    for record in calls:
+        diagnostics = record.get("provider_http_error")
+        if not isinstance(diagnostics, dict):
+            continue
+        call_number = record.get("call_number")
+        call_label = str(call_number) if type(call_number) is int and call_number > 0 else "unknown"
+        error_type = record.get("error_type")
+        if (
+            not isinstance(error_type, str)
+            or re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,79}", error_type) is None
+        ):
+            error_type = "ProviderHTTPError"
+        lines.extend([f"Call {call_label}: {error_type}"])
+        status_code = diagnostics.get("status_code")
+        if type(status_code) is int and 100 <= status_code <= 599:
+            lines.append(f"HTTP status: {status_code}")
+        provider_code = diagnostics.get("provider_code")
+        if (
+            not isinstance(provider_code, str)
+            or _PROVIDER_DIAGNOSTIC_FIELD.fullmatch(provider_code) is None
+        ):
+            lines.append("Provider code: 未提供可记录的结构化错误码")
+        else:
+            lines.append(f"Provider code: {provider_code}")
+        provider_type = diagnostics.get("provider_type")
+        if isinstance(provider_type, str) and _PROVIDER_DIAGNOSTIC_FIELD.fullmatch(provider_type):
+            lines.append(f"Provider type: {provider_type}")
+        lines.append("")
     if manifest.get("budget_termination"):
         lines.extend(
             ["## Evaluation budget termination", "", f"`{manifest['budget_termination']}`", ""]
