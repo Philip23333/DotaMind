@@ -146,14 +146,23 @@ def test_baseline_business_output_cap_matches_other_profiles_and_summary_keeps_i
 
 
 def test_call_quota_includes_summary_and_is_shared_across_both_user_requests() -> None:
+    class _Clock:
+        value = 1.0
+
+        def __call__(self) -> float:
+            return self.value
+
+    clock = _Clock()
     provider = _RecordingClient()
+    records: list[dict[str, Any]] = []
     evaluator = EvaluationModelClient(
         provider,
         output_token_limit=64,
         max_model_calls=2,
         max_wall_seconds=10,
         started_at=0,
-        clock=lambda: 1,
+        clock=clock,
+        on_record=records.append,
     )
 
     async def exercise() -> None:
@@ -169,9 +178,17 @@ def test_call_quota_includes_summary_and_is_shared_across_both_user_requests() -
         evaluator.user_request_number = 2
         with pytest.raises(EvaluationBudgetExceeded, match="model-call"):
             await evaluator.complete(ModelRequest(messages=[UserMessage(content="second")]))
+        clock.value = 100
+        with pytest.raises(EvaluationBudgetExceeded, match="model-call"):
+            await evaluator.complete(ModelRequest(messages=[UserMessage(content="still denied")]))
 
     asyncio.run(exercise())
     assert len(provider.requests) == 2
+    assert len(evaluator.calls) == len(records) == 2
+    assert evaluator.budget_termination == "model-call"
+    assert [record["call_number"] for record in records] == [1, 2]
+    assert all(record["error_type"] is None for record in records)
+    assert all(record["response"] is not None for record in records)
     assert [record["purpose"] for record in evaluator.calls] == ["business", "summary"]
     assert [record["user_request_number"] for record in evaluator.calls] == [1, 1]
 
@@ -203,6 +220,7 @@ def test_wall_time_budget_is_not_reset_for_second_user_request() -> None:
 
     asyncio.run(exercise())
     assert len(provider.requests) == 1
+    assert evaluator.budget_termination == "wall-time"
 
 
 def test_two_questions_share_real_session_artifact_and_summary_and_reset_task_state() -> None:
@@ -411,6 +429,8 @@ def test_failure_keeps_manifest_calls_trace_and_report_and_redacts_secrets(tmp_p
     assert result.status == "failed"
     assert result.exit_code != 0
     assert result.manifest["model_call_count"] == 1
+    assert len(result.calls) == 1
+    assert len((result.output_dir / "calls.jsonl").read_text(encoding="utf-8").splitlines()) == 1
     assert len(result.traces) == 1
     assert result.traces[0]["trace"]["steps"]
     output = "\n".join(path.read_text(encoding="utf-8") for path in result.output_dir.iterdir())
@@ -445,6 +465,8 @@ def test_later_request_failure_keeps_the_answer_already_delivered(tmp_path: Path
     report = (result.output_dir / "report.md").read_text(encoding="utf-8")
     assert result.status == "failed"
     assert result.manifest["model_call_count"] == 3
+    assert len(result.calls) == 3
+    assert len((result.output_dir / "calls.jsonl").read_text(encoding="utf-8").splitlines()) == 3
     assert len(result.traces) == 2
     assert "answer one preserved" in report
     assert "No final answer was delivered." not in report
@@ -464,12 +486,220 @@ def test_call_budget_termination_saves_partial_trace_and_artifacts(tmp_path: Pat
     assert result.exit_code != 0
     assert result.manifest["budget_termination"] == "model-call"
     assert len(provider.requests) == 1
-    assert len(result.traces) == 2
-    assert result.traces[1]["user_request_number"] == 2
-    assert len(result.answers) == 1
+    assert len(result.traces) == 1
+    assert result.traces[0]["user_request_number"] == 1
+    assert len(result.answers) == 0
     assert (result.output_dir / "manifest.json").exists()
     assert (result.output_dir / "calls.jsonl").read_text(encoding="utf-8").count("call_number") == 1
-    assert "model-call" in (result.output_dir / "report.md").read_text(encoding="utf-8")
+    report = (result.output_dir / "report.md").read_text(encoding="utf-8")
+    assert "model-call" in report
+    assert "No final answer was delivered." in report
+    assert "I wasn't able to generate the detailed final response" not in report
+
+
+def test_second_question_answer_budget_exhaustion_keeps_only_first_delivery(
+    tmp_path: Path,
+) -> None:
+    provider = _RecordingClient()
+    result = run_evaluation(
+        settings=_settings(),
+        profile="baseline",
+        output_dir=tmp_path / "second-answer-budget-run",
+        execute=True,
+        max_model_calls=3,
+        client_factory=lambda _: provider,
+    )
+
+    call_lines = (result.output_dir / "calls.jsonl").read_text(encoding="utf-8").splitlines()
+    report = (result.output_dir / "report.md").read_text(encoding="utf-8")
+    manifest = json.loads((result.output_dir / "manifest.json").read_text(encoding="utf-8"))
+
+    assert result.status == "budget_terminated"
+    assert result.exit_code == 1
+    assert result.manifest["budget_termination"] == "model-call"
+    assert len(provider.requests) == len(result.calls) == len(call_lines) == 3
+    assert manifest["model_call_count"] == 3
+    assert len(result.traces) == 2
+    assert [trace["user_request_number"] for trace in result.traces] == [1, 2]
+    assert len([trace for trace in result.traces if trace["user_request_number"] == 2]) == 1
+    assert [answer["user_request_number"] for answer in result.answers] == [1]
+    assert result.answers[0]["answer"] == "offline response"
+    assert "offline response" in report
+    assert "I wasn't able to generate the detailed final response" not in report
+    assert "No final answer was delivered." not in report
+
+
+def test_started_client_call_is_recorded_once_when_cancelled() -> None:
+    class _WaitingClient:
+        def __init__(self) -> None:
+            self.started = asyncio.Event()
+            self.exited = asyncio.Event()
+            self.call_count = 0
+
+        async def complete(self, _request: ModelRequest) -> ModelResponse:
+            self.call_count += 1
+            self.started.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                self.exited.set()
+
+    provider = _WaitingClient()
+    flushed: list[dict[str, Any]] = []
+    evaluator = EvaluationModelClient(
+        provider,
+        output_token_limit=64,
+        max_model_calls=2,
+        max_wall_seconds=10,
+        started_at=0,
+        clock=lambda: 1,
+        on_record=flushed.append,
+    )
+
+    async def exercise() -> None:
+        request = ModelRequest(messages=[UserMessage(content="q")])
+        call = asyncio.create_task(evaluator.complete(request))
+        await asyncio.wait_for(provider.started.wait(), timeout=1)
+        call.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await asyncio.wait_for(call, timeout=1)
+
+    asyncio.run(asyncio.wait_for(exercise(), timeout=2))
+
+    assert provider.call_count == 1
+    assert provider.exited.is_set()
+    assert len(evaluator.calls) == len(flushed) == 1
+    assert flushed[0]["error_type"] == "CancelledError"
+    assert flushed[0]["response"] is None
+    assert flushed[0]["usage"] is None
+    assert evaluator.budget_termination is None
+
+
+def test_runtime_stage_deadline_cancellation_is_recorded_without_global_budget(
+    tmp_path: Path,
+) -> None:
+    settings = _settings()
+    settings.agent_limits.answer_timeout_seconds = 0.03
+
+    class _DeadlineClient:
+        def __init__(self) -> None:
+            self.started = asyncio.Event()
+            self.exited = asyncio.Event()
+            self.call_count = 0
+
+        async def complete(self, _request: ModelRequest) -> ModelResponse:
+            self.call_count += 1
+            if self.call_count == 2:
+                self.started.set()
+                try:
+                    await asyncio.Event().wait()
+                finally:
+                    self.exited.set()
+            return ModelResponse.from_final(
+                "offline delivered answer",
+                usage={"input_tokens": 5, "output_tokens": 2},
+            )
+
+    provider = _DeadlineClient()
+    result = run_evaluation(
+        settings=settings,
+        profile="baseline",
+        output_dir=tmp_path / "stage-deadline-run",
+        execute=True,
+        client_factory=lambda _: provider,
+    )
+
+    call_lines = [
+        json.loads(line)
+        for line in (result.output_dir / "calls.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    report = (result.output_dir / "report.md").read_text(encoding="utf-8")
+
+    assert provider.started.is_set() and provider.exited.is_set()
+    assert result.status == "completed"
+    assert "budget_termination" not in result.manifest
+    assert len(result.calls) == result.manifest["model_call_count"] == len(call_lines)
+    cancelled = [record for record in call_lines if record["error_type"] == "CancelledError"]
+    assert len(cancelled) == 1
+    assert cancelled[0]["response"] is None and cancelled[0]["usage"] is None
+    assert "missing usage in 1 input and 1 output call records." in report
+
+
+def test_global_wall_time_termination_keeps_started_call_and_trace(tmp_path: Path) -> None:
+    class _Clock:
+        value = 0.0
+
+        def __call__(self) -> float:
+            value = self.value
+            self.value += 0.2
+            return value
+
+    class _WaitingClient:
+        def __init__(self) -> None:
+            self.started = asyncio.Event()
+            self.exited = asyncio.Event()
+            self.call_count = 0
+
+        async def complete(self, _request: ModelRequest) -> ModelResponse:
+            self.call_count += 1
+            self.started.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                self.exited.set()
+
+    provider = _WaitingClient()
+    result = run_evaluation(
+        settings=_settings(),
+        profile="baseline",
+        output_dir=tmp_path / "global-wall-time-run",
+        execute=True,
+        max_wall_seconds=1,
+        client_factory=lambda _: provider,
+        clock=_Clock(),
+    )
+
+    call_lines = (result.output_dir / "calls.jsonl").read_text(encoding="utf-8").splitlines()
+    report = (result.output_dir / "report.md").read_text(encoding="utf-8")
+
+    assert provider.call_count == 1
+    assert provider.started.is_set() and provider.exited.is_set()
+    assert result.status == "budget_terminated"
+    assert result.exit_code == 1
+    assert result.manifest["budget_termination"] == "wall-time"
+    assert len(result.calls) == result.manifest["model_call_count"] == len(call_lines) == 1
+    assert len(result.traces) == 1
+    assert result.traces[0]["user_request_number"] == 1
+    assert "wall-time" in report
+    assert "No final answer was delivered." in report
+
+
+def test_provider_timeout_is_a_failed_call_not_evaluation_wall_time() -> None:
+    class _TimeoutClient:
+        async def complete(self, _request: ModelRequest) -> ModelResponse:
+            raise TimeoutError("provider timeout")
+
+    records: list[dict[str, Any]] = []
+    evaluator = EvaluationModelClient(
+        _TimeoutClient(),
+        output_token_limit=64,
+        max_model_calls=2,
+        max_wall_seconds=10,
+        started_at=0,
+        clock=lambda: 1,
+        on_record=records.append,
+    )
+
+    async def exercise() -> None:
+        with pytest.raises(TimeoutError, match="provider timeout"):
+            await evaluator.complete(ModelRequest(messages=[UserMessage(content="q")]))
+
+    asyncio.run(exercise())
+
+    assert evaluator.budget_termination is None
+    assert len(evaluator.calls) == len(records) == 1
+    assert records[0]["error_type"] == "TimeoutError"
+    assert records[0]["response"] is None and records[0]["usage"] is None
 
 
 def test_output_directory_refuses_to_overwrite_evaluation_artifacts(tmp_path: Path) -> None:

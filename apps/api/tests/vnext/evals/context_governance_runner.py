@@ -189,14 +189,24 @@ class EvaluationModelClient:
         self._clock = clock
         self._on_record = on_record
         self.calls: list[dict[str, Any]] = []
+        self.budget_termination: str | None = None
         self.user_request_number = 0
 
+    def _budget_exceeded(self, budget: str) -> EvaluationBudgetExceeded:
+        if budget not in {"model-call", "wall-time"}:
+            raise ValueError("unknown evaluation budget")
+        if self.budget_termination is None:
+            self.budget_termination = budget
+        return EvaluationBudgetExceeded(self.budget_termination)
+
     async def complete(self, request: ModelRequest) -> ModelResponse:
+        if self.budget_termination is not None:
+            raise self._budget_exceeded(self.budget_termination)
         elapsed = self._clock() - self._started_at
         if elapsed >= self._max_wall_seconds:
-            raise EvaluationBudgetExceeded("wall-time")
+            raise self._budget_exceeded("wall-time")
         if len(self.calls) >= self._max_model_calls:
-            raise EvaluationBudgetExceeded("model-call")
+            raise self._budget_exceeded("model-call")
 
         actual_request = request
         if request.max_output_tokens is None:
@@ -219,24 +229,30 @@ class EvaluationModelClient:
         call_started = self._clock()
         remaining = self._max_wall_seconds - (call_started - self._started_at)
         if remaining <= 0:
-            raise EvaluationBudgetExceeded("wall-time")
+            raise self._budget_exceeded("wall-time")
 
         # Count immediately before entering the real client; rejected calls above
         # do not consume a slot and are not represented as provider calls.
         self.calls.append(record)
+        task: asyncio.Task[ModelResponse] | None = None
         try:
-            response = await asyncio.wait_for(
-                self._client.complete(actual_request), timeout=remaining
-            )
-        except asyncio.TimeoutError as exc:
+            task = asyncio.create_task(self._client.complete(actual_request))
+            completed, _ = await asyncio.wait({task}, timeout=remaining)
+            if not completed:
+                budget_error = self._budget_exceeded("wall-time")
+                await self._cancel_call_task(task)
+                raise budget_error
+            response = await task
+        except asyncio.CancelledError:
+            if task is not None and not task.done():
+                await self._cancel_call_task(task)
             record.update(
                 response=None,
                 usage=None,
-                error_type="EvaluationBudgetExceeded",
+                error_type="CancelledError",
                 duration_seconds=max(0.0, self._clock() - call_started),
             )
-            self._flush(record)
-            raise EvaluationBudgetExceeded("wall-time") from exc
+            raise
         except Exception as exc:
             record.update(
                 response=None,
@@ -244,17 +260,28 @@ class EvaluationModelClient:
                 error_type=type(exc).__name__,
                 duration_seconds=max(0.0, self._clock() - call_started),
             )
-            self._flush(record)
             raise
+        else:
+            record.update(
+                response=response.model_dump(mode="json"),
+                usage=deepcopy(response.usage),
+                error_type=None,
+                duration_seconds=max(0.0, self._clock() - call_started),
+            )
+            return response
+        finally:
+            self._flush(record)
 
-        record.update(
-            response=response.model_dump(mode="json"),
-            usage=deepcopy(response.usage),
-            error_type=None,
-            duration_seconds=max(0.0, self._clock() - call_started),
-        )
-        self._flush(record)
-        return response
+    @staticmethod
+    async def _cancel_call_task(task: asyncio.Task[ModelResponse]) -> None:
+        if not task.done():
+            task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            pass
 
     def _flush(self, record: dict[str, Any]) -> None:
         if self._on_record is not None:
@@ -537,6 +564,18 @@ async def _run_two_questions(
     history = SessionExecutionHistory()
     session_id = uuid4()
     answer_records = answers if answers is not None else []
+
+    def save_trace(index: int, question: str, trace: AgentTraceCollector) -> None:
+        traces.append(
+            {
+                "session_id": str(session_id),
+                "user_request_number": index,
+                "question": question,
+                "trace": _safe_trace_snapshot(trace.snapshot()),
+            }
+        )
+        on_trace(traces)
+
     for index, question in enumerate((FIRST_QUESTION, SECOND_QUESTION), start=1):
         elapsed = clock() - started_at
         remaining = prepared.max_wall_seconds - elapsed
@@ -557,36 +596,15 @@ async def _run_two_questions(
                 timeout=remaining,
             )
         except asyncio.TimeoutError as exc:
-            traces.append(
-                {
-                    "session_id": str(session_id),
-                    "user_request_number": index,
-                    "question": question,
-                    "trace": _safe_trace_snapshot(trace.snapshot()),
-                }
-            )
-            on_trace(traces)
+            save_trace(index, question, trace)
             raise EvaluationBudgetExceeded("wall-time") from exc
         except Exception:
-            traces.append(
-                {
-                    "session_id": str(session_id),
-                    "user_request_number": index,
-                    "question": question,
-                    "trace": _safe_trace_snapshot(trace.snapshot()),
-                }
-            )
-            on_trace(traces)
+            save_trace(index, question, trace)
             raise
-        traces.append(
-            {
-                "session_id": str(session_id),
-                "user_request_number": index,
-                "question": question,
-                "trace": _safe_trace_snapshot(trace.snapshot()),
-            }
-        )
-        on_trace(traces)
+        else:
+            save_trace(index, question, trace)
+            if client.budget_termination is not None:
+                raise EvaluationBudgetExceeded(client.budget_termination)
         answer_records.append(
             {
                 "user_request_number": index,
@@ -649,6 +667,7 @@ def run_evaluation(
     traces: list[dict[str, Any]] = []
     answers: list[dict[str, Any]] = []
     calls: list[dict[str, Any]] = []
+    evaluated_client: EvaluationModelClient | None = None
     exit_code = 0
     try:
         if client_factory is None:
@@ -708,6 +727,11 @@ def run_evaluation(
         )
         exit_code = 1
     finally:
+        if evaluated_client is not None and evaluated_client.budget_termination is not None:
+            manifest["status"] = "budget_terminated"
+            manifest["budget_termination"] = evaluated_client.budget_termination
+            manifest["failure_type"] = "EvaluationBudgetExceeded"
+            exit_code = 1
         manifest["model_call_count"] = len(calls)
         manifest["finished_at_utc"] = utc_now().astimezone(UTC).isoformat()
         manifest["elapsed_wall_seconds"] = max(0.0, clock() - started_at)
