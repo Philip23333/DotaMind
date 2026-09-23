@@ -14,6 +14,7 @@ RUN pip install --no-cache-dir -r requirements.prod.txt
 
 COPY alembic.ini ./
 COPY migrations ./migrations
+# Compose injects runtime settings from the root .env; real .env files are excluded.
 COPY app ./app
 
 EXPOSE 8001

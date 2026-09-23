@@ -75,6 +75,14 @@ Containers run built images; source changes require rebuilding. Use `stop` or
 `down` to stop the stack; `down -v` also deletes its database and Redis volumes.
 The separate `compose.prod.yml` remains the server deployment configuration.
 
+The repository-root .env is the only real configuration file for local API
+starts, scripts/evaluations, and Docker. Configuration precedence is process
+environment, root .env, then code defaults; .env.example is a template only.
+Compose injects the root file into the API container while retaining its
+container-specific database and Redis addresses. The real .env is excluded
+from the API build context and image. After changing API settings, recreate the
+container with `docker compose -f compose.wsl.yml up -d --no-deps --force-recreate api`.
+
 ### Run the processes locally
 
 Start the API:

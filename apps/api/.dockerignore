@@ -5,3 +5,11 @@ __pycache__
 .ruff_cache
 tests
 tmp_server.log
+
+# Runtime configuration is injected by Compose, never sent in the build context.
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example

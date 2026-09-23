@@ -12,6 +12,65 @@ def _isolate_settings_file(monkeypatch: pytest.MonkeyPatch, path: Path) -> None:
     monkeypatch.setattr(composition, "_VNEXT_ENV_PATH", path)
 
 
+def _clear_settings_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in (
+        "DOTAMIND_LLM_API_KEY",
+        "DOTAMIND_LLM_BASE_URL",
+        "DOTAMIND_LLM_MODEL",
+        "DOTAMIND_CONTEXT_WINDOW_TOKENS",
+        "VNEXT_TEST_RECORDING_ENABLED",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+
+def test_default_settings_path_is_repository_root_env() -> None:
+    assert composition._VNEXT_ENV_PATH == (
+        Path(composition.__file__).resolve().parents[4] / ".env"
+    )
+
+
+def test_model_and_context_settings_read_from_temporary_env_file(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "DOTAMIND_LLM_API_KEY=unit-test-key\n"
+        "DOTAMIND_LLM_BASE_URL=https://model.example/v1\n"
+        "DOTAMIND_LLM_MODEL=unit-test-model\n"
+        "DOTAMIND_CONTEXT_WINDOW_TOKENS=12000\n"
+        "DOTAMIND_CONTEXT_OUTPUT_RESERVE_TOKENS=300\n"
+        "DOTAMIND_CONTEXT_SAFETY_MARGIN_TOKENS=200\n",
+        encoding="utf-8",
+    )
+    _isolate_settings_file(monkeypatch, env_path)
+    _clear_settings_environment(monkeypatch)
+
+    settings = VNextSettings.from_env()
+
+    assert settings.llm_api_key == "unit-test-key"
+    assert settings.llm_base_url == "https://model.example/v1"
+    assert settings.llm_model == "unit-test-model"
+    assert settings.agent_limits.context_window_tokens == 12000
+    assert settings.agent_limits.context_output_reserve_tokens == 300
+    assert settings.agent_limits.context_safety_margin_tokens == 200
+
+
+def test_missing_root_env_still_uses_model_and_context_environment(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _isolate_settings_file(monkeypatch, tmp_path / "missing.env")
+    _clear_settings_environment(monkeypatch)
+    monkeypatch.setenv("DOTAMIND_LLM_MODEL", "environment-model")
+    monkeypatch.setenv("DOTAMIND_CONTEXT_WINDOW_TOKENS", "20000")
+
+    settings = VNextSettings.from_env()
+
+    assert settings.llm_model == "environment-model"
+    assert settings.agent_limits.context_window_tokens == 20000
+
+
 def test_test_recording_defaults_to_disabled(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -46,16 +105,28 @@ def test_test_recording_accepts_only_documented_boolean_values(
     assert VNextSettings.from_env().test_recording_enabled is expected
 
 
-def test_environment_overrides_vnext_dotenv_value(
+def test_environment_overrides_vnext_dotenv_values(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    env_path = tmp_path / "vnext.env"
-    env_path.write_text("VNEXT_TEST_RECORDING_ENABLED=false\n", encoding="utf-8")
+    env_path = tmp_path / "root.env"
+    env_path.write_text(
+        "VNEXT_TEST_RECORDING_ENABLED=false\n"
+        "DOTAMIND_LLM_MODEL=file-model\n"
+        "DOTAMIND_CONTEXT_WINDOW_TOKENS=12000\n",
+        encoding="utf-8",
+    )
     _isolate_settings_file(monkeypatch, env_path)
+    _clear_settings_environment(monkeypatch)
     monkeypatch.setenv("VNEXT_TEST_RECORDING_ENABLED", "true")
+    monkeypatch.setenv("DOTAMIND_LLM_MODEL", "environment-model")
+    monkeypatch.setenv("DOTAMIND_CONTEXT_WINDOW_TOKENS", "15000")
 
-    assert VNextSettings.from_env().test_recording_enabled is True
+    settings = VNextSettings.from_env()
+
+    assert settings.test_recording_enabled is True
+    assert settings.llm_model == "environment-model"
+    assert settings.agent_limits.context_window_tokens == 15000
 
 
 @pytest.mark.parametrize("value", ["", "yes", "enabled", "2"])

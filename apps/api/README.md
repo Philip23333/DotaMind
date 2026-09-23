@@ -62,16 +62,22 @@ feature disabled. The remaining context and compaction limits can be set with
 the `DOTAMIND_CONTEXT_*` and `DOTAMIND_COMPACTION_*` variables shown in the root
 `.env.example`.
 
-Configuration may be supplied through the process environment or
-`apps/api/app/vnext/.env`; process environment values take precedence. The root
-`.env.example` is only a template and is not read directly by the composition
-root. The model window must be established from the actual configured model;
-this project does not infer or provide a model-to-window mapping. A configured
-window enables automatic management for subsequently constructed runtimes,
-while an empty window disables it. Restart the service after changing these
-values. The output reserve also becomes the output-token limit for business
-model calls when capacity management is enabled. The bytes-per-token setting is
-an estimate, and the compaction input byte limit is not a model token window.
+Local API starts, scripts, and evaluations read the repository-root .env.
+VNextSettings.from_env() uses process environment values first, then root .env,
+then code defaults. The root .env.example is a template only. Docker Compose
+injects the same root file into the API container; the real .env is excluded
+from the build context and image. Compose's explicit database and Redis
+environment values retain their container-network addresses. Recreate the API
+container after changing .env:
+`docker compose -f compose.wsl.yml up -d --no-deps --force-recreate api`.
+
+The model window must be established from the actual configured model; this
+project does not infer or provide a model-to-window mapping. A configured window
+enables automatic management for subsequently constructed runtimes, while an
+empty window disables it. The output reserve also becomes the output-token limit
+for business model calls when capacity management is enabled. The bytes-per-token
+setting is an estimate, and the compaction input byte limit is not a model token
+window.
 
 ## Test
 

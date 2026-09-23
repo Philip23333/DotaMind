@@ -54,7 +54,7 @@ from app.vnext.tools.esports import (
 from app.vnext.tools.registry import ToolRegistry
 from app.vnext.tools.task import register_task_checkpoint_tool, register_task_plan_tool
 
-_VNEXT_ENV_PATH = Path(__file__).with_name(".env")
+_VNEXT_ENV_PATH = Path(__file__).resolve().parents[4] / ".env"
 
 LeagueSearchService = Callable[[LeagueSearchInput], Awaitable[LeagueSearchResult]]
 SeriesSearchService = Callable[[SeriesSearchInput], Awaitable[SeriesSearchResult]]
