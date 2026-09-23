@@ -135,3 +135,32 @@ not turn into deterministic test failures.
 
 Never commit credentials, authorization headers, request tokens, or material
 user data.
+
+## Product Runtime trace recording
+
+Set `VNEXT_TEST_RECORDING_ENABLED=true` in the API environment to record
+successful, failed, and cancelled product chat executions. It defaults to
+`false`; when disabled, the existing failure-diagnostic recording remains
+available. Enabling full test recording requires `DOTAMIND_REDIS_URL` at API
+startup. `DOTAMIND_VNEXT_TRACE_TTL_SECONDS` controls retention and defaults to
+72 hours.
+
+Trace records are scoped to the browser and chat session. The expanded
+**会话 Trace** panel in chat lists metadata for the 100 most recent records and
+offers a manual refresh. A trace can also be downloaded from its completed or
+failed assistant message while that message retains its trace metadata. A record
+that expires between listing and download returns HTTP 410.
+
+The downloaded ZIP contains `manifest.json` (recording mode, Runtime outcome,
+IDs, and timestamps), `trace.json` (the Runtime trace and recorded tool
+observations), `model-calls.jsonl` (application-level `ModelRequest` and
+`ModelResponse` records when full test recording is enabled), and
+`artifact-manifest.json`. It does not contain the complete temporary Artifact
+store or raw provider HTTP traffic. Diagnostic-only records may omit full model
+call bodies.
+
+`RunTrace.status` describes the Runtime execution: `completed`, `failed`, or
+`cancelled`. A completed Runtime trace stays `completed` if persisting its chat
+turn later fails; the chat response reports `chat_store_error` separately.
+Recording or trace download failures do not replace the original answer or
+Runtime error.

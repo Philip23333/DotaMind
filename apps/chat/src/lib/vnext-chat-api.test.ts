@@ -90,6 +90,36 @@ describe("vNext chat API", () => {
     ]);
   });
 
+  it("retains a completed trace reference and treats a null error trace as absent", async () => {
+    const fetchMock = vi.fn(async () =>
+      streamResponse([
+        '{"type":"completed","content":"answer","turn_index":1,"trace":{"trace_id":"trace-1","expires_at":"2026-09-26T00:00:00Z"}}\n',
+        '{"type":"error","error_code":"failed","reason":"original error","trace":null}\n',
+      ]),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const events = [];
+    for await (const event of streamChatMessage({
+      browserId: "browser-a",
+      sessionId: "session-a",
+      query: "question",
+      signal: new AbortController().signal,
+    })) {
+      events.push(event);
+    }
+
+    expect(events).toEqual([
+      {
+        type: "completed",
+        content: "answer",
+        turn_index: 1,
+        trace: { trace_id: "trace-1", expires_at: "2026-09-26T00:00:00Z" },
+      },
+      { type: "error", error_code: "failed", reason: "original error" },
+    ]);
+  });
+
   it("rejects non-local catalog visual entity paths", async () => {
     const fetchMock = vi.fn(async () =>
       streamResponse([

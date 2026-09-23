@@ -128,4 +128,30 @@ describe("vNext event converter", () => {
       dotamind: { trace: { trace_id: "trace-1", expires_at: "2026-08-31T12:00:00Z" } },
     });
   });
+
+  it("preserves a completed trace reference without changing completed text", async () => {
+    streamChatMessageMock.mockImplementation(async function* () {
+      yield {
+        type: "completed",
+        content: "answer",
+        turn_index: 1,
+        trace: { trace_id: "trace-2", expires_at: "2026-09-26T00:00:00Z" },
+      };
+    });
+
+    const results = [];
+    for await (const result of streamVNextChatMessage({
+      browserId: "browser-a",
+      sessionId: "session-a",
+      query: "question",
+      abortSignal: new AbortController().signal,
+    })) {
+      results.push(result);
+    }
+
+    expect(results.map(text)).toEqual(["answer"]);
+    expect(results[0]?.metadata?.custom).toEqual({
+      dotamind: { trace: { trace_id: "trace-2", expires_at: "2026-09-26T00:00:00Z" } },
+    });
+  });
 });

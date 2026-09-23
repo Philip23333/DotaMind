@@ -3,6 +3,8 @@
 import { MarkdownText } from "@/components/markdown-text";
 import { CheckpointCard } from "@/components/checkpoint-card";
 import { RuntimeInfoCard, useRuntimeInfo } from "@/components/runtime-info";
+import { SessionTracePanel } from "@/components/session-trace-panel";
+import { TraceDownloadAction } from "@/components/trace-download-action";
 import { Button } from "@/components/ui/button";
 import {
   ActionBarPrimitive,
@@ -19,15 +21,12 @@ import {
   ArrowUpIcon,
   CheckIcon,
   CopyIcon,
-  FootprintsIcon,
   SquareIcon,
   SparklesIcon,
 } from "lucide-react";
 import { siDota2 } from "simple-icons";
-import { cancelChatRun } from "@/lib/chat-run-api";
 import { DOTAMIND_ASSISTANT_METADATA_KEY } from "@/lib/assistant-ui/migration-contract";
-import { downloadTrace, TraceExpiredError } from "@/lib/trace-download";
-import { useMemo, useRef, useState, type FC } from "react";
+import { useMemo, type FC } from "react";
 
 export const Thread: FC<{ browserId?: string }> = ({ browserId }) => {
   return (
@@ -39,6 +38,7 @@ export const Thread: FC<{ browserId?: string }> = ({ browserId }) => {
       </div>
       <ThreadPrimitive.Viewport className="relative z-10 flex min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto scroll-smooth">
         <div className="mx-auto flex w-full max-w-3xl min-w-0 flex-1 flex-col px-3 pt-4 sm:px-6 sm:pt-6">
+          <SessionTracePanel browserId={browserId} />
           <AuiIf condition={(state) => state.thread.messages.length === 0}>
             <Welcome />
           </AuiIf>
@@ -62,7 +62,7 @@ export const Thread: FC<{ browserId?: string }> = ({ browserId }) => {
             >
               <ArrowDownIcon className="size-4" />
             </ThreadPrimitive.ScrollToBottom>
-            <Composer browserId={browserId} />
+            <Composer />
             <a
               href="https://beian.miit.gov.cn/"
               target="_blank"
@@ -148,35 +148,11 @@ const AssistantMessage: FC<{ browserId?: string }> = ({ browserId }) => {
             <CopyIcon className="size-4" />
           </AuiIf>
         </ActionBarPrimitive.Copy>
-        {browserId && trace && new Date(trace.expires_at) > new Date() && (
+        {browserId && trace && (
           <TraceDownloadAction browserId={browserId} traceId={trace.trace_id} />
         )}
       </ActionBarPrimitive.Root>
     </MessagePrimitive.Root>
-  );
-};
-
-const TraceDownloadAction: FC<{ browserId: string; traceId: string }> = ({ browserId, traceId }) => {
-  const [expired, setExpired] = useState(false);
-  const download = async () => {
-    try {
-      await downloadTrace(browserId, traceId);
-    } catch (error) {
-      if (error instanceof TraceExpiredError) setExpired(true);
-    }
-  };
-  return (
-    <Button
-      variant="ghost"
-      size="icon"
-      className="size-8"
-      aria-label={expired ? "Trace 已过期" : "下载本次调用 Trace"}
-      title={expired ? "Trace 已过期" : "下载本次调用 Trace"}
-      disabled={expired}
-      onClick={() => void download()}
-    >
-      <FootprintsIcon className="size-4" />
-    </Button>
   );
 };
 
@@ -192,7 +168,7 @@ function traceFromMetadata(custom: unknown): { trace_id: string; expires_at: str
     : null;
 }
 
-const Composer: FC<{ browserId?: string }> = ({ browserId }) => {
+const Composer: FC = () => {
   const aui = useAui();
   const isRunning = useAuiState((state) => state.thread.isRunning);
   const isNewThread = useAuiState((state) => state.thread.messages.length === 0);
@@ -240,7 +216,7 @@ const Composer: FC<{ browserId?: string }> = ({ browserId }) => {
             </ComposerPrimitive.Send>
           </AuiIf>
           <AuiIf condition={(state) => state.thread.isRunning}>
-            <DotaMindStopButton browserId={browserId} />
+            <DotaMindStopButton />
           </AuiIf>
         </div>
       </ComposerPrimitive.Root>
@@ -248,39 +224,15 @@ const Composer: FC<{ browserId?: string }> = ({ browserId }) => {
   );
 };
 
-const DotaMindStopButton: FC<{ browserId?: string }> = ({ browserId }) => {
-  const message = useAuiState((state) =>
-    state.thread.messages.findLast(
-      (candidate) => candidate.role === "assistant" && candidate.status?.type === "running",
-    ),
-  );
-  const [stopping, setStopping] = useState(false);
-  const requestedRunRef = useRef<string | null>(null);
-  const custom = message?.metadata?.custom?.[DOTAMIND_ASSISTANT_METADATA_KEY];
-  const runId =
-    custom && typeof custom === "object" && "runId" in custom && typeof custom.runId === "string"
-      ? custom.runId
-      : null;
-
-  const stop = async () => {
-    if (!browserId || !runId || stopping || requestedRunRef.current === runId) return;
-    requestedRunRef.current = runId;
-    setStopping(true);
-    try {
-      await cancelChatRun(browserId, runId);
-    } catch {
-      requestedRunRef.current = null;
-      setStopping(false);
-    }
-  };
+const DotaMindStopButton: FC = () => {
+  const aui = useAui();
 
   return (
     <Button
       size="icon"
       className="size-8 rounded-full"
       aria-label="停止生成"
-      disabled={!runId || stopping}
-      onClick={() => void stop()}
+      onClick={() => aui.thread.cancelRun()}
     >
       <SquareIcon className="size-3 fill-current" />
     </Button>

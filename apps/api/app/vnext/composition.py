@@ -75,6 +75,7 @@ class VNextSettings:
     pandascore_token: str = ""
     pandascore_timeout_seconds: float = 20.0
     trace_ttl_seconds: int = 72 * 60 * 60
+    test_recording_enabled: bool = False
     agent_limits: AgentLimits = field(default_factory=AgentLimits)
 
     @classmethod
@@ -106,6 +107,11 @@ class VNextSettings:
             trace_ttl_seconds=int(
                 _env_value("DOTAMIND_VNEXT_TRACE_TTL_SECONDS", "259200", file_values)
             ),
+            test_recording_enabled=_parse_bool_value(
+                "VNEXT_TEST_RECORDING_ENABLED",
+                False,
+                file_values,
+            ),
             agent_limits=_agent_limits_from_env(file_values),
         )
 
@@ -119,6 +125,20 @@ def _env_value(
     if value is not None:
         return value
     return file_values.get(name, default)
+
+
+def _parse_bool_value(
+    name: str,
+    default: bool,
+    file_values: dict[str, str | None],
+) -> bool:
+    value = _env_value(name, "true" if default else "false", file_values)
+    normalized = (value or "").strip().lower()
+    if normalized in {"true", "1"}:
+        return True
+    if normalized in {"false", "0"}:
+        return False
+    raise ValueError(f"{name} must be one of true, false, 1, or 0")
 
 
 _AGENT_LIMIT_ENV_FIELDS = (

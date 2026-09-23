@@ -33,7 +33,16 @@ export async function* streamVNextChatMessage({
       markDotaMindSessionUnread(sessionId);
       const finalText =
         decorateCatalogMentions(event.content, event.catalog_visual_entities ?? []) ?? event.content;
-      yield { content: [{ type: "text", text: finalText }] };
+      yield {
+        content: [{ type: "text", text: finalText }],
+        ...(event.trace === undefined
+          ? {}
+          : {
+              metadata: {
+                custom: { [DOTAMIND_ASSISTANT_METADATA_KEY]: { trace: event.trace } },
+              },
+            }),
+      };
       return;
     }
     yield {

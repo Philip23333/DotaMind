@@ -45,6 +45,16 @@ CATALOG_IMAGE_DIR = Path(__file__).parent / "data" / "catalog" / "images"
 ESPORTS_ASSET_DIR = Path(__file__).parent / "data" / "esports"
 
 
+def _require_trace_recording_redis(
+    vnext_settings: VNextSettings,
+    redis_url: str | None,
+) -> None:
+    if vnext_settings.test_recording_enabled and not redis_url:
+        raise RuntimeError(
+            "VNEXT_TEST_RECORDING_ENABLED requires DOTAMIND_REDIS_URL for trace storage"
+        )
+
+
 class PipeFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         timestamp = datetime.fromtimestamp(record.created).strftime("%Y-%m-%d %H:%M:%S")
@@ -81,6 +91,8 @@ for handler in logging.getLogger().handlers:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    vnext_settings = VNextSettings.from_env()
+    _require_trace_recording_redis(vnext_settings, settings.redis_url)
     database = create_database_resources(settings.database_url)
     await ping_database(database.engine)
     store = build_session_store(settings, get_policy())
@@ -98,9 +110,8 @@ async def lifespan(app: FastAPI):
         await vnext_redis.ping()
         trace_store = RedisTraceStore(
             vnext_redis,
-            ttl_seconds=VNextSettings.from_env().trace_ttl_seconds,
+            ttl_seconds=vnext_settings.trace_ttl_seconds,
         )
-    vnext_settings = VNextSettings.from_env()
     vnext_services = build_vnext_services(vnext_settings)
     app.state.vnext_services = vnext_services
     app.state.vnext_runtime = build_vnext_runtime(services=vnext_services)
@@ -112,6 +123,7 @@ async def lifespan(app: FastAPI):
         trace_store=trace_store,
         runtime_factory=lambda: build_vnext_runtime(services=vnext_services),
         trace_ttl_seconds=vnext_settings.trace_ttl_seconds,
+        test_recording_enabled=vnext_settings.test_recording_enabled,
     )
     app.state.chat_run_repository = PostgresChatRunRepository(database.session_factory)
     app.state.session_store = store

@@ -12,6 +12,12 @@ export async function downloadTrace(browserId: string, traceId: string): Promise
   const link = document.createElement("a");
   link.href = url;
   link.download = `dotamind-trace-${traceId}.zip`;
-  link.click();
-  URL.revokeObjectURL(url);
+  link.style.display = "none";
+  document.body.append(link);
+  try {
+    link.click();
+  } finally {
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  }
 }

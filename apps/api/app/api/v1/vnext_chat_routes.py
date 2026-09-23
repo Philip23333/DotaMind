@@ -14,7 +14,11 @@ from app.application.chat_repository import (
     ChatNotFoundError,
     ChatRepositoryError,
 )
-from app.vnext.product.chat import VNextChatService
+from app.vnext.product.chat import (
+    ProductChatCompleted,
+    ProductChatError,
+    VNextChatService,
+)
 from app.vnext.product.trace_store import TraceNotFoundError, TraceStoreUnavailableError
 
 router = APIRouter(prefix="/chat/sessions", tags=["chat"])
@@ -70,12 +74,42 @@ async def post_message(
 
     async def stream() -> AsyncIterator[bytes]:
         async for event in service.stream_turn(prepared):
-            yield (event.model_dump_json() + "\n").encode("utf-8")
+            if isinstance(event, (ProductChatCompleted, ProductChatError)) and event.trace is None:
+                payload = event.model_dump_json(exclude={"trace"})
+            else:
+                payload = event.model_dump_json()
+            yield (payload + "\n").encode("utf-8")
 
     return StreamingResponse(
         stream(),
         media_type="application/x-ndjson",
         headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.get("/{session_id}/traces", response_model=None)
+async def list_session_traces(
+    session_id: UUID,
+    request: Request,
+    x_dotamind_browser_id: str | None = Header(default=None),
+) -> JSONResponse:
+    if not x_dotamind_browser_id:
+        return _error("browser_id_required", "browser identity is required", 422)
+    service = _service(request)
+    if service is None:
+        return _error("unavailable", "vNext chat is temporarily unavailable", 503)
+    try:
+        traces = await service.list_session_traces(
+            browser_id=x_dotamind_browser_id,
+            session_id=session_id,
+        )
+    except ChatRepositoryError as exc:
+        return _repository_error(exc)
+    except TraceStoreUnavailableError:
+        return _error("trace_unavailable", "trace storage is temporarily unavailable", 503)
+    return JSONResponse(
+        content={"traces": [trace.model_dump(mode="json") for trace in traces]},
+        headers={"Cache-Control": "no-store"},
     )
 
 

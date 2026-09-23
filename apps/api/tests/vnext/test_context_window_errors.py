@@ -244,6 +244,7 @@ def _invoke(runtime: AgentRuntime) -> Any:
     return _run(
         runtime._invoke_model(
             _request(),
+            purpose="execution",
             token=CancellationToken(),
             deadline=_Deadline(1),
             step=1,

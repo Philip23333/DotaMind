@@ -2,6 +2,8 @@ import { createUuidV4 } from "./uuid";
 import { getApiUrl } from "./api-url";
 import type { CatalogVisualEntity } from "./dota-visuals";
 
+export type TraceRef = { trace_id: string; expires_at: string };
+
 export type VNextChatEvent =
   | { type: "delta"; text: string }
   | {
@@ -9,12 +11,13 @@ export type VNextChatEvent =
       content: string;
       turn_index: number;
       catalog_visual_entities?: CatalogVisualEntity[];
+      trace?: TraceRef;
     }
   | {
       type: "error";
       error_code: string;
       reason: string;
-      trace?: { trace_id: string; expires_at: string };
+      trace?: TraceRef;
     };
 
 function browserHeaders(browserId: string): HeadersInit {
@@ -48,6 +51,7 @@ function parseEvent(line: string): VNextChatEvent {
     typeof event.turn_index === "number"
   ) {
     const entities = event.catalog_visual_entities;
+    const trace = parseTraceRef(event.trace);
     if (entities !== undefined && !isCatalogVisualEntityList(entities)) {
       throw new Error("DotaMind 流式响应包含无效实体展示数据。");
     }
@@ -56,6 +60,7 @@ function parseEvent(line: string): VNextChatEvent {
       content: event.content,
       turn_index: event.turn_index,
       ...(entities === undefined ? {} : { catalog_visual_entities: entities }),
+      ...(trace === undefined ? {} : { trace }),
     };
   }
   if (
@@ -63,10 +68,7 @@ function parseEvent(line: string): VNextChatEvent {
     typeof event.error_code === "string" &&
     typeof event.reason === "string"
   ) {
-    const trace = event.trace;
-    if (trace !== undefined && !isTraceRef(trace)) {
-      throw new Error("DotaMind 流式响应包含无效 Trace 引用。");
-    }
+    const trace = parseTraceRef(event.trace);
     return {
       type: "error",
       error_code: event.error_code,
@@ -77,10 +79,16 @@ function parseEvent(line: string): VNextChatEvent {
   throw new Error("DotaMind 流式响应包含未知事件。");
 }
 
-function isTraceRef(value: unknown): value is { trace_id: string; expires_at: string } {
-  if (!value || typeof value !== "object") return false;
+function parseTraceRef(value: unknown): TraceRef | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (!value || typeof value !== "object") {
+    throw new Error("DotaMind 流式响应包含无效 Trace 引用。");
+  }
   const trace = value as Record<string, unknown>;
-  return typeof trace.trace_id === "string" && typeof trace.expires_at === "string";
+  if (typeof trace.trace_id !== "string" || typeof trace.expires_at !== "string") {
+    throw new Error("DotaMind 流式响应包含无效 Trace 引用。");
+  }
+  return { trace_id: trace.trace_id, expires_at: trace.expires_at };
 }
 
 function isCatalogVisualEntityList(value: unknown): value is CatalogVisualEntity[] {
