@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from copy import deepcopy
 from time import monotonic
 from typing import Any, Literal
+from uuid import uuid4
 
 from app.vnext.agent.answer_stage import (
     AnswerContext,
@@ -31,9 +32,74 @@ from app.vnext.llm.protocol import (
 class AgentTraceCollector:
     """Collect one run's model and tool evidence without provider transport data."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, capture_full_calls: bool = False) -> None:
         self._started = monotonic()
+        self._capture_full_calls = capture_full_calls
         self._trace: dict[str, Any] = {"initial_messages": [], "tool_schemas": [], "steps": []}
+        if capture_full_calls:
+            self._trace["model_calls"] = []
+
+    def model_call_started(
+        self,
+        request: ModelRequest,
+        *,
+        step: int,
+        purpose: Literal["execution", "primary_answer", "degraded_answer", "compaction"],
+    ) -> str | None:
+        if not self._capture_full_calls:
+            return None
+        call_id = str(uuid4())
+        self._trace["model_calls"].append(
+            {
+                "call_id": call_id,
+                "step": step,
+                "purpose": purpose,
+                "request": deepcopy(request.model_dump(mode="json")),
+                "response": None,
+                "partial_text": "",
+                "status": "started",
+                "duration_seconds": None,
+                "error_type": None,
+                "error_code": None,
+            }
+        )
+        return call_id
+
+    def model_call_response(self, call_id: str | None, response: ModelResponse) -> None:
+        call = self._model_call(call_id)
+        if call is not None:
+            call["response"] = deepcopy(response.model_dump(mode="json"))
+
+    def model_call_text_delta(self, call_id: str | None, text: str) -> None:
+        call = self._model_call(call_id)
+        if call is not None:
+            call["partial_text"] += text
+
+    def model_call_finished(
+        self,
+        call_id: str | None,
+        *,
+        status: Literal["completed", "failed", "cancelled", "deadline"],
+        duration_seconds: float,
+        error: BaseException | None = None,
+    ) -> None:
+        call = self._model_call(call_id)
+        if call is None or call["status"] != "started":
+            return
+        call["status"] = status
+        call["duration_seconds"] = duration_seconds
+        if error is not None:
+            call["error_type"] = type(error).__name__
+            code = getattr(error, "code", None)
+            call["error_code"] = code if isinstance(code, str) else None
+
+    def _model_call(self, call_id: str | None) -> dict[str, Any] | None:
+        if call_id is None:
+            return None
+        for call in self._trace.get("model_calls", []):
+            if call["call_id"] == call_id:
+                return call
+        return None
 
     def begin(self, messages: Sequence[Message], tool_schemas: list[dict[str, Any]]) -> None:
         self._trace["initial_messages"] = [message.model_dump(mode="json") for message in messages]

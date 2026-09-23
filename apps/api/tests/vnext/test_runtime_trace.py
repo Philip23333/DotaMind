@@ -98,6 +98,7 @@ def test_trace_records_execution_context_and_answer_stage_metrics() -> None:
     assert snapshot["answer_attempts"][0]["status"] == "completed"
     assert snapshot["answer_attempts"][0]["error_code"] is None
     assert snapshot["answer_fallback"] == "none"
+    assert "model_calls" not in snapshot
 
 
 def test_trace_context_updates_until_max_steps_without_finalization_phase() -> None:

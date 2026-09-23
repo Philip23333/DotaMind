@@ -8,7 +8,7 @@ import json
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from copy import deepcopy
 from time import monotonic
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import ValidationError
 
@@ -389,6 +389,7 @@ class AgentRuntime:
                     try:
                         response, duration, _ = await self._invoke_model(
                             request,
+                            purpose="execution",
                             token=token,
                             deadline=execution_deadline,
                             step=step,
@@ -933,6 +934,7 @@ class AgentRuntime:
                     try:
                         response, duration, answer_text_events = await self._invoke_model(
                             answer_request,
+                            purpose="primary_answer",
                             token=token,
                             deadline=primary_deadline,
                             step=answer_step,
@@ -1292,6 +1294,7 @@ class AgentRuntime:
                         degraded_text_events,
                     ) = await self._invoke_model(
                         degraded_request,
+                        purpose="degraded_answer",
                         token=token,
                         deadline=degraded_deadline,
                         step=degraded_step,
@@ -1604,17 +1607,31 @@ class AgentRuntime:
         self,
         request: ModelRequest,
         *,
+        purpose: Literal["execution", "primary_answer", "degraded_answer", "compaction"],
         token: CancellationToken,
         deadline: _Deadline,
         step: int,
         trace_collector: AgentTraceCollector | None,
         publish_text: bool,
+        record_step_text: bool = True,
         on_response: Callable[[ModelResponse], None] | None = None,
     ) -> tuple[ModelResponse, float, list[TextDelta]]:
         """Invoke one model request and optionally expose its text deltas."""
 
         started = monotonic()
         text_events: list[TextDelta] = []
+        call_id: str | None = None
+        if trace_collector is not None:
+            try:
+                call_id = trace_collector.model_call_started(
+                    request,
+                    step=step,
+                    purpose=purpose,
+                )
+            except Exception:
+                pass
+        call_status: Literal["completed", "failed", "cancelled", "deadline"] = "failed"
+        call_error: BaseException | None = None
         try:
             stream = getattr(self.model, "stream", None)
             if callable(stream):
@@ -1636,7 +1653,12 @@ class AgentRuntime:
                             break
                         if isinstance(item, ModelTextDelta):
                             if trace_collector is not None:
-                                trace_collector.text_delta(step, item.text)
+                                if record_step_text:
+                                    trace_collector.text_delta(step, item.text)
+                                try:
+                                    trace_collector.model_call_text_delta(call_id, item.text)
+                                except Exception:
+                                    pass
                             if response is not None:
                                 raise ModelProtocolError(
                                     "stream emitted text after its terminal response"
@@ -1649,6 +1671,11 @@ class AgentRuntime:
                                     "stream emitted more than one terminal response"
                                 )
                             normalized = self._normalize_response(item)
+                            if trace_collector is not None:
+                                try:
+                                    trace_collector.model_call_response(call_id, normalized)
+                                except Exception:
+                                    pass
                             if on_response is not None:
                                 on_response(normalized)
                             response = normalized
@@ -1667,25 +1694,57 @@ class AgentRuntime:
                     self.model.complete(request), token, deadline
                 )
                 response = self._normalize_response(raw_response)
+                if trace_collector is not None:
+                    try:
+                        trace_collector.model_call_response(call_id, response)
+                    except Exception:
+                        pass
                 if on_response is not None:
                     on_response(response)
             self._check_controls(token, deadline)
+            call_status = "completed"
             return response, max(0.0, monotonic() - started), text_events
-        except (AgentCancelledError, AgentDeadlineExceeded):
+        except asyncio.CancelledError as exc:
+            call_status = "cancelled"
+            call_error = exc
+            raise
+        except AgentCancelledError as exc:
+            call_status = "cancelled"
+            call_error = exc
+            raise
+        except AgentDeadlineExceeded as exc:
+            call_status = "deadline"
+            call_error = exc
             raise
         except ModelContextWindowError as exc:
-            raise ModelContextWindowExceeded(
+            wrapped = ModelContextWindowExceeded(
                 cause=exc,
                 provider_code=exc.provider_code,
                 status_code=exc.status_code,
-            ) from exc
-        except AgentRuntimeError:
+            )
+            call_error = wrapped
+            raise wrapped from exc
+        except AgentRuntimeError as exc:
+            call_error = exc
             raise
         except Exception as exc:
-            raise ModelProviderError(
+            wrapped = ModelProviderError(
                 f"model provider request failed: {exc}",
                 cause=exc,
-            ) from exc
+            )
+            call_error = wrapped
+            raise wrapped from exc
+        finally:
+            if trace_collector is not None:
+                try:
+                    trace_collector.model_call_finished(
+                        call_id,
+                        status=call_status,
+                        duration_seconds=max(0.0, monotonic() - started),
+                        error=call_error,
+                    )
+                except Exception:
+                    pass
 
     async def _generate_compaction_summary(
         self,
@@ -1712,11 +1771,13 @@ class AgentRuntime:
             _validate_compaction_call(request, max_summary_bytes)
             response, _, _ = await self._invoke_model(
                 request,
+                purpose="compaction",
                 token=token,
                 deadline=deadline,
                 step=step,
-                trace_collector=None,
+                trace_collector=trace_collector,
                 publish_text=False,
+                record_step_text=False,
                 on_response=capture_response,
             )
             self._check_controls(token, deadline)
