@@ -1968,6 +1968,11 @@ class AgentRuntime:
             else:
                 group = [call]
 
+            plan = (
+                self.task_state_coordinator.plan_snapshot()
+                if self.task_state_coordinator is not None
+                else None
+            )
             for item in group:
                 self._check_controls(token, deadline)
                 event = ToolStarted(
@@ -1985,11 +1990,6 @@ class AgentRuntime:
                 deadline,
             )
             candidates: list[tuple[tuple[int, int], int, ToolCall, ToolResultMessage, int]] = []
-            plan = (
-                self.task_state_coordinator.plan_snapshot()
-                if self.task_state_coordinator is not None
-                else None
-            )
             for original_index, (item, result) in enumerate(
                 zip(group, group_results, strict=True)
             ):
@@ -2047,9 +2047,12 @@ class AgentRuntime:
                     decision = decisions.get(item.id)
                     if decision is not None and decision.admitted:
                         if self.task_state_coordinator is not None:
+                            task_key = item.arguments.get("task_key")
+                            if task_key is None and plan is not None:
+                                task_key = plan.current_key
                             self.task_state_coordinator.record_evidence_lease(
                                 item.id,
-                                task_key=item.arguments.get("task_key"),
+                                task_key=task_key,
                                 raw_bytes=decision.raw_bytes,
                             )
                             if trace_collector is not None:
@@ -2077,6 +2080,12 @@ class AgentRuntime:
                                     self.task_state_coordinator.active_evidence_leases_snapshot()
                                 ),
                             )
+                    if self.task_state_coordinator is not None:
+                        self.task_state_coordinator.record_inline_tool_result(
+                            item,
+                            result,
+                            task_key=plan.current_key if plan is not None else None,
+                        )
                 results.append(result)
             index += len(group)
 

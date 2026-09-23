@@ -88,6 +88,45 @@ def test_checkpoint_tool_accepts_active_source_and_generates_id() -> None:
     assert coordinator.store.get("part") is not None
 
 
+def test_checkpoint_tool_accepts_a_current_successful_inline_result() -> None:
+    coordinator = TaskStateCoordinator()
+    coordinator.create_plan(
+        [
+            {"key": "A", "objective": "collect A"},
+            {"key": "B", "objective": "collect B"},
+        ]
+    )
+    call = ToolCall(
+        id="inline-call",
+        name="esports.match.search",
+        arguments={"year": 2025},
+    )
+    result_message = ToolResultMessage(
+        tool_call_id=call.id,
+        content={"items": [{"match_id": 1}]},
+    )
+    coordinator.record_inline_tool_result(call, result_message, task_key="A")
+    coordinator.refresh([AssistantMessage(tool_calls=[call]), result_message])
+
+    result = asyncio.run(
+        _registry(coordinator).execute(
+            ToolCall(
+                id="checkpoint-call",
+                name="task.checkpoint",
+                arguments={
+                    "key": "A",
+                    "value": {"match_count": 1},
+                    "source_tool_call_ids": ["inline-call"],
+                },
+            )
+        )
+    )
+
+    assert result.status == "ok"
+    assert result.content["accepted_source_tool_call_ids"] == ["inline-call"]  # type: ignore[index]
+    assert coordinator.plan_snapshot().current_key == "B"  # type: ignore[union-attr]
+
+
 @pytest.mark.parametrize(
     "arguments",
     [

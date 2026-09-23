@@ -25,7 +25,10 @@ class TaskCheckpointInput(DomainModel):
     )
     source_tool_call_ids: list[str] = Field(
         min_length=1,
-        description="Tool call IDs from the current checkpointable artifact observation manifest.",
+        description=(
+            "Tool call IDs from the current checkpointable observations manifest: "
+            "successful inline tool results or raw artifact.read observations."
+        ),
     )
 
     @field_validator("source_tool_call_ids")
@@ -43,15 +46,23 @@ class TaskCheckpointResult(DomainModel):
 
 
 TASK_CHECKPOINT_DESCRIPTION = """\
-When a task plan is active, use this tool to complete the current task item.
+Use this tool to preserve model-organized task state. When a task plan is active,
+it completes the current task item and advances the plan.
 
-The checkpoint value must preserve all information from the referenced raw
-observations that may still be needed for the user's final answer. A successful
-checkpoint completes the current task item and advances the plan to the next
-item. The value is the structured task state to retain, and
-source_tool_call_ids must refer to current successful raw artifact.read
-observations shown in the checkpoint manifest. Final synthesis after all plan
-items are complete does not require another checkpoint.
+The checkpoint value is model-organized task state with references to its
+supporting observations. A successful checkpoint means that this state was
+accepted and the plan advanced; Runtime does not verify whether its conclusions
+are correct or complete. Tool success means execution succeeded, not that its
+business result was verified.
+
+source_tool_call_ids must refer to current successful inline tool results or
+raw artifact.read observations shown in the checkpoint manifest. Use candidate
+IDs directly; do not repeat a query just to create an Artifact. Externalized
+previews and wrappers, artifact.grep results, task-tool results, errors,
+deferred results, and receipts are not checkpoint sources. Checkpointing does
+not force externalization or release the source results from conversation
+history. Final synthesis after all plan items are complete does not require
+another checkpoint.
 """
 
 

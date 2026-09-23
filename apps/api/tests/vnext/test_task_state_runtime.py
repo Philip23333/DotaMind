@@ -3,10 +3,21 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+from pydantic import BaseModel
+
 from app.vnext.agent.runtime import AgentRuntime
 from app.vnext.agent.task_state import TaskStateCoordinator
 from app.vnext.agent.trace import AgentTraceCollector
-from app.vnext.artifacts import ArtifactObservationTranscriptRewriter, ArtifactReadResult
+from app.vnext.artifacts import (
+    ArtifactBackedToolResultProcessor,
+    ArtifactGrepper,
+    ArtifactObservationTranscriptRewriter,
+    ArtifactReader,
+    ArtifactReadResult,
+    SessionArtifactStore,
+    ToolResponseExternalizer,
+)
+from app.vnext.artifacts.externalize import INLINE_TOOL_RESPONSE_MAX_BYTES, serialized_size
 from app.vnext.llm.protocol import (
     AssistantMessage,
     FinalMessage,
@@ -18,6 +29,7 @@ from app.vnext.llm.protocol import (
     UserMessage,
 )
 from app.vnext.tools import ToolContextEffect, ToolDefinition, ToolRegistry
+from app.vnext.tools.artifacts import register_artifact_tools
 from app.vnext.tools.task import register_task_checkpoint_tool, register_task_plan_tool
 from tests.vnext.fakes import ScriptedTranscriptModelClient
 
@@ -591,8 +603,8 @@ def test_current_checkpoint_candidate_adds_completion_guidance() -> None:
         system = _system(request)
         assert "checkpoint_candidates: 1" in system
         assert "checkpoint_candidate_bytes:" in system
-        assert "CURRENT has checkpointable raw evidence" in system
-        assert "If it already satisfies the objective, checkpoint it." in system
+        assert "CURRENT has checkpointable observations" in system
+        assert "If they already satisfy the objective, checkpoint them." in system
         return ModelResponse(message=FinalMessage(content="partial"))
 
     model = ScriptedTranscriptModelClient([first, second, third])
@@ -622,3 +634,302 @@ def test_future_evidence_is_allowed_but_does_not_replace_current_focus() -> None
     lease = coordinator.active_evidence_lease()
     assert lease is not None
     assert lease["task_key"] == "2026"
+
+
+class _SyntheticMatchesInput(BaseModel):
+    edition: str
+
+
+class _SyntheticMatchesOutput(BaseModel):
+    matches: list[dict[str, Any]]
+
+
+def test_runtime_checkpoints_eight_small_inline_match_records_without_artifacts() -> None:
+    coordinator = TaskStateCoordinator()
+    artifact_store = SessionArtifactStore()
+    calls: list[str] = []
+
+    async def lookup(args: _SyntheticMatchesInput) -> _SyntheticMatchesOutput:
+        calls.append(args.edition)
+        count = 8 if args.edition == "2025" else 1
+        matches = [
+            {
+                "match_id": f"synthetic-{args.edition}-{index}",
+                "edition": args.edition,
+                "winner": "Synthetic Radiant" if index % 2 else "Synthetic Dire",
+                "note": "Synthetic regression fixture, not real match data.",
+            }
+            for index in range(count)
+        ]
+        assert serialized_size({"matches": matches}) < INLINE_TOOL_RESPONSE_MAX_BYTES
+        return _SyntheticMatchesOutput(matches=matches)
+
+    registry = ToolRegistry(
+        result_processor=ArtifactBackedToolResultProcessor(
+            ToolResponseExternalizer(artifact_store)
+        )
+    )
+    registry.register(
+        ToolDefinition(
+            name="synthetic.matches",
+            description="Return fixed synthetic match records for a test edition.",
+            input_model=_SyntheticMatchesInput,
+            output_model=_SyntheticMatchesOutput,
+            handler=lookup,
+            read_only=True,
+            parallel_safe=True,
+        )
+    )
+    register_task_plan_tool(registry, coordinator)
+    register_task_checkpoint_tool(registry, coordinator)
+
+    def first(_: ModelRequest) -> ModelResponse:
+        return _tool_response(_plan_call())
+
+    def second(request: ModelRequest) -> ModelResponse:
+        assert "CURRENT: 2025" in _system(request)
+        return _tool_response(
+            ToolCall(
+                id="synthetic-query-2025",
+                name="synthetic.matches",
+                arguments={"edition": "2025"},
+            )
+        )
+
+    def third(request: ModelRequest) -> ModelResponse:
+        system = _system(request)
+        assert '"tool_call_id":"synthetic-query-2025"' in system
+        assert '"source_kind":"inline_tool_result"' in system
+        assert '"status":"ACTIVE_INLINE"' in system
+        return _tool_response(
+            _checkpoint_call(
+                "bad-inline-checkpoint",
+                key="2025",
+                source=["synthetic-query-2025", "unknown-source"],
+                value={"match_count": 8},
+            )
+        )
+
+    def fourth(request: ModelRequest) -> ModelResponse:
+        error = next(
+            message
+            for message in request.messages
+            if isinstance(message, ToolResultMessage)
+            and message.tool_call_id == "bad-inline-checkpoint"
+        )
+        assert error.status == "error"
+        assert error.error is not None
+        assert error.error.code == "invalid_checkpoint_source"
+        assert error.error.details == {
+            "checkpoint_key": "2025",
+            "invalid_sources": ["unknown-source"],
+            "available_sources": ["synthetic-query-2025"],
+        }
+        assert "CURRENT: 2025" in _system(request)
+        assert "Task state:\n{}" in _system(request)
+        return _tool_response(
+            _checkpoint_call(
+                "checkpoint-2025",
+                key="2025",
+                source=["synthetic-query-2025"],
+                value={"match_count": 8},
+            )
+        )
+
+    def fifth(request: ModelRequest) -> ModelResponse:
+        system = _system(request)
+        assert "CURRENT: 2026" in system
+        assert '"2025":{"match_count":8}' in system
+        assert '"tool_call_id":"synthetic-query-2025"' not in system
+        return _tool_response(
+            ToolCall(
+                id="synthetic-query-2026",
+                name="synthetic.matches",
+                arguments={"edition": "2026"},
+            )
+        )
+
+    def sixth(request: ModelRequest) -> ModelResponse:
+        system = _system(request)
+        assert '"tool_call_id":"synthetic-query-2026"' in system
+        assert '"task_key":"2026"' in system
+        return _tool_response(
+            _checkpoint_call(
+                "checkpoint-2026",
+                key="2026",
+                source=["synthetic-query-2026"],
+                value={"match_count": 1},
+            )
+        )
+
+    def seventh(request: ModelRequest) -> ModelResponse:
+        system = _system(request)
+        assert "CURRENT: None" in system
+        assert '"2025":{"match_count":8}' in system
+        assert '"2026":{"match_count":1}' in system
+        return ModelResponse(message=FinalMessage(content="Compared the synthetic records."))
+
+    def eighth(request: ModelRequest) -> ModelResponse:
+        assert request.tools == []
+        assert any(
+            isinstance(message, SystemMessage) and "Execution result:" in message.content
+            for message in request.messages
+        )
+        return ModelResponse(message=FinalMessage(content="Compared the synthetic records."))
+
+    model = ScriptedTranscriptModelClient(
+        [first, second, third, fourth, fifth, sixth, seventh, eighth]
+    )
+    runtime = AgentRuntime(
+        model,
+        registry,
+        transcript_rewriter=ArtifactObservationTranscriptRewriter(),
+        task_state_coordinator=coordinator,
+    )
+    final = asyncio.run(
+        runtime.run([UserMessage(content="Compare the two synthetic editions.")])
+    )
+
+    assert calls == ["2025", "2026"]
+    assert artifact_store._documents == {}
+    assert all(tool.name != "artifact.read" for tool in registry.schemas())
+    assert coordinator.plan_snapshot().current_key is None  # type: ignore[union-attr]
+    assert set(coordinator.store.snapshot()) == {"2025", "2026"}
+    assert len(model.requests) == 8
+    assert model.requests[-1].tools == []
+    assert final.content == "Compared the synthetic records."
+
+
+class _OversizedLookupInput(BaseModel):
+    edition: str
+
+
+class _OversizedLookupOutput(BaseModel):
+    matches: list[dict[str, Any]]
+
+
+def test_externalized_preview_is_not_checkpointable_but_artifact_read_is() -> None:
+    coordinator = TaskStateCoordinator()
+    artifact_store = SessionArtifactStore()
+    lookup_count = 0
+
+    async def lookup(args: _OversizedLookupInput) -> _OversizedLookupOutput:
+        nonlocal lookup_count
+        lookup_count += 1
+        return _OversizedLookupOutput(
+            matches=[{"edition": args.edition, "synthetic_record": "x" * 13_000}]
+        )
+
+    registry = ToolRegistry(
+        result_processor=ArtifactBackedToolResultProcessor(
+            ToolResponseExternalizer(artifact_store)
+        )
+    )
+    registry.register(
+        ToolDefinition(
+            name="synthetic.large_matches",
+            description="Return one oversized synthetic match record.",
+            input_model=_OversizedLookupInput,
+            output_model=_OversizedLookupOutput,
+            handler=lookup,
+            read_only=True,
+            parallel_safe=True,
+        )
+    )
+    register_artifact_tools(
+        registry,
+        ArtifactReader(artifact_store),
+        ArtifactGrepper(artifact_store),
+    )
+    register_task_plan_tool(registry, coordinator)
+    register_task_checkpoint_tool(registry, coordinator)
+
+    def first(_: ModelRequest) -> ModelResponse:
+        return _tool_response(_plan_call())
+
+    def second(_: ModelRequest) -> ModelResponse:
+        return _tool_response(
+            ToolCall(
+                id="oversized-lookup",
+                name="synthetic.large_matches",
+                arguments={"edition": "2025"},
+            )
+        )
+
+    def third(request: ModelRequest) -> ModelResponse:
+        preview = next(
+            message
+            for message in request.messages
+            if isinstance(message, ToolResultMessage)
+            and message.tool_call_id == "oversized-lookup"
+        )
+        assert preview.content["externalized"] is True  # type: ignore[index]
+        assert '"tool_call_id":"oversized-lookup"' not in _system(request)
+        return _tool_response(
+            ToolCall(
+                id="read-2025",
+                name="artifact.read",
+                arguments={
+                    "ref": preview.content["artifact_ref"],  # type: ignore[index]
+                    "mode": "read",
+                    "path": "matches",
+                    "task_key": "2025",
+                },
+            )
+        )
+
+    def fourth(request: ModelRequest) -> ModelResponse:
+        assert '"tool_call_id":"read-2025"' in _system(request)
+        assert '"source_kind":"artifact_read"' in _system(request)
+        return _tool_response(
+            _checkpoint_call("checkpoint-2025", key="2025", source=["read-2025"])
+        )
+
+    def fifth(request: ModelRequest) -> ModelResponse:
+        assert "CURRENT: 2026" in _system(request)
+        preview = next(
+            message
+            for message in request.messages
+            if isinstance(message, ToolResultMessage)
+            and message.tool_call_id == "oversized-lookup"
+        )
+        return _tool_response(
+            ToolCall(
+                id="read-2026",
+                name="artifact.read",
+                arguments={
+                    "ref": preview.content["artifact_ref"],  # type: ignore[index]
+                    "mode": "read",
+                    "path": "matches.0.edition",
+                    "task_key": "2026",
+                },
+            )
+        )
+
+    def sixth(request: ModelRequest) -> ModelResponse:
+        assert '"tool_call_id":"read-2026"' in _system(request)
+        return _tool_response(
+            _checkpoint_call("checkpoint-2026", key="2026", source=["read-2026"])
+        )
+
+    def seventh(request: ModelRequest) -> ModelResponse:
+        assert coordinator.plan_snapshot().current_key is None  # type: ignore[union-attr]
+        assert '"2025":{"fact":"A"}' in _system(request)
+        assert '"2026":{"fact":"A"}' in _system(request)
+        return ModelResponse(message=FinalMessage(content="Finished synthetic reads."))
+
+    model = ScriptedTranscriptModelClient(
+        [first, second, third, fourth, fifth, sixth, seventh]
+    )
+    runtime = AgentRuntime(
+        model,
+        registry,
+        transcript_rewriter=ArtifactObservationTranscriptRewriter(),
+        task_state_coordinator=coordinator,
+    )
+    asyncio.run(runtime.run([UserMessage(content="Read and checkpoint the synthetic records.")]))
+
+    assert lookup_count == 1
+    assert len(artifact_store._documents) == 1
+    assert coordinator.plan_snapshot().current_key is None  # type: ignore[union-attr]
+    assert set(coordinator.store.snapshot()) == {"2025", "2026"}

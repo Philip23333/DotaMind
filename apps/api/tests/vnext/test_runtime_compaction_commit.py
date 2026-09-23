@@ -72,6 +72,19 @@ def _artifact_group(prefix: str) -> tuple[AssistantMessage, ToolResultMessage, T
     return AssistantMessage(tool_calls=[call]), result, call
 
 
+def _inline_group(prefix: str) -> tuple[AssistantMessage, ToolResultMessage, ToolCall]:
+    call = ToolCall(
+        id=f"{prefix}-inline-call",
+        name="lookup",
+        arguments={"query": prefix},
+    )
+    result = ToolResultMessage(
+        tool_call_id=call.id,
+        content={"records": [{"label": f"synthetic {prefix}"}]},
+    )
+    return AssistantMessage(tool_calls=[call]), result, call
+
+
 def _history_with_two_groups() -> tuple[
     SessionExecutionHistory,
     UUID,
@@ -574,6 +587,73 @@ def test_compaction_does_not_reset_task_state_execute_tools_or_publish_events() 
     assert called is False
     assert coordinator.plan_snapshot() == before_plan
     assert events == []
+
+
+@pytest.mark.parametrize(("source_position", "retained"), [("first", False), ("second", True)])
+def test_compaction_refresh_keeps_only_inline_sources_in_effective_history(
+    source_position: str,
+    retained: bool,
+) -> None:
+    source_group = _inline_group("source")
+    other_first = _artifact_group("1")
+    other_second = _artifact_group("2")
+    first_group = source_group if source_position == "first" else other_first
+    second_group = source_group if source_position == "second" else other_second
+    current = UserMessage(content="current question")
+    history = SessionExecutionHistory()
+    request_id = uuid4()
+    messages = [
+        UserMessage(content="old question"),
+        first_group[0],
+        first_group[1],
+        second_group[0],
+        second_group[1],
+        current,
+    ]
+    history.begin_request(request_id, current.content, initial_messages=messages)
+
+    coordinator = TaskStateCoordinator()
+    coordinator.create_plan(
+        [
+            {"key": "first", "objective": "First"},
+            {"key": "second", "objective": "Second"},
+        ]
+    )
+    coordinator.record_inline_tool_result(
+        source_group[2], source_group[1], task_key="first"
+    )
+    coordinator.refresh(messages)
+    runtime = _runtime(
+        ScriptedModelClient([ModelResponse.from_final("summary", finish_reason="stop")]),
+        registry=ToolRegistry(),
+        task_state_coordinator=coordinator,
+    )
+
+    assert _compact(
+        runtime,
+        history,
+        request_id,
+        recent_history_bytes=_recent_budget_for_second_group(second_group, current),
+    ) is True
+    request_start, effective_messages, _ = runtime._rebuild_after_compaction(
+        execution_history=history,
+        request_id=request_id,
+        request_start=0,
+        request_start_before=0,
+        materialized_bytes_before=0,
+        step=4,
+        trigger="watermark",
+        trace_collector=None,
+    )
+
+    assert request_start == 0
+    assert effective_messages == history.effective_messages()
+    assert coordinator.active_evidence_lease() is None
+    candidate_ids = [
+        item["tool_call_id"]
+        for item in coordinator.context_payload()["checkpoint_candidates"]
+    ]
+    assert candidate_ids == ([source_group[2].id] if retained else [])
 
 
 def test_compaction_rejects_invalid_session_request_without_model_call() -> None:

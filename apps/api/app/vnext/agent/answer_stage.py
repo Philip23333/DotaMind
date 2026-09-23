@@ -324,9 +324,9 @@ def render_answer_context(context: AnswerContext) -> str:
             f"steps: {context.execution_steps}",
             "Task coverage:\n" + _json(context.task_plan),
             "Completed task state:\n" + _json(context.task_state),
-            "Uncheckpointed verified artifact evidence:\n"
+            "Artifact observations:\n"
             + _json(context.active_artifact_evidence),
-            "Other verified tool evidence:\n" + _json(context.tool_evidence),
+            "Other successful tool observations:\n" + _json(context.tool_evidence),
         )
     )
 

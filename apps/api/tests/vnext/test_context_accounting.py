@@ -210,7 +210,7 @@ def test_context_accounting_splits_task_context_and_runtime_prompt() -> None:
         SystemMessage(
             content=(
                 'Task state:\n{"part":{"fact":"saved"}}\n\n'
-                'Checkpointable artifact observations:\n[]'
+                'Checkpointable observations:\n[]'
             )
         ),
         *stable,
@@ -219,7 +219,7 @@ def test_context_accounting_splits_task_context_and_runtime_prompt() -> None:
         SystemMessage(
             content=(
                 'Task state:\n{"part":{"fact":"saved"}}\n\n'
-                'Checkpointable artifact observations:\n[]\n\n'
+                'Checkpointable observations:\n[]\n\n'
                 'Runtime state:\nexploration'
             )
         ),

@@ -1,4 +1,4 @@
-"""Provider-neutral instructions for the artifact-only agent runtime."""
+"""Provider-neutral instructions for the vNext agent runtime."""
 
 AGENT_INSTRUCTION = """\
 Use only the tools declared in the current tool catalog.
@@ -56,7 +56,14 @@ Use only the tools declared in the current tool catalog.
 - A deferred result means the tool execution succeeded, but its raw evidence
   is not currently available in model context. Do not use a deferred result as
   evidence or as a checkpoint source.
-- Recorded raw evidence remains available in context after checkpointing.
+- A checkpoint stores model-organized task state and consumes the selected
+  source IDs for checkpoint use. It does not release or replace the tool
+  results retained in effective conversation history.
+- Successful tool execution proves only that the tool ran successfully; it
+  does not verify the business conclusion. Checkpoint sources must be current
+  successful inline tool results or raw artifact.read observations shown in the
+  candidate list. Do not checkpoint externalized previews, receipts, deferred
+  results, tool errors, or task-control tool results.
 - Do not repeatedly retry a deferred materialization before context capacity
   has been released.
 - When materializing artifact evidence for a specific task-plan item, set its
@@ -64,8 +71,9 @@ Use only the tools declared in the current tool catalog.
   checkpointed.
 - Do not materialize large amounts of speculative evidence far ahead of the
   work you expect to process.
-- Each task-plan item must be an artifact-backed retrieval unit that is
-  checkpointable with task.checkpoint.
+- Each task-plan item must be an independently completable result unit that can
+  be checkpointed from successful inline tool results and/or raw artifact.read
+  observations.
 - Do not create plan items for final synthesis, comparison, aggregation, or
   answer composition. Perform those after the task plan is complete using the
   checkpointed TaskState.
@@ -78,24 +86,30 @@ ANSWER_INSTRUCTION = """\
 Execution has ended.
 
 Produce the final user-facing answer using only the original conversation and
-the verified execution evidence provided below.
+the execution evidence and task state provided below.
 
 Do not continue planning or attempt tool use. Do not invent facts that are not
 supported by the provided evidence.
 
-If execution coverage is incomplete, clearly distinguish completed or verified
-results from portions that could not be completed.
+Tool success does not mean a business conclusion was verified. Distinguish
+supported observations, uncertainty, and data gaps. Usually describe those
+limits directly instead of explaining internal checkpoint or Artifact storage.
+
+If execution coverage is incomplete, clearly distinguish completed results from
+portions that could not be completed.
 """
 
 DEGRADED_ANSWER_INSTRUCTION = """\
 Execution has ended.
 
 Produce a concise user-facing answer using only the original conversation and
-the verified execution evidence provided below.
+the execution evidence and task state provided below.
 
-Prioritize the main result and completed coverage. Do not expand every
-underlying record unless necessary. If execution coverage is incomplete,
-clearly state what was completed and what remains incomplete.
+Tool success does not mean a business conclusion was verified. Prioritize the
+main result and completed coverage, and state material uncertainty or data gaps.
+Do not explain internal checkpoint or Artifact storage unless relevant. Do not
+expand every underlying record unless necessary. If execution coverage is
+incomplete, clearly state what was completed and what remains incomplete.
 
 Do not continue planning, attempt tool use, or invent unsupported facts.
 """

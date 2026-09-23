@@ -9,8 +9,10 @@ from app.vnext.agent.answer_stage import (
     ExecutionStopReason,
     build_answer_fallback,
     build_failure_answer,
+    render_answer_context,
     resolve_answer,
 )
+from app.vnext.agent.instructions import ANSWER_INSTRUCTION, DEGRADED_ANSWER_INSTRUCTION
 from app.vnext.agent.task_state import (
     TaskCheckpoint,
     TaskItem,
@@ -515,3 +517,28 @@ def test_projection_without_coordinator_and_render_are_deterministic() -> None:
     assert first.render() == second.render()
     assert "reason: max_steps" in first.render()
     assert "CURRENT" not in first.render()
+
+
+def test_answer_context_uses_observation_language_without_claiming_runtime_verification() -> None:
+    messages = [
+        AssistantMessage(tool_calls=[_call("team", "esports.team.search")]),
+        _result("team", {"name": "Synthetic Team"}),
+    ]
+    context = AnswerContextBuilder().build(
+        execution_messages=messages,
+        outcome=_outcome(ExecutionStopReason.MODEL_DONE),
+        task_state_coordinator=None,
+        resolution=resolve_answer(
+            outcome=_outcome(ExecutionStopReason.MODEL_DONE),
+            task_state_coordinator=None,
+        ),
+    )
+
+    rendered = render_answer_context(context)
+    for instruction in (ANSWER_INSTRUCTION, DEGRADED_ANSWER_INSTRUCTION):
+        assert "Tool success does not mean a business conclusion was verified" in instruction
+        assert "internal checkpoint or Artifact storage" in instruction
+    assert "Artifact observations:\n[]" in rendered
+    assert 'Other successful tool observations:\n[{"content":{"name":"Synthetic Team"}' in rendered
+    assert "Uncheckpointed verified" not in rendered
+    assert "Other verified tool evidence" not in rendered

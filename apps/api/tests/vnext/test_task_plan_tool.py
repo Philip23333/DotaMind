@@ -29,10 +29,11 @@ def test_plan_input_schema_has_only_items() -> None:
 
 
 def test_plan_description_excludes_synthesis_items() -> None:
-    description = TASK_PLAN_DESCRIPTION.lower()
+    description = " ".join(TASK_PLAN_DESCRIPTION.lower().split())
 
-    assert "artifact-backed retrieval unit" in description
-    assert "checkpointable" in description
+    assert "every item must be an artifact-backed" not in description
+    assert "successful inline tool results" in description
+    assert "saved with task.checkpoint" in description
     assert "task.checkpoint" in description
     assert "final synthesis" in description
     assert "comparison" in description

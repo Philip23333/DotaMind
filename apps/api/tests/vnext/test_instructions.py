@@ -3,11 +3,12 @@ from __future__ import annotations
 from app.vnext.agent.instructions import AGENT_INSTRUCTION
 
 
-def test_task_plan_policy_is_limited_to_checkpointable_retrieval_units() -> None:
-    instruction = AGENT_INSTRUCTION.lower()
+def test_task_plan_policy_allows_checkpointable_result_units() -> None:
+    instruction = " ".join(AGENT_INSTRUCTION.lower().split())
 
-    assert "artifact-backed retrieval unit" in instruction
-    assert "checkpointable" in instruction
+    assert "every item must be an artifact-backed" not in instruction
+    assert "successful inline tool results" in instruction
+    assert "can be checkpointed" in instruction
     assert "final synthesis" in instruction
     assert "comparison" in instruction
     assert "aggregation" in instruction
@@ -35,7 +36,11 @@ def test_deferred_materialization_policy_guides_recovery_without_scheduler_detai
     assert "deferred result means the tool execution succeeded" in instruction
     assert "not currently available in model context" in instruction
     assert "do not use a deferred result as evidence or as a checkpoint source" in instruction
-    assert "recorded raw evidence remains available in context after checkpointing" in instruction
+    assert (
+        "does not release or replace the tool results retained in effective conversation history"
+        in instruction
+    )
+    assert "successful inline tool results" in instruction
     assert "retry deferred materialization later" not in instruction
     assert "do not repeatedly retry a deferred materialization" in instruction
     assert "160 kib" not in instruction

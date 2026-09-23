@@ -133,7 +133,7 @@ def test_tool_execution_is_followed_by_tool_free_answer_request() -> None:
     assert len(model.requests) == 3
     assert model.requests[1].messages[-1].tool_call_id == "call-1"  # type: ignore[union-attr]
     assert model.requests[2].tools == []
-    assert "Other verified tool evidence" in model.requests[2].messages[-1].content
+    assert "Other successful tool observations" in model.requests[2].messages[-1].content
 
 
 def test_max_steps_without_durable_state_closes_with_failure_answer() -> None:
@@ -508,8 +508,8 @@ def test_partial_primary_request_excludes_uncheckpointed_evidence() -> None:
     assert _run(runtime).content == "partial answer"
     context = model.requests[2].messages[-1].content
     assert '"fact":"A"' in context
-    assert "Uncheckpointed verified artifact evidence:\n[]" in context
-    assert "Other verified tool evidence:\n[]" in context
+    assert "Artifact observations:\n[]" in context
+    assert "Other successful tool observations:\n[]" in context
 
 
 def test_degraded_plan_projection_is_smaller_than_primary() -> None:
@@ -569,10 +569,10 @@ def test_degraded_plan_projection_is_smaller_than_primary() -> None:
     assert _run(runtime, trace_collector=collector).content == "compact"
     primary_context = model.requests[2].messages[-1].content
     degraded_context = model.requests[3].messages[-1].content
-    assert "Uncheckpointed verified artifact evidence:" in primary_context
-    assert "Other verified tool evidence:" in primary_context
-    assert "Uncheckpointed verified artifact evidence:\n[]" in degraded_context
-    assert "Other verified tool evidence:\n[]" in degraded_context
+    assert "Artifact observations:" in primary_context
+    assert "Other successful tool observations:" in primary_context
+    assert "Artifact observations:\n[]" in degraded_context
+    assert "Other successful tool observations:\n[]" in degraded_context
     projections = collector.snapshot()["answer_projections"]
     assert projections[0]["active_raw_count"] == 0
     assert projections[1]["active_raw_count"] == 0
@@ -616,7 +616,7 @@ def test_degraded_no_plan_projection_preserves_verified_evidence() -> None:
 
     assert _run(runtime, trace_collector=collector).content == "compact"
     degraded_context = model.requests[3].messages[-1].content
-    assert "Uncheckpointed verified artifact evidence:\n[]" in degraded_context
+    assert "Artifact observations:\n[]" in degraded_context
     assert collector.snapshot()["answer_projections"][1]["active_raw_count"] == 0
     assert collector.snapshot()["answer_projections"][1]["tool_evidence_count"] == 0
 

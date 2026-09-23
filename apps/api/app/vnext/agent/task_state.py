@@ -6,14 +6,13 @@ import json
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
 from app.vnext.artifacts.lifecycle import (
-    ArtifactObservation,
     collect_active_artifact_observations,
 )
-from app.vnext.llm.protocol import Message
+from app.vnext.llm.protocol import AssistantMessage, Message, ToolCall, ToolResultMessage
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,6 +57,27 @@ class EvidenceLease:
     tool_call_id: str
     task_key: str
     raw_bytes: int
+
+
+@dataclass(frozen=True, slots=True)
+class CheckpointSource:
+    """Small metadata record for one currently usable checkpoint source."""
+
+    tool_call_id: str
+    tool_name: str
+    source_kind: Literal["inline_tool_result", "artifact_read"]
+    message_index: int
+    task_key: str | None = None
+    ref: str | None = None
+    path: str | None = None
+    actual_start: int | None = None
+    actual_end: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _InlineSourceOwner:
+    tool_name: str
+    task_key: str | None
 
 
 class CheckpointSourceError(ValueError):
@@ -107,7 +127,8 @@ class TaskStateCoordinator:
     def __init__(self, store: TaskStateStore | None = None) -> None:
         self.store = store or TaskStateStore()
         self.plan: TaskPlan | None = None
-        self._active_observations: dict[str, ArtifactObservation] = {}
+        self._active_sources: dict[str, CheckpointSource] = {}
+        self._inline_source_owners: dict[str, _InlineSourceOwner] = {}
         self._claimed_source_tool_call_ids: set[str] = set()
         self._active_evidence_leases: dict[str, EvidenceLease] = {}
         self._request_start = 0
@@ -117,7 +138,8 @@ class TaskStateCoordinator:
 
         self.plan = None
         self.store.clear()
-        self._active_observations.clear()
+        self._active_sources.clear()
+        self._inline_source_owners.clear()
         self._claimed_source_tool_call_ids.clear()
         self._active_evidence_leases.clear()
         self._request_start = 0
@@ -127,12 +149,60 @@ class TaskStateCoordinator:
 
     def refresh(self, messages: Sequence[Message], *, start_index: int | None = None) -> None:
         effective_start = self._request_start if start_index is None else max(0, start_index)
-        observations = collect_active_artifact_observations(messages)
-        self._active_observations = {
-            observation.tool_call_id: observation for observation in observations
-            if observation.message_index >= effective_start
-            if observation.tool_call_id not in self._claimed_source_tool_call_ids
+        scoped_messages = messages[effective_start:]
+        sources: dict[str, CheckpointSource] = {}
+        for observation in collect_active_artifact_observations(scoped_messages):
+            if observation.tool_call_id in self._claimed_source_tool_call_ids:
+                continue
+            sources[observation.tool_call_id] = CheckpointSource(
+                tool_call_id=observation.tool_call_id,
+                tool_name="artifact.read",
+                source_kind="artifact_read",
+                message_index=effective_start + observation.message_index,
+                ref=observation.ref,
+                path=observation.path,
+                actual_start=observation.actual_start,
+                actual_end=observation.actual_end,
+            )
+
+        inline_sources = _collect_active_inline_sources(
+            scoped_messages,
+            self._inline_source_owners,
+            claimed_tool_call_ids=self._claimed_source_tool_call_ids,
+            message_index_offset=effective_start,
+        )
+        sources.update((source.tool_call_id, source) for source in inline_sources)
+        self._active_sources = sources
+        active_inline_ids = {
+            source.tool_call_id
+            for source in inline_sources
         }
+        self._inline_source_owners = {
+            tool_call_id: owner
+            for tool_call_id, owner in self._inline_source_owners.items()
+            if tool_call_id in active_inline_ids
+        }
+
+    def record_inline_tool_result(
+        self,
+        call: ToolCall,
+        result: ToolResultMessage,
+        *,
+        task_key: str | None,
+    ) -> None:
+        """Record execution-time ownership for one eligible successful inline result."""
+
+        if (
+            result.status != "ok"
+            or call.id != result.tool_call_id
+            or not _is_checkpointable_inline_tool(call.name)
+            or not _is_checkpointable_inline_content(result.content)
+        ):
+            return
+        self._inline_source_owners[call.id] = _InlineSourceOwner(
+            tool_name=call.name,
+            task_key=task_key,
+        )
 
     def create_plan(self, items: Sequence[Mapping[str, Any]]) -> TaskPlan:
         """Create the one serial plan allowed for this runtime invocation."""
@@ -307,7 +377,7 @@ class TaskStateCoordinator:
         self.store.put(checkpoint)
         self._claimed_source_tool_call_ids.update(sources)
         for source in sources:
-            self._active_observations.pop(source, None)
+            self._active_sources.pop(source, None)
         if self.plan is not None and self.plan.current_key is not None:
             completed_key = self.plan.current_key
             for tool_call_id, lease in list(self._active_evidence_leases.items()):
@@ -340,12 +410,13 @@ class TaskStateCoordinator:
             self.plan,
             payload["checkpoint_candidates"],
             self._active_evidence_leases,
+            self._ordered_active_sources(),
         )
         if focus_context is not None:
             sections.append(focus_context)
         sections.append("Task state:\n" + _json(payload["task_state"]))
         sections.append(
-            "Checkpointable artifact observations:\n"
+            "Checkpointable observations:\n"
             + _json(payload["active_manifest"])
         )
         sections.append("Checkpoint candidates:\n" + _json(payload["checkpoint_candidates"]))
@@ -355,7 +426,7 @@ class TaskStateCoordinator:
         """Return the structured ephemeral payload used by model context."""
 
         checkpoints = self.store.list()
-        observations = list(self._active_observations.values())
+        sources = self._ordered_active_sources()
         return {
             "task_plan": _plan_payload(self.plan),
             "task_state": {
@@ -363,21 +434,31 @@ class TaskStateCoordinator:
             },
             "active_manifest": [
                 _manifest_item(
-                    observation,
+                    source,
+                    task_key=self._source_task_key(source),
                     lease_key=(
-                        self._active_evidence_leases[observation.tool_call_id].task_key
-                        if observation.tool_call_id in self._active_evidence_leases
+                        self._active_evidence_leases[source.tool_call_id].task_key
+                        if source.tool_call_id in self._active_evidence_leases
                         else None
                     ),
                 )
-                for observation in observations
+                for source in sources
             ],
             "checkpoint_candidates": _checkpoint_candidates(
                 self.plan,
-                observations,
+                sources,
                 self._active_evidence_leases,
             ),
         }
+
+    def _ordered_active_sources(self) -> list[CheckpointSource]:
+        return sorted(
+            self._active_sources.values(),
+            key=lambda source: (source.message_index, source.tool_call_id),
+        )
+
+    def _source_task_key(self, source: CheckpointSource) -> str | None:
+        return _source_owner_key(source, self._active_evidence_leases)
 
     def _validate_checkpoint(
         self,
@@ -426,7 +507,7 @@ class TaskStateCoordinator:
         unknown = [
             tool_call_id
             for tool_call_id in source_tool_call_ids
-            if tool_call_id not in self._active_observations
+            if tool_call_id not in self._active_sources
         ]
         if unknown:
             raise CheckpointSourceError(
@@ -434,7 +515,7 @@ class TaskStateCoordinator:
                 invalid_sources=unknown,
                 available_sources=self._available_checkpoint_source_ids(key),
                 message=(
-                    "checkpoint sources must refer to active raw artifact.read "
+                    "checkpoint sources must refer to active checkpointable "
                     "observations: "
                     + ", ".join(unknown)
                 ),
@@ -442,10 +523,9 @@ class TaskStateCoordinator:
         mismatched = [
             tool_call_id
             for tool_call_id in source_tool_call_ids
-            if (
-                (lease := self._active_evidence_leases.get(tool_call_id)) is not None
-                and lease.task_key != key
-            )
+            if (source := self._active_sources.get(tool_call_id)) is not None
+            and (owner_key := self._source_task_key(source)) is not None
+            and owner_key != key
         ]
         if mismatched:
             raise CheckpointSourceError(
@@ -460,31 +540,34 @@ class TaskStateCoordinator:
 
     def _available_checkpoint_source_ids(self, key: str) -> list[str]:
         return [
-            tool_call_id
-            for tool_call_id in self._active_observations
-            if (
-                (lease := self._active_evidence_leases.get(tool_call_id)) is None
-                or lease.task_key == key
-            )
+            source.tool_call_id
+            for source in self._ordered_active_sources()
+            if self._source_task_key(source) in (None, key)
         ]
 
 
 def _manifest_item(
-    observation: ArtifactObservation,
+    source: CheckpointSource,
     *,
+    task_key: str | None,
     lease_key: str | None,
 ) -> dict[str, Any]:
     item: dict[str, Any] = {
-        "tool_call_id": observation.tool_call_id,
-        "ref": observation.ref,
-        "path": observation.path,
+        "tool_call_id": source.tool_call_id,
+        "tool_name": source.tool_name,
+        "source_kind": source.source_kind,
     }
-    if observation.actual_start is not None:
-        item["actual_start"] = observation.actual_start
-    if observation.actual_end is not None:
-        item["actual_end"] = observation.actual_end
-    if lease_key is not None:
-        item["lease_key"] = lease_key
+    if source.source_kind == "artifact_read":
+        item["ref"] = source.ref
+        item["path"] = source.path
+        if source.actual_start is not None:
+            item["actual_start"] = source.actual_start
+        if source.actual_end is not None:
+            item["actual_end"] = source.actual_end
+        if lease_key is not None:
+            item["lease_key"] = lease_key
+    else:
+        item["task_key"] = task_key
     return item
 
 
@@ -506,33 +589,124 @@ def _plan_payload(plan: TaskPlan | None) -> dict[str, Any] | None:
 
 def _checkpoint_candidates(
     plan: TaskPlan | None,
-    observations: Sequence[ArtifactObservation],
+    sources: Sequence[CheckpointSource],
     leases: Mapping[str, EvidenceLease],
 ) -> list[dict[str, Any]]:
-    """Project only current-task raw observations that can be checkpointed."""
+    """Project active sources whose execution-time owner permits current use."""
 
-    if plan is None or plan.current_key is None:
+    if plan is not None and plan.current_key is None:
         return []
+    current_key = plan.current_key if plan is not None else None
     candidates: list[dict[str, Any]] = []
-    for observation in observations:
-        lease = leases.get(observation.tool_call_id)
-        if lease is None or lease.task_key != plan.current_key:
+    for source in sources:
+        lease = leases.get(source.tool_call_id)
+        owner_key = _source_owner_key(source, leases)
+        if owner_key is not None and owner_key != current_key:
             continue
-        candidates.append(
-            {
-                "tool_call_id": observation.tool_call_id,
-                "task_key": lease.task_key,
-                "status": "ACTIVE_RAW",
-                "bytes": lease.raw_bytes,
-            }
-        )
+        candidate: dict[str, Any] = {
+            "tool_call_id": source.tool_call_id,
+            "tool_name": source.tool_name,
+            "source_kind": source.source_kind,
+            "task_key": owner_key,
+            "status": (
+                "ACTIVE_RAW"
+                if source.source_kind == "artifact_read"
+                else "ACTIVE_INLINE"
+            ),
+        }
+        if lease is not None:
+            candidate["bytes"] = lease.raw_bytes
+        candidates.append(candidate)
     return candidates
+
+
+def _collect_active_inline_sources(
+    messages: Sequence[Message],
+    owners: Mapping[str, _InlineSourceOwner],
+    *,
+    claimed_tool_call_ids: Collection[str],
+    message_index_offset: int,
+) -> list[CheckpointSource]:
+    calls: dict[str, list[ToolCall]] = {}
+    sources: list[CheckpointSource] = []
+    for message_index, message in enumerate(messages):
+        if isinstance(message, AssistantMessage):
+            for call in message.tool_calls:
+                calls.setdefault(call.id, []).append(call)
+            continue
+        if not isinstance(message, ToolResultMessage):
+            continue
+        matching_calls = calls.get(message.tool_call_id)
+        call = matching_calls.pop(0) if matching_calls else None
+        owner = owners.get(message.tool_call_id)
+        if (
+            call is None
+            or owner is None
+            or message.tool_call_id in claimed_tool_call_ids
+            or message.status != "ok"
+            or call.name != owner.tool_name
+            or not _is_checkpointable_inline_tool(call.name)
+            or not _is_checkpointable_inline_content(message.content)
+        ):
+            continue
+        sources.append(
+            CheckpointSource(
+                tool_call_id=message.tool_call_id,
+                tool_name=call.name,
+                source_kind="inline_tool_result",
+                message_index=message_index_offset + message_index,
+                task_key=owner.task_key,
+            )
+        )
+    return sources
+
+
+def _is_checkpointable_inline_tool(tool_name: str) -> bool:
+    return (
+        tool_name not in {"artifact.read", "artifact.grep"}
+        and not tool_name.startswith("task.")
+    )
+
+
+def _is_checkpointable_inline_content(content: Any) -> bool:
+    if not isinstance(content, (dict, list)):
+        return True
+    if isinstance(content, dict):
+        if content.get("externalized") is True or "artifact_ref" in content:
+            return False
+        observation = content.get("_artifact_observation")
+        if isinstance(observation, dict) and observation.get("state") == "receipt_only":
+            return False
+        materialization = content.get("_context_materialization")
+        if isinstance(materialization, dict) and materialization.get("state") == "deferred":
+            return False
+    stack = list(content.values()) if isinstance(content, dict) else list(content)
+    while stack:
+        value = stack.pop()
+        if isinstance(value, dict):
+            if "_artifact_path" in value:
+                return False
+            stack.extend(value.values())
+        elif isinstance(value, list):
+            stack.extend(value)
+    return True
+
+
+def _source_owner_key(
+    source: CheckpointSource,
+    leases: Mapping[str, EvidenceLease],
+) -> str | None:
+    if source.source_kind == "artifact_read":
+        lease = leases.get(source.tool_call_id)
+        return lease.task_key if lease is not None else None
+    return source.task_key
 
 
 def _focus_context(
     plan: TaskPlan | None,
     checkpoint_candidates: Sequence[Mapping[str, Any]],
     leases: Mapping[str, EvidenceLease],
+    sources: Sequence[CheckpointSource],
 ) -> str | None:
     if plan is None or plan.current_key is None:
         return None
@@ -550,10 +724,11 @@ def _focus_context(
         for candidate in checkpoint_candidates
         if candidate.get("task_key") == current_key
     )
-    future_leases = [
-        lease
-        for lease in leases.values()
-        if lease.task_key != current_key
+    future_sources = [
+        source
+        for source in sources
+        if (owner_key := _source_owner_key(source, leases)) is not None
+        and owner_key != current_key
     ]
 
     lines = [
@@ -575,7 +750,7 @@ def _focus_context(
         "Current progress:",
         f"checkpoint_candidates: {len(checkpoint_candidates)}",
         f"checkpoint_candidate_bytes: {candidate_bytes}",
-        f"future_owned_active_observations: {len(future_leases)}",
+        f"future_owned_active_observations: {len(future_sources)}",
     ]
 
     if checkpoint_candidates:
@@ -583,14 +758,14 @@ def _focus_context(
             [
                 "",
                 (
-                    "CURRENT has checkpointable raw evidence. If it already "
-                    "satisfies the objective, checkpoint it. Otherwise gather "
+                    "CURRENT has checkpointable observations. If they already "
+                    "satisfy the objective, checkpoint them. Otherwise gather "
                     "the specifically missing evidence needed to complete it."
                 ),
             ]
         )
 
-    if future_leases:
+    if future_sources:
         lines.extend(
             [
                 "",
@@ -638,6 +813,7 @@ def _json(value: Any) -> str:
 
 __all__ = [
     "CheckpointSourceError",
+    "CheckpointSource",
     "EvidenceLease",
     "TaskCheckpoint",
     "TaskItem",

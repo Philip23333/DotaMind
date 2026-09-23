@@ -169,6 +169,29 @@ document and are not entity identities. Static manuals, when introduced by a
 future capability, must be explicitly allowlisted and use the same generic
 read/grep contract.
 
+## Task planning and checkpoints
+
+`task.checkpoint` accepts the unchanged inputs `key`, `value`, and
+`source_tool_call_ids`. Sources may be current successful inline results from
+ordinary tools or current successful raw `artifact.read` observations. The
+checkpoint manifest identifies each source with `source_kind`; inline entries
+contain only the call ID, tool name, and execution-time task owner, while
+Artifact entries retain their locator metadata. Use IDs from the candidate list
+directly rather than repeating a query to create an Artifact.
+
+Externalized previews or wrappers, `artifact.grep`, task-control results,
+errors, deferred materializations, and lifecycle receipts are not checkpoint
+sources. Sources must remain in the effective current-request history and may
+be consumed only once. Inline ownership is the active task key captured before
+the tool execution group starts; results with no plan remain unowned. Artifact
+reads continue to use their existing `task_key` and EvidenceLease behavior.
+
+A checkpoint stores model-organized task state and source references. Success
+means that state was accepted and the plan advanced; it does not verify the
+business conclusions or guarantee completeness. Checkpointing does not force
+externalization, change the 12 KiB spill threshold or materialization accounting,
+or release raw results from conversation history.
+
 ## Future domain tools
 
 Future resource-shaped guidance may define search, detail, or lookup tools one

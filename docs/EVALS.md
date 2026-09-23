@@ -110,7 +110,15 @@ catalog, uses declared arguments and returned references, stops when evidence
 is sufficient, and does not claim facts unsupported by collected observations.
 Task-plan generalization covers temporal, entity, player, competition, hybrid,
 and single-deep cases without prescribing exact task keys or a fixed retrieval
-sequence.
+sequence. A deterministic checkpoint-source regression also covers eight
+synthetic inline match records under the 12 KiB inline bound: the current task
+checkpoints them by their original query call ID, advances to the second task,
+and reaches a final answer without `artifact.read` or creating an Artifact.
+Companion checks reject externalized previews, control results, failures,
+receipts, deferred results, stale IDs, and cross-task ownership while retaining
+the existing raw `artifact.read` checkpoint path. These checks verify Runtime
+source eligibility and lifecycle only; checkpoint success does not certify
+business facts.
 
 Context Governance evaluation measures answer omissions, complete-request
 peaks, summary and locator overhead, successful compactions, recovery attempts,
