@@ -1,6 +1,29 @@
 from __future__ import annotations
 
-from app.vnext.agent.instructions import AGENT_INSTRUCTION
+import re
+
+from app.vnext.agent.instructions import (
+    AGENT_INSTRUCTION,
+    ANSWER_INSTRUCTION,
+    DEGRADED_ANSWER_INSTRUCTION,
+    PRODUCT_INSTRUCTION,
+)
+
+
+def test_product_identity_is_shared_and_has_explicit_capability_boundaries() -> None:
+    identity = " ".join(PRODUCT_INSTRUCTION.lower().split())
+
+    assert "you are dotamind" in identity
+    assert "dota 2 esports" in identity
+    assert "players, teams, competitions, and match results" in identity
+    assert "inference and data gaps" in identity
+    assert "capabilities currently provided by this product" in identity
+    assert "file processing" in identity
+    assert "image processing" in identity
+    assert "general web search" in identity
+    assert "without calling tools" in identity
+    assert "language used by the user" in identity
+    assert re.search(r"\bfy\b|\bliquid\b|\bti 2024\b", identity) is None
 
 
 def test_task_plan_policy_allows_checkpointable_result_units() -> None:
@@ -44,3 +67,35 @@ def test_historical_deferred_receipts_are_not_evidence_or_checkpoint_sources() -
     assert "do not repeatedly retry a deferred materialization" not in instruction
     assert "160 kib" not in instruction
     assert "available bytes" not in instruction
+
+
+def test_execution_evidence_rules_preserve_scope_entities_and_placement_uncertainty() -> None:
+    instruction = " ".join(AGENT_INSTRUCTION.lower().split())
+
+    assert "one retrieved page or slice" in instruction
+    assert "does not prove that an upstream query exhausted its pages" in instruction
+    assert "state any range that remains unverified" in instruction
+    assert "verify that player's team membership" in instruction
+    assert "current roster does not establish a historical roster" in instruction
+    assert "do not infer a placement from a stage name alone" in instruction
+    assert "say that placement is unverified" in instruction
+    assert "checkpoint does not turn an inference into a verified fact" in instruction
+    assert re.search(r"\bfy\b|\bliquid\b|\bti 2024\b", instruction) is None
+
+
+def test_answer_instructions_keep_requested_coverage_and_uncertainty() -> None:
+    for prompt in (ANSWER_INSTRUCTION, DEGRADED_ANSWER_INSTRUCTION):
+        normalized = " ".join(prompt.lower().split())
+        assert "requested scope" in normalized
+        assert "relevant results already obtained" in normalized
+        assert "do not promote" in normalized or "do not promote an inference" in normalized
+        assert "source-reported absence" in normalized
+        assert "not yet been checked" in normalized or "ranges not yet checked" in normalized
+
+    main = " ".join(ANSWER_INSTRUCTION.lower().split())
+    assert "complete lists" in main
+    assert "implying completeness by omitting" in main
+
+    degraded = " ".join(DEGRADED_ANSWER_INSTRUCTION.lower().split())
+    assert "keep each item's explanation brief" in degraded
+    assert "do not silently drop key results" in degraded

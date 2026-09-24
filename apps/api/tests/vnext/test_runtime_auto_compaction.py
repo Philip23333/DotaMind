@@ -752,7 +752,7 @@ def test_continuous_watermarks_compact_again_after_new_tool_output() -> None:
     final_capacity = assess_request_capacity(final_request, probe_limits)
     assert final_capacity is not None
     limits = _limits_for_available(
-        final_capacity.estimated_input_tokens + 1_024,
+        final_capacity.estimated_input_tokens + 1_536,
         recent_tokens=500,
     )
     model = ScriptedModelClient(
@@ -834,7 +834,7 @@ def test_continuous_watermarks_compact_again_after_new_tool_output() -> None:
     ]
     assert [item["capacity"]["pressure"] for item in before_compaction] == [
         "critical",
-        "critical",
+        "high",
     ]
     before_model = [
         item

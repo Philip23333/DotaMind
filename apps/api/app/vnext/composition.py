@@ -10,7 +10,7 @@ from pathlib import Path
 
 from dotenv import dotenv_values
 
-from app.vnext.agent.instructions import AGENT_INSTRUCTION
+from app.vnext.agent.instructions import AGENT_INSTRUCTION, PRODUCT_INSTRUCTION
 from app.vnext.agent.limits import AgentLimits
 from app.vnext.agent.runtime import AgentRuntime
 from app.vnext.agent.task_state import TaskStateCoordinator
@@ -329,6 +329,7 @@ def build_vnext_runtime(
             task_state_coordinator=task_state_coordinator,
         ),
         system_instruction=AGENT_INSTRUCTION,
+        shared_instruction=PRODUCT_INSTRUCTION,
         limits=limits,
         transcript_rewriter=ArtifactObservationTranscriptRewriter(),
         task_state_coordinator=task_state_coordinator,

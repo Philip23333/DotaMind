@@ -179,6 +179,7 @@ class AgentRuntime:
         limits: AgentLimits | None = None,
         event_sink: EventSink | None = None,
         system_instruction: str | None = None,
+        shared_instruction: str | None = None,
         transcript_rewriter: TranscriptRewriter | None = None,
         task_state_coordinator: TaskStateCoordinator | None = None,
     ) -> None:
@@ -187,6 +188,7 @@ class AgentRuntime:
         self.limits = limits or AgentLimits()
         self.event_sink = event_sink
         self.system_instruction = system_instruction
+        self.shared_instruction = shared_instruction
         self.transcript_rewriter = transcript_rewriter
         self.task_state_coordinator = task_state_coordinator
 
@@ -255,12 +257,10 @@ class AgentRuntime:
         overflow_recovery_used = False
 
         try:
-            if self.system_instruction is not None and any(
+            if (self.system_instruction is not None or self.shared_instruction is not None) and any(
                 isinstance(message, SystemMessage) for message in messages
             ):
-                raise ModelProtocolError(
-                    "system messages are runtime-owned when system_instruction is configured"
-                )
+                raise ModelProtocolError("system messages are runtime-owned by the Runtime")
             request_messages = list(messages)
             if self.system_instruction is not None:
                 request_messages.insert(0, SystemMessage(content=self.system_instruction))
@@ -815,7 +815,11 @@ class AgentRuntime:
                     projection_mode=AnswerProjectionMode.PRIMARY,
                     effective_history_embedded=True,
                 )
-                answer_messages = _project_session_context(request_messages, execution_history)
+                answer_messages = _project_answer_messages(
+                    request_messages,
+                    execution_history,
+                    self.system_instruction,
+                )
                 answer_request = self._build_stage_answer_request(
                     instruction=ANSWER_INSTRUCTION,
                     messages=answer_messages,
@@ -874,9 +878,10 @@ class AgentRuntime:
                                 projection_mode=AnswerProjectionMode.PRIMARY,
                                 effective_history_embedded=True,
                             )
-                            answer_messages = _project_session_context(
+                            answer_messages = _project_answer_messages(
                                 request_messages,
                                 execution_history,
+                                self.system_instruction,
                             )
                             answer_request = self._build_stage_answer_request(
                                 instruction=ANSWER_INSTRUCTION,
@@ -1076,9 +1081,10 @@ class AgentRuntime:
                             projection_mode=AnswerProjectionMode.PRIMARY,
                             effective_history_embedded=True,
                         )
-                        answer_messages = _project_session_context(
+                        answer_messages = _project_answer_messages(
                             request_messages,
                             execution_history,
+                            self.system_instruction,
                         )
                         answer_request = self._build_stage_answer_request(
                             instruction=ANSWER_INSTRUCTION,
@@ -1218,7 +1224,11 @@ class AgentRuntime:
                 )
                 degraded_request = self._build_stage_answer_request(
                     instruction=DEGRADED_ANSWER_INSTRUCTION,
-                    messages=_project_session_context(request_messages, execution_history),
+                    messages=_project_answer_messages(
+                        request_messages,
+                        execution_history,
+                        self.system_instruction,
+                    ),
                     context=degraded_context,
                     step=degraded_step,
                     deadline=answer_deadline,
@@ -1513,6 +1523,7 @@ class AgentRuntime:
         return _build_answer_request(
             instruction=instruction,
             runtime_prompt=render_runtime_prompt(runtime_context, stage="answer"),
+            shared_instruction=self.shared_instruction,
             messages=messages,
             context=context,
             step=step,
@@ -1549,6 +1560,11 @@ class AgentRuntime:
             request_messages,
             execution_history,
         )
+        if self.shared_instruction is not None:
+            conversation_messages = _append_system_instruction(
+                conversation_messages,
+                self.shared_instruction,
+            )
         turn_messages = conversation_messages
         task_context_messages: list[Message] | None = None
         task_context_payload: dict[str, Any] | None = None
@@ -2449,6 +2465,23 @@ def _project_session_context(
     )
 
 
+def _project_answer_messages(
+    messages: Sequence[Message],
+    execution_history: Any | None,
+    execution_instruction: str | None,
+) -> list[Message]:
+    """Project answer conversation without execution-only operating rules."""
+
+    conversation = [message.model_copy(deep=True) for message in messages]
+    if execution_instruction is not None:
+        conversation = [
+            message
+            for message in conversation
+            if not (isinstance(message, SystemMessage) and message.content == execution_instruction)
+        ]
+    return _project_session_context(conversation, execution_history)
+
+
 def _history_set_effective(history: Any, messages: Sequence[Message]) -> None:
     setter = getattr(history, "set_effective", None)
     if callable(setter):
@@ -2603,6 +2636,7 @@ def _build_answer_request(
     *,
     instruction: str,
     runtime_prompt: str,
+    shared_instruction: str | None = None,
     messages: Sequence[Message],
     context: Any,
     step: int,
@@ -2610,6 +2644,11 @@ def _build_answer_request(
 ) -> ModelRequest:
     return ModelRequest(
         messages=[
+            *(
+                [SystemMessage(content=shared_instruction)]
+                if shared_instruction is not None
+                else []
+            ),
             SystemMessage(content=instruction),
             SystemMessage(content=runtime_prompt),
             *_answer_conversation(messages),

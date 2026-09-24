@@ -663,7 +663,11 @@ def test_system_instruction_is_execution_only() -> None:
 
     assert model.requests[0].messages[0].content.startswith("query discipline\n\nRuntime state:")
     assert model.requests[1].messages[0].content.startswith("Execution has ended.")
-    assert "query discipline" not in model.requests[1].messages[0].content
+    assert all(
+        "query discipline" not in message.content
+        for message in model.requests[1].messages
+        if isinstance(message, SystemMessage)
+    )
 
 
 def test_parallel_group_advances_once_and_runs_following_serial_call() -> None:
