@@ -111,3 +111,14 @@ def test_runtime_context_keeps_tools_available_at_step_limit() -> None:
     assert context.phase is RuntimePhase.CONVERGING
     assert context.remaining_turns == 0
     assert context.tools_available is True
+
+
+def test_runtime_context_without_step_budget_uses_only_time_pressure() -> None:
+    context = RuntimeContext.from_state(
+        current_step=25,
+        tools_available=True,
+        time_pressure=TimePressure.HEALTHY,
+    )
+
+    assert context.phase is RuntimePhase.EXPLORATION
+    assert context.remaining_turns is None

@@ -426,10 +426,8 @@ def test_product_follow_up_uses_automatic_compaction_and_fresh_task_state(
     register_task_plan_tool(registry, coordinator)
     register_task_checkpoint_tool(registry, coordinator)
     limits = AgentLimits(
-        max_steps=8,
         deadline_seconds=5,
         answer_timeout_seconds=5,
-        degraded_answer_timeout_seconds=5,
         context_window_tokens=24_000,
         context_output_reserve_tokens=256,
         context_safety_margin_tokens=128,
@@ -550,10 +548,8 @@ def test_product_overflow_recovery_budget_resets_for_each_user_request(monkeypat
         model,
         _lookup_registry(),
         limits=AgentLimits(
-            max_steps=2,
             deadline_seconds=5,
             answer_timeout_seconds=5,
-            degraded_answer_timeout_seconds=5,
             context_window_tokens=100_000,
             context_output_reserve_tokens=128,
             context_safety_margin_tokens=32,
@@ -703,10 +699,8 @@ def test_product_follow_up_succeeds_after_summary_validation_failure(monkeypatch
         model,
         registry,
         limits=AgentLimits(
-            max_steps=3,
             deadline_seconds=5,
             answer_timeout_seconds=5,
-            degraded_answer_timeout_seconds=5,
             context_window_tokens=100_000,
             context_output_reserve_tokens=128,
             context_safety_margin_tokens=32,

@@ -42,14 +42,14 @@ class RuntimeContext:
         cls,
         *,
         current_step: int,
-        max_steps: int,
+        max_steps: int | None = None,
         tools_available: bool = True,
         time_pressure: TimePressure = TimePressure.HEALTHY,
         context_pressure: ContextPressure = ContextPressure.NORMAL,
     ) -> RuntimeContext:
         """Build a snapshot from state already computed by one invocation."""
 
-        remaining_turns = max_steps - current_step
+        remaining_turns = max_steps - current_step if max_steps is not None else None
         return cls(
             phase=_phase(remaining_turns, time_pressure),
             remaining_turns=remaining_turns,
@@ -81,6 +81,9 @@ def _phase(
     remaining_turns: int | None,
     time_pressure: TimePressure,
 ) -> RuntimePhase:
+    # Steps pressure is retained for isolated use and tests.
+    # The production Runtime intentionally does not supply a step budget.
+    # It must not terminate execution or influence production prompts.
     if remaining_turns is not None and remaining_turns <= CONVERGING_THRESHOLD:
         return RuntimePhase.CONVERGING
     if time_pressure in {TimePressure.LIMITED, TimePressure.CRITICAL}:

@@ -186,13 +186,11 @@ def _limits_for_available(
     available_input_tokens: int,
     *,
     recent_tokens: int = 1,
-    max_steps: int = 3,
     test_trigger_percent: int | None = 80,
 ) -> AgentLimits:
     reserve = 64
     margin = 16
     return AgentLimits(
-        max_steps=max_steps,
         deadline_seconds=5,
         answer_timeout_seconds=5,
         compaction_keep_recent_tokens=recent_tokens,
@@ -441,7 +439,6 @@ def test_production_formula_triggers_a_real_compaction_without_test_override() -
     history, request_id = _history_with_old_group()
     registry = _echo_registry()
     probe_limits = AgentLimits(
-        max_steps=3,
         deadline_seconds=5,
         answer_timeout_seconds=5,
         context_window_tokens=1_000_000,
@@ -511,7 +508,6 @@ def test_test_override_compacts_the_same_history_before_production_boundary() ->
 
     def limits(test_percent: int | None) -> AgentLimits:
         return AgentLimits(
-            max_steps=3,
             deadline_seconds=5,
             answer_timeout_seconds=5,
             context_window_tokens=window,
@@ -750,15 +746,14 @@ def test_continuous_watermarks_compact_again_after_new_tool_output() -> None:
     history, request_id = _history_with_old_groups()
     calls: list[str] = []
     registry = _echo_registry(output_size=6_000, calls=calls)
-    probe_limits = _limits_for_available(100_000, recent_tokens=500, max_steps=2)
+    probe_limits = _limits_for_available(100_000, recent_tokens=500)
     compacted = _double_compacted_history(history)
     final_request = _probe_request(compacted, registry, limits=probe_limits)
     final_capacity = assess_request_capacity(final_request, probe_limits)
     assert final_capacity is not None
     limits = _limits_for_available(
-        final_capacity.estimated_input_tokens + 512,
+        final_capacity.estimated_input_tokens + 1_024,
         recent_tokens=500,
-        max_steps=2,
     )
     model = ScriptedModelClient(
         [

@@ -289,7 +289,7 @@ class AgentRuntime:
                 )
             yield await self._publish(AgentStarted(), sink)
 
-            while step < self.limits.max_steps:
+            while True:
                 step += 1
                 try:
                     self._check_controls(token, execution_deadline)
@@ -793,7 +793,7 @@ class AgentRuntime:
                     break
 
             if outcome is None:
-                outcome = ExecutionOutcome(ExecutionStopReason.MAX_STEPS, step)
+                raise AgentRuntimeError("execution loop exited without a stop reason")
             plan_complete = (
                 self.task_state_coordinator is not None
                 and self.task_state_coordinator.plan_snapshot() is not None
@@ -839,7 +839,7 @@ class AgentRuntime:
                 return
 
             answer_context_builder = AnswerContextBuilder()
-            primary_deadline = _Deadline(self.limits.answer_timeout_seconds)
+            answer_deadline = _Deadline(self.limits.answer_timeout_seconds)
             primary_started = monotonic()
             try:
                 primary_context = answer_context_builder.build(
@@ -851,11 +851,12 @@ class AgentRuntime:
                     effective_history_embedded=True,
                 )
                 answer_messages = _project_session_context(request_messages, execution_history)
-                answer_request = _build_answer_request(
+                answer_request = self._build_stage_answer_request(
                     instruction=ANSWER_INSTRUCTION,
                     messages=answer_messages,
                     context=primary_context,
                     step=answer_step,
+                    deadline=answer_deadline,
                     max_output_tokens=(
                         self.limits.context_output_reserve_tokens
                         if auto_compaction_enabled
@@ -883,7 +884,7 @@ class AgentRuntime:
                             execution_history=execution_history,
                             request_id=request_id,
                             token=token,
-                            deadline=primary_deadline,
+                            deadline=answer_deadline,
                             step=answer_step,
                             recent_history_tokens=(self.limits.compaction_keep_recent_tokens),
                             max_input_bytes=self.limits.compaction_max_input_bytes,
@@ -916,14 +917,15 @@ class AgentRuntime:
                                 request_messages,
                                 execution_history,
                             )
-                            answer_request = _build_answer_request(
+                            answer_request = self._build_stage_answer_request(
                                 instruction=ANSWER_INSTRUCTION,
                                 messages=answer_messages,
                                 context=primary_context,
                                 step=answer_step,
+                                deadline=answer_deadline,
                                 max_output_tokens=self.limits.context_output_reserve_tokens,
                             )
-                    self._check_controls(token, primary_deadline)
+                    self._check_controls(token, answer_deadline)
                     final_capacity = assess_request_capacity(answer_request, self.limits)
                     assert final_capacity is not None
                     if trace_collector is not None:
@@ -937,7 +939,7 @@ class AgentRuntime:
                         raise ContextCapacityExceeded(
                             "answer request exceeds the configured context budget"
                         )
-                self._check_controls(token, primary_deadline)
+                self._check_controls(token, answer_deadline)
                 recovery_pending = False
                 while True:
                     if trace_collector is not None:
@@ -962,7 +964,7 @@ class AgentRuntime:
                             answer_request,
                             purpose="primary_answer",
                             token=token,
-                            deadline=primary_deadline,
+                            deadline=answer_deadline,
                             step=answer_step,
                             trace_collector=trace_collector,
                             publish_text=True,
@@ -1005,12 +1007,12 @@ class AgentRuntime:
                         materialized_bytes_before = materialization_budget.active_bytes
                         request_start_before = request_start
                         try:
-                            self._check_controls(token, primary_deadline)
+                            self._check_controls(token, answer_deadline)
                             compacted = await self._compact_session_history(
                                 execution_history=execution_history,
                                 request_id=request_id,
                                 token=token,
-                                deadline=primary_deadline,
+                                deadline=answer_deadline,
                                 step=answer_step,
                                 recent_history_tokens=(self.limits.compaction_keep_recent_tokens),
                                 max_input_bytes=self.limits.compaction_max_input_bytes,
@@ -1077,7 +1079,7 @@ class AgentRuntime:
                                     trace_collector=trace_collector,
                                 )
                             )
-                            self._check_controls(token, primary_deadline)
+                            self._check_controls(token, answer_deadline)
                         except AgentCancelledError:
                             if trace_collector is not None:
                                 trace_collector.overflow_recovery(
@@ -1121,15 +1123,16 @@ class AgentRuntime:
                             request_messages,
                             execution_history,
                         )
-                        answer_request = _build_answer_request(
+                        answer_request = self._build_stage_answer_request(
                             instruction=ANSWER_INSTRUCTION,
                             messages=answer_messages,
                             context=primary_context,
                             step=answer_step,
+                            deadline=answer_deadline,
                             max_output_tokens=self.limits.context_output_reserve_tokens,
                         )
                         try:
-                            self._check_controls(token, primary_deadline)
+                            self._check_controls(token, answer_deadline)
                         except AgentCancelledError:
                             if trace_collector is not None:
                                 trace_collector.overflow_recovery(
@@ -1247,7 +1250,6 @@ class AgentRuntime:
                     )
 
                 degraded_step = answer_step + 1
-                degraded_deadline = _Deadline(self.limits.degraded_answer_timeout_seconds)
                 degraded_started = monotonic()
                 degraded_context = answer_context_builder.build(
                     execution_messages=request_messages,
@@ -1257,11 +1259,12 @@ class AgentRuntime:
                     projection_mode=AnswerProjectionMode.DEGRADED,
                     effective_history_embedded=True,
                 )
-                degraded_request = _build_answer_request(
+                degraded_request = self._build_stage_answer_request(
                     instruction=DEGRADED_ANSWER_INSTRUCTION,
                     messages=_project_session_context(request_messages, execution_history),
                     context=degraded_context,
                     step=degraded_step,
+                    deadline=answer_deadline,
                     max_output_tokens=(
                         self.limits.context_output_reserve_tokens
                         if auto_compaction_enabled
@@ -1285,7 +1288,7 @@ class AgentRuntime:
                         )
                 if degraded_precheck_error is None:
                     try:
-                        self._check_controls(token, degraded_deadline)
+                        self._check_controls(token, answer_deadline)
                     except AgentDeadlineExceeded as exc:
                         degraded_precheck_error = exc
                 if degraded_precheck_error is None:
@@ -1316,7 +1319,7 @@ class AgentRuntime:
                         degraded_request,
                         purpose="degraded_answer",
                         token=token,
-                        deadline=degraded_deadline,
+                        deadline=answer_deadline,
                         step=degraded_step,
                         trace_collector=trace_collector,
                         publish_text=True,
@@ -1530,6 +1533,35 @@ class AgentRuntime:
             yield await self._publish(event, sink)
             raise wrapped from exc
 
+    def _build_stage_answer_request(
+        self,
+        *,
+        instruction: str,
+        messages: Sequence[Message],
+        context: Any,
+        step: int,
+        deadline: _Deadline,
+        max_output_tokens: int | None = None,
+    ) -> ModelRequest:
+        """Build an answer request with a fresh, ephemeral stage snapshot."""
+
+        runtime_context = RuntimeContext.from_state(
+            current_step=step,
+            tools_available=False,
+            time_pressure=classify_time_pressure(
+                remaining_seconds=deadline.remaining(),
+                budget_seconds=self.limits.answer_timeout_seconds,
+            ),
+        )
+        return _build_answer_request(
+            instruction=instruction,
+            runtime_prompt=render_runtime_prompt(runtime_context, stage="answer"),
+            messages=messages,
+            context=context,
+            step=step,
+            max_output_tokens=max_output_tokens,
+        )
+
     def _build_execution_request(
         self,
         *,
@@ -1553,7 +1585,6 @@ class AgentRuntime:
         )
         runtime_context = RuntimeContext.from_state(
             current_step=step,
-            max_steps=self.limits.max_steps,
             tools_available=True,
             time_pressure=time_pressure,
         )
@@ -2644,6 +2675,7 @@ def _is_deferred_materialization_content(content: Any) -> bool:
 def _build_answer_request(
     *,
     instruction: str,
+    runtime_prompt: str,
     messages: Sequence[Message],
     context: Any,
     step: int,
@@ -2652,6 +2684,7 @@ def _build_answer_request(
     return ModelRequest(
         messages=[
             SystemMessage(content=instruction),
+            SystemMessage(content=runtime_prompt),
             *_answer_conversation(messages),
             SystemMessage(content=context.render()),
         ],

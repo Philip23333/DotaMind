@@ -130,9 +130,27 @@ automatically restored into a later turn's dialogue context.
 
 The Controller owns decision shape, schema adherence, reference validation, and
 capability-boundary errors. The execution runtime owns budgets, retries,
-tracing, and persistence. `QueryContext` is intentionally empty until a real
-cross-tool concern is designed. The model-authored `ExecutionPlan` is validated
-as received; no provider-specific or sample-size mutation is applied afterward.
+tracing, and persistence. Execution has no step-count ceiling; Runtime retains
+step numbering for traces, while the execution deadline, cancellation, plan
+completion, and existing context-capacity or error exits control its lifecycle.
+Steps-pressure calculations remain available for isolated tests, but production
+Runtime does not supply a step budget.
+
+Execution and answering have separate wall-clock deadlines. The execution
+deadline defaults to 300 seconds and the answer deadline defaults to 60 seconds;
+each can be configured from the repository-root `.env` with
+`DOTAMIND_EXECUTION_DEADLINE_SECONDS` and
+`DOTAMIND_ANSWER_DEADLINE_SECONDS`. Answer context preparation, compaction and
+recovery, the primary response, and a degraded response share one answer
+deadline. A degraded attempt never resets that budget, and an exhausted budget
+uses the existing no-model fallback. Runtime prompts are ephemeral request
+projections: execution prompts include time pressure and available tools, while
+answer prompts include their own time-pressure snapshot and say tools are
+unavailable.
+
+`QueryContext` is intentionally empty until a real cross-tool concern is
+designed. The model-authored `ExecutionPlan` is validated as received; no
+provider-specific or sample-size mutation is applied afterward.
 
 ## Migration order
 

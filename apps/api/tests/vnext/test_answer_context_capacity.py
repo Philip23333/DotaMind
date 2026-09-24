@@ -24,6 +24,8 @@ from app.vnext.agent.runtime import (
     _build_answer_request,
     _project_session_context,
 )
+from app.vnext.agent.runtime_context import RuntimeContext, TimePressure
+from app.vnext.agent.runtime_prompt import render_runtime_prompt
 from app.vnext.agent.task_state import TaskStateCoordinator
 from app.vnext.agent.trace import AgentTraceCollector
 from app.vnext.llm.protocol import (
@@ -122,6 +124,14 @@ def _answer_request(
     )
     return _build_answer_request(
         instruction=instruction,
+        runtime_prompt=render_runtime_prompt(
+            RuntimeContext.from_state(
+                current_step=step,
+                tools_available=False,
+                time_pressure=TimePressure.HEALTHY,
+            ),
+            stage="answer",
+        ),
         messages=_project_session_context(projected_messages, history),
         context=context,
         step=step,
@@ -138,7 +148,6 @@ def _find_limits(
     predicate: Callable[[dict[str, object]], bool],
     *,
     recent_tokens: int = 1,
-    max_steps: int = 3,
 ) -> AgentLimits:
     numeric_estimates = [
         value for name, value in estimates.items() if name != "requests" and isinstance(value, int)
@@ -149,7 +158,6 @@ def _find_limits(
         limits = _limits_for_available(
             available,
             recent_tokens=recent_tokens,
-            max_steps=max_steps,
         )
         capacities = {
             name: assess_request_capacity(request, limits)
@@ -244,7 +252,7 @@ def _answer_compaction_case() -> tuple[
     registry = _echo_registry(output_size=2_500)
     after_tool, _ = _history_with_new_tool(history, output_size=2_500)
     compacted = _committed_history(after_tool, cut_index=4, summary="answer summary")
-    probe_limits = _limits_for_available(100_000, recent_tokens=500, max_steps=2)
+    probe_limits = _limits_for_available(100_000, recent_tokens=500)
     execution_request = _probe_request(history, registry, limits=probe_limits)
     post_tool_execution = _probe_request(after_tool, registry, limits=probe_limits)
     before_answer = _answer_request(after_tool, limits=probe_limits, step=3)
@@ -267,7 +275,6 @@ def _answer_compaction_case() -> tuple[
             and _capacity_pressure(capacities, "after_answer") != "critical"
         ),
         recent_tokens=500,
-        max_steps=2,
     )
     return history, request_id, registry, limits
 
@@ -366,7 +373,7 @@ def test_execution_capacity_attempt_is_not_repeated_by_primary_answer() -> None:
 def test_final_message_does_not_reopen_primary_compaction_gate() -> None:
     history, request_id = _history_with_old_groups()
     registry = _echo_registry(output_size=4_000)
-    probe_limits = _limits_for_available(100_000, recent_tokens=1, max_steps=2)
+    probe_limits = _limits_for_available(100_000, recent_tokens=1)
     first_compacted, _ = _history_with_old_groups()
     first_compacted = _committed_history(first_compacted, cut_index=3, summary="summary one")
     after_tool, _ = _history_with_new_tool(first_compacted, output_size=4_000)
@@ -395,7 +402,6 @@ def test_final_message_does_not_reopen_primary_compaction_gate() -> None:
             and _capacity_pressure(capacities, "answer_after") != "critical"
         ),
         recent_tokens=1,
-        max_steps=2,
     )
     model = ScriptedModelClient(
         [
@@ -435,11 +441,11 @@ def test_final_message_does_not_reopen_primary_compaction_gate() -> None:
     assert history.summary == "summary one"
 
 
-def test_new_tool_progress_allows_real_primary_compaction() -> None:
+def test_new_tool_progress_allows_execution_to_compact_again_before_answer() -> None:
     history, request_id = _history_with_old_groups()
     coordinator = TaskStateCoordinator()
     registry = _compaction_workflow_registry(coordinator)
-    limits = _limits_for_available(16_000, recent_tokens=500, max_steps=3)
+    limits = _limits_for_available(16_000, recent_tokens=500)
     plan_call = ToolCall(
         id="plan-call",
         name="task.plan",
@@ -536,7 +542,7 @@ def test_new_tool_progress_allows_real_primary_compaction() -> None:
         item["stage"]
         for item in snapshot["context_capacity_checks"]
         if item["phase"] == "before_compaction"
-    ] == ["execution", "primary_answer"]
+    ] == ["execution", "execution"]
 
 
 def _answer_capacity_case() -> tuple[SessionExecutionHistory, object, AgentLimits]:

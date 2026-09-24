@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import os
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -149,13 +150,22 @@ _AGENT_LIMIT_ENV_FIELDS = (
     ("DOTAMIND_COMPACTION_MAX_RETRIES", "compaction_max_retries"),
 )
 
+_AGENT_DEADLINE_ENV_FIELDS = (
+    ("DOTAMIND_EXECUTION_DEADLINE_SECONDS", "deadline_seconds"),
+    ("DOTAMIND_ANSWER_DEADLINE_SECONDS", "answer_timeout_seconds"),
+)
+
 
 def _agent_limits_from_env(file_values: dict[str, str | None]) -> AgentLimits:
     window_name = "DOTAMIND_CONTEXT_WINDOW_TOKENS"
     window_value = _env_value(window_name, None, file_values)
-    values: dict[str, int | None] = {
+    values: dict[str, int | float | None] = {
         "context_window_tokens": _parse_window_value(window_name, window_value),
     }
+    for name, field_name in _AGENT_DEADLINE_ENV_FIELDS:
+        raw_value = _env_value(name, None, file_values)
+        if raw_value is not None:
+            values[field_name] = _parse_positive_finite_float(name, raw_value)
     for name, field_name in _AGENT_LIMIT_ENV_FIELDS:
         raw_value = _env_value(name, None, file_values)
         if raw_value is None:
@@ -178,6 +188,16 @@ def _agent_limits_from_env(file_values: dict[str, str | None]) -> AgentLimits:
             model_output_value,
         )
     return AgentLimits(**values)
+
+
+def _parse_positive_finite_float(name: str, value: str) -> float:
+    try:
+        parsed = float(value.strip())
+    except (AttributeError, ValueError) as exc:
+        raise ValueError(f"{name} must be a finite positive number") from exc
+    if not math.isfinite(parsed) or parsed <= 0:
+        raise ValueError(f"{name} must be a finite positive number")
+    return parsed
 
 
 def _parse_window_value(name: str, value: str | None) -> int | None:

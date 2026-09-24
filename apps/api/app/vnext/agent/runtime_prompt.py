@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from app.vnext.agent.runtime_context import RuntimeContext, RuntimePhase
+from typing import Literal
+
+from app.vnext.agent.runtime_context import RuntimeContext, RuntimePhase, TimePressure
 
 _GUIDANCE: dict[RuntimePhase, str] = {
     RuntimePhase.EXPLORATION: (
@@ -17,24 +19,57 @@ _GUIDANCE: dict[RuntimePhase, str] = {
     ),
 }
 
+_ANSWER_GUIDANCE: dict[TimePressure, str] = {
+    TimePressure.HEALTHY: "Use the evidence already collected to answer the user's request.",
+    TimePressure.LIMITED: (
+        "Prioritize the core conclusion from the available evidence.\n"
+        "Simplify optional detail and clearly describe any evidence gaps."
+    ),
+    TimePressure.CRITICAL: (
+        "Prioritize the core conclusion from the available evidence.\n"
+        "Simplify optional detail and clearly describe any evidence gaps."
+    ),
+}
 
-def render_runtime_prompt(context: RuntimeContext) -> str:
+
+def render_runtime_prompt(
+    context: RuntimeContext,
+    *,
+    stage: Literal["execution", "answer"] = "execution",
+) -> str:
     """Render one runtime snapshot without reading or mutating runtime state."""
 
-    remaining_turns = (
-        str(context.remaining_turns)
-        if context.remaining_turns is not None
-        else "unknown"
-    )
-    return "\n".join(
-        [
+    if stage == "answer":
+        sections = [
             "Runtime state:",
             "",
-            "Execution phase:",
-            context.phase.value,
+            "Stage:",
+            "answer",
             "",
-            "Remaining turns:",
-            remaining_turns,
+            "Time pressure:",
+            context.time_pressure.value,
+            "",
+            "Context pressure:",
+            context.context_pressure.value,
+            "",
+            "Tools available:",
+            "no",
+            "",
+            "Guidance:",
+            _ANSWER_GUIDANCE[context.time_pressure],
+        ]
+        return "\n".join(sections)
+
+    sections = [
+        "Runtime state:",
+        "",
+        "Execution phase:",
+        context.phase.value,
+    ]
+    if context.remaining_turns is not None:
+        sections.extend(["", "Remaining turns:", str(context.remaining_turns)])
+    sections.extend(
+        [
             "",
             "Time pressure:",
             context.time_pressure.value,
@@ -49,6 +84,7 @@ def render_runtime_prompt(context: RuntimeContext) -> str:
             _GUIDANCE[context.phase],
         ]
     )
+    return "\n".join(sections)
 
 
 __all__ = ["render_runtime_prompt"]

@@ -83,6 +83,22 @@ container-specific database and Redis addresses. The real .env is excluded
 from the API build context and image. After changing API settings, recreate the
 container with `docker compose -f compose.wsl.yml up -d --no-deps --force-recreate api`.
 
+### Agent time budgets
+
+The vNext Agent reads `DOTAMIND_EXECUTION_DEADLINE_SECONDS` (default `300`)
+and `DOTAMIND_ANSWER_DEADLINE_SECONDS` (default `60`) from the repository-root
+`.env`. Process environment variables override `.env`, which overrides code
+defaults. Both settings accept finite positive seconds, including decimals.
+Execution and answer are timed independently. The answer budget includes answer
+context preparation, compaction and recovery, the primary answer, and any
+degraded answer; a degraded attempt uses only the time left in that same
+budget. If it is exhausted, Runtime uses its existing no-model fallback.
+
+Execution has no step-count ceiling. Runtime still numbers and traces each step;
+the execution deadline, cancellation, completed plans, and existing capacity or
+error exits govern when the stage ends. Changes to `.env` take effect after the
+API is restarted or its container is recreated.
+
 ### Context compaction budgets
 
 `DOTAMIND_COMPACTION_RESERVE_TOKENS` defaults to `16384` and derives the

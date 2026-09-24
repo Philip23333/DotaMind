@@ -85,7 +85,7 @@ describe("vNext event converter", () => {
 
   it("renders an error event without marking the thread completed", async () => {
     streamChatMessageMock.mockImplementation(async function* () {
-      yield { type: "error", error_code: "max_steps_exceeded", reason: "too many steps" };
+      yield { type: "error", error_code: "agent_runtime_error", reason: "runtime failed" };
     });
 
     const results = [];
@@ -99,7 +99,7 @@ describe("vNext event converter", () => {
     }
 
     expect(results.map(text)).toEqual([
-      "本次请求未完成：too many steps",
+      "本次请求未完成：runtime failed",
     ]);
     expect(markUnreadMock).not.toHaveBeenCalled();
   });

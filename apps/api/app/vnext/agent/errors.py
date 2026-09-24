@@ -30,16 +30,6 @@ class AgentDeadlineExceeded(AgentRuntimeError):
         super().__init__(message)
 
 
-class MaxStepsExceeded(AgentRuntimeError):
-    code = "max_steps_exceeded"
-
-    def __init__(self, max_steps: int) -> None:
-        super().__init__(
-            f"agent run exceeded the maximum number of steps ({max_steps})",
-            details={"max_steps": max_steps},
-        )
-
-
 class ModelProviderError(AgentRuntimeError):
     code = "model_provider_error"
 
@@ -117,7 +107,6 @@ class ContextCapacityExceeded(AgentRuntimeError):
 # ``AgentCancelled`` intentionally lives in events.py and is not aliased here.
 AgentCancelled = AgentCancelledError
 AgentDeadlineExceededError = AgentDeadlineExceeded
-MaxStepsExceededError = MaxStepsExceeded
 
 __all__ = [
     "AgentCancelled",
@@ -127,8 +116,6 @@ __all__ = [
     "AgentRuntimeError",
     "CompactionFailedError",
     "ContextCapacityExceeded",
-    "MaxStepsExceeded",
-    "MaxStepsExceededError",
     "ModelContextWindowExceeded",
     "ModelProviderError",
     "ModelProtocolError",

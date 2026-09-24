@@ -1,3 +1,5 @@
+import pytest
+
 from app.vnext.agent.runtime_context import (
     ContextPressure,
     RuntimeContext,
@@ -54,7 +56,7 @@ def test_converging_prompt_has_no_finalization_guidance() -> None:
     assert "Do not infer or fabricate missing facts." not in prompt
 
 
-def test_render_runtime_prompt_shows_unknown_remaining_turns() -> None:
+def test_render_runtime_prompt_omits_remaining_turns_without_a_step_budget() -> None:
     context = RuntimeContext(
         phase=RuntimePhase.EXPLORATION,
         remaining_turns=None,
@@ -65,5 +67,28 @@ def test_render_runtime_prompt_shows_unknown_remaining_turns() -> None:
 
     prompt = render_runtime_prompt(context)
 
-    assert "Remaining turns:\nunknown" in prompt
+    assert "Remaining turns:" not in prompt
     assert "Remaining turns:\nNone" not in prompt
+
+
+@pytest.mark.parametrize("pressure", ["healthy", "limited", "critical"])
+def test_answer_runtime_prompt_has_answer_guidance_and_no_tools(pressure: str) -> None:
+    context = RuntimeContext.from_state(
+        current_step=22,
+        tools_available=False,
+        time_pressure=TimePressure(pressure),
+    )
+
+    prompt = render_runtime_prompt(context, stage="answer")
+
+    assert "Stage:\nanswer" in prompt
+    assert f"Time pressure:\n{pressure}" in prompt
+    assert "Tools available:\nno" in prompt
+    assert "Remaining turns:" not in prompt
+    assert "continue gathering information" not in prompt
+    assert "Use additional tools" not in prompt
+    if pressure == "healthy":
+        assert "Use the evidence already collected" in prompt
+    else:
+        assert "Prioritize the core conclusion" in prompt
+        assert "clearly describe any evidence gaps" in prompt

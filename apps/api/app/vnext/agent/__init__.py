@@ -21,7 +21,6 @@ _EXPORTS = {
     "CompactionFailedError": ("app.vnext.agent.errors", "CompactionFailedError"),
     "AgentStarted": ("app.vnext.agent.events", "AgentStarted"),
     "CancellationToken": ("app.vnext.agent.runtime", "CancellationToken"),
-    "MaxStepsExceeded": ("app.vnext.agent.errors", "MaxStepsExceeded"),
     "ModelProviderError": ("app.vnext.agent.errors", "ModelProviderError"),
     "ModelProtocolError": ("app.vnext.agent.errors", "ModelProtocolError"),
     "ModelRequested": ("app.vnext.agent.events", "ModelRequested"),

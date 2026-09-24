@@ -92,14 +92,11 @@ def _history(messages: list[object] | None = None) -> tuple[SessionExecutionHist
 
 def _limits(
     *,
-    max_steps: int = 3,
     context_window_tokens: int | None = 100_000,
 ) -> AgentLimits:
     return AgentLimits(
-        max_steps=max_steps,
         deadline_seconds=5,
         answer_timeout_seconds=5,
-        degraded_answer_timeout_seconds=5,
         compaction_keep_recent_tokens=1,
         compaction_max_input_bytes=100_000,
         compaction_reserve_tokens=160,
@@ -240,7 +237,7 @@ def test_overflow_recovery_does_not_replay_completed_tools() -> None:
         events.append(event)
 
     result = _run(
-        AgentRuntime(model, _registry(calls), limits=_limits(max_steps=3)),
+        AgentRuntime(model, _registry(calls), limits=_limits()),
         history,
         request_id,
         event_sink=sink,
@@ -616,7 +613,7 @@ def test_summary_retry_inside_overflow_recovery_does_not_replay_tools() -> None:
             _final("answer"),
         ]
     )
-    runtime = AgentRuntime(model, _registry(calls), limits=_limits(max_steps=3))
+    runtime = AgentRuntime(model, _registry(calls), limits=_limits())
     original_wait = runtime._await_controlled
     delays: list[float] = []
 

@@ -136,18 +136,34 @@ def test_tool_execution_is_followed_by_tool_free_answer_request() -> None:
     assert "Other successful tool observations" in model.requests[2].messages[-1].content
 
 
-def test_max_steps_without_durable_state_closes_with_failure_answer() -> None:
-    model = ScriptedModelClient([_tool_turn(_call()), ModelResponse.from_final("answer")])
+def test_execution_continues_beyond_twenty_steps_then_answers() -> None:
+    model = ScriptedModelClient(
+        [
+            *(_tool_turn(_call(f"call-{index}", value=index)) for index in range(21)),
+            ModelResponse.from_final("execution done"),
+            ModelResponse.from_final("answer"),
+        ]
+    )
+    collector = AgentTraceCollector()
     runtime = AgentRuntime(
         model,
         _registry(),
-        limits=AgentLimits(max_steps=1, deadline_seconds=2),
+        limits=AgentLimits(deadline_seconds=10),
     )
 
-    result = _run(runtime)
-    assert "reliable answer" in result.content
-    assert model.requests[0].tools
-    assert len(model.requests) == 1
+    result = _run(runtime, trace_collector=collector)
+
+    assert result.content == "answer"
+    assert len(model.requests) == 23
+    execution_contexts = [
+        item["runtime_context"]
+        for item in collector.snapshot()["steps"]
+        if item["runtime_context"] is not None
+    ]
+    assert len(execution_contexts) == 22
+    assert all(item["remaining_turns"] is None for item in execution_contexts)
+    assert all(item["phase"] == "exploration" for item in execution_contexts)
+    assert collector.snapshot()["execution_outcome"]["reason"] == "model_done"
 
 
 def test_execution_text_deltas_are_traced_but_not_published() -> None:
@@ -171,9 +187,7 @@ def test_execution_text_deltas_are_traced_but_not_published() -> None:
 
 
 def test_primary_answer_protocol_failure_retries_with_degraded_answer() -> None:
-    model = ScriptedModelClient(
-        [ModelResponse.from_final("execution"), _tool_turn(_call())]
-    )
+    model = ScriptedModelClient([ModelResponse.from_final("execution"), _tool_turn(_call())])
     runtime = AgentRuntime(model, _registry(), limits=AgentLimits(deadline_seconds=2))
 
     assert _run(runtime).content == "execution"
@@ -182,14 +196,12 @@ def test_primary_answer_protocol_failure_retries_with_degraded_answer() -> None:
     assert model.requests[2].tools == []
 
 
-def test_primary_timeout_retries_with_degraded_answer() -> None:
+def test_primary_timeout_consumes_answer_budget_and_skips_degraded_call() -> None:
     async def slow() -> ModelResponse:
         await asyncio.sleep(0.2)
         return ModelResponse.from_final("late")
 
-    model = ScriptedModelClient(
-        [ModelResponse.from_final("execution"), slow(), ModelResponse.from_final("compact")]
-    )
+    model = ScriptedModelClient([ModelResponse.from_final("execution"), slow()])
     collector = AgentTraceCollector()
     runtime = AgentRuntime(
         model,
@@ -197,15 +209,14 @@ def test_primary_timeout_retries_with_degraded_answer() -> None:
         limits=AgentLimits(
             deadline_seconds=2,
             answer_timeout_seconds=0.03,
-            degraded_answer_timeout_seconds=1,
         ),
     )
 
-    assert _run(runtime, trace_collector=collector).content == "compact"
-    assert len(model.requests) == 3
+    assert "detailed final response" in _run(runtime, trace_collector=collector).content
+    assert len(model.requests) == 2
     assert collector.snapshot()["answer_attempts"][0]["status"] == "timeout"
-    assert collector.snapshot()["answer_attempts"][1]["status"] == "completed"
-    assert collector.snapshot()["answer_fallback"] == "degraded_model"
+    assert collector.snapshot()["answer_attempts"][1]["status"] == "timeout"
+    assert collector.snapshot()["answer_fallback"] == "deterministic"
     assert collector.snapshot()["terminal"]["status"] == "completed"
 
 
@@ -222,14 +233,13 @@ def test_primary_and_degraded_timeout_use_deterministic_fallback() -> None:
         limits=AgentLimits(
             deadline_seconds=2,
             answer_timeout_seconds=0.03,
-            degraded_answer_timeout_seconds=0.03,
         ),
     )
 
     result = _run(runtime, trace_collector=collector)
 
     assert "detailed final response" in result.content
-    assert len(model.requests) == 3
+    assert len(model.requests) == 2
     assert collector.snapshot()["answer_fallback"] == "deterministic"
     assert collector.snapshot()["terminal"]["status"] == "completed"
 
@@ -263,7 +273,6 @@ def test_partial_double_answer_failure_reports_completed_coverage() -> None:
         limits=AgentLimits(
             deadline_seconds=2,
             answer_timeout_seconds=0.03,
-            degraded_answer_timeout_seconds=0.03,
         ),
         task_state_coordinator=coordinator,
     )
@@ -303,7 +312,6 @@ def test_full_double_answer_failure_reports_completed_coverage() -> None:
         limits=AgentLimits(
             deadline_seconds=2,
             answer_timeout_seconds=0.03,
-            degraded_answer_timeout_seconds=0.03,
         ),
         task_state_coordinator=coordinator,
     )
@@ -354,9 +362,7 @@ def test_failed_primary_stream_text_is_not_published() -> None:
 
     asyncio.run(collect())
 
-    assert [event.text for event in events if isinstance(event, TextDelta)] == [
-        "good compact"
-    ]
+    assert [event.text for event in events if isinstance(event, TextDelta)] == ["good compact"]
     assert collector.snapshot()["steps"][1]["streamed_text"] == ["bad partial"]
 
 
@@ -550,7 +556,7 @@ def test_degraded_plan_projection_is_smaller_than_primary() -> None:
                 _call("team", value=1),
             ),
             ModelResponse.from_final("execution"),
-            slow(),
+            ValueError("primary provider unavailable"),
             ModelResponse.from_final("compact"),
         ]
     )
@@ -560,8 +566,7 @@ def test_degraded_plan_projection_is_smaller_than_primary() -> None:
         _projection_registry(),
         limits=AgentLimits(
             deadline_seconds=2,
-            answer_timeout_seconds=0.03,
-            degraded_answer_timeout_seconds=1,
+            answer_timeout_seconds=1,
         ),
         task_state_coordinator=coordinator,
     )
@@ -599,7 +604,7 @@ def test_degraded_no_plan_projection_preserves_verified_evidence() -> None:
                 _call("team", value=1),
             ),
             ModelResponse.from_final("execution"),
-            slow(),
+            ValueError("primary provider unavailable"),
             ModelResponse.from_final("compact"),
         ]
     )
@@ -609,8 +614,7 @@ def test_degraded_no_plan_projection_preserves_verified_evidence() -> None:
         _projection_registry(),
         limits=AgentLimits(
             deadline_seconds=2,
-            answer_timeout_seconds=0.03,
-            degraded_answer_timeout_seconds=1,
+            answer_timeout_seconds=1,
         ),
     )
 
@@ -657,9 +661,7 @@ def test_system_instruction_is_execution_only() -> None:
 
     _run(runtime)
 
-    assert model.requests[0].messages[0].content.startswith(
-        "query discipline\n\nRuntime state:"
-    )
+    assert model.requests[0].messages[0].content.startswith("query discipline\n\nRuntime state:")
     assert model.requests[1].messages[0].content.startswith("Execution has ended.")
     assert "query discipline" not in model.requests[1].messages[0].content
 
@@ -752,8 +754,6 @@ def test_runtime_rejects_caller_system_message_when_system_instruction_configure
 
     with pytest.raises(ModelProtocolError):
         asyncio.run(
-            runtime.run(
-                [SystemMessage(content="caller system"), UserMessage(content="hello")]
-            )
+            runtime.run([SystemMessage(content="caller system"), UserMessage(content="hello")])
         )
     assert model.requests == []

@@ -63,7 +63,7 @@ def test_trace_records_execution_context_and_answer_stage_metrics() -> None:
         AgentRuntime(
             model,
             _registry(),
-            limits=AgentLimits(max_steps=20, deadline_seconds=2),
+            limits=AgentLimits(deadline_seconds=2),
         ),
         collector,
     )
@@ -71,7 +71,7 @@ def test_trace_records_execution_context_and_answer_stage_metrics() -> None:
     snapshot = collector.snapshot()
     assert snapshot["steps"][0]["runtime_context"] == {
         "phase": "exploration",
-        "remaining_turns": 19,
+        "remaining_turns": None,
         "time_pressure": "healthy",
         "context_pressure": "normal",
         "tools_available": True,
@@ -101,7 +101,7 @@ def test_trace_records_execution_context_and_answer_stage_metrics() -> None:
     assert "model_calls" not in snapshot
 
 
-def test_trace_context_updates_until_max_steps_without_finalization_phase() -> None:
+def test_trace_context_has_no_steps_pressure_in_production_runtime() -> None:
     model = ScriptedModelClient(
         [
             *(
@@ -117,8 +117,9 @@ def test_trace_context_updates_until_max_steps_without_finalization_phase() -> N
                         ],
                     )
                 )
-                for index in range(1, 4)
+                for index in range(1, 3)
             ),
+            ModelResponse.from_final("execution done"),
             ModelResponse.from_final("answer"),
         ]
     )
@@ -127,17 +128,20 @@ def test_trace_context_updates_until_max_steps_without_finalization_phase() -> N
         AgentRuntime(
             model,
             _registry(),
-            limits=AgentLimits(max_steps=3, deadline_seconds=2),
+            limits=AgentLimits(deadline_seconds=2),
         ),
         collector,
     )
 
-    steps = [
-        step for step in collector.snapshot()["steps"] if step["runtime_context"] is not None
+    steps = [step for step in collector.snapshot()["steps"] if step["runtime_context"] is not None]
+    assert [step["runtime_context"]["remaining_turns"] for step in steps] == [None, None, None]
+    assert [step["runtime_context"]["phase"] for step in steps] == [
+        "exploration",
+        "exploration",
+        "exploration",
     ]
-    assert [step["runtime_context"]["remaining_turns"] for step in steps] == [2, 1, 0]
     assert all(step["runtime_context"]["tools_available"] for step in steps)
-    assert collector.snapshot()["execution_outcome"]["reason"] == "max_steps"
+    assert collector.snapshot()["execution_outcome"]["reason"] == "model_done"
 
 
 def test_trace_keeps_legacy_model_request_calls_compatible() -> None:

@@ -23,7 +23,6 @@ class ExecutionStopReason(str, Enum):
     MODEL_DONE = "model_done"
     PLAN_COMPLETE = "plan_complete"
     DEADLINE = "deadline"
-    MAX_STEPS = "max_steps"
     CONTEXT_CAPACITY = "context_capacity"
 
 
@@ -76,8 +75,7 @@ def resolve_answer(
     if not isinstance(task_plan, dict):
         mode = (
             AnswerResolutionMode.FULL
-            if outcome.reason
-            in {ExecutionStopReason.MODEL_DONE, ExecutionStopReason.PLAN_COMPLETE}
+            if outcome.reason in {ExecutionStopReason.MODEL_DONE, ExecutionStopReason.PLAN_COMPLETE}
             else AnswerResolutionMode.PARTIAL
             if outcome.reason is ExecutionStopReason.CONTEXT_CAPACITY
             else AnswerResolutionMode.FAILURE
@@ -141,18 +139,13 @@ def build_failure_answer(
         "to produce a reliable answer.",
     ]
     if outcome.reason is ExecutionStopReason.CONTEXT_CAPACITY:
-        lines.append(
-            "The execution stopped because the available context budget was exhausted."
-        )
+        lines.append("The execution stopped because the available context budget was exhausted.")
     if resolution.total_items is not None:
         lines.append(
             f"{len(resolution.completed_keys)} of {resolution.total_items} planned "
             "parts were completed."
         )
-    elif outcome.reason in {
-        ExecutionStopReason.DEADLINE,
-        ExecutionStopReason.MAX_STEPS,
-    }:
+    elif outcome.reason is ExecutionStopReason.DEADLINE:
         lines.append("The execution stopped before a verified result was completed.")
     return FinalMessage(content="\n\n".join(lines))
 
@@ -171,10 +164,7 @@ def build_answer_fallback(
         )
         if resolution.total_items is None:
             return FinalMessage(
-                content=(
-                    execution_note
-                    + " I wasn't able to generate a reliable final response."
-                )
+                content=(execution_note + " I wasn't able to generate a reliable final response.")
             )
         completed = len(resolution.completed_keys)
         coverage = f"{completed} of {resolution.total_items} planned parts were completed."
@@ -186,8 +176,7 @@ def build_answer_fallback(
         return FinalMessage(content=f"{execution_note}\n\n{coverage}{remaining}")
 
     answer_capacity_message = (
-        "I wasn't able to generate the detailed final response within the available "
-        "context budget."
+        "I wasn't able to generate the detailed final response within the available context budget."
         if context_capacity_exhausted
         else None
     )
@@ -305,9 +294,7 @@ class AnswerContextBuilder:
                 if omit_history_evidence
                 else [
                     _artifact_evidence(observation)
-                    for observation in collect_active_artifact_observations(
-                        execution_messages
-                    )
+                    for observation in collect_active_artifact_observations(execution_messages)
                 ]
             ),
             tool_evidence=[] if omit_history_evidence else _tool_evidence(execution_messages),
@@ -324,8 +311,7 @@ def render_answer_context(context: AnswerContext) -> str:
             f"steps: {context.execution_steps}",
             "Task coverage:\n" + _json(context.task_plan),
             "Completed task state:\n" + _json(context.task_state),
-            "Artifact observations:\n"
-            + _json(context.active_artifact_evidence),
+            "Artifact observations:\n" + _json(context.active_artifact_evidence),
             "Other successful tool observations:\n" + _json(context.tool_evidence),
         )
     )

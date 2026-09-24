@@ -122,18 +122,27 @@ def test_resolve_plan_with_raw_only_is_failure() -> None:
 
 
 def test_resolve_without_plan_preserves_simple_model_done_and_closes_deadline() -> None:
-    assert resolve_answer(
-        outcome=_outcome(ExecutionStopReason.MODEL_DONE),
-        task_state_coordinator=None,
-    ).mode is AnswerResolutionMode.FULL
-    assert resolve_answer(
-        outcome=_outcome(ExecutionStopReason.DEADLINE),
-        task_state_coordinator=None,
-    ).mode is AnswerResolutionMode.FAILURE
-    assert resolve_answer(
-        outcome=_outcome(ExecutionStopReason.CONTEXT_CAPACITY),
-        task_state_coordinator=None,
-    ).mode is AnswerResolutionMode.PARTIAL
+    assert (
+        resolve_answer(
+            outcome=_outcome(ExecutionStopReason.MODEL_DONE),
+            task_state_coordinator=None,
+        ).mode
+        is AnswerResolutionMode.FULL
+    )
+    assert (
+        resolve_answer(
+            outcome=_outcome(ExecutionStopReason.DEADLINE),
+            task_state_coordinator=None,
+        ).mode
+        is AnswerResolutionMode.FAILURE
+    )
+    assert (
+        resolve_answer(
+            outcome=_outcome(ExecutionStopReason.CONTEXT_CAPACITY),
+            task_state_coordinator=None,
+        ).mode
+        is AnswerResolutionMode.PARTIAL
+    )
 
 
 def test_resolve_completed_plan_without_state_is_not_full() -> None:
@@ -172,17 +181,17 @@ def test_build_answer_fallback_distinguishes_full_partial_and_no_plan() -> None:
         remaining_keys=(),
     )
 
-    assert "2 of 2 planned parts were completed" in build_answer_fallback(
-        full, _outcome(ExecutionStopReason.PLAN_COMPLETE)
-    ).content
-    partial_text = build_answer_fallback(
-        partial, _outcome(ExecutionStopReason.DEADLINE)
-    ).content
+    assert (
+        "2 of 2 planned parts were completed"
+        in build_answer_fallback(full, _outcome(ExecutionStopReason.PLAN_COMPLETE)).content
+    )
+    partial_text = build_answer_fallback(partial, _outcome(ExecutionStopReason.DEADLINE)).content
     assert "1 of 3 planned parts were completed" in partial_text
     assert "won't infer or fill them in" in partial_text
-    assert "planned parts" not in build_answer_fallback(
-        no_plan, _outcome(ExecutionStopReason.MODEL_DONE)
-    ).content
+    assert (
+        "planned parts"
+        not in build_answer_fallback(no_plan, _outcome(ExecutionStopReason.MODEL_DONE)).content
+    )
 
 
 def test_capacity_stop_is_explained_in_deterministic_answers() -> None:
@@ -200,8 +209,7 @@ def test_capacity_stop_is_explained_in_deterministic_answers() -> None:
         context_capacity_exhausted=True,
     ).content
     assert (
-        "I wasn't able to generate the detailed final response within the available "
-        "context budget."
+        "I wasn't able to generate the detailed final response within the available context budget."
     ) in answer_capacity_text
     assert "execution stopped" not in answer_capacity_text
 
@@ -222,10 +230,13 @@ def test_capacity_stop_is_explained_in_deterministic_answers() -> None:
     ).content
     assert "task execution completed" in non_capacity_text
     assert "context budget" not in non_capacity_text
-    assert "context budget was exhausted" in build_failure_answer(
-        plan_resolution,
-        capacity_outcome,
-    ).content
+    assert (
+        "context budget was exhausted"
+        in build_failure_answer(
+            plan_resolution,
+            capacity_outcome,
+        ).content
+    )
 
 
 def test_projection_includes_task_state_plan_and_active_artifact_range() -> None:
@@ -322,9 +333,7 @@ def test_partial_projection_contains_checkpointed_state_and_pending_coverage() -
         execution_messages=rewritten,
         outcome=_outcome(),
         task_state_coordinator=coordinator,
-        resolution=resolve_answer(
-            outcome=_outcome(), task_state_coordinator=coordinator
-        ),
+        resolution=resolve_answer(outcome=_outcome(), task_state_coordinator=coordinator),
     )
 
     assert context.task_state == {"2021": {"series_count": 22}}
@@ -442,8 +451,9 @@ def test_projection_task_state_uses_only_completed_resolution_keys() -> None:
     assert context.task_state == {"A": {"key": "A"}}
 
 
-def test_projection_includes_successful_normal_tools_and_excludes_control_or_failed_results(
-) -> None:
+def test_projection_includes_successful_normal_tools_and_excludes_control_or_failed_results() -> (
+    None
+):
     messages = [
         AssistantMessage(
             tool_calls=[
@@ -494,19 +504,19 @@ def test_projection_without_coordinator_and_render_are_deterministic() -> None:
     builder = AnswerContextBuilder()
     first = builder.build(
         execution_messages=messages,
-        outcome=_outcome(ExecutionStopReason.MAX_STEPS),
+        outcome=_outcome(ExecutionStopReason.DEADLINE),
         task_state_coordinator=None,
         resolution=resolve_answer(
-            outcome=_outcome(ExecutionStopReason.MAX_STEPS),
+            outcome=_outcome(ExecutionStopReason.DEADLINE),
             task_state_coordinator=None,
         ),
     )
     second = builder.build(
         execution_messages=messages,
-        outcome=_outcome(ExecutionStopReason.MAX_STEPS),
+        outcome=_outcome(ExecutionStopReason.DEADLINE),
         task_state_coordinator=None,
         resolution=resolve_answer(
-            outcome=_outcome(ExecutionStopReason.MAX_STEPS),
+            outcome=_outcome(ExecutionStopReason.DEADLINE),
             task_state_coordinator=None,
         ),
     )
@@ -515,7 +525,7 @@ def test_projection_without_coordinator_and_render_are_deterministic() -> None:
     assert first.task_state == {}
     assert first.to_dict() == second.to_dict()
     assert first.render() == second.render()
-    assert "reason: max_steps" in first.render()
+    assert "reason: deadline" in first.render()
     assert "CURRENT" not in first.render()
 
 

@@ -138,7 +138,11 @@ def test_product_chat_replays_full_dialogue_then_persists_before_completed() -> 
 def test_product_chat_failure_does_not_create_a_dialogue_turn() -> None:
     repository = _Repository()
     runtime = _Runtime(
-        [AgentFailed(duration=0.1, error_code="max_steps_exceeded", error_message="too many steps")]
+        [
+            AgentFailed(
+                duration=0.1, error_code="agent_runtime_error", error_message="runtime failed"
+            )
+        ]
     )
     service = VNextChatService(  # type: ignore[arg-type]
         repository,
@@ -155,7 +159,7 @@ def test_product_chat_failure_does_not_create_a_dialogue_turn() -> None:
         query="query",
     )
 
-    assert events == [ProductChatError(error_code="max_steps_exceeded", reason="too many steps")]
+    assert events == [ProductChatError(error_code="agent_runtime_error", reason="runtime failed")]
     assert repository.appended == []
 
 
@@ -302,7 +306,7 @@ def test_product_chat_persists_only_failed_runs_and_preserves_original_error_on_
     service = VNextChatService(  # type: ignore[arg-type]
         _Repository(),
         _Runtime(
-            [AgentFailed(duration=0.1, error_code="max_steps_exceeded", error_message="failed")]
+            [AgentFailed(duration=0.1, error_code="agent_runtime_error", error_message="failed")]
         ),
         ConversationContextBuilder(),
         _VisualEntityEnricher(),
@@ -324,7 +328,7 @@ def test_product_chat_persists_only_failed_runs_and_preserves_original_error_on_
     unavailable = VNextChatService(  # type: ignore[arg-type]
         _Repository(),
         _Runtime(
-            [AgentFailed(duration=0.1, error_code="max_steps_exceeded", error_message="failed")]
+            [AgentFailed(duration=0.1, error_code="agent_runtime_error", error_message="failed")]
         ),
         ConversationContextBuilder(),
         _VisualEntityEnricher(),
@@ -338,7 +342,7 @@ def test_product_chat_persists_only_failed_runs_and_preserves_original_error_on_
         query="query",
     )
     assert unavailable_events == [
-        ProductChatError(error_code="max_steps_exceeded", reason="failed")
+        ProductChatError(error_code="agent_runtime_error", reason="failed")
     ]
 
 

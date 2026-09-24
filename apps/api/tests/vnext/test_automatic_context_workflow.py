@@ -219,10 +219,8 @@ def test_automatic_watermarks_keep_artifacts_rereadable_across_two_compactions()
     store = SessionArtifactStore()
     model = _ThreeEditionModel()
     limits = AgentLimits(
-        max_steps=12,
         deadline_seconds=10,
         answer_timeout_seconds=10,
-        degraded_answer_timeout_seconds=5,
         context_window_tokens=12_000,
         context_output_reserve_tokens=256,
         context_safety_margin_tokens=128,
@@ -419,10 +417,8 @@ def test_real_adapter_overflow_classification_compacts_and_retries_same_step() -
         transport=httpx.MockTransport(handler),
     )
     limits = AgentLimits(
-        max_steps=4,
         deadline_seconds=5,
         answer_timeout_seconds=5,
-        degraded_answer_timeout_seconds=5,
         context_window_tokens=100_000,
         context_output_reserve_tokens=256,
         context_safety_margin_tokens=128,

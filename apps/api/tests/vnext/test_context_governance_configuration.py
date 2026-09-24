@@ -24,6 +24,8 @@ from app.vnext.product.chat import ProductChatCompleted, VNextChatService
 from app.vnext.product.context import ConversationContextBuilder
 
 _LIMIT_ENV_NAMES = (
+    "DOTAMIND_EXECUTION_DEADLINE_SECONDS",
+    "DOTAMIND_ANSWER_DEADLINE_SECONDS",
     "DOTAMIND_CONTEXT_WINDOW_TOKENS",
     "DOTAMIND_CONTEXT_OUTPUT_RESERVE_TOKENS",
     "DOTAMIND_CONTEXT_SAFETY_MARGIN_TOKENS",
@@ -81,6 +83,8 @@ DOTAMIND_COMPACTION_MAX_INPUT_BYTES=50000
 DOTAMIND_COMPACTION_RESERVE_TOKENS=10000
 DOTAMIND_COMPACTION_MODEL_MAX_OUTPUT_TOKENS=500
 DOTAMIND_COMPACTION_MAX_RETRIES=2
+DOTAMIND_EXECUTION_DEADLINE_SECONDS=450.5
+DOTAMIND_ANSWER_DEADLINE_SECONDS=75.25
 """,
     )
 
@@ -98,6 +102,8 @@ DOTAMIND_COMPACTION_MAX_RETRIES=2
         "compaction_reserve_tokens": 10000,
         "compaction_model_max_output_tokens": 500,
         "compaction_max_retries": 2,
+        "deadline_seconds": 450.5,
+        "answer_timeout_seconds": 75.25,
     }
 
 
@@ -111,12 +117,16 @@ def test_process_environment_overrides_file_values(
         "DOTAMIND_CONTEXT_WINDOW_TOKENS=12000\n"
         "DOTAMIND_CONTEXT_COMPACTION_TEST_TRIGGER_PERCENT=30\n"
         "DOTAMIND_COMPACTION_RESERVE_TOKENS=10000\n"
-        "DOTAMIND_COMPACTION_MODEL_MAX_OUTPUT_TOKENS=4096\n",
+        "DOTAMIND_COMPACTION_MODEL_MAX_OUTPUT_TOKENS=4096\n"
+        "DOTAMIND_EXECUTION_DEADLINE_SECONDS=450\n"
+        "DOTAMIND_ANSWER_DEADLINE_SECONDS=75\n",
     )
     monkeypatch.setenv("DOTAMIND_CONTEXT_WINDOW_TOKENS", " 15000 ")
     monkeypatch.setenv("DOTAMIND_CONTEXT_COMPACTION_TEST_TRIGGER_PERCENT", "40")
     monkeypatch.setenv("DOTAMIND_COMPACTION_RESERVE_TOKENS", "12000")
     monkeypatch.setenv("DOTAMIND_COMPACTION_MODEL_MAX_OUTPUT_TOKENS", "700")
+    monkeypatch.setenv("DOTAMIND_EXECUTION_DEADLINE_SECONDS", "301.75")
+    monkeypatch.setenv("DOTAMIND_ANSWER_DEADLINE_SECONDS", "61.5")
 
     limits = VNextSettings.from_env().agent_limits
 
@@ -124,6 +134,53 @@ def test_process_environment_overrides_file_values(
     assert limits.context_compaction_test_trigger_percent == 40
     assert limits.compaction_reserve_tokens == 12000
     assert limits.compaction_model_max_output_tokens == 700
+    assert limits.deadline_seconds == 301.75
+    assert limits.answer_timeout_seconds == 61.5
+
+
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("DOTAMIND_EXECUTION_DEADLINE_SECONDS", ""),
+        ("DOTAMIND_EXECUTION_DEADLINE_SECONDS", "0"),
+        ("DOTAMIND_EXECUTION_DEADLINE_SECONDS", "-0.1"),
+        ("DOTAMIND_EXECUTION_DEADLINE_SECONDS", "nan"),
+        ("DOTAMIND_EXECUTION_DEADLINE_SECONDS", "inf"),
+        ("DOTAMIND_ANSWER_DEADLINE_SECONDS", "not-a-number"),
+        ("DOTAMIND_ANSWER_DEADLINE_SECONDS", "-inf"),
+    ],
+)
+def test_invalid_agent_deadlines_are_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+    name: str,
+    value: str,
+) -> None:
+    _isolate_env(monkeypatch)
+    monkeypatch.setattr(composition, "_VNEXT_ENV_PATH", Path("/does/not/exist"))
+    monkeypatch.setenv(name, value)
+
+    with pytest.raises(ValueError, match=name):
+        VNextSettings.from_env()
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "DOTAMIND_EXECUTION_DEADLINE_SECONDS=\n",
+        "DOTAMIND_ANSWER_DEADLINE_SECONDS=NaN\n",
+        "DOTAMIND_EXECUTION_DEADLINE_SECONDS=Infinity\n",
+    ],
+)
+def test_invalid_deadline_file_values_are_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    content: str,
+) -> None:
+    _isolate_env(monkeypatch)
+    _write_env(monkeypatch, tmp_path, content)
+
+    with pytest.raises(ValueError, match="DOTAMIND_.*_DEADLINE_SECONDS"):
+        VNextSettings.from_env()
 
 
 def test_blank_test_trigger_percent_disables_file_value(

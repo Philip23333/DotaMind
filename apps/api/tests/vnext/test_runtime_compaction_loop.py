@@ -558,7 +558,6 @@ def test_compaction_releases_repeated_reads_and_cleans_removed_task_leases() -> 
         model,
         _compaction_workflow_registry(coordinator),
         limits=AgentLimits(
-            max_steps=9,
             deadline_seconds=5,
             answer_timeout_seconds=5,
             compaction_keep_recent_tokens=1,
