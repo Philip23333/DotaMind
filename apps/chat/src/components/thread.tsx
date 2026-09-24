@@ -136,18 +136,20 @@ const AssistantMessage: FC<{ browserId?: string }> = ({ browserId }) => {
         hideWhenRunning
         className="absolute left-0 top-full mt-2 flex items-center gap-1 text-muted-foreground"
       >
-        <ActionBarPrimitive.Copy
-          render={
-            <Button variant="ghost" size="icon" className="size-8" aria-label="复制回答" />
-          }
-        >
-          <AuiIf condition={(state) => state.message.isCopied}>
-            <CheckIcon className="size-4" />
-          </AuiIf>
-          <AuiIf condition={(state) => !state.message.isCopied}>
-            <CopyIcon className="size-4" />
-          </AuiIf>
-        </ActionBarPrimitive.Copy>
+        <AuiIf condition={(state) => state.message.status?.type === "complete"}>
+          <ActionBarPrimitive.Copy
+            render={
+              <Button variant="ghost" size="icon" className="size-8" aria-label="复制回答" />
+            }
+          >
+            <AuiIf condition={(state) => state.message.isCopied}>
+              <CheckIcon className="size-4" />
+            </AuiIf>
+            <AuiIf condition={(state) => !state.message.isCopied}>
+              <CopyIcon className="size-4" />
+            </AuiIf>
+          </ActionBarPrimitive.Copy>
+        </AuiIf>
         {browserId && trace && (
           <TraceDownloadAction browserId={browserId} traceId={trace.trace_id} />
         )}

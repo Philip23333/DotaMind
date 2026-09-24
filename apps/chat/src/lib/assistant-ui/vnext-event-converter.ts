@@ -30,7 +30,6 @@ export async function* streamVNextChatMessage({
       continue;
     }
     if (event.type === "completed") {
-      markDotaMindSessionUnread(sessionId);
       const finalText =
         decorateCatalogMentions(event.content, event.catalog_visual_entities ?? []) ?? event.content;
       yield {
@@ -43,18 +42,18 @@ export async function* streamVNextChatMessage({
               },
             }),
       };
+      markDotaMindSessionUnread(sessionId);
       return;
     }
-    yield {
-      content: [{ type: "text", text: `本次请求未完成：${event.reason}` }],
-      metadata:
-        event.trace === undefined
-          ? undefined
-          : { custom: { [DOTAMIND_ASSISTANT_METADATA_KEY]: { trace: event.trace } } },
-    };
-    return;
+    if (event.trace !== undefined) {
+      yield {
+        content: [{ type: "text", text: content }],
+        metadata: { custom: { [DOTAMIND_ASSISTANT_METADATA_KEY]: { trace: event.trace } } },
+      };
+    }
+    throw new Error(`本次请求未完成：${event.reason}`);
   }
   if (!abortSignal.aborted) {
-    yield { content: [{ type: "text", text: "连接在收到最终结果前结束，请重试。" }] };
+    throw new Error("连接在收到最终结果前结束，请重试。");
   }
 }

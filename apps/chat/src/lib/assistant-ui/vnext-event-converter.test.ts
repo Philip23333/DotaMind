@@ -47,6 +47,24 @@ describe("vNext event converter", () => {
     expect(markUnreadMock).toHaveBeenCalledWith("session-a");
   });
 
+  it("delivers the final answer before updating unread thread metadata", async () => {
+    streamChatMessageMock.mockImplementation(async function* () {
+      yield { type: "completed", content: "完整回答", turn_index: 1 };
+    });
+
+    const stream = streamVNextChatMessage({
+      browserId: "browser-a",
+      sessionId: "session-a",
+      query: "question",
+      abortSignal: new AbortController().signal,
+    });
+
+    expect(text((await stream.next()).value as ChatModelRunResult)).toBe("完整回答");
+    expect(markUnreadMock).not.toHaveBeenCalled();
+    expect((await stream.next()).done).toBe(true);
+    expect(markUnreadMock).toHaveBeenCalledWith("session-a");
+  });
+
   it("decorates only the completed final text with persisted catalog entities", async () => {
     streamChatMessageMock.mockImplementation(async function* () {
       yield { type: "delta", text: "不朽" };
@@ -83,24 +101,23 @@ describe("vNext event converter", () => {
     ]);
   });
 
-  it("renders an error event without marking the thread completed", async () => {
+  it("rejects an error event without marking the thread completed", async () => {
     streamChatMessageMock.mockImplementation(async function* () {
       yield { type: "error", error_code: "agent_runtime_error", reason: "runtime failed" };
     });
 
-    const results = [];
-    for await (const result of streamVNextChatMessage({
-      browserId: "browser-a",
-      sessionId: "session-a",
-      query: "question",
-      abortSignal: new AbortController().signal,
-    })) {
-      results.push(result);
-    }
+    const consume = async () => {
+      for await (const _result of streamVNextChatMessage({
+        browserId: "browser-a",
+        sessionId: "session-a",
+        query: "question",
+        abortSignal: new AbortController().signal,
+      })) {
+        void _result;
+      }
+    };
 
-    expect(results.map(text)).toEqual([
-      "本次请求未完成：runtime failed",
-    ]);
+    await expect(consume()).rejects.toThrow("本次请求未完成：runtime failed");
     expect(markUnreadMock).not.toHaveBeenCalled();
   });
 
@@ -114,19 +131,34 @@ describe("vNext event converter", () => {
       };
     });
 
-    const results = [];
-    for await (const result of streamVNextChatMessage({
+    const stream = streamVNextChatMessage({
       browserId: "browser-a",
       sessionId: "session-a",
       query: "question",
       abortSignal: new AbortController().signal,
-    })) {
-      results.push(result);
-    }
+    });
 
-    expect(results[0]?.metadata?.custom).toEqual({
+    expect(((await stream.next()).value as ChatModelRunResult).metadata?.custom).toEqual({
       dotamind: { trace: { trace_id: "trace-1", expires_at: "2026-08-31T12:00:00Z" } },
     });
+    await expect(stream.next()).rejects.toThrow("本次请求未完成：too many calls");
+  });
+
+  it("rejects a truncated stream instead of treating the partial answer as complete", async () => {
+    streamChatMessageMock.mockImplementation(async function* () {
+      yield { type: "delta", text: "前几个字" };
+    });
+
+    const stream = streamVNextChatMessage({
+      browserId: "browser-a",
+      sessionId: "session-a",
+      query: "question",
+      abortSignal: new AbortController().signal,
+    });
+
+    expect(text((await stream.next()).value as ChatModelRunResult)).toBe("前几个字");
+    await expect(stream.next()).rejects.toThrow("连接在收到最终结果前结束");
+    expect(markUnreadMock).not.toHaveBeenCalled();
   });
 
   it("preserves a completed trace reference without changing completed text", async () => {
