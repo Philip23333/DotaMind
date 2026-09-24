@@ -111,10 +111,16 @@ def _history_with_two_groups() -> tuple[
     )
     history.remember_artifact_locators(first_call, first_result)
     history.remember_artifact_locators(second_call, second_result)
-    return history, request_id, messages, (first_assistant, first_result, first_call), (
-        second_assistant,
-        second_result,
-        second_call,
+    return (
+        history,
+        request_id,
+        messages,
+        (first_assistant, first_result, first_call),
+        (
+            second_assistant,
+            second_result,
+            second_call,
+        ),
     )
 
 
@@ -123,9 +129,7 @@ def _recent_budget_for_second_group(
     current: UserMessage,
 ) -> int:
     return (
-        _message_bytes(second_group[0])
-        + _message_bytes(second_group[1])
-        + _message_bytes(current)
+        _message_bytes(second_group[0]) + _message_bytes(second_group[1]) + _message_bytes(current)
     )
 
 
@@ -135,11 +139,12 @@ def _runtime(
     registry: ToolRegistry | None = None,
     task_state_coordinator: TaskStateCoordinator | None = None,
     event_sink=None,
+    limits: AgentLimits | None = None,
 ) -> AgentRuntime:
     return AgentRuntime(
         model,  # type: ignore[arg-type]
         registry or ToolRegistry(),
-        limits=AgentLimits(deadline_seconds=2),
+        limits=limits or AgentLimits(deadline_seconds=2),
         task_state_coordinator=task_state_coordinator,
         event_sink=event_sink,
     )
@@ -155,8 +160,6 @@ def _compact(
     token: CancellationToken | None = None,
     deadline: _Deadline | None = None,
     max_input_bytes: int = 100_000,
-    max_output_tokens: int = 128,
-    max_summary_bytes: int = 10_000,
 ) -> bool:
     return asyncio.run(
         runtime._compact_session_history(
@@ -167,8 +170,6 @@ def _compact(
             step=4,
             recent_history_bytes=recent_history_bytes,
             max_input_bytes=max_input_bytes,
-            max_output_tokens=max_output_tokens,
-            max_summary_bytes=max_summary_bytes,
             trace_collector=trace,
         )
     )
@@ -208,6 +209,7 @@ def test_first_compaction_selects_generates_and_commits_one_range() -> None:
 
     assert result is True
     assert len(model.requests) == 1
+    assert model.requests[0].max_output_tokens == 13_107
     data = _request_data(model.requests[0])
     assert data["current_user_message"] == "current question"
     assert "1 full body" in json.dumps(data, ensure_ascii=False)
@@ -223,6 +225,49 @@ def test_first_compaction_selects_generates_and_commits_one_range() -> None:
     assert trace.snapshot()["compaction_calls"][0]["status"] == "generated"
 
 
+def test_configured_model_output_limit_caps_history_summary_request() -> None:
+    history, request_id, messages, _, second_group = _history_with_two_groups()
+    current = messages[-1]
+    assert isinstance(current, UserMessage)
+    model = ScriptedModelClient([ModelResponse.from_final("summary", finish_reason="stop")])
+    runtime = _runtime(
+        model,
+        limits=AgentLimits(
+            deadline_seconds=2,
+            compaction_model_max_output_tokens=4096,
+        ),
+    )
+
+    assert _compact(
+        runtime,
+        history,
+        request_id,
+        recent_history_bytes=_recent_budget_for_second_group(second_group, current),
+    )
+    assert model.requests[0].max_output_tokens == 4096
+
+
+def test_summary_larger_than_old_8k_byte_limit_is_committed() -> None:
+    history, request_id, messages, _, second_group = _history_with_two_groups()
+    current = messages[-1]
+    assert isinstance(current, UserMessage)
+    summary = "合成摘要" + "x" * 8190
+    assert len(summary.encode("utf-8")) > 8 * 1024
+    model = ScriptedModelClient([ModelResponse.from_final(summary, finish_reason="stop")])
+
+    assert _compact(
+        _runtime(model),
+        history,
+        request_id,
+        recent_history_bytes=_recent_budget_for_second_group(second_group, current),
+    )
+
+    assert history.summary == summary
+    assert len(model.requests) == 1
+    assert model.requests[0].max_output_tokens == 13_107
+    assert len(history.compaction_records) == 1
+
+
 def test_current_user_in_compaction_prefix_is_not_duplicated_after_commit() -> None:
     history = SessionExecutionHistory()
     request_id = uuid4()
@@ -236,9 +281,7 @@ def test_current_user_in_compaction_prefix_is_not_duplicated_after_commit() -> N
     history.set_effective(
         [UserMessage(content="old question"), current, second_group[0], second_group[1]]
     )
-    model = ScriptedModelClient(
-        [ModelResponse.from_final("summary", finish_reason="stop")]
-    )
+    model = ScriptedModelClient([ModelResponse.from_final("summary", finish_reason="stop")])
 
     result = _compact(
         _runtime(model),
@@ -342,11 +385,6 @@ def test_input_budget_failure_does_not_call_model_or_commit() -> None:
             CompactionSummaryError,
             "empty_summary",
         ),
-        (
-            ModelResponse.from_final("too long", finish_reason="stop"),
-            CompactionSummaryError,
-            "summary_output_too_large",
-        ),
     ],
 )
 def test_generation_failure_propagates_and_does_not_commit(
@@ -366,7 +404,6 @@ def test_generation_failure_propagates_and_does_not_commit(
             history,
             request_id,
             recent_history_bytes=_recent_budget_for_second_group(second_group, current),
-            max_summary_bytes=3 if error_code == "summary_output_too_large" else 10_000,
             trace=trace,
         )
 
@@ -375,6 +412,34 @@ def test_generation_failure_propagates_and_does_not_commit(
     assert history.summary is None
     assert history.compaction_records == ()
     assert trace.snapshot()["compaction_calls"][0]["status"] == "failed"
+
+
+def test_truncated_candidate_preserves_previous_summary_boundary_and_revision() -> None:
+    history, request_id, _, _, _ = _history_with_two_groups()
+    history.commit_compaction(
+        request_id=request_id,
+        base_revision=history.revision,
+        summary="previous accepted summary",
+        cut_index=3,
+    )
+    before = history.context_snapshot()
+    before_records = history.compaction_records
+    model = ScriptedModelClient([ModelResponse.from_final("partial", finish_reason="length")])
+
+    with pytest.raises(CompactionSummaryError) as error:
+        _compact(
+            _runtime(model),
+            history,
+            request_id,
+            recent_history_bytes=1,
+        )
+
+    assert error.value.code == "summary_output_truncated"
+    after = history.context_snapshot()
+    assert after.summary == before.summary == "previous accepted summary"
+    assert after.revision == before.revision
+    assert after.messages == before.messages
+    assert history.compaction_records == before_records
 
 
 def test_compaction_cancellation_before_model_call_keeps_state() -> None:
@@ -452,8 +517,6 @@ def test_compaction_version_change_during_generation_is_not_overwritten() -> Non
                 step=4,
                 recent_history_bytes=_recent_budget_for_second_group(second_group, current),
                 max_input_bytes=100_000,
-                max_output_tokens=128,
-                max_summary_bytes=10_000,
                 trace_collector=trace,
             )
         )
@@ -477,9 +540,7 @@ def test_compaction_version_change_during_generation_is_not_overwritten() -> Non
         {
             "step": 4,
             "status": "generated",
-            "duration_seconds": trace.snapshot()["compaction_calls"][0][
-                "duration_seconds"
-            ],
+            "duration_seconds": trace.snapshot()["compaction_calls"][0]["duration_seconds"],
             "usage": {"completion_tokens": 11},
             "error_code": None,
         }
@@ -495,12 +556,15 @@ def test_two_compactions_use_previous_summary_and_only_current_retained_history(
     )
     first_recent = _recent_budget_for_second_group(second_group, current)
 
-    assert _compact(
-        _runtime(first_model),
-        history,
-        request_id,
-        recent_history_bytes=first_recent,
-    ) is True
+    assert (
+        _compact(
+            _runtime(first_model),
+            history,
+            request_id,
+            recent_history_bytes=first_recent,
+        )
+        is True
+    )
 
     third_assistant, third_result, third_call = _artifact_group("3")
     history.remember_artifact_locators(third_call, third_result)
@@ -510,12 +574,15 @@ def test_two_compactions_use_previous_summary_and_only_current_retained_history(
     )
     second_recent = _message_bytes(third_assistant) + _message_bytes(third_result)
 
-    assert _compact(
-        _runtime(second_model),
-        history,
-        request_id,
-        recent_history_bytes=second_recent,
-    ) is True
+    assert (
+        _compact(
+            _runtime(second_model),
+            history,
+            request_id,
+            recent_history_bytes=second_recent,
+        )
+        is True
+    )
 
     data = _request_data(second_model.requests[0])
     assert data["previous_summary"] == "summary one"
@@ -568,21 +635,22 @@ def test_compaction_does_not_reset_task_state_execute_tools_or_publish_events() 
         )
     )
     events: list[object] = []
-    model = ScriptedModelClient(
-        [ModelResponse.from_final("summary", finish_reason="stop")]
-    )
+    model = ScriptedModelClient([ModelResponse.from_final("summary", finish_reason="stop")])
 
-    assert _compact(
-        _runtime(
-            model,
-            registry=registry,
-            task_state_coordinator=coordinator,
-            event_sink=events.append,
-        ),
-        history,
-        request_id,
-        recent_history_bytes=_recent_budget_for_second_group(second_group, current),
-    ) is True
+    assert (
+        _compact(
+            _runtime(
+                model,
+                registry=registry,
+                task_state_coordinator=coordinator,
+                event_sink=events.append,
+            ),
+            history,
+            request_id,
+            recent_history_bytes=_recent_budget_for_second_group(second_group, current),
+        )
+        is True
+    )
 
     assert called is False
     assert coordinator.plan_snapshot() == before_plan
@@ -619,9 +687,7 @@ def test_compaction_refresh_keeps_only_inline_sources_in_effective_history(
             {"key": "second", "objective": "Second"},
         ]
     )
-    coordinator.record_inline_tool_result(
-        source_group[2], source_group[1], task_key="first"
-    )
+    coordinator.record_inline_tool_result(source_group[2], source_group[1], task_key="first")
     coordinator.refresh(messages)
     runtime = _runtime(
         ScriptedModelClient([ModelResponse.from_final("summary", finish_reason="stop")]),
@@ -629,12 +695,15 @@ def test_compaction_refresh_keeps_only_inline_sources_in_effective_history(
         task_state_coordinator=coordinator,
     )
 
-    assert _compact(
-        runtime,
-        history,
-        request_id,
-        recent_history_bytes=_recent_budget_for_second_group(second_group, current),
-    ) is True
+    assert (
+        _compact(
+            runtime,
+            history,
+            request_id,
+            recent_history_bytes=_recent_budget_for_second_group(second_group, current),
+        )
+        is True
+    )
     request_start, effective_messages, _ = runtime._rebuild_after_compaction(
         execution_history=history,
         request_id=request_id,
@@ -650,8 +719,7 @@ def test_compaction_refresh_keeps_only_inline_sources_in_effective_history(
     assert effective_messages == history.effective_messages()
     assert coordinator.active_evidence_lease() is None
     candidate_ids = [
-        item["tool_call_id"]
-        for item in coordinator.context_payload()["checkpoint_candidates"]
+        item["tool_call_id"] for item in coordinator.context_payload()["checkpoint_candidates"]
     ]
     assert candidate_ids == ([source_group[2].id] if retained else [])
 

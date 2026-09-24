@@ -83,6 +83,30 @@ container-specific database and Redis addresses. The real .env is excluded
 from the API build context and image. After changing API settings, recreate the
 container with `docker compose -f compose.wsl.yml up -d --no-deps --force-recreate api`.
 
+### Context compaction budgets
+
+`DOTAMIND_COMPACTION_RESERVE_TOKENS` defaults to `16384` and derives the
+compaction response limit: history summaries use `floor(reserve × 0.8)` and
+single-turn prefix summaries use `floor(reserve × 0.5)`. An optional
+`DOTAMIND_COMPACTION_MODEL_MAX_OUTPUT_TOKENS` caps either derived value; leave it
+blank when the model's output limit is unknown. The reserve is a configuration
+budget, not a claim about model capability. The current Runtime uses the history
+formula; prefix splitting is a later step.
+
+These output-token limits are independent from the existing serialized-input
+byte limit (`DOTAMIND_COMPACTION_MAX_INPUT_BYTES`). Summary text no longer has a
+separate 8 KiB byte ceiling; the complete rebuilt model request remains subject
+to the existing context-capacity checks. Ordinary answer output continues to
+use `DOTAMIND_CONTEXT_OUTPUT_RESERVE_TOKENS`. This budget change does not alter
+the watermark trigger, including the current 30% test setting, or implement Pi's
+production trigger formula. A larger reserve can reduce truncation but does not
+guarantee a successful summary.
+
+When migrating an existing `.env`, remove the obsolete
+`DOTAMIND_COMPACTION_MAX_OUTPUT_TOKENS` and
+`DOTAMIND_COMPACTION_MAX_SUMMARY_BYTES` entries; they are no longer read. An
+unset/blank model output cap means unknown, while a blank reserve is invalid.
+
 ### Run the processes locally
 
 Start the API:

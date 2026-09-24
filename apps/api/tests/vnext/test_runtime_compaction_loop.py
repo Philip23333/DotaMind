@@ -98,10 +98,7 @@ def _compaction_workflow_registry(coordinator: TaskStateCoordinator) -> ToolRegi
 
     async def read(args: _ReadInput) -> ArtifactReadResult:
         if args.path == "rows":
-            value: Any = [
-                {"fact": f"row-{index}-" + "x" * 220}
-                for index in range(8)
-            ]
+            value: Any = [{"fact": f"row-{index}-" + "x" * 220} for index in range(8)]
             return ArtifactReadResult(
                 ref=args.ref,
                 path=args.path,
@@ -184,8 +181,7 @@ def _runtime(
             deadline_seconds=2,
             compaction_recent_history_bytes=recent_bytes,
             compaction_max_input_bytes=100_000,
-            compaction_max_output_tokens=128,
-            compaction_max_summary_bytes=10_000,
+            compaction_reserve_tokens=160,
         ),
         system_instruction=system_instruction,
     )
@@ -254,12 +250,8 @@ def test_compaction_loop_rebuilds_messages_scope_and_budget_before_next_model_ca
     history, request_id = _history()
     model = ScriptedModelClient(
         [
-            ModelResponse.from_assistant(
-                AssistantMessage(tool_calls=[_call(1)])
-            ),
-            ModelResponse.from_assistant(
-                AssistantMessage(tool_calls=[_call(2)])
-            ),
+            ModelResponse.from_assistant(AssistantMessage(tool_calls=[_call(1)])),
+            ModelResponse.from_assistant(AssistantMessage(tool_calls=[_call(2)])),
             ModelResponse.from_final("summary one", finish_reason="stop", usage={"n": 1}),
             ModelResponse.from_final("execution final"),
             ModelResponse.from_final("answer final"),
@@ -291,14 +283,21 @@ def test_compaction_loop_rebuilds_messages_scope_and_budget_before_next_model_ca
         [message.model_dump(mode="json") for message in model.requests[3].messages]
     )
     assert _session_payload(model.requests[3])["summary"] == "summary one"
-    assert sum(
-        message == UserMessage(content="current question")
-        for message in model.requests[3].messages
-    ) == 1
-    assert history.effective_messages() == [
-        UserMessage(content="current question"),
-        model.requests[1].messages[-1],
-    ] or history.effective_messages()[-1].role == "final"
+    assert (
+        sum(
+            message == UserMessage(content="current question")
+            for message in model.requests[3].messages
+        )
+        == 1
+    )
+    assert (
+        history.effective_messages()
+        == [
+            UserMessage(content="current question"),
+            model.requests[1].messages[-1],
+        ]
+        or history.effective_messages()[-1].role == "final"
+    )
     assert len(trace.snapshot()["compaction_calls"]) == 1
     assert len(trace.snapshot()["compaction_commits"]) == 1
     commit = trace.snapshot()["compaction_commits"][0]
@@ -497,18 +496,14 @@ def test_compaction_releases_repeated_reads_and_cleans_removed_task_leases() -> 
         assert '"tool_call_id":"read-current"' not in task_context
         assert '"tool_call_id":"read-duplicate"' not in task_context
         return ModelResponse.from_assistant(
-            AssistantMessage(
-                tool_calls=[_checkpoint_call("checkpoint-first", "first", "read-new")]
-            )
+            AssistantMessage(tool_calls=[_checkpoint_call("checkpoint-first", "first", "read-new")])
         )
 
     def read_second(request: ModelRequest) -> ModelResponse:
         assert request.step == 7
         assert coordinator.plan_snapshot().current_key == "second"  # type: ignore[union-attr]
         return ModelResponse.from_assistant(
-            AssistantMessage(
-                tool_calls=[_read_call("read-second", "summary", task_key="second")]
-            )
+            AssistantMessage(tool_calls=[_read_call("read-second", "summary", task_key="second")])
         )
 
     def checkpoint_second(request: ModelRequest) -> ModelResponse:
@@ -550,8 +545,7 @@ def test_compaction_releases_repeated_reads_and_cleans_removed_task_leases() -> 
             answer_timeout_seconds=5,
             compaction_recent_history_bytes=1,
             compaction_max_input_bytes=100_000,
-            compaction_max_output_tokens=128,
-            compaction_max_summary_bytes=1_000,
+            compaction_reserve_tokens=160,
             max_materialized_context_bytes=100_000,
         ),
         transcript_rewriter=ArtifactObservationTranscriptRewriter(),

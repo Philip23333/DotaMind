@@ -196,8 +196,7 @@ def _limits_for_available(
         answer_timeout_seconds=5,
         compaction_recent_history_bytes=recent_bytes,
         compaction_max_input_bytes=100_000,
-        compaction_max_output_tokens=128,
-        compaction_max_summary_bytes=10_000,
+        compaction_reserve_tokens=160,
         context_window_tokens=available_input_tokens + reserve + margin,
         context_output_reserve_tokens=reserve,
         context_safety_margin_tokens=margin,
@@ -243,6 +242,26 @@ def test_context_capacity_is_disabled_by_default() -> None:
 
     assert model.requests[0].max_output_tokens is None
     assert "context_capacity_checks" not in trace.snapshot()
+
+
+def test_compaction_reserve_does_not_change_the_watermark_trigger() -> None:
+    request = ModelRequest(
+        messages=[UserMessage(content="x" * 3_200)],
+        max_output_tokens=500,
+    )
+    lower_reserve = AgentLimits(
+        context_window_tokens=5_000,
+        context_output_reserve_tokens=500,
+        context_safety_margin_tokens=200,
+        context_estimate_bytes_per_token=1,
+        context_compaction_trigger_percent=80,
+        compaction_reserve_tokens=2,
+    )
+    higher_reserve = lower_reserve.model_copy(update={"compaction_reserve_tokens": 100_000})
+
+    assert assess_request_capacity(request, lower_reserve) == assess_request_capacity(
+        request, higher_reserve
+    )
 
 
 @pytest.mark.parametrize("case", ["missing", "uninitialized", "mismatch"])
@@ -350,9 +369,7 @@ def test_tool_schemas_are_included_in_runtime_capacity() -> None:
         trace_collector=tool_trace,
     )
 
-    plain_bytes = plain_trace.snapshot()["context_capacity_checks"][0]["capacity"][
-        "context_bytes"
-    ]
+    plain_bytes = plain_trace.snapshot()["context_capacity_checks"][0]["capacity"]["context_bytes"]
     tool_bytes = tool_trace.snapshot()["context_capacity_checks"][0]["capacity"]["context_bytes"]
     assert tool_bytes > plain_bytes
 
@@ -459,9 +476,7 @@ def test_high_without_a_compactable_range_continues_to_model() -> None:
     assert model.requests[0].tools
     assert "compaction_calls" not in trace.snapshot()
     execution_checks = [
-        item
-        for item in trace.snapshot()["context_capacity_checks"]
-        if item["stage"] == "execution"
+        item for item in trace.snapshot()["context_capacity_checks"] if item["stage"] == "execution"
     ]
     assert execution_checks[-1]["capacity"]["pressure"] == "high"
 
@@ -612,9 +627,7 @@ def test_continuous_watermarks_compact_again_after_new_tool_output() -> None:
         measure_request_context_bytes(model.requests[1]),
         measure_request_context_bytes(model.requests[3]),
     ]
-    assert [
-        item["step"] for item in snapshot["steps"] if "model_request" in item
-    ] == [1, 2]
+    assert [item["step"] for item in snapshot["steps"] if "model_request" in item] == [1, 2]
 
 
 def test_tool_schema_can_cross_the_watermark_trigger_line() -> None:
@@ -701,9 +714,7 @@ def test_auto_summary_validation_failure_does_not_commit_or_execute() -> None:
     limits = _limits_for_available(final_capacity.estimated_input_tokens + 1)
     before_messages = history.effective_messages()
     before_records = history.records
-    model = ScriptedModelClient(
-        [ModelResponse.from_final("truncated", finish_reason="length")]
-    )
+    model = ScriptedModelClient([ModelResponse.from_final("truncated", finish_reason="length")])
     trace = AgentTraceCollector()
     events: list[object] = []
 

@@ -7,6 +7,7 @@ from typing import Any
 
 import pytest
 
+from app.vnext.agent.compaction_budget import resolve_compaction_output_tokens
 from app.vnext.agent.errors import ModelContextWindowExceeded
 from app.vnext.agent.limits import AgentLimits
 from app.vnext.artifacts import SessionArtifactStore
@@ -57,8 +58,7 @@ def _settings(*, window: int | None = 500_000) -> VNextSettings:
             max_materialized_context_bytes=80_000,
             compaction_recent_history_bytes=10_000,
             compaction_max_input_bytes=100_000,
-            compaction_max_output_tokens=256,
-            compaction_max_summary_bytes=2_000,
+            compaction_reserve_tokens=320,
             context_window_tokens=window,
             context_output_reserve_tokens=512,
             context_safety_margin_tokens=128,
@@ -159,7 +159,13 @@ def test_baseline_business_output_cap_matches_other_profiles_and_summary_keeps_i
                 ModelRequest(
                     messages=[SystemMessage(content="summary")],
                     metadata={"purpose": "context_compaction"},
-                    max_output_tokens=prepared.limits.compaction_max_output_tokens,
+                    max_output_tokens=resolve_compaction_output_tokens(
+                        kind="history",
+                        reserve_tokens=prepared.limits.compaction_reserve_tokens,
+                        model_max_output_tokens=(
+                            prepared.limits.compaction_model_max_output_tokens
+                        ),
+                    ),
                 )
             )
             observed.extend(provider.requests)

@@ -22,6 +22,7 @@ from app.vnext.agent.answer_stage import (
     build_failure_answer,
     resolve_answer,
 )
+from app.vnext.agent.compaction_budget import resolve_compaction_output_tokens
 from app.vnext.agent.context_capacity import assess_request_capacity
 from app.vnext.agent.errors import (
     AgentCancelledError,
@@ -305,8 +306,6 @@ class AgentRuntime:
                             step=step,
                             recent_history_bytes=self.limits.compaction_recent_history_bytes,
                             max_input_bytes=self.limits.compaction_max_input_bytes,
-                            max_output_tokens=self.limits.compaction_max_output_tokens,
-                            max_summary_bytes=self.limits.compaction_max_summary_bytes,
                             trace_collector=trace_collector,
                         )
                     except AgentCancelledError:
@@ -444,8 +443,6 @@ class AgentRuntime:
                                 step=step,
                                 recent_history_bytes=self.limits.compaction_recent_history_bytes,
                                 max_input_bytes=self.limits.compaction_max_input_bytes,
-                                max_output_tokens=self.limits.compaction_max_output_tokens,
-                                max_summary_bytes=self.limits.compaction_max_summary_bytes,
                                 trace_collector=trace_collector,
                             )
                         except AgentCancelledError:
@@ -853,18 +850,12 @@ class AgentRuntime:
                                 token=token,
                                 deadline=primary_deadline,
                                 step=answer_step,
-                                recent_history_bytes=(
-                                    self.limits.compaction_recent_history_bytes
-                                ),
+                                recent_history_bytes=(self.limits.compaction_recent_history_bytes),
                                 max_input_bytes=self.limits.compaction_max_input_bytes,
-                                max_output_tokens=self.limits.compaction_max_output_tokens,
-                                max_summary_bytes=self.limits.compaction_max_summary_bytes,
                                 trace_collector=trace_collector,
                             )
                         except CompactionSummaryError as exc:
-                            raise ModelProtocolError(
-                                f"answer compaction failed: {exc}"
-                            ) from exc
+                            raise ModelProtocolError(f"answer compaction failed: {exc}") from exc
                         if compacted:
                             request_start, request_messages, materialization_budget = (
                                 self._rebuild_after_compaction(
@@ -986,12 +977,8 @@ class AgentRuntime:
                                 token=token,
                                 deadline=primary_deadline,
                                 step=answer_step,
-                                recent_history_bytes=(
-                                    self.limits.compaction_recent_history_bytes
-                                ),
+                                recent_history_bytes=(self.limits.compaction_recent_history_bytes),
                                 max_input_bytes=self.limits.compaction_max_input_bytes,
-                                max_output_tokens=self.limits.compaction_max_output_tokens,
-                                max_summary_bytes=self.limits.compaction_max_summary_bytes,
                                 trace_collector=trace_collector,
                             )
                         except AgentCancelledError:
@@ -1527,9 +1514,7 @@ class AgentRuntime:
             tools=self.tools.schemas(),
             step=step,
             max_output_tokens=(
-                self.limits.context_output_reserve_tokens
-                if auto_compaction_enabled
-                else None
+                self.limits.context_output_reserve_tokens if auto_compaction_enabled else None
             ),
         )
         return (
@@ -1574,9 +1559,7 @@ class AgentRuntime:
             initial_entries=initial_entries,
         )
         current_tool_call_ids = {
-            key.removeprefix("current:")
-            for key, _ in initial_entries
-            if key.startswith("current:")
+            key.removeprefix("current:") for key, _ in initial_entries if key.startswith("current:")
         }
         if self.transcript_rewriter is not None:
             set_scope = getattr(self.transcript_rewriter, "set_request_scope", None)
@@ -1753,7 +1736,6 @@ class AgentRuntime:
         token: CancellationToken,
         deadline: _Deadline,
         step: int,
-        max_summary_bytes: int,
         trace_collector: AgentTraceCollector | None,
     ) -> CompactionSummaryResult:
         """Generate one validated summary candidate without committing it."""
@@ -1768,7 +1750,7 @@ class AgentRuntime:
 
         try:
             self._check_controls(token, deadline)
-            _validate_compaction_call(request, max_summary_bytes)
+            _validate_compaction_call(request)
             response, _, _ = await self._invoke_model(
                 request,
                 purpose="compaction",
@@ -1781,10 +1763,7 @@ class AgentRuntime:
                 on_response=capture_response,
             )
             self._check_controls(token, deadline)
-            summary = validate_compaction_response(
-                response,
-                max_summary_bytes=max_summary_bytes,
-            )
+            summary = validate_compaction_response(response)
             self._check_controls(token, deadline)
             duration_seconds = max(0.0, monotonic() - started)
             result = CompactionSummaryResult(
@@ -1842,8 +1821,6 @@ class AgentRuntime:
         step: int,
         recent_history_bytes: int,
         max_input_bytes: int,
-        max_output_tokens: int,
-        max_summary_bytes: int,
         trace_collector: AgentTraceCollector | None,
     ) -> bool:
         """Generate and atomically commit one session-history compaction."""
@@ -1851,9 +1828,13 @@ class AgentRuntime:
         self._check_controls(token, deadline)
         if type(recent_history_bytes) is not int or recent_history_bytes <= 0:
             raise HistoryCompactionRangeError("invalid_recent_history_budget")
-        for budget in (max_input_bytes, max_output_tokens, max_summary_bytes):
-            if type(budget) is not int or budget <= 0:
-                raise CompactionSummaryError("invalid_summary_budget")
+        if type(max_input_bytes) is not int or max_input_bytes <= 0:
+            raise CompactionSummaryError("invalid_summary_budget")
+        max_output_tokens = resolve_compaction_output_tokens(
+            kind="history",
+            reserve_tokens=self.limits.compaction_reserve_tokens,
+            model_max_output_tokens=self.limits.compaction_model_max_output_tokens,
+        )
 
         snapshot_method = getattr(execution_history, "context_snapshot", None)
         if not callable(snapshot_method):
@@ -1882,9 +1863,7 @@ class AgentRuntime:
         if selected is None:
             return False
 
-        current_user_prefix_index = (
-            current_index if current_index < selected.cut_index else None
-        )
+        current_user_prefix_index = current_index if current_index < selected.cut_index else None
         prefix_history_count = len(selected.prefix_messages) - (
             1 if current_user_prefix_index is not None else 0
         )
@@ -1904,7 +1883,6 @@ class AgentRuntime:
             token=token,
             deadline=deadline,
             step=step,
-            max_summary_bytes=max_summary_bytes,
             trace_collector=trace_collector,
         )
         self._check_controls(token, deadline)
@@ -1990,9 +1968,7 @@ class AgentRuntime:
                 deadline,
             )
             candidates: list[tuple[tuple[int, int], int, ToolCall, ToolResultMessage, int]] = []
-            for original_index, (item, result) in enumerate(
-                zip(group, group_results, strict=True)
-            ):
+            for original_index, (item, result) in enumerate(zip(group, group_results, strict=True)):
                 if result.status != "ok" or not self._is_materializing(item):
                     continue
                 raw_bytes = _serialized_size(result.model_dump(mode="json"))
@@ -2062,16 +2038,9 @@ class AgentRuntime:
                                 )
                     elif decision is not None:
                         result = result.model_copy(
-                            update={
-                                "content": _deferred_materialization(
-                                    raw_bytes_by_id[item.id]
-                                )
-                            }
+                            update={"content": _deferred_materialization(raw_bytes_by_id[item.id])}
                         )
-                    if (
-                        item.name == "task.checkpoint"
-                        and self.task_state_coordinator is not None
-                    ):
+                    if item.name == "task.checkpoint" and self.task_state_coordinator is not None:
                         if result.status == "ok" and trace_collector is not None:
                             trace_collector.checkpoint_lease_snapshot(
                                 step,
@@ -2129,9 +2098,7 @@ class AgentRuntime:
         message = response.message
         if isinstance(message, AssistantMessage) and not message.tool_calls:
             if message.content is None:
-                raise ModelProtocolError(
-                    "assistant response had neither content nor tool calls"
-                )
+                raise ModelProtocolError("assistant response had neither content nor tool calls")
             return ModelResponse(
                 message=FinalMessage(content=message.content),
                 finish_reason=response.finish_reason,
@@ -2155,9 +2122,7 @@ class AgentRuntime:
         cancellation_wait = asyncio.create_task(token.wait())
         remaining = deadline.remaining()
         deadline_wait = (
-            asyncio.create_task(asyncio.sleep(remaining))
-            if remaining is not None
-            else None
+            asyncio.create_task(asyncio.sleep(remaining)) if remaining is not None else None
         )
         waiters: set[asyncio.Task[Any]] = {operation, cancellation_wait}
         if deadline_wait is not None:
@@ -2210,13 +2175,12 @@ def _append_system_instruction(
     return instruction_messages
 
 
-def _validate_compaction_call(request: ModelRequest, max_summary_bytes: int) -> None:
-    if type(max_summary_bytes) is not int or max_summary_bytes <= 0:
-        raise CompactionSummaryError("invalid_summary_budget")
+def _validate_compaction_call(request: ModelRequest) -> None:
     if (
         request.tools
         or request.step is not None
-        or request.max_output_tokens is None
+        or type(request.max_output_tokens) is not int
+        or request.max_output_tokens <= 0
         or request.metadata.get("purpose") != "context_compaction"
     ):
         raise ModelProtocolError("invalid compaction summary request")
@@ -2313,10 +2277,7 @@ def _persistent_history_messages(
     return [
         message.model_copy(deep=True)
         for message in messages
-        if not (
-            isinstance(message, SystemMessage)
-            and message.content == system_instruction
-        )
+        if not (isinstance(message, SystemMessage) and message.content == system_instruction)
     ]
 
 

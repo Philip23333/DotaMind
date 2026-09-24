@@ -183,9 +183,7 @@ def test_recording_hook_failures_do_not_change_model_call_behavior() -> None:
 
     model = ScriptedModelClient([ModelResponse.from_final("answer")])
     runtime = AgentRuntime(model, ToolRegistry())
-    response = asyncio.run(
-        _invoke(runtime, _request(), BrokenRecording(capture_full_calls=True))
-    )
+    response = asyncio.run(_invoke(runtime, _request(), BrokenRecording(capture_full_calls=True)))
 
     assert response.message.content == "answer"
     assert len(model.requests) == 1
@@ -306,7 +304,6 @@ def test_truncated_summary_response_is_kept_when_candidate_is_rejected() -> None
                 token=CancellationToken(),
                 deadline=_Deadline(2),
                 step=1,
-                max_summary_bytes=1_000,
                 trace_collector=trace,
             )
         )

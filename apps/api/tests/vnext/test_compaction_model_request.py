@@ -52,9 +52,7 @@ def _build(
     return build_compaction_request(
         previous_summary=previous_summary,
         current_user_message=current or UserMessage(content="current question"),
-        prefix_messages=(
-            [UserMessage(content="old history")] if prefix is None else prefix
-        ),
+        prefix_messages=([UserMessage(content="old history")] if prefix is None else prefix),
         current_user_prefix_index=current_index,
         max_input_bytes=max_input_bytes,
         max_output_tokens=max_output_tokens,
@@ -257,9 +255,7 @@ def test_input_budget_counts_utf8_bytes() -> None:
 
 
 def test_deferred_and_receipt_observations_are_kept_as_returned_data() -> None:
-    calls = AssistantMessage(
-        tool_calls=[_call("deferred"), _call("receipt")]
-    )
+    calls = AssistantMessage(tool_calls=[_call("deferred"), _call("receipt")])
     prefix = [
         calls,
         _result(
@@ -274,24 +270,15 @@ def test_deferred_and_receipt_observations_are_kept_as_returned_data() -> None:
 
     history = _request_data(_build(prefix=prefix))["history"]
 
-    assert history[1]["content"] == {
-        "_context_materialization": {"state": "deferred"}
-    }
+    assert history[1]["content"] == {"_context_materialization": {"state": "deferred"}}
     assert history[2]["content"] == {"_artifact_observation": {"state": "receipt_only"}}
 
 
 @pytest.mark.parametrize("budget", [0, -1, True, False])
-def test_invalid_summary_budgets_are_rejected(budget: object) -> None:
+def test_invalid_compaction_input_budgets_are_rejected(budget: object) -> None:
     with pytest.raises(CompactionSummaryError) as build_error:
         _build(max_input_bytes=budget)  # type: ignore[arg-type]
     assert build_error.value.code == "invalid_summary_budget"
-
-    with pytest.raises(CompactionSummaryError) as response_error:
-        validate_compaction_response(
-            ModelResponse.from_final("summary", finish_reason="stop"),
-            max_summary_bytes=budget,  # type: ignore[arg-type]
-        )
-    assert response_error.value.code == "invalid_summary_budget"
 
 
 @pytest.mark.parametrize("max_output_tokens", [0, -1, True, False, 1.5, "256"])
@@ -309,7 +296,6 @@ def test_valid_summary_returns_original_text_without_rewriting() -> None:
 
     result = validate_compaction_response(
         ModelResponse.from_final(summary, finish_reason="stop"),
-        max_summary_bytes=len(summary.encode("utf-8")),
     )
 
     assert result == summary
@@ -324,20 +310,14 @@ def test_valid_summary_returns_original_text_without_rewriting() -> None:
 )
 def test_assistant_summary_responses_are_rejected(message: AssistantMessage) -> None:
     with pytest.raises(CompactionSummaryError) as error:
-        validate_compaction_response(
-            ModelResponse(message=message, finish_reason="stop"),
-            max_summary_bytes=100,
-        )
+        validate_compaction_response(ModelResponse(message=message, finish_reason="stop"))
 
     assert error.value.code == "invalid_summary_response"
 
 
 def test_length_finish_reason_is_rejected_as_truncated() -> None:
     with pytest.raises(CompactionSummaryError) as error:
-        validate_compaction_response(
-            ModelResponse.from_final("partial", finish_reason="length"),
-            max_summary_bytes=100,
-        )
+        validate_compaction_response(ModelResponse.from_final("partial", finish_reason="length"))
 
     assert error.value.code == "summary_output_truncated"
 
@@ -346,8 +326,7 @@ def test_length_finish_reason_is_rejected_as_truncated() -> None:
 def test_unconfirmed_finish_reasons_are_rejected(finish_reason: str | None) -> None:
     with pytest.raises(CompactionSummaryError) as error:
         validate_compaction_response(
-            ModelResponse.from_final("summary", finish_reason=finish_reason),
-            max_summary_bytes=100,
+            ModelResponse.from_final("summary", finish_reason=finish_reason)
         )
 
     assert error.value.code == "summary_completion_unconfirmed"
@@ -356,29 +335,16 @@ def test_unconfirmed_finish_reasons_are_rejected(finish_reason: str | None) -> N
 @pytest.mark.parametrize("summary", ["", "   \n\t"])
 def test_empty_summary_is_rejected(summary: str) -> None:
     with pytest.raises(CompactionSummaryError) as error:
-        validate_compaction_response(
-            ModelResponse.from_final(summary, finish_reason="stop"),
-            max_summary_bytes=100,
-        )
+        validate_compaction_response(ModelResponse.from_final(summary, finish_reason="stop"))
 
     assert error.value.code == "empty_summary"
 
 
-def test_summary_output_budget_is_utf8_bytes_and_exact_boundary_is_allowed() -> None:
-    summary = "中文摘要"
-    exact = len(summary.encode("utf-8"))
+def test_summary_larger_than_old_8k_byte_limit_is_accepted() -> None:
+    summary = "摘要" + "x" * 8190
+    assert len(summary.encode("utf-8")) > 8 * 1024
 
     assert (
-        validate_compaction_response(
-            ModelResponse.from_final(summary, finish_reason="stop"),
-            max_summary_bytes=exact,
-        )
+        validate_compaction_response(ModelResponse.from_final(summary, finish_reason="stop"))
         == summary
     )
-    with pytest.raises(CompactionSummaryError) as error:
-        validate_compaction_response(
-            ModelResponse.from_final(summary, finish_reason="stop"),
-            max_summary_bytes=exact - 1,
-        )
-
-    assert error.value.code == "summary_output_too_large"

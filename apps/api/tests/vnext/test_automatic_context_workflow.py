@@ -230,8 +230,7 @@ def test_automatic_watermarks_keep_artifacts_rereadable_across_two_compactions()
         context_compaction_trigger_percent=70,
         compaction_recent_history_bytes=1_000,
         compaction_max_input_bytes=100_000,
-        compaction_max_output_tokens=128,
-        compaction_max_summary_bytes=2_000,
+        compaction_reserve_tokens=160,
         max_materialized_context_bytes=100_000,
     )
     runtime = AgentRuntime(model, _registry(store, documents), limits=limits)
@@ -355,12 +354,9 @@ def test_automatic_watermarks_keep_artifacts_rereadable_across_two_compactions()
         for request in business_requests
     ]
     assert max(raw_bytes) > 0
+    assert any(later > earlier for earlier, later in zip(raw_bytes, raw_bytes[1:], strict=False))
     assert any(
-        later > earlier for earlier, later in zip(raw_bytes, raw_bytes[1:], strict=False)
-    )
-    assert any(
-        0 < later < earlier
-        for earlier, later in zip(raw_bytes, raw_bytes[1:], strict=False)
+        0 < later < earlier for earlier, later in zip(raw_bytes, raw_bytes[1:], strict=False)
     ), raw_bytes
     successful_steps = [item for item in snapshot["steps"] if "context_accounting" in item]
     by_step = {item["step"]: item["context_accounting"] for item in successful_steps}
@@ -429,8 +425,7 @@ def test_real_adapter_overflow_classification_compacts_and_retries_same_step() -
         context_estimate_bytes_per_token=1,
         compaction_recent_history_bytes=1,
         compaction_max_input_bytes=100_000,
-        compaction_max_output_tokens=128,
-        compaction_max_summary_bytes=2_000,
+        compaction_reserve_tokens=160,
     )
     history = SessionExecutionHistory()
     request_id = uuid4()

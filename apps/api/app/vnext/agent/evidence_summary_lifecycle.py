@@ -39,7 +39,7 @@ class CompactionSummaryError(ValueError):
     """A compaction request or response violated its explicit contract."""
 
     _messages = {
-        "invalid_summary_budget": "summary byte budget must be a positive integer",
+        "invalid_summary_budget": "compaction budgets must be positive integers",
         "empty_compaction_history": "compaction history must contain source material",
         "invalid_current_user_position": "current user position is not valid for compaction",
         "summary_input_too_large": "compaction request exceeds its input byte budget",
@@ -47,7 +47,6 @@ class CompactionSummaryError(ValueError):
         "summary_output_truncated": "compaction summary was truncated",
         "summary_completion_unconfirmed": "compaction completion was not confirmed",
         "empty_summary": "compaction summary must not be blank",
-        "summary_output_too_large": "compaction summary exceeds its output byte budget",
     }
 
     def __init__(self, code: str) -> None:
@@ -258,14 +257,9 @@ def build_compaction_request(
     return request
 
 
-def validate_compaction_response(
-    response: ModelResponse,
-    *,
-    max_summary_bytes: int,
-) -> str:
-    """Validate one complete, bounded summary response without rewriting it."""
+def validate_compaction_response(response: ModelResponse) -> str:
+    """Validate one complete summary response without rewriting it."""
 
-    _validate_summary_budget(max_summary_bytes)
     if not isinstance(response.message, FinalMessage):
         raise CompactionSummaryError("invalid_summary_response")
     if response.finish_reason == "length":
@@ -275,8 +269,6 @@ def validate_compaction_response(
     summary = response.message.content
     if not summary.strip():
         raise CompactionSummaryError("empty_summary")
-    if len(summary.encode("utf-8")) > max_summary_bytes:
-        raise CompactionSummaryError("summary_output_too_large")
     return summary
 
 

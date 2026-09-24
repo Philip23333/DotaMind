@@ -153,8 +153,7 @@ def _limits() -> AgentLimits:
         degraded_answer_timeout_seconds=5,
         compaction_recent_history_bytes=1,
         compaction_max_input_bytes=100_000,
-        compaction_max_output_tokens=128,
-        compaction_max_summary_bytes=4_096,
+        compaction_reserve_tokens=160,
         max_materialized_context_bytes=200_000,
     )
 
@@ -319,16 +318,18 @@ def test_explicit_compaction_preserves_artifacts_and_supports_two_rereads() -> N
         for call in record.message.tool_calls  # type: ignore[union-attr]
     ]
     tool_results = [
-        record.message.tool_call_id
-        for record in history.records
-        if record.kind == "tool_result"
+        record.message.tool_call_id for record in history.records if record.kind == "tool_result"
     ]
-    assert tool_calls == tool_results == [
-        "lookup-first",
-        "lookup-second",
-        "lookup-third",
-        "read-first-detail",
-    ]
+    assert (
+        tool_calls
+        == tool_results
+        == [
+            "lookup-first",
+            "lookup-second",
+            "lookup-third",
+            "read-first-detail",
+        ]
+    )
     assert len(history.compaction_records) == 2
     assert history.summary == "summary two intentionally omits all artifact references"
     assert len(history.artifact_locators) == 3

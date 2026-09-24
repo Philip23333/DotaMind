@@ -67,7 +67,6 @@ def _call(
     token: CancellationToken | None = None,
     deadline: _Deadline | None = None,
     step: int = 4,
-    max_summary_bytes: int = 10_000,
     trace: AgentTraceCollector | None = None,
 ) -> object:
     return asyncio.run(
@@ -76,7 +75,6 @@ def _call(
             token=token or CancellationToken(),
             deadline=deadline or _Deadline(2),
             step=step,
-            max_summary_bytes=max_summary_bytes,
             trace_collector=trace,
         )
     )
@@ -199,7 +197,6 @@ def test_compaction_call_cancels_an_in_flight_model_request() -> None:
                 token=token,
                 deadline=_Deadline(2),
                 step=3,
-                max_summary_bytes=10_000,
                 trace_collector=trace,
             )
         )
@@ -238,7 +235,6 @@ def test_compaction_call_uses_remaining_shared_deadline() -> None:
                     token=CancellationToken(),
                     deadline=deadline,
                     step=5,
-                    max_summary_bytes=10_000,
                     trace_collector=trace,
                 ),
                 timeout=1,
@@ -253,9 +249,7 @@ def test_compaction_call_uses_remaining_shared_deadline() -> None:
 
 def test_returned_response_is_rejected_when_summary_validation_fails() -> None:
     usage = {"completion_tokens": 3}
-    model = ScriptedModelClient(
-        [ModelResponse.from_final(" ", finish_reason="stop", usage=usage)]
-    )
+    model = ScriptedModelClient([ModelResponse.from_final(" ", finish_reason="stop", usage=usage)])
     trace = AgentTraceCollector()
 
     with pytest.raises(CompactionSummaryError) as error:
@@ -265,16 +259,17 @@ def test_returned_response_is_rejected_when_summary_validation_fails() -> None:
     assert trace.snapshot()["compaction_calls"][0]["usage"] == usage
 
 
-def test_compaction_call_rejects_summary_that_exceeds_byte_budget() -> None:
+def test_compaction_call_accepts_summary_larger_than_old_8k_byte_limit() -> None:
+    summary = "摘要" + "x" * 8190
     model = ScriptedModelClient(
-        [ModelResponse.from_final("中文摘要", finish_reason="stop", usage={"n": 1})]
+        [ModelResponse.from_final(summary, finish_reason="stop", usage={"n": 1})]
     )
     trace = AgentTraceCollector()
 
-    with pytest.raises(CompactionSummaryError) as error:
-        _call(_runtime(model), _request(), max_summary_bytes=1, trace=trace)
+    result = _call(_runtime(model), _request(), trace=trace)
 
-    assert error.value.code == "summary_output_too_large"
+    assert result.summary == summary
+    assert len(summary.encode("utf-8")) > 8 * 1024
     assert trace.snapshot()["compaction_calls"][0]["usage"] == {"n": 1}
 
 
@@ -304,7 +299,6 @@ def test_cancellation_after_provider_return_does_not_deliver_a_summary() -> None
                 token=token,
                 deadline=_Deadline(2),
                 step=6,
-                max_summary_bytes=10_000,
                 trace_collector=trace,
             )
         return model, trace
@@ -348,7 +342,6 @@ def test_deadline_after_provider_return_preserves_usage_without_a_candidate() ->
                 token=CancellationToken(),
                 deadline=deadline,
                 step=7,
-                max_summary_bytes=10_000,
                 trace_collector=trace,
             )
         return model, trace
@@ -360,9 +353,7 @@ def test_deadline_after_provider_return_preserves_usage_without_a_candidate() ->
         {
             "step": 7,
             "status": "deadline_exceeded",
-            "duration_seconds": trace.snapshot()["compaction_calls"][0][
-                "duration_seconds"
-            ],
+            "duration_seconds": trace.snapshot()["compaction_calls"][0]["duration_seconds"],
             "usage": {"completion_tokens": 8, "details": {"count": 2}},
             "error_code": "deadline_exceeded",
         }
@@ -406,7 +397,6 @@ def test_stream_cancellation_after_terminal_response_preserves_usage_and_cleans_
                     token=token,
                     deadline=_Deadline(2),
                     step=8,
-                    max_summary_bytes=10_000,
                     trace_collector=trace,
                 ),
                 timeout=1,
@@ -459,7 +449,6 @@ def test_stream_deadline_after_terminal_response_preserves_usage_and_cleans_up()
                     token=CancellationToken(),
                     deadline=deadline,
                     step=9,
-                    max_summary_bytes=10_000,
                     trace_collector=trace,
                 ),
                 timeout=1,
@@ -542,16 +531,6 @@ def test_compaction_call_rejects_invalid_request_shape_without_model_call(
     assert trace.snapshot()["compaction_calls"][0]["status"] == "failed"
 
 
-def test_compaction_call_rejects_invalid_summary_budget_without_model_call() -> None:
-    model = ScriptedModelClient([])
-
-    with pytest.raises(CompactionSummaryError) as error:
-        _call(_runtime(model), _request(), max_summary_bytes=True)
-
-    assert error.value.code == "invalid_summary_budget"
-    assert model.requests == []
-
-
 def test_compaction_call_does_not_reset_task_or_session_state() -> None:
     history = SessionExecutionHistory()
     request_id = uuid4()
@@ -574,9 +553,7 @@ def test_compaction_call_does_not_reset_task_or_session_state() -> None:
     before_records = history.records
     before_locators = history.artifact_locators
     before_plan = coordinator.plan_snapshot()
-    model = ScriptedModelClient(
-        [ModelResponse.from_final("summary", finish_reason="stop")]
-    )
+    model = ScriptedModelClient([ModelResponse.from_final("summary", finish_reason="stop")])
 
     _call(
         _runtime(model, task_state_coordinator=coordinator),

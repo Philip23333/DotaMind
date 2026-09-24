@@ -31,6 +31,9 @@ _LIMIT_ENV_NAMES = (
     "DOTAMIND_CONTEXT_COMPACTION_TRIGGER_PERCENT",
     "DOTAMIND_COMPACTION_RECENT_HISTORY_BYTES",
     "DOTAMIND_COMPACTION_MAX_INPUT_BYTES",
+    "DOTAMIND_COMPACTION_RESERVE_TOKENS",
+    "DOTAMIND_COMPACTION_MODEL_MAX_OUTPUT_TOKENS",
+    # Legacy names are cleared too, but are deliberately no longer consumed.
     "DOTAMIND_COMPACTION_MAX_OUTPUT_TOKENS",
     "DOTAMIND_COMPACTION_MAX_SUMMARY_BYTES",
 )
@@ -72,8 +75,8 @@ DOTAMIND_CONTEXT_ESTIMATE_BYTES_PER_TOKEN=3
 DOTAMIND_CONTEXT_COMPACTION_TRIGGER_PERCENT=75
 DOTAMIND_COMPACTION_RECENT_HISTORY_BYTES=4000
 DOTAMIND_COMPACTION_MAX_INPUT_BYTES=50000
-DOTAMIND_COMPACTION_MAX_OUTPUT_TOKENS=500
-DOTAMIND_COMPACTION_MAX_SUMMARY_BYTES=6000
+DOTAMIND_COMPACTION_RESERVE_TOKENS=10000
+DOTAMIND_COMPACTION_MODEL_MAX_OUTPUT_TOKENS=500
 """,
     )
 
@@ -88,8 +91,8 @@ DOTAMIND_COMPACTION_MAX_SUMMARY_BYTES=6000
         "context_compaction_trigger_percent": 75,
         "compaction_recent_history_bytes": 4000,
         "compaction_max_input_bytes": 50000,
-        "compaction_max_output_tokens": 500,
-        "compaction_max_summary_bytes": 6000,
+        "compaction_reserve_tokens": 10000,
+        "compaction_model_max_output_tokens": 500,
     }
 
 
@@ -101,17 +104,54 @@ def test_process_environment_overrides_file_values(
         monkeypatch,
         tmp_path,
         "DOTAMIND_CONTEXT_WINDOW_TOKENS=12000\n"
-        "DOTAMIND_COMPACTION_MAX_OUTPUT_TOKENS=500\n"
-        "DOTAMIND_COMPACTION_MAX_SUMMARY_BYTES=6000\n",
+        "DOTAMIND_COMPACTION_RESERVE_TOKENS=10000\n"
+        "DOTAMIND_COMPACTION_MODEL_MAX_OUTPUT_TOKENS=4096\n",
     )
     monkeypatch.setenv("DOTAMIND_CONTEXT_WINDOW_TOKENS", " 15000 ")
-    monkeypatch.setenv("DOTAMIND_COMPACTION_MAX_OUTPUT_TOKENS", "700")
+    monkeypatch.setenv("DOTAMIND_COMPACTION_RESERVE_TOKENS", "12000")
+    monkeypatch.setenv("DOTAMIND_COMPACTION_MODEL_MAX_OUTPUT_TOKENS", "700")
 
     limits = VNextSettings.from_env().agent_limits
 
     assert limits.context_window_tokens == 15000
-    assert limits.compaction_max_output_tokens == 700
-    assert limits.compaction_max_summary_bytes == 6000
+    assert limits.compaction_reserve_tokens == 12000
+    assert limits.compaction_model_max_output_tokens == 700
+
+
+@pytest.mark.parametrize(
+    ("file_cap", "process_cap"),
+    [("", None), ("4096", " ")],
+)
+def test_blank_model_output_cap_means_unknown(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    file_cap: str,
+    process_cap: str | None,
+) -> None:
+    _isolate_env(monkeypatch)
+    _write_env(
+        monkeypatch,
+        tmp_path,
+        f"DOTAMIND_COMPACTION_MODEL_MAX_OUTPUT_TOKENS={file_cap}\n",
+    )
+    if process_cap is not None:
+        monkeypatch.setenv("DOTAMIND_COMPACTION_MODEL_MAX_OUTPUT_TOKENS", process_cap)
+
+    assert VNextSettings.from_env().agent_limits.compaction_model_max_output_tokens is None
+
+
+def test_legacy_compaction_output_environment_variables_are_ignored(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _isolate_env(monkeypatch)
+    monkeypatch.setattr(composition, "_VNEXT_ENV_PATH", Path("/does/not/exist"))
+    monkeypatch.setenv("DOTAMIND_COMPACTION_MAX_OUTPUT_TOKENS", "7")
+    monkeypatch.setenv("DOTAMIND_COMPACTION_MAX_SUMMARY_BYTES", "9")
+
+    limits = VNextSettings.from_env().agent_limits
+
+    assert limits.compaction_reserve_tokens == 16384
+    assert limits.compaction_model_max_output_tokens is None
 
 
 @pytest.mark.parametrize("value", ["", "   "])
@@ -132,6 +172,8 @@ def test_empty_process_window_explicitly_disables_file_window(
         ("DOTAMIND_CONTEXT_OUTPUT_RESERVE_TOKENS", "true"),
         ("DOTAMIND_CONTEXT_ESTIMATE_BYTES_PER_TOKEN", "128k"),
         ("DOTAMIND_COMPACTION_MAX_INPUT_BYTES", ""),
+        ("DOTAMIND_COMPACTION_RESERVE_TOKENS", ""),
+        ("DOTAMIND_COMPACTION_MODEL_MAX_OUTPUT_TOKENS", "1.5"),
     ],
 )
 def test_invalid_context_governance_values_are_rejected(
@@ -152,6 +194,8 @@ def test_invalid_context_governance_values_are_rejected(
         "DOTAMIND_CONTEXT_WINDOW_TOKENS=-1\n",
         "DOTAMIND_CONTEXT_COMPACTION_TRIGGER_PERCENT=0\n",
         "DOTAMIND_CONTEXT_COMPACTION_TRIGGER_PERCENT=100\n",
+        "DOTAMIND_COMPACTION_RESERVE_TOKENS=1\n",
+        "DOTAMIND_COMPACTION_MODEL_MAX_OUTPUT_TOKENS=0\n",
         "DOTAMIND_CONTEXT_WINDOW_TOKENS=1000\n"
         "DOTAMIND_CONTEXT_OUTPUT_RESERVE_TOKENS=600\n"
         "DOTAMIND_CONTEXT_SAFETY_MARGIN_TOKENS=400\n",
@@ -194,8 +238,8 @@ def test_build_runtime_receives_an_isolated_configured_limits(
         context_compaction_trigger_percent=75,
         compaction_recent_history_bytes=4000,
         compaction_max_input_bytes=50000,
-        compaction_max_output_tokens=500,
-        compaction_max_summary_bytes=6000,
+        compaction_reserve_tokens=625,
+        compaction_model_max_output_tokens=500,
     )
     settings = VNextSettings(agent_limits=configured)
 
@@ -289,8 +333,8 @@ def test_product_chat_entry_uses_environment_configured_context_governance(
         "DOTAMIND_CONTEXT_COMPACTION_TRIGGER_PERCENT": "80",
         "DOTAMIND_COMPACTION_RECENT_HISTORY_BYTES": "1",
         "DOTAMIND_COMPACTION_MAX_INPUT_BYTES": "100000",
-        "DOTAMIND_COMPACTION_MAX_OUTPUT_TOKENS": "128",
-        "DOTAMIND_COMPACTION_MAX_SUMMARY_BYTES": "1000",
+        "DOTAMIND_COMPACTION_RESERVE_TOKENS": "160",
+        "DOTAMIND_COMPACTION_MODEL_MAX_OUTPUT_TOKENS": "128",
     }.items():
         monkeypatch.setenv(name, value)
     monkeypatch.setattr(composition, "OpenAICompatibleModelClient", _ConfiguredChatModel)
@@ -336,9 +380,20 @@ def test_product_chat_entry_uses_environment_configured_context_governance(
     assert len(created) == 1
     model = created[0].model
     assert isinstance(model, _ConfiguredChatModel)
-    assert any(
-        request.metadata.get("purpose") == "context_compaction"
+    compaction_requests = [
+        request
         for request in model.requests
+        if request.metadata.get("purpose") == "context_compaction"
+    ]
+    assert len(compaction_requests) == 1
+    assert compaction_requests[0].max_output_tokens == 128
+    assert all(
+        request.max_output_tokens == 200
+        for request in model.requests
+        if request.metadata.get("purpose") != "context_compaction"
+    )
+    assert any(
+        request.metadata.get("purpose") == "context_compaction" for request in model.requests
     )
     assert service._sessions[session_id].history.compaction_records
     assert any(

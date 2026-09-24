@@ -84,9 +84,7 @@ class VNextSettings:
         file_values = dotenv_values(_VNEXT_ENV_PATH)
         return cls(
             llm_api_key=_env_value("DOTAMIND_LLM_API_KEY", "", file_values) or "",
-            llm_base_url=_env_value(
-                "DOTAMIND_LLM_BASE_URL", defaults.llm_base_url, file_values
-            )
+            llm_base_url=_env_value("DOTAMIND_LLM_BASE_URL", defaults.llm_base_url, file_values)
             or defaults.llm_base_url,
             llm_model=_env_value("DOTAMIND_LLM_MODEL", defaults.llm_model, file_values)
             or defaults.llm_model,
@@ -148,8 +146,7 @@ _AGENT_LIMIT_ENV_FIELDS = (
     ("DOTAMIND_CONTEXT_COMPACTION_TRIGGER_PERCENT", "context_compaction_trigger_percent"),
     ("DOTAMIND_COMPACTION_RECENT_HISTORY_BYTES", "compaction_recent_history_bytes"),
     ("DOTAMIND_COMPACTION_MAX_INPUT_BYTES", "compaction_max_input_bytes"),
-    ("DOTAMIND_COMPACTION_MAX_OUTPUT_TOKENS", "compaction_max_output_tokens"),
-    ("DOTAMIND_COMPACTION_MAX_SUMMARY_BYTES", "compaction_max_summary_bytes"),
+    ("DOTAMIND_COMPACTION_RESERVE_TOKENS", "compaction_reserve_tokens"),
 )
 
 
@@ -166,6 +163,13 @@ def _agent_limits_from_env(file_values: dict[str, str | None]) -> AgentLimits:
                 raise ValueError(f"{name} must be an integer")
             continue
         values[field_name] = _parse_required_integer(name, raw_value)
+    model_output_name = "DOTAMIND_COMPACTION_MODEL_MAX_OUTPUT_TOKENS"
+    model_output_value = _env_value(model_output_name, None, file_values)
+    if model_output_value is not None and model_output_value.strip():
+        values["compaction_model_max_output_tokens"] = _parse_required_integer(
+            model_output_name,
+            model_output_value,
+        )
     return AgentLimits(**values)
 
 
@@ -246,9 +250,7 @@ def build_vnext_registry(
     artifact_store = SessionArtifactStore()
     manuals = ManualResolver()
     registry = ToolRegistry(
-        result_processor=ArtifactBackedToolResultProcessor(
-            ToolResponseExternalizer(artifact_store)
-        )
+        result_processor=ArtifactBackedToolResultProcessor(ToolResponseExternalizer(artifact_store))
     )
     register_artifact_tools(
         registry,

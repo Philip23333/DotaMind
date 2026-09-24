@@ -201,9 +201,7 @@ def test_adapter_complete_maps_explicit_output_limit_to_provider_payload() -> No
         )
 
     result = asyncio.run(
-        _adapter(handler).complete(
-            _request([UserMessage(content="go")], max_output_tokens=256)
-        )
+        _adapter(handler).complete(_request([UserMessage(content="go")], max_output_tokens=256))
     )
 
     assert result.message == FinalMessage(content="ok")
@@ -247,9 +245,7 @@ def test_adapter_output_limit_is_request_scoped() -> None:
         )
 
     client = _adapter(handler)
-    asyncio.run(
-        client.complete(_request([UserMessage(content="first")], max_output_tokens=256))
-    )
+    asyncio.run(client.complete(_request([UserMessage(content="first")], max_output_tokens=256)))
     asyncio.run(client.complete(_request([UserMessage(content="second")])))
 
     assert payloads[0]["max_tokens"] == 256
@@ -306,10 +302,7 @@ def test_adapter_maps_provider_unsafe_tool_names_at_its_boundary() -> None:
     result = asyncio.run(_adapter(handler).complete(request))
 
     assert seen["payload"]["tools"][0]["function"]["name"] == "sample_lookup"
-    assert (
-        seen["payload"]["messages"][1]["tool_calls"][0]["function"]["name"]
-        == "sample_lookup"
-    )
+    assert seen["payload"]["messages"][1]["tool_calls"][0]["function"]["name"] == "sample_lookup"
     assert isinstance(result.message, AssistantMessage)
     assert result.message.tool_calls[0].name == "sample.lookup"
 
@@ -602,11 +595,7 @@ def test_compaction_request_limit_reaches_http_and_length_is_rejected() -> None:
         seen["payload"] = json.loads(request.read())
         return httpx.Response(
             200,
-            json={
-                "choices": [
-                    {"message": {"content": "partial"}, "finish_reason": "length"}
-                ]
-            },
+            json={"choices": [{"message": {"content": "partial"}, "finish_reason": "length"}]},
             request=request,
         )
 
@@ -624,7 +613,7 @@ def test_compaction_request_limit_reaches_http_and_length_is_rejected() -> None:
 
     assert seen["payload"]["max_tokens"] == 256
     with pytest.raises(CompactionSummaryError) as error:
-        validate_compaction_response(response, max_summary_bytes=100)
+        validate_compaction_response(response)
     assert error.value.code == "summary_output_truncated"
 
 
@@ -633,9 +622,7 @@ def test_compaction_request_normal_stop_returns_valid_summary() -> None:
         return httpx.Response(
             200,
             json={
-                "choices": [
-                    {"message": {"content": "complete summary"}, "finish_reason": "stop"}
-                ]
+                "choices": [{"message": {"content": "complete summary"}, "finish_reason": "stop"}]
             },
             request=request,
         )
@@ -650,4 +637,4 @@ def test_compaction_request_normal_stop_returns_valid_summary() -> None:
     )
     response = asyncio.run(_adapter(handler).complete(request))
 
-    assert validate_compaction_response(response, max_summary_bytes=100) == "complete summary"
+    assert validate_compaction_response(response) == "complete summary"
