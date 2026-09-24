@@ -28,6 +28,7 @@ from app.vnext.agent.errors import (
     AgentCancelledError,
     AgentDeadlineExceeded,
     AgentRuntimeError,
+    CompactionFailedError,
     ContextCapacityExceeded,
     ModelContextWindowExceeded,
     ModelProtocolError,
@@ -39,6 +40,7 @@ from app.vnext.agent.events import (
     AgentEvent,
     AgentFailed,
     AgentStarted,
+    CompactionFailed,
     ModelRequested,
     ModelResponded,
     TextDelta,
@@ -63,7 +65,7 @@ from app.vnext.agent.runtime_prompt import render_runtime_prompt
 from app.vnext.agent.task_state import TaskStateCoordinator
 from app.vnext.agent.trace import AgentTraceCollector
 from app.vnext.agent.transcript_rewrite import TranscriptRewriter
-from app.vnext.llm.errors import ModelContextWindowError
+from app.vnext.llm.errors import ModelContextWindowError, ModelTransientError
 from app.vnext.llm.protocol import (
     AssistantMessage,
     FinalMessage,
@@ -91,6 +93,35 @@ user question and retained history. Artifact locators do not mean that the
 underlying document was read and do not prove a conclusion. Use the existing
 Artifact tools to read details when needed.
 """
+
+_COMPACTION_RETRY_DELAYS_SECONDS = (1, 2, 4)
+_SESSION_COMPACTION_FAILURE_CODES = frozenset(
+    {
+        "session_not_initialized",
+        "unknown_request",
+        "inactive_request",
+        "stale_context_revision",
+        "empty_summary",
+        "invalid_effective_history",
+        "empty_compaction_history",
+    }
+)
+
+
+class _CompactionFailureDetails(Exception):
+    def __init__(
+        self,
+        *,
+        summary_kind: Literal["history", "turn_prefix"] | None,
+        attempt_count: int,
+        reason_code: str,
+        cause: Exception,
+    ) -> None:
+        super().__init__(reason_code)
+        self.summary_kind = summary_kind
+        self.attempt_count = attempt_count
+        self.reason_code = reason_code
+        self.cause = cause
 
 
 class CancellationToken:
@@ -308,6 +339,8 @@ class AgentRuntime:
                             recent_history_tokens=self.limits.compaction_keep_recent_tokens,
                             max_input_bytes=self.limits.compaction_max_input_bytes,
                             trace_collector=trace_collector,
+                            trigger=compaction_trigger,
+                            stage="execution",
                         )
                     except AgentCancelledError:
                         raise
@@ -445,6 +478,8 @@ class AgentRuntime:
                                 recent_history_tokens=self.limits.compaction_keep_recent_tokens,
                                 max_input_bytes=self.limits.compaction_max_input_bytes,
                                 trace_collector=trace_collector,
+                                trigger="overflow",
+                                stage="execution",
                             )
                         except AgentCancelledError:
                             if trace_collector is not None:
@@ -844,19 +879,18 @@ class AgentRuntime:
                             )
                         materialized_bytes_before = materialization_budget.active_bytes
                         request_start_before = request_start
-                        try:
-                            compacted = await self._compact_session_history(
-                                execution_history=execution_history,
-                                request_id=request_id,
-                                token=token,
-                                deadline=primary_deadline,
-                                step=answer_step,
-                                recent_history_tokens=(self.limits.compaction_keep_recent_tokens),
-                                max_input_bytes=self.limits.compaction_max_input_bytes,
-                                trace_collector=trace_collector,
-                            )
-                        except CompactionSummaryError as exc:
-                            raise ModelProtocolError(f"answer compaction failed: {exc}") from exc
+                        compacted = await self._compact_session_history(
+                            execution_history=execution_history,
+                            request_id=request_id,
+                            token=token,
+                            deadline=primary_deadline,
+                            step=answer_step,
+                            recent_history_tokens=(self.limits.compaction_keep_recent_tokens),
+                            max_input_bytes=self.limits.compaction_max_input_bytes,
+                            trace_collector=trace_collector,
+                            trigger="watermark",
+                            stage="primary_answer",
+                        )
                         if compacted:
                             request_start, request_messages, materialization_budget = (
                                 self._rebuild_after_compaction(
@@ -981,6 +1015,8 @@ class AgentRuntime:
                                 recent_history_tokens=(self.limits.compaction_keep_recent_tokens),
                                 max_input_bytes=self.limits.compaction_max_input_bytes,
                                 trace_collector=trace_collector,
+                                trigger="overflow",
+                                stage="primary_answer",
                             )
                         except AgentCancelledError:
                             if trace_collector is not None:
@@ -1015,10 +1051,6 @@ class AgentRuntime:
                                     ),
                                 )
                             recovery_pending = False
-                            if isinstance(recovery_error, CompactionSummaryError):
-                                raise ModelProtocolError(
-                                    f"answer compaction failed: {recovery_error}"
-                                ) from recovery_error
                             raise
 
                         if not compacted:
@@ -1433,6 +1465,41 @@ class AgentRuntime:
             )
             yield await self._publish(event, sink)
             raise
+        except CompactionFailedError as exc:
+            if trace_collector is not None:
+                trace_collector.compaction_failed(
+                    step=exc.step,
+                    trigger=exc.trigger,
+                    stage=exc.stage,
+                    summary_kind=exc.summary_kind,
+                    reason_code=exc.reason_code,
+                    attempt_count=exc.attempt_count,
+                )
+                trace_collector.terminal(
+                    status="failed", error_code=exc.code, error_message=str(exc)
+                )
+            yield await self._publish(
+                CompactionFailed(
+                    step=exc.step,
+                    trigger=exc.trigger,
+                    stage=exc.stage,
+                    summary_kind=exc.summary_kind,
+                    reason_code=exc.reason_code,
+                    attempt_count=exc.attempt_count,
+                ),
+                sink,
+            )
+            yield await self._publish(
+                AgentFailed(
+                    step=exc.step,
+                    duration=max(0.0, monotonic() - started_at),
+                    error_code=exc.code,
+                    error_message=str(exc),
+                    details=exc.details,
+                ),
+                sink,
+            )
+            raise
         except AgentRuntimeError as exc:
             if trace_collector is not None:
                 trace_collector.terminal(
@@ -1735,6 +1802,7 @@ class AgentRuntime:
         request: ModelRequest,
         *,
         kind: Literal["history", "turn_prefix"] = "history",
+        attempt: int = 1,
         token: CancellationToken,
         deadline: _Deadline,
         step: int,
@@ -1742,8 +1810,9 @@ class AgentRuntime:
     ) -> CompactionSummaryResult:
         """Generate one validated summary candidate without committing it."""
 
+        self._check_controls(token, deadline)
+        _validate_compaction_call(request, kind=kind)
         started = monotonic()
-        response: ModelResponse | None = None
         usage: dict[str, Any] = {}
 
         def capture_response(received: ModelResponse) -> None:
@@ -1751,8 +1820,6 @@ class AgentRuntime:
             usage = deepcopy(received.usage)
 
         try:
-            self._check_controls(token, deadline)
-            _validate_compaction_call(request, kind=kind)
             response, _, _ = await self._invoke_model(
                 request,
                 purpose="compaction",
@@ -1776,6 +1843,7 @@ class AgentRuntime:
             if trace_collector is not None:
                 trace_collector.compaction_call(
                     kind=kind,
+                    attempt=attempt,
                     step=step,
                     status="generated",
                     duration_seconds=duration_seconds,
@@ -1787,6 +1855,7 @@ class AgentRuntime:
             self._record_compaction_call(
                 trace_collector,
                 kind=kind,
+                attempt=attempt,
                 step=step,
                 status="cancelled",
                 started=started,
@@ -1798,6 +1867,7 @@ class AgentRuntime:
             self._record_compaction_call(
                 trace_collector,
                 kind=kind,
+                attempt=attempt,
                 step=step,
                 status="deadline_exceeded",
                 started=started,
@@ -1809,6 +1879,7 @@ class AgentRuntime:
             self._record_compaction_call(
                 trace_collector,
                 kind=kind,
+                attempt=attempt,
                 step=step,
                 status="failed",
                 started=started,
@@ -1816,6 +1887,69 @@ class AgentRuntime:
                 error_code=getattr(exc, "code", None),
             )
             raise
+
+    async def _generate_compaction_summary_with_retry(
+        self,
+        request: ModelRequest,
+        *,
+        kind: Literal["history", "turn_prefix"],
+        token: CancellationToken,
+        deadline: _Deadline,
+        step: int,
+        trace_collector: AgentTraceCollector | None,
+    ) -> CompactionSummaryResult:
+        max_attempts = self.limits.compaction_max_retries + 1
+        for attempt in range(1, max_attempts + 1):
+            self._check_controls(token, deadline)
+            try:
+                return await self._generate_compaction_summary(
+                    request,
+                    kind=kind,
+                    attempt=attempt,
+                    token=token,
+                    deadline=deadline,
+                    step=step,
+                    trace_collector=trace_collector,
+                )
+            except (AgentCancelledError, AgentDeadlineExceeded, asyncio.CancelledError):
+                raise
+            except ModelProviderError as exc:
+                is_transient = isinstance(exc.cause, ModelTransientError)
+                if is_transient and attempt < max_attempts:
+                    delay_seconds = _COMPACTION_RETRY_DELAYS_SECONDS[attempt - 1]
+                    if trace_collector is not None:
+                        trace_collector.compaction_retry(
+                            step=step,
+                            kind=kind,
+                            failed_attempt=attempt,
+                            next_attempt=attempt + 1,
+                            delay_seconds=delay_seconds,
+                            error_code=exc.code,
+                        )
+                    await self._await_controlled(
+                        asyncio.sleep(delay_seconds),
+                        token,
+                        deadline,
+                    )
+                    self._check_controls(token, deadline)
+                    continue
+                reason_code = "transient_retries_exhausted" if is_transient else exc.code
+                failure = _CompactionFailureDetails(
+                    summary_kind=kind,
+                    attempt_count=attempt,
+                    reason_code=reason_code,
+                    cause=exc,
+                )
+                raise failure from exc
+            except (CompactionSummaryError, ModelProtocolError) as exc:
+                failure = _CompactionFailureDetails(
+                    summary_kind=kind,
+                    attempt_count=attempt,
+                    reason_code=getattr(exc, "code", "invalid_summary_response"),
+                    cause=exc,
+                )
+                raise failure from exc
+        raise AssertionError("summary retry loop exited without a result or failure")
 
     async def _compact_session_history(
         self,
@@ -1828,8 +1962,70 @@ class AgentRuntime:
         recent_history_tokens: int,
         max_input_bytes: int,
         trace_collector: AgentTraceCollector | None,
+        trigger: Literal["explicit", "watermark", "overflow"] = "explicit",
+        stage: Literal["execution", "primary_answer"] = "execution",
     ) -> bool:
         """Generate and atomically commit one session-history compaction."""
+
+        try:
+            return await self._compact_session_history_candidate(
+                execution_history=execution_history,
+                request_id=request_id,
+                token=token,
+                deadline=deadline,
+                step=step,
+                recent_history_tokens=recent_history_tokens,
+                max_input_bytes=max_input_bytes,
+                trace_collector=trace_collector,
+            )
+        except (AgentCancelledError, AgentDeadlineExceeded, asyncio.CancelledError):
+            raise
+        except _CompactionFailureDetails as exc:
+            raise CompactionFailedError(
+                step=step,
+                trigger=trigger,
+                stage=stage,
+                summary_kind=exc.summary_kind,
+                reason_code=exc.reason_code,
+                attempt_count=exc.attempt_count,
+                cause=exc.cause,
+            ) from exc.cause
+        except (CompactionSummaryError, HistoryCompactionRangeError, ModelProtocolError) as exc:
+            raise CompactionFailedError(
+                step=step,
+                trigger=trigger,
+                stage=stage,
+                summary_kind=None,
+                reason_code=getattr(exc, "code", "invalid_compaction_input"),
+                attempt_count=0,
+                cause=exc,
+            ) from exc
+        except ValueError as exc:
+            reason_code = getattr(exc, "code", None)
+            if reason_code not in _SESSION_COMPACTION_FAILURE_CODES:
+                raise
+            raise CompactionFailedError(
+                step=step,
+                trigger=trigger,
+                stage=stage,
+                summary_kind=None,
+                reason_code=reason_code,
+                attempt_count=0,
+                cause=exc,
+            ) from exc
+
+    async def _compact_session_history_candidate(
+        self,
+        *,
+        execution_history: Any,
+        request_id: Any,
+        token: CancellationToken,
+        deadline: _Deadline,
+        step: int,
+        recent_history_tokens: int,
+        max_input_bytes: int,
+        trace_collector: AgentTraceCollector | None,
+    ) -> bool:
 
         self._check_controls(token, deadline)
         if type(recent_history_tokens) is not int or recent_history_tokens <= 0:
@@ -1875,36 +2071,52 @@ class AgentRuntime:
         history_request: ModelRequest | None = None
         turn_prefix_request: ModelRequest | None = None
         if preparation.history_messages:
-            history_output_tokens = resolve_compaction_output_tokens(
-                kind="history",
-                reserve_tokens=self.limits.compaction_reserve_tokens,
-                model_max_output_tokens=self.limits.compaction_model_max_output_tokens,
-            )
-            history_request = build_history_compaction_request(
-                previous_summary=snapshot.summary,
-                history_messages=preparation.history_messages,
-                max_input_bytes=max_input_bytes,
-                max_output_tokens=history_output_tokens,
-            )
-            _validate_compaction_call(history_request, kind="history")
+            try:
+                history_output_tokens = resolve_compaction_output_tokens(
+                    kind="history",
+                    reserve_tokens=self.limits.compaction_reserve_tokens,
+                    model_max_output_tokens=self.limits.compaction_model_max_output_tokens,
+                )
+                history_request = build_history_compaction_request(
+                    previous_summary=snapshot.summary,
+                    history_messages=preparation.history_messages,
+                    max_input_bytes=max_input_bytes,
+                    max_output_tokens=history_output_tokens,
+                )
+                _validate_compaction_call(history_request, kind="history")
+            except (CompactionSummaryError, ModelProtocolError) as exc:
+                raise _CompactionFailureDetails(
+                    summary_kind="history",
+                    attempt_count=0,
+                    reason_code=getattr(exc, "code", "invalid_compaction_request"),
+                    cause=exc,
+                ) from exc
         if preparation.turn_prefix_messages:
-            turn_prefix_output_tokens = resolve_compaction_output_tokens(
-                kind="turn_prefix",
-                reserve_tokens=self.limits.compaction_reserve_tokens,
-                model_max_output_tokens=self.limits.compaction_model_max_output_tokens,
-            )
-            turn_prefix_request = build_turn_prefix_compaction_request(
-                turn_prefix_messages=preparation.turn_prefix_messages,
-                max_input_bytes=max_input_bytes,
-                max_output_tokens=turn_prefix_output_tokens,
-            )
-            _validate_compaction_call(turn_prefix_request, kind="turn_prefix")
+            try:
+                turn_prefix_output_tokens = resolve_compaction_output_tokens(
+                    kind="turn_prefix",
+                    reserve_tokens=self.limits.compaction_reserve_tokens,
+                    model_max_output_tokens=self.limits.compaction_model_max_output_tokens,
+                )
+                turn_prefix_request = build_turn_prefix_compaction_request(
+                    turn_prefix_messages=preparation.turn_prefix_messages,
+                    max_input_bytes=max_input_bytes,
+                    max_output_tokens=turn_prefix_output_tokens,
+                )
+                _validate_compaction_call(turn_prefix_request, kind="turn_prefix")
+            except (CompactionSummaryError, ModelProtocolError) as exc:
+                raise _CompactionFailureDetails(
+                    summary_kind="turn_prefix",
+                    attempt_count=0,
+                    reason_code=getattr(exc, "code", "invalid_compaction_request"),
+                    cause=exc,
+                ) from exc
         if history_request is None and turn_prefix_request is None:
             return False
 
         history_summary = snapshot.summary
         if history_request is not None:
-            history_result = await self._generate_compaction_summary(
+            history_result = await self._generate_compaction_summary_with_retry(
                 history_request,
                 kind="history",
                 token=token,
@@ -1917,7 +2129,7 @@ class AgentRuntime:
 
         candidate_summary = history_summary
         if turn_prefix_request is not None:
-            turn_prefix_result = await self._generate_compaction_summary(
+            turn_prefix_result = await self._generate_compaction_summary_with_retry(
                 turn_prefix_request,
                 kind="turn_prefix",
                 token=token,
@@ -1934,12 +2146,23 @@ class AgentRuntime:
             return False
 
         self._check_controls(token, deadline)
-        execution_history.commit_compaction(
-            request_id=request_id,
-            base_revision=snapshot.revision,
-            summary=candidate_summary,
-            cut_index=preparation.cut_index,
-        )
+        try:
+            execution_history.commit_compaction(
+                request_id=request_id,
+                base_revision=snapshot.revision,
+                summary=candidate_summary,
+                cut_index=preparation.cut_index,
+            )
+        except ValueError as exc:
+            reason_code = getattr(exc, "code", None)
+            if reason_code not in _SESSION_COMPACTION_FAILURE_CODES:
+                raise
+            raise _CompactionFailureDetails(
+                summary_kind=None,
+                attempt_count=0,
+                reason_code=reason_code,
+                cause=exc,
+            ) from exc
         return True
 
     @staticmethod
@@ -1947,6 +2170,7 @@ class AgentRuntime:
         trace_collector: AgentTraceCollector | None,
         *,
         kind: Literal["history", "turn_prefix"],
+        attempt: int,
         step: int,
         status: str,
         started: float,
@@ -1957,6 +2181,7 @@ class AgentRuntime:
             return
         trace_collector.compaction_call(
             kind=kind,
+            attempt=attempt,
             step=step,
             status=status,
             duration_seconds=max(0.0, monotonic() - started),
@@ -2167,7 +2392,13 @@ class AgentRuntime:
         token: CancellationToken,
         deadline: _Deadline,
     ) -> Any:
-        self._check_controls(token, deadline)
+        try:
+            self._check_controls(token, deadline)
+        except (AgentCancelledError, AgentDeadlineExceeded):
+            close = getattr(awaitable, "close", None)
+            if callable(close):
+                close()
+            raise
         operation = asyncio.ensure_future(awaitable)
         cancellation_wait = asyncio.create_task(token.wait())
         remaining = deadline.remaining()

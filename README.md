@@ -109,6 +109,18 @@ the watermark trigger, including the current 30% test setting, or implement Pi's
 production trigger formula. A larger reserve can reduce truncation but does not
 guarantee a successful summary.
 
+`DOTAMIND_COMPACTION_MAX_RETRIES` defaults to `1` and means retries after the
+first call (allowed range: 0–3), independently for each summary segment. Only
+classified temporary provider/network failures retry, with fixed 1/2/4-second
+backoff; the original execution or answer deadline covers both waiting and
+calls. Truncated (`finish_reason=length`), empty or invalid summaries, quota
+exhaustion, and other permanent errors are not retried. Both segments must
+succeed before the atomic history update; exhausted or rejected compaction
+stops the current task and leaves the previous effective history intact.
+Ordinary business model calls are not retried by this setting. Summary retries
+are real model calls and count toward request/evaluation call budgets; they do
+not consume or replenish the separate one-time provider-overflow recovery.
+
 When migrating an existing `.env`, remove the obsolete
 `DOTAMIND_COMPACTION_MAX_OUTPUT_TOKENS` and
 `DOTAMIND_COMPACTION_MAX_SUMMARY_BYTES` entries; they are no longer read. An

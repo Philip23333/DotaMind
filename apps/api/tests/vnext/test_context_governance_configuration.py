@@ -34,6 +34,7 @@ _LIMIT_ENV_NAMES = (
     "DOTAMIND_COMPACTION_MAX_INPUT_BYTES",
     "DOTAMIND_COMPACTION_RESERVE_TOKENS",
     "DOTAMIND_COMPACTION_MODEL_MAX_OUTPUT_TOKENS",
+    "DOTAMIND_COMPACTION_MAX_RETRIES",
     # Legacy names are cleared too, but are deliberately no longer consumed.
     "DOTAMIND_COMPACTION_MAX_OUTPUT_TOKENS",
     "DOTAMIND_COMPACTION_MAX_SUMMARY_BYTES",
@@ -78,6 +79,7 @@ DOTAMIND_COMPACTION_KEEP_RECENT_TOKENS=4000
 DOTAMIND_COMPACTION_MAX_INPUT_BYTES=50000
 DOTAMIND_COMPACTION_RESERVE_TOKENS=10000
 DOTAMIND_COMPACTION_MODEL_MAX_OUTPUT_TOKENS=500
+DOTAMIND_COMPACTION_MAX_RETRIES=2
 """,
     )
 
@@ -94,6 +96,7 @@ DOTAMIND_COMPACTION_MODEL_MAX_OUTPUT_TOKENS=500
         "compaction_max_input_bytes": 50000,
         "compaction_reserve_tokens": 10000,
         "compaction_model_max_output_tokens": 500,
+        "compaction_max_retries": 2,
     }
 
 
@@ -175,6 +178,7 @@ def test_empty_process_window_explicitly_disables_file_window(
         ("DOTAMIND_COMPACTION_MAX_INPUT_BYTES", ""),
         ("DOTAMIND_COMPACTION_RESERVE_TOKENS", ""),
         ("DOTAMIND_COMPACTION_MODEL_MAX_OUTPUT_TOKENS", "1.5"),
+        ("DOTAMIND_COMPACTION_MAX_RETRIES", "1.5"),
     ],
 )
 def test_invalid_context_governance_values_are_rejected(
@@ -196,6 +200,8 @@ def test_invalid_context_governance_values_are_rejected(
         "DOTAMIND_CONTEXT_COMPACTION_TRIGGER_PERCENT=0\n",
         "DOTAMIND_CONTEXT_COMPACTION_TRIGGER_PERCENT=100\n",
         "DOTAMIND_COMPACTION_RESERVE_TOKENS=1\n",
+        "DOTAMIND_COMPACTION_MAX_RETRIES=-1\n",
+        "DOTAMIND_COMPACTION_MAX_RETRIES=4\n",
         "DOTAMIND_COMPACTION_MODEL_MAX_OUTPUT_TOKENS=0\n",
         "DOTAMIND_CONTEXT_WINDOW_TOKENS=1000\n"
         "DOTAMIND_CONTEXT_OUTPUT_RESERVE_TOKENS=600\n"

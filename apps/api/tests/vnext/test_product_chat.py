@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 from uuid import uuid4
 
+import pytest
+
 from app.agentic.conversation.models import DialogueTurn
 from app.application.chat_repository import ChatDialogueTurnResult
 from app.vnext.agent.events import AgentCancelled, AgentCompleted, AgentFailed, TextDelta
@@ -154,6 +156,68 @@ def test_product_chat_failure_does_not_create_a_dialogue_turn() -> None:
     )
 
     assert events == [ProductChatError(error_code="max_steps_exceeded", reason="too many steps")]
+    assert repository.appended == []
+
+
+@pytest.mark.parametrize(
+    ("reason_code", "expected_reason"),
+    [
+        (
+            "summary_output_truncated",
+            "上下文摘要未完整生成，本次任务已停止。原有会话记录已保留。",
+        ),
+        (
+            "transient_retries_exhausted",
+            "生成上下文摘要时服务暂时不可用，重试后仍未成功。本次任务已停止，原有会话记录已保留。",
+        ),
+        (
+            "stale_context_revision",
+            "本次上下文整理未能完成，任务已停止。原有会话记录已保留。",
+        ),
+    ],
+)
+def test_compaction_failure_uses_safe_localized_reason(
+    reason_code: str,
+    expected_reason: str,
+) -> None:
+    repository = _Repository()
+    trace_store = _TraceStore()
+    runtime = _Runtime(
+        [
+            AgentFailed(
+                duration=0.1,
+                error_code="context_compaction_failed",
+                error_message="internal provider detail must not be exposed",
+                details={"reason_code": reason_code},
+            )
+        ]
+    )
+    service = VNextChatService(  # type: ignore[arg-type]
+        repository,
+        runtime,
+        ConversationContextBuilder(),
+        _VisualEntityEnricher(),
+        trace_store=trace_store,
+    )
+
+    browser_id = str(uuid4())
+    events = _collect(
+        service,
+        browser_id=browser_id,
+        session_id=uuid4(),
+        request_id=uuid4(),
+        query="问一个测试问题",
+    )
+
+    assert len(events) == 1
+    assert isinstance(events[0], ProductChatError)
+    assert events[0].error_code == "context_compaction_failed"
+    assert events[0].reason == expected_reason
+    assert "internal provider detail" not in events[0].reason
+    assert events[0].trace is not None
+    assert len(trace_store.saved) == 1
+    assert trace_store.saved[0].status == "failed"
+    assert trace_store.saved[0].trace["terminal"]["error_code"] == "context_compaction_failed"
     assert repository.appended == []
 
 

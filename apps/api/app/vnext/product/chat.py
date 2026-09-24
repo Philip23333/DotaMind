@@ -98,6 +98,19 @@ class _SessionState:
     completed: dict[UUID, _CompletedRequest]
 
 
+def _product_runtime_error_reason(event: AgentCancelled | AgentFailed) -> str:
+    if not isinstance(event, AgentFailed) or event.error_code != "context_compaction_failed":
+        return event.error_message
+    reason_code = event.details.get("reason_code")
+    if reason_code == "summary_output_truncated":
+        return "上下文摘要未完整生成，本次任务已停止。原有会话记录已保留。"
+    if reason_code == "transient_retries_exhausted":
+        return (
+            "生成上下文摘要时服务暂时不可用，重试后仍未成功。本次任务已停止，原有会话记录已保留。"
+        )
+    return "本次上下文整理未能完成，任务已停止。原有会话记录已保留。"
+
+
 class VNextChatService:
     """Compose durable dialogue with one request-bound AgentRuntime execution."""
 
@@ -148,7 +161,7 @@ class VNextChatService:
                 query=query,
                 history=[],
                 replay=replay,
-        )
+            )
         state = self._session_for(session_id)
         if state.history.initialized:
             history = state.history.effective_messages()
@@ -252,9 +265,7 @@ class VNextChatService:
                         if trace_collector is not None:
                             trace_collector.terminal(
                                 status=(
-                                    "cancelled"
-                                    if isinstance(event, AgentCancelled)
-                                    else "failed"
+                                    "cancelled" if isinstance(event, AgentCancelled) else "failed"
                                 ),
                                 error_code=event.error_code,
                                 error_message=event.error_message,
@@ -266,9 +277,7 @@ class VNextChatService:
                                 prepared,
                                 trace_collector,
                                 status=(
-                                    "cancelled"
-                                    if isinstance(event, AgentCancelled)
-                                    else "failed"
+                                    "cancelled" if isinstance(event, AgentCancelled) else "failed"
                                 ),
                                 recording_mode=(
                                     "test" if self._test_recording_enabled else "diagnostic"
@@ -276,7 +285,7 @@ class VNextChatService:
                             )
                         yield ProductChatError(
                             error_code=event.error_code,
-                            reason=event.error_message,
+                            reason=_product_runtime_error_reason(event),
                             trace=trace_ref,
                         )
                         return
@@ -354,8 +363,7 @@ class VNextChatService:
                     trace_ref=trace_ref,
                 )
                 if not any(
-                    record.request_id == prepared.request_id
-                    and record.kind == "delivery_answer"
+                    record.request_id == prepared.request_id and record.kind == "delivery_answer"
                     for record in state.history.records
                 ):
                     state.history.record_delivery(prepared.request_id, final)

@@ -94,6 +94,17 @@ class AgentFailed(AgentEvent):
     duration: float = Field(ge=0)
     error_code: str = Field(min_length=1)
     error_message: str = Field(min_length=1)
+    details: dict[str, object] = Field(default_factory=dict)
+
+
+class CompactionFailed(AgentEvent):
+    kind: Literal["compaction_failed"] = "compaction_failed"
+    error_code: Literal["context_compaction_failed"] = "context_compaction_failed"
+    trigger: Literal["explicit", "watermark", "overflow"]
+    stage: Literal["execution", "primary_answer"]
+    summary_kind: Literal["history", "turn_prefix"] | None
+    reason_code: str = Field(min_length=1)
+    attempt_count: int = Field(ge=0)
 
 
 __all__ = [
@@ -102,6 +113,7 @@ __all__ = [
     "AgentEvent",
     "AgentFailed",
     "AgentStarted",
+    "CompactionFailed",
     "ModelRequested",
     "ModelResponded",
     "TextDelta",

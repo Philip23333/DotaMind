@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 from collections.abc import Callable
 from time import monotonic
 from uuid import uuid4
@@ -12,6 +13,7 @@ from app.vnext.agent.context_capacity import assess_request_capacity
 from app.vnext.agent.errors import (
     AgentCancelledError,
     AgentRuntimeError,
+    CompactionFailedError,
     ModelContextWindowExceeded,
     ModelProviderError,
 )
@@ -19,7 +21,7 @@ from app.vnext.agent.events import ModelRequested, TextDelta, ToolStarted
 from app.vnext.agent.limits import AgentLimits
 from app.vnext.agent.runtime import AgentRuntime, CancellationToken, _Deadline
 from app.vnext.agent.trace import AgentTraceCollector
-from app.vnext.llm.errors import ModelContextWindowError
+from app.vnext.llm.errors import ModelContextWindowError, ModelTransientError
 from app.vnext.llm.protocol import (
     AssistantMessage,
     ModelRequest,
@@ -576,7 +578,7 @@ def test_summary_context_overflow_does_not_recurse_recovery() -> None:
     model = _PlannedModel([_overflow(), _overflow()])
     trace = AgentTraceCollector()
 
-    with pytest.raises(ModelContextWindowExceeded):
+    with pytest.raises(CompactionFailedError) as error:
         _run(
             AgentRuntime(model, _registry(), limits=_limits()),
             history,
@@ -585,8 +587,79 @@ def test_summary_context_overflow_does_not_recurse_recovery() -> None:
         )
 
     assert len(model.requests) == 2
+    assert error.value.reason_code == ModelContextWindowExceeded.code
+    assert error.value.attempt_count == 1
     assert len(history.compaction_records) == 0
     assert trace.snapshot()["overflow_recoveries"][0]["status"] == "compaction_failed"
+
+
+def test_summary_retry_inside_overflow_recovery_does_not_replay_tools() -> None:
+    history, request_id = _history()
+    calls: list[str] = []
+
+    def transient(request: ModelRequest) -> ModelResponse:
+        assert request.metadata.get("purpose") == "context_compaction"
+        raise ModelTransientError("transient test transport failure")
+
+    model = _PlannedModel(
+        [
+            lambda _request: ModelResponse.from_assistant(
+                AssistantMessage(tool_calls=[_call("tool-once", "once")])
+            ),
+            _overflow(),
+            transient,
+            _summary("compressed background"),
+            _summary("turn prefix"),
+            _final("execution continued"),
+            _final("answer"),
+        ]
+    )
+    runtime = AgentRuntime(model, _registry(calls), limits=_limits(max_steps=3))
+    original_wait = runtime._await_controlled
+    delays: list[float] = []
+
+    async def no_retry_sleep(awaitable, token, deadline):
+        if inspect.iscoroutine(awaitable) and awaitable.cr_code.co_name == "sleep":
+            assert awaitable.cr_frame is not None
+            delays.append(awaitable.cr_frame.f_locals["delay"])
+            awaitable.close()
+            runtime._check_controls(token, deadline)
+            return None
+        return await original_wait(awaitable, token, deadline)
+
+    runtime._await_controlled = no_retry_sleep  # type: ignore[method-assign]
+    trace = AgentTraceCollector()
+    events: list[object] = []
+
+    result = _run(
+        runtime,
+        history,
+        request_id,
+        trace_collector=trace,
+        event_sink=lambda event: events.append(event),
+    )
+
+    assert result.content == "answer"  # type: ignore[union-attr]
+    assert calls == ["once"]
+    assert delays == [1]
+    assert trace.snapshot()["overflow_recoveries"] == [
+        {
+            "step": 2,
+            "stage": "execution",
+            "status": "retry_succeeded",
+            "error_code": None,
+        }
+    ]
+    assert [call["attempt"] for call in trace.snapshot()["compaction_calls"]] == [1, 2, 1]
+    business_steps = [
+        request.step
+        for request in model.requests
+        if not request.metadata.get("purpose") == "context_compaction"
+    ]
+    assert business_steps == [1, 2, 2, 3]
+    assert [event.tool_call_id for event in events if isinstance(event, ToolStarted)] == [
+        "tool-once"
+    ]
 
 
 def test_cancellation_before_overflow_compaction_stops_without_retry() -> None:

@@ -355,6 +355,7 @@ class AgentTraceCollector:
         self,
         *,
         kind: str,
+        attempt: int,
         step: int,
         status: str,
         duration_seconds: float,
@@ -364,11 +365,54 @@ class AgentTraceCollector:
         self._trace.setdefault("compaction_calls", []).append(
             {
                 "kind": kind,
+                "attempt": attempt,
                 "step": step,
                 "status": status,
                 "duration_seconds": duration_seconds,
                 "usage": deepcopy(usage),
                 "error_code": error_code,
+            }
+        )
+
+    def compaction_retry(
+        self,
+        *,
+        step: int,
+        kind: str,
+        failed_attempt: int,
+        next_attempt: int,
+        delay_seconds: int,
+        error_code: str,
+    ) -> None:
+        self._trace.setdefault("compaction_retries", []).append(
+            {
+                "step": step,
+                "kind": kind,
+                "failed_attempt": failed_attempt,
+                "next_attempt": next_attempt,
+                "delay_seconds": delay_seconds,
+                "error_code": error_code,
+            }
+        )
+
+    def compaction_failed(
+        self,
+        *,
+        step: int,
+        trigger: str,
+        stage: str,
+        summary_kind: str | None,
+        reason_code: str,
+        attempt_count: int,
+    ) -> None:
+        self._trace.setdefault("compaction_failures", []).append(
+            {
+                "step": step,
+                "trigger": trigger,
+                "stage": stage,
+                "summary_kind": summary_kind,
+                "reason_code": reason_code,
+                "attempt_count": attempt_count,
             }
         )
 

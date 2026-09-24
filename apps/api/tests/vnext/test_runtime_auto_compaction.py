@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from app.vnext.agent.context_accounting import measure_request_context_bytes
 from app.vnext.agent.context_capacity import assess_request_capacity
 from app.vnext.agent.errors import AgentCancelledError, AgentRuntimeError, ModelProtocolError
-from app.vnext.agent.events import ModelRequested, ToolStarted
+from app.vnext.agent.events import AgentFailed, CompactionFailed, ModelRequested, ToolStarted
 from app.vnext.agent.limits import AgentLimits
 from app.vnext.agent.runtime import AgentRuntime, CancellationToken, _Deadline
 from app.vnext.agent.runtime_context import ContextPressure
@@ -770,10 +770,23 @@ def test_auto_summary_validation_failure_does_not_commit_or_execute() -> None:
             trace_collector=trace,
         )
 
-    assert error.value.details == {"code": "summary_output_truncated"}
+    assert error.value.code == "context_compaction_failed"
+    assert error.value.details == {
+        "trigger": "watermark",
+        "stage": "execution",
+        "summary_kind": "history",
+        "reason_code": "summary_output_truncated",
+        "attempt_count": 1,
+    }
     assert len(model.requests) == 1
     assert model.requests[0].tools == []
     assert not any(isinstance(event, (ModelRequested, ToolStarted)) for event in events)
+    assert [
+        type(event) for event in events if isinstance(event, CompactionFailed | AgentFailed)
+    ] == [
+        CompactionFailed,
+        AgentFailed,
+    ]
     assert history.effective_messages() == before_messages
     assert history.records == before_records
     assert history.compaction_records == ()

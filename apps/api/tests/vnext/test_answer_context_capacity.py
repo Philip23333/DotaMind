@@ -14,7 +14,7 @@ from app.vnext.agent.answer_stage import (
 )
 from app.vnext.agent.context_accounting import measure_request_context_bytes
 from app.vnext.agent.context_capacity import assess_request_capacity
-from app.vnext.agent.errors import AgentCancelledError
+from app.vnext.agent.errors import AgentCancelledError, CompactionFailedError
 from app.vnext.agent.events import ModelRequested, ToolStarted
 from app.vnext.agent.instructions import ANSWER_INSTRUCTION, DEGRADED_ANSWER_INSTRUCTION
 from app.vnext.agent.limits import AgentLimits
@@ -603,19 +603,42 @@ def test_primary_answer_compaction_failure_does_not_commit() -> None:
         ]
     )
     trace = AgentTraceCollector()
+    events: list[object] = []
 
-    result = _run(
-        AgentRuntime(model, registry, limits=limits),
-        history,
-        request_id,
-        trace_collector=trace,
-    )
+    with pytest.raises(CompactionFailedError) as error:
+        _run(
+            AgentRuntime(model, registry, limits=limits),
+            history,
+            request_id,
+            trace_collector=trace,
+            event_sink=lambda event: events.append(event),
+        )
 
-    assert result.content
+    assert error.value.code == "context_compaction_failed"
+    assert error.value.stage == "primary_answer"
     assert history.compaction_records == ()
     assert trace.snapshot()["compaction_calls"][-1]["status"] == "failed"
     assert trace.snapshot()["compaction_calls"][-1]["error_code"] == "empty_summary"
-    assert trace.snapshot()["answer_attempts"][0]["error_code"] == "model_protocol_error"
+    assert trace.snapshot()["compaction_failures"] == [
+        {
+            "step": 3,
+            "trigger": "watermark",
+            "stage": "primary_answer",
+            "summary_kind": "history",
+            "reason_code": "empty_summary",
+            "attempt_count": 1,
+        }
+    ]
+    assert [request.metadata.get("purpose") for request in model.requests] == [
+        None,
+        None,
+        "context_compaction",
+    ]
+    assert not trace.snapshot().get("answer_attempts")
+    assert [event.kind for event in events if hasattr(event, "kind")][-2:] == [
+        "compaction_failed",
+        "agent_failed",
+    ]
 
 
 def test_primary_answer_compaction_cancellation_propagates_without_commit() -> None:

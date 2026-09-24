@@ -12,4 +12,8 @@ class ModelContextWindowError(RuntimeError):
         self.status_code = status_code
 
 
-__all__ = ["ModelContextWindowError"]
+class ModelTransientError(RuntimeError):
+    """A provider-neutral model transport error that may succeed on retry."""
+
+
+__all__ = ["ModelContextWindowError", "ModelTransientError"]

@@ -86,6 +86,13 @@ automatic profile sweep. Provider usage is reported separately for business
 and summary requests; missing usage is unknown, byte estimates are not token
 counts, and no cost is estimated without price data.
 
+`DOTAMIND_COMPACTION_MAX_RETRIES` applies only to classified transient summary
+errors, independently per summary segment; every actual retry is a separate
+model call charged to this shared evaluation budget. Retry waits consume the
+existing Runtime stage deadline. Truncation and other deterministic summary
+failures do not retry, and summary retries do not add another provider-overflow
+recovery allowance.
+
 An executed run creates `manifest.json`, `calls.jsonl`, `traces.json`, and
 `report.md`. Existing files with those names are never overwritten. Requests,
 responses, usages, errors (type only), durations, and partial traces are kept

@@ -12,7 +12,7 @@ from typing import Any
 
 import httpx
 
-from app.vnext.llm.errors import ModelContextWindowError
+from app.vnext.llm.errors import ModelContextWindowError, ModelTransientError
 from app.vnext.llm.protocol import (
     AssistantMessage,
     FinalMessage,
@@ -36,6 +36,10 @@ class ProviderHTTPError(OpenAICompatibleError):
         self.body = body
 
 
+class TransientProviderHTTPError(ProviderHTTPError, ModelTransientError):
+    """An HTTP provider failure classified as transient by status and code."""
+
+
 class ProviderProtocolError(OpenAICompatibleError):
     """The provider returned data that is not a supported chat-completions response."""
 
@@ -46,6 +50,15 @@ class MalformedToolArgumentsError(ProviderProtocolError):
 
 _CONTEXT_WINDOW_HTTP_STATUSES = frozenset({400, 413, 422})
 _CONTEXT_WINDOW_PROVIDER_CODE = "context_length_exceeded"
+_TRANSIENT_HTTP_STATUSES = frozenset({408, 500, 502, 503, 504})
+_QUOTA_ERROR_CODES = frozenset(
+    {"insufficient_quota", "quota_exceeded", "billing_hard_limit_reached"}
+)
+_TRANSIENT_HTTPX_ERRORS = (
+    httpx.TimeoutException,
+    httpx.NetworkError,
+    httpx.RemoteProtocolError,
+)
 
 
 @dataclass
@@ -144,16 +157,14 @@ class OpenAICompatibleModelClient:
         payload: dict[str, Any] = {
             "model": self.model,
             "messages": [
-                self._serialize_message(message, agent_to_provider)
-                for message in request.messages
+                self._serialize_message(message, agent_to_provider) for message in request.messages
             ],
         }
         if request.max_output_tokens is not None:
             payload["max_tokens"] = request.max_output_tokens
         if request.tools:
             payload["tools"] = [
-                self._serialize_tool(tool, agent_to_provider[tool.name])
-                for tool in request.tools
+                self._serialize_tool(tool, agent_to_provider[tool.name]) for tool in request.tools
             ]
             payload["tool_choice"] = "auto"
         return payload
@@ -161,14 +172,17 @@ class OpenAICompatibleModelClient:
     async def _post(self, payload: dict[str, Any]) -> httpx.Response:
         headers = self._headers()
         url = self._url()
-        if self._client is not None:
-            response = await self._client.post(url, headers=headers, json=payload)
-        else:
-            async with httpx.AsyncClient(
-                timeout=self.timeout,
-                transport=self.transport,
-            ) as client:
-                response = await client.post(url, headers=headers, json=payload)
+        try:
+            if self._client is not None:
+                response = await self._client.post(url, headers=headers, json=payload)
+            else:
+                async with httpx.AsyncClient(
+                    timeout=self.timeout,
+                    transport=self.transport,
+                ) as client:
+                    response = await client.post(url, headers=headers, json=payload)
+        except _TRANSIENT_HTTPX_ERRORS as exc:
+            raise ModelTransientError("model provider transport failed") from exc
         self._raise_for_status(response)
         return response
 
@@ -176,19 +190,24 @@ class OpenAICompatibleModelClient:
     async def _open_stream(self, payload: dict[str, Any]) -> AsyncIterator[httpx.Response]:
         headers = self._headers()
         url = self._url()
-        if self._client is not None:
-            async with self._client.stream("POST", url, headers=headers, json=payload) as response:
-                await self._raise_for_status_async(response)
-                yield response
-            return
+        try:
+            if self._client is not None:
+                async with self._client.stream(
+                    "POST", url, headers=headers, json=payload
+                ) as response:
+                    await self._raise_for_status_async(response)
+                    yield response
+                return
 
-        async with httpx.AsyncClient(
-            timeout=self.timeout,
-            transport=self.transport,
-        ) as client:
-            async with client.stream("POST", url, headers=headers, json=payload) as response:
-                await self._raise_for_status_async(response)
-                yield response
+            async with httpx.AsyncClient(
+                timeout=self.timeout,
+                transport=self.transport,
+            ) as client:
+                async with client.stream("POST", url, headers=headers, json=payload) as response:
+                    await self._raise_for_status_async(response)
+                    yield response
+        except _TRANSIENT_HTTPX_ERRORS as exc:
+            raise ModelTransientError("model provider transport failed") from exc
 
     def _headers(self) -> dict[str, str]:
         headers = {"Content-Type": "application/json"}
@@ -205,7 +224,12 @@ class OpenAICompatibleModelClient:
             context_error = cls._context_window_error_from_response(response)
             if context_error is not None:
                 raise context_error
-            raise ProviderHTTPError(response.status_code, response.text)
+            error_type = (
+                TransientProviderHTTPError
+                if cls._is_transient_status(response.status_code, response)
+                else ProviderHTTPError
+            )
+            raise error_type(response.status_code, response.text)
 
     @classmethod
     async def _raise_for_status_async(cls, response: httpx.Response) -> None:
@@ -214,7 +238,32 @@ class OpenAICompatibleModelClient:
             context_error = cls._context_window_error_from_response(response)
             if context_error is not None:
                 raise context_error
-            raise ProviderHTTPError(response.status_code, response.text)
+            error_type = (
+                TransientProviderHTTPError
+                if cls._is_transient_status(response.status_code, response)
+                else ProviderHTTPError
+            )
+            raise error_type(response.status_code, response.text)
+
+    @classmethod
+    def _is_transient_status(cls, status_code: int, response: httpx.Response) -> bool:
+        if status_code in _TRANSIENT_HTTP_STATUSES:
+            return True
+        if status_code != 429:
+            return False
+        try:
+            data = response.json()
+        except (JSONDecodeError, ValueError):
+            return True
+        if not isinstance(data, Mapping):
+            return True
+        error = data.get("error")
+        if not isinstance(error, Mapping):
+            return True
+        return not any(
+            isinstance(error.get(field), str) and error[field] in _QUOTA_ERROR_CODES
+            for field in ("code", "type")
+        )
 
     @classmethod
     def _context_window_error_from_response(
@@ -282,8 +331,7 @@ class OpenAICompatibleModelClient:
             raise ProviderProtocolError("assistant tool_calls must be a list")
 
         tool_calls = [
-            cls._parse_tool_call(raw_call, provider_to_agent)
-            for raw_call in (raw_tool_calls or [])
+            cls._parse_tool_call(raw_call, provider_to_agent) for raw_call in (raw_tool_calls or [])
         ]
         finish_reason = choice.get("finish_reason")
         if finish_reason is not None and not isinstance(finish_reason, str):
@@ -463,9 +511,7 @@ class OpenAICompatibleModelClient:
             raise ProviderProtocolError("tool call function name must be a non-empty string")
         raw_arguments = function.get("arguments")
         if not isinstance(raw_arguments, str):
-            raise MalformedToolArgumentsError(
-                "tool call arguments must be a JSON-encoded string"
-            )
+            raise MalformedToolArgumentsError("tool call arguments must be a JSON-encoded string")
         try:
             arguments = json.loads(raw_arguments)
         except JSONDecodeError as exc:

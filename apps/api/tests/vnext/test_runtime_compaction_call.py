@@ -100,6 +100,7 @@ def test_non_streaming_compaction_call_returns_validated_result() -> None:
     assert trace.snapshot()["compaction_calls"] == [
         {
             "kind": "history",
+            "attempt": 1,
             "step": 4,
             "status": "generated",
             "duration_seconds": result.duration_seconds,
@@ -160,7 +161,7 @@ def test_compaction_call_rejects_cancelled_token_before_model_call() -> None:
         _call(_runtime(model), _request(), token=token, trace=trace)
 
     assert model.requests == []
-    assert trace.snapshot()["compaction_calls"][0]["status"] == "cancelled"
+    assert "compaction_calls" not in trace.snapshot()
 
 
 def test_compaction_call_rejects_expired_deadline_before_model_call() -> None:
@@ -171,7 +172,7 @@ def test_compaction_call_rejects_expired_deadline_before_model_call() -> None:
         _call(_runtime(model), _request(), deadline=_Deadline(0), trace=trace)
 
     assert model.requests == []
-    assert trace.snapshot()["compaction_calls"][0]["status"] == "deadline_exceeded"
+    assert "compaction_calls" not in trace.snapshot()
 
 
 def test_compaction_call_cancels_an_in_flight_model_request() -> None:
@@ -355,6 +356,7 @@ def test_deadline_after_provider_return_preserves_usage_without_a_candidate() ->
     assert trace.snapshot()["compaction_calls"] == [
         {
             "kind": "history",
+            "attempt": 1,
             "step": 7,
             "status": "deadline_exceeded",
             "duration_seconds": trace.snapshot()["compaction_calls"][0]["duration_seconds"],
@@ -532,7 +534,7 @@ def test_compaction_call_rejects_invalid_request_shape_without_model_call(
         _call(_runtime(model), mutate(_request()), trace=trace)
 
     assert model.requests == []
-    assert trace.snapshot()["compaction_calls"][0]["status"] == "failed"
+    assert "compaction_calls" not in trace.snapshot()
 
 
 def test_compaction_call_does_not_reset_task_or_session_state() -> None:

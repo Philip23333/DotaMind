@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from app.vnext.agent.errors import (
     AgentCancelledError,
     AgentDeadlineExceeded,
+    CompactionFailedError,
     ModelProtocolError,
     ModelProviderError,
 )
@@ -187,19 +188,22 @@ def _compact(
     max_input_bytes: int = 100_000,
 ) -> bool:
     async def run() -> bool:
-        return await asyncio.wait_for(
-            runtime._compact_session_history(
-                execution_history=history,
-                request_id=request_id,
-                token=token or CancellationToken(),
-                deadline=deadline or _Deadline(2),
-                step=4,
-                recent_history_tokens=recent_history_tokens,
-                max_input_bytes=max_input_bytes,
-                trace_collector=trace,
-            ),
-            timeout=2,
-        )
+        try:
+            return await asyncio.wait_for(
+                runtime._compact_session_history(
+                    execution_history=history,
+                    request_id=request_id,
+                    token=token or CancellationToken(),
+                    deadline=deadline or _Deadline(2),
+                    step=4,
+                    recent_history_tokens=recent_history_tokens,
+                    max_input_bytes=max_input_bytes,
+                    trace_collector=trace,
+                ),
+                timeout=2,
+            )
+        except CompactionFailedError as exc:
+            raise exc.cause from exc
 
     return asyncio.run(run())
 
@@ -846,9 +850,11 @@ def test_compaction_version_change_during_generation_is_not_overwritten() -> Non
         history.record(request_id, appended, kind="execution_final")
         history.set_effective([*history.effective_messages(), appended])
         release.set()
-        with pytest.raises(SessionCompactionError) as error:
+        with pytest.raises(CompactionFailedError) as error:
             await asyncio.wait_for(task, timeout=1)
-        assert error.value.code == "stale_context_revision"
+        assert error.value.reason_code == "stale_context_revision"
+        assert error.value.summary_kind is None
+        assert error.value.attempt_count == 0
         return model, trace
 
     model, trace = asyncio.run(exercise())
@@ -860,6 +866,7 @@ def test_compaction_version_change_during_generation_is_not_overwritten() -> Non
     assert trace.snapshot()["compaction_calls"] == [
         {
             "kind": "history",
+            "attempt": 1,
             "step": 4,
             "status": "generated",
             "duration_seconds": trace.snapshot()["compaction_calls"][0]["duration_seconds"],

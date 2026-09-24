@@ -71,6 +71,37 @@ class ModelContextWindowExceeded(ModelProviderError):
         )
 
 
+class CompactionFailedError(AgentRuntimeError):
+    code = "context_compaction_failed"
+
+    def __init__(
+        self,
+        *,
+        step: int,
+        trigger: str,
+        stage: str,
+        summary_kind: str | None,
+        reason_code: str,
+        attempt_count: int,
+        cause: Exception,
+    ) -> None:
+        details = {
+            "trigger": trigger,
+            "stage": stage,
+            "summary_kind": summary_kind,
+            "reason_code": reason_code,
+            "attempt_count": attempt_count,
+        }
+        super().__init__("context compaction failed", details=details)
+        self.step = step
+        self.trigger = trigger
+        self.stage = stage
+        self.summary_kind = summary_kind
+        self.reason_code = reason_code
+        self.attempt_count = attempt_count
+        self.cause = cause
+
+
 class ModelProtocolError(AgentRuntimeError):
     code = "model_protocol_error"
 
@@ -94,6 +125,7 @@ __all__ = [
     "AgentDeadlineExceeded",
     "AgentDeadlineExceededError",
     "AgentRuntimeError",
+    "CompactionFailedError",
     "ContextCapacityExceeded",
     "MaxStepsExceeded",
     "MaxStepsExceededError",

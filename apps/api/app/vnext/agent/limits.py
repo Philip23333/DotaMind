@@ -16,6 +16,7 @@ class AgentLimits(BaseModel):
     compaction_max_input_bytes: int = Field(default=256 * 1024, gt=0, strict=True)
     compaction_reserve_tokens: int = Field(default=16384, ge=2, strict=True)
     compaction_model_max_output_tokens: int | None = Field(default=None, gt=0, strict=True)
+    compaction_max_retries: int = Field(default=1, ge=0, le=3, strict=True)
     context_window_tokens: int | None = Field(default=None, gt=0, strict=True)
     context_output_reserve_tokens: int = Field(default=4096, gt=0, strict=True)
     context_safety_margin_tokens: int = Field(default=1024, gt=0, strict=True)
