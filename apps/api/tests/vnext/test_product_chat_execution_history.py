@@ -434,7 +434,7 @@ def test_product_follow_up_uses_automatic_compaction_and_fresh_task_state(
         context_output_reserve_tokens=256,
         context_safety_margin_tokens=128,
         context_estimate_bytes_per_token=1,
-        context_compaction_trigger_percent=75,
+        context_compaction_test_trigger_percent=75,
         compaction_keep_recent_tokens=1,
         compaction_max_input_bytes=100_000,
         compaction_reserve_tokens=160,

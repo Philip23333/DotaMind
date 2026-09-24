@@ -29,6 +29,7 @@ _LIMIT_ENV_NAMES = (
     "DOTAMIND_CONTEXT_SAFETY_MARGIN_TOKENS",
     "DOTAMIND_CONTEXT_ESTIMATE_BYTES_PER_TOKEN",
     "DOTAMIND_CONTEXT_COMPACTION_TRIGGER_PERCENT",
+    "DOTAMIND_CONTEXT_COMPACTION_TEST_TRIGGER_PERCENT",
     "DOTAMIND_COMPACTION_KEEP_RECENT_TOKENS",
     "DOTAMIND_COMPACTION_RECENT_HISTORY_BYTES",
     "DOTAMIND_COMPACTION_MAX_INPUT_BYTES",
@@ -74,7 +75,7 @@ DOTAMIND_CONTEXT_WINDOW_TOKENS=12000
 DOTAMIND_CONTEXT_OUTPUT_RESERVE_TOKENS=300
 DOTAMIND_CONTEXT_SAFETY_MARGIN_TOKENS=200
 DOTAMIND_CONTEXT_ESTIMATE_BYTES_PER_TOKEN=3
-DOTAMIND_CONTEXT_COMPACTION_TRIGGER_PERCENT=75
+DOTAMIND_CONTEXT_COMPACTION_TEST_TRIGGER_PERCENT=75
 DOTAMIND_COMPACTION_KEEP_RECENT_TOKENS=4000
 DOTAMIND_COMPACTION_MAX_INPUT_BYTES=50000
 DOTAMIND_COMPACTION_RESERVE_TOKENS=10000
@@ -91,7 +92,7 @@ DOTAMIND_COMPACTION_MAX_RETRIES=2
         "context_output_reserve_tokens": 300,
         "context_safety_margin_tokens": 200,
         "context_estimate_bytes_per_token": 3,
-        "context_compaction_trigger_percent": 75,
+        "context_compaction_test_trigger_percent": 75,
         "compaction_keep_recent_tokens": 4000,
         "compaction_max_input_bytes": 50000,
         "compaction_reserve_tokens": 10000,
@@ -108,18 +109,49 @@ def test_process_environment_overrides_file_values(
         monkeypatch,
         tmp_path,
         "DOTAMIND_CONTEXT_WINDOW_TOKENS=12000\n"
+        "DOTAMIND_CONTEXT_COMPACTION_TEST_TRIGGER_PERCENT=30\n"
         "DOTAMIND_COMPACTION_RESERVE_TOKENS=10000\n"
         "DOTAMIND_COMPACTION_MODEL_MAX_OUTPUT_TOKENS=4096\n",
     )
     monkeypatch.setenv("DOTAMIND_CONTEXT_WINDOW_TOKENS", " 15000 ")
+    monkeypatch.setenv("DOTAMIND_CONTEXT_COMPACTION_TEST_TRIGGER_PERCENT", "40")
     monkeypatch.setenv("DOTAMIND_COMPACTION_RESERVE_TOKENS", "12000")
     monkeypatch.setenv("DOTAMIND_COMPACTION_MODEL_MAX_OUTPUT_TOKENS", "700")
 
     limits = VNextSettings.from_env().agent_limits
 
     assert limits.context_window_tokens == 15000
+    assert limits.context_compaction_test_trigger_percent == 40
     assert limits.compaction_reserve_tokens == 12000
     assert limits.compaction_model_max_output_tokens == 700
+
+
+def test_blank_test_trigger_percent_disables_file_value(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _isolate_env(monkeypatch)
+    _write_env(
+        monkeypatch,
+        tmp_path,
+        "DOTAMIND_CONTEXT_COMPACTION_TEST_TRIGGER_PERCENT=30\n",
+    )
+    monkeypatch.setenv("DOTAMIND_CONTEXT_COMPACTION_TEST_TRIGGER_PERCENT", "  ")
+
+    assert VNextSettings.from_env().agent_limits.context_compaction_test_trigger_percent is None
+
+
+@pytest.mark.parametrize("value", ["0", "100", "1.5", "true", "30x"])
+def test_invalid_test_trigger_percent_is_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    value: str,
+) -> None:
+    _isolate_env(monkeypatch)
+    _write_env(monkeypatch, tmp_path, "DOTAMIND_CONTEXT_WINDOW_TOKENS=20000\n")
+    monkeypatch.setenv("DOTAMIND_CONTEXT_COMPACTION_TEST_TRIGGER_PERCENT", value)
+
+    with pytest.raises(ValueError):
+        VNextSettings.from_env()
 
 
 @pytest.mark.parametrize(
@@ -151,11 +183,13 @@ def test_legacy_compaction_output_environment_variables_are_ignored(
     monkeypatch.setattr(composition, "_VNEXT_ENV_PATH", Path("/does/not/exist"))
     monkeypatch.setenv("DOTAMIND_COMPACTION_MAX_OUTPUT_TOKENS", "7")
     monkeypatch.setenv("DOTAMIND_COMPACTION_MAX_SUMMARY_BYTES", "9")
+    monkeypatch.setenv("DOTAMIND_CONTEXT_COMPACTION_TRIGGER_PERCENT", "1")
 
     limits = VNextSettings.from_env().agent_limits
 
     assert limits.compaction_reserve_tokens == 16384
     assert limits.compaction_model_max_output_tokens is None
+    assert limits.context_compaction_test_trigger_percent is None
 
 
 @pytest.mark.parametrize("value", ["", "   "])
@@ -197,8 +231,8 @@ def test_invalid_context_governance_values_are_rejected(
     [
         "DOTAMIND_CONTEXT_WINDOW_TOKENS=0\n",
         "DOTAMIND_CONTEXT_WINDOW_TOKENS=-1\n",
-        "DOTAMIND_CONTEXT_COMPACTION_TRIGGER_PERCENT=0\n",
-        "DOTAMIND_CONTEXT_COMPACTION_TRIGGER_PERCENT=100\n",
+        "DOTAMIND_CONTEXT_COMPACTION_TEST_TRIGGER_PERCENT=0\n",
+        "DOTAMIND_CONTEXT_COMPACTION_TEST_TRIGGER_PERCENT=100\n",
         "DOTAMIND_COMPACTION_RESERVE_TOKENS=1\n",
         "DOTAMIND_COMPACTION_MAX_RETRIES=-1\n",
         "DOTAMIND_COMPACTION_MAX_RETRIES=4\n",
@@ -206,6 +240,8 @@ def test_invalid_context_governance_values_are_rejected(
         "DOTAMIND_CONTEXT_WINDOW_TOKENS=1000\n"
         "DOTAMIND_CONTEXT_OUTPUT_RESERVE_TOKENS=600\n"
         "DOTAMIND_CONTEXT_SAFETY_MARGIN_TOKENS=400\n",
+        "DOTAMIND_CONTEXT_WINDOW_TOKENS=10000\nDOTAMIND_COMPACTION_RESERVE_TOKENS=10000\n",
+        "DOTAMIND_CONTEXT_WINDOW_TOKENS=10000\nDOTAMIND_COMPACTION_RESERVE_TOKENS=10001\n",
     ],
 )
 def test_agent_limits_constraints_are_not_silently_relaxed(
@@ -242,7 +278,7 @@ def test_build_runtime_receives_an_isolated_configured_limits(
         context_output_reserve_tokens=300,
         context_safety_margin_tokens=200,
         context_estimate_bytes_per_token=3,
-        context_compaction_trigger_percent=75,
+        context_compaction_test_trigger_percent=75,
         compaction_keep_recent_tokens=4000,
         compaction_max_input_bytes=50000,
         compaction_reserve_tokens=625,
@@ -337,7 +373,7 @@ def test_product_chat_entry_uses_environment_configured_context_governance(
         "DOTAMIND_CONTEXT_OUTPUT_RESERVE_TOKENS": "200",
         "DOTAMIND_CONTEXT_SAFETY_MARGIN_TOKENS": "100",
         "DOTAMIND_CONTEXT_ESTIMATE_BYTES_PER_TOKEN": "1",
-        "DOTAMIND_CONTEXT_COMPACTION_TRIGGER_PERCENT": "80",
+        "DOTAMIND_CONTEXT_COMPACTION_TEST_TRIGGER_PERCENT": "80",
         "DOTAMIND_COMPACTION_KEEP_RECENT_TOKENS": "1",
         "DOTAMIND_COMPACTION_MAX_INPUT_BYTES": "100000",
         "DOTAMIND_COMPACTION_RESERVE_TOKENS": "160",

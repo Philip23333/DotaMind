@@ -274,7 +274,9 @@ def test_watermark_compaction_still_allows_one_overflow_recovery() -> None:
         summary=watermark_summary,
         cut_index=3,
     )
-    limits = _limits(context_window_tokens=6_000)
+    limits = _limits(context_window_tokens=6_000).model_copy(
+        update={"context_compaction_test_trigger_percent": 70}
+    )
     initial_capacity = assess_request_capacity(_execution_request(history, limits), limits)
     assert initial_capacity is not None
     assert initial_capacity.pressure.value == "high"

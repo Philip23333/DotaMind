@@ -18,15 +18,15 @@ def _clear_settings_environment(monkeypatch: pytest.MonkeyPatch) -> None:
         "DOTAMIND_LLM_BASE_URL",
         "DOTAMIND_LLM_MODEL",
         "DOTAMIND_CONTEXT_WINDOW_TOKENS",
+        "DOTAMIND_COMPACTION_RESERVE_TOKENS",
+        "DOTAMIND_CONTEXT_COMPACTION_TEST_TRIGGER_PERCENT",
         "VNEXT_TEST_RECORDING_ENABLED",
     ):
         monkeypatch.delenv(name, raising=False)
 
 
 def test_default_settings_path_is_repository_root_env() -> None:
-    assert composition._VNEXT_ENV_PATH == (
-        Path(composition.__file__).resolve().parents[4] / ".env"
-    )
+    assert composition._VNEXT_ENV_PATH == (Path(composition.__file__).resolve().parents[4] / ".env")
 
 
 def test_model_and_context_settings_read_from_temporary_env_file(
@@ -40,7 +40,8 @@ def test_model_and_context_settings_read_from_temporary_env_file(
         "DOTAMIND_LLM_MODEL=unit-test-model\n"
         "DOTAMIND_CONTEXT_WINDOW_TOKENS=12000\n"
         "DOTAMIND_CONTEXT_OUTPUT_RESERVE_TOKENS=300\n"
-        "DOTAMIND_CONTEXT_SAFETY_MARGIN_TOKENS=200\n",
+        "DOTAMIND_CONTEXT_SAFETY_MARGIN_TOKENS=200\n"
+        "DOTAMIND_COMPACTION_RESERVE_TOKENS=10000\n",
         encoding="utf-8",
     )
     _isolate_settings_file(monkeypatch, env_path)
@@ -113,7 +114,8 @@ def test_environment_overrides_vnext_dotenv_values(
     env_path.write_text(
         "VNEXT_TEST_RECORDING_ENABLED=false\n"
         "DOTAMIND_LLM_MODEL=file-model\n"
-        "DOTAMIND_CONTEXT_WINDOW_TOKENS=12000\n",
+        "DOTAMIND_CONTEXT_WINDOW_TOKENS=12000\n"
+        "DOTAMIND_COMPACTION_RESERVE_TOKENS=10000\n",
         encoding="utf-8",
     )
     _isolate_settings_file(monkeypatch, env_path)

@@ -73,10 +73,24 @@ and the same two fixed follow-up questions in one session. Profiles are not
 automatically iterated. `current` and `pressure` require a configured context
 window. `baseline` disables automatic capacity management but the evaluator
 client applies the same business output-token cap as other profiles. `pressure`
-sets `context_compaction_trigger_percent=1` and a recent-history target
+sets `context_compaction_test_trigger_percent=1` and a recent-history target
 equivalent to 4096 serialized bytes, rounded up using the configured
 `context_estimate_bytes_per_token` (2048 estimated tokens at the default ratio
-of 2); these are pressure-test overrides, not product recommendations.
+of 2); these are pressure-test overrides, not product recommendations. The
+`baseline` profile clears both the configured context window and test trigger.
+`current` preserves actual configuration, including any explicitly configured
+test percentage, so it does not necessarily represent the pure production
+threshold. `pressure` reports its effective test percentage and recent-history
+budget in the run report and manifest.
+
+With no test override, production compaction starts when the estimated input
+exceeds `context_window_tokens - compaction_reserve_tokens`. A test percentage
+is rounded up from the input capacity remaining after the current request's
+output reserve and safety margin; the effective threshold is the earlier of
+the production and test thresholds. Capacity estimates use configured UTF-8
+bytes-per-token ratios rather than an exact tokenizer. The summary input is
+still limited by `compaction_max_input_bytes` (currently 256 KiB), regardless
+of the configured model window.
 
 The default shared limits are at most 12 model calls (including summary and
 retry calls) and 180 wall-clock seconds for both questions together. CLI

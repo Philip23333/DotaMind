@@ -6,6 +6,7 @@ from uuid import uuid4
 import pytest
 from pydantic import BaseModel
 
+from app.vnext.agent.compaction_budget import resolve_compaction_output_tokens
 from app.vnext.agent.context_accounting import measure_request_context_bytes
 from app.vnext.agent.context_capacity import assess_request_capacity
 from app.vnext.agent.errors import AgentCancelledError, AgentRuntimeError, ModelProtocolError
@@ -186,7 +187,7 @@ def _limits_for_available(
     *,
     recent_tokens: int = 1,
     max_steps: int = 3,
-    trigger_percent: int = 80,
+    test_trigger_percent: int | None = 80,
 ) -> AgentLimits:
     reserve = 64
     margin = 16
@@ -201,7 +202,7 @@ def _limits_for_available(
         context_output_reserve_tokens=reserve,
         context_safety_margin_tokens=margin,
         context_estimate_bytes_per_token=1,
-        context_compaction_trigger_percent=trigger_percent,
+        context_compaction_test_trigger_percent=test_trigger_percent,
     )
 
 
@@ -244,24 +245,28 @@ def test_context_capacity_is_disabled_by_default() -> None:
     assert "context_capacity_checks" not in trace.snapshot()
 
 
-def test_compaction_reserve_does_not_change_the_watermark_trigger() -> None:
+def test_compaction_reserve_defines_the_production_watermark_trigger() -> None:
     request = ModelRequest(
         messages=[UserMessage(content="x" * 3_200)],
         max_output_tokens=500,
     )
-    lower_reserve = AgentLimits(
+    small_reserve = AgentLimits(
         context_window_tokens=5_000,
         context_output_reserve_tokens=500,
         context_safety_margin_tokens=200,
         context_estimate_bytes_per_token=1,
-        context_compaction_trigger_percent=80,
         compaction_reserve_tokens=2,
     )
-    higher_reserve = lower_reserve.model_copy(update={"compaction_reserve_tokens": 100_000})
+    large_reserve = small_reserve.model_copy(update={"compaction_reserve_tokens": 2_000})
 
-    assert assess_request_capacity(request, lower_reserve) == assess_request_capacity(
-        request, higher_reserve
-    )
+    small = assess_request_capacity(request, small_reserve)
+    large = assess_request_capacity(request, large_reserve)
+
+    assert small is not None and large is not None
+    assert small.production_trigger_input_tokens == 4_999
+    assert large.production_trigger_input_tokens == 3_001
+    assert small.pressure is ContextPressure.NORMAL
+    assert large.pressure is ContextPressure.HIGH
 
 
 @pytest.mark.parametrize("case", ["missing", "uninitialized", "mismatch"])
@@ -325,6 +330,7 @@ def test_auto_mode_sets_request_output_reserve() -> None:
             context_window_tokens=10_000,
             context_output_reserve_tokens=37,
             context_safety_margin_tokens=10,
+            compaction_reserve_tokens=160,
             deadline_seconds=5,
         ),
     )
@@ -336,6 +342,15 @@ def test_auto_mode_sets_request_output_reserve() -> None:
     assert [check["stage"] for check in checks] == ["execution", "primary_answer"]
     assert [check["phase"] for check in checks] == ["before_model", "before_model"]
     assert all(check["capacity"]["pressure"] == "normal" for check in checks)
+    capacity = checks[0]["capacity"]
+    assert capacity["context_window_tokens"] == 10_000
+    assert capacity["estimated_input_tokens"] > 0
+    assert capacity["reserved_output_tokens"] == 37
+    assert capacity["safety_margin_tokens"] == 10
+    assert capacity["compaction_reserve_tokens"] == 160
+    assert capacity["production_trigger_input_tokens"] == 9841
+    assert capacity["test_trigger_percent"] is None
+    assert capacity["trigger_input_tokens"] == capacity["production_trigger_input_tokens"]
 
 
 def test_tool_schemas_are_included_in_runtime_capacity() -> None:
@@ -343,6 +358,7 @@ def test_tool_schemas_are_included_in_runtime_capacity() -> None:
         context_window_tokens=10_000,
         context_output_reserve_tokens=64,
         context_safety_margin_tokens=16,
+        compaction_reserve_tokens=160,
         deadline_seconds=5,
     )
     plain_history, plain_id = _history()
@@ -419,6 +435,171 @@ def test_high_watermark_compacts_once_and_rebuilds_execution_request() -> None:
     ]
     assert snapshot["compaction_commits"][0]["trigger"] == "watermark"
     assert len(snapshot["compaction_commits"]) == 1
+
+
+def test_production_formula_triggers_a_real_compaction_without_test_override() -> None:
+    history, request_id = _history_with_old_group()
+    registry = _echo_registry()
+    probe_limits = AgentLimits(
+        max_steps=3,
+        deadline_seconds=5,
+        answer_timeout_seconds=5,
+        context_window_tokens=1_000_000,
+        context_output_reserve_tokens=64,
+        context_safety_margin_tokens=16,
+        context_estimate_bytes_per_token=1,
+        compaction_reserve_tokens=160,
+        compaction_keep_recent_tokens=1,
+        compaction_max_input_bytes=100_000,
+    )
+    candidate = _probe_request(history, registry, limits=probe_limits)
+    estimate = assess_request_capacity(candidate, probe_limits)
+    assert estimate is not None
+    limits = probe_limits.model_copy(
+        update={"context_window_tokens": estimate.estimated_input_tokens + 120}
+    )
+    actual_candidate = _probe_request(history, registry, limits=limits)
+    actual_capacity = assess_request_capacity(actual_candidate, limits)
+    assert actual_capacity is not None
+    assert actual_capacity.pressure is ContextPressure.HIGH
+    assert actual_capacity.test_trigger_percent is None
+
+    model = ScriptedModelClient(
+        [
+            ModelResponse.from_final("compressed background", finish_reason="stop"),
+            ModelResponse.from_final("execution"),
+            ModelResponse.from_final("answer"),
+        ]
+    )
+    trace = AgentTraceCollector()
+    _run(
+        AgentRuntime(model, registry, limits=limits),
+        history,
+        request_id,
+        trace_collector=trace,
+    )
+
+    assert len(trace.snapshot()["compaction_commits"]) == 1
+    assert trace.snapshot()["compaction_commits"][0]["trigger"] == "watermark"
+    assert (
+        trace.snapshot()["context_capacity_checks"][0]["capacity"]["trigger_input_tokens"]
+        == trace.snapshot()["context_capacity_checks"][0]["capacity"][
+            "production_trigger_input_tokens"
+        ]
+    )
+    assert model.requests[0].metadata.get("purpose") == "context_compaction"
+    assert len(model.requests) == 3
+
+
+def test_test_override_compacts_the_same_history_before_production_boundary() -> None:
+    probe_history, _ = _history_with_old_group()
+    registry = _echo_registry()
+    probe_limits = AgentLimits(
+        context_window_tokens=1_000_000,
+        context_output_reserve_tokens=64,
+        context_safety_margin_tokens=16,
+        context_estimate_bytes_per_token=1,
+        compaction_reserve_tokens=160,
+        compaction_keep_recent_tokens=1,
+        compaction_max_input_bytes=100_000,
+    )
+    request = _probe_request(probe_history, registry, limits=probe_limits)
+    capacity = assess_request_capacity(request, probe_limits)
+    assert capacity is not None
+    estimated_input = capacity.estimated_input_tokens
+    window = estimated_input * 4
+
+    def limits(test_percent: int | None) -> AgentLimits:
+        return AgentLimits(
+            max_steps=3,
+            deadline_seconds=5,
+            answer_timeout_seconds=5,
+            context_window_tokens=window,
+            context_output_reserve_tokens=64,
+            context_safety_margin_tokens=16,
+            context_estimate_bytes_per_token=1,
+            compaction_reserve_tokens=160,
+            compaction_keep_recent_tokens=1,
+            compaction_max_input_bytes=100_000,
+            context_compaction_test_trigger_percent=test_percent,
+        )
+
+    production_history, production_request_id = _history_with_old_group()
+    production_model = ScriptedModelClient(
+        [ModelResponse.from_final("execution"), ModelResponse.from_final("answer")]
+    )
+    production_trace = AgentTraceCollector()
+    _run(
+        AgentRuntime(production_model, _echo_registry(), limits=limits(None)),
+        production_history,
+        production_request_id,
+        trace_collector=production_trace,
+    )
+
+    test_history, test_request_id = _history_with_old_group()
+    test_model = ScriptedModelClient(
+        [
+            ModelResponse.from_final("compressed background", finish_reason="stop"),
+            ModelResponse.from_final("execution"),
+            ModelResponse.from_final("answer"),
+        ]
+    )
+    test_trace = AgentTraceCollector()
+    _run(
+        AgentRuntime(test_model, _echo_registry(), limits=limits(20)),
+        test_history,
+        test_request_id,
+        trace_collector=test_trace,
+    )
+
+    production_snapshot = production_trace.snapshot()
+    test_snapshot = test_trace.snapshot()
+    assert production_snapshot.get("compaction_commits", []) == []
+    production_capacity = production_snapshot["context_capacity_checks"][0]["capacity"]
+    assert production_capacity["pressure"] == "normal"
+    assert len(production_model.requests) == 2
+    assert len(test_snapshot["compaction_commits"]) == 1
+    assert test_snapshot["compaction_commits"][0]["trigger"] == "watermark"
+    test_capacity = test_snapshot["context_capacity_checks"][0]["capacity"]
+    assert test_capacity["estimated_input_tokens"] == production_capacity["estimated_input_tokens"]
+    assert test_capacity["test_trigger_percent"] == 20
+    assert test_capacity["trigger_input_tokens"] < test_capacity["production_trigger_input_tokens"]
+    assert len(test_model.requests) == 3
+    summary_request = next(
+        item for item in test_model.requests if item.metadata.get("purpose") == "context_compaction"
+    )
+    assert summary_request.max_output_tokens == resolve_compaction_output_tokens(
+        kind="history",
+        reserve_tokens=160,
+        model_max_output_tokens=None,
+    )
+
+    explicit_history, explicit_request_id = _history_with_old_group()
+    explicit_model = ScriptedModelClient(
+        [
+            ModelResponse.from_final("compressed background", finish_reason="stop"),
+            ModelResponse.from_final("execution"),
+            ModelResponse.from_final("answer"),
+        ]
+    )
+    explicit_trace = AgentTraceCollector()
+    _run(
+        AgentRuntime(explicit_model, _echo_registry(), limits=limits(None)),
+        explicit_history,
+        explicit_request_id,
+        compact_before_steps=(1,),
+        trace_collector=explicit_trace,
+    )
+    explicit_summary = next(
+        item
+        for item in explicit_model.requests
+        if item.metadata.get("purpose") == "context_compaction"
+    )
+    assert explicit_summary == summary_request
+    assert (
+        explicit_trace.snapshot()["compaction_commits"][0]["cut_index"]
+        == test_snapshot["compaction_commits"][0]["cut_index"]
+    )
 
 
 def test_explicit_compaction_wins_when_watermark_is_also_high() -> None:
@@ -681,14 +862,14 @@ def test_tool_schema_can_cross_the_watermark_trigger_line() -> None:
     assert tool_capacity.estimated_input_tokens > plain_capacity.estimated_input_tokens
 
     crossing: tuple[AgentLimits, object, object] | None = None
-    for trigger_percent in (99, 95, 90, 80):
+    for test_trigger_percent in (99, 95, 90, 80):
         for available in range(
             plain_capacity.estimated_input_tokens + 1,
             tool_capacity.estimated_input_tokens * 2 + 1,
         ):
             limits = _limits_for_available(
                 available,
-                trigger_percent=trigger_percent,
+                test_trigger_percent=test_trigger_percent,
             )
             plain = assess_request_capacity(plain_request, limits)
             with_tool = assess_request_capacity(tool_request, limits)
@@ -791,3 +972,29 @@ def test_auto_summary_validation_failure_does_not_commit_or_execute() -> None:
     assert history.records == before_records
     assert history.compaction_records == ()
     assert trace.snapshot()["compaction_calls"][0]["status"] == "failed"
+
+
+def test_summary_input_byte_limit_fails_before_model_call_or_commit() -> None:
+    history, request_id = _history_with_old_group()
+    limits = _limits_for_available(100_000, test_trigger_percent=1).model_copy(
+        update={"compaction_max_input_bytes": 1}
+    )
+    model = ScriptedModelClient([])
+    trace = AgentTraceCollector()
+    before_messages = history.effective_messages()
+    before_records = history.records
+
+    with pytest.raises(AgentRuntimeError) as error:
+        _run(
+            AgentRuntime(model, _echo_registry(), limits=limits),
+            history,
+            request_id,
+            trace_collector=trace,
+        )
+
+    assert error.value.code == "context_compaction_failed"
+    assert error.value.details["reason_code"] == "summary_input_too_large"
+    assert model.requests == []
+    assert history.effective_messages() == before_messages
+    assert history.records == before_records
+    assert history.compaction_records == ()

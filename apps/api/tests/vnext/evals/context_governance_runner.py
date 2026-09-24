@@ -148,10 +148,11 @@ def prepare_evaluation(
     limits = settings.agent_limits.model_copy(deep=True)
     if profile == "baseline":
         limits.context_window_tokens = None
+        limits.context_compaction_test_trigger_percent = None
     elif limits.context_window_tokens is None:
         raise EvaluationError(f"profile {profile} requires a valid configured context window")
     elif profile == "pressure":
-        limits.context_compaction_trigger_percent = 1
+        limits.context_compaction_test_trigger_percent = 1
         limits.compaction_keep_recent_tokens = (
             4096 + limits.context_estimate_bytes_per_token - 1
         ) // limits.context_estimate_bytes_per_token
@@ -518,6 +519,26 @@ def _report_markdown(
         "Values are usage fields reported by the provider; missing values are unknown, not zero.",
         "",
     ]
+    agent_limits = manifest.get("agent_limits", {})
+    context_window = agent_limits.get("context_window_tokens")
+    test_trigger_percent = agent_limits.get("context_compaction_test_trigger_percent")
+    lines.extend(["## Compaction trigger", ""])
+    if manifest["profile"] == "baseline" or context_window is None:
+        lines.append("Automatic capacity management: disabled (no configured context window).")
+    elif test_trigger_percent is None:
+        lines.append(
+            "Trigger mode: production formula (`estimated_input_tokens > window - reserve`)."
+        )
+    else:
+        lines.append(
+            f"Trigger mode: test override; test trigger percent: `{test_trigger_percent}%`."
+        )
+    if manifest["profile"] == "current":
+        lines.append(
+            "`current` uses the loaded configuration and may include an explicitly "
+            "configured test override."
+        )
+    lines.append("")
     for purpose in ("business", "summary"):
         input_tokens = usage[f"{purpose}_input_tokens"]
         output_tokens = usage[f"{purpose}_output_tokens"]
@@ -585,7 +606,7 @@ def _report_markdown(
                 "",
                 "This is a pressure-test override, not a product recommendation:",
                 "",
-                "- `context_compaction_trigger_percent = 1`",
+                "- test trigger percent: `1%`",
                 "- `compaction_keep_recent_tokens = "
                 f"{manifest.get('agent_limits', {}).get('compaction_keep_recent_tokens', 2048)}`",
                 "",

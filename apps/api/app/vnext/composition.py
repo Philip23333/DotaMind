@@ -143,7 +143,6 @@ _AGENT_LIMIT_ENV_FIELDS = (
     ("DOTAMIND_CONTEXT_OUTPUT_RESERVE_TOKENS", "context_output_reserve_tokens"),
     ("DOTAMIND_CONTEXT_SAFETY_MARGIN_TOKENS", "context_safety_margin_tokens"),
     ("DOTAMIND_CONTEXT_ESTIMATE_BYTES_PER_TOKEN", "context_estimate_bytes_per_token"),
-    ("DOTAMIND_CONTEXT_COMPACTION_TRIGGER_PERCENT", "context_compaction_trigger_percent"),
     ("DOTAMIND_COMPACTION_KEEP_RECENT_TOKENS", "compaction_keep_recent_tokens"),
     ("DOTAMIND_COMPACTION_MAX_INPUT_BYTES", "compaction_max_input_bytes"),
     ("DOTAMIND_COMPACTION_RESERVE_TOKENS", "compaction_reserve_tokens"),
@@ -164,6 +163,13 @@ def _agent_limits_from_env(file_values: dict[str, str | None]) -> AgentLimits:
                 raise ValueError(f"{name} must be an integer")
             continue
         values[field_name] = _parse_required_integer(name, raw_value)
+    test_trigger_name = "DOTAMIND_CONTEXT_COMPACTION_TEST_TRIGGER_PERCENT"
+    test_trigger_value = _env_value(test_trigger_name, None, file_values)
+    if test_trigger_value is not None and test_trigger_value.strip():
+        values["context_compaction_test_trigger_percent"] = _parse_required_integer(
+            test_trigger_name,
+            test_trigger_value,
+        )
     model_output_name = "DOTAMIND_COMPACTION_MODEL_MAX_OUTPUT_TOKENS"
     model_output_value = _env_value(model_output_name, None, file_values)
     if model_output_value is not None and model_output_value.strip():

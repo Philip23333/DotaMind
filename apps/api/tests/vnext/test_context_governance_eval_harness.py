@@ -63,7 +63,7 @@ def _settings(*, window: int | None = 500_000) -> VNextSettings:
             context_output_reserve_tokens=512,
             context_safety_margin_tokens=128,
             context_estimate_bytes_per_token=2,
-            context_compaction_trigger_percent=75,
+            context_compaction_test_trigger_percent=75,
         ),
     )
 
@@ -124,9 +124,10 @@ def test_profiles_copy_limits_and_only_override_the_selected_fields() -> None:
     pressure = prepare_evaluation(settings, profile="pressure")
 
     assert baseline.limits.context_window_tokens is None
+    assert baseline.limits.context_compaction_test_trigger_percent is None
     assert current.limits == settings.agent_limits
     assert pressure.limits.context_window_tokens == settings.agent_limits.context_window_tokens
-    assert pressure.limits.context_compaction_trigger_percent == 1
+    assert pressure.limits.context_compaction_test_trigger_percent == 1
     assert pressure.limits.compaction_keep_recent_tokens == 2048
     assert settings.agent_limits.model_dump(mode="python") == original
     assert baseline.limits is not settings.agent_limits
@@ -1043,11 +1044,42 @@ def test_pressure_report_disclaims_quality_when_no_compaction_succeeded() -> Non
             "max_model_calls": 12,
             "max_wall_seconds": 180,
             "elapsed_wall_seconds": 1.0,
+            "agent_limits": {
+                "context_window_tokens": 500_000,
+                "context_compaction_test_trigger_percent": 1,
+                "compaction_keep_recent_tokens": 2048,
+            },
         },
         calls=[],
         traces=[{"trace": {"compaction_commits": []}}],
         answers=[],
     )
-    assert "context_compaction_trigger_percent = 1" in report
+    assert "test trigger percent: `1%`" in report
     assert "compaction_keep_recent_tokens = 2048" in report
     assert "本次未覆盖压缩后的模型行为，不能据此判断摘要质量。" in report
+
+
+def test_current_report_discloses_explicit_test_trigger_override() -> None:
+    from tests.vnext.evals.context_governance_runner import _report_markdown
+
+    report = _report_markdown(
+        manifest={
+            "status": "completed",
+            "scene_id": "synthetic-scene",
+            "profile": "current",
+            "model": "offline-test",
+            "max_model_calls": 12,
+            "max_wall_seconds": 180,
+            "elapsed_wall_seconds": 1.0,
+            "agent_limits": {
+                "context_window_tokens": 100_000,
+                "context_compaction_test_trigger_percent": 30,
+            },
+        },
+        calls=[],
+        traces=[],
+        answers=[],
+    )
+
+    assert "Trigger mode: test override; test trigger percent: `30%`." in report
+    assert "`current` uses the loaded configuration" in report

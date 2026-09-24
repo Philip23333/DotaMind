@@ -101,13 +101,45 @@ existing `.env`, replace `DOTAMIND_COMPACTION_RECENT_HISTORY_BYTES` with this
 token setting; the old byte variable is no longer read.
 
 These output-token limits are independent from the existing serialized-input
-byte limit (`DOTAMIND_COMPACTION_MAX_INPUT_BYTES`). Summary text no longer has a
-separate 8 KiB byte ceiling; the complete rebuilt model request remains subject
-to the existing context-capacity checks. Ordinary answer output continues to
-use `DOTAMIND_CONTEXT_OUTPUT_RESERVE_TOKENS`. This budget change does not alter
-the watermark trigger, including the current 30% test setting, or implement Pi's
-production trigger formula. A larger reserve can reduce truncation but does not
-guarantee a successful summary.
+byte limit (`DOTAMIND_COMPACTION_MAX_INPUT_BYTES`, currently 256 KiB). Summary
+text has no separate 8 KiB byte ceiling, but a summary request whose serialized
+input exceeds that 256 KiB limit fails before a model call. The complete rebuilt
+model request remains subject to capacity checks. Ordinary answer output
+continues to use `DOTAMIND_CONTEXT_OUTPUT_RESERVE_TOKENS`.
+
+Automatic compaction uses the production threshold when the test override is
+blank:
+
+```dotenv
+DOTAMIND_COMPACTION_RESERVE_TOKENS=16384
+DOTAMIND_CONTEXT_COMPACTION_TEST_TRIGGER_PERCENT=
+```
+
+The production condition is `estimated_input_tokens > context_window_tokens -
+compaction_reserve_tokens`. Reserve must be smaller than the configured model
+window. The reserve also derives summary output limits, so it should not be
+changed merely to simulate early triggering.
+
+For deterministic pressure tests, a separate test-only percentage may advance
+the trigger without changing summary budgets or history slicing:
+
+```dotenv
+DOTAMIND_COMPACTION_RESERVE_TOKENS=16384
+DOTAMIND_CONTEXT_COMPACTION_TEST_TRIGGER_PERCENT=30
+```
+
+The test percentage is rounded up from the input budget after the current
+request's output reserve and safety margin are removed. The effective trigger
+is the earlier of the production threshold and this test threshold; it can
+never delay production triggering. `CRITICAL` hard-capacity handling takes
+priority. Leave `DOTAMIND_CONTEXT_WINDOW_TOKENS` blank to disable automatic
+capacity governance. The old `DOTAMIND_CONTEXT_COMPACTION_TRIGGER_PERCENT`
+variable is no longer read and must be removed/migrated.
+
+After changing API settings, restart the backend; for container deployments,
+also verify that the running container uses the intended image. These settings
+do not infer a model's actual window. Input sizing remains a configurable UTF-8
+byte-ratio heuristic, not an exact tokenizer or provider usage measurement.
 
 `DOTAMIND_COMPACTION_MAX_RETRIES` defaults to `1` and means retries after the
 first call (allowed range: 0–3), independently for each summary segment. Only

@@ -22,6 +22,9 @@ class RequestCapacity:
     safety_margin_tokens: int
     context_window_tokens: int
     available_input_tokens: int
+    compaction_reserve_tokens: int
+    production_trigger_input_tokens: int
+    test_trigger_percent: int | None
     trigger_input_tokens: int
     pressure: ContextPressure
 
@@ -48,13 +51,18 @@ def assess_request_capacity(
         0,
         window - reserved_output_tokens - limits.context_safety_margin_tokens,
     )
+    production_trigger_input_tokens = window - limits.compaction_reserve_tokens + 1
+    test_trigger_input_tokens = None
+    if limits.context_compaction_test_trigger_percent is not None:
+        test_trigger_input_tokens = (
+            available_input_tokens * limits.context_compaction_test_trigger_percent + 99
+        ) // 100
     trigger_input_tokens = (
-        available_input_tokens * limits.context_compaction_trigger_percent + 99
-    ) // 100
-    if (
-        available_input_tokens == 0
-        or estimated_input_tokens >= available_input_tokens
-    ):
+        min(production_trigger_input_tokens, test_trigger_input_tokens)
+        if test_trigger_input_tokens is not None
+        else production_trigger_input_tokens
+    )
+    if available_input_tokens == 0 or estimated_input_tokens >= available_input_tokens:
         pressure = ContextPressure.CRITICAL
     elif estimated_input_tokens >= trigger_input_tokens:
         pressure = ContextPressure.HIGH
@@ -68,6 +76,9 @@ def assess_request_capacity(
         safety_margin_tokens=limits.context_safety_margin_tokens,
         context_window_tokens=window,
         available_input_tokens=available_input_tokens,
+        compaction_reserve_tokens=limits.compaction_reserve_tokens,
+        production_trigger_input_tokens=production_trigger_input_tokens,
+        test_trigger_percent=limits.context_compaction_test_trigger_percent,
         trigger_input_tokens=trigger_input_tokens,
         pressure=pressure,
     )
