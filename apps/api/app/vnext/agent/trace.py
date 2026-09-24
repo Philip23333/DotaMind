@@ -17,7 +17,6 @@ from app.vnext.agent.answer_stage import (
 )
 from app.vnext.agent.context_accounting import build_context_accounting
 from app.vnext.agent.context_capacity import RequestCapacity
-from app.vnext.agent.materialization_budget import MaterializationDecision
 from app.vnext.agent.runtime_context import RuntimeContext
 from app.vnext.agent.transcript_rewrite import TranscriptRewriteEvent
 from app.vnext.llm.protocol import (
@@ -222,52 +221,6 @@ class AgentTraceCollector:
             "leases": active_leases,
         }
 
-    def materialization_admission(
-        self,
-        step: int,
-        *,
-        decision: MaterializationDecision,
-        task_key: str | None,
-        limit_bytes: int,
-    ) -> None:
-        """Record whether one materialized result entered model context."""
-
-        budget = self._materialization_budget(step, limit_bytes)
-        budget["admissions"].append(
-            {
-                "tool_call_id": decision.tool_call_id,
-                "task_key": task_key,
-                "raw_bytes": decision.raw_bytes,
-                "admitted": decision.admitted,
-                "active_before_bytes": decision.active_before_bytes,
-                "active_after_bytes": decision.active_after_bytes,
-            }
-        )
-
-    def materialization_release(
-        self,
-        step: int,
-        *,
-        tool_call_id: str,
-        reason: str,
-        released_bytes: int,
-        active_after_bytes: int,
-        limit_bytes: int,
-    ) -> None:
-        """Record bytes released from the active materialization budget."""
-
-        if released_bytes <= 0:
-            return
-        budget = self._materialization_budget(step, limit_bytes)
-        budget["releases"].append(
-            {
-                "tool_call_id": tool_call_id,
-                "reason": reason,
-                "released_bytes": released_bytes,
-                "active_after_bytes": active_after_bytes,
-            }
-        )
-
     def terminal(self, *, status: str, error_code: str | None, error_message: str | None) -> None:
         self._trace["terminal"] = {
             "status": status,
@@ -429,8 +382,6 @@ class AgentTraceCollector:
         retained_message_count: int,
         request_start_before: int,
         request_start_after: int,
-        materialized_bytes_before: int,
-        materialized_bytes_after: int,
     ) -> None:
         self._trace.setdefault("compaction_commits", []).append(
             {
@@ -444,8 +395,6 @@ class AgentTraceCollector:
                 "retained_message_count": retained_message_count,
                 "request_start_before": request_start_before,
                 "request_start_after": request_start_after,
-                "materialized_bytes_before": materialized_bytes_before,
-                "materialized_bytes_after": materialized_bytes_after,
             }
         )
 
@@ -490,15 +439,6 @@ class AgentTraceCollector:
         item = {"step": normalized_step}
         self._trace["steps"].append(item)
         return item
-
-    def _materialization_budget(self, step: int, limit_bytes: int) -> dict[str, Any]:
-        item = self._step(step)
-        budget = item.setdefault(
-            "materialization_budget",
-            {"limit_bytes": limit_bytes, "admissions": [], "releases": []},
-        )
-        return budget
-
 
 def runtime_context_to_dict(context: RuntimeContext) -> dict[str, object]:
     """Convert a RuntimeContext snapshot into JSON-safe trace fields."""

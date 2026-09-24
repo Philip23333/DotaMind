@@ -243,7 +243,7 @@ def _run(
     ("system_instruction", "request_start_before", "request_start_after"),
     [(None, 2, 1), ("base instruction", 3, 2)],
 )
-def test_compaction_loop_rebuilds_messages_scope_and_budget_before_next_model_call(
+def test_compaction_loop_rebuilds_messages_scope_and_leases_before_next_model_call(
     system_instruction: str | None,
     request_start_before: int,
     request_start_after: int,
@@ -321,7 +321,7 @@ def test_compaction_loop_rebuilds_messages_scope_and_budget_before_next_model_ca
     assert commit["step"] == 3
     assert commit["request_start_before"] == request_start_before
     assert commit["request_start_after"] == request_start_after
-    assert commit["materialized_bytes_after"] < commit["materialized_bytes_before"]
+    assert commit["new_revision"] > commit["base_revision"]
 
 
 def test_compaction_loop_supports_two_explicit_compactions_without_replaying_tools() -> None:
@@ -453,7 +453,7 @@ def test_compaction_entry_rejects_wrong_request_before_reset_or_execution() -> N
     assert coordinator.plan_snapshot() == before_plan
 
 
-def test_compaction_releases_repeated_reads_and_cleans_removed_task_leases() -> None:
+def test_compaction_cleans_removed_leases_and_keeps_retained_checkpoint_sources() -> None:
     history = SessionExecutionHistory()
     request_id = uuid4()
     history.begin_request(
@@ -563,7 +563,6 @@ def test_compaction_releases_repeated_reads_and_cleans_removed_task_leases() -> 
             compaction_keep_recent_tokens=1,
             compaction_max_input_bytes=100_000,
             compaction_reserve_tokens=160,
-            max_materialized_context_bytes=100_000,
         ),
         transcript_rewriter=ArtifactObservationTranscriptRewriter(),
         task_state_coordinator=coordinator,
@@ -590,14 +589,7 @@ def test_compaction_releases_repeated_reads_and_cleans_removed_task_leases() -> 
     )
     snapshot = trace.snapshot()
     assert [commit["step"] for commit in snapshot["compaction_commits"]] == [4, 6]
-    assert (
-        snapshot["compaction_commits"][1]["materialized_bytes_before"]
-        > snapshot["compaction_commits"][1]["materialized_bytes_after"]
-    )
-    assert any(
-        release["tool_call_id"] == "read-current"
-        and release["reason"] == "duplicate"
-        and release["released_bytes"] > 0
-        for step in snapshot["steps"]
-        for release in step.get("materialization_budget", {}).get("releases", [])
+    assert all(
+        commit["new_revision"] > commit["base_revision"]
+        for commit in snapshot["compaction_commits"]
     )

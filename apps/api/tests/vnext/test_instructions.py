@@ -29,19 +29,18 @@ def test_task_plan_policy_allows_bounded_cross_partition_batching() -> None:
     assert "avoid materializing evidence for later task items" not in instruction
 
 
-def test_deferred_materialization_policy_guides_recovery_without_scheduler_details() -> None:
+def test_historical_deferred_receipts_are_not_evidence_or_checkpoint_sources() -> None:
     instruction = " ".join(AGENT_INSTRUCTION.lower().split())
 
-    assert "materializing tool may succeed" in instruction
-    assert "deferred result means the tool execution succeeded" in instruction
-    assert "not currently available in model context" in instruction
-    assert "do not use a deferred result as evidence or as a checkpoint source" in instruction
+    assert "historical deferred receipts from older runs" in instruction
+    assert "not evidence or checkpoint sources" in instruction
     assert (
         "does not release or replace the tool results retained in effective conversation history"
         in instruction
     )
     assert "successful inline tool results" in instruction
     assert "retry deferred materialization later" not in instruction
-    assert "do not repeatedly retry a deferred materialization" in instruction
+    assert "materialization budget" not in instruction
+    assert "do not repeatedly retry a deferred materialization" not in instruction
     assert "160 kib" not in instruction
     assert "available bytes" not in instruction

@@ -8,7 +8,6 @@ from pydantic import BaseModel
 
 from app.vnext.agent.errors import AgentCancelledError
 from app.vnext.agent.events import ToolCompleted
-from app.vnext.agent.limits import AgentLimits
 from app.vnext.agent.runtime import AgentRuntime, CancellationToken
 from app.vnext.artifacts import (
     ArtifactBackedToolResultProcessor,
@@ -233,7 +232,7 @@ def test_successful_and_failed_tool_results_are_each_recorded_once() -> None:
     )] == ["ok", "bad"]
 
 
-def test_budget_rejection_records_raw_result_but_next_request_gets_deferred() -> None:
+def test_successful_materializing_results_are_visible_in_history_without_cumulative_gate() -> None:
     async def materialize(args: _ToolInput) -> _ToolOutput:
         return _ToolOutput(value=f"raw-{args.value}")
 
@@ -260,7 +259,6 @@ def test_budget_rejection_records_raw_result_but_next_request_gets_deferred() ->
                 )
             ]
         ),
-        limits=AgentLimits(max_materialized_context_bytes=1),
     )
     history, request_id, messages = _history()
 
@@ -282,10 +280,10 @@ def test_budget_rejection_records_raw_result_but_next_request_gets_deferred() ->
     ]
     next_results = _tool_results(model.requests[1])
     assert len(next_results) == 2
-    assert all(
-        result.content["_context_materialization"]["state"] == "deferred"  # type: ignore[index]
-        for result in next_results
-    )
+    assert [result.content for result in next_results] == [
+        {"value": "raw-1"},
+        {"value": "raw-1"},
+    ]
 
 
 def test_cancellation_preserves_externalized_locator_and_executes_tool_once() -> None:
@@ -338,7 +336,7 @@ def test_cancellation_preserves_externalized_locator_and_executes_tool_once() ->
     assert asyncio.run(store.get(ref)) == {"value": _large_output()}
 
 
-def test_deferred_materialization_preserves_externalized_locator_and_executes_once() -> None:
+def test_externalized_materializing_result_preserves_preview_and_executes_once() -> None:
     store = SessionArtifactStore()
     executions = 0
 
@@ -367,7 +365,6 @@ def test_deferred_materialization_preserves_externalized_locator_and_executes_on
             ],
             result_processor=_externalizing_processor(store),
         ),
-        limits=AgentLimits(max_materialized_context_bytes=1),
     )
     history, request_id, messages = _history()
 
@@ -384,4 +381,5 @@ def test_deferred_materialization_preserves_externalized_locator_and_executes_on
     assert executions == 1
     assert len(history.artifact_locators) == 1
     next_results = _tool_results(model.requests[1])
-    assert next_results[0].content["_context_materialization"]["state"] == "deferred"  # type: ignore[index]
+    assert next_results[0].content["externalized"] is True  # type: ignore[index]
+    assert next_results[0].content["artifact_ref"] == history.artifact_locators[0].ref  # type: ignore[index]

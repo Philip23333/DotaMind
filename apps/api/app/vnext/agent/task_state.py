@@ -678,6 +678,8 @@ def _is_checkpointable_inline_content(content: Any) -> bool:
         if isinstance(observation, dict) and observation.get("state") == "receipt_only":
             return False
         materialization = content.get("_context_materialization")
+        # New runs no longer create materialization-budget deferrals. Historical
+        # deferred receipts are not evidence and must remain ineligible.
         if isinstance(materialization, dict) and materialization.get("state") == "deferred":
             return False
     stack = list(content.values()) if isinstance(content, dict) else list(content)

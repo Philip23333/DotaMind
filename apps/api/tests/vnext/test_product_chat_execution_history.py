@@ -436,7 +436,6 @@ def test_product_follow_up_uses_automatic_compaction_and_fresh_task_state(
         compaction_keep_recent_tokens=1,
         compaction_max_input_bytes=100_000,
         compaction_reserve_tokens=160,
-        max_materialized_context_bytes=100_000,
     )
     runtime = AgentRuntime(model, registry, limits=limits, task_state_coordinator=coordinator)
     repository = _Repository()

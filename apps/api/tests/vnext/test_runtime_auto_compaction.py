@@ -826,10 +826,16 @@ def test_continuous_watermarks_compact_again_after_new_tool_output() -> None:
         "turn_prefix",
     ]
     assert all(commit["trigger"] == "watermark" for commit in commits)
-    assert all(
-        commit["materialized_bytes_after"] < commit["materialized_bytes_before"]
-        for commit in commits
-    )
+    assert all(commit["new_revision"] > commit["base_revision"] for commit in commits)
+    before_compaction = [
+        item
+        for item in snapshot["context_capacity_checks"]
+        if item["stage"] == "execution" and item["phase"] == "before_compaction"
+    ]
+    assert [item["capacity"]["pressure"] for item in before_compaction] == [
+        "critical",
+        "critical",
+    ]
     before_model = [
         item
         for item in snapshot["context_capacity_checks"]

@@ -42,6 +42,13 @@ generic spill processor: `artifact.read` enforces the same 35 KiB serialized
 result bound itself, while `artifact.grep` is bounded by match and preview
 limits but has no separate serialized-result byte budget.
 
+These per-operation bounds and externalization control individual tool outputs;
+there is no cumulative Raw admission budget across effective history. Overall
+context capacity is estimated from the complete model request and managed by
+Runtime compaction. Compaction changes effective history without rewriting the
+stored Artifact or append-only execution records. Checkpointing records task
+progress and evidence sources; it does not release raw results from history.
+
 ## Retrieval contract
 
 ```text

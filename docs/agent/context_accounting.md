@@ -185,16 +185,16 @@ context-window error classification.
 ## Compaction boundary
 
 The summary and FIFO Artifact locator projection are part of the full request
-and therefore contribute to `effective_request.serialized_bytes`. The
-materialization budget is narrower: it counts only successful Raw tool results
-actually carried in messages. Deferred materializations and lifecycle
-`receipt_only` observations contribute no Raw bytes.
-
-After a successful compaction, Runtime rebuilds the materialization budget from
-the retained messages and the new request scope. It does not reset the budget to
-zero, and it does not reconstruct it from removed raw records. Maintenance
-summary usage is recorded on `compaction_calls`; business step numbers and
-business model usage remain separate. Byte metrics are not token counts.
+and therefore contribute to `effective_request.serialized_bytes`. Active Raw
+observation statistics describe successful results actually carried in
+messages; they are diagnostic context accounting, not an independent admission
+limit. Per-read and tool-output bounds remain in force, while overall capacity
+is governed by the complete request estimate and compaction. After a successful
+compaction, capacity and evidence sources are rebuilt from retained effective
+history; removed raw records remain in append-only execution history but are no
+longer part of model context. Maintenance summary usage is recorded on
+`compaction_calls`; business step numbers and business model usage remain
+separate. Byte metrics are not token counts.
 
 ## Trace invariant
 

@@ -189,8 +189,8 @@ reads continue to use their existing `task_key` and EvidenceLease behavior.
 A checkpoint stores model-organized task state and source references. Success
 means that state was accepted and the plan advanced; it does not verify the
 business conclusions or guarantee completeness. Checkpointing does not force
-externalization, change the 12 KiB spill threshold or materialization accounting,
-or release raw results from conversation history.
+externalization, change the 12 KiB spill threshold, or release raw results from
+conversation history.
 
 ## Future domain tools
 

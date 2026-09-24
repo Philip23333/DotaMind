@@ -130,7 +130,9 @@ automatically restored into a later turn's dialogue context.
 
 The Controller owns decision shape, schema adherence, reference validation, and
 capability-boundary errors. The execution runtime owns budgets, retries,
-tracing, and persistence. Execution has no step-count ceiling; Runtime retains
+tracing, and persistence. Complete-request context capacity and automatic
+compaction govern effective history; there is no independent cumulative Raw
+admission budget. Execution has no step-count ceiling; Runtime retains
 step numbering for traces, while the execution deadline, cancellation, plan
 completion, and existing context-capacity or error exits control its lifecycle.
 Steps-pressure calculations remain available for isolated tests, but production

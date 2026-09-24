@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import json
-
 from pydantic import BaseModel
 
-from app.vnext.agent.runtime import _initial_materialization_entries
+from app.vnext.agent.runtime import _retained_current_materializing_call_ids
 from app.vnext.llm.protocol import AssistantMessage, Message, ToolCall, ToolResultMessage
 from app.vnext.tools import ToolContextEffect, ToolDefinition, ToolRegistry
 
@@ -66,95 +64,68 @@ def _messages(*pairs: tuple[ToolCall, ToolResultMessage]) -> list[Message]:
     return messages
 
 
-def _serialized_bytes(result: ToolResultMessage) -> int:
-    return len(
-        json.dumps(
-            result.model_dump(mode="json"),
-            ensure_ascii=False,
-            separators=(",", ":"),
-            sort_keys=True,
-        ).encode("utf-8")
+def _retained(messages: list[Message], *, request_start: int = 0) -> set[str]:
+    return _retained_current_materializing_call_ids(
+        messages,
+        _registry(),
+        request_start=request_start,
     )
 
 
-def test_failed_bounded_result_consumes_same_id_name_before_materializing_success() -> None:
-    success = _ok_result()
+def test_failed_result_consumes_matching_call_name_in_fifo_order() -> None:
     messages = _messages(
         (_call("bounded"), _failed_result()),
-        (_call("materializing"), success),
+        (_call("materializing"), _ok_result()),
     )
 
-    entries = _initial_materialization_entries(messages, _registry())
-
-    assert entries == [("history:3:same", _serialized_bytes(success))]
+    assert _retained(messages) == {"same"}
 
 
-def test_failed_materializing_result_consumes_same_id_name_before_bounded_success() -> None:
+def test_failed_materializing_result_does_not_match_later_bounded_result() -> None:
     messages = _messages(
         (_call("materializing"), _failed_result()),
         (_call("bounded"), _ok_result()),
     )
 
-    assert _initial_materialization_entries(messages, _registry()) == []
+    assert _retained(messages) == set()
 
 
-def test_two_successful_materializing_results_same_id_get_distinct_history_keys() -> None:
-    first = _ok_result(content={"value": "first"})
-    second = _ok_result(content={"value": "second"})
+def test_prior_request_result_with_reused_id_is_not_current_evidence() -> None:
     messages = _messages(
-        (_call("materializing"), first),
-        (_call("materializing"), second),
+        (_call("materializing"), _ok_result(content={"value": "historical"})),
+        (_call("bounded"), _ok_result(content={"value": "not materializing"})),
     )
 
-    entries = _initial_materialization_entries(messages, _registry())
-
-    assert entries == [
-        ("history:1:same", _serialized_bytes(first)),
-        ("history:3:same", _serialized_bytes(second)),
-    ]
-    assert entries[0][0] != entries[1][0]
+    assert _retained(messages, request_start=2) == set()
 
 
-def test_receipt_only_materializing_result_does_not_count_as_raw_history() -> None:
-    receipt = _ok_result(
-        content={
+def test_current_result_with_reused_id_is_associated_after_historical_result() -> None:
+    messages = _messages(
+        (_call("materializing"), _ok_result(content={"value": "historical"})),
+        (_call("materializing"), _ok_result(content={"value": "current"})),
+    )
+
+    assert _retained(messages, request_start=2) == {"same"}
+
+
+def test_receipts_previews_deferred_results_and_errors_are_not_retained() -> None:
+    ineligible = [
+        {
             "_artifact_observation": {
                 "state": "receipt_only",
                 "ref": "artifact:test",
             }
-        }
-    )
-    messages = _messages((_call("materializing"), receipt))
+        },
+        {"externalized": True, "artifact_ref": "artifact:test", "value": {}},
+        {"value": {"_artifact_path": "rows.0"}},
+        {"_context_materialization": {"state": "deferred"}},
+        None,
+    ]
+    messages: list[Message] = []
+    for index, content in enumerate(ineligible):
+        call_id = f"call-{index}"
+        call = _call("materializing", call_id)
+        result = _failed_result(call_id) if content is None else _ok_result(call_id, content)
+        messages.extend((AssistantMessage(tool_calls=[call]), result))
 
-    assert _initial_materialization_entries(messages, _registry()) == []
-
-
-def test_request_start_uses_history_and_current_keys_for_same_tool_call_id() -> None:
-    historical_call = _call("materializing", "same")
-    current_call = _call("materializing", "same")
-    messages = _messages(
-        (historical_call, _ok_result("same", {"value": "historical"})),
-        (current_call, _ok_result("same", {"value": "current"})),
-    )
-
-    entries = _initial_materialization_entries(
-        messages,
-        _registry(),
-        request_start=2,
-    )
-
-    assert [key for key, _ in entries] == ["history:1:same", "current:same"]
-
-
-def test_deferred_materializing_result_is_not_rebuilt_as_active_raw() -> None:
-    deferred = _ok_result(
-        content={
-            "_context_materialization": {
-                "state": "deferred",
-                "reason": "budget_exceeded",
-            }
-        }
-    )
-    messages = _messages((_call("materializing"), deferred))
-
-    assert _initial_materialization_entries(messages, _registry()) == []
+    assert _retained(messages) == set()

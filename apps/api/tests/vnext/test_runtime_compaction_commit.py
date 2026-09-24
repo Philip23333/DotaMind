@@ -1042,12 +1042,11 @@ def test_compaction_refresh_keeps_only_inline_sources_in_effective_history(
         )
         is True
     )
-    request_start, effective_messages, _ = runtime._rebuild_after_compaction(
+    request_start, effective_messages = runtime._rebuild_after_compaction(
         execution_history=history,
         request_id=request_id,
         request_start=0,
         request_start_before=0,
-        materialized_bytes_before=0,
         step=4,
         trigger="watermark",
         trace_collector=None,

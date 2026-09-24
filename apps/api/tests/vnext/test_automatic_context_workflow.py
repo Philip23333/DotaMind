@@ -229,7 +229,6 @@ def test_automatic_watermarks_keep_artifacts_rereadable_across_two_compactions()
         compaction_keep_recent_tokens=1_000,
         compaction_max_input_bytes=100_000,
         compaction_reserve_tokens=160,
-        max_materialized_context_bytes=100_000,
     )
     runtime = AgentRuntime(model, _registry(store, documents), limits=limits)
     history = SessionExecutionHistory()
@@ -258,12 +257,7 @@ def test_automatic_watermarks_keep_artifacts_rereadable_across_two_compactions()
     commits = snapshot["compaction_commits"]
     assert len(commits) >= 2, (
         [
-            (
-                item["step"],
-                item["trigger"],
-                item["materialized_bytes_before"],
-                item["materialized_bytes_after"],
-            )
+            (item["step"], item["trigger"], item["cut_index"], item["new_revision"])
             for item in commits
         ],
         [
@@ -280,20 +274,15 @@ def test_automatic_watermarks_keep_artifacts_rereadable_across_two_compactions()
         model.phase,
     )
     assert all(commit["trigger"] == "watermark" for commit in commits[:2])
+    before_compaction = {
+        item["step"]: item["capacity"]
+        for item in snapshot["context_capacity_checks"]
+        if item["phase"] == "before_compaction"
+    }
     assert all(
-        commit["materialized_bytes_before"] > commit["materialized_bytes_after"] > 0
-        for commit in commits[:2]
-    ), (
-        [
-            (item["step"], item["materialized_bytes_before"], item["materialized_bytes_after"])
-            for item in commits
-        ],
-        [
-            (item["step"], item.get("materialization_budget"))
-            for item in snapshot["steps"]
-            if item.get("materialization_budget")
-        ],
+        before_compaction[item["step"]]["pressure"] in {"high", "critical"} for item in commits[:2]
     )
+    assert all(item["new_revision"] > item["base_revision"] for item in commits[:2])
     assert model.phase == 8
     assert model.recovered_first_detail
     assert final.content.startswith("Synthetic comparison:")

@@ -59,7 +59,6 @@ from app.vnext.agent.evidence_summary_lifecycle import (
 )
 from app.vnext.agent.instructions import ANSWER_INSTRUCTION, DEGRADED_ANSWER_INSTRUCTION
 from app.vnext.agent.limits import AgentLimits
-from app.vnext.agent.materialization_budget import MaterializationBudget
 from app.vnext.agent.runtime_context import RuntimeContext, classify_time_pressure
 from app.vnext.agent.runtime_prompt import render_runtime_prompt
 from app.vnext.agent.task_state import TaskStateCoordinator
@@ -248,10 +247,6 @@ class AgentRuntime:
         token = cancellation_token or CancellationToken()
         sink = event_sink
         execution_deadline = _Deadline(self.limits.deadline_seconds)
-        materialization_budget = MaterializationBudget(
-            self.limits.max_materialized_context_bytes,
-            initial_entries=_initial_materialization_entries(messages, self.tools),
-        )
         started_at = execution_deadline.started
         step = 0
         outcome: ExecutionOutcome | None = None
@@ -327,7 +322,6 @@ class AgentRuntime:
 
                 if compaction_trigger is not None:
                     compaction_attempted_since_progress = True
-                    materialized_bytes_before = materialization_budget.active_bytes
                     request_start_before = request_start
                     try:
                         compacted = await self._compact_session_history(
@@ -355,17 +349,14 @@ class AgentRuntime:
                             details={"code": getattr(exc, "code", type(exc).__name__)},
                         ) from exc
                     if compacted:
-                        request_start, request_messages, materialization_budget = (
-                            self._rebuild_after_compaction(
-                                execution_history=execution_history,
-                                request_id=request_id,
-                                request_start=request_start,
-                                request_start_before=request_start_before,
-                                materialized_bytes_before=materialized_bytes_before,
-                                step=step,
-                                trigger=compaction_trigger,
-                                trace_collector=trace_collector,
-                            )
+                        request_start, request_messages = self._rebuild_after_compaction(
+                            execution_history=execution_history,
+                            request_id=request_id,
+                            request_start=request_start,
+                            request_start_before=request_start_before,
+                            step=step,
+                            trigger=compaction_trigger,
+                            trace_collector=trace_collector,
                         )
                     execution_request_data = None
 
@@ -465,7 +456,6 @@ class AgentRuntime:
                         overflow_recovery_used = True
                         recovery_pending = True
                         compaction_attempted_since_progress = True
-                        materialized_bytes_before = materialization_budget.active_bytes
                         request_start_before = request_start
                         try:
                             self._check_controls(token, execution_deadline)
@@ -552,17 +542,14 @@ class AgentRuntime:
                             raise overflow_error
 
                         try:
-                            request_start, request_messages, materialization_budget = (
-                                self._rebuild_after_compaction(
-                                    execution_history=execution_history,
-                                    request_id=request_id,
-                                    request_start=request_start,
-                                    request_start_before=request_start_before,
-                                    materialized_bytes_before=materialized_bytes_before,
-                                    step=step,
-                                    trigger="overflow",
-                                    trace_collector=trace_collector,
-                                )
+                            request_start, request_messages = self._rebuild_after_compaction(
+                                execution_history=execution_history,
+                                request_id=request_id,
+                                request_start=request_start,
+                                request_start_before=request_start_before,
+                                step=step,
+                                trigger="overflow",
+                                trace_collector=trace_collector,
                             )
                             self._check_controls(token, execution_deadline)
                         except AgentCancelledError:
@@ -739,7 +726,6 @@ class AgentRuntime:
                         sink,
                         results,
                         trace_collector,
-                        materialization_budget,
                         execution_history=execution_history,
                         request_id=request_id,
                     ):
@@ -755,29 +741,8 @@ class AgentRuntime:
                     rewrite = self.transcript_rewriter.rewrite(candidate_messages)
                     request_messages = rewrite.messages
                     for event in rewrite.events:
-                        event_index = event.metadata.get("message_index")
-                        release_current = not isinstance(event_index, int) or (
-                            event_index >= request_start
-                        )
-                        released_bytes = (
-                            materialization_budget.release(
-                                event.tool_call_id,
-                                entry_key=f"current:{event.tool_call_id}",
-                            )
-                            if release_current
-                            else 0
-                        )
                         if trace_collector is not None:
                             trace_collector.transcript_rewrite(step, event)
-                            if released_bytes > 0:
-                                trace_collector.materialization_release(
-                                    step,
-                                    tool_call_id=event.tool_call_id,
-                                    reason=event.reason,
-                                    released_bytes=released_bytes,
-                                    active_after_bytes=materialization_budget.active_bytes,
-                                    limit_bytes=materialization_budget.limit_bytes,
-                                )
                 if execution_history is not None:
                     _history_set_effective(
                         execution_history,
@@ -878,7 +843,6 @@ class AgentRuntime:
                                 phase="before_compaction",
                                 capacity=primary_capacity,
                             )
-                        materialized_bytes_before = materialization_budget.active_bytes
                         request_start_before = request_start
                         compacted = await self._compact_session_history(
                             execution_history=execution_history,
@@ -893,17 +857,14 @@ class AgentRuntime:
                             stage="primary_answer",
                         )
                         if compacted:
-                            request_start, request_messages, materialization_budget = (
-                                self._rebuild_after_compaction(
-                                    execution_history=execution_history,
-                                    request_id=request_id,
-                                    request_start=request_start,
-                                    request_start_before=request_start_before,
-                                    materialized_bytes_before=materialized_bytes_before,
-                                    step=answer_step,
-                                    trigger="watermark",
-                                    trace_collector=trace_collector,
-                                )
+                            request_start, request_messages = self._rebuild_after_compaction(
+                                execution_history=execution_history,
+                                request_id=request_id,
+                                request_start=request_start,
+                                request_start_before=request_start_before,
+                                step=answer_step,
+                                trigger="watermark",
+                                trace_collector=trace_collector,
                             )
                             primary_context = answer_context_builder.build(
                                 execution_messages=request_messages,
@@ -1004,7 +965,6 @@ class AgentRuntime:
                         overflow_recovery_used = True
                         recovery_pending = True
                         compaction_attempted_since_progress = True
-                        materialized_bytes_before = materialization_budget.active_bytes
                         request_start_before = request_start
                         try:
                             self._check_controls(token, answer_deadline)
@@ -1067,17 +1027,14 @@ class AgentRuntime:
                             raise overflow_error
 
                         try:
-                            request_start, request_messages, materialization_budget = (
-                                self._rebuild_after_compaction(
-                                    execution_history=execution_history,
-                                    request_id=request_id,
-                                    request_start=request_start,
-                                    request_start_before=request_start_before,
-                                    materialized_bytes_before=materialized_bytes_before,
-                                    step=answer_step,
-                                    trigger="overflow",
-                                    trace_collector=trace_collector,
-                                )
+                            request_start, request_messages = self._rebuild_after_compaction(
+                                execution_history=execution_history,
+                                request_id=request_id,
+                                request_start=request_start,
+                                request_start_before=request_start_before,
+                                step=answer_step,
+                                trigger="overflow",
+                                trace_collector=trace_collector,
                             )
                             self._check_controls(token, answer_deadline)
                         except AgentCancelledError:
@@ -1631,11 +1588,10 @@ class AgentRuntime:
         request_id: Any,
         request_start: int,
         request_start_before: int,
-        materialized_bytes_before: int,
         step: int,
         trigger: str,
         trace_collector: AgentTraceCollector | None,
-    ) -> tuple[int, list[Message], MaterializationBudget]:
+    ) -> tuple[int, list[Message]]:
         """Rebuild all request-local projections after an atomic compaction."""
 
         record = _latest_compaction_record(execution_history, request_id)
@@ -1648,18 +1604,11 @@ class AgentRuntime:
             execution_history,
             self.system_instruction,
         )
-        initial_entries = _initial_materialization_entries(
+        current_tool_call_ids = _retained_current_materializing_call_ids(
             request_messages,
             self.tools,
             request_start=request_start,
         )
-        materialization_budget = MaterializationBudget(
-            self.limits.max_materialized_context_bytes,
-            initial_entries=initial_entries,
-        )
-        current_tool_call_ids = {
-            key.removeprefix("current:") for key, _ in initial_entries if key.startswith("current:")
-        }
         if self.transcript_rewriter is not None:
             set_scope = getattr(self.transcript_rewriter, "set_request_scope", None)
             if callable(set_scope):
@@ -1680,10 +1629,8 @@ class AgentRuntime:
                 retained_message_count=len(execution_history.effective_messages()),
                 request_start_before=request_start_before,
                 request_start_after=request_start,
-                materialized_bytes_before=materialized_bytes_before,
-                materialized_bytes_after=materialization_budget.active_bytes,
             )
-        return request_start, request_messages, materialization_budget
+        return request_start, request_messages
 
     async def _invoke_model(
         self,
@@ -2229,7 +2176,6 @@ class AgentRuntime:
         sink: EventSink | None,
         results: list[ToolResultMessage],
         trace_collector: AgentTraceCollector | None,
-        materialization_budget: MaterializationBudget,
         execution_history: Any | None = None,
         request_id: Any | None = None,
     ) -> AsyncIterator[AgentEvent]:
@@ -2273,36 +2219,6 @@ class AgentRuntime:
                 token,
                 deadline,
             )
-            candidates: list[tuple[tuple[int, int], int, ToolCall, ToolResultMessage, int]] = []
-            for original_index, (item, result) in enumerate(zip(group, group_results, strict=True)):
-                if result.status != "ok" or not self._is_materializing(item):
-                    continue
-                raw_bytes = _serialized_size(result.model_dump(mode="json"))
-                candidates.append(
-                    (
-                        _materialization_priority(item, original_index, plan),
-                        original_index,
-                        item,
-                        result,
-                        raw_bytes,
-                    )
-                )
-            decisions = {}
-            for _, _, item, _, raw_bytes in sorted(candidates, key=lambda value: value[0]):
-                decision = materialization_budget.admit(
-                    item.id,
-                    raw_bytes=raw_bytes,
-                    entry_key=f"current:{item.id}",
-                )
-                decisions[item.id] = decision
-                if trace_collector is not None:
-                    trace_collector.materialization_admission(
-                        step,
-                        decision=decision,
-                        task_key=_materialization_telemetry_task_key(item, plan),
-                        limit_bytes=materialization_budget.limit_bytes,
-                    )
-            raw_bytes_by_id = {item.id: raw_bytes for _, _, item, _, raw_bytes in candidates}
             for item, result in zip(group, group_results, strict=True):
                 duration = max(0.0, monotonic() - started[item.id])
                 if result.status == "ok":
@@ -2326,26 +2242,20 @@ class AgentRuntime:
                 if trace_collector is not None:
                     trace_collector.tool_result(step, result, duration, call=item)
                 if result.status == "ok":
-                    decision = decisions.get(item.id)
-                    if decision is not None and decision.admitted:
-                        if self.task_state_coordinator is not None:
-                            task_key = item.arguments.get("task_key")
-                            if task_key is None and plan is not None:
-                                task_key = plan.current_key
-                            self.task_state_coordinator.record_evidence_lease(
-                                item.id,
-                                task_key=task_key,
-                                raw_bytes=decision.raw_bytes,
-                            )
-                            if trace_collector is not None:
-                                trace_collector.active_evidence_lease(
-                                    step,
-                                    self.task_state_coordinator.active_evidence_lease(),
-                                )
-                    elif decision is not None:
-                        result = result.model_copy(
-                            update={"content": _deferred_materialization(raw_bytes_by_id[item.id])}
+                    if self._is_materializing(item) and self.task_state_coordinator is not None:
+                        task_key = item.arguments.get("task_key")
+                        if task_key is None and plan is not None:
+                            task_key = plan.current_key
+                        self.task_state_coordinator.record_evidence_lease(
+                            item.id,
+                            task_key=task_key,
+                            raw_bytes=_serialized_size(result.model_dump(mode="json")),
                         )
+                        if trace_collector is not None:
+                            trace_collector.active_evidence_lease(
+                                step,
+                                self.task_state_coordinator.active_evidence_lease(),
+                            )
                     if item.name == "task.checkpoint" and self.task_state_coordinator is not None:
                         if result.status == "ok" and trace_collector is not None:
                             trace_collector.checkpoint_lease_snapshot(
@@ -2612,50 +2522,48 @@ def _record_delivery(
     )
 
 
-def _initial_materialization_entries(
+def _retained_current_materializing_call_ids(
     messages: Sequence[Message],
     tools: ToolRegistry,
     *,
-    request_start: int | None = None,
-) -> list[tuple[str, int]]:
-    """Seed the request budget with raw heavyweight results already carried in history."""
+    request_start: int,
+) -> set[str]:
+    """Find current-request materializing results still eligible as evidence."""
 
-    tool_names: dict[str, list[str]] = {}
-    for message in messages:
+    calls_by_id: dict[str, list[tuple[str, int]]] = {}
+    result_offsets: dict[str, int] = {}
+    retained: set[str] = set()
+    for index, message in enumerate(messages):
         if isinstance(message, AssistantMessage):
             for call in message.tool_calls:
-                tool_names.setdefault(call.id, []).append(call.name)
-
-    entries: list[tuple[str, int]] = []
-    for index, message in enumerate(messages):
+                calls_by_id.setdefault(call.id, []).append((call.name, index))
+            continue
         if not isinstance(message, ToolResultMessage):
             continue
-        names = tool_names.get(message.tool_call_id)
-        tool_name = names.pop(0) if names else None
-        if message.status != "ok" or tool_name is None:
+        call_id = message.tool_call_id
+        matches = calls_by_id.get(call_id, [])
+        offset = result_offsets.get(call_id, 0)
+        if offset >= len(matches):
             continue
-        try:
-            materializing = tools.get(tool_name).context_effect is ToolContextEffect.MATERIALIZING
-        except KeyError:
-            materializing = False
+        tool_name, call_index = matches[offset]
+        result_offsets[call_id] = offset + 1
         if (
-            not materializing
-            or _is_receipt_content(message.content)
-            or _is_deferred_materialization_content(message.content)
+            call_index < request_start
+            or index < request_start
+            or message.status != "ok"
+            or not _is_materializing_tool_name(tool_name, tools)
+            or not _is_checkpointable_materialization_content(message.content)
         ):
             continue
-        entry_key = (
-            f"history:{index}:{message.tool_call_id}"
-            if request_start is None or index < request_start
-            else f"current:{message.tool_call_id}"
-        )
-        entries.append(
-            (
-                entry_key,
-                _serialized_size(message.model_dump(mode="json")),
-            )
-        )
-    return entries
+        retained.add(call_id)
+    return retained
+
+
+def _is_materializing_tool_name(tool_name: str, tools: ToolRegistry) -> bool:
+    try:
+        return tools.get(tool_name).context_effect is ToolContextEffect.MATERIALIZING
+    except KeyError:
+        return False
 
 
 def _is_receipt_content(content: Any) -> bool:
@@ -2670,6 +2578,25 @@ def _is_deferred_materialization_content(content: Any) -> bool:
         return False
     marker = content.get("_context_materialization")
     return isinstance(marker, dict) and marker.get("state") == "deferred"
+
+
+def _is_checkpointable_materialization_content(content: Any) -> bool:
+    if _is_receipt_content(content) or _is_deferred_materialization_content(content):
+        return False
+    if isinstance(content, dict) and (
+        content.get("externalized") is True or "artifact_ref" in content
+    ):
+        return False
+    stack = [content]
+    while stack:
+        value = stack.pop()
+        if isinstance(value, dict):
+            if "_artifact_path" in value:
+                return False
+            stack.extend(value.values())
+        elif isinstance(value, list):
+            stack.extend(value)
+    return True
 
 
 def _build_answer_request(
@@ -2704,41 +2631,6 @@ def _answer_conversation(messages: Sequence[Message]) -> list[Message]:
     """Keep the full effective execution transcript for the answer model."""
 
     return [message.model_copy(deep=True) for message in messages]
-
-
-def _materialization_priority(
-    call: ToolCall,
-    original_index: int,
-    plan: Any,
-) -> tuple[int, int]:
-    if plan is None:
-        return (0, original_index)
-    owner_key = call.arguments.get("task_key") or plan.current_key
-    if isinstance(owner_key, str):
-        for order, item in enumerate(plan.items):
-            if item.key == owner_key and item.status.value != "completed":
-                return (order, original_index)
-    return (len(plan.items), original_index)
-
-
-def _materialization_telemetry_task_key(call: ToolCall, plan: Any) -> str | None:
-    explicit_key = call.arguments.get("task_key")
-    if isinstance(explicit_key, str):
-        return explicit_key
-    if plan is not None and isinstance(plan.current_key, str):
-        return plan.current_key
-    return None
-
-
-def _deferred_materialization(raw_bytes: int) -> dict[str, Any]:
-    return {
-        "_context_materialization": {
-            "state": "deferred",
-            "reason": "budget_exceeded",
-            "retryable": True,
-            "raw_bytes": raw_bytes,
-        }
-    }
 
 
 def _serialized_size(value: Any) -> int:

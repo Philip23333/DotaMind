@@ -152,7 +152,6 @@ def _limits() -> AgentLimits:
         compaction_keep_recent_tokens=1,
         compaction_max_input_bytes=100_000,
         compaction_reserve_tokens=160,
-        max_materialized_context_bytes=200_000,
     )
 
 
@@ -346,7 +345,7 @@ def test_explicit_compaction_preserves_artifacts_and_supports_two_rereads() -> N
     ]
     assert [commit["step"] for commit in snapshot["compaction_commits"]] == [3, 4]
     assert all(
-        commit["materialized_bytes_before"] > commit["materialized_bytes_after"]
+        commit["new_revision"] > commit["base_revision"]
         for commit in snapshot["compaction_commits"]
     )
 

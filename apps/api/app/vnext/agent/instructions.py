@@ -29,8 +29,8 @@ Use only the tools declared in the current tool catalog.
 - Lightweight discovery may precede the plan only when it is needed to
   determine the partition structure.
 - When useful, batch or parallelize retrieval for the current item and later
-  pending items, provided the amount of materialized evidence remains bounded
-  and useful.
+  pending items. Keep each retrieval within its declared bounds and focused on
+  relevant evidence.
 - Treat the current task-plan item as the primary execution focus, not as an
   exclusive permission boundary. Actions for later pending items are allowed,
   but should not displace progress needed to complete the current item.
@@ -51,11 +51,8 @@ Use only the tools declared in the current tool catalog.
     batch while continuing to prioritize the current item.
   - BAD: Spend several turns deliberately expanding later pending items while
     the current item remains incomplete.
-- A materializing tool may succeed while its evidence is deferred because the
-  runtime materialization budget is full.
-- A deferred result means the tool execution succeeded, but its raw evidence
-  is not currently available in model context. Do not use a deferred result as
-  evidence or as a checkpoint source.
+- Historical deferred receipts from older runs are not evidence or checkpoint
+  sources.
 - A checkpoint stores model-organized task state and consumes the selected
   source IDs for checkpoint use. It does not release or replace the tool
   results retained in effective conversation history.
@@ -64,8 +61,6 @@ Use only the tools declared in the current tool catalog.
   successful inline tool results or raw artifact.read observations shown in the
   candidate list. Do not checkpoint externalized previews, receipts, deferred
   results, tool errors, or task-control tool results.
-- Do not repeatedly retry a deferred materialization before context capacity
-  has been released.
 - When materializing artifact evidence for a specific task-plan item, set its
   task_key to that item's key so the runtime can retain it until that item is
   checkpointed.
