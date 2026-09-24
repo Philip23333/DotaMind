@@ -105,8 +105,14 @@ def _product_runtime_error_reason(event: AgentCancelled | AgentFailed) -> str:
     if reason_code == "summary_output_truncated":
         return "上下文摘要未完整生成，本次任务已停止。原有会话记录已保留。"
     if reason_code == "transient_retries_exhausted":
+        attempt_count = event.details.get("attempt_count")
+        retry_note = (
+            "重试后仍未成功"
+            if type(attempt_count) is int and attempt_count > 1
+            else "未能成功"
+        )
         return (
-            "生成上下文摘要时服务暂时不可用，重试后仍未成功。本次任务已停止，原有会话记录已保留。"
+            f"生成上下文摘要时服务暂时不可用，{retry_note}。本次任务已停止，原有会话记录已保留。"
         )
     return "本次上下文整理未能完成，任务已停止。原有会话记录已保留。"
 

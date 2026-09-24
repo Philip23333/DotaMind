@@ -160,24 +160,33 @@ def test_product_chat_failure_does_not_create_a_dialogue_turn() -> None:
 
 
 @pytest.mark.parametrize(
-    ("reason_code", "expected_reason"),
+    ("reason_code", "attempt_count", "expected_reason"),
     [
         (
             "summary_output_truncated",
+            1,
             "上下文摘要未完整生成，本次任务已停止。原有会话记录已保留。",
         ),
         (
             "transient_retries_exhausted",
+            1,
+            "生成上下文摘要时服务暂时不可用，未能成功。本次任务已停止，原有会话记录已保留。",
+        ),
+        (
+            "transient_retries_exhausted",
+            2,
             "生成上下文摘要时服务暂时不可用，重试后仍未成功。本次任务已停止，原有会话记录已保留。",
         ),
         (
             "stale_context_revision",
+            0,
             "本次上下文整理未能完成，任务已停止。原有会话记录已保留。",
         ),
     ],
 )
 def test_compaction_failure_uses_safe_localized_reason(
     reason_code: str,
+    attempt_count: int,
     expected_reason: str,
 ) -> None:
     repository = _Repository()
@@ -188,7 +197,7 @@ def test_compaction_failure_uses_safe_localized_reason(
                 duration=0.1,
                 error_code="context_compaction_failed",
                 error_message="internal provider detail must not be exposed",
-                details={"reason_code": reason_code},
+                details={"reason_code": reason_code, "attempt_count": attempt_count},
             )
         ]
     )
