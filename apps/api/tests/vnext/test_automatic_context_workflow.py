@@ -228,7 +228,7 @@ def test_automatic_watermarks_keep_artifacts_rereadable_across_two_compactions()
         context_safety_margin_tokens=128,
         context_estimate_bytes_per_token=1,
         context_compaction_trigger_percent=70,
-        compaction_recent_history_bytes=1_000,
+        compaction_keep_recent_tokens=1_000,
         compaction_max_input_bytes=100_000,
         compaction_reserve_tokens=160,
         max_materialized_context_bytes=100_000,
@@ -389,9 +389,13 @@ def test_real_adapter_overflow_classification_compacts_and_retries_same_step() -
                 json={"error": {"code": "context_length_exceeded"}},
                 request=request,
             )
-        if payload["messages"][0].get("role") == "system" and "Summarize" in payload["messages"][
-            0
-        ].get("content", ""):
+        if payload["messages"][0].get("role") == "system" and any(
+            marker in payload["messages"][0].get("content", "")
+            for marker in (
+                "Update the supplied previous summary",
+                "Summarize only the supplied prefix",
+            )
+        ):
             return httpx.Response(
                 200,
                 headers={"content-type": "text/event-stream"},
@@ -423,7 +427,7 @@ def test_real_adapter_overflow_classification_compacts_and_retries_same_step() -
         context_output_reserve_tokens=256,
         context_safety_margin_tokens=128,
         context_estimate_bytes_per_token=1,
-        compaction_recent_history_bytes=1,
+        compaction_keep_recent_tokens=1,
         compaction_max_input_bytes=100_000,
         compaction_reserve_tokens=160,
     )

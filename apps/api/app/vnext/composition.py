@@ -144,7 +144,7 @@ _AGENT_LIMIT_ENV_FIELDS = (
     ("DOTAMIND_CONTEXT_SAFETY_MARGIN_TOKENS", "context_safety_margin_tokens"),
     ("DOTAMIND_CONTEXT_ESTIMATE_BYTES_PER_TOKEN", "context_estimate_bytes_per_token"),
     ("DOTAMIND_CONTEXT_COMPACTION_TRIGGER_PERCENT", "context_compaction_trigger_percent"),
-    ("DOTAMIND_COMPACTION_RECENT_HISTORY_BYTES", "compaction_recent_history_bytes"),
+    ("DOTAMIND_COMPACTION_KEEP_RECENT_TOKENS", "compaction_keep_recent_tokens"),
     ("DOTAMIND_COMPACTION_MAX_INPUT_BYTES", "compaction_max_input_bytes"),
     ("DOTAMIND_COMPACTION_RESERVE_TOKENS", "compaction_reserve_tokens"),
 )

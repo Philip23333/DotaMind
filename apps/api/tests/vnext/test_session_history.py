@@ -7,8 +7,9 @@ import pytest
 
 from app.vnext.agent.evidence_summary_lifecycle import (
     HistoryCompactionRangeError,
-    build_compaction_request,
-    select_compaction_range,
+    build_history_compaction_request,
+    build_turn_prefix_compaction_request,
+    prepare_compaction,
     validate_compaction_cut,
 )
 from app.vnext.llm.protocol import (
@@ -498,7 +499,7 @@ def test_compaction_does_not_copy_prefix_into_record_or_modify_request_queries()
         history.begin_request(request_id, "different")
 
 
-def test_snapshot_range_and_summary_request_share_the_current_user_position() -> None:
+def test_snapshot_compaction_preparation_splits_old_history_and_current_turn() -> None:
     history, request_id = _initialized_history()
     history.set_effective(
         [
@@ -508,29 +509,39 @@ def test_snapshot_range_and_summary_request_share_the_current_user_position() ->
         ]
     )
     snapshot = history.context_snapshot()
-    selected = select_compaction_range(snapshot.messages, recent_history_bytes=1)
-    assert selected is not None
+    preparation = prepare_compaction(
+        snapshot.messages,
+        recent_history_tokens=1,
+        bytes_per_token=2,
+    )
+    assert preparation is not None
     assert snapshot.current_user_message is not None
     assert snapshot.current_user_index == 1
+    assert preparation.history_messages == (UserMessage(content="old"),)
+    assert preparation.turn_prefix_messages == (UserMessage(content="collect"),)
 
-    request = build_compaction_request(
+    history_request = build_history_compaction_request(
         previous_summary=snapshot.summary,
-        current_user_message=snapshot.current_user_message,
-        prefix_messages=selected.prefix_messages,
-        current_user_prefix_index=snapshot.current_user_index,
+        history_messages=preparation.history_messages,
         max_input_bytes=100_000,
         max_output_tokens=256,
     )
-    payload = json.loads(request.messages[1].content)  # type: ignore[union-attr]
+    prefix_request = build_turn_prefix_compaction_request(
+        turn_prefix_messages=preparation.turn_prefix_messages,
+        max_input_bytes=100_000,
+        max_output_tokens=128,
+    )
+    history_payload = json.loads(history_request.messages[1].content)  # type: ignore[union-attr]
+    prefix_payload = json.loads(prefix_request.messages[1].content)  # type: ignore[union-attr]
     history.commit_compaction(
         request_id=request_id,
         base_revision=snapshot.revision,
         summary="fixed summary",
-        cut_index=selected.cut_index,
+        cut_index=preparation.cut_index,
     )
 
-    assert payload["current_user_message"] == "collect"
-    assert [message["content"] for message in payload["history"]] == ["old"]
+    assert [message["content"] for message in history_payload["history"]] == ["old"]
+    assert [message["content"] for message in prefix_payload["turn_prefix"]] == ["collect"]
     assert history.effective_messages() == [UserMessage(content="collect"), *_tool_group("read")]
 
 

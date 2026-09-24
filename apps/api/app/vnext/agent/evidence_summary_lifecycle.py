@@ -7,8 +7,11 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from app.vnext.agent.evidence_summary import HistoryCompactionRange
-from app.vnext.agent.instructions import COMPACTION_INSTRUCTION
+from app.vnext.agent.evidence_summary import CompactionPreparation, HistoryCompactionRange
+from app.vnext.agent.instructions import (
+    HISTORY_COMPACTION_INSTRUCTION,
+    TURN_PREFIX_COMPACTION_INSTRUCTION,
+)
 from app.vnext.llm.protocol import (
     AssistantMessage,
     FinalMessage,
@@ -58,12 +61,14 @@ class CompactionSummaryError(ValueError):
 class _MessageGroup:
     messages: tuple[Message, ...]
     serialized_bytes: int
+    estimated_tokens: int
 
 
 def select_compaction_range(
     messages: Sequence[Message],
     *,
-    recent_history_bytes: int,
+    recent_history_tokens: int,
+    bytes_per_token: int,
 ) -> HistoryCompactionRange | None:
     """Select a complete older prefix and complete recent suffix.
 
@@ -73,18 +78,25 @@ def select_compaction_range(
     ordinary history and never commits a compaction.
     """
 
-    if type(recent_history_bytes) is not int or recent_history_bytes <= 0:
+    if (
+        type(recent_history_tokens) is not int
+        or recent_history_tokens <= 0
+        or type(bytes_per_token) is not int
+        or bytes_per_token <= 0
+    ):
         raise HistoryCompactionRangeError("invalid_recent_history_budget")
 
-    groups = _group_history(messages)
+    groups = _group_history(messages, bytes_per_token=bytes_per_token)
     if len(groups) <= 1:
         return None
 
     first_retained_group = len(groups) - 1
     retained_bytes = groups[first_retained_group].serialized_bytes
-    while retained_bytes < recent_history_bytes and first_retained_group > 0:
+    retained_estimated_tokens = groups[first_retained_group].estimated_tokens
+    while retained_estimated_tokens < recent_history_tokens and first_retained_group > 0:
         first_retained_group -= 1
         retained_bytes += groups[first_retained_group].serialized_bytes
+        retained_estimated_tokens += groups[first_retained_group].estimated_tokens
 
     cut_index = sum(len(group.messages) for group in groups[:first_retained_group])
     if cut_index <= 0:
@@ -105,6 +117,52 @@ def select_compaction_range(
         prefix_messages=prefix,
         retained_messages=retained,
         retained_bytes=retained_bytes,
+        retained_estimated_tokens=retained_estimated_tokens,
+    )
+
+
+def prepare_compaction(
+    messages: Sequence[Message],
+    *,
+    recent_history_tokens: int,
+    bytes_per_token: int,
+) -> CompactionPreparation | None:
+    """Select a recent suffix and split a cut turn from preceding history."""
+
+    selected = select_compaction_range(
+        messages,
+        recent_history_tokens=recent_history_tokens,
+        bytes_per_token=bytes_per_token,
+    )
+    if selected is None:
+        return None
+
+    split_turn_start_index: int | None = None
+    if not isinstance(messages[selected.cut_index], UserMessage):
+        for index in range(selected.cut_index - 1, -1, -1):
+            message = messages[index]
+            if isinstance(message, FinalMessage):
+                break
+            if isinstance(message, UserMessage):
+                split_turn_start_index = index
+                break
+
+    if split_turn_start_index is None:
+        history = messages[: selected.cut_index]
+        turn_prefix: Sequence[Message] = ()
+    else:
+        history = messages[:split_turn_start_index]
+        turn_prefix = messages[split_turn_start_index : selected.cut_index]
+
+    return CompactionPreparation(
+        cut_index=selected.cut_index,
+        history_messages=tuple(message.model_copy(deep=True) for message in history),
+        turn_prefix_messages=tuple(message.model_copy(deep=True) for message in turn_prefix),
+        retained_messages=tuple(
+            message.model_copy(deep=True) for message in selected.retained_messages
+        ),
+        split_turn_start_index=split_turn_start_index,
+        retained_estimated_tokens=selected.retained_estimated_tokens,
     )
 
 
@@ -127,7 +185,7 @@ def validate_compaction_cut(
     raise HistoryCompactionRangeError("invalid_compaction_boundary")
 
 
-def _group_history(messages: Sequence[Message]) -> list[_MessageGroup]:
+def _group_history(messages: Sequence[Message], *, bytes_per_token: int = 1) -> list[_MessageGroup]:
     source = list(messages)
     groups: list[_MessageGroup] = []
     index = 0
@@ -136,7 +194,7 @@ def _group_history(messages: Sequence[Message]) -> list[_MessageGroup]:
         if isinstance(message, SystemMessage):
             raise HistoryCompactionRangeError("invalid_history_structure")
         if isinstance(message, UserMessage | FinalMessage):
-            groups.append(_make_group((message,)))
+            groups.append(_make_group((message,), bytes_per_token=bytes_per_token))
             index += 1
             continue
         if isinstance(message, ToolResultMessage):
@@ -144,7 +202,7 @@ def _group_history(messages: Sequence[Message]) -> list[_MessageGroup]:
         if not isinstance(message, AssistantMessage):
             raise HistoryCompactionRangeError("invalid_history_structure")
         if not message.tool_calls:
-            groups.append(_make_group((message,)))
+            groups.append(_make_group((message,), bytes_per_token=bytes_per_token))
             index += 1
             continue
 
@@ -167,15 +225,17 @@ def _group_history(messages: Sequence[Message]) -> list[_MessageGroup]:
             results.append(result)
         if result_ids != expected:
             raise HistoryCompactionRangeError("invalid_history_structure")
-        groups.append(_make_group((message, *results)))
+        groups.append(_make_group((message, *results), bytes_per_token=bytes_per_token))
         index += 1 + len(results)
     return groups
 
 
-def _make_group(messages: tuple[Message, ...]) -> _MessageGroup:
+def _make_group(messages: tuple[Message, ...], *, bytes_per_token: int) -> _MessageGroup:
+    serialized_bytes = sum(_message_bytes(message) for message in messages)
     return _MessageGroup(
         messages=messages,
-        serialized_bytes=sum(_message_bytes(message) for message in messages),
+        serialized_bytes=serialized_bytes,
+        estimated_tokens=(serialized_bytes + bytes_per_token - 1) // bytes_per_token,
     )
 
 
@@ -194,48 +254,68 @@ def _message_bytes(message: Message) -> int:
         raise HistoryCompactionRangeError("invalid_history_structure") from exc
 
 
-def build_compaction_request(
+def build_history_compaction_request(
     *,
     previous_summary: str | None,
-    current_user_message: UserMessage,
-    prefix_messages: Sequence[Message],
-    current_user_prefix_index: int | None,
+    history_messages: Sequence[Message],
     max_input_bytes: int,
     max_output_tokens: int,
 ) -> ModelRequest:
-    """Build the model-only request used to replace one active summary."""
+    """Build a request that updates the session's compressed history."""
 
     _validate_summary_budget(max_input_bytes)
     _validate_summary_budget(max_output_tokens)
-    if not prefix_messages:
+    if not history_messages:
         raise CompactionSummaryError("empty_compaction_history")
-
-    # The selector owns the canonical message-group validation.  Its result is
-    # intentionally ignored because this function receives the already chosen
-    # prefix and must not select or split it again.
-    select_compaction_range(prefix_messages, recent_history_bytes=1)
-
-    history = list(prefix_messages)
-    if current_user_prefix_index is not None:
-        if (
-            type(current_user_prefix_index) is not int
-            or current_user_prefix_index < 0
-            or current_user_prefix_index >= len(history)
-        ):
-            raise CompactionSummaryError("invalid_current_user_position")
-        indexed_message = history[current_user_prefix_index]
-        if not isinstance(indexed_message, UserMessage) or indexed_message != current_user_message:
-            raise CompactionSummaryError("invalid_current_user_position")
-        history.pop(current_user_prefix_index)
-
-    if not history:
-        raise CompactionSummaryError("empty_compaction_history")
+    _group_history(history_messages)
 
     payload = {
-        "current_user_message": current_user_message.content,
         "previous_summary": previous_summary,
-        "history": [message.model_dump(mode="json") for message in history],
+        "history": [message.model_dump(mode="json") for message in history_messages],
     }
+    request = _build_compaction_request(
+        instruction=HISTORY_COMPACTION_INSTRUCTION,
+        payload=payload,
+        kind="history",
+        max_input_bytes=max_input_bytes,
+        max_output_tokens=max_output_tokens,
+    )
+    return request
+
+
+def build_turn_prefix_compaction_request(
+    *,
+    turn_prefix_messages: Sequence[Message],
+    max_input_bytes: int,
+    max_output_tokens: int,
+) -> ModelRequest:
+    """Build a request that summarizes only the cut portion of one turn."""
+
+    _validate_summary_budget(max_input_bytes)
+    _validate_summary_budget(max_output_tokens)
+    if not turn_prefix_messages:
+        raise CompactionSummaryError("empty_compaction_history")
+    _group_history(turn_prefix_messages)
+    payload = {
+        "turn_prefix": [message.model_dump(mode="json") for message in turn_prefix_messages],
+    }
+    return _build_compaction_request(
+        instruction=TURN_PREFIX_COMPACTION_INSTRUCTION,
+        payload=payload,
+        kind="turn_prefix",
+        max_input_bytes=max_input_bytes,
+        max_output_tokens=max_output_tokens,
+    )
+
+
+def _build_compaction_request(
+    *,
+    instruction: str,
+    payload: dict[str, Any],
+    kind: str,
+    max_input_bytes: int,
+    max_output_tokens: int,
+) -> ModelRequest:
     serialized_payload = json.dumps(
         payload,
         ensure_ascii=False,
@@ -244,12 +324,12 @@ def build_compaction_request(
     )
     request = ModelRequest(
         messages=[
-            SystemMessage(content=COMPACTION_INSTRUCTION),
+            SystemMessage(content=instruction),
             UserMessage(content=serialized_payload),
         ],
         tools=[],
         step=None,
-        metadata={"purpose": "context_compaction"},
+        metadata={"purpose": "context_compaction", "compaction_kind": kind},
         max_output_tokens=max_output_tokens,
     )
     if _serialized_request_bytes(request) > max_input_bytes:
@@ -290,7 +370,9 @@ def _serialized_request_bytes(request: ModelRequest) -> int:
 __all__ = [
     "CompactionSummaryError",
     "HistoryCompactionRangeError",
-    "build_compaction_request",
+    "build_history_compaction_request",
+    "build_turn_prefix_compaction_request",
+    "prepare_compaction",
     "select_compaction_range",
     "validate_compaction_cut",
     "validate_compaction_response",

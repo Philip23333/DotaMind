@@ -29,6 +29,7 @@ _LIMIT_ENV_NAMES = (
     "DOTAMIND_CONTEXT_SAFETY_MARGIN_TOKENS",
     "DOTAMIND_CONTEXT_ESTIMATE_BYTES_PER_TOKEN",
     "DOTAMIND_CONTEXT_COMPACTION_TRIGGER_PERCENT",
+    "DOTAMIND_COMPACTION_KEEP_RECENT_TOKENS",
     "DOTAMIND_COMPACTION_RECENT_HISTORY_BYTES",
     "DOTAMIND_COMPACTION_MAX_INPUT_BYTES",
     "DOTAMIND_COMPACTION_RESERVE_TOKENS",
@@ -73,7 +74,7 @@ DOTAMIND_CONTEXT_OUTPUT_RESERVE_TOKENS=300
 DOTAMIND_CONTEXT_SAFETY_MARGIN_TOKENS=200
 DOTAMIND_CONTEXT_ESTIMATE_BYTES_PER_TOKEN=3
 DOTAMIND_CONTEXT_COMPACTION_TRIGGER_PERCENT=75
-DOTAMIND_COMPACTION_RECENT_HISTORY_BYTES=4000
+DOTAMIND_COMPACTION_KEEP_RECENT_TOKENS=4000
 DOTAMIND_COMPACTION_MAX_INPUT_BYTES=50000
 DOTAMIND_COMPACTION_RESERVE_TOKENS=10000
 DOTAMIND_COMPACTION_MODEL_MAX_OUTPUT_TOKENS=500
@@ -89,7 +90,7 @@ DOTAMIND_COMPACTION_MODEL_MAX_OUTPUT_TOKENS=500
         "context_safety_margin_tokens": 200,
         "context_estimate_bytes_per_token": 3,
         "context_compaction_trigger_percent": 75,
-        "compaction_recent_history_bytes": 4000,
+        "compaction_keep_recent_tokens": 4000,
         "compaction_max_input_bytes": 50000,
         "compaction_reserve_tokens": 10000,
         "compaction_model_max_output_tokens": 500,
@@ -236,7 +237,7 @@ def test_build_runtime_receives_an_isolated_configured_limits(
         context_safety_margin_tokens=200,
         context_estimate_bytes_per_token=3,
         context_compaction_trigger_percent=75,
-        compaction_recent_history_bytes=4000,
+        compaction_keep_recent_tokens=4000,
         compaction_max_input_bytes=50000,
         compaction_reserve_tokens=625,
         compaction_model_max_output_tokens=500,
@@ -331,7 +332,7 @@ def test_product_chat_entry_uses_environment_configured_context_governance(
         "DOTAMIND_CONTEXT_SAFETY_MARGIN_TOKENS": "100",
         "DOTAMIND_CONTEXT_ESTIMATE_BYTES_PER_TOKEN": "1",
         "DOTAMIND_CONTEXT_COMPACTION_TRIGGER_PERCENT": "80",
-        "DOTAMIND_COMPACTION_RECENT_HISTORY_BYTES": "1",
+        "DOTAMIND_COMPACTION_KEEP_RECENT_TOKENS": "1",
         "DOTAMIND_COMPACTION_MAX_INPUT_BYTES": "100000",
         "DOTAMIND_COMPACTION_RESERVE_TOKENS": "160",
         "DOTAMIND_COMPACTION_MODEL_MAX_OUTPUT_TOKENS": "128",
@@ -385,8 +386,11 @@ def test_product_chat_entry_uses_environment_configured_context_governance(
         for request in model.requests
         if request.metadata.get("purpose") == "context_compaction"
     ]
-    assert len(compaction_requests) == 1
-    assert compaction_requests[0].max_output_tokens == 128
+    assert [request.metadata["compaction_kind"] for request in compaction_requests] == [
+        "history",
+        "turn_prefix",
+    ]
+    assert [request.max_output_tokens for request in compaction_requests] == [128, 80]
     assert all(
         request.max_output_tokens == 200
         for request in model.requests

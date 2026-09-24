@@ -152,7 +152,9 @@ def prepare_evaluation(
         raise EvaluationError(f"profile {profile} requires a valid configured context window")
     elif profile == "pressure":
         limits.context_compaction_trigger_percent = 1
-        limits.compaction_recent_history_bytes = 4096
+        limits.compaction_keep_recent_tokens = (
+            4096 + limits.context_estimate_bytes_per_token - 1
+        ) // limits.context_estimate_bytes_per_token
 
     fixture_json = json.dumps(
         fixture_manifest_hash_payload(),
@@ -584,7 +586,8 @@ def _report_markdown(
                 "This is a pressure-test override, not a product recommendation:",
                 "",
                 "- `context_compaction_trigger_percent = 1`",
-                "- `compaction_recent_history_bytes = 4096`",
+                "- `compaction_keep_recent_tokens = "
+                f"{manifest.get('agent_limits', {}).get('compaction_keep_recent_tokens', 2048)}`",
                 "",
             ]
         )

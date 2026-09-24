@@ -13,12 +13,14 @@ from app.vnext.agent.errors import (
 )
 from app.vnext.agent.evidence_summary_lifecycle import (
     CompactionSummaryError,
-    build_compaction_request,
+    build_history_compaction_request,
 )
 from app.vnext.agent.limits import AgentLimits
 from app.vnext.agent.runtime import AgentRuntime, CancellationToken, _Deadline
 from app.vnext.agent.trace import AgentTraceCollector
 from app.vnext.llm.protocol import (
+    AssistantMessage,
+    FinalMessage,
     ModelRequest,
     ModelResponse,
     ModelTextDelta,
@@ -127,6 +129,82 @@ def test_full_recording_captures_the_actual_request_and_response() -> None:
     assert calls[0]["response"]["usage"] == {"prompt_tokens": 11}
     assert calls[1]["response"]["message"] == {"role": "final", "content": "answer"}
     assert all(call["duration_seconds"] is not None for call in calls)
+
+
+def test_split_compaction_calls_use_existing_full_call_recording() -> None:
+    request_id = uuid4()
+    history = SessionExecutionHistory()
+    history.begin_request(
+        request_id,
+        "current question",
+        initial_messages=[
+            UserMessage(content="older question"),
+            FinalMessage(content="older answer"),
+        ],
+    )
+    history.set_effective(
+        [
+            UserMessage(content="older question"),
+            FinalMessage(content="older answer"),
+            UserMessage(content="current question"),
+            AssistantMessage(content="early progress"),
+            AssistantMessage(content="recent progress"),
+            FinalMessage(content="recent final"),
+        ]
+    )
+    model = ScriptedModelClient(
+        [
+            ModelResponse.from_final(
+                "updated history",
+                finish_reason="stop",
+                usage={"completion_tokens": 3},
+            ),
+            ModelResponse.from_final(
+                "turn progress",
+                finish_reason="stop",
+                usage={"completion_tokens": 4},
+            ),
+            ModelResponse.from_final("execution"),
+            ModelResponse.from_final("answer"),
+        ]
+    )
+    trace = AgentTraceCollector(capture_full_calls=True)
+    runtime = AgentRuntime(
+        model,
+        ToolRegistry(),
+        limits=AgentLimits(deadline_seconds=2, compaction_keep_recent_tokens=1),
+    )
+
+    asyncio.run(
+        runtime.run(
+            history.effective_messages(),
+            execution_history=history,
+            request_id=request_id,
+            compact_before_steps=(1,),
+            trace_collector=trace,
+        )
+    )
+
+    calls = trace.snapshot()["model_calls"]
+    assert [call["purpose"] for call in calls] == [
+        "compaction",
+        "compaction",
+        "execution",
+        "primary_answer",
+    ]
+    assert [call["request"]["metadata"].get("compaction_kind") for call in calls[:2]] == [
+        "history",
+        "turn_prefix",
+    ]
+    assert [call["response"]["message"]["content"] for call in calls[:2]] == [
+        "updated history",
+        "turn progress",
+    ]
+    assert [call["response"]["usage"] for call in calls[:2]] == [
+        {"completion_tokens": 3},
+        {"completion_tokens": 4},
+    ]
+    assert [call["status"] for call in calls] == ["completed"] * 4
 
 
 def test_same_step_calls_are_independent_and_collectors_do_not_share_records() -> None:
@@ -288,11 +366,9 @@ def test_truncated_summary_response_is_kept_when_candidate_is_rejected() -> None
     client = ScriptedStreamingModelClient([[response]])
     trace = AgentTraceCollector(capture_full_calls=True)
     runtime = AgentRuntime(client, ToolRegistry())  # type: ignore[arg-type]
-    request = build_compaction_request(
+    request = build_history_compaction_request(
         previous_summary=None,
-        current_user_message=UserMessage(content="question"),
-        prefix_messages=[UserMessage(content="older history")],
-        current_user_prefix_index=None,
+        history_messages=[UserMessage(content="older history")],
         max_input_bytes=10_000,
         max_output_tokens=64,
     )
@@ -301,6 +377,7 @@ def test_truncated_summary_response_is_kept_when_candidate_is_rejected() -> None
         asyncio.run(
             runtime._generate_compaction_summary(
                 request,
+                kind="history",
                 token=CancellationToken(),
                 deadline=_Deadline(2),
                 step=1,

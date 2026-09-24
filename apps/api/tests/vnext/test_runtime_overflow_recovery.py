@@ -98,7 +98,7 @@ def _limits(
         deadline_seconds=5,
         answer_timeout_seconds=5,
         degraded_answer_timeout_seconds=5,
-        compaction_recent_history_bytes=1,
+        compaction_keep_recent_tokens=1,
         compaction_max_input_bytes=100_000,
         compaction_reserve_tokens=160,
         context_window_tokens=context_window_tokens,
@@ -226,6 +226,7 @@ def test_overflow_recovery_does_not_replay_completed_tools() -> None:
                 AssistantMessage(tool_calls=[_call("new-call", "new")])
             ),
             _overflow(),
+            _summary(),
             _summary(),
             _final("execution"),
             _final("answer"),

@@ -137,7 +137,7 @@ def _find_limits(
     estimates: dict[str, object],
     predicate: Callable[[dict[str, object]], bool],
     *,
-    recent_bytes: int = 1,
+    recent_tokens: int = 1,
     max_steps: int = 3,
 ) -> AgentLimits:
     numeric_estimates = [
@@ -148,7 +148,7 @@ def _find_limits(
     for available in range(lower, upper + 1):
         limits = _limits_for_available(
             available,
-            recent_bytes=recent_bytes,
+            recent_tokens=recent_tokens,
             max_steps=max_steps,
         )
         capacities = {
@@ -166,8 +166,7 @@ def _capacity_estimates(
     probe_limits: AgentLimits,
 ) -> dict[str, int | dict[str, object]]:
     capacities = {
-        name: assess_request_capacity(request, probe_limits)
-        for name, request in requests.items()
+        name: assess_request_capacity(request, probe_limits) for name, request in requests.items()
     }
     return {
         "requests": requests,
@@ -245,7 +244,7 @@ def _answer_compaction_case() -> tuple[
     registry = _echo_registry(output_size=2_500)
     after_tool, _ = _history_with_new_tool(history, output_size=2_500)
     compacted = _committed_history(after_tool, cut_index=4, summary="answer summary")
-    probe_limits = _limits_for_available(100_000, recent_bytes=500, max_steps=2)
+    probe_limits = _limits_for_available(100_000, recent_tokens=500, max_steps=2)
     execution_request = _probe_request(history, registry, limits=probe_limits)
     post_tool_execution = _probe_request(after_tool, registry, limits=probe_limits)
     before_answer = _answer_request(after_tool, limits=probe_limits, step=3)
@@ -267,7 +266,7 @@ def _answer_compaction_case() -> tuple[
             and _capacity_pressure(capacities, "before_answer") in {"high", "critical"}
             and _capacity_pressure(capacities, "after_answer") != "critical"
         ),
-        recent_bytes=500,
+        recent_tokens=500,
         max_steps=2,
     )
     return history, request_id, registry, limits
@@ -281,6 +280,7 @@ def test_primary_answer_can_compact_an_independently_large_answer_context() -> N
                 AssistantMessage(tool_calls=[_echo_call("new-call", "new")])
             ),
             ModelResponse.from_final("execution", finish_reason="stop"),
+            ModelResponse.from_final("answer history summary", finish_reason="stop"),
             ModelResponse.from_final("answer summary", finish_reason="stop"),
             ModelResponse.from_final("answer"),
         ]
@@ -300,17 +300,21 @@ def test_primary_answer_can_compact_an_independently_large_answer_context() -> N
     )
 
     assert result.content == "answer"
-    assert len(model.requests) == 4
+    assert len(model.requests) == 5
     assert model.requests[0].tools
     compaction_requests = [
         request
         for request in model.requests
         if request.metadata.get("purpose") == "context_compaction"
     ]
-    assert len(compaction_requests) == 1
-    assert model.requests[3].tools == []
-    assert "old evidence" not in str(model.requests[3].messages)
-    assert "answer summary" in str(model.requests[3].messages)
+    assert [request.metadata["compaction_kind"] for request in compaction_requests] == [
+        "history",
+        "turn_prefix",
+    ]
+    assert model.requests[4].tools == []
+    assert "old evidence" not in str(model.requests[4].messages)
+    assert "answer history summary" in str(model.requests[4].messages)
+    assert "answer summary" in str(model.requests[4].messages)
     assert [event.step for event in events if isinstance(event, ModelRequested)] == [1, 2, 3]
     assert [commit["step"] for commit in trace.snapshot()["compaction_commits"]] == [3]
     assert trace.snapshot()["compaction_commits"][0]["trigger"] == "watermark"
@@ -324,7 +328,7 @@ def test_primary_answer_can_compact_an_independently_large_answer_context() -> N
         "before_model",
     ]
     assert primary_checks[-1]["capacity"]["context_bytes"] == measure_request_context_bytes(
-        model.requests[3]
+        model.requests[4]
     )
 
 
@@ -362,7 +366,7 @@ def test_execution_capacity_attempt_is_not_repeated_by_primary_answer() -> None:
 def test_final_message_does_not_reopen_primary_compaction_gate() -> None:
     history, request_id = _history_with_old_groups()
     registry = _echo_registry(output_size=4_000)
-    probe_limits = _limits_for_available(100_000, recent_bytes=500, max_steps=2)
+    probe_limits = _limits_for_available(100_000, recent_tokens=1, max_steps=2)
     first_compacted, _ = _history_with_old_groups()
     first_compacted = _committed_history(first_compacted, cut_index=3, summary="summary one")
     after_tool, _ = _history_with_new_tool(first_compacted, output_size=4_000)
@@ -390,7 +394,7 @@ def test_final_message_does_not_reopen_primary_compaction_gate() -> None:
             and _capacity_pressure(capacities, "answer_before") in {"high", "critical"}
             and _capacity_pressure(capacities, "answer_after") != "critical"
         ),
-        recent_bytes=500,
+        recent_tokens=1,
         max_steps=2,
     )
     model = ScriptedModelClient(
@@ -413,9 +417,9 @@ def test_final_message_does_not_reopen_primary_compaction_gate() -> None:
     )
 
     assert result.content == "execution"
-    assert len(model.requests) == 5
-    assert [commit["step"] for commit in trace.snapshot()["compaction_commits"]] == [1, 2]
-    assert [call["step"] for call in trace.snapshot()["compaction_calls"]] == [1, 2]
+    assert len(model.requests) == 4
+    assert [commit["step"] for commit in trace.snapshot()["compaction_commits"]] == [1]
+    assert [call["step"] for call in trace.snapshot()["compaction_calls"]] == [1]
     assert [
         item["stage"]
         for item in trace.snapshot()["context_capacity_checks"]
@@ -428,15 +432,14 @@ def test_final_message_does_not_reopen_primary_compaction_gate() -> None:
     ]
     assert [item["phase"] for item in primary_checks] == ["before_model"]
     assert primary_checks[0]["capacity"]["pressure"] in {"normal", "high"}
-    assert trace.snapshot()["compaction_calls"][-1]["step"] == 2
-    assert history.summary == "summary two"
+    assert history.summary == "summary one"
 
 
 def test_new_tool_progress_allows_real_primary_compaction() -> None:
     history, request_id = _history_with_old_groups()
     coordinator = TaskStateCoordinator()
     registry = _compaction_workflow_registry(coordinator)
-    limits = _limits_for_available(16_000, recent_bytes=500, max_steps=3)
+    limits = _limits_for_available(16_000, recent_tokens=500, max_steps=3)
     plan_call = ToolCall(
         id="plan-call",
         name="task.plan",
@@ -462,7 +465,7 @@ def test_new_tool_progress_allows_real_primary_compaction() -> None:
         name="task.checkpoint",
         arguments={
             "key": "first",
-            "value": {"status": "first complete", "details": "x" * 4_500},
+            "value": {"status": "first complete", "details": "x" * 4_000},
             "source_tool_call_ids": ["read-new"],
         },
     )
@@ -472,7 +475,8 @@ def test_new_tool_progress_allows_real_primary_compaction() -> None:
             ModelResponse.from_assistant(AssistantMessage(tool_calls=[plan_call])),
             ModelResponse.from_assistant(AssistantMessage(tool_calls=[read_call])),
             ModelResponse.from_assistant(AssistantMessage(tool_calls=[checkpoint_call])),
-            ModelResponse.from_final("summary after tool", finish_reason="stop"),
+            ModelResponse.from_final("history after tool", finish_reason="stop"),
+            ModelResponse.from_final("turn prefix after tool", finish_reason="stop"),
             ModelResponse.from_final("answer"),
         ]
     )
@@ -496,19 +500,38 @@ def test_new_tool_progress_allows_real_primary_compaction() -> None:
     )
 
     snapshot = trace.snapshot()
-    assert result.content == "answer"
+    assert result.content == "answer", {
+        "commits": [(item["step"], item["trigger"]) for item in snapshot["compaction_commits"]],
+        "calls": [
+            (item["step"], item["kind"], item["status"], item["error_code"])
+            for item in snapshot["compaction_calls"]
+        ],
+        "checks": [
+            (
+                item["stage"],
+                item["phase"],
+                item["capacity"]["pressure"],
+                item["capacity"]["context_bytes"],
+            )
+            for item in snapshot["context_capacity_checks"]
+        ],
+        "requests": [
+            (request.step, request.metadata, request.max_output_tokens)
+            for request in model.requests
+        ],
+        "answer": result.content,
+    }
     assert [commit["step"] for commit in snapshot["compaction_commits"]] == [1, 4]
-    assert len(snapshot["compaction_calls"]) == 2
-    assert sum(
-        request.metadata.get("purpose") == "context_compaction"
-        for request in model.requests
-    ) == 2
-    tool_starts = [
-        event.tool_name for event in events if isinstance(event, ToolStarted)
-    ]
+    assert len(snapshot["compaction_calls"]) == 3
+    assert (
+        sum(request.metadata.get("purpose") == "context_compaction" for request in model.requests)
+        == 3
+    )
+    tool_starts = [event.tool_name for event in events if isinstance(event, ToolStarted)]
     assert tool_starts.count("artifact.read") == 1
     assert tool_starts.count("task.checkpoint") == 1
-    assert "summary after tool" in str(model.requests[-1].messages)
+    assert "history after tool" in str(model.requests[-1].messages)
+    assert "turn prefix after tool" in str(model.requests[-1].messages)
     assert [
         item["stage"]
         for item in snapshot["context_capacity_checks"]
@@ -543,9 +566,7 @@ def _answer_capacity_case() -> tuple[SessionExecutionHistory, object, AgentLimit
 
 def test_primary_critical_checks_degraded_answer_capacity() -> None:
     history, request_id, limits = _answer_capacity_case()
-    model = ScriptedModelClient(
-        [ModelResponse.from_final("execution")]
-    )
+    model = ScriptedModelClient([ModelResponse.from_final("execution")])
     trace = AgentTraceCollector()
     events: list[object] = []
 

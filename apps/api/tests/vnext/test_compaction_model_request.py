@@ -8,10 +8,14 @@ import pytest
 from app.vnext.agent.evidence_summary_lifecycle import (
     CompactionSummaryError,
     HistoryCompactionRangeError,
-    build_compaction_request,
+    build_history_compaction_request,
+    build_turn_prefix_compaction_request,
     validate_compaction_response,
 )
-from app.vnext.agent.instructions import COMPACTION_INSTRUCTION
+from app.vnext.agent.instructions import (
+    HISTORY_COMPACTION_INSTRUCTION,
+    TURN_PREFIX_COMPACTION_INSTRUCTION,
+)
 from app.vnext.llm.protocol import (
     AssistantMessage,
     ModelRequest,
@@ -43,17 +47,13 @@ def _request_bytes(request: ModelRequest) -> int:
 def _build(
     *,
     previous_summary: str | None = None,
-    current: UserMessage | None = None,
-    prefix: list | None = None,
-    current_index: int | None = None,
+    history: list | None = None,
     max_input_bytes: int = 100_000,
     max_output_tokens: int = 256,
 ) -> ModelRequest:
-    return build_compaction_request(
+    return build_history_compaction_request(
         previous_summary=previous_summary,
-        current_user_message=current or UserMessage(content="current question"),
-        prefix_messages=([UserMessage(content="old history")] if prefix is None else prefix),
-        current_user_prefix_index=current_index,
+        history_messages=([UserMessage(content="old history")] if history is None else history),
         max_input_bytes=max_input_bytes,
         max_output_tokens=max_output_tokens,
     )
@@ -74,7 +74,6 @@ def test_first_compaction_request_keeps_null_previous_summary() -> None:
     request = _build()
 
     assert _request_data(request) == {
-        "current_user_message": "current question",
         "previous_summary": None,
         "history": [{"content": "old history", "role": "user"}],
     }
@@ -89,11 +88,14 @@ def test_follow_up_compaction_request_preserves_previous_summary_verbatim() -> N
 def test_compaction_request_has_only_instruction_and_data_without_tools() -> None:
     request = _build()
 
-    assert request.messages[0] == SystemMessage(content=COMPACTION_INSTRUCTION)
+    assert request.messages[0] == SystemMessage(content=HISTORY_COMPACTION_INSTRUCTION)
     assert isinstance(request.messages[1], UserMessage)
     assert request.tools == []
     assert request.step is None
-    assert request.metadata == {"purpose": "context_compaction"}
+    assert request.metadata == {
+        "purpose": "context_compaction",
+        "compaction_kind": "history",
+    }
     assert request.max_output_tokens == 256
 
 
@@ -103,11 +105,42 @@ def test_compaction_request_preserves_explicit_output_token_limit() -> None:
     assert request.max_output_tokens == 1234
 
 
+def test_turn_prefix_request_contains_only_its_turn_and_has_distinct_metadata() -> None:
+    turn = [UserMessage(content="original request"), AssistantMessage(content="early progress")]
+    request = build_turn_prefix_compaction_request(
+        turn_prefix_messages=turn,
+        max_input_bytes=100_000,
+        max_output_tokens=8192,
+    )
+
+    assert request.messages[0] == SystemMessage(content=TURN_PREFIX_COMPACTION_INSTRUCTION)
+    assert _request_data(request) == {
+        "turn_prefix": [message.model_dump(mode="json") for message in turn],
+    }
+    assert request.metadata == {
+        "purpose": "context_compaction",
+        "compaction_kind": "turn_prefix",
+    }
+    assert request.max_output_tokens == 8192
+
+
+def test_turn_prefix_request_does_not_mix_old_summary_or_recent_history() -> None:
+    request = build_turn_prefix_compaction_request(
+        turn_prefix_messages=[UserMessage(content="first question")],
+        max_input_bytes=100_000,
+        max_output_tokens=128,
+    )
+    encoded = request.messages[1].content
+
+    assert "previous_summary" not in encoded
+    assert "recent retained" not in encoded
+
+
 def test_tool_messages_are_serialized_as_history_data_with_relationships() -> None:
     call = _call()
     prefix = [AssistantMessage(tool_calls=[call]), _result(call.id)]
 
-    data = _request_data(_build(prefix=prefix))
+    data = _request_data(_build(history=prefix))
 
     assert data["history"] == [
         {
@@ -131,72 +164,23 @@ def test_tool_messages_are_serialized_as_history_data_with_relationships() -> No
     ]
 
 
-def test_current_user_position_removes_exactly_one_message() -> None:
-    current = UserMessage(content="current question")
-    prefix = [UserMessage(content="old"), current, UserMessage(content="old")]
+def test_history_request_does_not_rewrite_repeated_user_text() -> None:
+    repeated = [UserMessage(content="same question"), UserMessage(content="same question")]
+    data = _request_data(_build(history=repeated))
 
-    data = _request_data(_build(current=current, prefix=prefix, current_index=1))
-
-    assert [message["content"] for message in data["history"]] == ["old", "old"]
-
-
-def test_duplicate_old_question_is_not_removed() -> None:
-    current = UserMessage(content="same question")
-    prefix = [UserMessage(content="same question"), current]
-
-    data = _request_data(_build(current=current, prefix=prefix, current_index=1))
-
-    assert data["history"] == [{"content": "same question", "role": "user"}]
-
-
-def test_missing_current_user_position_does_not_rewrite_prefix() -> None:
-    prefix = [UserMessage(content="historical question")]
-
-    data = _request_data(_build(prefix=prefix, current_index=None))
-
-    assert data["history"] == [{"content": "historical question", "role": "user"}]
-
-
-@pytest.mark.parametrize(
-    "current_index",
-    [True, -1, 2],
-)
-def test_invalid_current_user_indices_are_rejected(current_index: object) -> None:
-    with pytest.raises(CompactionSummaryError) as error:
-        _build(current_index=current_index)  # type: ignore[arg-type]
-
-    assert error.value.code == "invalid_current_user_position"
+    assert data["history"] == [
+        {"content": "same question", "role": "user"},
+        {"content": "same question", "role": "user"},
+    ]
 
 
 @pytest.mark.parametrize(
     "prefix",
-    [
-        [AssistantMessage(content="not a user")],
-        [UserMessage(content="not current")],
-    ],
+    [[]],
 )
-def test_current_position_must_point_to_the_matching_user_message(prefix: list) -> None:
+def test_empty_compaction_history_is_rejected(prefix: list) -> None:
     with pytest.raises(CompactionSummaryError) as error:
-        _build(
-            current=UserMessage(content="current question"),
-            prefix=prefix,
-            current_index=0,
-        )
-
-    assert error.value.code == "invalid_current_user_position"
-
-
-@pytest.mark.parametrize(
-    "prefix",
-    [
-        [],
-        [UserMessage(content="current question")],
-    ],
-)
-def test_empty_or_current_only_compaction_history_is_rejected(prefix: list) -> None:
-    index = 0 if prefix else None
-    with pytest.raises(CompactionSummaryError) as error:
-        _build(prefix=prefix, current_index=index)
+        _build(history=prefix)
 
     assert error.value.code == "empty_compaction_history"
 
@@ -212,7 +196,7 @@ def test_empty_or_current_only_compaction_history_is_rejected(prefix: list) -> N
 )
 def test_invalid_history_uses_existing_range_structure_error(prefix: list) -> None:
     with pytest.raises(HistoryCompactionRangeError) as error:
-        _build(prefix=prefix)
+        _build(history=prefix)
 
     assert error.value.code == "invalid_history_structure"
 
@@ -223,7 +207,7 @@ def test_building_request_does_not_mutate_messages_or_nested_tool_content() -> N
     prefix = [AssistantMessage(tool_calls=[call]), result]
     before = copy.deepcopy(prefix)
 
-    _build(prefix=prefix)
+    _build(history=prefix)
 
     assert prefix == before
 
@@ -240,15 +224,31 @@ def test_input_budget_includes_the_complete_request_and_allows_exact_boundary() 
     assert error.value.code == "summary_input_too_large"
 
 
+def test_turn_prefix_input_budget_is_checked_before_model_call() -> None:
+    kwargs = {
+        "turn_prefix_messages": [UserMessage(content="x" * 100)],
+        "max_output_tokens": 128,
+    }
+    request = build_turn_prefix_compaction_request(max_input_bytes=10_000, **kwargs)
+    budget = _request_bytes(request)
+
+    assert (
+        _request_bytes(build_turn_prefix_compaction_request(max_input_bytes=budget, **kwargs))
+        == budget
+    )
+    with pytest.raises(CompactionSummaryError) as error:
+        build_turn_prefix_compaction_request(max_input_bytes=budget - 1, **kwargs)
+    assert error.value.code == "summary_input_too_large"
+
+
 def test_input_budget_counts_utf8_bytes() -> None:
     prefix = [UserMessage(content="中文历史")]
-    request = _build(prefix=prefix, current=UserMessage(content="当前问题"))
+    request = _build(history=prefix)
 
     assert len(request.messages[1].content.encode("utf-8")) > len(request.messages[1].content)
     assert _request_bytes(request) == _request_bytes(
         _build(
-            prefix=prefix,
-            current=UserMessage(content="当前问题"),
+            history=prefix,
             max_input_bytes=100_000,
         )
     )
@@ -268,7 +268,7 @@ def test_deferred_and_receipt_observations_are_kept_as_returned_data() -> None:
         ),
     ]
 
-    history = _request_data(_build(prefix=prefix))["history"]
+    history = _request_data(_build(history=prefix))["history"]
 
     assert history[1]["content"] == {"_context_materialization": {"state": "deferred"}}
     assert history[2]["content"] == {"_artifact_observation": {"state": "receipt_only"}}

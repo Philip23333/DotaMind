@@ -73,9 +73,10 @@ and the same two fixed follow-up questions in one session. Profiles are not
 automatically iterated. `current` and `pressure` require a configured context
 window. `baseline` disables automatic capacity management but the evaluator
 client applies the same business output-token cap as other profiles. `pressure`
-sets `context_compaction_trigger_percent=1` and
-`compaction_recent_history_bytes=4096`; these are pressure-test overrides, not
-product recommendations.
+sets `context_compaction_trigger_percent=1` and a recent-history target
+equivalent to 4096 serialized bytes, rounded up using the configured
+`context_estimate_bytes_per_token` (2048 estimated tokens at the default ratio
+of 2); these are pressure-test overrides, not product recommendations.
 
 The default shared limits are at most 12 model calls (including summary and
 retry calls) and 180 wall-clock seconds for both questions together. CLI

@@ -184,7 +184,7 @@ def _probe_request(
 def _limits_for_available(
     available_input_tokens: int,
     *,
-    recent_bytes: int = 1,
+    recent_tokens: int = 1,
     max_steps: int = 3,
     trigger_percent: int = 80,
 ) -> AgentLimits:
@@ -194,7 +194,7 @@ def _limits_for_available(
         max_steps=max_steps,
         deadline_seconds=5,
         answer_timeout_seconds=5,
-        compaction_recent_history_bytes=recent_bytes,
+        compaction_keep_recent_tokens=recent_tokens,
         compaction_max_input_bytes=100_000,
         compaction_reserve_tokens=160,
         context_window_tokens=available_input_tokens + reserve + margin,
@@ -569,14 +569,14 @@ def test_continuous_watermarks_compact_again_after_new_tool_output() -> None:
     history, request_id = _history_with_old_groups()
     calls: list[str] = []
     registry = _echo_registry(output_size=6_000, calls=calls)
-    probe_limits = _limits_for_available(100_000, recent_bytes=500, max_steps=2)
+    probe_limits = _limits_for_available(100_000, recent_tokens=500, max_steps=2)
     compacted = _double_compacted_history(history)
     final_request = _probe_request(compacted, registry, limits=probe_limits)
     final_capacity = assess_request_capacity(final_request, probe_limits)
     assert final_capacity is not None
     limits = _limits_for_available(
-        final_capacity.estimated_input_tokens + 1,
-        recent_bytes=500,
+        final_capacity.estimated_input_tokens + 512,
+        recent_tokens=500,
         max_steps=2,
     )
     model = ScriptedModelClient(
@@ -585,7 +585,8 @@ def test_continuous_watermarks_compact_again_after_new_tool_output() -> None:
             ModelResponse.from_assistant(
                 AssistantMessage(tool_calls=[_echo_call("new-call", "new")])
             ),
-            ModelResponse.from_final("summary two", finish_reason="stop"),
+            ModelResponse.from_final("summary two history", finish_reason="stop"),
+            ModelResponse.from_final("summary two turn prefix", finish_reason="stop"),
             ModelResponse.from_final("execution final"),
             ModelResponse.from_final("answer"),
         ]
@@ -604,15 +605,50 @@ def test_continuous_watermarks_compact_again_after_new_tool_output() -> None:
         trace_collector=trace,
     )
 
-    assert calls == ["new"]
-    assert len(model.requests) == 4
-    assert [request.step for request in model.requests[1:4:2]] == [1, 2]
-    assert [event.step for event in events if isinstance(event, ModelRequested)] == [1, 2]
+    assert calls == ["new"], {
+        "requests": [(request.step, request.metadata) for request in model.requests],
+        "compaction_calls": trace.snapshot().get("compaction_calls"),
+        "commits": trace.snapshot().get("compaction_commits"),
+        "outcome": trace.snapshot().get("execution_outcome"),
+    }
+    assert len(model.requests) == 6, {
+        "requests": [
+            (request.step, request.metadata, request.max_output_tokens)
+            for request in model.requests
+        ],
+        "calls": [
+            (call["step"], call["kind"], call["status"], call["error_code"])
+            for call in trace.snapshot()["compaction_calls"]
+        ],
+        "commits": trace.snapshot()["compaction_commits"],
+        "checks": [
+            (
+                item["stage"],
+                item["phase"],
+                item["capacity"]["pressure"],
+                item["capacity"]["context_bytes"],
+                item["capacity"]["available_input_tokens"],
+            )
+            for item in trace.snapshot()["context_capacity_checks"]
+        ],
+        "outcome": trace.snapshot()["execution_outcome"],
+    }
+    assert [request.step for request in (model.requests[1], model.requests[4])] == [1, 2]
+    assert [event.step for event in events if isinstance(event, ModelRequested)] == [
+        1,
+        2,
+        3,
+    ]
     assert [event.step for event in events if isinstance(event, ToolStarted)] == [1]
 
     snapshot = trace.snapshot()
     commits = snapshot["compaction_commits"]
     assert [commit["step"] for commit in commits] == [1, 2]
+    assert [call["kind"] for call in snapshot["compaction_calls"]] == [
+        "turn_prefix",
+        "history",
+        "turn_prefix",
+    ]
     assert all(commit["trigger"] == "watermark" for commit in commits)
     assert all(
         commit["materialized_bytes_after"] < commit["materialized_bytes_before"]
@@ -625,9 +661,13 @@ def test_continuous_watermarks_compact_again_after_new_tool_output() -> None:
     ]
     assert [item["capacity"]["context_bytes"] for item in before_model] == [
         measure_request_context_bytes(model.requests[1]),
-        measure_request_context_bytes(model.requests[3]),
+        measure_request_context_bytes(model.requests[4]),
     ]
-    assert [item["step"] for item in snapshot["steps"] if "model_request" in item] == [1, 2]
+    assert [item["step"] for item in snapshot["steps"] if "model_request" in item] == [
+        1,
+        2,
+        3,
+    ]
 
 
 def test_tool_schema_can_cross_the_watermark_trigger_line() -> None:

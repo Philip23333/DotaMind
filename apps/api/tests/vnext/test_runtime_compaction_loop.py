@@ -171,7 +171,7 @@ def _history() -> tuple[SessionExecutionHistory, object]:
 def _runtime(
     model: object,
     *,
-    recent_bytes: int,
+    recent_tokens: int,
     system_instruction: str | None = None,
 ) -> AgentRuntime:
     return AgentRuntime(
@@ -179,9 +179,10 @@ def _runtime(
         _registry(),
         limits=AgentLimits(
             deadline_seconds=2,
-            compaction_recent_history_bytes=recent_bytes,
+            compaction_keep_recent_tokens=recent_tokens,
             compaction_max_input_bytes=100_000,
             compaction_reserve_tokens=160,
+            context_estimate_bytes_per_token=1,
         ),
         system_instruction=system_instruction,
     )
@@ -246,6 +247,7 @@ def test_compaction_loop_rebuilds_messages_scope_and_budget_before_next_model_ca
     system_instruction: str | None,
     request_start_before: int,
     request_start_after: int,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     history, request_id = _history()
     model = ScriptedModelClient(
@@ -253,6 +255,7 @@ def test_compaction_loop_rebuilds_messages_scope_and_budget_before_next_model_ca
             ModelResponse.from_assistant(AssistantMessage(tool_calls=[_call(1)])),
             ModelResponse.from_assistant(AssistantMessage(tool_calls=[_call(2)])),
             ModelResponse.from_final("summary one", finish_reason="stop", usage={"n": 1}),
+            ModelResponse.from_final("turn prefix one", finish_reason="stop", usage={"n": 2}),
             ModelResponse.from_final("execution final"),
             ModelResponse.from_final("answer final"),
         ]
@@ -260,9 +263,18 @@ def test_compaction_loop_rebuilds_messages_scope_and_budget_before_next_model_ca
     trace = AgentTraceCollector()
     runtime = _runtime(
         model,
-        recent_bytes=_tool_group_bytes(2),
+        recent_tokens=_tool_group_bytes(2),
         system_instruction=system_instruction,
     )
+    rebuild_count = 0
+    original_rebuild = runtime._rebuild_after_compaction
+
+    def count_rebuild(**kwargs: Any):
+        nonlocal rebuild_count
+        rebuild_count += 1
+        return original_rebuild(**kwargs)
+
+    monkeypatch.setattr(runtime, "_rebuild_after_compaction", count_rebuild)
 
     result = _run(
         runtime,
@@ -273,20 +285,24 @@ def test_compaction_loop_rebuilds_messages_scope_and_budget_before_next_model_ca
     )
 
     assert result.content == "answer final"
-    assert len(model.requests) == 5
+    assert len(model.requests) == 6
     assert model.requests[2].tools == []
-    assert model.requests[3].tools
+    assert model.requests[3].tools == []
+    assert model.requests[2].metadata["compaction_kind"] == "history"
+    assert model.requests[3].metadata["compaction_kind"] == "turn_prefix"
+    assert model.requests[4].tools
     assert "event 1 raw body" not in json.dumps(
-        [message.model_dump(mode="json") for message in model.requests[3].messages]
+        [message.model_dump(mode="json") for message in model.requests[4].messages]
     )
     assert "event 2 raw body" in json.dumps(
-        [message.model_dump(mode="json") for message in model.requests[3].messages]
+        [message.model_dump(mode="json") for message in model.requests[4].messages]
     )
-    assert _session_payload(model.requests[3])["summary"] == "summary one"
+    assert "summary one" in _session_payload(model.requests[4])["summary"]
+    assert "turn prefix one" in _session_payload(model.requests[4])["summary"]
     assert (
         sum(
             message == UserMessage(content="current question")
-            for message in model.requests[3].messages
+            for message in model.requests[4].messages
         )
         == 1
     )
@@ -298,8 +314,9 @@ def test_compaction_loop_rebuilds_messages_scope_and_budget_before_next_model_ca
         ]
         or history.effective_messages()[-1].role == "final"
     )
-    assert len(trace.snapshot()["compaction_calls"]) == 1
+    assert len(trace.snapshot()["compaction_calls"]) == 2
     assert len(trace.snapshot()["compaction_commits"]) == 1
+    assert rebuild_count == 1
     commit = trace.snapshot()["compaction_commits"][0]
     assert commit["step"] == 3
     assert commit["request_start_before"] == request_start_before
@@ -314,6 +331,7 @@ def test_compaction_loop_supports_two_explicit_compactions_without_replaying_too
             ModelResponse.from_assistant(AssistantMessage(tool_calls=[_call(1)])),
             ModelResponse.from_assistant(AssistantMessage(tool_calls=[_call(2)])),
             ModelResponse.from_final("summary one", finish_reason="stop", usage={"n": 1}),
+            ModelResponse.from_final("turn prefix one", finish_reason="stop", usage={"n": 3}),
             ModelResponse.from_assistant(AssistantMessage(tool_calls=[_call(3)])),
             ModelResponse.from_assistant(AssistantMessage(tool_calls=[_call(4)])),
             ModelResponse.from_final("summary two", finish_reason="stop", usage={"n": 2}),
@@ -322,7 +340,7 @@ def test_compaction_loop_supports_two_explicit_compactions_without_replaying_too
         ]
     )
     trace = AgentTraceCollector()
-    runtime = _runtime(model, recent_bytes=_tool_group_bytes(2))
+    runtime = _runtime(model, recent_tokens=_tool_group_bytes(2))
 
     _run(
         runtime,
@@ -342,17 +360,17 @@ def test_compaction_loop_supports_two_explicit_compactions_without_replaying_too
         True,
         True,
         False,
+        False,
         True,
         True,
         False,
         True,
         False,
     ]
-    assert [_session_payload(model.requests[index])["summary"] for index in (3, 6)] == [
-        "summary one",
-        "summary two",
-    ]
-    assert len(trace.snapshot()["compaction_calls"]) == 2
+    assert "summary one" in _session_payload(model.requests[4])["summary"]
+    assert "turn prefix one" in _session_payload(model.requests[4])["summary"]
+    assert "summary two" in _session_payload(model.requests[7])["summary"]
+    assert len(trace.snapshot()["compaction_calls"]) == 3
     assert len(trace.snapshot()["compaction_commits"]) == 2
     assert [item["step"] for item in trace.snapshot()["compaction_commits"]] == [3, 5]
 
@@ -365,7 +383,7 @@ def test_empty_compaction_trigger_is_a_single_noop_and_normal_execution_continue
     trace = AgentTraceCollector()
 
     _run(
-        _runtime(model, recent_bytes=1_000_000),
+        _runtime(model, recent_tokens=1_000_000),
         history,
         request_id,
         compact_before_steps=(1,),
@@ -543,7 +561,7 @@ def test_compaction_releases_repeated_reads_and_cleans_removed_task_leases() -> 
             max_steps=9,
             deadline_seconds=5,
             answer_timeout_seconds=5,
-            compaction_recent_history_bytes=1,
+            compaction_keep_recent_tokens=1,
             compaction_max_input_bytes=100_000,
             compaction_reserve_tokens=160,
             max_materialized_context_bytes=100_000,

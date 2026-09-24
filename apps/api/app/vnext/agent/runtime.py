@@ -50,8 +50,9 @@ from app.vnext.agent.evidence_summary import CompactionSummaryResult
 from app.vnext.agent.evidence_summary_lifecycle import (
     CompactionSummaryError,
     HistoryCompactionRangeError,
-    build_compaction_request,
-    select_compaction_range,
+    build_history_compaction_request,
+    build_turn_prefix_compaction_request,
+    prepare_compaction,
     validate_compaction_response,
 )
 from app.vnext.agent.instructions import ANSWER_INSTRUCTION, DEGRADED_ANSWER_INSTRUCTION
@@ -304,7 +305,7 @@ class AgentRuntime:
                             token=token,
                             deadline=execution_deadline,
                             step=step,
-                            recent_history_bytes=self.limits.compaction_recent_history_bytes,
+                            recent_history_tokens=self.limits.compaction_keep_recent_tokens,
                             max_input_bytes=self.limits.compaction_max_input_bytes,
                             trace_collector=trace_collector,
                         )
@@ -441,7 +442,7 @@ class AgentRuntime:
                                 token=token,
                                 deadline=execution_deadline,
                                 step=step,
-                                recent_history_bytes=self.limits.compaction_recent_history_bytes,
+                                recent_history_tokens=self.limits.compaction_keep_recent_tokens,
                                 max_input_bytes=self.limits.compaction_max_input_bytes,
                                 trace_collector=trace_collector,
                             )
@@ -850,7 +851,7 @@ class AgentRuntime:
                                 token=token,
                                 deadline=primary_deadline,
                                 step=answer_step,
-                                recent_history_bytes=(self.limits.compaction_recent_history_bytes),
+                                recent_history_tokens=(self.limits.compaction_keep_recent_tokens),
                                 max_input_bytes=self.limits.compaction_max_input_bytes,
                                 trace_collector=trace_collector,
                             )
@@ -977,7 +978,7 @@ class AgentRuntime:
                                 token=token,
                                 deadline=primary_deadline,
                                 step=answer_step,
-                                recent_history_bytes=(self.limits.compaction_recent_history_bytes),
+                                recent_history_tokens=(self.limits.compaction_keep_recent_tokens),
                                 max_input_bytes=self.limits.compaction_max_input_bytes,
                                 trace_collector=trace_collector,
                             )
@@ -1733,6 +1734,7 @@ class AgentRuntime:
         self,
         request: ModelRequest,
         *,
+        kind: Literal["history", "turn_prefix"] = "history",
         token: CancellationToken,
         deadline: _Deadline,
         step: int,
@@ -1750,7 +1752,7 @@ class AgentRuntime:
 
         try:
             self._check_controls(token, deadline)
-            _validate_compaction_call(request)
+            _validate_compaction_call(request, kind=kind)
             response, _, _ = await self._invoke_model(
                 request,
                 purpose="compaction",
@@ -1773,6 +1775,7 @@ class AgentRuntime:
             )
             if trace_collector is not None:
                 trace_collector.compaction_call(
+                    kind=kind,
                     step=step,
                     status="generated",
                     duration_seconds=duration_seconds,
@@ -1783,6 +1786,7 @@ class AgentRuntime:
         except AgentCancelledError as exc:
             self._record_compaction_call(
                 trace_collector,
+                kind=kind,
                 step=step,
                 status="cancelled",
                 started=started,
@@ -1793,6 +1797,7 @@ class AgentRuntime:
         except AgentDeadlineExceeded as exc:
             self._record_compaction_call(
                 trace_collector,
+                kind=kind,
                 step=step,
                 status="deadline_exceeded",
                 started=started,
@@ -1803,6 +1808,7 @@ class AgentRuntime:
         except Exception as exc:
             self._record_compaction_call(
                 trace_collector,
+                kind=kind,
                 step=step,
                 status="failed",
                 started=started,
@@ -1819,23 +1825,17 @@ class AgentRuntime:
         token: CancellationToken,
         deadline: _Deadline,
         step: int,
-        recent_history_bytes: int,
+        recent_history_tokens: int,
         max_input_bytes: int,
         trace_collector: AgentTraceCollector | None,
     ) -> bool:
         """Generate and atomically commit one session-history compaction."""
 
         self._check_controls(token, deadline)
-        if type(recent_history_bytes) is not int or recent_history_bytes <= 0:
+        if type(recent_history_tokens) is not int or recent_history_tokens <= 0:
             raise HistoryCompactionRangeError("invalid_recent_history_budget")
         if type(max_input_bytes) is not int or max_input_bytes <= 0:
             raise CompactionSummaryError("invalid_summary_budget")
-        max_output_tokens = resolve_compaction_output_tokens(
-            kind="history",
-            reserve_tokens=self.limits.compaction_reserve_tokens,
-            model_max_output_tokens=self.limits.compaction_model_max_output_tokens,
-        )
-
         snapshot_method = getattr(execution_history, "context_snapshot", None)
         if not callable(snapshot_method):
             raise ModelProtocolError("execution history does not provide a context snapshot")
@@ -1856,41 +1856,89 @@ class AgentRuntime:
         ):
             raise ModelProtocolError("execution history has no valid current user message")
 
-        selected = select_compaction_range(
+        preparation = prepare_compaction(
             snapshot.messages,
-            recent_history_bytes=recent_history_bytes,
+            recent_history_tokens=recent_history_tokens,
+            bytes_per_token=self.limits.context_estimate_bytes_per_token,
         )
-        if selected is None:
+        if preparation is None:
             return False
 
-        current_user_prefix_index = current_index if current_index < selected.cut_index else None
-        prefix_history_count = len(selected.prefix_messages) - (
-            1 if current_user_prefix_index is not None else 0
+        removable_message_count = preparation.cut_index - (
+            1 if current_index < preparation.cut_index else 0
         )
-        if prefix_history_count < 1:
+        if removable_message_count < 1:
             return False
 
-        request = build_compaction_request(
-            previous_summary=snapshot.summary,
-            current_user_message=current_user,
-            prefix_messages=selected.prefix_messages,
-            current_user_prefix_index=current_user_prefix_index,
-            max_input_bytes=max_input_bytes,
-            max_output_tokens=max_output_tokens,
-        )
-        result = await self._generate_compaction_summary(
-            request,
-            token=token,
-            deadline=deadline,
-            step=step,
-            trace_collector=trace_collector,
-        )
+        # Build and validate every request before spending a model call. A bad
+        # second-stage payload must not leave a first-stage candidate behind.
+        history_request: ModelRequest | None = None
+        turn_prefix_request: ModelRequest | None = None
+        if preparation.history_messages:
+            history_output_tokens = resolve_compaction_output_tokens(
+                kind="history",
+                reserve_tokens=self.limits.compaction_reserve_tokens,
+                model_max_output_tokens=self.limits.compaction_model_max_output_tokens,
+            )
+            history_request = build_history_compaction_request(
+                previous_summary=snapshot.summary,
+                history_messages=preparation.history_messages,
+                max_input_bytes=max_input_bytes,
+                max_output_tokens=history_output_tokens,
+            )
+            _validate_compaction_call(history_request, kind="history")
+        if preparation.turn_prefix_messages:
+            turn_prefix_output_tokens = resolve_compaction_output_tokens(
+                kind="turn_prefix",
+                reserve_tokens=self.limits.compaction_reserve_tokens,
+                model_max_output_tokens=self.limits.compaction_model_max_output_tokens,
+            )
+            turn_prefix_request = build_turn_prefix_compaction_request(
+                turn_prefix_messages=preparation.turn_prefix_messages,
+                max_input_bytes=max_input_bytes,
+                max_output_tokens=turn_prefix_output_tokens,
+            )
+            _validate_compaction_call(turn_prefix_request, kind="turn_prefix")
+        if history_request is None and turn_prefix_request is None:
+            return False
+
+        history_summary = snapshot.summary
+        if history_request is not None:
+            history_result = await self._generate_compaction_summary(
+                history_request,
+                kind="history",
+                token=token,
+                deadline=deadline,
+                step=step,
+                trace_collector=trace_collector,
+            )
+            history_summary = history_result.summary
+            self._check_controls(token, deadline)
+
+        candidate_summary = history_summary
+        if turn_prefix_request is not None:
+            turn_prefix_result = await self._generate_compaction_summary(
+                turn_prefix_request,
+                kind="turn_prefix",
+                token=token,
+                deadline=deadline,
+                step=step,
+                trace_collector=trace_collector,
+            )
+            turn_prefix = f"**Turn Context (split turn):**\n\n{turn_prefix_result.summary}"
+            candidate_summary = (
+                f"{candidate_summary}\n\n---\n\n{turn_prefix}" if candidate_summary else turn_prefix
+            )
+            self._check_controls(token, deadline)
+        if not candidate_summary:
+            return False
+
         self._check_controls(token, deadline)
         execution_history.commit_compaction(
             request_id=request_id,
             base_revision=snapshot.revision,
-            summary=result.summary,
-            cut_index=selected.cut_index,
+            summary=candidate_summary,
+            cut_index=preparation.cut_index,
         )
         return True
 
@@ -1898,6 +1946,7 @@ class AgentRuntime:
     def _record_compaction_call(
         trace_collector: AgentTraceCollector | None,
         *,
+        kind: Literal["history", "turn_prefix"],
         step: int,
         status: str,
         started: float,
@@ -1907,6 +1956,7 @@ class AgentRuntime:
         if trace_collector is None:
             return
         trace_collector.compaction_call(
+            kind=kind,
             step=step,
             status=status,
             duration_seconds=max(0.0, monotonic() - started),
@@ -2175,13 +2225,16 @@ def _append_system_instruction(
     return instruction_messages
 
 
-def _validate_compaction_call(request: ModelRequest) -> None:
+def _validate_compaction_call(
+    request: ModelRequest, *, kind: Literal["history", "turn_prefix"]
+) -> None:
     if (
         request.tools
         or request.step is not None
         or type(request.max_output_tokens) is not int
         or request.max_output_tokens <= 0
         or request.metadata.get("purpose") != "context_compaction"
+        or request.metadata.get("compaction_kind") != kind
     ):
         raise ModelProtocolError("invalid compaction summary request")
 

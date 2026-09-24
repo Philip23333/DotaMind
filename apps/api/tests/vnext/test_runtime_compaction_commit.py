@@ -13,7 +13,12 @@ from app.vnext.agent.errors import (
     ModelProtocolError,
     ModelProviderError,
 )
-from app.vnext.agent.evidence_summary_lifecycle import CompactionSummaryError
+from app.vnext.agent.evidence_summary_lifecycle import (
+    CompactionSummaryError,
+    build_history_compaction_request,
+    build_turn_prefix_compaction_request,
+    prepare_compaction,
+)
 from app.vnext.agent.limits import AgentLimits
 from app.vnext.agent.runtime import AgentRuntime, CancellationToken, _Deadline
 from app.vnext.agent.task_state import TaskStateCoordinator
@@ -48,6 +53,17 @@ def _message_bytes(message: object) -> int:
     return len(
         json.dumps(
             message.model_dump(mode="json"),  # type: ignore[union-attr]
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    )
+
+
+def _request_bytes(request: ModelRequest) -> int:
+    return len(
+        json.dumps(
+            request.model_dump(mode="json"),
             ensure_ascii=False,
             sort_keys=True,
             separators=(",", ":"),
@@ -100,8 +116,11 @@ def _history_with_two_groups() -> tuple[
         UserMessage(content="old question"),
         first_assistant,
         first_result,
+        FinalMessage(content="first completed answer"),
+        UserMessage(content="second historical question"),
         second_assistant,
         second_result,
+        FinalMessage(content="second completed answer"),
         UserMessage(content="current question"),
     ]
     history.begin_request(
@@ -128,8 +147,14 @@ def _recent_budget_for_second_group(
     second_group: tuple[AssistantMessage, ToolResultMessage, ToolCall],
     current: UserMessage,
 ) -> int:
-    return (
-        _message_bytes(second_group[0]) + _message_bytes(second_group[1]) + _message_bytes(current)
+    return sum(
+        (_message_bytes(message) + 1) // 2
+        for message in (
+            UserMessage(content="second historical question"),
+            *second_group[:2],
+            FinalMessage(content="second completed answer"),
+            current,
+        )
     )
 
 
@@ -155,24 +180,62 @@ def _compact(
     history: SessionExecutionHistory,
     request_id: UUID,
     *,
-    recent_history_bytes: int,
+    recent_history_tokens: int,
     trace: AgentTraceCollector | None = None,
     token: CancellationToken | None = None,
     deadline: _Deadline | None = None,
     max_input_bytes: int = 100_000,
 ) -> bool:
-    return asyncio.run(
-        runtime._compact_session_history(
-            execution_history=history,
-            request_id=request_id,
-            token=token or CancellationToken(),
-            deadline=deadline or _Deadline(2),
-            step=4,
-            recent_history_bytes=recent_history_bytes,
-            max_input_bytes=max_input_bytes,
-            trace_collector=trace,
+    async def run() -> bool:
+        return await asyncio.wait_for(
+            runtime._compact_session_history(
+                execution_history=history,
+                request_id=request_id,
+                token=token or CancellationToken(),
+                deadline=deadline or _Deadline(2),
+                step=4,
+                recent_history_tokens=recent_history_tokens,
+                max_input_bytes=max_input_bytes,
+                trace_collector=trace,
+            ),
+            timeout=2,
         )
+
+    return asyncio.run(run())
+
+
+def _history_with_split_turn(
+    *, query: str = "current long request", early_progress: str = "early progress"
+) -> tuple[SessionExecutionHistory, UUID, UserMessage, tuple, int]:
+    history = SessionExecutionHistory()
+    request_id = uuid4()
+    current = UserMessage(content=query)
+    history.begin_request(
+        request_id,
+        query,
+        initial_messages=[
+            UserMessage(content="older request"),
+            FinalMessage(content="older answer"),
+        ],
     )
+    group = _artifact_group("split")
+    messages = [
+        UserMessage(content="older request"),
+        FinalMessage(content="older answer"),
+        current,
+        AssistantMessage(content=early_progress),
+        group[0],
+        group[1],
+        AssistantMessage(content="recent progress"),
+        FinalMessage(content="recent final"),
+    ]
+    history.set_effective(messages)
+    recent_tokens = (
+        (_message_bytes(group[0]) + _message_bytes(group[1]) + 1) // 2
+        + (_message_bytes(messages[-2]) + 1) // 2
+        + (_message_bytes(messages[-1]) + 1) // 2
+    )
+    return history, request_id, current, group, recent_tokens
 
 
 def _request_data(request: ModelRequest) -> dict[str, object]:
@@ -203,7 +266,7 @@ def test_first_compaction_selects_generates_and_commits_one_range() -> None:
         runtime,
         history,
         request_id,
-        recent_history_bytes=_recent_budget_for_second_group(second_group, current),
+        recent_history_tokens=_recent_budget_for_second_group(second_group, current),
         trace=trace,
     )
 
@@ -211,25 +274,271 @@ def test_first_compaction_selects_generates_and_commits_one_range() -> None:
     assert len(model.requests) == 1
     assert model.requests[0].max_output_tokens == 13_107
     data = _request_data(model.requests[0])
-    assert data["current_user_message"] == "current question"
     assert "1 full body" in json.dumps(data, ensure_ascii=False)
     assert "2 full body" not in json.dumps(data, ensure_ascii=False)
     assert all(message.get("content") != "current question" for message in data["history"])
     assert history.summary == "summary one"
-    assert history.effective_messages() == [second_group[0], second_group[1], current]
+    assert history.effective_messages() == [
+        UserMessage(content="second historical question"),
+        second_group[0],
+        second_group[1],
+        FinalMessage(content="second completed answer"),
+        current,
+    ]
     assert history.revision == 2
-    assert history.compaction_records[0].cut_index == 3
-    assert history.compaction_records[0].current_user_index_before == 5
+    assert history.compaction_records[0].cut_index == 4
+    assert history.compaction_records[0].current_user_index_before == 8
     assert history.records == before_records
     assert history.artifact_locators == before_locators
     assert trace.snapshot()["compaction_calls"][0]["status"] == "generated"
 
 
-def test_configured_model_output_limit_caps_history_summary_request() -> None:
-    history, request_id, messages, _, second_group = _history_with_two_groups()
-    current = messages[-1]
-    assert isinstance(current, UserMessage)
-    model = ScriptedModelClient([ModelResponse.from_final("summary", finish_reason="stop")])
+def test_split_turn_summaries_commit_once_after_both_requests_succeed() -> None:
+    history, request_id, current, _, recent_tokens = _history_with_split_turn()
+    model = ScriptedModelClient(
+        [
+            ModelResponse.from_final(
+                "updated history",
+                finish_reason="stop",
+                usage={"completion_tokens": 3},
+            ),
+            ModelResponse.from_final(
+                "turn progress",
+                finish_reason="stop",
+                usage={"completion_tokens": 4},
+            ),
+        ]
+    )
+    trace = AgentTraceCollector()
+    before = history.context_snapshot()
+
+    assert _compact(
+        _runtime(model), history, request_id, recent_history_tokens=recent_tokens, trace=trace
+    )
+
+    assert [request.metadata["compaction_kind"] for request in model.requests] == [
+        "history",
+        "turn_prefix",
+    ]
+    assert [request.max_output_tokens for request in model.requests] == [13_107, 8_192]
+    assert [call["kind"] for call in trace.snapshot()["compaction_calls"]] == [
+        "history",
+        "turn_prefix",
+    ]
+    assert len(history.compaction_records) == 1
+    assert history.revision == before.revision + 1
+    assert history.summary == (
+        "updated history\n\n---\n\n**Turn Context (split turn):**\n\nturn progress"
+    )
+    assert history.effective_messages()[0] == current
+    assert sum(message == current for message in history.effective_messages()) == 1
+
+
+def test_second_summary_failure_discards_first_candidate_and_keeps_session_state() -> None:
+    history, request_id, _, _, recent_tokens = _history_with_split_turn()
+    model = ScriptedModelClient(
+        [
+            ModelResponse.from_final("candidate history", finish_reason="stop"),
+            ModelResponse.from_final(
+                "truncated turn",
+                finish_reason="length",
+                usage={"completion_tokens": 9},
+            ),
+        ]
+    )
+    trace = AgentTraceCollector()
+    before = history.context_snapshot()
+    before_records = history.records
+
+    with pytest.raises(CompactionSummaryError) as error:
+        _compact(
+            _runtime(model),
+            history,
+            request_id,
+            recent_history_tokens=recent_tokens,
+            trace=trace,
+        )
+
+    after = history.context_snapshot()
+    assert error.value.code == "summary_output_truncated"
+    assert [request.metadata["compaction_kind"] for request in model.requests] == [
+        "history",
+        "turn_prefix",
+    ]
+    assert [call["status"] for call in trace.snapshot()["compaction_calls"]] == [
+        "generated",
+        "failed",
+    ]
+    assert trace.snapshot()["compaction_calls"][1]["usage"] == {"completion_tokens": 9}
+    assert after.summary == before.summary
+    assert after.messages == before.messages
+    assert after.revision == before.revision
+    assert history.records == before_records
+    assert history.compaction_records == ()
+
+
+def test_first_summary_failure_skips_turn_prefix_and_keeps_session_state() -> None:
+    history, request_id, _, _, recent_tokens = _history_with_split_turn()
+    model = ScriptedModelClient(
+        [
+            ModelResponse.from_final(
+                "truncated history",
+                finish_reason="length",
+                usage={"completion_tokens": 8},
+            )
+        ]
+    )
+    trace = AgentTraceCollector()
+    before = history.context_snapshot()
+    before_records = history.records
+
+    with pytest.raises(CompactionSummaryError) as error:
+        _compact(
+            _runtime(model),
+            history,
+            request_id,
+            recent_history_tokens=recent_tokens,
+            trace=trace,
+        )
+
+    assert error.value.code == "summary_output_truncated"
+    assert [request.metadata["compaction_kind"] for request in model.requests] == ["history"]
+    assert [call["kind"] for call in trace.snapshot()["compaction_calls"]] == ["history"]
+    assert trace.snapshot()["compaction_calls"][0]["status"] == "failed"
+    assert trace.snapshot()["compaction_calls"][0]["usage"] == {"completion_tokens": 8}
+    assert history.context_snapshot() == before
+    assert history.records == before_records
+    assert history.compaction_records == ()
+
+
+def test_second_request_input_limit_is_checked_before_first_model_call() -> None:
+    history, request_id, _, _, recent_tokens = _history_with_split_turn(
+        query="current question " + "q" * 2_000,
+        early_progress="progress " + "p" * 2_000,
+    )
+    model = ScriptedModelClient([])
+    before = history.context_snapshot()
+    preparation = prepare_compaction(
+        before.messages,
+        recent_history_tokens=recent_tokens,
+        bytes_per_token=2,
+    )
+    assert preparation is not None
+    history_request = build_history_compaction_request(
+        previous_summary=before.summary,
+        history_messages=preparation.history_messages,
+        max_input_bytes=100_000,
+        max_output_tokens=13_107,
+    )
+    turn_request = build_turn_prefix_compaction_request(
+        turn_prefix_messages=preparation.turn_prefix_messages,
+        max_input_bytes=100_000,
+        max_output_tokens=8_192,
+    )
+    history_limit = _request_bytes(history_request)
+    assert _request_bytes(turn_request) > history_limit
+
+    with pytest.raises(CompactionSummaryError) as error:
+        _compact(
+            _runtime(model),
+            history,
+            request_id,
+            recent_history_tokens=recent_tokens,
+            max_input_bytes=history_limit,
+        )
+
+    assert error.value.code == "summary_input_too_large"
+    assert model.requests == []
+    assert history.context_snapshot() == before
+    assert history.compaction_records == ()
+
+
+def test_cancellation_after_history_summary_prevents_turn_prefix_call_and_commit() -> None:
+    history, request_id, _, _, recent_tokens = _history_with_split_turn()
+    token = CancellationToken()
+
+    class CancelAfterFirstResponse:
+        def __init__(self) -> None:
+            self.requests: list[ModelRequest] = []
+
+        async def complete(self, request: ModelRequest) -> ModelResponse:
+            self.requests.append(request)
+            token.cancel()
+            return ModelResponse.from_final(
+                "candidate history",
+                finish_reason="stop",
+                usage={"completion_tokens": 5},
+            )
+
+    model = CancelAfterFirstResponse()
+    trace = AgentTraceCollector()
+    before = history.context_snapshot()
+
+    with pytest.raises(AgentCancelledError):
+        _compact(
+            _runtime(model),
+            history,
+            request_id,
+            recent_history_tokens=recent_tokens,
+            token=token,
+            trace=trace,
+        )
+
+    assert len(model.requests) == 1
+    assert model.requests[0].metadata["compaction_kind"] == "history"
+    assert trace.snapshot()["compaction_calls"][0]["status"] == "cancelled"
+    assert trace.snapshot()["compaction_calls"][0]["usage"] == {"completion_tokens": 5}
+    assert history.context_snapshot() == before
+    assert history.compaction_records == ()
+
+
+def test_stale_revision_after_both_summary_calls_rejects_atomic_commit() -> None:
+    history, request_id, _, _, recent_tokens = _history_with_split_turn()
+
+    class MutateAfterSecondResponse:
+        def __init__(self) -> None:
+            self.requests: list[ModelRequest] = []
+
+        async def complete(self, request: ModelRequest) -> ModelResponse:
+            self.requests.append(request)
+            if len(self.requests) == 2:
+                extra = FinalMessage(content="concurrent completion")
+                history.record(request_id, extra, kind="execution_final")
+                history.set_effective([*history.effective_messages(), extra])
+            return ModelResponse.from_final("candidate", finish_reason="stop")
+
+    model = MutateAfterSecondResponse()
+    trace = AgentTraceCollector()
+    before = history.context_snapshot()
+
+    with pytest.raises(SessionCompactionError) as error:
+        _compact(
+            _runtime(model),
+            history,
+            request_id,
+            recent_history_tokens=recent_tokens,
+            trace=trace,
+        )
+
+    assert error.value.code == "stale_context_revision"
+    assert len(model.requests) == 2
+    assert [call["status"] for call in trace.snapshot()["compaction_calls"]] == [
+        "generated",
+        "generated",
+    ]
+    assert history.summary == before.summary
+    assert history.revision == before.revision + 1
+    assert history.compaction_records == ()
+
+
+def test_configured_model_output_limit_caps_both_summary_requests() -> None:
+    history, request_id, _, _, recent_tokens = _history_with_split_turn()
+    model = ScriptedModelClient(
+        [
+            ModelResponse.from_final("history summary", finish_reason="stop"),
+            ModelResponse.from_final("turn summary", finish_reason="stop"),
+        ]
+    )
     runtime = _runtime(
         model,
         limits=AgentLimits(
@@ -242,9 +551,9 @@ def test_configured_model_output_limit_caps_history_summary_request() -> None:
         runtime,
         history,
         request_id,
-        recent_history_bytes=_recent_budget_for_second_group(second_group, current),
+        recent_history_tokens=recent_tokens,
     )
-    assert model.requests[0].max_output_tokens == 4096
+    assert [request.max_output_tokens for request in model.requests] == [4096, 4096]
 
 
 def test_summary_larger_than_old_8k_byte_limit_is_committed() -> None:
@@ -259,7 +568,7 @@ def test_summary_larger_than_old_8k_byte_limit_is_committed() -> None:
         _runtime(model),
         history,
         request_id,
-        recent_history_bytes=_recent_budget_for_second_group(second_group, current),
+        recent_history_tokens=_recent_budget_for_second_group(second_group, current),
     )
 
     assert history.summary == summary
@@ -281,20 +590,32 @@ def test_current_user_in_compaction_prefix_is_not_duplicated_after_commit() -> N
     history.set_effective(
         [UserMessage(content="old question"), current, second_group[0], second_group[1]]
     )
-    model = ScriptedModelClient([ModelResponse.from_final("summary", finish_reason="stop")])
+    model = ScriptedModelClient(
+        [
+            ModelResponse.from_final("history summary", finish_reason="stop"),
+            ModelResponse.from_final("turn summary", finish_reason="stop"),
+        ]
+    )
 
     result = _compact(
         _runtime(model),
         history,
         request_id,
-        recent_history_bytes=1,
+        recent_history_tokens=1,
     )
 
     assert result is True
     data = _request_data(model.requests[0])
-    assert data["current_user_message"] == "current question"
-    assert [item["content"] for item in data["history"]].count("current question") == 0
+    assert len(model.requests) == 2
+    assert model.requests[0].metadata["compaction_kind"] == "history"
+    assert model.requests[1].metadata["compaction_kind"] == "turn_prefix"
+    assert data["history"] == [{"content": "old question", "role": "user"}]
+    prefix = _request_data(model.requests[1])
+    assert [item["content"] for item in prefix["turn_prefix"]].count("current question") == 1
     assert history.effective_messages() == [current, second_group[0], second_group[1]]
+    assert history.summary == (
+        "history summary\n\n---\n\n**Turn Context (split turn):**\n\nturn summary"
+    )
 
 
 @pytest.mark.parametrize("case", ["only_current", "recent_window", "current_prefix"])
@@ -336,7 +657,7 @@ def test_no_compaction_range_returns_false_without_model_or_state_change(case: s
         _runtime(model),
         history,
         request_id,
-        recent_history_bytes=recent_budget,
+        recent_history_tokens=recent_budget,
     )
 
     assert result is False
@@ -360,7 +681,7 @@ def test_input_budget_failure_does_not_call_model_or_commit() -> None:
             _runtime(model),
             history,
             request_id,
-            recent_history_bytes=_recent_budget_for_second_group(second_group, current),
+            recent_history_tokens=_recent_budget_for_second_group(second_group, current),
             max_input_bytes=1,
         )
 
@@ -403,7 +724,7 @@ def test_generation_failure_propagates_and_does_not_commit(
             _runtime(model),
             history,
             request_id,
-            recent_history_bytes=_recent_budget_for_second_group(second_group, current),
+            recent_history_tokens=_recent_budget_for_second_group(second_group, current),
             trace=trace,
         )
 
@@ -431,7 +752,7 @@ def test_truncated_candidate_preserves_previous_summary_boundary_and_revision() 
             _runtime(model),
             history,
             request_id,
-            recent_history_bytes=1,
+            recent_history_tokens=1,
         )
 
     assert error.value.code == "summary_output_truncated"
@@ -456,7 +777,7 @@ def test_compaction_cancellation_before_model_call_keeps_state() -> None:
             _runtime(model),
             history,
             request_id,
-            recent_history_bytes=_recent_budget_for_second_group(second_group, current),
+            recent_history_tokens=_recent_budget_for_second_group(second_group, current),
             token=token,
         )
 
@@ -476,7 +797,7 @@ def test_compaction_deadline_before_model_call_keeps_state() -> None:
             _runtime(model),
             history,
             request_id,
-            recent_history_bytes=_recent_budget_for_second_group(second_group, current),
+            recent_history_tokens=_recent_budget_for_second_group(second_group, current),
             deadline=_Deadline(0),
         )
 
@@ -515,7 +836,7 @@ def test_compaction_version_change_during_generation_is_not_overwritten() -> Non
                 token=CancellationToken(),
                 deadline=_Deadline(2),
                 step=4,
-                recent_history_bytes=_recent_budget_for_second_group(second_group, current),
+                recent_history_tokens=_recent_budget_for_second_group(second_group, current),
                 max_input_bytes=100_000,
                 trace_collector=trace,
             )
@@ -538,6 +859,7 @@ def test_compaction_version_change_during_generation_is_not_overwritten() -> Non
     assert history.compaction_records == ()
     assert trace.snapshot()["compaction_calls"] == [
         {
+            "kind": "history",
             "step": 4,
             "status": "generated",
             "duration_seconds": trace.snapshot()["compaction_calls"][0]["duration_seconds"],
@@ -561,25 +883,34 @@ def test_two_compactions_use_previous_summary_and_only_current_retained_history(
             _runtime(first_model),
             history,
             request_id,
-            recent_history_bytes=first_recent,
+            recent_history_tokens=first_recent,
         )
         is True
     )
 
     third_assistant, third_result, third_call = _artifact_group("3")
     history.remember_artifact_locators(third_call, third_result)
-    history.set_effective([*history.effective_messages(), third_assistant, third_result])
+    history.set_effective(
+        [
+            *history.effective_messages(),
+            FinalMessage(content="current completed answer"),
+            third_assistant,
+            third_result,
+        ]
+    )
     second_model = ScriptedModelClient(
         [ModelResponse.from_final("summary two", finish_reason="stop")]
     )
-    second_recent = _message_bytes(third_assistant) + _message_bytes(third_result)
+    second_recent = sum(
+        (_message_bytes(message) + 1) // 2 for message in (third_assistant, third_result)
+    )
 
     assert (
         _compact(
             _runtime(second_model),
             history,
             request_id,
-            recent_history_bytes=second_recent,
+            recent_history_tokens=second_recent,
         )
         is True
     )
@@ -590,8 +921,6 @@ def test_two_compactions_use_previous_summary_and_only_current_retained_history(
     assert "1 full body" not in encoded
     assert "2 full body" in encoded
     assert "3 full body" not in encoded
-    assert data["current_user_message"] == "current question"
-    assert [item["content"] for item in data["history"]].count("current question") == 0
     assert history.summary == "summary two"
     assert history.effective_messages() == [
         current,
@@ -647,7 +976,7 @@ def test_compaction_does_not_reset_task_state_execute_tools_or_publish_events() 
             ),
             history,
             request_id,
-            recent_history_bytes=_recent_budget_for_second_group(second_group, current),
+            recent_history_tokens=_recent_budget_for_second_group(second_group, current),
         )
         is True
     )
@@ -700,7 +1029,9 @@ def test_compaction_refresh_keeps_only_inline_sources_in_effective_history(
             runtime,
             history,
             request_id,
-            recent_history_bytes=_recent_budget_for_second_group(second_group, current),
+            recent_history_tokens=sum(
+                (_message_bytes(message) + 1) // 2 for message in (*second_group[:2], current)
+            ),
         )
         is True
     )
@@ -733,7 +1064,7 @@ def test_compaction_rejects_invalid_session_request_without_model_call() -> None
             _runtime(model),
             history,
             uuid4(),
-            recent_history_bytes=1,
+            recent_history_tokens=1,
         )
 
     assert model.requests == []

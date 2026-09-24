@@ -13,12 +13,14 @@ def test_history_compaction_range_is_a_small_immutable_data_contract() -> None:
         prefix_messages=prefix,
         retained_messages=retained,
         retained_bytes=42,
+        retained_estimated_tokens=21,
     )
 
     assert result.cut_index == 1
     assert result.prefix_messages == prefix
     assert result.retained_messages == retained
     assert result.retained_bytes == 42
+    assert result.retained_estimated_tokens == 21
 
 
 def test_range_contract_does_not_share_nested_message_content_with_input() -> None:
@@ -31,6 +33,7 @@ def test_range_contract_does_not_share_nested_message_content_with_input() -> No
         prefix_messages=(),
         retained_messages=(message.model_copy(deep=True),),
         retained_bytes=1,
+        retained_estimated_tokens=1,
     )
 
     message.content["facts"][0]["value"] = 9  # type: ignore[index]
@@ -49,6 +52,7 @@ def test_range_parts_can_reconstruct_the_input_in_order() -> None:
         prefix_messages=tuple(message.model_copy(deep=True) for message in messages[:2]),
         retained_messages=tuple(message.model_copy(deep=True) for message in messages[2:]),
         retained_bytes=10,
+        retained_estimated_tokens=5,
     )
 
     assert result.prefix_messages + result.retained_messages == messages

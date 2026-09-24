@@ -56,7 +56,7 @@ def _settings(*, window: int | None = 500_000) -> VNextSettings:
             answer_timeout_seconds=5,
             degraded_answer_timeout_seconds=3,
             max_materialized_context_bytes=80_000,
-            compaction_recent_history_bytes=10_000,
+            compaction_keep_recent_tokens=10_000,
             compaction_max_input_bytes=100_000,
             compaction_reserve_tokens=320,
             context_window_tokens=window,
@@ -127,7 +127,7 @@ def test_profiles_copy_limits_and_only_override_the_selected_fields() -> None:
     assert current.limits == settings.agent_limits
     assert pressure.limits.context_window_tokens == settings.agent_limits.context_window_tokens
     assert pressure.limits.context_compaction_trigger_percent == 1
-    assert pressure.limits.compaction_recent_history_bytes == 4096
+    assert pressure.limits.compaction_keep_recent_tokens == 2048
     assert settings.agent_limits.model_dump(mode="python") == original
     assert baseline.limits is not settings.agent_limits
     assert pressure.limits is not settings.agent_limits
@@ -261,7 +261,7 @@ def test_two_questions_share_real_session_artifact_and_summary_and_reset_task_st
     from tests.vnext.evals.context_governance_runner import _run_two_questions
 
     settings = _settings()
-    settings.agent_limits.compaction_recent_history_bytes = 512
+    settings.agent_limits.compaction_keep_recent_tokens = 512
     prepared = prepare_evaluation(settings, profile="current")
 
     class _Model:
@@ -368,7 +368,7 @@ def test_two_questions_share_real_session_artifact_and_summary_and_reset_task_st
                 session_payload, _ = json.JSONDecoder().raw_decode(
                     session_message.content.split("Session context data:\n", 1)[1]
                 )
-                assert session_payload["summary"] == "verified synthetic progress summary"
+                assert "verified synthetic progress summary" in session_payload["summary"]
                 assert any(
                     locator["ref"] == self.first_detail_ref
                     for locator in session_payload["artifact_locators"]
@@ -1049,5 +1049,5 @@ def test_pressure_report_disclaims_quality_when_no_compaction_succeeded() -> Non
         answers=[],
     )
     assert "context_compaction_trigger_percent = 1" in report
-    assert "compaction_recent_history_bytes = 4096" in report
+    assert "compaction_keep_recent_tokens = 2048" in report
     assert "本次未覆盖压缩后的模型行为，不能据此判断摘要质量。" in report

@@ -151,7 +151,7 @@ def _limits() -> AgentLimits:
         deadline_seconds=5,
         answer_timeout_seconds=5,
         degraded_answer_timeout_seconds=5,
-        compaction_recent_history_bytes=1,
+        compaction_keep_recent_tokens=1,
         compaction_max_input_bytes=100_000,
         compaction_reserve_tokens=160,
         max_materialized_context_bytes=200_000,
@@ -197,6 +197,7 @@ def test_explicit_compaction_preserves_artifacts_and_supports_two_rereads() -> N
     def third_lookup(request: ModelRequest) -> ModelResponse:
         assert request.step == 3
         assert _session_payload(request)["summary"] == (
+            "**Turn Context (split turn):**\n\n"
             "summary one intentionally omits all artifact references"
         )
         assert _user_count(request, "compare the three synthetic editions") == 1
@@ -206,11 +207,10 @@ def test_explicit_compaction_preserves_artifacts_and_supports_two_rereads() -> N
     def second_summary(request: ModelRequest) -> ModelResponse:
         assert request.tools == []
         assert request.metadata["purpose"] == "context_compaction"
+        assert request.metadata["compaction_kind"] == "turn_prefix"
         payload = json.loads(request.messages[-1].content)  # type: ignore[union-attr]
         encoded = json.dumps(payload, ensure_ascii=False)
-        assert payload["previous_summary"] == (
-            "summary one intentionally omits all artifact references"
-        )
+        assert "turn_prefix" in payload
         assert "SECOND_EDITION_TEST_MARKER" in encoded
         assert "FIRST_EDITION_TEST_MARKER" not in encoded
         return ModelResponse.from_final(
@@ -222,7 +222,8 @@ def test_explicit_compaction_preserves_artifacts_and_supports_two_rereads() -> N
     def reread_first(request: ModelRequest) -> ModelResponse:
         assert request.step == 4
         payload = _session_payload(request)
-        assert payload["summary"] == "summary two intentionally omits all artifact references"
+        assert "summary one intentionally omits all artifact references" in payload["summary"]
+        assert "summary two intentionally omits all artifact references" in payload["summary"]
         first_ref = payload["artifact_locators"][0]["ref"]
         assert len(payload["artifact_locators"]) == 3
         return ModelResponse.from_assistant(
@@ -331,7 +332,12 @@ def test_explicit_compaction_preserves_artifacts_and_supports_two_rereads() -> N
         ]
     )
     assert len(history.compaction_records) == 2
-    assert history.summary == "summary two intentionally omits all artifact references"
+    assert history.summary == (
+        "**Turn Context (split turn):**\n\n"
+        "summary one intentionally omits all artifact references\n\n---\n\n"
+        "**Turn Context (split turn):**\n\n"
+        "summary two intentionally omits all artifact references"
+    )
     assert len(history.artifact_locators) == 3
     assert [record.cut_index for record in history.compaction_records] == [3, 3]
 

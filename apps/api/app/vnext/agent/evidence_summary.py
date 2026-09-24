@@ -22,6 +22,19 @@ class HistoryCompactionRange:
     prefix_messages: tuple[Message, ...]
     retained_messages: tuple[Message, ...]
     retained_bytes: int
+    retained_estimated_tokens: int
+
+
+@dataclass(frozen=True, slots=True)
+class CompactionPreparation:
+    """Temporary, defensive split of one compaction candidate."""
+
+    cut_index: int
+    history_messages: tuple[Message, ...]
+    turn_prefix_messages: tuple[Message, ...]
+    retained_messages: tuple[Message, ...]
+    split_turn_start_index: int | None
+    retained_estimated_tokens: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,4 +49,8 @@ class CompactionSummaryResult:
         object.__setattr__(self, "usage", deepcopy(self.usage))
 
 
-__all__ = ["CompactionSummaryResult", "HistoryCompactionRange"]
+__all__ = [
+    "CompactionPreparation",
+    "CompactionSummaryResult",
+    "HistoryCompactionRange",
+]

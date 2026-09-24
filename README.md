@@ -90,8 +90,15 @@ compaction response limit: history summaries use `floor(reserve × 0.8)` and
 single-turn prefix summaries use `floor(reserve × 0.5)`. An optional
 `DOTAMIND_COMPACTION_MODEL_MAX_OUTPUT_TOKENS` caps either derived value; leave it
 blank when the model's output limit is unknown. The reserve is a configuration
-budget, not a claim about model capability. The current Runtime uses the history
-formula; prefix splitting is a later step.
+budget, not a claim about model capability. Runtime may use both formulas when
+a cut crosses a task turn.
+
+`DOTAMIND_COMPACTION_KEEP_RECENT_TOKENS` defaults to `20000` and controls the
+estimated-token target retained as raw recent history. It uses the configured
+`DOTAMIND_CONTEXT_ESTIMATE_BYTES_PER_TOKEN` heuristic; complete tool-call groups
+are kept intact even when one group crosses the target. When migrating an
+existing `.env`, replace `DOTAMIND_COMPACTION_RECENT_HISTORY_BYTES` with this
+token setting; the old byte variable is no longer read.
 
 These output-token limits are independent from the existing serialized-input
 byte limit (`DOTAMIND_COMPACTION_MAX_INPUT_BYTES`). Summary text no longer has a

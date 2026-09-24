@@ -13,7 +13,7 @@ from app.vnext.agent.errors import (
 )
 from app.vnext.agent.evidence_summary_lifecycle import (
     CompactionSummaryError,
-    build_compaction_request,
+    build_history_compaction_request,
 )
 from app.vnext.agent.limits import AgentLimits
 from app.vnext.agent.runtime import (
@@ -37,11 +37,9 @@ from tests.vnext.fakes import ScriptedModelClient, ScriptedStreamingModelClient
 
 
 def _request() -> ModelRequest:
-    return build_compaction_request(
+    return build_history_compaction_request(
         previous_summary="previous summary",
-        current_user_message=UserMessage(content="current question"),
-        prefix_messages=[UserMessage(content="old history")],
-        current_user_prefix_index=None,
+        history_messages=[UserMessage(content="old history")],
         max_input_bytes=100_000,
         max_output_tokens=128,
     )
@@ -72,6 +70,7 @@ def _call(
     return asyncio.run(
         runtime._generate_compaction_summary(
             request,
+            kind="history",
             token=token or CancellationToken(),
             deadline=deadline or _Deadline(2),
             step=step,
@@ -94,9 +93,13 @@ def test_non_streaming_compaction_call_returns_validated_result() -> None:
     assert result.duration_seconds >= 0
     assert len(model.requests) == 1
     assert model.requests[0].max_output_tokens == 128
-    assert model.requests[0].metadata == {"purpose": "context_compaction"}
+    assert model.requests[0].metadata == {
+        "purpose": "context_compaction",
+        "compaction_kind": "history",
+    }
     assert trace.snapshot()["compaction_calls"] == [
         {
+            "kind": "history",
             "step": 4,
             "status": "generated",
             "duration_seconds": result.duration_seconds,
@@ -351,6 +354,7 @@ def test_deadline_after_provider_return_preserves_usage_without_a_candidate() ->
     assert len(model.requests) == 1
     assert trace.snapshot()["compaction_calls"] == [
         {
+            "kind": "history",
             "step": 7,
             "status": "deadline_exceeded",
             "duration_seconds": trace.snapshot()["compaction_calls"][0]["duration_seconds"],

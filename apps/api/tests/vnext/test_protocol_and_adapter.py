@@ -10,7 +10,7 @@ from pydantic import BaseModel, ValidationError
 
 from app.vnext.agent.evidence_summary_lifecycle import (
     CompactionSummaryError,
-    build_compaction_request,
+    build_history_compaction_request,
     validate_compaction_response,
 )
 from app.vnext.llm.openai_compatible import (
@@ -599,11 +599,9 @@ def test_compaction_request_limit_reaches_http_and_length_is_rejected() -> None:
             request=request,
         )
 
-    request = build_compaction_request(
+    request = build_history_compaction_request(
         previous_summary=None,
-        current_user_message=UserMessage(content="current"),
-        prefix_messages=[UserMessage(content="history")],
-        current_user_prefix_index=None,
+        history_messages=[UserMessage(content="history")],
         max_input_bytes=100_000,
         max_output_tokens=256,
     )
@@ -627,11 +625,9 @@ def test_compaction_request_normal_stop_returns_valid_summary() -> None:
             request=request,
         )
 
-    request = build_compaction_request(
+    request = build_history_compaction_request(
         previous_summary="old",
-        current_user_message=UserMessage(content="current"),
-        prefix_messages=[UserMessage(content="history")],
-        current_user_prefix_index=None,
+        history_messages=[UserMessage(content="history")],
         max_input_bytes=100_000,
         max_output_tokens=256,
     )

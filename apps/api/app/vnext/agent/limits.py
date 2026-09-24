@@ -12,7 +12,7 @@ class AgentLimits(BaseModel):
     degraded_answer_timeout_seconds: float | None = Field(default=15.0, gt=0)
     default_tool_timeout: float | None = Field(default=60.0, gt=0)
     max_materialized_context_bytes: int = Field(default=160 * 1024, ge=1)
-    compaction_recent_history_bytes: int = Field(default=32 * 1024, gt=0, strict=True)
+    compaction_keep_recent_tokens: int = Field(default=20_000, gt=0, strict=True)
     compaction_max_input_bytes: int = Field(default=256 * 1024, gt=0, strict=True)
     compaction_reserve_tokens: int = Field(default=16384, ge=2, strict=True)
     compaction_model_max_output_tokens: int | None = Field(default=None, gt=0, strict=True)

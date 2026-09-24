@@ -182,13 +182,9 @@ class AgentTraceCollector:
             {"result": result.model_dump(mode="json"), "duration_seconds": duration}
         )
         if call is not None and call.name == "task.checkpoint":
-            item.setdefault("checkpoint_metrics", []).append(
-                _checkpoint_metric(call, result)
-            )
+            item.setdefault("checkpoint_metrics", []).append(_checkpoint_metric(call, result))
         if call is not None and call.name == "task.plan":
-            item.setdefault("task_plan_metrics", []).append(
-                _task_plan_metric(call, result)
-            )
+            item.setdefault("task_plan_metrics", []).append(_task_plan_metric(call, result))
 
     def transcript_rewrite(self, step: int, event: TranscriptRewriteEvent) -> None:
         """Record a transcript replacement without duplicating raw evidence."""
@@ -358,6 +354,7 @@ class AgentTraceCollector:
     def compaction_call(
         self,
         *,
+        kind: str,
         step: int,
         status: str,
         duration_seconds: float,
@@ -366,6 +363,7 @@ class AgentTraceCollector:
     ) -> None:
         self._trace.setdefault("compaction_calls", []).append(
             {
+                "kind": kind,
                 "step": step,
                 "status": status,
                 "duration_seconds": duration_seconds,
