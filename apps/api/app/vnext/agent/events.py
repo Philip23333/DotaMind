@@ -44,9 +44,26 @@ class ModelResponded(AgentEvent):
     duration: float = Field(ge=0)
 
 
+class AnswerStageStarted(AgentEvent):
+    kind: Literal["answer_stage_started"] = "answer_stage_started"
+
+
+class AnswerAttemptStarted(AgentEvent):
+    kind: Literal["answer_attempt_started"] = "answer_attempt_started"
+    attempt_id: str = Field(min_length=1)
+    answer_kind: Literal["primary", "degraded", "deterministic"]
+
+
+class AnswerAttemptFailed(AgentEvent):
+    kind: Literal["answer_attempt_failed"] = "answer_attempt_failed"
+    attempt_id: str = Field(min_length=1)
+    error_code: str = Field(min_length=1)
+
+
 class TextDelta(AgentEvent):
     kind: Literal["text_delta"] = "text_delta"
     text: str
+    attempt_id: str | None = Field(default=None, min_length=1)
 
     @property
     def delta(self) -> str:
@@ -81,6 +98,7 @@ class AgentCompleted(AgentEvent):
     kind: Literal["agent_completed"] = "agent_completed"
     duration: float = Field(ge=0)
     final: FinalMessage
+    attempt_id: str | None = Field(default=None, min_length=1)
 
 
 class AgentCancelled(AgentEvent):
@@ -113,6 +131,9 @@ __all__ = [
     "AgentEvent",
     "AgentFailed",
     "AgentStarted",
+    "AnswerAttemptFailed",
+    "AnswerAttemptStarted",
+    "AnswerStageStarted",
     "CompactionFailed",
     "ModelRequested",
     "ModelResponded",

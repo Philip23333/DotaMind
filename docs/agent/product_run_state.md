@@ -5,9 +5,12 @@
 This document defines the accepted target for the chat execution experience.
 Phases 1-4 are design-approved, including Markdown-only rendering and continued
 generation when switching threads. The product Run State schema, synchronous
-projection, and deterministic projection tests are implemented. They are not
-connected to Runtime, product chat, transport, or frontend behavior; end-to-end
-acceptance remains pending. Phases 5-6 are planned, not implemented.
+projection, and deterministic projection tests are implemented. Runtime now
+emits answer-stage and answer-attempt lifecycle events with identities on
+buffered answer deltas and canonical completion. The product projection is not
+connected to Runtime or product chat, and live delta delivery, transport, and
+frontend behavior remain pending. End-to-end acceptance is not complete. Phases
+5-6 are planned, not implemented.
 Code remains the authority for current behavior. This document owns the product
 Run State contract; `../ROADMAP.md` owns delivery order.
 
@@ -250,9 +253,10 @@ Do not defer these semantics to Phase 6.
 
 ### Phase 2: Runtime events and product projection
 
-Design approved; implementation and executable acceptance are pending. This
-phase changes Runtime event production and product projection, not the public
-transport protocol or UI.
+Design approved. Runtime answer-stage and answer-attempt lifecycle events are
+implemented with deterministic tests; live answer delivery and product
+projection integration remain pending. This phase changes Runtime event
+production and product projection, not the public transport protocol or UI.
 
 **Decision:** Publish answer fragments during the model invocation and expose
 explicit answer-stage and answer-attempt boundaries. Keep one Runtime execution
@@ -268,8 +272,12 @@ Reuse existing model/tool/terminal events, including AgentCancelled. Runtime
 reports tool identity, call identity, and outcome; Product chooses bounded
 display labels and ordered activity. Tool failure alone does not fail the run.
 
-The required event semantics are below; exact class names are implementation
-choices, and existing events should be extended where they already fit.
+The Runtime now emits `AnswerStageStarted`, `AnswerAttemptStarted`, and
+`AnswerAttemptFailed`; `TextDelta` and `AgentCompleted` carry an optional
+`attempt_id` for compatibility with hand-constructed events. Production answer
+paths provide that identity, including deterministic answers and overflow
+retries. The existing model invocation still buffers answer deltas until its
+terminal response. The product projector does not yet consume these events.
 
 | Event semantic | Runtime fact | Product projection |
 | --- | --- | --- |

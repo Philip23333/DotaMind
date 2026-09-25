@@ -40,6 +40,9 @@ from app.vnext.agent.events import (
     AgentEvent,
     AgentFailed,
     AgentStarted,
+    AnswerAttemptFailed,
+    AnswerAttemptStarted,
+    AnswerStageStarted,
     CompactionFailed,
     ModelRequested,
     ModelResponded,
@@ -255,6 +258,12 @@ class AgentRuntime:
         request_messages: list[Message] = []
         compaction_attempted_since_progress = False
         overflow_recovery_used = False
+        answer_attempt_count = 0
+
+        def next_answer_attempt_id() -> str:
+            nonlocal answer_attempt_count
+            answer_attempt_count += 1
+            return f"answer-{answer_attempt_count}"
 
         try:
             if (self.system_instruction is not None or self.shared_instruction is not None) and any(
@@ -777,7 +786,17 @@ class AgentRuntime:
                     execution_reason=outcome.reason,
                 )
             answer_step = step + 1
+            yield await self._publish(AnswerStageStarted(step=answer_step), sink)
             if resolution.mode is AnswerResolutionMode.FAILURE:
+                attempt_id = next_answer_attempt_id()
+                yield await self._publish(
+                    AnswerAttemptStarted(
+                        step=answer_step,
+                        attempt_id=attempt_id,
+                        answer_kind="deterministic",
+                    ),
+                    sink,
+                )
                 final = build_failure_answer(resolution, outcome)
                 if execution_history is not None and request_id is not None:
                     _record_delivery(
@@ -798,6 +817,7 @@ class AgentRuntime:
                         step=answer_step,
                         duration=max(0.0, monotonic() - started_at),
                         final=final,
+                        attempt_id=attempt_id,
                     ),
                     sink,
                 )
@@ -806,6 +826,16 @@ class AgentRuntime:
             answer_context_builder = AnswerContextBuilder()
             answer_deadline = _Deadline(self.limits.answer_timeout_seconds)
             primary_started = monotonic()
+            primary_attempt_id = next_answer_attempt_id()
+            primary_attempt_failed = False
+            yield await self._publish(
+                AnswerAttemptStarted(
+                    step=answer_step,
+                    attempt_id=primary_attempt_id,
+                    answer_kind="primary",
+                ),
+                sink,
+            )
             try:
                 primary_context = answer_context_builder.build(
                     execution_messages=request_messages,
@@ -934,6 +964,7 @@ class AgentRuntime:
                             step=answer_step,
                             trace_collector=trace_collector,
                             publish_text=True,
+                            answer_attempt_id=primary_attempt_id,
                         )
                     except AgentCancelledError:
                         if recovery_pending and trace_collector is not None:
@@ -967,6 +998,15 @@ class AgentRuntime:
                         if not auto_compaction_enabled or overflow_recovery_used:
                             raise
 
+                        yield await self._publish(
+                            AnswerAttemptFailed(
+                                step=answer_step,
+                                attempt_id=primary_attempt_id,
+                                error_code=overflow_error.code,
+                            ),
+                            sink,
+                        )
+                        primary_attempt_failed = True
                         overflow_recovery_used = True
                         recovery_pending = True
                         compaction_attempted_since_progress = True
@@ -1142,6 +1182,16 @@ class AgentRuntime:
                                 answer_step,
                                 error_code=overflow_error.code,
                             )
+                        primary_attempt_id = next_answer_attempt_id()
+                        primary_attempt_failed = False
+                        yield await self._publish(
+                            AnswerAttemptStarted(
+                                step=answer_step,
+                                attempt_id=primary_attempt_id,
+                                answer_kind="primary",
+                            ),
+                            sink,
+                        )
                         continue
                     except AgentRuntimeError as model_error:
                         if recovery_pending and trace_collector is not None:
@@ -1203,6 +1253,16 @@ class AgentRuntime:
                 ModelProtocolError,
             ) as exc:
                 answer_capacity_exhausted = isinstance(exc, ContextCapacityExceeded)
+                if not primary_attempt_failed:
+                    yield await self._publish(
+                        AnswerAttemptFailed(
+                            step=answer_step,
+                            attempt_id=primary_attempt_id,
+                            error_code=exc.code,
+                        ),
+                        sink,
+                    )
+                    primary_attempt_failed = True
                 if trace_collector is not None:
                     trace_collector.answer_attempt(
                         kind="primary",
@@ -1213,6 +1273,15 @@ class AgentRuntime:
                     )
 
                 degraded_step = answer_step + 1
+                degraded_attempt_id = next_answer_attempt_id()
+                yield await self._publish(
+                    AnswerAttemptStarted(
+                        step=degraded_step,
+                        attempt_id=degraded_attempt_id,
+                        answer_kind="degraded",
+                    ),
+                    sink,
+                )
                 degraded_started = monotonic()
                 degraded_context = answer_context_builder.build(
                     execution_messages=request_messages,
@@ -1290,6 +1359,7 @@ class AgentRuntime:
                         step=degraded_step,
                         trace_collector=trace_collector,
                         publish_text=True,
+                        answer_attempt_id=degraded_attempt_id,
                     )
                     degraded_answer = degraded_response.message
                     if not isinstance(degraded_answer, FinalMessage):
@@ -1346,6 +1416,7 @@ class AgentRuntime:
                             step=degraded_step,
                             duration=max(0.0, monotonic() - started_at),
                             final=degraded_answer,
+                            attempt_id=degraded_attempt_id,
                         ),
                         sink,
                     )
@@ -1356,6 +1427,14 @@ class AgentRuntime:
                     ModelProviderError,
                     ModelProtocolError,
                 ) as degraded_exc:
+                    yield await self._publish(
+                        AnswerAttemptFailed(
+                            step=degraded_step,
+                            attempt_id=degraded_attempt_id,
+                            error_code=degraded_exc.code,
+                        ),
+                        sink,
+                    )
                     if trace_collector is not None:
                         trace_collector.answer_attempt(
                             kind="degraded",
@@ -1365,6 +1444,15 @@ class AgentRuntime:
                             error_code=degraded_exc.code,
                         )
                         trace_collector.answer_fallback("deterministic")
+                    deterministic_attempt_id = next_answer_attempt_id()
+                    yield await self._publish(
+                        AnswerAttemptStarted(
+                            step=degraded_step,
+                            attempt_id=deterministic_attempt_id,
+                            answer_kind="deterministic",
+                        ),
+                        sink,
+                    )
                     final = build_answer_fallback(
                         resolution,
                         outcome,
@@ -1390,6 +1478,7 @@ class AgentRuntime:
                             step=degraded_step,
                             duration=max(0.0, monotonic() - started_at),
                             final=final,
+                            attempt_id=deterministic_attempt_id,
                         ),
                         sink,
                     )
@@ -1421,6 +1510,7 @@ class AgentRuntime:
                         step=answer_step,
                         duration=max(0.0, monotonic() - started_at),
                         final=answer,
+                        attempt_id=primary_attempt_id,
                     ),
                     sink,
                 )
@@ -1658,6 +1748,7 @@ class AgentRuntime:
         step: int,
         trace_collector: AgentTraceCollector | None,
         publish_text: bool,
+        answer_attempt_id: str | None = None,
         record_step_text: bool = True,
         on_response: Callable[[ModelResponse], None] | None = None,
     ) -> tuple[ModelResponse, float, list[TextDelta]]:
@@ -1709,7 +1800,17 @@ class AgentRuntime:
                                     "stream emitted text after its terminal response"
                                 )
                             if publish_text:
-                                text_events.append(TextDelta(step=step, text=item.text))
+                                if answer_attempt_id is None:
+                                    raise ModelProtocolError(
+                                        "answer text requires an attempt identity"
+                                    )
+                                text_events.append(
+                                    TextDelta(
+                                        step=step,
+                                        text=item.text,
+                                        attempt_id=answer_attempt_id,
+                                    )
+                                )
                         elif isinstance(item, ModelResponse):
                             if response is not None:
                                 raise ModelProtocolError(
