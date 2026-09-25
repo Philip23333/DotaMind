@@ -6,7 +6,9 @@ import asyncio
 import inspect
 import json
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
+from contextlib import aclosing
 from copy import deepcopy
+from dataclasses import dataclass
 from time import monotonic
 from typing import Any, Literal
 
@@ -124,6 +126,12 @@ class _CompactionFailureDetails(Exception):
         self.attempt_count = attempt_count
         self.reason_code = reason_code
         self.cause = cause
+
+
+@dataclass(frozen=True, slots=True)
+class _ModelInvocationResult:
+    response: ModelResponse
+    duration_seconds: float
 
 
 class CancellationToken:
@@ -420,7 +428,7 @@ class AgentRuntime:
                     )
 
                     try:
-                        response, duration, _ = await self._invoke_model(
+                        response, duration = await self._invoke_model(
                             request,
                             purpose="execution",
                             token=token,
@@ -956,16 +964,34 @@ class AgentRuntime:
                         sink,
                     )
                     try:
-                        response, duration, answer_text_events = await self._invoke_model(
-                            answer_request,
-                            purpose="primary_answer",
-                            token=token,
-                            deadline=answer_deadline,
-                            step=answer_step,
-                            trace_collector=trace_collector,
-                            publish_text=True,
-                            answer_attempt_id=primary_attempt_id,
-                        )
+                        invocation_result: _ModelInvocationResult | None = None
+                        async with aclosing(
+                            self._stream_model_invocation(
+                                answer_request,
+                                purpose="primary_answer",
+                                token=token,
+                                deadline=answer_deadline,
+                                step=answer_step,
+                                trace_collector=trace_collector,
+                                publish_text=True,
+                                answer_attempt_id=primary_attempt_id,
+                            )
+                        ) as invocation_stream:
+                            async for invocation_item in invocation_stream:
+                                if isinstance(invocation_item, TextDelta):
+                                    yield await self._publish(invocation_item, sink)
+                                elif invocation_result is not None:
+                                    raise ModelProtocolError(
+                                        "model invocation emitted more than one result"
+                                    )
+                                else:
+                                    invocation_result = invocation_item
+                        if invocation_result is None:
+                            raise ModelProtocolError(
+                                "model invocation ended without a result"
+                            )
+                        response = invocation_result.response
+                        duration = invocation_result.duration_seconds
                     except AgentCancelledError:
                         if recovery_pending and trace_collector is not None:
                             trace_collector.overflow_recovery(
@@ -1234,8 +1260,6 @@ class AgentRuntime:
                         error_code=None,
                     )
                 recovery_pending = False
-                for text_event in answer_text_events:
-                    yield await self._publish(text_event, sink)
                 if trace_collector is not None:
                     trace_collector.model_response(answer_step, response, duration)
                 yield await self._publish(
@@ -1347,20 +1371,32 @@ class AgentRuntime:
                 try:
                     if degraded_precheck_error is not None:
                         raise degraded_precheck_error
-                    (
-                        degraded_response,
-                        degraded_duration,
-                        degraded_text_events,
-                    ) = await self._invoke_model(
-                        degraded_request,
-                        purpose="degraded_answer",
-                        token=token,
-                        deadline=answer_deadline,
-                        step=degraded_step,
-                        trace_collector=trace_collector,
-                        publish_text=True,
-                        answer_attempt_id=degraded_attempt_id,
-                    )
+                    degraded_invocation_result: _ModelInvocationResult | None = None
+                    async with aclosing(
+                        self._stream_model_invocation(
+                            degraded_request,
+                            purpose="degraded_answer",
+                            token=token,
+                            deadline=answer_deadline,
+                            step=degraded_step,
+                            trace_collector=trace_collector,
+                            publish_text=True,
+                            answer_attempt_id=degraded_attempt_id,
+                        )
+                    ) as invocation_stream:
+                        async for invocation_item in invocation_stream:
+                            if isinstance(invocation_item, TextDelta):
+                                yield await self._publish(invocation_item, sink)
+                            elif degraded_invocation_result is not None:
+                                raise ModelProtocolError(
+                                    "model invocation emitted more than one result"
+                                )
+                            else:
+                                degraded_invocation_result = invocation_item
+                    if degraded_invocation_result is None:
+                        raise ModelProtocolError("model invocation ended without a result")
+                    degraded_response = degraded_invocation_result.response
+                    degraded_duration = degraded_invocation_result.duration_seconds
                     degraded_answer = degraded_response.message
                     if not isinstance(degraded_answer, FinalMessage):
                         if trace_collector is not None:
@@ -1376,8 +1412,6 @@ class AgentRuntime:
                             sink,
                         )
                         raise ModelProtocolError("answer stage model requested tools")
-                    for text_event in degraded_text_events:
-                        yield await self._publish(text_event, sink)
                     if trace_collector is not None:
                         trace_collector.model_response(
                             degraded_step, degraded_response, degraded_duration
@@ -1738,7 +1772,7 @@ class AgentRuntime:
             )
         return request_start, request_messages
 
-    async def _invoke_model(
+    async def _stream_model_invocation(
         self,
         request: ModelRequest,
         *,
@@ -1751,11 +1785,10 @@ class AgentRuntime:
         answer_attempt_id: str | None = None,
         record_step_text: bool = True,
         on_response: Callable[[ModelResponse], None] | None = None,
-    ) -> tuple[ModelResponse, float, list[TextDelta]]:
-        """Invoke one model request and optionally expose its text deltas."""
+    ) -> AsyncIterator[TextDelta | _ModelInvocationResult]:
+        """Run one model call, forwarding answer text before its terminal response."""
 
         started = monotonic()
-        text_events: list[TextDelta] = []
         call_id: str | None = None
         if trace_collector is not None:
             try:
@@ -1768,10 +1801,11 @@ class AgentRuntime:
                 pass
         call_status: Literal["completed", "failed", "cancelled", "deadline"] = "failed"
         call_error: BaseException | None = None
+        invocation_result: _ModelInvocationResult | None = None
         try:
+            response: ModelResponse | None = None
             stream = getattr(self.model, "stream", None)
             if callable(stream):
-                response = None
                 model_stream = stream(request)
                 if inspect.isawaitable(model_stream):
                     model_stream = await self._await_controlled(model_stream, token, deadline)
@@ -1804,42 +1838,38 @@ class AgentRuntime:
                                     raise ModelProtocolError(
                                         "answer text requires an attempt identity"
                                     )
-                                text_events.append(
-                                    TextDelta(
-                                        step=step,
-                                        text=item.text,
-                                        attempt_id=answer_attempt_id,
-                                    )
+                                yield TextDelta(
+                                    step=step,
+                                    text=item.text,
+                                    attempt_id=answer_attempt_id,
                                 )
                         elif isinstance(item, ModelResponse):
                             if response is not None:
                                 raise ModelProtocolError(
                                     "stream emitted more than one terminal response"
                                 )
-                            normalized = self._normalize_response(item)
+                            response = self._normalize_response(item)
                             if trace_collector is not None:
                                 try:
-                                    trace_collector.model_call_response(call_id, normalized)
+                                    trace_collector.model_call_response(call_id, response)
                                 except Exception:
                                     pass
                             if on_response is not None:
-                                on_response(normalized)
-                            response = normalized
+                                on_response(response)
                         else:
                             raise ModelProtocolError("stream emitted an unsupported model item")
                 finally:
                     close = getattr(model_stream, "aclose", None)
                     if callable(close):
-                        result = close()
-                        if inspect.isawaitable(result):
-                            await result
+                        close_result = close()
+                        if inspect.isawaitable(close_result):
+                            await close_result
                 if response is None:
                     raise ModelProtocolError("stream ended without a terminal model response")
             else:
-                raw_response = await self._await_controlled(
-                    self.model.complete(request), token, deadline
+                response = self._normalize_response(
+                    await self._await_controlled(self.model.complete(request), token, deadline)
                 )
-                response = self._normalize_response(raw_response)
                 if trace_collector is not None:
                     try:
                         trace_collector.model_call_response(call_id, response)
@@ -1847,10 +1877,14 @@ class AgentRuntime:
                         pass
                 if on_response is not None:
                     on_response(response)
+
             self._check_controls(token, deadline)
             call_status = "completed"
-            return response, max(0.0, monotonic() - started), text_events
-        except asyncio.CancelledError as exc:
+            invocation_result = _ModelInvocationResult(
+                response=response,
+                duration_seconds=max(0.0, monotonic() - started),
+            )
+        except (asyncio.CancelledError, GeneratorExit) as exc:
             call_status = "cancelled"
             call_error = exc
             raise
@@ -1892,6 +1926,57 @@ class AgentRuntime:
                 except Exception:
                     pass
 
+        if invocation_result is None:
+            raise ModelProtocolError("model invocation ended without a result")
+        yield invocation_result
+
+    async def _invoke_model(
+        self,
+        request: ModelRequest,
+        *,
+        purpose: Literal["execution", "primary_answer", "degraded_answer", "compaction"],
+        token: CancellationToken,
+        deadline: _Deadline,
+        step: int,
+        trace_collector: AgentTraceCollector | None,
+        publish_text: bool,
+        answer_attempt_id: str | None = None,
+        record_step_text: bool = True,
+        on_response: Callable[[ModelResponse], None] | None = None,
+    ) -> tuple[ModelResponse, float]:
+        """Consume a model invocation that must not publish answer text."""
+
+        if publish_text:
+            raise ModelProtocolError(
+                "_invoke_model cannot publish text; consume _stream_model_invocation instead"
+            )
+        invocation_result: _ModelInvocationResult | None = None
+        async with aclosing(
+            self._stream_model_invocation(
+                request,
+                purpose=purpose,
+                token=token,
+                deadline=deadline,
+                step=step,
+                trace_collector=trace_collector,
+                publish_text=False,
+                answer_attempt_id=answer_attempt_id,
+                record_step_text=record_step_text,
+                on_response=on_response,
+            )
+        ) as invocation_stream:
+            async for invocation_item in invocation_stream:
+                if isinstance(invocation_item, TextDelta):
+                    raise ModelProtocolError(
+                        "non-answer model invocation produced a text event"
+                    )
+                if invocation_result is not None:
+                    raise ModelProtocolError("model invocation emitted more than one result")
+                invocation_result = invocation_item
+        if invocation_result is None:
+            raise ModelProtocolError("model invocation ended without a result")
+        return invocation_result.response, invocation_result.duration_seconds
+
     async def _generate_compaction_summary(
         self,
         request: ModelRequest,
@@ -1915,7 +2000,7 @@ class AgentRuntime:
             usage = deepcopy(received.usage)
 
         try:
-            response, _, _ = await self._invoke_model(
+            response, _ = await self._invoke_model(
                 request,
                 purpose="compaction",
                 token=token,

@@ -362,8 +362,8 @@ def test_cancellation_during_answer_does_not_fail_attempt_or_start_fallback() ->
                 if request.step == 1:
                     yield ModelResponse.from_final("execution")
                     return
-                stream_started.set()
                 yield ModelTextDelta(text="unpublished partial")
+                stream_started.set()
                 await asyncio.Future()
 
             return emit()
@@ -391,9 +391,10 @@ def test_cancellation_during_answer_does_not_fail_attempt_or_start_fallback() ->
 
     asyncio.run(run_and_cancel())
 
-    assert not any(
-        isinstance(event, (AnswerAttemptFailed, TextDelta, AgentCompleted)) for event in events
-    )
+    assert not any(isinstance(event, (AnswerAttemptFailed, AgentCompleted)) for event in events)
+    assert [event.text for event in events if isinstance(event, TextDelta)] == [
+        "unpublished partial"
+    ]
     assert [event.answer_kind for event in events if isinstance(event, AnswerAttemptStarted)] == [
         "primary"
     ]

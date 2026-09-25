@@ -249,7 +249,7 @@ def _invoke(runtime: AgentRuntime) -> Any:
             deadline=_Deadline(1),
             step=1,
             trace_collector=AgentTraceCollector(),
-            publish_text=True,
+            publish_text=False,
         )
     )
 

@@ -362,7 +362,10 @@ def test_failed_primary_stream_text_is_not_published() -> None:
 
     asyncio.run(collect())
 
-    assert [event.text for event in events if isinstance(event, TextDelta)] == ["good compact"]
+    assert [event.text for event in events if isinstance(event, TextDelta)] == [
+        "bad partial",
+        "good compact",
+    ]
     assert collector.snapshot()["steps"][1]["streamed_text"] == ["bad partial"]
 
 

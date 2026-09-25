@@ -143,9 +143,11 @@ deterministic projection tests are implemented, but this does not complete Phase
 1 end-to-end acceptance or connect the projection to Runtime/product chat. Phase
 2 Runtime event/projection design, Phase 3 transport/converter, and Phase 4
 message/history design are approved. Phase 2's Runtime answer lifecycle event
-and identity portion is implemented, but live delta delivery, projection
-integration, and phase acceptance remain pending; Phases 3-4 implementation has
-not started. Thread switching keeps runs and connections alive
+and identity portion and live delta delivery during model invocation are
+implemented, but product projection integration and phase acceptance remain
+pending; Phases 3-4 implementation has not started. The current product protocol
+does not represent attempt reset, so browser fallback replacement is not yet
+supported. Thread switching keeps runs and connections alive
 within the page; actual disconnect cancels unfinished generation. Continuation
 after disconnect and stream resume are excluded. Generation errors replace
 streamed text with fallback in the same
@@ -155,8 +157,9 @@ Work one boundary at a time in this order:
 1. Define the product state, message identities, history boundary, cancellation,
    persistence, interruption, and retry semantics.
 2. Runtime answer-stage/attempt lifecycle events and identities are implemented
-   with deterministic tests. Live answer-delta delivery, replacement-attempt
-   projection, and the bounded product activity integration remain pending.
+   with deterministic tests, and primary/degraded answer fragments are now
+   delivered during the model invocation. Replacement-attempt projection and
+   bounded product activity integration remain pending.
 3. Connect AssistantTransport and a minimal frontend converter in one end-to-end
    path, preserving authorization and request idempotency.
 4. Integrate independent thread runs, messages, history, and standard Markdown

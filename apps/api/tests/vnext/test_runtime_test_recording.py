@@ -51,7 +51,7 @@ async def _invoke(
     deadline: _Deadline | None = None,
     purpose: str = "execution",
 ) -> ModelResponse:
-    response, _, _ = await runtime._invoke_model(
+    response, _ = await runtime._invoke_model(
         request,
         purpose=purpose,  # type: ignore[arg-type]
         token=token or CancellationToken(),

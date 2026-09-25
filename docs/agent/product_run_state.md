@@ -6,11 +6,12 @@ This document defines the accepted target for the chat execution experience.
 Phases 1-4 are design-approved, including Markdown-only rendering and continued
 generation when switching threads. The product Run State schema, synchronous
 projection, and deterministic projection tests are implemented. Runtime now
-emits answer-stage and answer-attempt lifecycle events with identities on
-buffered answer deltas and canonical completion. The product projection is not
-connected to Runtime or product chat, and live delta delivery, transport, and
-frontend behavior remain pending. End-to-end acceptance is not complete. Phases
-5-6 are planned, not implemented.
+emits answer-stage and answer-attempt lifecycle events and publishes answer
+deltas during the model invocation. The product projection is not connected to
+Runtime or product chat; HTTP transport and frontend behavior remain pending.
+The current product protocol does not represent attempt reset, so this Runtime
+milestone does not establish browser fallback replacement. End-to-end acceptance
+is not complete. Phases 5-6 are planned, not implemented.
 Code remains the authority for current behavior. This document owns the product
 Run State contract; `../ROADMAP.md` owns delivery order.
 
@@ -253,10 +254,11 @@ Do not defer these semantics to Phase 6.
 
 ### Phase 2: Runtime events and product projection
 
-Design approved. Runtime answer-stage and answer-attempt lifecycle events are
-implemented with deterministic tests; live answer delivery and product
-projection integration remain pending. This phase changes Runtime event
-production and product projection, not the public transport protocol or UI.
+Design approved. Runtime answer-stage and answer-attempt lifecycle events, plus
+live answer delivery during model invocation, are implemented with deterministic
+tests. Product projection integration and phase acceptance remain pending. This
+phase changes Runtime event production and product projection, not the public
+transport protocol or UI.
 
 **Decision:** Publish answer fragments during the model invocation and expose
 explicit answer-stage and answer-attempt boundaries. Keep one Runtime execution
@@ -272,12 +274,14 @@ Reuse existing model/tool/terminal events, including AgentCancelled. Runtime
 reports tool identity, call identity, and outcome; Product chooses bounded
 display labels and ordered activity. Tool failure alone does not fail the run.
 
-The Runtime now emits `AnswerStageStarted`, `AnswerAttemptStarted`, and
+The Runtime emits `AnswerStageStarted`, `AnswerAttemptStarted`, and
 `AnswerAttemptFailed`; `TextDelta` and `AgentCompleted` carry an optional
 `attempt_id` for compatibility with hand-constructed events. Production answer
 paths provide that identity, including deterministic answers and overflow
-retries. The existing model invocation still buffers answer deltas until its
-terminal response. The product projector does not yet consume these events.
+retries. Primary and degraded answer paths publish each streamed text fragment
+through the Runtime event flow before the terminal model response. Execution and
+compaction text remain trace-only. The product projector does not yet consume
+these events.
 
 | Event semantic | Runtime fact | Product projection |
 | --- | --- | --- |
@@ -292,15 +296,16 @@ actual answer attempt. Deltas and final completion carry attempt identity. The
 projection rejects stale-attempt updates. Cancellation and fatal failure retain
 their existing terminal meanings; they must not be disguised as completion.
 
-Prefer sequential consumption of an async model stream that yields fragments
-and its terminal result, forwarding answer fragments immediately through the
-existing Runtime event flow. Remove the collect-until-return behavior from the
-answer-delivery path. Do not introduce a background queue/task/controller merely
+Runtime sequentially consumes an async model stream that yields fragments and
+its terminal result, forwarding answer fragments immediately through the
+existing Runtime event flow. The answer-delivery path does not buffer fragments
+until invocation completion. No background queue/task/controller is introduced
 to animate text. The terminal model response still owns protocol validation,
 usage accounting, and complete-result confirmation; deltas are not proof of
-successful completion. Preserve stream cleanup, deadlines, trace recording, and
-context-governance behavior. Execution text and raw reasoning remain excluded
-from the final-answer channel.
+successful completion. Stream cleanup, deadlines, trace recording, and
+context-governance behavior remain in place. Execution text and raw reasoning
+remain excluded from the final-answer channel. Complete-only model clients still
+produce no synthetic text fragments.
 
 Required replacement order:
 
@@ -337,6 +342,11 @@ live provider calls:
 Phase exit: a consumer without a browser can observe live execution, answer
 growth, replacement, and final completion correctly. HTTP/browser delivery is
 the separate Phase 3 acceptance boundary.
+
+This Runtime event behavior does not make the current HTTP protocol express
+attempt reset. Product/transport integration must select the new attempt and
+clear failed text before browser fallback replacement can be considered
+supported.
 
 ### Phase 3: minimal transport and converter loop
 
