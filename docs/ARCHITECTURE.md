@@ -154,6 +154,19 @@ unavailable.
 designed. The model-authored `ExecutionPlan` is validated as received; no
 provider-specific or sample-size mutation is applied afterward.
 
+## Product chat state and transport
+
+Runtime events are projected into a product-owned Run State before transport.
+Execution outcome, canonical answer readiness, and dialogue persistence are
+separate facts; a storage failure does not turn a completed Runtime into a failed
+execution. Runtime must not depend on assistant-ui or presentation state.
+
+The accepted target uses AssistantTransport for state replication and a frontend
+converter for message integration. The state contract, ephemeral activity,
+canonical history/metadata boundary, and phase acceptance are owned by
+[`agent/product_run_state.md`](agent/product_run_state.md). This migration is
+planned; it does not imply the current custom chat protocol has been replaced.
+
 ## Migration order
 
 1. Keep the Artifact baseline green.

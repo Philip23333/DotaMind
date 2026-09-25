@@ -19,8 +19,10 @@ preserve transitional vNext structure merely because it already exists.
 5. `agent/context_governance_evidence_lifecycle.md` for Context Governance,
    Runtime-driven history compaction, recent-message retention, FIFO Artifact
    locators, same-session continuation, and their implementation outline
-6. `EVALS.md`
-7. `ROADMAP.md`
+6. `agent/product_run_state.md` for product Run State, chat transport,
+   execution activity, final-answer presentation, and dialogue consistency
+7. `EVALS.md`
+8. `ROADMAP.md`
 
 `reference/` contains provider and identity facts that were costly to establish.
 It is supporting material, not product or architecture authority.
@@ -38,6 +40,7 @@ copy it.
 | Source identity, locators, provider facts, Valve identity, and normalization | `DATA.md` |
 | Large-result externalization, Artifact storage, corpus, and migration | `ARTIFACTS.md` |
 | Context Governance: Runtime-driven compaction, FIFO locators, and same-session continuation | `agent/context_governance_evidence_lifecycle.md` |
+| Product Run State, chat transport, activity presentation, and dialogue consistency | `agent/product_run_state.md` |
 | Behavioral and integration acceptance | `EVALS.md` |
 | Delivery order | `ROADMAP.md` |
 | Costly external implementation facts | `reference/` |

@@ -134,6 +134,40 @@ required by the current design.
 - Protect the spill threshold, observation bound, full-result recovery, and
   Artifact-tool bypass with focused tests.
 
+## Product chat: Run State and AssistantTransport (planned)
+
+The accepted design and acceptance criteria are defined in
+[`agent/product_run_state.md`](agent/product_run_state.md). Phase 1 lifecycle
+design, Phase 2 Runtime event/projection design, Phase 3 transport/converter,
+and Phase 4 message/history design are approved; implementation and executable
+acceptance have not started. Thread switching keeps runs and connections alive
+within the page; actual disconnect cancels unfinished generation. Continuation
+after disconnect and stream resume are excluded. Generation errors replace
+streamed text with fallback in the same
+message; cancellation, disconnection, and save failures have separate semantics.
+Work one boundary at a time in this order:
+
+1. Define the product state, message identities, history boundary, cancellation,
+   persistence, interruption, and retry semantics.
+2. Complete Runtime stage events, live answer-delta delivery, replacement-attempt
+   boundaries, and the bounded product activity projection.
+3. Connect AssistantTransport and a minimal frontend converter in one end-to-end
+   path, preserving authorization and request idempotency.
+4. Integrate independent thread runs, messages, history, and standard Markdown
+   rendering; defer catalog visual enhancement and retire the old protocol after
+   the replacement is accepted.
+5. Implement execution/tool/final presentation and user-controlled folding.
+6. Complete failure/history regression and remove obsolete code.
+
+First-version final answers stream as the model generates them, following the
+requested ChatGPT-style interaction. Waiting for the complete answer or replaying
+buffered text with a typing animation does not satisfy this requirement. Include
+partial-answer interruption, fallback replacement, and canonical completion
+reconciliation in the initial contract and focused checks. Resumable streams,
+cross-tab recovery, raw reasoning display, and durable execution recovery are
+outside this work. Failure semantics are designed in Phase 1 and tested with
+each implementation phase, not postponed until the final regression phase.
+
 ## Not planned in the baseline
 
 - a complete domain tool suite before each capability contract is accepted;
