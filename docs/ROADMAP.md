@@ -138,8 +138,11 @@ required by the current design.
 
 The accepted design and acceptance criteria are defined in
 [`agent/product_run_state.md`](agent/product_run_state.md). Phase 1 lifecycle
-design, Phase 2 Runtime event/projection design, Phase 3 transport/converter,
-and Phase 4 message/history design are approved; implementation and executable
+design is approved. The product Run State schema, synchronous projection, and
+deterministic projection tests are implemented, but this does not complete Phase
+1 end-to-end acceptance or connect the projection to Runtime/product chat. Phase
+2 Runtime event/projection design, Phase 3 transport/converter, and Phase 4
+message/history design are approved; their implementation and executable
 acceptance have not started. Thread switching keeps runs and connections alive
 within the page; actual disconnect cancels unfinished generation. Continuation
 after disconnect and stream resume are excluded. Generation errors replace

@@ -4,8 +4,10 @@
 
 This document defines the accepted target for the chat execution experience.
 Phases 1-4 are design-approved, including Markdown-only rendering and continued
-generation when switching threads. Implementation and executable acceptance
-remain pending; Phases 5-6 are planned, not implemented.
+generation when switching threads. The product Run State schema, synchronous
+projection, and deterministic projection tests are implemented. They are not
+connected to Runtime, product chat, transport, or frontend behavior; end-to-end
+acceptance remains pending. Phases 5-6 are planned, not implemented.
 Code remains the authority for current behavior. This document owns the product
 Run State contract; `../ROADMAP.md` owns delivery order.
 
@@ -226,13 +228,21 @@ After refresh, saved messages need not reconstruct an ephemeral process panel.
 Lifecycle design approved: three independent state dimensions, one message per
 request, live answer streaming, generation-error fallback replacement, and
 separate cancellation/network/persistence behavior. This is design acceptance,
-not a claim that new state schemas or Runtime behavior are implemented.
+not a claim that Runtime behavior is implemented.
 
-Define the exact Run State and thread/message envelope, identities, ordered and
-bounded activity, stage/outcome separation, safe errors, persistence, cancellation
-races, and retry rules. Specify what survives refresh and what is ephemeral.
-Define streaming/interrupted answer states, answer-attempt identity, replacement
-resets, and reconciliation with the canonical final.
+The `ProductRunState` schema and synchronous `ProductRunStateProjector` are
+implemented in `apps/api/app/vnext/product/run_state.py`, with deterministic
+tests in `apps/api/tests/vnext/test_product_run_state.py`. This establishes the
+product state projection only; Runtime events, product chat, transport, and
+frontend remain unconnected, so the phase's end-to-end acceptance is pending.
+
+The implemented product state defines request and assistant-message identity,
+ordered bounded activity, independent run/stage/answer/persistence status, safe
+errors, cancellation, and persistence retries. Its synchronous projector accepts
+facts without doing I/O, choosing fallbacks, or saving. The remaining Phase 1
+acceptance is to verify the shared backend/frontend transition contract and the
+thread/message envelope at integration boundaries; those consumers are not part
+of this implementation milestone.
 
 Acceptance: backend and frontend share an unambiguous transition contract for
 success, tool failure, fallback, cancellation, disconnection, and save failure.
