@@ -1,5 +1,6 @@
 import type { ThreadMessage, ThreadMessageLike } from "@assistant-ui/react";
 
+import { transcriptTurnsToCanonicalMessages } from "./assistant-ui/dotamind-state-converter";
 import { createUuidV4 } from "./uuid";
 import { formatToolFailure, isToolFailureCode } from "./runtime-failure";
 import { getApiUrl } from "./api-url";
@@ -268,22 +269,13 @@ export async function deleteChatSession(browserId: string, sessionId: string): P
 
 export function transcriptToInitialMessages(
   session: ChatSessionResponse,
-): ThreadMessageLike[] {
-  return session.turns.flatMap((turn) => [
-    {
-      id: `${session.session.session_id}:user:${turn.turn_index}`,
-      role: "user" as const,
-      content: [{ type: "text" as const, text: turn.user_query }],
-      createdAt: new Date(turn.created_at),
-    },
-    {
-      id: `${session.session.session_id}:assistant:${turn.turn_index}`,
-      role: "assistant" as const,
-      content: [{ type: "text" as const, text: formatPlanResponse(turn.public_response) }],
-      status: { type: "complete" as const, reason: "stop" as const },
-      createdAt: new Date(turn.created_at),
-    },
-  ]);
+): ThreadMessage[] {
+  return transcriptTurnsToCanonicalMessages(session.turns, (turn) => {
+    const canonicalAnswer = turn.public_response.answer?.summary;
+    return typeof canonicalAnswer === "string"
+      ? canonicalAnswer
+      : formatPlanResponse(turn.public_response, { decorateCatalogMentions: false });
+  });
 }
 
 export function pendingRunToInitialMessages(run: ChatRunSummary): ThreadMessageLike[] {
@@ -355,7 +347,10 @@ function formatLimitations(items: AnswerItem[] | undefined): string | null {
 }
 
 
-export function formatPlanResponse(payload: PlanResponse): string {
+export function formatPlanResponse(
+  payload: PlanResponse,
+  options: { decorateCatalogMentions?: boolean } = {},
+): string {
   const runtimeFailure = payload.runtime?.attempts
     ?.flatMap((attempt) => attempt.tool_call_statuses ?? [])
     .find((tool) => tool.status === "error" && tool.failure_code)?.failure_code;
@@ -374,7 +369,7 @@ export function formatPlanResponse(payload: PlanResponse): string {
   ].filter((section): section is string => Boolean(section));
   const answerText = sections.join("\n\n");
   const formattedAnswer =
-    payload.status === "ok"
+    payload.status === "ok" && options.decorateCatalogMentions !== false
       ? decorateCatalogMentions(answerText, extractCatalogVisualEntities(payload))
       : answerText;
 

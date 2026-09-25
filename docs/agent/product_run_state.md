@@ -12,10 +12,12 @@ and publishes answer deltas during the model invocation. The product state strea
 is connected to the official Python AssistantTransport encoder, and a real
 loopback HTTP test verifies live deltas, fallback resets, persistence outcomes,
 disconnect cancellation, and bounded save cleanup against `assistant-stream`
-Python 0.0.36 and JavaScript 0.3.33. The new `/transport` endpoint is available,
-while the existing chat UI
-still uses the old route; frontend integration and end-to-end product acceptance
-remain pending. Phases 4-6 are planned, not implemented.
+Python 0.0.36 and JavaScript 0.3.33. The new `/transport` endpoint is available.
+Frontend Run State types, message conversion, request identity reconciliation,
+and canonical Markdown history conversion are implemented. The production
+`runtime-provider` still uses the old route; real multi-session connections and
+page acceptance remain pending. Phases 5-6 are planned, not implemented.
+前端 Run State 类型、消息转换、请求身份合并与 canonical Markdown 历史转换已实现；生产 runtime-provider 尚未切换，真实多会话连接与页面验收尚未完成。
 Code remains the authority for current behavior. This document owns the product
 Run State contract; `../ROADMAP.md` owns delivery order.
 
@@ -97,6 +99,8 @@ stage. `persistence` describes saving the canonical dialogue turn; pending means
 no save has started and may remain so for a cancelled or failed run without an
 answer. Request settlement must consider these separate dimensions: Runtime
 completion alone does not mean persistence or the transport request has ended.
+Frontend connection outcomes carry their request ID and affect only that request's
+messages and local busy state; they do not rewrite the server Run State.
 
 `tooling` is derived from active tool calls rather than a competing top-level
 stage. Tools may alternate with model requests throughout execution. An ordered
@@ -368,8 +372,8 @@ trace references. HTTP/browser delivery is the Phase 3 acceptance boundary.
 The internal product state stream expresses attempt reset. The existing
 `/messages` protocol still cannot, so its temporary `stream_turn()` adapter
 delivers only a completed answer or terminal error. The separate `/transport`
-route carries attempt resets; the frontend remains on the old route until its
-converter and history integration are complete.
+route carries attempt resets; the production frontend remains on the old route
+until its runtime-provider hookup and browser acceptance are complete.
 
 ### Phase 3: minimal transport and converter loop
 
@@ -380,12 +384,15 @@ covered by real loopback HTTP tests for live text, fallback replacement,
 completion, persistence, and disconnect cancellation. A captured HTTP stream is
 also decoded by the exact official JavaScript package version used by
 assistant-ui. The actual chat frontend has not switched to this endpoint; the old
-route remains the normal UI path until the Phase 4 integration is complete.
+route remains the normal UI path until the runtime-provider integration is
+complete.
 
-The remaining Phase 3 product boundary is the frontend converter and UI hookup:
-connect send -> activity -> live answer -> optional fallback replacement ->
-completion and persistence through a real browser path. Polished process UI
-belongs to Phase 5.
+The frontend has a pure state converter, canonical message identities, history
+reconciliation, and canonical Markdown history conversion with deterministic
+tests. The production runtime-provider is not connected to `/transport` yet. The
+remaining boundary is the live hook and UI hookup: connect send -> activity ->
+live answer -> optional fallback replacement -> completion and persistence
+through a real browser path. Polished process UI belongs to Phase 5.
 
 **Decision:** AssistantTransport owns state replication; Product retains business
 completion and persistence. Cancel unfinished generation when the connection
@@ -431,8 +438,9 @@ The converter updates the same assistant message throughout. It does not decide
 fallback policy or maintain a second independent answer lifecycle. An optimistic
 user message must reconcile with server acceptance rather than appear twice;
 the transition from generating to saved must not create a second assistant
-message. Full history/thread integration follows in Phase 4, but identity
-handoff is part of this phase.
+message. The pure converter and history reconciliation foundation is implemented;
+full history/thread integration follows in Phase 4, but identity handoff is part
+of this phase.
 
 The minimum frontend displays activity/stage, growing answer text, a stop action,
 and cancellation/error/persistence status. User stop propagates through transport
@@ -471,7 +479,9 @@ where useful):
 
 ### Phase 4: messages, history, and independent thread runs
 
-Design approved; implementation and executable acceptance are pending.
+Design approved. The pure Run State converter, canonical request/message
+identity reconciliation, and history Markdown conversion are implemented;
+production integration and executable multi-thread acceptance remain pending.
 
 **Decision:** Switching threads changes the selected view only. Existing runs
 continue receiving streamed text and saving their final answers. Render only
@@ -512,11 +522,13 @@ completes. Refresh restores saved dialogue only; no durable draft store is added
 Live and restored messages share one canonical message conversion and Markdown
 renderer. Preserve request/message identity across optimistic user acceptance,
 streaming, save completion, and history hydration. Historical messages without
-process data do not fabricate activity panels. Remove decorateCatalogMentions
-from the normal display path. Visual metadata may stay stored but must not be
-required for readable answers or consumed for entity enhancement. Preserve trace
-links and existing message actions through structured metadata; this restriction
-is about catalog visuals, not all metadata.
+process data do not fabricate activity panels. The vNext history path now keeps
+canonical Markdown unchanged and does not apply `decorateCatalogMentions`; the
+new converter carries state without catalog enhancement. The existing production
+real-time path remains unchanged until the runtime-provider switch. Visual
+metadata may stay stored but must not be required for readable answers or consumed
+for entity enhancement. Preserve trace links and existing message actions through
+structured metadata; this restriction is about catalog visuals, not all metadata.
 
 Retire the old NDJSON encoder/parser, transport event types, accumulated-text
 converter, and superseded lifecycle logic after the new path is accepted. Retain

@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { formatPlanResponse, type PlanResponse } from "./dotamind-api";
+import {
+  formatPlanResponse,
+  transcriptToInitialMessages,
+  type ChatSessionResponse,
+  type PlanResponse,
+} from "./dotamind-api";
 
 const hero = {
   hero_name_zh: "斯温",
@@ -514,5 +519,78 @@ describe("formatPlanResponse", () => {
       ],
     });
     expect(formatted).toBe("# 斯温英雄介绍\n\n斯温。");
+  });
+});
+
+describe("transcriptToInitialMessages", () => {
+  it("uses canonical request IDs and preserves historical Markdown without catalog rewriting", () => {
+    const markdown = "# 齐天大圣（Monkey King）\n\n![图](https://example.test/hero.png)";
+    const session: ChatSessionResponse = {
+      session: {
+        session_id: "session-a",
+        game: "dota2",
+        title: "历史对话",
+        title_is_custom: false,
+        is_pinned: false,
+        created_at: "2026-09-24T12:00:00Z",
+        updated_at: "2026-09-24T12:00:00Z",
+      },
+      turns: [
+        {
+          turn_index: 4,
+          request_id: "request-canonical",
+          user_query: "请介绍齐天大圣",
+          public_response: {
+            status: "ok",
+            answer: { summary: markdown },
+            catalog_visual_entities: [
+              {
+                kind: "hero",
+                imagePath: "/api/v1/assets/dota/heroes/114.png",
+                label: "齐天大圣",
+                names: ["齐天大圣", "Monkey King"],
+              },
+            ],
+          },
+          created_at: "2026-09-24T12:00:00Z",
+        },
+      ],
+    };
+
+    const messages = transcriptToInitialMessages(session);
+    const textOf = (index: number) => messages[index]?.content
+      .filter((part) => part.type === "text")
+      .map((part) => part.text)
+      .join("");
+
+    expect(messages.map((message) => message.id)).toEqual([
+      "user:request-canonical",
+      "assistant:request-canonical",
+    ]);
+    expect(textOf(0)).toBe("请介绍齐天大圣");
+    expect(textOf(1)).toBe(markdown);
+    expect(textOf(1)).not.toContain("/api/v1/assets/");
+    expect(messages[1]!.metadata.custom.dotamind).toMatchObject({
+      request_id: "request-canonical",
+      persistence: "saved",
+      turn_index: 4,
+    });
+  });
+
+  it("does not decorate fallback formatting with catalog metadata", () => {
+    const response: PlanResponse = {
+      status: "ok",
+      catalog_visual_entities: [
+        {
+          kind: "hero",
+          imagePath: "/api/v1/assets/dota/heroes/114.png",
+          label: "齐天大圣",
+          names: ["齐天大圣", "Monkey King"],
+        },
+      ],
+      answer: { recommendations: [{ subject: "齐天大圣", rationale: "示例" }] },
+    };
+    expect(formatPlanResponse(response, { decorateCatalogMentions: false }))
+      .toBe("### 建议\n\n- **齐天大圣**：示例");
   });
 });
