@@ -76,6 +76,37 @@ class ProductRunStateProjector:
         )
         self._append_activity(StageActivity(id="stage:execution", stage="execution"))
 
+    @classmethod
+    def from_completed_answer(
+        cls,
+        request_id: UUID,
+        assistant_message_id: str,
+        text: str,
+        *,
+        attempt_id: str | None = None,
+        kind: AnswerKind | None = None,
+    ) -> ProductRunStateProjector:
+        """Restore a server-owned canonical answer without inventing Runtime activity."""
+
+        if (attempt_id is None) != (kind is None):
+            raise ValueError("attempt_id and kind must either both be present or both be absent")
+        projector = cls.__new__(cls)
+        projector._state = ProductRunState(
+            request_id=request_id,
+            assistant_message_id=assistant_message_id,
+            status="completed",
+            stage="answer",
+            activity=[],
+            answer=ProductAnswerState(
+                attempt_id=attempt_id,
+                kind=kind,
+                text=text,
+                status="ready",
+            ),
+            persistence="pending",
+        )
+        return projector
+
     def snapshot(self) -> ProductRunState:
         """Return a deep copy so consumers cannot mutate projection state."""
 

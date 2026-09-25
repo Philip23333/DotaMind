@@ -14,7 +14,12 @@ from fastapi.testclient import TestClient
 
 from app.api.v1.vnext_chat_routes import router as chat_router
 from app.application.chat_repository import ChatDialogueTurnResult, ChatNotFoundError
-from app.vnext.agent.events import AgentCompleted, AgentFailed
+from app.vnext.agent.events import (
+    AgentCompleted,
+    AgentFailed,
+    AnswerAttemptStarted,
+    AnswerStageStarted,
+)
 from app.vnext.agent.runtime import AgentRuntime
 from app.vnext.llm.protocol import FinalMessage, ModelRequest, ModelResponse, UserMessage
 from app.vnext.product.chat import ProductChatCompleted, ProductChatError, VNextChatService
@@ -362,7 +367,7 @@ def test_trace_store_write_failure_does_not_change_answer_or_runtime_error() -> 
     assert failure_events == [
         ProductChatError(
             error_code="provider_failed",
-            reason="original model failure",
+            reason="本次回答未能完成，请重试。",
         )
     ]
 
@@ -435,15 +440,27 @@ def test_disconnect_saves_cancelled_record_and_propagates_cancellation() -> None
 def test_disconnect_after_runtime_completion_keeps_completed_trace_status() -> None:
     async def exercise():
         completed = asyncio.Event()
-        block_after_completion = asyncio.Event()
+        save_started = asyncio.Event()
+        release_save = asyncio.Event()
 
         class CompletedThenWaitingRuntime:
             async def run_stream(self, _messages, *, trace_collector=None):
-                yield AgentCompleted(duration=0.1, final=FinalMessage(content="done"))
+                yield AnswerStageStarted()
+                yield AnswerAttemptStarted(attempt_id="answer-1", answer_kind="primary")
                 completed.set()
-                await block_after_completion.wait()
+                yield AgentCompleted(
+                    duration=0.1,
+                    final=FinalMessage(content="done"),
+                    attempt_id="answer-1",
+                )
 
-        repository = _Repository()
+        class BlockingRepository(_Repository):
+            async def append_dialogue_turn(self, **kwargs):
+                save_started.set()
+                await release_save.wait()
+                return await super().append_dialogue_turn(**kwargs)
+
+        repository = BlockingRepository()
         trace_store = _TraceStore()
         service = _service(repository, CompletedThenWaitingRuntime(), trace_store)
         prepared = await service.prepare_turn(
@@ -459,14 +476,19 @@ def test_disconnect_after_runtime_completion_keeps_completed_trace_status() -> N
 
         task = asyncio.create_task(consume())
         await asyncio.wait_for(completed.wait(), timeout=1)
+        await asyncio.wait_for(save_started.wait(), timeout=1)
         task.cancel()
+        await asyncio.sleep(0)
+        assert not task.done()
+        release_save.set()
         with pytest.raises(asyncio.CancelledError):
             await asyncio.wait_for(task, timeout=1)
-        return trace_store
+        return trace_store, repository
 
-    trace_store = asyncio.run(exercise())
+    trace_store, repository = asyncio.run(exercise())
 
     assert len(trace_store.saved) == 1
+    assert len(repository.results) == 1
     saved = next(iter(trace_store.saved.values()))
     assert saved.status == "completed"
     assert saved.trace["terminal"]["status"] == "completed"
@@ -729,7 +751,7 @@ def test_completed_runtime_trace_stays_completed_when_chat_persistence_fails() -
     assert saved.trace["terminal"]["status"] == "completed"
 
 
-def test_completed_runtime_trace_stays_completed_when_visual_enrichment_fails() -> None:
+def test_visual_enrichment_failure_saves_answer_and_completed_runtime_trace() -> None:
     class FailingVisualEntityEnricher:
         def match(self, _content):
             raise RuntimeError("visual entity enrichment failed")
@@ -759,22 +781,28 @@ def test_completed_runtime_trace_stays_completed_when_visual_enrichment_fails() 
             query="question",
         )
         events = [event async for event in service.stream_turn(prepared)]
-        error = events[-1]
+        completed = events[-1]
         bundle = None
-        if isinstance(error, ProductChatError) and error.trace is not None:
+        if isinstance(completed, ProductChatCompleted) and completed.trace is not None:
             bundle = await service.download_trace_bundle(
                 browser_id=browser_id,
-                trace_id=error.trace.trace_id,
+                trace_id=completed.trace.trace_id,
             )
-        return error, trace_store, bundle
+        return completed, repository, trace_store, bundle
 
-    error, trace_store, bundle = asyncio.run(run())
+    completed, repository, trace_store, bundle = asyncio.run(run())
 
-    assert isinstance(error, ProductChatError)
-    assert error.error_code == "chat_store_error"
-    assert error.trace is not None
+    assert isinstance(completed, ProductChatCompleted)
+    assert completed.content == "answer"
+    assert completed.turn_index == 1
+    assert completed.catalog_visual_entities == []
+    assert completed.trace is not None
+    assert len(repository.results) == 1
+    saved_turn = repository.results[next(iter(repository.results))]
+    assert saved_turn.assistant_message == "answer"
+    assert saved_turn.catalog_visual_entities == []
     assert len(trace_store.saved) == 1
-    saved = trace_store.saved[error.trace.trace_id]
+    saved = trace_store.saved[completed.trace.trace_id]
     assert saved.status == "completed"
     assert saved.trace["terminal"]["status"] == "completed"
     assert bundle is not None

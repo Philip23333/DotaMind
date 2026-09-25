@@ -8,6 +8,7 @@ import inspect
 import io
 import json
 import logging
+import math
 import zipfile
 from asyncio import Lock
 from collections.abc import AsyncIterator, Callable
@@ -21,10 +22,12 @@ from pydantic import BaseModel, Field
 
 from app.application.chat_repository import ChatDialogueTurnResult
 from app.application.postgres_chat_repository import PostgresChatRepository
-from app.vnext.agent.events import AgentCancelled, AgentCompleted, AgentFailed, TextDelta
+from app.vnext.agent.events import AgentCancelled, AgentCompleted, AgentFailed
 from app.vnext.agent.runtime import AgentRuntime
 from app.vnext.agent.trace import AgentTraceCollector
 from app.vnext.llm.protocol import FinalMessage, Message, UserMessage
+from app.vnext.product.run_state import AnswerKind, ProductRunState, ProductRunStateProjector
+from app.vnext.product.runtime_projection import apply_runtime_event
 
 from .context import ConversationContextBuilder
 from .presentation import DotaVisualEntityEnricher, ProductVisualEntity
@@ -63,6 +66,15 @@ class ProductTraceRef(BaseModel):
     expires_at: datetime
 
 
+class ProductChatState(BaseModel):
+    """Internal product envelope around one Run State snapshot."""
+
+    state: ProductRunState
+    turn_index: int | None = None
+    trace: ProductTraceRef | None = None
+    catalog_visual_entities: list[ProductVisualEntity] = Field(default_factory=list)
+
+
 class ProductTraceSummary(BaseModel):
     trace_id: str
     request_id: str
@@ -86,6 +98,8 @@ class PreparedVNextChatTurn:
 class _CompletedRequest:
     query: str
     final: FinalMessage
+    attempt_id: str
+    answer_kind: AnswerKind
     visual_entities: tuple[ProductVisualEntity, ...]
     trace_ref: ProductTraceRef | None = None
 
@@ -96,25 +110,6 @@ class _SessionState:
     history: SessionExecutionHistory
     lock: Lock
     completed: dict[UUID, _CompletedRequest]
-
-
-def _product_runtime_error_reason(event: AgentCancelled | AgentFailed) -> str:
-    if not isinstance(event, AgentFailed) or event.error_code != "context_compaction_failed":
-        return event.error_message
-    reason_code = event.details.get("reason_code")
-    if reason_code == "summary_output_truncated":
-        return "上下文摘要未完整生成，本次任务已停止。原有会话记录已保留。"
-    if reason_code == "transient_retries_exhausted":
-        attempt_count = event.details.get("attempt_count")
-        retry_note = (
-            "重试后仍未成功"
-            if type(attempt_count) is int and attempt_count > 1
-            else "未能成功"
-        )
-        return (
-            f"生成上下文摘要时服务暂时不可用，{retry_note}。本次任务已停止，原有会话记录已保留。"
-        )
-    return "本次上下文整理未能完成，任务已停止。原有会话记录已保留。"
 
 
 class VNextChatService:
@@ -131,9 +126,17 @@ class VNextChatService:
         runtime_factory: Callable[[], AgentRuntime] | None = None,
         trace_ttl_seconds: int = 72 * 60 * 60,
         test_recording_enabled: bool = False,
+        persistence_timeout_seconds: float = 15.0,
     ) -> None:
         if test_recording_enabled and trace_store is None:
             raise ValueError("test recording requires a configured TraceStore")
+        if (
+            isinstance(persistence_timeout_seconds, bool)
+            or not isinstance(persistence_timeout_seconds, (int, float))
+            or not math.isfinite(persistence_timeout_seconds)
+            or persistence_timeout_seconds <= 0
+        ):
+            raise ValueError("persistence_timeout_seconds must be a finite positive number")
         self._repository = repository
         self._runtime = runtime
         self._context_builder = context_builder
@@ -144,6 +147,7 @@ class VNextChatService:
         self._sessions: dict[UUID, _SessionState] = {}
         self._trace_ttl_seconds = trace_ttl_seconds
         self._test_recording_enabled = test_recording_enabled
+        self._persistence_timeout_seconds = float(persistence_timeout_seconds)
 
     async def prepare_turn(
         self,
@@ -187,8 +191,56 @@ class VNextChatService:
         self,
         prepared: PreparedVNextChatTurn,
     ) -> AsyncIterator[ProductChatDelta | ProductChatCompleted | ProductChatError]:
-        state = self._session_for(prepared.session_id)
-        async with state.lock:
+        states = self.stream_turn_states(prepared)
+        try:
+            async for update in states:
+                state = update.state
+                if state.status == "running":
+                    continue
+                if state.status == "completed" and state.persistence in ("pending", "saving"):
+                    continue
+                if state.status == "completed" and state.persistence == "saved":
+                    if update.turn_index is None:
+                        yield ProductChatError(
+                            error_code="chat_store_error",
+                            reason="回答已生成，但未能确认保存结果，请重试保存。",
+                            trace=update.trace,
+                        )
+                    else:
+                        yield ProductChatCompleted(
+                            content=state.answer.text,
+                            turn_index=update.turn_index,
+                            catalog_visual_entities=update.catalog_visual_entities,
+                            trace=update.trace,
+                        )
+                    return
+
+                if state.error is not None:
+                    yield ProductChatError(
+                        error_code=state.error.code,
+                        reason=state.error.message,
+                        trace=update.trace,
+                    )
+                else:
+                    yield ProductChatError(
+                        error_code="agent_cancelled",
+                        reason="本次任务已取消。",
+                        trace=update.trace,
+                    )
+                return
+        finally:
+            await _close_upstream(states)
+
+    async def stream_turn_states(
+        self,
+        prepared: PreparedVNextChatTurn,
+    ) -> AsyncIterator[ProductChatState]:
+        """Run product chat once and yield product-owned lifecycle snapshots."""
+
+        session = self._session_for(prepared.session_id)
+        assistant_message_id = f"assistant:{prepared.request_id}"
+        async with session.lock:
+            projector = ProductRunStateProjector(prepared.request_id, assistant_message_id)
             try:
                 replay = await self._repository.lookup_dialogue_request(
                     prepared.browser_id,
@@ -197,69 +249,207 @@ class VNextChatService:
                     prepared.query,
                 )
             except Exception as exc:
-                yield ProductChatError(
-                    error_code=getattr(exc, "code", "chat_store_error"), reason=str(exc)
-                )
+                code = getattr(exc, "code", None)
+                if code == "idempotency_conflict":
+                    projector.fail_execution(
+                        "idempotency_conflict",
+                        "request_id has already been used with different inputs",
+                    )
+                else:
+                    projector.fail_execution("chat_store_error", "聊天服务暂时不可用，请重试。")
+                yield ProductChatState(state=projector.snapshot())
                 return
+
+            cached = session.completed.get(prepared.request_id)
             if replay is not None:
-                cached = state.completed.get(prepared.request_id)
                 trace_ref = (
                     cached.trace_ref
                     if cached is not None and cached.query == prepared.query
                     else None
                 )
-                yield self._completed_event(replay, trace_ref=trace_ref)
+                projector = ProductRunStateProjector.from_completed_answer(
+                    prepared.request_id,
+                    assistant_message_id,
+                    replay.assistant_message,
+                )
+                projector.start_persistence()
+                projector.persistence_succeeded()
+                yield ProductChatState(
+                    state=projector.snapshot(),
+                    turn_index=replay.turn_index,
+                    trace=trace_ref,
+                    catalog_visual_entities=[
+                        ProductVisualEntity.model_validate(entity)
+                        for entity in replay.catalog_visual_entities
+                    ],
+                )
                 return
 
-            cached = state.completed.get(prepared.request_id)
             if cached is not None:
                 if cached.query != prepared.query:
-                    yield ProductChatError(
-                        error_code="idempotency_conflict",
-                        reason="request_id has already been used with different inputs",
+                    projector.fail_execution(
+                        "idempotency_conflict",
+                        "request_id has already been used with different inputs",
                     )
+                    yield ProductChatState(state=projector.snapshot())
                     return
-                async for event in self._commit_cached(prepared, cached):
-                    yield event
+                updates = self._persist_cached_answer(prepared, cached)
+                try:
+                    async for update in updates:
+                        yield update
+                finally:
+                    await _close_upstream(updates)
                 return
 
-            trace_collector: AgentTraceCollector | None = None
-            trace_ref: ProductTraceRef | None = None
-            runtime_completed = False
             try:
                 initial: list[Message] | None = None
-                if not state.history.initialized:
+                if not session.history.initialized:
                     dialogue, _ = await self._repository.get_all_dialogue_turns(
                         prepared.browser_id, prepared.session_id
                     )
                     initial = self._context_builder.build(dialogue, prepared.query)
-                messages = state.history.begin_request(
+                messages = session.history.begin_request(
                     prepared.request_id,
                     prepared.query,
                     initial_messages=initial,
                 )
-                reset = getattr(state.runtime, "reset_request_state", None)
+            except Exception as exc:
+                code = getattr(exc, "code", None)
+                if code == "idempotency_conflict":
+                    projector.fail_execution(
+                        "idempotency_conflict",
+                        "request_id has already been used with different inputs",
+                    )
+                else:
+                    projector.fail_execution("chat_store_error", "聊天服务暂时不可用，请重试。")
+                yield ProductChatState(state=projector.snapshot())
+                return
+
+            trace_collector: AgentTraceCollector | None = None
+            if self._trace_store is not None:
+                trace_collector = (
+                    AgentTraceCollector(capture_full_calls=True)
+                    if self._test_recording_enabled
+                    else AgentTraceCollector()
+                )
+            trace_ref: ProductTraceRef | None = None
+            runtime_completed = False
+            stream: AsyncIterator[object] | None = None
+            try:
+                reset = getattr(session.runtime, "reset_request_state", None)
                 if callable(reset):
                     reset()
-                if self._trace_store is not None:
-                    trace_collector = (
-                        AgentTraceCollector(capture_full_calls=True)
-                        if self._test_recording_enabled
-                        else AgentTraceCollector()
-                    )
-                final: FinalMessage | None = None
                 stream = self._runtime_stream(
-                    state.runtime,
+                    session.runtime,
                     messages,
                     prepared.request_id,
-                    state.history,
+                    session.history,
                     trace_collector,
                 )
-                async for event in stream:
-                    if isinstance(event, TextDelta):
-                        yield ProductChatDelta(text=event.text)
-                    elif isinstance(event, AgentCompleted):
-                        final = event.final
+            except asyncio.CancelledError:
+                if self._test_recording_enabled and trace_collector is not None:
+                    await self._save_interrupted_test_trace(
+                        prepared,
+                        trace_collector,
+                        runtime_completed=False,
+                    )
+                raise
+            except Exception:
+                projector.fail_execution(
+                    "agent_runtime_error",
+                    "本次回答未能完成，请重试。",
+                )
+                if trace_collector is not None:
+                    trace_collector.terminal(
+                        status="failed",
+                        error_code="agent_runtime_error",
+                        error_message="agent runtime could not start",
+                    )
+                    if self._test_recording_enabled:
+                        trace_ref = await self._save_run_trace(
+                            prepared,
+                            trace_collector,
+                            status="failed",
+                            recording_mode="test",
+                        )
+                yield ProductChatState(state=projector.snapshot(), trace=trace_ref)
+                return
+
+            assert stream is not None
+            try:
+                yield ProductChatState(state=projector.snapshot())
+                while True:
+                    try:
+                        event = await anext(stream)
+                    except StopAsyncIteration:
+                        if projector.snapshot().status == "running":
+                            projector.fail_execution(
+                                "agent_stream_incomplete",
+                                "本次回答未能完成，请重试。",
+                            )
+                            if trace_collector is not None:
+                                trace_collector.terminal(
+                                    status="failed",
+                                    error_code="agent_stream_incomplete",
+                                    error_message="agent stream ended without a final message",
+                                )
+                                if self._test_recording_enabled:
+                                    trace_ref = await self._save_run_trace(
+                                        prepared,
+                                        trace_collector,
+                                        status="failed",
+                                        recording_mode="test",
+                                    )
+                            yield ProductChatState(state=projector.snapshot(), trace=trace_ref)
+                        return
+                    except Exception:
+                        projector.fail_execution(
+                            "agent_runtime_error",
+                            "本次回答未能完成，请重试。",
+                        )
+                        if trace_collector is not None:
+                            trace_collector.terminal(
+                                status="failed",
+                                error_code="agent_runtime_error",
+                                error_message="agent runtime failed",
+                            )
+                            if self._test_recording_enabled:
+                                trace_ref = await self._save_run_trace(
+                                    prepared,
+                                    trace_collector,
+                                    status="failed",
+                                    recording_mode="test",
+                                )
+                        yield ProductChatState(state=projector.snapshot(), trace=trace_ref)
+                        return
+
+                    try:
+                        changed = apply_runtime_event(projector, event)
+                    except Exception:
+                        projector.fail_execution(
+                            "agent_runtime_error",
+                            "本次回答未能完成，请重试。",
+                        )
+                        if trace_collector is not None:
+                            trace_collector.terminal(
+                                status="failed",
+                                error_code="agent_runtime_error",
+                                error_message="invalid Runtime event sequence",
+                            )
+                            if self._test_recording_enabled:
+                                trace_ref = await self._save_run_trace(
+                                    prepared,
+                                    trace_collector,
+                                    status="failed",
+                                    recording_mode="test",
+                                )
+                        await _close_upstream(stream)
+                        yield ProductChatState(state=projector.snapshot(), trace=trace_ref)
+                        return
+
+                    if isinstance(event, AgentCompleted):
+                        if not changed:
+                            continue
                         runtime_completed = True
                         if trace_collector is not None:
                             trace_collector.terminal(
@@ -267,35 +457,124 @@ class VNextChatService:
                                 error_code=None,
                                 error_message=None,
                             )
-                    elif isinstance(event, (AgentCancelled, AgentFailed)):
+                        await _close_upstream(stream)
+                        completed_state = projector.snapshot()
+                        attempt_id = completed_state.answer.attempt_id
+                        answer_kind = completed_state.answer.kind
+                        if attempt_id is None or answer_kind is None:
+                            # apply_runtime_event validates identity; keep this guard at
+                            # the cache boundary so malformed projections cannot persist.
+                            projector.fail_execution(
+                                "agent_runtime_error",
+                                "本次回答未能完成，请重试。",
+                            )
+                            yield ProductChatState(state=projector.snapshot())
+                            return
+
+                        final = event.final
+                        try:
+                            visual_entities = tuple(
+                                self._visual_entity_enricher.match(final.content)
+                            )
+                        except Exception as exc:
+                            logger.warning(
+                                "could not enrich vNext answer visuals (%s)",
+                                type(exc).__name__,
+                            )
+                            visual_entities = ()
+
+                        if not any(
+                            record.request_id == prepared.request_id
+                            and record.kind == "delivery_answer"
+                            for record in session.history.records
+                        ):
+                            session.history.record_delivery(prepared.request_id, final)
+                        effective = session.history.effective_messages()
+                        if not effective or effective[-1] != final:
+                            session.history.set_effective([*effective, final])
+
+                        cached = _CompletedRequest(
+                            query=prepared.query,
+                            final=final,
+                            attempt_id=attempt_id,
+                            answer_kind=answer_kind,
+                            visual_entities=visual_entities,
+                        )
+                        session.completed[prepared.request_id] = cached
+                        save_task = asyncio.create_task(
+                            self._append_dialogue_turn(prepared, cached),
+                            name=f"vnext-chat-save-{prepared.request_id}",
+                        )
+                        if self._test_recording_enabled and trace_collector is not None:
+                            try:
+                                trace_ref = await self._save_run_trace(
+                                    prepared,
+                                    trace_collector,
+                                    status="completed",
+                                    recording_mode="test",
+                                )
+                            except asyncio.CancelledError:
+                                if save_task is not None:
+                                    await _finish_owned_save(save_task)
+                                raise
+                        if trace_ref is not None:
+                            cached = _CompletedRequest(
+                                query=cached.query,
+                                final=cached.final,
+                                attempt_id=cached.attempt_id,
+                                answer_kind=cached.answer_kind,
+                                visual_entities=cached.visual_entities,
+                                trace_ref=trace_ref,
+                            )
+                            session.completed[prepared.request_id] = cached
+
+                        updates = self._persist_cached_answer(
+                            prepared,
+                            cached,
+                            projector=projector,
+                            save_task=save_task,
+                        )
+                        try:
+                            async for update in updates:
+                                yield update
+                        finally:
+                            await _close_upstream(updates)
+                        return
+
+                    if isinstance(event, (AgentCancelled, AgentFailed)):
+                        terminal = projector.snapshot()
                         if trace_collector is not None:
                             trace_collector.terminal(
                                 status=(
-                                    "cancelled" if isinstance(event, AgentCancelled) else "failed"
+                                    "cancelled"
+                                    if isinstance(event, AgentCancelled)
+                                    else "failed"
                                 ),
                                 error_code=event.error_code,
                                 error_message=event.error_message,
                             )
-                        if trace_collector is not None and (
-                            self._test_recording_enabled or isinstance(event, AgentFailed)
-                        ):
-                            trace_ref = await self._save_run_trace(
-                                prepared,
-                                trace_collector,
-                                status=(
-                                    "cancelled" if isinstance(event, AgentCancelled) else "failed"
-                                ),
-                                recording_mode=(
-                                    "test" if self._test_recording_enabled else "diagnostic"
-                                ),
-                            )
-                        yield ProductChatError(
-                            error_code=event.error_code,
-                            reason=_product_runtime_error_reason(event),
-                            trace=trace_ref,
-                        )
+                            if self._test_recording_enabled or isinstance(event, AgentFailed):
+                                trace_ref = await self._save_run_trace(
+                                    prepared,
+                                    trace_collector,
+                                    status=(
+                                        "cancelled"
+                                        if isinstance(event, AgentCancelled)
+                                        else "failed"
+                                    ),
+                                    recording_mode=(
+                                        "test"
+                                        if self._test_recording_enabled
+                                        else "diagnostic"
+                                    ),
+                                )
+                        await _close_upstream(stream)
+                        yield ProductChatState(state=terminal, trace=trace_ref)
                         return
-            except asyncio.CancelledError as cancel_error:
+
+                    if changed:
+                        yield ProductChatState(state=projector.snapshot())
+            except asyncio.CancelledError:
                 if (
                     self._test_recording_enabled
                     and trace_collector is not None
@@ -306,111 +585,105 @@ class VNextChatService:
                         trace_collector,
                         runtime_completed=runtime_completed,
                     )
-                raise cancel_error
-            except Exception as exc:
-                trace_ref = None
-                runtime_status: Literal["completed", "failed"] = (
-                    "completed" if runtime_completed else "failed"
-                )
-                if trace_collector is not None and not runtime_completed:
-                    trace_collector.terminal(
-                        status="failed",
-                        error_code=getattr(exc, "code", "agent_runtime_error"),
-                        error_message=str(exc),
-                    )
-                if self._test_recording_enabled and trace_collector is not None:
-                    trace_ref = await self._save_run_trace(
-                        prepared,
-                        trace_collector,
-                        status=runtime_status,
-                        recording_mode="test",
-                    )
-                yield ProductChatError(
-                    error_code=getattr(exc, "code", "agent_runtime_error"),
-                    reason=str(exc),
-                    trace=trace_ref,
-                )
-                return
+                raise
+            finally:
+                if stream is not None:
+                    await _close_upstream(stream)
 
-            if final is None:
-                if trace_collector is not None:
-                    trace_collector.terminal(
-                        status="failed",
-                        error_code="agent_runtime_error",
-                        error_message="agent stream ended without a final message",
-                    )
-                if self._test_recording_enabled and trace_collector is not None:
-                    trace_ref = await self._save_run_trace(
-                        prepared,
-                        trace_collector,
-                        status="failed",
-                        recording_mode="test",
-                    )
-                yield ProductChatError(
-                    error_code="agent_runtime_error",
-                    reason="agent stream ended without a final message",
-                    trace=trace_ref,
-                )
-                return
+    async def _append_dialogue_turn(
+        self,
+        prepared: PreparedVNextChatTurn,
+        cached: _CompletedRequest,
+    ) -> ChatDialogueTurnResult:
+        async with asyncio.timeout(self._persistence_timeout_seconds):
+            return await self._repository.append_dialogue_turn(
+                browser_id=prepared.browser_id,
+                session_id=prepared.session_id,
+                request_id=prepared.request_id,
+                user_query=cached.query,
+                assistant_message=cached.final.content,
+                catalog_visual_entities=[entity.model_dump() for entity in cached.visual_entities],
+            )
 
-            try:
-                visual_entities = tuple(self._visual_entity_enricher.match(final.content))
-                if self._test_recording_enabled and trace_collector is not None:
-                    trace_ref = await self._save_run_trace(
-                        prepared,
-                        trace_collector,
-                        status="completed",
-                        recording_mode="test",
-                    )
-                state.completed[prepared.request_id] = _CompletedRequest(
-                    query=prepared.query,
-                    final=final,
-                    visual_entities=visual_entities,
-                    trace_ref=trace_ref,
-                )
-                if not any(
-                    record.request_id == prepared.request_id and record.kind == "delivery_answer"
-                    for record in state.history.records
-                ):
-                    state.history.record_delivery(prepared.request_id, final)
-                effective = state.history.effective_messages()
-                if not effective or effective[-1] != final:
-                    state.history.set_effective([*effective, final])
+    async def _persist_cached_answer(
+        self,
+        prepared: PreparedVNextChatTurn,
+        cached: _CompletedRequest,
+        *,
+        projector: ProductRunStateProjector | None = None,
+        save_task: asyncio.Task[ChatDialogueTurnResult] | None = None,
+    ) -> AsyncIterator[ProductChatState]:
+        assistant_message_id = f"assistant:{prepared.request_id}"
+        if projector is None:
+            projector = ProductRunStateProjector.from_completed_answer(
+                prepared.request_id,
+                assistant_message_id,
+                cached.final.content,
+                attempt_id=cached.attempt_id,
+                kind=cached.answer_kind,
+            )
+        if save_task is None:
+            save_task = asyncio.create_task(
+                self._append_dialogue_turn(prepared, cached),
+                name=f"vnext-chat-save-{prepared.request_id}",
+            )
 
-                async for event in self._commit_cached(
-                    prepared,
-                    state.completed[prepared.request_id],
-                ):
-                    yield event
-            except asyncio.CancelledError as cancel_error:
-                if (
-                    self._test_recording_enabled
-                    and trace_collector is not None
-                    and trace_ref is None
-                ):
-                    await self._save_interrupted_test_trace(
-                        prepared,
-                        trace_collector,
-                        runtime_completed=True,
-                    )
-                raise cancel_error
-            except Exception as exc:
-                if (
-                    self._test_recording_enabled
-                    and trace_collector is not None
-                    and trace_ref is None
-                ):
-                    trace_ref = await self._save_run_trace(
-                        prepared,
-                        trace_collector,
-                        status="completed",
-                        recording_mode="test",
-                    )
-                yield ProductChatError(
-                    error_code=getattr(exc, "code", "chat_store_error"),
-                    reason=str(exc),
-                    trace=trace_ref,
+        try:
+            yield ProductChatState(
+                state=projector.snapshot(),
+                trace=cached.trace_ref,
+                catalog_visual_entities=list(cached.visual_entities),
+            )
+            projector.start_persistence()
+            yield ProductChatState(
+                state=projector.snapshot(),
+                trace=cached.trace_ref,
+                catalog_visual_entities=list(cached.visual_entities),
+            )
+
+            committed: ChatDialogueTurnResult | None = None
+            save_error: Exception | None = None
+            cancelled_while_saving = False
+            if save_task is not None:
+                committed, save_error, cancelled_while_saving = await _wait_owned_save(save_task)
+
+            if save_error is None and committed is not None:
+                projector.persistence_succeeded()
+                terminal = ProductChatState(
+                    state=projector.snapshot(),
+                    turn_index=committed.turn_index,
+                    trace=cached.trace_ref,
+                    catalog_visual_entities=[
+                        ProductVisualEntity.model_validate(entity)
+                        for entity in committed.catalog_visual_entities
+                    ],
                 )
+            else:
+                if save_error is not None:
+                    logger.warning(
+                        "could not persist vNext dialogue turn (%s)",
+                        type(save_error).__name__,
+                    )
+                projector.persistence_failed(
+                    "chat_store_error",
+                    "回答已生成，但未能确认保存结果，请重试保存。",
+                )
+                terminal = ProductChatState(
+                    state=projector.snapshot(),
+                    trace=cached.trace_ref,
+                    catalog_visual_entities=list(cached.visual_entities),
+                )
+            if cancelled_while_saving:
+                raise asyncio.CancelledError
+            yield terminal
+        finally:
+            if save_task is not None and not save_task.done():
+                _result, error, _cancelled = await _wait_owned_save(save_task)
+                if error is not None:
+                    logger.warning(
+                        "vNext dialogue save did not complete after consumer close (%s)",
+                        type(error).__name__,
+                    )
 
     async def download_trace_bundle(self, *, browser_id: str, trace_id: str) -> bytes:
         if self._trace_store is None:
@@ -582,53 +855,6 @@ class VNextChatService:
         return state
 
     @staticmethod
-    def _completed_event(
-        replay: ChatDialogueTurnResult,
-        *,
-        trace_ref: ProductTraceRef | None = None,
-    ) -> ProductChatCompleted:
-        return ProductChatCompleted(
-            content=replay.assistant_message,
-            turn_index=replay.turn_index,
-            catalog_visual_entities=[
-                ProductVisualEntity.model_validate(entity)
-                for entity in replay.catalog_visual_entities
-            ],
-            trace=trace_ref,
-        )
-
-    async def _commit_cached(
-        self,
-        prepared: PreparedVNextChatTurn,
-        cached: _CompletedRequest,
-    ) -> AsyncIterator[ProductChatCompleted | ProductChatError]:
-        try:
-            committed = await self._repository.append_dialogue_turn(
-                browser_id=prepared.browser_id,
-                session_id=prepared.session_id,
-                request_id=prepared.request_id,
-                user_query=cached.query,
-                assistant_message=cached.final.content,
-                catalog_visual_entities=[entity.model_dump() for entity in cached.visual_entities],
-            )
-        except Exception as exc:
-            yield ProductChatError(
-                error_code="chat_store_error",
-                reason=str(exc),
-                trace=cached.trace_ref,
-            )
-            return
-        yield ProductChatCompleted(
-            content=committed.assistant_message,
-            turn_index=committed.turn_index,
-            catalog_visual_entities=[
-                ProductVisualEntity.model_validate(entity)
-                for entity in committed.catalog_visual_entities
-            ],
-            trace=cached.trace_ref,
-        )
-
-    @staticmethod
     def _runtime_stream(
         runtime: AgentRuntime,
         messages: list[Message],
@@ -660,11 +886,48 @@ def _browser_hash(browser_id: str) -> str:
     return hashlib.sha256(browser_id.encode("utf-8")).hexdigest()
 
 
+async def _wait_owned_save(
+    task: asyncio.Task[ChatDialogueTurnResult],
+) -> tuple[ChatDialogueTurnResult | None, Exception | None, bool]:
+    """Wait for a request-owned write without passing caller cancellation into it."""
+
+    caller_cancelled = False
+    while True:
+        try:
+            return await asyncio.shield(task), None, caller_cancelled
+        except asyncio.CancelledError:
+            if task.cancelled():
+                return None, RuntimeError("repository write was cancelled"), caller_cancelled
+            caller_cancelled = True
+        except Exception as exc:
+            return None, exc, caller_cancelled
+
+
+async def _finish_owned_save(task: asyncio.Task[ChatDialogueTurnResult]) -> None:
+    _result, error, _cancelled = await _wait_owned_save(task)
+    if error is not None:
+        logger.warning(
+            "vNext dialogue save did not complete after cancellation (%s)",
+            type(error).__name__,
+        )
+
+
+async def _close_upstream(events: AsyncIterator[object]) -> None:
+    close = getattr(events, "aclose", None)
+    if not callable(close):
+        return
+    try:
+        await close()
+    except Exception as exc:
+        logger.warning("could not close vNext Runtime stream (%s)", type(exc).__name__)
+
+
 __all__ = [
     "PreparedVNextChatTurn",
     "ProductChatCompleted",
     "ProductChatDelta",
     "ProductChatError",
+    "ProductChatState",
     "ProductTraceRef",
     "ProductTraceSummary",
     "VNextChatService",

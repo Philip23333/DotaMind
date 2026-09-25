@@ -50,6 +50,48 @@ def test_initial_state_has_stable_identity_and_execution_activity() -> None:
     assert state.error is None
 
 
+@pytest.mark.parametrize(
+    ("attempt_id", "kind"),
+    [(None, None), ("answer-attempt", "degraded")],
+)
+def test_restore_completed_server_answer_without_synthetic_activity(
+    attempt_id: str | None,
+    kind: str | None,
+) -> None:
+    request_id = uuid4()
+
+    projector = ProductRunStateProjector.from_completed_answer(
+        request_id,
+        f"assistant:{request_id}",
+        "stored answer",
+        attempt_id=attempt_id,
+        kind=kind,  # type: ignore[arg-type]
+    )
+
+    state = projector.snapshot()
+    assert state.request_id == request_id
+    assert state.assistant_message_id == f"assistant:{request_id}"
+    assert state.status == "completed"
+    assert state.stage == "answer"
+    assert state.activity == []
+    assert state.omitted_activity_count == 0
+    assert state.answer.attempt_id == attempt_id
+    assert state.answer.kind == kind
+    assert state.answer.text == "stored answer"
+    assert state.answer.status == "ready"
+    assert state.persistence == "pending"
+
+
+def test_restore_completed_answer_rejects_partial_attempt_identity() -> None:
+    with pytest.raises(ValueError, match="both be present"):
+        ProductRunStateProjector.from_completed_answer(
+            uuid4(),
+            "assistant:request",
+            "stored answer",
+            attempt_id="attempt-1",
+        )
+
+
 def test_normal_lifecycle_reconciles_final_text_and_saves_separately() -> None:
     projector = _projector()
     _begin_answer(projector)

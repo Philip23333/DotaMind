@@ -7,11 +7,17 @@ import pytest
 
 from app.agentic.conversation.models import DialogueTurn
 from app.application.chat_repository import ChatDialogueTurnResult
-from app.vnext.agent.events import AgentCancelled, AgentCompleted, AgentFailed, TextDelta
+from app.vnext.agent.events import (
+    AgentCancelled,
+    AgentCompleted,
+    AgentFailed,
+    AnswerAttemptStarted,
+    AnswerStageStarted,
+    TextDelta,
+)
 from app.vnext.llm.protocol import FinalMessage, UserMessage
 from app.vnext.product.chat import (
     ProductChatCompleted,
-    ProductChatDelta,
     ProductChatError,
     VNextChatService,
 )
@@ -102,9 +108,15 @@ def test_product_chat_replays_full_dialogue_then_persists_before_completed() -> 
     repository = _Repository()
     runtime = _Runtime(
         [
-            TextDelta(text="Ame "),
-            TextDelta(text="最近一场表现很好。"),
-            AgentCompleted(duration=0.1, final=FinalMessage(content="Ame 最近一场表现很好。")),
+            AnswerStageStarted(),
+            AnswerAttemptStarted(attempt_id="answer-1", answer_kind="primary"),
+            TextDelta(text="Ame ", attempt_id="answer-1"),
+            TextDelta(text="最近一场表现很好。", attempt_id="answer-1"),
+            AgentCompleted(
+                duration=0.1,
+                final=FinalMessage(content="Ame 最近一场表现很好。"),
+                attempt_id="answer-1",
+            ),
         ]
     )
     service = VNextChatService(  # type: ignore[arg-type]
@@ -122,11 +134,7 @@ def test_product_chat_replays_full_dialogue_then_persists_before_completed() -> 
         query="他最近一场表现如何？",
     )
 
-    assert [type(event) for event in events] == [
-        ProductChatDelta,
-        ProductChatDelta,
-        ProductChatCompleted,
-    ]
+    assert [type(event) for event in events] == [ProductChatCompleted]
     assert [message.role for message in runtime.messages] == ["user", "final", "user"]
     assert runtime.messages[-1].content == "他最近一场表现如何？"
     assert len(repository.appended) == 1
@@ -159,39 +167,27 @@ def test_product_chat_failure_does_not_create_a_dialogue_turn() -> None:
         query="query",
     )
 
-    assert events == [ProductChatError(error_code="agent_runtime_error", reason="runtime failed")]
+    assert events == [
+        ProductChatError(
+            error_code="agent_runtime_error",
+            reason="本次回答未能完成，请重试。",
+        )
+    ]
     assert repository.appended == []
 
 
 @pytest.mark.parametrize(
-    ("reason_code", "attempt_count", "expected_reason"),
+    ("reason_code", "attempt_count"),
     [
-        (
-            "summary_output_truncated",
-            1,
-            "上下文摘要未完整生成，本次任务已停止。原有会话记录已保留。",
-        ),
-        (
-            "transient_retries_exhausted",
-            1,
-            "生成上下文摘要时服务暂时不可用，未能成功。本次任务已停止，原有会话记录已保留。",
-        ),
-        (
-            "transient_retries_exhausted",
-            2,
-            "生成上下文摘要时服务暂时不可用，重试后仍未成功。本次任务已停止，原有会话记录已保留。",
-        ),
-        (
-            "stale_context_revision",
-            0,
-            "本次上下文整理未能完成，任务已停止。原有会话记录已保留。",
-        ),
+        ("summary_output_truncated", 1),
+        ("transient_retries_exhausted", 1),
+        ("transient_retries_exhausted", 2),
+        ("stale_context_revision", 0),
     ],
 )
-def test_compaction_failure_uses_safe_localized_reason(
+def test_compaction_failure_uses_safe_projection_message(
     reason_code: str,
     attempt_count: int,
-    expected_reason: str,
 ) -> None:
     repository = _Repository()
     trace_store = _TraceStore()
@@ -225,7 +221,7 @@ def test_compaction_failure_uses_safe_localized_reason(
     assert len(events) == 1
     assert isinstance(events[0], ProductChatError)
     assert events[0].error_code == "context_compaction_failed"
-    assert events[0].reason == expected_reason
+    assert events[0].reason == "本次回答未能完成，请重试。"
     assert "internal provider detail" not in events[0].reason
     assert events[0].trace is not None
     assert len(trace_store.saved) == 1
@@ -286,7 +282,12 @@ def test_product_chat_rejects_changed_query_for_failed_request_without_rerunning
         effective_after_conflict,
     ) = asyncio.run(exercise())
 
-    assert first_events == [ProductChatError(error_code="agent_failed", reason="failed")]
+    assert first_events == [
+        ProductChatError(
+            error_code="agent_failed",
+            reason="本次回答未能完成，请重试。",
+        )
+    ]
     assert second_events == [
         ProductChatError(
             error_code="idempotency_conflict",
@@ -342,13 +343,22 @@ def test_product_chat_persists_only_failed_runs_and_preserves_original_error_on_
         query="query",
     )
     assert unavailable_events == [
-        ProductChatError(error_code="agent_runtime_error", reason="failed")
+        ProductChatError(
+            error_code="agent_runtime_error",
+            reason="本次回答未能完成，请重试。",
+        )
     ]
 
 
 def test_product_chat_does_not_save_success_or_cancellation_traces() -> None:
     for event in (
-        AgentCompleted(duration=0.1, final=FinalMessage(content="done")),
+        AnswerStageStarted(),
+        AnswerAttemptStarted(attempt_id="answer-1", answer_kind="primary"),
+        AgentCompleted(
+            duration=0.1,
+            final=FinalMessage(content="done"),
+            attempt_id="answer-1",
+        ),
         AgentCancelled(error_code="agent_cancelled", error_message="cancelled"),
     ):
         trace_store = _TraceStore()
@@ -403,7 +413,17 @@ def test_product_chat_replays_without_running_the_agent() -> None:
 
 def test_product_chat_uses_the_injected_context_builder() -> None:
     repository = _Repository()
-    runtime = _Runtime([AgentCompleted(duration=0.1, final=FinalMessage(content="answer"))])
+    runtime = _Runtime(
+        [
+            AnswerStageStarted(),
+            AnswerAttemptStarted(attempt_id="answer-1", answer_kind="primary"),
+            AgentCompleted(
+                duration=0.1,
+                final=FinalMessage(content="answer"),
+                attempt_id="answer-1",
+            ),
+        ]
+    )
     context_builder = _ContextBuilder()
     service = VNextChatService(  # type: ignore[arg-type]
         repository,
@@ -437,7 +457,17 @@ def test_product_chat_bounds_runtime_history_without_mutating_durable_dialogue()
         )
         for index in range(1, 21)
     ]
-    runtime = _Runtime([AgentCompleted(duration=0.1, final=FinalMessage(content="answer"))])
+    runtime = _Runtime(
+        [
+            AnswerStageStarted(),
+            AnswerAttemptStarted(attempt_id="answer-1", answer_kind="primary"),
+            AgentCompleted(
+                duration=0.1,
+                final=FinalMessage(content="answer"),
+                attempt_id="answer-1",
+            ),
+        ]
+    )
     service = VNextChatService(  # type: ignore[arg-type]
         repository,
         runtime,
@@ -470,7 +500,15 @@ def test_product_chat_bounds_runtime_history_without_mutating_durable_dialogue()
 def test_product_chat_persists_and_returns_visual_metadata_without_changing_final_text() -> None:
     repository = _Repository()
     runtime = _Runtime(
-        [AgentCompleted(duration=0.1, final=FinalMessage(content="不朽尸王（Undying）"))]
+        [
+            AnswerStageStarted(),
+            AnswerAttemptStarted(attempt_id="answer-1", answer_kind="primary"),
+            AgentCompleted(
+                duration=0.1,
+                final=FinalMessage(content="不朽尸王（Undying）"),
+                attempt_id="answer-1",
+            ),
+        ]
     )
     entity = ProductVisualEntity(
         kind="hero",
@@ -544,7 +582,17 @@ def test_product_chat_runtime_factory_reuses_one_runtime_per_session() -> None:
     created: list[_Runtime] = []
 
     def factory() -> _Runtime:
-        runtime = _Runtime([AgentCompleted(duration=0.1, final=FinalMessage(content="done"))])
+        runtime = _Runtime(
+            [
+                AnswerStageStarted(),
+                AnswerAttemptStarted(attempt_id="answer-1", answer_kind="primary"),
+                AgentCompleted(
+                    duration=0.1,
+                    final=FinalMessage(content="done"),
+                    attempt_id="answer-1",
+                ),
+            ]
+        )
         created.append(runtime)
         return runtime
 

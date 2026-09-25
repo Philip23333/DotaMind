@@ -5,14 +5,14 @@
 This document defines the accepted target for the chat execution experience.
 Phases 1-4 are design-approved, including Markdown-only rendering and continued
 generation when switching threads. The product Run State schema, synchronous
-projection, deterministic projection tests, and standalone Runtime-event adapter
-that emits product-state snapshots are implemented. Runtime emits answer-stage
-and answer-attempt lifecycle events and publishes answer deltas during the model
-invocation. `VNextChatService` still consumes its legacy event path and does not
-use the new adapter; persistence/cache integration, HTTP transport, and frontend
-behavior remain pending. The current product protocol does not represent attempt
-reset, so browser fallback replacement is not yet supported. End-to-end
-acceptance is not complete. Phases 5-6 are planned, not implemented.
+projection, Runtime-event adapter, and `VNextChatService` integration with live
+answer state, dialogue persistence, completed-answer retry, and repository replay
+are implemented. Runtime emits answer-stage and answer-attempt lifecycle events
+and publishes answer deltas during the model invocation. The new internal service
+entry emits fallback resets and persistence outcomes. The existing HTTP route
+still uses a temporary terminal-only adapter because NDJSON cannot represent
+attempt resets; transport migration and frontend behavior remain pending.
+End-to-end acceptance is not complete. Phases 5-6 are planned, not implemented.
 Code remains the authority for current behavior. This document owns the product
 Run State contract; `../ROADMAP.md` owns delivery order.
 
@@ -138,6 +138,15 @@ cancellation race; stopping the client cannot promise rollback. An unconfirmed
 save must not be labeled saved, and history reload reconciles committed results.
 A disconnected browser cannot rely on receiving a terminal event or fallback.
 
+An initiated save uses one finite application-level persistence budget (15 seconds
+by default) for the repository write and its cooperative cancellation cleanup.
+On timeout, keep the completed answer and its cache; report persistence failure
+because commit outcome may be uncertain. A retry checks the idempotent repository
+record first, replays it if present, and otherwise retries saving the cached
+answer without rerunning Runtime. Optional visual metadata enrichment failure
+uses empty metadata and does not block canonical text persistence; actual
+repository failures remain visible.
+
 Preserve existing request-id idempotency and completed-answer caching: retrying
 a save with the same request must not rerun the model or append a duplicate turn
 while that cached answer remains available. Process restart recovery is outside
@@ -256,11 +265,12 @@ Do not defer these semantics to Phase 6.
 ### Phase 2: Runtime events and product projection
 
 Design approved. Runtime answer-stage and answer-attempt lifecycle events, live
-answer delivery during model invocation, and the standalone Runtime-to-Run-State
-adapter are implemented with deterministic tests. The adapter is not connected
-to `VNextChatService`, persistence/cache handling, HTTP, or frontend; those
-integration boundaries remain pending. This phase does not change the public
-transport protocol or UI.
+answer delivery during model invocation, the standalone Runtime-to-Run-State
+adapter, and its use by `VNextChatService` are implemented with deterministic
+tests. The service connects the state stream to dialogue persistence, cache
+retry, repository replay, and trace references. HTTP still uses the legacy
+terminal-only adapter; AssistantTransport and frontend integration remain
+pending. This phase does not change the public transport protocol or UI.
 
 **Decision:** Publish answer fragments during the model invocation and expose
 explicit answer-stage and answer-attempt boundaries. Keep one Runtime execution
@@ -284,8 +294,11 @@ retries. Primary and degraded answer paths publish each streamed text fragment
 through the Runtime event flow before the terminal model response. Execution and
 compaction text remain trace-only. The adapter in
 `apps/api/app/vnext/product/runtime_projection.py` maps these events into
-request-local product snapshots; the existing product chat service does not yet
-consume those snapshots.
+request-local product snapshots. `VNextChatService.stream_turn_states()` uses
+the same event mapper while retaining the canonical `FinalMessage` for history,
+cache, trace, and persistence. The legacy `stream_turn()` entry only translates
+terminal product states into its existing event types; it does not forward text
+deltas because that protocol cannot express fallback resets.
 
 | Event semantic | Runtime fact | Product projection |
 | --- | --- | --- |
@@ -343,15 +356,16 @@ live provider calls:
 - Preserve tool activity order, recoverable tool failures, no-tool success,
   tracing, and focused context-governance checks affected by the change.
 
-The standalone Runtime-to-Run-State boundary has deterministic coverage for live
-execution, answer growth, fallback replacement, and final completion. Connecting
-it to the product chat save/cache path remains separate work; HTTP/browser
-delivery is the Phase 3 acceptance boundary.
+The standalone Runtime-to-Run-State boundary and product service integration
+have deterministic coverage for live execution, answer growth, fallback
+replacement, completed-answer caching, save retry, replay, and cancellation
+around persistence. Product state is connected to dialogue persistence and
+trace references. HTTP/browser delivery is the Phase 3 acceptance boundary.
 
-This Runtime event behavior does not make the current HTTP protocol express
-attempt reset. Product/transport integration must select the new attempt and
-clear failed text before browser fallback replacement can be considered
-supported.
+The internal product state stream expresses attempt reset. The current HTTP
+protocol still cannot, so its temporary `stream_turn()` adapter delivers only a
+completed answer or terminal error while AssistantTransport and frontend work is
+pending. Browser fallback replacement is not supported through that old route.
 
 ### Phase 3: minimal transport and converter loop
 

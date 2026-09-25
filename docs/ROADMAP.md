@@ -138,30 +138,30 @@ required by the current design.
 
 The accepted design and acceptance criteria are defined in
 [`agent/product_run_state.md`](agent/product_run_state.md). Phase 1 lifecycle
-design is approved. The product Run State schema, synchronous projection, and
-deterministic projection tests are implemented, but this does not complete Phase
-1 end-to-end acceptance or connect the projection to product chat. Phase
-2 Runtime event/projection design, Phase 3 transport/converter, and Phase 4
-message/history design are approved. Phase 2's Runtime answer lifecycle event
-and identity portion, live delta delivery, and a standalone Runtime-to-Run-State
-adapter are implemented and independently validated. The adapter is not yet
-connected to `VNextChatService` persistence/cache handling; HTTP and frontend
-integration remain pending. Phases 3-4 implementation has not started. The
-current product protocol does not represent attempt reset, so browser fallback
-replacement is not yet supported. Thread switching keeps runs and connections
-alive within the page; actual disconnect cancels unfinished generation. Continuation
-after disconnect and stream resume are excluded. Generation errors replace
-streamed text with fallback in the same
-message; cancellation, disconnection, and save failures have separate semantics.
+design is approved. The product Run State schema, synchronous projection,
+deterministic tests, and service integration with Runtime projection, persistence,
+completed-answer retry, and repository replay are implemented. This does not
+complete end-to-end acceptance. Phase 2 Runtime lifecycle events, live delta
+delivery, and the event-to-state adapter are implemented and validated. Phase 3
+transport/converter and Phase 4 message/history designs are approved, but their
+implementation has not started. The current HTTP route still uses a temporary
+terminal-only adapter because NDJSON cannot express attempt resets;
+AssistantTransport and frontend integration remain pending. Thread switching keeps runs
+and connections alive within the page; actual disconnect cancels unfinished
+generation. Continuation after disconnect and stream resume are excluded.
+Generation errors replace streamed text with fallback in the same message;
+cancellation, disconnection, and save failures have separate semantics.
+Started saves use a unified finite application-level budget; timeout preserves the
+answer and cache for idempotent lookup/retry. Optional visual metadata failure
+does not block canonical answer persistence.
 Work one boundary at a time in this order:
 
 1. Define the product state, message identities, history boundary, cancellation,
    persistence, interruption, and retry semantics.
 2. Runtime answer-stage/attempt lifecycle events and identities are implemented
    with deterministic tests, primary/degraded answer fragments are delivered
-   during the model invocation, and a request-local event-to-state adapter emits
-   changed snapshots. Integration with the product chat save/cache path remains
-   pending.
+   during the model invocation, and the request-local event-to-state adapter is
+   connected to `VNextChatService` persistence, cache retry, and replay.
 3. Connect AssistantTransport and a minimal frontend converter in one end-to-end
    path, preserving authorization and request idempotency.
 4. Integrate independent thread runs, messages, history, and standard Markdown
