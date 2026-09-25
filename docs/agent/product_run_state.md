@@ -5,13 +5,14 @@
 This document defines the accepted target for the chat execution experience.
 Phases 1-4 are design-approved, including Markdown-only rendering and continued
 generation when switching threads. The product Run State schema, synchronous
-projection, and deterministic projection tests are implemented. Runtime now
-emits answer-stage and answer-attempt lifecycle events and publishes answer
-deltas during the model invocation. The product projection is not connected to
-Runtime or product chat; HTTP transport and frontend behavior remain pending.
-The current product protocol does not represent attempt reset, so this Runtime
-milestone does not establish browser fallback replacement. End-to-end acceptance
-is not complete. Phases 5-6 are planned, not implemented.
+projection, deterministic projection tests, and standalone Runtime-event adapter
+that emits product-state snapshots are implemented. Runtime emits answer-stage
+and answer-attempt lifecycle events and publishes answer deltas during the model
+invocation. `VNextChatService` still consumes its legacy event path and does not
+use the new adapter; persistence/cache integration, HTTP transport, and frontend
+behavior remain pending. The current product protocol does not represent attempt
+reset, so browser fallback replacement is not yet supported. End-to-end
+acceptance is not complete. Phases 5-6 are planned, not implemented.
 Code remains the authority for current behavior. This document owns the product
 Run State contract; `../ROADMAP.md` owns delivery order.
 
@@ -199,12 +200,11 @@ this requirement. Do not simulate streaming by replaying buffered completed text
 with a frontend typing animation. Chunk boundaries need not match individual
 tokens; fragments must reach the browser before the model call completes.
 
-Changing wire format alone is insufficient: current model invocation code
-buffers publishable deltas until the invocation returns. Phase 2 must remove
-that buffering from the answer-delivery path while keeping execution text and
-raw reasoning out of the final-answer channel. Final completion reconciles the
-streamed text with the canonical final once, without appending it a second time.
-Persistence starts only after canonical completion and must not gate live text.
+The Runtime answer path publishes deltas during model invocation while keeping
+execution text and raw reasoning out of the final-answer channel. The product
+projection reconciles the canonical final once, without appending it a second
+time. Persistence starts only after canonical completion and must not gate live
+text.
 
 ## History and metadata
 
@@ -236,9 +236,10 @@ not a claim that Runtime behavior is implemented.
 
 The `ProductRunState` schema and synchronous `ProductRunStateProjector` are
 implemented in `apps/api/app/vnext/product/run_state.py`, with deterministic
-tests in `apps/api/tests/vnext/test_product_run_state.py`. This establishes the
-product state projection only; Runtime events, product chat, transport, and
-frontend remain unconnected, so the phase's end-to-end acceptance is pending.
+tests in `apps/api/tests/vnext/test_product_run_state.py`. Runtime events are
+mapped by the separate Phase 2 adapter; this phase's state model remains
+independent of Runtime execution, product chat, transport, and frontend. The
+broader chat experience acceptance is still pending.
 
 The implemented product state defines request and assistant-message identity,
 ordered bounded activity, independent run/stage/answer/persistence status, safe
@@ -254,10 +255,11 @@ Do not defer these semantics to Phase 6.
 
 ### Phase 2: Runtime events and product projection
 
-Design approved. Runtime answer-stage and answer-attempt lifecycle events, plus
-live answer delivery during model invocation, are implemented with deterministic
-tests. Product projection integration and phase acceptance remain pending. This
-phase changes Runtime event production and product projection, not the public
+Design approved. Runtime answer-stage and answer-attempt lifecycle events, live
+answer delivery during model invocation, and the standalone Runtime-to-Run-State
+adapter are implemented with deterministic tests. The adapter is not connected
+to `VNextChatService`, persistence/cache handling, HTTP, or frontend; those
+integration boundaries remain pending. This phase does not change the public
 transport protocol or UI.
 
 **Decision:** Publish answer fragments during the model invocation and expose
@@ -280,8 +282,10 @@ The Runtime emits `AnswerStageStarted`, `AnswerAttemptStarted`, and
 paths provide that identity, including deterministic answers and overflow
 retries. Primary and degraded answer paths publish each streamed text fragment
 through the Runtime event flow before the terminal model response. Execution and
-compaction text remain trace-only. The product projector does not yet consume
-these events.
+compaction text remain trace-only. The adapter in
+`apps/api/app/vnext/product/runtime_projection.py` maps these events into
+request-local product snapshots; the existing product chat service does not yet
+consume those snapshots.
 
 | Event semantic | Runtime fact | Product projection |
 | --- | --- | --- |
@@ -339,9 +343,10 @@ live provider calls:
 - Preserve tool activity order, recoverable tool failures, no-tool success,
   tracing, and focused context-governance checks affected by the change.
 
-Phase exit: a consumer without a browser can observe live execution, answer
-growth, replacement, and final completion correctly. HTTP/browser delivery is
-the separate Phase 3 acceptance boundary.
+The standalone Runtime-to-Run-State boundary has deterministic coverage for live
+execution, answer growth, fallback replacement, and final completion. Connecting
+it to the product chat save/cache path remains separate work; HTTP/browser
+delivery is the Phase 3 acceptance boundary.
 
 This Runtime event behavior does not make the current HTTP protocol express
 attempt reset. Product/transport integration must select the new attempt and
