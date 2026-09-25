@@ -8,11 +8,14 @@ generation when switching threads. The product Run State schema, synchronous
 projection, Runtime-event adapter, and `VNextChatService` integration with live
 answer state, dialogue persistence, completed-answer retry, and repository replay
 are implemented. Runtime emits answer-stage and answer-attempt lifecycle events
-and publishes answer deltas during the model invocation. The new internal service
-entry emits fallback resets and persistence outcomes. The existing HTTP route
-still uses a temporary terminal-only adapter because NDJSON cannot represent
-attempt resets; transport migration and frontend behavior remain pending.
-End-to-end acceptance is not complete. Phases 5-6 are planned, not implemented.
+and publishes answer deltas during the model invocation. The product state stream
+is connected to the official Python AssistantTransport encoder, and a real
+loopback HTTP test verifies live deltas, fallback resets, persistence outcomes,
+disconnect cancellation, and bounded save cleanup against `assistant-stream`
+Python 0.0.36 and JavaScript 0.3.33. The new `/transport` endpoint is available,
+while the existing chat UI
+still uses the old route; frontend integration and end-to-end product acceptance
+remain pending. Phases 4-6 are planned, not implemented.
 Code remains the authority for current behavior. This document owns the product
 Run State contract; `../ROADMAP.md` owns delivery order.
 
@@ -268,9 +271,9 @@ Design approved. Runtime answer-stage and answer-attempt lifecycle events, live
 answer delivery during model invocation, the standalone Runtime-to-Run-State
 adapter, and its use by `VNextChatService` are implemented with deterministic
 tests. The service connects the state stream to dialogue persistence, cache
-retry, repository replay, and trace references. HTTP still uses the legacy
-terminal-only adapter; AssistantTransport and frontend integration remain
-pending. This phase does not change the public transport protocol or UI.
+retry, repository replay, and trace references. The existing `/messages` route
+still uses the legacy terminal-only adapter. Phase 3 adds a separate
+AssistantTransport endpoint; this phase does not switch the normal UI path.
 
 **Decision:** Publish answer fragments during the model invocation and expose
 explicit answer-stage and answer-attempt boundaries. Keep one Runtime execution
@@ -362,17 +365,27 @@ replacement, completed-answer caching, save retry, replay, and cancellation
 around persistence. Product state is connected to dialogue persistence and
 trace references. HTTP/browser delivery is the Phase 3 acceptance boundary.
 
-The internal product state stream expresses attempt reset. The current HTTP
-protocol still cannot, so its temporary `stream_turn()` adapter delivers only a
-completed answer or terminal error while AssistantTransport and frontend work is
-pending. Browser fallback replacement is not supported through that old route.
+The internal product state stream expresses attempt reset. The existing
+`/messages` protocol still cannot, so its temporary `stream_turn()` adapter
+delivers only a completed answer or terminal error. The separate `/transport`
+route carries attempt resets; the frontend remains on the old route until its
+converter and history integration are complete.
 
 ### Phase 3: minimal transport and converter loop
 
-Design approved; implementation and executable acceptance are pending. Connect
-send -> activity -> live answer -> optional fallback replacement -> completion
-and persistence through a real HTTP/browser path. Include a minimal frontend
-converter here; polished process UI belongs to Phase 5.
+The backend transport endpoint and its protocol loopback acceptance are
+implemented. The browser-facing `/transport` route accepts one new user message,
+projects server-owned product state using the official Python encoder, and is
+covered by real loopback HTTP tests for live text, fallback replacement,
+completion, persistence, and disconnect cancellation. A captured HTTP stream is
+also decoded by the exact official JavaScript package version used by
+assistant-ui. The actual chat frontend has not switched to this endpoint; the old
+route remains the normal UI path until the Phase 4 integration is complete.
+
+The remaining Phase 3 product boundary is the frontend converter and UI hookup:
+connect send -> activity -> live answer -> optional fallback replacement ->
+completion and persistence through a real browser path. Polished process UI
+belongs to Phase 5.
 
 **Decision:** AssistantTransport owns state replication; Product retains business
 completion and persistence. Cancel unfinished generation when the connection

@@ -5,15 +5,22 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from uuid import UUID
 
+from assistant_stream import RunController, create_run
+from assistant_stream.serialization import AssistantTransportResponse
 from fastapi import APIRouter, Header, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
+from pydantic import ValidationError
 
+from app.api.v1.assistant_transport_schemas import (
+    AssistantTransportRequest,
+)
 from app.api.v1.vnext_chat_schemas import ChatMessageRequest
 from app.application.chat_repository import (
     ChatIdempotencyConflictError,
     ChatNotFoundError,
     ChatRepositoryError,
 )
+from app.vnext.product.assistant_transport import forward_product_states
 from app.vnext.product.chat import (
     ProductChatCompleted,
     ProductChatError,
@@ -85,6 +92,87 @@ async def post_message(
         media_type="application/x-ndjson",
         headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"},
     )
+
+
+@router.post("/{session_id}/transport", response_model=None)
+async def post_assistant_transport(
+    session_id: UUID,
+    request: Request,
+    x_dotamind_browser_id: str | None = Header(default=None),
+) -> AssistantTransportResponse | JSONResponse:
+    if not x_dotamind_browser_id:
+        return _error("browser_id_required", "browser identity is required", 422)
+    service = _service(request)
+    if service is None:
+        return _error("unavailable", "vNext chat is temporarily unavailable", 503)
+
+    try:
+        body = AssistantTransportRequest.model_validate(await request.json())
+    except (ValidationError, ValueError):
+        return _error(
+            "invalid_transport_request",
+            "request does not match the supported AssistantTransport command",
+            422,
+        )
+    if len(body.commands) != 1:
+        return _error(
+            "unsupported_transport_command",
+            "exactly one new user message is supported",
+            422,
+        )
+
+    command = body.commands[0]
+    if command.source_id is not None:
+        return _error(
+            "unsupported_transport_command",
+            "message edits and branches are not supported",
+            422,
+        )
+    if body.thread_id is not None:
+        try:
+            body_session_id = UUID(body.thread_id)
+        except ValueError:
+            return _error("thread_mismatch", "threadId does not match the chat session", 409)
+        if body_session_id != session_id:
+            return _error("thread_mismatch", "threadId does not match the chat session", 409)
+
+    query = "".join(part.text for part in command.message.parts)
+    try:
+        validated = ChatMessageRequest(request_id=body.request_id, query=query)
+    except ValidationError:
+        return _error("invalid_query", "query must contain 1 to 20000 characters", 422)
+
+    try:
+        prepared = await service.prepare_turn(
+            browser_id=x_dotamind_browser_id,
+            session_id=session_id,
+            request_id=validated.request_id,
+            query=validated.query,
+        )
+    except ChatIdempotencyConflictError:
+        return _error(
+            "idempotency_conflict",
+            "request_id has already been used with a different query",
+            409,
+        )
+    except ChatRepositoryError as exc:
+        return _repository_error(exc)
+
+    async def run_callback(controller: RunController) -> None:
+        await forward_product_states(
+            prepared,
+            service.stream_turn_states(prepared),
+            controller,
+        )
+
+    response = AssistantTransportResponse(create_run(run_callback))
+    response.headers.update(
+        {
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+        }
+    )
+    return response
 
 
 @router.get("/{session_id}/traces", response_model=None)
