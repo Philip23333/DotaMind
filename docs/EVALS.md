@@ -142,6 +142,20 @@ the existing raw `artifact.read` checkpoint path. These checks verify Runtime
 source eligibility and lifecycle only; checkpoint success does not certify
 business facts.
 
+### Planned Steam player and game-detail contract checks
+
+Deterministic contract tests cover strict Steam32 and Valve game-ID inputs,
+closed outer schemas, provenance literals, timezone-aware retrieval timestamps,
+profile-presence semantics, recent-game count and duplicate-ID bounds, and
+lossless JSON-compatible source fields. A composition check passes a game ID
+from a recent-game result directly into the detail input. The capability names
+must remain absent from the product registry until provider implementations
+and their focused acceptance are complete. Later live or fixture-backed
+cross-source evaluation must verify any proposed relationship between a
+Steam32 account and a PandaScore professional player from explicit evidence;
+the shared appearance of a player or event is not sufficient. These tests do
+not call real providers or establish source business validity.
+
 Context Governance evaluation measures answer omissions, complete-request
 peaks, summary and locator overhead, successful compactions, recovery attempts,
 Artifact rereads, provider-reported tokens, and latency. A provider-confirmed

@@ -30,6 +30,17 @@ generic game statistics.
 - Continue with references such as "game two", "that player", or "their previous
   match" without restating the whole question.
 
+## Planned Steam-account and game-detail scope
+
+The next player-data slice is intended to let a user supply a Steam32 account
+ID to inspect source-provided profile data and recent games, then read existing
+single-game details for analysis. The account need not belong to a professional
+player. DotaMind will not automatically associate it with a PandaScore
+professional-player identity. “Parse a game” in this scope means reading and
+analyzing an existing game-detail record; submitting a replay for parsing is
+not included. These contracts are not registered in the product tool catalog
+yet, so users cannot call these capabilities at this stage.
+
 ## Product boundaries
 
 Answers distinguish provider facts, identity inferences, and model interpretation.

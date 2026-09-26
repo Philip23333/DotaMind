@@ -190,3 +190,14 @@ history/metadata boundary, and phase acceptance are owned by
 - scenario-specific workflows embedded in the generic registry;
 - provider routers before a second concrete implementation exists;
 - Artifact corpus discovery or hidden provider fetches.
+
+## Planned Steam player and game-detail boundaries
+
+The `capabilities/player` and `capabilities/game` contracts define closed
+inputs, provenance, and source-shaped JSON outputs for future STRATZ and
+OpenDota integrations. They do not modify application composition or the
+currently registered tool inventory. A later implementation must place source
+validation and recent-game ordering checks below these contracts, verify that
+the returned Valve game ID matches the requested ID, and register each tool
+only after focused acceptance. Steam32 and PandaScore player identities remain
+separate unless a future evidence-backed identity capability is designed.

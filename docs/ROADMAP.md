@@ -87,6 +87,18 @@ before a second concrete implementation demonstrates the need.
 4. Register the capability only after its focused acceptance passes.
 5. Remove transitional code once the replacement is accepted.
 
+## Steam player and game-detail capability contracts (contract commit complete)
+
+- Define strict Steam32 inputs for player profile and recent-game observations,
+  plus a Valve game-ID input for existing single-game detail.
+- Preserve provider provenance and source business objects as JSON while
+  keeping Steam accounts separate from PandaScore professional-player IDs.
+- Contract models and deterministic acceptance tests are in place. STRATZ and
+  OpenDota provider implementations, source-semantic validation, and product
+  tool registration remain pending; these capabilities are not yet callable.
+- The planned detail path reads an existing game record. Replay submission and
+  replay parsing are outside this scope.
+
 ## Context Governance: Runtime-driven history compaction
 
 The next phase is defined by

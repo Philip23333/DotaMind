@@ -199,3 +199,24 @@ capability at a time. Each tool owns its supported fields and output contract;
 the Controller must copy names and arguments from the rendered catalog and must
 not invent provider-specific parameters. Domain workflows belong to the
 capability contract and its tests, not to this generic registry baseline.
+
+## Planned Steam player and game-detail contracts (not registered)
+
+The capability contracts define the intended inputs and outputs for
+`player.profile(steam_account_id)`,
+`player.recent_games(steam_account_id, limit=5)`, and
+`game.detail(valve_game_id)`. Steam account inputs are strict Steam32 integers;
+they are distinct from PandaScore professional-player IDs. The planned player
+outputs carry a `stratz` source marker, while game details carry an `opendota`
+source marker and retain the source business object as JSON. These contracts
+do not add the three names to the tool catalog; provider access and explicit
+registration remain future work.
+
+`found=false` means only that the profile response did not contain a usable
+profile object; it does not establish that the account is absent or has no Dota
+2 history. An empty recent-games list is valid, and fewer rows than requested
+does not prove history completeness. The future STRATZ adapter must verify the
+upstream selection and ordering semantics before describing rows as recent.
+The future game-detail adapter must reject unusable or mismatched source detail
+rather than returning an empty successful result. Reading existing game data
+does not submit a replay for parsing.
