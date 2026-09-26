@@ -10,14 +10,12 @@ import { TestObserverDrawer } from "@/components/test-observer-drawer";
 import { Button } from "@/components/ui/button";
 import { Thread } from "@/components/thread";
 import {
-  clearStoredActiveSessionId,
   getOrCreateBrowserId,
-  storeActiveSessionId,
 } from "@/lib/dotamind-api";
 import { DotaMindRuntimeProvider } from "@/lib/assistant-ui/runtime-provider";
 import {
   DOTAMIND_THREAD_METADATA_EVENT,
-  markDotaMindSessionRead,
+  useActiveSessionReadState,
 } from "@/lib/assistant-ui/thread-unread";
 
 export const Assistant = () => {
@@ -39,14 +37,7 @@ function DotaMindChatShell({ browserId }: { browserId: string }) {
   const isLoading = useAuiState((state) => state.threads.isLoading);
   const isThreadLoading = useAuiState((state) => state.thread.isLoading);
 
-  useEffect(() => {
-    if (activeSessionId) {
-      storeActiveSessionId(activeSessionId);
-      markDotaMindSessionRead(activeSessionId);
-    } else {
-      clearStoredActiveSessionId();
-    }
-  }, [activeSessionId]);
+  useActiveSessionReadState(activeSessionId);
 
   useEffect(() => {
     const reloadThreads = () => void aui.threads.reload();

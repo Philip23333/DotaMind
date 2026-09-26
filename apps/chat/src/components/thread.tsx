@@ -26,7 +26,11 @@ import {
 } from "lucide-react";
 import { siDota2 } from "simple-icons";
 import { DOTAMIND_ASSISTANT_METADATA_KEY } from "@/lib/assistant-ui/migration-contract";
-import { useMemo, type FC } from "react";
+import { useEffect, useMemo, useRef, type FC } from "react";
+import { createUuidV4 } from "@/lib/uuid";
+import { getChatSession, transcriptToInitialMessages } from "@/lib/dotamind-api";
+import { useDotaMindThreadState } from "@/lib/assistant-ui/dotamind-transport-runtime";
+import type { DotamindMessageMetadata } from "@/lib/assistant-ui/dotamind-run-state";
 
 export const Thread: FC<{ browserId?: string }> = ({ browserId }) => {
   return (
@@ -62,7 +66,7 @@ export const Thread: FC<{ browserId?: string }> = ({ browserId }) => {
             >
               <ArrowDownIcon className="size-4" />
             </ThreadPrimitive.ScrollToBottom>
-            <Composer />
+            <Composer browserId={browserId} />
             <a
               href="https://beian.miit.gov.cn/"
               target="_blank"
@@ -93,8 +97,11 @@ const Welcome: FC = () => (
 );
 
 const ThreadMessage: FC<{ browserId?: string }> = ({ browserId }) => {
+  const messageId = useAuiState((state) => state.message.id);
   const role = useAuiState((state) => state.message.role);
-  return role === "user" ? <UserMessage /> : <AssistantMessage browserId={browserId} />;
+  return role === "user"
+    ? <UserMessage key={messageId} />
+    : <AssistantMessage key={messageId} browserId={browserId} />;
 };
 
 const UserMessage: FC = () => (
@@ -109,6 +116,7 @@ const AssistantMessage: FC<{ browserId?: string }> = ({ browserId }) => {
   const messageId = useAuiState((state) => state.message.id);
   const metadata = useAuiState((state) => state.message.metadata?.custom);
   const trace = useMemo(() => traceFromMetadata(metadata), [metadata]);
+  const transport = useMemo(() => transportMetadataFromCustom(metadata), [metadata]);
   const runtimeInfo = useRuntimeInfo(messageId);
 
   return (
@@ -125,7 +133,23 @@ const AssistantMessage: FC<{ browserId?: string }> = ({ browserId }) => {
         {runtimeInfo?.status === "running" && runtimeInfo.phase === "answering" && (
           <p className="mb-2 text-xs text-muted-foreground">生成中 · 待核验</p>
         )}
+        {transport?.source === "pending" && transport.connection_status === "sending" && (
+          <p className="mb-2 text-xs text-muted-foreground">正在连接…</p>
+        )}
+        {transport?.run?.status === "running" && transport.run.answer.status === "pending" && (
+          <p className="mb-2 text-xs text-muted-foreground">正在分析…</p>
+        )}
         <MessagePrimitive.Parts components={{ Text: MarkdownText }} />
+        {transport?.persistence === "failed" && (
+          <p role="status" className="mt-2 text-xs text-destructive">
+            回答已生成，但未能确认保存结果，请重试保存。
+          </p>
+        )}
+        {transport?.connection_status === "error" && (
+          <p role="status" className="mt-2 text-xs text-destructive">
+            连接中断，已保留当前可见内容。
+          </p>
+        )}
         <MessagePrimitive.Error>
           <ErrorPrimitive.Root className="mt-2 rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
             <ErrorPrimitive.Message />
@@ -170,15 +194,72 @@ function traceFromMetadata(custom: unknown): { trace_id: string; expires_at: str
     : null;
 }
 
-const Composer: FC = () => {
+const Composer: FC<{ browserId?: string }> = ({ browserId }) => {
   const aui = useAui();
   const isRunning = useAuiState((state) => state.thread.isRunning);
   const isNewThread = useAuiState((state) => state.thread.messages.length === 0);
+  const { entry, snapshot } = useDotaMindThreadState();
+  const remoteSessionId = useAuiState((state) => state.threadListItem.remoteId);
+  const threadStatus = useAuiState((state) => state.threadListItem.status);
+  const composerText = useAuiState((state) => state.composer.text);
+  const submitLock = useRef(false);
+  const isBusy = isRunning || snapshot.is_submitting || snapshot.connection?.status === "sending";
+
+  useEffect(() => {
+    if (isRunning || (snapshot.connection && snapshot.connection.status !== "sending")) {
+      submitLock.current = false;
+    }
+  }, [isRunning, snapshot.connection]);
+
+  const sendMessage = async () => {
+    if (submitLock.current || isBusy || !aui.composer.getState().text.trim()) return;
+    if (!entry.beginSubmission()) return;
+    submitLock.current = true;
+    let accepted = false;
+    let failureScope: "initialization" | "history" = "initialization";
+    try {
+      let sessionId = aui.threadListItem.getState().remoteId;
+      if (!sessionId) {
+        if (threadStatus !== "new") throw new Error("session initialization failed");
+        const initialized = await aui.threadListItem.initialize();
+        sessionId = initialized.remoteId;
+        entry.markNewSession(sessionId);
+        await entry.waitForSessionRenderCommit(sessionId);
+      } else {
+        failureScope = "history";
+        await entry.loadHistory(sessionId, async (signal) => {
+          if (!browserId) throw new Error("browser identity is unavailable");
+          const response = await getChatSession(browserId, sessionId!, signal);
+          return transcriptToInitialMessages(response);
+        });
+        if (entry.getSnapshot().history_status !== "ready") throw new Error("history unavailable");
+        await entry.waitForSessionRenderCommit(sessionId);
+      }
+
+      entry.captureVisibleMessages(aui.thread.getState().messages);
+      entry.acceptRequest({
+        session_id: sessionId,
+        request_id: createUuidV4(),
+        created_at: new Date().toISOString(),
+        command: null,
+      });
+      accepted = true;
+      aui.composer.send();
+    } catch {
+      if (accepted) {
+        const request = entry.getSnapshot().accepted_request;
+        if (request) entry.setConnection(request.request_id, "error");
+      } else {
+        entry.finishSubmissionWithError(failureScope);
+        submitLock.current = false;
+      }
+    }
+  };
 
   const sendTiUpdatePrompt = () => {
-    if (isRunning) return;
+    if (isBusy) return;
     aui.composer.setText("本届TI最新战况");
-    aui.composer.send();
+    void sendMessage();
   };
 
   return (
@@ -198,7 +279,13 @@ const Composer: FC = () => {
           </Button>
         </div>
       )}
-      <ComposerPrimitive.Root className="rounded-3xl border bg-popover p-1.5 shadow-sm focus-within:ring-2 focus-within:ring-ring/30 sm:p-2">
+      <ComposerPrimitive.Root
+        onSubmit={(event) => {
+          event.preventDefault();
+          void sendMessage();
+        }}
+        className="rounded-3xl border bg-popover p-1.5 shadow-sm focus-within:ring-2 focus-within:ring-ring/30 sm:p-2"
+      >
         <ComposerPrimitive.Input
           placeholder="询问英雄、阵容、对线或版本数据…"
           className="max-h-40 min-h-12 w-full min-w-0 resize-none bg-transparent px-3 py-2 text-base outline-none placeholder:text-muted-foreground"
@@ -208,23 +295,62 @@ const Composer: FC = () => {
           aria-label="消息输入框"
         />
         <div className="flex justify-end px-1 pb-1">
-          <AuiIf condition={(state) => !state.thread.isRunning}>
-            <ComposerPrimitive.Send
-              render={
-                <Button size="icon" className="size-8 rounded-full" aria-label="发送消息" />
+          {!isBusy && (
+            <Button
+              type="button"
+              size="icon"
+              className="size-8 rounded-full"
+              aria-label="发送消息"
+              disabled={
+                !composerText.trim() ||
+                snapshot.history_status !== "ready" ||
+                snapshot.is_submitting
               }
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => void sendMessage()}
             >
               <ArrowUpIcon className="size-4" />
-            </ComposerPrimitive.Send>
-          </AuiIf>
-          <AuiIf condition={(state) => state.thread.isRunning}>
+            </Button>
+          )}
+          {isBusy && (
             <DotaMindStopButton />
-          </AuiIf>
+          )}
         </div>
+        {snapshot.is_submitting && (
+          <p role="status" className="px-3 pb-2 text-xs text-muted-foreground">正在准备会话…</p>
+        )}
+        {snapshot.notice === "initialization" && (
+          <p role="alert" className="px-3 pb-2 text-xs text-destructive">无法建立聊天，请重试。</p>
+        )}
+        {snapshot.notice === "history" && (
+          <div className="flex items-center gap-2 px-3 pb-2 text-xs text-destructive">
+            <span role="alert">聊天记录未能加载。</span>
+            {remoteSessionId && browserId && (
+              <button
+                type="button"
+                className="underline underline-offset-2"
+                onClick={() => void entry.loadHistory(remoteSessionId, async (signal) => {
+                  const response = await getChatSession(browserId, remoteSessionId, signal);
+                  return transcriptToInitialMessages(response);
+                })}
+              >
+                重试
+              </button>
+            )}
+          </div>
+        )}
       </ComposerPrimitive.Root>
     </div>
   );
 };
+
+function transportMetadataFromCustom(custom: unknown): DotamindMessageMetadata | null {
+  if (!custom || typeof custom !== "object") return null;
+  const value = (custom as Record<string, unknown>)[DOTAMIND_ASSISTANT_METADATA_KEY];
+  if (!value || typeof value !== "object") return null;
+  const metadata = value as DotamindMessageMetadata;
+  return typeof metadata.request_id === "string" ? metadata : null;
+}
 
 const DotaMindStopButton: FC = () => {
   const aui = useAui();

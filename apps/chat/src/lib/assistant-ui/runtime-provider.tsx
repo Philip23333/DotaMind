@@ -2,22 +2,16 @@
 
 import {
   AssistantRuntimeProvider,
-  useLocalRuntime,
   useRemoteThreadListRuntime,
 } from "@assistant-ui/react";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 
-import { useDotaMindHistoryAdapter } from "./dotamind-history-adapter";
-import { useDotaMindModelAdapter } from "./dotamind-model-adapter";
+import {
+  DotaMindThreadStateProvider,
+  useDotaMindTransportThreadRuntime,
+} from "./dotamind-transport-runtime";
+import { DotaMindThreadStateRegistry } from "./dotamind-thread-state";
 import { createDotaMindThreadListAdapter } from "./dotamind-thread-list-adapter";
-
-export function useDotaMindThreadRuntime(browserId: string) {
-  const modelAdapter = useDotaMindModelAdapter(browserId);
-  const historyAdapter = useDotaMindHistoryAdapter(browserId);
-  return useLocalRuntime(modelAdapter, {
-    adapters: { history: historyAdapter },
-  });
-}
 
 export function DotaMindRuntimeProvider({
   browserId,
@@ -27,12 +21,13 @@ export function DotaMindRuntimeProvider({
   children: ReactNode;
 }) {
   const adapter = useMemo(() => createDotaMindThreadListAdapter(browserId), [browserId]);
+  const threadStates = useMemo(() => new DotaMindThreadStateRegistry(browserId), [browserId]);
   const [threadId, setThreadId] = useState<string | undefined>();
   const runtimeHook = useCallback(
     function useDotaMindThreadRuntimeHook() {
-      return useDotaMindThreadRuntime(browserId);
+      return useDotaMindTransportThreadRuntime(browserId, threadStates);
     },
-    [browserId],
+    [browserId, threadStates],
   );
   const onThreadIdChange = useCallback((nextThreadId: string | undefined) => {
     setThreadId(nextThreadId);
@@ -44,5 +39,9 @@ export function DotaMindRuntimeProvider({
     onThreadIdChange,
   });
 
-  return <AssistantRuntimeProvider runtime={runtime}>{children}</AssistantRuntimeProvider>;
+  return (
+    <DotaMindThreadStateProvider registry={threadStates}>
+      <AssistantRuntimeProvider runtime={runtime}>{children}</AssistantRuntimeProvider>
+    </DotaMindThreadStateProvider>
+  );
 }

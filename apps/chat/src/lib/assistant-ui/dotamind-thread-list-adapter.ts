@@ -11,14 +11,13 @@ import {
   type ChatRunStatus,
   setChatSessionPinned,
 } from "@/lib/dotamind-api";
-import { getSessionUnreadCount, DOTAMIND_THREAD_METADATA_EVENT } from "./thread-unread";
+import { DOTAMIND_THREAD_METADATA_EVENT } from "./thread-unread";
 
 export type DotaMindThreadCustom = {
   isPinned: boolean;
   updatedAt: string;
   activeRunId: string | null;
   activeRunStatus: ChatRunStatus | null;
-  unread: number;
 };
 
 function customMetadata(session: ChatSessionSummary): DotaMindThreadCustom {
@@ -27,7 +26,6 @@ function customMetadata(session: ChatSessionSummary): DotaMindThreadCustom {
     updatedAt: session.updated_at,
     activeRunId: session.active_run?.run_id ?? null,
     activeRunStatus: session.active_run?.status ?? null,
-    unread: getSessionUnreadCount(session.session_id),
   };
 }
 

@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { useSessionUnreadCount } from "@/lib/assistant-ui/thread-unread";
 
 type ChatSidebarProps = {
   disabled?: boolean;
@@ -94,13 +95,7 @@ export function ChatSidebar({
                     remoteId={remoteId}
                     title={threadListItem.title ?? "新聊天"}
                     isPinned={threadListItem.custom?.isPinned === true}
-                    unreadCount={
-                      typeof threadListItem.custom?.unread === "number"
-                        ? threadListItem.custom.unread
-                        : 0
-                    }
                     disabled={disabled}
-                    onClose={onClose}
                     onRename={onRename}
                     onPin={onPin}
                     onDelete={onDelete}
@@ -119,9 +114,7 @@ function ChatSidebarItem({
   remoteId,
   title,
   isPinned,
-  unreadCount,
   disabled,
-  onClose,
   onRename,
   onPin,
   onDelete,
@@ -129,14 +122,14 @@ function ChatSidebarItem({
   remoteId: string;
   title: string;
   isPinned: boolean;
-  unreadCount: number;
   disabled: boolean;
-  onClose?: () => void;
   onRename: (sessionId: string, title: string) => Promise<void>;
   onPin: (sessionId: string, isPinned: boolean) => Promise<void>;
   onDelete: (sessionId: string) => Promise<void>;
 }) {
   const active = useAuiState((state) => state.threads.mainThreadId === state.threadListItem.id);
+  const storedUnreadCount = useSessionUnreadCount(remoteId);
+  const unreadCount = active ? 0 : storedUnreadCount;
   const [editing, setEditing] = useState(false);
   const [editingTitle, setEditingTitle] = useState(title);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -205,13 +198,16 @@ function ChatSidebarItem({
       ) : (
         <ThreadListItemPrimitive.Trigger
           disabled={disabled}
-          onClick={onClose}
+          data-testid={`switch-${remoteId}`}
           className="flex min-w-0 flex-1 items-center gap-1.5 px-1 py-2 text-left text-sm"
         >
           {isPinned && <PinIcon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />}
           <span className="min-w-0 truncate">{title}</span>
           {!!unreadCount && (
-            <span className="ml-auto rounded-full bg-primary px-1.5 text-[10px] leading-5 text-primary-foreground">
+            <span
+              data-testid={`unread-${remoteId}`}
+              className="ml-auto rounded-full bg-primary px-1.5 text-[10px] leading-5 text-primary-foreground"
+            >
               {unreadCount}
             </span>
           )}
