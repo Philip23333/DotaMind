@@ -6,6 +6,7 @@ import { RuntimeInfoCard, useRuntimeInfo } from "@/components/runtime-info";
 import { SessionTracePanel } from "@/components/session-trace-panel";
 import { TraceDownloadAction } from "@/components/trace-download-action";
 import { Button } from "@/components/ui/button";
+import { RunProcessPanel } from "@/components/run-process-panel";
 import {
   ActionBarPrimitive,
   AuiIf,
@@ -130,14 +131,21 @@ const AssistantMessage: FC<{ browserId?: string }> = ({ browserId }) => {
             runtime={runtimeInfo}
           />
         )}
-        {runtimeInfo?.status === "running" && runtimeInfo.phase === "answering" && (
-          <p className="mb-2 text-xs text-muted-foreground">生成中 · 待核验</p>
-        )}
         {transport?.source === "pending" && transport.connection_status === "sending" && (
           <p className="mb-2 text-xs text-muted-foreground">正在连接…</p>
         )}
-        {transport?.run?.status === "running" && transport.run.answer.status === "pending" && (
-          <p className="mb-2 text-xs text-muted-foreground">正在分析…</p>
+        <RunProcessPanel
+          key={transport?.request_id}
+          run={transport?.run}
+          connectionStatus={transport?.connection_status}
+        />
+        {(transport?.run?.status === "cancelled" || transport?.connection_status === "cancelled") && (
+          <p role="status" className="mt-2 text-xs text-muted-foreground">已停止</p>
+        )}
+        {transport?.run?.status === "failed" && transport.run.error?.scope === "execution" && (
+          <p role="alert" className="mt-2 text-xs text-destructive">
+            {transport.run.error.message}
+          </p>
         )}
         <MessagePrimitive.Parts components={{ Text: MarkdownText }} />
         {transport?.persistence === "failed" && (
@@ -148,6 +156,11 @@ const AssistantMessage: FC<{ browserId?: string }> = ({ browserId }) => {
         {transport?.connection_status === "error" && (
           <p role="status" className="mt-2 text-xs text-destructive">
             连接中断，已保留当前可见内容。
+          </p>
+        )}
+        {transport?.connection_status === "ended" && transport.run?.status === "running" && (
+          <p role="status" className="mt-2 text-xs text-destructive">
+            连接已结束，最终结果未确认。
           </p>
         )}
         <MessagePrimitive.Error>

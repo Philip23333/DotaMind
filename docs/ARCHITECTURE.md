@@ -161,11 +161,17 @@ Execution outcome, canonical answer readiness, and dialogue persistence are
 separate facts; a storage failure does not turn a completed Runtime into a failed
 execution. Runtime must not depend on assistant-ui or presentation state.
 
-The accepted target uses AssistantTransport for state replication and a frontend
-converter for message integration. The state contract, ephemeral activity,
-canonical history/metadata boundary, and phase acceptance are owned by
-[`agent/product_run_state.md`](agent/product_run_state.md). This migration is
-planned; it does not imply the current custom chat protocol has been replaced.
+The production chat path uses AssistantTransport for state replication and a
+frontend converter for message integration. A page-lifetime registry owns each
+thread's connection and local Run State; changing the selected thread does not
+cancel another thread's stream. The sidebar's session unread indicators are
+browser-local and update independently of session-list reloads. Process activity
+is presentation-only: it reads ordered Run State metadata while canonical answer
+text remains in the assistant message body. The prior protocol implementation
+still exists in the repository and awaits Phase 6 cleanup; it is not the active
+production chat path. The state contract, ephemeral activity, canonical
+history/metadata boundary, and phase acceptance are owned by
+[`agent/product_run_state.md`](agent/product_run_state.md).
 
 ## Migration order
 

@@ -134,7 +134,7 @@ required by the current design.
 - Protect the spill threshold, observation bound, full-result recovery, and
   Artifact-tool bypass with focused tests.
 
-## Product chat: Run State and AssistantTransport (backend transport implemented)
+## Product chat: Run State and AssistantTransport (frontend integrated)
 
 The accepted design and acceptance criteria are defined in
 [`agent/product_run_state.md`](agent/product_run_state.md). Phase 1 lifecycle
@@ -145,14 +145,14 @@ lifecycle events, live delta delivery, and the event-to-state adapter are
 implemented and validated. The Phase 3 backend AssistantTransport endpoint is
 implemented and verified over real loopback HTTP with the official JavaScript
 decoder, including live deltas, fallback, persistence, and disconnect
-cancellation. The actual chat frontend has not switched; its existing route
-remains in use until production runtime-provider integration. A pure frontend Run
-State converter, request/message identity reconciliation, and canonical Markdown
-history conversion are implemented and covered by frontend tests, but the
-production runtime-provider is not connected to `/transport`. Real multi-session
-connections and page acceptance remain pending. Thread switching keeps runs and
-connections alive within the page; actual disconnect cancels unfinished
-generation. Continuation after disconnect and stream resume are excluded.
+cancellation. The production chat frontend uses `/transport`; the per-thread
+runtime registry preserves each connection and message state while switching
+threads. Unread counts are session-scoped local state, clear on selection, and
+update the sidebar without waiting for a session-list request. Mounted frontend
+integration tests cover switching, independent stop, unread clearing, and save
+updates. Actual disconnect cancels unfinished generation. Continuation after
+disconnect and stream resume are excluded. The old protocol code remains for
+Phase 6 cleanup.
 Generation errors replace streamed text with fallback in the same message;
 cancellation, disconnection, and save failures have separate semantics.
 Started saves use a unified finite application-level budget; timeout preserves the
@@ -166,14 +166,15 @@ Work one boundary at a time in this order:
    with deterministic tests, primary/degraded answer fragments are delivered
    during the model invocation, and the request-local event-to-state adapter is
    connected to `VNextChatService` persistence, cache retry, and replay.
-3. Connect the implemented pure converter and AssistantTransport endpoint through
-   the production runtime-provider in one end-to-end path, preserving
-   authorization and request idempotency.
+3. Connect the pure converter and AssistantTransport endpoint through the
+   production runtime-provider in one end-to-end path, preserving authorization
+   and request idempotency. Implemented.
 4. Integrate independent thread runs, messages, history, and standard Markdown
-   rendering; defer catalog visual enhancement and retire the old protocol after
-   the replacement is accepted.
+   rendering; defer catalog visual enhancement. Implemented; old protocol cleanup
+   remains pending.
 5. Implement execution/tool/final presentation and user-controlled folding.
-6. Complete failure/history regression and remove obsolete code.
+   Implemented with ordered Run State activity and per-message local folding.
+6. Complete failure/history regression and remove obsolete protocol code.
 
 First-version final answers stream as the model generates them, following the
 requested ChatGPT-style interaction. Waiting for the complete answer or replaying

@@ -3,21 +3,20 @@
 ## Status and scope
 
 This document defines the accepted target for the chat execution experience.
-Phases 1-4 are design-approved, including Markdown-only rendering and continued
-generation when switching threads. The product Run State schema, synchronous
-projection, Runtime-event adapter, and `VNextChatService` integration with live
-answer state, dialogue persistence, completed-answer retry, and repository replay
-are implemented. Runtime emits answer-stage and answer-attempt lifecycle events
-and publishes answer deltas during the model invocation. The product state stream
-is connected to the official Python AssistantTransport encoder, and a real
-loopback HTTP test verifies live deltas, fallback resets, persistence outcomes,
-disconnect cancellation, and bounded save cleanup against `assistant-stream`
-Python 0.0.36 and JavaScript 0.3.33. The new `/transport` endpoint is available.
-Frontend Run State types, message conversion, request identity reconciliation,
-and canonical Markdown history conversion are implemented. The production
-`runtime-provider` still uses the old route; real multi-session connections and
-page acceptance remain pending. Phases 5-6 are planned, not implemented.
-前端 Run State 类型、消息转换、请求身份合并与 canonical Markdown 历史转换已实现；生产 runtime-provider 尚未切换，真实多会话连接与页面验收尚未完成。
+Phases 1-5 are implemented, including Markdown-only rendering and independent
+thread runs. The product Run State schema, Runtime-event adapter, persistence,
+completed-answer retry, repository replay, and AssistantTransport endpoint are
+implemented. The production `runtime-provider` uses `/transport`; the
+page-lifetime thread registry keeps each thread's connection and run state alive
+when selection changes. The frontend reconciles request/message identities,
+streams canonical Markdown, and tracks unread counts per session in browser
+storage. Selecting a thread clears only its unread count, and the sidebar reads
+that local state directly. The process panel renders ordered stage/tool activity,
+stops showing a running tool as active after connection termination, and folds
+when the answer becomes ready unless the user has chosen its local expansion
+state. The old protocol implementation has not been removed; its cleanup and the
+remaining full journey regression belong to Phase 6.
+前端已接入 `/transport`，页面内多会话连接与按会话未读状态已实现；过程面板展示有序活动，并在回答就绪时自动折叠。
 Code remains the authority for current behavior. This document owns the product
 Run State contract; `../ROADMAP.md` owns delivery order.
 
@@ -479,9 +478,9 @@ where useful):
 
 ### Phase 4: messages, history, and independent thread runs
 
-Design approved. The pure Run State converter, canonical request/message
-identity reconciliation, and history Markdown conversion are implemented;
-production integration and executable multi-thread acceptance remain pending.
+Implemented. The production runtime-provider uses AssistantTransport, and the
+mounted chat integration covers independent thread connections, switching,
+stopping one request, history reconciliation, and unread indication/clearing.
 
 **Decision:** Switching threads changes the selected view only. Existing runs
 continue receiving streamed text and saving their final answers. Render only
@@ -548,25 +547,30 @@ Acceptance:
   Markdown links/images without injecting catalog decorations.
 - Retry saving without regeneration; refresh restores committed text and does
   not claim recovery of unpersisted answers or ephemeral activity.
-- Existing trace/actions remain usable and the normal path works after removal
-  of the old streaming protocol.
+- Existing trace/actions remain usable and the normal path uses
+  AssistantTransport. The old streaming protocol code remains until Phase 6
+  cleanup.
 
 ### Phase 5: process UI
 
-Build the execution activity, tool timeline, and final answer presentation.
-Render Markdown incrementally as answer fragments arrive, including partial
-Markdown constructs, while preserving the user's ability to scroll/read.
-Implement default folding after final readiness, manual reopening, and visible
-failure/cancellation/persistence outcomes without copying those rules to Runtime.
+Implemented in the production chat message view. The process panel renders
+Run State activity in array order, updates a tool row in place, shows omitted
+activity counts, and labels unfinished tool results as unconfirmed after a local
+connection ends. The canonical message body continues to stream through the
+existing Markdown renderer. The panel defaults open until answer readiness and
+then folds; a per-message manual choice takes precedence over later persistence
+and metadata updates. Cancellation, safe execution errors, connection errors,
+and persistence errors remain outside the collapsible process content.
+No reasoning summary is available or inferred.
 
-Acceptance: progress reflects real events, ordering survives repeated tool/model
-cycles, and users can inspect the process after completion in the current view.
-The final answer grows visibly during generation; completion, interruption,
-and fallback replacement leave a coherent message without a fake typing replay.
+Acceptance covers ordered activity, live answer deltas, automatic folding,
+manual expansion through save completion, and no empty panel for history without
+process metadata. Browser review still checks real scroll behavior and visual
+layout; no forced scroll is added for deltas or panel changes.
 
 ### Phase 6: regression and cleanup
 
-Complete integration regression and remove obsolete state/transport code.
+Complete integration regression and remove the obsolete state/transport code.
 Exercise no-tool success, multiple tools, recoverable tool failure, fatal error,
 primary/degraded/deterministic answers, cancellation, truncated streams, database
 failure and retry, consecutive turns, thread switching, and refresh after save.
@@ -574,10 +578,15 @@ Include first-fragment delivery before completion, cancellation/failure after
 partial text, fallback replacement after partial text, and final text equality
 between the live message and saved history.
 
+The old protocol modules are retained until their remaining references and
+regressions are reviewed; the production chat path already uses
+AssistantTransport.
+
 Acceptance: deterministic focused checks and frontend/backend integration checks
 protect the complete user journey. Report actual checks and limitations; do not
-claim resumability or durable execution recovery. Real-provider/model runs are
-not required merely to validate transport mechanics.
+claim reasoning summaries, resumability, cross-tab recovery, or durable execution
+recovery. Real-provider/model runs are not required merely to validate transport
+mechanics.
 
 ## Reference baseline
 

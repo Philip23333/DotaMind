@@ -14,6 +14,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Thread } from "@/components/thread";
 import { ChatSidebar } from "@/components/chat-sidebar";
+import type { DotamindActivityItem, DotamindRunStage } from "./dotamind-run-state";
 import { DotaMindRuntimeProvider } from "./runtime-provider";
 import { DotaMindThreadState } from "./dotamind-thread-state";
 import {
@@ -246,13 +247,29 @@ function complete(request: TransportRequest, finalText?: string) {
   request.close();
 }
 
-function completeWhileSaving(request: TransportRequest) {
+function publishActivity(
+  request: TransportRequest,
+  stage: DotamindRunStage,
+  activity: DotamindActivityItem[],
+) {
+  update(request, [
+    { type: "set", path: ["run", "stage"], value: stage },
+    { type: "set", path: ["run", "activity"], value: activity },
+  ]);
+}
+
+function completeWhileSaving(
+  request: TransportRequest,
+  activity: DotamindActivityItem[] = [],
+) {
   update(request, [{
     type: "set",
     path: ["run"],
     value: {
       ...rootEnvelope(request).run,
       status: "completed",
+      stage: "answer",
+      activity,
       answer: {
         attempt_id: "primary",
         kind: "primary",
@@ -377,6 +394,64 @@ describe("normal AssistantTransport chat integration", () => {
     expect(screen.queryByRole("button", { name: "停止生成" })).toBeNull();
   });
 
+  it("shows ordered activity and live Markdown, then folds ready state without overriding manual expansion", async () => {
+    render(<TestChat />);
+    await selectSession("session-a");
+    await submit("show the real run process");
+    const request = await waitForRequest(backend, 1);
+    await act(async () => startRun(request));
+
+    const initialActivity: DotamindActivityItem[] = [
+      { kind: "stage", id: "stage-execution", stage: "execution" },
+      {
+        kind: "tool",
+        id: "tool-match",
+        tool_name: "esports.match.search",
+        status: "running",
+        duration_seconds: null,
+        error_code: null,
+      },
+    ];
+    await act(async () => publishActivity(request, "execution", initialActivity));
+    expect(screen.getByRole("button", { name: "处理过程" }).getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByText("正在处理请求")).toBeTruthy();
+    expect(screen.getByText("调用 esports.match.search")).toBeTruthy();
+
+    const answerActivity: DotamindActivityItem[] = [
+      initialActivity[0]!,
+      {
+        kind: "tool",
+        id: "tool-match",
+        tool_name: "esports.match.search",
+        status: "completed",
+        duration_seconds: 0.4,
+        error_code: null,
+      },
+      { kind: "stage", id: "stage-answer", stage: "answer" },
+    ];
+    await act(async () => publishActivity(request, "answer", answerActivity));
+    expect(screen.getAllByTestId("activity-tool-match")).toHaveLength(1);
+    expect(screen.getByTestId("tool-status-tool-match").textContent).toBe("已完成 · 400 毫秒");
+
+    await act(async () => append(request, "第一个回答片段"));
+    expect(await screen.findByText("第一个回答片段")).toBeTruthy();
+    expect(request.closed).toBe(false);
+    expect(screen.getByRole("button", { name: "处理过程" }).getAttribute("aria-expanded")).toBe("true");
+    await act(async () => append(request, "，后续回答片段"));
+    expect(screen.getByText("第一个回答片段，后续回答片段")).toBeTruthy();
+
+    await act(async () => completeWhileSaving(request, answerActivity));
+    const processButton = screen.getByRole("button", { name: "处理过程" });
+    expect(processButton.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.getByText("第一个回答片段，后续回答片段")).toBeTruthy();
+
+    fireEvent.click(processButton);
+    expect(processButton.getAttribute("aria-expanded")).toBe("true");
+    await act(async () => finishSaving(request));
+    expect(screen.getByRole("button", { name: "处理过程" }).getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByText("第一个回答片段，后续回答片段")).toBeTruthy();
+  });
+
   it("replaces a primary fallback answer in place and keeps one canonical assistant message", async () => {
     render(<TestChat />);
     await selectSession("session-a");
@@ -466,6 +541,7 @@ describe("normal AssistantTransport chat integration", () => {
     await selectSession("session-a");
     fireEvent.click(screen.getByRole("button", { name: "停止生成" }));
     await waitFor(() => expect(a.signal.aborted).toBe(true));
+    expect(await screen.findByText("已停止")).toBeTruthy();
     expect(b.signal.aborted).toBe(false);
     expect(backend.requests).toHaveLength(2);
 
@@ -488,6 +564,10 @@ describe("normal AssistantTransport chat integration", () => {
     const request = await waitForRequest(backend, 1);
     expect(request.text).toBe("retry as a new request");
     await act(async () => startRun(request));
+    await act(async () => publishActivity(request, "execution", [
+      { kind: "stage", id: "stage-execution", stage: "execution" },
+      { kind: "stage", id: "stage-answer", stage: "answer" },
+    ]));
     await act(async () => append(request, "body retained"));
     update(request, [{
       type: "set",
@@ -495,6 +575,11 @@ describe("normal AssistantTransport chat integration", () => {
       value: {
         ...rootEnvelope(request).run,
         status: "completed",
+        stage: "answer",
+        activity: [
+          { kind: "stage", id: "stage-execution", stage: "execution" },
+          { kind: "stage", id: "stage-answer", stage: "answer" },
+        ],
         answer: { attempt_id: "primary", kind: "primary", text: "body retained", status: "ready" },
         persistence: "failed",
         error: { scope: "persistence", code: "chat_store_error", message: "safe" },
@@ -502,6 +587,9 @@ describe("normal AssistantTransport chat integration", () => {
     }]);
     request.close();
     expect(await screen.findByText("回答已生成，但未能确认保存结果，请重试保存。")).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "处理过程" }).getAttribute("aria-expanded")).toBe("false");
+    });
     expect(screen.getByText("body retained")).toBeTruthy();
     expect(backend.requests).toHaveLength(1);
   });
