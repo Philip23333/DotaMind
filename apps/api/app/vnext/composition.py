@@ -34,6 +34,7 @@ from app.vnext.capabilities.esports.series import (
 )
 from app.vnext.capabilities.esports.team import TeamSearchInput, TeamSearchResult
 from app.vnext.capabilities.esports.tournament import TournamentSearchInput, TournamentSearchResult
+from app.vnext.capabilities.player.profile import PlayerProfileInput, PlayerProfileResult
 from app.vnext.llm.openai_compatible import OpenAICompatibleModelClient
 from app.vnext.providers.pandascore.client import PandaScoreClient
 from app.vnext.providers.pandascore.league_adapter import PandaScoreLeagueAdapter
@@ -42,6 +43,7 @@ from app.vnext.providers.pandascore.player_adapter import PandaScorePlayerAdapte
 from app.vnext.providers.pandascore.series_adapter import PandaScoreSeriesAdapter
 from app.vnext.providers.pandascore.team_adapter import PandaScoreTeamAdapter
 from app.vnext.providers.pandascore.tournament_adapter import PandaScoreTournamentAdapter
+from app.vnext.providers.stratz import StratzGraphQLClient, StratzPlayerProfileAdapter
 from app.vnext.tools.artifacts import register_artifact_tools
 from app.vnext.tools.esports import (
     register_league_tool,
@@ -52,6 +54,7 @@ from app.vnext.tools.esports import (
     register_team_tool,
     register_tournament_tool,
 )
+from app.vnext.tools.player.profile import register_player_profile_tool
 from app.vnext.tools.registry import ToolRegistry
 from app.vnext.tools.task import register_task_checkpoint_tool, register_task_plan_tool
 
@@ -63,6 +66,7 @@ SeriesTeamsService = Callable[[SeriesTeamsInput], Awaitable[SeriesTeamsResult]]
 TournamentSearchService = Callable[[TournamentSearchInput], Awaitable[TournamentSearchResult]]
 MatchSearchService = Callable[[MatchSearchInput], Awaitable[MatchSearchResult]]
 PlayerSearchService = Callable[[PlayerSearchInput], Awaitable[PlayerSearchResult]]
+PlayerProfileService = Callable[[PlayerProfileInput], Awaitable[PlayerProfileResult]]
 TeamSearchService = Callable[[TeamSearchInput], Awaitable[TeamSearchResult]]
 
 
@@ -74,10 +78,17 @@ class VNextSettings:
     llm_timeout_seconds: float = 90.0
     pandascore_base_url: str = "https://api.pandascore.co"
     pandascore_token: str = ""
+    stratz_graphql_url: str = "https://api.stratz.com/graphql"
+    stratz_token: str = field(default="", repr=False)
+    stratz_timeout_seconds: float = 20.0
     pandascore_timeout_seconds: float = 20.0
     trace_ttl_seconds: int = 72 * 60 * 60
     test_recording_enabled: bool = False
     agent_limits: AgentLimits = field(default_factory=AgentLimits)
+
+    def __post_init__(self) -> None:
+        if not math.isfinite(self.stratz_timeout_seconds) or self.stratz_timeout_seconds <= 0:
+            raise ValueError("DOTAMIND_STRATZ_TIMEOUT_SECONDS must be a finite positive number")
 
     @classmethod
     def from_env(cls) -> VNextSettings:
@@ -102,6 +113,19 @@ class VNextSettings:
             or defaults.pandascore_token,
             pandascore_timeout_seconds=float(
                 _env_value("DOTAMIND_PANDASCORE_TIMEOUT_SECONDS", "20", file_values)
+            ),
+            stratz_graphql_url=(
+                _env_value(
+                    "DOTAMIND_STRATZ_GRAPHQL_URL",
+                    defaults.stratz_graphql_url,
+                    file_values,
+                )
+                or defaults.stratz_graphql_url
+            ),
+            stratz_token=_env_value("DOTAMIND_STRATZ_TOKEN", "", file_values) or "",
+            stratz_timeout_seconds=_parse_positive_finite_float(
+                "DOTAMIND_STRATZ_TIMEOUT_SECONDS",
+                _env_value("DOTAMIND_STRATZ_TIMEOUT_SECONDS", "20", file_values) or "",
             ),
             trace_ttl_seconds=int(
                 _env_value("DOTAMIND_VNEXT_TRACE_TTL_SECONDS", "259200", file_values)
@@ -234,6 +258,7 @@ class VNextServices:
     match_search: MatchSearchService | None = None
     team_search: TeamSearchService | None = None
     player_search: PlayerSearchService | None = None
+    player_profile: PlayerProfileService | None = None
 
     async def aclose(self) -> None:
         return None
@@ -255,6 +280,15 @@ def build_vnext_services(
     match_adapter = PandaScoreMatchAdapter(client)
     team_adapter = PandaScoreTeamAdapter(client)
     player_adapter = PandaScorePlayerAdapter(client)
+    player_profile: PlayerProfileService | None = None
+    stratz_token = config.stratz_token.strip()
+    if stratz_token:
+        stratz_client = StratzGraphQLClient(
+            graphql_url=config.stratz_graphql_url,
+            token=stratz_token,
+            timeout_seconds=config.stratz_timeout_seconds,
+        )
+        player_profile = StratzPlayerProfileAdapter(stratz_client).get_profile
     return VNextServices(
         league_search=league_adapter.search,
         series_search=series_adapter.search,
@@ -263,6 +297,7 @@ def build_vnext_services(
         match_search=match_adapter.search,
         team_search=team_adapter.search,
         player_search=player_adapter.search,
+        player_profile=player_profile,
     )
 
 
@@ -298,6 +333,8 @@ def build_vnext_registry(
         register_team_tool(registry, resolved_services.team_search)
     if resolved_services.player_search is not None:
         register_player_tool(registry, resolved_services.player_search)
+    if resolved_services.player_profile is not None:
+        register_player_profile_tool(registry, resolved_services.player_profile)
     if task_state_coordinator is not None:
         register_task_plan_tool(registry, task_state_coordinator)
         register_task_checkpoint_tool(registry, task_state_coordinator)

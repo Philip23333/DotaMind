@@ -191,13 +191,15 @@ history/metadata boundary, and phase acceptance are owned by
 - provider routers before a second concrete implementation exists;
 - Artifact corpus discovery or hidden provider fetches.
 
-## Planned Steam player and game-detail boundaries
+## Steam player and game-detail boundaries
 
 The `capabilities/player` and `capabilities/game` contracts define closed
-inputs, provenance, and source-shaped JSON outputs for future STRATZ and
-OpenDota integrations. They do not modify application composition or the
-currently registered tool inventory. A later implementation must place source
-validation and recent-game ordering checks below these contracts, verify that
-the returned Valve game ID matches the requested ID, and register each tool
-only after focused acceptance. Steam32 and PandaScore player identities remain
-separate unless a future evidence-backed identity capability is designed.
+inputs, provenance, and source-shaped JSON outputs. `player.profile` uses a
+small STRATZ GraphQL transport and adapter, and registers only when a STRATZ
+token is configured. The adapter validates the selected profile structure and
+requested Steam32 identity while retaining the source object as JSON. Its query
+has not been verified against the live API. Recent-game and single-game detail
+remain contract-only; future work must validate recent-game ordering and ensure
+the returned Valve game ID matches its request. Steam32 and PandaScore player
+identities remain separate unless a future evidence-backed identity capability
+is designed.

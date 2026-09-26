@@ -200,23 +200,26 @@ the Controller must copy names and arguments from the rendered catalog and must
 not invent provider-specific parameters. Domain workflows belong to the
 capability contract and its tests, not to this generic registry baseline.
 
-## Planned Steam player and game-detail contracts (not registered)
+## Steam player and game-detail tools
 
-The capability contracts define the intended inputs and outputs for
-`player.profile(steam_account_id)`,
-`player.recent_games(steam_account_id, limit=5)`, and
-`game.detail(valve_game_id)`. Steam account inputs are strict Steam32 integers;
-they are distinct from PandaScore professional-player IDs. The planned player
-outputs carry a `stratz` source marker, while game details carry an `opendota`
-source marker and retain the source business object as JSON. These contracts
-do not add the three names to the tool catalog; provider access and explicit
-registration remain future work.
+`player.profile` is the implemented STRATZ-backed Steam32 profile capability.
+`player.profile(steam_account_id)` is registered only when
+`DOTAMIND_STRATZ_TOKEN` is configured. It queries selected STRATZ profile fields
+by an exact unsigned Steam32 account ID; it does not accept names, SteamID64
+values, or PandaScore player IDs. Its source object is retained as JSON,
+including fields not yet interpreted by DotaMind. `retrieved_at` records when
+DotaMind fetched the response, not when STRATZ last updated the profile. The
+current provider query has not been verified against the live API.
+
+`player.recent_games(steam_account_id, limit=5)` and
+`game.detail(valve_game_id)` remain contract-only and are not registered. Their
+planned source markers are `stratz` and `opendota`, respectively.
 
 `found=false` means only that the profile response did not contain a usable
 profile object; it does not establish that the account is absent or has no Dota
 2 history. An empty recent-games list is valid, and fewer rows than requested
-does not prove history completeness. The future STRATZ adapter must verify the
-upstream selection and ordering semantics before describing rows as recent.
-The future game-detail adapter must reject unusable or mismatched source detail
+does not prove history completeness. A future STRATZ recent-games adapter must
+verify upstream selection and ordering before describing rows as recent. The
+future game-detail adapter must reject unusable or mismatched source detail
 rather than returning an empty successful result. Reading existing game data
 does not submit a replay for parsing.

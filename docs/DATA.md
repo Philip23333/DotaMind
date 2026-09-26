@@ -60,22 +60,25 @@ universal object graph. If complete provider-source fidelity is required, it
 must be added explicitly at the capability boundary before generic Artifact
 externalization.
 
-## Planned Steam player and single-game observations
+## Steam player and single-game observations
 
-The planned player contracts use a Steam32 account ID (unsigned 32-bit) as
+Player capability contracts use a Steam32 account ID (unsigned 32-bit) as
 their lookup identity. It is not a PandaScore professional-player ID, and a
 numeric value alone cannot prove which identity system supplied it. No
-automatic cross-source identity association is implied. The planned
-`player.profile` and `player.recent_games` results identify `stratz` as their
-source; `game.detail` identifies `opendota` and uses a Valve single-game ID.
-The latter can be passed directly from a recent-game row into the detail input.
+automatic cross-source identity association is implied. The implemented
+`player.profile` result identifies `stratz` as its source; `player.recent_games`
+is a contract-only STRATZ capability. `game.detail` identifies `opendota` and
+uses a Valve single-game ID, but remains contract-only. That ID is designed to
+pass from a future recent-game row into the detail input.
 
 Profile `found=false` means the source response had no usable profile object;
 it does not prove that the account does not exist or has never played Dota 2.
 An empty recent-game list is valid, and a short list is not evidence that all
 history was returned. Recent ordering must be verified against provider
-semantics by the future adapter. Profile and game business data are retained as
+semantics by a future adapter. Profile and game business data are retained as
 JSON objects so currently unknown source fields, nested arrays, `null`, zero,
 and boolean values survive validation. This JSON container does not itself
-validate provider-specific business meaning. These contracts are not yet
-registered or connected to a provider.
+validate provider-specific business meaning. `player.profile` is registered
+only when a STRATZ token is configured. Its query and field availability have
+not yet been verified against the live API; the other two capabilities are not
+registered.

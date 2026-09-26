@@ -87,15 +87,18 @@ before a second concrete implementation demonstrates the need.
 4. Register the capability only after its focused acceptance passes.
 5. Remove transitional code once the replacement is accepted.
 
-## Steam player and game-detail capability contracts (contract commit complete)
+## Steam player and game-detail capabilities
 
 - Define strict Steam32 inputs for player profile and recent-game observations,
   plus a Valve game-ID input for existing single-game detail.
 - Preserve provider provenance and source business objects as JSON while
   keeping Steam accounts separate from PandaScore professional-player IDs.
-- Contract models and deterministic acceptance tests are in place. STRATZ and
-  OpenDota provider implementations, source-semantic validation, and product
-  tool registration remain pending; these capabilities are not yet callable.
+- `player.profile` is implemented through STRATZ GraphQL and registers only
+  when `DOTAMIND_STRATZ_TOKEN` is configured. Deterministic tests use local
+  HTTP mocks; the live query and current field availability remain unverified.
+- `player.recent_games` and `game.detail` remain contract-only and are not
+  registered. OpenDota integration and STRATZ recent-game source semantics
+  remain pending.
 - The planned detail path reads an existing game record. Replay submission and
   replay parsing are outside this scope.
 
