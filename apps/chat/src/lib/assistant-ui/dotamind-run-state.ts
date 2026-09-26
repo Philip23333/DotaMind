@@ -1,4 +1,4 @@
-import type { TraceRef } from "../vnext-chat-api";
+import type { TraceRef } from "../vnext-trace-api";
 
 export type DotamindRunStatus = "running" | "completed" | "failed" | "cancelled";
 export type DotamindRunStage = "execution" | "answer";

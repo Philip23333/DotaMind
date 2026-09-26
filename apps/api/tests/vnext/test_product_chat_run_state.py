@@ -19,9 +19,6 @@ from app.vnext.agent.events import (
 from app.vnext.llm.protocol import FinalMessage
 from app.vnext.product.chat import (
     PreparedVNextChatTurn,
-    ProductChatCompleted,
-    ProductChatError,
-    ProductChatState,
     VNextChatService,
 )
 from app.vnext.product.context import ConversationContextBuilder
@@ -789,22 +786,27 @@ def test_runtime_errors_are_safe_and_incomplete_or_invalid_streams_settle() -> N
     assert "SECRET" not in startup_error.model_dump_json()
 
 
-def test_legacy_stream_adapter_emits_terminal_only_and_uses_the_new_service_path() -> None:
+def test_state_stream_reconciles_partial_text_with_canonical_completion() -> None:
     async def run():
         runtime = _Runtime(
             _events("replacement answer", deltas=("old partial",))
         )
         service = _service(_Repository(), runtime)
         prepared = await _prepared(service)
-        events = [event async for event in service.stream_turn(prepared)]
-        return events, runtime
+        updates = [update async for update in service.stream_turn_states(prepared)]
+        return updates, runtime
 
-    events, runtime = asyncio.run(run())
-    assert len(events) == 1
-    assert isinstance(events[0], ProductChatCompleted)
-    assert events[0].content == "replacement answer"
-    assert not any(isinstance(event, ProductChatState) for event in events)
-    assert not any(isinstance(event, ProductChatError) for event in events)
+    updates, runtime = asyncio.run(run())
+    assert any(
+        update.state.answer.status == "streaming"
+        and update.state.answer.text == "old partial"
+        for update in updates
+    )
+    final = updates[-1]
+    assert final.state.status == "completed"
+    assert final.state.answer.status == "ready"
+    assert final.state.answer.text == "replacement answer"
+    assert final.state.persistence == "saved"
     assert runtime.run_count == 1
 
 

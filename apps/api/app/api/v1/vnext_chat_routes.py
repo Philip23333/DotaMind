@@ -2,30 +2,24 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
 from uuid import UUID
 
 from assistant_stream import RunController, create_run
 from assistant_stream.serialization import AssistantTransportResponse
 from fastapi import APIRouter, Header, Request
-from fastapi.responses import JSONResponse, Response, StreamingResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import ValidationError
 
 from app.api.v1.assistant_transport_schemas import (
     AssistantTransportRequest,
 )
-from app.api.v1.vnext_chat_schemas import ChatMessageRequest
 from app.application.chat_repository import (
     ChatIdempotencyConflictError,
     ChatNotFoundError,
     ChatRepositoryError,
 )
 from app.vnext.product.assistant_transport import forward_product_states
-from app.vnext.product.chat import (
-    ProductChatCompleted,
-    ProductChatError,
-    VNextChatService,
-)
+from app.vnext.product.chat import VNextChatService
 from app.vnext.product.trace_store import TraceNotFoundError, TraceStoreUnavailableError
 
 router = APIRouter(prefix="/chat/sessions", tags=["chat"])
@@ -49,49 +43,6 @@ def _repository_error(exc: ChatRepositoryError) -> JSONResponse:
     if exc.code == "invalid_browser_id":
         return _error("invalid_browser_id", "browser identity must be a UUID v4", 422)
     return _error("chat_store_error", "chat storage is temporarily unavailable", 503)
-
-
-@router.post("/{session_id}/messages", response_model=None)
-async def post_message(
-    session_id: UUID,
-    body: ChatMessageRequest,
-    request: Request,
-    x_dotamind_browser_id: str | None = Header(default=None),
-) -> StreamingResponse | JSONResponse:
-    if not x_dotamind_browser_id:
-        return _error("browser_id_required", "browser identity is required", 422)
-    service = _service(request)
-    if service is None:
-        return _error("unavailable", "vNext chat is temporarily unavailable", 503)
-    try:
-        prepared = await service.prepare_turn(
-            browser_id=x_dotamind_browser_id,
-            session_id=session_id,
-            request_id=body.request_id,
-            query=body.query,
-        )
-    except ChatIdempotencyConflictError:
-        return _error(
-            "idempotency_conflict",
-            "request_id has already been used with a different query",
-            409,
-        )
-    except ChatRepositoryError as exc:
-        return _repository_error(exc)
-
-    async def stream() -> AsyncIterator[bytes]:
-        async for event in service.stream_turn(prepared):
-            if isinstance(event, (ProductChatCompleted, ProductChatError)) and event.trace is None:
-                payload = event.model_dump_json(exclude={"trace"})
-            else:
-                payload = event.model_dump_json()
-            yield (payload + "\n").encode("utf-8")
-
-    return StreamingResponse(
-        stream(),
-        media_type="application/x-ndjson",
-        headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"},
-    )
 
 
 @router.post("/{session_id}/transport", response_model=None)
@@ -137,17 +88,15 @@ async def post_assistant_transport(
             return _error("thread_mismatch", "threadId does not match the chat session", 409)
 
     query = "".join(part.text for part in command.message.parts)
-    try:
-        validated = ChatMessageRequest(request_id=body.request_id, query=query)
-    except ValidationError:
+    if not 1 <= len(query) <= 20_000:
         return _error("invalid_query", "query must contain 1 to 20000 characters", 422)
 
     try:
         prepared = await service.prepare_turn(
             browser_id=x_dotamind_browser_id,
             session_id=session_id,
-            request_id=validated.request_id,
-            query=validated.query,
+            request_id=body.request_id,
+            query=query,
         )
     except ChatIdempotencyConflictError:
         return _error(

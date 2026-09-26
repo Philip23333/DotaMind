@@ -167,9 +167,10 @@ thread's connection and local Run State; changing the selected thread does not
 cancel another thread's stream. The sidebar's session unread indicators are
 browser-local and update independently of session-list reloads. Process activity
 is presentation-only: it reads ordered Run State metadata while canonical answer
-text remains in the assistant message body. The prior protocol implementation
-still exists in the repository and awaits Phase 6 cleanup; it is not the active
-production chat path. The state contract, ephemeral activity, canonical
+text remains in the assistant message body. The obsolete product-chat NDJSON
+route and its event adapters have been removed. The separate `/runs` Runtime test
+event stream remains for the Test Observer and is not a chat transport. The state
+contract, ephemeral activity, canonical
 history/metadata boundary, and phase acceptance are owned by
 [`agent/product_run_state.md`](agent/product_run_state.md).
 

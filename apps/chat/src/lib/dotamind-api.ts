@@ -293,18 +293,6 @@ export function pendingRunToInitialMessages(run: ChatRunSummary): ThreadMessageL
   ];
 }
 
-export function latestUserText(messages: readonly ThreadMessage[]): string {
-  const message = messages.findLast((item) => item.role === "user");
-
-  return (
-    message?.content
-      .filter((part) => part.type === "text")
-      .map((part) => part.text)
-      .join("\n")
-      .trim() ?? ""
-  );
-}
-
 function stringField(item: AnswerItem, key: string): string | null {
   const value = item[key];
   return typeof value === "string" && value.trim() ? value.trim() : null;

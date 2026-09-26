@@ -10,7 +10,6 @@ from uuid import UUID, uuid4
 
 import pytest
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
 
 from app.api.v1.vnext_chat_routes import router as chat_router
 from app.application.chat_repository import ChatDialogueTurnResult, ChatNotFoundError
@@ -22,7 +21,7 @@ from app.vnext.agent.events import (
 )
 from app.vnext.agent.runtime import AgentRuntime
 from app.vnext.llm.protocol import FinalMessage, ModelRequest, ModelResponse, UserMessage
-from app.vnext.product.chat import ProductChatCompleted, ProductChatError, VNextChatService
+from app.vnext.product.chat import VNextChatService
 from app.vnext.product.context import ConversationContextBuilder
 from app.vnext.product.presentation import DotaVisualEntityEnricher
 from app.vnext.product.trace_store import RunTrace, TraceNotFoundError
@@ -103,18 +102,35 @@ def _service(repository, runtime, trace_store, *, visual_entity_enricher=None) -
     )
 
 
+def _transport_request(request_id: UUID, session_id: UUID, query: str) -> dict[str, object]:
+    return {
+        "request_id": str(request_id),
+        "threadId": str(session_id),
+        "commands": [
+            {
+                "type": "add-message",
+                "message": {
+                    "role": "user",
+                    "parts": [{"type": "text", "text": query}],
+                },
+                "parentId": None,
+                "sourceId": None,
+            }
+        ],
+        "state": None,
+    }
+
+
 async def _disconnect_asgi_chat(service, *, started, browser_id, session_id, request_id):
     app = FastAPI()
     app.include_router(chat_router)
     app.state.vnext_chat_service = service
-    path = f"/chat/sessions/{session_id}/messages"
+    path = f"/chat/sessions/{session_id}/transport"
     requests: asyncio.Queue[dict[str, object]] = asyncio.Queue()
     await requests.put(
         {
             "type": "http.request",
-            "body": json.dumps(
-                {"request_id": str(request_id), "query": "question"}
-            ).encode(),
+            "body": json.dumps(_transport_request(request_id, session_id, "question")).encode(),
             "more_body": False,
         }
     )
@@ -177,15 +193,16 @@ def test_completed_recording_is_exported_and_replay_reuses_its_reference() -> No
             "query": "question",
         }
         prepared = await service.prepare_turn(**kwargs)
-        first_events = [event async for event in service.stream_turn(prepared)]
+        first_events = [event async for event in service.stream_turn_states(prepared)]
         replay_prepared = await service.prepare_turn(**kwargs)
-        replay_events = [event async for event in service.stream_turn(replay_prepared)]
+        replay_events = [event async for event in service.stream_turn_states(replay_prepared)]
         return service, trace_store, model, first_events, replay_events, browser_id
 
     service, trace_store, model, first_events, replay_events, browser_id = asyncio.run(exercise())
 
     completed = first_events[-1]
-    assert isinstance(completed, ProductChatCompleted)
+    assert completed.state.status == "completed"
+    assert completed.state.answer.status == "ready"
     assert completed.trace is not None
     assert len(trace_store.saved) == 1
     run_trace = trace_store.saved[completed.trace.trace_id]
@@ -197,7 +214,8 @@ def test_completed_recording_is_exported_and_replay_reuses_its_reference() -> No
         "primary_answer",
     ]
     replay_completed = replay_events[-1]
-    assert isinstance(replay_completed, ProductChatCompleted)
+    assert replay_completed.state.status == "completed"
+    assert replay_completed.state.answer.text == completed.state.answer.text
     assert replay_completed.trace == completed.trace
     assert len(model.requests) == 2
     assert len(trace_store.saved) == 1
@@ -253,7 +271,7 @@ def test_replay_after_service_recreation_does_not_rerun_model_and_keeps_trace_li
             trace_store,
         )
         prepared = await first_service.prepare_turn(**request)
-        first_events = [event async for event in first_service.stream_turn(prepared)]
+        first_events = [event async for event in first_service.stream_turn_states(prepared)]
 
         after_restart_model = ScriptedModelClient([])
         after_restart = _service(
@@ -262,7 +280,7 @@ def test_replay_after_service_recreation_does_not_rerun_model_and_keeps_trace_li
             trace_store,
         )
         replay = await after_restart.prepare_turn(**request)
-        replay_events = [event async for event in after_restart.stream_turn(replay)]
+        replay_events = [event async for event in after_restart.stream_turn_states(replay)]
         listed = await after_restart.list_session_traces(
             browser_id=browser_id,
             session_id=session_id,
@@ -271,9 +289,11 @@ def test_replay_after_service_recreation_does_not_rerun_model_and_keeps_trace_li
 
     first_events, replay_events, first_model, after_restart_model, listed = asyncio.run(exercise())
 
-    assert isinstance(first_events[-1], ProductChatCompleted)
+    assert first_events[-1].state.status == "completed"
+    assert first_events[-1].state.answer.status == "ready"
     assert first_events[-1].trace is not None
-    assert isinstance(replay_events[-1], ProductChatCompleted)
+    assert replay_events[-1].state.status == "completed"
+    assert replay_events[-1].state.answer.text == first_events[-1].state.answer.text
     assert replay_events[-1].trace is None
     assert len(first_model.requests) == 2
     assert after_restart_model.requests == []
@@ -296,11 +316,12 @@ def test_failure_is_saved_in_test_mode_and_keeps_error_event_reference() -> None
             request_id=uuid4(),
             query="question",
         )
-        return [event async for event in service.stream_turn(prepared)]
+        return [event async for event in service.stream_turn_states(prepared)]
 
     events = asyncio.run(run())
 
-    assert isinstance(events[-1], ProductChatError)
+    assert events[-1].state.status == "failed"
+    assert events[-1].state.error is not None
     assert events[-1].trace is not None
     saved = trace_store.saved[events[-1].trace.trace_id]
     assert saved.status == "failed"
@@ -334,7 +355,7 @@ def test_trace_store_write_failure_does_not_change_answer_or_runtime_error() -> 
             request_id=uuid4(),
             query="question",
         )
-        return [event async for event in service.stream_turn(prepared)]
+        return [event async for event in service.stream_turn_states(prepared)]
 
     async def exercise_failure():
         class FailingRuntime:
@@ -356,20 +377,19 @@ def test_trace_store_write_failure_does_not_change_answer_or_runtime_error() -> 
             request_id=uuid4(),
             query="question",
         )
-        return [event async for event in service.stream_turn(prepared)]
+        return [event async for event in service.stream_turn_states(prepared)]
 
     success_events = asyncio.run(exercise_success())
     failure_events = asyncio.run(exercise_failure())
 
-    assert isinstance(success_events[-1], ProductChatCompleted)
-    assert success_events[-1].content == "answer remains available"
+    assert success_events[-1].state.status == "completed"
+    assert success_events[-1].state.answer.text == "answer remains available"
+    assert success_events[-1].state.persistence == "saved"
     assert success_events[-1].trace is None
-    assert failure_events == [
-        ProductChatError(
-            error_code="provider_failed",
-            reason="本次回答未能完成，请重试。",
-        )
-    ]
+    assert failure_events[-1].state.status == "failed"
+    assert failure_events[-1].state.error is not None
+    assert failure_events[-1].state.error.code == "provider_failed"
+    assert failure_events[-1].state.error.message == "本次回答未能完成，请重试。"
 
 
 def test_disconnect_saves_cancelled_record_and_propagates_cancellation() -> None:
@@ -417,7 +437,7 @@ def test_disconnect_saves_cancelled_record_and_propagates_cancellation() -> None
         )
 
         async def consume() -> None:
-            async for _event in service.stream_turn(prepared):
+            async for _event in service.stream_turn_states(prepared):
                 pass
 
         task = asyncio.create_task(consume())
@@ -471,7 +491,7 @@ def test_disconnect_after_runtime_completion_keeps_completed_trace_status() -> N
         )
 
         async def consume() -> None:
-            async for _event in service.stream_turn(prepared):
+            async for _event in service.stream_turn_states(prepared):
                 pass
 
         task = asyncio.create_task(consume())
@@ -537,14 +557,12 @@ def test_asgi_http_disconnect_cancels_runtime_and_saves_final_trace_snapshot() -
         browser_id = str(uuid4())
         session_id = uuid4()
         request_id = uuid4()
-        path = f"/chat/sessions/{session_id}/messages"
+        path = f"/chat/sessions/{session_id}/transport"
         requests: asyncio.Queue[dict[str, object]] = asyncio.Queue()
         await requests.put(
             {
                 "type": "http.request",
-                "body": json.dumps(
-                    {"request_id": str(request_id), "query": "question"}
-                ).encode(),
+                "body": json.dumps(_transport_request(request_id, session_id, "question")).encode(),
                 "more_body": False,
             }
         )
@@ -738,13 +756,18 @@ def test_completed_runtime_trace_stays_completed_when_chat_persistence_fails() -
             request_id=uuid4(),
             query="question",
         )
-        events = [event async for event in service.stream_turn(prepared)]
+        events = [event async for event in service.stream_turn_states(prepared)]
         return events, trace_store
 
     events, trace_store = asyncio.run(run())
 
-    assert isinstance(events[-1], ProductChatError)
-    assert events[-1].error_code == "chat_store_error"
+    assert events[-1].state.status == "completed"
+    assert events[-1].state.answer.status == "ready"
+    assert events[-1].state.answer.text == "completed answer"
+    assert events[-1].state.persistence == "failed"
+    assert events[-1].state.error is not None
+    assert events[-1].state.error.scope == "persistence"
+    assert events[-1].state.error.code == "chat_store_error"
     assert events[-1].trace is not None
     saved = trace_store.saved[events[-1].trace.trace_id]
     assert saved.status == "completed"
@@ -780,10 +803,10 @@ def test_visual_enrichment_failure_saves_answer_and_completed_runtime_trace() ->
             request_id=uuid4(),
             query="question",
         )
-        events = [event async for event in service.stream_turn(prepared)]
+        events = [event async for event in service.stream_turn_states(prepared)]
         completed = events[-1]
         bundle = None
-        if isinstance(completed, ProductChatCompleted) and completed.trace is not None:
+        if completed.state.status == "completed" and completed.trace is not None:
             bundle = await service.download_trace_bundle(
                 browser_id=browser_id,
                 trace_id=completed.trace.trace_id,
@@ -792,8 +815,10 @@ def test_visual_enrichment_failure_saves_answer_and_completed_runtime_trace() ->
 
     completed, repository, trace_store, bundle = asyncio.run(run())
 
-    assert isinstance(completed, ProductChatCompleted)
-    assert completed.content == "answer"
+    assert completed.state.status == "completed"
+    assert completed.state.answer.status == "ready"
+    assert completed.state.answer.text == "answer"
+    assert completed.state.persistence == "saved"
     assert completed.turn_index == 1
     assert completed.catalog_visual_entities == []
     assert completed.trace is not None
@@ -859,30 +884,3 @@ def test_trace_download_is_browser_owned_and_list_omits_expired_records() -> Non
         service.list_session_traces(browser_id="browser-a", session_id=session_uuid)
     )
     assert [trace.trace_id for trace in listed] == ["owned"]
-
-
-def test_missing_trace_reference_on_error_event_is_omitted_from_ndjson() -> None:
-    class ErrorService:
-        async def prepare_turn(self, **kwargs):
-            return kwargs
-
-        async def stream_turn(self, _prepared):
-            yield ProductChatError(error_code="agent_failed", reason="original failure")
-
-    app = FastAPI()
-    app.include_router(chat_router)
-    app.state.vnext_chat_service = ErrorService()
-
-    with TestClient(app) as client:
-        response = client.post(
-            f"/chat/sessions/{uuid4()}/messages",
-            headers={"X-DotaMind-Browser-Id": str(uuid4())},
-            json={"request_id": str(uuid4()), "query": "question"},
-        )
-
-    assert response.status_code == 200
-    assert response.json() == {
-        "type": "error",
-        "error_code": "agent_failed",
-        "reason": "original failure",
-    }

@@ -1,8 +1,6 @@
 "use client";
 
 import { MarkdownText } from "@/components/markdown-text";
-import { CheckpointCard } from "@/components/checkpoint-card";
-import { RuntimeInfoCard, useRuntimeInfo } from "@/components/runtime-info";
 import { SessionTracePanel } from "@/components/session-trace-panel";
 import { TraceDownloadAction } from "@/components/trace-download-action";
 import { Button } from "@/components/ui/button";
@@ -114,23 +112,13 @@ const UserMessage: FC = () => (
 );
 
 const AssistantMessage: FC<{ browserId?: string }> = ({ browserId }) => {
-  const messageId = useAuiState((state) => state.message.id);
   const metadata = useAuiState((state) => state.message.metadata?.custom);
   const trace = useMemo(() => traceFromMetadata(metadata), [metadata]);
   const transport = useMemo(() => transportMetadataFromCustom(metadata), [metadata]);
-  const runtimeInfo = useRuntimeInfo(messageId);
 
   return (
     <MessagePrimitive.Root className="group relative min-w-0 pr-2 sm:pr-8">
       <div className="min-w-0 leading-relaxed wrap-break-word">
-        {runtimeInfo && <RuntimeInfoCard run={runtimeInfo} />}
-        {runtimeInfo?.status === "waiting_input" && runtimeInfo.checkpoint && (
-          <CheckpointCard
-            browserId={browserId}
-            checkpoint={runtimeInfo.checkpoint}
-            runtime={runtimeInfo}
-          />
-        )}
         {transport?.source === "pending" && transport.connection_status === "sending" && (
           <p className="mb-2 text-xs text-muted-foreground">正在连接…</p>
         )}

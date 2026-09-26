@@ -20,7 +20,7 @@ from app.vnext.llm.protocol import (
     ToolCall,
     ToolResultMessage,
 )
-from app.vnext.product.chat import ProductChatCompleted, VNextChatService
+from app.vnext.product.chat import VNextChatService
 from app.vnext.product.context import ConversationContextBuilder
 
 _LIMIT_ENV_NAMES = (
@@ -472,11 +472,12 @@ def test_product_chat_entry_uses_environment_configured_context_governance(
             request_id=uuid4(),
             query="find the synthetic league",
         )
-        return [event async for event in service.stream_turn(prepared)], session_id
+        return [update async for update in service.stream_turn_states(prepared)], session_id
 
     events, session_id = asyncio.run(run_chat())
 
-    assert isinstance(events[-1], ProductChatCompleted)
+    assert events[-1].state.status == "completed"
+    assert events[-1].state.answer.status == "ready"
     assert len(created) == 1
     model = created[0].model
     assert isinstance(model, _ConfiguredChatModel)

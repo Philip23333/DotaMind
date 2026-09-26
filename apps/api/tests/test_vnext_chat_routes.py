@@ -6,18 +6,16 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.api.v1.vnext_chat_routes import router, trace_router
-from app.application.chat_repository import ChatIdempotencyConflictError
-from app.vnext.product.chat import ProductChatCompleted, ProductTraceSummary
+from app.vnext.product.chat import ProductTraceSummary
 from app.vnext.product.trace_store import TraceNotFoundError
 
 
 class _Service:
+    prepared = None
+
     async def prepare_turn(self, **kwargs):
         self.prepared = kwargs
         return kwargs
-
-    async def stream_turn(self, _prepared):
-        yield ProductChatCompleted(content="done", turn_index=1)
 
     async def list_session_traces(self, **kwargs):
         self.listed = kwargs
@@ -33,30 +31,22 @@ class _Service:
         ]
 
 
-def test_message_route_streams_the_small_product_contract() -> None:
+def test_legacy_message_route_is_removed_without_starting_a_run() -> None:
     service = _Service()
     app = FastAPI()
     app.include_router(router)
     app.state.vnext_chat_service = service
     session_id = uuid4()
-    request_id = uuid4()
 
     with TestClient(app) as client:
         response = client.post(
             f"/chat/sessions/{session_id}/messages",
             headers={"X-DotaMind-Browser-Id": str(uuid4())},
-            json={"request_id": str(request_id), "query": "Ame 在哪个队？"},
+            json={"request_id": str(uuid4()), "query": "Ame 在哪个队？"},
         )
 
-    assert response.status_code == 200
-    assert response.headers["content-type"].startswith("application/x-ndjson")
-    assert response.json() == {
-        "type": "completed",
-        "content": "done",
-        "turn_index": 1,
-        "catalog_visual_entities": [],
-    }
-    assert service.prepared["session_id"] == session_id
+    assert not response.is_success
+    assert service.prepared is None
 
 
 def test_session_trace_list_is_metadata_only_and_scoped_to_request_session() -> None:
@@ -88,41 +78,6 @@ def test_session_trace_list_is_metadata_only_and_scoped_to_request_session() -> 
             }
         ]
     }
-
-
-def test_message_route_requires_a_browser_identity() -> None:
-    app = FastAPI()
-    app.include_router(router)
-    app.state.vnext_chat_service = _Service()
-
-    with TestClient(app) as client:
-        response = client.post(
-            f"/chat/sessions/{uuid4()}/messages",
-            json={"request_id": str(uuid4()), "query": "question"},
-        )
-
-    assert response.status_code == 422
-    assert response.json()["error_code"] == "browser_id_required"
-
-
-def test_message_route_rejects_an_idempotency_payload_conflict() -> None:
-    class _ConflictingService:
-        async def prepare_turn(self, **_kwargs):
-            raise ChatIdempotencyConflictError()
-
-    app = FastAPI()
-    app.include_router(router)
-    app.state.vnext_chat_service = _ConflictingService()
-
-    with TestClient(app) as client:
-        response = client.post(
-            f"/chat/sessions/{uuid4()}/messages",
-            headers={"X-DotaMind-Browser-Id": str(uuid4())},
-            json={"request_id": str(uuid4()), "query": "question"},
-        )
-
-    assert response.status_code == 409
-    assert response.json()["error_code"] == "idempotency_conflict"
 
 
 def test_expired_trace_download_returns_gone() -> None:

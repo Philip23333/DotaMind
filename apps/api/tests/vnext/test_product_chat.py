@@ -16,11 +16,7 @@ from app.vnext.agent.events import (
     TextDelta,
 )
 from app.vnext.llm.protocol import FinalMessage, UserMessage
-from app.vnext.product.chat import (
-    ProductChatCompleted,
-    ProductChatError,
-    VNextChatService,
-)
+from app.vnext.product.chat import VNextChatService
 from app.vnext.product.context import ConversationContextBuilder
 from app.vnext.product.presentation import ProductVisualEntity
 
@@ -99,7 +95,7 @@ class _TraceStore:
 def _collect(service: VNextChatService, **kwargs):
     async def run():
         prepared = await service.prepare_turn(**kwargs)
-        return [event async for event in service.stream_turn(prepared)]
+        return [update async for update in service.stream_turn_states(prepared)]
 
     return asyncio.run(run())
 
@@ -134,13 +130,16 @@ def test_product_chat_replays_full_dialogue_then_persists_before_completed() -> 
         query="他最近一场表现如何？",
     )
 
-    assert [type(event) for event in events] == [ProductChatCompleted]
+    completed = events[-1]
+    assert completed.state.status == "completed"
+    assert completed.state.answer.status == "ready"
+    assert completed.state.answer.text == "Ame 最近一场表现很好。"
     assert [message.role for message in runtime.messages] == ["user", "final", "user"]
     assert runtime.messages[-1].content == "他最近一场表现如何？"
     assert len(repository.appended) == 1
     assert repository.appended[0]["user_query"] == "他最近一场表现如何？"
     assert repository.appended[0]["assistant_message"] == "Ame 最近一场表现很好。"
-    assert events[-1].turn_index == 2
+    assert completed.turn_index == 2
 
 
 def test_product_chat_failure_does_not_create_a_dialogue_turn() -> None:
@@ -167,12 +166,11 @@ def test_product_chat_failure_does_not_create_a_dialogue_turn() -> None:
         query="query",
     )
 
-    assert events == [
-        ProductChatError(
-            error_code="agent_runtime_error",
-            reason="本次回答未能完成，请重试。",
-        )
-    ]
+    failed = events[-1].state
+    assert failed.status == "failed"
+    assert failed.error is not None
+    assert failed.error.code == "agent_runtime_error"
+    assert failed.error.message == "本次回答未能完成，请重试。"
     assert repository.appended == []
 
 
@@ -218,12 +216,13 @@ def test_compaction_failure_uses_safe_projection_message(
         query="问一个测试问题",
     )
 
-    assert len(events) == 1
-    assert isinstance(events[0], ProductChatError)
-    assert events[0].error_code == "context_compaction_failed"
-    assert events[0].reason == "本次回答未能完成，请重试。"
-    assert "internal provider detail" not in events[0].reason
-    assert events[0].trace is not None
+    failed = events[-1]
+    assert failed.state.status == "failed"
+    assert failed.state.error is not None
+    assert failed.state.error.code == "context_compaction_failed"
+    assert failed.state.error.message == "本次回答未能完成，请重试。"
+    assert "internal provider detail" not in failed.state.error.message
+    assert failed.trace is not None
     assert len(trace_store.saved) == 1
     assert trace_store.saved[0].status == "failed"
     assert trace_store.saved[0].trace["terminal"]["error_code"] == "context_compaction_failed"
@@ -252,7 +251,7 @@ def test_product_chat_rejects_changed_query_for_failed_request_without_rerunning
             request_id=request_id,
             query="first",
         )
-        first_events = [event async for event in service.stream_turn(first)]
+        first_events = [event async for event in service.stream_turn_states(first)]
         state = service._sessions[session_id]
         records_after_failure = state.history.records
         effective_after_failure = state.history.effective_messages()
@@ -263,7 +262,7 @@ def test_product_chat_rejects_changed_query_for_failed_request_without_rerunning
             request_id=request_id,
             query="changed",
         )
-        second_events = [event async for event in service.stream_turn(second)]
+        second_events = [event async for event in service.stream_turn_states(second)]
         return (
             first_events,
             second_events,
@@ -282,18 +281,14 @@ def test_product_chat_rejects_changed_query_for_failed_request_without_rerunning
         effective_after_conflict,
     ) = asyncio.run(exercise())
 
-    assert first_events == [
-        ProductChatError(
-            error_code="agent_failed",
-            reason="本次回答未能完成，请重试。",
-        )
-    ]
-    assert second_events == [
-        ProductChatError(
-            error_code="idempotency_conflict",
-            reason="request_id has already been used with different inputs",
-        )
-    ]
+    first_error = first_events[-1].state.error
+    second_error = second_events[-1].state.error
+    assert first_error is not None
+    assert first_error.code == "agent_failed"
+    assert first_error.message == "本次回答未能完成，请重试。"
+    assert second_error is not None
+    assert second_error.code == "idempotency_conflict"
+    assert second_error.message == "request_id has already been used with different inputs"
     assert runtime.run_count == 1
     assert records_after_conflict == records_after_failure
     assert effective_after_conflict == effective_after_failure
@@ -322,7 +317,7 @@ def test_product_chat_persists_only_failed_runs_and_preserves_original_error_on_
         query="query",
     )
 
-    assert events[0].trace is not None
+    assert events[-1].trace is not None
     assert len(trace_store.saved) == 1
     assert trace_store.saved[0].browser_id_hash
 
@@ -342,12 +337,10 @@ def test_product_chat_persists_only_failed_runs_and_preserves_original_error_on_
         request_id=uuid4(),
         query="query",
     )
-    assert unavailable_events == [
-        ProductChatError(
-            error_code="agent_runtime_error",
-            reason="本次回答未能完成，请重试。",
-        )
-    ]
+    unavailable_error = unavailable_events[-1].state.error
+    assert unavailable_error is not None
+    assert unavailable_error.code == "agent_runtime_error"
+    assert unavailable_error.message == "本次回答未能完成，请重试。"
 
 
 def test_product_chat_does_not_save_success_or_cancellation_traces() -> None:
@@ -404,7 +397,12 @@ def test_product_chat_replays_without_running_the_agent() -> None:
         query="same query",
     )
 
-    assert events == [ProductChatCompleted(content="stored answer", turn_index=4)]
+    replayed = events[-1]
+    assert replayed.state.status == "completed"
+    assert replayed.state.answer.status == "ready"
+    assert replayed.state.answer.text == "stored answer"
+    assert replayed.state.persistence == "saved"
+    assert replayed.turn_index == 4
     assert runtime.messages is None
     assert repository.appended == []
     assert context_builder.received is None
@@ -535,11 +533,12 @@ def test_product_chat_persists_and_returns_visual_metadata_without_changing_fina
     assert visual_entity_enricher.received == ["不朽尸王（Undying）"]
     assert repository.appended[0]["assistant_message"] == "不朽尸王（Undying）"
     assert repository.appended[0]["catalog_visual_entities"] == [entity.model_dump()]
-    assert events[-1] == ProductChatCompleted(
-        content="不朽尸王（Undying）",
-        turn_index=2,
-        catalog_visual_entities=[entity],
-    )
+    completed = events[-1]
+    assert completed.state.status == "completed"
+    assert completed.state.answer.status == "ready"
+    assert completed.state.answer.text == "不朽尸王（Undying）"
+    assert completed.turn_index == 2
+    assert completed.catalog_visual_entities == [entity]
 
 
 def test_product_chat_replay_returns_persisted_visual_metadata() -> None:

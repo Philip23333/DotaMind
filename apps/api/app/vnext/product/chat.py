@@ -37,30 +37,6 @@ from .trace_store import RunTrace, TraceNotFoundError, TraceStore
 logger = logging.getLogger(__name__)
 
 
-class ProductChatEvent(BaseModel):
-    type: str
-
-
-class ProductChatDelta(ProductChatEvent):
-    type: Literal["delta"] = "delta"
-    text: str
-
-
-class ProductChatCompleted(ProductChatEvent):
-    type: Literal["completed"] = "completed"
-    content: str
-    turn_index: int
-    catalog_visual_entities: list[ProductVisualEntity] = Field(default_factory=list)
-    trace: ProductTraceRef | None = None
-
-
-class ProductChatError(ProductChatEvent):
-    type: Literal["error"] = "error"
-    error_code: str
-    reason: str
-    trace: ProductTraceRef | None = None
-
-
 class ProductTraceRef(BaseModel):
     trace_id: str
     expires_at: datetime
@@ -186,50 +162,6 @@ class VNextChatService:
             query=query,
             history=history,
         )
-
-    async def stream_turn(
-        self,
-        prepared: PreparedVNextChatTurn,
-    ) -> AsyncIterator[ProductChatDelta | ProductChatCompleted | ProductChatError]:
-        states = self.stream_turn_states(prepared)
-        try:
-            async for update in states:
-                state = update.state
-                if state.status == "running":
-                    continue
-                if state.status == "completed" and state.persistence in ("pending", "saving"):
-                    continue
-                if state.status == "completed" and state.persistence == "saved":
-                    if update.turn_index is None:
-                        yield ProductChatError(
-                            error_code="chat_store_error",
-                            reason="回答已生成，但未能确认保存结果，请重试保存。",
-                            trace=update.trace,
-                        )
-                    else:
-                        yield ProductChatCompleted(
-                            content=state.answer.text,
-                            turn_index=update.turn_index,
-                            catalog_visual_entities=update.catalog_visual_entities,
-                            trace=update.trace,
-                        )
-                    return
-
-                if state.error is not None:
-                    yield ProductChatError(
-                        error_code=state.error.code,
-                        reason=state.error.message,
-                        trace=update.trace,
-                    )
-                else:
-                    yield ProductChatError(
-                        error_code="agent_cancelled",
-                        reason="本次任务已取消。",
-                        trace=update.trace,
-                    )
-                return
-        finally:
-            await _close_upstream(states)
 
     async def stream_turn_states(
         self,
@@ -924,9 +856,6 @@ async def _close_upstream(events: AsyncIterator[object]) -> None:
 
 __all__ = [
     "PreparedVNextChatTurn",
-    "ProductChatCompleted",
-    "ProductChatDelta",
-    "ProductChatError",
     "ProductChatState",
     "ProductTraceRef",
     "ProductTraceSummary",

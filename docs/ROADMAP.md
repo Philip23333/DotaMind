@@ -151,8 +151,9 @@ threads. Unread counts are session-scoped local state, clear on selection, and
 update the sidebar without waiting for a session-list request. Mounted frontend
 integration tests cover switching, independent stop, unread clearing, and save
 updates. Actual disconnect cancels unfinished generation. Continuation after
-disconnect and stream resume are excluded. The old protocol code remains for
-Phase 6 cleanup.
+disconnect and stream resume are excluded. The obsolete product-chat NDJSON
+protocol was removed in Phase 6; the separate Runtime test-run `/runs` stream
+remains.
 Generation errors replace streamed text with fallback in the same message;
 cancellation, disconnection, and save failures have separate semantics.
 Started saves use a unified finite application-level budget; timeout preserves the
@@ -170,11 +171,12 @@ Work one boundary at a time in this order:
    production runtime-provider in one end-to-end path, preserving authorization
    and request idempotency. Implemented.
 4. Integrate independent thread runs, messages, history, and standard Markdown
-   rendering; defer catalog visual enhancement. Implemented; old protocol cleanup
-   remains pending.
+   rendering; defer catalog visual enhancement. Implemented.
 5. Implement execution/tool/final presentation and user-controlled folding.
    Implemented with ordered Run State activity and per-message local folding.
-6. Complete failure/history regression and remove obsolete protocol code.
+6. Complete failure/history regression and remove obsolete product-chat protocol
+   code. Implemented; tests use the product state stream directly. The separate
+   `/runs` Test Observer event stream remains independent.
 
 First-version final answers stream as the model generates them, following the
 requested ChatGPT-style interaction. Waiting for the complete answer or replaying

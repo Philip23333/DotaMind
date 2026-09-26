@@ -31,7 +31,7 @@ from app.vnext.llm.protocol import (
     ToolResultMessage,
     UserMessage,
 )
-from app.vnext.product.chat import ProductChatCompleted, VNextChatService
+from app.vnext.product.chat import VNextChatService
 from app.vnext.product.context import ConversationContextBuilder
 from app.vnext.product.presentation import DotaVisualEntityEnricher
 from app.vnext.tools.artifacts import register_artifact_tools
@@ -252,7 +252,7 @@ def test_follow_up_model_request_reuses_effective_history_and_reused_provider_id
             request_id=uuid4(),
             query="first",
         )
-        first_events = [event async for event in service.stream_turn(first)]
+        first_events = [event async for event in service.stream_turn_states(first)]
         state = service._sessions[session_id]
         state.history.commit_compaction(
             request_id=first.request_id,
@@ -266,15 +266,18 @@ def test_follow_up_model_request_reuses_effective_history_and_reused_provider_id
             request_id=uuid4(),
             query="second",
         )
-        second_events = [event async for event in service.stream_turn(second)]
+        second_events = [event async for event in service.stream_turn_states(second)]
         return first_events, second_events
 
     first_events, second_events = asyncio.run(exercise())
 
-    assert isinstance(first_events[-1], ProductChatCompleted), first_events
-    assert first_events[-1].content == "answer one"
+    assert first_events[-1].state.status == "completed", first_events
+    assert first_events[-1].state.answer.text == "answer one"
+    assert first_events[-1].state.answer.status == "ready"
     assert first_events[-1].turn_index == 2
-    assert second_events[-1] == ProductChatCompleted(content="answer two", turn_index=3)
+    assert second_events[-1].state.status == "completed"
+    assert second_events[-1].state.answer.text == "answer two"
+    assert second_events[-1].turn_index == 3
     assert repository.get_calls == 2
     state = service._sessions[session_id]
     assert len(state.history.records) == 10
@@ -461,23 +464,25 @@ def test_product_follow_up_uses_automatic_compaction_and_fresh_task_state(
             request_id=uuid4(),
             query=first_query,
         )
-        first_events = [event async for event in service.stream_turn(first)]
+        first_events = [event async for event in service.stream_turn_states(first)]
         second = await service.prepare_turn(
             browser_id="browser",
             session_id=session_id,
             request_id=uuid4(),
             query=second_query,
         )
-        second_events = [event async for event in service.stream_turn(second)]
+        second_events = [event async for event in service.stream_turn_states(second)]
         return first_events, second_events
 
     first_events, second_events = asyncio.run(exercise())
 
-    assert isinstance(first_events[-1], ProductChatCompleted), first_events
-    assert first_events[-1].content == "answer one"
+    assert first_events[-1].state.status == "completed", first_events
+    assert first_events[-1].state.answer.text == "answer one"
+    assert first_events[-1].state.answer.status == "ready"
     assert first_events[-1].turn_index == 2
-    assert isinstance(second_events[-1], ProductChatCompleted), second_events
-    assert second_events[-1].content == "answer two"
+    assert second_events[-1].state.status == "completed", second_events
+    assert second_events[-1].state.answer.text == "answer two"
+    assert second_events[-1].state.answer.status == "ready"
     assert second_events[-1].turn_index == 3
     assert model.phase == 16
     assert [record.kind for record in service._sessions[session_id].history.records].count(
@@ -574,12 +579,12 @@ def test_product_overflow_recovery_budget_resets_for_each_user_request(monkeypat
             prepared = await service.prepare_turn(
                 browser_id="browser", session_id=session_id, request_id=uuid4(), query=query
             )
-            results.append([event async for event in service.stream_turn(prepared)])
+            results.append([event async for event in service.stream_turn_states(prepared)])
         return results
 
     results = asyncio.run(exercise())
-    assert all(isinstance(events[-1], ProductChatCompleted) for events in results), results
-    assert [events[-1].content for events in results] == [
+    assert all(events[-1].state.status == "completed" for events in results), results
+    assert [events[-1].state.answer.text for events in results] == [
         f"answer for {query}" for query in queries
     ]
     assert len(model.requests) == 8
@@ -723,7 +728,7 @@ def test_product_follow_up_succeeds_after_summary_validation_failure(monkeypatch
         first = await service.prepare_turn(
             browser_id="browser", session_id=session_id, request_id=uuid4(), query=failed_query
         )
-        first_events = [event async for event in service.stream_turn(first)]
+        first_events = [event async for event in service.stream_turn_states(first)]
         state = service._sessions[session_id]
         artifact_ref = state.history.artifact_locators[0].ref
         artifact_before = await store.get(artifact_ref)
@@ -733,7 +738,7 @@ def test_product_follow_up_succeeds_after_summary_validation_failure(monkeypatch
         second = await service.prepare_turn(
             browser_id="browser", session_id=session_id, request_id=uuid4(), query=follow_up_query
         )
-        second_events = [event async for event in service.stream_turn(second)]
+        second_events = [event async for event in service.stream_turn_states(second)]
         return (
             first_events,
             second_events,
@@ -755,10 +760,11 @@ def test_product_follow_up_succeeds_after_summary_validation_failure(monkeypatch
         summary_before,
         commits_before,
     ) = asyncio.run(exercise())
-    assert first_events[-1].__class__.__name__ == "ProductChatError"
-    assert second_events[-1] == ProductChatCompleted(content="follow-up delivered", turn_index=2), (
-        second_events
-    )
+    assert first_events[-1].state.status == "failed"
+    assert first_events[-1].state.error is not None
+    assert second_events[-1].state.status == "completed", second_events
+    assert second_events[-1].state.answer.text == "follow-up delivered"
+    assert second_events[-1].turn_index == 2
     assert state.history.summary == summary_before
     assert len(state.history.compaction_records) == commits_before
     assert state.history.effective_messages() != history_before  # only the new request was appended

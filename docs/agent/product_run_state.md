@@ -3,19 +3,20 @@
 ## Status and scope
 
 This document defines the accepted target for the chat execution experience.
-Phases 1-5 are implemented, including Markdown-only rendering and independent
-thread runs. The product Run State schema, Runtime-event adapter, persistence,
-completed-answer retry, repository replay, and AssistantTransport endpoint are
-implemented. The production `runtime-provider` uses `/transport`; the
-page-lifetime thread registry keeps each thread's connection and run state alive
-when selection changes. The frontend reconciles request/message identities,
-streams canonical Markdown, and tracks unread counts per session in browser
-storage. Selecting a thread clears only its unread count, and the sidebar reads
-that local state directly. The process panel renders ordered stage/tool activity,
-stops showing a running tool as active after connection termination, and folds
-when the answer becomes ready unless the user has chosen its local expansion
-state. The old protocol implementation has not been removed; its cleanup and the
-remaining full journey regression belong to Phase 6.
+Phases 1-6 are implemented, including Markdown-only rendering, independent
+thread runs, and removal of the obsolete chat NDJSON protocol. The product Run
+State schema, Runtime-event adapter, persistence, completed-answer retry,
+repository replay, and AssistantTransport endpoint are implemented. The
+production `runtime-provider` uses `/transport`; the page-lifetime thread
+registry keeps each thread's connection and run state alive when selection
+changes. The frontend reconciles request/message identities, streams canonical
+Markdown, and tracks unread counts per session in browser storage. Selecting a
+thread clears only its unread count, and the sidebar reads that local state
+directly. The process panel renders ordered stage/tool activity, stops showing a
+running tool as active after connection termination, and folds when the answer
+becomes ready unless the user has chosen its local expansion state. Deterministic
+regression coverage uses the state stream; the separate `/runs` Test Observer
+event stream remains an independent feature.
 前端已接入 `/transport`，页面内多会话连接与按会话未读状态已实现；过程面板展示有序活动，并在回答就绪时自动折叠。
 Code remains the authority for current behavior. This document owns the product
 Run State contract; `../ROADMAP.md` owns delivery order.
@@ -274,9 +275,8 @@ Design approved. Runtime answer-stage and answer-attempt lifecycle events, live
 answer delivery during model invocation, the standalone Runtime-to-Run-State
 adapter, and its use by `VNextChatService` are implemented with deterministic
 tests. The service connects the state stream to dialogue persistence, cache
-retry, repository replay, and trace references. The existing `/messages` route
-still uses the legacy terminal-only adapter. Phase 3 adds a separate
-AssistantTransport endpoint; this phase does not switch the normal UI path.
+retry, repository replay, and trace references. Phase 3 added AssistantTransport;
+Phase 6 removed the obsolete `/messages` route and terminal-only event adapter.
 
 **Decision:** Publish answer fragments during the model invocation and expose
 explicit answer-stage and answer-attempt boundaries. Keep one Runtime execution
@@ -302,9 +302,8 @@ compaction text remain trace-only. The adapter in
 `apps/api/app/vnext/product/runtime_projection.py` maps these events into
 request-local product snapshots. `VNextChatService.stream_turn_states()` uses
 the same event mapper while retaining the canonical `FinalMessage` for history,
-cache, trace, and persistence. The legacy `stream_turn()` entry only translates
-terminal product states into its existing event types; it does not forward text
-deltas because that protocol cannot express fallback resets.
+cache, trace, and persistence. `stream_turn_states()` is the service's only chat
+state-stream API; no compatibility event translation remains.
 
 | Event semantic | Runtime fact | Product projection |
 | --- | --- | --- |
@@ -368,11 +367,9 @@ replacement, completed-answer caching, save retry, replay, and cancellation
 around persistence. Product state is connected to dialogue persistence and
 trace references. HTTP/browser delivery is the Phase 3 acceptance boundary.
 
-The internal product state stream expresses attempt reset. The existing
-`/messages` protocol still cannot, so its temporary `stream_turn()` adapter
-delivers only a completed answer or terminal error. The separate `/transport`
-route carries attempt resets; the production frontend remains on the old route
-until its runtime-provider hookup and browser acceptance are complete.
+The product state stream expresses attempt reset, and `/transport` carries those
+updates to the production frontend. There is no legacy chat streaming route or
+`stream_turn()` compatibility adapter.
 
 ### Phase 3: minimal transport and converter loop
 
@@ -382,16 +379,13 @@ projects server-owned product state using the official Python encoder, and is
 covered by real loopback HTTP tests for live text, fallback replacement,
 completion, persistence, and disconnect cancellation. A captured HTTP stream is
 also decoded by the exact official JavaScript package version used by
-assistant-ui. The actual chat frontend has not switched to this endpoint; the old
-route remains the normal UI path until the runtime-provider integration is
-complete.
+assistant-ui. The production frontend is connected to this endpoint through its
+runtime-provider; the old chat route and NDJSON protocol have been deleted.
 
 The frontend has a pure state converter, canonical message identities, history
 reconciliation, and canonical Markdown history conversion with deterministic
-tests. The production runtime-provider is not connected to `/transport` yet. The
-remaining boundary is the live hook and UI hookup: connect send -> activity ->
-live answer -> optional fallback replacement -> completion and persistence
-through a real browser path. Polished process UI belongs to Phase 5.
+tests. The production runtime-provider and chat UI are connected to `/transport`.
+The process presentation and folding behavior are implemented in Phase 5.
 
 **Decision:** AssistantTransport owns state replication; Product retains business
 completion and persistence. Cancel unfinished generation when the connection
@@ -437,9 +431,8 @@ The converter updates the same assistant message throughout. It does not decide
 fallback policy or maintain a second independent answer lifecycle. An optimistic
 user message must reconcile with server acceptance rather than appear twice;
 the transition from generating to saved must not create a second assistant
-message. The pure converter and history reconciliation foundation is implemented;
-full history/thread integration follows in Phase 4, but identity handoff is part
-of this phase.
+message. The pure converter, history reconciliation, and identity handoff are
+implemented in the production thread integration.
 
 The minimum frontend displays activity/stage, growing answer text, a stop action,
 and cancellation/error/persistence status. User stop propagates through transport
@@ -458,8 +451,8 @@ server's terminal cancellation event.
 Old and new routes may coexist briefly during development, but a request uses
 exactly one route. Do not dual-send or transparently retry an unsuccessful new
 transport request through the old protocol: either could run the Agent twice.
-Phase 3 validates the new route; Phase 4 integrates the remaining message/history
-features, switches the normal path, and removes the old protocol.
+Phase 3 validated the new route; Phase 4 integrated the remaining message/history
+features and switched the normal path. Phase 6 removed the old chat protocol.
 
 Acceptance through real HTTP and a browser (using a controllable model fixture
 where useful):
@@ -523,17 +516,18 @@ renderer. Preserve request/message identity across optimistic user acceptance,
 streaming, save completion, and history hydration. Historical messages without
 process data do not fabricate activity panels. The vNext history path now keeps
 canonical Markdown unchanged and does not apply `decorateCatalogMentions`; the
-new converter carries state without catalog enhancement. The existing production
-real-time path remains unchanged until the runtime-provider switch. Visual
+converter carries state without catalog enhancement. The production real-time
+path uses the runtime-provider and AssistantTransport. Visual
 metadata may stay stored but must not be required for readable answers or consumed
 for entity enhancement. Preserve trace links and existing message actions through
 structured metadata; this restriction is about catalog visuals, not all metadata.
 
-Retire the old NDJSON encoder/parser, transport event types, accumulated-text
-converter, and superseded lifecycle logic after the new path is accepted. Retain
-or relocate still-needed history, authorization, session, and trace operations
-rather than deleting whole files solely because they also contained old transport
-code. The normal chat path must use one protocol without automatic legacy retry.
+The old chat NDJSON encoder/parser, transport event types, accumulated-text
+converter, and superseded lifecycle adapters have been removed. History,
+authorization, session, and trace operations remain on their active routes. The
+normal chat path uses AssistantTransport without automatic legacy retry. The
+separate `/runs` event stream and Test Observer remain because they expose
+Runtime test runs, not product chat messages.
 
 Acceptance:
 
@@ -548,8 +542,7 @@ Acceptance:
 - Retry saving without regeneration; refresh restores committed text and does
   not claim recovery of unpersisted answers or ephemeral activity.
 - Existing trace/actions remain usable and the normal path uses
-  AssistantTransport. The old streaming protocol code remains until Phase 6
-  cleanup.
+  AssistantTransport.
 
 ### Phase 5: process UI
 
@@ -570,23 +563,18 @@ layout; no forced scroll is added for deltas or panel changes.
 
 ### Phase 6: regression and cleanup
 
-Complete integration regression and remove the obsolete state/transport code.
-Exercise no-tool success, multiple tools, recoverable tool failure, fatal error,
-primary/degraded/deterministic answers, cancellation, truncated streams, database
-failure and retry, consecutive turns, thread switching, and refresh after save.
-Include first-fragment delivery before completion, cancellation/failure after
-partial text, fallback replacement after partial text, and final text equality
-between the live message and saved history.
+Implemented. The obsolete product-chat NDJSON route, event encoder/types,
+accumulated-text converter, and superseded model/history adapters are removed.
+Product service tests assert `stream_turn_states()` snapshots directly; the
+removed `/messages` route is covered by a regression that verifies it cannot
+start a run. Session history, authorization, and trace APIs remain. The `/runs`
+event stream and Test Observer are independent Runtime test-run functionality and
+remain in place.
 
-The old protocol modules are retained until their remaining references and
-regressions are reviewed; the production chat path already uses
-AssistantTransport.
-
-Acceptance: deterministic focused checks and frontend/backend integration checks
-protect the complete user journey. Report actual checks and limitations; do not
-claim reasoning summaries, resumability, cross-tab recovery, or durable execution
-recovery. Real-provider/model runs are not required merely to validate transport
-mechanics.
+Deterministic backend and frontend regression suites are the acceptance boundary
+for this phase. They do not establish reasoning summaries, resumability,
+cross-tab recovery, or durable execution recovery. Real-provider/model runs are
+not required to validate transport mechanics.
 
 ## Reference baseline
 

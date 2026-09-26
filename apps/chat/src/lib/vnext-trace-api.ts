@@ -1,12 +1,15 @@
 import { getApiUrl } from "./api-url";
 
-export type SessionTraceSummary = {
+export type TraceRef = {
   trace_id: string;
+  expires_at: string;
+};
+
+export type SessionTraceSummary = TraceRef & {
   request_id: string;
   status: "completed" | "failed" | "cancelled";
   recording_mode: "diagnostic" | "test";
   created_at: string;
-  expires_at: string;
 };
 
 export async function listSessionTraces(
