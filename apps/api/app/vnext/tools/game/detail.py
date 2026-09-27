@@ -18,6 +18,8 @@ and whatever basic or extended data is currently available, but not necessarily
 a complete event timeline. Missing process data does not mean an event did not
 occur, and this tool does not request replay parsing. Large results are stored
 as an Artifact and can be read by a narrower data path when needed.
+When analyzing a particular Steam32 account, locate its player row by exact
+account_id; do not substitute a row based on nickname, hero, team, or slot.
 """
 
 

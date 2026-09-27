@@ -101,3 +101,21 @@ data does not prove an event did not occur, and the lookup does not trigger
 replay parsing. Tests use HTTP mocks. The earlier live cross-source check of
 `8960882635` is a single-match observation, not live verification of this new
 client.
+
+## Account-to-game evidence and local catalog labels
+
+The user-facing path composes existing observations: a Steam32 ID selects a
+STRATZ recent-games result; a chosen `valve_game_id` selects one OpenDota game;
+the requested player's row is identified only by exact `account_id`. The
+conversation history and generic Artifact references retain the list and large
+detail response for follow-ups such as “the second game”; there is no separate
+match-keyed memory store, forced profile lookup, or automatic detail fetch for
+all listed games. If the earlier list cannot be recovered, the agent must ask
+instead of guessing which match an ordinal refers to.
+
+`catalog.lookup` reads the bundled Valve hero/item snapshot by exact IDs and
+returns display names with snapshot-version metadata. These labels remain
+separate from provider match facts and do not rewrite OpenDota's `data`. Unknown
+IDs remain visible as unknown. Match statistics support only the conclusions
+they encode; missing timeline, purchase, or identity data remains unknown and
+must not be interpreted as proof that an event did not happen.

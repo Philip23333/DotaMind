@@ -169,6 +169,15 @@ the shared appearance of a player or event is not sufficient. These tests do
 not establish general current STRATZ availability or every source business
 meaning.
 
+The account-to-game workflow tests use the real Runtime, registry, session
+history, Artifact externalization/read path, and local Valve catalog with
+scripted model responses and synthetic provider data. They verify selected
+Valve IDs, exact `account_id` matching, ordinal follow-ups against the prior
+list, and preservation of missing or conflicting source values. These tests
+verify orchestration and evidence handling only; they do not establish that a
+real model will choose the tools correctly or produce an accurate analysis.
+No real STRATZ, OpenDota, or model request is made by this workflow suite.
+
 Context Governance evaluation measures answer omissions, complete-request
 peaks, summary and locator overhead, successful compactions, recovery attempts,
 Artifact rereads, provider-reported tokens, and latency. A provider-confirmed

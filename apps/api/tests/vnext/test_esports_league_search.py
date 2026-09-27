@@ -148,4 +148,5 @@ def test_default_vnext_registry_includes_league_and_match_search() -> None:
         "esports.match.search",
         "esports.team.search",
         "esports.player.search",
+        "catalog.lookup",
     }

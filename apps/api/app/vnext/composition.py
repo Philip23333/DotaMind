@@ -10,6 +10,7 @@ from pathlib import Path
 
 from dotenv import dotenv_values
 
+from app.integrations.valve.catalog_repository import load_default_catalog_repository
 from app.vnext.agent.instructions import AGENT_INSTRUCTION, PRODUCT_INSTRUCTION
 from app.vnext.agent.limits import AgentLimits
 from app.vnext.agent.runtime import AgentRuntime
@@ -23,6 +24,7 @@ from app.vnext.artifacts import (
     ToolResponseExternalizer,
 )
 from app.vnext.artifacts.lifecycle import ArtifactObservationTranscriptRewriter
+from app.vnext.capabilities.catalog.lookup import CatalogLookupInput, CatalogLookupResult
 from app.vnext.capabilities.esports.league import LeagueSearchInput, LeagueSearchResult
 from app.vnext.capabilities.esports.match import MatchSearchInput, MatchSearchResult
 from app.vnext.capabilities.esports.player import PlayerSearchInput, PlayerSearchResult
@@ -54,7 +56,9 @@ from app.vnext.providers.stratz import (
     StratzPlayerProfileAdapter,
     StratzPlayerRecentGamesAdapter,
 )
+from app.vnext.providers.valve.catalog_lookup import ValveCatalogLookupAdapter
 from app.vnext.tools.artifacts import register_artifact_tools
+from app.vnext.tools.catalog import register_catalog_lookup_tool
 from app.vnext.tools.esports import (
     register_league_tool,
     register_match_tool,
@@ -81,6 +85,7 @@ PlayerSearchService = Callable[[PlayerSearchInput], Awaitable[PlayerSearchResult
 PlayerProfileService = Callable[[PlayerProfileInput], Awaitable[PlayerProfileResult]]
 TeamSearchService = Callable[[TeamSearchInput], Awaitable[TeamSearchResult]]
 GameDetailService = Callable[[GameDetailInput], Awaitable[GameDetailResult]]
+CatalogLookupService = Callable[[CatalogLookupInput], Awaitable[CatalogLookupResult]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -304,6 +309,7 @@ class VNextServices:
         Callable[[PlayerRecentGamesInput], Awaitable[PlayerRecentGamesResult]] | None
     ) = None
     game_detail: GameDetailService | None = None
+    catalog_lookup: CatalogLookupService | None = None
 
     async def aclose(self) -> None:
         return None
@@ -346,6 +352,7 @@ def build_vnext_services(
             timeout_seconds=config.opendota_timeout_seconds,
         )
         game_detail = OpenDotaGameDetailAdapter(opendota_client).get_game_detail
+    catalog_lookup = ValveCatalogLookupAdapter(load_default_catalog_repository()).lookup
     return VNextServices(
         league_search=league_adapter.search,
         series_search=series_adapter.search,
@@ -357,6 +364,7 @@ def build_vnext_services(
         player_profile=player_profile,
         player_recent_games=player_recent_games,
         game_detail=game_detail,
+        catalog_lookup=catalog_lookup,
     )
 
 
@@ -398,6 +406,8 @@ def build_vnext_registry(
         register_player_recent_games_tool(registry, resolved_services.player_recent_games)
     if config.opendota_enabled and resolved_services.game_detail is not None:
         register_game_detail_tool(registry, resolved_services.game_detail)
+    if resolved_services.catalog_lookup is not None:
+        register_catalog_lookup_tool(registry, resolved_services.catalog_lookup)
     if task_state_coordinator is not None:
         register_task_plan_tool(registry, task_state_coordinator)
         register_task_checkpoint_tool(registry, task_state_coordinator)

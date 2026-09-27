@@ -46,6 +46,17 @@ only when `DOTAMIND_OPENDOTA_ENABLED=true`. Reading a record does not submit a
 replay for parsing. The profile query has not been verified against the live
 STRATZ API, and the new OpenDota client has not had a live request test.
 
+For the account-to-game journey, a user can provide a Steam32 ID, inspect its
+bounded recent-games list, select one returned `valve_game_id`, and request
+that game's detail. The account's row in the detail must be matched by exact
+`account_id`; names and other player attributes are not identity proof. A
+follow-up such as “the second game” refers to the earlier list retained in the
+conversation, not a refreshed list with potentially different ordering. The
+agent does not fetch every listed game's detail automatically. Static hero and
+item labels may be resolved from the bundled Valve catalog; unknown IDs remain
+unknown. Missing timelines or purchase data are evidence gaps, not proof that
+events or purchases did not occur.
+
 ## Product boundaries
 
 Answers distinguish provider facts, identity inferences, and model interpretation.

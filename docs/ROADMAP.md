@@ -112,6 +112,13 @@ before a second concrete implementation demonstrates the need.
   HTTP-mock tests do not establish live OpenDota availability. The prior
   `8960882635` cross-source ID check remains single-match evidence only.
 
+The account-to-game workflow is covered with deterministic Runtime composition:
+the agent can continue from an account's bounded recent-games list to one
+selected match, locate the exact account row, resolve known hero/item labels
+from the local Valve catalog, and keep the prior list available for ordinal
+follow-ups. This verifies scripted orchestration only, not real-model tool
+selection or answer quality. Real provider/model evaluation remains separate.
+
 ## Context Governance: Runtime-driven history compaction
 
 The next phase is defined by

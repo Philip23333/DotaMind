@@ -23,6 +23,7 @@ esports.tournament.search
 esports.match.search
 esports.team.search
 esports.player.search
+catalog.lookup             # local Valve hero/item names
 player.profile             # when a STRATZ token is configured
 player.recent_games        # when a STRATZ token is configured
 game.detail                # when OpenDota is explicitly enabled
@@ -250,13 +251,32 @@ parsing. Large results use normal Artifact externalization and narrower
 live cross-check for `8960882635` supports the ID mapping for that observed
 match only; this implementation has not yet been tested against live OpenDota.
 
+`catalog.lookup(kind, ids)` resolves up to 20 exact positive hero or item IDs
+against the locally bundled Valve Dota 2 catalog snapshot. It returns each
+requested ID as `found` or `unknown`, optional English/Chinese display labels,
+and the snapshot version. These names are static catalog labels, not fields
+returned by STRATZ or OpenDota; unknown IDs remain unknown. The lookup does not
+modify match-detail data and makes no network request.
+
+For an account-to-game workflow, use `player.profile` only when profile data is
+requested, and query `player.recent_games` directly when a Steam32 account is
+provided only to ask about recent games. Fetch `game.detail` only for the
+selected game, passing its `valve_game_id` unchanged. Identify the account's
+player row by exact `account_id`; a name, hero, team, or slot is not a substitute.
+For ordinal follow-ups such as “the second game”, use the earlier list retained
+in the conversation rather than refreshing and changing its order. If that
+list is unavailable, ask to retrieve or clarify it instead of guessing.
+Describe explicit statistics as facts, interpretations as interpretations, and
+missing evidence as unknown. A scoreboard cannot establish when or why an event
+happened, and absent timeline or purchase data does not prove that the event or
+purchase did not occur.
+
 `found=false` means only that the profile response did not contain a usable
 profile object; it does not establish that the account is absent or has no Dota
 2 history. An empty recent-games list is valid, and fewer rows than requested
 does not prove history completeness. An empty player row is preserved as such
 and cannot support claims about that player's hero, result, or performance in
 the game. Missing statistics remain missing, and the tool does not derive win
-rates or other aggregates. The game-detail adapter, when implemented, must
-reject unusable or mismatched source detail rather than returning an empty
-successful result. Reading existing game data does not submit a replay for
-parsing.
+rates or other aggregates. The game-detail adapter rejects unusable or
+mismatched source detail rather than returning an empty successful result.
+Reading existing game data does not submit a replay for parsing.

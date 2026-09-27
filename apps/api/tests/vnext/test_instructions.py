@@ -83,6 +83,22 @@ def test_execution_evidence_rules_preserve_scope_entities_and_placement_uncertai
     assert re.search(r"\bfy\b|\bliquid\b|\bti 2024\b", instruction) is None
 
 
+def test_player_game_followups_preserve_exact_account_and_match_identity() -> None:
+    instruction = " ".join(AGENT_INSTRUCTION.lower().split())
+
+    assert "use `player.profile` when profile information is requested" in instruction
+    assert "asks only for recent games, call `player.recent_games` directly" in instruction
+    assert "request `game.detail` only for a selected or explicitly identified game" in instruction
+    assert "pass its `valve_game_id` unchanged" in instruction
+    assert "exact `account_id`" in instruction
+    assert "never use the first player as a fallback" in instruction
+    assert "do not fetch a new list to redefine its order" in instruction
+    assert "if that list cannot be recovered" in instruction
+    assert "labels from the reported valve catalog snapshot" in instruction
+    assert "missing timeline or purchase data does not prove" in instruction
+    assert re.search(r"\bfy\b|\bliquid\b|\bti 2024\b", instruction) is None
+
+
 def test_answer_instructions_keep_requested_coverage_and_uncertainty() -> None:
     for prompt in (ANSWER_INSTRUCTION, DEGRADED_ANSWER_INSTRUCTION):
         normalized = " ".join(prompt.lower().split())

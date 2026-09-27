@@ -214,3 +214,13 @@ for the generic Artifact processor. Missing process data does not trigger
 replay parsing. OpenDota composition and registry construction are network-free.
 Steam32 and PandaScore player identities remain separate unless a future
 evidence-backed identity capability is designed.
+
+The account-to-game workflow is composed by the existing model-driven Runtime,
+not a dedicated player-analysis pipeline. `player.recent_games` supplies the
+bounded list, `game.detail` receives only a selected Valve game ID, and the
+player row is located by exact `account_id`. Existing conversation history and
+generic Artifact handling support ordinal follow-ups and large details; no
+second session store or automatic fetch of every listed match is introduced.
+The local `catalog.lookup` capability resolves hero/item display labels from
+the bundled Valve snapshot without changing provider observations or making
+network requests.

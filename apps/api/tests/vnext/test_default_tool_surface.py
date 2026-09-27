@@ -21,6 +21,7 @@ def test_default_registry_exposes_only_current_capabilities() -> None:
         "esports.match.search",
         "esports.team.search",
         "esports.player.search",
+        "catalog.lookup",
     }
     assert "game_summary" not in json.dumps(
         [tool.model_dump(mode="json") for tool in registry.schemas()]
