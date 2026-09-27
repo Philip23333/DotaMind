@@ -140,14 +140,16 @@ logical tool response; the bounded model observation is derived separately by
 the generic result processor for ordinary tools. A stored ref is not
 automatically restored into a later turn's dialogue context.
 
-## Hero guide data flow (client implemented; pipeline pending)
+## Hero guide data flow (client and parsers implemented; pipeline pending)
 
 The synchronous D2PT HTTP client is implemented with `urllib.request`; its
 deterministic tests use an injected opener and make no live request. It sends
 the verified request headers and performs bounded transport and minimal
-response-shape validation. This does not implement guide parsing, persistent
-storage, background refresh, or the registered `hero.guide` tool. The separate
-Sven probe remains evidence of access and sampled response shapes only.
+response-shape validation. This does not implement persistent storage,
+background refresh, or the registered `hero.guide` tool. The pure Pub and Pro
+parsers project source rows into the existing DTOs; the original `D2PTResponse`
+still owns the complete raw bytes and parsed source result. The separate Sven
+probe remains evidence of access and sampled response shapes only.
 
 The planned refresh path is:
 

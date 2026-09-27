@@ -54,10 +54,30 @@ class D2PTSchemaError(D2PTError):
         super().__init__("D2PT response structure was invalid")
 
 
+class D2PTParseError(D2PTError):
+    """A source record could not be projected into the guide DTO contract."""
+
+    code = "invalid_guide_data"
+    _REASONS = {
+        "invalid_structure",
+        "invalid_value",
+        "hero_mismatch",
+        "position_mismatch",
+    }
+
+    def __init__(self, reason: str, source_path: str) -> None:
+        if reason not in self._REASONS:
+            raise ValueError("unsupported D2PT parse error reason")
+        self.reason = reason
+        self.source_path = source_path
+        super().__init__(f"D2PT guide data invalid ({reason}) at {source_path}")
+
+
 __all__ = [
     "D2PTError",
     "D2PTHTTPError",
     "D2PTJSONError",
+    "D2PTParseError",
     "D2PTSchemaError",
     "D2PTTimeoutError",
     "D2PTTransportError",

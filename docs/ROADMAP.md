@@ -87,13 +87,13 @@ before a second concrete implementation demonstrates the need.
 4. Register the capability only after its focused acceptance passes.
 5. Remove transitional code once the replacement is accepted.
 
-## Hero guides (DTO, fixtures, and HTTP client implemented; pipeline pending)
+## Hero guides (DTO, fixtures, client, and parsers implemented; pipeline pending)
 
 The internal query DTOs and two fixed raw Sven fixtures are implemented and
 covered by offline tests. A synchronous, bounded D2PT HTTP client is also
 implemented and tested with a fake opener; those tests make no live request. The
-`hero.guide` tool is not registered; parsers, persistent cache, Service, and
-scheduled refresh remain unimplemented. The one-time endpoint probe verified
+`hero.guide` tool is not registered; the persistent cache, Service, and scheduled
+refresh remain unimplemented. The one-time endpoint probe verified
 non-empty sample responses only. Source evidence and its limits are documented
 in [`reference/d2pt.md`](reference/d2pt.md).
 
@@ -105,8 +105,10 @@ Implementation and acceptance proceed in this order:
 2. **Complete:** implement the bounded D2PT fetch client with deterministic
    injected-opener tests for request shape, transport failures, response bounds,
    and minimal validation. These tests do not call D2PT.
-3. Implement and fixture-test separate Pub and Pro parsers. Pub supplies the
-   primary guide; Pro contributes only examples from `recent_matches`.
+3. **Complete:** implement and fixture-test separate Pub and Pro parsers. Pub
+   supplies the primary guide; Pro contributes only examples from
+   `recent_matches`. Parser tests use the fixed samples and local constructed
+   cases, not live provider requests.
 4. Implement a persistent cache retaining original response bytes and parsed
    results, with atomic whole-snapshot replacement, old-value retention on
    failure, and explicit valid-empty records. Publish Pub by hero plus position

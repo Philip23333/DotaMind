@@ -203,7 +203,7 @@ not turn into deterministic test failures.
 Never commit credentials, authorization headers, request tokens, or material
 user data.
 
-## Hero guide evaluation (DTO, fixtures, and HTTP client implemented; pipeline pending)
+## Hero guide evaluation (DTO, fixtures, client, and parsers implemented; cache pipeline pending)
 
 The D2PT probe recorded in [`reference/d2pt.md`](reference/d2pt.md) is a live
 connectivity and sample-shape check for one Sven Pub row and one Sven Pro row.
@@ -212,35 +212,34 @@ for every hero/position, or model answer quality.
 
 The current offline acceptance covers strict DTO inputs, independent Pub/Pro
 metadata, source-shaped JSON preservation, byte/hash/shape checks for the two
-fixed raw response fixtures, and deterministic HTTP-client behavior through an
-injected fake opener. Client tests cover request URLs and headers, timeout and
-response-size bounds, status/error handling, JSON and minimal schema validation,
-and response closure. These tests make no network or model call and do not test
-parsing the fixtures into guide DTOs.
+fixed raw response fixtures, deterministic HTTP-client behavior through an
+injected fake opener, and Pub/Pro fixture parsing. Client tests cover request
+URLs and headers, timeout and response-size bounds, status/error handling, JSON
+and minimal schema validation, and response closure. Parser tests cover the
+observed Sven fields and counts, all-record ordering, source-position evidence,
+strict type and identity validation, all-or-nothing failure, and deep-copy
+behavior. They make no network or model call and do not establish all-hero or
+all-position parser coverage.
 
 Remaining acceptance layers are separate:
 
-1. **Parser:** parser tests use the checked-in byte-for-byte source fixtures to
-   verify root shapes, all-record traversal, field preservation, mixed/null
-   values, and Pub/Pro separation. These tests make no live provider or model
-   call.
-2. **Persistent cache:** deterministic tests verify independent Pub/Pro status
+1. **Persistent cache:** deterministic tests verify independent Pub/Pro status
    and timestamps, atomic publication after fetch and parse success, retention of
    the previous good value after failure, and a valid empty response distinct
    from missing data or an error.
-3. **Refresh coordination:** a clock-controlled test verifies the daily
+2. **Refresh coordination:** a clock-controlled test verifies the daily
    03:00 Asia/Shanghai schedule, serial request behavior with a one-second wait
    after each response, shared manual/scheduled entry point, and duplicate-run
    prevention. It does not wait for wall-clock 03:00 or call D2PT.
-4. **`hero.guide` query:** local cache fixtures verify hero/position/section
+3. **`hero.guide` query:** local cache fixtures verify hero/position/section
    filtering, partial Pub/Pro availability, visible stale/missing states, no
    remote request on a cache miss, and normal Artifact externalization for a
    large result.
-5. **Real full refresh:** a separately authorized live-provider acceptance
+4. **Real full refresh:** a separately authorized live-provider acceptance
    verifies the configured hero/position coverage, cache publication, and
    source status. A successful one-hero probe or fixture parser test cannot
    stand in for this check.
-6. **Real-model answer:** a separate evaluation checks whether the model answers
+5. **Real-model answer:** a separate evaluation checks whether the model answers
    from the cached Pub guide and Pro examples, keeps the sources distinct, and
    avoids unsupported statistical or causal claims. It is not implied by a
    successful provider refresh.

@@ -262,11 +262,12 @@ skill candidates.
 
 Source metadata can represent available, empty, or missing data, and can retain
 stale available data alongside a last refresh error. Retrieval and attempt times
-require timezones; the source `updated_at` remains an unparsed string. DTOs are
-contract-only in this phase: no cache read, remote request, parser, or tool
-registration is implemented. The eventual query remains cache-only, with
-section filtering, freshness calculation, partial-source behavior, and Artifact
-externalization owned by a later Service/tool phase.
+require timezones; the source `updated_at` remains an unparsed string. The D2PT
+HTTP client and pure Pub/Pro parsers are implemented below the capability
+boundary, but there is no cache read, Service, or tool registration yet. The
+eventual query remains cache-only, with section filtering, freshness calculation,
+partial-source behavior, and Artifact externalization owned by a later
+Service/tool phase.
 
 ## Steam player and game-detail tools
 

@@ -70,17 +70,18 @@ universal object graph. If complete provider-source fidelity is required, it
 must be added explicitly at the capability boundary before generic Artifact
 externalization.
 
-## Hero guide data contract (DTO and HTTP client implemented; pipeline pending)
+## Hero guide data contract (DTO, HTTP client, and parsers implemented; cache pipeline pending)
 
 The internal contract is defined in `app.vnext.capabilities.hero.guide`. A
 synchronous D2PT HTTP client now fetches the heroes list, Pub builds, and Pro
 builds. It preserves the exact response bytes and parsed JSON array and performs
-transport and minimal source-shape checks; it does not map source fields into the
-guide DTO. No parser, persistent cache, Guide Service, or model-facing tool is
-implemented. The input selects one `(hero_id, position)` pair, with a strict
-positive integer hero ID, a strict integer position from 1 through 5, and
-`section` equal to `all`, `items`, `skills`, or `pro_examples` (default `all`).
-It does not accept a hero name, provider selector, URL, or refresh request.
+transport and minimal source-shape checks. Pure Pub and Pro parsers project
+source rows into the existing guide DTOs without changing the response. No
+persistent cache, Guide Service, or model-facing tool is implemented. The input
+selects one `(hero_id, position)` pair, with a strict positive integer hero ID,
+a strict integer position from 1 through 5, and `section` equal to `all`,
+`items`, `skills`, or `pro_examples` (default `all`). It does not accept a hero
+name, provider selector, URL, or refresh request.
 
 The HTTP client uses the fixed D2PT base URL, the verified `User-Agent`,
 `Referer`, and `Accept: application/json` headers, and Python's standard
@@ -137,8 +138,8 @@ six-slot summaries.
 Skill sequences preserve source order, duplicates, and supplied length; they
 are not expanded into hero-level plans. Item timing is represented as a
 source-attributed `average` or `median` value without calculating either. The
-future parser may label item phases around the 30-minute boundary, but phase
-classification and the exact mapping are not part of this DTO-only phase. The
+current parser maps Pub `avg_minute` into average timing and applies the
+30-minute display phase boundary documented above. The
 raw response does not establish universal definitions for `pr`, `pick_rate`,
 nested `win_rate`, `avg_minute`, or `std_minute`; preserve source paths and
 associated counts, and do not compare unrelated paths or infer causal item
@@ -151,6 +152,44 @@ not claim cross-source Valve identity verification. Pro aggregate statistics
 are not turned into a recommended route, and no field links a Pro example to a
 Pub build.
 
+### Implemented source projections
+
+`parse_pub_builds(rows, hero_id, position)` validates each root row's hero,
+position, and `build_data`, then returns one `PubGuide` per source row in source
+order. `build_id` and `facet_id` are optional non-negative strict integers;
+`updated_at` remains a string and `data_scope` is copied as an open object.
+Statistics use separate `root` and `build_data` namespaces and include only
+source-present `num_matches`, `num_wins`, `pick_rate`, and `win_rate` keys, with
+values unchanged. Missing or null candidate arrays become empty lists. A
+malformed row or candidate fails the complete parse with `D2PTParseError` and a
+generated source path; rows are not silently skipped.
+
+Pub `starting_items_new` entries are `[item_ids, statistics]`. Repeated IDs are
+merged into a quantity within that option only, retaining first-seen order;
+separate options remain separate. `anchor_items` maps to `item_progression` and
+`items_mid_late` maps to `situational_items`; both preserve each complete source
+row as statistics. Only `avg_minute` is mapped as an average timing. The DTO
+phase is `mid` at or before 30 minutes, `late` after 30, and `unknown` when the
+field is missing or null. These are DotaMind projection choices, not claims that
+the source fields have universal statistical semantics. `abilities_new` keeps
+each supplied ordered sequence and its statistics; it is not expanded into a
+hero-level plan. Pub talents retain their complete source rows.
+
+`parse_pro_examples(rows, hero_id)` reads only each root row's
+`recent_matches`; Pro aggregate build, item, and ability fields do not produce
+recommendations. Each recent match becomes an example with ordered item,
+ability, and talent observations. Root position supplies the fallback. A unique
+draft row matching both account ID and hero ID supplies position when the match
+has an account ID; without one, matching uses hero ID. A missing, ambiguous, or
+invalid draft position falls back to the root position. The selected position's
+basis is recorded as `draft` or `build`. Other heroes in the draft are valid
+match context.
+
+Both parsers reject bool-as-number, non-finite times, wrong non-null optional
+field types, and malformed nested arrays as a whole. Open DTO dictionaries are
+deep copies. Unknown provider fields that have no DTO field remain in the
+original `D2PTResponse`; parsing is a projection, not source retention.
+
 When the later data pipeline is implemented, each refresh snapshot will retain
 the exact original response bytes and complete parsed result, including unknown
 source fields and heterogeneous or null values. Successful publication will
@@ -158,8 +197,8 @@ atomically replace the whole snapshot; a failed fetch or parse will preserve the
 previous successful value; valid empty data will remain distinct from missing
 data and failure. Pub snapshots are keyed by hero and position. Pro snapshots
 are keyed by hero and filtered by requested position at query time. These
-storage and refresh rules are documented targets, not behavior of the client or
-DTO package.
+storage and refresh rules are documented targets, not behavior of the client,
+parsers, or DTO package.
 
 The one-time Sven probe verified one non-empty JSON row from each tested
 endpoint. The Pub row declared a 14-day configured window and patch label

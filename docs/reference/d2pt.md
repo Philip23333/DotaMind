@@ -140,6 +140,29 @@ type. Pro aggregate statistics are not a substitute for the individual
 `recent_matches` examples when the product needs concrete professional-play
 references.
 
+## DotaMind parser projection
+
+The following are implementation choices for the current DTO projection, not
+additional semantics proven by D2PT:
+
+- Pub `starting_items_new` rows are `[item_id_sequence, statistics]`; the DTO
+  merges repeated item IDs into quantities within each option while preserving
+  first-seen order. It does not cross-pair starting items with skill sequences.
+- Pub `anchor_items` and `items_mid_late` remain separate DTO collections. For
+  display only, the parser maps observed `avg_minute` to average timing and uses
+  a 30-minute boundary (`<= 30` is `mid`; `> 30` is `late`). Missing/null time is
+  `unknown`; no median is inferred.
+- Pub `abilities_new` rows remain their supplied sequence and statistics.
+  Talent rows remain source-shaped. Root and `build_data` statistics are kept
+  in separate DTO namespaces so identically named values do not overwrite.
+- Pro DTO examples come only from `recent_matches`, not aggregate `core_items`,
+  `abilities`, or `starting_items`. Position uses a unique draft match by both
+  account and hero when account ID is available, otherwise by hero; an absent,
+  ambiguous, or invalid draft position falls back to the root row's position.
+- Malformed projected rows fail the full parse with a generated source path.
+  The client response remains the owner of complete raw bytes and unprojected
+  source fields.
+
 ## Time, versions, and statistic limits
 
 The Pub `data_scope` exposed a 14-day configured window, patch label `7.41f`, and
