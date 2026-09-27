@@ -203,7 +203,7 @@ not turn into deterministic test failures.
 Never commit credentials, authorization headers, request tokens, or material
 user data.
 
-## Hero guide evaluation (DTO/fixture contract implemented; pipeline pending)
+## Hero guide evaluation (DTO, fixtures, and HTTP client implemented; pipeline pending)
 
 The D2PT probe recorded in [`reference/d2pt.md`](reference/d2pt.md) is a live
 connectivity and sample-shape check for one Sven Pub row and one Sven Pro row.
@@ -211,14 +211,16 @@ It is not evidence of a full-cache refresh, scheduled execution, parser coverage
 for every hero/position, or model answer quality.
 
 The current offline acceptance covers strict DTO inputs, independent Pub/Pro
-metadata, source-shaped JSON preservation, and byte/hash/shape checks for the two
-fixed raw response fixtures. It makes no network or model call and does not test
-parsing those payloads into DTOs.
+metadata, source-shaped JSON preservation, byte/hash/shape checks for the two
+fixed raw response fixtures, and deterministic HTTP-client behavior through an
+injected fake opener. Client tests cover request URLs and headers, timeout and
+response-size bounds, status/error handling, JSON and minimal schema validation,
+and response closure. These tests make no network or model call and do not test
+parsing the fixtures into guide DTOs.
 
 Remaining acceptance layers are separate:
 
-1. **Client and parser:** deterministic client tests verify requested headers
-   and URLs; parser tests use the checked-in byte-for-byte source fixtures to
+1. **Parser:** parser tests use the checked-in byte-for-byte source fixtures to
    verify root shapes, all-record traversal, field preservation, mixed/null
    values, and Pub/Pro separation. These tests make no live provider or model
    call.

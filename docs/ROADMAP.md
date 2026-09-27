@@ -87,31 +87,37 @@ before a second concrete implementation demonstrates the need.
 4. Register the capability only after its focused acceptance passes.
 5. Remove transitional code once the replacement is accepted.
 
-## Hero guides (DTO and fixtures implemented; pipeline pending)
+## Hero guides (DTO, fixtures, and HTTP client implemented; pipeline pending)
 
 The internal query DTOs and two fixed raw Sven fixtures are implemented and
-covered by offline tests. The `hero.guide` tool is not registered; no D2PT
-client, parser, persistent cache, Service, or scheduled refresh exists. The
-one-time endpoint probe verified non-empty sample responses only. Source
-evidence and its limits are documented in [`reference/d2pt.md`](reference/d2pt.md).
+covered by offline tests. A synchronous, bounded D2PT HTTP client is also
+implemented and tested with a fake opener; those tests make no live request. The
+`hero.guide` tool is not registered; parsers, persistent cache, Service, and
+scheduled refresh remain unimplemented. The one-time endpoint probe verified
+non-empty sample responses only. Source evidence and its limits are documented
+in [`reference/d2pt.md`](reference/d2pt.md).
 
 Implementation and acceptance proceed in this order:
 
 1. **Complete:** define the guide DTO and source boundaries, and pin the
    observed Pub and Pro response bodies as byte-for-byte test fixtures. Contract
    and fixture-integrity tests run offline.
-2. Implement the D2PT fetch client and persistent cache, retaining original
-   response bytes and parsed results, with atomic success publication, old-value
-   retention on failure, and explicit valid-empty records. Publish Pub by hero
-   plus position and Pro by hero, with independent source metadata.
+2. **Complete:** implement the bounded D2PT fetch client with deterministic
+   injected-opener tests for request shape, transport failures, response bounds,
+   and minimal validation. These tests do not call D2PT.
 3. Implement and fixture-test separate Pub and Pro parsers. Pub supplies the
    primary guide; Pro contributes only examples from `recent_matches`.
-4. Add the cache-only `hero.guide(hero_id, position, section)` query capability
+4. Implement a persistent cache retaining original response bytes and parsed
+   results, with atomic whole-snapshot replacement, old-value retention on
+   failure, and explicit valid-empty records. Publish Pub by hero plus position
+   and Pro by hero, with independent source metadata; filter Pro by position on
+   read.
+5. Add the cache-only `hero.guide(hero_id, position, section)` query capability
    and register it after focused acceptance.
-5. Add the single-instance daily 03:00 Asia/Shanghai refresh and manual trigger
+6. Add the single-instance daily 03:00 Asia/Shanghai refresh and manual trigger
    through the same non-overlapping entry point. Keep scheduler/deployment
    facility choice open until implementation.
-6. Verify a real full refresh over the intended configured coverage, then run a
+7. Verify a real full refresh over the intended configured coverage, then run a
    separate real-model answer evaluation. Sample-fixture acceptance, provider
    refresh, and answer quality are separate results.
 

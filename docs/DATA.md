@@ -70,14 +70,26 @@ universal object graph. If complete provider-source fidelity is required, it
 must be added explicitly at the capability boundary before generic Artifact
 externalization.
 
-## Hero guide data contract (DTO implemented; data pipeline pending)
+## Hero guide data contract (DTO and HTTP client implemented; pipeline pending)
 
-The internal contract is defined in `app.vnext.capabilities.hero.guide`; no
-Provider, parser, cache, Service, or model-facing tool is implemented. The input
-selects one `(hero_id, position)` pair, with a strict positive integer hero ID,
-a strict integer position from 1 through 5, and `section` equal to `all`,
-`items`, `skills`, or `pro_examples` (default `all`). It does not accept a hero
-name, provider selector, URL, or refresh request.
+The internal contract is defined in `app.vnext.capabilities.hero.guide`. A
+synchronous D2PT HTTP client now fetches the heroes list, Pub builds, and Pro
+builds. It preserves the exact response bytes and parsed JSON array and performs
+transport and minimal source-shape checks; it does not map source fields into the
+guide DTO. No parser, persistent cache, Guide Service, or model-facing tool is
+implemented. The input selects one `(hero_id, position)` pair, with a strict
+positive integer hero ID, a strict integer position from 1 through 5, and
+`section` equal to `all`, `items`, `skills`, or `pro_examples` (default `all`).
+It does not accept a hero name, provider selector, URL, or refresh request.
+
+The HTTP client uses the fixed D2PT base URL, the verified `User-Agent`,
+`Referer`, and `Accept: application/json` headers, and Python's standard
+`urllib.request` transport. It makes one bounded request per method without
+automatic retry. Responses are limited to 8 MiB, must have HTTP status 200, and
+must decode as UTF-8 JSON arrays of objects with minimally valid identity and
+container fields. Content-Type is retained as metadata and does not determine
+whether a body is JSON. The offline client tests inject a fake opener; they do
+not verify live provider access.
 
 `HeroGuideResult` contains `hero_id`, `position`, `section`, independent
 `pub_metadata` and `pro_metadata`, `pub_guides[]`, `pro_examples[]`, and optional
@@ -139,14 +151,15 @@ not claim cross-source Valve identity verification. Pro aggregate statistics
 are not turned into a recommended route, and no field links a Pro example to a
 Pub build.
 
-When the later data pipeline is implemented, each refresh partition will retain
+When the later data pipeline is implemented, each refresh snapshot will retain
 the exact original response bytes and complete parsed result, including unknown
-source fields and heterogeneous or null values. Successful publication will be
-atomic; a failed fetch or parse will preserve the previous successful value;
-valid empty data will remain distinct from missing data and failure. Pub cache
-publication is planned per hero and position; Pro publication is planned per
-hero. These storage and refresh rules are documented targets, not behavior of
-the DTO package.
+source fields and heterogeneous or null values. Successful publication will
+atomically replace the whole snapshot; a failed fetch or parse will preserve the
+previous successful value; valid empty data will remain distinct from missing
+data and failure. Pub snapshots are keyed by hero and position. Pro snapshots
+are keyed by hero and filtered by requested position at query time. These
+storage and refresh rules are documented targets, not behavior of the client or
+DTO package.
 
 The one-time Sven probe verified one non-empty JSON row from each tested
 endpoint. The Pub row declared a 14-day configured window and patch label

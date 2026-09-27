@@ -140,12 +140,14 @@ logical tool response; the bounded model observation is derived separately by
 the generic result processor for ordinary tools. A stored ref is not
 automatically restored into a later turn's dialogue context.
 
-## Hero guide data flow (confirmed plan; not implemented)
+## Hero guide data flow (client implemented; pipeline pending)
 
-The D2PT probe is current source-access evidence only: the tested WSL
-`urllib` client retrieved non-empty Sven Pub and Pro JSON samples. There is no
-implemented D2PT provider integration, persistent guide cache, background
-refresh, or registered `hero.guide` tool implied by that probe.
+The synchronous D2PT HTTP client is implemented with `urllib.request`; its
+deterministic tests use an injected opener and make no live request. It sends
+the verified request headers and performs bounded transport and minimal
+response-shape validation. This does not implement guide parsing, persistent
+storage, background refresh, or the registered `hero.guide` tool. The separate
+Sven probe remains evidence of access and sampled response shapes only.
 
 The planned refresh path is:
 
@@ -154,19 +156,22 @@ daily 03:00 Asia/Shanghai trigger or manual refresh request
   -> one shared refresh entry point; reject/skip duplicate active refreshes
   -> D2PT Provider client; serial requests, wait 1 second after each response
   -> Pub parser and Pro parser, kept independent
-  -> persistent cache partitioned by source, hero, and position
+  -> persistent source snapshots
+       -> Pub snapshot per hero and position
+       -> Pro snapshot per hero; requested position is filtered on read
        -> retain original response bytes and parsed source result
-       -> atomically replace a partition only after successful parsing
-       -> retain its last good value on fetch/parse failure
+       -> atomically replace the whole snapshot only after successful parsing
+       -> never append one position's new rows while leaving old rows in place
+       -> retain its last good snapshot on fetch/parse failure
        -> represent a valid empty result separately from failure
 ```
 
-Each Pub and Pro partition records its own retrieval time, source-provided
-update time when available, and refresh status. A failed update of one source
-does not invalidate the other source's successful value. Scheduler technology
-and the precise freshness-expiration threshold remain implementation choices;
-the behavioral contract is one daily local-time run and one shared manual entry
-point that prevents overlapping refreshes.
+Each Pub hero-position snapshot and Pro hero snapshot records retrieval time,
+source-provided update time when available, and refresh status. A failed update
+of one snapshot does not invalidate another successful snapshot. Scheduler
+technology and the precise freshness-expiration threshold remain implementation
+choices; the behavioral contract is one daily local-time run and one shared
+manual entry point that prevents overlapping refreshes.
 
 The planned online path is read-only:
 

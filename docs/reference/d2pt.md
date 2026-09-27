@@ -21,6 +21,11 @@ results verify access and the sampled response shapes in that environment only.
 They do not establish a production integration, full hero/position coverage,
 long-term availability, a persistent cache, or scheduled refresh.
 
+The repository client uses the same three headers and standard
+`urllib.request.urlopen` transport. It leaves proxy selection to Python's
+default urllib behavior and its injected-opener tests are offline; those tests
+do not establish current connectivity from another environment.
+
 The endpoint paths follow the [D2PT Guides request implementation](https://github.com/Darktex/d2pt-guides/blob/main/d2pt_guides/d2pt.py):
 
 | Source sample | Request |
