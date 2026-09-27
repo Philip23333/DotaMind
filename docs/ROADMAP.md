@@ -119,6 +119,20 @@ from the local Valve catalog, and keep the prior list available for ordinal
 follow-ups. This verifies scripted orchestration only, not real-model tool
 selection or answer quality. Real provider/model evaluation remains separate.
 
+## Optional Tavily MCP web search (implemented; live provider call unverified)
+
+- Add the opt-in `web.search` capability through the official Python MCP SDK
+  and Streamable HTTP, with the remote `tavily_search` schema discovered at API
+  startup and validated locally.
+- Keep credentials in the bearer transport header and keep MCP transport,
+  provider adaptation, generic ToolRegistry validation, and Artifact handling
+  at their existing boundaries.
+- Expose only search; extraction, crawling, research, persistent MCP sessions,
+  automatic rediscovery, and automatic retries remain out of scope.
+- Deterministic tests use local sessions and fakes. A real Tavily MCP request
+  has not been run as part of this change; use the explicit smoke command only
+  when a live call is intended.
+
 ## Context Governance: Runtime-driven history compaction
 
 The next phase is defined by

@@ -24,6 +24,7 @@ esports.match.search
 esports.team.search
 esports.player.search
 catalog.lookup             # local Valve hero/item names
+web.search                 # when Tavily MCP is enabled and discovery succeeds
 player.profile             # when a STRATZ token is configured
 player.recent_games        # when a STRATZ token is configured
 game.detail                # when OpenDota is explicitly enabled
@@ -135,6 +136,44 @@ generic result processor for oversized responses. `TeamDTO.current_roster`
 preserves the current membership snapshot while
 `TournamentParticipantDTO.expected_roster` remains the historical/expected
 tournament-context relation.
+
+## Optional web search
+
+When Tavily MCP is enabled and startup discovery validates the remote
+`tavily_search` input schema, the default registry exposes one local tool:
+`web.search`. Its input schema is the discovered remote JSON Schema, passed to
+the model and used for local validation without a lossy Pydantic conversion.
+Invalid arguments are rejected before opening an MCP session.
+
+Each discovery or search operation uses a fresh Streamable HTTP MCP session and
+one bounded timeout. The API key is sent only as an Authorization bearer
+header; it is not part of tool arguments, model messages, traces, or sanitized
+errors. Startup discovery is explicit and asynchronous. If disabled, missing a
+key, or unable to validate the expected tool/schema, search is not registered;
+PandaScore capabilities remain available. There is no background rediscovery
+or automatic retry.
+
+Successful results preserve the remote tool name, retrieval time, structured
+content when supplied, and ordered content blocks. Valid JSON text blocks also
+retain their original text alongside a parsed representation. Error results
+are never treated as evidence; empty results remain distinguishable from
+failures. Unsupported binary blocks are described without embedding their
+payload, and linked MCP resources are not fetched. Large outputs continue
+through the generic session Artifact externalizer.
+
+Configure the root `.env` or process environment with
+`DOTAMIND_TAVILY_MCP_ENABLED=true`, `DOTAMIND_TAVILY_API_KEY`, and optionally
+`DOTAMIND_TAVILY_MCP_URL` / `DOTAMIND_TAVILY_MCP_TIMEOUT_SECONDS`; environment
+variables take precedence over `.env`. Restart the API after configuration
+changes. A dry smoke check makes no network request:
+
+```bash
+cd apps/api
+UV_CACHE_DIR=/tmp/dotamind-uv-cache uv run --locked --no-sync python -m scripts.smoke_tavily_mcp
+```
+
+The explicit `--execute` option performs discovery and one bounded search; use
+it only when a live provider call is intended.
 
 Future domain tools must be added explicitly with a closed schema and focused
 tests; the registry must not grow a universal open selector or deprecated

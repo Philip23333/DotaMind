@@ -5,9 +5,10 @@ from __future__ import annotations
 import asyncio
 import inspect
 from collections.abc import Awaitable
+from copy import deepcopy
 from typing import Any
 
-from pydantic import BaseModel, ValidationError
+from pydantic import ValidationError
 
 from app.vnext.artifacts import ToolResponseArtifactError
 from app.vnext.artifacts.processor import ToolResultProcessor
@@ -17,7 +18,7 @@ from app.vnext.artifacts.retrieval import (
 )
 from app.vnext.artifacts.store import ArtifactNotFoundError, InvalidArtifactRefError
 from app.vnext.llm.protocol import ModelTool, ToolCall, ToolResultMessage
-from app.vnext.tools.definition import ToolDefinition
+from app.vnext.tools.definition import ToolArguments, ToolDefinition
 from app.vnext.tools.errors import StructuredToolError, ToolError, ToolErrorCode
 
 
@@ -62,7 +63,18 @@ class ToolRegistry:
             )
 
         try:
-            arguments = definition.input_model.model_validate(call.arguments)
+            if definition.input_model is None:
+                validation_errors = definition.json_schema_errors(call.arguments)
+                if validation_errors:
+                    return self._error_result(
+                        call,
+                        "invalid_arguments",
+                        f"invalid arguments for tool {call.name}",
+                        {"validation_errors": validation_errors},
+                    )
+                arguments: ToolArguments = deepcopy(call.arguments)
+            else:
+                arguments = definition.input_model.model_validate(call.arguments)
         except ValidationError as exc:
             details = {
                 "validation_errors": [
@@ -204,7 +216,7 @@ class ToolRegistry:
         return results
 
     @staticmethod
-    def _invoke(definition: ToolDefinition, arguments: BaseModel) -> Awaitable[Any]:
+    def _invoke(definition: ToolDefinition, arguments: ToolArguments) -> Awaitable[Any]:
         if inspect.iscoroutinefunction(definition.handler):
             return definition.handler(arguments)  # type: ignore[return-value]
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import math
 import os
 from collections.abc import Awaitable, Callable
@@ -11,7 +12,11 @@ from pathlib import Path
 from dotenv import dotenv_values
 
 from app.integrations.valve.catalog_repository import load_default_catalog_repository
-from app.vnext.agent.instructions import AGENT_INSTRUCTION, PRODUCT_INSTRUCTION
+from app.vnext.agent.instructions import (
+    AGENT_INSTRUCTION,
+    PRODUCT_INSTRUCTION,
+    WEB_SEARCH_INSTRUCTION,
+)
 from app.vnext.agent.limits import AgentLimits
 from app.vnext.agent.runtime import AgentRuntime
 from app.vnext.agent.task_state import TaskStateCoordinator
@@ -42,6 +47,7 @@ from app.vnext.capabilities.player.recent_games import (
     PlayerRecentGamesInput,
     PlayerRecentGamesResult,
 )
+from app.vnext.integrations.mcp import MCPRemoteClient, MCPRemoteError
 from app.vnext.llm.openai_compatible import OpenAICompatibleModelClient
 from app.vnext.providers.opendota import OpenDotaClient, OpenDotaGameDetailAdapter
 from app.vnext.providers.pandascore.client import PandaScoreClient
@@ -56,6 +62,10 @@ from app.vnext.providers.stratz import (
     StratzPlayerProfileAdapter,
     StratzPlayerRecentGamesAdapter,
 )
+from app.vnext.providers.tavily import TavilyWebSearch
+from app.vnext.providers.tavily.web_search import (
+    TAVILY_REMOTE_SEARCH_TOOL,
+)
 from app.vnext.providers.valve.catalog_lookup import ValveCatalogLookupAdapter
 from app.vnext.tools.artifacts import register_artifact_tools
 from app.vnext.tools.catalog import register_catalog_lookup_tool
@@ -69,12 +79,15 @@ from app.vnext.tools.esports import (
     register_tournament_tool,
 )
 from app.vnext.tools.game.detail import register_game_detail_tool
+from app.vnext.tools.json_schema import compile_object_json_schema
 from app.vnext.tools.player.profile import register_player_profile_tool
 from app.vnext.tools.player.recent_games import register_player_recent_games_tool
 from app.vnext.tools.registry import ToolRegistry
 from app.vnext.tools.task import register_task_checkpoint_tool, register_task_plan_tool
+from app.vnext.tools.web import register_web_search_tool
 
 _VNEXT_ENV_PATH = Path(__file__).resolve().parents[4] / ".env"
+logger = logging.getLogger(__name__)
 
 LeagueSearchService = Callable[[LeagueSearchInput], Awaitable[LeagueSearchResult]]
 SeriesSearchService = Callable[[SeriesSearchInput], Awaitable[SeriesSearchResult]]
@@ -82,8 +95,8 @@ SeriesTeamsService = Callable[[SeriesTeamsInput], Awaitable[SeriesTeamsResult]]
 TournamentSearchService = Callable[[TournamentSearchInput], Awaitable[TournamentSearchResult]]
 MatchSearchService = Callable[[MatchSearchInput], Awaitable[MatchSearchResult]]
 PlayerSearchService = Callable[[PlayerSearchInput], Awaitable[PlayerSearchResult]]
-PlayerProfileService = Callable[[PlayerProfileInput], Awaitable[PlayerProfileResult]]
 TeamSearchService = Callable[[TeamSearchInput], Awaitable[TeamSearchResult]]
+PlayerProfileService = Callable[[PlayerProfileInput], Awaitable[PlayerProfileResult]]
 GameDetailService = Callable[[GameDetailInput], Awaitable[GameDetailResult]]
 CatalogLookupService = Callable[[CatalogLookupInput], Awaitable[CatalogLookupResult]]
 
@@ -96,14 +109,18 @@ class VNextSettings:
     llm_timeout_seconds: float = 90.0
     pandascore_base_url: str = "https://api.pandascore.co"
     pandascore_token: str = ""
+    pandascore_timeout_seconds: float = 20.0
     stratz_graphql_url: str = "https://api.stratz.com/graphql"
     stratz_token: str = field(default="", repr=False)
     stratz_timeout_seconds: float = 20.0
-    pandascore_timeout_seconds: float = 20.0
     opendota_enabled: bool = False
     opendota_base_url: str = "https://api.opendota.com/api"
     opendota_api_key: str = field(default="", repr=False)
     opendota_timeout_seconds: float = 20.0
+    tavily_mcp_enabled: bool = False
+    tavily_mcp_url: str = "https://mcp.tavily.com/mcp"
+    tavily_api_key: str = field(default="", repr=False)
+    tavily_mcp_timeout_seconds: float = 30.0
     trace_ttl_seconds: int = 72 * 60 * 60
     test_recording_enabled: bool = False
     agent_limits: AgentLimits = field(default_factory=AgentLimits)
@@ -117,6 +134,10 @@ class VNextSettings:
             or self.opendota_timeout_seconds <= 0
         ):
             raise ValueError("DOTAMIND_OPENDOTA_TIMEOUT_SECONDS must be a finite positive number")
+        if not math.isfinite(self.tavily_mcp_timeout_seconds) or (
+            self.tavily_mcp_timeout_seconds <= 0
+        ):
+            raise ValueError("DOTAMIND_TAVILY_MCP_TIMEOUT_SECONDS must be a finite positive number")
 
     @classmethod
     def from_env(cls) -> VNextSettings:
@@ -172,6 +193,22 @@ class VNextSettings:
             opendota_timeout_seconds=_parse_positive_finite_float(
                 "DOTAMIND_OPENDOTA_TIMEOUT_SECONDS",
                 _env_value("DOTAMIND_OPENDOTA_TIMEOUT_SECONDS", "20", file_values) or "",
+            ),
+            tavily_mcp_enabled=_parse_bool_value(
+                "DOTAMIND_TAVILY_MCP_ENABLED",
+                False,
+                file_values,
+            ),
+            tavily_mcp_url=_env_value(
+                "DOTAMIND_TAVILY_MCP_URL",
+                defaults.tavily_mcp_url,
+                file_values,
+            )
+            or defaults.tavily_mcp_url,
+            tavily_api_key=_env_value("DOTAMIND_TAVILY_API_KEY", "", file_values) or "",
+            tavily_mcp_timeout_seconds=_parse_positive_finite_float(
+                "DOTAMIND_TAVILY_MCP_TIMEOUT_SECONDS",
+                _env_value("DOTAMIND_TAVILY_MCP_TIMEOUT_SECONDS", "30", file_values),
             ),
             trace_ttl_seconds=int(
                 _env_value("DOTAMIND_VNEXT_TRACE_TTL_SECONDS", "259200", file_values)
@@ -310,6 +347,7 @@ class VNextServices:
     ) = None
     game_detail: GameDetailService | None = None
     catalog_lookup: CatalogLookupService | None = None
+    tavily_web_search: TavilyWebSearch | None = None
 
     async def aclose(self) -> None:
         return None
@@ -368,6 +406,58 @@ def build_vnext_services(
     )
 
 
+async def initialize_vnext_services(
+    settings: VNextSettings | None = None,
+    services: VNextServices | None = None,
+) -> VNextServices:
+    """Explicitly discover optional remote MCP tools before Runtime creation."""
+
+    config = settings or VNextSettings.from_env()
+    resolved_services = services or build_vnext_services(config)
+    if not config.tavily_mcp_enabled:
+        return resolved_services
+    api_key = config.tavily_api_key.strip()
+    if not api_key:
+        logger.error(
+            "Tavily MCP is enabled but DOTAMIND_TAVILY_API_KEY is missing; web.search disabled"
+        )
+        return resolved_services
+
+    try:
+        client = MCPRemoteClient(
+            url=config.tavily_mcp_url,
+            api_key=api_key,
+            timeout_seconds=config.tavily_mcp_timeout_seconds,
+        )
+        remote_tools = await client.list_tools()
+        matches = [tool for tool in remote_tools if tool.name == TAVILY_REMOTE_SEARCH_TOOL]
+        if len(matches) != 1:
+            logger.error(
+                "Tavily MCP search discovery expected one %s tool; web.search disabled",
+                TAVILY_REMOTE_SEARCH_TOOL,
+            )
+            return resolved_services
+        search_tool = TavilyWebSearch(client, matches[0])
+        compile_object_json_schema(search_tool.tool.input_schema)
+    except MCPRemoteError as exc:
+        if exc.status_code is None:
+            logger.error("Tavily MCP discovery failed: category=%s", exc.category)
+        else:
+            logger.error(
+                "Tavily MCP discovery failed: category=%s status_code=%s",
+                exc.category,
+                exc.status_code,
+            )
+        return resolved_services
+    except Exception as exc:
+        logger.error("Tavily MCP discovery disabled web.search (%s)", type(exc).__name__)
+        return resolved_services
+
+    resolved_services.tavily_web_search = search_tool
+    logger.info("Tavily MCP search discovered; web.search is available")
+    return resolved_services
+
+
 def build_vnext_registry(
     services: VNextServices | None = None,
     *,
@@ -408,6 +498,8 @@ def build_vnext_registry(
         register_game_detail_tool(registry, resolved_services.game_detail)
     if resolved_services.catalog_lookup is not None:
         register_catalog_lookup_tool(registry, resolved_services.catalog_lookup)
+    if resolved_services.tavily_web_search is not None:
+        register_web_search_tool(registry, resolved_services.tavily_web_search)
     if task_state_coordinator is not None:
         register_task_plan_tool(registry, task_state_coordinator)
         register_task_checkpoint_tool(registry, task_state_coordinator)
@@ -431,6 +523,9 @@ def build_vnext_runtime(
         timeout=config.llm_timeout_seconds,
     )
     task_state_coordinator = TaskStateCoordinator()
+    shared_instruction = PRODUCT_INSTRUCTION
+    if resolved_services.tavily_web_search is not None:
+        shared_instruction = f"{PRODUCT_INSTRUCTION}\n\n{WEB_SEARCH_INSTRUCTION}"
     return AgentRuntime(
         model,
         build_vnext_registry(
@@ -439,7 +534,7 @@ def build_vnext_runtime(
             task_state_coordinator=task_state_coordinator,
         ),
         system_instruction=AGENT_INSTRUCTION,
-        shared_instruction=PRODUCT_INSTRUCTION,
+        shared_instruction=shared_instruction,
         limits=limits,
         transcript_rewriter=ArtifactObservationTranscriptRewriter(),
         task_state_coordinator=task_state_coordinator,
@@ -452,4 +547,5 @@ __all__ = [
     "build_vnext_registry",
     "build_vnext_runtime",
     "build_vnext_services",
+    "initialize_vnext_services",
 ]

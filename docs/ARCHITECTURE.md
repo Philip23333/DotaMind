@@ -7,7 +7,9 @@ currently contains the generic Artifact tools and the closed
 `esports.league.search`, `esports.series.search`,
 `esports.series.teams`, `esports.tournament.search`,
 `esports.match.search`, `esports.team.search`, and `esports.player.search`
-capabilities.
+capabilities. When explicitly enabled and discovered during application
+startup, it also contains `web.search`, backed by Tavily's remote
+`tavily_search` MCP tool.
 Additional domain capabilities are introduced later as independent contracts.
 
 ## Principles
@@ -59,6 +61,11 @@ User
              -> player capability contract
              -> PandaScore adapter/client
              -> player identity/current-team observations
+       <-> web.search (optional)
+             -> discovered remote JSON Schema / local validation
+             -> Tavily MCP adapter
+             -> official MCP SDK Streamable HTTP session
+             -> source-preserving search observations
        oversized tool result
              -> generic result processor
              -> complete validated logical tool response in a session Artifact
@@ -80,6 +87,13 @@ Model
 The model-facing contract never exposes wire routes, credentials, pagination
 syntax, or transport-private IDs. A single provider does not justify a router or
 plugin framework.
+
+The optional web-search integration is initialized asynchronously in the API
+lifespan before Runtime construction. Synchronous/offline composition performs
+no MCP I/O. Startup discovers and validates the exact remote search capability;
+each later search opens and closes a separate authenticated MCP session. The
+bearer credential is confined to the transport header, and discovery or request
+failures do not disable the independent PandaScore services.
 
 ## Tool registry boundary
 

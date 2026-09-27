@@ -44,6 +44,16 @@ capability's public output model determines which validated facts and
 normalizations reach the tool result. The generic Artifact layer preserves that
 result exactly, but cannot recover fields omitted before output validation.
 
+Optional web search is different from the closed esports DTOs: `web.search`
+uses the discovered Tavily input schema and preserves returned source material
+instead of mapping it into a cross-provider business model. The result records
+the service and remote tool identity, retrieval time, structured content when
+available, and ordered content blocks. Parsed JSON from a text block is
+additional to—not a replacement for—the original text. Credentials and
+transport headers never enter the result. Unsupported binary content is not
+embedded, and a resource link is not fetched automatically. The generic
+Artifact layer remains the only storage path for oversized results.
+
 ## Data design test
 
 For each new field or normalization step, ask:

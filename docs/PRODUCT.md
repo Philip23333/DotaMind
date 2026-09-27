@@ -19,6 +19,8 @@ generic game statistics.
 - Player builds, skill upgrades, talents, and item progression when data exists
 - Hero, item, and ability information that explains a match
 - Natural follow-up questions grounded in the actual conversation
+- Optional web search for current external information, when enabled by the
+  deployment
 
 ## Core user journeys
 
@@ -62,6 +64,11 @@ events or purchases did not occur.
 Answers distinguish provider facts, identity inferences, and model interpretation.
 The agent must use tools for current or specific facts and must not invent data
 that no tool returned.
+
+When Tavily MCP search is configured and available, the agent can search the web
+and cite URLs actually returned by that search. Search snippets are observations,
+not proof that a full page was read; search availability is optional and provider
+failures are reported as missing evidence rather than silently substituted.
 
 The product is organized around user value, not around whatever a provider API
 happens to expose.

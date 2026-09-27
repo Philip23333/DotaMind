@@ -31,7 +31,12 @@ from app.persistence.database import (
     create_database_resources,
     ping_database,
 )
-from app.vnext.composition import VNextSettings, build_vnext_runtime, build_vnext_services
+from app.vnext.composition import (
+    VNextSettings,
+    build_vnext_runtime,
+    build_vnext_services,
+    initialize_vnext_services,
+)
 from app.vnext.product import (
     ConversationContextBuilder,
     DotaVisualEntityEnricher,
@@ -89,6 +94,7 @@ for handler in logging.getLogger().handlers:
     handler.addFilter(QueryStringRedactionFilter())
     handler.setFormatter(PipeFormatter())
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     vnext_settings = VNextSettings.from_env()
@@ -113,6 +119,7 @@ async def lifespan(app: FastAPI):
             ttl_seconds=vnext_settings.trace_ttl_seconds,
         )
     vnext_services = build_vnext_services(vnext_settings)
+    await initialize_vnext_services(vnext_settings, vnext_services)
     app.state.vnext_services = vnext_services
     app.state.vnext_runtime = build_vnext_runtime(services=vnext_services)
     app.state.vnext_chat_service = VNextChatService(

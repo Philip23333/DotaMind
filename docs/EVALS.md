@@ -20,6 +20,7 @@ esports.tournament.search
 esports.match.search
 esports.team.search
 esports.player.search
+web.search                 # only when Tavily MCP discovery succeeds
 task.plan                 # when task-state coordination is enabled
 task.checkpoint           # when task-state coordination is enabled
 ```
@@ -201,6 +202,20 @@ not turn into deterministic test failures.
 
 Never commit credentials, authorization headers, request tokens, or material
 user data.
+
+### Tavily MCP smoke check
+
+The offline smoke command is dry unless `--execute` is passed:
+
+```bash
+cd apps/api
+UV_CACHE_DIR=/tmp/dotamind-uv-cache uv run --locked --no-sync python -m scripts.smoke_tavily_mcp
+```
+
+With explicit `--execute`, it performs one startup-style tool discovery and one
+bounded search for official TI 2026 information, then prints only status,
+source URLs, and elapsed time. It does not exercise a live language model. Do
+not run it as part of deterministic tests.
 
 ## Product Runtime trace recording
 
