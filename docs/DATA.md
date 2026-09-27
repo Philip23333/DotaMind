@@ -70,6 +70,58 @@ universal object graph. If complete provider-source fidelity is required, it
 must be added explicitly at the capability boundary before generic Artifact
 externalization.
 
+## Hero guide data contract (confirmed plan; not implemented)
+
+The guide cache is a persistent source-data store owned by the guide capability;
+it is not the temporary session Artifact store. For a requested `(hero_id,
+position)`, the query DTO is a view containing `pub_guides[]` and
+`pro_examples[]`. It retains provenance and whatever sample count, patch/version,
+statistics window, source update time, and local retrieval time the source
+actually provides. Missing source fields remain absent/unknown rather than being
+filled with defaults. Pub and Pro refresh status and timestamps are independent.
+
+Pub is the primary guide source. The parser may project available source build
+facts such as starting items, item progression and alternatives, skill sequence,
+talents, and neutral-item statistics into guide entries. Candidate item builds
+and skill sequences remain independently sourced; the DTO does not pair them or
+claim that separate arrays describe one combined build. Pro data contributes
+only practical examples taken from `recent_matches`; its aggregate build
+statistics are not converted into a recommended route. No fixed number of Pub
+guides or Pro examples is manufactured.
+
+The source skill sequence is retained at its supplied length and order. The
+current Sven Pub sample contains ten skill IDs, and the Pro response exposes a
+ten-entry `abilities.skill_order`; neither representation proves a mapping to
+every hero level. Equipment, skill, facet, and neutral-item identifiers remain
+source values unless a separate exact catalog capability resolves them.
+
+For item timing, the DTO groups available progression facts around the
+30-minute boundary. Where the source supplies `avg_minute`, expose it as the
+source's average-minute statistic; do not label it a median or calculate a
+median from grouped values. If that statistic is absent, leave the time unknown.
+The source response does not by itself establish a universal definition for
+`pr`, `pick_rate`, nested `win_rate`, `avg_minute`, or `std_minute`. Preserve
+values with their source path and associated counts; do not compare rates across
+different paths or infer causal item impact.
+
+For each refresh partition, retain the exact original response bytes and the
+complete parsed result, including unknown source fields and heterogeneous or
+null values. The DTO is a query view, not a replacement for those source
+records. Publish a successfully fetched and parsed replacement atomically. On
+fetch or parse failure, retain the last successful value and record the failed
+attempt separately. A valid empty response is a successful, explicit empty
+state, distinct from missing data and failure.
+
+### D2PT source and statistic boundary
+
+The one-time Sven probe verified one non-empty JSON row from each tested
+endpoint. The Pub row declared a 14-day configured window and patch label
+`7.41f`; the Pro row returned 80 aggregate matches and five `recent_matches`,
+without an explicit patch or full statistics window. These observations are
+sample facts, not universal parser guarantees. See
+[`reference/d2pt.md`](reference/d2pt.md) for the tested shapes, values, and
+semantic limitations.
+
 ## Steam player and single-game observations
 
 Player capability contracts use a Steam32 account ID (unsigned 32-bit) as

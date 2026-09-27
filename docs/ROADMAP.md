@@ -87,6 +87,39 @@ before a second concrete implementation demonstrates the need.
 4. Register the capability only after its focused acceptance passes.
 5. Remove transitional code once the replacement is accepted.
 
+## Hero guides (confirmed plan; not started)
+
+The proposed `hero.guide` capability serves a specified hero/position from
+separate Pub guide data and Pro `recent_matches` examples. It is not registered
+or implemented. The one-time Sven endpoint probe verified non-empty sample
+responses only; it did not implement or validate a full persistent cache or
+scheduled refresh. Source evidence and its limits are documented in
+[`reference/d2pt.md`](reference/d2pt.md).
+
+Implementation and acceptance proceed in this order:
+
+1. Define the guide DTO, source boundaries, freshness states, and fixture
+   samples for the observed Pub and Pro response shapes.
+2. Implement the D2PT fetch client and persistent cache, retaining original
+   response bytes and parsed results, with atomic success publication, old-value
+   retention on failure, and explicit valid-empty records.
+3. Implement and fixture-test separate Pub and Pro parsers. Pub supplies the
+   primary guide; Pro contributes only examples from `recent_matches`.
+4. Add the cache-only `hero.guide(hero_id, position, section)` query capability
+   and register it after focused acceptance.
+5. Add the single-instance daily 03:00 Asia/Shanghai refresh and manual trigger
+   through the same non-overlapping entry point. Keep scheduler/deployment
+   facility choice open until implementation.
+6. Verify a real full refresh over the intended configured coverage, then run a
+   separate real-model answer evaluation. Sample-fixture acceptance, provider
+   refresh, and answer quality are separate results.
+
+Do not force-match Pub item builds to skill sequences, derive recommendation
+routes from Pro aggregates, manufacture a fixed number of examples, or infer
+statistical meaning that the source does not establish. Local choices such as
+Pub alternative thresholds, list merging/deduplication, and the concrete hero
+position vocabulary are resolved within their implementation stage.
+
 ## Steam player and game-detail capabilities
 
 - Define strict Steam32 inputs for player profile and recent-game observations,

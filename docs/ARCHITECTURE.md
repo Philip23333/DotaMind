@@ -140,6 +140,50 @@ logical tool response; the bounded model observation is derived separately by
 the generic result processor for ordinary tools. A stored ref is not
 automatically restored into a later turn's dialogue context.
 
+## Hero guide data flow (confirmed plan; not implemented)
+
+The D2PT probe is current source-access evidence only: the tested WSL
+`urllib` client retrieved non-empty Sven Pub and Pro JSON samples. There is no
+implemented D2PT provider integration, persistent guide cache, background
+refresh, or registered `hero.guide` tool implied by that probe.
+
+The planned refresh path is:
+
+```text
+daily 03:00 Asia/Shanghai trigger or manual refresh request
+  -> one shared refresh entry point; reject/skip duplicate active refreshes
+  -> D2PT Provider client; serial requests, wait 1 second after each response
+  -> Pub parser and Pro parser, kept independent
+  -> persistent cache partitioned by source, hero, and position
+       -> retain original response bytes and parsed source result
+       -> atomically replace a partition only after successful parsing
+       -> retain its last good value on fetch/parse failure
+       -> represent a valid empty result separately from failure
+```
+
+Each Pub and Pro partition records its own retrieval time, source-provided
+update time when available, and refresh status. A failed update of one source
+does not invalidate the other source's successful value. Scheduler technology
+and the precise freshness-expiration threshold remain implementation choices;
+the behavioral contract is one daily local-time run and one shared manual entry
+point that prevents overlapping refreshes.
+
+The planned online path is read-only:
+
+```text
+Model -> hero.guide(hero_id, position, section)
+      -> Guide Service -> persistent guide cache
+      -> hero/position query DTO: pub_guides[] + pro_examples[]
+      -> bounded tool result or existing generic Artifact externalization
+```
+
+The Guide Service combines the requested cached source partitions into a query
+view; it does not call D2PT or start a refresh. Missing or stale partitions are
+reported as such while any available source data is returned. The shared,
+cross-session guide cache is distinct from the process-local, session-owned
+Artifact store: Artifacts continue to hold oversized logical tool responses and
+are not the durable guide cache.
+
 ## Runtime boundary
 
 The Controller owns decision shape, schema adherence, reference validation, and

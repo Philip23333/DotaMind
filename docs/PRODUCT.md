@@ -32,6 +32,25 @@ generic game statistics.
 - Continue with references such as "game two", "that player", or "their previous
   match" without restating the whole question.
 
+## Hero guides (confirmed plan; not implemented)
+
+The planned hero-guide journey answers a request for one specified hero and
+position. The Pub build data is the primary guide; recent professional matches
+for the same hero and position provide separate practical examples. The two
+sources remain distinguishable, and a professional example is not presented as
+evidence that its player followed a particular Pub build.
+
+The current evidence is limited to a one-time D2PT connectivity and payload
+probe for Sven (`hero_id=18`, position 1). Both sampled endpoints returned one
+non-empty JSON build record in the tested WSL environment. This verifies access
+and those sample shapes only. It does not mean D2PT is integrated, a shared cache
+exists, or a scheduled all-hero refresh has run.
+
+This journey is a specified-hero guide lookup. It does not add an all-hero
+strength ranking, matchup/counter analysis, or draft recommendation. Pub and Pro
+partitions may be independently missing or stale; answers must identify which
+source data is available and must not fill gaps with invented facts.
+
 ## Steam-account and game-detail scope
 
 Users can look up a STRATZ player profile by Steam32 account ID when

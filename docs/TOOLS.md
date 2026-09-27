@@ -243,6 +243,32 @@ the Controller must copy names and arguments from the rendered catalog and must
 not invent provider-specific parameters. Domain workflows belong to the
 capability contract and its tests, not to this generic registry baseline.
 
+### Planned `hero.guide` capability (not registered)
+
+`hero.guide(hero_id, position, section)` is a confirmed future capability
+proposal. It is not part of the current registry inventory above. It queries the
+shared guide cache for one hero and position; `section` selects all guide data,
+equipment, skill upgrades, or professional-match examples. The concrete
+position vocabulary and wire-level section enum are to be finalized with the
+implementation contract.
+
+The query view combines `pub_guides[]` and `pro_examples[]` while preserving
+source identity. Pub entries expose available source builds, starting items,
+item progression/alternatives, skill sequences, talents, and their source
+statistics and scope. Pro entries are examples extracted from `recent_matches`;
+the tool does not turn Pro aggregate statistics into a recommended build. It
+does not pair Pub item and skill candidates, invent a fixed number of guides, or
+claim that a Pro example used a particular Pub route.
+
+Each source partition carries its available sample, version/window, source
+update time, retrieval time, and refresh status. Missing values remain missing.
+If one partition is absent or stale, the query returns the usable other
+partition and makes the unavailable/stale status visible. A missing cache value
+is not fetched online; an expired retained value is reported as stale rather
+than silently refreshed. The exact expiration threshold is not part of this
+proposal. Large query results use the ordinary Artifact externalizer; the guide
+cache itself is persistent shared data, not a session Artifact.
+
 ## Steam player and game-detail tools
 
 `player.profile` and `player.recent_games` are the implemented STRATZ-backed
