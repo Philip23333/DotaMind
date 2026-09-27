@@ -67,8 +67,8 @@ their lookup identity. It is not a PandaScore professional-player ID, and a
 numeric value alone cannot prove which identity system supplied it. No
 automatic cross-source identity association is implied. The implemented
 `player.profile` and `player.recent_games` results identify `stratz` as their
-source; `game.detail` identifies `opendota` and uses a Valve single-game ID,
-but remains contract-only. Recent-game rows expose the source `MatchType.id` as
+source; `game.detail` identifies `opendota` and uses a Valve single-game ID.
+Recent-game rows expose the source `MatchType.id` as
 `valve_game_id` so it can be passed to the detail input. A one-match live
 cross-check (`8960882635`) found matching STRATZ and OpenDota IDs, start time,
 and duration; it is evidence for that sample, not a general integration
@@ -92,3 +92,12 @@ one participant returned 20 rows with nonincreasing raw timestamps under
 `8960882635` predates the oldest row in that bounded sample and was not
 returned. This verifies one account/query sample, not general provider
 availability or universal ordering behavior.
+`game.detail` registers only when `DOTAMIND_OPENDOTA_ENABLED` is true. It
+preserves the full validated OpenDota object, including unknown JSON extensions,
+null values, zeroes, and booleans. The returned positive `match_id` must equal
+the requested Valve ID; known fields are type-checked when present. Anonymous
+player rows and absent optional or parsed fields are valid. Missing process
+data does not prove an event did not occur, and the lookup does not trigger
+replay parsing. Tests use HTTP mocks. The earlier live cross-source check of
+`8960882635` is a single-match observation, not live verification of this new
+client.

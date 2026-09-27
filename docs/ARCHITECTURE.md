@@ -207,6 +207,10 @@ query for one participant requested the newest 20 with `orderBy: DESC`; raw
 STRATZ timestamps were nonincreasing and each row contained only that account.
 The supplied match predates that sample and was not among those 20. This is
 single-account sample evidence, not a guarantee for every account or general
-provider availability. `game.detail` remains contract-only. Steam32 and
-PandaScore player identities remain separate unless a future evidence-backed
-identity capability is designed.
+provider availability. `game.detail` is implemented by an opt-in OpenDota
+adapter. It requires the returned `match_id` to match the requested Valve ID,
+checks known fields only when present, and preserves the complete source object
+for the generic Artifact processor. Missing process data does not trigger
+replay parsing. OpenDota composition and registry construction are network-free.
+Steam32 and PandaScore player identities remain separate unless a future
+evidence-backed identity capability is designed.

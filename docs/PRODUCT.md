@@ -41,11 +41,10 @@ Steam32 account. A one-match live check confirmed that STRATZ's ID for the
 provided match also resolves as the same OpenDota match ID. A live query for
 one participant returned 20 rows newest-first; that older final was outside the
 bounded sample. This is a single-account check, not a general availability
-guarantee. `game.detail` remains contract-only and is not callable yet. “Parse
-a game” in this scope means reading and
-analyzing an existing game-detail record; submitting a replay for parsing is
-not included. The profile query has not been verified against the live STRATZ
-API.
+guarantee. `game.detail` reads an existing OpenDota game record and registers
+only when `DOTAMIND_OPENDOTA_ENABLED=true`. Reading a record does not submit a
+replay for parsing. The profile query has not been verified against the live
+STRATZ API, and the new OpenDota client has not had a live request test.
 
 ## Product boundaries
 

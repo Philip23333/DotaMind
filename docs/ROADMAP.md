@@ -105,9 +105,12 @@ before a second concrete implementation demonstrates the need.
   timestamps under `orderBy: DESC`, each containing only that account. The
   supplied match predates that bounded sample. This is sample evidence, not a
   universal ordering or provider-availability guarantee.
-- `game.detail` is contract-only and is not registered. The planned detail
-  path reads an existing OpenDota game record. Replay submission and replay
-  parsing are outside this scope.
+- `game.detail` is implemented through an opt-in OpenDota client and adapter;
+  it registers only when `DOTAMIND_OPENDOTA_ENABLED=true`. It validates returned
+  `match_id` identity, preserves the complete source object, and uses generic
+  Artifact handling. It does not submit or poll replay parsing. Deterministic
+  HTTP-mock tests do not establish live OpenDota availability. The prior
+  `8960882635` cross-source ID check remains single-match evidence only.
 
 ## Context Governance: Runtime-driven history compaction
 

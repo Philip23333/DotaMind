@@ -157,7 +157,12 @@ STRATZ `Match.id` with OpenDota `match_id`, start time, and duration. A raw live
 `player.matches` query for one participant returned 20 rows in nonincreasing
 timestamp order with only that player's row; the supplied match was older than
 the returned sample. This is one-account evidence, not a universal guarantee.
-`game.detail` remains absent from the registry. Later live or fixture-backed
+`player.profile` and `player.recent_games` register with a STRATZ token;
+`game.detail` registers only when OpenDota is explicitly enabled.
+`game.detail` is covered by deterministic OpenDota MockTransport tests and is
+opt-in at composition; no live OpenDota request was made for this
+implementation. The earlier cross-source ID observation is limited to
+`8960882635`. Later live or fixture-backed
 cross-source evaluation must verify any proposed relationship between a
 Steam32 account and a PandaScore professional player from explicit evidence;
 the shared appearance of a player or event is not sufficient. These tests do

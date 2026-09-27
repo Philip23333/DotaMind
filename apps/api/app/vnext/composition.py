@@ -34,12 +34,14 @@ from app.vnext.capabilities.esports.series import (
 )
 from app.vnext.capabilities.esports.team import TeamSearchInput, TeamSearchResult
 from app.vnext.capabilities.esports.tournament import TournamentSearchInput, TournamentSearchResult
+from app.vnext.capabilities.game.detail import GameDetailInput, GameDetailResult
 from app.vnext.capabilities.player.profile import PlayerProfileInput, PlayerProfileResult
 from app.vnext.capabilities.player.recent_games import (
     PlayerRecentGamesInput,
     PlayerRecentGamesResult,
 )
 from app.vnext.llm.openai_compatible import OpenAICompatibleModelClient
+from app.vnext.providers.opendota import OpenDotaClient, OpenDotaGameDetailAdapter
 from app.vnext.providers.pandascore.client import PandaScoreClient
 from app.vnext.providers.pandascore.league_adapter import PandaScoreLeagueAdapter
 from app.vnext.providers.pandascore.match_adapter import PandaScoreMatchAdapter
@@ -62,6 +64,7 @@ from app.vnext.tools.esports import (
     register_team_tool,
     register_tournament_tool,
 )
+from app.vnext.tools.game.detail import register_game_detail_tool
 from app.vnext.tools.player.profile import register_player_profile_tool
 from app.vnext.tools.player.recent_games import register_player_recent_games_tool
 from app.vnext.tools.registry import ToolRegistry
@@ -77,6 +80,7 @@ MatchSearchService = Callable[[MatchSearchInput], Awaitable[MatchSearchResult]]
 PlayerSearchService = Callable[[PlayerSearchInput], Awaitable[PlayerSearchResult]]
 PlayerProfileService = Callable[[PlayerProfileInput], Awaitable[PlayerProfileResult]]
 TeamSearchService = Callable[[TeamSearchInput], Awaitable[TeamSearchResult]]
+GameDetailService = Callable[[GameDetailInput], Awaitable[GameDetailResult]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,6 +95,10 @@ class VNextSettings:
     stratz_token: str = field(default="", repr=False)
     stratz_timeout_seconds: float = 20.0
     pandascore_timeout_seconds: float = 20.0
+    opendota_enabled: bool = False
+    opendota_base_url: str = "https://api.opendota.com/api"
+    opendota_api_key: str = field(default="", repr=False)
+    opendota_timeout_seconds: float = 20.0
     trace_ttl_seconds: int = 72 * 60 * 60
     test_recording_enabled: bool = False
     agent_limits: AgentLimits = field(default_factory=AgentLimits)
@@ -98,6 +106,12 @@ class VNextSettings:
     def __post_init__(self) -> None:
         if not math.isfinite(self.stratz_timeout_seconds) or self.stratz_timeout_seconds <= 0:
             raise ValueError("DOTAMIND_STRATZ_TIMEOUT_SECONDS must be a finite positive number")
+        if (
+            isinstance(self.opendota_timeout_seconds, bool)
+            or not math.isfinite(self.opendota_timeout_seconds)
+            or self.opendota_timeout_seconds <= 0
+        ):
+            raise ValueError("DOTAMIND_OPENDOTA_TIMEOUT_SECONDS must be a finite positive number")
 
     @classmethod
     def from_env(cls) -> VNextSettings:
@@ -135,6 +149,24 @@ class VNextSettings:
             stratz_timeout_seconds=_parse_positive_finite_float(
                 "DOTAMIND_STRATZ_TIMEOUT_SECONDS",
                 _env_value("DOTAMIND_STRATZ_TIMEOUT_SECONDS", "20", file_values) or "",
+            ),
+            opendota_enabled=_parse_bool_value(
+                "DOTAMIND_OPENDOTA_ENABLED",
+                False,
+                file_values,
+            ),
+            opendota_base_url=(
+                _env_value(
+                    "DOTAMIND_OPENDOTA_BASE_URL",
+                    defaults.opendota_base_url,
+                    file_values,
+                )
+                or defaults.opendota_base_url
+            ),
+            opendota_api_key=_env_value("DOTAMIND_OPENDOTA_API_KEY", "", file_values) or "",
+            opendota_timeout_seconds=_parse_positive_finite_float(
+                "DOTAMIND_OPENDOTA_TIMEOUT_SECONDS",
+                _env_value("DOTAMIND_OPENDOTA_TIMEOUT_SECONDS", "20", file_values) or "",
             ),
             trace_ttl_seconds=int(
                 _env_value("DOTAMIND_VNEXT_TRACE_TTL_SECONDS", "259200", file_values)
@@ -271,6 +303,7 @@ class VNextServices:
     player_recent_games: (
         Callable[[PlayerRecentGamesInput], Awaitable[PlayerRecentGamesResult]] | None
     ) = None
+    game_detail: GameDetailService | None = None
 
     async def aclose(self) -> None:
         return None
@@ -305,6 +338,14 @@ def build_vnext_services(
         )
         player_profile = StratzPlayerProfileAdapter(stratz_client).get_profile
         player_recent_games = StratzPlayerRecentGamesAdapter(stratz_client).get_recent_games
+    game_detail: GameDetailService | None = None
+    if config.opendota_enabled:
+        opendota_client = OpenDotaClient(
+            base_url=config.opendota_base_url,
+            api_key=config.opendota_api_key,
+            timeout_seconds=config.opendota_timeout_seconds,
+        )
+        game_detail = OpenDotaGameDetailAdapter(opendota_client).get_game_detail
     return VNextServices(
         league_search=league_adapter.search,
         series_search=series_adapter.search,
@@ -315,6 +356,7 @@ def build_vnext_services(
         player_search=player_adapter.search,
         player_profile=player_profile,
         player_recent_games=player_recent_games,
+        game_detail=game_detail,
     )
 
 
@@ -354,6 +396,8 @@ def build_vnext_registry(
         register_player_profile_tool(registry, resolved_services.player_profile)
     if resolved_services.player_recent_games is not None:
         register_player_recent_games_tool(registry, resolved_services.player_recent_games)
+    if config.opendota_enabled and resolved_services.game_detail is not None:
+        register_game_detail_tool(registry, resolved_services.game_detail)
     if task_state_coordinator is not None:
         register_task_plan_tool(registry, task_state_coordinator)
         register_task_checkpoint_tool(registry, task_state_coordinator)

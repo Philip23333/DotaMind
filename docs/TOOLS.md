@@ -25,6 +25,7 @@ esports.team.search
 esports.player.search
 player.profile             # when a STRATZ token is configured
 player.recent_games        # when a STRATZ token is configured
+game.detail                # when OpenDota is explicitly enabled
 ```
 
 ## Esports search capabilities
@@ -225,8 +226,29 @@ returned 20 rows newest-first, with only that account in each row; the supplied
 match predates the bounded sample. This single-account result is not a general
 provider-availability guarantee.
 
-`game.detail(valve_game_id)` remains contract-only and is not registered; its
-planned source is OpenDota.
+`game.detail(valve_game_id)` reads one existing OpenDota match by Valve single-
+game ID. It registers only when `DOTAMIND_OPENDOTA_ENABLED=true`; the base URL
+defaults to `https://api.opendota.com/api`, the API key is optional, and the
+finite request timeout defaults to 20 seconds. Configure these with
+`DOTAMIND_OPENDOTA_BASE_URL`, `DOTAMIND_OPENDOTA_API_KEY`, and
+`DOTAMIND_OPENDOTA_TIMEOUT_SECONDS`. The key is sent as the `api_key` query
+parameter and is excluded from settings/client representations and tool errors.
+The endpoint follows the [OpenDota matches API documentation](https://docs.opendota.com/#tag/matches);
+OpenDota's [API tier announcement](https://blog.opendota.com/2018/04/17/changes-to-the-api/)
+describes public free-tier use without a key. Composition and registry creation
+do not make provider calls. Process environment variables take precedence over
+the root `.env`.
+
+The input is a Valve game ID, not a PandaScore identifier. The tool preserves
+the validated OpenDota business object, including unknown JSON extensions and
+nullable values. Player rows and core fields are type-checked when present;
+anonymous players and missing optional or parsed fields remain valid. The
+returned data depends on what OpenDota already has: missing process data does
+not show that an event did not happen, and the lookup does not request replay
+parsing. Large results use normal Artifact externalization and narrower
+`artifact.read` paths. Deterministic coverage uses local HTTP mocks. The prior
+live cross-check for `8960882635` supports the ID mapping for that observed
+match only; this implementation has not yet been tested against live OpenDota.
 
 `found=false` means only that the profile response did not contain a usable
 profile object; it does not establish that the account is absent or has no Dota
