@@ -170,3 +170,18 @@ empty Pro result means the hero has no professional games. Do not treat
 `retrieved_at` or HTTP `Last-Modified` as the source statistics update time.
 These two Sven records do not demonstrate complete hero coverage or production
 availability.
+
+## Offline fixtures and separate environment evidence
+
+The raw WSL response bodies are preserved byte-for-byte for offline contract
+tests:
+
+- [Pub Sven pos 1 fixture](../../apps/api/tests/vnext/fixtures/d2pt/pub_sven_pos1.json)
+- [Pro Sven fixture](../../apps/api/tests/vnext/fixtures/d2pt/pro_sven.json)
+- [Fixture provenance, sizes, and SHA-256](../../apps/api/tests/vnext/fixtures/d2pt/README.md)
+
+A separate user-provided report states that D2PT connectivity succeeded from a
+Guangzhou container. That report is independent of these WSL-sourced fixture
+files; the fixtures were not retrieved from the container. Neither result
+establishes full hero/position coverage, a persistent cache, or scheduled
+refresh.

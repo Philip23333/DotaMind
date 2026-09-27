@@ -70,49 +70,83 @@ universal object graph. If complete provider-source fidelity is required, it
 must be added explicitly at the capability boundary before generic Artifact
 externalization.
 
-## Hero guide data contract (confirmed plan; not implemented)
+## Hero guide data contract (DTO implemented; data pipeline pending)
 
-The guide cache is a persistent source-data store owned by the guide capability;
-it is not the temporary session Artifact store. For a requested `(hero_id,
-position)`, the query DTO is a view containing `pub_guides[]` and
-`pro_examples[]`. It retains provenance and whatever sample count, patch/version,
-statistics window, source update time, and local retrieval time the source
-actually provides. Missing source fields remain absent/unknown rather than being
-filled with defaults. Pub and Pro refresh status and timestamps are independent.
+The internal contract is defined in `app.vnext.capabilities.hero.guide`; no
+Provider, parser, cache, Service, or model-facing tool is implemented. The input
+selects one `(hero_id, position)` pair, with a strict positive integer hero ID,
+a strict integer position from 1 through 5, and `section` equal to `all`,
+`items`, `skills`, or `pro_examples` (default `all`). It does not accept a hero
+name, provider selector, URL, or refresh request.
 
-Pub is the primary guide source. The parser may project available source build
-facts such as starting items, item progression and alternatives, skill sequence,
-talents, and neutral-item statistics into guide entries. Candidate item builds
-and skill sequences remain independently sourced; the DTO does not pair them or
-claim that separate arrays describe one combined build. Pro data contributes
-only practical examples taken from `recent_matches`; its aggregate build
-statistics are not converted into a recommended route. No fixed number of Pub
-guides or Pro examples is manufactured.
+`HeroGuideResult` contains `hero_id`, `position`, `section`, independent
+`pub_metadata` and `pro_metadata`, `pub_guides[]`, `pro_examples[]`, and optional
+known totals. Each `GuideSourceMetadata` identifies D2PT and Pub/Pro sample
+type, and represents `available`, `empty`, or `missing` plus stale state,
+retrieval/attempt timestamps, source update text, last error, and an open source
+scope object. Retrieval and attempt datetimes require timezones. The source
+`updated_at` remains an unparsed string without inferred timezone. The DTO does
+not calculate staleness or synthesize the current time.
 
-The source skill sequence is retained at its supplied length and order. The
-current Sven Pub sample contains ten skill IDs, and the Pro response exposes a
-ten-entry `abilities.skill_order`; neither representation proves a mapping to
-every hero level. Equipment, skill, facet, and neutral-item identifiers remain
-source values unless a separate exact catalog capability resolves them.
+The contract's concrete shape is:
 
-For item timing, the DTO groups available progression facts around the
-30-minute boundary. Where the source supplies `avg_minute`, expose it as the
-source's average-minute statistic; do not label it a median or calculate a
-median from grouped values. If that statistic is absent, leave the time unknown.
-The source response does not by itself establish a universal definition for
-`pr`, `pick_rate`, nested `win_rate`, `avg_minute`, or `std_minute`. Preserve
-values with their source path and associated counts; do not compare rates across
-different paths or infer causal item impact.
+| Model | Fields |
+|---|---|
+| `HeroGuideInput` | `hero_id`, `position`, `section` |
+| `GuideSourceMetadata` | `provider`, `sample_type`, `availability`, `stale`, `retrieved_at`, `source_updated_at`, `last_attempt_at`, `last_error`, `scope` |
+| `GuideItem` | `item_id`, `quantity`, `name` |
+| `StartingItemOption` | `items`, `statistics`, `source_path` |
+| `ItemTiming` | `kind`, `minute`, `source_path` |
+| `GuideItemObservation` | `item_id`, `name`, `phase`, `timing`, `statistics`, `source_path` |
+| `SkillSequenceOption` | `ability_ids`, `statistics`, `source_path` |
+| `TalentObservation` | `level`, `data`, `source_path` |
+| `PubGuide` | `build_id`, `facet_id`, `source_updated_at`, `scope`, `statistics`, `starting_options`, `item_progression`, `situational_items`, `skill_sequences`, `talents` |
+| `ProItemEvent` | `item_id`, `minute`, `source_fields` |
+| `ProAbilityEvent` | `ability_id`, `time_seconds`, `hero_level`, `source_fields` |
+| `ProMatchExample` | `source_match_id`, `account_id`, `hero_id`, `position`, `position_basis`, `date`, `started_at_unix`, `player_name`, `team_name`, `opponent_name`, `won`, `duration_seconds`, `item_timeline`, `ability_timeline`, `talent_choices`, `source_path` |
+| `HeroGuideResult` | `hero_id`, `position`, `section`, `pub_metadata`, `pro_metadata`, `pub_guides`, `pro_examples`, `pub_guides_total`, `pro_examples_total` |
 
-For each refresh partition, retain the exact original response bytes and the
-complete parsed result, including unknown source fields and heterogeneous or
-null values. The DTO is a query view, not a replacement for those source
-records. Publish a successfully fetched and parsed replacement atomically. On
-fetch or parse failure, retain the last successful value and record the failed
-attempt separately. A valid empty response is a successful, explicit empty
-state, distinct from missing data and failure.
+`GuideSection` is `all | items | skills | pro_examples`; `HeroPosition` is a
+strict integer from 1 through 5. All DTO models reject extra fields. Numeric
+identifiers use strict integers, open JSON objects use recursive JSON values,
+and non-finite numbers are rejected even inside those objects. List/object
+fields default to fresh empty collections; optional totals default to `None`.
 
-### D2PT source and statistic boundary
+`PubGuide` holds source build/facet IDs, per-build metadata, open statistics,
+starting-item options, item progression, situational items, skill-sequence
+options, and talent observations. Each open source JSON object preserves unknown
+fields, nested null, zero, false, and finite values outside a 0-to-1 range; NaN
+and infinity are rejected. `source_path` records where a value was found in the
+raw response. It is neither an ArtifactRef nor an upstream navigation handle.
+Candidate starting-item options and skill sequences remain independent and are
+never cross-paired. The DTO does not encode neutral-item statistics or complete
+six-slot summaries.
+
+Skill sequences preserve source order, duplicates, and supplied length; they
+are not expanded into hero-level plans. Item timing is represented as a
+source-attributed `average` or `median` value without calculating either. The
+future parser may label item phases around the 30-minute boundary, but phase
+classification and the exact mapping are not part of this DTO-only phase. The
+raw response does not establish universal definitions for `pr`, `pick_rate`,
+nested `win_rate`, `avg_minute`, or `std_minute`; preserve source paths and
+associated counts, and do not compare unrelated paths or infer causal item
+impact.
+
+`ProMatchExample` represents a concrete recent-match example with a source match
+ID, optional account/player/team fields, optional position and explicit
+`position_basis`, and ordered item/ability/talent events. `source_match_id` does
+not claim cross-source Valve identity verification. Pro aggregate statistics
+are not turned into a recommended route, and no field links a Pro example to a
+Pub build.
+
+When the later data pipeline is implemented, each refresh partition will retain
+the exact original response bytes and complete parsed result, including unknown
+source fields and heterogeneous or null values. Successful publication will be
+atomic; a failed fetch or parse will preserve the previous successful value;
+valid empty data will remain distinct from missing data and failure. Pub cache
+publication is planned per hero and position; Pro publication is planned per
+hero. These storage and refresh rules are documented targets, not behavior of
+the DTO package.
 
 The one-time Sven probe verified one non-empty JSON row from each tested
 endpoint. The Pub row declared a 14-day configured window and patch label

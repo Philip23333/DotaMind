@@ -243,31 +243,30 @@ the Controller must copy names and arguments from the rendered catalog and must
 not invent provider-specific parameters. Domain workflows belong to the
 capability contract and its tests, not to this generic registry baseline.
 
-### Planned `hero.guide` capability (not registered)
+### `hero.guide` contract defined; tool not registered
 
-`hero.guide(hero_id, position, section)` is a confirmed future capability
-proposal. It is not part of the current registry inventory above. It queries the
-shared guide cache for one hero and position; `section` selects all guide data,
-equipment, skill upgrades, or professional-match examples. The concrete
-position vocabulary and wire-level section enum are to be finalized with the
-implementation contract.
+The input and DTO contract for `hero.guide(hero_id, position, section)` is
+defined in `app.vnext.capabilities.hero.guide`. The proposed tool is still not
+part of the current registry inventory above. `hero_id` is a strict positive
+integer, `position` is a strict integer from 1 through 5, and `section` is one
+of `all`, `items`, `skills`, or `pro_examples` (default `all`). The input does
+not accept a name, provider/source selector, URL, or refresh flag.
 
-The query view combines `pub_guides[]` and `pro_examples[]` while preserving
-source identity. Pub entries expose available source builds, starting items,
-item progression/alternatives, skill sequences, talents, and their source
-statistics and scope. Pro entries are examples extracted from `recent_matches`;
-the tool does not turn Pro aggregate statistics into a recommended build. It
-does not pair Pub item and skill candidates, invent a fixed number of guides, or
-claim that a Pro example used a particular Pub route.
+`HeroGuideResult` combines `pub_guides[]` and `pro_examples[]` with independent
+`pub_metadata` and `pro_metadata`. The DTO records Pub builds, starting-item
+options, item observations, skill sequences, and talents; Pro examples expose
+source match identity, optional position and its basis, and ordered item/ability
+events. Raw statistics stay in source JSON objects. DTO construction does not
+filter sections, compute totals, rank/truncate candidates, or pair Pub item and
+skill candidates.
 
-Each source partition carries its available sample, version/window, source
-update time, retrieval time, and refresh status. Missing values remain missing.
-If one partition is absent or stale, the query returns the usable other
-partition and makes the unavailable/stale status visible. A missing cache value
-is not fetched online; an expired retained value is reported as stale rather
-than silently refreshed. The exact expiration threshold is not part of this
-proposal. Large query results use the ordinary Artifact externalizer; the guide
-cache itself is persistent shared data, not a session Artifact.
+Source metadata can represent available, empty, or missing data, and can retain
+stale available data alongside a last refresh error. Retrieval and attempt times
+require timezones; the source `updated_at` remains an unparsed string. DTOs are
+contract-only in this phase: no cache read, remote request, parser, or tool
+registration is implemented. The eventual query remains cache-only, with
+section filtering, freshness calculation, partial-source behavior, and Artifact
+externalization owned by a later Service/tool phase.
 
 ## Steam player and game-detail tools
 
