@@ -9,12 +9,14 @@ from .client import (
     StratzTransportError,
 )
 from .player_profile import StratzPlayerProfileAdapter
+from .player_recent_games import StratzPlayerRecentGamesAdapter
 
 __all__ = [
     "StratzGraphQLError",
     "StratzGraphQLClient",
     "StratzHTTPError",
     "StratzPlayerProfileAdapter",
+    "StratzPlayerRecentGamesAdapter",
     "StratzResponseError",
     "StratzTimeoutError",
     "StratzTransportError",

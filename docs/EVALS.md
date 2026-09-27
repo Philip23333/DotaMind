@@ -149,14 +149,20 @@ closed outer schemas, provenance literals, timezone-aware retrieval timestamps,
 profile-presence semantics, recent-game count and duplicate-ID bounds, and
 lossless JSON-compatible source fields. A composition check passes a game ID
 from a recent-game result directly into the detail input. MockTransport tests
-exercise the implemented `player.profile` request, source validation, errors,
-cancellation and cleanup, and token-gated registration without network access.
-The query has not been verified against the live API; `player.recent_games` and
-`game.detail` remain absent from the registry. Later live or fixture-backed
+exercise both STRATZ player queries and their source validation/error paths,
+Artifact externalization/retrieval, and token-gated registration without
+network access; shared-client cancellation cleanup remains covered by the
+profile/client regression tests. A live cross-check for `8960882635` matched
+STRATZ `Match.id` with OpenDota `match_id`, start time, and duration. A raw live
+`player.matches` query for one participant returned 20 rows in nonincreasing
+timestamp order with only that player's row; the supplied match was older than
+the returned sample. This is one-account evidence, not a universal guarantee.
+`game.detail` remains absent from the registry. Later live or fixture-backed
 cross-source evaluation must verify any proposed relationship between a
 Steam32 account and a PandaScore professional player from explicit evidence;
 the shared appearance of a player or event is not sufficient. These tests do
-not establish current STRATZ field availability or source business validity.
+not establish general current STRATZ availability or every source business
+meaning.
 
 Context Governance evaluation measures answer omissions, complete-request
 peaks, summary and locator overhead, successful compactions, recovery attempts,

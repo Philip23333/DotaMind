@@ -35,6 +35,10 @@ from app.vnext.capabilities.esports.series import (
 from app.vnext.capabilities.esports.team import TeamSearchInput, TeamSearchResult
 from app.vnext.capabilities.esports.tournament import TournamentSearchInput, TournamentSearchResult
 from app.vnext.capabilities.player.profile import PlayerProfileInput, PlayerProfileResult
+from app.vnext.capabilities.player.recent_games import (
+    PlayerRecentGamesInput,
+    PlayerRecentGamesResult,
+)
 from app.vnext.llm.openai_compatible import OpenAICompatibleModelClient
 from app.vnext.providers.pandascore.client import PandaScoreClient
 from app.vnext.providers.pandascore.league_adapter import PandaScoreLeagueAdapter
@@ -43,7 +47,11 @@ from app.vnext.providers.pandascore.player_adapter import PandaScorePlayerAdapte
 from app.vnext.providers.pandascore.series_adapter import PandaScoreSeriesAdapter
 from app.vnext.providers.pandascore.team_adapter import PandaScoreTeamAdapter
 from app.vnext.providers.pandascore.tournament_adapter import PandaScoreTournamentAdapter
-from app.vnext.providers.stratz import StratzGraphQLClient, StratzPlayerProfileAdapter
+from app.vnext.providers.stratz import (
+    StratzGraphQLClient,
+    StratzPlayerProfileAdapter,
+    StratzPlayerRecentGamesAdapter,
+)
 from app.vnext.tools.artifacts import register_artifact_tools
 from app.vnext.tools.esports import (
     register_league_tool,
@@ -55,6 +63,7 @@ from app.vnext.tools.esports import (
     register_tournament_tool,
 )
 from app.vnext.tools.player.profile import register_player_profile_tool
+from app.vnext.tools.player.recent_games import register_player_recent_games_tool
 from app.vnext.tools.registry import ToolRegistry
 from app.vnext.tools.task import register_task_checkpoint_tool, register_task_plan_tool
 
@@ -259,6 +268,9 @@ class VNextServices:
     team_search: TeamSearchService | None = None
     player_search: PlayerSearchService | None = None
     player_profile: PlayerProfileService | None = None
+    player_recent_games: (
+        Callable[[PlayerRecentGamesInput], Awaitable[PlayerRecentGamesResult]] | None
+    ) = None
 
     async def aclose(self) -> None:
         return None
@@ -281,6 +293,9 @@ def build_vnext_services(
     team_adapter = PandaScoreTeamAdapter(client)
     player_adapter = PandaScorePlayerAdapter(client)
     player_profile: PlayerProfileService | None = None
+    player_recent_games: (
+        Callable[[PlayerRecentGamesInput], Awaitable[PlayerRecentGamesResult]] | None
+    ) = None
     stratz_token = config.stratz_token.strip()
     if stratz_token:
         stratz_client = StratzGraphQLClient(
@@ -289,6 +304,7 @@ def build_vnext_services(
             timeout_seconds=config.stratz_timeout_seconds,
         )
         player_profile = StratzPlayerProfileAdapter(stratz_client).get_profile
+        player_recent_games = StratzPlayerRecentGamesAdapter(stratz_client).get_recent_games
     return VNextServices(
         league_search=league_adapter.search,
         series_search=series_adapter.search,
@@ -298,6 +314,7 @@ def build_vnext_services(
         team_search=team_adapter.search,
         player_search=player_adapter.search,
         player_profile=player_profile,
+        player_recent_games=player_recent_games,
     )
 
 
@@ -335,6 +352,8 @@ def build_vnext_registry(
         register_player_tool(registry, resolved_services.player_search)
     if resolved_services.player_profile is not None:
         register_player_profile_tool(registry, resolved_services.player_profile)
+    if resolved_services.player_recent_games is not None:
+        register_player_recent_games_tool(registry, resolved_services.player_recent_games)
     if task_state_coordinator is not None:
         register_task_plan_tool(registry, task_state_coordinator)
         register_task_checkpoint_tool(registry, task_state_coordinator)

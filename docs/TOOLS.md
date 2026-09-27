@@ -23,6 +23,8 @@ esports.tournament.search
 esports.match.search
 esports.team.search
 esports.player.search
+player.profile             # when a STRATZ token is configured
+player.recent_games        # when a STRATZ token is configured
 ```
 
 ## Esports search capabilities
@@ -202,24 +204,37 @@ capability contract and its tests, not to this generic registry baseline.
 
 ## Steam player and game-detail tools
 
-`player.profile` is the implemented STRATZ-backed Steam32 profile capability.
-`player.profile(steam_account_id)` is registered only when
-`DOTAMIND_STRATZ_TOKEN` is configured. It queries selected STRATZ profile fields
-by an exact unsigned Steam32 account ID; it does not accept names, SteamID64
-values, or PandaScore player IDs. Its source object is retained as JSON,
-including fields not yet interpreted by DotaMind. `retrieved_at` records when
-DotaMind fetched the response, not when STRATZ last updated the profile. The
-current provider query has not been verified against the live API.
+`player.profile` and `player.recent_games` are the implemented STRATZ-backed
+Steam32 capabilities. Both register only when `DOTAMIND_STRATZ_TOKEN` is
+configured. The profile query accepts an exact unsigned Steam32 account ID; it
+does not accept names, SteamID64 values, or PandaScore player IDs. Its source
+object is retained as JSON. `retrieved_at` records when DotaMind fetched the
+response, not when STRATZ last updated the profile.
 
-`player.recent_games(steam_account_id, limit=5)` and
-`game.detail(valve_game_id)` remain contract-only and are not registered. Their
-planned source markers are `stratz` and `opendota`, respectively.
+`player.recent_games(steam_account_id, limit=5)` returns at most 20 source
+records. It requests `PlayerType.matches` with `take=limit`, `orderBy: DESC`,
+and `playerList: SINGLE`; the historical schema inventory describes this as
+date-descending order and a single row for the requested SteamAccountId. The
+adapter validates the outer account and each returned player-row identity,
+requires usable match IDs/timestamps, rejects duplicate IDs or malformed rows,
+and locally sorts only after the provider has selected the bounded subset.
+`valve_game_id` comes from STRATZ `MatchType.id` and composes with the existing
+`GameDetailInput`. One live spot check for `8960882635` matched STRATZ and
+OpenDota IDs, start time, and duration. A raw query for one participant
+returned 20 rows newest-first, with only that account in each row; the supplied
+match predates the bounded sample. This single-account result is not a general
+provider-availability guarantee.
+
+`game.detail(valve_game_id)` remains contract-only and is not registered; its
+planned source is OpenDota.
 
 `found=false` means only that the profile response did not contain a usable
 profile object; it does not establish that the account is absent or has no Dota
 2 history. An empty recent-games list is valid, and fewer rows than requested
-does not prove history completeness. A future STRATZ recent-games adapter must
-verify upstream selection and ordering before describing rows as recent. The
-future game-detail adapter must reject unusable or mismatched source detail
-rather than returning an empty successful result. Reading existing game data
-does not submit a replay for parsing.
+does not prove history completeness. An empty player row is preserved as such
+and cannot support claims about that player's hero, result, or performance in
+the game. Missing statistics remain missing, and the tool does not derive win
+rates or other aggregates. The game-detail adapter, when implemented, must
+reject unusable or mismatched source detail rather than returning an empty
+successful result. Reading existing game data does not submit a replay for
+parsing.

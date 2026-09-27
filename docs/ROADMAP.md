@@ -93,14 +93,21 @@ before a second concrete implementation demonstrates the need.
   plus a Valve game-ID input for existing single-game detail.
 - Preserve provider provenance and source business objects as JSON while
   keeping Steam accounts separate from PandaScore professional-player IDs.
-- `player.profile` is implemented through STRATZ GraphQL and registers only
-  when `DOTAMIND_STRATZ_TOKEN` is configured. Deterministic tests use local
-  HTTP mocks; the live query and current field availability remain unverified.
-- `player.recent_games` and `game.detail` remain contract-only and are not
-  registered. OpenDota integration and STRATZ recent-game source semantics
-  remain pending.
-- The planned detail path reads an existing game record. Replay submission and
-  replay parsing are outside this scope.
+- `player.profile` and `player.recent_games` are implemented through the shared
+  STRATZ GraphQL client and register only when `DOTAMIND_STRATZ_TOKEN` is
+  configured. Deterministic tests use local HTTP mocks. The profile query
+  itself has not been live-verified. Recent games request an explicit
+  date-descending bounded sample, validate the target player row, and preserve
+  source match data for Artifact handling.
+- A live spot check of match `8960882635` found matching STRATZ `Match.id` and
+  OpenDota `match_id`, with matching start time and duration. A raw query for
+  one participant returned 20 `player.matches` rows with nonincreasing
+  timestamps under `orderBy: DESC`, each containing only that account. The
+  supplied match predates that bounded sample. This is sample evidence, not a
+  universal ordering or provider-availability guarantee.
+- `game.detail` is contract-only and is not registered. The planned detail
+  path reads an existing OpenDota game record. Replay submission and replay
+  parsing are outside this scope.
 
 ## Context Governance: Runtime-driven history compaction
 

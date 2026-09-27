@@ -66,19 +66,29 @@ Player capability contracts use a Steam32 account ID (unsigned 32-bit) as
 their lookup identity. It is not a PandaScore professional-player ID, and a
 numeric value alone cannot prove which identity system supplied it. No
 automatic cross-source identity association is implied. The implemented
-`player.profile` result identifies `stratz` as its source; `player.recent_games`
-is a contract-only STRATZ capability. `game.detail` identifies `opendota` and
-uses a Valve single-game ID, but remains contract-only. That ID is designed to
-pass from a future recent-game row into the detail input.
+`player.profile` and `player.recent_games` results identify `stratz` as their
+source; `game.detail` identifies `opendota` and uses a Valve single-game ID,
+but remains contract-only. Recent-game rows expose the source `MatchType.id` as
+`valve_game_id` so it can be passed to the detail input. A one-match live
+cross-check (`8960882635`) found matching STRATZ and OpenDota IDs, start time,
+and duration; it is evidence for that sample, not a general integration
+guarantee.
 
 Profile `found=false` means the source response had no usable profile object;
 it does not prove that the account does not exist or has never played Dota 2.
 An empty recent-game list is valid, and a short list is not evidence that all
-history was returned. Recent ordering must be verified against provider
-semantics by a future adapter. Profile and game business data are retained as
-JSON objects so currently unknown source fields, nested arrays, `null`, zero,
-and boolean values survive validation. This JSON container does not itself
-validate provider-specific business meaning. `player.profile` is registered
-only when a STRATZ token is configured. Its query and field availability have
-not yet been verified against the live API; the other two capabilities are not
-registered.
+history was returned. Recent games request `take=limit`, explicit `DESC` date
+ordering, and `playerList=SINGLE`; local sorting is applied only after that
+provider-selected sample is received. The target player's Steam32 ID is checked
+in both the outer player and returned player row. An empty player-row list keeps
+the match record but provides no basis for that player's performance. Null
+statistics remain null; zero and false remain distinct. Profile and match
+business data are retained as JSON objects so unknown returned source fields,
+nested arrays, nulls, zeroes, and booleans survive validation. This JSON
+container does not itself validate every provider-specific business meaning.
+Both STRATZ tools register only when a token is configured. A live query for
+one participant returned 20 rows with nonincreasing raw timestamps under
+`orderBy=DESC`, and each row contained only the requested account. Match
+`8960882635` predates the oldest row in that bounded sample and was not
+returned. This verifies one account/query sample, not general provider
+availability or universal ordering behavior.

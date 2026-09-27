@@ -35,11 +35,17 @@ generic game statistics.
 Users can look up a STRATZ player profile by Steam32 account ID when
 `DOTAMIND_STRATZ_TOKEN` is configured. The account need not belong to a
 professional player. DotaMind does not automatically associate it with a
-PandaScore professional-player identity. Recent-game lookup and single-game
-detail remain contracts only and are not callable yet. “Parse a game” in this
-scope means reading and analyzing an existing game-detail record; submitting a
-replay for parsing is not included. The implemented profile query has not yet
-been verified against the live STRATZ API.
+PandaScore professional-player identity. With the same token configured,
+`player.recent_games` can return a bounded latest-first sample for that exact
+Steam32 account. A one-match live check confirmed that STRATZ's ID for the
+provided match also resolves as the same OpenDota match ID. A live query for
+one participant returned 20 rows newest-first; that older final was outside the
+bounded sample. This is a single-account check, not a general availability
+guarantee. `game.detail` remains contract-only and is not callable yet. “Parse
+a game” in this scope means reading and
+analyzing an existing game-detail record; submitting a replay for parsing is
+not included. The profile query has not been verified against the live STRATZ
+API.
 
 ## Product boundaries
 

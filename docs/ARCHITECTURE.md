@@ -194,12 +194,19 @@ history/metadata boundary, and phase acceptance are owned by
 ## Steam player and game-detail boundaries
 
 The `capabilities/player` and `capabilities/game` contracts define closed
-inputs, provenance, and source-shaped JSON outputs. `player.profile` uses a
-small STRATZ GraphQL transport and adapter, and registers only when a STRATZ
-token is configured. The adapter validates the selected profile structure and
-requested Steam32 identity while retaining the source object as JSON. Its query
-has not been verified against the live API. Recent-game and single-game detail
-remain contract-only; future work must validate recent-game ordering and ensure
-the returned Valve game ID matches its request. Steam32 and PandaScore player
-identities remain separate unless a future evidence-backed identity capability
-is designed.
+inputs, provenance, and source-shaped JSON outputs. `player.profile` and
+`player.recent_games` share the STRATZ GraphQL client and register only when a
+STRATZ token is configured. The recent-games adapter sends `take`,
+`orderBy: DESC`, and `playerList: SINGLE`, validates the outer and row Steam32
+identities, and preserves selected match/player source objects as JSON. The
+historical schema inventory identifies `DESC` as date ordering; local sorting
+only stabilizes the returned order after STRATZ has selected the bounded
+subset. A live cross-check for match `8960882635` returned the same ID, start
+time, and duration from STRATZ `match(id)` and OpenDota. A live `player.matches`
+query for one participant requested the newest 20 with `orderBy: DESC`; raw
+STRATZ timestamps were nonincreasing and each row contained only that account.
+The supplied match predates that sample and was not among those 20. This is
+single-account sample evidence, not a guarantee for every account or general
+provider availability. `game.detail` remains contract-only. Steam32 and
+PandaScore player identities remain separate unless a future evidence-backed
+identity capability is designed.
