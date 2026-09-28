@@ -77,8 +77,9 @@ synchronous D2PT HTTP client now fetches the heroes list, Pub builds, and Pro
 builds. It preserves the exact response bytes and parsed JSON array and performs
 transport and minimal source-shape checks. Pure Pub and Pro parsers project
 source rows into the existing guide DTOs without changing the response. A
-standalone Redis cache component now stores source snapshots; it is not wired to
-application startup and there is still no Guide Service or model-facing tool.
+Redis cache stores source snapshots and is wired to the application's existing
+Redis connection. HeroGuideService exposes cache-only queries through the
+conditionally registered hero.guide tool; background refresh remains pending.
 The input selects one `(hero_id, position)` pair, with a strict positive integer hero ID,
 a strict integer position from 1 through 5, and `section` equal to `all`,
 `items`, `skills`, or `pro_examples` (default `all`). It does not accept a hero
@@ -198,8 +199,8 @@ applicable, timezone-aware retrieval time, content type, exact raw response
 bytes, complete parsed source rows, and the corresponding DTO projection. The
 raw bytes are stored as Base64 inside snapshot JSON and restored byte-for-byte.
 Pub snapshots are keyed by hero and position; Pro snapshots are keyed by hero
-and replace that hero's complete set of examples across positions. Pro position
-filtering belongs to the later query Service.
+and replace that hero's complete set of examples across positions. The query
+Service filters Pro examples to the requested position.
 
 Each Redis hash stores `snapshot`, `last_attempt_at`, and `last_error`. Successful
 publication sets all three with one `HSET`, replacing the old snapshot; a valid
@@ -214,9 +215,44 @@ a miss or deleted automatically.
 The cache accepts an injected async Redis client and does not create or close
 connections. Offline tests use a small fake Redis; they do not verify live Redis,
 container configuration, AOF recovery, or restart persistence. Deployed
-persistence relies on Redis AOF and its configured persistent volume. The
-component is not yet connected to the application, refresh pipeline, Guide
-Service, or model-facing tool.
+persistence relies on Redis AOF and its configured persistent volume.
+
+The cache is connected to a read-only `HeroGuideService`, which the model-facing
+`hero.guide` tool exposes when the application injects the cache. The Service
+reads Pub and Pro once each for every section query. It filters Pro examples by
+both exact hero ID and exact requested position, retaining source order and
+duplicates while excluding unknown positions. It does not infer positions again
+or use Pro aggregates to build recommendations.
+
+Availability is based on the full cached candidates before section projection:
+no snapshot is `missing`; a successful snapshot with no matching candidates is
+`empty`; otherwise it is `available`. A Pro hero snapshot containing examples
+for other positions can therefore be `empty` for the requested position. A
+snapshot is stale when its age is at least 36 hours or its latest refresh
+attempt failed. A future retrieval time alone is not stale. Successful empty
+snapshots can age and become stale. Source update labels, patch labels, or
+statistics windows do not affect freshness. A read error marks only that source
+missing with `cache_unavailable` or `cache_invalid_data`, without carrying
+unconfirmed timestamps; the other source can still be returned. If both reads
+fail, the tool returns a fixed `tool_execution_error` with only those two error
+codes.
+
+`source_updated_at` is exposed only when every root source row has the same
+non-empty string `updated_at`; it is not parsed or inferred. `scope.records`
+preserves each root row's source path and any present `position`, `updated_at`,
+and `data_scope` values, including nulls. It does not claim that Pro hero-level
+scope belongs only to the requested position.
+
+Section projection occurs after candidate matching. `all` returns both source
+projections; `items` retains Pub build metadata, statistics, and item fields but
+clears skill sequences and talents; `skills` retains Pub metadata, statistics,
+sequences, and talents but clears item fields; `pro_examples` returns only the
+matching Pro examples. Empty projected Pub rows are retained. Totals count
+hero-position candidates before projection; a missing or unreadable partition
+has a null total, while a successful empty partition has total zero. The
+application has not been wired to fetch or refresh data, so currently empty Redis
+keys yield normal missing-source results. These query rules do not establish
+live Redis persistence, all-hero coverage, or real-model answer quality.
 
 The one-time Sven probe verified one non-empty JSON row from each tested
 endpoint. The Pub row declared a 14-day configured window and patch label

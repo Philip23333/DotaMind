@@ -203,7 +203,7 @@ not turn into deterministic test failures.
 Never commit credentials, authorization headers, request tokens, or material
 user data.
 
-## Hero guide evaluation (DTO, fixtures, client, parsers, and cache component implemented)
+## Hero guide evaluation (cache query implemented; refresh and live acceptance pending)
 
 The D2PT probe recorded in [`reference/d2pt.md`](reference/d2pt.md) is a live
 connectivity and sample-shape check for one Sven Pub row and one Sven Pro row.
@@ -221,9 +221,13 @@ source-position evidence, strict type and identity validation, all-or-nothing
 failure, and deep-copy behavior. Cache tests use a fake Redis to verify whole
 snapshot replacement, one-command HSET/HGETALL shapes, Pub/Pro key isolation,
 raw bytes/source rows/DTO round-trips, failure retention, valid-empty snapshots,
-corruption errors, and input/output mutation isolation. These checks make no
-network, live Redis, or model call; they do not establish all-hero or all-position
-parser coverage, deployment persistence, or AOF recovery.
+corruption errors, and input/output mutation isolation. Service and tool tests
+cover sections, matching, staleness, source metadata, partial read failures,
+structured errors, conditional registration, composition injection, and large
+result Artifact reads. Application wiring is exercised with fake external
+resources. These checks make no network, live Redis, database, or model call;
+they do not establish all-hero or all-position parser coverage, deployment
+persistence, or AOF recovery.
 
 Remaining acceptance layers are separate:
 
@@ -231,18 +235,14 @@ Remaining acceptance layers are separate:
    03:00 Asia/Shanghai schedule, serial request behavior with a one-second wait
    after each response, shared manual/scheduled entry point, and duplicate-run
    prevention. It does not wait for wall-clock 03:00 or call D2PT.
-2. **`hero.guide` query:** local cache fixtures verify hero/position/section
-   filtering, partial Pub/Pro availability, visible stale/missing states, no
-   remote request on a cache miss, and normal Artifact externalization for a
-   large result.
-3. **Redis deployment persistence:** a separate deployment acceptance checks
+2. **Redis deployment persistence:** a separate deployment acceptance checks
    the configured Redis AOF and volume across restart. Fake Redis tests do not
    establish this behavior.
-4. **Real full refresh:** a separately authorized live-provider acceptance
+3. **Real full refresh:** a separately authorized live-provider acceptance
    verifies the configured hero/position coverage, cache publication, and
    source status. A successful one-hero probe or fixture parser test cannot
    stand in for this check.
-5. **Real-model answer:** a separate evaluation checks whether the model answers
+4. **Real-model answer:** a separate evaluation checks whether the model answers
    from the cached Pub guide and Pro examples, keeps the sources distinct, and
    avoids unsupported statistical or causal claims. It is not implied by a
    successful provider refresh.

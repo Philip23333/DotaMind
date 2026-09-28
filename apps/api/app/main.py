@@ -37,6 +37,7 @@ from app.vnext.composition import (
     build_vnext_services,
     initialize_vnext_services,
 )
+from app.vnext.hero_guides.cache import RedisHeroGuideCache
 from app.vnext.product import (
     ConversationContextBuilder,
     DotaVisualEntityEnricher,
@@ -118,7 +119,11 @@ async def lifespan(app: FastAPI):
             vnext_redis,
             ttl_seconds=vnext_settings.trace_ttl_seconds,
         )
-    vnext_services = build_vnext_services(vnext_settings)
+    hero_guide_cache = RedisHeroGuideCache(vnext_redis) if vnext_redis is not None else None
+    vnext_services = build_vnext_services(
+        vnext_settings,
+        hero_guide_cache=hero_guide_cache,
+    )
     await initialize_vnext_services(vnext_settings, vnext_services)
     app.state.vnext_services = vnext_services
     app.state.vnext_runtime = build_vnext_runtime(services=vnext_services)

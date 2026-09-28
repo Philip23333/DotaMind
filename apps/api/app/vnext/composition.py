@@ -42,11 +42,14 @@ from app.vnext.capabilities.esports.series import (
 from app.vnext.capabilities.esports.team import TeamSearchInput, TeamSearchResult
 from app.vnext.capabilities.esports.tournament import TournamentSearchInput, TournamentSearchResult
 from app.vnext.capabilities.game.detail import GameDetailInput, GameDetailResult
+from app.vnext.capabilities.hero.guide import HeroGuideInput, HeroGuideResult
+from app.vnext.capabilities.hero.service import HeroGuideService
 from app.vnext.capabilities.player.profile import PlayerProfileInput, PlayerProfileResult
 from app.vnext.capabilities.player.recent_games import (
     PlayerRecentGamesInput,
     PlayerRecentGamesResult,
 )
+from app.vnext.hero_guides.cache import RedisHeroGuideCache
 from app.vnext.integrations.mcp import MCPRemoteClient, MCPRemoteError
 from app.vnext.llm.openai_compatible import OpenAICompatibleModelClient
 from app.vnext.providers.opendota import OpenDotaClient, OpenDotaGameDetailAdapter
@@ -79,6 +82,7 @@ from app.vnext.tools.esports import (
     register_tournament_tool,
 )
 from app.vnext.tools.game.detail import register_game_detail_tool
+from app.vnext.tools.hero.guide import register_hero_guide_tool
 from app.vnext.tools.json_schema import compile_object_json_schema
 from app.vnext.tools.player.profile import register_player_profile_tool
 from app.vnext.tools.player.recent_games import register_player_recent_games_tool
@@ -99,6 +103,7 @@ TeamSearchService = Callable[[TeamSearchInput], Awaitable[TeamSearchResult]]
 PlayerProfileService = Callable[[PlayerProfileInput], Awaitable[PlayerProfileResult]]
 GameDetailService = Callable[[GameDetailInput], Awaitable[GameDetailResult]]
 CatalogLookupService = Callable[[CatalogLookupInput], Awaitable[CatalogLookupResult]]
+HeroGuideLookup = Callable[[HeroGuideInput], Awaitable[HeroGuideResult]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -346,6 +351,7 @@ class VNextServices:
         Callable[[PlayerRecentGamesInput], Awaitable[PlayerRecentGamesResult]] | None
     ) = None
     game_detail: GameDetailService | None = None
+    hero_guide: HeroGuideLookup | None = None
     catalog_lookup: CatalogLookupService | None = None
     tavily_web_search: TavilyWebSearch | None = None
 
@@ -355,7 +361,8 @@ class VNextServices:
 
 def build_vnext_services(
     settings: VNextSettings | None = None,
-    **_: object,
+    *,
+    hero_guide_cache: RedisHeroGuideCache | None = None,
 ) -> VNextServices:
     config = settings or VNextSettings.from_env()
     client = PandaScoreClient(
@@ -391,6 +398,9 @@ def build_vnext_services(
         )
         game_detail = OpenDotaGameDetailAdapter(opendota_client).get_game_detail
     catalog_lookup = ValveCatalogLookupAdapter(load_default_catalog_repository()).lookup
+    hero_guide: HeroGuideLookup | None = None
+    if hero_guide_cache is not None:
+        hero_guide = HeroGuideService(hero_guide_cache).get_guide
     return VNextServices(
         league_search=league_adapter.search,
         series_search=series_adapter.search,
@@ -402,6 +412,7 @@ def build_vnext_services(
         player_profile=player_profile,
         player_recent_games=player_recent_games,
         game_detail=game_detail,
+        hero_guide=hero_guide,
         catalog_lookup=catalog_lookup,
     )
 
@@ -496,6 +507,8 @@ def build_vnext_registry(
         register_player_recent_games_tool(registry, resolved_services.player_recent_games)
     if config.opendota_enabled and resolved_services.game_detail is not None:
         register_game_detail_tool(registry, resolved_services.game_detail)
+    if resolved_services.hero_guide is not None:
+        register_hero_guide_tool(registry, resolved_services.hero_guide)
     if resolved_services.catalog_lookup is not None:
         register_catalog_lookup_tool(registry, resolved_services.catalog_lookup)
     if resolved_services.tavily_web_search is not None:

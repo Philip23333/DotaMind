@@ -87,7 +87,7 @@ before a second concrete implementation demonstrates the need.
 4. Register the capability only after its focused acceptance passes.
 5. Remove transitional code once the replacement is accepted.
 
-## Hero guides (DTO, fixtures, client, parsers, and persistent cache component implemented; query/refresh pending)
+## Hero guides (cache query implemented; refresh pending)
 
 The internal query DTOs and two fixed raw Sven fixtures are implemented and
 covered by offline tests. A synchronous, bounded D2PT HTTP client is also
@@ -96,8 +96,12 @@ implemented and tested with a fake opener; those tests make no live request. The
 It stores exact response bytes, parsed source rows, and DTO projections in
 whole-snapshot Redis hashes without TTL; failed attempts retain the last good
 snapshot. Its tests use fake Redis and do not verify deployed AOF/restart
-persistence. The cache is not wired into application startup. The `hero.guide`
-tool, Guide Service, and scheduled refresh remain unimplemented. The one-time endpoint probe verified
+persistence. The application injects its existing Redis connection into the
+cache and registers the cache-only `hero.guide` tool. A Service combines
+independent Pub and Pro source states, filters Pro examples by position, applies
+section projections, and exposes pre-projection totals. Cache misses do not
+trigger D2PT requests. Scheduled refresh and cache population remain
+unimplemented. The one-time endpoint probe verified
 non-empty sample responses only. Source evidence and its limits are documented
 in [`reference/d2pt.md`](reference/d2pt.md).
 
@@ -119,8 +123,9 @@ Implementation and acceptance proceed in this order:
    valid-empty records. Publish Pub by hero plus position and Pro by hero. The
    cache uses no TTL; freshness and Pro position filtering belong to the query
    Service.
-5. Add the cache-only `hero.guide(hero_id, position, section)` query capability
-   and register it after focused acceptance.
+5. **Complete:** add the cache-only `hero.guide(hero_id, position, section)`
+   query capability and register it only when the application provides the
+   existing Redis cache dependency. Query registration does not populate cache.
 6. Add the single-instance daily 03:00 Asia/Shanghai refresh and manual trigger
    through the same non-overlapping entry point. Keep scheduler/deployment
    facility choice open until implementation.

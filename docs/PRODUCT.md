@@ -32,24 +32,31 @@ generic game statistics.
 - Continue with references such as "game two", "that player", or "their previous
   match" without restating the whole question.
 
-## Hero guides (confirmed plan; not implemented)
+## Hero guides (cache query implemented; refresh pipeline pending)
 
-The planned hero-guide journey answers a request for one specified hero and
-position. The Pub build data is the primary guide; recent professional matches
-for the same hero and position provide separate practical examples. The two
-sources remain distinguishable, and a professional example is not presented as
-evidence that its player followed a particular Pub build.
+The hero-guide tool answers a request for one specified Valve hero ID and
+position. Pub build data is the primary guide; recent professional matches for
+the same hero and position provide separate practical examples. The two sources
+remain distinguishable, and a professional example is not presented as
+evidence that its player followed a particular Pub build. The query reads the
+shared Redis cache only and does not trigger a D2PT request or refresh. When the
+cache has not been populated, it reports the source as missing.
 
-The current evidence is limited to a one-time D2PT connectivity and payload
-probe for Sven (`hero_id=18`, position 1). Both sampled endpoints returned one
-non-empty JSON build record in the tested WSL environment. This verifies access
-and those sample shapes only. It does not mean D2PT is integrated, a shared cache
-exists, or a scheduled all-hero refresh has run.
+The current provider evidence is limited to a one-time D2PT connectivity and
+payload probe for Sven (`hero_id=18`, position 1). Both sampled endpoints
+returned one non-empty JSON build record in the tested WSL environment. The D2PT
+client, parsers, Redis snapshots, and cache-only query capability are now
+implemented. The query is registered only when the application injects its
+existing Redis connection. This does not mean an all-hero cache has been
+populated or a scheduled refresh has run.
 
 This journey is a specified-hero guide lookup. It does not add an all-hero
 strength ranking, matchup/counter analysis, or draft recommendation. Pub and Pro
 partitions may be independently missing or stale; answers must identify which
-source data is available and must not fill gaps with invented facts.
+source data is available and must not fill gaps with invented facts. A cache
+snapshot is shown as stale after 36 hours or when its latest refresh attempt
+failed; the stale threshold is a display rule, not the provider's statistics
+window.
 
 ## Steam-account and game-detail scope
 

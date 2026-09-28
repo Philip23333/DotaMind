@@ -243,11 +243,11 @@ the Controller must copy names and arguments from the rendered catalog and must
 not invent provider-specific parameters. Domain workflows belong to the
 capability contract and its tests, not to this generic registry baseline.
 
-### `hero.guide` contract defined; tool not registered
+## `hero.guide` cache query
 
 The input and DTO contract for `hero.guide(hero_id, position, section)` is
-defined in `app.vnext.capabilities.hero.guide`. The proposed tool is still not
-part of the current registry inventory above. `hero_id` is a strict positive
+defined in `app.vnext.capabilities.hero.guide`. This tool is conditionally
+registered when the application injects its existing Redis cache. `hero_id` is a strict positive
 integer, `position` is a strict integer from 1 through 5, and `section` is one
 of `all`, `items`, `skills`, or `pro_examples` (default `all`). The input does
 not accept a name, provider/source selector, URL, or refresh flag.
@@ -263,13 +263,23 @@ skill candidates.
 Source metadata can represent available, empty, or missing data, and can retain
 stale available data alongside a last refresh error. Retrieval and attempt times
 require timezones; the source `updated_at` remains an unparsed string. The D2PT
-HTTP client, pure Pub/Pro parsers, and standalone Redis snapshot cache are
-implemented below the capability boundary. The cache has no TTL, keeps the last
-successful snapshot after a failed attempt, and is independent of session
-Artifacts; it is not yet wired into application startup. There is still no cache
-query, Guide Service, or tool registration. The eventual query remains
-cache-only, with section filtering, freshness calculation, partial-source
-behavior, and Artifact externalization owned by a later Service/tool phase.
+HTTP client, pure Pub/Pro parsers, Redis snapshot cache, `HeroGuideService`, and
+`hero.guide` tool are implemented. The tool is registered only when the
+application injects the existing Redis connection. It reads cache only, never
+refreshes on a miss, and does not expose the raw body or complete source rows.
+The cache has no TTL, keeps the last successful snapshot after a failed attempt,
+and remains independent of session Artifacts.
+
+The query reads Pub by hero plus position and Pro by hero, then filters Pro
+examples to the exact requested hero and position. It reports `missing` when no
+snapshot exists, `empty` when the successful snapshot has no matching candidates,
+and `available` otherwise. Data is stale at or beyond 36 hours, or after a
+refresh failure; section projection does not change status or totals. Totals are
+pre-projection hero-position counts. A single cache read error returns the other
+source when available; two read errors become a fixed `tool_execution_error`
+with per-source safe codes. Large outputs use the existing generic Artifact
+externalization and can be explored with `artifact.read` or `artifact.grep`.
+Refresh, scheduling, and cache population are not implemented.
 
 ## Steam player and game-detail tools
 

@@ -140,7 +140,7 @@ logical tool response; the bounded model observation is derived separately by
 the generic result processor for ordinary tools. A stored ref is not
 automatically restored into a later turn's dialogue context.
 
-## Hero guide data flow (client, parsers, and persistent cache implemented; pipeline pending)
+## Hero guide data flow (cache-only query implemented; refresh pipeline pending)
 
 The synchronous D2PT HTTP client is implemented with `urllib.request`; its
 deterministic tests use an injected opener and make no live request. It sends
@@ -153,9 +153,10 @@ one snapshot. A successful publish replaces the complete snapshot with one
 Redis `HSET`; callers record a failed fetch/parse by updating only attempt
 metadata, which keeps the last successful snapshot. Reads use one `HGETALL`.
 Keys have no TTL.
-The cache accepts an injected Redis client and does not create connections or
-wire itself into application startup. The `hero.guide` Service/tool and
-background refresh are still unimplemented. The separate Sven probe remains
+The cache accepts an injected Redis client and does not create connections. The
+application wraps its existing lifespan Redis client and injects the cache into
+composition, which registers the `hero.guide` Service/tool only when supplied.
+Background refresh is still unimplemented. The separate Sven probe remains
 evidence of access and sampled response shapes only.
 
 The cache's persistence across process or Redis restarts depends on the deployed
@@ -183,13 +184,13 @@ daily 03:00 Asia/Shanghai trigger or manual refresh request
 Each implemented cache snapshot records its retrieval time; source-provided
 update fields remain in the retained source rows and projections. The cache
 entry separately records the latest attempt time and stable error code. It does
-not calculate availability or staleness. The future refresh worker and Guide
-Service will interpret those fields. Scheduler technology and the precise
-freshness-expiration threshold remain implementation choices; the behavioral
-contract is one daily local-time run and one shared manual entry point that
-prevents overlapping refreshes.
+not calculate availability or staleness. The implemented Guide Service marks a
+snapshot stale at an age of 36 hours or after a failed refresh attempt. Scheduler
+technology remains an implementation choice; the refresh contract is one daily
+03:00 Asia/Shanghai run and one shared manual entry point that prevents
+overlapping refreshes.
 
-The planned online path is read-only:
+The implemented online path is read-only when Redis is available:
 
 ```text
 Model -> hero.guide(hero_id, position, section)
@@ -198,9 +199,14 @@ Model -> hero.guide(hero_id, position, section)
       -> bounded tool result or existing generic Artifact externalization
 ```
 
-The Guide Service combines the requested cached source partitions into a query
-view; it does not call D2PT or start a refresh. Missing or stale partitions are
-reported as such while any available source data is returned. The shared,
+At application startup, the cache wraps the lifespan's existing `vnext_redis`
+client; composition does not open or close Redis connections. The tool is
+registered only when the cache dependency is injected. The Guide Service reads
+Pub and Pro once each for every query, filters Pro examples to the exact hero and
+position, and applies the requested section without changing source status or
+candidate totals. It does not call D2PT or start a refresh. Missing or stale
+partitions are reported while any readable source data is returned; if both
+cache reads fail, the tool returns a fixed execution error. The shared,
 cross-session guide cache is distinct from the process-local, session-owned
 Artifact store: Artifacts continue to hold oversized logical tool responses and
 are not the durable guide cache.
