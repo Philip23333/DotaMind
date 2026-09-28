@@ -470,6 +470,41 @@ def test_pro_root_validation_uses_safe_errors(
             "$[0].recent_matches[0].abilities[0].time",
         ),
         (
+            _pro_match(abilities=[{"ability_id": -1}]),
+            "invalid_value",
+            "$[0].recent_matches[0].abilities[0].ability_id",
+        ),
+        (
+            _pro_match(abilities=[{"ability_id": True}]),
+            "invalid_value",
+            "$[0].recent_matches[0].abilities[0].ability_id",
+        ),
+        (
+            _pro_match(abilities=[{"ability_id": False}]),
+            "invalid_value",
+            "$[0].recent_matches[0].abilities[0].ability_id",
+        ),
+        (
+            _pro_match(abilities=[{"ability_id": "0"}]),
+            "invalid_value",
+            "$[0].recent_matches[0].abilities[0].ability_id",
+        ),
+        (
+            _pro_match(abilities=[{"ability_id": 0.0}]),
+            "invalid_value",
+            "$[0].recent_matches[0].abilities[0].ability_id",
+        ),
+        (
+            _pro_match(abilities=[{"ability_id": None}]),
+            "invalid_value",
+            "$[0].recent_matches[0].abilities[0].ability_id",
+        ),
+        (
+            _pro_match(abilities=[{}]),
+            "invalid_value",
+            "$[0].recent_matches[0].abilities[0].ability_id",
+        ),
+        (
             _pro_match(abilities=[{"ability_id": 1, "level": False}]),
             "invalid_value",
             "$[0].recent_matches[0].abilities[0].level",
@@ -618,6 +653,33 @@ def test_pro_optional_fields_and_event_arrays_preserve_source_values() -> None:
     assert example.ability_timeline[0].time_seconds == 0
     assert example.ability_timeline[0].source_fields["future"] is None
     assert example.talent_choices == [{"lvl": 10, "selected": "left"}]
+
+
+def test_pro_ability_events_preserve_zero_order_duplicates_and_source_fields() -> None:
+    abilities = [
+        {"ability_id": 2, "time": 100, "level": 1},
+        {
+            "ability_id": 0,
+            "time": 1105,
+            "level": 14,
+            "unknown": {"values": [0, False, None]},
+        },
+        {"ability_id": 2, "time": 1106, "level": 15},
+    ]
+    rows = [_pro_row(recent_matches=[_pro_match(abilities=abilities)])]
+    before = deepcopy(rows)
+
+    example = parse_pro_examples(rows, hero_id=18)[0]
+
+    assert rows == before
+    assert len(example.ability_timeline) == len(abilities)
+    assert [event.ability_id for event in example.ability_timeline] == [2, 0, 2]
+    zero_event = example.ability_timeline[1]
+    assert zero_event.time_seconds == 1105
+    assert zero_event.hero_level == 14
+    assert zero_event.source_fields == abilities[1]
+    zero_event.source_fields["unknown"]["values"].append("output-only")
+    assert rows == before
 
 
 def test_pro_missing_and_null_optional_event_fields_map_to_empty_or_none() -> None:

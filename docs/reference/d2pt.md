@@ -199,6 +199,28 @@ empty Pro result means the hero has no professional games. Do not treat
 These two Sven records do not demonstrate complete hero coverage or production
 availability.
 
+## Pro ability-ID diagnosis samples (2026-09-28)
+
+A bounded WSL diagnosis made one request each to the existing Pro endpoint for
+Anti-Mage, Axe, and Crystal Maiden. All three returned HTTP 200 JSON arrays.
+The original parser rejected each response with `invalid_guide_data` /
+`invalid_value` at an ability event's `ability_id`: the source value was integer
+`0`, while the parser required a strict integer greater than zero. The captured
+responses contained 7, 67, and 9 such events, respectively.
+
+| Hero | ID | Root records | First failure path | Bytes | SHA-256 |
+|---|---:|---:|---|---:|---|
+| Anti-Mage | 1 | 1 | `$[0].recent_matches[4].abilities[15].ability_id` | 57,211 | `f5f6e34f7fe5e0807fbdb26dc7a93e7c6500b7a9ca05570eea8b955a512e5670` |
+| Axe | 2 | 4 | `$[0].recent_matches[0].abilities[15].ability_id` | 162,415 | `d144cc678c13b99bac76df13f2988545758060f8049c24f0fa694ad990d7ef4f` |
+| Crystal Maiden | 5 | 1 | `$[0].recent_matches[3].abilities[15].ability_id` | 59,707 | `a3c562fde86546a33c234b4d6cfbdd72e2f10275f73d0b77b5dad1fbcfd44485` |
+
+The current DTO and Pro event parser preserve non-negative strict integer IDs,
+including zero, with original event fields and ordering. Zero's game meaning is
+not confirmed and is not mapped to a named ability. This fix is supported by
+these three regression samples only; it does not establish that the other 68
+failures from the prior full refresh share this cause or are resolved. Fixture
+capture times, endpoints, and provenance are recorded in the [fixture README](../../apps/api/tests/vnext/fixtures/d2pt/README.md).
+
 ## Offline fixtures and separate environment evidence
 
 The raw WSL response bodies are preserved byte-for-byte for offline contract
@@ -206,6 +228,7 @@ tests:
 
 - [Pub Sven pos 1 fixture](../../apps/api/tests/vnext/fixtures/d2pt/pub_sven_pos1.json)
 - [Pro Sven fixture](../../apps/api/tests/vnext/fixtures/d2pt/pro_sven.json)
+- [Anti-Mage, Axe, and Crystal Maiden Pro fixtures](../../apps/api/tests/vnext/fixtures/d2pt/README.md#pro-ability-id-diagnosis-samples)
 - [Fixture provenance, sizes, and SHA-256](../../apps/api/tests/vnext/fixtures/d2pt/README.md)
 
 A separate user-provided report states that D2PT connectivity succeeded from a

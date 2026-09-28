@@ -398,6 +398,7 @@ def _parse_pro_ability(value: object, path: str) -> ProAbilityEvent:
     ability_id = _required_int(
         ability.get("ability_id", _MISSING),
         f"{path}.ability_id",
+        minimum=0,
     )
     raw_time = ability.get("time", _MISSING)
     time_seconds = None if raw_time is _MISSING or raw_time is None else _finite_number(

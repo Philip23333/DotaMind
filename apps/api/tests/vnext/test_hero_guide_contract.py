@@ -140,6 +140,29 @@ def test_ability_events_preserve_same_level_entries_and_negative_time() -> None:
     assert [event.time_seconds for event in example.ability_timeline] == [-5, -3]
 
 
+def test_pro_ability_event_preserves_zero_as_a_strict_integer() -> None:
+    event = ProAbilityEvent(ability_id=0)
+
+    assert event.ability_id == 0
+    assert type(event.model_dump(mode="json")["ability_id"]) is int
+
+
+@pytest.mark.parametrize("ability_id", [-1, True, False, "0", 0.0, None])
+def test_pro_ability_event_rejects_invalid_nonnegative_ids(ability_id: object) -> None:
+    with pytest.raises(ValidationError):
+        ProAbilityEvent(ability_id=ability_id)
+
+
+def test_pro_ability_event_requires_ability_id() -> None:
+    with pytest.raises(ValidationError):
+        ProAbilityEvent.model_validate({})
+
+
+def test_pub_skill_sequences_still_reject_zero_ability_ids() -> None:
+    with pytest.raises(ValidationError):
+        SkillSequenceOption(ability_ids=[0], source_path="$.abilities_new[0]")
+
+
 def test_open_json_preserves_extensions_null_zero_false_and_large_finite_values() -> None:
     item = GuideItemObservation(
         item_id=1,

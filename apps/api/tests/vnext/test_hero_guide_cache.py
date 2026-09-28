@@ -185,6 +185,49 @@ def test_fixture_snapshots_round_trip_raw_source_and_parsed_dtos() -> None:
     assert pro_entry.snapshot.retrieved_at == pro_snapshot.retrieved_at
 
 
+def test_pro_zero_ability_event_round_trips_through_fake_redis() -> None:
+    source_rows = [
+        {
+            "hero_id": 18,
+            "position": "pos 1",
+            "recent_matches": [
+                {
+                    "match_id": 900,
+                    "hero_id": 18,
+                    "abilities": [
+                        {
+                            "ability_id": 0,
+                            "time": 1105,
+                            "level": 14,
+                            "unknown": {"kept": [0, False, None]},
+                        }
+                    ],
+                }
+            ],
+        }
+    ]
+    raw_body = json.dumps(source_rows, separators=(",", ":")).encode("utf-8")
+    examples = parse_pro_examples(source_rows, hero_id=18)
+    snapshot = _pro_snapshot(
+        raw_body=raw_body,
+        source_rows=source_rows,
+        pro_examples=examples,
+    )
+    cache = RedisHeroGuideCache(FakeRedis())
+
+    _run(cache.publish(snapshot, attempted_at=_NOW))
+    loaded = _run(cache.get_pro(hero_id=18)).snapshot
+
+    assert loaded is not None
+    assert loaded.raw_body == raw_body
+    event = loaded.pro_examples[0].ability_timeline[0]
+    assert event.ability_id == 0
+    assert type(event.ability_id) is int
+    assert event.time_seconds == 1105
+    assert event.hero_level == 14
+    assert event.source_fields == source_rows[0]["recent_matches"][0]["abilities"][0]
+
+
 def test_second_cache_instance_reads_published_data_from_shared_redis() -> None:
     client = FakeRedis()
     first_cache = RedisHeroGuideCache(client)

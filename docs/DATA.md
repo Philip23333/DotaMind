@@ -130,6 +130,12 @@ identifiers use strict integers, open JSON objects use recursive JSON values,
 and non-finite numbers are rejected even inside those objects. List/object
 fields default to fresh empty collections; optional totals default to `None`.
 
+`ProAbilityEvent.ability_id` is a non-negative strict integer: zero is retained
+as the source value, but it is not mapped to an ability name or interpreted as
+a specific kind of level-up event. Pub `SkillSequenceOption.ability_ids` remain
+strictly positive IDs; this Pro event rule does not relax other identifier
+fields.
+
 `PubGuide` holds source build/facet IDs, per-build metadata, open statistics,
 starting-item options, item progression, situational items, skill-sequence
 options, and talent observations. Each open source JSON object preserves unknown
@@ -194,6 +200,13 @@ Both parsers reject bool-as-number, non-finite times, wrong non-null optional
 field types, and malformed nested arrays as a whole. Open DTO dictionaries are
 deep copies. Unknown provider fields that have no DTO field remain in the
 original `D2PTResponse`; parsing is a projection, not source retention.
+
+Three additional real Pro response fixtures captured for parser diagnosis
+contained integer `ability_id=0` events. The earlier positive-only Pro event
+constraint rejected those complete responses; the current Pro parser preserves
+their non-negative IDs and event order without assigning a name or game
+meaning. This regression evidence covers only those three samples; it does not
+show that the other 68 failures from the previous full refresh are resolved.
 
 `RedisHeroGuideCache` is an independent storage component that receives an
 already fetched and parsed `GuideCacheSnapshot`; it does not call the client or

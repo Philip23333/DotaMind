@@ -211,15 +211,15 @@ It is not evidence of a full-cache refresh, scheduled execution, parser coverage
 for every hero/position, or model answer quality.
 
 The current offline acceptance covers strict DTO inputs, independent Pub/Pro
-metadata, source-shaped JSON preservation, byte/hash/shape checks for the two
-fixed raw response fixtures, deterministic HTTP-client behavior through an
+metadata, source-shaped JSON preservation, byte/hash/shape checks for the fixed
+raw response fixtures, deterministic HTTP-client behavior through an
 injected fake opener, Pub/Pro fixture parsing, the standalone Redis cache, and
 the internal `HeroGuideRefresher`.
 Client tests cover request URLs and headers, timeout and response-size bounds,
 status/error handling, JSON and minimal schema validation, and response closure.
-Parser tests cover the observed Sven fields and counts, all-record ordering,
-source-position evidence, strict type and identity validation, all-or-nothing
-failure, and deep-copy behavior. Cache tests use a fake Redis to verify whole
+Parser tests cover the observed Sven fields and counts, the additional Pro
+zero-ID samples, all-record ordering, source-position evidence, strict type and
+identity validation, all-or-nothing failure, and deep-copy behavior. Cache tests use a fake Redis to verify whole
 snapshot replacement, one-command HSET/HGETALL shapes, Pub/Pro key isolation,
 raw bytes/source rows/DTO round-trips, failure retention, valid-empty snapshots,
 corruption errors, and input/output mutation isolation. Service and tool tests
@@ -235,6 +235,13 @@ followed by successful replacement using the real cache component over fake
 Redis. These checks make no network, live Redis, database, or model call; they do
 not establish all-hero or all-position parser coverage, deployment persistence,
 or AOF recovery.
+
+Three additional raw Pro fixtures captured during the bounded 2026-09-28 parser
+diagnosis exercise full `recent_matches` and ability-event ordering. They contain
+7, 67, and 9 zero-valued `ability_id` events for hero IDs 1, 2, and 5. The tests
+verify those events and source fields survive parsing; this is regression
+coverage for the observed pattern, not Pro full-hero acceptance or evidence that
+other previously failed heroes now parse.
 
 CLI tests exercise help/argument handling, environment-only Redis configuration,
 same-container non-blocking lock behavior, one-line safe JSON results, fixed exit

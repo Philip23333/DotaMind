@@ -150,11 +150,15 @@ class ProItemEvent(BaseModel):
 
 
 class ProAbilityEvent(BaseModel):
-    """One ordered ability-level event from a professional-match example."""
+    """One ordered ability-level event from a professional-match example.
+
+    Source ability IDs, including zero, are retained. Zero is not mapped to a
+    named ability or interpreted as a specific kind of level-up event.
+    """
 
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
-    ability_id: _PositiveInt
+    ability_id: _NonNegativeInt
     time_seconds: FiniteFloat | None = None
     hero_level: _PositiveInt | None = None
     source_fields: _JsonObject = Field(default_factory=dict)
