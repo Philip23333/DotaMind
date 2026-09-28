@@ -70,7 +70,7 @@ universal object graph. If complete provider-source fidelity is required, it
 must be added explicitly at the capability boundary before generic Artifact
 externalization.
 
-## Hero guide data contract (DTO, HTTP client, parsers, and cache component implemented)
+## Hero guide data contract (DTO, HTTP client, parsers, cache, and refresh executor implemented)
 
 The internal contract is defined in `app.vnext.capabilities.hero.guide`. A
 synchronous D2PT HTTP client now fetches the heroes list, Pub builds, and Pro
@@ -79,7 +79,9 @@ transport and minimal source-shape checks. Pure Pub and Pro parsers project
 source rows into the existing guide DTOs without changing the response. A
 Redis cache stores source snapshots and is wired to the application's existing
 Redis connection. HeroGuideService exposes cache-only queries through the
-conditionally registered hero.guide tool; background refresh remains pending.
+conditionally registered hero.guide tool. An internal serial refresher now
+connects the D2PT client, parsers, and cache; scheduling and a public/manual
+trigger remain pending.
 The input selects one `(hero_id, position)` pair, with a strict positive integer hero ID,
 a strict integer position from 1 through 5, and `section` equal to `all`,
 `items`, `skills`, or `pro_examples` (default `all`). It does not accept a hero
@@ -216,6 +218,27 @@ The cache accepts an injected async Redis client and does not create or close
 connections. Offline tests use a small fake Redis; they do not verify live Redis,
 container configuration, AOF recovery, or restart persistence. Deployed
 persistence relies on Redis AOF and its configured persistent volume.
+
+`HeroGuideRefresher.refresh_all()` performs only the fetch/parse/publish pass. It
+uses the validated hero-list order, requests Pub positions 1 through 5 followed
+by one Pro response per hero, and does not read the cache or skip fresh
+partitions. Synchronous client calls run one at a time through
+`asyncio.to_thread()`. After a response or `D2PTError`, it waits exactly one
+second before parsing, publishing, recording a partition failure, or issuing the
+next request. A successful parse publishes the response's original bytes, source
+rows, retrieval time, and DTOs together; a valid empty array is published as a
+successful empty snapshot. A fetch or parse failure records only the stable error
+code and attempt time, leaving old snapshot data to the cache's failure-retention
+behavior. Cache write errors abort the pass; cancellation and unexpected
+programming errors propagate. Cancelling an awaited `to_thread()` call does not
+forcibly stop an urllib request already running in its worker thread.
+
+The refresher returns an in-memory report with status, timing, hero/request and
+publication counts, empty-response counts, and ordered partition failures. It
+does not retain exception text or provider response payloads in the report. The
+executor is not wired to application startup, a scheduler, an HTTP/CLI entry
+point, or overlap protection. No real full refresh is run by this component, so
+it does not automatically populate production cache data.
 
 The cache is connected to a read-only `HeroGuideService`, which the model-facing
 `hero.guide` tool exposes when the application injects the cache. The Service

@@ -87,7 +87,7 @@ before a second concrete implementation demonstrates the need.
 4. Register the capability only after its focused acceptance passes.
 5. Remove transitional code once the replacement is accepted.
 
-## Hero guides (cache query implemented; refresh pending)
+## Hero guides (cache query and serial refresh executor implemented; scheduling pending)
 
 The internal query DTOs and two fixed raw Sven fixtures are implemented and
 covered by offline tests. A synchronous, bounded D2PT HTTP client is also
@@ -100,9 +100,15 @@ persistence. The application injects its existing Redis connection into the
 cache and registers the cache-only `hero.guide` tool. A Service combines
 independent Pub and Pro source states, filters Pro examples by position, applies
 section projections, and exposes pre-projection totals. Cache misses do not
-trigger D2PT requests. Scheduled refresh and cache population remain
-unimplemented. The one-time endpoint probe verified
-non-empty sample responses only. Source evidence and its limits are documented
+trigger D2PT requests. The internal `HeroGuideRefresher` fetches the hero list
+once and requests Pub positions 1 through 5, then Pro once, for each hero in
+source order. Client calls are sequential and followed by a one-second wait;
+successful responses are parsed and published as whole snapshots, while a fetch
+or parse failure records partition attempt metadata and preserves its prior
+snapshot. Cache write errors abort the run. The executor has no schedule, public
+manual entry point, overlap protection, or startup wiring; it has not performed
+a real full refresh or automatically populated the cache. The one-time endpoint
+probe verified non-empty sample responses only. Source evidence and its limits are documented
 in [`reference/d2pt.md`](reference/d2pt.md).
 
 Implementation and acceptance proceed in this order:
@@ -126,12 +132,20 @@ Implementation and acceptance proceed in this order:
 5. **Complete:** add the cache-only `hero.guide(hero_id, position, section)`
    query capability and register it only when the application provides the
    existing Redis cache dependency. Query registration does not populate cache.
-6. Add the single-instance daily 03:00 Asia/Shanghai refresh and manual trigger
-   through the same non-overlapping entry point. Keep scheduler/deployment
-   facility choice open until implementation.
-7. Verify a real full refresh over the intended configured coverage, then run a
-   separate real-model answer evaluation. Sample-fixture acceptance, provider
-   refresh, and answer quality are separate results.
+6. **Complete: serial refresh executor.** Use one hero-list response in source
+   order, then five Pub position requests and one Pro request per hero. Wait one
+   second after every response or D2PT error, parse before publishing, retain the
+   last good partition on fetch/parse failure, and abort on cache write failure.
+   Offline tests use fake clients, clocks, sleeps, and Redis; no provider or
+   production cache was contacted.
+7. **Pending: refresh scheduling and coordination.** Add the single-instance
+   daily 03:00 Asia/Shanghai trigger and manual trigger through the same entry
+   point, with duplicate-run prevention. Choose the scheduler/deployment
+   facility during this implementation stage. Until then, do not wire the
+   executor to startup or an automatic/public trigger.
+8. Verify a real full refresh over the intended configured coverage, then run a
+   separate real-model answer evaluation. Sample-fixture acceptance, offline
+   executor tests, provider refresh, and answer quality are separate results.
 
 Do not force-match Pub item builds to skill sequences, derive recommendation
 routes from Pro aggregates, manufacture a fixed number of examples, or infer

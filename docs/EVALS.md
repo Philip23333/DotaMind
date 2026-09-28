@@ -203,7 +203,7 @@ not turn into deterministic test failures.
 Never commit credentials, authorization headers, request tokens, or material
 user data.
 
-## Hero guide evaluation (cache query implemented; refresh and live acceptance pending)
+## Hero guide evaluation (cache query and offline refresh executor implemented; scheduling and live acceptance pending)
 
 The D2PT probe recorded in [`reference/d2pt.md`](reference/d2pt.md) is a live
 connectivity and sample-shape check for one Sven Pub row and one Sven Pro row.
@@ -213,7 +213,8 @@ for every hero/position, or model answer quality.
 The current offline acceptance covers strict DTO inputs, independent Pub/Pro
 metadata, source-shaped JSON preservation, byte/hash/shape checks for the two
 fixed raw response fixtures, deterministic HTTP-client behavior through an
-injected fake opener, Pub/Pro fixture parsing, and the standalone Redis cache.
+injected fake opener, Pub/Pro fixture parsing, the standalone Redis cache, and
+the internal `HeroGuideRefresher`.
 Client tests cover request URLs and headers, timeout and response-size bounds,
 status/error handling, JSON and minimal schema validation, and response closure.
 Parser tests cover the observed Sven fields and counts, all-record ordering,
@@ -225,16 +226,22 @@ corruption errors, and input/output mutation isolation. Service and tool tests
 cover sections, matching, staleness, source metadata, partial read failures,
 structured errors, conditional registration, composition injection, and large
 result Artifact reads. Application wiring is exercised with fake external
-resources. These checks make no network, live Redis, database, or model call;
-they do not establish all-hero or all-position parser coverage, deployment
-persistence, or AOF recovery.
+resources. Refresh-executor tests use synchronous fake-client methods, fake
+sleep, fake clocks, and fake caches; they cover source-order traversal, one
+request at a time on a worker thread, the request→sleep→parse/publish sequence,
+`1 + 6 × hero_count` calls, bounded per-partition failure handling, cancellation
+and unexpected-error propagation, report counts, and old-snapshot retention
+followed by successful replacement using the real cache component over fake
+Redis. These checks make no network, live Redis, database, or model call; they do
+not establish all-hero or all-position parser coverage, deployment persistence,
+or AOF recovery.
 
 Remaining acceptance layers are separate:
 
 1. **Refresh coordination:** a clock-controlled test verifies the daily
-   03:00 Asia/Shanghai schedule, serial request behavior with a one-second wait
-   after each response, shared manual/scheduled entry point, and duplicate-run
-   prevention. It does not wait for wall-clock 03:00 or call D2PT.
+   03:00 Asia/Shanghai schedule, a shared manual/scheduled entry point, and
+   duplicate-run prevention. It does not wait for wall-clock 03:00 or call D2PT.
+   The implemented serial executor is not yet connected to either trigger.
 2. **Redis deployment persistence:** a separate deployment acceptance checks
    the configured Redis AOF and volume across restart. Fake Redis tests do not
    establish this behavior.

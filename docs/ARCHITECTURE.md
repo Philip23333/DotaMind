@@ -140,7 +140,7 @@ logical tool response; the bounded model observation is derived separately by
 the generic result processor for ordinary tools. A stored ref is not
 automatically restored into a later turn's dialogue context.
 
-## Hero guide data flow (cache-only query implemented; refresh pipeline pending)
+## Hero guide data flow (cache query and serial refresh executor implemented)
 
 The synchronous D2PT HTTP client is implemented with `urllib.request`; its
 deterministic tests use an injected opener and make no live request. It sends
@@ -156,39 +156,41 @@ Keys have no TTL.
 The cache accepts an injected Redis client and does not create connections. The
 application wraps its existing lifespan Redis client and injects the cache into
 composition, which registers the `hero.guide` Service/tool only when supplied.
-Background refresh is still unimplemented. The separate Sven probe remains
-evidence of access and sampled response shapes only.
+An internal `HeroGuideRefresher` now connects the injected D2PT client and cache:
+it fetches the hero list once, then requests Pub positions 1 through 5 and Pro
+once per hero in source order. Requests run sequentially through
+`asyncio.to_thread`; after every normal response or `D2PTError`, the executor
+waits one second before parsing, publishing, recording failure, or starting the
+next request. Successful full parses publish one whole snapshot. A fetch or parse
+failure updates only that partition's attempt metadata, preserving its last good
+snapshot; a cache write failure aborts the refresh. Cancellation and unexpected
+programming errors propagate. The executor is not connected to startup, a
+scheduler, an HTTP/CLI trigger, or a refresh lock, so it does not run
+automatically and has not populated the cache through a full refresh. The
+separate Sven probe remains evidence of access and sampled response shapes only.
 
 The cache's persistence across process or Redis restarts depends on the deployed
 Redis AOF and persistent volume configuration. Offline tests use a fake Redis
 and do not verify AOF recovery or a live Redis deployment. The shared guide
 cache remains separate from session Artifacts.
 
-The planned refresh path is:
+The next managed refresh step is still planned:
 
 ```text
 daily 03:00 Asia/Shanghai trigger or manual refresh request
-  -> one shared refresh entry point; reject/skip duplicate active refreshes
-  -> D2PT Provider client; serial requests, wait 1 second after each response
-  -> Pub parser and Pro parser, kept independent
-  -> persistent source snapshots
-       -> Pub snapshot per hero and position
-       -> Pro snapshot per hero; requested position is filtered on read
-       -> retain original response bytes and parsed source result
-       -> atomically replace the whole snapshot only after successful parsing
-       -> never append one position's new rows while leaving old rows in place
-       -> retain its last good snapshot on fetch/parse failure
-       -> represent a valid empty result separately from failure
+  -> one single-instance entry point with overlap prevention
+  -> implemented HeroGuideRefresher
 ```
 
 Each implemented cache snapshot records its retrieval time; source-provided
 update fields remain in the retained source rows and projections. The cache
 entry separately records the latest attempt time and stable error code. It does
 not calculate availability or staleness. The implemented Guide Service marks a
-snapshot stale at an age of 36 hours or after a failed refresh attempt. Scheduler
-technology remains an implementation choice; the refresh contract is one daily
-03:00 Asia/Shanghai run and one shared manual entry point that prevents
-overlapping refreshes.
+snapshot stale at an age of 36 hours or after a failed refresh attempt. The daily
+03:00 Asia/Shanghai schedule, shared manual entry point, and protection against
+overlapping runs remain unimplemented; scheduler/deployment technology remains
+an implementation choice. No live full refresh has been run as part of the
+executor implementation.
 
 The implemented online path is read-only when Redis is available:
 
