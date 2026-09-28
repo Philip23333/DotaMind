@@ -79,9 +79,10 @@ transport and minimal source-shape checks. Pure Pub and Pro parsers project
 source rows into the existing guide DTOs without changing the response. A
 Redis cache stores source snapshots and is wired to the application's existing
 Redis connection. HeroGuideService exposes cache-only queries through the
-conditionally registered hero.guide tool. An internal serial refresher now
-connects the D2PT client, parsers, and cache; scheduling and a public/manual
-trigger remain pending.
+conditionally registered hero.guide tool. An internal serial refresher connects
+the D2PT client, parsers, and cache. An operator-only CLI runs it on demand, and
+an uninstalled systemd service/timer template describes daily scheduling. The
+CLI is not a public endpoint or model tool.
 The input selects one `(hero_id, position)` pair, with a strict positive integer hero ID,
 a strict integer position from 1 through 5, and `section` equal to `all`,
 `items`, `skills`, or `pro_examples` (default `all`). It does not accept a hero
@@ -236,9 +237,19 @@ forcibly stop an urllib request already running in its worker thread.
 The refresher returns an in-memory report with status, timing, hero/request and
 publication counts, empty-response counts, and ordered partition failures. It
 does not retain exception text or provider response payloads in the report. The
-executor is not wired to application startup, a scheduler, an HTTP/CLI entry
-point, or overlap protection. No real full refresh is run by this component, so
-it does not automatically populate production cache data.
+executor is not wired to application startup or an HTTP endpoint. The CLI reads
+`DOTAMIND_REDIS_URL` from its process environment, acquires a non-blocking `flock`
+at `/tmp/dotamind-hero-guide-refresh.lock` before creating resources, pings Redis,
+executes one refresh, emits one JSON result, and closes Redis before releasing the
+lock. Success, partial, failed, skipped, and cancelled results use fixed exit
+codes; exception details and credentials are not printed. The lock coordinates
+processes sharing one API container's `/tmp` only, not multiple API containers.
+On SIGINT/SIGTERM the CLI cancels the refresh coroutine, then waits for the
+default executor before closing Redis; cancellation does not forcibly stop an
+urllib request already running in its worker thread. The supplied systemd
+templates invoke this CLI daily at 03:00 Asia/Shanghai, but they have not been
+installed or enabled. No live full refresh has been run, so the CLI and templates
+have not populated deployed cache data.
 
 The cache is connected to a read-only `HeroGuideService`, which the model-facing
 `hero.guide` tool exposes when the application injects the cache. The Service
@@ -272,9 +283,10 @@ clears skill sequences and talents; `skills` retains Pub metadata, statistics,
 sequences, and talents but clears item fields; `pro_examples` returns only the
 matching Pro examples. Empty projected Pub rows are retained. Totals count
 hero-position candidates before projection; a missing or unreadable partition
-has a null total, while a successful empty partition has total zero. The
-application has not been wired to fetch or refresh data, so currently empty Redis
-keys yield normal missing-source results. These query rules do not establish
+has a null total, while a successful empty partition has total zero. Application
+startup has not been wired to fetch or refresh data, so currently empty Redis
+keys yield normal missing-source results unless an operator runs the CLI. These
+query rules do not establish
 live Redis persistence, all-hero coverage, or real-model answer quality.
 
 The one-time Sven probe verified one non-empty JSON row from each tested

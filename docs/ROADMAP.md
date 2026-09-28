@@ -87,7 +87,7 @@ before a second concrete implementation demonstrates the need.
 4. Register the capability only after its focused acceptance passes.
 5. Remove transitional code once the replacement is accepted.
 
-## Hero guides (cache query and serial refresh executor implemented; scheduling pending)
+## Hero guides (cache query, serial executor, and operator CLI implemented; timer deployment pending)
 
 The internal query DTOs and two fixed raw Sven fixtures are implemented and
 covered by offline tests. A synchronous, bounded D2PT HTTP client is also
@@ -105,9 +105,12 @@ once and requests Pub positions 1 through 5, then Pro once, for each hero in
 source order. Client calls are sequential and followed by a one-second wait;
 successful responses are parsed and published as whole snapshots, while a fetch
 or parse failure records partition attempt metadata and preserves its prior
-snapshot. Cache write errors abort the run. The executor has no schedule, public
-manual entry point, overlap protection, or startup wiring; it has not performed
-a real full refresh or automatically populated the cache. The one-time endpoint
+snapshot. Cache write errors abort the run. An operator-only CLI invokes the
+executor using the API container's `DOTAMIND_REDIS_URL`, with a non-blocking
+process lock shared among CLI invocations in that one container. A systemd daily
+timer template invokes the same command, but it is not installed or enabled. The
+CLI is not a public endpoint or model-facing tool, and application startup is not
+wired to refresh. No real full refresh has populated the cache. The one-time endpoint
 probe verified non-empty sample responses only. Source evidence and its limits are documented
 in [`reference/d2pt.md`](reference/d2pt.md).
 
@@ -138,14 +141,17 @@ Implementation and acceptance proceed in this order:
    last good partition on fetch/parse failure, and abort on cache write failure.
    Offline tests use fake clients, clocks, sleeps, and Redis; no provider or
    production cache was contacted.
-7. **Pending: refresh scheduling and coordination.** Add the single-instance
-   daily 03:00 Asia/Shanghai trigger and manual trigger through the same entry
-   point, with duplicate-run prevention. Choose the scheduler/deployment
-   facility during this implementation stage. Until then, do not wire the
-   executor to startup or an automatic/public trigger.
-8. Verify a real full refresh over the intended configured coverage, then run a
+7. **Complete in repository; deployment pending:** add the operator CLI, a
+   non-blocking per-container process lock, and systemd service/timer templates
+   for a daily 03:00 Asia/Shanghai run. The template remains uninstalled and
+   disabled until deployment is explicitly configured. The lock is not
+   distributed; multi-container refresh coordination is not supported. The
+   operator command and timer call the same CLI entry point; neither refreshes
+   during application startup or a `hero.guide` query.
+8. Install and verify the timer in the target deployment, then verify a real full
+   refresh over the intended configured coverage, then run a
    separate real-model answer evaluation. Sample-fixture acceptance, offline
-   executor tests, provider refresh, and answer quality are separate results.
+   executor/CLI tests, provider refresh, and answer quality are separate results.
 
 Do not force-match Pub item builds to skill sequences, derive recommendation
 routes from Pro aggregates, manufacture a fixed number of examples, or infer

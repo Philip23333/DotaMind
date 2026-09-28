@@ -203,7 +203,7 @@ not turn into deterministic test failures.
 Never commit credentials, authorization headers, request tokens, or material
 user data.
 
-## Hero guide evaluation (cache query and offline refresh executor implemented; scheduling and live acceptance pending)
+## Hero guide evaluation (cache query, offline executor, and CLI implemented; deployment/live acceptance pending)
 
 The D2PT probe recorded in [`reference/d2pt.md`](reference/d2pt.md) is a live
 connectivity and sample-shape check for one Sven Pub row and one Sven Pro row.
@@ -236,12 +236,19 @@ Redis. These checks make no network, live Redis, database, or model call; they d
 not establish all-hero or all-position parser coverage, deployment persistence,
 or AOF recovery.
 
+CLI tests exercise help/argument handling, environment-only Redis configuration,
+same-container non-blocking lock behavior, one-line safe JSON results, fixed exit
+codes, resource cleanup, and SIGINT/SIGTERM cleanup while a worker request is in
+flight. They use fake Redis/client/refresher dependencies and a local process lock;
+they make no D2PT, Redis, Docker, or model calls. The systemd service/timer files
+are templates only and have not been installed or enabled.
+
 Remaining acceptance layers are separate:
 
-1. **Refresh coordination:** a clock-controlled test verifies the daily
-   03:00 Asia/Shanghai schedule, a shared manual/scheduled entry point, and
-   duplicate-run prevention. It does not wait for wall-clock 03:00 or call D2PT.
-   The implemented serial executor is not yet connected to either trigger.
+1. **Scheduled deployment:** verify the installed systemd timer fires at
+   03:00 Asia/Shanghai and invokes the same CLI command as an operator. Offline
+   tests validate the CLI lock within one API container; they do not establish
+   coordination across API containers or verify an installed timer.
 2. **Redis deployment persistence:** a separate deployment acceptance checks
    the configured Redis AOF and volume across restart. Fake Redis tests do not
    establish this behavior.

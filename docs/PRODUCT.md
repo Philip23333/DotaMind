@@ -32,7 +32,7 @@ generic game statistics.
 - Continue with references such as "game two", "that player", or "their previous
   match" without restating the whole question.
 
-## Hero guides (cache query implemented; refresh pipeline pending)
+## Hero guides (cache query and operator refresh command implemented; scheduled deployment pending)
 
 The hero-guide tool answers a request for one specified Valve hero ID and
 position. Pub build data is the primary guide; recent professional matches for
@@ -47,8 +47,10 @@ payload probe for Sven (`hero_id=18`, position 1). Both sampled endpoints
 returned one non-empty JSON build record in the tested WSL environment. The D2PT
 client, parsers, Redis snapshots, and cache-only query capability are now
 implemented. The query is registered only when the application injects its
-existing Redis connection. This does not mean an all-hero cache has been
-populated or a scheduled refresh has run.
+existing Redis connection. An operator-only CLI now runs the serial refresh
+executor inside the API container, and a daily systemd timer template is
+provided. The template has not been installed or enabled. This does not mean an
+all-hero cache has been populated or a scheduled refresh has run.
 
 This journey is a specified-hero guide lookup. It does not add an all-hero
 strength ranking, matchup/counter analysis, or draft recommendation. Pub and Pro

@@ -279,7 +279,12 @@ pre-projection hero-position counts. A single cache read error returns the other
 source when available; two read errors become a fixed `tool_execution_error`
 with per-source safe codes. Large outputs use the existing generic Artifact
 externalization and can be explored with `artifact.read` or `artifact.grep`.
-Refresh, scheduling, and cache population are not implemented.
+The operator-only command `python -m app.vnext.hero_guides refresh` invokes the
+serial refresher using `DOTAMIND_REDIS_URL` from the process environment. It is
+not registered as a model-facing tool or HTTP endpoint. Cache queries remain
+read-only and never trigger remote refreshes. A systemd timer template exists but
+is not installed or enabled; running the command is required to populate cache
+data until deployment configures that timer.
 
 ## Steam player and game-detail tools
 

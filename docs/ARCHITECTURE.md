@@ -140,7 +140,7 @@ logical tool response; the bounded model observation is derived separately by
 the generic result processor for ordinary tools. A stored ref is not
 automatically restored into a later turn's dialogue context.
 
-## Hero guide data flow (cache query and serial refresh executor implemented)
+## Hero guide data flow (cache query, serial executor, and operator CLI implemented)
 
 The synchronous D2PT HTTP client is implemented with `urllib.request`; its
 deterministic tests use an injected opener and make no live request. It sends
@@ -164,33 +164,47 @@ waits one second before parsing, publishing, recording failure, or starting the
 next request. Successful full parses publish one whole snapshot. A fetch or parse
 failure updates only that partition's attempt metadata, preserving its last good
 snapshot; a cache write failure aborts the refresh. Cancellation and unexpected
-programming errors propagate. The executor is not connected to startup, a
-scheduler, an HTTP/CLI trigger, or a refresh lock, so it does not run
-automatically and has not populated the cache through a full refresh. The
-separate Sven probe remains evidence of access and sampled response shapes only.
+programming errors propagate. An operator-only CLI runs this executor on demand
+with the API container's `DOTAMIND_REDIS_URL`. It acquires a non-blocking `flock`
+at `/tmp/dotamind-hero-guide-refresh.lock` before constructing resources, pings
+Redis, runs one refresh, drains the default executor, closes its Redis client,
+then releases the lock. The lock coordinates CLI processes sharing that
+container's `/tmp`; it is not distributed and does not coordinate multiple API
+containers. SIGINT/SIGTERM cancel the refresh coroutine; an urllib request
+already running in a worker thread is allowed to finish before Redis closes and
+the lock is released. The CLI emits one credential-safe JSON result and fixed
+exit codes. A systemd service/timer template invokes the CLI through
+`docker compose exec`, but the template is not installed or enabled, and
+application startup is not wired to refresh. No full refresh has populated the
+cache; the separate Sven probe remains evidence of access and sampled response
+shapes only.
 
 The cache's persistence across process or Redis restarts depends on the deployed
 Redis AOF and persistent volume configuration. Offline tests use a fake Redis
 and do not verify AOF recovery or a live Redis deployment. The shared guide
 cache remains separate from session Artifacts.
 
-The next managed refresh step is still planned:
+The current operator and deployment-template path is:
 
 ```text
-daily 03:00 Asia/Shanghai trigger or manual refresh request
-  -> one single-instance entry point with overlap prevention
+daily 03:00 Asia/Shanghai systemd timer template or operator CLI invocation
+  -> same-container non-blocking process lock
   -> implemented HeroGuideRefresher
 ```
+
+The timer template is not installed or enabled. The process lock only protects
+refresh commands in the same API container; multi-container coordination is not
+implemented. The CLI is not an HTTP endpoint or model-facing tool.
 
 Each implemented cache snapshot records its retrieval time; source-provided
 update fields remain in the retained source rows and projections. The cache
 entry separately records the latest attempt time and stable error code. It does
 not calculate availability or staleness. The implemented Guide Service marks a
 snapshot stale at an age of 36 hours or after a failed refresh attempt. The daily
-03:00 Asia/Shanghai schedule, shared manual entry point, and protection against
-overlapping runs remain unimplemented; scheduler/deployment technology remains
-an implementation choice. No live full refresh has been run as part of the
-executor implementation.
+03:00 Asia/Shanghai schedule exists as an uninstalled systemd template; the
+operator CLI provides the manual path through the same executor. The lock
+prevents overlap only among CLI processes in one API container. No live full
+refresh has been run as part of this implementation.
 
 The implemented online path is read-only when Redis is available:
 
