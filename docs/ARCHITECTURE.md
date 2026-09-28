@@ -84,6 +84,17 @@ Model
        -> bounded observation when oversized
 ```
 
+Code-internal capabilities may share the injected local `EntityNameResolver` to
+map explicitly selected hero, item, and ability IDs to bundled Valve catalog
+names. The business capability remains responsible for identifying which
+fields contain those IDs and for preserving its source IDs and source data; the
+resolver returns the explicit IDs alongside resolved names and does not inspect
+arbitrary JSON, perform fuzzy matching, or register a model-facing tool. Its
+names are attributed to the local Valve catalog snapshot; upstream facts retain
+their source attribution. Unknown IDs remain present with empty names. The shared
+component is implemented, while hero-guide and `game.detail` integration is
+still pending.
+
 The model-facing contract never exposes wire routes, credentials, pagination
 syntax, or transport-private IDs. A single provider does not justify a router or
 plugin framework.

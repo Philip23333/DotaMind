@@ -78,6 +78,19 @@ before a second concrete implementation demonstrates the need.
 - Reuse the shared result processor and protect the endpoint path, normalization,
   schema boundary, and nine-tool registry inventory.
 
+## Commit 9: shared local entity-name resolver
+
+- Add a code-internal synchronous component that resolves explicitly selected
+  hero, item, and ability IDs through an injected local
+  `DotaCatalogRepository`.
+- Return each supplied ID, exact catalog names when found, explicit unknown entries,
+  and the repository snapshot version. Validate the complete batch before any
+  repository access; preserve first-seen order while deduplicating lookups.
+- Keep source-field extraction in each business capability. This component does
+  not scan payloads, infer IDs, call providers, or register in `ToolRegistry`.
+- **Implemented; integration pending:** hero-guide and `game.detail` have not
+  yet adopted the resolver, and neither output contract has changed.
+
 ## Subsequent capability work
 
 1. Define one closed semantic capability contract.

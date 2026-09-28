@@ -179,6 +179,17 @@ verify orchestration and evidence handling only; they do not establish that a
 real model will choose the tools correctly or produce an accurate analysis.
 No real STRATZ, OpenDota, or model request is made by this workflow suite.
 
+The code-internal `EntityNameResolver` acceptance uses a call-recording fake
+repository and the committed static Valve catalog. It covers strict batch ID
+validation before repository access, kind-specific dispatch, first-seen
+deduplication, the reserved zero value, unknown-ID and unexpected-error
+semantics, missing names, result isolation, and repository-sourced catalog
+versioning. The static-catalog integration check compares a present hero, item,
+and ability directly with their repository records and checks zero plus an
+absent ID. These tests are offline and do not change `catalog.lookup`,
+hero-guide, or `game.detail` behavior; business integrations remain separate
+acceptance work.
+
 Context Governance evaluation measures answer omissions, complete-request
 peaks, summary and locator overhead, successful compactions, recovery attempts,
 Artifact rereads, provider-reported tokens, and latency. A provider-confirmed

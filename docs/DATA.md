@@ -28,6 +28,15 @@ remain evidence inside tool-response documents unless a future closed capability
 declares a stable input. Names and relationships must come from collected
 evidence; model knowledge is not an identity resolver.
 
+Code-internal `EntityNameResolver` resolves an explicitly supplied batch of hero,
+item, or ability IDs against the injected local `DotaCatalogRepository`. The
+business capability locates ID fields and retains the original IDs and source
+data; the shared component does not scan or infer fields. It adds Valve catalog
+names as local enrichment with the catalog snapshot version. A missing ID
+remains in the result with `unknown` status and empty names, without failing the
+business result. The resolver is not a model tool. It is implemented, but hero-guide and
+`game.detail` have not yet integrated it; their result contracts have not changed.
+
 ## Artifact retrieval
 
 `artifact.read` and `artifact.grep` are schema-neutral observation primitives.
