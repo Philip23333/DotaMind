@@ -49,6 +49,7 @@ from app.vnext.capabilities.player.recent_games import (
     PlayerRecentGamesInput,
     PlayerRecentGamesResult,
 )
+from app.vnext.catalog import EntityNameResolver
 from app.vnext.hero_guides.cache import RedisHeroGuideCache
 from app.vnext.integrations.mcp import MCPRemoteClient, MCPRemoteError
 from app.vnext.llm.openai_compatible import OpenAICompatibleModelClient
@@ -397,10 +398,14 @@ def build_vnext_services(
             timeout_seconds=config.opendota_timeout_seconds,
         )
         game_detail = OpenDotaGameDetailAdapter(opendota_client).get_game_detail
-    catalog_lookup = ValveCatalogLookupAdapter(load_default_catalog_repository()).lookup
+    catalog_repository = load_default_catalog_repository()
+    catalog_lookup = ValveCatalogLookupAdapter(catalog_repository).lookup
     hero_guide: HeroGuideLookup | None = None
     if hero_guide_cache is not None:
-        hero_guide = HeroGuideService(hero_guide_cache).get_guide
+        hero_guide = HeroGuideService(
+            hero_guide_cache,
+            EntityNameResolver(catalog_repository),
+        ).get_guide
     return VNextServices(
         league_search=league_adapter.search,
         series_search=series_adapter.search,

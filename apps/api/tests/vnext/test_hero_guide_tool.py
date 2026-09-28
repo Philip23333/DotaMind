@@ -4,6 +4,7 @@ import asyncio
 from datetime import UTC, datetime
 from typing import Any
 
+from app.integrations.valve.catalog_repository import load_default_catalog_repository
 from app.vnext.artifacts import (
     ArtifactBackedToolResultProcessor,
     ArtifactGrepper,
@@ -12,13 +13,19 @@ from app.vnext.artifacts import (
     ToolResponseExternalizer,
 )
 from app.vnext.capabilities.hero.guide import (
+    GuideItem,
     GuideSourceMetadata,
     HeroGuideInput,
     HeroGuideResult,
+    ProAbilityEvent,
+    ProItemEvent,
     ProMatchExample,
     PubGuide,
+    SkillSequenceOption,
+    StartingItemOption,
 )
 from app.vnext.capabilities.hero.service import HeroGuideQueryError, HeroGuideService
+from app.vnext.catalog import EntityNameResolver
 from app.vnext.hero_guides.cache import (
     GuideCacheEntry,
     GuideCacheSnapshot,
@@ -34,6 +41,10 @@ from app.vnext.tools.hero.guide import (
 from app.vnext.tools.registry import ToolRegistry
 
 _NOW = datetime(2026, 9, 28, 3, 0, tzinfo=UTC)
+
+
+def _resolver() -> EntityNameResolver:
+    return EntityNameResolver(load_default_catalog_repository())
 
 
 def _result() -> HeroGuideResult:
@@ -81,6 +92,8 @@ def test_tool_contract_and_small_result_are_inline() -> None:
     assert "does not trigger a refresh" in HERO_GUIDE_DESCRIPTION
     assert "independent candidates" in HERO_GUIDE_DESCRIPTION
     assert "Artifact" in HERO_GUIDE_DESCRIPTION
+    assert "catalog_version" in HERO_GUIDE_DESCRIPTION
+    assert "Do not call `catalog.lookup`" in HERO_GUIDE_DESCRIPTION
 
     result = _run(
         registry.execute(
@@ -172,7 +185,7 @@ def test_cache_exception_text_is_not_disclosed_by_tool() -> None:
     registry = ToolRegistry()
     register_hero_guide_tool(
         registry,
-        HeroGuideService(FailingCache(), clock=lambda: _NOW).get_guide,
+        HeroGuideService(FailingCache(), _resolver(), clock=lambda: _NOW).get_guide,
     )
     result = _run(
         registry.execute(
@@ -194,8 +207,25 @@ def test_cache_exception_text_is_not_disclosed_by_tool() -> None:
 
 
 def test_hero_guide_auto_externalizes_and_artifact_read_returns_both_sources() -> None:
+    repository = load_default_catalog_repository()
+    item_id = repository.list_items()[0].item_id
+    ability_id = repository.list_abilities()[0].ability_id
     pub_guides = [
-        PubGuide(build_id=index, statistics={"sample": f"pub-{index}-" + "p" * 1200})
+        PubGuide(
+            build_id=index,
+            statistics={"sample": f"pub-{index}-" + "p" * 1200},
+            starting_options=[
+                StartingItemOption(
+                    items=[GuideItem(item_id=item_id, quantity=1, name="source label")],
+                    source_path=f"pub-{index}.starting",
+                )
+            ],
+            skill_sequences=[
+                SkillSequenceOption(
+                    ability_ids=[ability_id], source_path=f"pub-{index}.skills"
+                )
+            ],
+        )
         for index in range(20)
     ]
     pro_examples = [
@@ -205,6 +235,8 @@ def test_hero_guide_auto_externalizes_and_artifact_read_returns_both_sources() -
             position=1,
             position_basis="build",
             player_name=f"pro-{index}-" + "x" * 700,
+            item_timeline=[ProItemEvent(item_id=item_id)],
+            ability_timeline=[ProAbilityEvent(ability_id=ability_id)],
             source_path=f"$[0].recent_matches[{index}]",
         )
         for index in range(8)
@@ -252,7 +284,7 @@ def test_hero_guide_auto_externalizes_and_artifact_read_returns_both_sources() -
     register_artifact_tools(registry, ArtifactReader(store), ArtifactGrepper(store))
     register_hero_guide_tool(
         registry,
-        HeroGuideService(FakeCache(), clock=lambda: _NOW).get_guide,
+        HeroGuideService(FakeCache(), _resolver(), clock=lambda: _NOW).get_guide,
     )
 
     result = _run(
@@ -271,6 +303,22 @@ def test_hero_guide_auto_externalizes_and_artifact_read_returns_both_sources() -
     stored = _run(store.get(ref))
     assert len(stored["pub_guides"]) == 20
     assert len(stored["pro_examples"]) == 8
+    expected_item = repository.get_item(item_id)
+    expected_ability = repository.get_ability(ability_id)
+    stored_guide = stored["pub_guides"][0]
+    stored_starting_item = stored_guide["starting_options"][0]["items"][0]
+    stored_skill = stored_guide["skill_sequences"][0]["abilities"][0]
+    stored_example = stored["pro_examples"][0]
+    assert stored_starting_item["name"] == "source label"
+    assert stored_starting_item["resolved_name"]["name_en"] == expected_item.name_en
+    assert stored_skill["name_en"] == expected_ability.name_en
+    assert stored_example["item_timeline"][0]["resolved_name"]["name_en"] == (
+        expected_item.name_en
+    )
+    assert stored_example["ability_timeline"][0]["resolved_name"]["name_en"] == (
+        expected_ability.name_en
+    )
+    assert stored["catalog_version"]["source"] == "valve_dota2_datafeed"
     assert "raw_body" not in stored
     assert "source_rows" not in stored
     assert "SOURCE_ROWS_PRIVATE" not in str(stored)
@@ -309,5 +357,21 @@ def test_hero_guide_auto_externalizes_and_artifact_read_returns_both_sources() -
 
     assert pub_read.status == "ok"
     assert pub_read.content["value"][0]["build_id"] == 0
+    assert (
+        pub_read.content["value"][0]["starting_options"][0]["items"][0]["resolved_name"]["name_en"]
+        == expected_item.name_en
+    )
+    assert (
+        pub_read.content["value"][0]["skill_sequences"][0]["abilities"][0]["name_en"]
+        == expected_ability.name_en
+    )
     assert pro_read.status == "ok"
     assert pro_read.content["value"][0]["source_match_id"] == 1
+    assert (
+        pro_read.content["value"][0]["item_timeline"][0]["resolved_name"]["name_en"]
+        == expected_item.name_en
+    )
+    assert (
+        pro_read.content["value"][0]["ability_timeline"][0]["resolved_name"]["name_en"]
+        == expected_ability.name_en
+    )

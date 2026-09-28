@@ -88,8 +88,25 @@ before a second concrete implementation demonstrates the need.
   repository access; preserve first-seen order while deduplicating lookups.
 - Keep source-field extraction in each business capability. This component does
   not scan payloads, infer IDs, call providers, or register in `ToolRegistry`.
-- **Implemented; integration pending:** hero-guide and `game.detail` have not
-  yet adopted the resolver, and neither output contract has changed.
+- **Implemented:** `hero.guide` is integrated. `game.detail` remains a separate
+  follow-up and has not adopted the resolver.
+
+## Commit 10: hero-guide entity-name enrichment
+
+- Extend guide DTOs with optional local-name fields while preserving source IDs,
+  source labels, provider fields, event order, and repeated occurrences.
+- Inject the shared resolver into `HeroGuideService`; resolve only fields in the
+  post-filter, post-section-projection result, in at most one batch per entity
+  kind. Always resolve the requested hero, including when both cache partitions
+  are missing.
+- Attribute names and `catalog_version` to the bundled Valve snapshot. Keep
+  unknown IDs and zero-valued ability events with empty names. Require one
+  catalog version across all batches.
+- Enrich query DTOs only; do not write names into Redis or add lookup behavior to
+  Artifact tools. Reuse generic Artifact externalization unchanged.
+- **Implemented:** deterministic tests cover existing fixtures, zero-ID samples,
+  section bounds, cache compatibility, composition sharing, and Artifact reads.
+  `game.detail` name enrichment remains for the next commit.
 
 ## Subsequent capability work
 

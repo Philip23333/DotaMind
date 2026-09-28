@@ -7,19 +7,21 @@ from typing import Any
 import pytest
 
 from app.vnext.composition import VNextSettings, build_vnext_registry, build_vnext_services
+from app.vnext.hero_guides.cache import GuideCacheEntry
+from app.vnext.llm.protocol import ToolCall
 
 
 class IdleCache:
     def __init__(self) -> None:
         self.reads: list[str] = []
 
-    async def get_pub(self, **_kwargs: Any) -> object:
+    async def get_pub(self, **_kwargs: Any) -> GuideCacheEntry:
         self.reads.append("pub")
-        raise AssertionError("cache should not be queried during composition")
+        return GuideCacheEntry()
 
-    async def get_pro(self, **_kwargs: Any) -> object:
+    async def get_pro(self, **_kwargs: Any) -> GuideCacheEntry:
         self.reads.append("pro")
-        raise AssertionError("cache should not be queried during composition")
+        return GuideCacheEntry()
 
 
 def test_hero_guide_is_registered_only_when_cache_is_injected() -> None:
@@ -31,14 +33,39 @@ def test_hero_guide_is_registered_only_when_cache_is_injected() -> None:
 
     cache = IdleCache()
     with_cache = build_vnext_services(settings, hero_guide_cache=cache)  # type: ignore[arg-type]
-    registry = build_vnext_registry(with_cache, settings=settings)
-    names = [tool.name for tool in registry.schemas()]
-
-    assert callable(with_cache.hero_guide)
-    assert names.count("hero.guide") == 1
     service = with_cache.hero_guide.__self__  # type: ignore[union-attr]
     assert service._cache is cache
+    catalog_repository = with_cache.catalog_lookup.__self__.repository  # type: ignore[union-attr]
+    assert service._resolver._repository is catalog_repository
     assert cache.reads == []
+
+    catalog_lookup_calls: list[object] = []
+
+    async def unexpected_catalog_lookup(query: object) -> object:
+        catalog_lookup_calls.append(query)
+        raise AssertionError("hero.guide must use the injected resolver directly")
+
+    with_cache.catalog_lookup = unexpected_catalog_lookup  # type: ignore[assignment]
+    registry = build_vnext_registry(with_cache, settings=settings)
+    names = [tool.name for tool in registry.schemas()]
+    assert callable(with_cache.hero_guide)
+    assert names.count("hero.guide") == 1
+    assert "catalog.lookup" in names
+
+    result = asyncio.run(
+        registry.execute(
+            ToolCall(
+                id="guide-with-local-names",
+                name="hero.guide",
+                arguments={"hero_id": 18, "position": 1},
+            )
+        )
+    )
+
+    assert result.status == "ok"
+    assert result.content["hero_name"]["id"] == 18
+    assert catalog_lookup_calls == []
+    assert cache.reads == ["pub", "pro"]
 
 
 def test_application_lifespan_wraps_its_existing_redis_client_for_hero_guides(

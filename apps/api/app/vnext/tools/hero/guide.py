@@ -21,8 +21,13 @@ paired routes. Skill sequences may cover only some skill points and are not a
 complete level-by-level plan. Either source can be missing or stale; a cache miss
 does not trigger a refresh. Source statistics may use different units and must
 not all be described as percentages. Totals count hero-position candidates before
-section projection. Large results may be stored as an Artifact for further
-reading with artifact.read or artifact.grep.
+section projection. Returned entries include English and Chinese names from the
+local Valve catalog, with source and snapshot version in `catalog_version`. An
+`unknown` name means the catalog did not resolve that ID; it does not mean the
+source event is absent. Zero-valued skill events are preserved without an
+asserted ability name. Do not call `catalog.lookup` for IDs already included in
+this result. Large results may be stored as an Artifact for further reading with
+artifact.read or artifact.grep.
 """
 
 

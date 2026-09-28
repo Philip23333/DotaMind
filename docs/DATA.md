@@ -34,8 +34,11 @@ business capability locates ID fields and retains the original IDs and source
 data; the shared component does not scan or infer fields. It adds Valve catalog
 names as local enrichment with the catalog snapshot version. A missing ID
 remains in the result with `unknown` status and empty names, without failing the
-business result. The resolver is not a model tool. It is implemented, but hero-guide and
-`game.detail` have not yet integrated it; their result contracts have not changed.
+business result. The resolver is not a model tool. `hero.guide` uses it after
+section projection and preserves original IDs, source labels, and source fields.
+Names are added to the query result and generic Artifact output; they are not
+written into Redis snapshots. Old snapshots remain readable because enrichment
+DTO fields have defaults. `game.detail` has not yet integrated the resolver.
 
 ## Artifact retrieval
 

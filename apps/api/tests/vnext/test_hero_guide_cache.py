@@ -185,6 +185,55 @@ def test_fixture_snapshots_round_trip_raw_source_and_parsed_dtos() -> None:
     assert pro_entry.snapshot.retrieved_at == pro_snapshot.retrieved_at
 
 
+def test_snapshots_written_before_name_fields_were_added_remain_readable() -> None:
+    client = FakeRedis()
+    cache = RedisHeroGuideCache(client)
+    pub_snapshot, pro_snapshot = _source_snapshots()
+    _run(cache.publish(pub_snapshot, attempted_at=_ATTEMPTED_BEFORE_RETRIEVAL))
+    _run(cache.publish(pro_snapshot, attempted_at=_ATTEMPTED_BEFORE_RETRIEVAL))
+
+    old_pub = json.loads(client.hashes[_PUB_KEY]["snapshot"])
+    for guide in old_pub["pub_guides"]:
+        for option in guide["starting_options"]:
+            for item in option["items"]:
+                item.pop("resolved_name", None)
+        for item in (*guide["item_progression"], *guide["situational_items"]):
+            item.pop("resolved_name", None)
+        for sequence in guide["skill_sequences"]:
+            sequence.pop("abilities", None)
+    client.hashes[_PUB_KEY]["snapshot"] = json.dumps(old_pub)
+
+    old_pro = json.loads(client.hashes[_PRO_KEY]["snapshot"])
+    for example in old_pro["pro_examples"]:
+        for event in example["item_timeline"]:
+            event.pop("resolved_name", None)
+        for event in example["ability_timeline"]:
+            event.pop("resolved_name", None)
+    client.hashes[_PRO_KEY]["snapshot"] = json.dumps(old_pro)
+
+    pub_entry = _run(cache.get_pub(hero_id=18, position=1))
+    pro_entry = _run(cache.get_pro(hero_id=18))
+
+    assert pub_entry.snapshot is not None
+    assert all(
+        item.resolved_name is None
+        for guide in pub_entry.snapshot.pub_guides
+        for option in guide.starting_options
+        for item in option.items
+    )
+    assert all(
+        sequence.abilities == []
+        for guide in pub_entry.snapshot.pub_guides
+        for sequence in guide.skill_sequences
+    )
+    assert pro_entry.snapshot is not None
+    assert all(
+        event.resolved_name is None
+        for example in pro_entry.snapshot.pro_examples
+        for event in (*example.item_timeline, *example.ability_timeline)
+    )
+
+
 def test_pro_zero_ability_event_round_trips_through_fake_redis() -> None:
     source_rows = [
         {

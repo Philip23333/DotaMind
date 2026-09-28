@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 
+from app.integrations.valve.catalog_repository import load_default_catalog_repository
 from app.vnext.capabilities.hero.guide import (
     GuideItemObservation,
     HeroGuideInput,
@@ -19,6 +20,7 @@ from app.vnext.capabilities.hero.guide import (
     TalentObservation,
 )
 from app.vnext.capabilities.hero.service import HeroGuideQueryError, HeroGuideService
+from app.vnext.catalog import EntityNameResolver
 from app.vnext.hero_guides.cache import (
     GuideCacheEntry,
     GuideCacheSnapshot,
@@ -29,6 +31,10 @@ from app.vnext.providers.d2pt.parsers import parse_pro_examples, parse_pub_build
 
 _NOW = datetime(2026, 9, 28, 3, 0, tzinfo=UTC)
 _FIXTURE_DIR = Path(__file__).parent / "fixtures" / "d2pt"
+
+
+def _resolver() -> EntityNameResolver:
+    return EntityNameResolver(load_default_catalog_repository())
 
 
 class FakeGuideCache:
@@ -145,15 +151,18 @@ def test_fixture_query_reads_both_sources_once_and_filters_pro_position() -> Non
     clock_calls: list[datetime] = []
 
     result = _run(
-        HeroGuideService(cache, clock=lambda: clock_calls.append(_NOW) or _NOW).get_guide(
+        HeroGuideService(
+            cache, _resolver(), clock=lambda: clock_calls.append(_NOW) or _NOW
+        ).get_guide(
             _query()
         )
     )
 
-    assert result.pub_guides == pub_entry.snapshot.pub_guides
-    assert result.pro_examples == [
-        example
-        for example in pro_entry.snapshot.pro_examples
+    assert [guide.build_id for guide in result.pub_guides] == [
+        guide.build_id for guide in pub_entry.snapshot.pub_guides
+    ]
+    assert [example.source_match_id for example in result.pro_examples] == [
+        example.source_match_id for example in pro_entry.snapshot.pro_examples
         if example.hero_id == 18 and example.position == 1
     ]
     assert result.pub_metadata.availability == "available"
@@ -179,7 +188,7 @@ def test_pro_filter_preserves_source_order_and_duplicates_and_excludes_unknown_p
     ]
     cache = FakeGuideCache(pro=GuideCacheEntry(snapshot=_pro_snapshot(examples=examples)))
 
-    result = _run(HeroGuideService(cache, clock=lambda: _NOW).get_guide(_query()))
+    result = _run(HeroGuideService(cache, _resolver(), clock=lambda: _NOW).get_guide(_query()))
 
     assert [example.source_match_id for example in result.pro_examples] == [1, 1]
     assert result.pro_examples_total == 2
@@ -211,7 +220,9 @@ def test_sections_project_fields_without_changing_source_status_or_totals(sectio
         pro=GuideCacheEntry(snapshot=_pro_snapshot(examples=examples)),
     )
 
-    result = _run(HeroGuideService(cache, clock=lambda: _NOW).get_guide(_query(section)))
+    result = _run(
+        HeroGuideService(cache, _resolver(), clock=lambda: _NOW).get_guide(_query(section))
+    )
 
     assert result.section == section
     assert result.pub_metadata.availability == "available"
@@ -244,17 +255,23 @@ def test_sections_project_fields_without_changing_source_status_or_totals(sectio
         assert result.pro_examples == []
     elif section == "pro_examples":
         assert result.pub_guides == []
-        assert result.pro_examples == examples
+        assert [example.source_match_id for example in result.pro_examples] == [
+            example.source_match_id for example in examples
+        ]
     else:
-        assert result.pub_guides[0] == guide
-        assert result.pro_examples == examples
+        assert result.pub_guides[0].build_id == guide.build_id
+        assert [example.source_match_id for example in result.pro_examples] == [
+            example.source_match_id for example in examples
+        ]
 
 
 def test_projection_keeps_pub_rows_that_become_empty() -> None:
     guide = PubGuide(skill_sequences=[SkillSequenceOption(source_path="$.skills")])
     cache = FakeGuideCache(pub=GuideCacheEntry(snapshot=_pub_snapshot(guides=[guide])))
 
-    result = _run(HeroGuideService(cache, clock=lambda: _NOW).get_guide(_query("items")))
+    result = _run(
+        HeroGuideService(cache, _resolver(), clock=lambda: _NOW).get_guide(_query("items"))
+    )
 
     assert len(result.pub_guides) == 1
     assert result.pub_guides[0].skill_sequences == []
@@ -274,7 +291,7 @@ def test_snapshot_freshness_boundary_and_future_time(age: timedelta, expected_st
     snapshot = _pub_snapshot(retrieved_at=_NOW - age, guides=[PubGuide(build_id=2)])
     cache = FakeGuideCache(pub=GuideCacheEntry(snapshot=snapshot))
 
-    result = _run(HeroGuideService(cache, clock=lambda: _NOW).get_guide(_query()))
+    result = _run(HeroGuideService(cache, _resolver(), clock=lambda: _NOW).get_guide(_query()))
 
     assert result.pub_metadata.stale is expected_stale
 
@@ -289,7 +306,7 @@ def test_empty_snapshot_can_be_stale_and_other_position_pro_means_empty() -> Non
         ),
     )
 
-    result = _run(HeroGuideService(cache, clock=lambda: _NOW).get_guide(_query()))
+    result = _run(HeroGuideService(cache, _resolver(), clock=lambda: _NOW).get_guide(_query()))
 
     assert result.pub_metadata.availability == "empty"
     assert result.pub_metadata.stale is True
@@ -306,7 +323,9 @@ def test_old_snapshot_after_refresh_failure_remains_available_and_stale() -> Non
         last_error="timeout",
     )
     result = _run(
-        HeroGuideService(FakeGuideCache(pub=entry), clock=lambda: _NOW).get_guide(_query())
+        HeroGuideService(
+            FakeGuideCache(pub=entry), _resolver(), clock=lambda: _NOW
+        ).get_guide(_query())
     )
 
     assert result.pub_metadata.availability == "available"
@@ -324,7 +343,9 @@ def test_future_snapshot_after_refresh_failure_is_still_stale() -> None:
     )
 
     result = _run(
-        HeroGuideService(FakeGuideCache(pub=entry), clock=lambda: _NOW).get_guide(_query())
+        HeroGuideService(
+            FakeGuideCache(pub=entry), _resolver(), clock=lambda: _NOW
+        ).get_guide(_query())
     )
 
     assert result.pub_metadata.stale is True
@@ -335,7 +356,7 @@ def test_first_refresh_failure_and_cache_miss_are_missing_with_attempt_state() -
         pub=GuideCacheEntry(last_attempt_at=_NOW, last_error="http_error")
     )
 
-    result = _run(HeroGuideService(cache, clock=lambda: _NOW).get_guide(_query()))
+    result = _run(HeroGuideService(cache, _resolver(), clock=lambda: _NOW).get_guide(_query()))
 
     assert result.pub_metadata.availability == "missing"
     assert result.pub_metadata.stale is False
@@ -363,7 +384,7 @@ def test_source_updated_at_requires_identical_nonempty_strings(
 ) -> None:
     cache = FakeGuideCache(pub=GuideCacheEntry(snapshot=_pub_snapshot(source_rows=rows)))
 
-    result = _run(HeroGuideService(cache, clock=lambda: _NOW).get_guide(_query()))
+    result = _run(HeroGuideService(cache, _resolver(), clock=lambda: _NOW).get_guide(_query()))
 
     assert result.pub_metadata.source_updated_at == expected
 
@@ -381,9 +402,9 @@ def test_scope_copies_only_source_scope_fields_and_preserves_nulls() -> None:
     cache = FakeGuideCache(pub=GuideCacheEntry(snapshot=_pub_snapshot(source_rows=rows)))
     original = json.loads(json.dumps(rows))
 
-    first = _run(HeroGuideService(cache, clock=lambda: _NOW).get_guide(_query()))
+    first = _run(HeroGuideService(cache, _resolver(), clock=lambda: _NOW).get_guide(_query()))
     first.pub_metadata.scope["records"][0]["data_scope"]["window"] = "mutated"
-    second = _run(HeroGuideService(cache, clock=lambda: _NOW).get_guide(_query()))
+    second = _run(HeroGuideService(cache, _resolver(), clock=lambda: _NOW).get_guide(_query()))
 
     assert rows == original
     assert second.pub_metadata.scope == {
@@ -423,7 +444,7 @@ def test_single_cache_read_error_returns_other_source_and_fixed_metadata(
     }
     cache = FakeGuideCache(**kwargs)
 
-    result = _run(HeroGuideService(cache, clock=lambda: _NOW).get_guide(_query()))
+    result = _run(HeroGuideService(cache, _resolver(), clock=lambda: _NOW).get_guide(_query()))
 
     failed_metadata = result.pub_metadata if failed_source == "pub" else result.pro_metadata
     successful_metadata = result.pro_metadata if failed_source == "pub" else result.pub_metadata
@@ -453,7 +474,7 @@ def test_both_cache_read_errors_raise_fixed_query_error() -> None:
     )
 
     with pytest.raises(HeroGuideQueryError) as exc_info:
-        _run(HeroGuideService(cache, clock=lambda: _NOW).get_guide(_query()))
+        _run(HeroGuideService(cache, _resolver(), clock=lambda: _NOW).get_guide(_query()))
 
     assert str(exc_info.value) == "hero guide cache could not be read"
     assert exc_info.value.pub_error == "cache_unavailable"
@@ -463,7 +484,9 @@ def test_both_cache_read_errors_raise_fixed_query_error() -> None:
 
 
 def test_two_cache_misses_are_a_normal_result_not_a_query_error() -> None:
-    result = _run(HeroGuideService(FakeGuideCache(), clock=lambda: _NOW).get_guide(_query()))
+    result = _run(
+        HeroGuideService(FakeGuideCache(), _resolver(), clock=lambda: _NOW).get_guide(_query())
+    )
 
     assert result.pub_metadata.availability == "missing"
     assert result.pro_metadata.availability == "missing"
@@ -476,18 +499,18 @@ def test_two_cache_misses_are_a_normal_result_not_a_query_error() -> None:
 def test_cancellation_and_unexpected_cache_errors_are_not_converted() -> None:
     cancelled = FakeGuideCache(pub_error=asyncio.CancelledError())
     with pytest.raises(asyncio.CancelledError):
-        _run(HeroGuideService(cancelled, clock=lambda: _NOW).get_guide(_query()))
+        _run(HeroGuideService(cancelled, _resolver(), clock=lambda: _NOW).get_guide(_query()))
     assert cancelled.pro_calls == []
 
     unexpected = FakeGuideCache(pub_error=RuntimeError("unexpected"))
     with pytest.raises(RuntimeError, match="unexpected"):
-        _run(HeroGuideService(unexpected, clock=lambda: _NOW).get_guide(_query()))
+        _run(HeroGuideService(unexpected, _resolver(), clock=lambda: _NOW).get_guide(_query()))
 
 
 @pytest.mark.parametrize("value", [timedelta(0), timedelta(seconds=-1)])
 def test_stale_after_must_be_positive(value: timedelta) -> None:
     with pytest.raises(ValueError, match="stale_after"):
-        HeroGuideService(FakeGuideCache(), stale_after=value)
+        HeroGuideService(FakeGuideCache(), _resolver(), stale_after=value)
 
 
 def test_clock_is_called_once_and_must_return_timezone_aware_time() -> None:
@@ -499,7 +522,7 @@ def test_clock_is_called_once_and_must_return_timezone_aware_time() -> None:
         return datetime(2026, 9, 28)
 
     with pytest.raises(ValueError, match="timezone-aware"):
-        _run(HeroGuideService(FakeGuideCache(), clock=clock).get_guide(_query()))
+        _run(HeroGuideService(FakeGuideCache(), _resolver(), clock=clock).get_guide(_query()))
     assert calls == 1
 
 
@@ -511,10 +534,10 @@ def test_mutating_service_output_does_not_mutate_cache_entries() -> None:
         pro=GuideCacheEntry(snapshot=_pro_snapshot(examples=[example])),
     )
 
-    first = _run(HeroGuideService(cache, clock=lambda: _NOW).get_guide(_query()))
+    first = _run(HeroGuideService(cache, _resolver(), clock=lambda: _NOW).get_guide(_query()))
     first.pub_guides[0].statistics["counts"]["wins"] = 0
     first.pro_examples[0].ability_timeline[0].source_fields["rank"] = 0
-    second = _run(HeroGuideService(cache, clock=lambda: _NOW).get_guide(_query()))
+    second = _run(HeroGuideService(cache, _resolver(), clock=lambda: _NOW).get_guide(_query()))
 
     assert second.pub_guides[0].statistics["counts"]["wins"] == 4
     assert second.pro_examples[0].ability_timeline[0].source_fields["rank"] == 9

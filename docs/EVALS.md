@@ -186,9 +186,15 @@ deduplication, the reserved zero value, unknown-ID and unexpected-error
 semantics, missing names, result isolation, and repository-sourced catalog
 versioning. The static-catalog integration check compares a present hero, item,
 and ability directly with their repository records and checks zero plus an
-absent ID. These tests are offline and do not change `catalog.lookup`,
-hero-guide, or `game.detail` behavior; business integrations remain separate
-acceptance work.
+absent ID. Follow-on hero-guide enrichment tests use the actual local catalog,
+the committed Sven Pub/Pro samples, and the three Pro zero-ID fixtures. They
+cover query-time Service enrichment, section-specific lookup bounds, duplicate
+skill-sequence alignment, unknown IDs, copied output objects, missing-cache
+hero names, version mismatch and resolver-error propagation, old Redis snapshot
+decoding, composition repository sharing, tool non-use of `catalog.lookup`, and
+name retrieval through the existing Artifact path. These are offline checks;
+they do not establish real-model answer quality. `game.detail` remains outside
+this integration.
 
 Context Governance evaluation measures answer omissions, complete-request
 peaks, summary and locator overhead, successful compactions, recovery attempts,

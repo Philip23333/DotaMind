@@ -9,6 +9,7 @@ from typing import Literal
 
 from pydantic import JsonValue
 
+from app.vnext.capabilities.hero.enrichment import enrich_hero_guide
 from app.vnext.capabilities.hero.guide import (
     GuideSourceMetadata,
     HeroGuideInput,
@@ -16,6 +17,7 @@ from app.vnext.capabilities.hero.guide import (
     ProMatchExample,
     PubGuide,
 )
+from app.vnext.catalog import EntityNameResolver
 from app.vnext.hero_guides.cache import (
     GuideCacheEntry,
     GuideCacheSnapshot,
@@ -42,6 +44,7 @@ class HeroGuideService:
     def __init__(
         self,
         cache: RedisHeroGuideCache,
+        resolver: EntityNameResolver,
         *,
         clock: Callable[[], datetime] | None = None,
         stale_after: timedelta = timedelta(hours=36),
@@ -49,6 +52,7 @@ class HeroGuideService:
         if stale_after <= timedelta(0):
             raise ValueError("stale_after must be greater than zero")
         self._cache = cache
+        self._resolver = resolver
         self._clock = clock if clock is not None else lambda: datetime.now(UTC)
         self._stale_after = stale_after
 
@@ -111,7 +115,7 @@ class HeroGuideService:
             all_pro_examples,
             query.section,
         )
-        return HeroGuideResult(
+        result = HeroGuideResult(
             hero_id=query.hero_id,
             position=query.position,
             section=query.section,
@@ -130,6 +134,7 @@ class HeroGuideService:
                 else None
             ),
         )
+        return enrich_hero_guide(result, self._resolver)
 
 
 def _cache_error_code(

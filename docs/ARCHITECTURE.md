@@ -92,8 +92,8 @@ resolver returns the explicit IDs alongside resolved names and does not inspect
 arbitrary JSON, perform fuzzy matching, or register a model-facing tool. Its
 names are attributed to the local Valve catalog snapshot; upstream facts retain
 their source attribution. Unknown IDs remain present with empty names. The shared
-component is implemented, while hero-guide and `game.detail` integration is
-still pending.
+component is integrated into `hero.guide`; `game.detail` integration remains
+pending.
 
 The model-facing contract never exposes wire routes, credentials, pagination
 syntax, or transport-private IDs. A single provider does not justify a router or
@@ -222,7 +222,9 @@ The implemented online path is read-only when Redis is available:
 ```text
 Model -> hero.guide(hero_id, position, section)
       -> Guide Service -> persistent guide cache
-      -> hero/position query DTO: pub_guides[] + pro_examples[]
+      -> hero/position filter and section projection
+      -> injected EntityNameResolver -> local Valve catalog snapshot
+      -> DTO with source IDs, local names, and catalog_version
       -> bounded tool result or existing generic Artifact externalization
 ```
 
@@ -233,7 +235,11 @@ Pub and Pro once each for every query, filters Pro examples to the exact hero an
 position, and applies the requested section without changing source status or
 candidate totals. It does not call D2PT or start a refresh. Missing or stale
 partitions are reported while any readable source data is returned; if both
-cache reads fail, the tool returns a fixed execution error. The shared,
+cache reads fail, the tool returns a fixed execution error. The Guide Service
+resolves only visible hero, item, and ability IDs after section projection, in up
+to one batch per kind. It does not store names in Redis or invoke the
+`catalog.lookup` tool. The top-level catalog version identifies the local Valve
+snapshot; a batch reporting a different version causes a fixed `ValueError`. The shared,
 cross-session guide cache is distinct from the process-local, session-owned
 Artifact store: Artifacts continue to hold oversized logical tool responses and
 are not the durable guide cache.

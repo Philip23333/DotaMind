@@ -58,7 +58,13 @@ partitions may be independently missing or stale; answers must identify which
 source data is available and must not fill gaps with invented facts. A cache
 snapshot is shown as stale after 36 hours or when its latest refresh attempt
 failed; the stale threshold is a display rule, not the provider's statistics
-window.
+window. `hero.guide` now adds English and Chinese hero, item, and ability names
+from the bundled Valve catalog to the fields selected by its result section. The
+result includes the catalog snapshot version; IDs and provider-supplied labels
+remain intact, and unresolved IDs remain visible with empty catalog names. This
+enrichment happens when queried and does not write into Redis, so existing cache
+snapshots need no refresh for the names to appear. The same resolver is not yet
+connected to `game.detail`.
 
 ## Steam-account and game-detail scope
 

@@ -17,6 +17,8 @@ from pydantic import (
     model_validator,
 )
 
+from app.vnext.catalog import EntityNameCatalogVersion, ResolvedEntityName
+
 HeroPosition = Annotated[StrictInt, Field(ge=1, le=5)]
 GuideSection = Literal["all", "items", "skills", "pro_examples"]
 
@@ -67,6 +69,7 @@ class GuideItem(BaseModel):
     item_id: _PositiveInt
     quantity: _PositiveInt
     name: str | None
+    resolved_name: ResolvedEntityName | None = None
 
 
 class StartingItemOption(BaseModel):
@@ -100,6 +103,7 @@ class GuideItemObservation(BaseModel):
     timing: ItemTiming | None = None
     statistics: _JsonObject = Field(default_factory=dict)
     source_path: str
+    resolved_name: ResolvedEntityName | None = None
 
 
 class SkillSequenceOption(BaseModel):
@@ -108,6 +112,7 @@ class SkillSequenceOption(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
     ability_ids: list[_PositiveInt] = Field(default_factory=list)
+    abilities: list[ResolvedEntityName] = Field(default_factory=list)
     statistics: _JsonObject = Field(default_factory=dict)
     source_path: str
 
@@ -147,6 +152,7 @@ class ProItemEvent(BaseModel):
     item_id: _PositiveInt
     minute: FiniteFloat | None = None
     source_fields: _JsonObject = Field(default_factory=dict)
+    resolved_name: ResolvedEntityName | None = None
 
 
 class ProAbilityEvent(BaseModel):
@@ -162,6 +168,7 @@ class ProAbilityEvent(BaseModel):
     time_seconds: FiniteFloat | None = None
     hero_level: _PositiveInt | None = None
     source_fields: _JsonObject = Field(default_factory=dict)
+    resolved_name: ResolvedEntityName | None = None
 
 
 class ProMatchExample(BaseModel):
@@ -201,6 +208,8 @@ class HeroGuideResult(BaseModel):
     pro_examples: list[ProMatchExample] = Field(default_factory=list)
     pub_guides_total: _NonNegativeInt | None = None
     pro_examples_total: _NonNegativeInt | None = None
+    hero_name: ResolvedEntityName | None = None
+    catalog_version: EntityNameCatalogVersion | None = None
 
     @model_validator(mode="after")
     def validate_source_metadata_kinds(self) -> HeroGuideResult:

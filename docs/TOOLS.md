@@ -256,7 +256,10 @@ not accept a name, provider/source selector, URL, or refresh flag.
 `pub_metadata` and `pro_metadata`. The DTO records Pub builds, starting-item
 options, item observations, skill sequences, and talents; Pro examples expose
 source match identity, optional position and its basis, and ordered item/ability
-events. Raw statistics stay in source JSON objects. DTO construction does not
+events. It also includes `hero_name` and `catalog_version`; returned item entries
+and Pro item/ability events carry a `resolved_name`, while each Pub skill
+sequence carries an `abilities[]` list in exact correspondence with `ability_ids`.
+Raw statistics stay in source JSON objects. DTO construction does not
 filter sections, compute totals, rank/truncate candidates, or pair Pub item and
 skill candidates.
 
@@ -279,6 +282,15 @@ pre-projection hero-position counts. A single cache read error returns the other
 source when available; two read errors become a fixed `tool_execution_error`
 with per-source safe codes. Large outputs use the existing generic Artifact
 externalization and can be explored with `artifact.read` or `artifact.grep`.
+After filtering and section projection, the Service uses its injected local
+`EntityNameResolver` to add Valve catalog labels to only the visible IDs. It
+resolves the requested hero even when both cache partitions are missing and
+returns the snapshot version as `catalog_version`. Duplicate occurrences remain
+in source order and each receives an independent name object. ID zero stays
+`unknown` with empty names; unknown IDs do not remove events or skill entries.
+This enrichment runs at query time and is not written to Redis. It does not call
+the separate `catalog.lookup` tool. Names identify the local Valve snapshot, not
+D2PT or OpenDota source fields.
 The operator-only command `python -m app.vnext.hero_guides refresh` invokes the
 serial refresher using `DOTAMIND_REDIS_URL` from the process environment. It is
 not registered as a model-facing tool or HTTP endpoint. Cache queries remain

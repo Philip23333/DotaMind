@@ -11,6 +11,7 @@ from app.vnext.capabilities.hero import (
     HeroGuideResult,
     ItemTiming,
     ProAbilityEvent,
+    ProItemEvent,
     ProMatchExample,
     PubGuide,
     SkillSequenceOption,
@@ -195,6 +196,28 @@ def test_open_json_rejects_non_json_objects() -> None:
             statistics={"unsupported": object()},
             source_path="build_data.abilities_new[0]",
         )
+
+
+def test_entity_name_enrichment_fields_have_backward_compatible_defaults() -> None:
+    item = GuideItem(item_id=1, quantity=1, name="provider name")
+    observation = GuideItemObservation(item_id=1, phase="mid", source_path="item")
+    sequence = SkillSequenceOption(ability_ids=[1, 2, 1], source_path="skills")
+    pro_item = ProItemEvent(item_id=1)
+    pro_ability = ProAbilityEvent(ability_id=0)
+    result = empty_result()
+
+    assert item.resolved_name is None
+    assert observation.resolved_name is None
+    assert sequence.abilities == []
+    assert pro_item.resolved_name is None
+    assert pro_ability.resolved_name is None
+    assert result.hero_name is None
+    assert result.catalog_version is None
+
+    old_payload = result.model_dump(mode="json")
+    old_payload.pop("hero_name")
+    old_payload.pop("catalog_version")
+    assert HeroGuideResult.model_validate(old_payload).hero_name is None
 
 
 def test_item_and_match_identifiers_are_strict() -> None:
