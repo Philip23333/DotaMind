@@ -39,6 +39,25 @@ def test_task_plan_policy_allows_checkpointable_result_units() -> None:
     assert "checkpointed taskstate" in instruction
 
 
+def test_shared_capability_rules_use_current_inventory_and_distinguish_data_availability() -> None:
+    instruction = " ".join(PRODUCT_INSTRUCTION.lower().split())
+
+    assert "hero-guide tool is enabled for this run" in instruction
+    assert (
+        "cached item builds, skill-build suggestions, and professional-match examples"
+        in instruction
+    )
+    assert "do not promise complete laning instruction or a real-time optimal build" in instruction
+    assert "judge current integrated capabilities from the enabled tool inventory" in instruction
+    assert "earlier assistant statements" in instruction
+    assert "they do not override the current inventory" in instruction
+    assert "unsupported capability, missing data, and failed lookup" in instruction
+    assert "does not guarantee that data is present or that a lookup has succeeded" in instruction
+    assert "use the current inventory without executing tools" in instruction
+    assert "for necessary missing input instead of denying the capability" in instruction
+    assert "subject to the current stage's permissions" in instruction
+
+
 def test_task_plan_policy_allows_bounded_cross_partition_batching() -> None:
     instruction = " ".join(AGENT_INSTRUCTION.lower().split())
 

@@ -191,6 +191,16 @@ positions to source-specific strings are resolved within their implementation
 stage. The DTO input position is already defined as a strict integer from 1
 through 5.
 
+Product guidance recognizes cached hero guides when enabled. Composition now
+derives a short tool-name inventory from the actual Runtime registry and shares
+it with execution and all answer attempts; answer tool calls remain disabled.
+Deterministic regressions cover retained incorrect capability claims and an
+offline guide lookup. Real-model acceptance in both new conversations and
+conversations with old refusal history remains pending; scripted-model success
+does not establish that real-model refusal behavior is fixed. `game.detail`
+name-enrichment integration is deferred while this capability-declaration work
+is accepted.
+
 ## Steam player and game-detail capabilities
 
 - Define strict Steam32 inputs for player profile and recent-game observations,

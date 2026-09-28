@@ -524,6 +524,18 @@ def build_vnext_registry(
     return registry
 
 
+def _format_enabled_tool_inventory(registry: ToolRegistry) -> str:
+    names = [tool.name for tool in registry.list()]
+    listing = "\n".join(f"- {name}" for name in names) if names else "none"
+    return (
+        f"Enabled tools for this run:\n{listing}\n\n"
+        "This inventory describes enabled capabilities, not permission to call tools in\n"
+        "every stage. During the answer stage, tool calls are disabled because execution\n"
+        "has ended; this does not mean these capabilities are absent from the product.\n"
+        "The inventory is not evidence that any lookup succeeded."
+    )
+
+
 def build_vnext_runtime(
     settings: VNextSettings | None = None,
     *,
@@ -541,16 +553,18 @@ def build_vnext_runtime(
         timeout=config.llm_timeout_seconds,
     )
     task_state_coordinator = TaskStateCoordinator()
+    registry = build_vnext_registry(
+        resolved_services,
+        settings=config,
+        task_state_coordinator=task_state_coordinator,
+    )
     shared_instruction = PRODUCT_INSTRUCTION
     if resolved_services.tavily_web_search is not None:
         shared_instruction = f"{PRODUCT_INSTRUCTION}\n\n{WEB_SEARCH_INSTRUCTION}"
+    shared_instruction = f"{shared_instruction}\n\n{_format_enabled_tool_inventory(registry)}"
     return AgentRuntime(
         model,
-        build_vnext_registry(
-            resolved_services,
-            settings=config,
-            task_state_coordinator=task_state_coordinator,
-        ),
+        registry,
         system_instruction=AGENT_INSTRUCTION,
         shared_instruction=shared_instruction,
         limits=limits,

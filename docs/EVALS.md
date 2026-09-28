@@ -45,6 +45,32 @@ providers, and it does not change the product registry.
    evaluation step; provider volatility and outages are not deterministic test
    failures.
 
+## Enabled capability inventory and guide answers
+
+Offline acceptance compares execution schemas and the shared inventory against
+the same registry, in registration order, both with and without `hero.guide`.
+An empty registry explicitly renders `none`. Product guidance distinguishes
+unsupported capabilities, missing data, and failed lookups; the inventory must
+not claim that a query has succeeded. Optional web-search guidance remains
+conditional on the registered search capability.
+
+Request-level regressions cover normal answers, answer overflow recovery/retry,
+and degraded answers: all retain the inventory exactly once, while answer
+requests keep `tools=[]` and exclude execution-only instructions. Input message
+lists are unchanged. A scripted Runtime regression retains earlier assistant
+claims such as "no hero guides" and "only web search", verifies the current
+`hero.guide` schema and inventory, executes an offline handler, and confirms its
+evidence reaches the answer stage. These tests establish request plumbing and
+stage boundaries, not real-model willingness to use the tool.
+
+Real-model acceptance remains pending. It must separately exercise a new
+conversation and one retaining incorrect refusal history, using a known guide
+cache state. Inspect traces for supported lookup selection, appropriate missing
+input questions, and evidence-grounded answers. Also distinguish registered
+tools with missing cache data or failed reads from unsupported capabilities.
+Capability questions should be answered without executing tools; concrete guide
+requests should not be rejected solely because of an earlier assistant claim.
+
 ## Context Governance harness
 
 Run commands from `apps/api`. Without `--execute`, the command validates the

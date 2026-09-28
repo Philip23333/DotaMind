@@ -117,6 +117,22 @@ Artifact retrieval tool opts out explicitly. Domain modules must not own the
 application registry builder, and removed capabilities must not be kept as
 aliases or hidden registrations.
 
+Composition builds one registry and renders its ordered tool names into a short
+`Enabled tools for this run` inventory (`none` for an empty registry). The same
+registry instance is passed to Runtime. The inventory is appended to
+`shared_instruction` alongside product identity and conditional web-search
+guidance, so execution, primary answers, answer retries, and degraded answers
+receive the same enabled-capability information. Only names are duplicated;
+descriptions and argument schemas remain in execution's tool declarations.
+Earlier assistant capability claims do not override the current inventory.
+
+Answer requests still use `tools=[]`: execution has ended, while the product's
+capabilities have not disappeared. The inventory grants no permission to call
+tools in that stage and proves neither cache availability nor lookup success.
+Answer evidence comes from the conversation and execution results. Runtime's
+existing shared-instruction request builders carry this information without a
+second registry or capability manager.
+
 The current esports boundaries are `esports.league.search`,
 `esports.series.search`, `esports.tournament.search`,
 `esports.series.teams`, `esports.match.search`, `esports.team.search`,
