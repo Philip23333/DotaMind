@@ -203,7 +203,7 @@ not turn into deterministic test failures.
 Never commit credentials, authorization headers, request tokens, or material
 user data.
 
-## Hero guide evaluation (DTO, fixtures, client, and parsers implemented; cache pipeline pending)
+## Hero guide evaluation (DTO, fixtures, client, parsers, and cache component implemented)
 
 The D2PT probe recorded in [`reference/d2pt.md`](reference/d2pt.md) is a live
 connectivity and sample-shape check for one Sven Pub row and one Sven Pro row.
@@ -213,28 +213,31 @@ for every hero/position, or model answer quality.
 The current offline acceptance covers strict DTO inputs, independent Pub/Pro
 metadata, source-shaped JSON preservation, byte/hash/shape checks for the two
 fixed raw response fixtures, deterministic HTTP-client behavior through an
-injected fake opener, and Pub/Pro fixture parsing. Client tests cover request
-URLs and headers, timeout and response-size bounds, status/error handling, JSON
-and minimal schema validation, and response closure. Parser tests cover the
-observed Sven fields and counts, all-record ordering, source-position evidence,
-strict type and identity validation, all-or-nothing failure, and deep-copy
-behavior. They make no network or model call and do not establish all-hero or
-all-position parser coverage.
+injected fake opener, Pub/Pro fixture parsing, and the standalone Redis cache.
+Client tests cover request URLs and headers, timeout and response-size bounds,
+status/error handling, JSON and minimal schema validation, and response closure.
+Parser tests cover the observed Sven fields and counts, all-record ordering,
+source-position evidence, strict type and identity validation, all-or-nothing
+failure, and deep-copy behavior. Cache tests use a fake Redis to verify whole
+snapshot replacement, one-command HSET/HGETALL shapes, Pub/Pro key isolation,
+raw bytes/source rows/DTO round-trips, failure retention, valid-empty snapshots,
+corruption errors, and input/output mutation isolation. These checks make no
+network, live Redis, or model call; they do not establish all-hero or all-position
+parser coverage, deployment persistence, or AOF recovery.
 
 Remaining acceptance layers are separate:
 
-1. **Persistent cache:** deterministic tests verify independent Pub/Pro status
-   and timestamps, atomic publication after fetch and parse success, retention of
-   the previous good value after failure, and a valid empty response distinct
-   from missing data or an error.
-2. **Refresh coordination:** a clock-controlled test verifies the daily
+1. **Refresh coordination:** a clock-controlled test verifies the daily
    03:00 Asia/Shanghai schedule, serial request behavior with a one-second wait
    after each response, shared manual/scheduled entry point, and duplicate-run
    prevention. It does not wait for wall-clock 03:00 or call D2PT.
-3. **`hero.guide` query:** local cache fixtures verify hero/position/section
+2. **`hero.guide` query:** local cache fixtures verify hero/position/section
    filtering, partial Pub/Pro availability, visible stale/missing states, no
    remote request on a cache miss, and normal Artifact externalization for a
    large result.
+3. **Redis deployment persistence:** a separate deployment acceptance checks
+   the configured Redis AOF and volume across restart. Fake Redis tests do not
+   establish this behavior.
 4. **Real full refresh:** a separately authorized live-provider acceptance
    verifies the configured hero/position coverage, cache publication, and
    source status. A successful one-hero probe or fixture parser test cannot

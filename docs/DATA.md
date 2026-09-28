@@ -70,15 +70,16 @@ universal object graph. If complete provider-source fidelity is required, it
 must be added explicitly at the capability boundary before generic Artifact
 externalization.
 
-## Hero guide data contract (DTO, HTTP client, and parsers implemented; cache pipeline pending)
+## Hero guide data contract (DTO, HTTP client, parsers, and cache component implemented)
 
 The internal contract is defined in `app.vnext.capabilities.hero.guide`. A
 synchronous D2PT HTTP client now fetches the heroes list, Pub builds, and Pro
 builds. It preserves the exact response bytes and parsed JSON array and performs
 transport and minimal source-shape checks. Pure Pub and Pro parsers project
-source rows into the existing guide DTOs without changing the response. No
-persistent cache, Guide Service, or model-facing tool is implemented. The input
-selects one `(hero_id, position)` pair, with a strict positive integer hero ID,
+source rows into the existing guide DTOs without changing the response. A
+standalone Redis cache component now stores source snapshots; it is not wired to
+application startup and there is still no Guide Service or model-facing tool.
+The input selects one `(hero_id, position)` pair, with a strict positive integer hero ID,
 a strict integer position from 1 through 5, and `section` equal to `all`,
 `items`, `skills`, or `pro_examples` (default `all`). It does not accept a hero
 name, provider selector, URL, or refresh request.
@@ -190,15 +191,32 @@ field types, and malformed nested arrays as a whole. Open DTO dictionaries are
 deep copies. Unknown provider fields that have no DTO field remain in the
 original `D2PTResponse`; parsing is a projection, not source retention.
 
-When the later data pipeline is implemented, each refresh snapshot will retain
-the exact original response bytes and complete parsed result, including unknown
-source fields and heterogeneous or null values. Successful publication will
-atomically replace the whole snapshot; a failed fetch or parse will preserve the
-previous successful value; valid empty data will remain distinct from missing
-data and failure. Pub snapshots are keyed by hero and position. Pro snapshots
-are keyed by hero and filtered by requested position at query time. These
-storage and refresh rules are documented targets, not behavior of the client,
-parsers, or DTO package.
+`RedisHeroGuideCache` is an independent storage component that receives an
+already fetched and parsed `GuideCacheSnapshot`; it does not call the client or
+parsers. Each snapshot contains the sample type, hero and Pub position where
+applicable, timezone-aware retrieval time, content type, exact raw response
+bytes, complete parsed source rows, and the corresponding DTO projection. The
+raw bytes are stored as Base64 inside snapshot JSON and restored byte-for-byte.
+Pub snapshots are keyed by hero and position; Pro snapshots are keyed by hero
+and replace that hero's complete set of examples across positions. Pro position
+filtering belongs to the later query Service.
+
+Each Redis hash stores `snapshot`, `last_attempt_at`, and `last_error`. Successful
+publication sets all three with one `HSET`, replacing the old snapshot; a valid
+empty response remains a successful non-null snapshot. A failed attempt writes
+only its timestamp and stable error code, retaining any last successful
+snapshot. Reads use one `HGETALL`; an empty hash means never attempted, while a
+first failure has status fields but no snapshot. The cache sets no TTL and does
+not calculate freshness, staleness, or current/update timestamps. Cache errors
+are surfaced as fixed safe exceptions; malformed stored data is not treated as
+a miss or deleted automatically.
+
+The cache accepts an injected async Redis client and does not create or close
+connections. Offline tests use a small fake Redis; they do not verify live Redis,
+container configuration, AOF recovery, or restart persistence. Deployed
+persistence relies on Redis AOF and its configured persistent volume. The
+component is not yet connected to the application, refresh pipeline, Guide
+Service, or model-facing tool.
 
 The one-time Sven probe verified one non-empty JSON row from each tested
 endpoint. The Pub row declared a 14-day configured window and patch label

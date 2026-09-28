@@ -140,16 +140,28 @@ logical tool response; the bounded model observation is derived separately by
 the generic result processor for ordinary tools. A stored ref is not
 automatically restored into a later turn's dialogue context.
 
-## Hero guide data flow (client and parsers implemented; pipeline pending)
+## Hero guide data flow (client, parsers, and persistent cache implemented; pipeline pending)
 
 The synchronous D2PT HTTP client is implemented with `urllib.request`; its
 deterministic tests use an injected opener and make no live request. It sends
 the verified request headers and performs bounded transport and minimal
-response-shape validation. This does not implement persistent storage,
-background refresh, or the registered `hero.guide` tool. The pure Pub and Pro
-parsers project source rows into the existing DTOs; the original `D2PTResponse`
-still owns the complete raw bytes and parsed source result. The separate Sven
-probe remains evidence of access and sampled response shapes only.
+response-shape validation. Pure Pub and Pro parsers project source rows into the
+existing DTOs. The independent `RedisHeroGuideCache` stores each complete source
+snapshot, including exact response bytes, parsed source rows, and DTO projection.
+Pub keys use hero plus position; Pro keys use hero and replace all positions as
+one snapshot. A successful publish replaces the complete snapshot with one
+Redis `HSET`; callers record a failed fetch/parse by updating only attempt
+metadata, which keeps the last successful snapshot. Reads use one `HGETALL`.
+Keys have no TTL.
+The cache accepts an injected Redis client and does not create connections or
+wire itself into application startup. The `hero.guide` Service/tool and
+background refresh are still unimplemented. The separate Sven probe remains
+evidence of access and sampled response shapes only.
+
+The cache's persistence across process or Redis restarts depends on the deployed
+Redis AOF and persistent volume configuration. Offline tests use a fake Redis
+and do not verify AOF recovery or a live Redis deployment. The shared guide
+cache remains separate from session Artifacts.
 
 The planned refresh path is:
 
@@ -168,12 +180,14 @@ daily 03:00 Asia/Shanghai trigger or manual refresh request
        -> represent a valid empty result separately from failure
 ```
 
-Each Pub hero-position snapshot and Pro hero snapshot records retrieval time,
-source-provided update time when available, and refresh status. A failed update
-of one snapshot does not invalidate another successful snapshot. Scheduler
-technology and the precise freshness-expiration threshold remain implementation
-choices; the behavioral contract is one daily local-time run and one shared
-manual entry point that prevents overlapping refreshes.
+Each implemented cache snapshot records its retrieval time; source-provided
+update fields remain in the retained source rows and projections. The cache
+entry separately records the latest attempt time and stable error code. It does
+not calculate availability or staleness. The future refresh worker and Guide
+Service will interpret those fields. Scheduler technology and the precise
+freshness-expiration threshold remain implementation choices; the behavioral
+contract is one daily local-time run and one shared manual entry point that
+prevents overlapping refreshes.
 
 The planned online path is read-only:
 

@@ -263,11 +263,13 @@ skill candidates.
 Source metadata can represent available, empty, or missing data, and can retain
 stale available data alongside a last refresh error. Retrieval and attempt times
 require timezones; the source `updated_at` remains an unparsed string. The D2PT
-HTTP client and pure Pub/Pro parsers are implemented below the capability
-boundary, but there is no cache read, Service, or tool registration yet. The
-eventual query remains cache-only, with section filtering, freshness calculation,
-partial-source behavior, and Artifact externalization owned by a later
-Service/tool phase.
+HTTP client, pure Pub/Pro parsers, and standalone Redis snapshot cache are
+implemented below the capability boundary. The cache has no TTL, keeps the last
+successful snapshot after a failed attempt, and is independent of session
+Artifacts; it is not yet wired into application startup. There is still no cache
+query, Guide Service, or tool registration. The eventual query remains
+cache-only, with section filtering, freshness calculation, partial-source
+behavior, and Artifact externalization owned by a later Service/tool phase.
 
 ## Steam player and game-detail tools
 

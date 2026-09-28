@@ -87,13 +87,17 @@ before a second concrete implementation demonstrates the need.
 4. Register the capability only after its focused acceptance passes.
 5. Remove transitional code once the replacement is accepted.
 
-## Hero guides (DTO, fixtures, client, and parsers implemented; pipeline pending)
+## Hero guides (DTO, fixtures, client, parsers, and persistent cache component implemented; query/refresh pending)
 
 The internal query DTOs and two fixed raw Sven fixtures are implemented and
 covered by offline tests. A synchronous, bounded D2PT HTTP client is also
 implemented and tested with a fake opener; those tests make no live request. The
-`hero.guide` tool is not registered; the persistent cache, Service, and scheduled
-refresh remain unimplemented. The one-time endpoint probe verified
+`RedisHeroGuideCache` is implemented as an injected, offline-testable component.
+It stores exact response bytes, parsed source rows, and DTO projections in
+whole-snapshot Redis hashes without TTL; failed attempts retain the last good
+snapshot. Its tests use fake Redis and do not verify deployed AOF/restart
+persistence. The cache is not wired into application startup. The `hero.guide`
+tool, Guide Service, and scheduled refresh remain unimplemented. The one-time endpoint probe verified
 non-empty sample responses only. Source evidence and its limits are documented
 in [`reference/d2pt.md`](reference/d2pt.md).
 
@@ -109,11 +113,12 @@ Implementation and acceptance proceed in this order:
    supplies the primary guide; Pro contributes only examples from
    `recent_matches`. Parser tests use the fixed samples and local constructed
    cases, not live provider requests.
-4. Implement a persistent cache retaining original response bytes and parsed
-   results, with atomic whole-snapshot replacement, old-value retention on
-   failure, and explicit valid-empty records. Publish Pub by hero plus position
-   and Pro by hero, with independent source metadata; filter Pro by position on
-   read.
+4. **Complete:** implement the standalone persistent cache retaining original
+   response bytes, complete parsed source rows, and DTO projections, with atomic
+   whole-snapshot replacement, old-value retention on failure, and explicit
+   valid-empty records. Publish Pub by hero plus position and Pro by hero. The
+   cache uses no TTL; freshness and Pro position filtering belong to the query
+   Service.
 5. Add the cache-only `hero.guide(hero_id, position, section)` query capability
    and register it after focused acceptance.
 6. Add the single-instance daily 03:00 Asia/Shanghai refresh and manual trigger
