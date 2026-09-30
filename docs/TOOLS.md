@@ -246,8 +246,11 @@ capability contract and its tests, not to this generic registry baseline.
 ## `hero.guide` cache query
 
 The input and DTO contract for `hero.guide(hero_id, position, section)` is
-defined in `app.vnext.capabilities.hero.guide`. This tool is conditionally
-registered when the application injects its existing Redis cache. `hero_id` is a strict positive
+defined in `app.vnext.capabilities.hero.guide`. This tool is currently
+conditionally registered when the application injects its existing Redis
+cache. After the planned file-store migration, availability will no longer
+depend on a guide Redis connection; the public input, section values, Pub/Pro
+boundaries, and DTO remain unchanged. `hero_id` is a strict positive
 integer, `position` is a strict integer from 1 through 5, and `section` is one
 of `all`, `items`, `skills`, or `pro_examples` (default `all`). The input does
 not accept a name, provider/source selector, URL, or refresh flag.
@@ -267,9 +270,11 @@ Source metadata can represent available, empty, or missing data, and can retain
 stale available data alongside a last refresh error. Retrieval and attempt times
 require timezones; the source `updated_at` remains an unparsed string. The D2PT
 HTTP client, pure Pub/Pro parsers, Redis snapshot cache, `HeroGuideService`, and
-`hero.guide` tool are implemented. The tool is registered only when the
-application injects the existing Redis connection. It reads cache only, never
+`hero.guide` tool are implemented. Today, the tool is registered only when the
+application injects the existing Redis connection. It reads Redis only, never
 refreshes on a miss, and does not expose the raw body or complete source rows.
+The target file store reads the same guide partitions while keeping the tool
+query-only.
 The cache has no TTL, keeps the last successful snapshot after a failed attempt,
 and remains independent of session Artifacts.
 
@@ -285,18 +290,20 @@ externalization and can be explored with `artifact.read` or `artifact.grep`.
 After filtering and section projection, the Service uses its injected local
 `EntityNameResolver` to add Valve catalog labels to only the visible IDs. It
 resolves the requested hero even when both cache partitions are missing and
-returns the snapshot version as `catalog_version`. Duplicate occurrences remain
+returns the catalog snapshot version as `catalog_version`. Duplicate occurrences remain
 in source order and each receives an independent name object. ID zero stays
 `unknown` with empty names; unknown IDs do not remove events or skill entries.
-This enrichment runs at query time and is not written to Redis. It does not call
-the separate `catalog.lookup` tool. Names identify the local Valve snapshot, not
-D2PT or OpenDota source fields.
-The operator-only command `python -m app.vnext.hero_guides refresh` invokes the
-serial refresher using `DOTAMIND_REDIS_URL` from the process environment. It is
-not registered as a model-facing tool or HTTP endpoint. Cache queries remain
-read-only and never trigger remote refreshes. A systemd timer template exists but
-is not installed or enabled; running the command is required to populate cache
-data until deployment configures that timer.
+This enrichment runs at query time and is not written into guide snapshots. It
+does not call the separate `catalog.lookup` tool. Names identify the local Valve
+catalog, not D2PT or OpenDota source fields. Once hot reload is implemented, a
+query will use the catalog snapshot captured at its start.
+The current operator-only command `python -m app.vnext.hero_guides refresh`
+invokes the guide-only serial refresher using `DOTAMIND_REDIS_URL` from the
+process environment. It is not a model-facing tool or HTTP endpoint. The future
+unified update entrypoint is not implemented, so no command for it is specified
+here. A model cannot trigger refresh, migrate snapshots, or perform entity-ID
+mapping; cache misses remain ordinary missing-source results. The existing
+generic Artifact externalization and retrieval contract is unchanged.
 
 ## Steam player and game-detail tools
 
@@ -348,9 +355,11 @@ match only; this implementation has not yet been tested against live OpenDota.
 `catalog.lookup(kind, ids)` resolves up to 20 exact positive hero or item IDs
 against the locally bundled Valve Dota 2 catalog snapshot. It returns each
 requested ID as `found` or `unknown`, optional English/Chinese display labels,
-and the snapshot version. These names are static catalog labels, not fields
-returned by STRATZ or OpenDota; unknown IDs remain unknown. The lookup does not
-modify match-detail data and makes no network request.
+and the snapshot version. Today it reads the locally bundled Valve snapshot.
+After catalog hot reload is implemented, each query will capture the active
+snapshot once and use it throughout. These names are local catalog labels, not
+fields returned by STRATZ or OpenDota; unknown IDs remain unknown. The lookup
+does not modify match-detail data and makes no network request.
 
 For an account-to-game workflow, use `player.profile` only when profile data is
 requested, and query `player.recent_games` directly when a Steam32 account is

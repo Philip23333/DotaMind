@@ -246,12 +246,14 @@ not turn into deterministic test failures.
 Never commit credentials, authorization headers, request tokens, or material
 user data.
 
-## Hero guide evaluation (cache query, offline executor, and CLI implemented; deployment/live acceptance pending)
+## Hero guide evaluation (Redis query and CLI implemented; shared file update and hot reload pending)
 
 The D2PT probe recorded in [`reference/d2pt.md`](reference/d2pt.md) is a live
 connectivity and sample-shape check for one Sven Pub row and one Sven Pro row.
-It is not evidence of a full-cache refresh, scheduled execution, parser coverage
-for every hero/position, or model answer quality.
+It is distinct from the historical local full refresh recorded below. Neither
+result proves the shared-file migration, API hot reload, a successful automatic
+timer firing, full parser correctness for every source shape, or model answer
+quality.
 
 The current offline acceptance covers strict DTO inputs, independent Pub/Pro
 metadata, source-shaped JSON preservation, byte/hash/shape checks for the fixed
@@ -290,26 +292,56 @@ CLI tests exercise help/argument handling, environment-only Redis configuration,
 same-container non-blocking lock behavior, one-line safe JSON results, fixed exit
 codes, resource cleanup, and SIGINT/SIGTERM cleanup while a worker request is in
 flight. They use fake Redis/client/refresher dependencies and a local process lock;
-they make no D2PT, Redis, Docker, or model calls. The systemd service/timer files
-are templates only and have not been installed or enabled.
+they make no D2PT, Redis, Docker, or model calls. The repository service/timer
+files are templates; a separate historical WSL record says the local timer was
+enabled. Enablement alone does not show that a scheduled invocation succeeded.
+
+### Shared file-update acceptance (pending)
+
+The following matrix is for the planned file-backed updater and API hot reload.
+These behaviors have not passed acceptance:
+
+| Layer | Required evidence |
+|---|---|
+| Catalog publication | The five JSON files always form one validated snapshot; interruption or write failure does not switch the successful-snapshot reference. |
+| Guide migration | Raw bytes, parsed source rows, DTOs, retrieval/attempt times, and statuses round-trip; missing, valid-empty, and failed-with-last-good remain distinct. |
+| Version gate | Same-patch success skips the full fetch; version-check failure does not skip; a failed new publication is retried next run. |
+| Fetch sharing and bounds | Shared responses are not fetched twice; Valve total concurrency stays within its bound; D2PT requests remain serial. |
+| Hot reload | A new snapshot switches in one process only after full validation; each query sees one version; invalid snapshots leave the old one active. |
+| Images | Existing files survive failed downloads; missing files can be backfilled; name-match indexes and browser resources track available images only. |
+| Containers | The data volume survives API-container recreation; the API mounts data read-only and can read it afterward. |
+| Scheduling | One unified daily entrypoint prevents overlapping runs, reports module/partition results, and replaces the guide-only schedule without duplicate guide work. |
+| Model behavior | Query inputs and DTOs remain stable; source attribution, catalog-name use, and generic Artifact access do not regress. |
+
+### Historical local guide-refresh evidence
+
+A local full refresh processed 127 heroes with 763 requests and published 635
+Pub and 127 Pro partitions, including valid empty responses. Sven and Anti-Mage
+Service queries succeeded. The local WSL guide timer was enabled; this records
+host configuration, not an observed successful scheduled firing. These facts do
+not establish that a Guangzhou deployment has the same data or configuration,
+and they provide no evidence for file storage migration or API hot reload.
 
 Remaining acceptance layers are separate:
 
-1. **Scheduled deployment:** verify the installed systemd timer fires at
-   03:00 Asia/Shanghai and invokes the same CLI command as an operator. Offline
-   tests validate the CLI lock within one API container; they do not establish
-   coordination across API containers or verify an installed timer.
-2. **Redis deployment persistence:** a separate deployment acceptance checks
-   the configured Redis AOF and volume across restart. Fake Redis tests do not
-   establish this behavior.
-3. **Real full refresh:** a separately authorized live-provider acceptance
-   verifies the configured hero/position coverage, cache publication, and
-   source status. A successful one-hero probe or fixture parser test cannot
-   stand in for this check.
+1. **Scheduled deployment:** historical evidence records that the local WSL
+   guide-only timer was enabled, but not that it fired successfully. The planned
+   unified scheduler still needs a deployment check proving one daily 03:00
+   Asia/Shanghai run, no overlap or duplicate guide refresh, and module results.
+   Offline lock tests do not establish multi-container coordination.
+2. **Persistence and container boundary:** existing Redis AOF recovery and the
+   target shared file volume across API-container recreation are separate checks.
+   Fake Redis tests establish neither deployment behavior; the target API mount
+   must also be verified read-only.
+3. **Real update:** the historical local guide refresh is evidence for that
+   Redis-backed run only. The unified file updater still needs live acceptance
+   for version checking, publication, source status, retained previous success,
+   and independent image/patch handling. A Sven probe or fixture parser test
+   cannot establish this.
 4. **Real-model answer:** a separate evaluation checks whether the model answers
-   from the cached Pub guide and Pro examples, keeps the sources distinct, and
-   avoids unsupported statistical or causal claims. It is not implied by a
-   successful provider refresh.
+   from Pub guide and Pro examples, keeps the sources distinct, and avoids
+   unsupported statistical or causal claims. A successful refresh does not imply
+   answer quality.
 
 ### Tavily MCP smoke check
 

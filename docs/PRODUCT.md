@@ -34,7 +34,7 @@ generic game statistics.
 - Continue with references such as "game two", "that player", or "their previous
   match" without restating the whole question.
 
-## Hero guides (cache query and operator refresh command implemented; scheduled deployment pending)
+## Hero guides and shared game data (Redis query and operator refresh implemented; file updates pending)
 
 The hero-guide tool answers a request for one specified Valve hero ID and
 position. Pub build data is the primary guide; recent professional matches for
@@ -44,15 +44,11 @@ evidence that its player followed a particular Pub build. The query reads the
 shared Redis cache only and does not trigger a D2PT request or refresh. When the
 cache has not been populated, it reports the source as missing.
 
-The current provider evidence is limited to a one-time D2PT connectivity and
-payload probe for Sven (`hero_id=18`, position 1). Both sampled endpoints
-returned one non-empty JSON build record in the tested WSL environment. The D2PT
-client, parsers, Redis snapshots, and cache-only query capability are now
-implemented. The query is registered only when the application injects its
-existing Redis connection. An operator-only CLI now runs the serial refresh
-executor inside the API container, and a daily systemd timer template is
-provided. The template has not been installed or enabled. This does not mean an
-all-hero cache has been populated or a scheduled refresh has run.
+Today, the query reads guide snapshots from the injected Redis cache, and an
+operator-only CLI can refresh those snapshots. The Valve entity catalog is
+loaded from files bundled with the API code. The shared file store, unified
+update task, and API hot reload described below are target behavior; they are
+not part of the current query path.
 
 This journey is a specified-hero guide lookup. It does not add an all-hero
 strength ranking, matchup/counter analysis, or draft recommendation. Pub and Pro
@@ -67,6 +63,25 @@ remain intact, and unresolved IDs remain visible with empty catalog names. This
 enrichment happens when queried and does not write into Redis, so existing cache
 snapshots need no refresh for the names to appear. The same resolver is not yet
 connected to `game.detail`.
+
+## Shared game-data updates (target)
+
+Heroes, abilities and talents, items and recipes, images, patch records, and
+Pub/Pro guides are shared application data. The target update task publishes new
+data in the background; user queries read the last successfully published data
+and never trigger a remote refresh. Entity catalogs update by default when the
+official patch changes, while guide partitions update daily. Images and patch
+records are maintained independently from the entity-catalog version.
+
+After the shared file store and API hot reload are deployed, routine data
+updates should not require an API restart or redeployment. If an update fails,
+the last successful catalog or guide partition remains available, while missing,
+stale, and failed-source states remain visible to the query. The official latest
+patch, the patch represented by the last successful catalog, the catalog
+snapshot number, guide source scope and retrieval time, and image-resource
+version describe different things and must not be conflated. This is a confirmed
+implementation target; it does not describe current file-backed guide storage or
+hot reload.
 
 ## Steam-account and game-detail scope
 

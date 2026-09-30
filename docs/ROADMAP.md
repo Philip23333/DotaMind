@@ -106,7 +106,29 @@ before a second concrete implementation demonstrates the need.
   Artifact tools. Reuse generic Artifact externalization unchanged.
 - **Implemented:** deterministic tests cover existing fixtures, zero-ID samples,
   section bounds, cache compatibility, composition sharing, and Artifact reads.
-  `game.detail` name enrichment remains for the next commit.
+  `game.detail` name enrichment is a later independent follow-up.
+
+## Shared data update migration (design confirmed; implementation pending)
+
+Current priority is moving shared game data from the committed Valve catalog and
+Redis guide cache to a persistent file-backed update path with API hot reload.
+The sequence is:
+
+1. Create the persistent data directory and publish entity catalogs as complete
+   validated snapshots.
+2. Add file-backed guide partitions and migrate Redis snapshots with content and
+   status verification.
+3. Add API catalog hot reload and connect image matching to the active snapshot.
+4. Split and reuse the Valve fetch script for catalog, patch, and image work.
+5. Add the unified update entrypoint and patch-version gate.
+6. Connect the persistent data volume and one daily 03:00 Asia/Shanghai schedule.
+7. Deploy and verify persistent reads, query-consistent hot reload, fallback,
+   and the scheduled update path.
+
+These steps are a confirmed design only; none of the file migration, unified
+entrypoint, or API hot reload is marked implemented here. `game.detail` entity
+name enrichment remains a later independent item after this data-update
+migration.
 
 ## Subsequent capability work
 
@@ -117,7 +139,7 @@ before a second concrete implementation demonstrates the need.
 4. Register the capability only after its focused acceptance passes.
 5. Remove transitional code once the replacement is accepted.
 
-## Hero guides (cache query, serial executor, and operator CLI implemented; timer deployment pending)
+## Hero guides (Redis query, serial executor, and operator CLI implemented; shared file update pending)
 
 The internal query DTOs and two fixed raw Sven fixtures are implemented and
 covered by offline tests. A synchronous, bounded D2PT HTTP client is also
@@ -137,12 +159,13 @@ successful responses are parsed and published as whole snapshots, while a fetch
 or parse failure records partition attempt metadata and preserves its prior
 snapshot. Cache write errors abort the run. An operator-only CLI invokes the
 executor using the API container's `DOTAMIND_REDIS_URL`, with a non-blocking
-process lock shared among CLI invocations in that one container. A systemd daily
-timer template invokes the same command, but it is not installed or enabled. The
-CLI is not a public endpoint or model-facing tool, and application startup is not
-wired to refresh. No real full refresh has populated the cache. The one-time endpoint
-probe verified non-empty sample responses only. Source evidence and its limits are documented
-in [`reference/d2pt.md`](reference/d2pt.md).
+process lock shared among CLI invocations in that one container. A repository
+systemd timer template invokes the same command; host installation state varies.
+The local WSL setup has its own WSL-path unit and a historical enabled-timer
+record. The CLI is not a public endpoint or model-facing tool, and application
+startup is not wired to refresh. A historical local full refresh and its limits
+are recorded below and in
+[`reference/hero-guide-operations.md`](reference/hero-guide-operations.md).
 
 Implementation and acceptance proceed in this order:
 
@@ -171,17 +194,18 @@ Implementation and acceptance proceed in this order:
    last good partition on fetch/parse failure, and abort on cache write failure.
    Offline tests use fake clients, clocks, sleeps, and Redis; no provider or
    production cache was contacted.
-7. **Complete in repository; deployment pending:** add the operator CLI, a
-   non-blocking per-container process lock, and systemd service/timer templates
-   for a daily 03:00 Asia/Shanghai run. The template remains uninstalled and
-   disabled until deployment is explicitly configured. The lock is not
-   distributed; multi-container refresh coordination is not supported. The
-   operator command and timer call the same CLI entry point; neither refreshes
-   during application startup or a `hero.guide` query.
-8. Install and verify the timer in the target deployment, then verify a real full
-   refresh over the intended configured coverage, then run a
-   separate real-model answer evaluation. Sample-fixture acceptance, offline
-   executor/CLI tests, provider refresh, and answer quality are separate results.
+7. **Implemented in the repository:** add the operator CLI, a non-blocking
+   per-container process lock, and systemd service/timer templates. The
+   repository template targets the production Compose path. Host installation
+   and timer state are environment-specific; the local WSL setup has a separate
+   WSL-path unit and a recorded enabled timer. The lock remains container-local,
+   and neither application startup nor a `hero.guide` query refreshes data.
+8. **Historical deployment evidence:** a local full refresh, successful Sven and
+   Anti-Mage Service queries, and an enabled WSL timer are recorded in
+   [`EVALS.md`](EVALS.md) and
+   [`reference/hero-guide-operations.md`](reference/hero-guide-operations.md).
+   They do not establish successful timer firing, shared-file migration, API hot
+   reload, another deployment's state, or real-model guide answer quality.
 
 Do not force-match Pub item builds to skill sequences, derive recommendation
 routes from Pro aggregates, manufacture a fixed number of examples, or infer
@@ -198,8 +222,8 @@ Deterministic regressions cover retained incorrect capability claims and an
 offline guide lookup. Real-model acceptance in both new conversations and
 conversations with old refusal history remains pending; scripted-model success
 does not establish that real-model refusal behavior is fixed. `game.detail`
-name-enrichment integration is deferred while this capability-declaration work
-is accepted.
+name enrichment remains a later independent item; shared data updates have
+higher priority.
 
 ## Steam player and game-detail capabilities
 

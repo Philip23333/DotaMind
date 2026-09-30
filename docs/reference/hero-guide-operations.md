@@ -1,11 +1,11 @@
 # Hero guide refresh operations
 
-The hero-guide refresh is an operator command, separate from online
+The current hero-guide refresh is an operator command, separate from online
 `hero.guide` queries. Queries read Redis only. The refresh command makes live
 D2PT requests and publishes successful source partitions to the shared Redis
-cache; this runbook documents how to invoke and schedule it. The commands below
-are operational instructions and have not been executed as part of the offline
-implementation checks.
+cache. Offline tests do not execute this command. A historical local WSL
+deployment record includes a full refresh and an enabled guide timer; it does not
+prove the timer fired or describe another host's installation.
 
 ## Preconditions and boundaries
 
@@ -64,11 +64,15 @@ not a strict total-request or whole-run deadline. Do not assume killing only the
 ## Optional systemd schedule
 
 The repository provides `deploy/systemd/dotamind-hero-guides.service` and
-`deploy/systemd/dotamind-hero-guides.timer` as templates. They schedule the
-command daily at 03:00 Asia/Shanghai with no random delay. Before installing,
-verify that `WorkingDirectory` in the service matches the deployment Compose
-project directory and that `compose.prod.yml` names the running API service as
-`api`.
+`deploy/systemd/dotamind-hero-guides.timer` as production deployment templates.
+They use `/opt/dotamind`, `compose.prod.yml`, and daily 03:00 Asia/Shanghai
+scheduling with no random delay. The repository timer has `Persistent=false`.
+
+The local Ubuntu WSL installation is separate: its installed unit uses
+`/home/lip233/code/dotamind`, `compose.wsl.yml`, and a timer with
+`Persistent=true`. The local deployment record says this timer was enabled.
+These WSL paths and catch-up behavior do not describe the production template or
+other hosts. Check the actual host's unit and timer state before operating it.
 
 An operator who is authorized to configure this host can install the templates
 and enable the timer:
@@ -82,8 +86,10 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now dotamind-hero-guides.timer
 ```
 
-These commands are not run by application deployment or by the repository's
-offline tests. The service's `SuccessExitStatus=3` treats a same-container
+The install commands above are not run by application deployment or the
+repository's offline tests. The local WSL timer's enabled state is historical
+host evidence, not proof of a successful scheduled invocation. The service's
+`SuccessExitStatus=3` treats a same-container
 overlap skip as successful; exit code `4` remains visible as a partial refresh
 requiring review.
 
@@ -101,9 +107,28 @@ credentials while diagnosing refresh failures.
 
 ## Acceptance still required
 
-Offline tests use fake clients and Redis. They do not verify an installed timer,
-the live deployment's Redis AOF/volume recovery, full configured hero/position
-coverage, or real-model answer quality. A separately authorized deployment check
-must verify those items. The process lock is intentionally container-local; a
-deployment with multiple API containers needs an explicit coordination decision
-before scheduling this command on more than one container.
+Offline tests use fake clients and Redis. They do not verify a successful
+scheduled invocation, the live deployment's Redis AOF/volume recovery, or
+real-model answer quality. A historical local refresh processed 127 heroes with
+763 requests and published 635 Pub and 127 Pro partitions, including valid
+empty responses; Sven and Anti-Mage Service queries succeeded. This evidence is
+specific to that local Redis-backed run. It does not establish file migration,
+API hot reload, or the state of another deployment. The process lock is
+intentionally container-local; a deployment with multiple API containers needs
+an explicit coordination decision before scheduling this command on more than
+one container.
+
+## Shared data-update migration target (not executable yet)
+
+The planned unified updater will refresh the entity catalog by patch and guide
+partitions daily, then publish them to persistent shared files. The existing CLI
+above remains the current guide-only Redis entrypoint until that migration is
+implemented. Do not substitute a guessed future command for it.
+
+The migration order is to initialize the persistent data areas, import Redis
+guide snapshots once, verify source bytes, parsed rows, DTOs, times, and statuses,
+and only then wire the API to read the file store. Keep the old Redis guide data
+until acceptance; do not add long-term dual writes. Once a unified scheduler takes
+over, disable the old guide-only schedule to prevent duplicate guide refreshes.
+Failures must leave the last successful catalog or guide partition available.
+This document update performs none of the migration or cleanup steps.

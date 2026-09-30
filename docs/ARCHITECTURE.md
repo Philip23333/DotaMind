@@ -201,39 +201,42 @@ containers. SIGINT/SIGTERM cancel the refresh coroutine; an urllib request
 already running in a worker thread is allowed to finish before Redis closes and
 the lock is released. The CLI emits one credential-safe JSON result and fixed
 exit codes. A systemd service/timer template invokes the CLI through
-`docker compose exec`, but the template is not installed or enabled, and
-application startup is not wired to refresh. No full refresh has populated the
-cache; the separate Sven probe remains evidence of access and sampled response
-shapes only.
+`docker compose exec`; application startup is not wired to refresh. Repository
+templates do not establish the installation state of a particular host. A
+historical local WSL deployment record reports a completed full refresh and an
+enabled guide timer, but does not establish that the timer fired successfully or
+that file storage and API hot reload were deployed. See the operations and
+evaluation references for the environment-specific evidence.
 
 The cache's persistence across process or Redis restarts depends on the deployed
 Redis AOF and persistent volume configuration. Offline tests use a fake Redis
 and do not verify AOF recovery or a live Redis deployment. The shared guide
 cache remains separate from session Artifacts.
 
-The current operator and deployment-template path is:
+The current guide-only update path is:
 
 ```text
-daily 03:00 Asia/Shanghai systemd timer template or operator CLI invocation
+operator CLI or a host-configured guide-only timer
   -> same-container non-blocking process lock
   -> implemented HeroGuideRefresher
+  -> Redis guide partitions
 ```
 
-The timer template is not installed or enabled. The process lock only protects
-refresh commands in the same API container; multi-container coordination is not
-implemented. The CLI is not an HTTP endpoint or model-facing tool.
+The process lock only protects refresh commands in the same API container;
+multi-container coordination is not implemented. The CLI is not an HTTP endpoint
+or model-facing tool. The repository timer template is deployment-specific, and
+its presence does not describe local WSL or other installed service state.
 
 Each implemented cache snapshot records its retrieval time; source-provided
 update fields remain in the retained source rows and projections. The cache
 entry separately records the latest attempt time and stable error code. It does
 not calculate availability or staleness. The implemented Guide Service marks a
-snapshot stale at an age of 36 hours or after a failed refresh attempt. The daily
-03:00 Asia/Shanghai schedule exists as an uninstalled systemd template; the
-operator CLI provides the manual path through the same executor. The lock
-prevents overlap only among CLI processes in one API container. No live full
-refresh has been run as part of this implementation.
+snapshot stale at an age of 36 hours or after a failed refresh attempt. The
+repository's guide-only timer template is configured for 03:00 Asia/Shanghai;
+installed schedules and their execution history are host-specific. The lock
+prevents overlap only among CLI processes in one API container.
 
-The implemented online path is read-only when Redis is available:
+The current online path is read-only when Redis is available:
 
 ```text
 Model -> hero.guide(hero_id, position, section)
@@ -259,6 +262,47 @@ snapshot; a batch reporting a different version causes a fixed `ValueError`. The
 cross-session guide cache is distinct from the process-local, session-owned
 Artifact store: Artifacts continue to hold oversized logical tool responses and
 are not the durable guide cache.
+
+## Shared data updates and API hot reload (confirmed target; implementation pending)
+
+The shared update task owns application-wide Valve entities, patch records,
+images, and D2PT guide partitions. Its planned responsibilities are:
+
+| Boundary | Target responsibility |
+|---|---|
+| Schedule and manual entry | Start one unified update daily at 03:00 Asia/Shanghai; the manual entry reuses the same update logic. |
+| Fetch and processing | Follow data dependencies, reuse fetched responses, and bound total Valve concurrency. Keep D2PT requests serial with a one-second interval. |
+| Publication | Publish the five-file entity catalog as one snapshot; publish guide partitions independently; process patch records and images separately. |
+| Persistence | Let the updater write the shared persistent data directory. Mount it durably across container recreation and keep API access read-only. |
+| Online reads | Load catalogs in the background and switch snapshots; read guides by partition. Queries never start a remote refresh. |
+
+```text
+schedule -> updater -> persistent data
+                         ↓
+                 API hot reload / file reads
+                         ↓
+                 business Service -> tool result
+```
+
+For catalog hot reload, each API process checks the published snapshot number
+every 30 seconds. If it is unchanged, the process does not reload the directory.
+For a new number, it loads and validates the complete snapshot in the background
+before swapping the in-memory repository reference. A failed load keeps the old
+reference active. Each query captures one repository snapshot at its start and
+uses it throughout that query, so one result cannot mix catalog versions.
+
+The shared snapshot path must back the internal entity-name resolver, catalog
+query capability, and chat image matching. Publishing a catalog never rewrites
+previously generated Artifacts. API processes may detect a publication at
+different checks within the 30-second interval; the design does not promise a
+simultaneous fleet-wide switch.
+
+Today, the API loads entity catalog files bundled with its code into a
+process-cached repository, guide queries use Redis, and the guide-only refresh
+CLI runs inside the API container. The
+shared writable data directory, file-backed guides, unified updater, and catalog
+hot reload are migration targets. They do not change the session Artifact
+storage contract.
 
 ## Runtime boundary
 

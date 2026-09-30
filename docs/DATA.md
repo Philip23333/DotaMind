@@ -55,6 +55,79 @@ catalog snapshot can still be published. Chat visual metadata is created only
 when the corresponding local image file exists; catalog name lookup does not
 depend on images.
 
+## Shared data storage and update target
+
+The current entity catalog is loaded from files bundled with the API code.
+`hero.guide` currently reads Redis snapshots, and its operator refresh CLI writes
+those snapshots. The persistent shared-file layout and update flow below are
+confirmed targets, not the current storage implementation. The conceptual data
+areas are `catalog`, `patches`, `images`, and `guides`; their eventual paths and
+configuration names belong to implementation work.
+
+### Catalog snapshot publication
+
+The entity catalog keeps its existing five JSON documents and their field
+structures:
+
+```text
+manifest.json
+dota2_heroes.json
+dota2_abilities.json
+dota2_items.json
+sync_audit.json
+```
+
+An update writes all five documents into a candidate catalog directory,
+validates the complete set, and only then atomically changes the reference to the
+current snapshot. Replacing each JSON file atomically does not make the five-file
+set an atomic publication. A failed write or validation must leave the current
+successful snapshot and its version unchanged. Retain at least the immediately
+previous successful catalog; the exact history limit is an implementation
+choice.
+
+Images are separate best-effort resources. A failed download keeps an existing
+image when present, and a missing image does not block catalog publication.
+Missing resources can be filled independently without fetching every entity
+again. Readers generate image metadata only for files that exist. Patch records
+are stored by patch version and do not share the catalog snapshot number.
+
+### Guide partition storage and migration
+
+The target file store preserves the current partition keys: Pub by hero and
+position, Pro by hero. A stored guide snapshot retains the exact raw response
+bytes, parsed source rows, DTO projection, retrieval time, most recent attempt
+time, and failure/status information. A valid empty response remains distinct
+from a missing partition. A failed attempt retains the last successful snapshot
+and exposes its failure metadata.
+
+The existing 36-hour stale rule remains query semantics; it is not a file TTL or
+deletion rule. Local-name enrichment remains at query time and is not written
+back into source guide snapshots. Migration imports Redis snapshots once, then
+verifies their raw bytes, source rows, DTOs, times, and states before the API
+switches to file reads. Do not rely on indefinite dual writes, and do not delete
+the old Redis guide data before migration acceptance. This migration does not
+change session, Run State, or Artifact storage.
+
+### Update cadence and version gates
+
+| Condition | Target behavior |
+|---|---|
+| Official latest patch equals the patch of the current successful catalog | Skip the full entity fetch by default. |
+| Official latest patch differs | Fetch, validate, and publish a new complete catalog snapshot. |
+| Patch-version check fails | Record an update failure; never interpret it as “unchanged.” |
+| A new catalog cannot be published | Keep the old success; retry the new version on the next run. |
+| Same-patch catalog is missing or corrupt, or an explicit forced refresh is requested | Allow the catalog to be regenerated. |
+| Images are missing | Fill missing images independently where possible; do not refetch all entities. |
+| Guide partitions | Update daily, independently of the entity-patch gate. |
+
+Skipping a full fetch for the same patch is DotaMind's update policy. It is not a
+Valve guarantee that entity content cannot change within one patch. Keep these
+values distinct in stored data and observations: the official latest patch, the
+patch of the last successfully published catalog, the catalog snapshot number,
+each guide source's scope and retrieval/attempt times, and the image-resource
+version. The sampled Valve endpoints and their limits are recorded in
+[`reference/valve-datafeed.md`](reference/valve-datafeed.md).
+
 ## Artifact retrieval
 
 `artifact.read` and `artifact.grep` are schema-neutral observation primitives.
@@ -108,8 +181,9 @@ Redis cache stores source snapshots and is wired to the application's existing
 Redis connection. HeroGuideService exposes cache-only queries through the
 conditionally registered hero.guide tool. An internal serial refresher connects
 the D2PT client, parsers, and cache. An operator-only CLI runs it on demand, and
-an uninstalled systemd service/timer template describes daily scheduling. The
-CLI is not a public endpoint or model tool.
+the repository systemd service/timer template describes daily scheduling. Host
+installation is separate; a historical WSL setup used its own WSL-path unit and
+enabled timer. The CLI is not a public endpoint or model tool.
 The input selects one `(hero_id, position)` pair, with a strict positive integer hero ID,
 a strict integer position from 1 through 5, and `section` equal to `all`,
 `items`, `skills`, or `pro_examples` (default `all`). It does not accept a hero
@@ -233,7 +307,8 @@ contained integer `ability_id=0` events. The earlier positive-only Pro event
 constraint rejected those complete responses; the current Pro parser preserves
 their non-negative IDs and event order without assigning a name or game
 meaning. This regression evidence covers only those three samples; it does not
-show that the other 68 failures from the previous full refresh are resolved.
+establish general parser coverage. A later local full-refresh record is separate
+deployment evidence, documented in [`EVALS.md`](EVALS.md).
 
 `RedisHeroGuideCache` is an independent storage component that receives an
 already fetched and parsed `GuideCacheSnapshot`; it does not call the client or
@@ -286,10 +361,12 @@ codes; exception details and credentials are not printed. The lock coordinates
 processes sharing one API container's `/tmp` only, not multiple API containers.
 On SIGINT/SIGTERM the CLI cancels the refresh coroutine, then waits for the
 default executor before closing Redis; cancellation does not forcibly stop an
-urllib request already running in its worker thread. The supplied systemd
-templates invoke this CLI daily at 03:00 Asia/Shanghai, but they have not been
-installed or enabled. No live full refresh has been run, so the CLI and templates
-have not populated deployed cache data.
+urllib request already running in its worker thread. The repository templates
+invoke this CLI daily at 03:00 Asia/Shanghai; their production paths do not
+describe local WSL installation state. A historical WSL record says its separate
+timer was enabled and a local full refresh populated guide data. This does not
+establish a successful scheduled firing, another deployment's cache contents, or
+the planned shared-file migration and API hot reload.
 
 The cache is connected to a read-only `HeroGuideService`, which the model-facing
 `hero.guide` tool exposes when the application injects the cache. The Service
