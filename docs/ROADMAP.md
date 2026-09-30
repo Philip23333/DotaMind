@@ -158,7 +158,12 @@ is:
    enrichment, and answer name matching to the loader. Each operation fixes one
    repository reference; a configured missing or invalid snapshot fails startup.
    This switches catalog-backed names only; it does not hot-reload image files.
-8. Split and reuse the Valve fetch script for catalog, patch, and image work.
+8. **Implemented first step:** move the existing Valve catalog, patch-record,
+   and image synchronization code into `app.integrations.valve.game_data_sync`,
+   retaining the script as a thin entrypoint and preserving current behavior.
+   Fetch-task splitting, shared response reuse, and a total concurrency bound
+   remain pending. The `--patch` argument does not fetch historical entity
+   attributes.
 9. Add the unified update entrypoint and patch-version gate.
 10. Connect the persistent data volume and one daily 03:00 Asia/Shanghai schedule.
 11. Deploy and verify persistent reads, API startup from that directory, and the

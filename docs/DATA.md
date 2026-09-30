@@ -97,6 +97,25 @@ under a caller-supplied data root. The API loader reads published snapshots when
 `DOTAMIND_DATA_DIR` is configured; publication is not connected to a unified
 updater, and no operational data root has been initialized.
 
+### Valve synchronization module
+
+The existing Valve catalog, patch-record, and image sync implementation is in
+`app.integrations.valve.game_data_sync`; `scripts/sync_game_data.py` is a thin
+compatibility entrypoint. This change only relocates the code and Chinese hero
+alias resource. Requests, normalization, ID filtering, worker bounds, retries,
+and image replacement behavior remain unchanged. The module resolves its alias
+resource and default Catalog and patch outputs from its own location, independent
+of the process working directory. Defaults still write to the repository's
+`app/data/catalog` and `app/data/patches`; the persistent snapshot store is not
+connected to this sync module.
+
+`--patch` still selects the patch label and patch-notes request; it does not
+retrieve historical hero, item, or ability attributes. Those detail endpoints
+continue to provide their current data. Importing the module does not create a
+client, make a request, create output directories, or run the command. Fetch-task
+splitting, response reuse, a total concurrency bound, patch-version gating, and
+persistent publication remain future work.
+
 `CatalogSnapshotLoader` loads the current complete snapshot at startup and then
 checks the pointer revision in the background, defaulting to a 30-second interval.
 With `DOTAMIND_DATA_DIR` configured, API startup waits for this first load and

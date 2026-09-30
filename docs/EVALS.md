@@ -348,6 +348,19 @@ stable store-error reasons. These tests do not write to the committed catalog,
 call providers, or establish power-loss recovery. API reads are covered by the
 separate loader and wiring tests.
 
+### Valve sync application module (offline acceptance)
+
+`test_valve_sync_entrypoint.py` verifies direct application-module import without
+sync side effects, both module and legacy-script `--help` entrypoints, default
+arguments, worker-range rejection, cwd-independent resource/output paths, the
+`--images-only` path, and that the old script contains only its bootstrap and
+forwarding call. The moved alias YAML has the same SHA-256 bytes as its prior
+script location. `test_dota_catalog_sync.py` also exercises Catalog/audit and
+recipe generation plus patch-record projection with fixed fake Datafeed input.
+These tests use no network and do not execute a real synchronization. They do not
+cover fetch-task splitting, total concurrency, patch gating, or persistent
+publication, which remain pending.
+
 The offline data-update CLI tests use temporary data roots and FakeRedis. They
 cover absolute data-root validation and argument-over-environment precedence,
 first catalog initialization, safe skip on a valid existing pointer, corrupt

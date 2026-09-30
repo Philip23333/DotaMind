@@ -342,6 +342,16 @@ initialization or Redis migration has been run. The API reads guide files when
 Redis is configured; without either store the tool is absent. The existing timer
 still uses Redis. Do not schedule both refresh commands daily.
 
+The existing Valve catalog, patch-record, and image sync implementation now lives
+in `app.integrations.valve.game_data_sync`. The legacy
+`scripts/sync_game_data.py` remains a thin entrypoint to that module. This is a
+code relocation: request selection, normalization, worker bounds, image handling,
+and the default bundled output paths are unchanged. Its `--patch` option still
+does not fetch historical hero, item, or ability attributes; those details come
+from the current Datafeed endpoints. Importing the application module performs no
+sync work. Fetch-task splitting, shared response reuse, persistent publication,
+and the unified updater remain pending.
+
 ```text
 schedule -> updater -> persistent data
                          ↓

@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 
+from app.integrations.valve import game_data_sync as sync_game_data
 from app.integrations.valve.catalog import (
     AbilityCatalogRecord,
     CatalogBundle,
@@ -28,7 +29,6 @@ from app.integrations.valve.catalog import (
 )
 from app.integrations.valve.catalog_repository import CatalogLookupError, DotaCatalogRepository
 from app.integrations.valve.datafeed import ValveDatafeedClient
-from scripts import sync_game_data
 
 
 class _Response(io.BytesIO):
@@ -1384,3 +1384,117 @@ def test_runtime_repository_ignores_audit_and_excluded_item_remains_missing(
     with pytest.raises(CatalogLookupError, match="item not found: 825"):
         repository.get_item(825)
     assert repository.resolve_item("Ascetic's Cap")["status"] == "not_found"
+
+
+def test_sync_builder_and_patch_projection_preserve_fixed_fake_source_results() -> None:
+    summary_825_en, summary_825_zh, detail_825_en, detail_825_zh = (
+        _ascetic_cap_exclusion_fixture()
+    )
+    summaries = {
+        "english": [
+            {"id": 1, "name": "item_blink", "name_loc": "Blink", "recipes": []},
+            {
+                "id": 2,
+                "name": "item_recipe_blink",
+                "name_loc": "Blink Recipe",
+                "recipes": [{"items": [3]}],
+            },
+            {"id": 3, "name": "item_component", "name_loc": "Component", "recipes": []},
+            summary_825_en,
+        ],
+        "schinese": [
+            {"id": 1, "name": "item_blink", "name_loc": "闪烁匕首", "recipes": []},
+            {
+                "id": 2,
+                "name": "item_recipe_blink",
+                "name_loc": "闪烁匕首卷轴",
+                "recipes": [{"items": [3]}],
+            },
+            {"id": 3, "name": "item_component", "name_loc": "合成材料", "recipes": []},
+            summary_825_zh,
+        ],
+    }
+    details: dict[str, dict[int, dict[str, Any]]] = {"english": {}, "schinese": {}}
+    for language, display_names in (
+        ("english", {1: "Blink", 2: "Blink Recipe", 3: "Component"}),
+        ("schinese", {1: "闪烁匕首", 2: "闪烁匕首卷轴", 3: "合成材料"}),
+    ):
+        for item_id, internal_name in (
+            (1, "item_blink"),
+            (2, "item_recipe_blink"),
+            (3, "item_component"),
+        ):
+            details[language][item_id] = {
+                "id": item_id,
+                "name": internal_name,
+                "name_loc": display_names[item_id],
+                "desc_loc": "",
+                "special_values": [],
+                "item_cost": 100 if item_id != 2 else 0,
+            }
+    details["english"][825] = detail_825_en
+    details["schinese"][825] = detail_825_zh
+
+    class FakeSyncClient:
+        def herolist(self, _language: str) -> dict[str, Any]:
+            return {"result": {"data": {"heroes": []}}}
+
+        def abilitylist(self, _language: str) -> dict[str, Any]:
+            return {"result": {"data": {"itemabilities": []}}}
+
+        def itemlist(self, language: str) -> dict[str, Any]:
+            return {"result": {"data": {"itemabilities": summaries[language]}}}
+
+        def itemdata(self, item_id: int, language: str) -> dict[str, Any]:
+            return {"result": {"data": {"items": [details[language][item_id]]}}}
+
+        def patchnotes(self, _patch: str, _language: str) -> dict[str, Any]:
+            return {
+                "patch_number": "7.41f",
+                "patch_timestamp": 100,
+                "general_notes": [],
+                "items": [
+                    {
+                        "ability_id": 1,
+                        "title": "Blink",
+                        "ability_notes": [{"note": "Cooldown decreased from 15 to 12"}],
+                    }
+                ],
+                "neutral_items": [],
+                "heroes": [],
+            }
+
+    generated_at = datetime(2026, 9, 30, 12, 0, tzinfo=timezone.utc)
+    client = FakeSyncClient()
+    bundle = sync_game_data._build_catalog_snapshot(
+        client, "7.41f", workers=1, generated_at=generated_at
+    )
+
+    assert bundle.manifest.patch == "7.41f"
+    assert bundle.manifest.generated_at == generated_at
+    assert bundle.manifest.entity_counts == {"heroes": 0, "abilities": 0, "items": 3}
+    assert [edge.model_dump(mode="json") for edge in bundle.recipes] == [
+        {"recipe_item_id": 2, "component_item_ids": [3], "upgrade_item_ids": [1]}
+    ]
+    blink = next(item for item in bundle.items if item.item_id == 1)
+    blink_recipe = next(item for item in bundle.items if item.item_id == 2)
+    assert blink.recipe_component_ids == [3]
+    assert blink_recipe.upgrade_item_ids == [1]
+    assert [item.entity_id for item in bundle.sync_audit.excluded_entities] == [825]
+    assert bundle.sync_audit.patch == bundle.manifest.patch
+    assert bundle.sync_audit.generated_at == generated_at
+
+    patch_records = sync_game_data._build_patch_records(client, "7.41f")
+    assert patch_records["patch"] == "7.41f"
+    assert patch_records["released_at"] == "1970-01-01T00:01:40Z"
+    assert patch_records["changes"] == [
+        {
+            "target_type": "item",
+            "target": "blink",
+            "field": "cooldown",
+            "polarity": "buff",
+            "raw": "Cooldown decreased from 15 to 12",
+            "target_display_name": "Blink",
+            "source_id": 1,
+        }
+    ]
