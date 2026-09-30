@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
 
@@ -43,8 +44,8 @@ from app.vnext.tools.registry import ToolRegistry
 _NOW = datetime(2026, 9, 28, 3, 0, tzinfo=UTC)
 
 
-def _resolver() -> EntityNameResolver:
-    return EntityNameResolver(load_default_catalog_repository())
+def _resolver() -> Callable[[], EntityNameResolver]:
+    return lambda: EntityNameResolver(load_default_catalog_repository())
 
 
 def _result() -> HeroGuideResult:
@@ -311,12 +312,12 @@ def test_hero_guide_auto_externalizes_and_artifact_read_returns_both_sources() -
     stored_example = stored["pro_examples"][0]
     assert stored_starting_item["name"] == "source label"
     assert stored_starting_item["resolved_name"]["name_en"] == expected_item.name_en
-    assert stored_skill["name_en"] == expected_ability.name_en
+    assert stored_skill["name_en"] == (expected_ability.name_en or None)
     assert stored_example["item_timeline"][0]["resolved_name"]["name_en"] == (
         expected_item.name_en
     )
     assert stored_example["ability_timeline"][0]["resolved_name"]["name_en"] == (
-        expected_ability.name_en
+        expected_ability.name_en or None
     )
     assert stored["catalog_version"]["source"] == "valve_dota2_datafeed"
     assert "raw_body" not in stored
@@ -363,7 +364,7 @@ def test_hero_guide_auto_externalizes_and_artifact_read_returns_both_sources() -
     )
     assert (
         pub_read.content["value"][0]["skill_sequences"][0]["abilities"][0]["name_en"]
-        == expected_ability.name_en
+        == (expected_ability.name_en or None)
     )
     assert pro_read.status == "ok"
     assert pro_read.content["value"][0]["source_match_id"] == 1
@@ -373,5 +374,5 @@ def test_hero_guide_auto_externalizes_and_artifact_read_returns_both_sources() -
     )
     assert (
         pro_read.content["value"][0]["ability_timeline"][0]["resolved_name"]["name_en"]
-        == expected_ability.name_en
+        == (expected_ability.name_en or None)
     )

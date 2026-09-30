@@ -77,7 +77,7 @@ def _services(
     recent_games=None,
     game_detail=None,
 ) -> VNextServices:
-    catalog = ValveCatalogLookupAdapter(load_default_catalog_repository())
+    catalog = ValveCatalogLookupAdapter(load_default_catalog_repository)
     return VNextServices(
         player_profile=profile,
         player_recent_games=recent_games,

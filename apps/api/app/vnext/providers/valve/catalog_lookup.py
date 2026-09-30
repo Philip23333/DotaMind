@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from app.integrations.valve.catalog_repository import (
     CatalogLookupError,
     DotaCatalogRepository,
@@ -15,17 +17,21 @@ from app.vnext.capabilities.catalog.lookup import (
 
 
 class ValveCatalogLookupAdapter:
-    def __init__(self, repository: DotaCatalogRepository) -> None:
-        self.repository = repository
+    def __init__(
+        self,
+        repository_provider: Callable[[], DotaCatalogRepository],
+    ) -> None:
+        self._repository_provider = repository_provider
 
     async def lookup(self, query: CatalogLookupInput) -> CatalogLookupResult:
+        repository = self._repository_provider()
         entries = []
         for identifier in query.ids:
             try:
                 record = (
-                    self.repository.get_hero(identifier)
+                    repository.get_hero(identifier)
                     if query.kind == "hero"
-                    else self.repository.get_item(identifier)
+                    else repository.get_item(identifier)
                 )
             except CatalogLookupError:
                 entries.append(
@@ -47,7 +53,7 @@ class ValveCatalogLookupAdapter:
                 )
             )
 
-        metadata = self.repository.snapshot_metadata()
+        metadata = repository.snapshot_metadata()
         return CatalogLookupResult(
             kind=query.kind,
             catalog_version=CatalogVersion(

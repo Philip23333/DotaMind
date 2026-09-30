@@ -274,7 +274,7 @@ cross-session guide cache is distinct from the process-local, session-owned
 Artifact store: Artifacts continue to hold oversized logical tool responses and
 are not the durable guide cache.
 
-## Shared data updates and API hot reload (standalone storage, reload, and operator entrypoints implemented; integration pending)
+## Shared data updates and API hot reload (catalog API integration implemented; updater and deployment pending)
 
 The shared update task owns application-wide Valve entities, patch records,
 images, and D2PT guide partitions. Its planned responsibilities are:
@@ -287,23 +287,21 @@ images, and D2PT guide partitions. Its planned responsibilities are:
 | Persistence | Let the updater write the shared persistent data directory. Mount it durably across container recreation and keep API access read-only. |
 | Online reads | Load catalogs in the background and switch snapshots; read guides by partition. Queries never start a remote refresh. |
 
-The standalone `CatalogSnapshotStore` now copies the five catalog JSON files
-byte-for-byte into immutable UUID-revision directories, validates the copied
-catalog and sync audit, and atomically replaces `catalog/current.json` only
-after the complete revision can be loaded by `DotaCatalogRepository`. A failed
-publication leaves the prior pointer intact. This component is not connected to
-an updater, an application data-root setting, or API hot reload; it does not
-claim power-loss recovery.
+`CatalogSnapshotStore` copies the five catalog JSON files byte-for-byte into
+immutable UUID-revision directories, validates the copied catalog and sync audit,
+and atomically replaces `catalog/current.json` only after the complete revision
+can be loaded by `DotaCatalogRepository`. A failed publication leaves the prior
+pointer intact. It does not claim power-loss recovery.
 
-The independent `CatalogSnapshotLoader` loads and validates the pointed snapshot
-before starting its poller. It checks only the pointer by default every 30 seconds;
-when the revision changes, it loads the complete snapshot in a worker thread and
-switches one in-memory `CatalogSnapshot` reference after validation. An unchanged
-revision does not reload the five files. A failed check or load keeps the previous
-snapshot available, and stopping waits for an in-flight refresh to finish. The
-loader is not connected to API lifecycle, resolver, catalog tools, image matching,
-or guide reads. The 30-second value is a check interval, not a bound on validation
-or IO completion time.
+`CatalogSnapshotLoader` loads and validates the pointed snapshot before starting
+its poller. When `DOTAMIND_DATA_DIR` is configured as an absolute path, API startup
+uses this loader and fails if its current snapshot is missing or invalid. The
+loader checks only the pointer by default every 30 seconds; when the revision
+changes, it loads the complete snapshot in a worker thread and switches one
+in-memory `CatalogSnapshot` reference after validation. An unchanged revision
+does not reload the five files. A failed check or load keeps the previous snapshot
+available, and stopping waits for an in-flight refresh to finish. The check
+interval is not a bound on validation or IO completion time.
 
 The operator module `python -m app.vnext.data_updates` exposes `init-catalog`
 and `migrate-guides`. The former publishes the bundled or explicitly selected
@@ -315,8 +313,8 @@ environment. A non-blocking data-root lock protects both commands, and guide
 migration also takes the existing refresh lock in data-lock-then-refresh-lock
 order. The refresh lock is container-local, so migration must run in the same
 API container as the guide refresh CLI. These commands are offline-verifiable
-entrypoints only: no real initialization or Redis migration has been run, and
-the API, refresh CLI, and timer still use their existing paths.
+entrypoints only: no real initialization or Redis migration has been run. The
+guide refresh CLI and timer still use Redis.
 
 ```text
 schedule -> updater -> persistent data
@@ -326,26 +324,30 @@ schedule -> updater -> persistent data
                  business Service -> tool result
 ```
 
-When API wiring is added, each process should use the loader's current snapshot.
-Each query must capture that reference once and use its repository throughout the
-query, so one result cannot mix catalog versions. The standalone loader supports
-this reference pattern, but existing API consumers have not been switched and
-have not been verified to follow it.
+With a configured data directory, composition and answer presentation receive the
+same callable that returns the loader's current repository. `catalog.lookup`
+captures one repository per invocation; `hero.guide` creates one resolver before
+its first cache read; and each answer-text match obtains one repository. Each
+operation keeps that reference for its full duration, so a result cannot mix
+catalog versions. Presentation rebuilds its current name-match records when the
+repository object changes, including publications with the same patch number.
 
-The shared snapshot path must back the internal entity-name resolver, catalog
-query capability, and chat image matching. Publishing a catalog never rewrites
-previously generated Artifacts. API processes may detect a publication at
-different checks within the 30-second interval; the design does not promise a
-simultaneous fleet-wide switch.
+The configured snapshot backs the internal entity-name resolver, catalog query
+capability, and chat name matching. This only hot-reloads names; image files and
+image URL availability continue to use the existing bundled-resource behavior.
+Publishing a catalog never rewrites previously generated Artifacts. API processes
+may detect a publication at different checks within the 30-second interval; the
+design does not promise a simultaneous fleet-wide switch.
 
-Today, the API still loads entity catalog files bundled with its code into a
-process-cached repository, guide queries use Redis, and the guide-only refresh
-CLI runs inside the API container. The standalone stores, loader, and manual
-initialization/import CLI do not change those read paths; neither operator command
-has been run against the deployment data directory. Automatic updates,
-file-backed API reads, the unified updater, and API lifecycle/consumer integration
-remain migration targets. They do not change the session Artifact storage
-contract.
+When `DOTAMIND_DATA_DIR` is unset, the API uses its existing bundled catalog
+repository. When set, it must name an absolute path containing a valid published
+snapshot; startup does not create or initialize the directory and does not fall
+back to bundled data on error. Guide snapshots and the guide refresh CLI still use
+Redis. No operational data directory has been initialized, no Redis migration has
+been run, and no persistent container mount or scheduled unified updater has been
+accepted. Guide file reads/writes, image-resource hot reload, automatic updates,
+and deployment verification remain pending. These changes do not alter the
+session Artifact storage contract.
 
 ## Runtime boundary
 

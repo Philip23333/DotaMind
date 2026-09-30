@@ -1,8 +1,16 @@
 """Deterministic local-catalog enrichment tests for product chat presentation."""
 
+import json
+import shutil
+from pathlib import Path
+
 import pytest
 
-from app.integrations.valve.catalog_repository import load_default_catalog_repository
+from app.integrations.valve.catalog_repository import (
+    CATALOG_DIR,
+    load_default_catalog_repository,
+)
+from app.vnext.data_updates.catalog_store import CatalogSnapshotStore
 from app.vnext.product import presentation
 from app.vnext.product.presentation import DotaVisualEntityEnricher
 
@@ -71,3 +79,63 @@ def test_missing_ability_image_keeps_catalog_name_lookup_but_emits_no_icon(
     assert [(entity.kind, entity.imagePath) for entity in entities] == [
         ("ability", "/api/v1/assets/dota/abilities/5442.png")
     ]
+
+
+def test_presentation_rebuilds_names_when_same_patch_repository_changes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source_a = tmp_path / "source-a"
+    source_a.mkdir()
+    catalog_files = (
+        "manifest.json",
+        "dota2_heroes.json",
+        "dota2_abilities.json",
+        "dota2_items.json",
+        "sync_audit.json",
+    )
+    for filename in catalog_files:
+        shutil.copyfile(CATALOG_DIR / filename, source_a / filename)
+
+    source_b = tmp_path / "source-b"
+    shutil.copytree(source_a, source_b)
+    hero_path = source_b / "dota2_heroes.json"
+    heroes = json.loads(hero_path.read_text(encoding="utf-8"))
+    next(hero for hero in heroes if hero["hero_id"] == 18)["name_en"] = (
+        "Sven Presentation Snapshot B"
+    )
+    hero_path.write_text(json.dumps(heroes, ensure_ascii=False), encoding="utf-8")
+
+    store = CatalogSnapshotStore(tmp_path / "persistent-data")
+    first = store.publish_from_directory(source_a)
+    second = store.publish_from_directory(source_b)
+    assert first.repository.snapshot_metadata()["patch"] == (
+        second.repository.snapshot_metadata()["patch"]
+    )
+
+    image_root = tmp_path / "images"
+    hero_image = image_root / "images" / "heroes" / "18.png"
+    hero_image.parent.mkdir(parents=True)
+    hero_image.write_bytes(b"local image")
+    monkeypatch.setattr(presentation, "CATALOG_DIR", image_root)
+
+    current = [first.repository]
+    provider_calls = 0
+
+    def repository_provider():
+        nonlocal provider_calls
+        provider_calls += 1
+        return current[0]
+
+    enricher = DotaVisualEntityEnricher(repository_provider)
+    first_name = first.repository.get_hero(18).name_en
+    assert any(entity.kind == "hero" for entity in enricher.match(first_name))
+
+    current[0] = second.repository
+    assert enricher.match(first_name) == []
+    matches = enricher.match("Sven Presentation Snapshot B")
+
+    assert len(matches) == 1
+    assert matches[0].kind == "hero"
+    assert "Sven Presentation Snapshot B" in matches[0].names
+    assert provider_calls == 3

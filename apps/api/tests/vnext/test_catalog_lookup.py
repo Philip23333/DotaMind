@@ -14,7 +14,7 @@ from app.vnext.providers.valve.catalog_lookup import ValveCatalogLookupAdapter
 
 def test_catalog_lookup_maps_exact_hero_and_item_ids_with_snapshot_version() -> None:
     repository = load_default_catalog_repository()
-    adapter = ValveCatalogLookupAdapter(repository)
+    adapter = ValveCatalogLookupAdapter(lambda: repository)
 
     hero = asyncio.run(adapter.lookup(CatalogLookupInput(kind="hero", ids=[1, 2**31 - 1])))
     item = asyncio.run(adapter.lookup(CatalogLookupInput(kind="item", ids=[1, 2**31 - 1])))
@@ -39,6 +39,30 @@ def test_catalog_lookup_maps_exact_hero_and_item_ids_with_snapshot_version() -> 
     assert hero.catalog_version.generated_at == repository.manifest.generated_at
     assert hero.catalog_version.source == "valve_dota2_datafeed"
     assert item.kind == "item"
+
+
+def test_catalog_lookup_uses_one_repository_for_all_ids_and_version() -> None:
+    repository = load_default_catalog_repository()
+    provider_calls: list[int] = []
+
+    def repository_provider():
+        provider_calls.append(1)
+        return repository
+
+    adapter = ValveCatalogLookupAdapter(repository_provider)
+    result = asyncio.run(
+        adapter.lookup(CatalogLookupInput(kind="hero", ids=[1, 2, 2**31 - 1]))
+    )
+
+    assert provider_calls == [1]
+    assert [entry.name_en for entry in result.entries[:2]] == [
+        repository.get_hero(1).name_en,
+        repository.get_hero(2).name_en,
+    ]
+    assert result.catalog_version.patch == repository.snapshot_metadata()["patch"]
+    assert result.catalog_version.generated_at.isoformat() == repository.snapshot_metadata()[
+        "generated_at"
+    ]
 
 
 def test_catalog_lookup_input_is_closed_bounded_and_uses_positive_integer_ids() -> None:

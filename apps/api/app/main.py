@@ -1,5 +1,6 @@
 import logging
-from contextlib import asynccontextmanager
+from collections.abc import Callable
+from contextlib import AsyncExitStack, asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
@@ -26,6 +27,7 @@ from app.application.redis_session_store import RedisSessionStore
 from app.application.run_recovery import RunStaleSweeper
 from app.application.session_store_factory import build_session_store
 from app.core.config import get_policy, get_settings
+from app.integrations.valve.catalog_repository import DotaCatalogRepository
 from app.persistence.database import (
     close_database,
     create_database_resources,
@@ -37,6 +39,8 @@ from app.vnext.composition import (
     build_vnext_services,
     initialize_vnext_services,
 )
+from app.vnext.data_updates.catalog_loader import CatalogSnapshotLoader
+from app.vnext.data_updates.catalog_store import CatalogSnapshotStore
 from app.vnext.hero_guides.cache import RedisHeroGuideCache
 from app.vnext.product import (
     ConversationContextBuilder,
@@ -100,124 +104,146 @@ for handler in logging.getLogger().handlers:
 async def lifespan(app: FastAPI):
     vnext_settings = VNextSettings.from_env()
     _require_trace_recording_redis(vnext_settings, settings.redis_url)
-    database = create_database_resources(settings.database_url)
-    await ping_database(database.engine)
-    store = build_session_store(settings, get_policy())
-    if isinstance(store, RedisSessionStore):
-        await store.ping()
-    from app.application.plan_service import PlanService
+    cleanup = AsyncExitStack()
+    try:
+        catalog_repository_provider: Callable[[], DotaCatalogRepository] | None = None
+        if vnext_settings.data_dir is not None:
+            catalog_loader = CatalogSnapshotLoader(
+                CatalogSnapshotStore(vnext_settings.data_dir)
+            )
+            cleanup.push_async_callback(catalog_loader.stop)
+            await catalog_loader.start()
+            catalog_repository_provider = _repository_provider_for_loader(catalog_loader)
 
-    app.state.chat_repository = PostgresChatRepository(database.session_factory)
-    vnext_redis = None
-    trace_store = None
-    if settings.redis_url:
-        from redis.asyncio import from_url
+        database = create_database_resources(settings.database_url)
+        await ping_database(database.engine)
+        store = build_session_store(settings, get_policy())
+        if isinstance(store, RedisSessionStore):
+            await store.ping()
+        from app.application.plan_service import PlanService
 
-        vnext_redis = from_url(settings.redis_url, decode_responses=True)
-        await vnext_redis.ping()
-        trace_store = RedisTraceStore(
-            vnext_redis,
-            ttl_seconds=vnext_settings.trace_ttl_seconds,
+        app.state.chat_repository = PostgresChatRepository(database.session_factory)
+        vnext_redis = None
+        trace_store = None
+        if settings.redis_url:
+            from redis.asyncio import from_url
+
+            vnext_redis = from_url(settings.redis_url, decode_responses=True)
+            await vnext_redis.ping()
+            trace_store = RedisTraceStore(
+                vnext_redis,
+                ttl_seconds=vnext_settings.trace_ttl_seconds,
+            )
+        hero_guide_cache = (
+            RedisHeroGuideCache(vnext_redis) if vnext_redis is not None else None
         )
-    hero_guide_cache = RedisHeroGuideCache(vnext_redis) if vnext_redis is not None else None
-    vnext_services = build_vnext_services(
-        vnext_settings,
-        hero_guide_cache=hero_guide_cache,
-    )
-    await initialize_vnext_services(vnext_settings, vnext_services)
-    app.state.vnext_services = vnext_services
-    app.state.vnext_runtime = build_vnext_runtime(services=vnext_services)
-    app.state.vnext_chat_service = VNextChatService(
-        app.state.chat_repository,
-        app.state.vnext_runtime,
-        ConversationContextBuilder(),
-        DotaVisualEntityEnricher(),
-        trace_store=trace_store,
-        runtime_factory=lambda: build_vnext_runtime(services=vnext_services),
-        trace_ttl_seconds=vnext_settings.trace_ttl_seconds,
-        test_recording_enabled=vnext_settings.test_recording_enabled,
-    )
-    app.state.chat_run_repository = PostgresChatRunRepository(database.session_factory)
-    app.state.session_store = store
-    app.state.conversation_memory = ConversationMemoryService(
-        chat_repository=app.state.chat_repository,
-        session_store=store,
-        max_chars=get_policy().conversation.recent_dialogue_max_chars,
-    )
-    app.state.plan_service = PlanService()
-    run_event_bus = None
-    run_manager = None
-    run_sweeper = None
-    if settings.redis_url:
-        run_event_bus = RedisRunEventBus(redis_url=settings.redis_url)
-        await run_event_bus.ping()
-        worker_id = str(uuid4())
-
-        async def mark_shutdown_interrupted(run_id):
-            try:
-                await app.state.chat_run_repository.mark_interrupted(
-                    run_id=run_id,
-                    error_code="worker_shutdown",
-                    worker_id=worker_id,
-                )
-            except Exception:
-                return
-
-        run_manager = BackgroundRunManager(
-            max_concurrent_runs=settings.max_concurrent_chat_runs,
-            worker_id=worker_id,
-            on_shutdown=mark_shutdown_interrupted,
-            cancel_subscriber=run_event_bus.subscribe_cancellations,
+        vnext_services = build_vnext_services(
+            vnext_settings,
+            hero_guide_cache=hero_guide_cache,
+            catalog_repository_provider=catalog_repository_provider,
         )
-        executor = ChatRunExecutor(
-            runner=app.state.plan_service.runner,
-            run_repository=app.state.chat_run_repository,
+        await initialize_vnext_services(vnext_settings, vnext_services)
+        app.state.vnext_services = vnext_services
+        app.state.vnext_runtime = build_vnext_runtime(services=vnext_services)
+        app.state.vnext_chat_service = VNextChatService(
+            app.state.chat_repository,
+            app.state.vnext_runtime,
+            ConversationContextBuilder(),
+            DotaVisualEntityEnricher(catalog_repository_provider),
+            trace_store=trace_store,
+            runtime_factory=lambda: build_vnext_runtime(services=vnext_services),
+            trace_ttl_seconds=vnext_settings.trace_ttl_seconds,
+            test_recording_enabled=vnext_settings.test_recording_enabled,
+        )
+        app.state.chat_run_repository = PostgresChatRunRepository(database.session_factory)
+        app.state.session_store = store
+        app.state.conversation_memory = ConversationMemoryService(
             chat_repository=app.state.chat_repository,
             session_store=store,
-            memory_service=app.state.conversation_memory,
-            event_bus=run_event_bus,
-            worker_id=worker_id,
-            history_lookup_max_turns=get_policy().conversation.history_lookup_max_turns,
-            history_lookup_max_chars=get_policy().conversation.history_lookup_max_chars,
-            build_turn=app.state.plan_service._build_turn,
-            build_response=lambda state, session_id: app.state.plan_service._public_response(
-                state,
-                session_id=session_id,
-            ),
-            heartbeat_interval_seconds=settings.run_heartbeat_seconds,
+            max_chars=get_policy().conversation.recent_dialogue_max_chars,
         )
-        app.state.chat_run_runtime = ChatRunRuntime(
-            repository=app.state.chat_run_repository,
-            manager=run_manager,
-            executor=executor,
-            event_bus=run_event_bus,
-        )
-        await run_manager.start()
-        run_sweeper = RunStaleSweeper(
-            repository=app.state.chat_run_repository,
-            stale_after_seconds=settings.run_stale_seconds,
-            interval_seconds=settings.run_sweeper_interval_seconds,
-        )
-        await run_sweeper.start()
-    else:
-        # The Run API is intentionally unavailable without Redis; no memory
-        # event-bus fallback is allowed by the V3.3-2 contract.
-        app.state.chat_run_runtime = None
-    app.state.chat_run_event_bus = run_event_bus
-    try:
-        yield
+        app.state.plan_service = PlanService()
+        run_event_bus = None
+        run_manager = None
+        run_sweeper = None
+        if settings.redis_url:
+            run_event_bus = RedisRunEventBus(redis_url=settings.redis_url)
+            await run_event_bus.ping()
+            worker_id = str(uuid4())
+
+            async def mark_shutdown_interrupted(run_id):
+                try:
+                    await app.state.chat_run_repository.mark_interrupted(
+                        run_id=run_id,
+                        error_code="worker_shutdown",
+                        worker_id=worker_id,
+                    )
+                except Exception:
+                    return
+
+            run_manager = BackgroundRunManager(
+                max_concurrent_runs=settings.max_concurrent_chat_runs,
+                worker_id=worker_id,
+                on_shutdown=mark_shutdown_interrupted,
+                cancel_subscriber=run_event_bus.subscribe_cancellations,
+            )
+            executor = ChatRunExecutor(
+                runner=app.state.plan_service.runner,
+                run_repository=app.state.chat_run_repository,
+                chat_repository=app.state.chat_repository,
+                session_store=store,
+                memory_service=app.state.conversation_memory,
+                event_bus=run_event_bus,
+                worker_id=worker_id,
+                history_lookup_max_turns=get_policy().conversation.history_lookup_max_turns,
+                history_lookup_max_chars=get_policy().conversation.history_lookup_max_chars,
+                build_turn=app.state.plan_service._build_turn,
+                build_response=lambda state, session_id: app.state.plan_service._public_response(
+                    state,
+                    session_id=session_id,
+                ),
+                heartbeat_interval_seconds=settings.run_heartbeat_seconds,
+            )
+            app.state.chat_run_runtime = ChatRunRuntime(
+                repository=app.state.chat_run_repository,
+                manager=run_manager,
+                executor=executor,
+                event_bus=run_event_bus,
+            )
+            await run_manager.start()
+            run_sweeper = RunStaleSweeper(
+                repository=app.state.chat_run_repository,
+                stale_after_seconds=settings.run_stale_seconds,
+                interval_seconds=settings.run_sweeper_interval_seconds,
+            )
+            await run_sweeper.start()
+        else:
+            # The Run API is intentionally unavailable without Redis; no memory
+            # event-bus fallback is allowed by the V3.3-2 contract.
+            app.state.chat_run_runtime = None
+        app.state.chat_run_event_bus = run_event_bus
+        try:
+            yield
+        finally:
+            if run_sweeper is not None:
+                await run_sweeper.stop()
+            if run_manager is not None:
+                await run_manager.shutdown()
+            if run_event_bus is not None:
+                await run_event_bus.aclose()
+            if vnext_redis is not None:
+                await vnext_redis.aclose()
+            await vnext_services.aclose()
+            await store.aclose()
+            await close_database(database)
     finally:
-        if run_sweeper is not None:
-            await run_sweeper.stop()
-        if run_manager is not None:
-            await run_manager.shutdown()
-        if run_event_bus is not None:
-            await run_event_bus.aclose()
-        if vnext_redis is not None:
-            await vnext_redis.aclose()
-        await vnext_services.aclose()
-        await store.aclose()
-        await close_database(database)
+        await cleanup.aclose()
+
+
+def _repository_provider_for_loader(
+    loader: CatalogSnapshotLoader,
+) -> Callable[[], DotaCatalogRepository]:
+    return lambda: loader.current().repository
 
 
 app = FastAPI(

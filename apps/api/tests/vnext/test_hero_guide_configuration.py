@@ -35,8 +35,9 @@ def test_hero_guide_is_registered_only_when_cache_is_injected() -> None:
     with_cache = build_vnext_services(settings, hero_guide_cache=cache)  # type: ignore[arg-type]
     service = with_cache.hero_guide.__self__  # type: ignore[union-attr]
     assert service._cache is cache
-    catalog_repository = with_cache.catalog_lookup.__self__.repository  # type: ignore[union-attr]
-    assert service._resolver._repository is catalog_repository
+    repository_provider = with_cache.catalog_lookup.__self__._repository_provider  # type: ignore[union-attr]
+    catalog_repository = repository_provider()
+    assert service._resolver_factory()._repository is catalog_repository
     assert cache.reads == []
 
     catalog_lookup_calls: list[object] = []
@@ -190,9 +191,18 @@ def test_application_lifespan_wraps_its_existing_redis_client_for_hero_guides(
     captured_caches: list[object] = []
     original_builder = main.build_vnext_services
 
-    def capture_builder(settings: VNextSettings, *, hero_guide_cache=None):
+    def capture_builder(
+        settings: VNextSettings,
+        *,
+        hero_guide_cache=None,
+        catalog_repository_provider=None,
+    ):
         captured_caches.append(hero_guide_cache)
-        return original_builder(settings, hero_guide_cache=hero_guide_cache)
+        return original_builder(
+            settings,
+            hero_guide_cache=hero_guide_cache,
+            catalog_repository_provider=catalog_repository_provider,
+        )
 
     monkeypatch.setattr(main, "build_vnext_services", capture_builder)
     monkeypatch.setattr(main, "initialize_vnext_services", no_op)

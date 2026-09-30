@@ -295,8 +295,10 @@ in source order and each receives an independent name object. ID zero stays
 `unknown` with empty names; unknown IDs do not remove events or skill entries.
 This enrichment runs at query time and is not written into guide snapshots. It
 does not call the separate `catalog.lookup` tool. Names identify the local Valve
-catalog, not D2PT or OpenDota source fields. Once hot reload is implemented, a
-query will use the catalog snapshot captured at its start.
+catalog, not D2PT or OpenDota source fields. When `DOTAMIND_DATA_DIR` is
+configured, each query creates its resolver from the active snapshot before the
+first cache read and keeps it for that query; without the setting it uses the
+bundled catalog repository.
 The current operator-only command `python -m app.vnext.hero_guides refresh`
 invokes the guide-only serial refresher using `DOTAMIND_REDIS_URL` from the
 process environment. It is not a model-facing tool or HTTP endpoint. The future
@@ -353,13 +355,14 @@ live cross-check for `8960882635` supports the ID mapping for that observed
 match only; this implementation has not yet been tested against live OpenDota.
 
 `catalog.lookup(kind, ids)` resolves up to 20 exact positive hero or item IDs
-against the locally bundled Valve Dota 2 catalog snapshot. It returns each
-requested ID as `found` or `unknown`, optional English/Chinese display labels,
-and the snapshot version. Today it reads the locally bundled Valve snapshot.
-After catalog hot reload is implemented, each query will capture the active
-snapshot once and use it throughout. These names are local catalog labels, not
-fields returned by STRATZ or OpenDota; unknown IDs remain unknown. The lookup
-does not modify match-detail data and makes no network request.
+against the active local Valve Dota 2 catalog snapshot. It returns each requested
+ID as `found` or `unknown`, optional English/Chinese display labels, and the
+snapshot version. With `DOTAMIND_DATA_DIR` unset, it uses the bundled snapshot;
+when configured, it uses the file-backed snapshot managed by the API loader. Each
+lookup captures one repository and uses it for all IDs and version metadata.
+These names are local catalog labels, not fields returned by STRATZ or OpenDota;
+unknown IDs remain unknown. The lookup does not modify match-detail data and
+makes no network request.
 
 For an account-to-game workflow, use `player.profile` only when profile data is
 requested, and query `player.recent_games` directly when a Steam32 account is

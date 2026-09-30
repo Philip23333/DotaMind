@@ -334,7 +334,7 @@ JSON, fixed safe reasons, credential redaction, help without I/O, and Redis
 client closure. These checks do not connect to Redis or perform initialization
 or migration against an operational data root.
 
-### Catalog snapshot loader acceptance (implemented; API integration pending)
+### Catalog snapshot loader and API integration acceptance (implemented offline)
 
 `CatalogSnapshotLoader` and the revision-only pointer read have offline
 `tmp_path` coverage. Tests exercise startup and retry after failure, idempotent
@@ -344,24 +344,32 @@ failure retention and later recovery, pointer disappearance and IO errors,
 revision changes and rollback without UUID ordering, serialized concurrent
 refreshes, stop waiting for active work, restart from disk, finite interval
 validation, and fixed-reason logging. They also verify that reads do not write
-snapshot or source files. These tests validate the independent component only;
-API lifecycle, resolver/catalog/image consumers, and guide reads are not wired to
-it and have not passed integration acceptance.
+snapshot or source files.
 
-### Shared file-update acceptance (integration pending)
+`test_catalog_api_wiring.py` verifies optional/invalid `DOTAMIND_DATA_DIR`
+configuration, loader startup before consumer construction, startup failure for a
+missing or corrupt configured snapshot, loader cleanup after normal shutdown,
+later initialization failure, and startup cancellation. It checks that API reads
+do not write the data root, that composition and presentation receive the same
+repository provider, and that concurrent guide queries keep the repository each
+captured before their cache wait. Catalog lookup tests verify one repository per
+call, and presentation tests verify a same-patch repository replacement refreshes
+the matching records. These checks are offline and do not connect to a real Redis,
+database, provider, or model. They validate code wiring, not deployment state.
 
-The following matrix is for the planned file-backed updater and API integration.
-The standalone store and loader have focused offline acceptance; these end-to-end
-behaviors have not passed acceptance:
+### Shared file-update acceptance (updater and deployment pending)
+
+The catalog store, loader, and configured API consumer wiring have focused offline
+acceptance. The remaining operational behaviors have not passed acceptance:
 
 | Layer | Required evidence |
 |---|---|
 | Updater publication | Connect the accepted snapshot store to the updater and prove failed fetches, writes, or validation leave the current successful revision active. |
-| Migration execution and application switch | Run the new importer CLI against the intended Redis and persistent data root, verify every selected partition and report, then switch API reads only after acceptance; current API/refresh CLI/timer remain Redis-backed. |
+| Migration execution and guide switch | Run the importer CLI against the intended Redis and persistent data root and verify every selected partition and report. Guide reads, refresh CLI, and timer still use Redis. |
 | Version gate | Same-patch success skips the full fetch; version-check failure does not skip; a failed new publication is retried next run. |
 | Fetch sharing and bounds | Shared responses are not fetched twice; Valve total concurrency stays within its bound; D2PT requests remain serial. |
-| Hot reload | A new snapshot switches in one process only after full validation; each query sees one version; invalid snapshots leave the old one active. |
-| Images | Existing files survive failed downloads; missing files can be backfilled; name-match indexes and browser resources track available images only. |
+| Catalog hot reload | Offline tests prove a new snapshot switches in one API process only after full validation, each catalog/guide/name-match operation pins one version, and invalid snapshots leave the old one active. Real persistent-directory and container behavior remains unverified. |
+| Images | Image files are still served from the existing bundled-resource path; persistent image publication, backfill, and URL/cache switching remain pending. |
 | Containers | The data volume survives API-container recreation; the API mounts data read-only and can read it afterward. |
 | Scheduling | One unified daily entrypoint prevents overlapping runs, reports module/partition results, and replaces the guide-only schedule without duplicate guide work. |
 | Model behavior | Query inputs and DTOs remain stable; source attribution, catalog-name use, and generic Artifact access do not regress. |
@@ -373,7 +381,7 @@ Pub and 127 Pro partitions, including valid empty responses. Sven and Anti-Mage
 Service queries succeeded. The local WSL guide timer was enabled; this records
 host configuration, not an observed successful scheduled firing. These facts do
 not establish that a Guangzhou deployment has the same data or configuration,
-and they provide no evidence for file storage migration or API hot reload.
+and they provide no evidence for file storage migration or deployed API hot reload.
 
 Remaining acceptance layers are separate:
 

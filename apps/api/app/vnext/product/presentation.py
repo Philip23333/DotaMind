@@ -3,13 +3,18 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.integrations.valve.catalog_repository import CATALOG_DIR, load_default_catalog_repository
+from app.integrations.valve.catalog_repository import (
+    CATALOG_DIR,
+    DotaCatalogRepository,
+    load_default_catalog_repository,
+)
 
 _LOCAL_ASSET_PREFIX = "/api/v1/assets/"
 _TEAM_MANIFEST_PATH = (
@@ -36,52 +41,36 @@ class _Mention:
 
 
 class DotaVisualEntityEnricher:
-    """Match Final text against static local catalog and team-asset names."""
+    """Match Final text against the current local catalog and team-asset names."""
 
-    def __init__(self) -> None:
-        catalog = load_default_catalog_repository()
-        entities: list[ProductVisualEntity] = []
-        for hero in catalog.list_heroes():
-            entity = _entity(
-                kind="hero",
-                image_path=_catalog_image_path("heroes", hero.hero_id),
-                name_zh=hero.name_zh,
-                name_en=hero.name_en,
-                aliases=hero.aliases,
-            )
-            if entity is not None:
-                entities.append(entity)
-        for item in catalog.list_items():
-            if item.is_recipe:
-                continue
-            entity = _entity(
-                kind="item",
-                image_path=_catalog_image_path("items", item.item_id),
-                name_zh=item.name_zh,
-                name_en=item.name_en,
-                aliases=item.aliases,
-            )
-            if entity is not None:
-                entities.append(entity)
-        for ability in catalog.list_abilities():
-            if ability.is_item or ability.is_talent or ability.is_innate:
-                continue
-            entity = _entity(
-                kind="ability",
-                image_path=_catalog_image_path("abilities", ability.ability_id),
-                name_zh=ability.name_zh,
-                name_en=ability.name_en,
-            )
-            if entity is not None:
-                entities.append(entity)
-        entities.extend(_team_entities())
-        self._entities = tuple(entities)
+    def __init__(
+        self,
+        catalog_repository_provider: Callable[[], DotaCatalogRepository] | None = None,
+    ) -> None:
+        self._catalog_repository_provider = (
+            catalog_repository_provider
+            if catalog_repository_provider is not None
+            else load_default_catalog_repository
+        )
+        self._catalog_repository: DotaCatalogRepository | None = None
+        self._catalog_entities: tuple[ProductVisualEntity, ...] = ()
+        self._team_entities = tuple(_team_entities())
+        self._entities: tuple[ProductVisualEntity, ...] = self._team_entities
+
+    def _entities_for(self, catalog: DotaCatalogRepository) -> tuple[ProductVisualEntity, ...]:
+        if catalog is not self._catalog_repository:
+            self._catalog_entities = tuple(_catalog_entities(catalog))
+            self._catalog_repository = catalog
+            self._entities = self._catalog_entities + self._team_entities
+        return self._entities
 
     def match(self, text: str) -> list[ProductVisualEntity]:
         """Return one local entity per longest, non-overlapping text match."""
 
+        repository = self._catalog_repository_provider()
+        entities = self._entities_for(repository)
         mentions: list[_Mention] = []
-        for entity in self._entities:
+        for entity in entities:
             for name in entity.names:
                 mentions.extend(_find_mentions(text, name, entity))
 
@@ -99,6 +88,44 @@ class DotaVisualEntityEnricher:
                 selected.append(mention.entity)
                 seen_paths.add(mention.entity.imagePath)
         return selected
+
+
+def _catalog_entities(catalog: DotaCatalogRepository) -> list[ProductVisualEntity]:
+    entities: list[ProductVisualEntity] = []
+    for hero in catalog.list_heroes():
+        entity = _entity(
+            kind="hero",
+            image_path=_catalog_image_path("heroes", hero.hero_id),
+            name_zh=hero.name_zh,
+            name_en=hero.name_en,
+            aliases=hero.aliases,
+        )
+        if entity is not None:
+            entities.append(entity)
+    for item in catalog.list_items():
+        if item.is_recipe:
+            continue
+        entity = _entity(
+            kind="item",
+            image_path=_catalog_image_path("items", item.item_id),
+            name_zh=item.name_zh,
+            name_en=item.name_en,
+            aliases=item.aliases,
+        )
+        if entity is not None:
+            entities.append(entity)
+    for ability in catalog.list_abilities():
+        if ability.is_item or ability.is_talent or ability.is_innate:
+            continue
+        entity = _entity(
+            kind="ability",
+            image_path=_catalog_image_path("abilities", ability.ability_id),
+            name_zh=ability.name_zh,
+            name_en=ability.name_en,
+        )
+        if entity is not None:
+            entities.append(entity)
+    return entities
 
 
 def _entity(

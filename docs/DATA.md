@@ -57,13 +57,14 @@ depend on images.
 
 ## Shared data storage and update target
 
-The current entity catalog is loaded from files bundled with the API code.
-`hero.guide` currently reads Redis snapshots, and its operator refresh CLI writes
-those snapshots. The persistent catalog and guide stores are implemented, as
-are manual initialization and Redis-import commands, but neither command has
-been run against an operational data root or Redis cache. The API read path and
-regular refresh path remain unchanged. The conceptual data areas are `catalog`,
-`patches`, `images`, and `guides`.
+When `DOTAMIND_DATA_DIR` is unset, the API loads its entity catalog from files
+bundled with the API code. When set to an absolute path, the API requires a valid
+published catalog snapshot there and uses the background loader. `hero.guide`
+still reads Redis snapshots, and its operator refresh CLI writes those snapshots.
+The persistent catalog and guide stores are implemented, as are manual
+initialization and Redis-import commands, but neither command has been run
+against an operational data root or Redis cache. The conceptual data areas are
+`catalog`, `patches`, `images`, and `guides`.
 
 ### Catalog snapshot publication
 
@@ -86,17 +87,21 @@ UUID-hex revision is independent of the Dota patch and catalog schema versions.
 Failed publication leaves the current pointer unchanged; successful snapshot
 directories are retained. The store loads the pointed revision into a
 `DotaCatalogRepository`, and the manual `init-catalog` command can initialize it
-under a caller-supplied data root. It is not connected to API reads or a unified
+under a caller-supplied data root. The API loader reads published snapshots when
+`DOTAMIND_DATA_DIR` is configured; publication is not connected to a unified
 updater, and no operational data root has been initialized.
 
-The independent `CatalogSnapshotLoader` loads the current complete snapshot at
-startup and then checks the pointer revision in the background, defaulting to a
-30-second interval. An unchanged revision does not reload the five files. A new
-revision is fully validated before one in-memory snapshot reference is switched;
-failed checks or loads keep the last successful snapshot available. The check
-interval does not bound validation or IO time. The loader is not connected to API
-lifecycle or consumers, so API hot reload remains pending. Offline tests do not
-establish power-loss recovery.
+`CatalogSnapshotLoader` loads the current complete snapshot at startup and then
+checks the pointer revision in the background, defaulting to a 30-second interval.
+With `DOTAMIND_DATA_DIR` configured, API startup waits for this first load and
+fails if the pointer or snapshot is missing or invalid; it does not initialize a
+directory or fall back to bundled data. An unchanged revision does not reload the
+five files. A new revision is fully validated before one in-memory snapshot
+reference is switched; failed checks or loads keep the last successful snapshot
+available. `catalog.lookup`, guide name enrichment, and answer name matching use
+the current snapshot, each pinning one repository for its operation. The check
+interval does not bound validation or IO time. Offline tests do not establish
+power-loss recovery or deployed persistent-volume behavior.
 
 The eventual updater must validate the complete set before changing the current
 reference. Replacing each JSON file atomically does not make the five-file set an
@@ -106,8 +111,10 @@ successful snapshot and its version unchanged.
 Images are separate best-effort resources. A failed download keeps an existing
 image when present, and a missing image does not block catalog publication.
 Missing resources can be filled independently without fetching every entity
-again. Readers generate image metadata only for files that exist. Patch records
-are stored by patch version and do not share the catalog snapshot number.
+again. Readers generate image metadata only for files that exist. The API loader
+currently switches catalog-backed names only; it does not publish or reload image
+files, whose paths and availability continue to follow bundled resources. Patch
+records are stored by patch version and do not share the catalog snapshot number.
 
 ### Guide partition storage and migration (components implemented; actual migration pending)
 
@@ -417,7 +424,7 @@ invoke this CLI daily at 03:00 Asia/Shanghai; their production paths do not
 describe local WSL installation state. A historical WSL record says its separate
 timer was enabled and a local full refresh populated guide data. This does not
 establish a successful scheduled firing, another deployment's cache contents, or
-the planned shared-file migration and API hot reload.
+file-backed catalog operation in a deployed API container.
 
 The cache is connected to a read-only `HeroGuideService`, which the model-facing
 `hero.guide` tool exposes when the application injects the cache. The Service
@@ -518,9 +525,11 @@ match-keyed memory store, forced profile lookup, or automatic detail fetch for
 all listed games. If the earlier list cannot be recovered, the agent must ask
 instead of guessing which match an ordinal refers to.
 
-`catalog.lookup` reads the bundled Valve hero/item snapshot by exact IDs and
-returns display names with snapshot-version metadata. These labels remain
-separate from provider match facts and do not rewrite OpenDota's `data`. Unknown
-IDs remain visible as unknown. Match statistics support only the conclusions
-they encode; missing timeline, purchase, or identity data remains unknown and
-must not be interpreted as proof that an event did not happen.
+`catalog.lookup` reads exact Valve hero/item IDs from the active local snapshot
+and returns display names with snapshot-version metadata. With
+`DOTAMIND_DATA_DIR` unset, that snapshot is bundled with the API; when configured,
+the API uses the published file-backed snapshot and background loader. These
+labels remain separate from provider match facts and do not rewrite OpenDota's
+`data`. Unknown IDs remain visible as unknown. Match statistics support only the
+conclusions they encode; missing timeline, purchase, or identity data remains
+unknown and must not be interpreted as proof that an event did not happen.

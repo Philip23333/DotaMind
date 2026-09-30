@@ -226,7 +226,7 @@ def test_service_enriches_all_visible_entity_fields_with_batched_names() -> None
     resolver = RecordingResolver(repository)
 
     result = asyncio.run(
-        HeroGuideService(cache, resolver, clock=lambda: _NOW).get_guide(
+        HeroGuideService(cache, lambda: resolver, clock=lambda: _NOW).get_guide(
             HeroGuideInput(hero_id=18, position=1)
         )
     )
@@ -282,7 +282,9 @@ def test_service_enriches_all_visible_entity_fields_with_batched_names() -> None
     example.ability_timeline[1].resolved_name.name_en = "changed in response"
     assert sequence.abilities[0].name_en == before_name
     again = asyncio.run(
-        HeroGuideService(cache, RecordingResolver(repository), clock=lambda: _NOW).get_guide(
+        HeroGuideService(
+            cache, lambda: RecordingResolver(repository), clock=lambda: _NOW
+        ).get_guide(
             HeroGuideInput(hero_id=18, position=1)
         )
     )
@@ -310,7 +312,9 @@ def test_service_resolves_only_fields_visible_in_projected_section(
     resolver = RecordingResolver(repository)
 
     result = asyncio.run(
-        HeroGuideService(FakeGuideCache(pub=pub_snapshot, pro=pro_snapshot), resolver)
+        HeroGuideService(
+            FakeGuideCache(pub=pub_snapshot, pro=pro_snapshot), lambda: resolver
+        )
         .get_guide(HeroGuideInput(hero_id=18, position=1, section=section))
     )
 
@@ -332,7 +336,7 @@ def test_missing_cache_still_resolves_hero_and_keeps_sources_missing() -> None:
     resolver = RecordingResolver(repository)
 
     result = asyncio.run(
-        HeroGuideService(FakeGuideCache(), resolver, clock=lambda: _NOW).get_guide(
+        HeroGuideService(FakeGuideCache(), lambda: resolver, clock=lambda: _NOW).get_guide(
             HeroGuideInput(hero_id=18, position=1)
         )
     )
@@ -353,7 +357,9 @@ def test_real_sven_pub_and_pro_fixtures_enrich_names_from_local_catalog() -> Non
     )
 
     result = asyncio.run(
-        HeroGuideService(cache, EntityNameResolver(repository), clock=lambda: _NOW).get_guide(
+        HeroGuideService(
+            cache, lambda: EntityNameResolver(repository), clock=lambda: _NOW
+        ).get_guide(
             HeroGuideInput(hero_id=18, position=1)
         )
     )
@@ -447,7 +453,9 @@ def test_resolver_errors_and_mixed_catalog_versions_propagate() -> None:
 
     with pytest.raises(OSError, match="catalog file unreadable"):
         asyncio.run(
-            HeroGuideService(FakeGuideCache(pub=pub_snapshot), BrokenResolver()).get_guide(
+            HeroGuideService(
+                FakeGuideCache(pub=pub_snapshot), lambda: BrokenResolver()
+            ).get_guide(
                 HeroGuideInput(hero_id=18, position=1)
             )
         )
@@ -462,6 +470,6 @@ def test_resolver_errors_and_mixed_catalog_versions_propagate() -> None:
     with pytest.raises(ValueError, match="catalog version changed"):
         asyncio.run(
             HeroGuideService(
-                FakeGuideCache(pub=pub_snapshot), MixedVersionResolver(repository)
+                FakeGuideCache(pub=pub_snapshot), lambda: MixedVersionResolver(repository)
             ).get_guide(HeroGuideInput(hero_id=18, position=1))
         )

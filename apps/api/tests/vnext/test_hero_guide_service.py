@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -33,8 +34,8 @@ _NOW = datetime(2026, 9, 28, 3, 0, tzinfo=UTC)
 _FIXTURE_DIR = Path(__file__).parent / "fixtures" / "d2pt"
 
 
-def _resolver() -> EntityNameResolver:
-    return EntityNameResolver(load_default_catalog_repository())
+def _resolver() -> Callable[[], EntityNameResolver]:
+    return lambda: EntityNameResolver(load_default_catalog_repository())
 
 
 class FakeGuideCache:

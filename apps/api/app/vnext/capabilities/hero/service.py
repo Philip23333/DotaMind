@@ -44,7 +44,7 @@ class HeroGuideService:
     def __init__(
         self,
         cache: RedisHeroGuideCache,
-        resolver: EntityNameResolver,
+        resolver_factory: Callable[[], EntityNameResolver],
         *,
         clock: Callable[[], datetime] | None = None,
         stale_after: timedelta = timedelta(hours=36),
@@ -52,11 +52,12 @@ class HeroGuideService:
         if stale_after <= timedelta(0):
             raise ValueError("stale_after must be greater than zero")
         self._cache = cache
-        self._resolver = resolver
+        self._resolver_factory = resolver_factory
         self._clock = clock if clock is not None else lambda: datetime.now(UTC)
         self._stale_after = stale_after
 
     async def get_guide(self, query: HeroGuideInput) -> HeroGuideResult:
+        resolver = self._resolver_factory()
         now = self._clock()
         if now.tzinfo is None or now.utcoffset() is None:
             raise ValueError("clock must return a timezone-aware datetime")
@@ -134,7 +135,7 @@ class HeroGuideService:
                 else None
             ),
         )
-        return enrich_hero_guide(result, self._resolver)
+        return enrich_hero_guide(result, resolver)
 
 
 def _cache_error_code(

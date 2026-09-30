@@ -108,20 +108,20 @@ before a second concrete implementation demonstrates the need.
   section bounds, cache compatibility, composition sharing, and Artifact reads.
   `game.detail` name enrichment is a later independent follow-up.
 
-## Shared data update migration (storage and operator entrypoints implemented; integration pending)
+## Shared data update migration (catalog API integration implemented; updater and deployment pending)
 
 Current priority is moving shared game data from the committed Valve catalog and
 Redis guide cache to a persistent file-backed update path with API hot reload.
 The standalone catalog storage boundary is implemented; the remaining sequence
 is:
 
-1. **Implemented, standalone:** `CatalogSnapshotStore` copies the existing five
+1. **Implemented:** `CatalogSnapshotStore` copies the existing five
    catalog JSON files byte-for-byte, validates the copied models, catalog
    relations, and audit, and publishes each complete snapshot under a unique
    UUID revision by atomically replacing `catalog/current.json`. Failed
    publication keeps the old pointer; successful revision directories remain
-   available. The component is not wired to automatic data-directory
-   initialization, configuration, API reads, or an update task.
+   available. API startup reads this store when `DOTAMIND_DATA_DIR` is configured;
+   initialization remains an explicit operator action.
 2. **Implemented, not run:** expose `python -m app.vnext.data_updates init-catalog`
    for one-time initialization from the bundled or explicitly selected local
    five-file catalog. The operator must supply an absolute data root with
@@ -129,32 +129,35 @@ is:
    initialized by this component.
 3. **Implemented, not executed:** the standalone `FileHeroGuideCache` and
    callable `migrate_redis_guides()` component. Offline FakeRedis and `tmp_path`
-   tests cover full-entry import and read-back verification. The API, refresh CLI,
-   and timer still use Redis; no real Redis migration has been run.
+   tests cover full-entry import and read-back verification. Guide queries, the
+   refresh CLI, and timer still use Redis; no real Redis migration has been run.
 4. **Implemented, not run:** expose
    `python -m app.vnext.data_updates migrate-guides` to use the current catalog's
    hero list and existing Redis importer. Run and verify it against the intended
-   Redis cache and persistent data root before changing API reads. It shares the
+   Redis cache and persistent data root before changing guide reads. It shares the
    data-root update lock and the guide refresh CLI lock, which only coordinates
    processes in the same API container.
-5. **Implemented, standalone:** add a loader that checks the current pointer by
+5. **Implemented:** add a loader that checks the current pointer by
    default every 30 seconds, validates changed snapshots in the background, and
    switches one in-memory snapshot reference only after a successful load.
    Unchanged revisions are not reloaded; failures retain the previous snapshot.
-6. Wire API lifecycle and consumers to the loader, and connect image matching to
-   the active snapshot. This integration remains pending.
+6. **Implemented:** wire API lifecycle, `catalog.lookup`, hero-guide name
+   enrichment, and answer name matching to the loader. Each operation fixes one
+   repository reference; a configured missing or invalid snapshot fails startup.
+   This switches catalog-backed names only; it does not hot-reload image files.
 7. Split and reuse the Valve fetch script for catalog, patch, and image work.
 8. Add the unified update entrypoint and patch-version gate.
 9. Connect the persistent data volume and one daily 03:00 Asia/Shanghai schedule.
-10. Deploy and verify persistent reads, query-consistent hot reload, fallback,
-   and the scheduled update path.
+10. Deploy and verify persistent reads, API startup from that directory, and the
+    scheduled update path.
 
-The standalone five-file catalog store and loader, guide file/import components,
-and their manual operator entrypoints are implemented here. Real catalog
-initialization and guide migration, API lifecycle and consumer switching, the
-unified scheduled updater, and deployment acceptance remain pending. Offline
-tests do not establish power-loss recovery. `game.detail` entity-name enrichment
-remains a later independent item after this data-update migration.
+The five-file catalog store and loader, configured API lifecycle and catalog-name
+consumers, guide file/import components, and manual operator entrypoints are
+implemented. Real catalog initialization and guide migration, guide file reads
+and writes, image-resource hot reload, the unified scheduled updater, persistent
+container mounts, and deployment acceptance remain pending. Offline tests do not
+establish power-loss recovery. `game.detail` entity-name enrichment remains a
+later independent item after this data-update migration.
 
 ## Subsequent capability work
 

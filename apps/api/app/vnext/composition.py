@@ -11,7 +11,10 @@ from pathlib import Path
 
 from dotenv import dotenv_values
 
-from app.integrations.valve.catalog_repository import load_default_catalog_repository
+from app.integrations.valve.catalog_repository import (
+    DotaCatalogRepository,
+    load_default_catalog_repository,
+)
 from app.vnext.agent.instructions import (
     AGENT_INSTRUCTION,
     PRODUCT_INSTRUCTION,
@@ -129,9 +132,14 @@ class VNextSettings:
     tavily_mcp_timeout_seconds: float = 30.0
     trace_ttl_seconds: int = 72 * 60 * 60
     test_recording_enabled: bool = False
+    data_dir: Path | None = None
     agent_limits: AgentLimits = field(default_factory=AgentLimits)
 
     def __post_init__(self) -> None:
+        if self.data_dir is not None and (
+            not isinstance(self.data_dir, Path) or not self.data_dir.is_absolute()
+        ):
+            raise ValueError("DOTAMIND_DATA_DIR must be an absolute path when set")
         if not math.isfinite(self.stratz_timeout_seconds) or self.stratz_timeout_seconds <= 0:
             raise ValueError("DOTAMIND_STRATZ_TIMEOUT_SECONDS must be a finite positive number")
         if (
@@ -224,6 +232,9 @@ class VNextSettings:
                 False,
                 file_values,
             ),
+            data_dir=_parse_data_dir(
+                _env_value("DOTAMIND_DATA_DIR", None, file_values)
+            ),
             agent_limits=_agent_limits_from_env(file_values),
         )
 
@@ -237,6 +248,17 @@ def _env_value(
     if value is not None:
         return value
     return file_values.get(name, default)
+
+
+def _parse_data_dir(value: str | None) -> Path | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("DOTAMIND_DATA_DIR must be a non-empty absolute path when set")
+    path = Path(value.strip())
+    if not path.is_absolute():
+        raise ValueError("DOTAMIND_DATA_DIR must be an absolute path when set")
+    return path
 
 
 def _parse_bool_value(
@@ -364,6 +386,7 @@ def build_vnext_services(
     settings: VNextSettings | None = None,
     *,
     hero_guide_cache: RedisHeroGuideCache | None = None,
+    catalog_repository_provider: Callable[[], DotaCatalogRepository] | None = None,
 ) -> VNextServices:
     config = settings or VNextSettings.from_env()
     client = PandaScoreClient(
@@ -398,13 +421,17 @@ def build_vnext_services(
             timeout_seconds=config.opendota_timeout_seconds,
         )
         game_detail = OpenDotaGameDetailAdapter(opendota_client).get_game_detail
-    catalog_repository = load_default_catalog_repository()
-    catalog_lookup = ValveCatalogLookupAdapter(catalog_repository).lookup
+    repository_provider = (
+        catalog_repository_provider
+        if catalog_repository_provider is not None
+        else load_default_catalog_repository
+    )
+    catalog_lookup = ValveCatalogLookupAdapter(repository_provider).lookup
     hero_guide: HeroGuideLookup | None = None
     if hero_guide_cache is not None:
         hero_guide = HeroGuideService(
             hero_guide_cache,
-            EntityNameResolver(catalog_repository),
+            lambda: EntityNameResolver(repository_provider()),
         ).get_guide
     return VNextServices(
         league_search=league_adapter.search,
