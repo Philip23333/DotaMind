@@ -167,7 +167,7 @@ logical tool response; the bounded model observation is derived separately by
 the generic result processor for ordinary tools. A stored ref is not
 automatically restored into a later turn's dialogue context.
 
-## Hero guide data flow (Redis path and standalone file/import components implemented)
+## Hero guide data flow (Redis query and file refresh/import implemented; API still reads Redis)
 
 The synchronous D2PT HTTP client is implemented with `urllib.request`; its
 deterministic tests use an injected opener and make no live request. It sends
@@ -219,24 +219,37 @@ retrieval time, and latest attempt/error state. It uses a same-directory
 temporary file and `os.replace` for each partition. `migrate_redis_guides()` is
 an offline-verifiable component that reads selected entries through
 `RedisHeroGuideCache`, imports absent file partitions, skips identical entries,
-rejects conflicts, and compares imported entries by reading them back. The new
-operator CLI invokes this importer, but the file cache is not wired into
-composition or the refresh timer; the API and regular refresh command still use
-Redis, and no real Redis migration has been run.
+rejects conflicts, and compares imported entries by reading them back. The
+`migrate-guides` operator command invokes this importer. The `HeroGuideRefresher`
+depends on a minimal `HeroGuideWriter` protocol, and
+`python -m app.vnext.data_updates refresh-guides --data-dir ...` runs the same
+serial fetch/parse algorithm with `FileHeroGuideCache` as its writer. It takes the
+data-root update lock and then the existing container-local Redis refresh lock,
+so it does not overlap with the legacy command in that API container. This new
+entrypoint has only offline fake-client acceptance; it has not been deployed or
+used for a real refresh.
 
-The current guide-only update path is:
+The migration period has two operator refresh entrypoints:
 
 ```text
-operator CLI or a host-configured guide-only timer
-  -> same-container non-blocking process lock
-  -> implemented HeroGuideRefresher
+legacy CLI or existing timer
+  -> container-local refresh lock
+  -> HeroGuideRefresher
   -> Redis guide partitions
+
+new data_updates CLI
+  -> data-root update lock, then container-local refresh lock
+  -> HeroGuideRefresher
+  -> file guide partitions
 ```
 
-The process lock only protects refresh commands in the same API container;
-multi-container coordination is not implemented. The CLI is not an HTTP endpoint
-or model-facing tool. The repository timer template is deployment-specific, and
-its presence does not describe local WSL or other installed service state.
+The new and legacy paths are separate migration-stage entrypoints and must not be
+installed together as daily jobs. The existing timer still runs the Redis
+command; the API and `hero.guide` still read Redis. The refresh lock only
+coordinates processes sharing one API container; multi-container coordination is
+not implemented. Neither command is an HTTP endpoint or model-facing tool. The
+repository timer template is deployment-specific, and its presence does not
+describe local WSL or other installed service state.
 
 Each implemented cache snapshot records its retrieval time; source-provided
 update fields remain in the retained source rows and projections. The cache
@@ -303,18 +316,21 @@ does not reload the five files. A failed check or load keeps the previous snapsh
 available, and stopping waits for an in-flight refresh to finish. The check
 interval is not a bound on validation or IO completion time.
 
-The operator module `python -m app.vnext.data_updates` exposes `init-catalog`
-and `migrate-guides`. The former publishes the bundled or explicitly selected
-five-file catalog only when no valid current snapshot exists. The latter reads
+The operator module `python -m app.vnext.data_updates` exposes `init-catalog`,
+`migrate-guides`, and `refresh-guides`. The first publishes the bundled or explicitly selected
+five-file catalog only when no valid current snapshot exists. `migrate-guides` reads
 hero IDs from that published repository and calls the existing Redis-to-file
-guide importer. Both commands require an absolute data root from `--data-dir` or
+guide importer. All three require an absolute data root from `--data-dir` or
 `DOTAMIND_DATA_DIR`; migration reads `DOTAMIND_REDIS_URL` only from the
-environment. A non-blocking data-root lock protects both commands, and guide
+environment. A non-blocking data-root lock protects all commands, and guide
 migration also takes the existing refresh lock in data-lock-then-refresh-lock
-order. The refresh lock is container-local, so migration must run in the same
-API container as the guide refresh CLI. These commands are offline-verifiable
-entrypoints only: no real initialization or Redis migration has been run. The
-guide refresh CLI and timer still use Redis.
+order. File guide refresh does not require a catalog snapshot or Redis URL; it
+takes the same two locks before constructing D2PT and file-cache resources. The
+refresh lock is container-local, so migration and file refresh must run in the
+same API container as the legacy guide refresh CLI. The new refresh command has
+offline fake-client tests but has not been deployed or run against D2PT. No real
+initialization or Redis migration has been run. The API guide reader and existing
+timer still use Redis; do not schedule both refresh commands daily.
 
 ```text
 schedule -> updater -> persistent data
@@ -342,12 +358,12 @@ design does not promise a simultaneous fleet-wide switch.
 When `DOTAMIND_DATA_DIR` is unset, the API uses its existing bundled catalog
 repository. When set, it must name an absolute path containing a valid published
 snapshot; startup does not create or initialize the directory and does not fall
-back to bundled data on error. Guide snapshots and the guide refresh CLI still use
-Redis. No operational data directory has been initialized, no Redis migration has
-been run, and no persistent container mount or scheduled unified updater has been
-accepted. Guide file reads/writes, image-resource hot reload, automatic updates,
-and deployment verification remain pending. These changes do not alter the
-session Artifact storage contract.
+back to bundled data on error. The file-backed guide refresh entrypoint exists,
+but API guide reads and the existing timer still use Redis. No operational data
+directory has been initialized, no Redis migration has been run, and no persistent
+container mount or scheduled unified updater has been accepted. Guide file reads,
+image-resource hot reload, automatic updates, and deployment verification remain
+pending. These changes do not alter the session Artifact storage contract.
 
 ## Runtime boundary
 

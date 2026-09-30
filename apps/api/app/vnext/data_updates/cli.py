@@ -10,9 +10,11 @@ import json
 import os
 import signal
 import sys
-from collections.abc import Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
+from dataclasses import asdict
+from datetime import datetime
 from pathlib import Path
-from typing import Any, TextIO
+from typing import Any, TextIO, TypeVar
 
 from redis.asyncio import from_url
 from redis.exceptions import RedisError
@@ -34,9 +36,12 @@ from app.vnext.hero_guides.migration import (
     GuideMigrationVerificationError,
     migrate_redis_guides,
 )
+from app.vnext.hero_guides.refresh import HeroGuideRefresher, HeroGuideRefreshReport
+from app.vnext.providers.d2pt import D2PTClient
 
 _DATA_LOCK_NAME = ".update.lock"
 _BUSY_ERRNOS = {errno.EACCES, errno.EAGAIN}
+_OperationResult = TypeVar("_OperationResult")
 
 
 class _OutputArgumentParser(argparse.ArgumentParser):
@@ -68,6 +73,8 @@ def main(
     stdout: TextIO | None = None,
     stderr: TextIO | None = None,
     refresh_lock_path: str | os.PathLike[str] | None = None,
+    refresh_clock: Callable[[], datetime] | None = None,
+    refresh_sleep: Callable[[float], Awaitable[None]] | None = None,
 ) -> int:
     """Run one data-update command and return its stable process exit code."""
 
@@ -111,7 +118,12 @@ def main(
             result = (_failed(operation, "storage_error"), 1)
         else:
             if data_lock_fd is None:
-                result = (_skipped_already_running(), 3)
+                result = (
+                    _refresh_skipped_already_running()
+                    if operation == "refresh-guides"
+                    else _skipped_already_running(),
+                    3,
+                )
             elif operation == "migrate-guides":
                 old_lock_path = (
                     hero_guide_cli._LOCK_PATH
@@ -131,13 +143,37 @@ def main(
                             redis_url=redis_url,
                             operation=operation,
                         )
+            elif operation == "refresh-guides":
+                old_lock_path = (
+                    hero_guide_cli._LOCK_PATH
+                    if refresh_lock_path is None
+                    else refresh_lock_path
+                )
+                try:
+                    refresh_lock_fd = _try_acquire_lock(old_lock_path)
+                except OSError:
+                    result = (_failed(operation, "storage_error"), 1)
+                else:
+                    if refresh_lock_fd is None:
+                        result = (_refresh_skipped_already_running(), 3)
+                    else:
+                        result = _run_refresh_guides_command(
+                            data_root=data_root,
+                            clock=refresh_clock,
+                            sleep=refresh_sleep,
+                        )
             else:
                 result = _run_init_command(
                     data_root=data_root,
                     source_dir=args.source_dir,
                 )
     except (asyncio.CancelledError, KeyboardInterrupt):
-        result = ({"status": "cancelled"}, 130)
+        result = (
+            {"status": "cancelled", "operation": operation}
+            if operation == "refresh-guides"
+            else {"status": "cancelled"},
+            130,
+        )
     except Exception as exc:
         result = (_failed(operation, _safe_reason(exc)), 1)
     finally:
@@ -163,7 +199,7 @@ def main(
 def _build_parser(stdout: TextIO, stderr: TextIO) -> argparse.ArgumentParser:
     parser = _OutputArgumentParser(
         prog="python -m app.vnext.data_updates",
-        description="Initialize and migrate persistent shared Dota data.",
+        description="Initialize, migrate, and refresh persistent shared Dota data.",
         stdout=stdout,
         stderr=stderr,
     )
@@ -201,6 +237,15 @@ def _build_parser(stdout: TextIO, stderr: TextIO) -> argparse.ArgumentParser:
         "migrate-guides", help="import Redis guide partitions into file storage"
     )
     migrate_parser.add_argument(
+        "--data-dir",
+        default=argparse.SUPPRESS,
+        help="absolute persistent data directory (or DOTAMIND_DATA_DIR)",
+    )
+
+    refresh_parser = subparsers.add_parser(
+        "refresh-guides", help="refresh D2PT guide partitions into file storage"
+    )
+    refresh_parser.add_argument(
         "--data-dir",
         default=argparse.SUPPRESS,
         help="absolute persistent data directory (or DOTAMIND_DATA_DIR)",
@@ -293,20 +338,105 @@ def _run_migration_command(
     )
 
 
+def _run_refresh_guides_command(
+    *,
+    data_root: Path,
+    clock: Callable[[], datetime] | None,
+    sleep: Callable[[float], Awaitable[None]] | None,
+) -> tuple[dict[str, Any], int]:
+    try:
+        report = asyncio.run(_run_file_refresh(data_root, clock=clock, sleep=sleep))
+    except (asyncio.CancelledError, KeyboardInterrupt):
+        return {"status": "cancelled", "operation": "refresh-guides"}, 130
+    except Exception as exc:
+        return _failed("refresh-guides", _safe_reason(exc)), 1
+    return _refresh_report_result(report)
+
+
+async def _run_file_refresh(
+    data_root: Path,
+    *,
+    clock: Callable[[], datetime] | None,
+    sleep: Callable[[float], Awaitable[None]] | None,
+) -> HeroGuideRefreshReport:
+    async def refresh() -> HeroGuideRefreshReport:
+        refresher = HeroGuideRefresher(
+            D2PTClient(),
+            FileHeroGuideCache(data_root),
+            clock=clock,
+            sleep=sleep,
+        )
+        return await refresher.refresh_all()
+
+    return await _run_with_cli_cleanup(refresh, operation_name="guide refresh")
+
+
+def _refresh_report_result(
+    report: HeroGuideRefreshReport,
+) -> tuple[dict[str, Any], int]:
+    code = {"success": 0, "partial": 4, "failed": 1}.get(report.status)
+    if code is None:
+        return _failed("refresh-guides", "operation_failed"), 1
+
+    serialized = asdict(report)
+    serialized["started_at"] = report.started_at.isoformat()
+    serialized["finished_at"] = report.finished_at.isoformat()
+    return (
+        {
+            "status": report.status,
+            "operation": "refresh-guides",
+            "report": serialized,
+        },
+        code,
+    )
+
+
 async def _run_migration(
     redis_url: str,
     data_root: Path,
     hero_ids: Sequence[int],
 ) -> GuideMigrationReport:
+    redis_client: Any | None = None
+
+    async def migrate() -> GuideMigrationReport:
+        nonlocal redis_client
+        redis_client = from_url(redis_url, decode_responses=True)
+        await redis_client.ping()
+        source = RedisHeroGuideCache(redis_client)
+        target = FileHeroGuideCache(data_root)
+        return await migrate_redis_guides(
+            source=source,
+            target=target,
+            hero_ids=hero_ids,
+        )
+
+    async def close_redis() -> None:
+        if redis_client is not None:
+            await redis_client.aclose()
+
+    return await _run_with_cli_cleanup(
+        migrate,
+        operation_name="migration",
+        after_executor_shutdown=close_redis,
+    )
+
+
+async def _run_with_cli_cleanup(
+    operation: Callable[[], Awaitable[_OperationResult]],
+    *,
+    operation_name: str,
+    after_executor_shutdown: Callable[[], Awaitable[None]] | None = None,
+) -> _OperationResult:
+    """Run one CLI operation with signal cancellation and worker cleanup."""
+
     loop = asyncio.get_running_loop()
     task = asyncio.current_task()
     if task is None:
-        raise RuntimeError("migration CLI requires an asyncio task")
+        raise RuntimeError(f"{operation_name} CLI requires an asyncio task")
 
     stop_requested = False
     cleaning_up = False
     installed_signals: list[signal.Signals] = []
-    redis_client: Any | None = None
 
     def request_stop() -> None:
         nonlocal stop_requested
@@ -322,24 +452,15 @@ async def _run_migration(
             except (NotImplementedError, RuntimeError):
                 continue
             installed_signals.append(stop_signal)
-
-        redis_client = from_url(redis_url, decode_responses=True)
-        await redis_client.ping()
-        source = RedisHeroGuideCache(redis_client)
-        target = FileHeroGuideCache(data_root)
-        return await migrate_redis_guides(
-            source=source,
-            target=target,
-            hero_ids=hero_ids,
-        )
+        return await operation()
     finally:
         cleaning_up = True
         try:
             await loop.shutdown_default_executor()
         finally:
             try:
-                if redis_client is not None:
-                    await redis_client.aclose()
+                if after_executor_shutdown is not None:
+                    await after_executor_shutdown()
             finally:
                 for stop_signal in installed_signals:
                     loop.remove_signal_handler(stop_signal)
@@ -390,6 +511,14 @@ def _failed(operation: str, reason: str) -> dict[str, str]:
 
 def _skipped_already_running() -> dict[str, str]:
     return {"status": "skipped", "reason": "already_running"}
+
+
+def _refresh_skipped_already_running() -> dict[str, str]:
+    return {
+        "status": "skipped",
+        "operation": "refresh-guides",
+        "reason": "already_running",
+    }
 
 
 def _emit(stream: TextIO, payload: dict[str, Any]) -> None:

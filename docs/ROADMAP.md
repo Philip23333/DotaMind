@@ -108,7 +108,7 @@ before a second concrete implementation demonstrates the need.
   section bounds, cache compatibility, composition sharing, and Artifact reads.
   `game.detail` name enrichment is a later independent follow-up.
 
-## Shared data update migration (catalog API integration implemented; updater and deployment pending)
+## Shared data update migration (catalog API and file refresh implemented; guide switch and deployment pending)
 
 Current priority is moving shared game data from the committed Valve catalog and
 Redis guide cache to a persistent file-backed update path with API hot reload.
@@ -137,24 +137,33 @@ is:
    Redis cache and persistent data root before changing guide reads. It shares the
    data-root update lock and the guide refresh CLI lock, which only coordinates
    processes in the same API container.
-5. **Implemented:** add a loader that checks the current pointer by
+5. **Implemented, not run:** expose
+   `python -m app.vnext.data_updates refresh-guides --data-dir ...`, reusing the
+   serial `HeroGuideRefresher` with `FileHeroGuideCache`. It does not require a
+   catalog snapshot or Redis URL. It acquires the data-root lock and then the
+   existing container-local guide refresh lock. Offline fake-client tests cover
+   file publication and cancellation cleanup; no real D2PT refresh or deployment
+   has occurred. The API still reads guides from Redis and the existing timer
+   still invokes the Redis command; do not install both commands as daily jobs.
+6. **Implemented:** add a loader that checks the current pointer by
    default every 30 seconds, validates changed snapshots in the background, and
    switches one in-memory snapshot reference only after a successful load.
    Unchanged revisions are not reloaded; failures retain the previous snapshot.
-6. **Implemented:** wire API lifecycle, `catalog.lookup`, hero-guide name
+7. **Implemented:** wire API lifecycle, `catalog.lookup`, hero-guide name
    enrichment, and answer name matching to the loader. Each operation fixes one
    repository reference; a configured missing or invalid snapshot fails startup.
    This switches catalog-backed names only; it does not hot-reload image files.
-7. Split and reuse the Valve fetch script for catalog, patch, and image work.
-8. Add the unified update entrypoint and patch-version gate.
-9. Connect the persistent data volume and one daily 03:00 Asia/Shanghai schedule.
-10. Deploy and verify persistent reads, API startup from that directory, and the
+8. Split and reuse the Valve fetch script for catalog, patch, and image work.
+9. Add the unified update entrypoint and patch-version gate.
+10. Connect the persistent data volume and one daily 03:00 Asia/Shanghai schedule.
+11. Deploy and verify persistent reads, API startup from that directory, and the
     scheduled update path.
 
 The five-file catalog store and loader, configured API lifecycle and catalog-name
-consumers, guide file/import components, and manual operator entrypoints are
-implemented. Real catalog initialization and guide migration, guide file reads
-and writes, image-resource hot reload, the unified scheduled updater, persistent
+consumers, guide file/import components, and file-backed guide refresh entrypoint
+are implemented. Real catalog initialization, guide migration, and guide refresh
+have not been run. API guide reads and the existing timer still use Redis. Guide
+file reads, image-resource hot reload, the unified scheduled updater, persistent
 container mounts, and deployment acceptance remain pending. Offline tests do not
 establish power-loss recovery. `game.detail` entity-name enrichment remains a
 later independent item after this data-update migration.
@@ -168,7 +177,7 @@ later independent item after this data-update migration.
 4. Register the capability only after its focused acceptance passes.
 5. Remove transitional code once the replacement is accepted.
 
-## Hero guides (Redis query, serial executor, operator CLI, and standalone file/import components implemented; application still uses Redis)
+## Hero guides (Redis query, both refresh commands, and file/import components implemented; application still uses Redis)
 
 The internal query DTOs and two fixed raw Sven fixtures are implemented and
 covered by offline tests. A synchronous, bounded D2PT HTTP client is also
@@ -186,14 +195,18 @@ once and requests Pub positions 1 through 5, then Pro once, for each hero in
 source order. Client calls are sequential and followed by a one-second wait;
 successful responses are parsed and published as whole snapshots, while a fetch
 or parse failure records partition attempt metadata and preserves its prior
-snapshot. Cache write errors abort the run. An operator-only CLI invokes the
-executor using the API container's `DOTAMIND_REDIS_URL`, with a non-blocking
-process lock shared among CLI invocations in that one container. A repository
-systemd timer template invokes the same command; host installation state varies.
-The local WSL setup has its own WSL-path unit and a historical enabled-timer
-record. The CLI is not a public endpoint or model-facing tool, and application
-startup is not wired to refresh. A historical local full refresh and its limits
-are recorded below and in
+snapshot. Cache write errors abort the run. The legacy operator CLI writes to
+Redis using the API container's `DOTAMIND_REDIS_URL`; the file-backed
+`data_updates refresh-guides` command reuses the refresher with
+`FileHeroGuideCache` and does not need Redis or catalog initialization. The file
+command takes the data-root update lock followed by the existing container-local
+refresh lock. Offline fake-client tests cover the new entrypoint, but it has not
+been deployed or run against D2PT. The repository systemd timer still invokes the
+legacy Redis command; do not install both commands as daily jobs. Host
+installation and timer state are environment-specific. The local WSL setup has
+its own WSL-path unit and a historical enabled-timer record. Neither CLI is a
+public endpoint or model-facing tool, and application startup is not wired to
+refresh. A historical local full refresh and its limits are recorded below and in
 [`reference/hero-guide-operations.md`](reference/hero-guide-operations.md).
 
 Implementation and acceptance proceed in this order:
@@ -223,13 +236,17 @@ Implementation and acceptance proceed in this order:
    last good partition on fetch/parse failure, and abort on cache write failure.
    Offline tests use fake clients, clocks, sleeps, and Redis; no provider or
    production cache was contacted.
-7. **Implemented in the repository:** add the operator CLI, a non-blocking
-   per-container process lock, and systemd service/timer templates. The
+7. **Implemented in the repository:** add the legacy Redis operator CLI, a
+   non-blocking per-container process lock, and systemd service/timer templates. The
    repository template targets the production Compose path. Host installation
    and timer state are environment-specific; the local WSL setup has a separate
    WSL-path unit and a recorded enabled timer. The lock remains container-local,
    and neither application startup nor a `hero.guide` query refreshes data.
-8. **Historical deployment evidence:** a local full refresh, successful Sven and
+8. **Implemented, not run:** add the `data_updates refresh-guides` CLI over the
+   same serial refresher and file cache; protect the data-root and legacy refresh
+   locks, output a safe report, and wait for worker I/O on cancellation. API guide
+   reads and the timer remain on Redis pending a later storage switch.
+9. **Historical deployment evidence:** a local full refresh, successful Sven and
    Anti-Mage Service queries, and an enabled WSL timer are recorded in
    [`EVALS.md`](EVALS.md) and
    [`reference/hero-guide-operations.md`](reference/hero-guide-operations.md).

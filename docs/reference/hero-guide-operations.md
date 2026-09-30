@@ -61,6 +61,38 @@ to finish before closing Redis and releasing the lock. The urllib timeout is
 not a strict total-request or whole-run deadline. Do not assume killing only the host-side
 `docker compose exec` command proves the in-container refresh process has ended.
 
+## File-backed refresh command (implemented; not deployed or run)
+
+The separate file-backed entrypoint reuses `HeroGuideRefresher` and writes
+partitions through `FileHeroGuideCache`:
+
+```bash
+cd apps/api
+python -m app.vnext.data_updates refresh-guides --data-dir /absolute/data/root
+```
+
+`--data-dir` takes precedence over `DOTAMIND_DATA_DIR`; either must be an
+absolute path. The command does not require `DOTAMIND_REDIS_URL`, a catalog
+snapshot, or a Redis connection. It uses the D2PT hero list, keeps the serial
+Pub-position-then-Pro request order and one-second waits, and writes complete
+source snapshots to the guide files.
+
+It acquires `<data_root>/.update.lock` first and then
+`/tmp/dotamind-hero-guide-refresh.lock`, releasing them in reverse order. The
+second lock prevents overlap with the legacy Redis refresh command only for
+processes sharing that lock path inside one API container; it is not distributed.
+On cancellation, the command waits for an in-flight HTTP or file worker before
+releasing either lock. Its one-line JSON includes `"operation":"refresh-guides"`
+and the refresh report. Exit codes are 0 for success, 4 for partial completion,
+1 for execution failure, 2 for invalid configuration, 3 when either lock is
+busy, and 130 for cancellation.
+
+The API guide query still reads Redis and the existing systemd timer still
+invokes the legacy Redis command. The file-backed command has offline fake-client
+tests only; it has not been deployed or used for a real D2PT refresh. Do not
+install the Redis and file refresh commands together as daily jobs. Guide API
+switching remains a separate migration step.
+
 ## Optional systemd schedule
 
 The repository provides `deploy/systemd/dotamind-hero-guides.service` and
@@ -170,8 +202,9 @@ failure, 2 means invalid arguments or missing configuration, and 130 means
 interruption. Error JSON uses fixed reasons and excludes credentials and
 exception text.
 
-No real data root has been initialized and no Redis migration has been run. The
-API still reads its bundled catalog, guide queries and the refresh CLI/timer
-still use Redis, and no unified scheduled updater or API hot reload is enabled.
-Keep the Redis guide data until migration verification and API switching have
-been separately accepted.
+No real data root has been initialized, no Redis migration has been run, and no
+real file-backed guide refresh has been performed. The API still reads its
+bundled catalog, guide queries and the existing refresh CLI/timer still use
+Redis, and no unified scheduled updater or guide API switch is enabled. Keep the
+Redis guide data until migration verification and API switching have been
+separately accepted.

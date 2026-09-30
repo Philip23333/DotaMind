@@ -60,9 +60,11 @@ depend on images.
 When `DOTAMIND_DATA_DIR` is unset, the API loads its entity catalog from files
 bundled with the API code. When set to an absolute path, the API requires a valid
 published catalog snapshot there and uses the background loader. `hero.guide`
-still reads Redis snapshots, and its operator refresh CLI writes those snapshots.
-The persistent catalog and guide stores are implemented, as are manual
-initialization and Redis-import commands, but neither command has been run
+still reads Redis snapshots, and the legacy Redis refresh CLI writes those snapshots.
+The file-backed `refresh-guides` operator command is implemented, but has only
+offline fake-client coverage and has not been used for a real D2PT refresh. The
+persistent catalog and guide stores are implemented, as are manual initialization
+and Redis-import commands, but neither initialization nor migration has been run
 against an operational data root or Redis cache. The conceptual data areas are
 `catalog`, `patches`, `images`, and `guides`.
 
@@ -136,13 +138,31 @@ cache API, imports complete non-missing entries, and reads each imported or
 already-present file back for value equality. Identical files are safe to skip;
 conflicting or corrupt targets stop the migration. The report counts checked,
 missing, imported, and already-present partitions. Tests use a fake Redis and
-temporary files. No real Redis migration has been run. The API, existing refresh
-CLI, and timer still use Redis. The new `migrate-guides` operator command calls
-this component using the hero list from the current file-backed catalog; it
-reads `DOTAMIND_REDIS_URL` from the environment.
+temporary files. No real Redis migration has been run. The new `migrate-guides`
+operator command calls this component using the hero list from the current
+file-backed catalog; it reads `DOTAMIND_REDIS_URL` from the environment.
+
+`python -m app.vnext.data_updates refresh-guides --data-dir /absolute/data/root`
+uses the existing `HeroGuideRefresher` with `FileHeroGuideCache`. A minimal
+`HeroGuideWriter` protocol expresses the two write methods used by the refresher;
+the serial request order, one-second waits, parsers, stable error codes, and
+failure retention remain unchanged. The command requires an absolute data root
+from `--data-dir` or `DOTAMIND_DATA_DIR`, but does not require a catalog snapshot
+or Redis URL and does not construct a Redis client. It takes
+`<data_root>/.update.lock` followed by the existing
+`/tmp/dotamind-hero-guide-refresh.lock`, releasing both in reverse order. The
+second lock prevents overlap with the legacy Redis refresh command only among
+processes sharing that container-local lock path. It does not coordinate across
+containers.
+
+The file refresh command has offline fake-client tests only; it has not been
+deployed or used for a real D2PT refresh. API guide queries still read Redis, and
+the existing daily timer still runs the Redis refresh command. These are two
+migration-stage operation entrypoints; do not install both as daily jobs.
 
 Run `python -m app.vnext.data_updates init-catalog` before
-`python -m app.vnext.data_updates migrate-guides`. Both accept `--data-dir` as
+`python -m app.vnext.data_updates migrate-guides` when importing existing guide
+data. Those commands accept `--data-dir` as
 an absolute persistent root, falling back to `DOTAMIND_DATA_DIR`; an unset or
 invalid path fails instead of defaulting to the repository or working
 directory. `init-catalog` accepts an optional local `--source-dir` and defaults
@@ -154,9 +174,13 @@ reported rather than overwritten.
 Migration uses the current published catalog's hero list, does not scan Redis
 keys or request provider data, and writes only to the configured data root.
 Identical target partitions are verified and skipped; conflicts stop with the
-files and Redis entries preserved. Run the command in the same API container as
-the Redis refresh CLI because their shared refresh lock is container-local.
-The API and recurring refresh path have not switched to files.
+files and Redis entries preserved. Run it in the same API container as the
+Redis refresh CLI because their shared refresh lock is container-local.
+
+The independent `refresh-guides` operation does not require `init-catalog` or
+`migrate-guides`; it uses the D2PT hero list and writes partitions directly to
+the configured file cache. No real file refresh has been run. The API and
+recurring refresh path have not switched to files.
 
 The existing 36-hour stale rule remains query semantics; it is not a file TTL or
 deletion rule. Local-name enrichment remains at query time and is not written
@@ -410,21 +434,24 @@ forcibly stop an urllib request already running in its worker thread.
 The refresher returns an in-memory report with status, timing, hero/request and
 publication counts, empty-response counts, and ordered partition failures. It
 does not retain exception text or provider response payloads in the report. The
-executor is not wired to application startup or an HTTP endpoint. The CLI reads
-`DOTAMIND_REDIS_URL` from its process environment, acquires a non-blocking `flock`
-at `/tmp/dotamind-hero-guide-refresh.lock` before creating resources, pings Redis,
-executes one refresh, emits one JSON result, and closes Redis before releasing the
-lock. Success, partial, failed, skipped, and cancelled results use fixed exit
-codes; exception details and credentials are not printed. The lock coordinates
-processes sharing one API container's `/tmp` only, not multiple API containers.
-On SIGINT/SIGTERM the CLI cancels the refresh coroutine, then waits for the
-default executor before closing Redis; cancellation does not forcibly stop an
-urllib request already running in its worker thread. The repository templates
-invoke this CLI daily at 03:00 Asia/Shanghai; their production paths do not
-describe local WSL installation state. A historical WSL record says its separate
-timer was enabled and a local full refresh populated guide data. This does not
-establish a successful scheduled firing, another deployment's cache contents, or
-file-backed catalog operation in a deployed API container.
+executor is not wired to application startup or an HTTP endpoint. The legacy
+`python -m app.vnext.hero_guides refresh` command reads `DOTAMIND_REDIS_URL`,
+acquires the non-blocking lock at `/tmp/dotamind-hero-guide-refresh.lock`, pings
+Redis, executes one refresh, emits one JSON result, and closes Redis before
+releasing the lock. The new `python -m app.vnext.data_updates refresh-guides`
+command writes with `FileHeroGuideCache`; it first acquires
+`<data_root>/.update.lock`, then the same refresh lock. It does not construct
+Redis. Both commands reuse the same refresher and wait for default-executor work
+to finish during SIGINT/SIGTERM cleanup. Exit codes and JSON reasons are fixed;
+exception details and credentials are not printed. The refresh lock coordinates
+processes sharing one API container's `/tmp` only, not multiple containers. The
+repository timer still invokes the legacy Redis command daily at 03:00
+Asia/Shanghai. Do not install both commands as daily jobs. The file refresh
+command has not been deployed or used for a real D2PT refresh; the API still reads
+guide snapshots from Redis. A historical WSL record says its separate timer was
+enabled and a local full refresh populated guide data; it does not establish a
+successful scheduled firing, another deployment's cache contents, or file-backed
+guide reads in a deployed API container.
 
 The cache is connected to a read-only `HeroGuideService`, which the model-facing
 `hero.guide` tool exposes when the application injects the cache. The Service

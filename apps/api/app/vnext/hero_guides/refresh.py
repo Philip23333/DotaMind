@@ -11,7 +11,7 @@ from typing import Literal
 from app.vnext.providers.d2pt import D2PTClient, D2PTError, D2PTResponse
 from app.vnext.providers.d2pt.parsers import parse_pro_examples, parse_pub_builds
 
-from .cache import GuideCacheSnapshot, RedisHeroGuideCache
+from .cache import GuideCacheSnapshot, HeroGuideWriter
 
 SampleType = Literal["pub", "pro"]
 RefreshStatus = Literal["success", "partial", "failed"]
@@ -47,7 +47,7 @@ class HeroGuideRefresher:
     def __init__(
         self,
         client: D2PTClient,
-        cache: RedisHeroGuideCache,
+        cache: HeroGuideWriter,
         *,
         clock: Callable[[], datetime] | None = None,
         sleep: Callable[[float], Awaitable[None]] | None = None,

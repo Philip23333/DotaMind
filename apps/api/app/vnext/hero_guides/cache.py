@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import datetime
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, Protocol
 
 from pydantic import (
     BaseModel,
@@ -78,6 +78,27 @@ class GuideCacheSnapshot(BaseModel):
             if self.pub_guides:
                 raise ValueError("Pro snapshots cannot contain Pub guides")
         return self
+
+
+class HeroGuideWriter(Protocol):
+    """Minimal persistence interface needed by the serial guide refresher."""
+
+    async def publish(
+        self,
+        snapshot: GuideCacheSnapshot,
+        *,
+        attempted_at: datetime,
+    ) -> None: ...
+
+    async def record_failure(
+        self,
+        *,
+        sample_type: Literal["pub", "pro"],
+        hero_id: int,
+        position: int | None = None,
+        attempted_at: datetime,
+        error_code: str,
+    ) -> None: ...
 
 
 class GuideCacheEntry(BaseModel):
@@ -406,5 +427,6 @@ __all__ = [
     "HeroGuideCacheDataError",
     "HeroGuideCacheError",
     "HeroGuideCacheUnavailableError",
+    "HeroGuideWriter",
     "RedisHeroGuideCache",
 ]

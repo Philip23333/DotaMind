@@ -246,7 +246,7 @@ not turn into deterministic test failures.
 Never commit credentials, authorization headers, request tokens, or material
 user data.
 
-## Hero guide evaluation (Redis path, standalone file/import/reload components, and operator entrypoints implemented; API integration pending)
+## Hero guide evaluation (Redis query path and file refresh/import components implemented; API file reads pending)
 
 The D2PT probe recorded in [`reference/d2pt.md`](reference/d2pt.md) is a live
 connectivity and sample-shape check for one Sven Pub row and one Sven Pro row.
@@ -288,13 +288,22 @@ verify those events and source fields survive parsing; this is regression
 coverage for the observed pattern, not Pro full-hero acceptance or evidence that
 other previously failed heroes now parse.
 
-CLI tests exercise help/argument handling, environment-only Redis configuration,
-same-container non-blocking lock behavior, one-line safe JSON results, fixed exit
-codes, resource cleanup, and SIGINT/SIGTERM cleanup while a worker request is in
-flight. They use fake Redis/client/refresher dependencies and a local process lock;
-they make no D2PT, Redis, Docker, or model calls. The repository service/timer
-files are templates; a separate historical WSL record says the local timer was
-enabled. Enablement alone does not show that a scheduled invocation succeeded.
+The legacy Redis CLI tests exercise help/argument handling, environment-only
+Redis configuration, same-container non-blocking lock behavior, one-line safe
+JSON results, fixed exit codes, resource cleanup, and SIGINT/SIGTERM cleanup
+while a worker request is in flight. They use fake Redis/client/refresher
+dependencies and a local process lock; they make no D2PT, Redis, Docker, or model
+calls. The repository service/timer files are templates; a separate historical
+WSL record says the local timer was enabled. Enablement alone does not show that
+a scheduled invocation succeeded.
+
+The `refresh-guides` data-update CLI is covered with a fake D2PT client and
+temporary data roots. Tests verify that no Redis URL or client is required, the
+data-root and existing guide-refresh locks are acquired in order, either lock
+prevents provider construction, the report is emitted as one safe JSON line with
+ISO timestamps and fixed exit codes, cache errors are redacted, and cancellation
+waits for a blocked file-write worker before either lock is released. No real
+refresh is performed by these tests.
 
 The standalone `FileHeroGuideCache` acceptance uses temporary directories and
 the committed Sven Pub/Pro fixtures plus all three Pro fixtures containing
@@ -306,6 +315,13 @@ tests use `FakeRedis`; they verify pre-I/O hero-list validation, first-seen orde
 the five Pub reads followed by one Pro read per hero, complete status import,
 read-back equality, safe resume, and absence of Redis writes, deletes, or expiry
 operations. These tests do not connect to Redis or run an actual data migration.
+
+`test_file_guide_refresh.py` connects the real `HeroGuideRefresher` to the real
+`FileHeroGuideCache` with fake D2PT responses. It verifies the seven serial
+requests for one hero, one-second waits through an injected sleeper, source byte
+and row retention, DTO projection and attempt times, valid empty partitions,
+failure retention followed by recovery, and abort on file-write failure. It does
+not access D2PT, Redis, catalog files, or images.
 
 ### Catalog snapshot store acceptance (implemented)
 
@@ -365,7 +381,7 @@ acceptance. The remaining operational behaviors have not passed acceptance:
 | Layer | Required evidence |
 |---|---|
 | Updater publication | Connect the accepted snapshot store to the updater and prove failed fetches, writes, or validation leave the current successful revision active. |
-| Migration execution and guide switch | Run the importer CLI against the intended Redis and persistent data root and verify every selected partition and report. Guide reads, refresh CLI, and timer still use Redis. |
+| Migration execution and guide switch | Run the importer CLI against the intended Redis and persistent data root and verify every selected partition and report. API guide reads and the existing timer still use Redis. The file refresh CLI has offline acceptance only; it has not been deployed or run against D2PT. Do not install both refresh commands as daily jobs. |
 | Version gate | Same-patch success skips the full fetch; version-check failure does not skip; a failed new publication is retried next run. |
 | Fetch sharing and bounds | Shared responses are not fetched twice; Valve total concurrency stays within its bound; D2PT requests remain serial. |
 | Catalog hot reload | Offline tests prove a new snapshot switches in one API process only after full validation, each catalog/guide/name-match operation pins one version, and invalid snapshots leave the old one active. Real persistent-directory and container behavior remains unverified. |
