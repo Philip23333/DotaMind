@@ -263,7 +263,7 @@ cross-session guide cache is distinct from the process-local, session-owned
 Artifact store: Artifacts continue to hold oversized logical tool responses and
 are not the durable guide cache.
 
-## Shared data updates and API hot reload (confirmed target; implementation pending)
+## Shared data updates and API hot reload (catalog snapshot store implemented; integration pending)
 
 The shared update task owns application-wide Valve entities, patch records,
 images, and D2PT guide partitions. Its planned responsibilities are:
@@ -275,6 +275,14 @@ images, and D2PT guide partitions. Its planned responsibilities are:
 | Publication | Publish the five-file entity catalog as one snapshot; publish guide partitions independently; process patch records and images separately. |
 | Persistence | Let the updater write the shared persistent data directory. Mount it durably across container recreation and keep API access read-only. |
 | Online reads | Load catalogs in the background and switch snapshots; read guides by partition. Queries never start a remote refresh. |
+
+The standalone `CatalogSnapshotStore` now copies the five catalog JSON files
+byte-for-byte into immutable UUID-revision directories, validates the copied
+catalog and sync audit, and atomically replaces `catalog/current.json` only
+after the complete revision can be loaded by `DotaCatalogRepository`. A failed
+publication leaves the prior pointer intact. This component is not connected to
+an updater, an application data-root setting, or API hot reload; it does not
+claim power-loss recovery.
 
 ```text
 schedule -> updater -> persistent data
@@ -297,12 +305,12 @@ previously generated Artifacts. API processes may detect a publication at
 different checks within the 30-second interval; the design does not promise a
 simultaneous fleet-wide switch.
 
-Today, the API loads entity catalog files bundled with its code into a
+Today, the API still loads entity catalog files bundled with its code into a
 process-cached repository, guide queries use Redis, and the guide-only refresh
-CLI runs inside the API container. The
-shared writable data directory, file-backed guides, unified updater, and catalog
-hot reload are migration targets. They do not change the session Artifact
-storage contract.
+CLI runs inside the API container. The standalone store does not change those
+read paths. Automatic data-directory initialization, file-backed guides, the
+unified updater, and catalog hot reload remain migration targets. They do not
+change the session Artifact storage contract.
 
 ## Runtime boundary
 

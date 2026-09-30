@@ -77,13 +77,21 @@ dota2_items.json
 sync_audit.json
 ```
 
-An update writes all five documents into a candidate catalog directory,
-validates the complete set, and only then atomically changes the reference to the
-current snapshot. Replacing each JSON file atomically does not make the five-file
-set an atomic publication. A failed write or validation must leave the current
-successful snapshot and its version unchanged. Retain at least the immediately
-previous successful catalog; the exact history limit is an implementation
-choice.
+The standalone `CatalogSnapshotStore` is implemented. Given a caller-supplied
+data root and source directory, it copies these five files byte-for-byte into
+`catalog/snapshots/<revision>/`, validates the copied models, catalog relations,
+and sync audit, then atomically replaces `catalog/current.json`. The pointer's
+UUID-hex revision is independent of the Dota patch and catalog schema versions.
+Failed publication leaves the current pointer unchanged; successful snapshot
+directories are retained. The store loads the pointed revision into a
+`DotaCatalogRepository`, but is not yet connected to API reads or an update
+entrypoint. Real data-root initialization/configuration and API hot reload remain
+pending. Offline tests do not establish power-loss recovery.
+
+The eventual updater must validate the complete set before changing the current
+reference. Replacing each JSON file atomically does not make the five-file set an
+atomic publication. A failed write or validation must leave the current
+successful snapshot and its version unchanged.
 
 Images are separate best-effort resources. A failed download keeps an existing
 image when present, and a missing image does not block catalog publication.

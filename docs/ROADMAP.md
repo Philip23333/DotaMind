@@ -108,26 +108,35 @@ before a second concrete implementation demonstrates the need.
   section bounds, cache compatibility, composition sharing, and Artifact reads.
   `game.detail` name enrichment is a later independent follow-up.
 
-## Shared data update migration (design confirmed; implementation pending)
+## Shared data update migration (catalog snapshot store implemented; integration pending)
 
 Current priority is moving shared game data from the committed Valve catalog and
 Redis guide cache to a persistent file-backed update path with API hot reload.
-The sequence is:
+The standalone catalog storage boundary is implemented; the remaining sequence
+is:
 
-1. Create the persistent data directory and publish entity catalogs as complete
-   validated snapshots.
-2. Add file-backed guide partitions and migrate Redis snapshots with content and
+1. **Implemented, standalone:** `CatalogSnapshotStore` copies the existing five
+   catalog JSON files byte-for-byte, validates the copied models, catalog
+   relations, and audit, and publishes each complete snapshot under a unique
+   UUID revision by atomically replacing `catalog/current.json`. Failed
+   publication keeps the old pointer; successful revision directories remain
+   available. The component is not wired to automatic data-directory
+   initialization, configuration, API reads, or an update task.
+2. Initialize and configure the persistent data directory; connect the updater
+   to publish entity catalogs through the snapshot store.
+3. Add file-backed guide partitions and migrate Redis snapshots with content and
    status verification.
-3. Add API catalog hot reload and connect image matching to the active snapshot.
-4. Split and reuse the Valve fetch script for catalog, patch, and image work.
-5. Add the unified update entrypoint and patch-version gate.
-6. Connect the persistent data volume and one daily 03:00 Asia/Shanghai schedule.
-7. Deploy and verify persistent reads, query-consistent hot reload, fallback,
+4. Add API catalog hot reload and connect image matching to the active snapshot.
+5. Split and reuse the Valve fetch script for catalog, patch, and image work.
+6. Add the unified update entrypoint and patch-version gate.
+7. Connect the persistent data volume and one daily 03:00 Asia/Shanghai schedule.
+8. Deploy and verify persistent reads, query-consistent hot reload, fallback,
    and the scheduled update path.
 
-These steps are a confirmed design only; none of the file migration, unified
-entrypoint, or API hot reload is marked implemented here. `game.detail` entity
-name enrichment remains a later independent item after this data-update
+Only the standalone five-file storage component is marked implemented here. The
+remaining file migration, unified entrypoint, schedule, and API hot reload are
+pending. Its offline tests do not establish power-loss recovery. `game.detail`
+entity-name enrichment remains a later independent item after this data-update
 migration.
 
 ## Subsequent capability work

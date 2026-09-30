@@ -296,14 +296,27 @@ they make no D2PT, Redis, Docker, or model calls. The repository service/timer
 files are templates; a separate historical WSL record says the local timer was
 enabled. Enablement alone does not show that a scheduled invocation succeeded.
 
-### Shared file-update acceptance (pending)
+### Catalog snapshot store acceptance (implemented)
+
+`CatalogSnapshotStore` is covered by offline `tmp_path` tests using copies of the
+committed five-file Valve catalog. They verify byte-preserving copies, ignored
+extra files, runtime Repository queries, distinct UUID revisions for the same
+patch, retention of prior revisions and already-loaded repositories, all five
+required files, catalog/audit validation, failure injection during copy, final
+directory rename, and pointer replacement, plus reads on both sides of the
+atomic pointer switch. Invalid pointers and missing revisions are rejected with
+stable store-error reasons. These tests do not write to the committed catalog,
+call providers, or establish power-loss recovery. The component is not wired to
+an update entrypoint or API reads.
+
+### Shared file-update acceptance (integration pending)
 
 The following matrix is for the planned file-backed updater and API hot reload.
 These behaviors have not passed acceptance:
 
 | Layer | Required evidence |
 |---|---|
-| Catalog publication | The five JSON files always form one validated snapshot; interruption or write failure does not switch the successful-snapshot reference. |
+| Updater publication | Connect the accepted snapshot store to the updater and prove failed fetches, writes, or validation leave the current successful revision active. |
 | Guide migration | Raw bytes, parsed source rows, DTOs, retrieval/attempt times, and statuses round-trip; missing, valid-empty, and failed-with-last-good remain distinct. |
 | Version gate | Same-patch success skips the full fetch; version-check failure does not skip; a failed new publication is retried next run. |
 | Fetch sharing and bounds | Shared responses are not fetched twice; Valve total concurrency stays within its bound; D2PT requests remain serial. |
