@@ -53,7 +53,7 @@ from app.vnext.capabilities.player.recent_games import (
     PlayerRecentGamesResult,
 )
 from app.vnext.catalog import EntityNameResolver
-from app.vnext.hero_guides.cache import RedisHeroGuideCache
+from app.vnext.hero_guides.cache import HeroGuideReader
 from app.vnext.integrations.mcp import MCPRemoteClient, MCPRemoteError
 from app.vnext.llm.openai_compatible import OpenAICompatibleModelClient
 from app.vnext.providers.opendota import OpenDotaClient, OpenDotaGameDetailAdapter
@@ -385,7 +385,7 @@ class VNextServices:
 def build_vnext_services(
     settings: VNextSettings | None = None,
     *,
-    hero_guide_cache: RedisHeroGuideCache | None = None,
+    hero_guide_cache: HeroGuideReader | None = None,
     catalog_repository_provider: Callable[[], DotaCatalogRepository] | None = None,
 ) -> VNextServices:
     config = settings or VNextSettings.from_env()

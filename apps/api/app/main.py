@@ -41,7 +41,8 @@ from app.vnext.composition import (
 )
 from app.vnext.data_updates.catalog_loader import CatalogSnapshotLoader
 from app.vnext.data_updates.catalog_store import CatalogSnapshotStore
-from app.vnext.hero_guides.cache import RedisHeroGuideCache
+from app.vnext.hero_guides.cache import HeroGuideReader, RedisHeroGuideCache
+from app.vnext.hero_guides.file_cache import FileHeroGuideCache
 from app.vnext.product import (
     ConversationContextBuilder,
     DotaVisualEntityEnricher,
@@ -134,8 +135,9 @@ async def lifespan(app: FastAPI):
                 vnext_redis,
                 ttl_seconds=vnext_settings.trace_ttl_seconds,
             )
-        hero_guide_cache = (
-            RedisHeroGuideCache(vnext_redis) if vnext_redis is not None else None
+        hero_guide_cache = _hero_guide_cache_for_data_dir(
+            vnext_settings.data_dir,
+            vnext_redis,
         )
         vnext_services = build_vnext_services(
             vnext_settings,
@@ -244,6 +246,17 @@ def _repository_provider_for_loader(
     loader: CatalogSnapshotLoader,
 ) -> Callable[[], DotaCatalogRepository]:
     return lambda: loader.current().repository
+
+
+def _hero_guide_cache_for_data_dir(
+    data_dir: Path | None,
+    redis_client: object | None,
+) -> HeroGuideReader | None:
+    if data_dir is not None:
+        return FileHeroGuideCache(data_dir)
+    if redis_client is not None:
+        return RedisHeroGuideCache(redis_client)
+    return None
 
 
 app = FastAPI(

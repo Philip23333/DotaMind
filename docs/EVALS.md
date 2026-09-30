@@ -246,7 +246,7 @@ not turn into deterministic test failures.
 Never commit credentials, authorization headers, request tokens, or material
 user data.
 
-## Hero guide evaluation (Redis query path and file refresh/import components implemented; API file reads pending)
+## Hero guide evaluation (Redis/file query paths and file refresh/import components implemented; migration and deployment pending)
 
 The D2PT probe recorded in [`reference/d2pt.md`](reference/d2pt.md) is a live
 connectivity and sample-shape check for one Sven Pub row and one Sven Pro row.
@@ -323,6 +323,18 @@ and row retention, DTO projection and attempt times, valid empty partitions,
 failure retention followed by recovery, and abort on file-write failure. It does
 not access D2PT, Redis, catalog files, or images.
 
+`test_file_guide_api_wiring.py` verifies that `DOTAMIND_DATA_DIR` selects file
+guide reads even when Redis is configured, that file mode also registers the
+tool without Redis, and that no configured store leaves the tool unavailable.
+It runs the existing Sven fixtures through the real file cache, Service, tool,
+and Artifact read path; checks names, source metadata, totals, sections, and
+exclusion of raw bytes/source rows; and covers immediate visibility after an
+atomic replacement, missing versus empty data, retained success with a failed
+attempt, single/both partition corruption, and query-time read-only behavior.
+A gated file read with a Catalog loader publication verifies that one query
+keeps the resolver captured before its cache wait while the next query sees the
+new snapshot. These are offline tests and do not exercise a deployed data root.
+
 ### Catalog snapshot store acceptance (implemented)
 
 `CatalogSnapshotStore` is covered by offline `tmp_path` tests using copies of the
@@ -333,8 +345,8 @@ required files, catalog/audit validation, failure injection during copy, final
 directory rename, and pointer replacement, plus reads on both sides of the
 atomic pointer switch. Invalid pointers and missing revisions are rejected with
 stable store-error reasons. These tests do not write to the committed catalog,
-call providers, or establish power-loss recovery. The component is not wired to
-API reads.
+call providers, or establish power-loss recovery. API reads are covered by the
+separate loader and wiring tests.
 
 The offline data-update CLI tests use temporary data roots and FakeRedis. They
 cover absolute data-root validation and argument-over-environment precedence,
@@ -381,7 +393,7 @@ acceptance. The remaining operational behaviors have not passed acceptance:
 | Layer | Required evidence |
 |---|---|
 | Updater publication | Connect the accepted snapshot store to the updater and prove failed fetches, writes, or validation leave the current successful revision active. |
-| Migration execution and guide switch | Run the importer CLI against the intended Redis and persistent data root and verify every selected partition and report. API guide reads and the existing timer still use Redis. The file refresh CLI has offline acceptance only; it has not been deployed or run against D2PT. Do not install both refresh commands as daily jobs. |
+| Migration execution and guide switch | Run the importer CLI against the intended Redis and persistent data root and verify every selected partition and report. API instances with `DOTAMIND_DATA_DIR` read files; without it, they use Redis when configured. The existing timer still uses Redis. The file refresh CLI has offline acceptance only; it has not been deployed or run against D2PT. Do not install both refresh commands as daily jobs. |
 | Version gate | Same-patch success skips the full fetch; version-check failure does not skip; a failed new publication is retried next run. |
 | Fetch sharing and bounds | Shared responses are not fetched twice; Valve total concurrency stays within its bound; D2PT requests remain serial. |
 | Catalog hot reload | Offline tests prove a new snapshot switches in one API process only after full validation, each catalog/guide/name-match operation pins one version, and invalid snapshots leave the old one active. Real persistent-directory and container behavior remains unverified. |

@@ -246,11 +246,13 @@ capability contract and its tests, not to this generic registry baseline.
 ## `hero.guide` cache query
 
 The input and DTO contract for `hero.guide(hero_id, position, section)` is
-defined in `app.vnext.capabilities.hero.guide`. This tool is currently
-conditionally registered when the application injects its existing Redis
-cache. After the planned file-store migration, availability will no longer
-depend on a guide Redis connection; the public input, section values, Pub/Pro
-boundaries, and DTO remain unchanged. `hero_id` is a strict positive
+defined in `app.vnext.capabilities.hero.guide`. The application registers this
+tool when it can inject a guide reader: `DOTAMIND_DATA_DIR` selects the file
+cache, otherwise a configured Redis connection selects the Redis cache. With
+neither configured, the tool is not registered. File mode takes priority over
+Redis and a missing or invalid file partition does not fall back to Redis. The
+public input, section values, Pub/Pro boundaries, and DTO remain unchanged.
+`hero_id` is a strict positive
 integer, `position` is a strict integer from 1 through 5, and `section` is one
 of `all`, `items`, `skills`, or `pro_examples` (default `all`). The input does
 not accept a name, provider/source selector, URL, or refresh flag.
@@ -269,12 +271,14 @@ skill candidates.
 Source metadata can represent available, empty, or missing data, and can retain
 stale available data alongside a last refresh error. Retrieval and attempt times
 require timezones; the source `updated_at` remains an unparsed string. The D2PT
-HTTP client, pure Pub/Pro parsers, Redis snapshot cache, `HeroGuideService`, and
-`hero.guide` tool are implemented. Today, the tool is registered only when the
-application injects the existing Redis connection. It reads Redis only, never
-refreshes on a miss, and does not expose the raw body or complete source rows.
-The target file store reads the same guide partitions while keeping the tool
-query-only.
+HTTP client, pure Pub/Pro parsers, Redis snapshot cache, `FileHeroGuideCache`,
+`HeroGuideService`, and `hero.guide` tool are implemented. With
+`DOTAMIND_DATA_DIR`, the API reads the file partitions from that same directory
+used by the Catalog loader; otherwise it uses the existing Redis connection when
+available. The Service reads both partitions once per query, never refreshes on a
+miss, and does not expose the raw body or complete source rows. File reads do not
+cache contents or write, repair, or refresh files, so an atomic replacement is
+visible on the next query.
 The cache has no TTL, keeps the last successful snapshot after a failed attempt,
 and remains independent of session Artifacts.
 

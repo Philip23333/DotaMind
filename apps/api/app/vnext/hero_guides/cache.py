@@ -132,6 +132,19 @@ class HeroGuideCacheDataError(HeroGuideCacheError):
         super().__init__("hero guide cache data is invalid")
 
 
+class HeroGuideReader(Protocol):
+    """Minimal read-only interface used by hero-guide queries."""
+
+    async def get_pub(
+        self,
+        *,
+        hero_id: int,
+        position: int,
+    ) -> GuideCacheEntry: ...
+
+    async def get_pro(self, *, hero_id: int) -> GuideCacheEntry: ...
+
+
 class RedisHeroGuideCache:
     """Persist independent Pub and Pro snapshots in Redis hashes without TTL."""
 
@@ -427,6 +440,7 @@ __all__ = [
     "HeroGuideCacheDataError",
     "HeroGuideCacheError",
     "HeroGuideCacheUnavailableError",
+    "HeroGuideReader",
     "HeroGuideWriter",
     "RedisHeroGuideCache",
 ]

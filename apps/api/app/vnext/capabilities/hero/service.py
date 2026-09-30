@@ -23,7 +23,7 @@ from app.vnext.hero_guides.cache import (
     GuideCacheSnapshot,
     HeroGuideCacheDataError,
     HeroGuideCacheUnavailableError,
-    RedisHeroGuideCache,
+    HeroGuideReader,
 )
 
 _SCOPE_FIELDS = ("position", "updated_at", "data_scope")
@@ -43,7 +43,7 @@ class HeroGuideService:
 
     def __init__(
         self,
-        cache: RedisHeroGuideCache,
+        cache: HeroGuideReader,
         resolver_factory: Callable[[], EntityNameResolver],
         *,
         clock: Callable[[], datetime] | None = None,

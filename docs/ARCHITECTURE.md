@@ -167,7 +167,7 @@ logical tool response; the bounded model observation is derived separately by
 the generic result processor for ordinary tools. A stored ref is not
 automatically restored into a later turn's dialogue context.
 
-## Hero guide data flow (Redis query and file refresh/import implemented; API still reads Redis)
+## Hero guide data flow (Redis/file queries and file refresh/import implemented; migration and scheduling pending)
 
 The synchronous D2PT HTTP client is implemented with `urllib.request`; its
 deterministic tests use an injected opener and make no live request. It sends
@@ -180,9 +180,12 @@ one snapshot. A successful publish replaces the complete snapshot with one
 Redis `HSET`; callers record a failed fetch/parse by updating only attempt
 metadata, which keeps the last successful snapshot. Reads use one `HGETALL`.
 Keys have no TTL.
-The cache accepts an injected Redis client and does not create connections. The
-application wraps its existing lifespan Redis client and injects the cache into
-composition, which registers the `hero.guide` Service/tool only when supplied.
+The Redis cache accepts an injected client and does not create connections. At
+startup, a configured `DOTAMIND_DATA_DIR` selects `FileHeroGuideCache`; otherwise
+the application wraps its existing Redis client when one is configured. The same
+data root is used for the Catalog loader and guide files. Composition registers
+the `hero.guide` Service/tool only when a reader is supplied. File mode takes
+priority over Redis and never falls back to it for missing or invalid partitions.
 An internal `HeroGuideRefresher` now connects the injected D2PT client and cache:
 it fetches the hero list once, then requests Pub positions 1 through 5 and Pro
 once per hero in source order. Requests run sequentially through
@@ -245,7 +248,9 @@ new data_updates CLI
 
 The new and legacy paths are separate migration-stage entrypoints and must not be
 installed together as daily jobs. The existing timer still runs the Redis
-command; the API and `hero.guide` still read Redis. The refresh lock only
+command. The API reads files when `DOTAMIND_DATA_DIR` is configured and uses Redis when
+the data directory is unset and Redis is configured; without either store the
+tool is absent. No guide read falls back between stores. The refresh lock only
 coordinates processes sharing one API container; multi-container coordination is
 not implemented. Neither command is an HTTP endpoint or model-facing tool. The
 repository timer template is deployment-specific, and its presence does not
@@ -260,7 +265,7 @@ repository's guide-only timer template is configured for 03:00 Asia/Shanghai;
 installed schedules and their execution history are host-specific. The lock
 prevents overlap only among CLI processes in one API container.
 
-The current online path is read-only when Redis is available:
+The current online guide query path is read-only:
 
 ```text
 Model -> hero.guide(hero_id, position, section)
@@ -271,16 +276,19 @@ Model -> hero.guide(hero_id, position, section)
       -> bounded tool result or existing generic Artifact externalization
 ```
 
-At application startup, the cache wraps the lifespan's existing `vnext_redis`
-client; composition does not open or close Redis connections. The tool is
-registered only when the cache dependency is injected. The Guide Service reads
-Pub and Pro once each for every query, filters Pro examples to the exact hero and
-position, and applies the requested section without changing source status or
-candidate totals. It does not call D2PT or start a refresh. Missing or stale
-partitions are reported while any readable source data is returned; if both
-cache reads fail, the tool returns a fixed execution error. The Guide Service
+With `DOTAMIND_DATA_DIR`, application startup injects a `FileHeroGuideCache` over
+that root; without it, the reader wraps the lifespan's existing `vnext_redis`
+client when available. Composition does not open or close Redis connections.
+The tool is registered when either configured reader is supplied and remains
+unregistered when neither data directory nor Redis is configured. The Guide
+Service reads Pub and Pro once each for every query, filters Pro examples to the
+exact hero and position, and applies the requested section without changing source status or
+candidate totals. It does not cache file contents, write or repair guide files,
+call D2PT, or start a refresh. Missing or stale partitions are reported while
+any readable source data is returned; if both cache reads fail, the tool returns
+a fixed execution error. The Guide Service
 resolves only visible hero, item, and ability IDs after section projection, in up
-to one batch per kind. It does not store names in Redis or invoke the
+to one batch per kind. It does not store names in guide snapshots or invoke the
 `catalog.lookup` tool. The top-level catalog version identifies the local Valve
 snapshot; a batch reporting a different version causes a fixed `ValueError`. The shared,
 cross-session guide cache is distinct from the process-local, session-owned
@@ -329,8 +337,10 @@ takes the same two locks before constructing D2PT and file-cache resources. The
 refresh lock is container-local, so migration and file refresh must run in the
 same API container as the legacy guide refresh CLI. The new refresh command has
 offline fake-client tests but has not been deployed or run against D2PT. No real
-initialization or Redis migration has been run. The API guide reader and existing
-timer still use Redis; do not schedule both refresh commands daily.
+initialization or Redis migration has been run. The API reads guide files when
+`DOTAMIND_DATA_DIR` is configured and Redis when the data directory is unset and
+Redis is configured; without either store the tool is absent. The existing timer
+still uses Redis. Do not schedule both refresh commands daily.
 
 ```text
 schedule -> updater -> persistent data
@@ -358,12 +368,13 @@ design does not promise a simultaneous fleet-wide switch.
 When `DOTAMIND_DATA_DIR` is unset, the API uses its existing bundled catalog
 repository. When set, it must name an absolute path containing a valid published
 snapshot; startup does not create or initialize the directory and does not fall
-back to bundled data on error. The file-backed guide refresh entrypoint exists,
-but API guide reads and the existing timer still use Redis. No operational data
+back to bundled data on error. The API also reads guide partitions from this same
+root, without falling back to Redis when a partition is missing or invalid. The
+existing timer still invokes the Redis refresh command. No operational data
 directory has been initialized, no Redis migration has been run, and no persistent
-container mount or scheduled unified updater has been accepted. Guide file reads,
-image-resource hot reload, automatic updates, and deployment verification remain
-pending. These changes do not alter the session Artifact storage contract.
+container mount or scheduled unified updater has been accepted. Image-resource
+hot reload, automatic updates, and deployment verification remain pending. These
+changes do not alter the session Artifact storage contract.
 
 ## Runtime boundary
 

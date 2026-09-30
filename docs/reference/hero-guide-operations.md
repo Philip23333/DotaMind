@@ -1,8 +1,10 @@
 # Hero guide refresh operations
 
-The current hero-guide refresh is an operator command, separate from online
-`hero.guide` queries. Queries read Redis only. The refresh command makes live
-D2PT requests and publishes successful source partitions to the shared Redis
+The hero-guide refresh commands are separate from online `hero.guide` queries.
+When `DOTAMIND_DATA_DIR` is configured, queries read file partitions from that
+root; otherwise they read Redis when configured. File mode does not fall back to
+Redis, and the tool is not registered if neither store is configured. The legacy
+Redis refresh command makes live D2PT requests and publishes successful source partitions to the shared Redis
 cache. Offline tests do not execute this command. A historical local WSL
 deployment record includes a full refresh and an enabled guide timer; it does not
 prove the timer fired or describe another host's installation.
@@ -87,11 +89,11 @@ and the refresh report. Exit codes are 0 for success, 4 for partial completion,
 1 for execution failure, 2 for invalid configuration, 3 when either lock is
 busy, and 130 for cancellation.
 
-The API guide query still reads Redis and the existing systemd timer still
-invokes the legacy Redis command. The file-backed command has offline fake-client
-tests only; it has not been deployed or used for a real D2PT refresh. Do not
-install the Redis and file refresh commands together as daily jobs. Guide API
-switching remains a separate migration step.
+The API can read file partitions when `DOTAMIND_DATA_DIR` is configured, but no
+operational data root or API deployment has been accepted. The existing systemd
+timer still invokes the legacy Redis command. The file-backed command has offline
+fake-client tests only; it has not been deployed or used for a real D2PT refresh.
+Do not install the Redis and file refresh commands together as daily jobs.
 
 ## Optional systemd schedule
 
@@ -203,8 +205,28 @@ interruption. Error JSON uses fixed reasons and excludes credentials and
 exception text.
 
 No real data root has been initialized, no Redis migration has been run, and no
-real file-backed guide refresh has been performed. The API still reads its
-bundled catalog, guide queries and the existing refresh CLI/timer still use
-Redis, and no unified scheduled updater or guide API switch is enabled. Keep the
-Redis guide data until migration verification and API switching have been
-separately accepted.
+real file-backed guide refresh has been performed. The API reads file-backed
+catalog and guide data only when `DOTAMIND_DATA_DIR` points to a valid initialized
+root; otherwise catalog reads use bundled data and guide reads use Redis when
+configured. The existing refresh CLI and timer still use Redis. No unified
+scheduled updater or deployment has been accepted. Keep the Redis guide data
+until migration verification and API switching have been separately accepted.
+
+## API file-read cutover order
+
+For a future cutover, use this order and verify each step before proceeding:
+
+1. Prepare the persistent data root and publish a valid Catalog snapshot.
+2. Import the intended Redis guide partitions with `migrate-guides`, then verify
+   the migration report and representative file entries.
+3. Pause the existing Redis guide timer and confirm no refresh is still running.
+4. Confirm the final imported files are valid. Investigate any conflicts; do not
+   force overwrite them.
+5. Configure the API with `DOTAMIND_DATA_DIR` and enable the matching file-backed
+   refresh job. The repository timer template still invokes the Redis command;
+   this task does not switch or enable a file schedule.
+6. Verify API queries, file refresh, and persistence across API-container
+   recreation. Only after that acceptance should operators consider removing old
+   Redis guide data.
+
+This sequence is operational guidance only. It has not been executed.

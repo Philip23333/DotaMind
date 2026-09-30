@@ -108,7 +108,7 @@ before a second concrete implementation demonstrates the need.
   section bounds, cache compatibility, composition sharing, and Artifact reads.
   `game.detail` name enrichment is a later independent follow-up.
 
-## Shared data update migration (catalog API and file refresh implemented; guide switch and deployment pending)
+## Shared data update migration (catalog API, file guide reads, and file refresh implemented; migration and deployment pending)
 
 Current priority is moving shared game data from the committed Valve catalog and
 Redis guide cache to a persistent file-backed update path with API hot reload.
@@ -129,22 +129,27 @@ is:
    initialized by this component.
 3. **Implemented, not executed:** the standalone `FileHeroGuideCache` and
    callable `migrate_redis_guides()` component. Offline FakeRedis and `tmp_path`
-   tests cover full-entry import and read-back verification. Guide queries, the
-   refresh CLI, and timer still use Redis; no real Redis migration has been run.
+   tests cover full-entry import and read-back verification. Configured API
+   instances read file partitions; instances without `DOTAMIND_DATA_DIR` use
+   Redis when configured. With neither store, the guide tool is absent. The
+   existing refresh CLI and timer still use Redis; no real Redis migration has
+   been run.
 4. **Implemented, not run:** expose
    `python -m app.vnext.data_updates migrate-guides` to use the current catalog's
    hero list and existing Redis importer. Run and verify it against the intended
-   Redis cache and persistent data root before changing guide reads. It shares the
-   data-root update lock and the guide refresh CLI lock, which only coordinates
-   processes in the same API container.
+   Redis cache and persistent data root before configuring API guide reads from
+   that root. It shares the data-root update lock and the guide refresh CLI lock,
+   which only coordinates processes in the same API container.
 5. **Implemented, not run:** expose
    `python -m app.vnext.data_updates refresh-guides --data-dir ...`, reusing the
    serial `HeroGuideRefresher` with `FileHeroGuideCache`. It does not require a
    catalog snapshot or Redis URL. It acquires the data-root lock and then the
    existing container-local guide refresh lock. Offline fake-client tests cover
    file publication and cancellation cleanup; no real D2PT refresh or deployment
-   has occurred. The API still reads guides from Redis and the existing timer
-   still invokes the Redis command; do not install both commands as daily jobs.
+   has occurred. The API reads files when `DOTAMIND_DATA_DIR` is configured and
+   Redis when the data directory is unset and Redis is configured; with neither
+   store the tool is absent. The existing timer still invokes the Redis command.
+   Do not install both commands as daily jobs.
 6. **Implemented:** add a loader that checks the current pointer by
    default every 30 seconds, validates changed snapshots in the background, and
    switches one in-memory snapshot reference only after a successful load.
@@ -160,13 +165,13 @@ is:
     scheduled update path.
 
 The five-file catalog store and loader, configured API lifecycle and catalog-name
-consumers, guide file/import components, and file-backed guide refresh entrypoint
-are implemented. Real catalog initialization, guide migration, and guide refresh
-have not been run. API guide reads and the existing timer still use Redis. Guide
-file reads, image-resource hot reload, the unified scheduled updater, persistent
-container mounts, and deployment acceptance remain pending. Offline tests do not
-establish power-loss recovery. `game.detail` entity-name enrichment remains a
-later independent item after this data-update migration.
+consumers, file-backed guide reads, guide import, and file-backed guide refresh
+entrypoint are implemented. Real catalog initialization, guide migration, and
+guide refresh have not been run. The existing timer still uses Redis. Image
+resource hot reload, the unified scheduled updater, persistent container mounts,
+and deployment acceptance remain pending. Offline tests do not establish
+power-loss recovery. `game.detail` entity-name enrichment remains a later
+independent item after this data-update migration.
 
 ## Subsequent capability work
 
@@ -177,7 +182,7 @@ later independent item after this data-update migration.
 4. Register the capability only after its focused acceptance passes.
 5. Remove transitional code once the replacement is accepted.
 
-## Hero guides (Redis query, both refresh commands, and file/import components implemented; application still uses Redis)
+## Hero guides (Redis/file query, both refresh commands, and file/import components implemented; operational migration pending)
 
 The internal query DTOs and two fixed raw Sven fixtures are implemented and
 covered by offline tests. A synchronous, bounded D2PT HTTP client is also
@@ -186,8 +191,9 @@ implemented and tested with a fake opener; those tests make no live request. The
 It stores exact response bytes, parsed source rows, and DTO projections in
 whole-snapshot Redis hashes without TTL; failed attempts retain the last good
 snapshot. Its tests use fake Redis and do not verify deployed AOF/restart
-persistence. The application injects its existing Redis connection into the
-cache and registers the cache-only `hero.guide` tool. A Service combines
+persistence. The application injects the file reader when `DOTAMIND_DATA_DIR` is
+configured, otherwise its existing Redis connection when available. It registers
+the cache-only `hero.guide` tool only when a reader is supplied. A Service combines
 independent Pub and Pro source states, filters Pro examples by position, applies
 section projections, and exposes pre-projection totals. Cache misses do not
 trigger D2PT requests. The internal `HeroGuideRefresher` fetches the hero list
@@ -228,8 +234,9 @@ Implementation and acceptance proceed in this order:
    cache uses no TTL; freshness and Pro position filtering belong to the query
    Service.
 5. **Complete:** add the cache-only `hero.guide(hero_id, position, section)`
-   query capability and register it only when the application provides the
-   existing Redis cache dependency. Query registration does not populate cache.
+   query capability. `DOTAMIND_DATA_DIR` selects file reads; without it, a
+   configured Redis connection supplies the reader. With neither store, the tool
+   is not registered. Query registration does not populate cache.
 6. **Complete: serial refresh executor.** Use one hero-list response in source
    order, then five Pub position requests and one Pro request per hero. Wait one
    second after every response or D2PT error, parse before publishing, retain the
@@ -244,8 +251,8 @@ Implementation and acceptance proceed in this order:
    and neither application startup nor a `hero.guide` query refreshes data.
 8. **Implemented, not run:** add the `data_updates refresh-guides` CLI over the
    same serial refresher and file cache; protect the data-root and legacy refresh
-   locks, output a safe report, and wait for worker I/O on cancellation. API guide
-   reads and the timer remain on Redis pending a later storage switch.
+   locks, output a safe report, and wait for worker I/O on cancellation. The API
+   reads files when `DOTAMIND_DATA_DIR` is configured; the timer remains on Redis.
 9. **Historical deployment evidence:** a local full refresh, successful Sven and
    Anti-Mage Service queries, and an enabled WSL timer are recorded in
    [`EVALS.md`](EVALS.md) and

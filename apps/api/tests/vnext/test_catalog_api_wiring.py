@@ -21,6 +21,7 @@ from app.vnext.data_updates.catalog_loader import (
 )
 from app.vnext.data_updates.catalog_store import CatalogSnapshotStore, CatalogStoreError
 from app.vnext.hero_guides.cache import GuideCacheEntry
+from app.vnext.hero_guides.file_cache import FileHeroGuideCache
 from app.vnext.providers.valve.catalog_lookup import ValveCatalogLookupAdapter
 
 _CATALOG_FILES = (
@@ -299,7 +300,12 @@ def _patch_lifespan_dependencies(
     ) -> VNextServices:
         assert events[-1:] == ["loader_started"]
         captures["composition_provider"] = catalog_repository_provider
-        return VNextServices()
+        captures["hero_guide_cache"] = hero_guide_cache
+        return build_vnext_services(
+            _settings,
+            hero_guide_cache=hero_guide_cache,
+            catalog_repository_provider=catalog_repository_provider,
+        )
 
     def chat_service(*args: Any, **_kwargs: Any) -> object:
         captures["presentation_enricher"] = args[3]
@@ -335,9 +341,17 @@ def test_api_lifespan_starts_loader_before_consumers_and_stops_without_writing(
             async with main.lifespan(main.app):
                 provider = captures["composition_provider"]
                 enricher = captures["presentation_enricher"]
+                guide_cache = captures["hero_guide_cache"]
                 assert callable(provider)
+                assert isinstance(guide_cache, FileHeroGuideCache)
+                assert guide_cache._guides_directory == data_dir / "guides"
                 assert enricher._catalog_repository_provider is provider
                 assert provider().get_hero(18).hero_id == 18
+                guide_lookup = main.app.state.vnext_services.hero_guide
+                assert guide_lookup is not None
+                result = await guide_lookup(HeroGuideInput(hero_id=18, position=1))
+                assert result.pub_metadata.availability == "missing"
+                assert result.pro_metadata.availability == "missing"
                 assert events == ["loader_started"]
 
         asyncio.run(exercise())

@@ -37,7 +37,7 @@ remains in the result with `unknown` status and empty names, without failing the
 business result. The resolver is not a model tool. `hero.guide` uses it after
 section projection and preserves original IDs, source labels, and source fields.
 Names are added to the query result and generic Artifact output; they are not
-written into Redis snapshots. Old snapshots remain readable because enrichment
+written into guide snapshots. Old snapshots remain readable because enrichment
 DTO fields have defaults. `game.detail` has not yet integrated the resolver.
 
 The Valve catalog sync also retains positive ability IDs from the bilingual
@@ -58,9 +58,13 @@ depend on images.
 ## Shared data storage and update target
 
 When `DOTAMIND_DATA_DIR` is unset, the API loads its entity catalog from files
-bundled with the API code. When set to an absolute path, the API requires a valid
-published catalog snapshot there and uses the background loader. `hero.guide`
-still reads Redis snapshots, and the legacy Redis refresh CLI writes those snapshots.
+bundled with the API code and reads guides from Redis when configured. When set
+to an absolute path, the API requires a valid published catalog snapshot there,
+uses the background loader, and reads guide partitions from the same data root.
+File mode takes priority over Redis; a missing or invalid guide file does not
+fall back to Redis. With neither a data directory nor Redis configured,
+`hero.guide` is not registered. The legacy Redis refresh CLI still writes Redis
+snapshots.
 The file-backed `refresh-guides` operator command is implemented, but has only
 offline fake-client coverage and has not been used for a real D2PT refresh. The
 persistent catalog and guide stores are implemented, as are manual initialization
@@ -129,8 +133,10 @@ encoding. The entry retains exact response bytes, parsed source rows, DTO
 projection, retrieval time, most recent attempt time, and failure/status
 information. A valid empty snapshot remains distinct from a missing partition.
 A failed attempt retains the last successful snapshot. Per-partition writes use
-a same-directory temporary file and `os.replace`; reads do not write, files have
-no TTL, and this component is not connected to API composition.
+a same-directory temporary file and `os.replace`; reads do not write, and files
+have no TTL. API composition injects this cache when `DOTAMIND_DATA_DIR` is
+configured. The query Service does not cache file contents, so each query sees
+the latest atomically replaced partition.
 
 The callable `migrate_redis_guides()` validates the complete hero list before
 I/O, reads Pub positions 1 through 5 and then Pro through the existing Redis
@@ -156,8 +162,9 @@ processes sharing that container-local lock path. It does not coordinate across
 containers.
 
 The file refresh command has offline fake-client tests only; it has not been
-deployed or used for a real D2PT refresh. API guide queries still read Redis, and
-the existing daily timer still runs the Redis refresh command. These are two
+deployed or used for a real D2PT refresh. Configured API instances read guide
+files; instances without `DOTAMIND_DATA_DIR` read Redis when available. The
+existing daily timer still runs the Redis refresh command. These are two
 migration-stage operation entrypoints; do not install both as daily jobs.
 
 Run `python -m app.vnext.data_updates init-catalog` before
@@ -179,8 +186,8 @@ Redis refresh CLI because their shared refresh lock is container-local.
 
 The independent `refresh-guides` operation does not require `init-catalog` or
 `migrate-guides`; it uses the D2PT hero list and writes partitions directly to
-the configured file cache. No real file refresh has been run. The API and
-recurring refresh path have not switched to files.
+the configured file cache. No real file refresh has been run. The repository's
+recurring refresh path has not switched to files.
 
 The existing 36-hour stale rule remains query semantics; it is not a file TTL or
 deletion rule. Local-name enrichment remains at query time and is not written
@@ -447,8 +454,9 @@ exception details and credentials are not printed. The refresh lock coordinates
 processes sharing one API container's `/tmp` only, not multiple containers. The
 repository timer still invokes the legacy Redis command daily at 03:00
 Asia/Shanghai. Do not install both commands as daily jobs. The file refresh
-command has not been deployed or used for a real D2PT refresh; the API still reads
-guide snapshots from Redis. A historical WSL record says its separate timer was
+command has not been deployed or used for a real D2PT refresh. API instances with
+`DOTAMIND_DATA_DIR` read guide files; instances without it read Redis when
+available. A historical WSL record says its separate timer was
 enabled and a local full refresh populated guide data; it does not establish a
 successful scheduled firing, another deployment's cache contents, or file-backed
 guide reads in a deployed API container.
