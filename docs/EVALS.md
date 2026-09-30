@@ -246,7 +246,7 @@ not turn into deterministic test failures.
 Never commit credentials, authorization headers, request tokens, or material
 user data.
 
-## Hero guide evaluation (Redis path, file/import components, and operator entrypoints implemented; migration and hot reload pending)
+## Hero guide evaluation (Redis path, standalone file/import/reload components, and operator entrypoints implemented; API integration pending)
 
 The D2PT probe recorded in [`reference/d2pt.md`](reference/d2pt.md) is a live
 connectivity and sample-shape check for one Sven Pub row and one Sven Pro row.
@@ -334,10 +334,25 @@ JSON, fixed safe reasons, credential redaction, help without I/O, and Redis
 client closure. These checks do not connect to Redis or perform initialization
 or migration against an operational data root.
 
+### Catalog snapshot loader acceptance (implemented; API integration pending)
+
+`CatalogSnapshotLoader` and the revision-only pointer read have offline
+`tmp_path` coverage. Tests exercise startup and retry after failure, idempotent
+start/stop, pointer-only checks for unchanged revisions, complete background
+loads before reference replacement, old-reference availability during a load,
+failure retention and later recovery, pointer disappearance and IO errors,
+revision changes and rollback without UUID ordering, serialized concurrent
+refreshes, stop waiting for active work, restart from disk, finite interval
+validation, and fixed-reason logging. They also verify that reads do not write
+snapshot or source files. These tests validate the independent component only;
+API lifecycle, resolver/catalog/image consumers, and guide reads are not wired to
+it and have not passed integration acceptance.
+
 ### Shared file-update acceptance (integration pending)
 
-The following matrix is for the planned file-backed updater and API hot reload.
-These behaviors have not passed acceptance:
+The following matrix is for the planned file-backed updater and API integration.
+The standalone store and loader have focused offline acceptance; these end-to-end
+behaviors have not passed acceptance:
 
 | Layer | Required evidence |
 |---|---|

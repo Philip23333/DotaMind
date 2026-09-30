@@ -181,6 +181,17 @@ class CatalogSnapshotStore:
             repository=repository,
         )
 
+    def read_current_revision(self) -> str | None:
+        """Read and validate the pointer without loading any snapshot files."""
+
+        try:
+            pointer_bytes = self._current_pointer.read_bytes()
+        except FileNotFoundError:
+            return None
+        except OSError as exc:
+            raise CatalogStoreError("storage_error") from exc
+        return self._parse_pointer(pointer_bytes)
+
     def _new_revision_directory(self) -> tuple[str, Path]:
         while True:
             revision = uuid.uuid4().hex

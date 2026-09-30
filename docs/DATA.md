@@ -87,8 +87,16 @@ Failed publication leaves the current pointer unchanged; successful snapshot
 directories are retained. The store loads the pointed revision into a
 `DotaCatalogRepository`, and the manual `init-catalog` command can initialize it
 under a caller-supplied data root. It is not connected to API reads or a unified
-updater, and no operational data root has been initialized. API hot reload
-remains pending. Offline tests do not establish power-loss recovery.
+updater, and no operational data root has been initialized.
+
+The independent `CatalogSnapshotLoader` loads the current complete snapshot at
+startup and then checks the pointer revision in the background, defaulting to a
+30-second interval. An unchanged revision does not reload the five files. A new
+revision is fully validated before one in-memory snapshot reference is switched;
+failed checks or loads keep the last successful snapshot available. The check
+interval does not bound validation or IO time. The loader is not connected to API
+lifecycle or consumers, so API hot reload remains pending. Offline tests do not
+establish power-loss recovery.
 
 The eventual updater must validate the complete set before changing the current
 reference. Replacing each JSON file atomically does not make the five-file set an

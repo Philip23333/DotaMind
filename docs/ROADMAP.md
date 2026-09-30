@@ -137,19 +137,24 @@ is:
    Redis cache and persistent data root before changing API reads. It shares the
    data-root update lock and the guide refresh CLI lock, which only coordinates
    processes in the same API container.
-5. Add API catalog hot reload and connect image matching to the active snapshot.
-6. Split and reuse the Valve fetch script for catalog, patch, and image work.
-7. Add the unified update entrypoint and patch-version gate.
-8. Connect the persistent data volume and one daily 03:00 Asia/Shanghai schedule.
-9. Deploy and verify persistent reads, query-consistent hot reload, fallback,
+5. **Implemented, standalone:** add a loader that checks the current pointer by
+   default every 30 seconds, validates changed snapshots in the background, and
+   switches one in-memory snapshot reference only after a successful load.
+   Unchanged revisions are not reloaded; failures retain the previous snapshot.
+6. Wire API lifecycle and consumers to the loader, and connect image matching to
+   the active snapshot. This integration remains pending.
+7. Split and reuse the Valve fetch script for catalog, patch, and image work.
+8. Add the unified update entrypoint and patch-version gate.
+9. Connect the persistent data volume and one daily 03:00 Asia/Shanghai schedule.
+10. Deploy and verify persistent reads, query-consistent hot reload, fallback,
    and the scheduled update path.
 
-Only the standalone five-file catalog store, guide file/import components, and
-their manual operator entrypoints are implemented here. Real catalog
-initialization and guide migration, API switching, unified scheduled updater,
-and API hot reload remain pending. Offline tests do not establish power-loss
-recovery. `game.detail` entity-name enrichment remains a later independent item
-after this data-update migration.
+The standalone five-file catalog store and loader, guide file/import components,
+and their manual operator entrypoints are implemented here. Real catalog
+initialization and guide migration, API lifecycle and consumer switching, the
+unified scheduled updater, and deployment acceptance remain pending. Offline
+tests do not establish power-loss recovery. `game.detail` entity-name enrichment
+remains a later independent item after this data-update migration.
 
 ## Subsequent capability work
 

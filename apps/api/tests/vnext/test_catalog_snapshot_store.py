@@ -274,3 +274,58 @@ def test_pointer_read_permission_error_is_a_storage_error(
     with pytest.raises(CatalogStoreError) as raised:
         store.load_current()
     assert raised.value.reason == "storage_error"
+
+
+def test_read_current_revision_returns_none_without_pointer(tmp_path: Path) -> None:
+    store = CatalogSnapshotStore(tmp_path / "data")
+    assert store.read_current_revision() is None
+
+
+def test_read_current_revision_only_reads_validated_pointer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store, _ = _published_store(tmp_path)
+    expected_revision = store.load_current().revision  # type: ignore[union-attr]
+
+    def fail_if_snapshot_loaded(*_args: object, **_kwargs: object) -> None:
+        pytest.fail("revision-only reads must not load snapshot files or a repository")
+
+    monkeypatch.setattr(catalog_store, "DotaCatalogRepository", fail_if_snapshot_loaded)
+    monkeypatch.setattr(
+        store,
+        "_validate_snapshot_directory",
+        fail_if_snapshot_loaded,
+    )
+    assert store.read_current_revision() == expected_revision
+
+
+def test_read_current_revision_reuses_invalid_pointer_error(
+    tmp_path: Path,
+) -> None:
+    store = CatalogSnapshotStore(tmp_path / "data")
+    _write_pointer(store, b'{"schema_version":1,"revision":"../outside"}')
+
+    with pytest.raises(CatalogStoreError) as raised:
+        store.read_current_revision()
+    assert raised.value.reason == "invalid_pointer"
+
+
+def test_read_current_revision_io_error_is_storage_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = CatalogSnapshotStore(tmp_path / "data")
+    _write_pointer(
+        store,
+        json.dumps({"schema_version": 1, "revision": "a" * 32}).encode("utf-8"),
+    )
+    original_read_bytes = Path.read_bytes
+
+    def fail_pointer_read(path: Path) -> bytes:
+        if path == store._current_pointer:
+            raise PermissionError("injected permission error")
+        return original_read_bytes(path)
+
+    monkeypatch.setattr(Path, "read_bytes", fail_pointer_read)
+    with pytest.raises(CatalogStoreError) as raised:
+        store.read_current_revision()
+    assert raised.value.reason == "storage_error"
