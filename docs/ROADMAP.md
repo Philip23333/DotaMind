@@ -124,20 +124,24 @@ is:
    initialization, configuration, API reads, or an update task.
 2. Initialize and configure the persistent data directory; connect the updater
    to publish entity catalogs through the snapshot store.
-3. Add file-backed guide partitions and migrate Redis snapshots with content and
-   status verification.
-4. Add API catalog hot reload and connect image matching to the active snapshot.
-5. Split and reuse the Valve fetch script for catalog, patch, and image work.
-6. Add the unified update entrypoint and patch-version gate.
-7. Connect the persistent data volume and one daily 03:00 Asia/Shanghai schedule.
-8. Deploy and verify persistent reads, query-consistent hot reload, fallback,
+3. **Implemented, not executed:** add the standalone `FileHeroGuideCache` and
+   callable `migrate_redis_guides()` component. Offline FakeRedis and `tmp_path`
+   tests cover full-entry import and read-back verification. The API, refresh CLI,
+   and timer still use Redis; no real Redis migration has been run.
+4. Run and verify the guide migration against the intended Redis cache and
+   persistent data root before changing API reads.
+5. Add API catalog hot reload and connect image matching to the active snapshot.
+6. Split and reuse the Valve fetch script for catalog, patch, and image work.
+7. Add the unified update entrypoint and patch-version gate.
+8. Connect the persistent data volume and one daily 03:00 Asia/Shanghai schedule.
+9. Deploy and verify persistent reads, query-consistent hot reload, fallback,
    and the scheduled update path.
 
-Only the standalone five-file storage component is marked implemented here. The
-remaining file migration, unified entrypoint, schedule, and API hot reload are
-pending. Its offline tests do not establish power-loss recovery. `game.detail`
-entity-name enrichment remains a later independent item after this data-update
-migration.
+Only the standalone five-file catalog store and guide file/import components are
+marked implemented here. Real guide migration, API switching, unified entrypoint,
+schedule, and API hot reload remain pending. Offline tests do not establish
+power-loss recovery. `game.detail` entity-name enrichment remains a later
+independent item after this data-update migration.
 
 ## Subsequent capability work
 
@@ -148,7 +152,7 @@ migration.
 4. Register the capability only after its focused acceptance passes.
 5. Remove transitional code once the replacement is accepted.
 
-## Hero guides (Redis query, serial executor, and operator CLI implemented; shared file update pending)
+## Hero guides (Redis query, serial executor, operator CLI, and standalone file/import components implemented; application still uses Redis)
 
 The internal query DTOs and two fixed raw Sven fixtures are implemented and
 covered by offline tests. A synchronous, bounded D2PT HTTP client is also

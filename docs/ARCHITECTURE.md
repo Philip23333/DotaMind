@@ -167,7 +167,7 @@ logical tool response; the bounded model observation is derived separately by
 the generic result processor for ordinary tools. A stored ref is not
 automatically restored into a later turn's dialogue context.
 
-## Hero guide data flow (cache query, serial executor, and operator CLI implemented)
+## Hero guide data flow (Redis path and standalone file/import components implemented)
 
 The synchronous D2PT HTTP client is implemented with `urllib.request`; its
 deterministic tests use an injected opener and make no live request. It sends
@@ -205,13 +205,23 @@ exit codes. A systemd service/timer template invokes the CLI through
 templates do not establish the installation state of a particular host. A
 historical local WSL deployment record reports a completed full refresh and an
 enabled guide timer, but does not establish that the timer fired successfully or
-that file storage and API hot reload were deployed. See the operations and
-evaluation references for the environment-specific evidence.
+that shared file storage and API hot reload were deployed. See the operations
+and evaluation references for the environment-specific evidence.
 
 The cache's persistence across process or Redis restarts depends on the deployed
 Redis AOF and persistent volume configuration. Offline tests use a fake Redis
 and do not verify AOF recovery or a live Redis deployment. The shared guide
 cache remains separate from session Artifacts.
+
+The standalone `FileHeroGuideCache` stores one complete Pub or Pro entry per
+file, including base64-encoded raw response bytes, source rows, parsed DTOs,
+retrieval time, and latest attempt/error state. It uses a same-directory
+temporary file and `os.replace` for each partition. `migrate_redis_guides()` is
+an offline-verifiable component that reads selected entries through
+`RedisHeroGuideCache`, imports absent file partitions, skips identical entries,
+rejects conflicts, and compares imported entries by reading them back. Neither
+component is wired into composition, the operator CLI, or the timer; the API and
+refresh command still use Redis, and no real Redis migration has been run.
 
 The current guide-only update path is:
 

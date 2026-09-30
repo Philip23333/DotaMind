@@ -246,7 +246,7 @@ not turn into deterministic test failures.
 Never commit credentials, authorization headers, request tokens, or material
 user data.
 
-## Hero guide evaluation (Redis query and CLI implemented; shared file update and hot reload pending)
+## Hero guide evaluation (Redis path and standalone file/import components implemented; actual migration and hot reload pending)
 
 The D2PT probe recorded in [`reference/d2pt.md`](reference/d2pt.md) is a live
 connectivity and sample-shape check for one Sven Pub row and one Sven Pro row.
@@ -296,6 +296,17 @@ they make no D2PT, Redis, Docker, or model calls. The repository service/timer
 files are templates; a separate historical WSL record says the local timer was
 enabled. Enablement alone does not show that a scheduled invocation succeeded.
 
+The standalone `FileHeroGuideCache` acceptance uses temporary directories and
+the committed Sven Pub/Pro fixtures plus all three Pro fixtures containing
+zero-valued ability events. It covers complete entry round-trips, partition
+isolation, missing versus valid-empty versus failed states, retention and
+recovery, strict identities and error codes, import conflicts and idempotency,
+damaged-file handling, and atomic-write failure and visibility. The migration
+tests use `FakeRedis`; they verify pre-I/O hero-list validation, first-seen order,
+the five Pub reads followed by one Pro read per hero, complete status import,
+read-back equality, safe resume, and absence of Redis writes, deletes, or expiry
+operations. These tests do not connect to Redis or run an actual data migration.
+
 ### Catalog snapshot store acceptance (implemented)
 
 `CatalogSnapshotStore` is covered by offline `tmp_path` tests using copies of the
@@ -317,7 +328,7 @@ These behaviors have not passed acceptance:
 | Layer | Required evidence |
 |---|---|
 | Updater publication | Connect the accepted snapshot store to the updater and prove failed fetches, writes, or validation leave the current successful revision active. |
-| Guide migration | Raw bytes, parsed source rows, DTOs, retrieval/attempt times, and statuses round-trip; missing, valid-empty, and failed-with-last-good remain distinct. |
+| Migration execution and application switch | Run the importer against the intended Redis and persistent data root, verify every selected partition and report, then switch API reads only after acceptance; current API/CLI/timer remain Redis-backed. |
 | Version gate | Same-patch success skips the full fetch; version-check failure does not skip; a failed new publication is retried next run. |
 | Fetch sharing and bounds | Shared responses are not fetched twice; Valve total concurrency stays within its bound; D2PT requests remain serial. |
 | Hot reload | A new snapshot switches in one process only after full validation; each query sees one version; invalid snapshots leave the old one active. |

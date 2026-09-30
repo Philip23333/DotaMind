@@ -149,9 +149,7 @@ class RedisHeroGuideCache:
         _validate_aware_datetime(attempted_at, "attempted_at")
 
         try:
-            checked_snapshot = GuideCacheSnapshot.model_validate(
-                snapshot.model_dump(mode="python")
-            )
+            checked_snapshot = _revalidate_snapshot(snapshot)
             serialized_snapshot = checked_snapshot.model_dump_json()
         except (ValidationError, PydanticSerializationError, TypeError, ValueError):
             raise HeroGuideCacheDataError() from None
@@ -175,8 +173,7 @@ class RedisHeroGuideCache:
     ) -> None:
         key = self._partition_key(sample_type, hero_id, position)
         _validate_aware_datetime(attempted_at, "attempted_at")
-        if type(error_code) is not str or error_code not in _ERROR_CODES:
-            raise ValueError("error_code is not a supported D2PT error code")
+        _validate_error_code(error_code)
 
         await self._hset(
             key,
@@ -233,16 +230,10 @@ class RedisHeroGuideCache:
         hero_id: int,
         position: int | None,
     ) -> str:
-        if type(sample_type) is not str or sample_type not in _SAMPLE_TYPES:
-            raise ValueError("sample_type must be 'pub' or 'pro'")
-        _validate_hero_id(hero_id)
+        _validate_partition_identity(sample_type, hero_id, position)
         if sample_type == "pub":
-            if position is None:
-                raise ValueError("Pub failure records require a position")
-            _validate_position(position)
+            assert position is not None
             return cls._pub_key(hero_id, position)
-        if position is not None:
-            raise ValueError("Pro failure records must not include a position")
         return cls._pro_key(hero_id)
 
 
@@ -275,8 +266,11 @@ def _decode_entry(
         raise HeroGuideCacheDataError()
 
     last_error = fields["last_error"]
-    if last_error and last_error not in _ERROR_CODES:
-        raise HeroGuideCacheDataError()
+    if last_error:
+        try:
+            _validate_error_code(last_error)
+        except ValueError:
+            raise HeroGuideCacheDataError() from None
     if "snapshot" not in fields and not last_error:
         raise HeroGuideCacheDataError()
 
@@ -294,14 +288,16 @@ def _decode_entry(
         ):
             raise HeroGuideCacheDataError()
 
-    try:
-        return GuideCacheEntry(
+    return _validate_guide_cache_entry(
+        GuideCacheEntry(
             snapshot=snapshot,
             last_attempt_at=attempted_at,
             last_error=last_error or None,
-        )
-    except ValidationError:
-        raise HeroGuideCacheDataError() from None
+        ),
+        sample_type=sample_type,
+        hero_id=hero_id,
+        position=position,
+    )
 
 
 def _decode_redis_text(value: object) -> str:
@@ -329,6 +325,69 @@ def _validate_aware_datetime(value: object, field: str) -> None:
         or value.utcoffset() is None
     ):
         raise ValueError(f"{field} must include a timezone")
+
+
+def _validate_partition_identity(
+    sample_type: object,
+    hero_id: object,
+    position: object,
+) -> None:
+    if type(sample_type) is not str or sample_type not in _SAMPLE_TYPES:
+        raise ValueError("sample_type must be 'pub' or 'pro'")
+    _validate_hero_id(hero_id)
+    if sample_type == "pub":
+        if position is None:
+            raise ValueError("Pub failure records require a position")
+        _validate_position(position)
+    elif position is not None:
+        raise ValueError("Pro failure records must not include a position")
+
+
+def _validate_error_code(error_code: object) -> None:
+    if type(error_code) is not str or error_code not in _ERROR_CODES:
+        raise ValueError("error_code is not a supported D2PT error code")
+
+
+def _revalidate_snapshot(snapshot: object) -> GuideCacheSnapshot:
+    if not isinstance(snapshot, GuideCacheSnapshot):
+        raise ValueError("snapshot must be a GuideCacheSnapshot")
+    try:
+        return GuideCacheSnapshot.model_validate(snapshot.model_dump(mode="python"))
+    except (ValidationError, PydanticSerializationError, TypeError, ValueError):
+        raise HeroGuideCacheDataError() from None
+
+
+def _validate_guide_cache_entry(
+    entry: object,
+    *,
+    sample_type: Literal["pub", "pro"],
+    hero_id: int,
+    position: int | None,
+) -> GuideCacheEntry:
+    if not isinstance(entry, GuideCacheEntry):
+        raise HeroGuideCacheDataError()
+    try:
+        checked_entry = GuideCacheEntry.model_validate(entry.model_dump(mode="python"))
+    except (ValidationError, PydanticSerializationError, TypeError, ValueError):
+        raise HeroGuideCacheDataError() from None
+
+    if checked_entry.last_error is not None:
+        try:
+            _validate_error_code(checked_entry.last_error)
+        except ValueError:
+            raise HeroGuideCacheDataError() from None
+    if checked_entry != GuideCacheEntry():
+        if checked_entry.last_attempt_at is None:
+            raise HeroGuideCacheDataError()
+        if checked_entry.snapshot is None and checked_entry.last_error is None:
+            raise HeroGuideCacheDataError()
+    if checked_entry.snapshot is not None and (
+        checked_entry.snapshot.sample_type != sample_type
+        or checked_entry.snapshot.hero_id != hero_id
+        or checked_entry.snapshot.position != position
+    ):
+        raise HeroGuideCacheDataError()
+    return checked_entry
 
 
 def _validate_hero_id(hero_id: object) -> None:

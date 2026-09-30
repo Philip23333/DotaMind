@@ -99,22 +99,36 @@ Missing resources can be filled independently without fetching every entity
 again. Readers generate image metadata only for files that exist. Patch records
 are stored by patch version and do not share the catalog snapshot number.
 
-### Guide partition storage and migration
+### Guide partition storage and migration (components implemented; actual migration pending)
 
-The target file store preserves the current partition keys: Pub by hero and
-position, Pro by hero. A stored guide snapshot retains the exact raw response
-bytes, parsed source rows, DTO projection, retrieval time, most recent attempt
-time, and failure/status information. A valid empty response remains distinct
-from a missing partition. A failed attempt retains the last successful snapshot
-and exposes its failure metadata.
+The standalone `FileHeroGuideCache(data_root)` preserves the current partition
+keys: Pub by hero and position, Pro by hero. Files live at
+`guides/pub/<hero_id>/<position>.json` and `guides/pro/<hero_id>.json`. Each
+schema-version-1 file contains the partition identity and a complete
+`GuideCacheEntry`; `GuideCacheSnapshot.raw_body` uses the existing Base64 JSON
+encoding. The entry retains exact response bytes, parsed source rows, DTO
+projection, retrieval time, most recent attempt time, and failure/status
+information. A valid empty snapshot remains distinct from a missing partition.
+A failed attempt retains the last successful snapshot. Per-partition writes use
+a same-directory temporary file and `os.replace`; reads do not write, files have
+no TTL, and this component is not connected to API composition.
+
+The callable `migrate_redis_guides()` validates the complete hero list before
+I/O, reads Pub positions 1 through 5 and then Pro through the existing Redis
+cache API, imports complete non-missing entries, and reads each imported or
+already-present file back for value equality. Identical files are safe to skip;
+conflicting or corrupt targets stop the migration. The report counts checked,
+missing, imported, and already-present partitions. Tests use a fake Redis and
+temporary files. No real Redis migration has been run, and the API, CLI, and
+timer still use Redis.
 
 The existing 36-hour stale rule remains query semantics; it is not a file TTL or
 deletion rule. Local-name enrichment remains at query time and is not written
-back into source guide snapshots. Migration imports Redis snapshots once, then
-verifies their raw bytes, source rows, DTOs, times, and states before the API
-switches to file reads. Do not rely on indefinite dual writes, and do not delete
-the old Redis guide data before migration acceptance. This migration does not
-change session, Run State, or Artifact storage.
+back into source guide snapshots. A future migration run must verify raw bytes,
+source rows, DTOs, times, and states before any API switch. Do not rely on
+indefinite dual writes, and do not delete the old Redis guide data before
+migration acceptance. This migration does not change session, Run State, or
+Artifact storage.
 
 ### Update cadence and version gates
 
