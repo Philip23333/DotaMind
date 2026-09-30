@@ -246,7 +246,7 @@ not turn into deterministic test failures.
 Never commit credentials, authorization headers, request tokens, or material
 user data.
 
-## Hero guide evaluation (Redis path and standalone file/import components implemented; actual migration and hot reload pending)
+## Hero guide evaluation (Redis path, file/import components, and operator entrypoints implemented; migration and hot reload pending)
 
 The D2PT probe recorded in [`reference/d2pt.md`](reference/d2pt.md) is a live
 connectivity and sample-shape check for one Sven Pub row and one Sven Pro row.
@@ -318,7 +318,21 @@ directory rename, and pointer replacement, plus reads on both sides of the
 atomic pointer switch. Invalid pointers and missing revisions are rejected with
 stable store-error reasons. These tests do not write to the committed catalog,
 call providers, or establish power-loss recovery. The component is not wired to
-an update entrypoint or API reads.
+API reads.
+
+The offline data-update CLI tests use temporary data roots and FakeRedis. They
+cover absolute data-root validation and argument-over-environment precedence,
+first catalog initialization, safe skip on a valid existing pointer, corrupt
+pointer/source failures, and publication from the bundled five-file source.
+Migration tests verify that a missing or corrupt current catalog prevents Redis
+construction, the hero list comes from the loaded snapshot, the existing
+importer reports counts, identical partitions skip on a repeated run, and Redis
+is never written, deleted, or expired. Lock tests cover data-lock contention,
+the old refresh-lock order, release of the first lock when the second cannot be
+acquired, and cleanup after failure or cancellation. Output tests check one-line
+JSON, fixed safe reasons, credential redaction, help without I/O, and Redis
+client closure. These checks do not connect to Redis or perform initialization
+or migration against an operational data root.
 
 ### Shared file-update acceptance (integration pending)
 
@@ -328,7 +342,7 @@ These behaviors have not passed acceptance:
 | Layer | Required evidence |
 |---|---|
 | Updater publication | Connect the accepted snapshot store to the updater and prove failed fetches, writes, or validation leave the current successful revision active. |
-| Migration execution and application switch | Run the importer against the intended Redis and persistent data root, verify every selected partition and report, then switch API reads only after acceptance; current API/CLI/timer remain Redis-backed. |
+| Migration execution and application switch | Run the new importer CLI against the intended Redis and persistent data root, verify every selected partition and report, then switch API reads only after acceptance; current API/refresh CLI/timer remain Redis-backed. |
 | Version gate | Same-patch success skips the full fetch; version-check failure does not skip; a failed new publication is retried next run. |
 | Fetch sharing and bounds | Shared responses are not fetched twice; Valve total concurrency stays within its bound; D2PT requests remain serial. |
 | Hot reload | A new snapshot switches in one process only after full validation; each query sees one version; invalid snapshots leave the old one active. |

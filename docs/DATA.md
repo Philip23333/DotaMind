@@ -59,10 +59,11 @@ depend on images.
 
 The current entity catalog is loaded from files bundled with the API code.
 `hero.guide` currently reads Redis snapshots, and its operator refresh CLI writes
-those snapshots. The persistent shared-file layout and update flow below are
-confirmed targets, not the current storage implementation. The conceptual data
-areas are `catalog`, `patches`, `images`, and `guides`; their eventual paths and
-configuration names belong to implementation work.
+those snapshots. The persistent catalog and guide stores are implemented, as
+are manual initialization and Redis-import commands, but neither command has
+been run against an operational data root or Redis cache. The API read path and
+regular refresh path remain unchanged. The conceptual data areas are `catalog`,
+`patches`, `images`, and `guides`.
 
 ### Catalog snapshot publication
 
@@ -84,9 +85,10 @@ and sync audit, then atomically replaces `catalog/current.json`. The pointer's
 UUID-hex revision is independent of the Dota patch and catalog schema versions.
 Failed publication leaves the current pointer unchanged; successful snapshot
 directories are retained. The store loads the pointed revision into a
-`DotaCatalogRepository`, but is not yet connected to API reads or an update
-entrypoint. Real data-root initialization/configuration and API hot reload remain
-pending. Offline tests do not establish power-loss recovery.
+`DotaCatalogRepository`, and the manual `init-catalog` command can initialize it
+under a caller-supplied data root. It is not connected to API reads or a unified
+updater, and no operational data root has been initialized. API hot reload
+remains pending. Offline tests do not establish power-loss recovery.
 
 The eventual updater must validate the complete set before changing the current
 reference. Replacing each JSON file atomically does not make the five-file set an
@@ -119,8 +121,27 @@ cache API, imports complete non-missing entries, and reads each imported or
 already-present file back for value equality. Identical files are safe to skip;
 conflicting or corrupt targets stop the migration. The report counts checked,
 missing, imported, and already-present partitions. Tests use a fake Redis and
-temporary files. No real Redis migration has been run, and the API, CLI, and
-timer still use Redis.
+temporary files. No real Redis migration has been run. The API, existing refresh
+CLI, and timer still use Redis. The new `migrate-guides` operator command calls
+this component using the hero list from the current file-backed catalog; it
+reads `DOTAMIND_REDIS_URL` from the environment.
+
+Run `python -m app.vnext.data_updates init-catalog` before
+`python -m app.vnext.data_updates migrate-guides`. Both accept `--data-dir` as
+an absolute persistent root, falling back to `DOTAMIND_DATA_DIR`; an unset or
+invalid path fails instead of defaulting to the repository or working
+directory. `init-catalog` accepts an optional local `--source-dir` and defaults
+to the bundled catalog. It copies only the five catalog JSON files, excluding
+images and patch records. A valid current pointer is left untouched, including
+when the requested source directory is absent, and a damaged pointer is
+reported rather than overwritten.
+
+Migration uses the current published catalog's hero list, does not scan Redis
+keys or request provider data, and writes only to the configured data root.
+Identical target partitions are verified and skipped; conflicts stop with the
+files and Redis entries preserved. Run the command in the same API container as
+the Redis refresh CLI because their shared refresh lock is container-local.
+The API and recurring refresh path have not switched to files.
 
 The existing 36-hour stale rule remains query semantics; it is not a file TTL or
 deletion rule. Local-name enrichment remains at query time and is not written

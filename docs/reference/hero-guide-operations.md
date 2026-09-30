@@ -118,17 +118,60 @@ intentionally container-local; a deployment with multiple API containers needs
 an explicit coordination decision before scheduling this command on more than
 one container.
 
-## Shared data-update migration target (not executable yet)
+## Persistent data initialization and guide import (commands implemented; not run)
 
-The planned unified updater will refresh the entity catalog by patch and guide
-partitions daily, then publish them to persistent shared files. The existing CLI
-above remains the current guide-only Redis entrypoint until that migration is
-implemented. Do not substitute a guessed future command for it.
+The operator CLI provides two offline-verifiable commands. They are separate
+from the existing guide refresh command above and do not change API reads or the
+timer.
 
-The migration order is to initialize the persistent data areas, import Redis
-guide snapshots once, verify source bytes, parsed rows, DTOs, times, and statuses,
-and only then wire the API to read the file store. Keep the old Redis guide data
-until acceptance; do not add long-term dual writes. Once a unified scheduler takes
-over, disable the old guide-only schedule to prevent duplicate guide refreshes.
-Failures must leave the last successful catalog or guide partition available.
-This document update performs none of the migration or cleanup steps.
+From `apps/api`, initialize the five-file catalog first:
+
+```bash
+python -m app.vnext.data_updates init-catalog --data-dir /absolute/data/root
+```
+
+The source defaults to the catalog bundled with the API. To copy another local
+validated catalog, pass `--source-dir /absolute/source/directory`. The command
+copies only `manifest.json`, `dota2_heroes.json`, `dota2_abilities.json`,
+`dota2_items.json`, and `sync_audit.json`; images and patch records are not
+included. It publishes only if `catalog/current.json` has no valid snapshot. A
+valid existing snapshot is reported as `already_initialized` without reading
+the source; a damaged pointer or snapshot fails and is never overwritten.
+
+Then import guide partitions:
+
+```bash
+python -m app.vnext.data_updates migrate-guides --data-dir /absolute/data/root
+```
+
+An explicit `--data-dir` takes precedence over `DOTAMIND_DATA_DIR`. If the
+argument is omitted, that environment variable must contain an absolute path;
+there is no repository or working-directory default. The migration command
+requires `DOTAMIND_REDIS_URL` from the process environment and does not accept a
+Redis URL argument. It takes hero IDs from the current published catalog, reads
+only the known Pub and Pro Redis partitions, and invokes the existing importer.
+It does not request D2PT data, scan arbitrary Redis keys, publish refresh data,
+or delete Redis entries.
+
+Both commands acquire a non-blocking exclusive lock at
+`<data_root>/.update.lock`. Guide migration next acquires the existing
+`/tmp/dotamind-hero-guide-refresh.lock`; it releases the locks in reverse order.
+The refresh lock coordinates only processes sharing that path. Therefore guide
+migration must run in the same API container as the existing refresh CLI; this
+lock does not coordinate other containers or hosts. If either lock is busy, the
+command prints `{"status":"skipped","reason":"already_running"}` and exits
+with code 3 without starting storage or Redis work.
+
+Successful commands print one JSON line. Repeating `init-catalog` safely skips
+an already published valid snapshot. Repeating migration verifies and skips
+identical file partitions; conflicting or corrupt targets fail while preserving
+both file data and Redis data. Exit code 1 means an execution/storage/Redis
+failure, 2 means invalid arguments or missing configuration, and 130 means
+interruption. Error JSON uses fixed reasons and excludes credentials and
+exception text.
+
+No real data root has been initialized and no Redis migration has been run. The
+API still reads its bundled catalog, guide queries and the refresh CLI/timer
+still use Redis, and no unified scheduled updater or API hot reload is enabled.
+Keep the Redis guide data until migration verification and API switching have
+been separately accepted.

@@ -219,9 +219,10 @@ retrieval time, and latest attempt/error state. It uses a same-directory
 temporary file and `os.replace` for each partition. `migrate_redis_guides()` is
 an offline-verifiable component that reads selected entries through
 `RedisHeroGuideCache`, imports absent file partitions, skips identical entries,
-rejects conflicts, and compares imported entries by reading them back. Neither
-component is wired into composition, the operator CLI, or the timer; the API and
-refresh command still use Redis, and no real Redis migration has been run.
+rejects conflicts, and compares imported entries by reading them back. The new
+operator CLI invokes this importer, but the file cache is not wired into
+composition or the refresh timer; the API and regular refresh command still use
+Redis, and no real Redis migration has been run.
 
 The current guide-only update path is:
 
@@ -273,7 +274,7 @@ cross-session guide cache is distinct from the process-local, session-owned
 Artifact store: Artifacts continue to hold oversized logical tool responses and
 are not the durable guide cache.
 
-## Shared data updates and API hot reload (catalog snapshot store implemented; integration pending)
+## Shared data updates and API hot reload (storage and operator entrypoints implemented; integration pending)
 
 The shared update task owns application-wide Valve entities, patch records,
 images, and D2PT guide partitions. Its planned responsibilities are:
@@ -293,6 +294,19 @@ after the complete revision can be loaded by `DotaCatalogRepository`. A failed
 publication leaves the prior pointer intact. This component is not connected to
 an updater, an application data-root setting, or API hot reload; it does not
 claim power-loss recovery.
+
+The operator module `python -m app.vnext.data_updates` exposes `init-catalog`
+and `migrate-guides`. The former publishes the bundled or explicitly selected
+five-file catalog only when no valid current snapshot exists. The latter reads
+hero IDs from that published repository and calls the existing Redis-to-file
+guide importer. Both commands require an absolute data root from `--data-dir` or
+`DOTAMIND_DATA_DIR`; migration reads `DOTAMIND_REDIS_URL` only from the
+environment. A non-blocking data-root lock protects both commands, and guide
+migration also takes the existing refresh lock in data-lock-then-refresh-lock
+order. The refresh lock is container-local, so migration must run in the same
+API container as the guide refresh CLI. These commands are offline-verifiable
+entrypoints only: no real initialization or Redis migration has been run, and
+the API, refresh CLI, and timer still use their existing paths.
 
 ```text
 schedule -> updater -> persistent data
@@ -317,10 +331,11 @@ simultaneous fleet-wide switch.
 
 Today, the API still loads entity catalog files bundled with its code into a
 process-cached repository, guide queries use Redis, and the guide-only refresh
-CLI runs inside the API container. The standalone store does not change those
-read paths. Automatic data-directory initialization, file-backed guides, the
-unified updater, and catalog hot reload remain migration targets. They do not
-change the session Artifact storage contract.
+CLI runs inside the API container. The standalone stores and the new manual
+initialization/import CLI do not change those read paths; neither command has
+been run against the deployment data directory. Automatic updates, file-backed
+API reads, the unified updater, and catalog hot reload remain migration targets.
+They do not change the session Artifact storage contract.
 
 ## Runtime boundary
 

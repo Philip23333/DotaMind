@@ -1,0 +1,399 @@
+"""Operator commands for initializing and migrating shared application data."""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import errno
+import fcntl
+import json
+import os
+import signal
+import sys
+from collections.abc import Mapping, Sequence
+from pathlib import Path
+from typing import Any, TextIO
+
+from redis.asyncio import from_url
+from redis.exceptions import RedisError
+
+from app.integrations.valve.catalog_repository import CATALOG_DIR
+from app.vnext.data_updates.catalog_store import CatalogSnapshotStore, CatalogStoreError
+from app.vnext.hero_guides import cli as hero_guide_cli
+from app.vnext.hero_guides.cache import (
+    HeroGuideCacheDataError,
+    HeroGuideCacheUnavailableError,
+    RedisHeroGuideCache,
+)
+from app.vnext.hero_guides.file_cache import (
+    FileHeroGuideCache,
+    GuideMigrationConflictError,
+)
+from app.vnext.hero_guides.migration import (
+    GuideMigrationReport,
+    GuideMigrationVerificationError,
+    migrate_redis_guides,
+)
+
+_DATA_LOCK_NAME = ".update.lock"
+_BUSY_ERRNOS = {errno.EACCES, errno.EAGAIN}
+
+
+class _OutputArgumentParser(argparse.ArgumentParser):
+    def __init__(
+        self,
+        *args: Any,
+        stdout: TextIO | None = None,
+        stderr: TextIO | None = None,
+        **kwargs: Any,
+    ) -> None:
+        self._output_stdout = stdout
+        self._output_stderr = stderr
+        super().__init__(*args, **kwargs)
+
+    def _print_message(self, message: str, file: TextIO | None = None) -> None:
+        if not message or file is None:
+            return
+        if file is sys.stdout and self._output_stdout is not None:
+            file = self._output_stdout
+        elif file is sys.stderr and self._output_stderr is not None:
+            file = self._output_stderr
+        file.write(message)
+
+
+def main(
+    argv: Sequence[str] | None = None,
+    *,
+    environ: Mapping[str, str] | None = None,
+    stdout: TextIO | None = None,
+    stderr: TextIO | None = None,
+    refresh_lock_path: str | os.PathLike[str] | None = None,
+) -> int:
+    """Run one data-update command and return its stable process exit code."""
+
+    output = sys.stdout if stdout is None else stdout
+    error_output = sys.stderr if stderr is None else stderr
+    parser = _build_parser(output, error_output)
+    try:
+        args = parser.parse_args(argv)
+    except SystemExit as exc:
+        return int(exc.code)
+
+    environment = os.environ if environ is None else environ
+    operation = args.command
+    data_root, config_error = _resolve_data_root(args.data_dir, environment)
+    if config_error is not None:
+        _emit(output, _failed(operation, config_error))
+        return 2
+
+    redis_url: str | None = None
+    if operation == "migrate-guides":
+        redis_url = environment.get("DOTAMIND_REDIS_URL")
+        if not isinstance(redis_url, str) or not redis_url.strip():
+            _emit(output, _failed(operation, "missing_redis_url"))
+            return 2
+
+    assert data_root is not None
+    try:
+        data_root.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        _emit(output, _failed(operation, "storage_error"))
+        return 1
+
+    data_lock_fd: int | None = None
+    refresh_lock_fd: int | None = None
+    result: tuple[dict[str, Any], int] | None = None
+    lock_error = False
+    try:
+        try:
+            data_lock_fd = _try_acquire_lock(data_root / _DATA_LOCK_NAME)
+        except OSError:
+            result = (_failed(operation, "storage_error"), 1)
+        else:
+            if data_lock_fd is None:
+                result = (_skipped_already_running(), 3)
+            elif operation == "migrate-guides":
+                old_lock_path = (
+                    hero_guide_cli._LOCK_PATH
+                    if refresh_lock_path is None
+                    else refresh_lock_path
+                )
+                try:
+                    refresh_lock_fd = _try_acquire_lock(old_lock_path)
+                except OSError:
+                    result = (_failed(operation, "storage_error"), 1)
+                else:
+                    if refresh_lock_fd is None:
+                        result = (_skipped_already_running(), 3)
+                    else:
+                        result = _run_migration_command(
+                            data_root=data_root,
+                            redis_url=redis_url,
+                            operation=operation,
+                        )
+            else:
+                result = _run_init_command(
+                    data_root=data_root,
+                    source_dir=args.source_dir,
+                )
+    except (asyncio.CancelledError, KeyboardInterrupt):
+        result = ({"status": "cancelled"}, 130)
+    except Exception as exc:
+        result = (_failed(operation, _safe_reason(exc)), 1)
+    finally:
+        if refresh_lock_fd is not None:
+            try:
+                _release_lock(refresh_lock_fd)
+            except OSError:
+                lock_error = True
+        if data_lock_fd is not None:
+            try:
+                _release_lock(data_lock_fd)
+            except OSError:
+                lock_error = True
+
+    if result is None:
+        result = (_failed(operation, "operation_failed"), 1)
+    if lock_error:
+        result = (_failed(operation, "storage_error"), 1)
+    _emit(output, result[0])
+    return result[1]
+
+
+def _build_parser(stdout: TextIO, stderr: TextIO) -> argparse.ArgumentParser:
+    parser = _OutputArgumentParser(
+        prog="python -m app.vnext.data_updates",
+        description="Initialize and migrate persistent shared Dota data.",
+        stdout=stdout,
+        stderr=stderr,
+    )
+    parser.add_argument(
+        "--data-dir",
+        default=None,
+        help="absolute persistent data directory (or DOTAMIND_DATA_DIR)",
+    )
+    subparsers = parser.add_subparsers(
+        dest="command",
+        required=True,
+        parser_class=lambda **kwargs: _OutputArgumentParser(
+            stdout=stdout,
+            stderr=stderr,
+            **kwargs,
+        ),
+    )
+
+    init_parser = subparsers.add_parser(
+        "init-catalog", help="initialize the current five-file Valve catalog"
+    )
+    init_parser.add_argument(
+        "--data-dir",
+        default=argparse.SUPPRESS,
+        help="absolute persistent data directory (or DOTAMIND_DATA_DIR)",
+    )
+    init_parser.add_argument(
+        "--source-dir",
+        type=Path,
+        default=None,
+        help="local catalog source directory (defaults to the bundled catalog)",
+    )
+
+    migrate_parser = subparsers.add_parser(
+        "migrate-guides", help="import Redis guide partitions into file storage"
+    )
+    migrate_parser.add_argument(
+        "--data-dir",
+        default=argparse.SUPPRESS,
+        help="absolute persistent data directory (or DOTAMIND_DATA_DIR)",
+    )
+    return parser
+
+
+def _resolve_data_root(
+    explicit_value: str | None,
+    environment: Mapping[str, str],
+) -> tuple[Path | None, str | None]:
+    value = explicit_value
+    if value is None:
+        value = environment.get("DOTAMIND_DATA_DIR")
+    if value is None:
+        return None, "missing_data_dir"
+    if not isinstance(value, str) or not value.strip():
+        return None, "invalid_data_dir"
+    path = Path(value)
+    if not path.is_absolute():
+        return None, "invalid_data_dir"
+    return path, None
+
+
+def _run_init_command(
+    *,
+    data_root: Path,
+    source_dir: Path | None,
+) -> tuple[dict[str, Any], int]:
+    store = CatalogSnapshotStore(data_root)
+    try:
+        current = store.load_current()
+        if current is not None:
+            return (
+                {
+                    "status": "skipped",
+                    "operation": "init-catalog",
+                    "reason": "already_initialized",
+                    "revision": current.revision,
+                    "patch": current.repository.manifest.patch,
+                },
+                0,
+            )
+        snapshot = store.publish_from_directory(CATALOG_DIR if source_dir is None else source_dir)
+    except Exception as exc:
+        return _failed("init-catalog", _safe_reason(exc)), 1
+    return (
+        {
+            "status": "success",
+            "operation": "init-catalog",
+            "revision": snapshot.revision,
+            "patch": snapshot.repository.manifest.patch,
+        },
+        0,
+    )
+
+
+def _run_migration_command(
+    *,
+    data_root: Path,
+    redis_url: str | None,
+    operation: str,
+) -> tuple[dict[str, Any], int]:
+    store = CatalogSnapshotStore(data_root)
+    try:
+        catalog = store.load_current()
+        if catalog is None:
+            return _failed(operation, "catalog_missing"), 1
+    except Exception as exc:
+        return _failed(operation, _safe_reason(exc)), 1
+
+    hero_ids = [hero.hero_id for hero in catalog.repository.list_heroes()]
+    assert redis_url is not None
+    try:
+        report = asyncio.run(_run_migration(redis_url, data_root, hero_ids))
+    except (asyncio.CancelledError, KeyboardInterrupt):
+        return {"status": "cancelled"}, 130
+    except Exception as exc:
+        return _failed(operation, _safe_reason(exc)), 1
+    return (
+        {
+            "status": "success",
+            "operation": operation,
+            "partitions_checked": report.partitions_checked,
+            "missing": report.missing,
+            "imported": report.imported,
+            "already_present": report.already_present,
+        },
+        0,
+    )
+
+
+async def _run_migration(
+    redis_url: str,
+    data_root: Path,
+    hero_ids: Sequence[int],
+) -> GuideMigrationReport:
+    loop = asyncio.get_running_loop()
+    task = asyncio.current_task()
+    if task is None:
+        raise RuntimeError("migration CLI requires an asyncio task")
+
+    stop_requested = False
+    cleaning_up = False
+    installed_signals: list[signal.Signals] = []
+    redis_client: Any | None = None
+
+    def request_stop() -> None:
+        nonlocal stop_requested
+        if stop_requested or cleaning_up:
+            return
+        stop_requested = True
+        task.cancel()
+
+    try:
+        for stop_signal in (signal.SIGINT, signal.SIGTERM):
+            try:
+                loop.add_signal_handler(stop_signal, request_stop)
+            except (NotImplementedError, RuntimeError):
+                continue
+            installed_signals.append(stop_signal)
+
+        redis_client = from_url(redis_url, decode_responses=True)
+        await redis_client.ping()
+        source = RedisHeroGuideCache(redis_client)
+        target = FileHeroGuideCache(data_root)
+        return await migrate_redis_guides(
+            source=source,
+            target=target,
+            hero_ids=hero_ids,
+        )
+    finally:
+        cleaning_up = True
+        try:
+            await loop.shutdown_default_executor()
+        finally:
+            try:
+                if redis_client is not None:
+                    await redis_client.aclose()
+            finally:
+                for stop_signal in installed_signals:
+                    loop.remove_signal_handler(stop_signal)
+
+
+def _try_acquire_lock(path: str | os.PathLike[str]) -> int | None:
+    """Return a non-blocking exclusive lock descriptor or ``None`` if busy."""
+
+    descriptor = os.open(os.fspath(path), os.O_CREAT | os.O_RDWR, 0o600)
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError as exc:
+        os.close(descriptor)
+        if exc.errno in _BUSY_ERRNOS:
+            return None
+        raise
+    return descriptor
+
+
+def _release_lock(descriptor: int) -> None:
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_UN)
+    finally:
+        os.close(descriptor)
+
+
+def _safe_reason(error: Exception) -> str:
+    if isinstance(error, CatalogStoreError):
+        return error.reason
+    if isinstance(error, GuideMigrationConflictError):
+        return "migration_conflict"
+    if isinstance(error, GuideMigrationVerificationError):
+        return "migration_verification_failed"
+    if isinstance(error, HeroGuideCacheUnavailableError):
+        return "cache_unavailable"
+    if isinstance(error, HeroGuideCacheDataError):
+        return "cache_invalid_data"
+    if isinstance(error, RedisError):
+        return "redis_unavailable"
+    if isinstance(error, OSError):
+        return "storage_error"
+    return "operation_failed"
+
+
+def _failed(operation: str, reason: str) -> dict[str, str]:
+    return {"status": "failed", "operation": operation, "reason": reason}
+
+
+def _skipped_already_running() -> dict[str, str]:
+    return {"status": "skipped", "reason": "already_running"}
+
+
+def _emit(stream: TextIO, payload: dict[str, Any]) -> None:
+    print(json.dumps(payload, separators=(",", ":"), sort_keys=True), file=stream)
+
+
+__all__ = ["main"]

@@ -108,7 +108,7 @@ before a second concrete implementation demonstrates the need.
   section bounds, cache compatibility, composition sharing, and Artifact reads.
   `game.detail` name enrichment is a later independent follow-up.
 
-## Shared data update migration (catalog snapshot store implemented; integration pending)
+## Shared data update migration (storage and operator entrypoints implemented; integration pending)
 
 Current priority is moving shared game data from the committed Valve catalog and
 Redis guide cache to a persistent file-backed update path with API hot reload.
@@ -122,14 +122,21 @@ is:
    publication keeps the old pointer; successful revision directories remain
    available. The component is not wired to automatic data-directory
    initialization, configuration, API reads, or an update task.
-2. Initialize and configure the persistent data directory; connect the updater
-   to publish entity catalogs through the snapshot store.
-3. **Implemented, not executed:** add the standalone `FileHeroGuideCache` and
+2. **Implemented, not run:** expose `python -m app.vnext.data_updates init-catalog`
+   for one-time initialization from the bundled or explicitly selected local
+   five-file catalog. The operator must supply an absolute data root with
+   `--data-dir` or `DOTAMIND_DATA_DIR`; no deployment directory has been
+   initialized by this component.
+3. **Implemented, not executed:** the standalone `FileHeroGuideCache` and
    callable `migrate_redis_guides()` component. Offline FakeRedis and `tmp_path`
    tests cover full-entry import and read-back verification. The API, refresh CLI,
    and timer still use Redis; no real Redis migration has been run.
-4. Run and verify the guide migration against the intended Redis cache and
-   persistent data root before changing API reads.
+4. **Implemented, not run:** expose
+   `python -m app.vnext.data_updates migrate-guides` to use the current catalog's
+   hero list and existing Redis importer. Run and verify it against the intended
+   Redis cache and persistent data root before changing API reads. It shares the
+   data-root update lock and the guide refresh CLI lock, which only coordinates
+   processes in the same API container.
 5. Add API catalog hot reload and connect image matching to the active snapshot.
 6. Split and reuse the Valve fetch script for catalog, patch, and image work.
 7. Add the unified update entrypoint and patch-version gate.
@@ -137,11 +144,12 @@ is:
 9. Deploy and verify persistent reads, query-consistent hot reload, fallback,
    and the scheduled update path.
 
-Only the standalone five-file catalog store and guide file/import components are
-marked implemented here. Real guide migration, API switching, unified entrypoint,
-schedule, and API hot reload remain pending. Offline tests do not establish
-power-loss recovery. `game.detail` entity-name enrichment remains a later
-independent item after this data-update migration.
+Only the standalone five-file catalog store, guide file/import components, and
+their manual operator entrypoints are implemented here. Real catalog
+initialization and guide migration, API switching, unified scheduled updater,
+and API hot reload remain pending. Offline tests do not establish power-loss
+recovery. `game.detail` entity-name enrichment remains a later independent item
+after this data-update migration.
 
 ## Subsequent capability work
 
