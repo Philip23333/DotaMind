@@ -38,6 +38,7 @@ from app.integrations.valve.catalog import (  # noqa: E402
     HeroCatalogRecord,
     ItemCatalogRecord,
     RecipeEdge,
+    clean_text,
     extract_display_tokens,
     index_talent_bonus_candidates,
     normalize_ability,
@@ -92,8 +93,11 @@ def main() -> None:
 
     client = ValveDatafeedClient()
     patch = _latest_patch(client) if args.patch == "latest" else args.patch
+    previous_ability_ids = {
+        item.ability_id for item in _load_committed_catalog_bundle().abilities
+    }
     bundle = _build_catalog_snapshot(client, patch, workers=args.workers)
-    _sync_catalog_images(bundle, workers=args.workers)
+    image_failures = _sync_catalog_images(bundle, workers=args.workers)
     _write_catalog_snapshot(bundle)
     patch_records = _build_patch_records(client, patch)
 
@@ -109,6 +113,20 @@ def main() -> None:
         f"({len(bundle.heroes)} heroes, {len(bundle.abilities)} abilities, "
         f"{len(bundle.items)} items)"
     )
+    new_abilities = [
+        item for item in bundle.abilities if item.ability_id not in previous_ability_ids
+    ]
+    missing_names = [item for item in new_abilities if not item.name_en or not item.name_zh]
+    print(
+        f"supplemental abilities: added={len(new_abilities)}, "
+        f"missing_display_name={len(missing_names)}, image_failures={image_failures}"
+    )
+    for item in missing_names:
+        print(
+            f"warning: ability {item.ability_id} has missing display name(s): "
+            f"english={not bool(item.name_en)}, schinese={not bool(item.name_zh)}",
+            file=sys.stderr,
+        )
 
 
 def _load_committed_catalog_bundle() -> CatalogBundle:
@@ -141,8 +159,8 @@ def _load_committed_catalog_bundle() -> CatalogBundle:
     )
 
 
-def _sync_catalog_images(bundle: CatalogBundle, *, workers: int = 8) -> None:
-    """Download hero, non-recipe item, and ordinary ability images."""
+def _sync_catalog_images(bundle: CatalogBundle, *, workers: int = 8) -> int:
+    """Best-effort download of hero, non-recipe item, and ordinary ability images."""
 
     requests: list[tuple[str, str, int, str]] = []
     for hero in bundle.heroes:
@@ -154,7 +172,12 @@ def _sync_catalog_images(bundle: CatalogBundle, *, workers: int = 8) -> None:
         slug = _asset_slug(item.internal_name, "item_")
         requests.append(("items", slug, item.item_id, f"{VALVE_IMAGE_ROOT}/items/{slug}.png"))
     for ability in bundle.abilities:
-        if ability.is_item or ability.is_talent or ability.is_innate:
+        if (
+            ability.is_item
+            or ability.is_talent
+            or ability.is_innate
+            or not ability.name_en and not ability.name_zh
+        ):
             continue
         slug = _asset_slug(ability.internal_name, "")
         requests.append(
@@ -169,6 +192,11 @@ def _sync_catalog_images(bundle: CatalogBundle, *, workers: int = 8) -> None:
     temporary_dir = Path(tempfile.mkdtemp(prefix=".catalog-images-", dir=CATALOG_OUTPUT_DIR.parent))
     staging_dir = temporary_dir / "images"
     try:
+        if CATALOG_IMAGE_OUTPUT_DIR.is_dir():
+            shutil.copytree(CATALOG_IMAGE_OUTPUT_DIR, staging_dir)
+        else:
+            staging_dir.mkdir(parents=True)
+        failures = 0
         with ThreadPoolExecutor(max_workers=workers) as executor:
             futures = {
                 executor.submit(
@@ -183,12 +211,18 @@ def _sync_catalog_images(bundle: CatalogBundle, *, workers: int = 8) -> None:
                 try:
                     future.result()
                 except Exception as exc:
-                    raise RuntimeError(
-                        f"failed to download {kind} image {entity_id} ({slug})"
-                    ) from exc
+                    failures += 1
+                    print(
+                        f"warning: failed to download {kind} image {entity_id} ({slug}): {exc}",
+                        file=sys.stderr,
+                    )
 
         _replace_catalog_images(staging_dir)
-        print(f"wrote {CATALOG_IMAGE_OUTPUT_DIR} ({len(requests)} images)")
+        print(
+            f"wrote {CATALOG_IMAGE_OUTPUT_DIR} "
+            f"({len(requests) - failures} downloaded, {failures} failed)"
+        )
+        return failures
     finally:
         shutil.rmtree(temporary_dir, ignore_errors=True)
 
@@ -366,23 +400,39 @@ def _build_catalog_snapshot(
     _validate_summary_identity(item_en, item_zh, "item")
     item_ids = [int(item["id"]) for item in item_en]
 
-    auxiliary_ids = _auxiliary_ability_ids(
+    supplemental_ability_ids = _auxiliary_ability_ids(
+        ability_list_en,
+        existing_ability_ids=set(ability_en_by_id),
+        item_ids=set(item_ids),
+    )
+    talent_bonus_auxiliary_ids = _talent_bonus_auxiliary_ids(
         ability_list_en,
         visible_ability_ids=set(ability_en_by_id),
         talent_ids=talent_ids,
         item_ids=set(item_ids),
     )
+    ability_detail_en_ids = _ability_detail_request_ids(
+        supplemental_ability_ids, talent_bonus_auxiliary_ids
+    )
     auxiliary_details_en = _parallel_details(
-        auxiliary_ids,
+        ability_detail_en_ids,
         lambda ability_id: _result_data(
             client.abilitydata(ability_id, "english"), "abilities"
         )[0],
         workers,
     )
+    supplemental_details_zh = _parallel_details(
+        supplemental_ability_ids,
+        lambda ability_id: _result_data(
+            client.abilitydata(ability_id, "schinese"), "abilities"
+        )[0],
+        workers,
+    )
     auxiliary_bonus_index = index_talent_bonus_candidates(
-        record
-        for ability_id, record in sorted(auxiliary_details_en.items())
-        if not record.get("is_item") and ability_id not in ability_en_by_id
+        auxiliary_details_en[ability_id]
+        for ability_id in talent_bonus_auxiliary_ids
+        if not auxiliary_details_en[ability_id].get("is_item")
+        and ability_id not in ability_en_by_id
     )
 
     talent_bonuses_by_id: dict[int, dict[str, dict[str, Any]]] = {}
@@ -398,7 +448,7 @@ def _build_catalog_snapshot(
             localized_talents=[ability_zh_by_id[talent_id]],
         )
 
-    abilities = [
+    hero_abilities = [
         normalize_ability(
             ability_en_by_id[ability_id],
             ability_zh_by_id[ability_id],
@@ -408,6 +458,14 @@ def _build_catalog_snapshot(
         )
         for ability_id in sorted(ability_en_by_id)
     ]
+    abilities = _merge_ability_records(
+        hero_abilities,
+        _supplemental_ability_records(
+            supplemental_ability_ids,
+            auxiliary_details_en,
+            supplemental_details_zh,
+        ),
+    )
 
     item_details_en = _parallel_details(
         item_ids,
@@ -665,11 +723,102 @@ def _reviewed_catalog_exclusions(
 def _auxiliary_ability_ids(
     ability_summaries: list[dict[str, Any]],
     *,
+    existing_ability_ids: set[int],
+    item_ids: set[int],
+) -> list[int]:
+    """Select positive, non-item ability IDs absent from hero detail records."""
+
+    output: list[int] = []
+    for summary in ability_summaries:
+        ability_id = int(summary["id"])
+        if ability_id <= 0:
+            continue
+        if ability_id in existing_ability_ids or ability_id in item_ids:
+            continue
+        output.append(ability_id)
+    return sorted(set(output))
+
+
+def _ability_detail_request_ids(
+    supplemental_ids: list[int], talent_bonus_auxiliary_ids: list[int]
+) -> list[int]:
+    """Fetch each English detail once for supplements and talent value parsing."""
+
+    return sorted(set(supplemental_ids) | set(talent_bonus_auxiliary_ids))
+
+
+def _supplemental_ability_records(
+    identifiers: list[int],
+    details_en: dict[int, dict[str, Any]],
+    details_zh: dict[int, dict[str, Any]],
+) -> list[AbilityCatalogRecord]:
+    """Normalize missing IDs without inferring hero ownership or display names."""
+
+    records: list[AbilityCatalogRecord] = []
+    for identifier in identifiers:
+        english = details_en[identifier]
+        chinese = details_zh[identifier]
+        try:
+            english_id = int(english["id"])
+            chinese_id = int(chinese["id"])
+            english_internal_name = str(english["name"])
+            chinese_internal_name = str(chinese["name"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise CatalogValidationError(
+                f"supplemental ability detail {identifier} is missing its identity"
+            ) from exc
+        if (
+            english_id != identifier
+            or chinese_id != identifier
+            or english_internal_name != chinese_internal_name
+        ):
+            raise CatalogValidationError(
+                f"supplemental ability bilingual identity mismatch for {identifier}: "
+                f"english={english_id}/{english_internal_name!r}, "
+                f"schinese={chinese_id}/{chinese_internal_name!r}"
+            )
+        name_en = _supplemental_display_name(english.get("name_loc"))
+        name_zh = _supplemental_display_name(chinese.get("name_loc"))
+        records.append(
+            AbilityCatalogRecord(
+                ability_id=identifier,
+                internal_name=english_internal_name,
+                name_en=name_en,
+                name_zh=name_zh,
+                hero_ids=[],
+            )
+        )
+    return records
+
+
+def _supplemental_display_name(value: Any) -> str:
+    """Keep a localized label only when Valve supplies a renderable name."""
+
+    name = clean_text(value)
+    return "" if extract_display_tokens(name) else name
+
+
+def _merge_ability_records(
+    hero_records: list[AbilityCatalogRecord],
+    supplemental_records: list[AbilityCatalogRecord],
+) -> list[AbilityCatalogRecord]:
+    """Keep hero detail records first and fill only IDs they do not define."""
+
+    records_by_id = {record.ability_id: record for record in hero_records}
+    for record in supplemental_records:
+        if record.ability_id not in records_by_id:
+            records_by_id[record.ability_id] = record
+    return [records_by_id[identifier] for identifier in sorted(records_by_id)]
+
+
+def _talent_bonus_auxiliary_ids(
+    ability_summaries: list[dict[str, Any]],
+    *,
     visible_ability_ids: set[int],
     talent_ids: set[int],
     item_ids: set[int],
 ) -> list[int]:
-    """Select official non-output abilities that may carry talent bonus edges."""
+    """Preserve the historical auxiliary source set for talent value parsing."""
 
     output: list[int] = []
     for summary in ability_summaries:
@@ -679,9 +828,8 @@ def _auxiliary_ability_ids(
             continue
         if ability_id in visible_ability_ids or ability_id in talent_ids or ability_id in item_ids:
             continue
-        # Datafeed summaries do not expose an is_talent flag. Valve's stable
-        # special_bonus namespace is used only to avoid fetching talent records;
-        # it is never used to associate an auxiliary ability with a hero.
+        # These records are now retained in the snapshot, but remain outside the
+        # existing talent bonus parser's candidate set.
         if internal_name.startswith("special_bonus_"):
             continue
         output.append(ability_id)

@@ -103,7 +103,7 @@ def test_catalog_image_sync_includes_only_ordinary_abilities(monkeypatch) -> Non
 
     assert any(
         url.endswith("/abilities/test_ability.png")
-        and target.endswith("abilities\\10.png")
+        and Path(target).parts[-2:] == ("abilities", "10.png")
         for url, target in requests
     )
     assert not any("/abilities/special_bonus_" in url for url, _target in requests)
@@ -125,6 +125,52 @@ def test_catalog_image_sync_excludes_innate_abilities(monkeypatch) -> None:
     sync_game_data._sync_catalog_images(bundle, workers=1)
 
     assert not any(url.endswith("/abilities/test_ability.png") for url in requests)
+
+
+def test_catalog_image_sync_skips_abilities_without_display_names(monkeypatch) -> None:
+    bundle = _catalog_fixture()
+    bundle.abilities.append(
+        AbilityCatalogRecord(ability_id=999, internal_name="unlocalized_ability")
+    )
+    bundle.manifest.entity_counts["abilities"] += 1
+    requests: list[str] = []
+
+    def download(url: str, target: Path) -> None:
+        requests.append(url)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b"image")
+
+    monkeypatch.setattr(sync_game_data, "_download_catalog_image", download)
+    monkeypatch.setattr(sync_game_data, "_replace_catalog_images", lambda _staging: None)
+
+    sync_game_data._sync_catalog_images(bundle, workers=1)
+
+    assert not any(url.endswith("/abilities/unlocalized_ability.png") for url in requests)
+
+
+def test_catalog_image_failures_warn_and_do_not_block_snapshot_write(tmp_path, monkeypatch) -> None:
+    bundle = _catalog_fixture()
+    output = tmp_path / "catalog"
+    image_dir = output / "images"
+    output.mkdir()
+    monkeypatch.setattr(sync_game_data, "CATALOG_OUTPUT_DIR", output)
+    monkeypatch.setattr(sync_game_data, "CATALOG_IMAGE_OUTPUT_DIR", image_dir)
+
+    def download(_url: str, target: Path) -> None:
+        if target.name == "10.png":
+            raise FileNotFoundError("image does not exist")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b"image")
+
+    monkeypatch.setattr(sync_game_data, "_download_catalog_image", download)
+
+    failures = sync_game_data._sync_catalog_images(bundle, workers=1)
+    sync_game_data._write_catalog_snapshot(bundle)
+
+    assert failures == 1
+    assert not (image_dir / "abilities" / "10.png").exists()
+    assert (image_dir / "heroes" / "1.png").is_file()
+    assert (output / "dota2_abilities.json").is_file()
 
 
 def _hero_fixture() -> tuple[dict, dict]:
@@ -1175,7 +1221,7 @@ def test_catalog_merges_english_and_chinese_talent_token_requirements() -> None:
     assert ability.name_zh == "天赋 12"
 
 
-def test_sync_filters_auxiliary_ability_requests_without_associating_by_hero_name() -> None:
+def test_sync_supplements_special_bonus_without_expanding_talent_value_sources() -> None:
     summaries = [
         {"id": 0, "name": "dota_base_ability"},
         {"id": 10, "name": "visible_hero_ability"},
@@ -1188,10 +1234,80 @@ def test_sync_filters_auxiliary_ability_requests_without_associating_by_hero_nam
 
     assert sync_game_data._auxiliary_ability_ids(
         summaries,
+        existing_ability_ids={10, 20},
+        item_ids={30},
+    ) == [21, 40, 41]
+    assert sync_game_data._talent_bonus_auxiliary_ids(
+        summaries,
         visible_ability_ids={10},
         talent_ids={20},
         item_ids={30},
     ) == [40, 41]
+
+
+def test_supplemental_ability_records_keep_source_names_and_no_hero_guess() -> None:
+    supplemental_en = {
+        "id": 730,
+        "name": "special_bonus_source_name",
+        "name_loc": "Valve English Name",
+        "desc_loc": "",
+        "special_values": [],
+    }
+    supplemental_zh = dict(supplemental_en, name_loc="Valve 中文名称")
+    unnamed_en = {
+        "id": 731,
+        "name": "unlocalized_source_name",
+        "name_loc": "+{s:bonus_damage} Talent",
+        "desc_loc": "",
+        "special_values": [],
+    }
+    unnamed_zh = dict(unnamed_en)
+    records = sync_game_data._supplemental_ability_records(
+        [730, 731],
+        {730: supplemental_en, 731: unnamed_en},
+        {730: supplemental_zh, 731: unnamed_zh},
+    )
+
+    assert [record.ability_id for record in records] == [730, 731]
+    assert records[0].name_en == "Valve English Name"
+    assert records[0].name_zh == "Valve 中文名称"
+    assert records[0].hero_ids == []
+    assert records[1].name_en == ""
+    assert records[1].name_zh == ""
+
+    with pytest.raises(CatalogValidationError, match="bilingual identity mismatch"):
+        sync_game_data._supplemental_ability_records(
+            [730],
+            {730: supplemental_en},
+            {730: dict(supplemental_zh, name="different_internal_name")},
+        )
+
+
+def test_supplemental_and_talent_detail_requests_reuse_english_ids() -> None:
+    assert sync_game_data._ability_detail_request_ids([730, 731], [731, 900]) == [
+        730,
+        731,
+        900,
+    ]
+
+
+def test_hero_detail_records_win_when_supplemental_ids_overlap() -> None:
+    hero_record = AbilityCatalogRecord(
+        ability_id=730,
+        internal_name="hero_detail_name",
+        name_en="Hero Detail Name",
+        hero_ids=[1],
+    )
+    supplemental_record = AbilityCatalogRecord(
+        ability_id=730,
+        internal_name="supplemental_name",
+        name_en="Supplemental Name",
+        hero_ids=[],
+    )
+
+    merged = sync_game_data._merge_ability_records([hero_record], [supplemental_record])
+
+    assert merged == [hero_record]
 
 
 def test_catalog_rejects_unresolved_token_and_bilingual_identity_mismatch() -> None:

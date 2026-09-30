@@ -40,6 +40,21 @@ Names are added to the query result and generic Artifact output; they are not
 written into Redis snapshots. Old snapshots remain readable because enrichment
 DTO fields have defaults. `game.detail` has not yet integrated the resolver.
 
+The Valve catalog sync also retains positive ability IDs from the bilingual
+ability list when hero detail responses do not define them, including records
+whose internal names use `special_bonus_`. Hero detail records remain
+authoritative for duplicate IDs; supplemental records have no inferred hero
+association. These supplements retain their validated ID/internal name and
+renderable bilingual display names; they do not extend hero ability lists,
+talent trees, or the existing talent-value candidate set. Missing or unresolved
+localized display names stay empty, while malformed identity and other required
+source errors still fail synchronization. Ability ID zero remains excluded.
+Image downloads are best effort: failures are
+reported, successful and previously available files remain usable, and the
+catalog snapshot can still be published. Chat visual metadata is created only
+when the corresponding local image file exists; catalog name lookup does not
+depend on images.
+
 ## Artifact retrieval
 
 `artifact.read` and `artifact.grep` are schema-neutral observation primitives.

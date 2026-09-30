@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "game": "dota2",
-  "patch": "7.41e",
-  "generated_at": "2026-08-09T19:05:36.363376Z",
+  "patch": "7.41f",
+  "generated_at": "2026-09-28T16:35:43.688620Z",
   "locales": [
     "english",
     "schinese"
@@ -18,7 +18,7 @@
   ],
   "entity_counts": {
     "heroes": 127,
-    "abilities": 1707,
+    "abilities": 2701,
     "items": 543
   }
 }

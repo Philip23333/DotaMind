@@ -1,0 +1,994 @@
+{
+  "schema_version": 1,
+  "patch": "7.41f",
+  "released_at": "2026-09-15T07:00:00Z",
+  "source_url": "https://www.dota2.com/patches/7.41f?l=english",
+  "source_data_url": "https://www.dota2.com/datafeed/patchnotes?version=7.41f&language=english",
+  "normalization": "Valve datafeed flattened locally; polarity is conservative rule-based classification and neutral when direction is unclear.",
+  "changes": [
+    {
+      "target_type": "item",
+      "target": "infused_raindrop",
+      "field": "mana_regen_bonus",
+      "polarity": "nerf",
+      "raw": "Mana Regen bonus decreased from +0.8 to +0.6",
+      "target_display_name": "Infused Raindrops",
+      "source_id": 265
+    },
+    {
+      "target_type": "item",
+      "target": "bfury",
+      "field": "chop_tree_cooldown",
+      "polarity": "buff",
+      "raw": "Chop Tree cooldown decreased from 4s to 3s",
+      "target_display_name": "Battle Fury",
+      "source_id": 145
+    },
+    {
+      "target_type": "item",
+      "target": "greater_crit",
+      "field": "recipe_cost",
+      "polarity": "nerf",
+      "raw": "Recipe cost increased from 900 to 1000. Total cost increased from 5100g to 5200g",
+      "target_display_name": "Daedalus",
+      "source_id": 141
+    },
+    {
+      "target_type": "item",
+      "target": "dragon_lance",
+      "field": "recipe_cost",
+      "polarity": "nerf",
+      "raw": "Recipe cost increased from 450 to 550. Total cost increased from 1900g to 2000g",
+      "target_display_name": "Dragon Lance",
+      "source_id": 236
+    },
+    {
+      "target_type": "item",
+      "target": "essence_distiller",
+      "field": "mana_regen_bonus",
+      "polarity": "nerf",
+      "raw": "Mana Regen bonus decreased from +1.75 to +1.5",
+      "target_display_name": "Essence Distiller",
+      "source_id": 1852
+    },
+    {
+      "target_type": "item",
+      "target": "heart",
+      "field": "recipe_cost",
+      "polarity": "nerf",
+      "raw": "Recipe cost increased from 700 to 800. Total cost increased from 5200g to 5300g",
+      "target_display_name": "Heart of Tarrasque",
+      "source_id": 114
+    },
+    {
+      "target_type": "item",
+      "target": "heavens_halberd",
+      "field": "recipe_cost",
+      "polarity": "buff",
+      "raw": "Recipe cost decreased from 450 to 350. Total cost decreased from 3400g to 3300g",
+      "target_display_name": "Heaven's Halberd",
+      "source_id": 210
+    },
+    {
+      "target_type": "item",
+      "target": "hurricane_pike",
+      "field": "total_cost",
+      "polarity": "nerf",
+      "raw": "Total cost increased from 4450g to 4550g (due to Dragon Lance cost increase)",
+      "target_display_name": "Hurricane Pike",
+      "source_id": 263
+    },
+    {
+      "target_type": "item",
+      "target": "hydras_breath",
+      "field": "recipe_cost",
+      "polarity": "buff",
+      "raw": "Recipe cost decreased from 1100 to 1000. Total cost unchanged at 5900g (due to Dragon Lance cost increase)",
+      "target_display_name": "Hydra's Breath",
+      "source_id": 1858
+    },
+    {
+      "target_type": "item",
+      "target": "manta",
+      "field": "mirror_image_ranged_images_damage",
+      "polarity": "nerf",
+      "raw": "Mirror Image ranged images damage decreased from 28% to 25%",
+      "target_display_name": "Manta Style",
+      "source_id": 147
+    },
+    {
+      "target_type": "item",
+      "target": "mask_of_madness",
+      "field": "lifesteal_bonus",
+      "polarity": "nerf",
+      "raw": "Lifesteal bonus decreased from +24% to +22%",
+      "target_display_name": "Mask of Madness",
+      "source_id": 172
+    },
+    {
+      "target_type": "item",
+      "target": "mask_of_madness",
+      "field": "creep_lifesteal",
+      "polarity": "nerf",
+      "raw": "Creep lifesteal decreased from +14.4% to +13.2%",
+      "target_display_name": "Mask of Madness",
+      "source_id": 172
+    },
+    {
+      "target_type": "item",
+      "target": "mjollnir",
+      "field": "static_charge_duration",
+      "polarity": "neutral",
+      "raw": "Static Charge duration decreased from 15s to 12s",
+      "target_display_name": "Mjollnir",
+      "source_id": 158
+    },
+    {
+      "target_type": "item",
+      "target": "octarine_core",
+      "field": "recipe_cost",
+      "polarity": "nerf",
+      "raw": "Recipe cost increased from 200 to 400. Total cost increased from 4900g to 5100g",
+      "target_display_name": "Octarine Core",
+      "source_id": 235
+    },
+    {
+      "target_type": "item",
+      "target": "satanic",
+      "field": "lifesteal_bonus",
+      "polarity": "nerf",
+      "raw": "Lifesteal bonus decreased from +30% to +25%",
+      "target_display_name": "Satanic",
+      "source_id": 156
+    },
+    {
+      "target_type": "item",
+      "target": "satanic",
+      "field": "creep_lifesteal",
+      "polarity": "nerf",
+      "raw": "Creep lifesteal decreased from +18% to +15%",
+      "target_display_name": "Satanic",
+      "source_id": 156
+    },
+    {
+      "target_type": "item",
+      "target": "shivas_guard",
+      "field": "arctic_blast_damage",
+      "polarity": "nerf",
+      "raw": "Arctic Blast damage decreased from 260 to 225",
+      "target_display_name": "Shiva's Guard",
+      "source_id": 119
+    },
+    {
+      "target_type": "item",
+      "target": "silver_edge",
+      "field": "shadow_walk_cooldown",
+      "polarity": "nerf",
+      "raw": "Shadow Walk cooldown increased from 22s to 23s",
+      "target_display_name": "Silver Edge",
+      "source_id": 249
+    },
+    {
+      "target_type": "item",
+      "target": "silver_edge",
+      "field": "shadow_walk_bonus_movement_speed",
+      "polarity": "nerf",
+      "raw": "Shadow Walk bonus movement speed decreased from 22% to 20%",
+      "target_display_name": "Silver Edge",
+      "source_id": 249
+    },
+    {
+      "target_type": "neutral_item",
+      "target": "neutral_1593",
+      "field": "attack_damage_penalty",
+      "polarity": "nerf",
+      "raw": "Attack Damage penalty increased from 30/60 to 35/70",
+      "target_display_name": "neutral_1593",
+      "source_id": 1593
+    },
+    {
+      "target_type": "hero",
+      "target": "antimage",
+      "field": "antimage_mana_break",
+      "polarity": "buff",
+      "raw": "Mana Burned as Damage increased from 60% to 65%",
+      "target_display_name": "Anti-Mage",
+      "field_display_name": "Mana Break",
+      "source_id": 1,
+      "ability_id": 5003
+    },
+    {
+      "target_type": "hero",
+      "target": "bane",
+      "field": "base_armor",
+      "polarity": "nerf",
+      "raw": "Base Armor decreased by 1",
+      "target_display_name": "Bane",
+      "source_id": 3
+    },
+    {
+      "target_type": "hero",
+      "target": "mirana",
+      "field": "mirana_celestial_quiver",
+      "polarity": "neutral",
+      "raw": "Base Charge Restore Time increased from 6s to 7s",
+      "target_display_name": "Mirana",
+      "field_display_name": "Celestial Quiver",
+      "source_id": 9,
+      "ability_id": 1739
+    },
+    {
+      "target_type": "hero",
+      "target": "mirana",
+      "field": "mirana_arrow",
+      "polarity": "neutral",
+      "raw": "Maximum Stun decreased from 2.6/3.4/4.2/5s to 2.3/3.2/4.1/5s",
+      "target_display_name": "Mirana",
+      "field_display_name": "Sacred Arrow",
+      "source_id": 9,
+      "ability_id": 5048
+    },
+    {
+      "target_type": "hero",
+      "target": "nevermore",
+      "field": "talent",
+      "polarity": "nerf",
+      "raw": "Level 15 Talent Presence Armor Reduction decreased from +2 to +1.5",
+      "target_display_name": "Shadow Fiend",
+      "source_id": 11
+    },
+    {
+      "target_type": "hero",
+      "target": "nevermore",
+      "field": "nevermore_necromastery",
+      "polarity": "neutral",
+      "raw": "Damage per soul changed from 1.35 + 0.15 damage per level to 1 + 0.8 damage per 6 levels",
+      "target_display_name": "Shadow Fiend",
+      "field_display_name": "Necromastery",
+      "source_id": 11,
+      "ability_id": 5062
+    },
+    {
+      "target_type": "hero",
+      "target": "nevermore",
+      "field": "nevermore_shadowraze1",
+      "polarity": "nerf",
+      "raw": "Bonus Damage Per Soul decreased from 3 to 2",
+      "target_display_name": "Shadow Fiend",
+      "field_display_name": "Shadowraze",
+      "source_id": 11,
+      "ability_id": 5059
+    },
+    {
+      "target_type": "hero",
+      "target": "lina",
+      "field": "base_intelligence",
+      "polarity": "neutral",
+      "raw": "Base Intelligence decreased from 30 to 28",
+      "target_display_name": "Lina",
+      "source_id": 25
+    },
+    {
+      "target_type": "hero",
+      "target": "lina",
+      "field": "damage_at_level_1",
+      "polarity": "nerf",
+      "raw": "Damage at level 1 decreased from 51-59 to 49-57",
+      "target_display_name": "Lina",
+      "source_id": 25
+    },
+    {
+      "target_type": "hero",
+      "target": "lina",
+      "field": "lina_fiery_soul",
+      "polarity": "nerf",
+      "raw": "Attack Speed Bonus decreased from 8/16/24/32 to 7/14/21/28",
+      "target_display_name": "Lina",
+      "field_display_name": "Fiery Soul",
+      "source_id": 25,
+      "ability_id": 5042
+    },
+    {
+      "target_type": "hero",
+      "target": "lina",
+      "field": "lina_fiery_soul",
+      "polarity": "neutral",
+      "raw": "Duration decreased from 18s to 16s",
+      "target_display_name": "Lina",
+      "field_display_name": "Fiery Soul",
+      "source_id": 25,
+      "ability_id": 5042
+    },
+    {
+      "target_type": "hero",
+      "target": "slardar",
+      "field": "base_health_regen",
+      "polarity": "nerf",
+      "raw": "Base Health Regen decreased by 0.25",
+      "target_display_name": "Slardar",
+      "source_id": 28
+    },
+    {
+      "target_type": "hero",
+      "target": "slardar",
+      "field": "slardar_slithereen_crush",
+      "polarity": "nerf",
+      "raw": "Damage decreased from 75/150/225/300 to 60/140/220/300",
+      "target_display_name": "Slardar",
+      "field_display_name": "Slithereen Crush",
+      "source_id": 28,
+      "ability_id": 5115
+    },
+    {
+      "target_type": "hero",
+      "target": "enigma",
+      "field": "talent",
+      "polarity": "nerf",
+      "raw": "Level 20 Talent Eidolon Damage decreased from +40 to +30",
+      "target_display_name": "Enigma",
+      "source_id": 33
+    },
+    {
+      "target_type": "hero",
+      "target": "enigma",
+      "field": "enigma_demonic_conversion",
+      "polarity": "nerf",
+      "raw": "Eidolon Attack Range decreased from 425/450/475/500 to 380/420/460/500",
+      "target_display_name": "Enigma",
+      "field_display_name": "Demonic Summoning",
+      "source_id": 33,
+      "ability_id": 5147
+    },
+    {
+      "target_type": "hero",
+      "target": "enigma",
+      "field": "enigma_black_hole",
+      "polarity": "neutral",
+      "raw": "Aghanim's Scepter pull speed decreased from 175 to 150",
+      "target_display_name": "Enigma",
+      "field_display_name": "Black Hole",
+      "source_id": 33,
+      "ability_id": 5149
+    },
+    {
+      "target_type": "hero",
+      "target": "necrolyte",
+      "field": "necrolyte_sadist",
+      "polarity": "neutral",
+      "raw": "Hero Kill Multiplier decreased from 6 to 4",
+      "target_display_name": "Necrophos",
+      "field_display_name": "Sadist",
+      "source_id": 36,
+      "ability_id": 5160
+    },
+    {
+      "target_type": "hero",
+      "target": "necrolyte",
+      "field": "necrolyte_ghost_shroud",
+      "polarity": "neutral",
+      "raw": "Restoration Amplification decreased from 55/65/75/85% to 45/55/65/75%",
+      "target_display_name": "Necrophos",
+      "field_display_name": "Ghost Shroud",
+      "source_id": 36,
+      "ability_id": 1270
+    },
+    {
+      "target_type": "hero",
+      "target": "warlock",
+      "field": "base_attack_speed",
+      "polarity": "buff",
+      "raw": "Base Attack Speed increased from 90 to 95",
+      "target_display_name": "Warlock",
+      "source_id": 37
+    },
+    {
+      "target_type": "hero",
+      "target": "rattletrap",
+      "field": "rattletrap_power_cogs",
+      "polarity": "nerf",
+      "raw": "Mana Cost increased from 75 to 90",
+      "target_display_name": "Clockwerk",
+      "field_display_name": "Power Cogs",
+      "source_id": 51,
+      "ability_id": 5238
+    },
+    {
+      "target_type": "hero",
+      "target": "rattletrap",
+      "field": "rattletrap_power_cogs",
+      "polarity": "neutral",
+      "raw": "Knockback Duration decreased from 0.8s to 0.7s",
+      "target_display_name": "Clockwerk",
+      "field_display_name": "Power Cogs",
+      "source_id": 51,
+      "ability_id": 5238
+    },
+    {
+      "target_type": "hero",
+      "target": "life_stealer",
+      "field": "talent",
+      "polarity": "nerf",
+      "raw": "Level 10 Talent Movement Speed decreased from +20 to +15",
+      "target_display_name": "Lifestealer",
+      "source_id": 54
+    },
+    {
+      "target_type": "hero",
+      "target": "life_stealer",
+      "field": "life_stealer_rage",
+      "polarity": "nerf",
+      "raw": "Cooldown increased from 20/19/18/17s to 21/20/19/18s",
+      "target_display_name": "Lifestealer",
+      "field_display_name": "Rage",
+      "source_id": 54,
+      "ability_id": 5249
+    },
+    {
+      "target_type": "hero",
+      "target": "life_stealer",
+      "field": "life_stealer_infest",
+      "polarity": "neutral",
+      "raw": "Aghanim's Scepter Enemy Duration decreased from 5s to 4s",
+      "target_display_name": "Lifestealer",
+      "field_display_name": "Infest",
+      "source_id": 54,
+      "ability_id": 5252
+    },
+    {
+      "target_type": "hero",
+      "target": "huskar",
+      "field": "base_strength",
+      "polarity": "neutral",
+      "raw": "Base Strength decreased from 23 to 22",
+      "target_display_name": "Huskar",
+      "source_id": 59
+    },
+    {
+      "target_type": "hero",
+      "target": "huskar",
+      "field": "damage_at_level_1",
+      "polarity": "nerf",
+      "raw": "Damage at level 1 decreased from 44-49 to 43-48",
+      "target_display_name": "Huskar",
+      "source_id": 59
+    },
+    {
+      "target_type": "hero",
+      "target": "huskar",
+      "field": "strength_gain",
+      "polarity": "neutral",
+      "raw": "Strength gain increased from 3.3 to 3.4",
+      "target_display_name": "Huskar",
+      "source_id": 59
+    },
+    {
+      "target_type": "hero",
+      "target": "broodmother",
+      "field": "broodmother_insatiable_hunger",
+      "polarity": "buff",
+      "raw": "Mana Cost decreased from 80 to 70",
+      "target_display_name": "Broodmother",
+      "field_display_name": "Insatiable Hunger",
+      "source_id": 61,
+      "ability_id": 5282
+    },
+    {
+      "target_type": "hero",
+      "target": "bounty_hunter",
+      "field": "talent",
+      "polarity": "neutral",
+      "raw": "Level 10 Talent Shuriken Toss Slow decreased from +0.6s to +0.35s",
+      "target_display_name": "Bounty Hunter",
+      "source_id": 62
+    },
+    {
+      "target_type": "hero",
+      "target": "bounty_hunter",
+      "field": "talent",
+      "polarity": "neutral",
+      "raw": "Level 20 Talent Track Grants Shared Vision replaced with +190 Shuriken Toss Damage",
+      "target_display_name": "Bounty Hunter",
+      "source_id": 62
+    },
+    {
+      "target_type": "hero",
+      "target": "bounty_hunter",
+      "field": "talent",
+      "polarity": "neutral",
+      "raw": "Level 25 Talent +250 Shuriken Toss Damage replaced with Track Grants Shared Vision",
+      "target_display_name": "Bounty Hunter",
+      "source_id": 62
+    },
+    {
+      "target_type": "hero",
+      "target": "bounty_hunter",
+      "field": "bounty_hunter_track",
+      "polarity": "nerf",
+      "raw": "Self bonus gold decreased from 130/225/320 to 80/160/240",
+      "target_display_name": "Bounty Hunter",
+      "field_display_name": "Track",
+      "source_id": 62,
+      "ability_id": 5288
+    },
+    {
+      "target_type": "hero",
+      "target": "bounty_hunter",
+      "field": "bounty_hunter_track",
+      "polarity": "nerf",
+      "raw": "Allies bonus gold decreased from 50/90/130 to 40/80/120",
+      "target_display_name": "Bounty Hunter",
+      "field_display_name": "Track",
+      "source_id": 62,
+      "ability_id": 5288
+    },
+    {
+      "target_type": "hero",
+      "target": "batrider",
+      "field": "intelligence_gain",
+      "polarity": "neutral",
+      "raw": "Intelligence gain increased from 2.9 to 3.2",
+      "target_display_name": "Batrider",
+      "source_id": 65
+    },
+    {
+      "target_type": "hero",
+      "target": "batrider",
+      "field": "damage_gain_per_level",
+      "polarity": "buff",
+      "raw": "Damage gain per level increased from 3.5 to 3.6",
+      "target_display_name": "Batrider",
+      "source_id": 65
+    },
+    {
+      "target_type": "hero",
+      "target": "chen",
+      "field": "strength_gain",
+      "polarity": "neutral",
+      "raw": "Strength gain increased from 2.0 to 2.2",
+      "target_display_name": "Chen",
+      "source_id": 66
+    },
+    {
+      "target_type": "hero",
+      "target": "chen",
+      "field": "chen_zealot",
+      "polarity": "neutral",
+      "raw": "Zealot respawn time changed from 60s to 60s - 1s per hero level",
+      "target_display_name": "Chen",
+      "field_display_name": "Zealot",
+      "source_id": 66,
+      "ability_id": 1755
+    },
+    {
+      "target_type": "hero",
+      "target": "spectre",
+      "field": "spectre_desolate",
+      "polarity": "nerf",
+      "raw": "Damage decreased from 23 + 2 per level to 23.5 + 1.5 per level",
+      "target_display_name": "Spectre",
+      "field_display_name": "Desolate",
+      "source_id": 67,
+      "ability_id": 5335
+    },
+    {
+      "target_type": "hero",
+      "target": "ursa",
+      "field": "ursa_maul",
+      "polarity": "buff",
+      "raw": "Health As Damage increased from 1.25% to 1.75%",
+      "target_display_name": "Ursa",
+      "field_display_name": "Maul",
+      "source_id": 70,
+      "ability_id": 1327
+    },
+    {
+      "target_type": "hero",
+      "target": "invoker",
+      "field": "invoker_cold_snap",
+      "polarity": "nerf",
+      "raw": "Cooldown increased from 18s to 19s",
+      "target_display_name": "Invoker",
+      "field_display_name": "Cold Snap",
+      "source_id": 74,
+      "ability_id": 5376
+    },
+    {
+      "target_type": "hero",
+      "target": "invoker",
+      "field": "invoker_ghost_walk",
+      "polarity": "neutral",
+      "raw": "Aghanim's Shard no longer applies damage to non-Hero units",
+      "target_display_name": "Invoker",
+      "field_display_name": "Ghost Walk",
+      "source_id": 74,
+      "ability_id": 5381
+    },
+    {
+      "target_type": "hero",
+      "target": "lone_druid",
+      "field": "lone_druid_entangle",
+      "polarity": "neutral",
+      "raw": "Stack Duration decreased from 10s to 7/8/9/10s",
+      "target_display_name": "Lone Druid",
+      "field_display_name": "Entangle",
+      "source_id": 80,
+      "ability_id": 1684
+    },
+    {
+      "target_type": "hero",
+      "target": "treant",
+      "field": "base_intelligence",
+      "polarity": "neutral",
+      "raw": "Base Intelligence decreased from 20 to 17",
+      "target_display_name": "Treant Protector",
+      "source_id": 83
+    },
+    {
+      "target_type": "hero",
+      "target": "treant",
+      "field": "talent",
+      "polarity": "neutral",
+      "raw": "Level 10 Talent +3 Living Armor Heal per Second replaced with +3s Living Armor Duration",
+      "target_display_name": "Treant Protector",
+      "source_id": 83
+    },
+    {
+      "target_type": "hero",
+      "target": "treant",
+      "field": "treant_natures_guise",
+      "polarity": "neutral",
+      "raw": "Invisibility linger when leaving trees decreased from 2s to 1s",
+      "target_display_name": "Treant Protector",
+      "field_display_name": "Nature's Guise",
+      "source_id": 83,
+      "ability_id": 5434
+    },
+    {
+      "target_type": "hero",
+      "target": "treant",
+      "field": "treant_leech_seed",
+      "polarity": "neutral",
+      "raw": "Now costs 35 mana",
+      "target_display_name": "Treant Protector",
+      "field_display_name": "Leech Seed",
+      "source_id": 83,
+      "ability_id": 5435
+    },
+    {
+      "target_type": "hero",
+      "target": "treant",
+      "field": "treant_leech_seed",
+      "polarity": "neutral",
+      "raw": "Damage to Healing rescaled from 20% to 10/15/20/25%",
+      "target_display_name": "Treant Protector",
+      "field_display_name": "Leech Seed",
+      "source_id": 83,
+      "ability_id": 5435
+    },
+    {
+      "target_type": "hero",
+      "target": "treant",
+      "field": "treant_living_armor",
+      "polarity": "nerf",
+      "raw": "Minimum damage block decreased from 20 to 10",
+      "target_display_name": "Treant Protector",
+      "field_display_name": "Living Armor",
+      "source_id": 83,
+      "ability_id": 5436
+    },
+    {
+      "target_type": "hero",
+      "target": "undying",
+      "field": "base_health_regen",
+      "polarity": "nerf",
+      "raw": "Base Health Regen decreased by 0.25",
+      "target_display_name": "Undying",
+      "source_id": 85
+    },
+    {
+      "target_type": "hero",
+      "target": "undying",
+      "field": "undying_decay",
+      "polarity": "nerf",
+      "raw": "Mana Cost increased from 100 to 110",
+      "target_display_name": "Undying",
+      "field_display_name": "Decay",
+      "source_id": 85,
+      "ability_id": 5442
+    },
+    {
+      "target_type": "hero",
+      "target": "disruptor",
+      "field": "base_intelligence",
+      "polarity": "neutral",
+      "raw": "Base Intelligence increased from 20 to 21",
+      "target_display_name": "Disruptor",
+      "source_id": 87
+    },
+    {
+      "target_type": "hero",
+      "target": "disruptor",
+      "field": "damage_at_level_1",
+      "polarity": "buff",
+      "raw": "Damage at level 1 increased from 47-51 to 48-52",
+      "target_display_name": "Disruptor",
+      "source_id": 87
+    },
+    {
+      "target_type": "hero",
+      "target": "keeper_of_the_light",
+      "field": "base_attack_speed",
+      "polarity": "nerf",
+      "raw": "Base Attack Speed decreased from 100 to 90",
+      "target_display_name": "Keeper of the Light",
+      "source_id": 90
+    },
+    {
+      "target_type": "hero",
+      "target": "keeper_of_the_light",
+      "field": "keeper_of_the_light_chakra_magic",
+      "polarity": "buff",
+      "raw": "Cooldown Reduction decreased from 3/4/5/6s to 2.5/3.5/4.5/5.5s",
+      "target_display_name": "Keeper of the Light",
+      "field_display_name": "Chakra Magic",
+      "source_id": 90,
+      "ability_id": 5473
+    },
+    {
+      "target_type": "hero",
+      "target": "keeper_of_the_light",
+      "field": "keeper_of_the_light_spirit_form",
+      "polarity": "neutral",
+      "raw": "Illuminate Heal decreased from 70% to 60%",
+      "target_display_name": "Keeper of the Light",
+      "field_display_name": "Spirit Form",
+      "source_id": 90,
+      "ability_id": 5474
+    },
+    {
+      "target_type": "hero",
+      "target": "keeper_of_the_light",
+      "field": "keeper_of_the_light_spirit_form",
+      "polarity": "neutral",
+      "raw": "Illuminate Heal with Aghanim's Shard unchanged at 100%",
+      "target_display_name": "Keeper of the Light",
+      "field_display_name": "Spirit Form",
+      "source_id": 90,
+      "ability_id": 5474
+    },
+    {
+      "target_type": "hero",
+      "target": "wisp",
+      "field": "talent",
+      "polarity": "nerf",
+      "raw": "Level 15 Talent Spirits Damage decreased from +50% to +40%",
+      "target_display_name": "Io",
+      "source_id": 91
+    },
+    {
+      "target_type": "hero",
+      "target": "centaur",
+      "field": "base_damage",
+      "polarity": "nerf",
+      "raw": "Base Damage decreased by 2",
+      "target_display_name": "Centaur Warrunner",
+      "source_id": 96
+    },
+    {
+      "target_type": "hero",
+      "target": "centaur",
+      "field": "damage_at_level_1",
+      "polarity": "nerf",
+      "raw": "Damage at level 1 decreased from 64-66 to 62-64",
+      "target_display_name": "Centaur Warrunner",
+      "source_id": 96
+    },
+    {
+      "target_type": "hero",
+      "target": "centaur",
+      "field": "base_movement_speed",
+      "polarity": "nerf",
+      "raw": "Base Movement Speed decreased from 300 to 295",
+      "target_display_name": "Centaur Warrunner",
+      "source_id": 96
+    },
+    {
+      "target_type": "hero",
+      "target": "centaur",
+      "field": "centaur_mount",
+      "polarity": "nerf",
+      "raw": "Cast Range decreased from 250 to 200",
+      "target_display_name": "Centaur Warrunner",
+      "field_display_name": "Hitch A Ride",
+      "source_id": 96,
+      "ability_id": 980
+    },
+    {
+      "target_type": "hero",
+      "target": "ember_spirit",
+      "field": "base_agility",
+      "polarity": "neutral",
+      "raw": "Base Agility decreased from 22 to 21",
+      "target_display_name": "Ember Spirit",
+      "source_id": 106
+    },
+    {
+      "target_type": "hero",
+      "target": "ember_spirit",
+      "field": "damage_at_level_1",
+      "polarity": "nerf",
+      "raw": "Damage at level 1 decreased from 52-56 to 51-55",
+      "target_display_name": "Ember Spirit",
+      "source_id": 106
+    },
+    {
+      "target_type": "hero",
+      "target": "earth_spirit",
+      "field": "base_attack_speed",
+      "polarity": "nerf",
+      "raw": "Base Attack Speed decreased from 100 to 95",
+      "target_display_name": "Earth Spirit",
+      "source_id": 107
+    },
+    {
+      "target_type": "hero",
+      "target": "earth_spirit",
+      "field": "talent",
+      "polarity": "neutral",
+      "raw": "Level 20 Talent +25% Magnetize Damage & Duration replaced with +35 Magnetize Damage Per Second",
+      "target_display_name": "Earth Spirit",
+      "source_id": 107
+    },
+    {
+      "target_type": "hero",
+      "target": "earth_spirit",
+      "field": "talent",
+      "polarity": "neutral",
+      "raw": "Level 20 Talent +175% Rolling Boulder Damage from Strength replaced with +200 Geomagnetic Grip Remnant Damage",
+      "target_display_name": "Earth Spirit",
+      "source_id": 107
+    },
+    {
+      "target_type": "hero",
+      "target": "earth_spirit",
+      "field": "talent",
+      "polarity": "neutral",
+      "raw": "Level 25 Talent +250 Geomagnetic Grip Remnant Damage replaced with +250% Rolling Boulder Damage from Strength",
+      "target_display_name": "Earth Spirit",
+      "source_id": 107
+    },
+    {
+      "target_type": "hero",
+      "target": "earth_spirit",
+      "field": "earth_spirit_stone_caller",
+      "polarity": "neutral",
+      "raw": "Charges changed from (7 + 1 per 4 levels) to (7 + 1 per 5 levels)",
+      "target_display_name": "Earth Spirit",
+      "field_display_name": "Stone Remnant",
+      "source_id": 107,
+      "ability_id": 1395
+    },
+    {
+      "target_type": "hero",
+      "target": "earth_spirit",
+      "field": "earth_spirit_stone_caller",
+      "polarity": "nerf",
+      "raw": "Max charges decreased from 14 at level 28 to 13 at level 30",
+      "target_display_name": "Earth Spirit",
+      "field_display_name": "Stone Remnant",
+      "source_id": 107,
+      "ability_id": 1395
+    },
+    {
+      "target_type": "hero",
+      "target": "abyssal_underlord",
+      "field": "abyssal_underlord_pit_of_malice",
+      "polarity": "neutral",
+      "raw": "No longer upgraded with Aghanim's Scepter",
+      "target_display_name": "Underlord",
+      "field_display_name": "Pit of Malice",
+      "source_id": 108,
+      "ability_id": 5614
+    },
+    {
+      "target_type": "hero",
+      "target": "abyssal_underlord",
+      "field": "abyssal_underlord_dark_portal",
+      "polarity": "buff",
+      "raw": "Aghanim's Scepter Cooldown decreased from 100/95/90s to 90/85/80s",
+      "target_display_name": "Underlord",
+      "field_display_name": "Fiend's Gate",
+      "source_id": 108,
+      "ability_id": 865
+    },
+    {
+      "target_type": "hero",
+      "target": "winter_wyvern",
+      "field": "winter_wyvern_arctic_burn",
+      "polarity": "nerf",
+      "raw": "Cooldown increased from 26/24/22/20s to 29/26/23/20s",
+      "target_display_name": "Winter Wyvern",
+      "field_display_name": "Arctic Burn",
+      "source_id": 112,
+      "ability_id": 5651
+    },
+    {
+      "target_type": "hero",
+      "target": "winter_wyvern",
+      "field": "winter_wyvern_cold_embrace",
+      "polarity": "neutral",
+      "raw": "Max HP Heal per second decreased from 2.25/3/3.75/4.5% to 1.5/2.5/3.5/4.5%",
+      "target_display_name": "Winter Wyvern",
+      "field_display_name": "Cold Embrace",
+      "source_id": 112,
+      "ability_id": 5653
+    },
+    {
+      "target_type": "hero",
+      "target": "hoodwink",
+      "field": "base_strength",
+      "polarity": "neutral",
+      "raw": "Base Strength decreased from 17 to 16",
+      "target_display_name": "Hoodwink",
+      "source_id": 123
+    },
+    {
+      "target_type": "hero",
+      "target": "mars",
+      "field": "base_armor",
+      "polarity": "buff",
+      "raw": "Base Armor increased by 1",
+      "target_display_name": "Mars",
+      "source_id": 129
+    },
+    {
+      "target_type": "hero",
+      "target": "marci",
+      "field": "marci_companion_run",
+      "polarity": "neutral",
+      "raw": "Ally bonus movement speed rescaled from 15/20/25/30% to 25%",
+      "target_display_name": "Marci",
+      "field_display_name": "Rebound",
+      "source_id": 136,
+      "ability_id": 8235
+    },
+    {
+      "target_type": "hero",
+      "target": "kez",
+      "field": "base_damage",
+      "polarity": "nerf",
+      "raw": "Base Damage decreased by 1",
+      "target_display_name": "Kez",
+      "source_id": 145
+    },
+    {
+      "target_type": "hero",
+      "target": "kez",
+      "field": "damage_at_level_1",
+      "polarity": "nerf",
+      "raw": "Damage at level 1 decreased from 50-56 to 49-55",
+      "target_display_name": "Kez",
+      "source_id": 145
+    },
+    {
+      "target_type": "hero",
+      "target": "kez",
+      "field": "talent",
+      "polarity": "nerf",
+      "raw": "Level 20 Talent Kazurai Katana Damage Per Second decreased from +4% to +3.5%",
+      "target_display_name": "Kez",
+      "source_id": 145
+    },
+    {
+      "target_type": "hero",
+      "target": "largo",
+      "field": "largo_song_good_vibrations",
+      "polarity": "neutral",
+      "raw": "Heal rescaled from 34/56/78 to 30/55/80",
+      "target_display_name": "Largo",
+      "field_display_name": "Island Elixir",
+      "source_id": 155,
+      "ability_id": 1665
+    }
+  ]
+}

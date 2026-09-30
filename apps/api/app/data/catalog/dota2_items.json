@@ -8425,7 +8425,7 @@
       "scepter_zh": "",
       "shard_en": "",
       "shard_zh": "",
-      "price": 700,
+      "price": 800,
       "quality": 1,
       "stock": 0,
       "initial_charges": 0,
@@ -8472,7 +8472,7 @@
       "scepter_zh": "",
       "shard_en": "",
       "shard_zh": "",
-      "price": 5200,
+      "price": 5300,
       "quality": 4,
       "stock": 0,
       "initial_charges": 0,
@@ -8872,8 +8872,8 @@
       "name_en": "Shiva's Guard",
       "name_zh": "希瓦的守护",
       "aliases": [],
-      "description_en": "Active: Arctic Blast\nEmits a freezing wave that deals 260 magical damage to enemies and slows their movement by -40% for 4 seconds.\n\nRadius: 825\n\nPassive: Freezing Aura\nReduces the attack speed of all enemies by -40.\n\nRadius: 1200",
-      "description_zh": "主动：极寒冲击\n发出一道寒冷的波动，对敌人造成260点魔法伤害并减速-40%，持续4秒。\n\n作用范围：825\n\n被动：霜冷光环\n降低所有敌人-40攻击速度。\n\n作用范围：1200",
+      "description_en": "Active: Arctic Blast\nEmits a freezing wave that deals 225 magical damage to enemies and slows their movement by -40% for 4 seconds.\n\nRadius: 825\n\nPassive: Freezing Aura\nReduces the attack speed of all enemies by -40.\n\nRadius: 1200",
+      "description_zh": "主动：极寒冲击\n发出一道寒冷的波动，对敌人造成225点魔法伤害并减速-40%，持续4秒。\n\n作用范围：825\n\n被动：霜冷光环\n降低所有敌人-40攻击速度。\n\n作用范围：1200",
       "lore_en": "Said to have belonged to a goddess, today it retains much of its former power.",
       "lore_zh": "据说曾经属于某位女神，至今仍保持大部分神力。",
       "notes_en": [
@@ -8962,14 +8962,14 @@
         {
           "name": "blast_damage",
           "values": [
-            260
+            225
           ],
           "is_percentage": false,
           "heading_en": "",
           "heading_zh": "",
           "bonuses": [],
-          "rendered_en": "260",
-          "rendered_zh": "260"
+          "rendered_en": "225",
+          "rendered_zh": "225"
         },
         {
           "name": "blast_movement_speed",
@@ -10690,7 +10690,7 @@
       "scepter_zh": "",
       "shard_en": "",
       "shard_zh": "",
-      "price": 900,
+      "price": 1000,
       "quality": 1,
       "stock": 0,
       "initial_charges": 0,
@@ -10737,7 +10737,7 @@
       "scepter_zh": "",
       "shard_en": "",
       "shard_zh": "",
-      "price": 5100,
+      "price": 5200,
       "quality": 4,
       "stock": 0,
       "initial_charges": 0,
@@ -11068,7 +11068,7 @@
       "target_team": 4,
       "target_type": 192,
       "cooldowns": [
-        4
+        3
       ],
       "durations": [
         0
@@ -11237,14 +11237,14 @@
         {
           "name": "AbilityCooldown",
           "values": [
-            4
+            3
           ],
           "is_percentage": false,
           "heading_en": "",
           "heading_zh": "",
           "bonuses": [],
-          "rendered_en": "4",
-          "rendered_zh": "4"
+          "rendered_en": "3",
+          "rendered_zh": "3"
         }
       ],
       "recipe_component_ids": [
@@ -11306,8 +11306,8 @@
       "name_en": "Manta Style",
       "name_zh": "幻影斧",
       "aliases": [],
-      "description_en": "Active: Mirror Image\nCreates 2 images of your hero that last 18 seconds.\n\nMelee images deal 33% damage, while Ranged images deal 28%. Illusions take 300% damage.\n\nDispel Type: Basic Dispel",
-      "description_zh": "主动：镜像\n制造2个你的幻象，持续18秒。\n\n近战英雄的幻象继承33%的攻击力，远程英雄的幻象继承28%的攻击力。幻象承受300%的伤害。\n\n驱散类型：弱驱散",
+      "description_en": "Active: Mirror Image\nCreates 2 images of your hero that last 18 seconds.\n\nMelee images deal 33% damage, while Ranged images deal 25%. Illusions take 300% damage.\n\nDispel Type: Basic Dispel",
+      "description_zh": "主动：镜像\n制造2个你的幻象，持续18秒。\n\n近战英雄的幻象继承33%的攻击力，远程英雄的幻象继承25%的攻击力。幻象承受300%的伤害。\n\n驱散类型：弱驱散",
       "lore_en": "An axe made of reflective materials that causes confusion amongst enemy ranks.",
       "lore_zh": "用反光材料制成的斧头，能够混淆敌军。",
       "notes_en": [
@@ -11478,26 +11478,26 @@
         {
           "name": "images_do_damage_percent_ranged",
           "values": [
-            -72
+            -75
           ],
           "is_percentage": false,
           "heading_en": "",
           "heading_zh": "",
           "bonuses": [],
-          "rendered_en": "-72",
-          "rendered_zh": "-72"
+          "rendered_en": "-75",
+          "rendered_zh": "-75"
         },
         {
           "name": "tooltip_damage_outgoing_ranged",
           "values": [
-            28
+            25
           ],
           "is_percentage": false,
           "heading_en": "",
           "heading_zh": "",
           "bonuses": [],
-          "rendered_en": "28",
-          "rendered_zh": "28"
+          "rendered_en": "25",
+          "rendered_zh": "25"
         },
         {
           "name": "invuln_duration",
@@ -12343,14 +12343,14 @@
         {
           "name": "lifesteal_percent",
           "values": [
-            30
+            25
           ],
           "is_percentage": true,
           "heading_en": "+$lifesteal",
           "heading_zh": "+$lifesteal",
           "bonuses": [],
-          "rendered_en": "30",
-          "rendered_zh": "30"
+          "rendered_en": "25",
+          "rendered_zh": "25"
         },
         {
           "name": "unholy_lifesteal_percent",
@@ -12460,8 +12460,8 @@
       "name_en": "Mjollnir",
       "name_zh": "雷神之锤",
       "aliases": [],
-      "description_en": "Active: Static Charge\nPlaces a charged shield on a target unit for 15 seconds which has a 20% chance to release a 225 magical damage shocking bolt at a nearby attacker and 4 additional enemies.\n\nPassive: Chain Lightning\nGrants a 25% chance on attack to release a bolt of electricity that leaps between 12 targets within a 650 radius, dealing 180 magical damage to each. Lightning proc pierces evasion.",
-      "description_zh": "主动：静电冲击\n对目标单位施加一个静电护盾，持续15秒。护盾有20%几率对附近攻击护盾的目标及其周围4个敌方单位释放闪电冲击，造成225点魔法伤害。\n\n被动：连环闪电\n攻击有25%几率释放一道连环闪电，在650范围内12个目标之间跳跃，每次造成180点魔法伤害。触发闪电时无视闪避。",
+      "description_en": "Active: Static Charge\nPlaces a charged shield on a target unit for 12 seconds which has a 20% chance to release a 225 magical damage shocking bolt at a nearby attacker and 4 additional enemies.\n\nPassive: Chain Lightning\nGrants a 25% chance on attack to release a bolt of electricity that leaps between 12 targets within a 650 radius, dealing 180 magical damage to each. Lightning proc pierces evasion.",
+      "description_zh": "主动：静电冲击\n对目标单位施加一个静电护盾，持续12秒。护盾有20%几率对附近攻击护盾的目标及其周围4个敌方单位释放闪电冲击，造成225点魔法伤害。\n\n被动：连环闪电\n攻击有25%几率释放一道连环闪电，在650范围内12个目标之间跳跃，每次造成180点魔法伤害。触发闪电时无视闪避。",
       "lore_en": "Thor's magical hammer, made for him by the dwarves Brok and Eitri.",
       "lore_zh": "索尔的魔法之锤，由矮人名匠布鲁克和艾崔打造。",
       "notes_en": [
@@ -12524,14 +12524,14 @@
         {
           "name": "static_duration",
           "values": [
-            15
+            12
           ],
           "is_percentage": false,
           "heading_en": "",
           "heading_zh": "",
           "bonuses": [],
-          "rendered_en": "15",
-          "rendered_zh": "15"
+          "rendered_en": "12",
+          "rendered_zh": "12"
         },
         {
           "name": "static_chance",
@@ -13913,14 +13913,14 @@
         {
           "name": "lifesteal_percent",
           "values": [
-            24
+            22
           ],
           "is_percentage": true,
           "heading_en": "+$lifesteal",
           "heading_zh": "+$lifesteal",
           "bonuses": [],
-          "rendered_en": "24",
-          "rendered_zh": "24"
+          "rendered_en": "22",
+          "rendered_zh": "22"
         },
         {
           "name": "berserk_bonus_attack_speed",
@@ -17779,7 +17779,7 @@
       "scepter_zh": "",
       "shard_en": "",
       "shard_zh": "",
-      "price": 450,
+      "price": 350,
       "quality": 1,
       "stock": 0,
       "initial_charges": 0,
@@ -17822,7 +17822,7 @@
       "scepter_zh": "",
       "shard_en": "",
       "shard_zh": "",
-      "price": 3400,
+      "price": 3300,
       "quality": 5,
       "stock": 0,
       "initial_charges": 0,
@@ -19677,7 +19677,7 @@
       "scepter_zh": "",
       "shard_en": "",
       "shard_zh": "",
-      "price": 200,
+      "price": 400,
       "quality": 1,
       "stock": 0,
       "initial_charges": 0,
@@ -20290,7 +20290,7 @@
       "scepter_zh": "",
       "shard_en": "",
       "shard_zh": "",
-      "price": 450,
+      "price": 550,
       "quality": 1,
       "stock": 0,
       "initial_charges": 0,
@@ -20333,7 +20333,7 @@
       "scepter_zh": "",
       "shard_en": "",
       "shard_zh": "",
-      "price": 4900,
+      "price": 5100,
       "quality": 3,
       "stock": 0,
       "initial_charges": 0,
@@ -20430,7 +20430,7 @@
       "scepter_zh": "",
       "shard_en": "",
       "shard_zh": "",
-      "price": 1900,
+      "price": 2000,
       "quality": 5,
       "stock": 0,
       "initial_charges": 0,
@@ -21454,8 +21454,8 @@
       "name_en": "Silver Edge",
       "name_zh": "白银之锋",
       "aliases": [],
-      "description_en": "Active: Shadow Walk\nMakes you invisible for 17 seconds, or until you attack or cast a spell. While invisible, you move 22% faster and can move through units.\n\nAttacking to end the invisibility will deal 300 bonus physical damage, disable their passive abilities for 5 seconds, and cap their movement speed to 200.",
-      "description_zh": "主动：疾影步\n进入隐身直到17秒持续时间结束、或者在此之前攻击或施法。隐身时，移动速度将提升22%，而且可以穿越单位。\n\n破隐一击将额外造成300点物理伤害，同时5秒内目标的被动技能无效，移动速度不会超过200。",
+      "description_en": "Active: Shadow Walk\nMakes you invisible for 17 seconds, or until you attack or cast a spell. While invisible, you move 20% faster and can move through units.\n\nAttacking to end the invisibility will deal 300 bonus physical damage, disable their passive abilities for 5 seconds, and cap their movement speed to 200.",
+      "description_zh": "主动：疾影步\n进入隐身直到17秒持续时间结束、或者在此之前攻击或施法。隐身时，移动速度将提升20%，而且可以穿越单位。\n\n破隐一击将额外造成300点物理伤害，同时5秒内目标的被动技能无效，移动速度不会超过200。",
       "lore_en": "Once used to slay an unjust king, only to have the kingdom erupt into civil war in the aftermath.",
       "lore_zh": "曾经是手刃不义之君的利器，但是后来王国也因此陷入了内乱。",
       "notes_en": [],
@@ -21473,7 +21473,7 @@
       "target_team": 0,
       "target_type": 0,
       "cooldowns": [
-        22
+        23
       ],
       "durations": [
         0
@@ -21522,14 +21522,14 @@
         {
           "name": "windwalk_movement_speed",
           "values": [
-            22
+            20
           ],
           "is_percentage": false,
           "heading_en": "",
           "heading_zh": "",
           "bonuses": [],
-          "rendered_en": "22",
-          "rendered_zh": "22"
+          "rendered_en": "20",
+          "rendered_zh": "20"
         },
         {
           "name": "windwalk_fade_time",
@@ -21606,14 +21606,14 @@
         {
           "name": "AbilityCooldown",
           "values": [
-            22
+            23
           ],
           "is_percentage": false,
           "heading_en": "",
           "heading_zh": "",
           "bonuses": [],
-          "rendered_en": "22",
-          "rendered_zh": "22"
+          "rendered_en": "23",
+          "rendered_zh": "23"
         }
       ],
       "recipe_component_ids": [
@@ -22800,7 +22800,7 @@
       "scepter_zh": "",
       "shard_en": "",
       "shard_zh": "",
-      "price": 4450,
+      "price": 4550,
       "quality": 4,
       "stock": 0,
       "initial_charges": 0,
@@ -23051,14 +23051,14 @@
         {
           "name": "mana_regen",
           "values": [
-            0.8
+            0.6
           ],
           "is_percentage": false,
           "heading_en": "+$mana_regen",
           "heading_zh": "+$mana_regen",
           "bonuses": [],
-          "rendered_en": "0.8",
-          "rendered_zh": "0.8"
+          "rendered_en": "0.6",
+          "rendered_zh": "0.6"
         },
         {
           "name": "magic_damage_block",
@@ -40229,15 +40229,15 @@
         {
           "name": "bonus_damage",
           "values": [
-            -30,
-            -60
+            -35,
+            -70
           ],
           "is_percentage": false,
           "heading_en": "-Attack Damage",
           "heading_zh": "-攻击力",
           "bonuses": [],
-          "rendered_en": "-30 / -60",
-          "rendered_zh": "-30 / -60"
+          "rendered_en": "-35 / -70",
+          "rendered_zh": "-35 / -70"
         }
       ],
       "recipe_component_ids": [],
@@ -44951,14 +44951,14 @@
         {
           "name": "mana_regen",
           "values": [
-            1.75
+            1.5
           ],
           "is_percentage": false,
           "heading_en": "+$mana_regen",
           "heading_zh": "+$mana_regen",
           "bonuses": [],
-          "rendered_en": "1.75",
-          "rendered_zh": "1.75"
+          "rendered_en": "1.5",
+          "rendered_zh": "1.5"
         },
         {
           "name": "bonus_all_stats",
@@ -45624,7 +45624,7 @@
       "scepter_zh": "",
       "shard_en": "",
       "shard_zh": "",
-      "price": 1100,
+      "price": 1000,
       "quality": 1,
       "stock": 0,
       "initial_charges": 0,

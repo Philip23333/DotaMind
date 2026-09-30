@@ -2,6 +2,8 @@
 
 import pytest
 
+from app.integrations.valve.catalog_repository import load_default_catalog_repository
+from app.vnext.product import presentation
 from app.vnext.product.presentation import DotaVisualEntityEnricher
 
 
@@ -49,3 +51,23 @@ def test_unknown_text_and_ascii_substrings_do_not_create_visual_entities(
     enricher: DotaVisualEntityEnricher,
 ) -> None:
     assert enricher.match("mystery teams 的战术与未知英雄无关。") == []
+
+
+def test_missing_ability_image_keeps_catalog_name_lookup_but_emits_no_icon(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setattr(presentation, "CATALOG_DIR", tmp_path)
+    repository = load_default_catalog_repository()
+    ability = repository.get_ability(5442)
+    assert ability.name_zh == "腐朽"
+
+    assert DotaVisualEntityEnricher().match("腐朽（Decay）") == []
+
+    image = tmp_path / "images" / "abilities" / "5442.png"
+    image.parent.mkdir(parents=True)
+    image.write_bytes(b"image")
+    entities = DotaVisualEntityEnricher().match("腐朽（Decay）")
+
+    assert [(entity.kind, entity.imagePath) for entity in entities] == [
+        ("ability", "/api/v1/assets/dota/abilities/5442.png")
+    ]

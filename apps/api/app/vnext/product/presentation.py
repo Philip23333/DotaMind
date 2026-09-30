@@ -9,7 +9,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.integrations.valve.catalog_repository import load_default_catalog_repository
+from app.integrations.valve.catalog_repository import CATALOG_DIR, load_default_catalog_repository
 
 _LOCAL_ASSET_PREFIX = "/api/v1/assets/"
 _TEAM_MANIFEST_PATH = (
@@ -44,7 +44,7 @@ class DotaVisualEntityEnricher:
         for hero in catalog.list_heroes():
             entity = _entity(
                 kind="hero",
-                image_path=f"{_LOCAL_ASSET_PREFIX}dota/heroes/{hero.hero_id}.png",
+                image_path=_catalog_image_path("heroes", hero.hero_id),
                 name_zh=hero.name_zh,
                 name_en=hero.name_en,
                 aliases=hero.aliases,
@@ -56,7 +56,7 @@ class DotaVisualEntityEnricher:
                 continue
             entity = _entity(
                 kind="item",
-                image_path=f"{_LOCAL_ASSET_PREFIX}dota/items/{item.item_id}.png",
+                image_path=_catalog_image_path("items", item.item_id),
                 name_zh=item.name_zh,
                 name_en=item.name_en,
                 aliases=item.aliases,
@@ -68,7 +68,7 @@ class DotaVisualEntityEnricher:
                 continue
             entity = _entity(
                 kind="ability",
-                image_path=f"{_LOCAL_ASSET_PREFIX}dota/abilities/{ability.ability_id}.png",
+                image_path=_catalog_image_path("abilities", ability.ability_id),
                 name_zh=ability.name_zh,
                 name_en=ability.name_en,
             )
@@ -104,15 +104,28 @@ class DotaVisualEntityEnricher:
 def _entity(
     *,
     kind: Literal["hero", "item", "ability", "team"],
-    image_path: str,
+    image_path: str | None,
     name_zh: str | None,
     name_en: str | None,
     aliases: list[str] | None = None,
 ) -> ProductVisualEntity | None:
     names = _distinct_names(name_zh, name_en, *(aliases or ()))
-    if not names or not image_path.startswith(_LOCAL_ASSET_PREFIX):
+    if (
+        not names
+        or not isinstance(image_path, str)
+        or not image_path.startswith(_LOCAL_ASSET_PREFIX)
+    ):
         return None
     return ProductVisualEntity(kind=kind, imagePath=image_path, label=names[0], names=names)
+
+
+def _catalog_image_path(
+    kind: Literal["heroes", "items", "abilities"], identifier: int
+) -> str | None:
+    image_file = CATALOG_DIR / "images" / kind / f"{identifier}.png"
+    if not image_file.is_file():
+        return None
+    return f"{_LOCAL_ASSET_PREFIX}dota/{kind}/{identifier}.png"
 
 
 def _team_entities() -> list[ProductVisualEntity]:
