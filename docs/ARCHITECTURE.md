@@ -325,10 +325,11 @@ available, and stopping waits for an in-flight refresh to finish. The check
 interval is not a bound on validation or IO completion time.
 
 The operator module `python -m app.vnext.data_updates` exposes `init-catalog`,
-`migrate-guides`, `refresh-guides`, and `refresh-catalog`. `init-catalog` publishes
+`migrate-guides`, `refresh-guides`, `refresh-catalog`, and `refresh-patches`.
+`init-catalog` publishes
 the bundled or explicitly selected five-file catalog only when no valid current
 snapshot exists. `migrate-guides` reads hero IDs from that repository and calls
-the Redis-to-file importer. All four require an absolute data root from
+the Redis-to-file importer. All five require an absolute data root from
 `--data-dir` or `DOTAMIND_DATA_DIR`; migration reads `DOTAMIND_REDIS_URL` only
 from the environment. A non-blocking data-root lock protects all commands, and
 guide migration also takes the existing refresh lock in data-lock-then-refresh-lock
@@ -368,9 +369,16 @@ directory and publishes it through `CatalogSnapshotStore`; only the atomic point
 switch makes it current. Invalid local pointers or snapshots are replaceable after
 a successful build, while storage IO errors stop the operation. This command uses
 the data-root lock and one bounded session, without Redis or the guide lock. It has
-offline acceptance only and has not been run against Valve. Patch notes, images,
-guides, the unified updater, schedule, persistent mount, and deployment remain
-separate work.
+offline acceptance only and has not been run against Valve. `refresh-patches`
+independently checks Valve's latest patch and writes the legacy patch-record shape
+to `patches/<patch_with_underscores>.json` using a same-directory temporary file
+and atomic replacement. A valid existing record is skipped unless `--force` is
+set; corrupt or missing records are rebuilt while other patch files are retained.
+Its SHA-256 identifies saved content, independently of the Catalog revision and
+patch number. It does not require a Catalog, scan all history, or fetch historical
+entity attributes. It has offline acceptance only and has not been run against
+Valve. Images, guides, the unified updater, schedule, persistent mount, and
+deployment remain separate work.
 
 ```text
 schedule -> updater -> persistent data

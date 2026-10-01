@@ -153,6 +153,16 @@ currently switches catalog-backed names only; it does not publish or reload imag
 files, whose paths and availability continue to follow bundled resources. Patch
 records are stored by patch version and do not share the catalog snapshot number.
 
+`python -m app.vnext.data_updates refresh-patches --data-dir /absolute/data/root`
+independently checks the latest Valve patch and stores its existing patch-record
+format at `patches/<patch_with_underscores>.json`. A valid file for that patch is
+skipped unless `--force` is set; a missing or invalid file is fetched and atomically
+replaced, preserving other patch files. The report hash is over the saved bytes;
+it is distinct from both the patch number and Catalog revision. The command does
+not require Catalog initialization, fetch older hero/item/ability attributes, or
+fill all historical patch files. It does not update images or guides. This entry
+has offline acceptance only and has not been run against Valve.
+
 ### Guide partition storage and migration (components implemented; actual migration pending)
 
 The standalone `FileHeroGuideCache(data_root)` preserves the current partition

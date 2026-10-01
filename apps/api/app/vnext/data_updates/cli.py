@@ -24,6 +24,11 @@ from app.integrations.valve.datafeed import ValveDatafeedClient
 from app.integrations.valve.fetch_session import ValveFetchSession
 from app.vnext.data_updates.catalog_refresh import CatalogRefreshReport, refresh_catalog
 from app.vnext.data_updates.catalog_store import CatalogSnapshotStore, CatalogStoreError
+from app.vnext.data_updates.patch_refresh import (
+    PatchRefreshError,
+    PatchRefreshReport,
+    refresh_patches,
+)
 from app.vnext.hero_guides import cli as hero_guide_cli
 from app.vnext.hero_guides.cache import (
     HeroGuideCacheDataError,
@@ -136,6 +141,8 @@ def main(
                     if operation == "refresh-guides"
                     else _catalog_refresh_skipped_already_running()
                     if operation == "refresh-catalog"
+                    else _patch_refresh_skipped_already_running()
+                    if operation == "refresh-patches"
                     else _skipped_already_running(),
                     3,
                 )
@@ -184,6 +191,11 @@ def main(
                     workers=workers,
                     force=args.force,
                 )
+            elif operation == "refresh-patches":
+                result = _run_refresh_patches_command(
+                    data_root=data_root,
+                    force=args.force,
+                )
             else:
                 result = _run_init_command(
                     data_root=data_root,
@@ -192,7 +204,7 @@ def main(
     except (asyncio.CancelledError, KeyboardInterrupt):
         result = (
             {"status": "cancelled", "operation": operation}
-            if operation in {"refresh-guides", "refresh-catalog"}
+            if operation in {"refresh-guides", "refresh-catalog", "refresh-patches"}
             else {"status": "cancelled"},
             130,
         )
@@ -289,6 +301,19 @@ def _build_parser(stdout: TextIO, stderr: TextIO) -> argparse.ArgumentParser:
         "--force",
         action="store_true",
         help="refresh even when the current snapshot has the latest patch",
+    )
+    patch_refresh_parser = subparsers.add_parser(
+        "refresh-patches", help="refresh the latest Valve patch notes file"
+    )
+    patch_refresh_parser.add_argument(
+        "--data-dir",
+        default=argparse.SUPPRESS,
+        help="absolute persistent data directory (or DOTAMIND_DATA_DIR)",
+    )
+    patch_refresh_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="fetch and replace the local patch notes file",
     )
     return parser
 
@@ -410,6 +435,23 @@ def _run_refresh_catalog_command(
     return _catalog_refresh_report_result(report)
 
 
+def _run_refresh_patches_command(
+    *,
+    data_root: Path,
+    force: bool,
+) -> tuple[dict[str, Any], int]:
+    try:
+        report = asyncio.run(_run_patch_refresh(data_root=data_root, force=force))
+    except (asyncio.CancelledError, KeyboardInterrupt):
+        return {"status": "cancelled", "operation": "refresh-patches"}, 130
+    except PatchRefreshError as exc:
+        return _failed("refresh-patches", exc.reason), 1
+    except Exception:
+        # Remote/client failures are classified with one safe operation code.
+        return _failed("refresh-patches", "operation_failed"), 1
+    return _patch_refresh_report_result(report)
+
+
 async def _run_catalog_refresh(
     *,
     data_root: Path,
@@ -431,6 +473,17 @@ async def _run_catalog_refresh(
     return await _run_with_cli_cleanup(run, operation_name="catalog refresh")
 
 
+async def _run_patch_refresh(*, data_root: Path, force: bool) -> PatchRefreshReport:
+    def refresh() -> PatchRefreshReport:
+        session = ValveFetchSession(ValveDatafeedClient())
+        return refresh_patches(data_root=data_root, session=session, force=force)
+
+    async def run() -> PatchRefreshReport:
+        return await asyncio.to_thread(refresh)
+
+    return await _run_with_cli_cleanup(run, operation_name="patch refresh")
+
+
 def _catalog_refresh_report_result(
     report: CatalogRefreshReport,
 ) -> tuple[dict[str, Any], int]:
@@ -438,6 +491,19 @@ def _catalog_refresh_report_result(
         {
             "status": "success",
             "operation": "refresh-catalog",
+            "report": asdict(report),
+        },
+        0,
+    )
+
+
+def _patch_refresh_report_result(
+    report: PatchRefreshReport,
+) -> tuple[dict[str, Any], int]:
+    return (
+        {
+            "status": "success",
+            "operation": "refresh-patches",
             "report": asdict(report),
         },
         0,
@@ -581,6 +647,8 @@ def _release_lock(descriptor: int) -> None:
 def _safe_reason(error: Exception) -> str:
     if isinstance(error, CatalogStoreError):
         return error.reason
+    if isinstance(error, PatchRefreshError):
+        return error.reason
     if isinstance(error, GuideMigrationConflictError):
         return "migration_conflict"
     if isinstance(error, GuideMigrationVerificationError):
@@ -616,6 +684,14 @@ def _catalog_refresh_skipped_already_running() -> dict[str, str]:
     return {
         "status": "skipped",
         "operation": "refresh-catalog",
+        "reason": "already_running",
+    }
+
+
+def _patch_refresh_skipped_already_running() -> dict[str, str]:
+    return {
+        "status": "skipped",
+        "operation": "refresh-patches",
         "reason": "already_running",
     }
 

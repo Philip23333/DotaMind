@@ -178,19 +178,28 @@ is:
     publishes the same five-file Catalog through `CatalogSnapshotStore`. Invalid
     local pointers or snapshots can be replaced by a successful update; storage
     errors stop the run. This does not update patch notes, images, or guides, and
-    has not made a real Valve request. Add the unified update entrypoint that
-    coordinates Catalog, patch notes, images, and guides as separate tasks.
-11. Connect the persistent data volume and one daily 03:00 Asia/Shanghai schedule.
-12. Deploy and verify persistent reads, API startup from that directory, and the
+    has not made a real Valve request.
+11. **Implemented, not run:** expose
+    `python -m app.vnext.data_updates refresh-patches --data-dir ...` to check and
+    atomically save the latest patch's legacy record under an independent
+    patch-number filename. Existing valid files skip unless forced; missing or
+    invalid current files can be repaired. The content SHA-256 is separate from
+    patch number and Catalog revision. This does not backfill history or fetch
+    historical entity attributes, and has not made a real Valve request.
+12. Add the unified update entrypoint that coordinates Catalog, patch records,
+    images, and guides as separate tasks.
+13. Connect the persistent data volume and one daily 03:00 Asia/Shanghai schedule.
+14. Deploy and verify persistent reads, API startup from that directory, and the
     scheduled update path.
 
 The five-file catalog store and loader, configured API lifecycle and catalog-name
-consumers, patch-gated Catalog refresh, file-backed guide reads, guide import, and
-file-backed guide refresh entrypoint are implemented. Real Catalog initialization,
-refresh, guide migration, and guide refresh have not been run. The existing timer
-still uses Redis. Patch notes and images are not part of `refresh-catalog`; image
-resource hot reload, the unified scheduled updater, persistent container mounts,
-and deployment acceptance remain pending. Offline tests do not establish
+consumers, patch-gated Catalog refresh, independent latest patch-record refresh,
+file-backed guide reads, guide import, and file-backed guide refresh entrypoint are
+implemented. Real Catalog initialization, Catalog refresh, patch refresh, guide
+migration, and guide refresh have not been run. The existing timer still uses
+Redis. Patch records are independent of `refresh-catalog`; image resource
+publication and hot reload, the unified scheduled updater, persistent container
+mounts, and deployment acceptance remain pending. Offline tests do not establish
 power-loss recovery. `game.detail` entity-name enrichment remains a later
 independent item after this data-update migration.
 

@@ -383,6 +383,14 @@ cancellation waiting for the worker before releasing the data lock. These checks
 use fakes and temporary directories; they do not call Valve or establish deployment
 behavior.
 
+`test_patch_refresh.py` uses a fake Valve session and temporary data roots. It
+checks latest-patch skip/force decisions, independent per-patch files, legacy
+record validation, repair of missing or invalid files, safe rejection of invalid
+patch IDs and non-finite JSON numbers, content hashes, and atomic-write failure
+retention. The extended CLI tests cover the data-root lock, one session, safe
+single-line output, no Redis or guide lock, and cancellation waiting for the
+worker before lock release. These tests do not call Valve or modify bundled data.
+
 The offline data-update CLI tests use temporary data roots and FakeRedis. They
 cover absolute data-root validation and argument-over-environment precedence,
 first catalog initialization, safe skip on a valid existing pointer, corrupt
@@ -420,15 +428,16 @@ call, and presentation tests verify a same-patch repository replacement refreshe
 the matching records. These checks are offline and do not connect to a real Redis,
 database, provider, or model. They validate code wiring, not deployment state.
 
-### Shared file-update acceptance (Catalog refresh implemented; unified schedule and deployment pending)
+### Shared file-update acceptance (Catalog and patch-record refresh implemented; unified schedule and deployment pending)
 
-The catalog store, patch-gated Catalog refresh, loader, and configured API consumer
-wiring have focused offline acceptance. The remaining operational behaviors have
-not passed acceptance:
+The catalog store, patch-gated Catalog refresh, independent patch-record refresh,
+loader, and configured API consumer wiring have focused offline acceptance. The
+remaining operational behaviors have not passed acceptance:
 
 | Layer | Required evidence |
 |---|---|
 | Catalog publication | Offline tests verify that failed remote checks, builds, serialization, and publication do not replace the current pointer. The refresh command has not been run against Valve or an operational data root. |
+| Patch records | Offline tests verify independent latest-patch files, valid-file skip, force, SHA-256 reporting, and atomic replacement. The command has not been run against Valve; historical patch backfill is not implemented. |
 | Migration execution and guide switch | Run the importer CLI against the intended Redis and persistent data root and verify every selected partition and report. API instances with `DOTAMIND_DATA_DIR` read files; without it, they use Redis when configured. The existing timer still uses Redis. The file refresh CLI has offline acceptance only; it has not been deployed or run against D2PT. Do not install both refresh commands as daily jobs. |
 | Catalog version gate | Offline tests verify that a valid same-patch Catalog skips full entity fetching, `--force` refreshes the same patch, version-check failures do not skip, and a failed update is attempted again on the next invocation. This is DotaMind policy, not a Valve guarantee about same-patch data changes. |
 | Fetch sharing and bounds | The ordinary Valve CLI uses one session for request reuse and a Datafeed concurrency ceiling; Catalog construction now uses a fixed two-branch hero→ability and item task split. This does not bound separate image CDN downloads. The unified updater still needs to retain these properties across its future fetch tasks; D2PT requests remain serial. |
@@ -459,10 +468,11 @@ Remaining acceptance layers are separate:
    Fake Redis tests establish neither deployment behavior; the target API mount
    must also be verified read-only.
 3. **Real update:** the historical local guide refresh is evidence for that
-   Redis-backed run only. The unified file updater still needs live acceptance
-   for version checking, publication, source status, retained previous success,
-   and independent image/patch handling. A Sven probe or fixture parser test
-   cannot establish this.
+   Redis-backed run only. Catalog and latest patch-record refresh both have
+   offline implementations, but the unified file updater still needs live
+   acceptance for version checking, publication, source status, retained previous
+   success, and image handling. A Sven probe or fixture parser test cannot
+   establish this.
 4. **Real-model answer:** a separate evaluation checks whether the model answers
    from Pub guide and Pro examples, keeps the sources distinct, and avoids
    unsupported statistical or causal claims. A successful refresh does not imply
