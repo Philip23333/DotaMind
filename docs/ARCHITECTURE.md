@@ -354,7 +354,12 @@ identification, Catalog construction, and patch-record generation. The session
 reuses each successful or failed Datafeed method/parameter pair for that run and
 limits concurrent calls across its explicit client methods. Its bound covers only
 Valve Datafeed calls; the independent image CDN downloads are not included.
-Fetch-task splitting, persistent publication, and the unified updater remain
+Catalog construction fetches and validates its six localized summary lists
+before running two fixed coordination branches: heroes followed by abilities,
+and items with recipe relations. Both branches share the run's session and
+converge before the five-file bundle is validated. Detail requests may use the
+existing per-phase worker pools; the session still applies the single Datafeed
+concurrency ceiling. Persistent publication and the unified updater remain
 pending.
 
 ```text

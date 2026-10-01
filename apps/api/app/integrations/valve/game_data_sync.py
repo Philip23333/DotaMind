@@ -19,6 +19,7 @@ import tempfile
 import urllib.request
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -308,33 +309,71 @@ def _build_patch_records(client: ValveFetchSession, patch: str) -> dict[str, Any
     }
 
 
-def _build_catalog_snapshot(
+@dataclass(frozen=True)
+class _CatalogLists:
+    heroes_en: list[dict[str, Any]]
+    heroes_zh: list[dict[str, Any]]
+    abilities_en: list[dict[str, Any]]
+    abilities_zh: list[dict[str, Any]]
+    items_en: list[dict[str, Any]]
+    items_zh: list[dict[str, Any]]
+
+
+@dataclass(frozen=True)
+class _HeroBuild:
+    records: list[HeroCatalogRecord]
+    details_en: dict[int, dict[str, Any]]
+    details_zh: dict[int, dict[str, Any]]
+
+
+@dataclass(frozen=True)
+class _HeroAbilityBuild:
+    heroes: list[HeroCatalogRecord]
+    abilities: list[AbilityCatalogRecord]
+
+
+@dataclass(frozen=True)
+class _ItemBuild:
+    records: list[ItemCatalogRecord]
+    recipes: list[RecipeEdge]
+    excluded_entities: list[CatalogExcludedEntity]
+
+
+def _fetch_catalog_lists(client: ValveFetchSession) -> _CatalogLists:
+    """Fetch and validate the six localized entity summary lists."""
+
+    heroes_en = _result_data(client.herolist("english"), "heroes")
+    heroes_zh = _result_data(client.herolist("schinese"), "heroes")
+    abilities_en = _result_data(client.abilitylist("english"), "itemabilities")
+    abilities_zh = _result_data(client.abilitylist("schinese"), "itemabilities")
+    items_en = _result_data(client.itemlist("english"), "itemabilities")
+    items_zh = _result_data(client.itemlist("schinese"), "itemabilities")
+
+    _validate_summary_identity(heroes_en, heroes_zh, "hero")
+    _validate_summary_identity(abilities_en, abilities_zh, "ability")
+    _validate_summary_identity(items_en, items_zh, "item")
+    return _CatalogLists(
+        heroes_en=heroes_en,
+        heroes_zh=heroes_zh,
+        abilities_en=abilities_en,
+        abilities_zh=abilities_zh,
+        items_en=items_en,
+        items_zh=items_zh,
+    )
+
+
+def _build_hero_records(
     client: ValveFetchSession,
-    patch: str,
-    *,
-    workers: int = 8,
-    generated_at: datetime | None = None,
-) -> CatalogBundle:
-    """Fetch and normalize the complete static catalog in memory.
-
-    Hero detail responses contain the authoritative visible hero ability and
-    talent records. The bilingual ability list validates their IDs/names; English
-    ability details are additionally fetched only for filtered non-output
-    auxiliary abilities that may carry otherwise hidden talent bonus edges.
-    Item details are fetched for every item-list ID because item-list records do
-    not contain descriptions or special values.
-    """
-
-    hero_en = _result_data(client.herolist("english"), "heroes")
-    hero_zh = _result_data(client.herolist("schinese"), "heroes")
-    _validate_summary_identity(hero_en, hero_zh, "hero")
-    hero_ids = [int(hero["id"]) for hero in hero_en]
-    hero_details_en = _parallel_details(
+    catalog_lists: _CatalogLists,
+    workers: int,
+) -> _HeroBuild:
+    hero_ids = [int(hero["id"]) for hero in catalog_lists.heroes_en]
+    details_en = _parallel_details(
         hero_ids,
         lambda hero_id: _result_data(client.herodata(hero_id, "english"), "heroes")[0],
         workers,
     )
-    hero_details_zh = _parallel_details(
+    details_zh = _parallel_details(
         hero_ids,
         lambda hero_id: _result_data(client.herodata(hero_id, "schinese"), "heroes")[0],
         workers,
@@ -345,23 +384,32 @@ def _build_catalog_snapshot(
         int(hero_id): [str(alias) for alias in aliases]
         for hero_id, aliases in alias_payload.get("aliases", {}).items()
     }
-    heroes = [
+    records = [
         normalize_hero(
-            hero_details_en[hero_id],
-            hero_details_zh[hero_id],
+            details_en[hero_id],
+            details_zh[hero_id],
             aliases=aliases_by_id.get(hero_id, []),
         )
         for hero_id in sorted(hero_ids)
     ]
+    return _HeroBuild(records=records, details_en=details_en, details_zh=details_zh)
 
+
+def _build_ability_records(
+    client: ValveFetchSession,
+    catalog_lists: _CatalogLists,
+    hero_build: _HeroBuild,
+    workers: int,
+) -> list[AbilityCatalogRecord]:
+    hero_ids = [int(hero["id"]) for hero in catalog_lists.heroes_en]
     ability_en_by_id: dict[int, dict[str, Any]] = {}
     ability_zh_by_id: dict[int, dict[str, Any]] = {}
     ability_hero_ids: dict[int, set[int]] = {}
     ability_records_en_by_hero_id: dict[int, list[dict[str, Any]]] = {}
     talent_ids: set[int] = set()
     for hero_id in sorted(hero_ids):
-        details_en = hero_details_en[hero_id]
-        details_zh = hero_details_zh[hero_id]
+        details_en = hero_build.details_en[hero_id]
+        details_zh = hero_build.details_zh[hero_id]
         en_records = [*(details_en.get("abilities") or []), *(details_en.get("talents") or [])]
         zh_records = [*(details_zh.get("abilities") or []), *(details_zh.get("talents") or [])]
         ability_records_en_by_hero_id[hero_id] = en_records
@@ -383,33 +431,24 @@ def _build_catalog_snapshot(
             ability_hero_ids.setdefault(ability_id, set()).add(hero_id)
         talent_ids.update(int(talent["id"]) for talent in details_en.get("talents") or [])
 
-    # Fetch both lists to verify every hero-owned ability/talent is a known
-    # Datafeed entity and that the two locale lists agree on internal names.
-    ability_list_en = _result_data(client.abilitylist("english"), "itemabilities")
-    ability_list_zh = _result_data(client.abilitylist("schinese"), "itemabilities")
-    _validate_summary_identity(ability_list_en, ability_list_zh, "ability")
-    ability_summary_ids = {int(item["id"]) for item in ability_list_en}
+    ability_summary_ids = {int(item["id"]) for item in catalog_lists.abilities_en}
     missing_summary_ids = sorted(set(ability_en_by_id) - ability_summary_ids)
     if missing_summary_ids:
         raise CatalogValidationError(
             f"hero details reference abilities absent from abilitylist: {missing_summary_ids[:5]}"
         )
 
-    item_en = _result_data(client.itemlist("english"), "itemabilities")
-    item_zh = _result_data(client.itemlist("schinese"), "itemabilities")
-    _validate_summary_identity(item_en, item_zh, "item")
-    item_ids = [int(item["id"]) for item in item_en]
-
+    item_ids = {int(item["id"]) for item in catalog_lists.items_en}
     supplemental_ability_ids = _auxiliary_ability_ids(
-        ability_list_en,
+        catalog_lists.abilities_en,
         existing_ability_ids=set(ability_en_by_id),
-        item_ids=set(item_ids),
+        item_ids=item_ids,
     )
     talent_bonus_auxiliary_ids = _talent_bonus_auxiliary_ids(
-        ability_list_en,
+        catalog_lists.abilities_en,
         visible_ability_ids=set(ability_en_by_id),
         talent_ids=talent_ids,
-        item_ids=set(item_ids),
+        item_ids=item_ids,
     )
     ability_detail_en_ids = _ability_detail_request_ids(
         supplemental_ability_ids, talent_bonus_auxiliary_ids
@@ -458,7 +497,7 @@ def _build_catalog_snapshot(
         )
         for ability_id in sorted(ability_en_by_id)
     ]
-    abilities = _merge_ability_records(
+    return _merge_ability_records(
         hero_abilities,
         _supplemental_ability_records(
             supplemental_ability_ids,
@@ -467,6 +506,13 @@ def _build_catalog_snapshot(
         ),
     )
 
+
+def _build_item_records(
+    client: ValveFetchSession,
+    catalog_lists: _CatalogLists,
+    workers: int,
+) -> _ItemBuild:
+    item_ids = [int(item["id"]) for item in catalog_lists.items_en]
     item_details_en = _parallel_details(
         item_ids,
         lambda item_id: _result_data(client.itemdata(item_id, "english"), "items")[0],
@@ -477,9 +523,9 @@ def _build_catalog_snapshot(
         lambda item_id: _result_data(client.itemdata(item_id, "schinese"), "items")[0],
         workers,
     )
-    summary_by_id = {int(item["id"]): item for item in item_en}
-    summary_zh_by_id = {int(item["id"]): item for item in item_zh}
-    components_by_target, upgrades_by_recipe, recipe_edges = _recipe_relations(summary_by_id)
+    summary_by_id = {int(item["id"]): item for item in catalog_lists.items_en}
+    summary_zh_by_id = {int(item["id"]): item for item in catalog_lists.items_zh}
+    components_by_target, upgrades_by_recipe, recipes = _recipe_relations(summary_by_id)
     excluded_entities = _reviewed_catalog_exclusions(
         summary_by_id,
         summary_zh_by_id,
@@ -487,14 +533,14 @@ def _build_catalog_snapshot(
         item_details_zh,
         components_by_target,
         upgrades_by_recipe,
-        recipe_edges,
+        recipes,
     )
     excluded_item_ids = {
         excluded.entity_id
         for excluded in excluded_entities
         if excluded.entity_type == "item"
     }
-    items = [
+    records = [
         normalize_item(
             item_details_en[item_id],
             item_details_zh[item_id],
@@ -511,6 +557,47 @@ def _build_catalog_snapshot(
         for item_id in sorted(item_ids)
         if item_id not in excluded_item_ids
     ]
+    return _ItemBuild(
+        records=records,
+        recipes=recipes,
+        excluded_entities=excluded_entities,
+    )
+
+
+def _build_catalog_snapshot(
+    client: ValveFetchSession,
+    patch: str,
+    *,
+    workers: int = 8,
+    generated_at: datetime | None = None,
+) -> CatalogBundle:
+    """Build the catalog through dependency-aware hero/ability and item tasks."""
+
+    catalog_lists = _fetch_catalog_lists(client)
+
+    def build_hero_and_ability_branch() -> _HeroAbilityBuild:
+        hero_build = _build_hero_records(client, catalog_lists, workers)
+        abilities = _build_ability_records(client, catalog_lists, hero_build, workers)
+        return _HeroAbilityBuild(heroes=hero_build.records, abilities=abilities)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        future_branches = {
+            executor.submit(build_hero_and_ability_branch): "hero_ability",
+            executor.submit(_build_item_records, client, catalog_lists, workers): "items",
+        }
+        branch_results: dict[str, _HeroAbilityBuild | _ItemBuild] = {}
+        try:
+            for future in as_completed(future_branches):
+                branch_results[future_branches[future]] = future.result()
+        except BaseException:
+            for future in future_branches:
+                future.cancel()
+            raise
+
+    hero_ability_build = branch_results["hero_ability"]
+    item_build = branch_results["items"]
+    assert isinstance(hero_ability_build, _HeroAbilityBuild)
+    assert isinstance(item_build, _ItemBuild)
 
     generated_at = generated_at or datetime.now(timezone.utc)
     manifest = CatalogManifest(
@@ -526,21 +613,36 @@ def _build_catalog_snapshot(
             f"{DATAFEED_ROOT}/itemdata",
             f"{DATAFEED_ROOT}/patchnoteslist",
         ],
-        entity_counts={"heroes": len(heroes), "abilities": len(abilities), "items": len(items)},
+        entity_counts={
+            "heroes": len(hero_ability_build.heroes),
+            "abilities": len(hero_ability_build.abilities),
+            "items": len(item_build.records),
+        },
     )
     sync_audit = CatalogSyncAudit(
         patch=patch,
         generated_at=generated_at,
-        excluded_entities=excluded_entities,
+        excluded_entities=item_build.excluded_entities,
     )
-    validate_catalog(manifest, heroes, abilities, items)
-    validate_sync_audit(manifest, sync_audit, heroes, abilities, items)
+    validate_catalog(
+        manifest,
+        hero_ability_build.heroes,
+        hero_ability_build.abilities,
+        item_build.records,
+    )
+    validate_sync_audit(
+        manifest,
+        sync_audit,
+        hero_ability_build.heroes,
+        hero_ability_build.abilities,
+        item_build.records,
+    )
     return CatalogBundle(
         manifest=manifest,
-        heroes=heroes,
-        abilities=abilities,
-        items=items,
-        recipes=recipe_edges,
+        heroes=hero_ability_build.heroes,
+        abilities=hero_ability_build.abilities,
+        items=item_build.records,
+        recipes=item_build.recipes,
         sync_audit=sync_audit,
     )
 

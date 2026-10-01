@@ -363,8 +363,13 @@ simultaneous duplicates, a shared mixed-endpoint concurrency ceiling, quota
 release after failure, and fresh requests in a new session. A workflow test
 confirms Catalog and patch generation share one session and reuse English lists
 without conflating Chinese requests. These tests use fake clients and events; they
-make no network request and do not execute a real synchronization. Fetch-task
-splitting, image update policy, patch gating, and persistent publication remain
+make no network request and do not execute a real synchronization.
+`test_valve_catalog_tasks.py` verifies list-first identity checks, the concurrent
+hero-to-ability and item branches, shared Datafeed bounds, the `workers=1` path,
+stable output under opposite branch completion orders, no duplicate hero detail
+fetches, and waiting for an already-started branch after failure. It also checks
+talent values, supplemental abilities, recipe relations, and the reviewed item
+exclusion. Image update policy, patch gating, and persistent publication remain
 pending.
 
 The offline data-update CLI tests use temporary data roots and FakeRedis. They
@@ -414,7 +419,7 @@ acceptance. The remaining operational behaviors have not passed acceptance:
 | Updater publication | Connect the accepted snapshot store to the updater and prove failed fetches, writes, or validation leave the current successful revision active. |
 | Migration execution and guide switch | Run the importer CLI against the intended Redis and persistent data root and verify every selected partition and report. API instances with `DOTAMIND_DATA_DIR` read files; without it, they use Redis when configured. The existing timer still uses Redis. The file refresh CLI has offline acceptance only; it has not been deployed or run against D2PT. Do not install both refresh commands as daily jobs. |
 | Version gate | Same-patch success skips the full fetch; version-check failure does not skip; a failed new publication is retried next run. |
-| Fetch sharing and bounds | The ordinary Valve CLI uses one session for request reuse and a Datafeed concurrency ceiling; this does not bound its separate image CDN downloads. The unified updater still needs to retain these properties across its future fetch tasks; D2PT requests remain serial. |
+| Fetch sharing and bounds | The ordinary Valve CLI uses one session for request reuse and a Datafeed concurrency ceiling; Catalog construction now uses a fixed two-branch hero→ability and item task split. This does not bound separate image CDN downloads. The unified updater still needs to retain these properties across its future fetch tasks; D2PT requests remain serial. |
 | Catalog hot reload | Offline tests prove a new snapshot switches in one API process only after full validation, each catalog/guide/name-match operation pins one version, and invalid snapshots leave the old one active. Real persistent-directory and container behavior remains unverified. |
 | Images | Image files are still served from the existing bundled-resource path; persistent image publication, backfill, and URL/cache switching remain pending. |
 | Containers | The data volume survives API-container recreation; the API mounts data read-only and can read it afterward. |

@@ -165,9 +165,12 @@ is:
 9. **Implemented:** create one `ValveFetchSession` per ordinary sync run to share
    same-method/same-parameter Datafeed responses across patch identification,
    Catalog construction, and patch generation, while applying one concurrency
-   limit to Datafeed calls. `--images-only` does not create a session. Fetch-task
-   splitting and persistent publication remain pending; image CDN downloads are
-   outside this concurrency bound.
+   limit to Datafeed calls. `--images-only` does not create a session. **Implemented:**
+   Catalog construction fetches and validates its six localized lists first,
+   then runs heroes→abilities alongside items/recipes in a fixed two-thread
+   coordinator. Both branches share the same session and merge before the
+   original five-file bundle is validated. Image CDN downloads are outside the
+   Datafeed concurrency bound; persistent publication remains pending.
 10. Add the unified update entrypoint and patch-version gate.
 11. Connect the persistent data volume and one daily 03:00 Asia/Shanghai schedule.
 12. Deploy and verify persistent reads, API startup from that directory, and the

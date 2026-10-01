@@ -112,8 +112,11 @@ connected to this sync module.
 `--patch` still selects the patch label and patch-notes request; it does not
 retrieve historical hero, item, or ability attributes. Those detail endpoints
 continue to provide their current data. Importing the module does not create a
-client, make a request, create output directories, or run the command. Fetch-task
-splitting remains future work. An ordinary CLI run creates one
+client, make a request, create output directories, or run the command. Catalog
+construction first fetches and validates all six localized summary lists, then
+runs a fixed hero-then-ability branch alongside an item-and-recipe branch. The
+branches share one fetch session and merge into the original five-file bundle
+before validation. An ordinary CLI run creates one
 `ValveFetchSession` with the `--workers` bound and shares it across latest-patch
 identification, Catalog construction, and patch-record generation. Within that
 run, identical method/parameter requests share one result or exception; each
