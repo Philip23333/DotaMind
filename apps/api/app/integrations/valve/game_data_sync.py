@@ -647,9 +647,8 @@ def _build_catalog_snapshot(
     )
 
 
-def _write_catalog_snapshot(bundle: CatalogBundle) -> None:
-    """Validate again and atomically replace all five catalog files."""
-
+def serialize_catalog_bundle(bundle: CatalogBundle) -> dict[str, bytes]:
+    """Validate a bundle and serialize its five files in the committed format."""
     validate_catalog(bundle.manifest, bundle.heroes, bundle.abilities, bundle.items)
     if bundle.sync_audit is None:
         raise CatalogValidationError("catalog sync audit is required before snapshot writing")
@@ -660,8 +659,6 @@ def _write_catalog_snapshot(bundle: CatalogBundle) -> None:
         bundle.abilities,
         bundle.items,
     )
-    CATALOG_OUTPUT_DIR.parent.mkdir(parents=True, exist_ok=True)
-    temporary_dir = Path(tempfile.mkdtemp(prefix=".catalog-", dir=CATALOG_OUTPUT_DIR.parent))
     payloads = {
         "manifest.json": bundle.manifest.model_dump(mode="json"),
         "dota2_heroes.json": [item.model_dump(mode="json") for item in bundle.heroes],
@@ -672,12 +669,22 @@ def _write_catalog_snapshot(bundle: CatalogBundle) -> None:
         },
         "sync_audit.json": bundle.sync_audit.model_dump(mode="json"),
     }
+    return {
+        filename: (json.dumps(payload, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+        for filename, payload in payloads.items()
+    }
+
+
+def _write_catalog_snapshot(bundle: CatalogBundle) -> None:
+    """Validate again and atomically replace all five catalog files."""
+
+    payloads = serialize_catalog_bundle(bundle)
+    CATALOG_OUTPUT_DIR.parent.mkdir(parents=True, exist_ok=True)
+    temporary_dir = Path(tempfile.mkdtemp(prefix=".catalog-", dir=CATALOG_OUTPUT_DIR.parent))
     try:
         for filename, payload in payloads.items():
             path = temporary_dir / filename
-            path.write_text(
-                json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-            )
+            path.write_bytes(payload)
         for filename in payloads:
             target = CATALOG_OUTPUT_DIR / filename
             target.parent.mkdir(parents=True, exist_ok=True)

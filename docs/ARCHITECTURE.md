@@ -325,22 +325,23 @@ available, and stopping waits for an in-flight refresh to finish. The check
 interval is not a bound on validation or IO completion time.
 
 The operator module `python -m app.vnext.data_updates` exposes `init-catalog`,
-`migrate-guides`, and `refresh-guides`. The first publishes the bundled or explicitly selected
-five-file catalog only when no valid current snapshot exists. `migrate-guides` reads
-hero IDs from that published repository and calls the existing Redis-to-file
-guide importer. All three require an absolute data root from `--data-dir` or
-`DOTAMIND_DATA_DIR`; migration reads `DOTAMIND_REDIS_URL` only from the
-environment. A non-blocking data-root lock protects all commands, and guide
-migration also takes the existing refresh lock in data-lock-then-refresh-lock
+`migrate-guides`, `refresh-guides`, and `refresh-catalog`. `init-catalog` publishes
+the bundled or explicitly selected five-file catalog only when no valid current
+snapshot exists. `migrate-guides` reads hero IDs from that repository and calls
+the Redis-to-file importer. All four require an absolute data root from
+`--data-dir` or `DOTAMIND_DATA_DIR`; migration reads `DOTAMIND_REDIS_URL` only
+from the environment. A non-blocking data-root lock protects all commands, and
+guide migration also takes the existing refresh lock in data-lock-then-refresh-lock
 order. File guide refresh does not require a catalog snapshot or Redis URL; it
 takes the same two locks before constructing D2PT and file-cache resources. The
 refresh lock is container-local, so migration and file refresh must run in the
-same API container as the legacy guide refresh CLI. The new refresh command has
-offline fake-client tests but has not been deployed or run against D2PT. No real
-initialization or Redis migration has been run. The API reads guide files when
-`DOTAMIND_DATA_DIR` is configured and Redis when the data directory is unset and
-Redis is configured; without either store the tool is absent. The existing timer
-still uses Redis. Do not schedule both refresh commands daily.
+same API container as the legacy guide refresh CLI. The file guide refresh command
+has offline fake-client tests but has not been deployed or run against D2PT. The
+Catalog refresh command has offline tests only and has not been run against Valve.
+No real initialization or Redis migration has been run. The API reads guide files
+when `DOTAMIND_DATA_DIR` is configured and Redis when the data directory is unset
+and Redis is configured; without either store the tool is absent. The existing
+timer still uses Redis. Do not schedule both guide refresh commands daily.
 
 The existing Valve catalog, patch-record, and image sync implementation now lives
 in `app.integrations.valve.game_data_sync`. The legacy
@@ -359,8 +360,17 @@ before running two fixed coordination branches: heroes followed by abilities,
 and items with recipe relations. Both branches share the run's session and
 converge before the five-file bundle is validated. Detail requests may use the
 existing per-phase worker pools; the session still applies the single Datafeed
-concurrency ceiling. Persistent publication and the unified updater remain
-pending.
+concurrency ceiling. The separate `refresh-catalog` operation reads and fully
+validates the current published snapshot, checks Valve's latest patch, and skips
+the full entity build when the patches match unless `--force` is set. A needed
+update builds and serializes the original five-file bundle in a temporary data-root
+directory and publishes it through `CatalogSnapshotStore`; only the atomic pointer
+switch makes it current. Invalid local pointers or snapshots are replaceable after
+a successful build, while storage IO errors stop the operation. This command uses
+the data-root lock and one bounded session, without Redis or the guide lock. It has
+offline acceptance only and has not been run against Valve. Patch notes, images,
+guides, the unified updater, schedule, persistent mount, and deployment remain
+separate work.
 
 ```text
 schedule -> updater -> persistent data

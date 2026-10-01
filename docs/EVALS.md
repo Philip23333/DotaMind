@@ -369,8 +369,19 @@ hero-to-ability and item branches, shared Datafeed bounds, the `workers=1` path,
 stable output under opposite branch completion orders, no duplicate hero detail
 fetches, and waiting for an already-started branch after failure. It also checks
 talent values, supplemental abilities, recipe relations, and the reviewed item
-exclusion. Image update policy, patch gating, and persistent publication remain
-pending.
+exclusion. Image update policy and image persistence remain pending.
+
+`test_catalog_refresh.py` uses the committed catalog only as a local test source
+and publishes into `tmp_path`. It verifies same-patch skip without file or mtime
+changes, patch-change publication, forced same-patch publication, first-time
+initialization, recovery from invalid pointers and snapshots, storage and remote
+check failures, retry after an unsuccessful build, shared five-file serialization,
+preservation of old revisions, and temporary-directory cleanup. The extended
+data-update CLI tests cover a single bounded Valve session, no Redis or guide-lock
+use, lock contention before client construction, worker validation, safe JSON, and
+cancellation waiting for the worker before releasing the data lock. These checks
+use fakes and temporary directories; they do not call Valve or establish deployment
+behavior.
 
 The offline data-update CLI tests use temporary data roots and FakeRedis. They
 cover absolute data-root validation and argument-over-environment precedence,
@@ -409,16 +420,17 @@ call, and presentation tests verify a same-patch repository replacement refreshe
 the matching records. These checks are offline and do not connect to a real Redis,
 database, provider, or model. They validate code wiring, not deployment state.
 
-### Shared file-update acceptance (updater and deployment pending)
+### Shared file-update acceptance (Catalog refresh implemented; unified schedule and deployment pending)
 
-The catalog store, loader, and configured API consumer wiring have focused offline
-acceptance. The remaining operational behaviors have not passed acceptance:
+The catalog store, patch-gated Catalog refresh, loader, and configured API consumer
+wiring have focused offline acceptance. The remaining operational behaviors have
+not passed acceptance:
 
 | Layer | Required evidence |
 |---|---|
-| Updater publication | Connect the accepted snapshot store to the updater and prove failed fetches, writes, or validation leave the current successful revision active. |
+| Catalog publication | Offline tests verify that failed remote checks, builds, serialization, and publication do not replace the current pointer. The refresh command has not been run against Valve or an operational data root. |
 | Migration execution and guide switch | Run the importer CLI against the intended Redis and persistent data root and verify every selected partition and report. API instances with `DOTAMIND_DATA_DIR` read files; without it, they use Redis when configured. The existing timer still uses Redis. The file refresh CLI has offline acceptance only; it has not been deployed or run against D2PT. Do not install both refresh commands as daily jobs. |
-| Version gate | Same-patch success skips the full fetch; version-check failure does not skip; a failed new publication is retried next run. |
+| Catalog version gate | Offline tests verify that a valid same-patch Catalog skips full entity fetching, `--force` refreshes the same patch, version-check failures do not skip, and a failed update is attempted again on the next invocation. This is DotaMind policy, not a Valve guarantee about same-patch data changes. |
 | Fetch sharing and bounds | The ordinary Valve CLI uses one session for request reuse and a Datafeed concurrency ceiling; Catalog construction now uses a fixed two-branch hero→ability and item task split. This does not bound separate image CDN downloads. The unified updater still needs to retain these properties across its future fetch tasks; D2PT requests remain serial. |
 | Catalog hot reload | Offline tests prove a new snapshot switches in one API process only after full validation, each catalog/guide/name-match operation pins one version, and invalid snapshots leave the old one active. Real persistent-directory and container behavior remains unverified. |
 | Images | Image files are still served from the existing bundled-resource path; persistent image publication, backfill, and URL/cache switching remain pending. |

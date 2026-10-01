@@ -1328,6 +1328,9 @@ def test_snapshot_writer_roundtrips_manifest_catalogs_and_sync_audit(tmp_path, m
     output = tmp_path / "catalog"
     monkeypatch.setattr(sync_game_data, "CATALOG_OUTPUT_DIR", output)
     sync_game_data._write_catalog_snapshot(bundle)
+    assert {
+        path.name: path.read_bytes() for path in output.iterdir()
+    } == sync_game_data.serialize_catalog_bundle(bundle)
 
     manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
     heroes = json.loads((output / "dota2_heroes.json").read_text(encoding="utf-8"))

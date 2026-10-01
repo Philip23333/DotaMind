@@ -20,6 +20,9 @@ from redis.asyncio import from_url
 from redis.exceptions import RedisError
 
 from app.integrations.valve.catalog_repository import CATALOG_DIR
+from app.integrations.valve.datafeed import ValveDatafeedClient
+from app.integrations.valve.fetch_session import ValveFetchSession
+from app.vnext.data_updates.catalog_refresh import CatalogRefreshReport, refresh_catalog
 from app.vnext.data_updates.catalog_store import CatalogSnapshotStore, CatalogStoreError
 from app.vnext.hero_guides import cli as hero_guide_cli
 from app.vnext.hero_guides.cache import (
@@ -92,6 +95,16 @@ def main(
     if config_error is not None:
         _emit(output, _failed(operation, config_error))
         return 2
+    workers: int | None = None
+    if operation == "refresh-catalog":
+        try:
+            workers = int(args.workers)
+        except (TypeError, ValueError):
+            _emit(output, _failed(operation, "invalid_workers"))
+            return 2
+        if not 1 <= workers <= 16:
+            _emit(output, _failed(operation, "invalid_workers"))
+            return 2
 
     redis_url: str | None = None
     if operation == "migrate-guides":
@@ -121,6 +134,8 @@ def main(
                 result = (
                     _refresh_skipped_already_running()
                     if operation == "refresh-guides"
+                    else _catalog_refresh_skipped_already_running()
+                    if operation == "refresh-catalog"
                     else _skipped_already_running(),
                     3,
                 )
@@ -162,6 +177,13 @@ def main(
                             clock=refresh_clock,
                             sleep=refresh_sleep,
                         )
+            elif operation == "refresh-catalog":
+                assert workers is not None
+                result = _run_refresh_catalog_command(
+                    data_root=data_root,
+                    workers=workers,
+                    force=args.force,
+                )
             else:
                 result = _run_init_command(
                     data_root=data_root,
@@ -170,7 +192,7 @@ def main(
     except (asyncio.CancelledError, KeyboardInterrupt):
         result = (
             {"status": "cancelled", "operation": operation}
-            if operation == "refresh-guides"
+            if operation in {"refresh-guides", "refresh-catalog"}
             else {"status": "cancelled"},
             130,
         )
@@ -249,6 +271,24 @@ def _build_parser(stdout: TextIO, stderr: TextIO) -> argparse.ArgumentParser:
         "--data-dir",
         default=argparse.SUPPRESS,
         help="absolute persistent data directory (or DOTAMIND_DATA_DIR)",
+    )
+    catalog_refresh_parser = subparsers.add_parser(
+        "refresh-catalog", help="refresh the persistent Valve catalog snapshot"
+    )
+    catalog_refresh_parser.add_argument(
+        "--data-dir",
+        default=argparse.SUPPRESS,
+        help="absolute persistent data directory (or DOTAMIND_DATA_DIR)",
+    )
+    catalog_refresh_parser.add_argument(
+        "--workers",
+        default="8",
+        help="maximum concurrent Valve Datafeed calls (1-16, default: 8)",
+    )
+    catalog_refresh_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="refresh even when the current snapshot has the latest patch",
     )
     return parser
 
@@ -351,6 +391,57 @@ def _run_refresh_guides_command(
     except Exception as exc:
         return _failed("refresh-guides", _safe_reason(exc)), 1
     return _refresh_report_result(report)
+
+
+def _run_refresh_catalog_command(
+    *,
+    data_root: Path,
+    workers: int,
+    force: bool,
+) -> tuple[dict[str, Any], int]:
+    try:
+        report = asyncio.run(
+            _run_catalog_refresh(data_root=data_root, workers=workers, force=force)
+        )
+    except (asyncio.CancelledError, KeyboardInterrupt):
+        return {"status": "cancelled", "operation": "refresh-catalog"}, 130
+    except Exception as exc:
+        return _failed("refresh-catalog", _safe_reason(exc)), 1
+    return _catalog_refresh_report_result(report)
+
+
+async def _run_catalog_refresh(
+    *,
+    data_root: Path,
+    workers: int,
+    force: bool,
+) -> CatalogRefreshReport:
+    def refresh() -> CatalogRefreshReport:
+        session = ValveFetchSession(ValveDatafeedClient(), max_concurrency=workers)
+        return refresh_catalog(
+            data_root=data_root,
+            session=session,
+            workers=workers,
+            force=force,
+        )
+
+    async def run() -> CatalogRefreshReport:
+        return await asyncio.to_thread(refresh)
+
+    return await _run_with_cli_cleanup(run, operation_name="catalog refresh")
+
+
+def _catalog_refresh_report_result(
+    report: CatalogRefreshReport,
+) -> tuple[dict[str, Any], int]:
+    return (
+        {
+            "status": "success",
+            "operation": "refresh-catalog",
+            "report": asdict(report),
+        },
+        0,
+    )
 
 
 async def _run_file_refresh(
@@ -517,6 +608,14 @@ def _refresh_skipped_already_running() -> dict[str, str]:
     return {
         "status": "skipped",
         "operation": "refresh-guides",
+        "reason": "already_running",
+    }
+
+
+def _catalog_refresh_skipped_already_running() -> dict[str, str]:
+    return {
+        "status": "skipped",
+        "operation": "refresh-catalog",
         "reason": "already_running",
     }
 

@@ -170,16 +170,25 @@ is:
    then runs heroes→abilities alongside items/recipes in a fixed two-thread
    coordinator. Both branches share the same session and merge before the
    original five-file bundle is validated. Image CDN downloads are outside the
-   Datafeed concurrency bound; persistent publication remains pending.
-10. Add the unified update entrypoint and patch-version gate.
+   Datafeed concurrency bound; patch-note and image publication remain pending.
+10. **Implemented for Catalog only, not run:** expose
+    `python -m app.vnext.data_updates refresh-catalog --data-dir ... --workers 8`
+    with `--force` for same-patch rebuilds. It validates the current snapshot,
+    checks Valve's latest patch, and either skips or builds and atomically
+    publishes the same five-file Catalog through `CatalogSnapshotStore`. Invalid
+    local pointers or snapshots can be replaced by a successful update; storage
+    errors stop the run. This does not update patch notes, images, or guides, and
+    has not made a real Valve request. Add the unified update entrypoint that
+    coordinates Catalog, patch notes, images, and guides as separate tasks.
 11. Connect the persistent data volume and one daily 03:00 Asia/Shanghai schedule.
 12. Deploy and verify persistent reads, API startup from that directory, and the
     scheduled update path.
 
 The five-file catalog store and loader, configured API lifecycle and catalog-name
-consumers, file-backed guide reads, guide import, and file-backed guide refresh
-entrypoint are implemented. Real catalog initialization, guide migration, and
-guide refresh have not been run. The existing timer still uses Redis. Image
+consumers, patch-gated Catalog refresh, file-backed guide reads, guide import, and
+file-backed guide refresh entrypoint are implemented. Real Catalog initialization,
+refresh, guide migration, and guide refresh have not been run. The existing timer
+still uses Redis. Patch notes and images are not part of `refresh-catalog`; image
 resource hot reload, the unified scheduled updater, persistent container mounts,
 and deployment acceptance remain pending. Offline tests do not establish
 power-loss recovery. `game.detail` entity-name enrichment remains a later

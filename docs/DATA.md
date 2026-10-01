@@ -123,7 +123,9 @@ run, identical method/parameter requests share one result or exception; each
 caller receives a deep copy. The limit applies to Datafeed calls only, not image
 CDN downloads. A new run has a new session. `--images-only` reads the local
 snapshot and does not create a Datafeed client or session. Patch-version gating
-and persistent publication remain future work.
+and persistent publication are now available through the separate
+`refresh-catalog` operation; the legacy synchronization command above still writes
+to the bundled repository paths and does not publish to the configured data root.
 
 `CatalogSnapshotLoader` loads the current complete snapshot at startup and then
 checks the pointer revision in the background, defaulting to a 30-second interval.
@@ -137,10 +139,11 @@ the current snapshot, each pinning one repository for its operation. The check
 interval does not bound validation or IO time. Offline tests do not establish
 power-loss recovery or deployed persistent-volume behavior.
 
-The eventual updater must validate the complete set before changing the current
-reference. Replacing each JSON file atomically does not make the five-file set an
-atomic publication. A failed write or validation must leave the current
-successful snapshot and its version unchanged.
+The `refresh-catalog` operation writes one temporary five-file source and
+delegates validation and publication to `CatalogSnapshotStore`. It never replaces
+the current files one by one. A failed fetch, serialization, or publication leaves
+the current pointer unchanged; the store may retain an unreferenced revision if
+the final directory was created before pointer replacement failed.
 
 Images are separate best-effort resources. A failed download keeps an existing
 image when present, and a missing image does not block catalog publication.
@@ -225,7 +228,20 @@ indefinite dual writes, and do not delete the old Redis guide data before
 migration acceptance. This migration does not change session, Run State, or
 Artifact storage.
 
-### Update cadence and version gates
+### Catalog update cadence and version gate
+
+`python -m app.vnext.data_updates refresh-catalog --data-dir ...` checks the
+current fully validated snapshot before asking Valve for its latest patch. If the
+valid local patch matches, it skips entity fetching unless `--force` is supplied.
+Otherwise it uses one bounded `ValveFetchSession` to build the complete Catalog,
+serializes the same five JSON files as the legacy sync writer, and publishes them
+through `CatalogSnapshotStore`. The pointer changes only after all five files
+pass validation and the new Repository loads. A corrupt pointer or snapshot can
+be replaced after a successful fetch; storage IO failures stop the operation.
+The command takes the data-root update lock, does not use Redis or the guide lock,
+and returns the action, decision reason, previous and target patch, and revision
+as one JSON result. This command has offline acceptance only; it has not been run
+against Valve or deployed.
 
 | Condition | Target behavior |
 |---|---|
