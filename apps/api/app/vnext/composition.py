@@ -53,6 +53,7 @@ from app.vnext.capabilities.player.recent_games import (
     PlayerRecentGamesResult,
 )
 from app.vnext.catalog import EntityNameResolver
+from app.vnext.data_updates.image_reader import ImageManifestReader
 from app.vnext.hero_guides.cache import HeroGuideReader
 from app.vnext.integrations.mcp import MCPRemoteClient, MCPRemoteError
 from app.vnext.llm.openai_compatible import OpenAICompatibleModelClient
@@ -259,6 +260,12 @@ def _parse_data_dir(value: str | None) -> Path | None:
     if not path.is_absolute():
         raise ValueError("DOTAMIND_DATA_DIR must be an absolute path when set")
     return path
+
+
+def build_image_manifest_reader(data_dir: Path | None) -> ImageManifestReader | None:
+    """Enable persistent answer images only when the shared data directory is configured."""
+
+    return ImageManifestReader(data_dir) if data_dir is not None else None
 
 
 def _parse_bool_value(

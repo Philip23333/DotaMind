@@ -191,7 +191,9 @@ is:
     with `--force`. It reads one current validated Catalog snapshot, stores raw
     PNGs by SHA-256, and atomically publishes a manifest while retaining old
     entries on download failures. It has offline fake-client acceptance only and
-    has not downloaded from the CDN. API image serving still uses bundled assets.
+    has not downloaded from the CDN. API reads the configured manifest per answer
+    match and serves retained content-hash assets; when data directory is unset,
+    bundled assets remain in use.
 13. Add the unified update entrypoint that coordinates Catalog, patch records,
     images, and guides as separate tasks.
 14. Connect the persistent data volume and one daily 03:00 Asia/Shanghai schedule.
@@ -200,13 +202,14 @@ is:
 
 The five-file catalog store and loader, configured API lifecycle and catalog-name
 consumers, patch-gated Catalog refresh, independent latest patch-record refresh,
-file-backed guide reads, guide import, and file-backed guide refresh entrypoint are
-implemented. Real Catalog initialization, Catalog refresh, patch refresh, image
-download, guide migration, and guide refresh have not been run. The existing timer
-still uses Redis. Patch records are independent of `refresh-catalog`; image
-resource publication is implemented but API image serving still uses bundled
-assets. The unified scheduled updater, persistent container mounts, and deployment
-acceptance remain pending. Offline tests do not establish power-loss recovery.
+file-backed guide reads, guide import, file-backed guide refresh entrypoint, and
+persistent image serving are implemented. Real Catalog initialization, Catalog
+refresh, patch refresh, image download, guide migration, and guide refresh have not
+been run. The existing timer still uses Redis. Patch records are independent of
+`refresh-catalog`; image URLs use content hashes independent of Catalog revision
+and patch. The unified scheduled updater, persistent container mounts, and
+deployment acceptance remain pending. Offline tests do not establish power-loss
+recovery.
 `game.detail` entity-name enrichment remains a later independent item after this
 data-update migration.
 

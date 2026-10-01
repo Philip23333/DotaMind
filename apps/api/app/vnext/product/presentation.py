@@ -15,6 +15,7 @@ from app.integrations.valve.catalog_repository import (
     DotaCatalogRepository,
     load_default_catalog_repository,
 )
+from app.vnext.data_updates.image_reader import ImageManifestReader, ImageManifestSnapshot
 
 _LOCAL_ASSET_PREFIX = "/api/v1/assets/"
 _TEAM_MANIFEST_PATH = (
@@ -40,35 +41,62 @@ class _Mention:
     entity: ProductVisualEntity
 
 
+@dataclass(frozen=True)
+class _CatalogVisualDescriptor:
+    kind: Literal["hero", "item", "ability"]
+    entity_id: int
+    internal_name: str
+    names: tuple[str, ...]
+
+
 class DotaVisualEntityEnricher:
     """Match Final text against the current local catalog and team-asset names."""
 
     def __init__(
         self,
         catalog_repository_provider: Callable[[], DotaCatalogRepository] | None = None,
+        image_manifest_reader: ImageManifestReader | None = None,
     ) -> None:
         self._catalog_repository_provider = (
             catalog_repository_provider
             if catalog_repository_provider is not None
             else load_default_catalog_repository
         )
+        self._image_manifest_reader = image_manifest_reader
         self._catalog_repository: DotaCatalogRepository | None = None
-        self._catalog_entities: tuple[ProductVisualEntity, ...] = ()
+        self._catalog_entities: tuple[_CatalogVisualDescriptor, ...] = ()
         self._team_entities = tuple(_team_entities())
-        self._entities: tuple[ProductVisualEntity, ...] = self._team_entities
 
-    def _entities_for(self, catalog: DotaCatalogRepository) -> tuple[ProductVisualEntity, ...]:
+    def _descriptors_for(
+        self, catalog: DotaCatalogRepository
+    ) -> tuple[_CatalogVisualDescriptor, ...]:
         if catalog is not self._catalog_repository:
-            self._catalog_entities = tuple(_catalog_entities(catalog))
+            self._catalog_entities = tuple(_catalog_descriptors(catalog))
             self._catalog_repository = catalog
-            self._entities = self._catalog_entities + self._team_entities
-        return self._entities
+        return self._catalog_entities
 
     def match(self, text: str) -> list[ProductVisualEntity]:
         """Return one local entity per longest, non-overlapping text match."""
 
         repository = self._catalog_repository_provider()
-        entities = self._entities_for(repository)
+        descriptors = self._descriptors_for(repository)
+        image_manifest = (
+            self._image_manifest_reader.read_current()
+            if self._image_manifest_reader is not None
+            else None
+        )
+        catalog_entities = tuple(
+            entity
+            for descriptor in descriptors
+            if (
+                entity := _render_catalog_descriptor(
+                    descriptor,
+                    image_manifest=image_manifest,
+                )
+            )
+            is not None
+        )
+        entities = catalog_entities + self._team_entities
         mentions: list[_Mention] = []
         for entity in entities:
             for name in entity.names:
@@ -90,12 +118,13 @@ class DotaVisualEntityEnricher:
         return selected
 
 
-def _catalog_entities(catalog: DotaCatalogRepository) -> list[ProductVisualEntity]:
-    entities: list[ProductVisualEntity] = []
+def _catalog_descriptors(catalog: DotaCatalogRepository) -> list[_CatalogVisualDescriptor]:
+    entities: list[_CatalogVisualDescriptor] = []
     for hero in catalog.list_heroes():
-        entity = _entity(
+        entity = _catalog_descriptor(
             kind="hero",
-            image_path=_catalog_image_path("heroes", hero.hero_id),
+            entity_id=hero.hero_id,
+            internal_name=hero.internal_name,
             name_zh=hero.name_zh,
             name_en=hero.name_en,
             aliases=hero.aliases,
@@ -105,9 +134,10 @@ def _catalog_entities(catalog: DotaCatalogRepository) -> list[ProductVisualEntit
     for item in catalog.list_items():
         if item.is_recipe:
             continue
-        entity = _entity(
+        entity = _catalog_descriptor(
             kind="item",
-            image_path=_catalog_image_path("items", item.item_id),
+            entity_id=item.item_id,
+            internal_name=item.internal_name,
             name_zh=item.name_zh,
             name_en=item.name_en,
             aliases=item.aliases,
@@ -117,15 +147,57 @@ def _catalog_entities(catalog: DotaCatalogRepository) -> list[ProductVisualEntit
     for ability in catalog.list_abilities():
         if ability.is_item or ability.is_talent or ability.is_innate:
             continue
-        entity = _entity(
+        entity = _catalog_descriptor(
             kind="ability",
-            image_path=_catalog_image_path("abilities", ability.ability_id),
+            entity_id=ability.ability_id,
+            internal_name=ability.internal_name,
             name_zh=ability.name_zh,
             name_en=ability.name_en,
         )
         if entity is not None:
             entities.append(entity)
     return entities
+
+
+def _catalog_descriptor(
+    *,
+    kind: Literal["hero", "item", "ability"],
+    entity_id: int,
+    internal_name: str,
+    name_zh: str | None,
+    name_en: str | None,
+    aliases: list[str] | None = None,
+) -> _CatalogVisualDescriptor | None:
+    names = _distinct_names(name_zh, name_en, *(aliases or ()))
+    if not names:
+        return None
+    return _CatalogVisualDescriptor(kind, entity_id, internal_name, tuple(names))
+
+
+def _render_catalog_descriptor(
+    descriptor: _CatalogVisualDescriptor,
+    *,
+    image_manifest: ImageManifestSnapshot | None,
+) -> ProductVisualEntity | None:
+    if image_manifest is not None:
+        image_path = image_manifest.image_url(
+            kind=descriptor.kind,
+            entity_id=descriptor.entity_id,
+            internal_name=descriptor.internal_name,
+        )
+    else:
+        image_kind = {"hero": "heroes", "item": "items", "ability": "abilities"}[
+            descriptor.kind
+        ]
+        image_path = _catalog_image_path(image_kind, descriptor.entity_id)
+    if image_path is None:
+        return None
+    return ProductVisualEntity(
+        kind=descriptor.kind,
+        imagePath=image_path,
+        label=descriptor.names[0],
+        names=list(descriptor.names),
+    )
 
 
 def _entity(

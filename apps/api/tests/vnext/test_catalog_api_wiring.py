@@ -14,12 +14,18 @@ from app.vnext.capabilities.catalog.lookup import CatalogLookupInput
 from app.vnext.capabilities.hero.guide import HeroGuideInput
 from app.vnext.capabilities.hero.service import HeroGuideService
 from app.vnext.catalog import EntityNameResolver
-from app.vnext.composition import VNextServices, VNextSettings, build_vnext_services
+from app.vnext.composition import (
+    VNextServices,
+    VNextSettings,
+    build_image_manifest_reader,
+    build_vnext_services,
+)
 from app.vnext.data_updates.catalog_loader import (
     CatalogNotInitializedError,
     CatalogSnapshotLoader,
 )
 from app.vnext.data_updates.catalog_store import CatalogSnapshotStore, CatalogStoreError
+from app.vnext.data_updates.image_reader import ImageManifestReader
 from app.vnext.hero_guides.cache import GuideCacheEntry
 from app.vnext.hero_guides.file_cache import FileHeroGuideCache
 from app.vnext.providers.valve.catalog_lookup import ValveCatalogLookupAdapter
@@ -86,6 +92,8 @@ def test_data_dir_environment_is_optional_but_must_be_nonempty_absolute(
 
     monkeypatch.setenv("DOTAMIND_DATA_DIR", f"  {tmp_path}  ")
     assert VNextSettings.from_env().data_dir == tmp_path
+    assert build_image_manifest_reader(None) is None
+    assert isinstance(build_image_manifest_reader(tmp_path), ImageManifestReader)
 
 
 def test_composition_passes_one_lazy_repository_provider_to_catalog_consumers() -> None:
@@ -346,6 +354,8 @@ def test_api_lifespan_starts_loader_before_consumers_and_stops_without_writing(
                 assert isinstance(guide_cache, FileHeroGuideCache)
                 assert guide_cache._guides_directory == data_dir / "guides"
                 assert enricher._catalog_repository_provider is provider
+                assert isinstance(enricher._image_manifest_reader, ImageManifestReader)
+                assert main.app.state.persistent_image_data_root == data_dir
                 assert provider().get_hero(18).hero_id == 18
                 guide_lookup = main.app.state.vnext_services.hero_guide
                 assert guide_lookup is not None

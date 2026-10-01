@@ -13,6 +13,7 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from app.api.v1.chat_routes import router as chat_router
 from app.api.v1.chat_run_routes import router as chat_run_router
+from app.api.v1.persistent_image_routes import router as persistent_image_router
 from app.api.v1.routes import router as v1_router
 from app.api.v1.vnext_chat_routes import router as vnext_chat_router
 from app.api.v1.vnext_chat_routes import trace_router as vnext_trace_router
@@ -35,6 +36,7 @@ from app.persistence.database import (
 )
 from app.vnext.composition import (
     VNextSettings,
+    build_image_manifest_reader,
     build_vnext_runtime,
     build_vnext_services,
     initialize_vnext_services,
@@ -105,6 +107,8 @@ for handler in logging.getLogger().handlers:
 async def lifespan(app: FastAPI):
     vnext_settings = VNextSettings.from_env()
     _require_trace_recording_redis(vnext_settings, settings.redis_url)
+    app.state.persistent_image_data_root = vnext_settings.data_dir
+    image_manifest_reader = build_image_manifest_reader(vnext_settings.data_dir)
     cleanup = AsyncExitStack()
     try:
         catalog_repository_provider: Callable[[], DotaCatalogRepository] | None = None
@@ -151,7 +155,10 @@ async def lifespan(app: FastAPI):
             app.state.chat_repository,
             app.state.vnext_runtime,
             ConversationContextBuilder(),
-            DotaVisualEntityEnricher(catalog_repository_provider),
+            DotaVisualEntityEnricher(
+                catalog_repository_provider,
+                image_manifest_reader,
+            ),
             trace_store=trace_store,
             runtime_factory=lambda: build_vnext_runtime(services=vnext_services),
             trace_ttl_seconds=vnext_settings.trace_ttl_seconds,
@@ -279,6 +286,7 @@ app.include_router(chat_router, prefix=settings.api_v1_prefix)
 app.include_router(vnext_chat_router, prefix=settings.api_v1_prefix)
 app.include_router(vnext_trace_router, prefix=settings.api_v1_prefix)
 app.include_router(chat_run_router, prefix=settings.api_v1_prefix)
+app.include_router(persistent_image_router, prefix=settings.api_v1_prefix)
 app.mount(
     f"{settings.api_v1_prefix}/assets/dota",
     StaticFiles(directory=CATALOG_IMAGE_DIR, check_dir=False),

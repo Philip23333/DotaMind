@@ -159,9 +159,21 @@ or patch-stale assets are fetched again. Failed downloads preserve the old image
 entry and patch marker; other targets continue. Unrelated manifest entries and
 historical hash files are retained. A corrupt manifest stops the operation rather
 than rebuilding it. The command uses a separate 1–16 worker bound and has offline
-fake-client tests only; it has not downloaded from the CDN. Readers generate image
-metadata only for existing bundled files. The API still uses its bundled image
-path and does not read the persistent image manifest or hot-reload these assets.
+fake-client tests only; it has not downloaded from the CDN. In persistent mode,
+each answer match reads the manifest once and fixes that snapshot for the match.
+Entries are matched by image kind and entity ID, then checked against the Catalog
+internal name; source patch does not have to equal the current Catalog patch. A
+missing entry or asset omits image metadata while preserving text matching. The
+reader retains its latest valid manifest after a later read or validation failure;
+before any valid read, it returns an empty image set. It does not write, repair, or
+fetch resources. Without a configured data directory, the API retains its bundled
+image behavior.
+
+Persistent answer images use `/api/v1/assets/dota/by-hash/<sha256>.png`. The route
+only operates with `DOTAMIND_DATA_DIR`, reads a bounded file once, and checks PNG
+signature and SHA-256 before serving immutable content. It does not require the
+hash to remain in the current manifest, so previously published hash files keep
+old answer links working. Hashes are independent of Catalog revision and patch.
 Patch records are stored by patch version and do not share the catalog snapshot
 number.
 

@@ -385,9 +385,10 @@ snapshot and stores selected Valve PNG bytes under content-hash filenames in
 skipped; failed downloads preserve old manifest entries and do not block other
 targets. It uses the data-root lock and a separate worker limit, without Redis,
 Datafeed, or the guide lock. The command has offline fake-client acceptance only
-and has not downloaded from Valve's CDN. API presentation still uses the bundled
-image path; it does not read this manifest or hot-reload these assets. The unified
-updater, schedule, persistent mount, and deployment remain separate work.
+and has not downloaded from Valve's CDN. Configured API presentation reads this
+manifest per answer match and emits content-hash image URLs; the hash route serves
+retained assets independently of the current manifest. The unified updater,
+schedule, persistent mount, and deployment remain separate work.
 
 ```text
 schedule -> updater -> persistent data
@@ -406,11 +407,25 @@ catalog versions. Presentation rebuilds its current name-match records when the
 repository object changes, including publications with the same patch number.
 
 The configured snapshot backs the internal entity-name resolver, catalog query
-capability, and chat name matching. This only hot-reloads names; image files and
-image URL availability continue to use the existing bundled-resource behavior.
-Publishing a catalog never rewrites previously generated Artifacts. API processes
-may detect a publication at different checks within the 30-second interval; the
-design does not promise a simultaneous fleet-wide switch.
+capability, and chat name matching. In persistent data mode, each answer-text match
+captures one current Catalog repository and reads the image manifest once. A valid
+entry is used only when its entity ID and internal name match the Catalog and its
+content-hash asset exists; the source patch does not need to match the current
+Catalog patch. A new manifest affects the next match without restarting the API.
+On manifest read or validation failure, the process keeps its last valid manifest;
+if none has been valid, catalog images are omitted. It never falls back to bundled
+Catalog images in persistent mode. With no configured data directory, the existing
+bundled image behavior remains. Team images are unchanged. Publishing a Catalog
+never rewrites previously generated Artifacts. API processes may detect a Catalog
+publication at different checks within the 30-second interval; the design does not
+promise a simultaneous fleet-wide switch.
+
+Persistent Dota image URLs include the asset SHA-256. The read-only API route
+validates the requested hash, PNG signature, size limit, and bytes before serving
+with immutable cache headers. It resolves the file by hash rather than requiring
+the hash to remain in the current manifest, so retained historical images continue
+to serve old answer URLs after a manifest change. Content hashes are independent of
+Catalog revisions and patch numbers.
 
 When `DOTAMIND_DATA_DIR` is unset, the API uses its existing bundled catalog
 repository. When set, it must name an absolute path containing a valid published
@@ -419,8 +434,8 @@ back to bundled data on error. The API also reads guide partitions from this sam
 root, without falling back to Redis when a partition is missing or invalid. The
 existing timer still invokes the Redis refresh command. No operational data
 directory has been initialized, no Redis migration has been run, and no persistent
-container mount or scheduled unified updater has been accepted. Image-resource
-hot reload, automatic updates, and deployment verification remain pending. These
+container mount or scheduled unified updater has been accepted. Real image
+downloads, automatic updates, and deployment verification remain pending. These
 changes do not alter the session Artifact storage contract.
 
 ## Runtime boundary
