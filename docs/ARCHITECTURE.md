@@ -295,15 +295,15 @@ cross-session guide cache is distinct from the process-local, session-owned
 Artifact store: Artifacts continue to hold oversized logical tool responses and
 are not the durable guide cache.
 
-## Shared data updates and API hot reload (catalog API and independent refresh commands implemented; unified updater and deployment pending)
+## Shared data updates and API hot reload (unified manual refresh implemented; schedule and deployment pending)
 
 The shared update task owns application-wide Valve entities, patch records,
 images, and D2PT guide partitions. Its planned responsibilities are:
 
 | Boundary | Target responsibility |
 |---|---|
-| Schedule and manual entry | Start one unified update daily at 03:00 Asia/Shanghai; the manual entry reuses the same update logic. |
-| Fetch and processing | Follow data dependencies, reuse fetched responses, and bound total Valve concurrency. Keep D2PT requests serial with a one-second interval. |
+| Schedule and manual entry | The manual `refresh-all` command coordinates one refresh; a daily 03:00 Asia/Shanghai schedule remains pending. |
+| Fetch and processing | Reuse one bounded Valve Datafeed session for Catalog and patch records. Keep image downloads under a separate bound and D2PT requests serial with a one-second interval. |
 | Publication | Publish the five-file entity catalog as one snapshot; publish guide partitions independently; process patch records and images separately. |
 | Persistence | Let the updater write the shared persistent data directory. Mount it durably across container recreation and keep API access read-only. |
 | Online reads | Load catalogs in the background and switch snapshots; read guides by partition. Queries never start a remote refresh. |
@@ -325,8 +325,8 @@ available, and stopping waits for an in-flight refresh to finish. The check
 interval is not a bound on validation or IO completion time.
 
 The operator module `python -m app.vnext.data_updates` exposes `init-catalog`,
-`migrate-guides`, `refresh-guides`, `refresh-catalog`, `refresh-patches`, and
-`refresh-images`.
+`migrate-guides`, `refresh-guides`, `refresh-catalog`, `refresh-patches`,
+`refresh-images`, and `refresh-all`.
 `init-catalog` publishes
 the bundled or explicitly selected five-file catalog only when no valid current
 snapshot exists. `migrate-guides` reads hero IDs from that repository and calls
@@ -357,8 +357,7 @@ identification, Catalog construction, and patch-record generation. The session
 reuses each successful or failed Datafeed method/parameter pair for that run and
 limits concurrent calls across its explicit client methods. Its bound covers only
 Valve Datafeed calls; the independent image CDN downloads are not included.
-The standalone `refresh-images` command uses its own bounded image-download pool;
-the future unified updater still needs to coordinate its separate work streams.
+The standalone `refresh-images` command uses its own bounded image-download pool.
 Catalog construction fetches and validates its six localized summary lists
 before running two fixed coordination branches: heroes followed by abilities,
 and items with recipe relations. Both branches share the run's session and
@@ -387,8 +386,18 @@ targets. It uses the data-root lock and a separate worker limit, without Redis,
 Datafeed, or the guide lock. The command has offline fake-client acceptance only
 and has not downloaded from Valve's CDN. Configured API presentation reads this
 manifest per answer match and emits content-hash image URLs; the hash route serves
-retained assets independently of the current manifest. The unified updater,
-schedule, persistent mount, and deployment remain separate work.
+retained assets independently of the current manifest.
+
+The manual `refresh-all` command acquires the data-root lock followed by the
+legacy guide-refresh lock and holds both through cancellation cleanup. It runs
+Catalog, patch records, and the serial file-guide refresher concurrently. Catalog
+and patch records share one Datafeed session and its `--workers` ceiling; images
+start only after Catalog succeeds or skips, and use the independent
+`--image-workers` ceiling. Catalog failure blocks images, while patch and guide
+failures do not cancel other modules. Module reports keep their component fields;
+the command returns a partial status when some modules fail or report partial
+success. It has offline acceptance only and has not been run against Valve, D2PT,
+or the CDN. The daily schedule, persistent mount, and deployment remain pending.
 
 ```text
 schedule -> updater -> persistent data

@@ -24,6 +24,10 @@ from app.vnext.data_updates.image_refresh import (
     ImageRefreshReport,
 )
 from app.vnext.data_updates.patch_refresh import PatchRefreshError, PatchRefreshReport
+from app.vnext.data_updates.refresh_all import (
+    RefreshAllModuleResult,
+    RefreshAllReport,
+)
 from app.vnext.hero_guides.cache import (
     GuideCacheEntry,
     GuideCacheSnapshot,
@@ -96,6 +100,7 @@ def _invoke(
     refresh_lock_path: Path,
     refresh_clock: Any = None,
     refresh_sleep: Any = None,
+    refresh_all_clock: Any = None,
 ) -> tuple[int, dict[str, Any] | None, str, str]:
     stdout = StringIO()
     stderr = StringIO()
@@ -107,6 +112,7 @@ def _invoke(
         refresh_lock_path=refresh_lock_path,
         refresh_clock=refresh_clock,
         refresh_sleep=refresh_sleep,
+        refresh_all_clock=refresh_all_clock,
     )
     raw = stdout.getvalue()
     parsed = json.loads(raw) if raw.strip().startswith("{") else None
@@ -1912,3 +1918,375 @@ def test_refresh_images_cancellation_waits_for_worker_before_releasing_lock(
     data_lock = cli._try_acquire_lock(data_dir / ".update.lock")
     assert data_lock is not None
     cli._release_lock(data_lock)
+
+
+def _refresh_all_success_report() -> RefreshAllReport:
+    return RefreshAllReport(
+        status="success",
+        started_at=_NOW,
+        finished_at=_NOW,
+        modules={
+            "catalog": RefreshAllModuleResult(
+                status="skipped",
+                report={"action": "skipped", "reason": "patch_unchanged"},
+            ),
+            "patches": RefreshAllModuleResult(
+                status="success",
+                report={"action": "updated", "change_count": 2},
+            ),
+            "images": RefreshAllModuleResult(
+                status="success",
+                report={"target_count": 3, "downloaded": 1, "skipped": 2},
+            ),
+            "guides": RefreshAllModuleResult(
+                status="success",
+                report={"status": "success", "request_count": 7},
+            ),
+        },
+        exit_code=0,
+    )
+
+
+def test_refresh_all_help_has_no_directory_or_client_side_effects(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client_calls: list[str] = []
+    monkeypatch.setattr(cli, "ValveDatafeedClient", lambda: client_calls.append("valve"))
+    monkeypatch.setattr(cli, "D2PTClient", lambda: client_calls.append("d2pt"))
+    monkeypatch.setattr(cli, "ValveImageClient", lambda: client_calls.append("image"))
+    stdout = StringIO()
+
+    code = cli.main(
+        ["refresh-all", "--help"],
+        environ={},
+        stdout=stdout,
+        stderr=StringIO(),
+        refresh_lock_path=tmp_path / "legacy-guide.lock",
+    )
+
+    assert code == 0
+    assert "--image-workers" in stdout.getvalue()
+    assert "--force" in stdout.getvalue()
+    assert client_calls == []
+    assert not list(tmp_path.iterdir())
+    parsed = cli._build_parser(StringIO(), StringIO()).parse_args(["refresh-all"])
+    assert parsed.workers == "8"
+    assert parsed.image_workers == "8"
+    assert parsed.force is False
+
+
+@pytest.mark.parametrize(
+    ("option", "value", "reason"),
+    [
+        ("--workers", "0", "invalid_workers"),
+        ("--workers", "17", "invalid_workers"),
+        ("--image-workers", "0", "invalid_image_workers"),
+        ("--image-workers", "17", "invalid_image_workers"),
+        ("--image-workers", "abc", "invalid_image_workers"),
+    ],
+)
+def test_refresh_all_rejects_invalid_worker_bounds_before_storage(
+    tmp_path: Path,
+    option: str,
+    value: str,
+    reason: str,
+) -> None:
+    data_dir = tmp_path / "data"
+    code, payload, _raw, _stderr = _invoke(
+        ["refresh-all", "--data-dir", str(data_dir), option, value],
+        refresh_lock_path=tmp_path / "legacy.lock",
+    )
+
+    assert code == 2
+    assert payload == {
+        "status": "failed",
+        "operation": "refresh-all",
+        "reason": reason,
+    }
+    assert not data_dir.exists()
+
+
+def test_refresh_all_first_lock_busy_starts_no_clients(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    held_fd = cli._try_acquire_lock(data_dir / ".update.lock")
+    assert held_fd is not None
+    calls: list[str] = []
+    monkeypatch.setattr(cli, "ValveDatafeedClient", lambda: calls.append("valve"))
+    monkeypatch.setattr(cli, "D2PTClient", lambda: calls.append("d2pt"))
+    monkeypatch.setattr(cli, "ValveImageClient", lambda: calls.append("image"))
+    try:
+        code, payload, _raw, _stderr = _invoke(
+            ["refresh-all", "--data-dir", str(data_dir)],
+            refresh_lock_path=tmp_path / "legacy.lock",
+        )
+    finally:
+        cli._release_lock(held_fd)
+
+    assert code == 3
+    assert payload == {
+        "status": "skipped",
+        "operation": "refresh-all",
+        "reason": "already_running",
+    }
+    assert calls == []
+
+
+def test_refresh_all_second_lock_busy_releases_data_lock_before_any_client(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    guide_lock = tmp_path / "legacy.lock"
+    held_fd = cli._try_acquire_lock(guide_lock)
+    assert held_fd is not None
+    calls: list[str] = []
+    monkeypatch.setattr(cli, "ValveDatafeedClient", lambda: calls.append("valve"))
+    monkeypatch.setattr(cli, "D2PTClient", lambda: calls.append("d2pt"))
+    monkeypatch.setattr(cli, "ValveImageClient", lambda: calls.append("image"))
+    try:
+        code, payload, _raw, _stderr = _invoke(
+            ["refresh-all", "--data-dir", str(data_dir)],
+            refresh_lock_path=guide_lock,
+        )
+        data_fd = cli._try_acquire_lock(data_dir / ".update.lock")
+        assert data_fd is not None
+        cli._release_lock(data_fd)
+    finally:
+        cli._release_lock(held_fd)
+
+    assert code == 3
+    assert payload == {
+        "status": "skipped",
+        "operation": "refresh-all",
+        "reason": "already_running",
+    }
+    assert calls == []
+
+
+def test_refresh_all_cli_passes_one_bounded_session_and_both_locks(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data_dir = tmp_path / "data"
+    guide_lock = tmp_path / "legacy.lock"
+    valve_client = object()
+    image_client = object()
+    sessions: list[tuple[object, int, object]] = []
+    call_args: list[dict[str, Any]] = []
+
+    class FakeSession:
+        def __init__(self, client: object, *, max_concurrency: int) -> None:
+            sessions.append((client, max_concurrency, self))
+
+    monkeypatch.setattr(cli, "ValveDatafeedClient", lambda: valve_client)
+    monkeypatch.setattr(cli, "ValveFetchSession", FakeSession)
+    monkeypatch.setattr(cli, "D2PTClient", lambda: object())
+    monkeypatch.setattr(cli, "ValveImageClient", lambda: image_client)
+    monkeypatch.setattr(cli, "from_url", lambda *_args, **_kwargs: pytest.fail("Redis is unused"))
+
+    async def fake_refresh_all(**kwargs: Any) -> RefreshAllReport:
+        assert cli._try_acquire_lock(data_dir / ".update.lock") is None
+        assert cli._try_acquire_lock(guide_lock) is None
+        call_args.append(kwargs)
+        return _refresh_all_success_report()
+
+    monkeypatch.setattr(cli, "run_refresh_all", fake_refresh_all)
+    code, payload, raw, stderr = _invoke(
+        [
+            "refresh-all",
+            "--data-dir",
+            str(data_dir),
+            "--workers",
+            "4",
+            "--image-workers",
+            "6",
+            "--force",
+        ],
+        refresh_lock_path=guide_lock,
+        refresh_all_clock=lambda: _NOW,
+    )
+
+    assert code == 0 and stderr == ""
+    assert payload == {
+        "status": "success",
+        "operation": "refresh-all",
+        "started_at": _NOW.isoformat(),
+        "finished_at": _NOW.isoformat(),
+        "modules": {
+            "catalog": {
+                "status": "skipped",
+                "report": {"action": "skipped", "reason": "patch_unchanged"},
+            },
+            "patches": {
+                "status": "success",
+                "report": {"action": "updated", "change_count": 2},
+            },
+            "images": {
+                "status": "success",
+                "report": {"target_count": 3, "downloaded": 1, "skipped": 2},
+            },
+            "guides": {
+                "status": "success",
+                "report": {"status": "success", "request_count": 7},
+            },
+        },
+    }
+    assert raw.count("\n") == 1
+    assert len(sessions) == 1
+    assert sessions[0][:2] == (valve_client, 4)
+    assert len(call_args) == 1
+    assert call_args[0]["session"] is sessions[0][2]
+    assert call_args[0]["workers"] == 4
+    assert call_args[0]["image_workers"] == 6
+    assert call_args[0]["force"] is True
+    assert call_args[0]["image_client"] is image_client
+    assert call_args[0]["data_root"] == data_dir
+
+
+def test_refresh_all_cli_partial_module_report_returns_exit_code_four(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    report = _refresh_all_success_report()
+    partial_report = RefreshAllReport(
+        status="partial",
+        started_at=report.started_at,
+        finished_at=report.finished_at,
+        modules={
+            **report.modules,
+            "images": RefreshAllModuleResult(
+                status="partial",
+                report={"target_count": 5, "downloaded": 2, "skipped": 2, "failures": 1},
+            ),
+        },
+        exit_code=4,
+    )
+
+    async def fake_refresh_all(**_kwargs: Any) -> RefreshAllReport:
+        return partial_report
+
+    monkeypatch.setattr(cli, "ValveDatafeedClient", object)
+    monkeypatch.setattr(cli, "ValveFetchSession", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(cli, "D2PTClient", object)
+    monkeypatch.setattr(cli, "ValveImageClient", object)
+    monkeypatch.setattr(cli, "run_refresh_all", fake_refresh_all)
+
+    code, payload, _raw, _stderr = _invoke(
+        ["refresh-all", "--data-dir", str(tmp_path / "data")],
+        refresh_lock_path=tmp_path / "legacy.lock",
+    )
+
+    assert code == 4
+    assert payload is not None and payload["status"] == "partial"
+    assert payload["modules"]["images"] == {
+        "status": "partial",
+        "report": {"target_count": 5, "downloaded": 2, "skipped": 2, "failures": 1},
+    }
+
+
+def test_refresh_all_cli_sanitizes_unexpected_operation_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_refresh_all(**_kwargs: Any) -> RefreshAllReport:
+        raise RuntimeError("secret response payload")
+
+    monkeypatch.setattr(cli, "ValveDatafeedClient", object)
+    monkeypatch.setattr(cli, "ValveFetchSession", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(cli, "D2PTClient", object)
+    monkeypatch.setattr(cli, "ValveImageClient", object)
+
+    # The actual component report path is covered in the orchestration tests; this
+    # assertion protects the CLI boundary from provider exception text.
+    monkeypatch.setattr(cli, "run_refresh_all", fake_refresh_all)
+    code, payload, raw, _stderr = _invoke(
+        ["refresh-all", "--data-dir", str(tmp_path / "data")],
+        refresh_lock_path=tmp_path / "legacy.lock",
+    )
+
+    assert code == 1
+    assert payload == {
+        "status": "failed",
+        "operation": "refresh-all",
+        "reason": "operation_failed",
+    }
+    assert "secret response payload" not in raw
+
+
+def test_refresh_all_cancellation_waits_for_worker_before_releasing_both_locks(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data_dir = tmp_path / "data"
+    guide_lock = tmp_path / "legacy.lock"
+    worker_started = threading.Event()
+    release_worker = threading.Event()
+    command_finished = threading.Event()
+    locks_checked = threading.Event()
+    monitor_errors: list[BaseException] = []
+
+    async def fake_refresh_all(**_kwargs: Any) -> RefreshAllReport:
+        def blocked_worker() -> None:
+            worker_started.set()
+            if not release_worker.wait(timeout=5):
+                raise TimeoutError("test refresh worker was not released")
+
+        await asyncio.to_thread(blocked_worker)
+        return _refresh_all_success_report()
+
+    monkeypatch.setattr(cli, "ValveDatafeedClient", object)
+    monkeypatch.setattr(cli, "ValveFetchSession", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(cli, "D2PTClient", object)
+    monkeypatch.setattr(cli, "ValveImageClient", object)
+    monkeypatch.setattr(cli, "run_refresh_all", fake_refresh_all)
+    original_main = cli.main
+
+    def monitored_main(*args: Any, **kwargs: Any) -> int:
+        try:
+            return original_main(*args, **kwargs)
+        finally:
+            command_finished.set()
+
+    monkeypatch.setattr(cli, "main", monitored_main)
+
+    def cancel_when_worker_starts() -> None:
+        try:
+            assert worker_started.wait(timeout=5)
+            os.kill(os.getpid(), signal.SIGTERM)
+            assert not command_finished.wait(timeout=0.15)
+            os.kill(os.getpid(), signal.SIGTERM)
+            assert not command_finished.wait(timeout=0.15)
+            assert cli._try_acquire_lock(data_dir / ".update.lock") is None
+            assert cli._try_acquire_lock(guide_lock) is None
+            locks_checked.set()
+        except BaseException as exc:
+            monitor_errors.append(exc)
+        finally:
+            release_worker.set()
+
+    monitor = threading.Thread(target=cancel_when_worker_starts)
+    monitor.start()
+    code, payload, raw, _stderr = _invoke(
+        ["refresh-all", "--data-dir", str(data_dir)],
+        refresh_lock_path=guide_lock,
+    )
+    monitor.join(timeout=5)
+
+    assert not monitor.is_alive()
+    assert monitor_errors == []
+    assert locks_checked.is_set()
+    assert command_finished.is_set()
+    assert code == 130
+    assert payload == {"status": "cancelled", "operation": "refresh-all"}
+    assert raw.count("\n") == 1
+    data_fd = cli._try_acquire_lock(data_dir / ".update.lock")
+    guide_fd = cli._try_acquire_lock(guide_lock)
+    assert data_fd is not None and guide_fd is not None
+    cli._release_lock(guide_fd)
+    cli._release_lock(data_fd)

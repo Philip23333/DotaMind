@@ -35,6 +35,8 @@ from app.vnext.data_updates.patch_refresh import (
     PatchRefreshReport,
     refresh_patches,
 )
+from app.vnext.data_updates.refresh_all import RefreshAllReport
+from app.vnext.data_updates.refresh_all import refresh_all as run_refresh_all
 from app.vnext.hero_guides import cli as hero_guide_cli
 from app.vnext.hero_guides.cache import (
     HeroGuideCacheDataError,
@@ -89,6 +91,7 @@ def main(
     refresh_lock_path: str | os.PathLike[str] | None = None,
     refresh_clock: Callable[[], datetime] | None = None,
     refresh_sleep: Callable[[float], Awaitable[None]] | None = None,
+    refresh_all_clock: Callable[[], datetime] | None = None,
 ) -> int:
     """Run one data-update command and return its stable process exit code."""
 
@@ -107,7 +110,7 @@ def main(
         _emit(output, _failed(operation, config_error))
         return 2
     workers: int | None = None
-    if operation in {"refresh-catalog", "refresh-images"}:
+    if operation in {"refresh-catalog", "refresh-images", "refresh-all"}:
         try:
             workers = int(args.workers)
         except (TypeError, ValueError):
@@ -115,6 +118,16 @@ def main(
             return 2
         if not 1 <= workers <= 16:
             _emit(output, _failed(operation, "invalid_workers"))
+            return 2
+    image_workers: int | None = None
+    if operation == "refresh-all":
+        try:
+            image_workers = int(args.image_workers)
+        except (TypeError, ValueError):
+            _emit(output, _failed(operation, "invalid_image_workers"))
+            return 2
+        if not 1 <= image_workers <= 16:
+            _emit(output, _failed(operation, "invalid_image_workers"))
             return 2
 
     redis_url: str | None = None
@@ -151,6 +164,8 @@ def main(
                     if operation == "refresh-patches"
                     else _image_refresh_skipped_already_running()
                     if operation == "refresh-images"
+                    else _refresh_all_skipped_already_running()
+                    if operation == "refresh-all"
                     else _skipped_already_running(),
                     3,
                 )
@@ -192,6 +207,30 @@ def main(
                             clock=refresh_clock,
                             sleep=refresh_sleep,
                         )
+            elif operation == "refresh-all":
+                assert workers is not None and image_workers is not None
+                old_lock_path = (
+                    hero_guide_cli._LOCK_PATH
+                    if refresh_lock_path is None
+                    else refresh_lock_path
+                )
+                try:
+                    refresh_lock_fd = _try_acquire_lock(old_lock_path)
+                except OSError:
+                    result = (_failed(operation, "storage_error"), 1)
+                else:
+                    if refresh_lock_fd is None:
+                        result = (_refresh_all_skipped_already_running(), 3)
+                    else:
+                        result = _run_refresh_all_command(
+                            data_root=data_root,
+                            workers=workers,
+                            image_workers=image_workers,
+                            force=args.force,
+                            guide_clock=refresh_clock,
+                            guide_sleep=refresh_sleep,
+                            report_clock=refresh_all_clock,
+                        )
             elif operation == "refresh-catalog":
                 assert workers is not None
                 result = _run_refresh_catalog_command(
@@ -224,6 +263,7 @@ def main(
                 "refresh-catalog",
                 "refresh-patches",
                 "refresh-images",
+                "refresh-all",
             }
             else {"status": "cancelled"},
             130,
@@ -352,6 +392,29 @@ def _build_parser(stdout: TextIO, stderr: TextIO) -> argparse.ArgumentParser:
         "--force",
         action="store_true",
         help="download all current catalog images again",
+    )
+    refresh_all_parser = subparsers.add_parser(
+        "refresh-all", help="refresh Catalog, patch notes, images, and guide files"
+    )
+    refresh_all_parser.add_argument(
+        "--data-dir",
+        default=argparse.SUPPRESS,
+        help="absolute persistent data directory (or DOTAMIND_DATA_DIR)",
+    )
+    refresh_all_parser.add_argument(
+        "--workers",
+        default="8",
+        help="maximum concurrent Valve Datafeed calls (1-16, default: 8)",
+    )
+    refresh_all_parser.add_argument(
+        "--image-workers",
+        default="8",
+        help="maximum concurrent image downloads (1-16, default: 8)",
+    )
+    refresh_all_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="refresh Catalog, patch notes, and current images even when already current",
     )
     return parser
 
@@ -509,6 +572,42 @@ def _run_refresh_images_command(
     return _image_refresh_report_result(report)
 
 
+def _run_refresh_all_command(
+    *,
+    data_root: Path,
+    workers: int,
+    image_workers: int,
+    force: bool,
+    guide_clock: Callable[[], datetime] | None,
+    guide_sleep: Callable[[float], Awaitable[None]] | None,
+    report_clock: Callable[[], datetime] | None,
+) -> tuple[dict[str, Any], int]:
+    async def run() -> RefreshAllReport:
+        session = ValveFetchSession(ValveDatafeedClient(), max_concurrency=workers)
+        return await run_refresh_all(
+            data_root=data_root,
+            session=session,
+            workers=workers,
+            image_workers=image_workers,
+            force=force,
+            guide_client=D2PTClient(),
+            image_client=ValveImageClient(),
+            guide_clock=guide_clock,
+            guide_sleep=guide_sleep,
+            clock=report_clock,
+        )
+
+    try:
+        report = asyncio.run(
+            _run_with_cli_cleanup(run, operation_name="unified data refresh")
+        )
+    except (asyncio.CancelledError, KeyboardInterrupt):
+        return {"status": "cancelled", "operation": "refresh-all"}, 130
+    except Exception as exc:
+        return _failed("refresh-all", _safe_reason(exc)), 1
+    return _refresh_all_report_result(report)
+
+
 async def _run_catalog_refresh(
     *,
     data_root: Path,
@@ -598,6 +697,29 @@ def _image_refresh_report_result(
             "report": asdict(report),
         },
         4 if report.failures else 0,
+    )
+
+
+def _refresh_all_report_result(
+    report: RefreshAllReport,
+) -> tuple[dict[str, Any], int]:
+    modules: dict[str, dict[str, Any]] = {}
+    for name, result in report.modules.items():
+        module: dict[str, Any] = {"status": result.status}
+        if result.report is not None:
+            module["report"] = result.report
+        if result.reason is not None:
+            module["reason"] = result.reason
+        modules[name] = module
+    return (
+        {
+            "status": report.status,
+            "operation": "refresh-all",
+            "started_at": report.started_at.isoformat(),
+            "finished_at": report.finished_at.isoformat(),
+            "modules": modules,
+        },
+        report.exit_code,
     )
 
 
@@ -793,6 +915,14 @@ def _image_refresh_skipped_already_running() -> dict[str, str]:
     return {
         "status": "skipped",
         "operation": "refresh-images",
+        "reason": "already_running",
+    }
+
+
+def _refresh_all_skipped_already_running() -> dict[str, str]:
+    return {
+        "status": "skipped",
+        "operation": "refresh-all",
         "reason": "already_running",
     }
 

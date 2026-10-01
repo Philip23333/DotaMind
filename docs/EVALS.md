@@ -432,11 +432,12 @@ call, and presentation tests verify a same-patch repository replacement refreshe
 the matching records. These checks are offline and do not connect to a real Redis,
 database, provider, or model. They validate code wiring, not deployment state.
 
-### Shared file-update acceptance (Catalog, patch-record, and image refresh implemented; unified schedule and deployment pending)
+### Shared file-update acceptance (unified manual refresh implemented; live run, schedule, and deployment pending)
 
 The catalog store, patch-gated Catalog refresh, independent patch-record refresh,
-persistent image refresh, loader, and configured API consumer wiring have focused
-offline acceptance. The remaining operational behaviors have not passed acceptance:
+persistent image refresh, unified refresh coordinator, loader, and configured API
+consumer wiring have focused offline acceptance. The remaining operational
+behaviors have not passed acceptance:
 
 | Layer | Required evidence |
 |---|---|
@@ -444,11 +445,11 @@ offline acceptance. The remaining operational behaviors have not passed acceptan
 | Patch records | Offline tests verify independent latest-patch files, valid-file skip, force, SHA-256 reporting, and atomic replacement. The command has not been run against Valve; historical patch backfill is not implemented. |
 | Migration execution and guide switch | Run the importer CLI against the intended Redis and persistent data root and verify every selected partition and report. API instances with `DOTAMIND_DATA_DIR` read files; without it, they use Redis when configured. The existing timer still uses Redis. The file refresh CLI has offline acceptance only; it has not been deployed or run against D2PT. Do not install both refresh commands as daily jobs. |
 | Catalog version gate | Offline tests verify that a valid same-patch Catalog skips full entity fetching, `--force` refreshes the same patch, version-check failures do not skip, and a failed update is attempted again on the next invocation. This is DotaMind policy, not a Valve guarantee about same-patch data changes. |
-| Fetch sharing and bounds | The ordinary Valve CLI uses one session for request reuse and a Datafeed concurrency ceiling; Catalog construction now uses a fixed two-branch hero→ability and item task split. That Datafeed bound does not include the CDN; standalone `refresh-images` uses a separate 1–16 worker pool. The unified updater still needs to coordinate these work streams; D2PT requests remain serial. |
+| Fetch sharing and bounds | `refresh-all` starts Catalog and patch work with the same session and response cache; its configured Datafeed ceiling is shared by those branches. Images wait for Catalog success or skip and use the independent 1–16 image-worker bound. Guides run alongside them through the existing serial refresher and one-second request spacing. Offline tests cover gating, report retention, failure isolation, and cancellation cleanup. |
 | Catalog hot reload | Offline tests prove a new snapshot switches in one API process only after full validation, each catalog/guide/name-match operation pins one version, and invalid snapshots leave the old one active. Real persistent-directory and container behavior remains unverified. |
 | Images | Offline tests verify selected-target downloads, content-addressed PNG storage, manifest validation and atomic replacement, skip/force rules, bounded image concurrency, and best-effort failure retention. Presentation tests verify per-match manifest reads, hash URLs, last-valid retention, internal-name matching, and immediate manifest changes. Route tests verify bounded reads, PNG/hash validation, immutable caching, 404 behavior, and historical hash URLs. No real CDN downloads, persistent mount, or deployment have been verified. |
 | Containers | The data volume survives API-container recreation; the API mounts data read-only and can read it afterward. |
-| Scheduling | One unified daily entrypoint prevents overlapping runs, reports module/partition results, and replaces the guide-only schedule without duplicate guide work. |
+| Scheduling | The manual `refresh-all` command reports module results and owns both update locks. Deployment must still switch one daily job to this command and verify no duplicate guide refresh or overlap. |
 | Model behavior | Query inputs and DTOs remain stable; source attribution, catalog-name use, and generic Artifact access do not regress. |
 
 ### Historical local guide-refresh evidence
@@ -464,8 +465,9 @@ Remaining acceptance layers are separate:
 
 1. **Scheduled deployment:** historical evidence records that the local WSL
    guide-only timer was enabled, but not that it fired successfully. The planned
-   unified scheduler still needs a deployment check proving one daily 03:00
-   Asia/Shanghai run, no overlap or duplicate guide refresh, and module results.
+   unified manual command is implemented and offline-tested. Deployment still
+   needs a check proving one daily 03:00 Asia/Shanghai run, no overlap or duplicate
+   guide refresh, and module results.
    Offline lock tests do not establish multi-container coordination.
 2. **Persistence and container boundary:** existing Redis AOF recovery and the
    target shared file volume across API-container recreation are separate checks.
@@ -474,9 +476,10 @@ Remaining acceptance layers are separate:
 3. **Real update:** the historical local guide refresh is evidence for that
    Redis-backed run only. Catalog and latest patch-record refresh both have
    offline implementations, and persistent image refresh has fake-client
-   acceptance. The unified file updater still needs live acceptance for version
-   checking, publication, source status, retained previous success, and image
-   handling. A Sven probe or fixture parser test cannot establish this.
+   acceptance. The unified file updater has offline coordination tests but still
+   needs live acceptance for version checking, publication, source status,
+   retained previous success, and image handling. A Sven probe or fixture parser
+   test cannot establish this.
 4. **Real-model answer:** a separate evaluation checks whether the model answers
    from Pub guide and Pro examples, keeps the sources distinct, and avoids
    unsupported statistical or causal claims. A successful refresh does not imply

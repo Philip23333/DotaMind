@@ -194,22 +194,27 @@ is:
     has not downloaded from the CDN. API reads the configured manifest per answer
     match and serves retained content-hash assets; when data directory is unset,
     bundled assets remain in use.
-13. Add the unified update entrypoint that coordinates Catalog, patch records,
-    images, and guides as separate tasks.
+13. **Implemented, not run:** expose
+    `python -m app.vnext.data_updates refresh-all` with `--workers 8` and
+    `--image-workers 8`. Catalog and patch records share one bounded Datafeed
+    session and run with the existing serial guide refresher; images run after a
+    successful Catalog update or normal skip. Both update locks are held through
+    cancellation cleanup, failures are isolated and summarized by module, and
+    guide refresh is not repeated through a nested CLI. No real refresh has run.
 14. Connect the persistent data volume and one daily 03:00 Asia/Shanghai schedule.
 15. Deploy and verify persistent reads, API startup from that directory, and the
     scheduled update path.
 
 The five-file catalog store and loader, configured API lifecycle and catalog-name
 consumers, patch-gated Catalog refresh, independent latest patch-record refresh,
-file-backed guide reads, guide import, file-backed guide refresh entrypoint, and
-persistent image serving are implemented. Real Catalog initialization, Catalog
-refresh, patch refresh, image download, guide migration, and guide refresh have not
-been run. The existing timer still uses Redis. Patch records are independent of
-`refresh-catalog`; image URLs use content hashes independent of Catalog revision
-and patch. The unified scheduled updater, persistent container mounts, and
-deployment acceptance remain pending. Offline tests do not establish power-loss
-recovery.
+file-backed guide reads, guide import, file-backed guide refresh entrypoint,
+persistent image serving, and unified manual refresh command are implemented.
+Real Catalog initialization, Catalog refresh, patch refresh, image download, guide
+migration, guide refresh, and unified refresh have not been run. The existing timer
+still uses Redis. Patch records are independent of `refresh-catalog`; image URLs
+use content hashes independent of Catalog revision and patch. The unified daily
+schedule, persistent container mounts, and deployment acceptance remain pending.
+Offline tests do not establish power-loss recovery.
 `game.detail` entity-name enrichment remains a later independent item after this
 data-update migration.
 

@@ -94,8 +94,8 @@ Failed publication leaves the current pointer unchanged; successful snapshot
 directories are retained. The store loads the pointed revision into a
 `DotaCatalogRepository`, and the manual `init-catalog` command can initialize it
 under a caller-supplied data root. The API loader reads published snapshots when
-`DOTAMIND_DATA_DIR` is configured; publication is not connected to a unified
-updater, and no operational data root has been initialized.
+`DOTAMIND_DATA_DIR` is configured. The manual unified refresh command is
+implemented, but no operational data root has been initialized.
 
 ### Valve synchronization module
 
@@ -186,6 +186,33 @@ it is distinct from both the patch number and Catalog revision. The command does
 not require Catalog initialization, fetch older hero/item/ability attributes, or
 fill all historical patch files. It does not update images or guides. This entry
 has offline acceptance only and has not been run against Valve.
+
+### Unified manual refresh
+
+The command is:
+
+```bash
+python -m app.vnext.data_updates refresh-all \
+  --data-dir /absolute/data/root --workers 8 --image-workers 8
+```
+
+It runs the current Catalog, latest patch-record,
+image, and file-guide refresh components in one invocation. `--force` is passed
+to Catalog, patch, and image refresh; guides refresh on every run. Catalog and
+patch work run in parallel with the guide refresher and share one
+`ValveFetchSession`, response cache, and Datafeed concurrency ceiling. The
+independent image worker limit controls CDN downloads. Images begin only after
+Catalog succeeds or skips; Catalog failure marks images blocked, while patch or
+guide failure does not cancel other work. The guide refresher retains its
+existing serial hero/request order and one-second post-request wait.
+
+The command acquires `<data_root>/.update.lock` and then the legacy guide-refresh
+lock before creating clients or making requests. Both locks remain held through
+thread and coroutine cleanup and are released in reverse order. It emits one
+ordered module summary and returns success, partial, or failed according to the
+module results. This manual command has offline acceptance only. It has not been
+run against Valve, D2PT, or the CDN; the persistent container mount and daily
+timer have not been switched or deployment-tested.
 
 ### Guide partition storage and migration (components implemented; actual migration pending)
 
