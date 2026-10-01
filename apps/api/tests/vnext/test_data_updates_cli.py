@@ -18,6 +18,11 @@ from app.integrations.valve.catalog_repository import CATALOG_DIR
 from app.vnext.data_updates import cli
 from app.vnext.data_updates.catalog_refresh import CatalogRefreshReport
 from app.vnext.data_updates.catalog_store import CatalogSnapshotStore, CatalogStoreError
+from app.vnext.data_updates.image_refresh import (
+    ImageRefreshError,
+    ImageRefreshFailure,
+    ImageRefreshReport,
+)
 from app.vnext.data_updates.patch_refresh import PatchRefreshError, PatchRefreshReport
 from app.vnext.hero_guides.cache import (
     GuideCacheEntry,
@@ -127,6 +132,10 @@ def _catalog_refresh_args(data_dir: Path, *options: str) -> list[str]:
 
 def _patch_refresh_args(data_dir: Path, *options: str) -> list[str]:
     return ["refresh-patches", "--data-dir", str(data_dir), *options]
+
+
+def _image_refresh_args(data_dir: Path, *options: str) -> list[str]:
+    return ["refresh-images", "--data-dir", str(data_dir), *options]
 
 
 def _response(data: list[dict[str, Any]]) -> D2PTResponse:
@@ -1636,6 +1645,270 @@ def test_refresh_patches_cancellation_waits_for_worker_before_releasing_lock(
     assert payload == {"status": "cancelled", "operation": "refresh-patches"}
     assert raw.count("\n") == 1
     assert not old_guide_lock.exists()
+    data_lock = cli._try_acquire_lock(data_dir / ".update.lock")
+    assert data_lock is not None
+    cli._release_lock(data_lock)
+
+
+def test_refresh_images_uses_data_lock_and_fake_client_without_redis_or_guide_lock(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data_dir = tmp_path / "selected-data"
+    environment_dir = tmp_path / "from-environment"
+    old_guide_lock = tmp_path / "legacy-guide.lock"
+    client = object()
+    client_instances: list[object] = []
+    refresh_calls: list[dict[str, Any]] = []
+
+    def make_client() -> object:
+        client_instances.append(client)
+        return client
+
+    monkeypatch.setattr(cli, "ValveImageClient", make_client)
+    monkeypatch.setattr(cli, "from_url", lambda *_args, **_kwargs: pytest.fail("Redis is unused"))
+
+    def fake_refresh(**kwargs: Any) -> ImageRefreshReport:
+        refresh_calls.append(kwargs)
+        return ImageRefreshReport(
+            catalog_revision="a" * 32,
+            catalog_patch="7.41f",
+            target_count=3,
+            downloaded=2,
+            skipped=1,
+            failures=(),
+        )
+
+    monkeypatch.setattr(cli, "refresh_images", fake_refresh)
+    code, payload, raw, stderr = _invoke(
+        _image_refresh_args(data_dir, "--workers", "4", "--force"),
+        environ={"DOTAMIND_DATA_DIR": str(environment_dir)},
+        refresh_lock_path=old_guide_lock,
+    )
+
+    assert code == 0
+    assert stderr == ""
+    assert payload == {
+        "status": "success",
+        "operation": "refresh-images",
+        "report": {
+            "catalog_revision": "a" * 32,
+            "catalog_patch": "7.41f",
+            "target_count": 3,
+            "downloaded": 2,
+            "skipped": 1,
+            "failures": [],
+        },
+    }
+    assert raw.count("\n") == 1
+    assert client_instances == [client]
+    assert refresh_calls == [
+        {
+            "data_root": data_dir,
+            "workers": 4,
+            "force": True,
+            "client": client,
+        }
+    ]
+    assert (data_dir / ".update.lock").exists()
+    assert not environment_dir.exists()
+    assert not old_guide_lock.exists()
+
+
+def test_refresh_images_partial_failures_return_exit_code_four(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data_dir = tmp_path / "persistent-data"
+    monkeypatch.setattr(cli, "ValveImageClient", object)
+    monkeypatch.setattr(
+        cli,
+        "refresh_images",
+        lambda **_kwargs: ImageRefreshReport(
+            catalog_revision="b" * 32,
+            catalog_patch="7.42",
+            target_count=2,
+            downloaded=1,
+            skipped=0,
+            failures=(ImageRefreshFailure("heroes", 18, "download_failed"),),
+        ),
+    )
+
+    code, payload, _raw, _stderr = _invoke(
+        _image_refresh_args(data_dir), refresh_lock_path=tmp_path / "legacy.lock"
+    )
+
+    assert code == 4
+    assert payload == {
+        "status": "partial",
+        "operation": "refresh-images",
+        "report": {
+            "catalog_revision": "b" * 32,
+            "catalog_patch": "7.42",
+            "target_count": 2,
+            "downloaded": 1,
+            "skipped": 0,
+            "failures": [
+                {"kind": "heroes", "entity_id": 18, "error_code": "download_failed"}
+            ],
+        },
+    }
+
+
+def test_refresh_images_help_has_no_filesystem_or_provider_side_effects(
+    tmp_path: Path,
+) -> None:
+    stdout = StringIO()
+    stderr = StringIO()
+
+    code = cli.main(
+        ["refresh-images", "--help"],
+        environ={},
+        stdout=stdout,
+        stderr=stderr,
+    )
+
+    assert code == 0
+    assert "--workers" in stdout.getvalue()
+    assert "--force" in stdout.getvalue()
+    assert not list(tmp_path.iterdir())
+
+
+def test_refresh_images_lock_busy_skips_before_client_creation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data_dir = tmp_path / "persistent-data"
+    data_dir.mkdir()
+    lock_fd = cli._try_acquire_lock(data_dir / ".update.lock")
+    assert lock_fd is not None
+    client_calls: list[None] = []
+    monkeypatch.setattr(cli, "ValveImageClient", lambda: client_calls.append(None))
+    try:
+        code, payload, _raw, _stderr = _invoke(
+            _image_refresh_args(data_dir), refresh_lock_path=tmp_path / "legacy.lock"
+        )
+    finally:
+        cli._release_lock(lock_fd)
+
+    assert code == 3
+    assert payload == {
+        "status": "skipped",
+        "operation": "refresh-images",
+        "reason": "already_running",
+    }
+    assert client_calls == []
+
+
+@pytest.mark.parametrize("workers", ["0", "17", "not-an-int"])
+def test_refresh_images_rejects_workers_before_lock_or_download(
+    workers: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data_dir = tmp_path / "persistent-data"
+    client_calls: list[None] = []
+    monkeypatch.setattr(cli, "ValveImageClient", lambda: client_calls.append(None))
+
+    code, payload, _raw, _stderr = _invoke(
+        _image_refresh_args(data_dir, "--workers", workers),
+        refresh_lock_path=tmp_path / "legacy.lock",
+    )
+
+    assert code == 2
+    assert payload == {
+        "status": "failed",
+        "operation": "refresh-images",
+        "reason": "invalid_workers",
+    }
+    assert not data_dir.exists()
+    assert client_calls == []
+
+
+def test_refresh_images_catalog_missing_is_safe_and_releases_lock(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data_dir = tmp_path / "persistent-data"
+    monkeypatch.setattr(cli, "ValveImageClient", object)
+    monkeypatch.setattr(
+        cli,
+        "refresh_images",
+        lambda **_kwargs: (_ for _ in ()).throw(ImageRefreshError("catalog_missing")),
+    )
+
+    code, payload, raw, _stderr = _invoke(
+        _image_refresh_args(data_dir), refresh_lock_path=tmp_path / "legacy.lock"
+    )
+
+    assert code == 1
+    assert payload == {
+        "status": "failed",
+        "operation": "refresh-images",
+        "reason": "catalog_missing",
+    }
+    assert "published catalog snapshot" not in raw
+    data_lock = cli._try_acquire_lock(data_dir / ".update.lock")
+    assert data_lock is not None
+    cli._release_lock(data_lock)
+
+
+def test_refresh_images_cancellation_waits_for_worker_before_releasing_lock(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data_dir = tmp_path / "persistent-data"
+    worker_started = threading.Event()
+    release_worker = threading.Event()
+    command_finished = threading.Event()
+    monitor_checked = threading.Event()
+    monitor_errors: list[BaseException] = []
+    monkeypatch.setattr(cli, "ValveImageClient", object)
+
+    def blocked_refresh(**_kwargs: Any) -> ImageRefreshReport:
+        worker_started.set()
+        if not release_worker.wait(timeout=5):
+            raise TimeoutError("test worker was not released")
+        return ImageRefreshReport("c" * 32, "7.41f", 0, 0, 0, ())
+
+    monkeypatch.setattr(cli, "refresh_images", blocked_refresh)
+    original_main = cli.main
+
+    def monitored_main(*args: Any, **kwargs: Any) -> int:
+        try:
+            return original_main(*args, **kwargs)
+        finally:
+            command_finished.set()
+
+    monkeypatch.setattr(cli, "main", monitored_main)
+
+    def cancel_when_worker_starts() -> None:
+        try:
+            assert worker_started.wait(timeout=5)
+            os.kill(os.getpid(), signal.SIGTERM)
+            assert not command_finished.wait(timeout=0.15)
+            data_lock = cli._try_acquire_lock(data_dir / ".update.lock")
+            assert data_lock is None
+            monitor_checked.set()
+        except BaseException as exc:
+            monitor_errors.append(exc)
+        finally:
+            release_worker.set()
+
+    monitor = threading.Thread(target=cancel_when_worker_starts)
+    monitor.start()
+    code, payload, raw, _stderr = _invoke(
+        _image_refresh_args(data_dir), refresh_lock_path=tmp_path / "legacy.lock"
+    )
+    monitor.join(timeout=5)
+
+    assert not monitor.is_alive()
+    assert monitor_errors == []
+    assert monitor_checked.is_set()
+    assert command_finished.is_set()
+    assert code == 130
+    assert payload == {"status": "cancelled", "operation": "refresh-images"}
+    assert raw.count("\n") == 1
     data_lock = cli._try_acquire_lock(data_dir / ".update.lock")
     assert data_lock is not None
     cli._release_lock(data_lock)

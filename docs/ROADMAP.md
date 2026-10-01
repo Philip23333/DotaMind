@@ -170,7 +170,7 @@ is:
    then runs heroes→abilities alongside items/recipes in a fixed two-thread
    coordinator. Both branches share the same session and merge before the
    original five-file bundle is validated. Image CDN downloads are outside the
-   Datafeed concurrency bound; patch-note and image publication remain pending.
+   Datafeed concurrency bound.
 10. **Implemented for Catalog only, not run:** expose
     `python -m app.vnext.data_updates refresh-catalog --data-dir ... --workers 8`
     with `--force` for same-patch rebuilds. It validates the current snapshot,
@@ -186,22 +186,29 @@ is:
     invalid current files can be repaired. The content SHA-256 is separate from
     patch number and Catalog revision. This does not backfill history or fetch
     historical entity attributes, and has not made a real Valve request.
-12. Add the unified update entrypoint that coordinates Catalog, patch records,
+12. **Implemented, not run:** expose
+    `python -m app.vnext.data_updates refresh-images --data-dir ... --workers 8`
+    with `--force`. It reads one current validated Catalog snapshot, stores raw
+    PNGs by SHA-256, and atomically publishes a manifest while retaining old
+    entries on download failures. It has offline fake-client acceptance only and
+    has not downloaded from the CDN. API image serving still uses bundled assets.
+13. Add the unified update entrypoint that coordinates Catalog, patch records,
     images, and guides as separate tasks.
-13. Connect the persistent data volume and one daily 03:00 Asia/Shanghai schedule.
-14. Deploy and verify persistent reads, API startup from that directory, and the
+14. Connect the persistent data volume and one daily 03:00 Asia/Shanghai schedule.
+15. Deploy and verify persistent reads, API startup from that directory, and the
     scheduled update path.
 
 The five-file catalog store and loader, configured API lifecycle and catalog-name
 consumers, patch-gated Catalog refresh, independent latest patch-record refresh,
 file-backed guide reads, guide import, and file-backed guide refresh entrypoint are
-implemented. Real Catalog initialization, Catalog refresh, patch refresh, guide
-migration, and guide refresh have not been run. The existing timer still uses
-Redis. Patch records are independent of `refresh-catalog`; image resource
-publication and hot reload, the unified scheduled updater, persistent container
-mounts, and deployment acceptance remain pending. Offline tests do not establish
-power-loss recovery. `game.detail` entity-name enrichment remains a later
-independent item after this data-update migration.
+implemented. Real Catalog initialization, Catalog refresh, patch refresh, image
+download, guide migration, and guide refresh have not been run. The existing timer
+still uses Redis. Patch records are independent of `refresh-catalog`; image
+resource publication is implemented but API image serving still uses bundled
+assets. The unified scheduled updater, persistent container mounts, and deployment
+acceptance remain pending. Offline tests do not establish power-loss recovery.
+`game.detail` entity-name enrichment remains a later independent item after this
+data-update migration.
 
 ## Subsequent capability work
 

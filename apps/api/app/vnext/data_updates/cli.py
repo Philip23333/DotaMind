@@ -22,8 +22,14 @@ from redis.exceptions import RedisError
 from app.integrations.valve.catalog_repository import CATALOG_DIR
 from app.integrations.valve.datafeed import ValveDatafeedClient
 from app.integrations.valve.fetch_session import ValveFetchSession
+from app.integrations.valve.image_client import ValveImageClient
 from app.vnext.data_updates.catalog_refresh import CatalogRefreshReport, refresh_catalog
 from app.vnext.data_updates.catalog_store import CatalogSnapshotStore, CatalogStoreError
+from app.vnext.data_updates.image_refresh import (
+    ImageRefreshError,
+    ImageRefreshReport,
+    refresh_images,
+)
 from app.vnext.data_updates.patch_refresh import (
     PatchRefreshError,
     PatchRefreshReport,
@@ -101,7 +107,7 @@ def main(
         _emit(output, _failed(operation, config_error))
         return 2
     workers: int | None = None
-    if operation == "refresh-catalog":
+    if operation in {"refresh-catalog", "refresh-images"}:
         try:
             workers = int(args.workers)
         except (TypeError, ValueError):
@@ -143,6 +149,8 @@ def main(
                     if operation == "refresh-catalog"
                     else _patch_refresh_skipped_already_running()
                     if operation == "refresh-patches"
+                    else _image_refresh_skipped_already_running()
+                    if operation == "refresh-images"
                     else _skipped_already_running(),
                     3,
                 )
@@ -196,6 +204,13 @@ def main(
                     data_root=data_root,
                     force=args.force,
                 )
+            elif operation == "refresh-images":
+                assert workers is not None
+                result = _run_refresh_images_command(
+                    data_root=data_root,
+                    workers=workers,
+                    force=args.force,
+                )
             else:
                 result = _run_init_command(
                     data_root=data_root,
@@ -204,7 +219,12 @@ def main(
     except (asyncio.CancelledError, KeyboardInterrupt):
         result = (
             {"status": "cancelled", "operation": operation}
-            if operation in {"refresh-guides", "refresh-catalog", "refresh-patches"}
+            if operation in {
+                "refresh-guides",
+                "refresh-catalog",
+                "refresh-patches",
+                "refresh-images",
+            }
             else {"status": "cancelled"},
             130,
         )
@@ -314,6 +334,24 @@ def _build_parser(stdout: TextIO, stderr: TextIO) -> argparse.ArgumentParser:
         "--force",
         action="store_true",
         help="fetch and replace the local patch notes file",
+    )
+    image_refresh_parser = subparsers.add_parser(
+        "refresh-images", help="refresh persistent images for the current catalog"
+    )
+    image_refresh_parser.add_argument(
+        "--data-dir",
+        default=argparse.SUPPRESS,
+        help="absolute persistent data directory (or DOTAMIND_DATA_DIR)",
+    )
+    image_refresh_parser.add_argument(
+        "--workers",
+        default="8",
+        help="maximum concurrent image downloads (1-16, default: 8)",
+    )
+    image_refresh_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="download all current catalog images again",
     )
     return parser
 
@@ -452,6 +490,25 @@ def _run_refresh_patches_command(
     return _patch_refresh_report_result(report)
 
 
+def _run_refresh_images_command(
+    *,
+    data_root: Path,
+    workers: int,
+    force: bool,
+) -> tuple[dict[str, Any], int]:
+    try:
+        report = asyncio.run(
+            _run_image_refresh(data_root=data_root, workers=workers, force=force)
+        )
+    except (asyncio.CancelledError, KeyboardInterrupt):
+        return {"status": "cancelled", "operation": "refresh-images"}, 130
+    except ImageRefreshError as exc:
+        return _failed("refresh-images", exc.reason), 1
+    except Exception as exc:
+        return _failed("refresh-images", _safe_reason(exc)), 1
+    return _image_refresh_report_result(report)
+
+
 async def _run_catalog_refresh(
     *,
     data_root: Path,
@@ -484,6 +541,26 @@ async def _run_patch_refresh(*, data_root: Path, force: bool) -> PatchRefreshRep
     return await _run_with_cli_cleanup(run, operation_name="patch refresh")
 
 
+async def _run_image_refresh(
+    *,
+    data_root: Path,
+    workers: int,
+    force: bool,
+) -> ImageRefreshReport:
+    def refresh() -> ImageRefreshReport:
+        return refresh_images(
+            data_root=data_root,
+            workers=workers,
+            force=force,
+            client=ValveImageClient(),
+        )
+
+    async def run() -> ImageRefreshReport:
+        return await asyncio.to_thread(refresh)
+
+    return await _run_with_cli_cleanup(run, operation_name="image refresh")
+
+
 def _catalog_refresh_report_result(
     report: CatalogRefreshReport,
 ) -> tuple[dict[str, Any], int]:
@@ -507,6 +584,20 @@ def _patch_refresh_report_result(
             "report": asdict(report),
         },
         0,
+    )
+
+
+def _image_refresh_report_result(
+    report: ImageRefreshReport,
+) -> tuple[dict[str, Any], int]:
+    status = "partial" if report.failures else "success"
+    return (
+        {
+            "status": status,
+            "operation": "refresh-images",
+            "report": asdict(report),
+        },
+        4 if report.failures else 0,
     )
 
 
@@ -649,6 +740,8 @@ def _safe_reason(error: Exception) -> str:
         return error.reason
     if isinstance(error, PatchRefreshError):
         return error.reason
+    if isinstance(error, ImageRefreshError):
+        return error.reason
     if isinstance(error, GuideMigrationConflictError):
         return "migration_conflict"
     if isinstance(error, GuideMigrationVerificationError):
@@ -692,6 +785,14 @@ def _patch_refresh_skipped_already_running() -> dict[str, str]:
     return {
         "status": "skipped",
         "operation": "refresh-patches",
+        "reason": "already_running",
+    }
+
+
+def _image_refresh_skipped_already_running() -> dict[str, str]:
+    return {
+        "status": "skipped",
+        "operation": "refresh-images",
         "reason": "already_running",
     }
 

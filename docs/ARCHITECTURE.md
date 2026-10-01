@@ -295,7 +295,7 @@ cross-session guide cache is distinct from the process-local, session-owned
 Artifact store: Artifacts continue to hold oversized logical tool responses and
 are not the durable guide cache.
 
-## Shared data updates and API hot reload (catalog API integration implemented; updater and deployment pending)
+## Shared data updates and API hot reload (catalog API and independent refresh commands implemented; unified updater and deployment pending)
 
 The shared update task owns application-wide Valve entities, patch records,
 images, and D2PT guide partitions. Its planned responsibilities are:
@@ -325,7 +325,8 @@ available, and stopping waits for an in-flight refresh to finish. The check
 interval is not a bound on validation or IO completion time.
 
 The operator module `python -m app.vnext.data_updates` exposes `init-catalog`,
-`migrate-guides`, `refresh-guides`, `refresh-catalog`, and `refresh-patches`.
+`migrate-guides`, `refresh-guides`, `refresh-catalog`, `refresh-patches`, and
+`refresh-images`.
 `init-catalog` publishes
 the bundled or explicitly selected five-file catalog only when no valid current
 snapshot exists. `migrate-guides` reads hero IDs from that repository and calls
@@ -356,6 +357,8 @@ identification, Catalog construction, and patch-record generation. The session
 reuses each successful or failed Datafeed method/parameter pair for that run and
 limits concurrent calls across its explicit client methods. Its bound covers only
 Valve Datafeed calls; the independent image CDN downloads are not included.
+The standalone `refresh-images` command uses its own bounded image-download pool;
+the future unified updater still needs to coordinate its separate work streams.
 Catalog construction fetches and validates its six localized summary lists
 before running two fixed coordination branches: heroes followed by abilities,
 and items with recipe relations. Both branches share the run's session and
@@ -376,9 +379,15 @@ and atomic replacement. A valid existing record is skipped unless `--force` is
 set; corrupt or missing records are rebuilt while other patch files are retained.
 Its SHA-256 identifies saved content, independently of the Catalog revision and
 patch number. It does not require a Catalog, scan all history, or fetch historical
-entity attributes. It has offline acceptance only and has not been run against
-Valve. Images, guides, the unified updater, schedule, persistent mount, and
-deployment remain separate work.
+entity attributes. `refresh-images` reads one fully validated current Catalog
+snapshot and stores selected Valve PNG bytes under content-hash filenames in
+`images/assets/`, then atomically publishes a manifest. Matching local assets are
+skipped; failed downloads preserve old manifest entries and do not block other
+targets. It uses the data-root lock and a separate worker limit, without Redis,
+Datafeed, or the guide lock. The command has offline fake-client acceptance only
+and has not downloaded from Valve's CDN. API presentation still uses the bundled
+image path; it does not read this manifest or hot-reload these assets. The unified
+updater, schedule, persistent mount, and deployment remain separate work.
 
 ```text
 schedule -> updater -> persistent data

@@ -48,6 +48,12 @@ from app.integrations.valve.catalog import (
 )
 from app.integrations.valve.datafeed import DATAFEED_ROOT, ValveDatafeedClient
 from app.integrations.valve.fetch_session import ValveFetchSession
+from app.integrations.valve.image_client import (
+    VALVE_IMAGE_ROOT,
+    ImageKind,
+    build_image_url,
+    image_asset_slug,
+)
 
 API_ROOT = Path(__file__).resolve().parents[3]
 ALIASES_PATH = Path(__file__).with_name("hero_aliases_zh.yaml")
@@ -62,7 +68,15 @@ CATALOG_ABILITY_OUTPUT = CATALOG_OUTPUT_DIR / "dota2_abilities.json"
 CATALOG_ITEM_OUTPUT = CATALOG_OUTPUT_DIR / "dota2_items.json"
 CATALOG_AUDIT_OUTPUT = CATALOG_OUTPUT_DIR / "sync_audit.json"
 CATALOG_IMAGE_OUTPUT_DIR = CATALOG_OUTPUT_DIR / "images"
-VALVE_IMAGE_ROOT = "https://cdn.cloudflare.steamstatic.com/apps/dota2/images/dota_react"
+
+
+@dataclass(frozen=True)
+class CatalogImageTarget:
+    kind: ImageKind
+    slug: str
+    entity_id: int
+    internal_name: str
+    url: str
 
 
 def main(argv: Sequence[str] | None = None) -> None:
@@ -163,32 +177,11 @@ def _load_committed_catalog_bundle() -> CatalogBundle:
 def _sync_catalog_images(bundle: CatalogBundle, *, workers: int = 8) -> int:
     """Best-effort download of hero, non-recipe item, and ordinary ability images."""
 
-    requests: list[tuple[str, str, int, str]] = []
-    for hero in bundle.heroes:
-        slug = _asset_slug(hero.internal_name, "npc_dota_hero_")
-        requests.append(("heroes", slug, hero.hero_id, f"{VALVE_IMAGE_ROOT}/heroes/{slug}.png"))
-    for item in bundle.items:
-        if item.is_recipe:
-            continue
-        slug = _asset_slug(item.internal_name, "item_")
-        requests.append(("items", slug, item.item_id, f"{VALVE_IMAGE_ROOT}/items/{slug}.png"))
-    for ability in bundle.abilities:
-        if (
-            ability.is_item
-            or ability.is_talent
-            or ability.is_innate
-            or not ability.name_en and not ability.name_zh
-        ):
-            continue
-        slug = _asset_slug(ability.internal_name, "")
-        requests.append(
-            (
-                "abilities",
-                slug,
-                ability.ability_id,
-                f"{VALVE_IMAGE_ROOT}/abilities/{ability.internal_name}.png",
-            )
-        )
+    requests = _catalog_image_targets(
+        heroes=bundle.heroes,
+        items=bundle.items,
+        abilities=bundle.abilities,
+    )
 
     temporary_dir = Path(tempfile.mkdtemp(prefix=".catalog-images-", dir=CATALOG_OUTPUT_DIR.parent))
     staging_dir = temporary_dir / "images"
@@ -202,19 +195,20 @@ def _sync_catalog_images(bundle: CatalogBundle, *, workers: int = 8) -> int:
             futures = {
                 executor.submit(
                     _download_catalog_image,
-                    url,
-                    staging_dir / kind / f"{entity_id}.png",
-                ): (kind, slug, entity_id)
-                for kind, slug, entity_id, url in requests
+                    target.url,
+                    staging_dir / target.kind / f"{target.entity_id}.png",
+                ): target
+                for target in requests
             }
             for future in as_completed(futures):
-                kind, slug, entity_id = futures[future]
+                target = futures[future]
                 try:
                     future.result()
                 except Exception as exc:
                     failures += 1
                     print(
-                        f"warning: failed to download {kind} image {entity_id} ({slug}): {exc}",
+                        f"warning: failed to download {target.kind} image "
+                        f"{target.entity_id} ({target.slug}): {exc}",
                         file=sys.stderr,
                     )
 
@@ -228,11 +222,71 @@ def _sync_catalog_images(bundle: CatalogBundle, *, workers: int = 8) -> int:
         shutil.rmtree(temporary_dir, ignore_errors=True)
 
 
+def _catalog_image_targets(
+    *,
+    heroes: Sequence[HeroCatalogRecord],
+    items: Sequence[ItemCatalogRecord],
+    abilities: Sequence[AbilityCatalogRecord],
+) -> list[CatalogImageTarget]:
+    """Enumerate the existing image policy for old and persistent refresh paths."""
+
+    targets: list[CatalogImageTarget] = []
+    for hero in heroes:
+        slug = _asset_slug(hero.internal_name, "npc_dota_hero_")
+        targets.append(
+            CatalogImageTarget(
+                kind="heroes",
+                slug=slug,
+                entity_id=hero.hero_id,
+                internal_name=hero.internal_name,
+                url=build_image_url(
+                    "heroes", hero.internal_name, image_root=VALVE_IMAGE_ROOT
+                ),
+            )
+        )
+    for item in items:
+        if item.is_recipe:
+            continue
+        slug = _asset_slug(item.internal_name, "item_")
+        targets.append(
+            CatalogImageTarget(
+                kind="items",
+                slug=slug,
+                entity_id=item.item_id,
+                internal_name=item.internal_name,
+                url=build_image_url("items", item.internal_name, image_root=VALVE_IMAGE_ROOT),
+            )
+        )
+    for ability in abilities:
+        if (
+            ability.is_item
+            or ability.is_talent
+            or ability.is_innate
+            or not ability.name_en and not ability.name_zh
+        ):
+            continue
+        slug = _asset_slug(ability.internal_name, "")
+        targets.append(
+            CatalogImageTarget(
+                kind="abilities",
+                slug=slug,
+                entity_id=ability.ability_id,
+                internal_name=ability.internal_name,
+                url=build_image_url(
+                    "abilities", ability.internal_name, image_root=VALVE_IMAGE_ROOT
+                ),
+            )
+        )
+    return targets
+
+
 def _asset_slug(internal_name: str, prefix: str) -> str:
-    slug = internal_name.removeprefix(prefix)
-    if not slug or not re.fullmatch(r"[a-z0-9_]+", slug):
-        raise CatalogValidationError(f"invalid image asset name: {internal_name!r}")
-    return slug
+    try:
+        return image_asset_slug(internal_name, prefix)
+    except ValueError:
+        raise CatalogValidationError(
+            f"invalid image asset name: {internal_name!r}"
+        ) from None
 
 
 def _download_catalog_image(url: str, target: Path) -> None:

@@ -148,10 +148,22 @@ the final directory was created before pointer replacement failed.
 Images are separate best-effort resources. A failed download keeps an existing
 image when present, and a missing image does not block catalog publication.
 Missing resources can be filled independently without fetching every entity
-again. Readers generate image metadata only for files that exist. The API loader
-currently switches catalog-backed names only; it does not publish or reload image
-files, whose paths and availability continue to follow bundled resources. Patch
-records are stored by patch version and do not share the catalog snapshot number.
+again. `python -m app.vnext.data_updates refresh-images --data-dir ...` now loads
+one complete Catalog snapshot and selects hero, non-recipe item, and eligible
+ability images using the existing Valve internal-name rules. It stores raw PNG
+bytes at `images/assets/<sha256>.png` and publishes `images/manifest.json` by
+atomic replacement. The manifest's kind, entity ID, internal name, content hash,
+and last-successful source patch are validated; asset paths are derived from the
+validated hash. Matching entries skip downloads, while missing, damaged, renamed,
+or patch-stale assets are fetched again. Failed downloads preserve the old image
+entry and patch marker; other targets continue. Unrelated manifest entries and
+historical hash files are retained. A corrupt manifest stops the operation rather
+than rebuilding it. The command uses a separate 1–16 worker bound and has offline
+fake-client tests only; it has not downloaded from the CDN. Readers generate image
+metadata only for existing bundled files. The API still uses its bundled image
+path and does not read the persistent image manifest or hot-reload these assets.
+Patch records are stored by patch version and do not share the catalog snapshot
+number.
 
 `python -m app.vnext.data_updates refresh-patches --data-dir /absolute/data/root`
 independently checks the latest Valve patch and stores its existing patch-record
