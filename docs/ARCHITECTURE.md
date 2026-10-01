@@ -349,8 +349,13 @@ code relocation: request selection, normalization, worker bounds, image handling
 and the default bundled output paths are unchanged. Its `--patch` option still
 does not fetch historical hero, item, or ability attributes; those details come
 from the current Datafeed endpoints. Importing the application module performs no
-sync work. Fetch-task splitting, shared response reuse, persistent publication,
-and the unified updater remain pending.
+sync work. An ordinary sync run creates one `ValveFetchSession` shared by patch
+identification, Catalog construction, and patch-record generation. The session
+reuses each successful or failed Datafeed method/parameter pair for that run and
+limits concurrent calls across its explicit client methods. Its bound covers only
+Valve Datafeed calls; the independent image CDN downloads are not included.
+Fetch-task splitting, persistent publication, and the unified updater remain
+pending.
 
 ```text
 schedule -> updater -> persistent data

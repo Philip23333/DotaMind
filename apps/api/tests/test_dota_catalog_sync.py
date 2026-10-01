@@ -29,6 +29,7 @@ from app.integrations.valve.catalog import (
 )
 from app.integrations.valve.catalog_repository import CatalogLookupError, DotaCatalogRepository
 from app.integrations.valve.datafeed import ValveDatafeedClient
+from app.integrations.valve.fetch_session import ValveFetchSession
 
 
 class _Response(io.BytesIO):
@@ -1436,19 +1437,35 @@ def test_sync_builder_and_patch_projection_preserve_fixed_fake_source_results() 
     details["schinese"][825] = detail_825_zh
 
     class FakeSyncClient:
-        def herolist(self, _language: str) -> dict[str, Any]:
+        def __init__(self) -> None:
+            self.calls: dict[str, int] = {}
+
+        def _count(self, endpoint: str, language: str) -> None:
+            key = f"{endpoint}:{language}"
+            self.calls[key] = self.calls.get(key, 0) + 1
+
+        def patchnoteslist(self, language: str) -> dict[str, Any]:
+            self._count("patchnoteslist", language)
+            return {"patches": [{"patch_number": "7.41f", "patch_timestamp": 100}]}
+
+        def herolist(self, language: str) -> dict[str, Any]:
+            self._count("herolist", language)
             return {"result": {"data": {"heroes": []}}}
 
-        def abilitylist(self, _language: str) -> dict[str, Any]:
+        def abilitylist(self, language: str) -> dict[str, Any]:
+            self._count("abilitylist", language)
             return {"result": {"data": {"itemabilities": []}}}
 
         def itemlist(self, language: str) -> dict[str, Any]:
+            self._count("itemlist", language)
             return {"result": {"data": {"itemabilities": summaries[language]}}}
 
         def itemdata(self, item_id: int, language: str) -> dict[str, Any]:
+            self._count("itemdata", language)
             return {"result": {"data": {"items": [details[language][item_id]]}}}
 
         def patchnotes(self, _patch: str, _language: str) -> dict[str, Any]:
+            self._count("patchnotes", _language)
             return {
                 "patch_number": "7.41f",
                 "patch_timestamp": 100,
@@ -1466,8 +1483,10 @@ def test_sync_builder_and_patch_projection_preserve_fixed_fake_source_results() 
 
     generated_at = datetime(2026, 9, 30, 12, 0, tzinfo=timezone.utc)
     client = FakeSyncClient()
+    session = ValveFetchSession(client, max_concurrency=1)
+    assert sync_game_data._latest_patch(session) == "7.41f"
     bundle = sync_game_data._build_catalog_snapshot(
-        client, "7.41f", workers=1, generated_at=generated_at
+        session, "7.41f", workers=1, generated_at=generated_at
     )
 
     assert bundle.manifest.patch == "7.41f"
@@ -1484,7 +1503,7 @@ def test_sync_builder_and_patch_projection_preserve_fixed_fake_source_results() 
     assert bundle.sync_audit.patch == bundle.manifest.patch
     assert bundle.sync_audit.generated_at == generated_at
 
-    patch_records = sync_game_data._build_patch_records(client, "7.41f")
+    patch_records = sync_game_data._build_patch_records(session, "7.41f")
     assert patch_records["patch"] == "7.41f"
     assert patch_records["released_at"] == "1970-01-01T00:01:40Z"
     assert patch_records["changes"] == [
@@ -1498,3 +1517,9 @@ def test_sync_builder_and_patch_projection_preserve_fixed_fake_source_results() 
             "source_id": 1,
         }
     ]
+    assert client.calls["herolist:english"] == 1
+    assert client.calls["herolist:schinese"] == 1
+    assert client.calls["abilitylist:english"] == 1
+    assert client.calls["abilitylist:schinese"] == 1
+    assert client.calls["itemlist:english"] == 1
+    assert client.calls["itemlist:schinese"] == 1

@@ -102,10 +102,17 @@ def test_sync_defaults_and_output_paths_are_independent_of_working_directory(
         items=[object()],
     )
     fake_client = object()
+    fake_session = object()
     calls: dict[str, object] = {}
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(game_data_sync, "ValveDatafeedClient", lambda: fake_client)
+
+    def make_session(client: object, *, max_concurrency: int) -> object:
+        calls["session"] = (client, max_concurrency)
+        return fake_session
+
+    monkeypatch.setattr(game_data_sync, "ValveFetchSession", make_session)
     monkeypatch.setattr(
         game_data_sync,
         "_load_committed_catalog_bundle",
@@ -140,11 +147,12 @@ def test_sync_defaults_and_output_paths_are_independent_of_working_directory(
 
     game_data_sync.main([])
 
-    assert calls["latest_client"] is fake_client
-    assert calls["catalog"] == (fake_client, "7.41f", 8)
+    assert calls["session"] == (fake_client, 8)
+    assert calls["latest_client"] is fake_session
+    assert calls["catalog"] == (fake_session, "7.41f", 8)
     assert calls["images"] == (bundle, 8)
     assert calls["write"] is bundle
-    assert calls["patch"] == (fake_client, "7.41f")
+    assert calls["patch"] == (fake_session, "7.41f")
     assert (tmp_path / "patches" / "7_41f.json").is_file()
     assert game_data_sync.API_ROOT == API_ROOT
     assert game_data_sync.CATALOG_OUTPUT_DIR == API_ROOT / "app" / "data" / "catalog"
@@ -179,6 +187,13 @@ def test_images_only_loads_committed_catalog_without_full_fetch(
         raise AssertionError("images-only must not create a Datafeed client")
 
     monkeypatch.setattr(game_data_sync, "ValveDatafeedClient", unexpected_client)
+    monkeypatch.setattr(
+        game_data_sync,
+        "ValveFetchSession",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("images-only must not create a Datafeed session")
+        ),
+    )
     monkeypatch.setattr(
         game_data_sync,
         "_load_committed_catalog_bundle",

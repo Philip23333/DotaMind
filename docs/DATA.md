@@ -113,8 +113,14 @@ connected to this sync module.
 retrieve historical hero, item, or ability attributes. Those detail endpoints
 continue to provide their current data. Importing the module does not create a
 client, make a request, create output directories, or run the command. Fetch-task
-splitting, response reuse, a total concurrency bound, patch-version gating, and
-persistent publication remain future work.
+splitting remains future work. An ordinary CLI run creates one
+`ValveFetchSession` with the `--workers` bound and shares it across latest-patch
+identification, Catalog construction, and patch-record generation. Within that
+run, identical method/parameter requests share one result or exception; each
+caller receives a deep copy. The limit applies to Datafeed calls only, not image
+CDN downloads. A new run has a new session. `--images-only` reads the local
+snapshot and does not create a Datafeed client or session. Patch-version gating
+and persistent publication remain future work.
 
 `CatalogSnapshotLoader` loads the current complete snapshot at startup and then
 checks the pointer revision in the background, defaulting to a 30-second interval.

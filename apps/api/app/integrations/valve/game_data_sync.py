@@ -46,6 +46,7 @@ from app.integrations.valve.catalog import (
     validate_sync_audit,
 )
 from app.integrations.valve.datafeed import DATAFEED_ROOT, ValveDatafeedClient
+from app.integrations.valve.fetch_session import ValveFetchSession
 
 API_ROOT = Path(__file__).resolve().parents[3]
 ALIASES_PATH = Path(__file__).with_name("hero_aliases_zh.yaml")
@@ -90,14 +91,15 @@ def main(argv: Sequence[str] | None = None) -> None:
         return
 
     client = ValveDatafeedClient()
-    patch = _latest_patch(client) if args.patch == "latest" else args.patch
+    session = ValveFetchSession(client, max_concurrency=args.workers)
+    patch = _latest_patch(session) if args.patch == "latest" else args.patch
     previous_ability_ids = {
         item.ability_id for item in _load_committed_catalog_bundle().abilities
     }
-    bundle = _build_catalog_snapshot(client, patch, workers=args.workers)
+    bundle = _build_catalog_snapshot(session, patch, workers=args.workers)
     image_failures = _sync_catalog_images(bundle, workers=args.workers)
     _write_catalog_snapshot(bundle)
-    patch_records = _build_patch_records(client, patch)
+    patch_records = _build_patch_records(session, patch)
 
     PATCH_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     patch_path = PATCH_OUTPUT_DIR / f"{patch.replace('.', '_')}.json"
@@ -260,7 +262,7 @@ def _replace_catalog_images(staging_dir: Path) -> None:
         if backup_dir.exists():
             shutil.rmtree(backup_dir)
 
-def _latest_patch(client: ValveDatafeedClient) -> str:
+def _latest_patch(client: ValveFetchSession) -> str:
     payload = client.patchnoteslist("english")
     patches = payload.get("patches", [])
     if not patches:
@@ -269,7 +271,7 @@ def _latest_patch(client: ValveDatafeedClient) -> str:
     return str(latest["patch_number"])
 
 
-def _build_patch_records(client: ValveDatafeedClient, patch: str) -> dict[str, Any]:
+def _build_patch_records(client: ValveFetchSession, patch: str) -> dict[str, Any]:
     payload = client.patchnotes(patch, "english")
     actual_patch = str(payload.get("patch_number") or "")
     if actual_patch != patch:
@@ -307,7 +309,7 @@ def _build_patch_records(client: ValveDatafeedClient, patch: str) -> dict[str, A
 
 
 def _build_catalog_snapshot(
-    client: ValveDatafeedClient,
+    client: ValveFetchSession,
     patch: str,
     *,
     workers: int = 8,

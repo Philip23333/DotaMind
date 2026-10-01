@@ -161,12 +161,16 @@ is:
 8. **Implemented first step:** move the existing Valve catalog, patch-record,
    and image synchronization code into `app.integrations.valve.game_data_sync`,
    retaining the script as a thin entrypoint and preserving current behavior.
-   Fetch-task splitting, shared response reuse, and a total concurrency bound
-   remain pending. The `--patch` argument does not fetch historical entity
-   attributes.
-9. Add the unified update entrypoint and patch-version gate.
-10. Connect the persistent data volume and one daily 03:00 Asia/Shanghai schedule.
-11. Deploy and verify persistent reads, API startup from that directory, and the
+   The `--patch` argument does not fetch historical entity attributes.
+9. **Implemented:** create one `ValveFetchSession` per ordinary sync run to share
+   same-method/same-parameter Datafeed responses across patch identification,
+   Catalog construction, and patch generation, while applying one concurrency
+   limit to Datafeed calls. `--images-only` does not create a session. Fetch-task
+   splitting and persistent publication remain pending; image CDN downloads are
+   outside this concurrency bound.
+10. Add the unified update entrypoint and patch-version gate.
+11. Connect the persistent data volume and one daily 03:00 Asia/Shanghai schedule.
+12. Deploy and verify persistent reads, API startup from that directory, and the
     scheduled update path.
 
 The five-file catalog store and loader, configured API lifecycle and catalog-name
