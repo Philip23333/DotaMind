@@ -94,8 +94,8 @@ Failed publication leaves the current pointer unchanged; successful snapshot
 directories are retained. The store loads the pointed revision into a
 `DotaCatalogRepository`, and the manual `init-catalog` command can initialize it
 under a caller-supplied data root. The API loader reads published snapshots when
-`DOTAMIND_DATA_DIR` is configured. The manual unified refresh command is
-implemented, but no operational data root has been initialized.
+`DOTAMIND_DATA_DIR` is configured. WSL has initialized a fresh persistent data
+root; production data initialization remains pending.
 
 ### Valve synchronization module
 
@@ -159,7 +159,9 @@ or patch-stale assets are fetched again. Failed downloads preserve the old image
 entry and patch marker; other targets continue. Unrelated manifest entries and
 historical hash files are retained. A corrupt manifest stops the operation rather
 than rebuilding it. The command uses a separate 1–16 worker bound and has offline
-fake-client tests only; it has not downloaded from the CDN. In persistent mode,
+fake-client tests. Its first WSL run downloaded 1,338 of 1,488 targets; 150 ability
+images returned `download_failed` and remain eligible for a later attempt. In
+persistent mode,
 each answer match reads the manifest once and fixes that snapshot for the match.
 Entries are matched by image kind and entity ID, then checked against the Catalog
 internal name; source patch does not have to equal the current Catalog patch. A
@@ -184,8 +186,9 @@ skipped unless `--force` is set; a missing or invalid file is fetched and atomic
 replaced, preserving other patch files. The report hash is over the saved bytes;
 it is distinct from both the patch number and Catalog revision. The command does
 not require Catalog initialization, fetch older hero/item/ability attributes, or
-fill all historical patch files. It does not update images or guides. This entry
-has offline acceptance only and has not been run against Valve.
+fill all historical patch files. It does not update images or guides. The first WSL
+run updated patch `7.41f` with 100 changes; the saved content SHA-256 was
+`50e10530e0d2de4967df94a1331b43f8f4b13b16ab455cb9a8ca99db099b30df`.
 
 ### Unified manual refresh
 
@@ -210,9 +213,33 @@ The command acquires `<data_root>/.update.lock` and then the legacy guide-refres
 lock before creating clients or making requests. Both locks remain held through
 thread and coroutine cleanup and are released in reverse order. It emits one
 ordered module summary and returns success, partial, or failed according to the
-module results. This manual command has offline acceptance only. It has not been
-run against Valve, D2PT, or the CDN; the persistent container mount and daily
-timer have not been switched or deployment-tested.
+module results. The first real WSL run completed as partial: Catalog skipped
+because patch `7.41f` was unchanged, patch notes updated, file guides succeeded,
+and images downloaded 1,338 targets with 150 ability-image failures. The full
+safe report is recorded in the local operations evidence below.
+
+### Persistent Compose and daily update configuration (WSL active; production pending)
+
+Both `compose.wsl.yml` and `compose.prod.yml` give the API an explicit image tag
+and define a `data-updater` service in the `maintenance` profile using that same
+image. Its safe default command is `--help`; an explicit `run` command is required
+to perform work. The updater writes the project-scoped `shared-data` volume at
+`/var/lib/dotamind/data`. The separate `compose.data.yml` overlay opts the API
+into `DOTAMIND_DATA_DIR` and mounts that volume read-only. Existing ordinary
+Compose invocations do not load the overlay and keep their current API mode.
+
+`deploy/systemd/dotamind-data-update.service` and `.timer` describe a one-shot
+`refresh-all` run each day at 03:00 Asia/Shanghai. The service uses the production
+Compose files, runs with `--rm --no-deps`, and treats only lock-busy exit code 3
+as successful. The timer has `Persistent=false`. The WSL service and timer are
+installed and active using a local drop-in for the WSL Compose files; the
+production templates remain uninstalled. The WSL data root was initialized from
+the bundled Catalog and guide data was fetched directly to files without a Redis
+migration. See
+[`reference/data-update-operations.md`](reference/data-update-operations.md)
+for the WSL evidence and production cutover procedure. A failed/partial refresh (exit 4)
+is not marked successful, and no automatic API restart is configured. The WSL
+timer is active; production cutover remains separate.
 
 ### Guide partition storage and migration (components implemented; actual migration pending)
 
@@ -253,11 +280,13 @@ second lock prevents overlap with the legacy Redis refresh command only among
 processes sharing that container-local lock path. It does not coordinate across
 containers.
 
-The file refresh command has offline fake-client tests only; it has not been
-deployed or used for a real D2PT refresh. Configured API instances read guide
-files; instances without `DOTAMIND_DATA_DIR` read Redis when available. The
-existing daily timer still runs the Redis refresh command. These are two
-migration-stage operation entrypoints; do not install both as daily jobs.
+The file refresh command has offline fake-client tests and has run against D2PT
+on the local WSL host. It published data for 127 heroes: 635 nonempty Pub
+partitions, 143 empty Pub partitions, 127 nonempty Pro partitions, and 3 empty Pro
+partitions, with no guide fetch failures. Configured API instances read guide
+files; instances without `DOTAMIND_DATA_DIR` read Redis when available. The old
+Redis refresh timer is disabled on WSL. These remain migration-stage entrypoints;
+do not install both as daily jobs.
 
 Run `python -m app.vnext.data_updates init-catalog` before
 `python -m app.vnext.data_updates migrate-guides` when importing existing guide
@@ -273,21 +302,25 @@ reported rather than overwritten.
 Migration uses the current published catalog's hero list, does not scan Redis
 keys or request provider data, and writes only to the configured data root.
 Identical target partitions are verified and skipped; conflicts stop with the
-files and Redis entries preserved. Run it in the same API container as the
-Redis refresh CLI because their shared refresh lock is container-local.
+files and Redis entries preserved. The fresh-data WSL deployment intentionally
+did not run `migrate-guides`; its previous Docker Desktop Redis volume remains
+untouched. Production migration remains a separate operation. Run it in the same
+API container as the Redis refresh CLI because their shared refresh lock is
+container-local.
 
 The independent `refresh-guides` operation does not require `init-catalog` or
 `migrate-guides`; it uses the D2PT hero list and writes partitions directly to
-the configured file cache. No real file refresh has been run. The repository's
-recurring refresh path has not switched to files.
+the configured file cache. The WSL recurring refresh path now uses the unified
+file updater; the production path has not switched to files.
 
 The existing 36-hour stale rule remains query semantics; it is not a file TTL or
 deletion rule. Local-name enrichment remains at query time and is not written
-back into source guide snapshots. A future migration run must verify raw bytes,
-source rows, DTOs, times, and states before any API switch. Do not rely on
-indefinite dual writes, and do not delete the old Redis guide data before
-migration acceptance. This migration does not change session, Run State, or
-Artifact storage.
+back into source guide snapshots. The WSL deployment started with an empty file
+guide store and did not import the old Docker Desktop Redis data. For production,
+a migration run must verify raw bytes, source rows, DTOs, times, and states before
+switching API reads. Do not rely on indefinite dual writes, and do not delete old
+Redis guide data before migration acceptance. This migration does not change
+session, Run State, or Artifact storage.
 
 ### Catalog update cadence and version gate
 
@@ -301,8 +334,9 @@ pass validation and the new Repository loads. A corrupt pointer or snapshot can
 be replaced after a successful fetch; storage IO failures stop the operation.
 The command takes the data-root update lock, does not use Redis or the guide lock,
 and returns the action, decision reason, previous and target patch, and revision
-as one JSON result. This command has offline acceptance only; it has not been run
-against Valve or deployed.
+as one JSON result. The first WSL unified refresh checked Valve's latest patch and
+skipped full Catalog fetching because it matched the initialized `7.41f` snapshot;
+revision `d0446e97add94e0fb29a30fdf4cc0905` remained current.
 
 | Condition | Target behavior |
 |---|---|
@@ -557,14 +591,12 @@ Redis. Both commands reuse the same refresher and wait for default-executor work
 to finish during SIGINT/SIGTERM cleanup. Exit codes and JSON reasons are fixed;
 exception details and credentials are not printed. The refresh lock coordinates
 processes sharing one API container's `/tmp` only, not multiple containers. The
-repository timer still invokes the legacy Redis command daily at 03:00
-Asia/Shanghai. Do not install both commands as daily jobs. The file refresh
-command has not been deployed or used for a real D2PT refresh. API instances with
-`DOTAMIND_DATA_DIR` read guide files; instances without it read Redis when
-available. A historical WSL record says its separate timer was
-enabled and a local full refresh populated guide data; it does not establish a
-successful scheduled firing, another deployment's cache contents, or file-backed
-guide reads in a deployed API container.
+legacy guide-only timer remains a Redis-based template and is disabled on WSL.
+Do not install both commands as daily jobs. The file refresh command completed a
+real WSL D2PT refresh for 127 heroes with 763 requests and no fetch failures. API
+instances with `DOTAMIND_DATA_DIR` read guide files; instances without it read
+Redis when available. The unified WSL timer is enabled but has not had its first
+scheduled firing; production remains separate.
 
 The cache is connected to a read-only `HeroGuideService`, which the model-facing
 `hero.guide` tool exposes when the application injects the cache. The Service

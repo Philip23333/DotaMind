@@ -432,54 +432,59 @@ call, and presentation tests verify a same-patch repository replacement refreshe
 the matching records. These checks are offline and do not connect to a real Redis,
 database, provider, or model. They validate code wiring, not deployment state.
 
-### Shared file-update acceptance (unified manual refresh implemented; live run, schedule, and deployment pending)
+### Shared file-update acceptance (WSL live run and activation complete; scheduled firing and production pending)
 
 The catalog store, patch-gated Catalog refresh, independent patch-record refresh,
 persistent image refresh, unified refresh coordinator, loader, and configured API
-consumer wiring have focused offline acceptance. The remaining operational
-behaviors have not passed acceptance:
+consumer wiring have focused offline acceptance. A fresh WSL data root, live
+`refresh-all`, read-only API mount, API-only recreation, and WSL timer activation
+have also been checked. Production and an actual scheduled firing remain pending.
 
-| Layer | Required evidence |
+| Layer | Evidence and remaining scope |
 |---|---|
-| Catalog publication | Offline tests verify that failed remote checks, builds, serialization, and publication do not replace the current pointer. The refresh command has not been run against Valve or an operational data root. |
-| Patch records | Offline tests verify independent latest-patch files, valid-file skip, force, SHA-256 reporting, and atomic replacement. The command has not been run against Valve; historical patch backfill is not implemented. |
-| Migration execution and guide switch | Run the importer CLI against the intended Redis and persistent data root and verify every selected partition and report. API instances with `DOTAMIND_DATA_DIR` read files; without it, they use Redis when configured. The existing timer still uses Redis. The file refresh CLI has offline acceptance only; it has not been deployed or run against D2PT. Do not install both refresh commands as daily jobs. |
+| Catalog publication | Offline tests cover failure retention. WSL `init-catalog` published patch `7.41f`, revision `d0446e97add94e0fb29a30fdf4cc0905`. Live `refresh-all` checked Valve and skipped full entity fetching because the patch was unchanged; a changed-patch publication was not exercised. |
+| Patch records | Offline tests cover validation, skip/force, SHA-256 reporting, and atomic replacement. The WSL run wrote patch `7.41f` with 100 changes and content SHA-256 `50e10530e0d2de4967df94a1331b43f8f4b13b16ab455cb9a8ca99db099b30df`. Historical patch backfill is not implemented. |
+| Migration execution and guide switch | This WSL cutover used a fresh file store, so no Redis guide migration was run and old Docker Desktop volumes remain untouched. File guide refresh succeeded for 127 heroes with 763 requests. The API reads the same file volume; Sven and Anti-Mage position-1 Service queries each returned one Pub guide and five Pro examples. The old WSL Redis timer is disabled. Production migration remains separate. |
 | Catalog version gate | Offline tests verify that a valid same-patch Catalog skips full entity fetching, `--force` refreshes the same patch, version-check failures do not skip, and a failed update is attempted again on the next invocation. This is DotaMind policy, not a Valve guarantee about same-patch data changes. |
 | Fetch sharing and bounds | `refresh-all` starts Catalog and patch work with the same session and response cache; its configured Datafeed ceiling is shared by those branches. Images wait for Catalog success or skip and use the independent 1–16 image-worker bound. Guides run alongside them through the existing serial refresher and one-second request spacing. Offline tests cover gating, report retention, failure isolation, and cancellation cleanup. |
-| Catalog hot reload | Offline tests prove a new snapshot switches in one API process only after full validation, each catalog/guide/name-match operation pins one version, and invalid snapshots leave the old one active. Real persistent-directory and container behavior remains unverified. |
-| Images | Offline tests verify selected-target downloads, content-addressed PNG storage, manifest validation and atomic replacement, skip/force rules, bounded image concurrency, and best-effort failure retention. Presentation tests verify per-match manifest reads, hash URLs, last-valid retention, internal-name matching, and immediate manifest changes. Route tests verify bounded reads, PNG/hash validation, immutable caching, 404 behavior, and historical hash URLs. No real CDN downloads, persistent mount, or deployment have been verified. |
-| Containers | The data volume survives API-container recreation; the API mounts data read-only and can read it afterward. |
-| Scheduling | The manual `refresh-all` command reports module results and owns both update locks. Deployment must still switch one daily job to this command and verify no duplicate guide refresh or overlap. |
+| Catalog hot reload | Offline tests prove validated snapshot switching and per-operation pinning. WSL API startup and file reads passed; Catalog hot-switch was not exercised because the live patch gate skipped fetching. The API container was recreated and retained its Catalog and guide reads. |
+| Images | The WSL run downloaded 1,338 of 1,488 targets; 150 ability images reported `download_failed`. A Sven hash URL returned PNG bytes with matching SHA-256 and immutable cache headers. API image reads are backed by the persistent volume. |
+| Container configuration | Compose uses the same API image for API and updater. The WSL updater wrote the project-scoped volume; the API mount is `RW=false`. Recreating only the API kept Catalog, guide, and image reads available; other service container IDs remained unchanged. |
+| Scheduling configuration | `dotamind-data-update.timer` is installed, enabled, and active in WSL for 03:00 Asia/Shanghai with `Persistent=false`; next fire is 2026-10-03 03:00 CST. The legacy guide timer is disabled and inactive. No scheduled run has fired yet; production has not installed the timer. |
 | Model behavior | Query inputs and DTOs remain stable; source attribution, catalog-name use, and generic Artifact access do not regress. |
 
-### Historical local guide-refresh evidence
+### WSL live refresh evidence (2026-10-02)
 
-A local full refresh processed 127 heroes with 763 requests and published 635
-Pub and 127 Pro partitions, including valid empty responses. Sven and Anti-Mage
-Service queries succeeded. The local WSL guide timer was enabled; this records
-host configuration, not an observed successful scheduled firing. These facts do
-not establish that a Guangzhou deployment has the same data or configuration,
-and they provide no evidence for file storage migration or deployed API hot reload.
+The first unified refresh ran from 2026-10-02 15:20 to 15:49 CST with no `--force`.
+Catalog checked Valve's latest patch and skipped full entity fetching because
+`7.41f` matched revision `d0446e97add94e0fb29a30fdf4cc0905`. Patch records updated
+with 100 changes. The guide module succeeded for 127 heroes with 763 requests,
+publishing 635 Pub and 127 Pro partitions and recording 143 empty Pub plus 3 empty
+Pro partitions. Images downloaded 1,338 of 1,488 targets and reported 150
+`download_failed` ability images, so the overall result was partial.
+
+After the API container was recreated by itself, the API remained healthy and its
+read-only data mount still served the current Catalog and guide entries. Service
+queries for Sven and Anti-Mage position 1 each returned one Pub guide and five Pro
+examples. A Sven hash URL returned PNG bytes with a matching SHA-256 and immutable
+cache headers. The unified WSL timer is enabled for the next 03:00 CST run, but no
+scheduled firing has yet been observed. This is local WSL evidence only; it does
+not establish production state or real-model answer quality.
 
 Remaining acceptance layers are separate:
 
-1. **Scheduled deployment:** historical evidence records that the local WSL
-   guide-only timer was enabled, but not that it fired successfully. The planned
-   unified manual command is implemented and offline-tested. Deployment still
-   needs a check proving one daily 03:00 Asia/Shanghai run, no overlap or duplicate
-   guide refresh, and module results.
+1. **Scheduled deployment:** the unified WSL timer is enabled, and the legacy
+   guide timer is disabled. The first scheduled firing, lock behavior, and module
+   report still need observation. Production scheduling remains unconfigured.
    Offline lock tests do not establish multi-container coordination.
-2. **Persistence and container boundary:** existing Redis AOF recovery and the
-   target shared file volume across API-container recreation are separate checks.
-   Fake Redis tests establish neither deployment behavior; the target API mount
-   must also be verified read-only.
-3. **Real update:** the historical local guide refresh is evidence for that
-   Redis-backed run only. Catalog and latest patch-record refresh both have
-   offline implementations, and persistent image refresh has fake-client
-   acceptance. The unified file updater has offline coordination tests but still
-   needs live acceptance for version checking, publication, source status,
-   retained previous success, and image handling. A Sven probe or fixture parser
-   test cannot establish this.
+2. **Persistence and container boundary:** WSL API-only recreation preserved the
+   new shared volume, with the API mount verified read-only. The old Docker
+   Desktop volumes remain separate and untouched. Production persistence is not
+   established by this local check.
+3. **Real update:** WSL live update behavior is recorded above. The unchanged
+   patch meant Catalog full-entity publication was not exercised; the image
+   result remains partial. Future patch changes, update failures, and production
+   operation still require their own evidence.
 4. **Real-model answer:** a separate evaluation checks whether the model answers
    from Pub guide and Pro examples, keeps the sources distinct, and avoids
    unsupported statistical or causal claims. A successful refresh does not imply

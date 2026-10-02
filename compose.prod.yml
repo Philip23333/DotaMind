@@ -1,3 +1,5 @@
+x-api-image: &api-image dotamind-api:prod
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -37,6 +39,7 @@ services:
     restart: unless-stopped
 
   api:
+    image: *api-image
     build:
       context: ./apps/api
       args:
@@ -62,6 +65,21 @@ services:
         condition: service_started
     restart: unless-stopped
 
+  data-updater:
+    image: *api-image
+    profiles: ["maintenance"]
+    entrypoint: ["python", "-m", "app.vnext.data_updates"]
+    command: ["--help"]
+    restart: "no"
+    environment:
+      DOTAMIND_REDIS_URL: redis://redis:6379/0
+      DOTAMIND_DATA_DIR: /var/lib/dotamind/data
+      HTTP_PROXY: http://vless-proxy:7890
+      HTTPS_PROXY: http://vless-proxy:7890
+      NO_PROXY: localhost,127.0.0.1,::1,postgres,redis,vless-proxy
+    volumes:
+      - shared-data:/var/lib/dotamind/data
+
   chat:
     build:
       context: ./apps/chat
@@ -85,3 +103,4 @@ services:
 volumes:
   postgres-data:
   redis-data:
+  shared-data:

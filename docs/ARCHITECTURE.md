@@ -295,17 +295,17 @@ cross-session guide cache is distinct from the process-local, session-owned
 Artifact store: Artifacts continue to hold oversized logical tool responses and
 are not the durable guide cache.
 
-## Shared data updates and API hot reload (unified manual refresh implemented; schedule and deployment pending)
+## Shared data updates and API hot reload (WSL deployed; production migration and deployment pending)
 
 The shared update task owns application-wide Valve entities, patch records,
 images, and D2PT guide partitions. Its planned responsibilities are:
 
 | Boundary | Target responsibility |
 |---|---|
-| Schedule and manual entry | The manual `refresh-all` command coordinates one refresh; a daily 03:00 Asia/Shanghai schedule remains pending. |
+| Schedule and manual entry | The manual `refresh-all` command coordinates one refresh. The WSL 03:00 Asia/Shanghai timer is installed and enabled; the production timer remains a configured template only. |
 | Fetch and processing | Reuse one bounded Valve Datafeed session for Catalog and patch records. Keep image downloads under a separate bound and D2PT requests serial with a one-second interval. |
 | Publication | Publish the five-file entity catalog as one snapshot; publish guide partitions independently; process patch records and images separately. |
-| Persistence | Let the updater write the shared persistent data directory. Mount it durably across container recreation and keep API access read-only. |
+| Persistence | Compose declares a project-scoped `shared-data` volume. WSL loads `compose.data.yml`: the updater is writable and the API mount is read-only. Production has not activated this overlay. |
 | Online reads | Load catalogs in the background and switch snapshots; read guides by partition. Queries never start a remote refresh. |
 
 `CatalogSnapshotStore` copies the five catalog JSON files byte-for-byte into
@@ -338,12 +338,12 @@ order. File guide refresh does not require a catalog snapshot or Redis URL; it
 takes the same two locks before constructing D2PT and file-cache resources. The
 refresh lock is container-local, so migration and file refresh must run in the
 same API container as the legacy guide refresh CLI. The file guide refresh command
-has offline fake-client tests but has not been deployed or run against D2PT. The
-Catalog refresh command has offline tests only and has not been run against Valve.
-No real initialization or Redis migration has been run. The API reads guide files
-when `DOTAMIND_DATA_DIR` is configured and Redis when the data directory is unset
-and Redis is configured; without either store the tool is absent. The existing
-timer still uses Redis. Do not schedule both guide refresh commands daily.
+has offline fake-client tests and completed a real WSL run for 127 heroes. The WSL
+data root was initialized from the bundled Catalog; no Redis guide migration was
+performed, and the old Docker Desktop data was left untouched. The API reads guide
+files from this root. The old Redis guide timer is disabled on WSL, and the unified
+03:00 timer is enabled but has not yet fired. The production path remains pending.
+Do not schedule both guide refresh commands daily.
 
 The existing Valve catalog, patch-record, and image sync implementation now lives
 in `app.integrations.valve.game_data_sync`. The legacy
@@ -370,21 +370,23 @@ update builds and serializes the original five-file bundle in a temporary data-r
 directory and publishes it through `CatalogSnapshotStore`; only the atomic pointer
 switch makes it current. Invalid local pointers or snapshots are replaceable after
 a successful build, while storage IO errors stop the operation. This command uses
-the data-root lock and one bounded session, without Redis or the guide lock. It has
-offline acceptance only and has not been run against Valve. `refresh-patches`
+the data-root lock and one bounded session, without Redis or the guide lock. On
+the first WSL `refresh-all`, Valve still reported `7.41f`, so entity fetching was
+skipped and revision `d0446e97add94e0fb29a30fdf4cc0905` remained current.
+`refresh-patches`
 independently checks Valve's latest patch and writes the legacy patch-record shape
 to `patches/<patch_with_underscores>.json` using a same-directory temporary file
 and atomic replacement. A valid existing record is skipped unless `--force` is
 set; corrupt or missing records are rebuilt while other patch files are retained.
 Its SHA-256 identifies saved content, independently of the Catalog revision and
-patch number. It does not require a Catalog, scan all history, or fetch historical
+patch number. The WSL run wrote 100 changes for `7.41f`. It does not require a Catalog, scan all history, or fetch historical
 entity attributes. `refresh-images` reads one fully validated current Catalog
 snapshot and stores selected Valve PNG bytes under content-hash filenames in
 `images/assets/`, then atomically publishes a manifest. Matching local assets are
 skipped; failed downloads preserve old manifest entries and do not block other
 targets. It uses the data-root lock and a separate worker limit, without Redis,
-Datafeed, or the guide lock. The command has offline fake-client acceptance only
-and has not downloaded from Valve's CDN. Configured API presentation reads this
+Datafeed, or the guide lock. The first WSL run downloaded 1,338 of 1,488 targets;
+150 ability images returned `download_failed`. Configured API presentation reads this
 manifest per answer match and emits content-hash image URLs; the hash route serves
 retained assets independently of the current manifest.
 
@@ -396,8 +398,12 @@ start only after Catalog succeeds or skips, and use the independent
 `--image-workers` ceiling. Catalog failure blocks images, while patch and guide
 failures do not cancel other modules. Module reports keep their component fields;
 the command returns a partial status when some modules fail or report partial
-success. It has offline acceptance only and has not been run against Valve, D2PT,
-or the CDN. The daily schedule, persistent mount, and deployment remain pending.
+success. The first WSL run ended `partial`: Catalog skipped at patch `7.41f`, patch
+notes updated with 100 changes, guides succeeded for 127 heroes with 763 requests,
+and images had 150 ability-image failures after 1,338 downloads. The WSL API reads
+the persistent volume read-only; a manual API-only recreation retained Catalog,
+guide, and image reads. Its daily timer is enabled but has not fired. Production
+migration, deployment, and scheduling remain pending.
 
 ```text
 schedule -> updater -> persistent data
@@ -440,12 +446,16 @@ When `DOTAMIND_DATA_DIR` is unset, the API uses its existing bundled catalog
 repository. When set, it must name an absolute path containing a valid published
 snapshot; startup does not create or initialize the directory and does not fall
 back to bundled data on error. The API also reads guide partitions from this same
-root, without falling back to Redis when a partition is missing or invalid. The
-existing timer still invokes the Redis refresh command. No operational data
-directory has been initialized, no Redis migration has been run, and no persistent
-container mount or scheduled unified updater has been accepted. Real image
-downloads, automatic updates, and deployment verification remain pending. These
-changes do not alter the session Artifact storage contract.
+root, without falling back to Redis when a partition is missing or invalid. In
+WSL, the fresh data root has been initialized, the API overlay is active with a
+read-only mount, and the unified timer is enabled; the old Redis guide timer is
+disabled. The timer's first scheduled firing has not yet been observed. No Redis
+guide migration was run; the prior Docker Desktop data was left untouched.
+Production still needs its own data root, migration decision, Compose cutover, and
+timer installation. Real image downloads and API-container persistence were
+verified locally in WSL. These changes do not alter the session Artifact storage
+contract.
+These changes do not alter the session Artifact storage contract.
 
 ## Runtime boundary
 

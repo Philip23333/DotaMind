@@ -1,0 +1,6 @@
+services:
+  api:
+    environment:
+      DOTAMIND_DATA_DIR: /var/lib/dotamind/data
+    volumes:
+      - shared-data:/var/lib/dotamind/data:ro

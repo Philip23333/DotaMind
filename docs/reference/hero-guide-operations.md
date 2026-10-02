@@ -5,9 +5,9 @@ When `DOTAMIND_DATA_DIR` is configured, queries read file partitions from that
 root; otherwise they read Redis when configured. File mode does not fall back to
 Redis, and the tool is not registered if neither store is configured. The legacy
 Redis refresh command makes live D2PT requests and publishes successful source partitions to the shared Redis
-cache. Offline tests do not execute this command. A historical local WSL
-deployment record includes a full refresh and an enabled guide timer; it does not
-prove the timer fired or describe another host's installation.
+cache. Offline tests do not execute this command. The fresh-data WSL cutover now
+uses file-backed guides and the unified timer; the legacy Redis timer is disabled
+there. This does not prove a scheduled firing or describe another host's state.
 
 ## Preconditions and boundaries
 
@@ -63,7 +63,7 @@ to finish before closing Redis and releasing the lock. The urllib timeout is
 not a strict total-request or whole-run deadline. Do not assume killing only the host-side
 `docker compose exec` command proves the in-container refresh process has ended.
 
-## File-backed refresh command (implemented; not deployed or run)
+## File-backed refresh command (implemented; run on WSL; production pending)
 
 The separate file-backed entrypoint reuses `HeroGuideRefresher` and writes
 partitions through `FileHeroGuideCache`:
@@ -89,27 +89,31 @@ and the refresh report. Exit codes are 0 for success, 4 for partial completion,
 1 for execution failure, 2 for invalid configuration, 3 when either lock is
 busy, and 130 for cancellation.
 
-The API can read file partitions when `DOTAMIND_DATA_DIR` is configured, but no
-operational data root or API deployment has been accepted. The existing systemd
-timer still invokes the legacy Redis command. The file-backed command has offline
-fake-client tests only; it has not been deployed or used for a real D2PT refresh.
-Do not install the Redis and file refresh commands together as daily jobs.
+The WSL API reads the shared file volume through its read-only mount. The old
+Redis guide timer is disabled there, and the unified data-update timer is enabled.
+The file-backed command has offline fake-client tests and completed a real D2PT
+refresh on WSL. Do not install the Redis and file refresh commands together as
+daily jobs.
 
-## Optional systemd schedule
+## systemd schedule templates
 
-The repository provides `deploy/systemd/dotamind-hero-guides.service` and
-`deploy/systemd/dotamind-hero-guides.timer` as production deployment templates.
-They use `/opt/dotamind`, `compose.prod.yml`, and daily 03:00 Asia/Shanghai
-scheduling with no random delay. The repository timer has `Persistent=false`.
+The repository retains `deploy/systemd/dotamind-hero-guides.service` and
+`deploy/systemd/dotamind-hero-guides.timer` as legacy production templates. They
+run the Redis refresh command. The new `dotamind-data-update.service` and
+`dotamind-data-update.timer` templates run unified file updates through the
+one-shot updater container. They use `/opt/dotamind`, both production Compose
+files, daily 03:00 Asia/Shanghai scheduling, and `Persistent=false`. The new timer
+is not installed or enabled by this repository change. Do not run both schedules
+as daily jobs after the file-backed cutover.
 
-The local Ubuntu WSL installation is separate: its installed unit uses
-`/home/lip233/code/dotamind`, `compose.wsl.yml`, and a timer with
-`Persistent=true`. The local deployment record says this timer was enabled.
-These WSL paths and catch-up behavior do not describe the production template or
-other hosts. Check the actual host's unit and timer state before operating it.
+The local Ubuntu WSL installation is separate: the legacy Redis guide timer is
+disabled. The unified data-update service is installed with a local drop-in using
+`/home/lip233/code/dotamind`, `/usr/bin/docker`, and the WSL Compose files. Its
+timer uses the repository template's `Persistent=false` and is enabled for
+03:00 Asia/Shanghai. These WSL paths do not describe the production template or
+other hosts. No scheduled firing has yet been observed.
 
-An operator who is authorized to configure this host can install the templates
-and enable the timer:
+The following commands install the legacy Redis guide timer only:
 
 ```bash
 sudo install -m 0644 deploy/systemd/dotamind-hero-guides.service \
@@ -121,11 +125,13 @@ sudo systemctl enable --now dotamind-hero-guides.timer
 ```
 
 The install commands above are not run by application deployment or the
-repository's offline tests. The local WSL timer's enabled state is historical
-host evidence, not proof of a successful scheduled invocation. The service's
-`SuccessExitStatus=3` treats a same-container
-overlap skip as successful; exit code `4` remains visible as a partial refresh
-requiring review.
+repository's offline tests. The legacy Redis guide timer is disabled on WSL; the
+unified timer is enabled there, but has not fired yet. The legacy service's
+`SuccessExitStatus=3` treats a same-container overlap skip as
+successful; exit code `4` remains visible as a partial refresh requiring review.
+The new data-update service also treats only lock-busy exit code `3` as
+successful. For persistent data initialization, Redis import, API cutover, and
+rollback order, see [`data-update-operations.md`](data-update-operations.md).
 
 Read-only checks for timer and recent service state:
 
@@ -141,18 +147,18 @@ credentials while diagnosing refresh failures.
 
 ## Acceptance still required
 
-Offline tests use fake clients and Redis. They do not verify a successful
-scheduled invocation, the live deployment's Redis AOF/volume recovery, or
-real-model answer quality. A historical local refresh processed 127 heroes with
-763 requests and published 635 Pub and 127 Pro partitions, including valid
-empty responses; Sven and Anti-Mage Service queries succeeded. This evidence is
-specific to that local Redis-backed run. It does not establish file migration,
-API hot reload, or the state of another deployment. The process lock is
-intentionally container-local; a deployment with multiple API containers needs
-an explicit coordination decision before scheduling this command on more than
-one container.
+Offline tests use fake clients and Redis. The 2026-10-02 WSL file refresh
+processed 127 heroes with 763 requests and published 635 Pub and 127 Pro
+partitions, including 143 empty Pub and 3 empty Pro partitions. Sven and
+Anti-Mage position-1 Service queries each read one Pub guide and five Pro
+examples. The API-only container recreation preserved those reads through the
+read-only shared volume. The unified timer is enabled but has not had its first
+scheduled firing. Production state and real-model answer quality remain separate
+checks. The process lock is intentionally container-local; a deployment with
+multiple API containers needs an explicit coordination decision before scheduling
+the legacy Redis refresh command on more than one container.
 
-## Persistent data initialization and guide import (commands implemented; not run)
+## Persistent data initialization and guide import (WSL initialized; Redis import pending)
 
 The operator CLI provides two offline-verifiable commands. They are separate
 from the existing guide refresh command above and do not change API reads or the
@@ -204,15 +210,16 @@ failure, 2 means invalid arguments or missing configuration, and 130 means
 interruption. Error JSON uses fixed reasons and excludes credentials and
 exception text.
 
-No real data root has been initialized, no Redis migration has been run, and no
-real file-backed guide refresh has been performed. The API reads file-backed
-catalog and guide data only when `DOTAMIND_DATA_DIR` points to a valid initialized
-root; otherwise catalog reads use bundled data and guide reads use Redis when
-configured. The existing refresh CLI and timer still use Redis. No unified
-scheduled updater or deployment has been accepted. Keep the Redis guide data
-until migration verification and API switching have been separately accepted.
+The WSL data root was initialized from the bundled Catalog and the API uses it in
+file mode. No Redis guide migration was run: this deployment used a fresh volume,
+and the previous Docker Desktop data remains untouched. A real file-backed guide
+refresh has been performed on WSL. The old Redis guide timer is disabled and the
+unified data-update timer is enabled, although no scheduled firing has yet been
+observed. The production Redis migration, API switch, and timer installation are
+still pending. Keep production Redis guide data until any production migration is
+verified and accepted.
 
-## API file-read cutover order
+## Production API file-read cutover order
 
 For a future cutover, use this order and verify each step before proceeding:
 
@@ -222,11 +229,14 @@ For a future cutover, use this order and verify each step before proceeding:
 3. Pause the existing Redis guide timer and confirm no refresh is still running.
 4. Confirm the final imported files are valid. Investigate any conflicts; do not
    force overwrite them.
-5. Configure the API with `DOTAMIND_DATA_DIR` and enable the matching file-backed
-   refresh job. The repository timer template still invokes the Redis command;
-   this task does not switch or enable a file schedule.
+5. Configure the API with `DOTAMIND_DATA_DIR` using the opt-in Compose overlay.
+   After validating a manual `refresh-all`, replace the old Redis guide schedule
+   with the unified data-update timer. See
+   [`data-update-operations.md`](data-update-operations.md) for the full sequence.
 6. Verify API queries, file refresh, and persistence across API-container
    recreation. Only after that acceptance should operators consider removing old
    Redis guide data.
 
-This sequence is operational guidance only. It has not been executed.
+This sequence remains the production procedure. The local WSL cutover is complete
+as recorded above; it does not establish that a production host has switched to
+the shared data volume or enabled its timer.

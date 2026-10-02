@@ -122,33 +122,35 @@ is:
    publication keeps the old pointer; successful revision directories remain
    available. API startup reads this store when `DOTAMIND_DATA_DIR` is configured;
    initialization remains an explicit operator action.
-2. **Implemented, not run:** expose `python -m app.vnext.data_updates init-catalog`
+2. **Implemented and run in WSL:** expose `python -m app.vnext.data_updates init-catalog`
    for one-time initialization from the bundled or explicitly selected local
    five-file catalog. The operator must supply an absolute data root with
-   `--data-dir` or `DOTAMIND_DATA_DIR`; no deployment directory has been
-   initialized by this component.
+   `--data-dir` or `DOTAMIND_DATA_DIR`; the production data directory remains
+   uninitialized. The WSL fresh-data volume now has patch `7.41f`,
+   revision `d0446e97add94e0fb29a30fdf4cc0905`.
 3. **Implemented, not executed:** the standalone `FileHeroGuideCache` and
    callable `migrate_redis_guides()` component. Offline FakeRedis and `tmp_path`
    tests cover full-entry import and read-back verification. Configured API
    instances read file partitions; instances without `DOTAMIND_DATA_DIR` use
    Redis when configured. With neither store, the guide tool is absent. The
-   existing refresh CLI and timer still use Redis; no real Redis migration has
-   been run.
+   legacy Redis refresh CLI remains available; its WSL timer is disabled. No real
+   Redis migration has been run.
 4. **Implemented, not run:** expose
    `python -m app.vnext.data_updates migrate-guides` to use the current catalog's
    hero list and existing Redis importer. Run and verify it against the intended
-   Redis cache and persistent data root before configuring API guide reads from
-   that root. It shares the data-root update lock and the guide refresh CLI lock,
+   Redis cache and persistent data root before configuring production API guide
+   reads from that root. It shares the data-root update lock and the guide refresh CLI lock,
    which only coordinates processes in the same API container.
-5. **Implemented, not run:** expose
+5. **Implemented and run in WSL:** expose
    `python -m app.vnext.data_updates refresh-guides --data-dir ...`, reusing the
    serial `HeroGuideRefresher` with `FileHeroGuideCache`. It does not require a
    catalog snapshot or Redis URL. It acquires the data-root lock and then the
    existing container-local guide refresh lock. Offline fake-client tests cover
-   file publication and cancellation cleanup; no real D2PT refresh or deployment
-   has occurred. The API reads files when `DOTAMIND_DATA_DIR` is configured and
-   Redis when the data directory is unset and Redis is configured; with neither
-   store the tool is absent. The existing timer still invokes the Redis command.
+   file publication and cancellation cleanup. WSL published data for 127 heroes
+   with 763 requests and no guide fetch failures. The API reads files when
+   `DOTAMIND_DATA_DIR` is configured and Redis when the data directory is unset
+   and Redis is configured; with neither
+   store the tool is absent. The old WSL Redis timer is disabled.
    Do not install both commands as daily jobs.
 6. **Implemented:** add a loader that checks the current pointer by
    default every 30 seconds, validates changed snapshots in the background, and
@@ -171,49 +173,61 @@ is:
    coordinator. Both branches share the same session and merge before the
    original five-file bundle is validated. Image CDN downloads are outside the
    Datafeed concurrency bound.
-10. **Implemented for Catalog only, not run:** expose
+10. **Implemented for Catalog only; WSL check run:** expose
     `python -m app.vnext.data_updates refresh-catalog --data-dir ... --workers 8`
     with `--force` for same-patch rebuilds. It validates the current snapshot,
     checks Valve's latest patch, and either skips or builds and atomically
     publishes the same five-file Catalog through `CatalogSnapshotStore`. Invalid
     local pointers or snapshots can be replaced by a successful update; storage
-    errors stop the run. This does not update patch notes, images, or guides, and
-    has not made a real Valve request.
-11. **Implemented, not run:** expose
+    errors stop the run. WSL checked Valve and skipped full fetching because
+    `7.41f` matched the current Catalog. This does not update patch notes, images,
+    or guides.
+11. **Implemented and run in WSL:** expose
     `python -m app.vnext.data_updates refresh-patches --data-dir ...` to check and
     atomically save the latest patch's legacy record under an independent
     patch-number filename. Existing valid files skip unless forced; missing or
     invalid current files can be repaired. The content SHA-256 is separate from
-    patch number and Catalog revision. This does not backfill history or fetch
-    historical entity attributes, and has not made a real Valve request.
-12. **Implemented, not run:** expose
+    patch number and Catalog revision. The WSL run wrote 100 changes for `7.41f`.
+    This does not backfill history or fetch historical entity attributes.
+12. **Implemented and run in WSL:** expose
     `python -m app.vnext.data_updates refresh-images --data-dir ... --workers 8`
     with `--force`. It reads one current validated Catalog snapshot, stores raw
     PNGs by SHA-256, and atomically publishes a manifest while retaining old
-    entries on download failures. It has offline fake-client acceptance only and
-    has not downloaded from the CDN. API reads the configured manifest per answer
-    match and serves retained content-hash assets; when data directory is unset,
+    entries on download failures. The WSL run downloaded 1,338 of 1,488 targets;
+    150 ability images returned `download_failed`. API reads the configured
+    manifest per answer match and serves retained content-hash assets; when data directory is unset,
     bundled assets remain in use.
-13. **Implemented, not run:** expose
+13. **Implemented and run in WSL:** expose
     `python -m app.vnext.data_updates refresh-all` with `--workers 8` and
     `--image-workers 8`. Catalog and patch records share one bounded Datafeed
     session and run with the existing serial guide refresher; images run after a
     successful Catalog update or normal skip. Both update locks are held through
     cancellation cleanup, failures are isolated and summarized by module, and
-    guide refresh is not repeated through a nested CLI. No real refresh has run.
-14. Connect the persistent data volume and one daily 03:00 Asia/Shanghai schedule.
-15. Deploy and verify persistent reads, API startup from that directory, and the
-    scheduled update path.
+    guide refresh is not repeated through a nested CLI. WSL's first run was
+    partial due to the 150 optional ability-image failures; Catalog full fetching
+    was skipped because the patch matched.
+14. **Implemented configuration; WSL active, production pending:** declare a project-scoped
+    `shared-data` volume and one-shot maintenance updater in WSL and production
+    Compose, add an opt-in read-only API overlay, and provide a daily 03:00
+    Asia/Shanghai systemd template. The updater and API use the same image; the
+    updater writes and the API reads. WSL uses the overlay and its timer is
+    enabled; the production host has not activated these files.
+15. **Pending for production:** initialize the production data root, decide and
+    verify any Redis guide migration, switch the production API to the overlay,
+    and verify its scheduled update path. The first WSL timer firing is not yet
+    observed.
 
 The five-file catalog store and loader, configured API lifecycle and catalog-name
 consumers, patch-gated Catalog refresh, independent latest patch-record refresh,
 file-backed guide reads, guide import, file-backed guide refresh entrypoint,
 persistent image serving, and unified manual refresh command are implemented.
-Real Catalog initialization, Catalog refresh, patch refresh, image download, guide
-migration, guide refresh, and unified refresh have not been run. The existing timer
-still uses Redis. Patch records are independent of `refresh-catalog`; image URLs
-use content hashes independent of Catalog revision and patch. The unified daily
-schedule, persistent container mounts, and deployment acceptance remain pending.
+WSL now has a fresh initialized Catalog, live patch and guide files, best-effort
+image assets, API reads across an API-only recreation, and an enabled daily timer.
+Catalog entity fetching skipped because the patch was unchanged; image refresh
+was partial. No Redis guide migration or scheduled timer firing has been observed.
+Production migration, mounts, and timer remain pending. Patch records are
+independent of `refresh-catalog`; image URLs use content hashes independent of
+Catalog revision and patch.
 Offline tests do not establish power-loss recovery.
 `game.detail` entity-name enrichment remains a later independent item after this
 data-update migration.
@@ -251,11 +265,11 @@ Redis using the API container's `DOTAMIND_REDIS_URL`; the file-backed
 `data_updates refresh-guides` command reuses the refresher with
 `FileHeroGuideCache` and does not need Redis or catalog initialization. The file
 command takes the data-root update lock followed by the existing container-local
-refresh lock. Offline fake-client tests cover the new entrypoint, but it has not
-been deployed or run against D2PT. The repository systemd timer still invokes the
-legacy Redis command; do not install both commands as daily jobs. Host
-installation and timer state are environment-specific. The local WSL setup has
-its own WSL-path unit and a historical enabled-timer record. Neither CLI is a
+refresh lock. Offline fake-client tests cover the entrypoint, which completed a
+real D2PT run on WSL. The old Redis timer is disabled on WSL; the unified WSL timer
+is enabled. Do not install both commands as daily jobs. Host installation and
+timer state are environment-specific. The local WSL setup has its own WSL-path
+unit and active unified timer. Neither CLI is a
 public endpoint or model-facing tool, and application startup is not wired to
 refresh. A historical local full refresh and its limits are recorded below and in
 [`reference/hero-guide-operations.md`](reference/hero-guide-operations.md).
@@ -294,12 +308,13 @@ Implementation and acceptance proceed in this order:
    and timer state are environment-specific; the local WSL setup has a separate
    WSL-path unit and a recorded enabled timer. The lock remains container-local,
    and neither application startup nor a `hero.guide` query refreshes data.
-8. **Implemented, not run:** add the `data_updates refresh-guides` CLI over the
+8. **Implemented and run in WSL:** add the `data_updates refresh-guides` CLI over the
    same serial refresher and file cache; protect the data-root and legacy refresh
    locks, output a safe report, and wait for worker I/O on cancellation. The API
-   reads files when `DOTAMIND_DATA_DIR` is configured; the timer remains on Redis.
-9. **Historical deployment evidence:** a local full refresh, successful Sven and
-   Anti-Mage Service queries, and an enabled WSL timer are recorded in
+   reads files when `DOTAMIND_DATA_DIR` is configured; the unified WSL timer uses
+   `refresh-all`. The first scheduled firing remains unobserved.
+9. **WSL deployment evidence:** a full file refresh and successful Sven and
+   Anti-Mage Service queries after API-only recreation are recorded in
    [`EVALS.md`](EVALS.md) and
    [`reference/hero-guide-operations.md`](reference/hero-guide-operations.md).
    They do not establish successful timer firing, shared-file migration, API hot

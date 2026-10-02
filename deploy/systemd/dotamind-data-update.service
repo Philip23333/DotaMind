@@ -1,0 +1,12 @@
+[Unit]
+Description=DotaMind persistent data refresh
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/dotamind
+ExecStart=/usr/bin/docker compose -f compose.prod.yml -f compose.data.yml run --rm --no-deps -T data-updater refresh-all --workers 8 --image-workers 8
+TimeoutStartSec=infinity
+SuccessExitStatus=3

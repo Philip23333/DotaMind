@@ -1,3 +1,5 @@
+x-api-image: &api-image dotamind-api:local
+
 name: dotamind
 
 services:
@@ -29,6 +31,7 @@ services:
     restart: unless-stopped
 
   api:
+    image: *api-image
     build:
       context: ./apps/api
     env_file:
@@ -39,6 +42,12 @@ services:
       DOTAMIND_REDIS_URL: redis://redis:6379/0
       DOTAMIND_SESSION_STORE_BACKEND: redis
       DOTAMIND_CORS_ORIGINS: '["http://localhost:${DOTAMIND_WEB_PORT:-3000}","http://127.0.0.1:${DOTAMIND_WEB_PORT:-3000}"]'
+      HTTP_PROXY: http://172.29.112.1:10808
+      HTTPS_PROXY: http://172.29.112.1:10808
+      NO_PROXY: localhost,127.0.0.1,::1,postgres,redis,api,chat,nginx
+      http_proxy: http://172.29.112.1:10808
+      https_proxy: http://172.29.112.1:10808
+      no_proxy: localhost,127.0.0.1,::1,postgres,redis,api,chat,nginx
     ports:
       - "127.0.0.1:${DOTAMIND_API_PORT:-8001}:8001"
     depends_on:
@@ -53,6 +62,26 @@ services:
       retries: 12
       start_period: 30s
     restart: unless-stopped
+
+  data-updater:
+    image: *api-image
+    profiles: ["maintenance"]
+    entrypoint: ["python", "-m", "app.vnext.data_updates"]
+    command: ["--help"]
+    restart: "no"
+    env_file:
+      - .env
+    environment:
+      DOTAMIND_REDIS_URL: redis://redis:6379/0
+      DOTAMIND_DATA_DIR: /var/lib/dotamind/data
+      HTTP_PROXY: http://172.29.112.1:10808
+      HTTPS_PROXY: http://172.29.112.1:10808
+      NO_PROXY: localhost,127.0.0.1,::1,postgres,redis,api,chat,nginx
+      http_proxy: http://172.29.112.1:10808
+      https_proxy: http://172.29.112.1:10808
+      no_proxy: localhost,127.0.0.1,::1,postgres,redis,api,chat,nginx
+    volumes:
+      - shared-data:/var/lib/dotamind/data
 
   chat:
     build:
@@ -91,3 +120,4 @@ services:
 volumes:
   postgres-data:
   redis-data:
+  shared-data:
