@@ -241,6 +241,27 @@ data-update migration.
 4. Register the capability only after its focused acceptance passes.
 5. Remove transitional code once the replacement is accepted.
 
+## 首页与快捷查询优化（已确认设计，待实现）
+
+按 [PRODUCT.md](PRODUCT.md) 的首页交互契约实施；赛事候选和缓存由
+[DATA.md](DATA.md) 定义，验收清单见 [EVALS.md](EVALS.md)。本阶段不新增独立
+方案文档，不改变工具、Artifact 或聊天传输契约。
+
+1. **赛事数据与缓存**：经普通后端接口和现有 Provider 层提供 Series 候选，
+   实现排序、去重、冠军解析、十分钟共享缓存、并发刷新合并，以及旧数据保留。
+   出口：缓存、候选排序、冠军缺失和请求失败均通过确定性验收；接口及缓存
+   介质由实现时核实，不在本路线图预设。
+2. **赛事展示与点击发送**：替换硬编码 TI 宣传，显示最近三条并提供最多十条
+   展开列表；点击发送带 Series 名称、类型和 ID 的普通文本。出口：首页和
+   展开层候选一致，点击可在既有聊天中准确消歧；加载、空和失败不阻塞聊天。
+3. **英雄、玩家和单局面板**：加入英雄名称与位置多选、Steam32 ID、比赛 ID
+   输入及基础校验。填入问题替换草稿并支持撤销或明确确认，不自动发送；Enter
+   只填入。出口：字段、生成文本、草稿恢复、面板状态和生成期间行为通过验收。
+4. **首页布局与整体交互**：调整品牌、赛事、四入口和输入框布局；保留聊天后
+   的快捷入口，完成小屏、键盘、触屏、Trace 调试入口及加载／空／失败状态验收。
+   出口：四条查询路径都进入现有 AssistantTransport 聊天链路；点击赛事消歧
+   与自由文本赛事理解分别验收。
+
 ## Hero guides (Redis/file query, both refresh commands, and file/import components implemented; operational migration pending)
 
 The internal query DTOs and two fixed raw Sven fixtures are implemented and

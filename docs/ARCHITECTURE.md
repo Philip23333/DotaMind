@@ -505,6 +505,30 @@ contract, ephemeral activity, canonical
 history/metadata boundary, and phase acceptance are owned by
 [`agent/product_run_state.md`](agent/product_run_state.md).
 
+## 首页赛事与快捷查询（已确认设计，待实现）
+
+首页赛事列表走普通后端数据接口，不调用模型。后端查询服务通过现有
+PandaScore Provider 层获取 Series 及必要的冠军身份事实，并将排序后的候选
+和刷新元数据放在共享缓存中；首页读取同一份最多十条候选，展示前三条。
+缓存和 Provider 的具体实现细节由代码阶段核实，本设计不固定缓存介质、
+HTTP 路径或冠军查询端点。
+
+快捷面板只组织用户输入：赛事点击发送包含 Series 名称、类型和 ID 的普通
+文本；英雄攻略、玩家战绩、单局解析将生成的问题填入现有聊天草稿。之后
+全部进入 AssistantTransport 和现有 Agent Runtime。前端做必要的空值及格式
+提示，现有工具继续负责其既有参数校验。
+
+```text
+首页 -> 普通后端接口 -> Series 候选服务 <-> 共享缓存
+                                |
+                                +-> 现有 PandaScore Provider 层
+
+快捷面板 -> 普通聊天文本／草稿 -> AssistantTransport -> Agent Runtime -> Agent
+```
+
+首页列表不触发模型调用。快捷入口不预排工具调用、不附加结构化消息对象，
+也不创建第二套聊天协议；它不改变工具注册、Artifact 或 Run State 契约。
+
 ## Migration order
 
 1. Keep the Artifact baseline green.

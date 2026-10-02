@@ -72,6 +72,29 @@ and Redis-import commands, but neither initialization nor migration has been run
 against an operational data root or Redis cache. The conceptual data areas are
 `catalog`, `patches`, `images`, and `guides`.
 
+## 首页近期赛事候选（已确认设计，待实现）
+
+首页和“赛事查询”展开层共用一组最多十条的 Series 候选。候选保留足以展示
+和继续查询的来源事实：Series ID、Series 身份、名称、状态、开始／结束时间，
+以及可用时的冠军战队名称。首页使用候选顺序中的前三条。赛事仍是 Series
+届次，不转换成 Tournament 或 Match。
+
+候选按状态分组排序：进行中的 Series 按开始时间倒序优先；数量不足十条时，
+使用已结束 Series 按结束时间倒序补齐。按 Series ID 去重。相同状态内，缺少
+相应排序日期的记录排在有日期的记录之后；数据不足十条时返回实际数量，不
+填充虚构记录。
+
+冠军只从明确的 Series 获胜对象解析。只有获胜对象可以确认为战队且战队名称
+解析成功时，候选才包含冠军名称；不能从阶段胜者、赛事名称或模型常识推断。
+未结束、获胜对象缺失或名称无法解析时不显示冠军。
+
+候选使用十分钟共享缓存和按需刷新，并发刷新请求合并。已有成功缓存先用于
+响应；刷新失败保留上次成功候选，不覆盖为失败空列表。成功获取时间与最新
+刷新尝试状态分别记录，以便区分“上次数据何时成功获取”和“最近刷新是否
+失败”。成功取得空列表表示有效空数据；请求失败表示数据不可用，不能互相
+替代。没有成功缓存且刷新失败时也必须报告不可用状态。缓存介质、接口路径
+和冠军查询端点留待实现阶段根据现有代码及上游契约确定。
+
 ### Catalog snapshot publication
 
 The entity catalog keeps its existing five JSON documents and their field
