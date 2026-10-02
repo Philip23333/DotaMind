@@ -203,6 +203,9 @@ class HomepageRecentSeriesService:
         self._cache = cache
         self._now = now or _utc_now
         self._refresh_lock = asyncio.Lock()
+        self._refresh_task: asyncio.Task[RecentSeriesResponse] | None = None
+        self._local_failure: tuple[datetime, str] | None = None
+        self._closed = False
 
     async def get_recent_series(self) -> RecentSeriesResponse:
         requested_at = _ensure_aware(self._now())
@@ -211,59 +214,144 @@ class HomepageRecentSeriesService:
             return _response(entry, status="fresh")
 
         async with self._refresh_lock:
+            # Recheck the shared snapshot after acquiring the short state lock.
+            # A refresh may have completed since the first cache read.
             entry = await self._cache.get()
             now = _ensure_aware(self._now())
             if _is_fresh(entry.snapshot, now):
                 return _response(entry, status="fresh")
-            if entry.last_attempt_at is not None and entry.last_attempt_at >= requested_at:
-                return _response(
+            if self._closed:
+                return self._entry_response(
                     entry,
                     status="stale" if entry.snapshot is not None else "unavailable",
                 )
 
-            try:
-                items = await self._load_candidates()
-            except _ProviderError as exc:
-                error_code = _provider_error_code(exc)
-                attempted_at = _ensure_aware(self._now())
-                logger.warning("Homepage Series refresh failed: code=%s", error_code)
-                try:
-                    await self._cache.record_failure(
-                        attempted_at=attempted_at,
-                        error_code=error_code,
-                    )
-                except RecentSeriesCacheUnavailableError:
-                    if entry.snapshot is None:
-                        return _unavailable(attempted_at, error_code)
-                    return _response(
-                        entry,
-                        status="stale",
-                        last_attempt_at=attempted_at,
-                        last_error=error_code,
-                    )
-                failed_entry = await self._cache.get()
-                if failed_entry.snapshot is None:
-                    return _response(failed_entry, status="unavailable")
-                return _response(failed_entry, status="stale")
-            retrieved_at = _ensure_aware(self._now())
-            snapshot = RecentSeriesSnapshot(items=items, retrieved_at=retrieved_at)
-            try:
-                await self._cache.publish(snapshot, attempted_at=retrieved_at)
-            except RecentSeriesCacheUnavailableError:
-                if entry.snapshot is None:
-                    return _unavailable(retrieved_at, "cache_unavailable")
-                return _response(
+            task = self._refresh_task
+            if task is not None and task.done():
+                self._refresh_task = None
+                task = None
+            if task is None and _failure_cooldown_active(
+                entry,
+                now,
+                local_failure=self._local_failure,
+            ):
+                return self._entry_response(
                     entry,
-                    status="stale",
-                    last_attempt_at=retrieved_at,
-                    last_error="cache_unavailable",
+                    status="stale" if entry.snapshot is not None else "unavailable",
                 )
+            if task is None:
+                task = asyncio.create_task(self._refresh(entry))
+                self._refresh_task = task
+                task.add_done_callback(self._consume_refresh_result)
+
+        if entry.snapshot is not None:
+            # Stale snapshots are useful immediately. The owned task continues
+            # in the background and later requests will observe its result.
+            return self._entry_response(entry, status="stale")
+
+        # Shield the shared cold-start refresh from cancellation of one request.
+        return await asyncio.shield(task)
+
+    async def aclose(self) -> None:
+        async with self._refresh_lock:
+            self._closed = True
+            task = self._refresh_task
+            if task is not None and not task.done():
+                task.cancel()
+        if task is not None:
+            await asyncio.gather(task, return_exceptions=True)
+
+    async def _refresh(self, previous_entry: RecentSeriesCacheEntry) -> RecentSeriesResponse:
+        current_task = asyncio.current_task()
+        try:
+            return await self._perform_refresh(previous_entry)
+        finally:
+            if self._refresh_task is current_task:
+                self._refresh_task = None
+
+    async def _perform_refresh(
+        self,
+        previous_entry: RecentSeriesCacheEntry,
+    ) -> RecentSeriesResponse:
+        try:
+            items = await self._load_candidates()
+        except _ProviderError as exc:
+            error_code = _provider_error_code(exc)
+            attempted_at = _ensure_aware(self._now())
+            logger.warning("Homepage Series refresh failed: code=%s", error_code)
+            try:
+                await self._cache.record_failure(
+                    attempted_at=attempted_at,
+                    error_code=error_code,
+                )
+            except RecentSeriesCacheUnavailableError:
+                self._local_failure = (attempted_at, error_code)
+                if previous_entry.snapshot is None:
+                    return _unavailable(attempted_at, error_code)
+                return _response(
+                    previous_entry,
+                    status="stale",
+                    last_attempt_at=attempted_at,
+                    last_error=error_code,
+                )
+            failed_entry = await self._cache.get()
+            if failed_entry.snapshot is None:
+                return _response(failed_entry, status="unavailable")
+            return _response(failed_entry, status="stale")
+
+        retrieved_at = _ensure_aware(self._now())
+        snapshot = RecentSeriesSnapshot(items=items, retrieved_at=retrieved_at)
+        try:
+            await self._cache.publish(snapshot, attempted_at=retrieved_at)
+        except RecentSeriesCacheUnavailableError:
+            self._local_failure = (retrieved_at, "cache_unavailable")
+            if previous_entry.snapshot is None:
+                return _unavailable(retrieved_at, "cache_unavailable")
             return _response(
-                RecentSeriesCacheEntry(
-                    snapshot=snapshot,
-                    last_attempt_at=retrieved_at,
-                ),
-                status="fresh",
+                previous_entry,
+                status="stale",
+                last_attempt_at=retrieved_at,
+                last_error="cache_unavailable",
+            )
+        self._local_failure = None
+        return _response(
+            RecentSeriesCacheEntry(
+                snapshot=snapshot,
+                last_attempt_at=retrieved_at,
+            ),
+            status="fresh",
+        )
+
+    def _entry_response(
+        self,
+        entry: RecentSeriesCacheEntry,
+        *,
+        status: Literal["fresh", "stale", "unavailable"],
+    ) -> RecentSeriesResponse:
+        local_failure = self._local_failure
+        if (
+            local_failure is not None
+            and (entry.last_attempt_at is None or local_failure[0] >= entry.last_attempt_at)
+        ):
+            return _response(
+                entry,
+                status=status,
+                last_attempt_at=local_failure[0],
+                last_error=local_failure[1],
+            )
+        return _response(entry, status=status)
+
+    @staticmethod
+    def _consume_refresh_result(task: asyncio.Task[RecentSeriesResponse]) -> None:
+        if task.cancelled():
+            return
+        error = task.exception()
+        if error is not None:
+            # Avoid leaking provider details and ensure background exceptions are
+            # always retrieved even when no cold-start request is awaiting them.
+            logger.error(
+                "Homepage Series refresh crashed: error_type=%s",
+                type(error).__name__,
             )
 
     async def _load_candidates(self) -> list[RecentSeriesCandidate]:
@@ -358,6 +446,22 @@ def _is_fresh(snapshot: RecentSeriesSnapshot | None, now: datetime) -> bool:
         return False
     age = (now - snapshot.retrieved_at).total_seconds()
     return age < _REFRESH_SECONDS
+
+
+def _failure_cooldown_active(
+    entry: RecentSeriesCacheEntry,
+    now: datetime,
+    *,
+    local_failure: tuple[datetime, str] | None,
+) -> bool:
+    failure_times = []
+    if entry.last_error is not None and entry.last_attempt_at is not None:
+        failure_times.append(entry.last_attempt_at)
+    if local_failure is not None and (
+        entry.last_attempt_at is None or local_failure[0] >= entry.last_attempt_at
+    ):
+        failure_times.append(local_failure[0])
+    return any((now - failed_at).total_seconds() < _REFRESH_SECONDS for failed_at in failure_times)
 
 
 def _response(

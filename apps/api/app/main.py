@@ -246,9 +246,9 @@ async def lifespan(app: FastAPI):
                 await run_manager.shutdown()
             if run_event_bus is not None:
                 await run_event_bus.aclose()
+            await vnext_services.aclose()
             if vnext_redis is not None:
                 await vnext_redis.aclose()
-            await vnext_services.aclose()
             await store.aclose()
             await close_database(database)
     finally:

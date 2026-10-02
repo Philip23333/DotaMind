@@ -391,7 +391,8 @@ class VNextServices:
     tavily_web_search: TavilyWebSearch | None = None
 
     async def aclose(self) -> None:
-        return None
+        if self.homepage_recent_series is not None:
+            await self.homepage_recent_series.aclose()
 
 
 def build_vnext_services(

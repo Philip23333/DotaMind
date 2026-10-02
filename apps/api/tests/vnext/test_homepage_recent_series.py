@@ -2,15 +2,18 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 import httpx
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from redis.exceptions import RedisError
 
 from app.api.v1.home_routes import router
 from app.vnext.capabilities.esports.dtos import TeamDTO
 from app.vnext.capabilities.esports.team import TeamSearchResult
-from app.vnext.composition import VNextSettings, build_vnext_services
+from app.vnext.composition import VNextServices, VNextSettings, build_vnext_services
 from app.vnext.homepage.recent_series import (
     HomepageRecentSeriesService,
     RecentSeriesCacheEntry,
@@ -29,11 +32,28 @@ class FakeRedis:
     def __init__(self) -> None:
         self.hashes: dict[str, dict[str, str]] = {}
         self.hset_calls: list[tuple[str, dict[str, str]]] = []
+        self.read_count = 0
+        self.read_events: dict[int, asyncio.Event] = {}
+        self.hset_failures_remaining = 0
+
+    def watch_reads(self, target: int) -> asyncio.Event:
+        event = asyncio.Event()
+        if self.read_count >= target:
+            event.set()
+        self.read_events[target] = event
+        return event
 
     async def hgetall(self, key: str) -> dict[str, str]:
+        self.read_count += 1
+        for target, event in self.read_events.items():
+            if self.read_count >= target:
+                event.set()
         return dict(self.hashes.get(key, {}))
 
     async def hset(self, key: str, *, mapping: dict[str, str]) -> int:
+        if self.hset_failures_remaining:
+            self.hset_failures_remaining -= 1
+            raise RedisError("test Redis write failure")
         self.hset_calls.append((key, dict(mapping)))
         target = self.hashes.setdefault(key, {})
         added = sum(field not in target for field in mapping)
@@ -46,17 +66,32 @@ class FakeProvider:
         self.results = {"running": running, "past": past}
         self.calls: list[tuple[str, int, int]] = []
         self.fail_with: Exception | None = None
+        self.started = asyncio.Event()
+        self.release: asyncio.Event | None = None
+        self.cleaned = asyncio.Event()
+        self.active_calls = 0
+        self.max_active_calls = 0
 
     async def read_lifecycle(self, *, lifecycle: str, page: int, limit: int):
         self.calls.append((lifecycle, page, limit))
-        await asyncio.sleep(0)
-        if self.fail_with is not None:
-            raise self.fail_with
-        return SeriesLifecycleResult(
-            items=self.results[lifecycle],
-            page=page,
-            limit=limit,
-        )
+        self.active_calls += 1
+        self.max_active_calls = max(self.max_active_calls, self.active_calls)
+        self.started.set()
+        try:
+            if self.release is None:
+                await asyncio.sleep(0)
+            else:
+                await self.release.wait()
+            if self.fail_with is not None:
+                raise self.fail_with
+            return SeriesLifecycleResult(
+                items=self.results[lifecycle],
+                page=page,
+                limit=limit,
+            )
+        finally:
+            self.active_calls -= 1
+            self.cleaned.set()
 
 
 class Clock:
@@ -187,22 +222,31 @@ def test_valid_empty_data_is_cached_and_distinct_from_source_failure() -> None:
 
 
 def test_stale_success_is_returned_after_provider_failure() -> None:
-    provider = FakeProvider([_series(1)], [])
-    redis = FakeRedis()
-    clock = Clock()
-    service = _service(provider, RedisRecentSeriesCache(redis), clock=clock)
+    async def run() -> None:
+        provider = FakeProvider([_series(1)], [])
+        redis = FakeRedis()
+        clock = Clock()
+        service = _service(provider, RedisRecentSeriesCache(redis), clock=clock)
 
-    first = asyncio.run(service.get_recent_series())
-    clock.value += timedelta(seconds=601)
-    provider.fail_with = httpx.ConnectError("private provider detail")
-    stale = asyncio.run(service.get_recent_series())
+        first = await service.get_recent_series()
+        clock.value += timedelta(seconds=601)
+        provider.fail_with = httpx.ConnectError("private provider detail")
+        stale = await service.get_recent_series()
+        refresh_task = service._refresh_task
+        assert refresh_task is not None
+        await refresh_task
+        after_failure = await service.get_recent_series()
 
-    assert first.status == "fresh"
-    assert stale.status == "stale"
-    assert [item.series_id for item in stale.items] == [1]
-    assert stale.retrieved_at == first.retrieved_at
-    assert stale.last_error == "transport_error"
-    assert redis.hashes["dotamind:vnext:homepage:recent-series:v1"]["snapshot"]
+        assert first.status == "fresh"
+        assert stale.status == "stale"
+        assert [item.series_id for item in stale.items] == [1]
+        assert stale.retrieved_at == first.retrieved_at
+        assert stale.last_error is None
+        assert after_failure.last_error == "transport_error"
+        assert redis.hashes["dotamind:vnext:homepage:recent-series:v1"]["snapshot"]
+        await service.aclose()
+
+    asyncio.run(run())
 
 
 def test_no_previous_snapshot_reports_provider_failure_as_unavailable() -> None:
@@ -253,6 +297,302 @@ def test_overlapping_requests_share_one_refresh() -> None:
 
     assert first.status == second.status == "fresh"
     assert len(provider.calls) == 2
+    assert provider.max_active_calls == 1
+
+
+def test_expired_snapshot_returns_immediately_while_refresh_is_blocked() -> None:
+    async def run() -> None:
+        redis = FakeRedis()
+        cache = RedisRecentSeriesCache(redis)
+        old_snapshot = RecentSeriesSnapshot(
+            items=[
+                {
+                    "series_id": 1,
+                    "name": "Old Series",
+                    "lifecycle": "running",
+                }
+            ],
+            retrieved_at=NOW - timedelta(seconds=601),
+        )
+        await cache.publish(old_snapshot, attempted_at=old_snapshot.retrieved_at)
+        provider = FakeProvider([_series(2)], [])
+        provider.release = asyncio.Event()
+        clock = Clock()
+        service = _service(provider, cache, clock=clock)
+
+        response = await service.get_recent_series()
+        await provider.started.wait()
+
+        assert response.status == "stale"
+        assert [item.series_id for item in response.items] == [1]
+        assert not provider.release.is_set()
+        refresh_task = service._refresh_task
+        assert refresh_task is not None and not refresh_task.done()
+
+        provider.release.set()
+        await refresh_task
+        refreshed = await service.get_recent_series()
+        assert refreshed.status == "fresh"
+        assert [item.series_id for item in refreshed.items] == [2]
+        await service.aclose()
+
+    asyncio.run(run())
+
+
+def test_expired_successful_empty_snapshot_uses_stale_refresh_path() -> None:
+    async def run() -> None:
+        cache = RedisRecentSeriesCache(FakeRedis())
+        snapshot = RecentSeriesSnapshot(items=[], retrieved_at=NOW - timedelta(seconds=601))
+        await cache.publish(snapshot, attempted_at=snapshot.retrieved_at)
+        provider = FakeProvider([], [])
+        provider.release = asyncio.Event()
+        service = _service(provider, cache, clock=Clock())
+
+        stale = await service.get_recent_series()
+        await provider.started.wait()
+        assert stale.status == "stale"
+        assert stale.items == []
+        refresh_task = service._refresh_task
+        assert refresh_task is not None and not refresh_task.done()
+
+        provider.release.set()
+        await refresh_task
+        fresh = await service.get_recent_series()
+        assert fresh.status == "fresh"
+        assert fresh.items == []
+        await service.aclose()
+
+    asyncio.run(run())
+
+
+def test_concurrent_stale_requests_share_one_background_refresh() -> None:
+    async def run() -> None:
+        cache = RedisRecentSeriesCache(FakeRedis())
+        snapshot = RecentSeriesSnapshot(
+            items=[{"series_id": 1, "name": "Old", "lifecycle": "running"}],
+            retrieved_at=NOW - timedelta(seconds=601),
+        )
+        await cache.publish(snapshot, attempted_at=snapshot.retrieved_at)
+        provider = FakeProvider([_series(2)], [])
+        provider.release = asyncio.Event()
+        service = _service(provider, cache, clock=Clock())
+
+        responses = await asyncio.gather(
+            *(service.get_recent_series() for _ in range(5))
+        )
+        await provider.started.wait()
+
+        assert all(response.status == "stale" for response in responses)
+        assert all(response.items[0].series_id == 1 for response in responses)
+        assert len(provider.calls) == 1
+        assert provider.max_active_calls == 1
+        refresh_task = service._refresh_task
+        assert refresh_task is not None
+        provider.release.set()
+        await refresh_task
+        assert len(provider.calls) == 2
+        await service.aclose()
+
+    asyncio.run(run())
+
+
+def test_cancelling_one_cold_cache_waiter_does_not_cancel_shared_refresh() -> None:
+    async def run() -> None:
+        redis = FakeRedis()
+        service_cache = RedisRecentSeriesCache(redis)
+        provider = FakeProvider([_series(4)], [])
+        provider.release = asyncio.Event()
+        service = _service(provider, service_cache, clock=Clock())
+
+        first_waiter = asyncio.create_task(service.get_recent_series())
+        await provider.started.wait()
+        shared_refresh = service._refresh_task
+        assert shared_refresh is not None
+
+        fourth_cache_read = redis.watch_reads(4)
+        second_waiter = asyncio.create_task(service.get_recent_series())
+        await fourth_cache_read.wait()
+        first_waiter.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await first_waiter
+        assert not shared_refresh.cancelled()
+        assert not shared_refresh.done()
+
+        provider.release.set()
+        response = await second_waiter
+        assert response.status == "fresh"
+        assert [item.series_id for item in response.items] == [4]
+        assert len(provider.calls) == 2
+        assert provider.max_active_calls == 1
+        await service.aclose()
+
+    asyncio.run(run())
+
+
+def test_failed_refresh_cooldown_survives_service_reconstruction() -> None:
+    async def run() -> None:
+        cache = RedisRecentSeriesCache(FakeRedis())
+        snapshot = RecentSeriesSnapshot(
+            items=[{"series_id": 1, "name": "Old", "lifecycle": "running"}],
+            retrieved_at=NOW - timedelta(seconds=601),
+        )
+        await cache.publish(snapshot, attempted_at=snapshot.retrieved_at)
+        clock = Clock()
+        first_provider = FakeProvider([], [])
+        first_provider.fail_with = httpx.ConnectError("private provider detail")
+        first_service = _service(first_provider, cache, clock=clock)
+
+        first_response = await first_service.get_recent_series()
+        failed_task = first_service._refresh_task
+        assert first_response.status == "stale"
+        assert failed_task is not None
+        await failed_task
+        assert first_provider.calls == [("running", 1, 100)]
+        assert (await cache.get()).last_error == "transport_error"
+
+        clock.value += timedelta(seconds=599)
+        still_throttled = await first_service.get_recent_series()
+        assert still_throttled.status == "stale"
+        assert first_provider.calls == [("running", 1, 100)]
+
+        second_provider = FakeProvider([], [])
+        second_provider.fail_with = httpx.ConnectError("private provider detail")
+        second_service = _service(second_provider, cache, clock=clock)
+        reconstructed_still_throttled = await second_service.get_recent_series()
+        assert reconstructed_still_throttled.status == "stale"
+        assert second_provider.calls == []
+
+        clock.value += timedelta(seconds=1)
+        retry_response = await second_service.get_recent_series()
+        retry_task = second_service._refresh_task
+        assert retry_response.status == "stale"
+        assert retry_task is not None
+        await retry_task
+        assert second_provider.calls == [("running", 1, 100)]
+        await first_service.aclose()
+        await second_service.aclose()
+
+    asyncio.run(run())
+
+
+def test_cold_failure_returns_unavailable_and_retries_at_600_seconds() -> None:
+    async def run() -> None:
+        provider = FakeProvider([], [])
+        provider.fail_with = httpx.ConnectError("private provider detail")
+        clock = Clock()
+        service = _service(provider, RedisRecentSeriesCache(FakeRedis()), clock=clock)
+
+        first = await service.get_recent_series()
+        assert first.status == "unavailable"
+        assert first.last_error == "transport_error"
+        assert provider.calls == [("running", 1, 100)]
+
+        clock.value += timedelta(seconds=599)
+        throttled = await service.get_recent_series()
+        assert throttled.status == "unavailable"
+        assert provider.calls == [("running", 1, 100)]
+
+        clock.value += timedelta(seconds=1)
+        retried = await service.get_recent_series()
+        assert retried.status == "unavailable"
+        assert len(provider.calls) == 2
+        await service.aclose()
+
+    asyncio.run(run())
+
+
+def test_local_failure_time_throttles_when_redis_failure_write_fails() -> None:
+    async def run() -> None:
+        redis = FakeRedis()
+        cache = RedisRecentSeriesCache(redis)
+        snapshot = RecentSeriesSnapshot(
+            items=[{"series_id": 1, "name": "Old", "lifecycle": "running"}],
+            retrieved_at=NOW - timedelta(seconds=601),
+        )
+        await cache.publish(snapshot, attempted_at=snapshot.retrieved_at)
+        redis.hset_failures_remaining = 1
+        clock = Clock()
+        provider = FakeProvider([], [])
+        provider.fail_with = httpx.ConnectError("private provider detail")
+        service = _service(provider, cache, clock=clock)
+
+        response = await service.get_recent_series()
+        failed_task = service._refresh_task
+        assert response.status == "stale"
+        assert failed_task is not None
+        await failed_task
+        entry = await cache.get()
+        assert entry.last_error is None
+        assert service._local_failure == (NOW, "transport_error")
+
+        clock.value += timedelta(seconds=599)
+        throttled = await service.get_recent_series()
+        assert throttled.status == "stale"
+        assert throttled.last_error == "transport_error"
+        assert provider.calls == [("running", 1, 100)]
+
+        clock.value += timedelta(seconds=1)
+        retry = await service.get_recent_series()
+        retry_task = service._refresh_task
+        assert retry.status == "stale"
+        assert retry_task is not None
+        await retry_task
+        assert provider.calls == [("running", 1, 100), ("running", 1, 100)]
+        await service.aclose()
+
+    asyncio.run(run())
+
+
+def test_aclose_cancels_refresh_preserves_cache_and_prevents_new_tasks() -> None:
+    async def run() -> None:
+        redis = FakeRedis()
+        cache = RedisRecentSeriesCache(redis)
+        snapshot = RecentSeriesSnapshot(
+            items=[{"series_id": 1, "name": "Old", "lifecycle": "running"}],
+            retrieved_at=NOW - timedelta(seconds=601),
+        )
+        await cache.publish(snapshot, attempted_at=snapshot.retrieved_at)
+        provider = FakeProvider([_series(2)], [])
+        provider.release = asyncio.Event()
+        clock = Clock()
+        service = _service(provider, cache, clock=clock)
+
+        first = await service.get_recent_series()
+        await provider.started.wait()
+        refresh_task = service._refresh_task
+        assert refresh_task is not None and not refresh_task.done()
+        await service.aclose()
+        await provider.cleaned.wait()
+        await asyncio.gather(refresh_task, return_exceptions=True)
+        await service.aclose()
+
+        stored = await cache.get()
+        assert stored.snapshot == snapshot
+        assert stored.last_error is None
+        assert len(redis.hset_calls) == 1
+        assert service._refresh_task is None
+        assert first.status == "stale"
+
+        after_close = await service.get_recent_series()
+        assert after_close.status == "stale"
+        assert [item.series_id for item in after_close.items] == [1]
+        assert provider.calls == [("running", 1, 100)]
+
+    asyncio.run(run())
+
+
+def test_unexpected_refresh_errors_are_not_reported_as_empty_provider_results() -> None:
+    async def run() -> None:
+        provider = FakeProvider([], [])
+        provider.fail_with = RuntimeError("private implementation detail")
+        service = _service(provider, RedisRecentSeriesCache(FakeRedis()), clock=Clock())
+
+        with pytest.raises(RuntimeError, match="private implementation detail"):
+            await service.get_recent_series()
+        assert provider.calls == [("running", 1, 100)]
+        await service.aclose()
+
+    asyncio.run(run())
 
 
 def test_redis_cache_round_trip_and_failure_keep_successful_snapshot() -> None:
@@ -301,6 +641,13 @@ def test_home_route_returns_candidates_and_is_unavailable_without_service() -> N
 
     assert response.status_code == 200
     assert response.json()["status"] == "fresh"
+    assert set(response.json()) == {
+        "status",
+        "items",
+        "retrieved_at",
+        "last_attempt_at",
+        "last_error",
+    }
     assert response.json()["items"][0]["series_id"] == 4
     assert response.json()["items"][0]["name"] == "Series Four"
 
@@ -329,3 +676,123 @@ def test_composition_registers_homepage_read_service_only_with_shared_cache() ->
 
     assert without_cache.homepage_recent_series is None
     assert isinstance(with_cache.homepage_recent_series, HomepageRecentSeriesService)
+
+
+def test_vnext_services_close_homepage_service_before_shared_redis(monkeypatch) -> None:
+    from redis import asyncio as redis_asyncio
+
+    from app import main
+
+    events: list[str] = []
+
+    class Closeable:
+        async def aclose(self) -> None:
+            events.append("homepage")
+
+    class FakeRedisClient:
+        async def ping(self) -> bool:
+            return True
+
+        async def aclose(self) -> None:
+            events.append("redis")
+
+    class FakeStore:
+        async def aclose(self) -> None:
+            events.append("store")
+
+    class FakeDatabase:
+        engine = object()
+        session_factory = object()
+
+    class FakeEventBus:
+        def __init__(self, **_kwargs) -> None:
+            pass
+
+        async def ping(self) -> bool:
+            return True
+
+        async def aclose(self) -> None:
+            events.append("event_bus")
+
+        async def subscribe_cancellations(self, _run_id):
+            return
+
+    class FakeManager:
+        def __init__(self, **_kwargs) -> None:
+            pass
+
+        async def start(self) -> None:
+            pass
+
+        async def shutdown(self) -> None:
+            pass
+
+    class FakeSweeper:
+        def __init__(self, **_kwargs) -> None:
+            pass
+
+        async def start(self) -> None:
+            pass
+
+        async def stop(self) -> None:
+            pass
+
+    async def no_op_async(*_args, **_kwargs):
+        return None
+
+    async def run() -> None:
+        redis_client = FakeRedisClient()
+        services = VNextServices(homepage_recent_series=Closeable())
+        fake_settings = SimpleNamespace(
+            redis_url="redis://local-test",
+            database_url="postgresql://local-test",
+            max_concurrent_chat_runs=1,
+            run_heartbeat_seconds=1,
+            run_stale_seconds=1,
+            run_sweeper_interval_seconds=1,
+        )
+        conversation = SimpleNamespace(
+            recent_dialogue_max_chars=100,
+            history_lookup_max_turns=1,
+            history_lookup_max_chars=100,
+        )
+        monkeypatch.setattr(main, "settings", fake_settings)
+        monkeypatch.setattr(
+            main.VNextSettings,
+            "from_env",
+            classmethod(lambda cls: VNextSettings()),
+        )
+        monkeypatch.setattr(main, "get_policy", lambda: SimpleNamespace(conversation=conversation))
+        monkeypatch.setattr(main, "_require_trace_recording_redis", lambda *_args: None)
+        monkeypatch.setattr(main, "build_image_manifest_reader", lambda _data_dir: None)
+        monkeypatch.setattr(main, "create_database_resources", lambda _url: FakeDatabase())
+        monkeypatch.setattr(main, "ping_database", no_op_async)
+        monkeypatch.setattr(main, "build_session_store", lambda *_args: FakeStore())
+        monkeypatch.setattr(main, "PostgresChatRepository", lambda _factory: object())
+        monkeypatch.setattr(main, "PostgresChatRunRepository", lambda _factory: object())
+        monkeypatch.setattr(main, "RedisTraceStore", lambda *_args, **_kwargs: object())
+        monkeypatch.setattr(main, "_hero_guide_cache_for_data_dir", lambda *_args: None)
+        monkeypatch.setattr(main, "build_vnext_services", lambda *_args, **_kwargs: services)
+        monkeypatch.setattr(main, "initialize_vnext_services", no_op_async)
+        monkeypatch.setattr(main, "build_vnext_runtime", lambda **_kwargs: object())
+        monkeypatch.setattr(main, "ConversationContextBuilder", lambda: object())
+        monkeypatch.setattr(main, "DotaVisualEntityEnricher", lambda *_args: object())
+        monkeypatch.setattr(main, "VNextChatService", lambda *_args, **_kwargs: object())
+        monkeypatch.setattr(main, "ConversationMemoryService", lambda **_kwargs: object())
+        monkeypatch.setattr(main, "RedisRunEventBus", FakeEventBus)
+        monkeypatch.setattr(main, "BackgroundRunManager", FakeManager)
+        monkeypatch.setattr(main, "ChatRunExecutor", lambda **_kwargs: object())
+        monkeypatch.setattr(main, "ChatRunRuntime", lambda **_kwargs: object())
+        monkeypatch.setattr(main, "RunStaleSweeper", FakeSweeper)
+        monkeypatch.setattr(main, "close_database", no_op_async)
+        monkeypatch.setattr(redis_asyncio, "from_url", lambda *_args, **_kwargs: redis_client)
+
+        class FakeApp:
+            state = SimpleNamespace()
+
+        async with main.lifespan(FakeApp()):
+            pass
+
+        assert events.index("homepage") < events.index("redis")
+
+    asyncio.run(run())
