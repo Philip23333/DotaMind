@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Literal
 
 from app.vnext.capabilities.esports.dtos import (
     ResponseAnomaly,
@@ -18,6 +18,7 @@ from app.vnext.capabilities.esports.series import (
 )
 
 from .client import PandaScoreClient
+from .series_lifecycle import SeriesLifecycleItem, SeriesLifecycleResult
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +88,67 @@ class PandaScoreSeriesAdapter:
             items=items,
             page=query.page,
             limit=query.limit,
+            anomalies=anomalies,
+        )
+
+    async def list_by_lifecycle(
+        self,
+        *,
+        lifecycle: Literal["running", "past"],
+        page: int = 1,
+        limit: int = 100,
+    ) -> SeriesLifecycleResult:
+        if not isinstance(lifecycle, str) or lifecycle not in {"running", "past"}:
+            raise ValueError("lifecycle must be 'running' or 'past'")
+        if isinstance(page, bool) or not isinstance(page, int) or page < 1:
+            raise ValueError("page must be a positive integer")
+        if (
+            isinstance(limit, bool)
+            or not isinstance(limit, int)
+            or not 1 <= limit <= 100
+        ):
+            raise ValueError("limit must be an integer from 1 to 100")
+
+        path, sort_field = {
+            "running": ("/dota2/series/running", "-begin_at"),
+            "past": ("/dota2/series/past", "-end_at"),
+        }[lifecycle]
+        rows = await self.client.get_list(
+            path,
+            params={"page": page, "per_page": limit, "sort": sort_field},
+        )
+
+        items: list[SeriesLifecycleItem] = []
+        anomalies: list[ResponseAnomaly] = []
+        for index, row in enumerate(rows):
+            path = f"provider.items[{index}]"
+            if not isinstance(row, dict):
+                anomalies.append(
+                    ResponseAnomaly(path=path, reason="provider item is not an object")
+                )
+                continue
+            try:
+                normalized = self._normalize(row)
+                items.append(
+                    SeriesLifecycleItem(
+                        **normalized.model_dump(),
+                        winner_type=self._optional_text(row.get("winner_type")),
+                    )
+                )
+            except (KeyError, TypeError, ValueError) as exc:
+                logger.warning("Failed to map PandaScore lifecycle series item")
+                anomalies.append(
+                    ResponseAnomaly(
+                        path=path,
+                        reason=self._mapping_reason(exc),
+                        provider_id=self._provider_id(row.get("id")),
+                    )
+                )
+
+        return SeriesLifecycleResult(
+            items=items,
+            page=page,
+            limit=limit,
             anomalies=anomalies,
         )
 
