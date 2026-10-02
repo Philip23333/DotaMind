@@ -528,6 +528,8 @@ HTTP 路径或冠军查询端点。
 
 首页列表不触发模型调用。快捷入口不预排工具调用、不附加结构化消息对象，
 也不创建第二套聊天协议；它不改变工具注册、Artifact 或 Run State 契约。
+Series 生命周期读取、候选组装、共享 Redis 缓存和普通只读接口已实现；前端
+消费接口以及快捷查询交互仍待实现。接口为 `GET /api/v1/home/recent-series`。
 
 ## Migration order
 

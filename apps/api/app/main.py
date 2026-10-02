@@ -13,6 +13,7 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from app.api.v1.chat_routes import router as chat_router
 from app.api.v1.chat_run_routes import router as chat_run_router
+from app.api.v1.home_routes import router as home_router
 from app.api.v1.persistent_image_routes import router as persistent_image_router
 from app.api.v1.routes import router as v1_router
 from app.api.v1.vnext_chat_routes import router as vnext_chat_router
@@ -45,6 +46,7 @@ from app.vnext.data_updates.catalog_loader import CatalogSnapshotLoader
 from app.vnext.data_updates.catalog_store import CatalogSnapshotStore
 from app.vnext.hero_guides.cache import HeroGuideReader, RedisHeroGuideCache
 from app.vnext.hero_guides.file_cache import FileHeroGuideCache
+from app.vnext.homepage.recent_series import RedisRecentSeriesCache
 from app.vnext.product import (
     ConversationContextBuilder,
     DotaVisualEntityEnricher,
@@ -146,10 +148,14 @@ async def lifespan(app: FastAPI):
         vnext_services = build_vnext_services(
             vnext_settings,
             hero_guide_cache=hero_guide_cache,
+            recent_series_cache=RedisRecentSeriesCache(vnext_redis)
+            if vnext_redis is not None
+            else None,
             catalog_repository_provider=catalog_repository_provider,
         )
         await initialize_vnext_services(vnext_settings, vnext_services)
         app.state.vnext_services = vnext_services
+        app.state.homepage_recent_series = vnext_services.homepage_recent_series
         app.state.vnext_runtime = build_vnext_runtime(services=vnext_services)
         app.state.vnext_chat_service = VNextChatService(
             app.state.chat_repository,
@@ -282,6 +288,7 @@ app.add_middleware(
 )
 
 app.include_router(v1_router, prefix=settings.api_v1_prefix)
+app.include_router(home_router, prefix=settings.api_v1_prefix)
 app.include_router(chat_router, prefix=settings.api_v1_prefix)
 app.include_router(vnext_chat_router, prefix=settings.api_v1_prefix)
 app.include_router(vnext_trace_router, prefix=settings.api_v1_prefix)

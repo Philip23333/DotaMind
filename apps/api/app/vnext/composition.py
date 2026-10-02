@@ -55,6 +55,10 @@ from app.vnext.capabilities.player.recent_games import (
 from app.vnext.catalog import EntityNameResolver
 from app.vnext.data_updates.image_reader import ImageManifestReader
 from app.vnext.hero_guides.cache import HeroGuideReader
+from app.vnext.homepage.recent_series import (
+    HomepageRecentSeriesService,
+    RecentSeriesCache,
+)
 from app.vnext.integrations.mcp import MCPRemoteClient, MCPRemoteError
 from app.vnext.llm.openai_compatible import OpenAICompatibleModelClient
 from app.vnext.providers.opendota import OpenDotaClient, OpenDotaGameDetailAdapter
@@ -382,6 +386,7 @@ class VNextServices:
     ) = None
     game_detail: GameDetailService | None = None
     hero_guide: HeroGuideLookup | None = None
+    homepage_recent_series: HomepageRecentSeriesService | None = None
     catalog_lookup: CatalogLookupService | None = None
     tavily_web_search: TavilyWebSearch | None = None
 
@@ -393,6 +398,7 @@ def build_vnext_services(
     settings: VNextSettings | None = None,
     *,
     hero_guide_cache: HeroGuideReader | None = None,
+    recent_series_cache: RecentSeriesCache | None = None,
     catalog_repository_provider: Callable[[], DotaCatalogRepository] | None = None,
 ) -> VNextServices:
     config = settings or VNextSettings.from_env()
@@ -407,6 +413,13 @@ def build_vnext_services(
     match_adapter = PandaScoreMatchAdapter(client)
     team_adapter = PandaScoreTeamAdapter(client)
     player_adapter = PandaScorePlayerAdapter(client)
+    homepage_recent_series = None
+    if recent_series_cache is not None:
+        homepage_recent_series = HomepageRecentSeriesService(
+            read_lifecycle=series_adapter.list_by_lifecycle,
+            search_team=team_adapter.search,
+            cache=recent_series_cache,
+        )
     player_profile: PlayerProfileService | None = None
     player_recent_games: (
         Callable[[PlayerRecentGamesInput], Awaitable[PlayerRecentGamesResult]] | None
@@ -452,6 +465,7 @@ def build_vnext_services(
         player_recent_games=player_recent_games,
         game_detail=game_detail,
         hero_guide=hero_guide,
+        homepage_recent_series=homepage_recent_series,
         catalog_lookup=catalog_lookup,
     )
 

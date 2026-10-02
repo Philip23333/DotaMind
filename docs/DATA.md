@@ -92,8 +92,30 @@ against an operational data root or Redis cache. The conceptual data areas are
 响应；刷新失败保留上次成功候选，不覆盖为失败空列表。成功获取时间与最新
 刷新尝试状态分别记录，以便区分“上次数据何时成功获取”和“最近刷新是否
 失败”。成功取得空列表表示有效空数据；请求失败表示数据不可用，不能互相
-替代。没有成功缓存且刷新失败时也必须报告不可用状态。缓存介质、接口路径
-和冠军查询端点留待实现阶段根据现有代码及上游契约确定。
+替代。没有成功缓存且刷新失败时也必须报告不可用状态。下面记录当前后端实现
+采用的缓存、接口和冠军名称查询方式。
+
+### 当前后端实现
+
+首页读取接口为 `GET /api/v1/home/recent-series`。响应包含 `status`、`items`、
+`retrieved_at`、`last_attempt_at` 和安全错误码 `last_error`；状态为 `fresh`、
+`stale` 或 `unavailable`。候选字段为 Series ID、展示名称、生命周期、起止时间
+和可选冠军战队名称。展示名称优先取 `full_name`，缺失时取 `name`。
+
+Provider 读取分别调用 running 与 past Series 生命周期端点，候选服务按开始／结束
+时间本地排序，日期缺失项排在有日期项之后，稳定保留相同日期的来源顺序；去重后
+最多取十条。只有 past Series 明确给出 `winner_type="Team"` 和获胜 ID 时才查询
+对应 Team；Team 请求失败、结果缺失或名称为空只会省略冠军名称，不阻止赛事候选。
+
+共享快照存于 Redis。十分钟是基于 `retrieved_at` 的新鲜度窗口；成功快照不设置
+Redis TTL，以便刷新失败时继续返回旧数据并标记 `stale`。失败尝试单独更新
+`last_attempt_at` 和稳定 `last_error`，有效空列表仍会作为成功快照缓存。没有成功
+快照时，来源失败返回 `status="unavailable"`；Redis 不可用或缓存损坏时接口返回
+HTTP 503。单个 API 进程内并发的过期读取共用一次刷新；没有跨进程刷新锁。
+
+离线测试覆盖 Provider 读取后的排序、去重、冠军条件、空与坏数据区分、缓存旧值
+保留、并发请求和 HTTP 路由。真实 PandaScore 刷新及部署环境中的 Redis 行为尚未
+验收；前端尚未消费该接口。
 
 ### Catalog snapshot publication
 
