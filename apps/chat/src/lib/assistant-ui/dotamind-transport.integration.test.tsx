@@ -48,12 +48,55 @@ type TransportRequest = {
   fail: () => void;
 };
 
+function deferred<T = void>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((done) => { resolve = done; });
+  return {
+    promise,
+    resolve: (value?: T | PromiseLike<T>) => resolve(value as T),
+  };
+}
+
+type DeferredVoid = ReturnType<typeof deferred<void>>;
+
+const homepageSeries = {
+  status: "fresh" as const,
+  items: [
+    {
+      series_id: 9001,
+      name: "The International 2026",
+      lifecycle: "past" as const,
+      begin_at: "2026-09-01T00:00:00Z",
+      end_at: "2026-09-10T00:00:00Z",
+      champion_name: "Team Example",
+    },
+    {
+      series_id: 9002,
+      name: null,
+      lifecycle: "running" as const,
+      begin_at: null,
+      end_at: null,
+      champion_name: null,
+    },
+  ],
+  retrieved_at: "2026-09-10T00:00:00Z",
+  last_attempt_at: "2026-09-10T00:00:00Z",
+  last_error: null,
+};
+
 class ControlledBackend {
   readonly calls: Array<{ url: string; method: string; headers: Headers; body?: Record<string, unknown> }> = [];
   readonly requests: TransportRequest[] = [];
   readonly sessions = new Map<string, Session>();
   failCreate = false;
+  failHistory = false;
+  failRecentSeries = false;
   failNextTransport = false;
+  recentGate: DeferredVoid | null = null;
+  recentStarted: (() => void) | null = null;
+  createGate: DeferredVoid | null = null;
+  createStarted: (() => void) | null = null;
+  readonly historyGates = new Map<string, DeferredVoid>();
   nextId = 1;
 
   constructor(initialSessions: string[] = ["session-a", "session-b"]) {
@@ -67,10 +110,18 @@ class ControlledBackend {
     const body = typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : undefined;
     this.calls.push({ url: url.toString(), method, headers, ...(body ? { body } : {}) });
 
+    if (url.pathname === "/api/v1/home/recent-series" && method === "GET") {
+      this.recentStarted?.();
+      if (this.recentGate) await this.recentGate.promise;
+      if (this.failRecentSeries) return json({ detail: "private series failure" }, 503);
+      return json(homepageSeries);
+    }
     if (url.pathname === "/api/v1/chat/sessions" && method === "GET") {
       return json({ sessions: [...this.sessions.values()] });
     }
     if (url.pathname === "/api/v1/chat/sessions" && method === "POST") {
+      this.createStarted?.();
+      if (this.createGate) await this.createGate.promise;
       if (this.failCreate) return json({ reason: "private create failure" }, 503);
       const session = makeSession(`created-${this.nextId++}`);
       this.sessions.set(session.session_id, session);
@@ -126,6 +177,9 @@ class ControlledBackend {
     const sessionMatch = url.pathname.match(/^\/api\/v1\/chat\/sessions\/([^/]+)$/);
     if (sessionMatch && method === "GET") {
       const sessionId = decodeURIComponent(sessionMatch[1]!);
+      const historyGate = this.historyGates.get(sessionId);
+      if (historyGate) await historyGate.promise;
+      if (this.failHistory) return json({ detail: "private history failure" }, 503);
       const session = this.sessions.get(sessionId);
       return session
         ? json({ session, turns: [] })
@@ -359,6 +413,9 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  backend.recentGate?.resolve();
+  backend.createGate?.resolve();
+  for (const gate of backend.historyGates.values()) gate.resolve();
   for (const request of backend.requests) {
     if (!request.signal.aborted) request.close();
   }
@@ -392,6 +449,141 @@ describe("normal AssistantTransport chat integration", () => {
     await act(async () => complete(request));
     expect(await chatView().findByText("first fragment")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "停止生成" })).toBeNull();
+  });
+
+  it("sends a selected homepage Series as one plain-text transport message and preserves the draft", async () => {
+    render(<TestChat />);
+    expect(await screen.findByRole("button", { name: /已结束，The International 2026/ })).toBeTruthy();
+    expect(backend.calls.filter((call) => call.url.endsWith("/api/v1/home/recent-series"))).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "赛事查询" }));
+    expect(backend.calls.filter((call) => call.url.endsWith("/api/v1/home/recent-series"))).toHaveLength(1);
+    await selectSession("session-a");
+
+    const input = screen.getByRole("textbox", { name: "消息输入框" }) as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: "保留这段草稿" } });
+    fireEvent.click(within(screen.getByRole("region", { name: "赛事查询" })).getByRole("button", { name: /已结束，The International 2026/ }));
+
+    const request = await waitForRequest(backend, 1);
+    expect(request.sessionId).toBe("session-a");
+    expect(request.text).toBe("查询赛事「The International 2026」的最新战况和赛程（赛事届次 Series ID：9001）。");
+    expect(request.body).not.toHaveProperty("series_id");
+    expect(request.body).not.toHaveProperty("series");
+    const commands = request.body.commands as Array<{ type: string; message: Record<string, unknown> }>;
+    expect(commands).toHaveLength(1);
+    expect(commands[0]?.type).toBe("add-message");
+    expect(commands[0]?.message).toEqual({ role: "user", parts: [{ type: "text", text: request.text }] });
+    expect(commands[0]?.message).not.toHaveProperty("metadata");
+    expect(input.value).toBe("保留这段草稿");
+    expect(backend.requests).toHaveLength(1);
+    expect(backend.calls.filter((call) => call.url.includes("/transport"))).toHaveLength(1);
+    expect(backend.calls.filter((call) => call.url.includes("/messages"))).toHaveLength(0);
+    request.close();
+  });
+
+  it("keeps regular chat usable while the homepage request is loading and after it fails", async () => {
+    const gate = deferred();
+    const started = deferred();
+    backend.recentGate = gate;
+    backend.recentStarted = started.resolve;
+    render(<TestChat />);
+    await started.promise;
+
+    await submit("ordinary while events load");
+    const first = await waitForRequest(backend, 1);
+    expect(first.text).toBe("ordinary while events load");
+    await act(async () => complete(first));
+
+    backend.failRecentSeries = true;
+    fireEvent.click(screen.getByRole("button", { name: "赛事查询" }));
+    gate.resolve();
+    expect(await screen.findByText("赛事列表暂时不可用")).toBeTruthy();
+    await submit("ordinary after event failure");
+    const second = await waitForRequest(backend, 2);
+    expect(second.text).toBe("ordinary after event failure");
+    second.close();
+  });
+
+  it("locks the selected Series during session creation, preserves edits made while waiting, and ignores a double click", async () => {
+    render(<TestChat />);
+    await screen.findByRole("button", { name: /已结束，The International 2026/ });
+    fireEvent.click(screen.getByRole("button", { name: "新建聊天" }));
+    const input = screen.getByRole("textbox", { name: "消息输入框" }) as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: "原草稿" } });
+
+    const gate = deferred();
+    const started = deferred();
+    backend.createGate = gate;
+    backend.createStarted = started.resolve;
+    const eventRow = screen.getByRole("button", { name: /已结束，The International 2026/ });
+    fireEvent.click(eventRow);
+    fireEvent.click(eventRow);
+    await started.promise;
+    fireEvent.change(input, { target: { value: "等待期间的新草稿" } });
+    gate.resolve();
+
+    const request = await waitForRequest(backend, 1);
+    expect(request.sessionId).toBe("created-1");
+    expect(request.text).toBe("查询赛事「The International 2026」的最新战况和赛程（赛事届次 Series ID：9001）。");
+    expect(input.value).toBe("等待期间的新草稿");
+    expect(backend.calls.filter((call) => call.method === "POST" && call.url.endsWith("/chat/sessions"))).toHaveLength(1);
+    expect(backend.requests).toHaveLength(1);
+    request.close();
+  });
+
+  it("does not send when session creation or history preparation fails, and leaves the draft intact", async () => {
+    render(<TestChat />);
+    await screen.findByRole("button", { name: /已结束，The International 2026/ });
+    fireEvent.click(screen.getByRole("button", { name: "新建聊天" }));
+    const input = screen.getByRole("textbox", { name: "消息输入框" }) as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: "草稿不应丢失" } });
+    backend.failCreate = true;
+    fireEvent.click(screen.getByRole("button", { name: /已结束，The International 2026/ }));
+
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(input.value).toBe("草稿不应丢失");
+    expect(backend.requests).toHaveLength(0);
+
+    backend.failCreate = false;
+    fireEvent.click(screen.getByRole("button", { name: "新建聊天" }));
+    backend.failHistory = true;
+    await selectSession("session-a");
+    fireEvent.change(input, { target: { value: "历史失败草稿" } });
+    fireEvent.click(screen.getByRole("button", { name: /已结束，The International 2026/ }));
+    expect(await screen.findByText("聊天记录未能加载。")).toBeTruthy();
+    expect(input.value).toBe("历史失败草稿");
+    expect(backend.requests).toHaveLength(0);
+  });
+
+  it("keeps the event panel browseable during a run but disables its send rows", async () => {
+    render(<TestChat />);
+    await selectSession("session-a");
+    await submit("ordinary request");
+    const request = await waitForRequest(backend, 1);
+
+    fireEvent.click(screen.getByRole("button", { name: "赛事查询" }));
+    const eventRow = screen.getByRole("button", { name: /已结束，The International 2026/ });
+    expect(eventRow).toBeTruthy();
+    expect((eventRow as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(eventRow);
+    expect(backend.requests).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "停止生成" })).toBeTruthy();
+    request.close();
+  });
+
+  it("does not route an event to a different session after the user switches during history loading", async () => {
+    const gate = deferred();
+    backend.historyGates.set("session-a", gate);
+    render(<TestChat />);
+    await screen.findByRole("button", { name: /已结束，The International 2026/ });
+    await selectSession("session-a");
+    fireEvent.click(screen.getByRole("button", { name: /已结束，The International 2026/ }));
+    await waitFor(() => expect(backend.calls.some((call) => call.url.endsWith("/chat/sessions/session-a"))).toBe(true));
+
+    await selectSession("session-b");
+    gate.resolve();
+    await waitFor(() => expect(screen.getByTestId("switch-session-b").parentElement?.getAttribute("aria-current")).toBe("true"));
+    expect(backend.requests).toHaveLength(0);
+    expect(backend.calls.filter((call) => call.url.includes("/transport"))).toHaveLength(0);
   });
 
   it("shows ordered activity and live Markdown, then folds ready state without overriding manual expansion", async () => {

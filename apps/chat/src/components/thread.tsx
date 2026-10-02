@@ -6,6 +6,12 @@ import { TraceDownloadAction } from "@/components/trace-download-action";
 import { Button } from "@/components/ui/button";
 import { RunProcessPanel } from "@/components/run-process-panel";
 import {
+  RecentSeriesContent,
+  RecentSeriesPanel,
+  useRecentSeries,
+  type RecentSeriesState,
+} from "@/components/recent-series";
+import {
   ActionBarPrimitive,
   AuiIf,
   ComposerPrimitive,
@@ -21,7 +27,6 @@ import {
   CheckIcon,
   CopyIcon,
   SquareIcon,
-  SparklesIcon,
 } from "lucide-react";
 import { siDota2 } from "simple-icons";
 import { DOTAMIND_ASSISTANT_METADATA_KEY } from "@/lib/assistant-ui/migration-contract";
@@ -30,8 +35,88 @@ import { createUuidV4 } from "@/lib/uuid";
 import { getChatSession, transcriptToInitialMessages } from "@/lib/dotamind-api";
 import { useDotaMindThreadState } from "@/lib/assistant-ui/dotamind-transport-runtime";
 import type { DotamindMessageMetadata } from "@/lib/assistant-ui/dotamind-run-state";
+import type { RecentSeriesCandidate } from "@/lib/home-api";
 
 export const Thread: FC<{ browserId?: string }> = ({ browserId }) => {
+  const aui = useAui();
+  const recentSeries = useRecentSeries();
+  const isRunning = useAuiState((state) => state.thread.isRunning);
+  const threadStatus = useAuiState((state) => state.threadListItem.status);
+  const { entry, snapshot } = useDotaMindThreadState();
+  const submitLock = useRef(false);
+  const isBusy = isRunning || snapshot.is_submitting || snapshot.connection?.status === "sending";
+
+  useEffect(() => {
+    if (isRunning || (snapshot.connection && snapshot.connection.status !== "sending")) {
+      submitLock.current = false;
+    }
+  }, [isRunning, snapshot.connection]);
+
+  const sendMessage = async (messageOverride?: string) => {
+    const currentSnapshot = entry.getSnapshot();
+    const busyNow = aui.thread.getState().isRunning || currentSnapshot.is_submitting ||
+      currentSnapshot.connection?.status === "sending";
+    const message = messageOverride ?? aui.composer.getState().text;
+    if (submitLock.current || busyNow || !message.trim()) return;
+    if (!entry.beginSubmission()) return;
+    submitLock.current = true;
+    let accepted = false;
+    let failureScope: "initialization" | "history" = "initialization";
+    const targetThreadId = aui.threadListItem.getState().id;
+    const ensureTargetThreadIsActive = () => {
+      if (aui.threadListItem.getState().id !== targetThreadId) {
+        throw new Error("active thread changed during submission preparation");
+      }
+    };
+    try {
+      let sessionId = aui.threadListItem.getState().remoteId;
+      if (!sessionId) {
+        if (threadStatus !== "new") throw new Error("session initialization failed");
+        const initialized = await aui.threadListItem.initialize();
+        ensureTargetThreadIsActive();
+        sessionId = initialized.remoteId;
+        entry.markNewSession(sessionId);
+        await entry.waitForSessionRenderCommit(sessionId);
+      } else {
+        failureScope = "history";
+        await entry.loadHistory(sessionId, async (signal) => {
+          if (!browserId) throw new Error("browser identity is unavailable");
+          const response = await getChatSession(browserId, sessionId!, signal);
+          return transcriptToInitialMessages(response);
+        });
+        ensureTargetThreadIsActive();
+        if (entry.getSnapshot().history_status !== "ready") throw new Error("history unavailable");
+        await entry.waitForSessionRenderCommit(sessionId);
+      }
+
+      ensureTargetThreadIsActive();
+      entry.captureVisibleMessages(aui.thread.getState().messages);
+      entry.acceptRequest({
+        session_id: sessionId,
+        request_id: createUuidV4(),
+        created_at: new Date().toISOString(),
+        command: null,
+      });
+      accepted = true;
+      if (messageOverride === undefined) {
+        aui.composer.send();
+      } else {
+        aui.thread.append({
+          role: "user",
+          content: [{ type: "text", text: messageOverride }],
+        });
+      }
+    } catch {
+      if (accepted) {
+        const request = entry.getSnapshot().accepted_request;
+        if (request) entry.setConnection(request.request_id, "error");
+      } else {
+        entry.finishSubmissionWithError(failureScope);
+        submitLock.current = false;
+      }
+    }
+  };
+
   return (
     <ThreadPrimitive.Root className="chat-main-surface relative flex h-full min-w-0 flex-col overflow-hidden bg-card">
       <div className="chat-main-surface__mark" aria-hidden="true">
@@ -43,7 +128,7 @@ export const Thread: FC<{ browserId?: string }> = ({ browserId }) => {
         <div className="mx-auto flex w-full max-w-3xl min-w-0 flex-1 flex-col px-3 pt-4 sm:px-6 sm:pt-6">
           <SessionTracePanel browserId={browserId} />
           <AuiIf condition={(state) => state.thread.messages.length === 0}>
-            <Welcome />
+            <Welcome recentSeries={recentSeries} onSelect={(series) => { void sendMessage(seriesQueryText(series)); }} />
           </AuiIf>
 
           <div className="flex flex-col gap-10 pb-16 empty:hidden">
@@ -65,7 +150,12 @@ export const Thread: FC<{ browserId?: string }> = ({ browserId }) => {
             >
               <ArrowDownIcon className="size-4" />
             </ThreadPrimitive.ScrollToBottom>
-            <Composer browserId={browserId} />
+            <Composer
+              browserId={browserId}
+              recentSeries={recentSeries}
+              isBusy={isBusy}
+              onSendMessage={sendMessage}
+            />
             <a
               href="https://beian.miit.gov.cn/"
               target="_blank"
@@ -81,17 +171,28 @@ export const Thread: FC<{ browserId?: string }> = ({ browserId }) => {
   );
 };
 
-const Welcome: FC = () => (
-  <div className="welcome-intro flex flex-1 flex-col items-center justify-center pb-24 text-center">
-    <div className="mb-6 flex size-[150px] items-center justify-center rounded-[2rem] bg-[#b92d1e] text-[#fff4e1] shadow-[0_16px_36px_rgb(115_31_24_/_24%)]">
-      <svg className="size-24" viewBox="0 0 24 24" aria-hidden="true">
-        <path fill="currentColor" d={siDota2.path} />
-      </svg>
+const Welcome: FC<{
+  recentSeries: RecentSeriesState;
+  onSelect: (series: RecentSeriesCandidate) => void;
+}> = ({ recentSeries, onSelect }) => (
+  <div className="welcome-intro flex flex-1 flex-col items-center justify-center gap-5 pb-12 text-center sm:pb-20">
+    <div className="flex items-center gap-3">
+      <div className="flex size-14 items-center justify-center rounded-2xl bg-[#b92d1e] text-[#fff4e1] shadow-[0_8px_20px_rgb(115_31_24_/_20%)]">
+        <svg className="size-9" viewBox="0 0 24 24" aria-hidden="true">
+          <path fill="currentColor" d={siDota2.path} />
+        </svg>
+      </div>
+      <h1 className="text-2xl font-semibold tracking-tight">DotaMind</h1>
     </div>
-    <h1 className="text-2xl font-semibold tracking-tight">🔥TI正在火热进行中！</h1>
-    <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-      快捷查询赛程、比赛详情与选手数据等
-    </p>
+    <section className="w-full max-w-2xl text-left" aria-label="🔥最近赛事">
+      <h2 className="mb-2 px-3 text-sm font-semibold">🔥最近赛事</h2>
+      <RecentSeriesContent
+        state={recentSeries}
+        count={3}
+        onSelect={onSelect}
+        onRetry={recentSeries.retry}
+      />
+    </section>
   </div>
 );
 
@@ -195,100 +296,34 @@ function traceFromMetadata(custom: unknown): { trace_id: string; expires_at: str
     : null;
 }
 
-const Composer: FC<{ browserId?: string }> = ({ browserId }) => {
-  const aui = useAui();
-  const isRunning = useAuiState((state) => state.thread.isRunning);
-  const isNewThread = useAuiState((state) => state.thread.messages.length === 0);
+const Composer: FC<{
+  browserId?: string;
+  recentSeries: RecentSeriesState;
+  isBusy: boolean;
+  onSendMessage: (message?: string) => Promise<void>;
+}> = ({ browserId, recentSeries, isBusy, onSendMessage }) => {
   const { entry, snapshot } = useDotaMindThreadState();
   const remoteSessionId = useAuiState((state) => state.threadListItem.remoteId);
-  const threadStatus = useAuiState((state) => state.threadListItem.status);
   const composerText = useAuiState((state) => state.composer.text);
-  const submitLock = useRef(false);
-  const isBusy = isRunning || snapshot.is_submitting || snapshot.connection?.status === "sending";
-
-  useEffect(() => {
-    if (isRunning || (snapshot.connection && snapshot.connection.status !== "sending")) {
-      submitLock.current = false;
-    }
-  }, [isRunning, snapshot.connection]);
-
-  const sendMessage = async () => {
-    if (submitLock.current || isBusy || !aui.composer.getState().text.trim()) return;
-    if (!entry.beginSubmission()) return;
-    submitLock.current = true;
-    let accepted = false;
-    let failureScope: "initialization" | "history" = "initialization";
-    try {
-      let sessionId = aui.threadListItem.getState().remoteId;
-      if (!sessionId) {
-        if (threadStatus !== "new") throw new Error("session initialization failed");
-        const initialized = await aui.threadListItem.initialize();
-        sessionId = initialized.remoteId;
-        entry.markNewSession(sessionId);
-        await entry.waitForSessionRenderCommit(sessionId);
-      } else {
-        failureScope = "history";
-        await entry.loadHistory(sessionId, async (signal) => {
-          if (!browserId) throw new Error("browser identity is unavailable");
-          const response = await getChatSession(browserId, sessionId!, signal);
-          return transcriptToInitialMessages(response);
-        });
-        if (entry.getSnapshot().history_status !== "ready") throw new Error("history unavailable");
-        await entry.waitForSessionRenderCommit(sessionId);
-      }
-
-      entry.captureVisibleMessages(aui.thread.getState().messages);
-      entry.acceptRequest({
-        session_id: sessionId,
-        request_id: createUuidV4(),
-        created_at: new Date().toISOString(),
-        command: null,
-      });
-      accepted = true;
-      aui.composer.send();
-    } catch {
-      if (accepted) {
-        const request = entry.getSnapshot().accepted_request;
-        if (request) entry.setConnection(request.request_id, "error");
-      } else {
-        entry.finishSubmissionWithError(failureScope);
-        submitLock.current = false;
-      }
-    }
-  };
-
-  const sendTiUpdatePrompt = () => {
-    if (isBusy) return;
-    aui.composer.setText("本届TI最新战况");
-    void sendMessage();
-  };
 
   return (
     <div className="relative">
-      {isNewThread && !isRunning && (
-        <div className="absolute inset-x-0 bottom-full mb-[5px]">
-          <Button
-            type="button"
-            variant="ghost"
-            size="lg"
-            className="h-11 w-full justify-start rounded-lg bg-transparent px-4 text-base text-foreground/55 shadow-none hover:bg-popover hover:text-foreground hover:shadow-[0_-5px_14px_rgb(0_0_0_/_8%)] focus-visible:bg-popover focus-visible:text-foreground focus-visible:shadow-[0_-5px_14px_rgb(0_0_0_/_8%)]"
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={sendTiUpdatePrompt}
-          >
-            <SparklesIcon className="size-4" />
-            本届TI最新战况
-          </Button>
-        </div>
-      )}
+      <RecentSeriesPanel
+        state={recentSeries}
+        disabled={isBusy}
+        onOpen={recentSeries.refreshOnOpen}
+        onRetry={recentSeries.retry}
+        onSelect={(series) => { void onSendMessage(seriesQueryText(series)); }}
+      />
       <ComposerPrimitive.Root
         onSubmit={(event) => {
           event.preventDefault();
-          void sendMessage();
+          void onSendMessage();
         }}
         className="rounded-3xl border bg-popover p-1.5 shadow-sm focus-within:ring-2 focus-within:ring-ring/30 sm:p-2"
       >
         <ComposerPrimitive.Input
-          placeholder="询问英雄、阵容、对线或版本数据…"
+          placeholder="询问 Dota 2 电竞赛事、英雄攻略与比赛数据…"
           className="max-h-40 min-h-12 w-full min-w-0 resize-none bg-transparent px-3 py-2 text-base outline-none placeholder:text-muted-foreground"
           rows={1}
           autoFocus
@@ -308,7 +343,7 @@ const Composer: FC<{ browserId?: string }> = ({ browserId }) => {
                 snapshot.is_submitting
               }
               onMouseDown={(event) => event.preventDefault()}
-              onClick={() => void sendMessage()}
+              onClick={() => void onSendMessage()}
             >
               <ArrowUpIcon className="size-4" />
             </Button>
@@ -344,6 +379,13 @@ const Composer: FC<{ browserId?: string }> = ({ browserId }) => {
     </div>
   );
 };
+
+function seriesQueryText(series: RecentSeriesCandidate): string {
+  const name = series.name?.trim();
+  return name
+    ? `查询赛事「${name}」的最新战况和赛程（赛事届次 Series ID：${series.series_id}）。`
+    : `查询赛事届次 Series ID 为 ${series.series_id} 的最新战况和赛程。`;
+}
 
 function transportMetadataFromCustom(custom: unknown): DotamindMessageMetadata | null {
   if (!custom || typeof custom !== "object") return null;
