@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import Literal
 
 from pydantic import Field, field_validator, model_validator
@@ -58,9 +57,10 @@ class ArtifactReadInput(DomainModel):
         min_length=1,
         max_length=128,
         description=(
-            "Optional task-plan item key that this materialized evidence is intended "
-            "to support. When omitted during an active task plan, the current task "
-            "item is used."
+            "Optional task-plan item key that owns this observation for checkpoint "
+            "source selection. When omitted, the current task item is used. A completed "
+            "item may be read again; reading does not reopen it. This key does not "
+            "identify the Artifact's owner."
         ),
     )
 
@@ -101,11 +101,7 @@ def register_artifact_tools(
     registry: ToolRegistry,
     reader: ArtifactReader,
     grepper: ArtifactGrepper,
-    *,
-    completed_task_lookup: Callable[[str | None], dict[str, str] | None] | None = None,
 ) -> None:
-    del completed_task_lookup
-
     async def read(args: ArtifactReadInput) -> ArtifactReadResult:
         if args.mode == "outline":
             return await reader.outline(args.ref)

@@ -197,28 +197,27 @@ class AgentTraceCollector:
             }
         )
 
-    def active_evidence_lease(
+    def checkpoint_source_owners(
         self,
         step: int,
-        payload: dict[str, Any] | None,
+        source_owners: list[dict[str, str | None]],
     ) -> None:
-        """Record locator-free active evidence lease accounting."""
+        """Record task ownership for currently active checkpoint sources."""
 
-        if payload is not None:
-            self._step(step)["active_evidence_lease"] = payload
+        self._step(step)["checkpoint_source_owners"] = source_owners
 
-    def checkpoint_lease_snapshot(
+    def source_owners_after_checkpoint(
         self,
         step: int,
         *,
         checkpoint_key: str | None,
-        active_leases: list[dict[str, Any]],
+        source_owners: list[dict[str, str | None]],
     ) -> None:
-        """Record individual leases remaining after a successful checkpoint."""
+        """Record unconsumed task-source owners after checkpoint creation."""
 
-        self._step(step)["active_leases_after_checkpoint"] = {
+        self._step(step)["source_owners_after_checkpoint"] = {
             "checkpoint_key": checkpoint_key,
-            "leases": active_leases,
+            "source_owners": source_owners,
         }
 
     def terminal(self, *, status: str, error_code: str | None, error_message: str | None) -> None:

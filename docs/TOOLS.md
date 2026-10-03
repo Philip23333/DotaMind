@@ -225,9 +225,16 @@ directly rather than repeating a query to create an Artifact.
 Externalized previews or wrappers, `artifact.grep`, task-control results,
 errors, deferred materializations, and lifecycle receipts are not checkpoint
 sources. Sources must remain in the effective current-request history and may
-be consumed only once. Inline ownership is the active task key captured before
-the tool execution group starts; results with no plan remain unowned. Artifact
-reads continue to use their existing `task_key` and EvidenceLease behavior.
+be consumed only once. Each successful source records its execution-time task
+owner; inline ownership is the active task key captured before the tool
+execution group starts. For `artifact.read`, an omitted `task_key` uses that
+same captured current key, while a known explicit key may be pending, active,
+or completed. An unknown key is rejected before the reader runs. With no plan,
+the source remains unowned. Task ownership is checkpoint metadata only:
+completing an item does not block later Artifact reads or reopen the item, and
+a read never infers ownership from the Artifact reference. A checkpoint
+consumes only the source IDs it names; other observations retain their
+original owner and cannot drift into a later task's candidates.
 
 A checkpoint stores model-organized task state and source references. Success
 means that state was accepted and the plan advanced; it does not verify the

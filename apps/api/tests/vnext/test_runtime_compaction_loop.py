@@ -243,7 +243,7 @@ def _run(
     ("system_instruction", "request_start_before", "request_start_after"),
     [(None, 2, 1), ("base instruction", 3, 2)],
 )
-def test_compaction_loop_rebuilds_messages_scope_and_leases_before_next_model_call(
+def test_compaction_loop_rebuilds_messages_scope_and_source_owners_before_next_model_call(
     system_instruction: str | None,
     request_start_before: int,
     request_start_after: int,
@@ -453,7 +453,7 @@ def test_compaction_entry_rejects_wrong_request_before_reset_or_execution() -> N
     assert coordinator.plan_snapshot() == before_plan
 
 
-def test_compaction_cleans_removed_leases_and_keeps_retained_checkpoint_sources() -> None:
+def test_compaction_cleans_removed_source_owners_and_keeps_retained_checkpoint_sources() -> None:
     history = SessionExecutionHistory()
     request_id = uuid4()
     history.begin_request(
@@ -581,8 +581,7 @@ def test_compaction_cleans_removed_leases_and_keeps_retained_checkpoint_sources(
     assert result.content == "answer"
     assert coordinator.plan_snapshot() is not None
     assert coordinator.plan_snapshot().current_key is None  # type: ignore[union-attr]
-    leases = coordinator.active_evidence_leases_snapshot()
-    assert leases == []
+    assert coordinator.source_owners_snapshot() == []
     assert all(
         item.status.value == "completed"
         for item in coordinator.plan_snapshot().items  # type: ignore[union-attr]

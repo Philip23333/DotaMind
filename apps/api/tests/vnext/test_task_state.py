@@ -4,6 +4,9 @@ import pytest
 
 from app.vnext.agent.task_state import (
     TaskCheckpoint,
+    TaskItem,
+    TaskItemStatus,
+    TaskPlan,
     TaskStateCoordinator,
     TaskStateStore,
 )
@@ -57,6 +60,23 @@ def _messages(*pairs: tuple[ToolCall, ToolResultMessage]):
     for call, result in pairs:
         messages.extend([AssistantMessage(tool_calls=[call]), result])
     return messages
+
+
+def _record_read_owner(
+    coordinator: TaskStateCoordinator,
+    call_id: str,
+    *,
+    task_key: str | None,
+) -> None:
+    owner = coordinator.resolve_source_task_key(
+        task_key,
+        plan=coordinator.plan_snapshot(),
+    )
+    coordinator.record_tool_result(
+        _read_call(call_id),
+        _read_result(call_id),
+        task_key=owner,
+    )
 
 
 def _inline_call(call_id: str = "inline-1", *, name: str = "esports.match.search") -> ToolCall:
@@ -243,7 +263,7 @@ def test_rendered_context_uses_utf8_json_and_omits_ranges_for_scalar_reads() -> 
     assert "\\u6700" not in context
 
 
-def test_retain_evidence_leases_only_filters_leases_without_changing_task_state() -> None:
+def test_refresh_drops_owners_for_observations_outside_effective_history() -> None:
     coordinator = TaskStateCoordinator()
     coordinator.create_plan(
         [
@@ -251,21 +271,26 @@ def test_retain_evidence_leases_only_filters_leases_without_changing_task_state(
             {"key": "second", "objective": "Second"},
         ]
     )
-    coordinator.record_evidence_lease("call-1", task_key=None, raw_bytes=10)
-    coordinator.record_evidence_lease("call-2", task_key=None, raw_bytes=20)
+    messages = _messages(
+        (_read_call("call-1"), _read_result("call-1")),
+        (_read_call("call-2"), _read_result("call-2")),
+    )
+    _record_read_owner(coordinator, "call-1", task_key=None)
+    _record_read_owner(coordinator, "call-2", task_key=None)
+    coordinator.refresh(messages)
     before_plan = coordinator.plan_snapshot()
 
-    coordinator.retain_evidence_leases({"call-2", "missing"})
+    coordinator.refresh(_messages((_read_call("call-2"), _read_result("call-2"))))
 
-    assert coordinator.active_evidence_leases_snapshot() == [
-        {"tool_call_id": "call-2", "task_key": "first", "raw_bytes": 20}
+    assert coordinator.source_owners_snapshot() == [
+        {"tool_call_id": "call-2", "tool_name": "artifact.read", "task_key": "first"}
     ]
     assert coordinator.plan_snapshot() == before_plan
-    coordinator.retain_evidence_leases(set())
-    assert coordinator.active_evidence_leases_snapshot() == []
+    coordinator.refresh([])
+    assert coordinator.source_owners_snapshot() == []
 
 
-def test_evidence_lease_is_scoped_to_current_partition_and_cleared_on_checkpoint() -> None:
+def test_source_owner_is_scoped_to_current_partition_and_consumed_by_checkpoint() -> None:
     coordinator = TaskStateCoordinator()
     coordinator.create_plan(
         [
@@ -275,21 +300,20 @@ def test_evidence_lease_is_scoped_to_current_partition_and_cleared_on_checkpoint
     )
     messages = _messages((_read_call("call-1"), _read_result()))
     coordinator.refresh(messages)
-    coordinator.record_evidence_lease("call-1", task_key=None, raw_bytes=1234)
+    _record_read_owner(coordinator, "call-1", task_key=None)
+    coordinator.refresh(messages)
 
-    assert coordinator.active_evidence_lease() == {
-        "task_key": "2025",
-        "observation_count": 1,
-        "raw_bytes": 1234,
-    }
-    assert coordinator.context_payload()["active_manifest"][0]["lease_key"] == "2025"
+    assert coordinator.source_owners_snapshot() == [
+        {"tool_call_id": "call-1", "tool_name": "artifact.read", "task_key": "2025"}
+    ]
+    assert coordinator.context_payload()["active_manifest"][0]["task_key"] == "2025"
 
     coordinator.create_checkpoint("2025", {"fact": "saved"}, ["call-1"])
     assert coordinator.plan_snapshot().current_key == "2026"  # type: ignore[union-attr]
-    assert coordinator.active_evidence_lease() is None
+    assert coordinator.source_owners_snapshot() == []
 
 
-def test_failed_checkpoint_keeps_active_evidence_lease() -> None:
+def test_failed_checkpoint_keeps_source_owner() -> None:
     coordinator = TaskStateCoordinator()
     coordinator.create_plan(
         [
@@ -298,19 +322,18 @@ def test_failed_checkpoint_keeps_active_evidence_lease() -> None:
         ]
     )
     coordinator.refresh(_messages((_read_call("call-1"), _read_result())))
-    coordinator.record_evidence_lease("call-1", task_key=None, raw_bytes=321)
+    _record_read_owner(coordinator, "call-1", task_key=None)
+    coordinator.refresh(_messages((_read_call("call-1"), _read_result())))
 
     with pytest.raises(ValueError, match="active checkpointable"):
         coordinator.create_checkpoint("2025", {"fact": "saved"}, ["missing"])
 
-    assert coordinator.active_evidence_lease() == {
-        "task_key": "2025",
-        "observation_count": 1,
-        "raw_bytes": 321,
-    }
+    assert coordinator.source_owners_snapshot() == [
+        {"tool_call_id": "call-1", "tool_name": "artifact.read", "task_key": "2025"}
+    ]
 
 
-def test_explicit_future_task_key_owns_lease_instead_of_current_item() -> None:
+def test_explicit_future_task_key_owns_source_instead_of_current_item() -> None:
     coordinator = TaskStateCoordinator()
     coordinator.create_plan(
         [
@@ -318,13 +341,11 @@ def test_explicit_future_task_key_owns_lease_instead_of_current_item() -> None:
             {"key": "B", "objective": "retrieve B"},
         ]
     )
-    coordinator.record_evidence_lease("future", task_key="B", raw_bytes=456)
+    _record_read_owner(coordinator, "future", task_key="B")
 
-    assert coordinator.active_evidence_lease() == {
-        "task_key": "B",
-        "observation_count": 1,
-        "raw_bytes": 456,
-    }
+    assert coordinator.source_owners_snapshot() == [
+        {"tool_call_id": "future", "tool_name": "artifact.read", "task_key": "B"}
+    ]
 
 
 def test_checkpoint_candidates_filter_to_current_task_active_raw_sources() -> None:
@@ -347,8 +368,9 @@ def test_checkpoint_candidates_filter_to_current_task_active_raw_sources() -> No
         ),
     )
     coordinator.refresh(messages)
-    coordinator.record_evidence_lease("raw-a", task_key="A", raw_bytes=100)
-    coordinator.record_evidence_lease("raw-b", task_key="B", raw_bytes=200)
+    _record_read_owner(coordinator, "raw-a", task_key="A")
+    _record_read_owner(coordinator, "raw-b", task_key="B")
+    coordinator.refresh(messages)
 
     assert coordinator.context_payload()["checkpoint_candidates"] == [
         {
@@ -357,7 +379,6 @@ def test_checkpoint_candidates_filter_to_current_task_active_raw_sources() -> No
             "source_kind": "artifact_read",
             "task_key": "A",
             "status": "ACTIVE_RAW",
-            "bytes": 100,
         }
     ]
     rendered = coordinator.render_context()
@@ -378,7 +399,8 @@ def test_checkpoint_candidates_disappear_after_checkpoint_claim() -> None:
     )
     messages = _messages((_read_call("raw-a"), _read_result("raw-a")))
     coordinator.refresh(messages)
-    coordinator.record_evidence_lease("raw-a", task_key="A", raw_bytes=100)
+    _record_read_owner(coordinator, "raw-a", task_key="A")
+    coordinator.refresh(messages)
     candidates = coordinator.context_payload()["checkpoint_candidates"]
     assert [item["tool_call_id"] for item in candidates] == ["raw-a"]
 
@@ -403,9 +425,10 @@ def test_checkpoint_candidates_follow_current_partition_after_batched_reads() ->
         (_read_call("raw-c"), _read_result("raw-c")),
     )
     coordinator.refresh(messages)
-    coordinator.record_evidence_lease("raw-a", task_key="A", raw_bytes=100)
-    coordinator.record_evidence_lease("raw-b", task_key="B", raw_bytes=200)
-    coordinator.record_evidence_lease("raw-c", task_key="C", raw_bytes=300)
+    _record_read_owner(coordinator, "raw-a", task_key="A")
+    _record_read_owner(coordinator, "raw-b", task_key="B")
+    _record_read_owner(coordinator, "raw-c", task_key="C")
+    coordinator.refresh(messages)
 
     candidates = coordinator.context_payload()["checkpoint_candidates"]
     assert [item["tool_call_id"] for item in candidates] == ["raw-a"]
@@ -417,9 +440,9 @@ def test_checkpoint_candidates_follow_current_partition_after_batched_reads() ->
     assert [item["tool_call_id"] for item in candidates] == ["raw-b"]
 
 
-def test_unknown_and_completed_task_keys_are_rejected_without_creating_leases() -> None:
+def test_resolve_source_owner_uses_the_plan_snapshot_and_allows_completed_items() -> None:
     coordinator = TaskStateCoordinator()
-    coordinator.create_plan(
+    plan = coordinator.create_plan(
         [
             {"key": "A", "objective": "retrieve A"},
             {"key": "B", "objective": "retrieve B"},
@@ -427,18 +450,33 @@ def test_unknown_and_completed_task_keys_are_rejected_without_creating_leases() 
     )
 
     with pytest.raises(ValueError, match="not in the active task plan"):
-        coordinator.record_evidence_lease("unknown", task_key="missing", raw_bytes=1)
-    assert coordinator.active_evidence_lease() is None
+        coordinator.resolve_source_task_key("missing", plan=plan)
+    assert coordinator.resolve_source_task_key(None, plan=plan) == "A"
+    assert coordinator.resolve_source_task_key("B", plan=plan) == "B"
 
-    coordinator.refresh(_messages((_read_call("raw-a"), _read_result("raw-a"))))
-    coordinator.create_checkpoint("A", {"fact": "saved"}, ["raw-a"])
+    advanced_plan = TaskPlan(
+        items=(
+            TaskItem("A", "completed", TaskItemStatus.COMPLETED),
+            TaskItem("B", "current", TaskItemStatus.IN_PROGRESS),
+        ),
+        current_key="B",
+    )
+    assert coordinator.resolve_source_task_key("A", plan=advanced_plan) == "A"
+    assert coordinator.resolve_source_task_key(None, plan=advanced_plan) == "B"
 
-    with pytest.raises(ValueError, match="already completed"):
-        coordinator.record_evidence_lease("completed", task_key="A", raw_bytes=1)
-    assert coordinator.active_evidence_lease() is None
+    completed_plan = TaskPlan(
+        items=(
+            TaskItem("A", "completed", TaskItemStatus.COMPLETED),
+            TaskItem("B", "completed", TaskItemStatus.COMPLETED),
+        ),
+        current_key=None,
+    )
+    assert coordinator.resolve_source_task_key(None, plan=completed_plan) is None
+    assert coordinator.resolve_source_task_key("A", plan=completed_plan) == "A"
+    assert coordinator.resolve_source_task_key("A", plan=None) is None
 
 
-def test_cross_partition_leases_survive_an_earlier_checkpoint() -> None:
+def test_checkpoint_consumes_only_selected_source_and_preserves_other_owner() -> None:
     coordinator = TaskStateCoordinator()
     coordinator.create_plan(
         [
@@ -450,25 +488,23 @@ def test_cross_partition_leases_survive_an_earlier_checkpoint() -> None:
         (_read_call("raw-a"), _read_result("raw-a")),
         (_read_call("raw-b"), _read_result("raw-b", value=[{"fact": "B"}])),
     )
+    _record_read_owner(coordinator, "raw-a", task_key="A")
+    _record_read_owner(coordinator, "raw-b", task_key="B")
     coordinator.refresh(messages)
-    coordinator.record_evidence_lease("raw-a", task_key="A", raw_bytes=100)
-    coordinator.record_evidence_lease("raw-b", task_key="B", raw_bytes=200)
 
     coordinator.create_checkpoint("A", {"fact": "A"}, ["raw-a"])
-    assert coordinator.active_evidence_lease() == {
-        "task_key": "B",
-        "observation_count": 1,
-        "raw_bytes": 200,
-    }
+    assert coordinator.source_owners_snapshot() == [
+        {"tool_call_id": "raw-b", "tool_name": "artifact.read", "task_key": "B"}
+    ]
     assert coordinator.plan_snapshot().current_key == "B"  # type: ignore[union-attr]
 
     coordinator.refresh(messages)
     coordinator.create_checkpoint("B", {"fact": "B"}, ["raw-b"])
     assert coordinator.plan_snapshot().current_key is None  # type: ignore[union-attr]
-    assert coordinator.active_evidence_lease() is None
+    assert coordinator.source_owners_snapshot() == []
 
 
-def test_checkpoint_accepts_source_lease_owned_by_checkpoint_item() -> None:
+def test_checkpoint_accepts_source_owned_by_checkpoint_item() -> None:
     coordinator = TaskStateCoordinator()
     coordinator.create_plan(
         [
@@ -476,8 +512,9 @@ def test_checkpoint_accepts_source_lease_owned_by_checkpoint_item() -> None:
             {"key": "B", "objective": "retrieve B"},
         ]
     )
-    coordinator.refresh(_messages((_read_call("raw-a"), _read_result("raw-a"))))
-    coordinator.record_evidence_lease("raw-a", task_key="A", raw_bytes=100)
+    messages = _messages((_read_call("raw-a"), _read_result("raw-a")))
+    _record_read_owner(coordinator, "raw-a", task_key="A")
+    coordinator.refresh(messages)
 
     coordinator.create_checkpoint("A", {"fact": "A"}, ["raw-a"])
 
@@ -485,7 +522,7 @@ def test_checkpoint_accepts_source_lease_owned_by_checkpoint_item() -> None:
     assert coordinator.plan_snapshot().current_key == "B"  # type: ignore[union-attr]
 
 
-def test_checkpoint_rejects_source_leased_to_different_task_item_atomically() -> None:
+def test_checkpoint_rejects_source_owned_by_different_task_item_atomically() -> None:
     coordinator = TaskStateCoordinator()
     coordinator.create_plan(
         [
@@ -497,11 +534,11 @@ def test_checkpoint_rejects_source_leased_to_different_task_item_atomically() ->
         (_read_call("raw-a"), _read_result("raw-a")),
         (_read_call("raw-b"), _read_result("raw-b")),
     )
+    _record_read_owner(coordinator, "raw-a", task_key="A")
+    _record_read_owner(coordinator, "raw-b", task_key="B")
     coordinator.refresh(messages)
-    coordinator.record_evidence_lease("raw-a", task_key="A", raw_bytes=100)
-    coordinator.record_evidence_lease("raw-b", task_key="B", raw_bytes=200)
 
-    with pytest.raises(ValueError, match="different task items: raw-b"):
+    with pytest.raises(ValueError, match="belong to different task items: raw-b"):
         coordinator.create_checkpoint("A", {"fact": "A"}, ["raw-b"])
 
     assert coordinator.plan_snapshot().current_key == "A"  # type: ignore[union-attr]
@@ -510,10 +547,13 @@ def test_checkpoint_rejects_source_leased_to_different_task_item_atomically() ->
         "raw-a",
         "raw-b",
     }
-    assert coordinator.active_evidence_lease()["task_key"] is None  # type: ignore[index]
+    assert coordinator.source_owners_snapshot() == [
+        {"tool_call_id": "raw-a", "tool_name": "artifact.read", "task_key": "A"},
+        {"tool_call_id": "raw-b", "tool_name": "artifact.read", "task_key": "B"},
+    ]
 
 
-def test_mixed_checkpoint_sources_reject_atomically_when_one_lease_mismatches() -> None:
+def test_mixed_checkpoint_sources_reject_atomically_when_one_owner_mismatches() -> None:
     coordinator = TaskStateCoordinator()
     coordinator.create_plan(
         [
@@ -525,19 +565,19 @@ def test_mixed_checkpoint_sources_reject_atomically_when_one_lease_mismatches() 
         (_read_call("raw-a"), _read_result("raw-a")),
         (_read_call("raw-b"), _read_result("raw-b")),
     )
+    _record_read_owner(coordinator, "raw-a", task_key="A")
+    _record_read_owner(coordinator, "raw-b", task_key="B")
     coordinator.refresh(messages)
-    coordinator.record_evidence_lease("raw-a", task_key="A", raw_bytes=100)
-    coordinator.record_evidence_lease("raw-b", task_key="B", raw_bytes=200)
 
-    with pytest.raises(ValueError, match="different task items: raw-b"):
+    with pytest.raises(ValueError, match="belong to different task items: raw-b"):
         coordinator.create_checkpoint("A", {"fact": "A"}, ["raw-a", "raw-b"])
 
     assert coordinator.plan_snapshot().current_key == "A"  # type: ignore[union-attr]
     assert coordinator.store.snapshot() == {}
-    assert coordinator.active_evidence_lease() is not None
+    assert len(coordinator.source_owners_snapshot()) == 2
 
 
-def test_rejected_lease_owner_checkpoint_can_retry_a_then_b() -> None:
+def test_rejected_owner_checkpoint_can_retry_a_then_b() -> None:
     coordinator = TaskStateCoordinator()
     coordinator.create_plan(
         [
@@ -549,25 +589,23 @@ def test_rejected_lease_owner_checkpoint_can_retry_a_then_b() -> None:
         (_read_call("raw-a"), _read_result("raw-a")),
         (_read_call("raw-b"), _read_result("raw-b")),
     )
+    _record_read_owner(coordinator, "raw-a", task_key="A")
+    _record_read_owner(coordinator, "raw-b", task_key="B")
     coordinator.refresh(messages)
-    coordinator.record_evidence_lease("raw-a", task_key="A", raw_bytes=100)
-    coordinator.record_evidence_lease("raw-b", task_key="B", raw_bytes=200)
 
-    with pytest.raises(ValueError, match="different task items: raw-b"):
+    with pytest.raises(ValueError, match="belong to different task items: raw-b"):
         coordinator.create_checkpoint("A", {"fact": "A"}, ["raw-b"])
 
     coordinator.create_checkpoint("A", {"fact": "A"}, ["raw-a"])
     assert coordinator.plan_snapshot().current_key == "B"  # type: ignore[union-attr]
-    assert coordinator.active_evidence_lease() == {
-        "task_key": "B",
-        "observation_count": 1,
-        "raw_bytes": 200,
-    }
+    assert coordinator.source_owners_snapshot() == [
+        {"tool_call_id": "raw-b", "tool_name": "artifact.read", "task_key": "B"}
+    ]
 
     coordinator.refresh(messages)
     coordinator.create_checkpoint("B", {"fact": "B"}, ["raw-b"])
     assert coordinator.plan_snapshot().current_key is None  # type: ignore[union-attr]
-    assert coordinator.active_evidence_lease() is None
+    assert coordinator.source_owners_snapshot() == []
 
 
 def test_inline_source_is_a_checkpoint_candidate_without_copying_its_body() -> None:
@@ -580,7 +618,7 @@ def test_inline_source_is_a_checkpoint_candidate_without_copying_its_body() -> N
     )
     call = _inline_call()
     result = _inline_result(content={"items": [{"match_id": 1, "title": "synthetic"}]})
-    coordinator.record_inline_tool_result(call, result, task_key="A")
+    coordinator.record_tool_result(call, result, task_key="A")
     messages = [AssistantMessage(tool_calls=[call]), result]
     coordinator.refresh(messages)
 
@@ -631,9 +669,9 @@ def test_inline_and_artifact_sources_can_be_checkpointed_together() -> None:
         inline_result,
         read_result,
     ]
-    coordinator.record_inline_tool_result(inline_call, inline_result, task_key="A")
+    coordinator.record_tool_result(inline_call, inline_result, task_key="A")
+    coordinator.record_tool_result(read_call, read_result, task_key="A")
     coordinator.refresh(messages)
-    coordinator.record_evidence_lease("raw", task_key="A", raw_bytes=100)
 
     checkpoint = coordinator.create_checkpoint("A", {"matches": 1}, ["inline", "raw"])
     coordinator.refresh(messages)
@@ -687,7 +725,7 @@ def test_ineligible_inline_results_never_enter_checkpoint_candidates(
     )
     call = _inline_call(name=name)
     result = _inline_result(content=content, status=status)
-    coordinator.record_inline_tool_result(call, result, task_key="A")
+    coordinator.record_tool_result(call, result, task_key="A")
     coordinator.refresh([AssistantMessage(tool_calls=[call]), result])
 
     assert coordinator.context_payload()["active_manifest"] == []
@@ -709,8 +747,8 @@ def test_inline_source_ownership_rejects_mixed_cross_task_checkpoint_atomically(
     )
     inline_a, inline_b = _inline_call("inline-a"), _inline_call("inline-b")
     result_a, result_b = _inline_result("inline-a"), _inline_result("inline-b")
-    coordinator.record_inline_tool_result(inline_a, result_a, task_key="A")
-    coordinator.record_inline_tool_result(inline_b, result_b, task_key="B")
+    coordinator.record_tool_result(inline_a, result_a, task_key="A")
+    coordinator.record_tool_result(inline_b, result_b, task_key="B")
     messages = [
         AssistantMessage(tool_calls=[inline_a, inline_b]),
         result_a,
@@ -722,7 +760,7 @@ def test_inline_source_ownership_rejects_mixed_cross_task_checkpoint_atomically(
         item["tool_call_id"]
         for item in coordinator.context_payload()["checkpoint_candidates"]
     ] == ["inline-a"]
-    with pytest.raises(ValueError, match="different task items: inline-b") as raised:
+    with pytest.raises(ValueError, match="belong to different task items: inline-b") as raised:
         coordinator.create_checkpoint("A", {"matches": 2}, ["inline-a", "inline-b"])
 
     assert raised.value.details == {
@@ -739,7 +777,7 @@ def test_unplanned_inline_sources_remain_unowned_and_request_reset_clears_them()
     call = _inline_call("reused")
     result = _inline_result("reused")
     old_request = [AssistantMessage(tool_calls=[call]), result]
-    coordinator.record_inline_tool_result(call, result, task_key=None)
+    coordinator.record_tool_result(call, result, task_key=None)
     coordinator.refresh(old_request)
     assert coordinator.context_payload()["checkpoint_candidates"] == [
         {
@@ -772,7 +810,7 @@ def test_refresh_rejects_inline_sources_outside_effective_request_scope() -> Non
     call = _inline_call("previous-request")
     result = _inline_result("previous-request")
     messages = [AssistantMessage(tool_calls=[call]), result]
-    coordinator.record_inline_tool_result(call, result, task_key="A")
+    coordinator.record_tool_result(call, result, task_key="A")
     coordinator.refresh(messages)
     assert coordinator.context_payload()["checkpoint_candidates"]
 

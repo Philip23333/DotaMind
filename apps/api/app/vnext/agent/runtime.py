@@ -66,7 +66,7 @@ from app.vnext.agent.instructions import ANSWER_INSTRUCTION, DEGRADED_ANSWER_INS
 from app.vnext.agent.limits import AgentLimits
 from app.vnext.agent.runtime_context import RuntimeContext, classify_time_pressure
 from app.vnext.agent.runtime_prompt import render_runtime_prompt
-from app.vnext.agent.task_state import TaskStateCoordinator
+from app.vnext.agent.task_state import TaskPlan, TaskStateCoordinator
 from app.vnext.agent.trace import AgentTraceCollector
 from app.vnext.agent.transcript_rewrite import TranscriptRewriter
 from app.vnext.llm.errors import ModelContextWindowError, ModelTransientError
@@ -85,6 +85,7 @@ from app.vnext.llm.protocol import (
     UserMessage,
 )
 from app.vnext.tools.definition import ToolContextEffect
+from app.vnext.tools.errors import ToolError
 from app.vnext.tools.registry import ToolRegistry
 
 EventSink = Callable[[AgentEvent], Awaitable[None] | None]
@@ -1744,18 +1745,12 @@ class AgentRuntime:
             execution_history,
             self.system_instruction,
         )
-        current_tool_call_ids = _retained_current_materializing_call_ids(
-            request_messages,
-            self.tools,
-            request_start=request_start,
-        )
         if self.transcript_rewriter is not None:
             set_scope = getattr(self.transcript_rewriter, "set_request_scope", None)
             if callable(set_scope):
                 set_scope(request_start)
         if self.task_state_coordinator is not None:
             self.task_state_coordinator.set_request_scope(request_start)
-            self.task_state_coordinator.retain_evidence_leases(current_tool_call_ids)
             self.task_state_coordinator.refresh(request_messages)
         if trace_collector is not None:
             trace_collector.compaction_commit(
@@ -2381,8 +2376,58 @@ class AgentRuntime:
         execution_history: Any | None = None,
         request_id: Any | None = None,
     ) -> AsyncIterator[AgentEvent]:
+        resolved_task_keys: dict[str, str | None] = {}
+        invalid_task_key_results: dict[str, ToolResultMessage] = {}
+
+        def prepare_task_ownership(item: ToolCall, plan: TaskPlan | None) -> None:
+            task_key = plan.current_key if plan is not None else None
+            if self.task_state_coordinator is None or not self._is_materializing(item):
+                resolved_task_keys[item.id] = task_key
+                return
+            try:
+                definition = self.tools.get(item.name)
+            except KeyError:
+                resolved_task_keys[item.id] = task_key
+                return
+            if definition.input_model is None:
+                resolved_task_keys[item.id] = task_key
+                return
+            try:
+                arguments = definition.input_model.model_validate(item.arguments)
+            except ValidationError:
+                # ToolRegistry remains responsible for reporting schema errors.
+                resolved_task_keys[item.id] = task_key
+                return
+            requested_key = getattr(arguments, "task_key", None)
+            try:
+                task_key = self.task_state_coordinator.resolve_source_task_key(
+                    requested_key,
+                    plan=plan,
+                )
+            except ValueError:
+                assert plan is not None
+                invalid_task_key_results[item.id] = ToolResultMessage(
+                    tool_call_id=item.id,
+                    status="error",
+                    error=ToolError(
+                        code="invalid_arguments",
+                        message=f"invalid arguments for tool {item.name}",
+                        details={
+                            "task_key": requested_key,
+                            "available_task_keys": [planned.key for planned in plan.items],
+                        },
+                    ),
+                )
+            else:
+                resolved_task_keys[item.id] = task_key
+
         async def execute_and_record(item: ToolCall) -> ToolResultMessage:
-            result = await self.tools.execute(item, timeout=self._tool_timeout(item, deadline))
+            result = invalid_task_key_results.get(item.id)
+            if result is None:
+                result = await self.tools.execute(
+                    item,
+                    timeout=self._tool_timeout(item, deadline),
+                )
             if execution_history is not None and request_id is not None:
                 execution_history.record(request_id, result, kind="tool_result")
                 execution_history.remember_artifact_locators(item, result)
@@ -2406,6 +2451,8 @@ class AgentRuntime:
                 else None
             )
             for item in group:
+                prepare_task_ownership(item, plan)
+            for item in group:
                 self._check_controls(token, deadline)
                 event = ToolStarted(
                     step=step,
@@ -2423,6 +2470,12 @@ class AgentRuntime:
             )
             for item, result in zip(group, group_results, strict=True):
                 duration = max(0.0, monotonic() - started[item.id])
+                if result.status == "ok" and self.task_state_coordinator is not None:
+                    self.task_state_coordinator.record_tool_result(
+                        item,
+                        result,
+                        task_key=resolved_task_keys.get(item.id),
+                    )
                 if result.status == "ok":
                     event = ToolCompleted(
                         step=step,
@@ -2444,35 +2497,15 @@ class AgentRuntime:
                 if trace_collector is not None:
                     trace_collector.tool_result(step, result, duration, call=item)
                 if result.status == "ok":
-                    if self._is_materializing(item) and self.task_state_coordinator is not None:
-                        task_key = item.arguments.get("task_key")
-                        if task_key is None and plan is not None:
-                            task_key = plan.current_key
-                        self.task_state_coordinator.record_evidence_lease(
-                            item.id,
-                            task_key=task_key,
-                            raw_bytes=_serialized_size(result.model_dump(mode="json")),
-                        )
-                        if trace_collector is not None:
-                            trace_collector.active_evidence_lease(
-                                step,
-                                self.task_state_coordinator.active_evidence_lease(),
-                            )
-                    if item.name == "task.checkpoint" and self.task_state_coordinator is not None:
-                        if result.status == "ok" and trace_collector is not None:
-                            trace_collector.checkpoint_lease_snapshot(
+                    if trace_collector is not None and self.task_state_coordinator is not None:
+                        owners = self.task_state_coordinator.source_owners_snapshot()
+                        trace_collector.checkpoint_source_owners(step, owners)
+                        if item.name == "task.checkpoint":
+                            trace_collector.source_owners_after_checkpoint(
                                 step,
                                 checkpoint_key=item.arguments.get("key"),
-                                active_leases=(
-                                    self.task_state_coordinator.active_evidence_leases_snapshot()
-                                ),
+                                source_owners=owners,
                             )
-                    if self.task_state_coordinator is not None:
-                        self.task_state_coordinator.record_inline_tool_result(
-                            item,
-                            result,
-                            task_key=plan.current_key if plan is not None else None,
-                        )
                 results.append(result)
             index += len(group)
 
@@ -2741,83 +2774,6 @@ def _record_delivery(
     )
 
 
-def _retained_current_materializing_call_ids(
-    messages: Sequence[Message],
-    tools: ToolRegistry,
-    *,
-    request_start: int,
-) -> set[str]:
-    """Find current-request materializing results still eligible as evidence."""
-
-    calls_by_id: dict[str, list[tuple[str, int]]] = {}
-    result_offsets: dict[str, int] = {}
-    retained: set[str] = set()
-    for index, message in enumerate(messages):
-        if isinstance(message, AssistantMessage):
-            for call in message.tool_calls:
-                calls_by_id.setdefault(call.id, []).append((call.name, index))
-            continue
-        if not isinstance(message, ToolResultMessage):
-            continue
-        call_id = message.tool_call_id
-        matches = calls_by_id.get(call_id, [])
-        offset = result_offsets.get(call_id, 0)
-        if offset >= len(matches):
-            continue
-        tool_name, call_index = matches[offset]
-        result_offsets[call_id] = offset + 1
-        if (
-            call_index < request_start
-            or index < request_start
-            or message.status != "ok"
-            or not _is_materializing_tool_name(tool_name, tools)
-            or not _is_checkpointable_materialization_content(message.content)
-        ):
-            continue
-        retained.add(call_id)
-    return retained
-
-
-def _is_materializing_tool_name(tool_name: str, tools: ToolRegistry) -> bool:
-    try:
-        return tools.get(tool_name).context_effect is ToolContextEffect.MATERIALIZING
-    except KeyError:
-        return False
-
-
-def _is_receipt_content(content: Any) -> bool:
-    if not isinstance(content, dict):
-        return False
-    marker = content.get("_artifact_observation")
-    return isinstance(marker, dict) and marker.get("state") == "receipt_only"
-
-
-def _is_deferred_materialization_content(content: Any) -> bool:
-    if not isinstance(content, dict):
-        return False
-    marker = content.get("_context_materialization")
-    return isinstance(marker, dict) and marker.get("state") == "deferred"
-
-
-def _is_checkpointable_materialization_content(content: Any) -> bool:
-    if _is_receipt_content(content) or _is_deferred_materialization_content(content):
-        return False
-    if isinstance(content, dict) and (
-        content.get("externalized") is True or "artifact_ref" in content
-    ):
-        return False
-    stack = [content]
-    while stack:
-        value = stack.pop()
-        if isinstance(value, dict):
-            if "_artifact_path" in value:
-                return False
-            stack.extend(value.values())
-        elif isinstance(value, list):
-            stack.extend(value)
-    return True
-
-
 def _build_answer_request(
     *,
     instruction: str,
@@ -2856,17 +2812,6 @@ def _answer_conversation(messages: Sequence[Message]) -> list[Message]:
     """Keep the full effective execution transcript for the answer model."""
 
     return [message.model_copy(deep=True) for message in messages]
-
-
-def _serialized_size(value: Any) -> int:
-    return len(
-        json.dumps(
-            value,
-            ensure_ascii=False,
-            separators=(",", ":"),
-            sort_keys=True,
-        ).encode("utf-8")
-    )
 
 
 __all__ = ["AgentRuntime", "CancellationToken", "EventSink"]

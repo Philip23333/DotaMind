@@ -1023,7 +1023,7 @@ def test_compaction_refresh_keeps_only_inline_sources_in_effective_history(
             {"key": "second", "objective": "Second"},
         ]
     )
-    coordinator.record_inline_tool_result(source_group[2], source_group[1], task_key="first")
+    coordinator.record_tool_result(source_group[2], source_group[1], task_key="first")
     coordinator.refresh(messages)
     runtime = _runtime(
         ScriptedModelClient([ModelResponse.from_final("summary", finish_reason="stop")]),
@@ -1054,7 +1054,18 @@ def test_compaction_refresh_keeps_only_inline_sources_in_effective_history(
 
     assert request_start == 0
     assert effective_messages == history.effective_messages()
-    assert coordinator.active_evidence_lease() is None
+    expected_owners = (
+        [
+            {
+                "tool_call_id": source_group[2].id,
+                "tool_name": source_group[2].name,
+                "task_key": "first",
+            }
+        ]
+        if retained
+        else []
+    )
+    assert coordinator.source_owners_snapshot() == expected_owners
     candidate_ids = [
         item["tool_call_id"] for item in coordinator.context_payload()["checkpoint_candidates"]
     ]

@@ -55,7 +55,6 @@ def _completed_partition_coordinator() -> TaskStateCoordinator:
         ),
         current_key="B",
     )
-    coordinator.record_evidence_lease("raw-b", task_key="B", raw_bytes=42)
     return coordinator
 
 
@@ -80,7 +79,8 @@ def test_artifact_read_schema_explains_granularity_choices() -> None:
     assert "max_tokens" not in properties
     assert "budget" not in properties
     assert "task_key" in properties
-    assert "intended to support" in properties["task_key"]["description"]
+    assert "checkpoint source selection" in properties["task_key"]["description"]
+    assert "does not identify the Artifact's owner" in properties["task_key"]["description"]
 
 
 def test_outline_and_explicit_read_modes_are_unambiguous() -> None:
@@ -149,7 +149,6 @@ def test_completed_task_read_remains_allowed_for_follow_up_evidence() -> None:
             registry,
             reader,
             ArtifactGrepper(store),
-            completed_task_lookup=coordinator.completed_materialization_task,
         )
         result = await registry.execute(
             _call({"ref": ref, "mode": "read", "path": "rows", "task_key": "A"})
@@ -168,13 +167,11 @@ def test_pending_and_future_task_reads_remain_allowed() -> None:
     async def exercise():
         store = SessionArtifactStore()
         ref = await store.put({"rows": [{"id": 1}]})
-        coordinator = _completed_partition_coordinator()
         registry = ToolRegistry()
         register_artifact_tools(
             registry,
             ArtifactReader(store),
             ArtifactGrepper(store),
-            completed_task_lookup=coordinator.completed_materialization_task,
         )
         result = await registry.execute(
             _call({"ref": ref, "mode": "read", "path": "rows", "task_key": "B"})

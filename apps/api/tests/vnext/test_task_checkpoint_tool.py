@@ -48,6 +48,15 @@ def _registry(coordinator: TaskStateCoordinator) -> ToolRegistry:
     return registry
 
 
+def _record_owner(
+    coordinator: TaskStateCoordinator,
+    call_id: str,
+    task_key: str,
+) -> None:
+    messages = _active_messages(call_id)
+    coordinator.record_tool_result(messages[0].tool_calls[0], messages[1], task_key=task_key)  # type: ignore[union-attr,arg-type]
+
+
 def test_checkpoint_input_schema_has_no_model_supplied_checkpoint_id() -> None:
     schema = TaskCheckpointInput.model_json_schema()
 
@@ -105,7 +114,7 @@ def test_checkpoint_tool_accepts_a_current_successful_inline_result() -> None:
         tool_call_id=call.id,
         content={"items": [{"match_id": 1}]},
     )
-    coordinator.record_inline_tool_result(call, result_message, task_key="A")
+    coordinator.record_tool_result(call, result_message, task_key="A")
     coordinator.refresh([AssistantMessage(tool_calls=[call]), result_message])
 
     result = asyncio.run(
@@ -180,9 +189,9 @@ def test_checkpoint_source_error_exposes_recovery_candidates_and_allows_retry() 
         ]
     )
     messages = _active_messages("raw-a", "raw-b")
+    _record_owner(coordinator, "raw-a", "A")
+    _record_owner(coordinator, "raw-b", "B")
     coordinator.refresh(messages)  # type: ignore[arg-type]
-    coordinator.record_evidence_lease("raw-a", task_key="A", raw_bytes=100)
-    coordinator.record_evidence_lease("raw-b", task_key="B", raw_bytes=200)
     registry = _registry(coordinator)
 
     bad = asyncio.run(
@@ -209,15 +218,10 @@ def test_checkpoint_source_error_exposes_recovery_candidates_and_allows_retry() 
     }
     assert coordinator.plan_snapshot().current_key == "A"  # type: ignore[union-attr]
     assert coordinator.store.snapshot() == {}
-    assert coordinator.active_evidence_lease() == {
-        "task_key": None,
-        "observation_count": 2,
-        "raw_bytes": 300,
-        "partitions": [
-            {"task_key": "A", "observation_count": 1, "raw_bytes": 100},
-            {"task_key": "B", "observation_count": 1, "raw_bytes": 200},
-        ],
-    }
+    assert coordinator.source_owners_snapshot() == [
+        {"tool_call_id": "raw-a", "tool_name": "artifact.read", "task_key": "A"},
+        {"tool_call_id": "raw-b", "tool_name": "artifact.read", "task_key": "B"},
+    ]
     assert coordinator.plan_snapshot().current_key == "A"  # type: ignore[union-attr]
 
     good_a = asyncio.run(

@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import asyncio
 from typing import Any
+from uuid import uuid4
 
 from pydantic import BaseModel
 
+from app.vnext.agent.limits import AgentLimits
 from app.vnext.agent.runtime import AgentRuntime
 from app.vnext.agent.task_state import TaskStateCoordinator
 from app.vnext.agent.trace import AgentTraceCollector
@@ -28,6 +30,7 @@ from app.vnext.llm.protocol import (
     ToolResultMessage,
     UserMessage,
 )
+from app.vnext.product.session_history import SessionExecutionHistory
 from app.vnext.tools import ToolContextEffect, ToolDefinition, ToolRegistry
 from app.vnext.tools.artifacts import register_artifact_tools
 from app.vnext.tools.task import register_task_checkpoint_tool, register_task_plan_tool
@@ -439,17 +442,16 @@ def test_flow_f_plan_serially_checkpoints_each_result_unit() -> None:
     ]
     assert snapshot["steps"][2].get("transcript_rewrites", []) == []
     assert snapshot["steps"][4].get("transcript_rewrites", []) == []
-    active_lease = snapshot["steps"][1]["active_evidence_lease"]
-    assert active_lease["task_key"] == "2025"
-    assert active_lease["observation_count"] == 1
-    assert active_lease["raw_bytes"] > 0
+    assert snapshot["steps"][1]["checkpoint_source_owners"] == [
+        {"tool_call_id": "read-2025", "tool_name": "artifact.read", "task_key": "2025"}
+    ]
     assert all(
         "partition_evidence_release" not in step
         for step in snapshot["steps"]
     )
-    assert snapshot["steps"][2]["active_leases_after_checkpoint"] == {
+    assert snapshot["steps"][2]["source_owners_after_checkpoint"] == {
         "checkpoint_key": "2025",
-        "leases": [],
+        "source_owners": [],
     }
     assert all(
         tool_result["result"]["tool_call_id"] in {"plan-call", "checkpoint-2025", "checkpoint-2026"}
@@ -517,7 +519,7 @@ def test_flow_i_future_partition_leases_survive_earlier_checkpoint() -> None:
         system = _system(request)
         assert "CURRENT: 2026" in system
         assert '"tool_call_id":"read-b"' in system
-        assert '"lease_key":"2026"' in system
+        assert '"task_key":"2026"' in system
         assert any(
             isinstance(message, ToolResultMessage)
             and message.tool_call_id == "read-a"
@@ -541,7 +543,7 @@ def test_flow_i_future_partition_leases_survive_earlier_checkpoint() -> None:
 
     plan = coordinator.plan_snapshot()
     assert plan is not None and plan.current_key is None
-    assert coordinator.active_evidence_lease() is None
+    assert coordinator.source_owners_snapshot() == []
 
 
 def test_flow_h_invalid_plan_source_does_not_advance_or_claim_raw() -> None:
@@ -602,7 +604,7 @@ def test_current_checkpoint_candidate_adds_completion_guidance() -> None:
     def third(request: ModelRequest) -> ModelResponse:
         system = _system(request)
         assert "checkpoint_candidates: 1" in system
-        assert "checkpoint_candidate_bytes:" in system
+        assert "checkpoint_candidate_bytes:" not in system
         assert "CURRENT has checkpointable observations" in system
         assert "If they already satisfy the objective, checkpoint them." in system
         return ModelResponse(message=FinalMessage(content="partial"))
@@ -631,9 +633,9 @@ def test_future_evidence_is_allowed_but_does_not_replace_current_focus() -> None
     model = ScriptedTranscriptModelClient([first, second, third])
     _run(model, coordinator)
 
-    lease = coordinator.active_evidence_lease()
-    assert lease is not None
-    assert lease["task_key"] == "2026"
+    assert coordinator.source_owners_snapshot() == [
+        {"tool_call_id": "read-future", "tool_name": "artifact.read", "task_key": "2026"}
+    ]
 
 
 class _SyntheticMatchesInput(BaseModel):
@@ -806,6 +808,418 @@ class _OversizedLookupInput(BaseModel):
 
 class _OversizedLookupOutput(BaseModel):
     matches: list[dict[str, Any]]
+
+
+class _CountingArtifactReader(ArtifactReader):
+    def __init__(self, store: SessionArtifactStore) -> None:
+        super().__init__(store)
+        self.read_calls = 0
+
+    async def read(
+        self,
+        ref: str,
+        path: str,
+        *,
+        offset: int | None = None,
+        limit: int | None = None,
+    ) -> ArtifactReadResult:
+        self.read_calls += 1
+        return await super().read(ref, path, offset=offset, limit=limit)
+
+
+def _real_artifact_registry(
+    coordinator: TaskStateCoordinator,
+) -> tuple[ToolRegistry, SessionArtifactStore, _CountingArtifactReader, list[str]]:
+    artifact_store = SessionArtifactStore()
+    reader = _CountingArtifactReader(artifact_store)
+    lookup_editions: list[str] = []
+
+    async def lookup(args: _OversizedLookupInput) -> _OversizedLookupOutput:
+        lookup_editions.append(args.edition)
+        return _OversizedLookupOutput(
+            matches=[
+                {
+                    "edition": args.edition,
+                    "kind": "synthetic tournament",
+                    "source_id": 501,
+                    "year": 2025,
+                    "marker": "second source row",
+                    "synthetic_record": "x" * 13_000,
+                }
+            ]
+        )
+
+    registry = ToolRegistry(
+        result_processor=ArtifactBackedToolResultProcessor(
+            ToolResponseExternalizer(artifact_store)
+        )
+    )
+    registry.register(
+        ToolDefinition(
+            name="synthetic.large_matches",
+            description="Return one oversized synthetic match record.",
+            input_model=_OversizedLookupInput,
+            output_model=_OversizedLookupOutput,
+            handler=lookup,
+            read_only=True,
+            parallel_safe=True,
+        )
+    )
+    register_artifact_tools(registry, reader, ArtifactGrepper(artifact_store))
+    register_task_plan_tool(registry, coordinator)
+    register_task_checkpoint_tool(registry, coordinator)
+    return registry, artifact_store, reader, lookup_editions
+
+
+def _artifact_ref(request: ModelRequest, call_id: str) -> str:
+    preview = next(
+        message
+        for message in request.messages
+        if isinstance(message, ToolResultMessage) and message.tool_call_id == call_id
+    )
+    assert preview.status == "ok"
+    assert preview.content["externalized"] is True  # type: ignore[index]
+    return str(preview.content["artifact_ref"])  # type: ignore[index]
+
+
+def _artifact_read_call(
+    call_id: str,
+    ref: str,
+    *,
+    task_key: str | None,
+    path: str = "matches.0.edition",
+) -> ToolCall:
+    arguments: dict[str, Any] = {
+        "ref": ref,
+        "mode": "read",
+        "path": path,
+    }
+    if task_key is not None:
+        arguments["task_key"] = task_key
+    return ToolCall(id=call_id, name="artifact.read", arguments=arguments)
+
+
+def _two_task_plan_call() -> ToolCall:
+    return ToolCall(
+        id="plan-ab",
+        name="task.plan",
+        arguments={
+            "items": [
+                {"key": "A", "objective": "Collect A evidence"},
+                {"key": "B", "objective": "Collect B evidence"},
+            ]
+        },
+    )
+
+
+def test_real_artifact_reads_after_task_completion_keep_owner_and_runtime_recovers() -> None:
+    coordinator = TaskStateCoordinator()
+    registry, artifact_store, reader, lookup_editions = _real_artifact_registry(coordinator)
+
+    def first(_: ModelRequest) -> ModelResponse:
+        return _tool_response(_two_task_plan_call())
+
+    def second(_: ModelRequest) -> ModelResponse:
+        return _tool_response(
+            ToolCall(
+                id="large-lookup",
+                name="synthetic.large_matches",
+                arguments={"edition": "synthetic"},
+            )
+        )
+
+    def third(request: ModelRequest) -> ModelResponse:
+        ref = _artifact_ref(request, "large-lookup")
+        return _tool_response(
+            _artifact_read_call("read-a-consumed", ref, task_key="A", path="matches.0.edition"),
+            _artifact_read_call("read-a-unconsumed", ref, task_key="A", path="matches.0.kind"),
+            _artifact_read_call("read-b-pending", ref, task_key="B", path="matches.0.source_id"),
+        )
+
+    def fourth(request: ModelRequest) -> ModelResponse:
+        manifest = coordinator.context_payload()["active_manifest"]
+        assert {item["tool_call_id"] for item in manifest} == {
+            "read-a-consumed",
+            "read-a-unconsumed",
+            "read-b-pending",
+        }
+        return _tool_response(
+            _checkpoint_call("checkpoint-a", key="A", source=["read-a-consumed"])
+        )
+
+    def fifth(request: ModelRequest) -> ModelResponse:
+        system = _system(request)
+        assert "CURRENT: B" in system
+        assert '"tool_call_id":"read-a-unconsumed"' in system
+        assert '"task_key":"A"' in system
+        assert '"tool_call_id":"read-b-pending"' in system
+        assert '"tool_call_id":"read-a-consumed"' not in system
+        assert "future_owned_active_observations: 0" in system
+        ref = _artifact_ref(request, "large-lookup")
+        return _tool_response(
+            _artifact_read_call("read-a-completed", ref, task_key="A", path="matches.0.year"),
+            _artifact_read_call("read-unknown-key", ref, task_key="missing"),
+            _artifact_read_call("read-b-second", ref, task_key="B", path="matches.0.marker"),
+            ToolCall(
+                id="read-failed",
+                name="artifact.read",
+                arguments={
+                    "ref": ref,
+                    "mode": "read",
+                    "path": "matches.99.edition",
+                    "task_key": "B",
+                },
+            ),
+        )
+
+    def sixth(request: ModelRequest) -> ModelResponse:
+        assert reader.read_calls == 6  # the unknown task key never reaches ArtifactReader
+        results = {
+            message.tool_call_id: message
+            for message in request.messages
+            if isinstance(message, ToolResultMessage)
+        }
+        assert results["read-a-completed"].status == "ok"
+        assert results["read-unknown-key"].error is not None
+        assert results["read-unknown-key"].error.code == "invalid_arguments"
+        assert results["read-unknown-key"].error.details == {
+            "task_key": "missing",
+            "available_task_keys": ["A", "B"],
+        }
+        assert results["read-b-second"].status == "ok"
+        assert results["read-failed"].error is not None
+        assert results["read-failed"].error.code == "artifact_path_not_found"
+        owners = coordinator.source_owners_snapshot()
+        assert owners == [
+            {"tool_call_id": "read-a-completed", "tool_name": "artifact.read", "task_key": "A"},
+            {"tool_call_id": "read-a-unconsumed", "tool_name": "artifact.read", "task_key": "A"},
+            {"tool_call_id": "read-b-pending", "tool_name": "artifact.read", "task_key": "B"},
+            {"tool_call_id": "read-b-second", "tool_name": "artifact.read", "task_key": "B"},
+        ]
+        assert "future_owned_active_observations: 0" in _system(request)
+        return _tool_response(
+            _checkpoint_call("checkpoint-a-as-b", key="B", source=["read-a-completed"])
+        )
+
+    def seventh(request: ModelRequest) -> ModelResponse:
+        error = next(
+            message
+            for message in request.messages
+            if isinstance(message, ToolResultMessage)
+            and message.tool_call_id == "checkpoint-a-as-b"
+        )
+        assert error.status == "error"
+        assert error.error is not None
+        assert error.error.code == "invalid_checkpoint_source"
+        assert error.error.details == {
+            "checkpoint_key": "B",
+            "invalid_sources": ["read-a-completed"],
+            "available_sources": ["read-b-pending", "read-b-second"],
+        }
+        assert coordinator.plan_snapshot().current_key == "B"  # type: ignore[union-attr]
+        assert "future_owned_active_observations: 0" in _system(request)
+        return _tool_response(
+            _checkpoint_call("checkpoint-consumed-again", key="B", source=["read-a-consumed"])
+        )
+
+    def eighth(request: ModelRequest) -> ModelResponse:
+        error = next(
+            message
+            for message in request.messages
+            if isinstance(message, ToolResultMessage)
+            and message.tool_call_id == "checkpoint-consumed-again"
+        )
+        assert error.status == "error"
+        assert error.error is not None
+        assert error.error.code == "invalid_checkpoint_source"
+        assert error.error.details == {
+            "checkpoint_key": "B",
+            "invalid_sources": ["read-a-consumed"],
+            "available_sources": ["read-b-pending", "read-b-second"],
+        }
+        return _tool_response(
+            _checkpoint_call("checkpoint-b", key="B", source=["read-b-pending"])
+        )
+
+    def ninth(request: ModelRequest) -> ModelResponse:
+        assert coordinator.plan_snapshot().current_key is None  # type: ignore[union-attr]
+        assert '"A":{"fact":"A"}' in _system(request)
+        assert '"B":{"fact":"A"}' in _system(request)
+        return ModelResponse(
+            message=FinalMessage(
+                content=(
+                    "Completed both tasks."
+                    if not request.tools
+                    else "Execution completed both tasks."
+                )
+            )
+        )
+
+    def answer(_: ModelRequest) -> ModelResponse:
+        return ModelResponse(message=FinalMessage(content="Completed both tasks."))
+
+    model = ScriptedTranscriptModelClient(
+        [first, second, third, fourth, fifth, sixth, seventh, eighth, ninth, answer]
+    )
+    runtime = AgentRuntime(
+        model,
+        registry,
+        transcript_rewriter=ArtifactObservationTranscriptRewriter(),
+        task_state_coordinator=coordinator,
+    )
+    final = asyncio.run(runtime.run([UserMessage(content="Read the artifact for A and B.")]))
+
+    assert final.content == "Completed both tasks."
+    assert lookup_editions == ["synthetic"]
+    assert reader.read_calls == 6
+    assert len(artifact_store._documents) == 1
+    plan = coordinator.plan_snapshot()
+    assert plan is not None and plan.current_key is None
+    assert [(item.key, item.status.value) for item in plan.items] == [
+        ("A", "completed"),
+        ("B", "completed"),
+    ]
+    assert coordinator.store.snapshot().keys() == {"A", "B"}
+
+
+def test_real_artifact_remains_readable_after_compaction_removes_old_observation() -> None:
+    coordinator = TaskStateCoordinator()
+    registry, artifact_store, reader, lookup_editions = _real_artifact_registry(coordinator)
+    history = SessionExecutionHistory()
+    request_id = uuid4()
+    history.begin_request(
+        request_id,
+        "current question",
+        initial_messages=[
+            UserMessage(content="older background " + "x" * 2_000),
+            UserMessage(content="Read the current synthetic artifact."),
+        ],
+    )
+    artifact_ref: str | None = None
+
+    def scripted(request: ModelRequest) -> ModelResponse:
+        nonlocal artifact_ref
+        if request.metadata.get("purpose") == "context_compaction":
+            assert request.tools == []
+            return ModelResponse(
+                message=FinalMessage(content="An earlier observation can be reread."),
+                finish_reason="stop",
+            )
+        if not request.tools:
+            return ModelResponse(
+                message=FinalMessage(content="The artifact remained readable.")
+            )
+        if request.step == 1:
+            return _tool_response(_two_task_plan_call())
+        if request.step == 2:
+            return _tool_response(
+                ToolCall(
+                    id="large-lookup",
+                    name="synthetic.large_matches",
+                    arguments={"edition": "synthetic"},
+                )
+            )
+        if request.step == 3:
+            artifact_ref = _artifact_ref(request, "large-lookup")
+            return _tool_response(
+                _artifact_read_call(
+                    "read-old-a",
+                    artifact_ref,
+                    task_key="A",
+                )
+            )
+        if request.step == 4:
+            assert artifact_ref is not None
+            return _tool_response(
+                _artifact_read_call(
+                    "read-intermediate-a",
+                    artifact_ref,
+                    task_key="A",
+                    path="matches.0.kind",
+                )
+            )
+        if request.step == 5:
+            assert "CURRENT: A" in _system(request)
+            assert '"tool_call_id":"read-old-a"' not in _system(request)
+            assert all(
+                owner["tool_call_id"] != "read-old-a"
+                for owner in coordinator.source_owners_snapshot()
+            )
+            return _tool_response(
+                _artifact_read_call(
+                    "read-new-a",
+                    artifact_ref,
+                    task_key="A",
+                    path="matches.0.year",
+                )
+            )
+        if request.step == 6:
+            assert '"tool_call_id":"read-new-a"' in _system(request)
+            assert '"tool_call_id":"read-old-a"' not in _system(request)
+            return _tool_response(
+                _checkpoint_call("checkpoint-removed-id", key="A", source=["read-old-a"])
+            )
+        if request.step == 6:
+            assert '"tool_call_id":"read-new-a"' in _system(request)
+            assert '"tool_call_id":"read-old-a"' not in _system(request)
+            return _tool_response(
+                _checkpoint_call("checkpoint-removed-id", key="A", source=["read-old-a"])
+            )
+        if request.step == 7:
+            error = next(
+                message
+                for message in request.messages
+                if isinstance(message, ToolResultMessage)
+                and message.tool_call_id == "checkpoint-removed-id"
+            )
+            assert error.status == "error"
+            assert error.error is not None
+            assert error.error.code == "invalid_checkpoint_source"
+            assert error.error.details == {
+                "checkpoint_key": "A",
+                "invalid_sources": ["read-old-a"],
+                "available_sources": ["read-intermediate-a", "read-new-a"],
+            }
+            assert coordinator.plan_snapshot().current_key == "A"  # type: ignore[union-attr]
+            return _tool_response(
+                _checkpoint_call("checkpoint-new-id", key="A", source=["read-new-a"])
+            )
+        if request.step == 8:
+            return ModelResponse(message=FinalMessage(content="Evidence collected."))
+        raise AssertionError(f"unexpected model step: {request.step}")
+
+    model = ScriptedTranscriptModelClient([scripted] * 20)
+    runtime = AgentRuntime(
+        model,
+        registry,
+        limits=AgentLimits(
+            deadline_seconds=5,
+            answer_timeout_seconds=5,
+            compaction_keep_recent_tokens=1,
+            compaction_max_input_bytes=100_000,
+            compaction_reserve_tokens=160,
+            context_estimate_bytes_per_token=1,
+        ),
+        transcript_rewriter=ArtifactObservationTranscriptRewriter(),
+        task_state_coordinator=coordinator,
+    )
+    trace = AgentTraceCollector()
+    final = asyncio.run(
+        runtime.run(
+            history.effective_messages(),
+            execution_history=history,
+            request_id=request_id,
+            compact_before_steps=(5,),
+            trace_collector=trace,
+        )
+    )
+
+    assert final.content == "The artifact remained readable."
+    assert lookup_editions == ["synthetic"]
+    assert reader.read_calls == 3
+    assert len(artifact_store._documents) == 1
+    assert trace.snapshot()["compaction_commits"]
+    assert coordinator.plan_snapshot().current_key == "B"  # type: ignore[union-attr]
 
 
 def test_externalized_preview_is_not_checkpointable_but_artifact_read_is() -> None:
