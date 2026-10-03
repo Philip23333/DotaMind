@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from uuid import uuid4
 
+import httpx
 import pytest
 from pydantic import BaseModel
 
@@ -18,6 +20,7 @@ from app.vnext.agent.evidence_summary_lifecycle import (
 from app.vnext.agent.limits import AgentLimits
 from app.vnext.agent.runtime import AgentRuntime, CancellationToken, _Deadline
 from app.vnext.agent.trace import AgentTraceCollector
+from app.vnext.llm.openai_compatible import OpenAICompatibleModelClient
 from app.vnext.llm.protocol import (
     AssistantMessage,
     FinalMessage,
@@ -355,6 +358,265 @@ def test_deadline_and_provider_failures_are_recorded_without_error_text() -> Non
     assert provider_call["status"] == "failed"
     assert provider_call["error_type"] == "ModelProviderError"
     assert "sensitive provider body" not in str(provider_call)
+
+
+@pytest.mark.parametrize(
+    "purpose",
+    ["execution", "primary_answer", "degraded_answer", "compaction"],
+)
+@pytest.mark.parametrize("capture_full_calls", [True, False])
+def test_response_diagnostics_are_associated_with_all_call_purposes(
+    purpose: str,
+    capture_full_calls: bool,
+) -> None:
+    raw_arguments = '{"value": 1 nope}'
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        chunks = [
+            {
+                "choices": [
+                    {
+                        "delta": {
+                            "content": "partial answer",
+                            "tool_calls": [
+                                {
+                                    "index": 0,
+                                    "id": "call-1",
+                                    "function": {
+                                        "name": "sample_lookup",
+                                        "arguments": raw_arguments[:11],
+                                    },
+                                }
+                            ],
+                        },
+                        "finish_reason": None,
+                    }
+                ]
+            },
+            {
+                "choices": [
+                    {
+                        "delta": {
+                            "tool_calls": [
+                                {
+                                    "index": 0,
+                                    "function": {"arguments": raw_arguments[11:]},
+                                }
+                            ]
+                        },
+                        "finish_reason": "length",
+                    }
+                ]
+            },
+            {"choices": [], "usage": {"completion_tokens": 19}},
+        ]
+        body = "".join(
+            f"data: {json.dumps(chunk, ensure_ascii=False, separators=(',', ':'))}\n\n"
+            for chunk in chunks
+        ) + "data: [DONE]\n\n"
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            text=body,
+            request=request,
+        )
+
+    model = OpenAICompatibleModelClient(
+        api_key="offline-test-key",
+        base_url="https://provider.test/v1",
+        model="test-model",
+        transport=httpx.MockTransport(handler),
+    )
+    executions = 0
+
+    def execute_tool(_args: _ToolArgs) -> _ToolResult:
+        nonlocal executions
+        executions += 1
+        return _ToolResult(value=1)
+
+    tools = ToolRegistry()
+    tools.register(
+        ToolDefinition(
+            name="sample.lookup",
+            description="Lookup a sample.",
+            input_model=_ToolArgs,
+            output_model=_ToolResult,
+            handler=execute_tool,
+        )
+    )
+    runtime = AgentRuntime(model, tools)
+    trace = AgentTraceCollector(capture_full_calls=capture_full_calls)
+    request = ModelRequest(
+        messages=[UserMessage(content="question")],
+        tools=tools.schemas(),
+        step=3,
+    )
+
+    with pytest.raises(ModelProviderError) as raised:
+        asyncio.run(_invoke(runtime, request, trace, purpose=purpose))
+
+    assert raised.value.code == "model_provider_error"
+    assert executions == 0
+    snapshot = trace.snapshot()
+    if capture_full_calls:
+        call = snapshot["model_calls"][0]
+        diagnostic = call["failure_diagnostics"]
+        assert call["response"] is None
+        assert call["partial_text"] == "partial answer"
+        assert call["status"] == "failed"
+        assert call["error_type"] == "ModelProviderError"
+        assert diagnostic["tool_calls"][0]["raw_arguments"] == raw_arguments
+    else:
+        assert "model_calls" not in snapshot
+        step = snapshot["steps"][0]
+        assert step["streamed_text"] == ["partial answer"]
+        diagnostic = step["model_failure_diagnostics"][0]
+        assert diagnostic["purpose"] == purpose
+        assert "raw_arguments" not in diagnostic["tool_calls"][0]
+        assert "arguments_prefix" not in diagnostic["tool_calls"][0]
+        assert "arguments_suffix" not in diagnostic["tool_calls"][0]
+    assert diagnostic["stage"] == "tool_arguments_decode"
+    assert diagnostic["response_mode"] == "stream"
+    assert diagnostic["finish_reason"] == "length"
+    assert diagnostic["usage"] == {"completion_tokens": 19}
+    assert diagnostic["stream_done_received"] is True
+    assert diagnostic["failed_tool_call_index"] == 0
+    assert diagnostic["tool_calls"][0]["provider_name"] == "sample_lookup"
+    assert diagnostic["tool_calls"][0]["agent_name"] == "sample.lookup"
+
+
+def test_collector_diagnostic_failure_does_not_replace_model_error() -> None:
+    class BrokenDiagnosticRecording(AgentTraceCollector):
+        def model_call_failure_diagnostics(self, *_args, **_kwargs) -> None:
+            raise RuntimeError("sensitive collector failure")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        event = {
+            "choices": [
+                {
+                    "delta": {
+                        "tool_calls": [
+                            {
+                                "index": 0,
+                                "id": "call-1",
+                                "function": {"name": "echo", "arguments": "not-json"},
+                            }
+                        ]
+                    },
+                    "finish_reason": "tool_calls",
+                }
+            ]
+        }
+        body = f"data: {json.dumps(event)}\n\ndata: [DONE]\n\n"
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            text=body,
+            request=request,
+        )
+
+    runtime = AgentRuntime(
+        OpenAICompatibleModelClient(
+            api_key="offline-test-key",
+            base_url="https://provider.test/v1",
+            model="test-model",
+            transport=httpx.MockTransport(handler),
+        ),
+        ToolRegistry(),
+    )
+    with pytest.raises(ModelProviderError) as raised:
+        asyncio.run(
+            _invoke(
+                runtime,
+                _request(),
+                BrokenDiagnosticRecording(capture_full_calls=True),
+            )
+        )
+    assert raised.value.code == "model_provider_error"
+    assert "sensitive collector failure" not in str(raised.value)
+
+
+def test_runtime_does_not_execute_tool_from_malformed_provider_arguments() -> None:
+    executions = 0
+
+    def execute_tool(_args: _ToolArgs) -> _ToolResult:
+        nonlocal executions
+        executions += 1
+        return _ToolResult(value=1)
+
+    tools = ToolRegistry()
+    tools.register(
+        ToolDefinition(
+            name="sample.lookup",
+            description="Lookup a sample.",
+            input_model=_ToolArgs,
+            output_model=_ToolResult,
+            handler=execute_tool,
+        )
+    )
+    raw_arguments = '{"value": 1 nope}'
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        event = {
+            "choices": [
+                {
+                    "delta": {
+                        "content": "partial answer",
+                        "tool_calls": [
+                            {
+                                "index": 0,
+                                "id": "call-runtime",
+                                "function": {
+                                    "name": "sample_lookup",
+                                    "arguments": raw_arguments,
+                                },
+                            }
+                        ],
+                    },
+                    "finish_reason": "tool_calls",
+                }
+            ]
+        }
+        body = (
+            f"data: {json.dumps(event, ensure_ascii=False, separators=(',', ':'))}\n\n"
+            + "data: [DONE]\n\n"
+        )
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            text=body,
+            request=request,
+        )
+
+    runtime = AgentRuntime(
+        OpenAICompatibleModelClient(
+            api_key="offline-test-key",
+            base_url="https://provider.test/v1",
+            model="test-model",
+            transport=httpx.MockTransport(handler),
+        ),
+        tools,
+    )
+    trace = AgentTraceCollector(capture_full_calls=True)
+
+    async def run():
+        return [
+            event
+            async for event in runtime.run_stream(
+                [UserMessage(content="run the tool")],
+                trace_collector=trace,
+            )
+        ]
+
+    with pytest.raises(ModelProviderError) as raised:
+        asyncio.run(run())
+
+    assert raised.value.code == "model_provider_error"
+    assert executions == 0
+    call = trace.snapshot()["model_calls"][0]
+    assert call["response"] is None
+    assert call["partial_text"] == "partial answer"
+    assert call["failure_diagnostics"]["tool_calls"][0]["raw_arguments"] == raw_arguments
 
 
 def test_truncated_summary_response_is_kept_when_candidate_is_rejected() -> None:

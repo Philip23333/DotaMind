@@ -69,7 +69,11 @@ from app.vnext.agent.runtime_prompt import render_runtime_prompt
 from app.vnext.agent.task_state import TaskPlan, TaskStateCoordinator
 from app.vnext.agent.trace import AgentTraceCollector
 from app.vnext.agent.transcript_rewrite import TranscriptRewriter
-from app.vnext.llm.errors import ModelContextWindowError, ModelTransientError
+from app.vnext.llm.errors import (
+    ModelContextWindowError,
+    ModelResponseDiagnosticError,
+    ModelTransientError,
+)
 from app.vnext.llm.protocol import (
     AssistantMessage,
     FinalMessage,
@@ -1903,6 +1907,20 @@ class AgentRuntime:
             call_error = exc
             raise
         except Exception as exc:
+            if (
+                trace_collector is not None
+                and isinstance(exc, ModelResponseDiagnosticError)
+                and exc.diagnostics is not None
+            ):
+                try:
+                    trace_collector.model_call_failure_diagnostics(
+                        call_id,
+                        step=step,
+                        purpose=purpose,
+                        diagnostics=exc.diagnostics,
+                    )
+                except Exception:
+                    pass
             wrapped = ModelProviderError(
                 f"model provider request failed: {exc}",
                 cause=exc,

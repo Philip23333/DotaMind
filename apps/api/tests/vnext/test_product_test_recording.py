@@ -8,6 +8,7 @@ import zipfile
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
+import httpx
 import pytest
 from fastapi import FastAPI
 
@@ -20,6 +21,7 @@ from app.vnext.agent.events import (
     AnswerStageStarted,
 )
 from app.vnext.agent.runtime import AgentRuntime
+from app.vnext.llm.openai_compatible import OpenAICompatibleModelClient
 from app.vnext.llm.protocol import FinalMessage, ModelRequest, ModelResponse, UserMessage
 from app.vnext.product.chat import VNextChatService
 from app.vnext.product.context import ConversationContextBuilder
@@ -91,14 +93,21 @@ class _TraceStore:
         return traces[:limit]
 
 
-def _service(repository, runtime, trace_store, *, visual_entity_enricher=None) -> VNextChatService:
+def _service(
+    repository,
+    runtime,
+    trace_store,
+    *,
+    visual_entity_enricher=None,
+    test_recording_enabled: bool = True,
+) -> VNextChatService:
     return VNextChatService(
         repository,  # type: ignore[arg-type]
         runtime,  # type: ignore[arg-type]
         ConversationContextBuilder(),
         visual_entity_enricher or DotaVisualEntityEnricher(),
         trace_store=trace_store,
-        test_recording_enabled=True,
+        test_recording_enabled=test_recording_enabled,
     )
 
 
@@ -328,6 +337,136 @@ def test_failure_is_saved_in_test_mode_and_keeps_error_event_reference() -> None
     assert saved.recording_mode == "test"
     assert saved.trace["model_calls"][0]["status"] == "failed"
     assert "synthetic provider failure" not in json.dumps(saved.trace["model_calls"])
+
+
+@pytest.mark.parametrize("test_recording_enabled", [True, False])
+def test_parsing_failure_diagnostics_round_trip_through_existing_trace_zip(
+    test_recording_enabled: bool,
+) -> None:
+    raw_arguments = '{"hero":"斯温\n","quote":"他说"好"}'
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        chunks = [
+            {
+                "choices": [
+                    {
+                        "delta": {
+                            "content": "partial answer",
+                            "tool_calls": [
+                                {
+                                    "index": 0,
+                                    "id": "call-zip",
+                                    "function": {
+                                        "name": "task_checkpoint",
+                                        "arguments": raw_arguments[:14],
+                                    },
+                                }
+                            ],
+                        },
+                        "finish_reason": None,
+                    }
+                ]
+            },
+            {
+                "choices": [
+                    {
+                        "delta": {
+                            "tool_calls": [
+                                {
+                                    "index": 0,
+                                    "function": {"arguments": raw_arguments[14:]},
+                                }
+                            ]
+                        },
+                        "finish_reason": "length",
+                    }
+                ]
+            },
+            {"choices": [], "usage": {"completion_tokens": 23}},
+        ]
+        body = "".join(
+            f"data: {json.dumps(chunk, ensure_ascii=False, separators=(',', ':'))}\n\n"
+            for chunk in chunks
+        ) + "data: [DONE]\n\n"
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            text=body,
+            request=request,
+        )
+
+    async def exercise():
+        repository = _Repository()
+        trace_store = _TraceStore()
+        model = OpenAICompatibleModelClient(
+            api_key="offline-test-key",
+            base_url="https://provider.test/v1",
+            model="test-model",
+            transport=httpx.MockTransport(handler),
+        )
+        service = _service(
+            repository,
+            AgentRuntime(model, ToolRegistry()),
+            trace_store,
+            test_recording_enabled=test_recording_enabled,
+        )
+        browser_id = str(uuid4())
+        session_id = uuid4()
+        request_id = uuid4()
+        prepared = await service.prepare_turn(
+            browser_id=browser_id,
+            session_id=session_id,
+            request_id=request_id,
+            query="diagnostic zip test",
+        )
+        events = [event async for event in service.stream_turn_states(prepared)]
+        failed = events[-1]
+        assert failed.state.status == "failed"
+        assert failed.trace is not None
+        bundle = await service.download_trace_bundle(
+            browser_id=browser_id,
+            trace_id=failed.trace.trace_id,
+        )
+        return trace_store, failed, bundle
+
+    trace_store, failed, bundle = asyncio.run(exercise())
+    saved = trace_store.saved[failed.trace.trace_id]
+    assert saved.recording_mode == ("test" if test_recording_enabled else "diagnostic")
+    with zipfile.ZipFile(io.BytesIO(bundle)) as archive:
+        assert set(archive.namelist()) == {
+            "manifest.json",
+            "trace.json",
+            "model-calls.jsonl",
+            "artifact-manifest.json",
+        }
+        manifest = json.loads(archive.read("manifest.json"))
+        exported_trace = json.loads(archive.read("trace.json"))
+        model_calls = [
+            json.loads(line)
+            for line in archive.read("model-calls.jsonl").decode("utf-8").splitlines()
+        ]
+
+    assert manifest["recording_version"] == 1
+    assert manifest["status"] == "failed"
+    if test_recording_enabled:
+        call_diagnostic = exported_trace["model_calls"][0]["failure_diagnostics"]
+        assert len(model_calls) == 1
+        assert model_calls[0]["failure_diagnostics"] == call_diagnostic
+        assert call_diagnostic["tool_calls"][0]["raw_arguments"] == raw_arguments
+        assert call_diagnostic["tool_calls"][0]["agent_name"] is None
+        assert "model_failure_diagnostics" not in exported_trace["steps"][0]
+    else:
+        call_diagnostic = exported_trace["steps"][0]["model_failure_diagnostics"][0]
+        assert model_calls == []
+        assert call_diagnostic["purpose"] == "execution"
+        assert "raw_arguments" not in call_diagnostic["tool_calls"][0]
+        assert "arguments_prefix" not in call_diagnostic["tool_calls"][0]
+        assert "arguments_suffix" not in call_diagnostic["tool_calls"][0]
+        assert raw_arguments not in json.dumps(exported_trace, ensure_ascii=False)
+    assert call_diagnostic["stage"] == "tool_arguments_decode"
+    assert call_diagnostic["finish_reason"] == "length"
+    assert call_diagnostic["usage"] == {"completion_tokens": 23}
+    assert call_diagnostic["stream_done_received"] is True
 
 
 def test_trace_store_write_failure_does_not_change_answer_or_runtime_error() -> None:

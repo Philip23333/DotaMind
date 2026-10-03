@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncIterator, Callable, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from json import JSONDecodeError
@@ -12,7 +12,18 @@ from typing import Any
 
 import httpx
 
-from app.vnext.llm.errors import ModelContextWindowError, ModelTransientError
+from app.vnext.llm.diagnostics import (
+    DiagnosticStage,
+    ModelFailureDiagnostics,
+    ModelJSONErrorDiagnostic,
+    ToolCallDiagnosticInput,
+    build_model_failure_diagnostics,
+)
+from app.vnext.llm.errors import (
+    ModelContextWindowError,
+    ModelResponseDiagnosticError,
+    ModelTransientError,
+)
 from app.vnext.llm.protocol import (
     AssistantMessage,
     FinalMessage,
@@ -25,7 +36,7 @@ from app.vnext.llm.protocol import (
 )
 
 
-class OpenAICompatibleError(RuntimeError):
+class OpenAICompatibleError(ModelResponseDiagnosticError):
     """Base error for an OpenAI-compatible transport/protocol failure."""
 
 
@@ -42,6 +53,16 @@ class TransientProviderHTTPError(ProviderHTTPError, ModelTransientError):
 
 class ProviderProtocolError(OpenAICompatibleError):
     """The provider returned data that is not a supported chat-completions response."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        diagnostics: ModelFailureDiagnostics | None = None,
+        failed_tool_call_index: int | None = None,
+    ) -> None:
+        super().__init__(message, diagnostics=diagnostics)
+        self.failed_tool_call_index = failed_tool_call_index
 
 
 class MalformedToolArgumentsError(ProviderProtocolError):
@@ -66,6 +87,18 @@ class _ToolCallAccumulator:
     call_id: str | None = None
     name: str | None = None
     argument_fragments: list[str] = field(default_factory=list)
+
+
+def _attach_diagnostics_best_effort(
+    error: ProviderProtocolError,
+    build: Callable[[], ModelFailureDiagnostics],
+) -> None:
+    """Attach bounded evidence without replacing the provider parsing error."""
+
+    try:
+        error.diagnostics = build()
+    except Exception:
+        pass
 
 
 class OpenAICompatibleModelClient:
@@ -108,46 +141,79 @@ class OpenAICompatibleModelClient:
         finish_reason: str | None = None
         usage: dict[str, Any] = {}
         saw_done = False
+        diagnostic_stage: DiagnosticStage = "stream_protocol"
 
-        async with self._open_stream(payload) as response:
-            async for line in response.aiter_lines():
-                if not line:
-                    continue
-                if line.startswith(":"):
-                    continue
-                if not line.startswith("data:"):
-                    raise ProviderProtocolError("malformed SSE line")
+        try:
+            async with self._open_stream(payload) as response:
+                async for line in response.aiter_lines():
+                    if not line:
+                        continue
+                    if line.startswith(":"):
+                        continue
+                    if not line.startswith("data:"):
+                        raise ProviderProtocolError("malformed SSE line")
 
-                encoded = line[len("data:") :].lstrip()
-                if encoded == "[DONE]":
-                    saw_done = True
-                    break
-                try:
-                    chunk = json.loads(encoded)
-                except JSONDecodeError as exc:
-                    raise ProviderProtocolError("stream data is not valid JSON") from exc
+                    encoded = line[len("data:") :].lstrip()
+                    if encoded == "[DONE]":
+                        saw_done = True
+                        break
+                    try:
+                        chunk = json.loads(encoded)
+                    except JSONDecodeError as exc:
+                        raise ProviderProtocolError("stream data is not valid JSON") from exc
 
-                deltas, chunk_finish_reason, chunk_usage = self._consume_stream_chunk(
-                    chunk,
-                    content_parts,
-                    tool_calls,
+                    if isinstance(chunk, Mapping):
+                        observed_usage = chunk.get("usage")
+                        if isinstance(observed_usage, Mapping):
+                            usage.update(observed_usage)
+                        observed_choices = chunk.get("choices")
+                        if (
+                            isinstance(observed_choices, list)
+                            and observed_choices
+                            and isinstance(observed_choices[0], Mapping)
+                        ):
+                            observed_finish_reason = observed_choices[0].get("finish_reason")
+                            if isinstance(observed_finish_reason, str):
+                                finish_reason = observed_finish_reason
+
+                    deltas, chunk_finish_reason, chunk_usage = self._consume_stream_chunk(
+                        chunk,
+                        content_parts,
+                        tool_calls,
+                    )
+                    for delta in deltas:
+                        yield delta
+                    if chunk_finish_reason is not None:
+                        finish_reason = chunk_finish_reason
+                    usage.update(chunk_usage)
+
+            if not saw_done:
+                raise ProviderProtocolError("stream ended before [DONE]")
+
+            diagnostic_stage = "response_assembly"
+            yield self._assemble_stream_response(
+                content_parts,
+                tool_calls,
+                finish_reason,
+                usage,
+                provider_to_agent,
+            )
+        except ProviderProtocolError as exc:
+            if exc.diagnostics is None:
+                _attach_diagnostics_best_effort(
+                    exc,
+                    lambda exc=exc: self._stream_failure_diagnostics(
+                        stage=diagnostic_stage,
+                        original_error_type=type(exc).__name__,
+                        tool_calls=tool_calls,
+                        provider_to_agent=provider_to_agent,
+                        finish_reason=finish_reason,
+                        usage=usage,
+                        stream_done_received=saw_done,
+                        failed_tool_call_index=exc.failed_tool_call_index,
+                    ),
                 )
-                for delta in deltas:
-                    yield delta
-                if chunk_finish_reason is not None:
-                    finish_reason = chunk_finish_reason
-                usage.update(chunk_usage)
-
-        if not saw_done:
-            raise ProviderProtocolError("stream ended before [DONE]")
-
-        yield self._assemble_stream_response(
-            content_parts,
-            tool_calls,
-            finish_reason,
-            usage,
-            provider_to_agent,
-        )
+            raise
 
     def _payload(
         self,
@@ -306,49 +372,105 @@ class OpenAICompatibleModelClient:
         try:
             data = response.json()
         except (JSONDecodeError, ValueError) as exc:
-            raise ProviderProtocolError("model provider returned invalid JSON") from exc
+            error = ProviderProtocolError("model provider returned invalid JSON")
+            _attach_diagnostics_best_effort(
+                error,
+                lambda: build_model_failure_diagnostics(
+                    stage="response_assembly",
+                    response_mode="complete",
+                    original_error_type=type(error).__name__,
+                    finish_reason=None,
+                    usage=None,
+                    stream_done_received=None,
+                    tool_calls=(),
+                ),
+            )
+            raise error from exc
         if not isinstance(data, Mapping):
-            raise ProviderProtocolError("model provider response must be a JSON object")
+            error = ProviderProtocolError("model provider response must be a JSON object")
+            _attach_diagnostics_best_effort(
+                error,
+                lambda: cls._complete_failure_diagnostics(
+                    error,
+                    provider_to_agent=provider_to_agent,
+                    raw_tool_calls=(),
+                    finish_reason=None,
+                    usage=None,
+                    failed_tool_call_index=None,
+                ),
+            )
+            raise error
         context_error = cls._context_window_error(data, status_code=None)
         if context_error is not None:
             raise context_error
 
-        choices = data.get("choices")
-        if not isinstance(choices, list) or not choices:
-            raise ProviderProtocolError("model provider response has no choices")
-        choice = choices[0]
-        if not isinstance(choice, Mapping):
-            raise ProviderProtocolError("model provider choice must be an object")
-        message = choice.get("message")
-        if not isinstance(message, Mapping):
-            raise ProviderProtocolError("model provider choice has no message object")
+        usage = cls._usage(data)
+        finish_reason: str | None = None
+        raw_tool_calls: Sequence[Any] = ()
+        try:
+            choices = data.get("choices")
+            if not isinstance(choices, list) or not choices:
+                raise ProviderProtocolError("model provider response has no choices")
+            choice = choices[0]
+            if not isinstance(choice, Mapping):
+                raise ProviderProtocolError("model provider choice must be an object")
 
-        content = message.get("content")
-        if content is not None and not isinstance(content, str):
-            raise ProviderProtocolError("assistant message content must be a string or null")
-        raw_tool_calls = message.get("tool_calls")
-        if raw_tool_calls is not None and not isinstance(raw_tool_calls, list):
-            raise ProviderProtocolError("assistant tool_calls must be a list")
+            candidate_finish_reason = choice.get("finish_reason")
+            if candidate_finish_reason is not None and not isinstance(candidate_finish_reason, str):
+                raise ProviderProtocolError("finish_reason must be a string or null")
+            finish_reason = candidate_finish_reason
 
-        tool_calls = [
-            cls._parse_tool_call(raw_call, provider_to_agent) for raw_call in (raw_tool_calls or [])
-        ]
-        finish_reason = choice.get("finish_reason")
-        if finish_reason is not None and not isinstance(finish_reason, str):
-            raise ProviderProtocolError("finish_reason must be a string or null")
-        if tool_calls:
+            message = choice.get("message")
+            if not isinstance(message, Mapping):
+                raise ProviderProtocolError("model provider choice has no message object")
+
+            content = message.get("content")
+            if content is not None and not isinstance(content, str):
+                raise ProviderProtocolError("assistant message content must be a string or null")
+            candidate_tool_calls = message.get("tool_calls")
+            if candidate_tool_calls is not None and not isinstance(candidate_tool_calls, list):
+                raise ProviderProtocolError("assistant tool_calls must be a list")
+            raw_tool_calls = candidate_tool_calls or []
+
+            tool_calls: list[ToolCall] = []
+            for index, raw_call in enumerate(raw_tool_calls):
+                tool_calls.append(
+                    cls._parse_tool_call(
+                        raw_call,
+                        provider_to_agent,
+                        index=index,
+                        raw_tool_calls=raw_tool_calls,
+                        finish_reason=finish_reason,
+                        usage=usage,
+                    )
+                )
+            if tool_calls:
+                return ModelResponse(
+                    message=AssistantMessage(content=content, tool_calls=tool_calls),
+                    finish_reason=finish_reason,
+                    usage=usage,
+                )
+            if content is None:
+                raise ProviderProtocolError("final assistant message has no content")
             return ModelResponse(
-                message=AssistantMessage(content=content, tool_calls=tool_calls),
+                message=FinalMessage(content=content),
                 finish_reason=finish_reason,
-                usage=cls._usage(data),
+                usage=usage,
             )
-        if content is None:
-            raise ProviderProtocolError("final assistant message has no content")
-        return ModelResponse(
-            message=FinalMessage(content=content),
-            finish_reason=finish_reason,
-            usage=cls._usage(data),
-        )
+        except ProviderProtocolError as exc:
+            if exc.diagnostics is None:
+                _attach_diagnostics_best_effort(
+                    exc,
+                    lambda exc=exc: cls._complete_failure_diagnostics(
+                        exc,
+                        provider_to_agent=provider_to_agent,
+                        raw_tool_calls=raw_tool_calls,
+                        finish_reason=finish_reason,
+                        usage=usage,
+                        failed_tool_call_index=exc.failed_tool_call_index,
+                    ),
+                )
+            raise
 
     @classmethod
     def _consume_stream_chunk(
@@ -414,29 +536,47 @@ class OpenAICompatibleModelClient:
         call_id = raw_call.get("id")
         if call_id is not None:
             if not isinstance(call_id, str) or not call_id:
-                raise ProviderProtocolError("stream tool call id must be a non-empty string")
+                raise ProviderProtocolError(
+                    "stream tool call id must be a non-empty string",
+                    failed_tool_call_index=index,
+                )
             if accumulator.call_id is not None and accumulator.call_id != call_id:
-                raise ProviderProtocolError("stream tool call id changed during assembly")
+                raise ProviderProtocolError(
+                    "stream tool call id changed during assembly",
+                    failed_tool_call_index=index,
+                )
             accumulator.call_id = call_id
 
         raw_function = raw_call.get("function")
         if raw_function is not None and not isinstance(raw_function, Mapping):
-            raise ProviderProtocolError("stream tool call function must be an object")
+            raise ProviderProtocolError(
+                "stream tool call function must be an object",
+                failed_tool_call_index=index,
+            )
         if raw_function is None:
             return
 
         name = raw_function.get("name")
         if name is not None:
             if not isinstance(name, str) or not name:
-                raise ProviderProtocolError("stream tool call name must be a non-empty string")
+                raise ProviderProtocolError(
+                    "stream tool call name must be a non-empty string",
+                    failed_tool_call_index=index,
+                )
             if accumulator.name is not None and accumulator.name != name:
-                raise ProviderProtocolError("stream tool call name changed during assembly")
+                raise ProviderProtocolError(
+                    "stream tool call name changed during assembly",
+                    failed_tool_call_index=index,
+                )
             accumulator.name = name
 
         arguments = raw_function.get("arguments")
         if arguments is not None:
             if not isinstance(arguments, str):
-                raise ProviderProtocolError("stream tool call arguments must be a string")
+                raise ProviderProtocolError(
+                    "stream tool call arguments must be a string",
+                    failed_tool_call_index=index,
+                )
             accumulator.argument_fragments.append(arguments)
 
     @classmethod
@@ -453,20 +593,62 @@ class OpenAICompatibleModelClient:
             assembled_calls: list[ToolCall] = []
             for index, accumulator in sorted(tool_calls.items()):
                 if not accumulator.call_id:
-                    raise ProviderProtocolError(f"stream tool call {index} has no id")
+                    raise ProviderProtocolError(
+                        f"stream tool call {index} has no id",
+                        failed_tool_call_index=index,
+                    )
                 if not accumulator.name:
-                    raise ProviderProtocolError(f"stream tool call {index} has no name")
+                    raise ProviderProtocolError(
+                        f"stream tool call {index} has no name",
+                        failed_tool_call_index=index,
+                    )
                 encoded_arguments = "".join(accumulator.argument_fragments) or "{}"
                 try:
                     arguments = json.loads(encoded_arguments)
                 except JSONDecodeError as exc:
-                    raise MalformedToolArgumentsError(
-                        "stream tool call arguments are not valid JSON"
-                    ) from exc
-                if not isinstance(arguments, dict):
-                    raise MalformedToolArgumentsError(
-                        "stream tool call arguments must decode to an object"
+                    error = MalformedToolArgumentsError(
+                        "stream tool call arguments are not valid JSON",
+                        failed_tool_call_index=index,
                     )
+                    _attach_diagnostics_best_effort(
+                        error,
+                        lambda error=error, index=index, exc=exc: cls._stream_failure_diagnostics(
+                            stage="tool_arguments_decode",
+                            original_error_type=type(error).__name__,
+                            tool_calls=tool_calls,
+                            provider_to_agent=provider_to_agent,
+                            finish_reason=finish_reason,
+                            usage=usage,
+                            stream_done_received=True,
+                            failed_tool_call_index=index,
+                            json_error=ModelJSONErrorDiagnostic(
+                                message=exc.msg,
+                                position=exc.pos,
+                                line=exc.lineno,
+                                column=exc.colno,
+                            ),
+                        ),
+                    )
+                    raise error from exc
+                if not isinstance(arguments, dict):
+                    error = MalformedToolArgumentsError(
+                        "stream tool call arguments must decode to an object",
+                        failed_tool_call_index=index,
+                    )
+                    _attach_diagnostics_best_effort(
+                        error,
+                        lambda error=error, index=index: cls._stream_failure_diagnostics(
+                            stage="tool_arguments_decode",
+                            original_error_type=type(error).__name__,
+                            tool_calls=tool_calls,
+                            provider_to_agent=provider_to_agent,
+                            finish_reason=finish_reason,
+                            usage=usage,
+                            stream_done_received=True,
+                            failed_tool_call_index=index,
+                        ),
+                    )
+                    raise error
                 assembled_calls.append(
                     ToolCall(
                         id=accumulator.call_id,
@@ -493,31 +675,193 @@ class OpenAICompatibleModelClient:
         return dict(usage) if isinstance(usage, Mapping) else {}
 
     @classmethod
+    def _stream_failure_diagnostics(
+        cls,
+        *,
+        stage: DiagnosticStage,
+        original_error_type: str,
+        tool_calls: Mapping[int, _ToolCallAccumulator],
+        provider_to_agent: Mapping[str, str],
+        finish_reason: str | None,
+        usage: Mapping[str, Any] | None,
+        stream_done_received: bool | None,
+        failed_tool_call_index: int | None,
+        json_error: ModelJSONErrorDiagnostic | None = None,
+    ) -> ModelFailureDiagnostics:
+        inputs = [
+            ToolCallDiagnosticInput(
+                index=index,
+                call_id=accumulator.call_id,
+                provider_name=accumulator.name,
+                agent_name=(
+                    provider_to_agent.get(accumulator.name)
+                    if accumulator.name is not None
+                    else None
+                ),
+                argument_fragments=tuple(accumulator.argument_fragments),
+                argument_fragment_count=len(accumulator.argument_fragments),
+            )
+            for index, accumulator in tool_calls.items()
+        ]
+        return build_model_failure_diagnostics(
+            stage=stage,
+            response_mode="stream",
+            original_error_type=original_error_type,
+            finish_reason=finish_reason,
+            usage=usage,
+            stream_done_received=stream_done_received,
+            tool_calls=inputs,
+            failed_tool_call_index=failed_tool_call_index,
+            json_error=json_error,
+        )
+
+    @classmethod
+    def _complete_failure_diagnostics(
+        cls,
+        error: ProviderProtocolError,
+        *,
+        provider_to_agent: Mapping[str, str],
+        raw_tool_calls: Sequence[Any],
+        finish_reason: str | None,
+        usage: Mapping[str, Any] | None,
+        failed_tool_call_index: int | None,
+        stage: DiagnosticStage = "response_assembly",
+        json_error: ModelJSONErrorDiagnostic | None = None,
+    ) -> ModelFailureDiagnostics:
+        inputs: list[ToolCallDiagnosticInput] = []
+        for index, raw_call in enumerate(raw_tool_calls):
+            call_id: str | None = None
+            provider_name: str | None = None
+            arguments: str | None = None
+            if isinstance(raw_call, Mapping):
+                raw_id = raw_call.get("id")
+                call_id = raw_id if isinstance(raw_id, str) else None
+                function = raw_call.get("function")
+                if isinstance(function, Mapping):
+                    raw_name = function.get("name")
+                    provider_name = raw_name if isinstance(raw_name, str) else None
+                    raw_arguments = function.get("arguments")
+                    arguments = raw_arguments if isinstance(raw_arguments, str) else None
+            inputs.append(
+                ToolCallDiagnosticInput(
+                    index=index,
+                    call_id=call_id,
+                    provider_name=provider_name,
+                    agent_name=(
+                        provider_to_agent.get(provider_name)
+                        if provider_name is not None
+                        else None
+                    ),
+                    argument_fragments=(arguments,) if arguments is not None else None,
+                    argument_fragment_count=None,
+                )
+            )
+        return build_model_failure_diagnostics(
+            stage=stage,
+            response_mode="complete",
+            original_error_type=type(error).__name__,
+            finish_reason=finish_reason,
+            usage=usage,
+            stream_done_received=None,
+            tool_calls=inputs,
+            failed_tool_call_index=failed_tool_call_index,
+            json_error=json_error,
+        )
+
+    @classmethod
     def _parse_tool_call(
         cls,
         raw_call: Any,
         provider_to_agent: Mapping[str, str],
+        *,
+        index: int = 0,
+        raw_tool_calls: Sequence[Any] | None = None,
+        finish_reason: str | None = None,
+        usage: Mapping[str, Any] | None = None,
     ) -> ToolCall:
         if not isinstance(raw_call, Mapping):
-            raise ProviderProtocolError("tool call must be an object")
+            raise ProviderProtocolError("tool call must be an object", failed_tool_call_index=index)
         call_id = raw_call.get("id")
         if not isinstance(call_id, str) or not call_id:
-            raise ProviderProtocolError("tool call id must be a non-empty string")
+            raise ProviderProtocolError(
+                "tool call id must be a non-empty string",
+                failed_tool_call_index=index,
+            )
         function = raw_call.get("function")
         if not isinstance(function, Mapping):
-            raise ProviderProtocolError("tool call function must be an object")
+            raise ProviderProtocolError(
+                "tool call function must be an object",
+                failed_tool_call_index=index,
+            )
         name = function.get("name")
         if not isinstance(name, str) or not name:
-            raise ProviderProtocolError("tool call function name must be a non-empty string")
+            raise ProviderProtocolError(
+                "tool call function name must be a non-empty string",
+                failed_tool_call_index=index,
+            )
         raw_arguments = function.get("arguments")
         if not isinstance(raw_arguments, str):
-            raise MalformedToolArgumentsError("tool call arguments must be a JSON-encoded string")
+            error = MalformedToolArgumentsError(
+                "tool call arguments must be a JSON-encoded string",
+                failed_tool_call_index=index,
+            )
+            _attach_diagnostics_best_effort(
+                error,
+                lambda: cls._complete_failure_diagnostics(
+                    error,
+                    provider_to_agent=provider_to_agent,
+                    raw_tool_calls=raw_tool_calls or (raw_call,),
+                    finish_reason=finish_reason,
+                    usage=usage,
+                    failed_tool_call_index=index,
+                    stage="tool_arguments_decode",
+                ),
+            )
+            raise error
         try:
             arguments = json.loads(raw_arguments)
         except JSONDecodeError as exc:
-            raise MalformedToolArgumentsError("tool call arguments are not valid JSON") from exc
+            error = MalformedToolArgumentsError(
+                "tool call arguments are not valid JSON",
+                failed_tool_call_index=index,
+            )
+            _attach_diagnostics_best_effort(
+                error,
+                lambda exc=exc: cls._complete_failure_diagnostics(
+                    error,
+                    provider_to_agent=provider_to_agent,
+                    raw_tool_calls=raw_tool_calls or (raw_call,),
+                    finish_reason=finish_reason,
+                    usage=usage,
+                    failed_tool_call_index=index,
+                    stage="tool_arguments_decode",
+                    json_error=ModelJSONErrorDiagnostic(
+                        message=exc.msg,
+                        position=exc.pos,
+                        line=exc.lineno,
+                        column=exc.colno,
+                    ),
+                ),
+            )
+            raise error from exc
         if not isinstance(arguments, dict):
-            raise MalformedToolArgumentsError("tool call arguments must decode to an object")
+            error = MalformedToolArgumentsError(
+                "tool call arguments must decode to an object",
+                failed_tool_call_index=index,
+            )
+            _attach_diagnostics_best_effort(
+                error,
+                lambda: cls._complete_failure_diagnostics(
+                    error,
+                    provider_to_agent=provider_to_agent,
+                    raw_tool_calls=raw_tool_calls or (raw_call,),
+                    finish_reason=finish_reason,
+                    usage=usage,
+                    failed_tool_call_index=index,
+                    stage="tool_arguments_decode",
+                ),
+            )
+            raise error
         try:
             return ToolCall(
                 id=call_id,
@@ -525,7 +869,10 @@ class OpenAICompatibleModelClient:
                 arguments=arguments,
             )
         except ValueError as exc:
-            raise ProviderProtocolError("tool call arguments are not a valid object") from exc
+            raise ProviderProtocolError(
+                "tool call arguments are not a valid object",
+                failed_tool_call_index=index,
+            ) from exc
 
     @staticmethod
     def _tool_name_maps(

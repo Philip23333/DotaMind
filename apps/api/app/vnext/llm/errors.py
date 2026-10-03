@@ -2,6 +2,21 @@
 
 from __future__ import annotations
 
+from app.vnext.llm.diagnostics import ModelFailureDiagnostics
+
+
+class ModelResponseDiagnosticError(RuntimeError):
+    """A model response failure with optional bounded parsing evidence."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        diagnostics: ModelFailureDiagnostics | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.diagnostics = diagnostics
+
 
 class ModelContextWindowError(RuntimeError):
     """The model provider explicitly reported a context-window limit."""
@@ -16,4 +31,8 @@ class ModelTransientError(RuntimeError):
     """A provider-neutral model transport error that may succeed on retry."""
 
 
-__all__ = ["ModelContextWindowError", "ModelTransientError"]
+__all__ = [
+    "ModelContextWindowError",
+    "ModelResponseDiagnosticError",
+    "ModelTransientError",
+]

@@ -579,3 +579,27 @@ call bodies.
 turn later fails; the chat response reports `chat_store_error` separately.
 Recording or trace download failures do not replace the original answer or
 Runtime error.
+
+Model-response parsing failures may add a versioned `failure_diagnostics` object
+to the affected model call. It records the parsing stage, stream or complete
+mode, provider tool names and their mapped agent names when known, the observed
+finish reason and usage, and the JSON error location when parsing failed. Stream
+diagnostics also record whether `[DONE]` arrived and how many argument fragments
+were collected. Missing provider fields remain `null` or `{}`; they are not
+inferred. A valid JSON value that is not an object retains `json_error: null`.
+
+Full test recording may retain bounded tool-argument evidence: at most 64 calls,
+64 KiB per call, and 256 KiB across one failure. Oversized arguments keep only
+UTF-8-safe prefix and suffix snippets of up to 4 KiB each, subject to the same
+cumulative budget, with `arguments_truncated` and the original UTF-8 byte count.
+These diagnostics describe model-response parsing; they are not raw HTTP or SSE
+traffic and never include response headers or complete provider response bodies.
+The default diagnostic-only recording removes raw argument text and snippets
+while keeping the parsing stage, locations, counts, truncation flags, and
+provider-reported metadata.
+
+Diagnostic objects use `schema_version: 1` and are an optional addition to the
+existing four-file ZIP, which remains at `recording_version: 1`. Older traces
+without these fields mean that the evidence was not collected at that time; they
+do not establish that the failure did not occur. Diagnostic persistence is
+best-effort and cannot replace or suppress the original Runtime error.

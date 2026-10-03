@@ -13,6 +13,11 @@ from app.vnext.agent.evidence_summary_lifecycle import (
     build_history_compaction_request,
     validate_compaction_response,
 )
+from app.vnext.llm.diagnostics import (
+    MAX_DIAGNOSTIC_ARGUMENT_BYTES,
+    MAX_DIAGNOSTIC_ARGUMENT_EDGE_BYTES,
+    MAX_DIAGNOSTIC_TOTAL_ARGUMENT_BYTES,
+)
 from app.vnext.llm.openai_compatible import (
     MalformedToolArgumentsError,
     OpenAICompatibleModelClient,
@@ -490,8 +495,14 @@ def test_adapter_rejects_malformed_sse_and_missing_done_marker() -> None:
             request=request,
         )
 
-    with pytest.raises(ProviderProtocolError, match="valid JSON"):
+    with pytest.raises(ProviderProtocolError, match="valid JSON") as malformed_error:
         _collect_stream(_adapter(malformed), _request([UserMessage(content="go")]))
+    malformed_diagnostics = malformed_error.value.diagnostics
+    assert malformed_diagnostics is not None
+    assert malformed_diagnostics.stage == "stream_protocol"
+    assert malformed_diagnostics.stream_done_received is False
+    assert malformed_diagnostics.tool_calls == ()
+    assert "not-json" not in str(malformed_diagnostics.model_dump(mode="json"))
 
     def missing_done(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
@@ -503,8 +514,10 @@ def test_adapter_rejects_malformed_sse_and_missing_done_marker() -> None:
             request=request,
         )
 
-    with pytest.raises(ProviderProtocolError, match=r"\[DONE\]"):
+    with pytest.raises(ProviderProtocolError, match=r"\[DONE\]") as missing_done_error:
         _collect_stream(_adapter(missing_done), _request([UserMessage(content="go")]))
+    assert missing_done_error.value.diagnostics is not None
+    assert missing_done_error.value.diagnostics.stream_done_received is False
 
     def http_error(request: httpx.Request) -> httpx.Response:
         return httpx.Response(503, text="provider secret body", request=request)
@@ -571,8 +584,33 @@ def test_adapter_rejects_malformed_arguments_http_errors_and_protocol_shapes() -
             request=request,
         )
 
-    with pytest.raises(MalformedToolArgumentsError):
+    with pytest.raises(MalformedToolArgumentsError) as malformed_error:
         asyncio.run(_adapter(malformed_arguments).complete(_request([])))
+    diagnostic = malformed_error.value.diagnostics
+    assert diagnostic is not None
+    assert diagnostic.response_mode == "complete"
+    assert diagnostic.stage == "tool_arguments_decode"
+    assert diagnostic.finish_reason is None
+    assert diagnostic.usage == {}
+    assert diagnostic.stream_done_received is None
+    assert diagnostic.failed_tool_call_index == 0
+    assert diagnostic.tool_calls[0].raw_arguments == "not-json"
+    assert diagnostic.json_error is not None
+    assert diagnostic.json_error.position == 0
+
+    def malformed_arguments_with_metadata(request: httpx.Request) -> httpx.Response:
+        response = malformed_arguments(request)
+        payload = response.json()
+        payload["usage"] = {"completion_tokens": 3}
+        payload["choices"][0]["finish_reason"] = "length"
+        return httpx.Response(200, json=payload, request=request)
+
+    with pytest.raises(MalformedToolArgumentsError) as metadata_error:
+        asyncio.run(_adapter(malformed_arguments_with_metadata).complete(_request([])))
+    metadata_diagnostic = metadata_error.value.diagnostics
+    assert metadata_diagnostic is not None
+    assert metadata_diagnostic.finish_reason == "length"
+    assert metadata_diagnostic.usage == {"completion_tokens": 3}
 
     def http_error(request: httpx.Request) -> httpx.Response:
         return httpx.Response(502, text="upstream unavailable", request=request)
@@ -586,6 +624,506 @@ def test_adapter_rejects_malformed_arguments_http_errors_and_protocol_shapes() -
 
     with pytest.raises(ProviderProtocolError):
         asyncio.run(_adapter(malformed_response).complete(_request([])))
+
+
+def test_stream_tool_argument_failure_records_complete_multifragment_diagnostic() -> None:
+    raw_arguments = '{"key":"斯温\n"bad"}'
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            text=_sse_body(
+                {
+                    "choices": [
+                        {
+                            "delta": {
+                                "tool_calls": [
+                                    {
+                                        "index": 0,
+                                        "id": "call-good",
+                                        "function": {
+                                            "name": "task_checkpoint",
+                                            "arguments": '{"key":"position-4"}',
+                                        },
+                                    },
+                                    {
+                                        "index": 1,
+                                        "id": "call-bad",
+                                        "function": {
+                                            "name": "task_checkpoint",
+                                            "arguments": raw_arguments[:12],
+                                        },
+                                    },
+                                ]
+                            },
+                            "finish_reason": None,
+                        }
+                    ]
+                },
+                {
+                    "choices": [
+                        {
+                            "delta": {
+                                "tool_calls": [
+                                    {
+                                        "index": 1,
+                                        "function": {"arguments": raw_arguments[12:]},
+                                    }
+                                ]
+                            },
+                            "finish_reason": "length",
+                        }
+                    ],
+                    "usage": {"completion_tokens": 4096},
+                },
+            ),
+            request=request,
+        )
+
+    request = _request(
+        [UserMessage(content="run")],
+        [ModelTool(name="task.checkpoint", description="checkpoint", input_schema={})],
+    )
+    with pytest.raises(MalformedToolArgumentsError) as raised:
+        _collect_stream(_adapter(handler), request)
+
+    diagnostic = raised.value.diagnostics
+    assert diagnostic is not None
+    assert diagnostic.stage == "tool_arguments_decode"
+    assert diagnostic.response_mode == "stream"
+    assert diagnostic.original_error_type == "MalformedToolArgumentsError"
+    assert diagnostic.finish_reason == "length"
+    assert diagnostic.usage == {"completion_tokens": 4096}
+    assert diagnostic.stream_done_received is True
+    assert diagnostic.failed_tool_call_index == 1
+    assert diagnostic.tool_calls_total == 2
+    assert [call.index for call in diagnostic.tool_calls] == [0, 1]
+    assert diagnostic.tool_calls[0].raw_arguments == '{"key":"position-4"}'
+    assert diagnostic.tool_calls[0].argument_fragment_count == 1
+    assert diagnostic.tool_calls[0].provider_name == "task_checkpoint"
+    assert diagnostic.tool_calls[0].agent_name == "task.checkpoint"
+    assert diagnostic.tool_calls[1].raw_arguments == raw_arguments
+    assert diagnostic.tool_calls[1].argument_fragment_count == 2
+    assert diagnostic.json_error is not None
+    expected_error = None
+    try:
+        json.loads(raw_arguments)
+    except json.JSONDecodeError as exc:
+        expected_error = exc
+    assert expected_error is not None
+    assert diagnostic.json_error.message == expected_error.msg
+    assert diagnostic.json_error.position == expected_error.pos
+    assert diagnostic.json_error.line == expected_error.lineno
+    assert diagnostic.json_error.column == expected_error.colno
+
+
+@pytest.mark.parametrize("finish_reason", ["tool_calls", None])
+def test_stream_argument_diagnostic_does_not_infer_finish_reason_or_usage(
+    finish_reason: str | None,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            text=_sse_body(
+                {
+                    "choices": [
+                        {
+                            "delta": {
+                                "tool_calls": [
+                                    {
+                                        "index": 0,
+                                        "id": "call-invalid",
+                                        "function": {"name": "echo", "arguments": "not-json"},
+                                    }
+                                ]
+                            },
+                            "finish_reason": finish_reason,
+                        }
+                    ]
+                }
+            ),
+            request=request,
+        )
+
+    with pytest.raises(MalformedToolArgumentsError) as raised:
+        _collect_stream(_adapter(handler), _request([UserMessage(content="run")]))
+    diagnostic = raised.value.diagnostics
+    assert diagnostic is not None
+    assert diagnostic.finish_reason == finish_reason
+    assert diagnostic.usage == {}
+    assert diagnostic.stream_done_received is True
+    assert diagnostic.tool_calls[0].raw_arguments == "not-json"
+    assert diagnostic.json_error is not None
+
+
+def test_stream_protocol_diagnostic_retains_partial_calls_when_done_is_missing() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = _sse_body(
+            {
+                "choices": [
+                    {
+                        "delta": {
+                            "tool_calls": [
+                                {
+                                    "index": 3,
+                                    "id": "call-partial",
+                                    "function": {
+                                        "name": "unknown_provider_tool",
+                                        "arguments": '{"partial":',
+                                    },
+                                }
+                            ]
+                        },
+                        "finish_reason": "tool_calls",
+                    }
+                ],
+                "usage": {"completion_tokens": 9},
+            }
+        ).replace("data: [DONE]\n\n", "")
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            text=body,
+            request=request,
+        )
+
+    with pytest.raises(ProviderProtocolError, match=r"\[DONE\]") as raised:
+        _collect_stream(_adapter(handler), _request([UserMessage(content="run")]))
+    diagnostic = raised.value.diagnostics
+    assert diagnostic is not None
+    assert diagnostic.stage == "stream_protocol"
+    assert diagnostic.stream_done_received is False
+    assert diagnostic.failed_tool_call_index is None
+    assert diagnostic.finish_reason == "tool_calls"
+    assert diagnostic.usage == {"completion_tokens": 9}
+    assert diagnostic.tool_calls[0].agent_name is None
+    assert diagnostic.tool_calls[0].raw_arguments == '{"partial":'
+    assert diagnostic.tool_calls[0].argument_fragment_count == 1
+
+
+def test_stream_protocol_failure_keeps_metadata_from_the_invalid_chunk() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        chunk = {
+            "choices": [
+                {
+                    "delta": {
+                        "tool_calls": [
+                            {
+                                "index": 4,
+                                "id": "call-invalid",
+                                "function": {"name": "echo", "arguments": ["not", "text"]},
+                            }
+                        ]
+                    },
+                    "finish_reason": "length",
+                }
+            ],
+            "usage": {"completion_tokens": 13},
+        }
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            text=_sse_body(chunk),
+            request=request,
+        )
+
+    with pytest.raises(ProviderProtocolError, match="arguments must be a string") as raised:
+        _collect_stream(_adapter(handler), _request([UserMessage(content="go")]))
+
+    diagnostic = raised.value.diagnostics
+    assert diagnostic is not None
+    assert diagnostic.stage == "stream_protocol"
+    assert diagnostic.finish_reason == "length"
+    assert diagnostic.usage == {"completion_tokens": 13}
+    assert diagnostic.stream_done_received is False
+    assert diagnostic.failed_tool_call_index == 4
+    assert diagnostic.tool_calls[0].id == "call-invalid"
+    assert diagnostic.tool_calls[0].argument_fragment_count == 0
+
+
+@pytest.mark.parametrize("response_mode", ["stream", "complete"])
+def test_diagnostic_build_failure_does_not_replace_parse_error(
+    monkeypatch: pytest.MonkeyPatch,
+    response_mode: str,
+) -> None:
+    import app.vnext.llm.openai_compatible as adapter_module
+
+    def fail_diagnostics(**_kwargs):
+        raise RuntimeError("diagnostic builder failure")
+
+    monkeypatch.setattr(adapter_module, "build_model_failure_diagnostics", fail_diagnostics)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if response_mode == "stream":
+            event = {
+                "choices": [
+                    {
+                        "delta": {
+                            "tool_calls": [
+                                {
+                                    "index": 0,
+                                    "id": "call-bad",
+                                    "function": {"name": "echo", "arguments": "not-json"},
+                                }
+                            ]
+                        },
+                        "finish_reason": "tool_calls",
+                    }
+                ]
+            }
+            return httpx.Response(
+                200,
+                headers={"content-type": "text/event-stream"},
+                text=_sse_body(event),
+                request=request,
+            )
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "tool_calls": [
+                                {
+                                    "id": "call-bad",
+                                    "function": {"name": "echo", "arguments": "not-json"},
+                                }
+                            ]
+                        },
+                        "finish_reason": "tool_calls",
+                    }
+                ]
+            },
+            request=request,
+        )
+
+    client = _adapter(handler)
+    request = _request([UserMessage(content="go")])
+    expected_message = (
+        "stream tool call arguments are not valid JSON"
+        if response_mode == "stream"
+        else "tool call arguments are not valid JSON"
+    )
+    with pytest.raises(MalformedToolArgumentsError, match=expected_message) as raised:
+        if response_mode == "stream":
+            _collect_stream(client, request)
+        else:
+            asyncio.run(client.complete(request))
+
+    assert str(raised.value) == expected_message
+    assert raised.value.diagnostics is None
+
+
+def test_stream_response_assembly_failure_records_known_partial_tool_call() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            text=_sse_body(
+                {
+                    "choices": [
+                        {
+                            "delta": {
+                                "tool_calls": [
+                                    {
+                                        "index": 2,
+                                        "function": {
+                                            "name": "echo",
+                                            "arguments": '{"value":1}',
+                                        },
+                                    }
+                                ]
+                            },
+                            "finish_reason": "tool_calls",
+                        }
+                    ]
+                }
+            ),
+            request=request,
+        )
+
+    with pytest.raises(ProviderProtocolError, match="has no id") as raised:
+        _collect_stream(_adapter(handler), _request([UserMessage(content="run")]))
+    diagnostic = raised.value.diagnostics
+    assert diagnostic is not None
+    assert diagnostic.stage == "response_assembly"
+    assert diagnostic.response_mode == "stream"
+    assert diagnostic.stream_done_received is True
+    assert diagnostic.failed_tool_call_index == 2
+    assert diagnostic.tool_calls[0].id is None
+    assert diagnostic.tool_calls[0].provider_name == "echo"
+    assert diagnostic.tool_calls[0].raw_arguments == '{"value":1}'
+
+
+def test_complete_response_diagnostic_includes_prior_tool_calls_and_exact_metadata() -> None:
+    bad_arguments = "[1, 2]"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": None,
+                            "tool_calls": [
+                                {
+                                    "id": "call-first",
+                                    "function": {"name": "echo", "arguments": '{"value":1}'},
+                                },
+                                {
+                                    "id": "call-second",
+                                    "function": {"name": "echo", "arguments": bad_arguments},
+                                },
+                            ],
+                        },
+                        "finish_reason": "tool_calls",
+                    }
+                ],
+                "usage": {"prompt_tokens": 12, "completion_tokens": 4},
+            },
+            request=request,
+        )
+
+    request = _request(
+        [UserMessage(content="run")],
+        [ModelTool(name="echo", description="echo", input_schema={})],
+    )
+    with pytest.raises(MalformedToolArgumentsError) as raised:
+        asyncio.run(_adapter(handler).complete(request))
+    diagnostic = raised.value.diagnostics
+    assert diagnostic is not None
+    assert diagnostic.response_mode == "complete"
+    assert diagnostic.stage == "tool_arguments_decode"
+    assert diagnostic.failed_tool_call_index == 1
+    assert diagnostic.finish_reason == "tool_calls"
+    assert diagnostic.usage == {"prompt_tokens": 12, "completion_tokens": 4}
+    assert diagnostic.stream_done_received is None
+    assert [call.id for call in diagnostic.tool_calls] == ["call-first", "call-second"]
+    assert [call.argument_fragment_count for call in diagnostic.tool_calls] == [None, None]
+    assert diagnostic.tool_calls[1].raw_arguments == bad_arguments
+    assert diagnostic.json_error is None
+
+
+def test_complete_response_assembly_failure_keeps_observed_metadata() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"choices": [{"finish_reason": "length"}], "usage": {"prompt_tokens": 6}},
+            request=request,
+        )
+
+    with pytest.raises(ProviderProtocolError, match="no message object") as raised:
+        asyncio.run(_adapter(handler).complete(_request([UserMessage(content="go")])))
+
+    diagnostic = raised.value.diagnostics
+    assert diagnostic is not None
+    assert diagnostic.stage == "response_assembly"
+    assert diagnostic.response_mode == "complete"
+    assert diagnostic.original_error_type == "ProviderProtocolError"
+    assert diagnostic.finish_reason == "length"
+    assert diagnostic.usage == {"prompt_tokens": 6}
+    assert diagnostic.stream_done_received is None
+    assert diagnostic.tool_calls == ()
+    assert diagnostic.json_error is None
+
+
+def test_diagnostic_argument_capture_respects_per_call_total_and_utf8_caps() -> None:
+    raw_values = [f'{{"text":"{"λ" * 40000}"}}'] + [
+        f'{{"text":"{"x" * 50000}"}}' for _ in range(6)
+    ]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        chunk = {
+            "choices": [
+                {
+                    "delta": {
+                        "tool_calls": [
+                            {
+                                "index": index,
+                                "id": f"call-{index}",
+                                "function": {"name": "echo", "arguments": value},
+                            }
+                            for index, value in enumerate(raw_values)
+                        ]
+                    },
+                    "finish_reason": None,
+                }
+            ]
+        }
+        body = _sse_body(chunk).replace("data: [DONE]\n\n", "")
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            text=body,
+            request=request,
+        )
+
+    with pytest.raises(ProviderProtocolError) as raised:
+        _collect_stream(_adapter(handler), _request([UserMessage(content="run")]))
+    diagnostic = raised.value.diagnostics
+    assert diagnostic is not None
+    assert diagnostic.stream_done_received is False
+    assert diagnostic.tool_calls_total == 7
+    assert any(call.arguments_truncated for call in diagnostic.tool_calls)
+    retained_bytes = 0
+    for call in diagnostic.tool_calls:
+        if call.raw_arguments is not None:
+            retained_bytes += len(call.raw_arguments.encode("utf-8"))
+            assert call.arguments_utf8_bytes <= MAX_DIAGNOSTIC_ARGUMENT_BYTES
+        else:
+            assert call.arguments_truncated
+            for fragment in (call.arguments_prefix, call.arguments_suffix):
+                if fragment is not None:
+                    fragment_bytes = fragment.encode("utf-8")
+                    assert fragment_bytes.decode("utf-8") == fragment
+                    assert len(fragment_bytes) <= MAX_DIAGNOSTIC_ARGUMENT_EDGE_BYTES
+                    retained_bytes += len(fragment_bytes)
+        assert call.arguments_utf8_bytes == len(raw_values[call.index].encode("utf-8"))
+    assert retained_bytes <= MAX_DIAGNOSTIC_TOTAL_ARGUMENT_BYTES
+    assert diagnostic.tool_calls[0].arguments_utf8_bytes > MAX_DIAGNOSTIC_ARGUMENT_BYTES
+    assert diagnostic.tool_calls[0].raw_arguments is None
+
+
+def test_diagnostic_tool_call_count_is_capped_and_sorted_by_provider_index() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        chunks = [
+            {
+                "choices": [
+                    {
+                        "delta": {
+                            "tool_calls": [
+                                {
+                                    "index": index,
+                                    "id": f"call-{index}",
+                                    "function": {"name": "unknown", "arguments": "{"},
+                                }
+                            ]
+                        },
+                        "finish_reason": None,
+                    }
+                ]
+            }
+            for index in range(65, -1, -1)
+        ]
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            text=_sse_body(*chunks),
+            request=request,
+        )
+
+    with pytest.raises(ProviderProtocolError) as raised:
+        _collect_stream(_adapter(handler), _request([UserMessage(content="go")]))
+
+    diagnostic = raised.value.diagnostics
+    assert diagnostic is not None
+    assert diagnostic.tool_calls_total == 66
+    assert diagnostic.tool_calls_truncated is True
+    assert len(diagnostic.tool_calls) == 64
+    assert [call.index for call in diagnostic.tool_calls] == list(range(64))
 
 
 def test_compaction_request_limit_reaches_http_and_length_is_rejected() -> None:

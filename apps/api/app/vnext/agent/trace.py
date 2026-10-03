@@ -19,6 +19,7 @@ from app.vnext.agent.context_accounting import build_context_accounting
 from app.vnext.agent.context_capacity import RequestCapacity
 from app.vnext.agent.runtime_context import RuntimeContext
 from app.vnext.agent.transcript_rewrite import TranscriptRewriteEvent
+from app.vnext.llm.diagnostics import ModelFailureDiagnostics
 from app.vnext.llm.protocol import (
     Message,
     ModelRequest,
@@ -60,6 +61,7 @@ class AgentTraceCollector:
                 "duration_seconds": None,
                 "error_type": None,
                 "error_code": None,
+                "failure_diagnostics": None,
             }
         )
         return call_id
@@ -73,6 +75,32 @@ class AgentTraceCollector:
         call = self._model_call(call_id)
         if call is not None:
             call["partial_text"] += text
+
+    def model_call_failure_diagnostics(
+        self,
+        call_id: str | None,
+        *,
+        step: int,
+        purpose: Literal["execution", "primary_answer", "degraded_answer", "compaction"],
+        diagnostics: ModelFailureDiagnostics,
+    ) -> None:
+        """Associate parsing evidence with a full call or a redacted diagnostic step."""
+
+        payload = diagnostics.model_dump(mode="json")
+        if self._capture_full_calls:
+            call = self._model_call(call_id)
+            if call is not None:
+                call["failure_diagnostics"] = deepcopy(payload)
+            return
+
+        redacted = deepcopy(payload)
+        for tool_call in redacted.get("tool_calls", []):
+            if isinstance(tool_call, dict):
+                tool_call.pop("raw_arguments", None)
+                tool_call.pop("arguments_prefix", None)
+                tool_call.pop("arguments_suffix", None)
+        redacted["purpose"] = purpose
+        self._step(step).setdefault("model_failure_diagnostics", []).append(redacted)
 
     def model_call_finished(
         self,
