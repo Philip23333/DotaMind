@@ -57,27 +57,33 @@ export const SessionTracePanel: FC<{
 
   return (
     <>
-      {mobileMode && open && (
+      {mobileMode && (
         <button
           type="button"
-          className="fixed inset-0 z-40 bg-black/30"
+          className={`chat-drawer-backdrop fixed inset-0 z-40 bg-black/30 ${
+            open ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
+          }`}
           aria-label="关闭 Trace 抽屉"
+          aria-hidden={!open}
+          tabIndex={-1}
+          inert={!open}
           onClick={onClose}
         />
       )}
       <aside
         ref={drawerRef}
         id="session-trace-drawer"
-        className={`chat-trace-surface flex shrink-0 flex-col border-l bg-card ${mobileMode
-          ? `fixed inset-y-0 right-0 z-50 w-[min(92vw,24rem)] transition-transform ${open ? "translate-x-0" : "translate-x-full"}`
-          : `relative h-full w-[360px] ${open ? "" : "hidden"}`}`}
+        className={`chat-trace-surface min-w-0 shrink-0 overflow-hidden ${mobileMode
+          ? `chat-drawer-slide fixed inset-y-0 right-0 z-50 w-[min(92vw,24rem)] ${open ? "translate-x-0" : "translate-x-full pointer-events-none"}`
+          : `chat-trace-width relative h-full ${open ? "w-[360px]" : "w-0 pointer-events-none"}`}`}
         aria-label="会话 Trace"
         aria-hidden={!open}
         aria-modal={mobileMode && open ? true : undefined}
         role={mobileMode && open ? "dialog" : undefined}
         inert={!open}
       >
-        <header className="flex min-h-16 items-center gap-2 border-b px-3 py-3">
+        <div className={`border-l bg-card ${mobileMode ? "h-full w-full" : "h-full w-[360px] min-w-[360px]"} flex flex-col`}>
+        <header className="chat-trace__header flex min-h-16 items-center gap-2 border-b px-3 py-3">
           <div className="min-w-0 flex-1">
             <h2 className="text-sm font-semibold">会话 Trace</h2>
             <p className="text-xs text-muted-foreground">最近最多 100 条</p>
@@ -133,6 +139,7 @@ export const SessionTracePanel: FC<{
               当前会话还没有 Trace。取消记录可能稍后才会出现，可手动刷新。
             </p>
           )}
+        </div>
         </div>
       </aside>
     </>

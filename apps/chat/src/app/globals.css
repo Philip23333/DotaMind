@@ -181,9 +181,17 @@
   color: var(--foreground);
 }
 
-.chat-shell__header {
-  background: oklch(0.985 0 0);
-  box-shadow: 0 8px 22px rgb(0 0 0 / 5%);
+.chat-sidebar-width,
+.chat-trace-width {
+  transition: width 180ms ease-out;
+}
+
+.chat-drawer-slide {
+  transition: transform 180ms ease-out;
+}
+
+.chat-drawer-backdrop {
+  transition: opacity 180ms ease-out;
 }
 
 .chat-sidebar-surface {
@@ -356,6 +364,13 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .chat-sidebar-width,
+  .chat-trace-width,
+  .chat-drawer-slide,
+  .chat-drawer-backdrop {
+    transition: none;
+  }
+
   .startup-overlay,
   .startup-overlay--leaving,
   .startup-icon,

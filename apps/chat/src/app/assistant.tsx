@@ -185,41 +185,46 @@ export function DotaMindChatShell({ browserId }: { browserId: string }) {
       />
       <main
         id="chat-main-content"
-        className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+        className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
         aria-hidden={mobileModalOpen}
         inert={mobileModalOpen}
       >
-        <header className="chat-shell__header z-20 flex h-14 shrink-0 items-center justify-between gap-2 border-b px-3 sm:px-5">
-          <Button
-            ref={leftToggleRef}
-            variant="ghost"
-            size="icon"
-            className="size-10 shrink-0"
-            onClick={() => toggleDrawer("left")}
-            aria-label={leftOpen ? "收起聊天记录" : "展开聊天记录"}
-            aria-expanded={leftOpen}
-            aria-controls="chat-history-drawer"
-            title={leftOpen ? "收起聊天记录" : "展开聊天记录"}
+        <Button
+          ref={leftToggleRef}
+          variant="ghost"
+          size="icon"
+          className="chat-drawer-toggle absolute left-3 top-3 z-30 size-10 rounded-xl border bg-card/90 shadow-sm backdrop-blur hover:bg-card"
+          onClick={() => toggleDrawer("left")}
+          aria-label={leftOpen ? "收起聊天记录" : "展开聊天记录"}
+          aria-expanded={leftOpen}
+          aria-controls="chat-history-drawer"
+          title={leftOpen ? "收起聊天记录" : "展开聊天记录"}
+        >
+          {leftOpen ? <PanelLeftCloseIcon className="size-5" /> : <PanelLeftOpenIcon className="size-5" />}
+        </Button>
+        <Button
+          ref={rightToggleRef}
+          variant="ghost"
+          size="icon"
+          className={`chat-drawer-toggle absolute top-3 z-30 size-10 rounded-xl border bg-card/90 shadow-sm backdrop-blur hover:bg-card ${
+            process.env.NEXT_PUBLIC_DOTAMIND_TEST_OBSERVER_ENABLED === "true" ? "right-14" : "right-3"
+          }`}
+          onClick={() => toggleDrawer("right")}
+          aria-label={rightOpen ? "收起会话 Trace" : "展开会话 Trace"}
+          aria-expanded={rightOpen}
+          aria-controls="session-trace-drawer"
+          title={rightOpen ? "收起会话 Trace" : "展开会话 Trace"}
+        >
+          {rightOpen ? <PanelRightCloseIcon className="size-5" /> : <PanelRightOpenIcon className="size-5" />}
+        </Button>
+        {error && (
+          <div
+            role="alert"
+            className="absolute left-1/2 top-3 z-30 max-w-[calc(100%-7rem)] -translate-x-1/2 truncate rounded-full border bg-card/95 px-4 py-2 text-xs text-destructive shadow-sm backdrop-blur"
           >
-            {leftOpen ? <PanelLeftCloseIcon className="size-5" /> : <PanelLeftOpenIcon className="size-5" />}
-          </Button>
-          {error ? (
-            <div role="alert" className="min-w-0 flex-1 truncate px-2 text-xs text-destructive">{error}</div>
-          ) : <div className="min-w-0 flex-1" />}
-          <Button
-            ref={rightToggleRef}
-            variant="ghost"
-            size="icon"
-            className={`size-10 shrink-0 ${process.env.NEXT_PUBLIC_DOTAMIND_TEST_OBSERVER_ENABLED === "true" ? "mr-12" : ""}`}
-            onClick={() => toggleDrawer("right")}
-            aria-label={rightOpen ? "收起会话 Trace" : "展开会话 Trace"}
-            aria-expanded={rightOpen}
-            aria-controls="session-trace-drawer"
-            title={rightOpen ? "收起会话 Trace" : "展开会话 Trace"}
-          >
-            {rightOpen ? <PanelRightCloseIcon className="size-5" /> : <PanelRightOpenIcon className="size-5" />}
-          </Button>
-        </header>
+            {error}
+          </div>
+        )}
         <div className="relative min-h-0 flex-1">
           <Thread browserId={browserId} />
         </div>

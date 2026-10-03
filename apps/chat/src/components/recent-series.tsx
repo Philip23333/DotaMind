@@ -1,15 +1,12 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
 import {
   getRecentSeries,
   recentSeriesDisplayName,
   type RecentSeriesCandidate,
   type RecentSeriesResponse,
 } from "@/lib/home-api";
-import { useCallback, useEffect, useRef, useState, type FC, type RefObject } from "react";
-
-const REFRESH_AFTER_MS = 600_000;
+import { useCallback, useEffect, useRef, useState, type FC } from "react";
 
 export type RecentSeriesViewState = {
   response: RecentSeriesResponse | null;
@@ -19,7 +16,6 @@ export type RecentSeriesViewState = {
 
 export type RecentSeriesState = RecentSeriesViewState & {
   retry: () => void;
-  refreshOnOpen: () => void;
 };
 
 export function useRecentSeries(): RecentSeriesState {
@@ -29,7 +25,6 @@ export function useRecentSeries(): RecentSeriesState {
     error: false,
   });
   const mounted = useRef(false);
-  const lastSuccessAt = useRef<number | null>(null);
   const requestRef = useRef<Promise<void> | null>(null);
 
   const load = useCallback(() => {
@@ -40,7 +35,6 @@ export function useRecentSeries(): RecentSeriesState {
     const request = getRecentSeries()
       .then((response) => {
         if (!mounted.current) return;
-        lastSuccessAt.current = Date.now();
         setState({ response, loading: false, error: false });
       })
       .catch(() => {
@@ -62,24 +56,9 @@ export function useRecentSeries(): RecentSeriesState {
     };
   }, [load]);
 
-  const refreshOnOpen = useCallback(() => {
-    const response = state.response;
-    if (
-      state.error ||
-      !response ||
-      response.status === "stale" ||
-      response.status === "unavailable" ||
-      lastSuccessAt.current === null ||
-      Date.now() - lastSuccessAt.current >= REFRESH_AFTER_MS
-    ) {
-      void load();
-    }
-  }, [load, state.error, state.response]);
-
   return {
     ...state,
     retry: () => void load(),
-    refreshOnOpen,
   };
 }
 
@@ -177,66 +156,6 @@ export const RecentSeriesContent: FC<RecentSeriesContentProps> = ({ state, count
       )}
       {!statusUnavailable && items.length > 0 && (
         <RecentSeriesList items={items} count={count} disabled={disabled} onSelect={onSelect} />
-      )}
-    </div>
-  );
-};
-
-type RecentSeriesPanelProps = Omit<RecentSeriesContentProps, "count"> & {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  triggerRef: RefObject<HTMLButtonElement | null>;
-  onOpen: () => void;
-};
-
-export const RecentSeriesPanel: FC<RecentSeriesPanelProps> = ({
-  state,
-  disabled,
-  onSelect,
-  onRetry,
-  open,
-  onOpenChange,
-  triggerRef,
-  onOpen,
-}) => {
-  const toggle = () => {
-    const nextOpen = !open;
-    onOpenChange(nextOpen);
-    if (nextOpen) onOpen();
-  };
-
-  return (
-    <div className="min-w-0">
-      <Button
-        ref={triggerRef}
-        type="button"
-        variant="ghost"
-        size="sm"
-        aria-expanded={open}
-        aria-controls="recent-series-panel"
-        onClick={toggle}
-        className="h-8 w-full bg-muted/75 px-3 text-xs hover:bg-accent aria-expanded:bg-accent"
-      >
-        赛事查询
-      </Button>
-      {open && (
-        <section
-          id="recent-series-panel"
-          aria-label="赛事查询"
-          className="recent-series-panel-scrollbar absolute inset-x-0 bottom-full z-20 mb-2 max-h-[min(60vh,28rem)] overflow-y-auto rounded-2xl border bg-popover p-3 shadow-lg"
-        >
-          <h2 className="mb-2 px-3 text-sm font-semibold">🔥最近赛事</h2>
-          <RecentSeriesContent
-            state={state}
-            count={10}
-            disabled={disabled}
-            onSelect={(series) => {
-              onSelect(series);
-              onOpenChange(false);
-            }}
-            onRetry={onRetry}
-          />
-        </section>
       )}
     </div>
   );

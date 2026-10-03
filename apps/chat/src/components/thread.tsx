@@ -4,7 +4,13 @@ import { MarkdownText } from "@/components/markdown-text";
 import { TraceDownloadAction } from "@/components/trace-download-action";
 import { Button } from "@/components/ui/button";
 import { RunProcessPanel } from "@/components/run-process-panel";
-import { QuickQueryPanels } from "@/components/quick-query-panels";
+import {
+  ComposerModeSwitch,
+  composeModeMessage,
+  composerModeLabel,
+  composerModePlaceholder,
+  type ComposerMode,
+} from "@/components/composer-mode-switch";
 import {
   RecentSeriesContent,
   useRecentSeries,
@@ -26,6 +32,7 @@ import {
   ArrowUpIcon,
   CheckIcon,
   CopyIcon,
+  RefreshCwIcon,
   SquareIcon,
 } from "lucide-react";
 import { siDota2 } from "simple-icons";
@@ -52,13 +59,12 @@ export const Thread: FC<{ browserId?: string }> = ({ browserId }) => {
     }
   }, [isRunning, snapshot.connection]);
 
-  const sendMessage = async (messageOverride?: string) => {
+  const sendMessage = async (message: string): Promise<boolean> => {
     const currentSnapshot = entry.getSnapshot();
     const busyNow = aui.thread.getState().isRunning || currentSnapshot.is_submitting ||
       currentSnapshot.connection?.status === "sending";
-    const message = messageOverride ?? aui.composer.getState().text;
-    if (submitLock.current || busyNow || !message.trim()) return;
-    if (!entry.beginSubmission()) return;
+    if (submitLock.current || busyNow || !message.trim()) return false;
+    if (!entry.beginSubmission()) return false;
     submitLock.current = true;
     let accepted = false;
     let failureScope: "initialization" | "history" = "initialization";
@@ -98,14 +104,11 @@ export const Thread: FC<{ browserId?: string }> = ({ browserId }) => {
         command: null,
       });
       accepted = true;
-      if (messageOverride === undefined) {
-        aui.composer.send();
-      } else {
-        aui.thread.append({
-          role: "user",
-          content: [{ type: "text", text: messageOverride }],
-        });
-      }
+      aui.thread.append({
+        role: "user",
+        content: [{ type: "text", text: message }],
+      });
+      return true;
     } catch {
       if (accepted) {
         const request = entry.getSnapshot().accepted_request;
@@ -114,6 +117,7 @@ export const Thread: FC<{ browserId?: string }> = ({ browserId }) => {
         entry.finishSubmissionWithError(failureScope);
         submitLock.current = false;
       }
+      return false;
     }
   };
 
@@ -125,11 +129,12 @@ export const Thread: FC<{ browserId?: string }> = ({ browserId }) => {
         </svg>
       </div>
       <ThreadPrimitive.Viewport className="relative z-10 flex min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto scroll-smooth">
-        <div className="mx-auto flex w-full max-w-3xl min-w-0 flex-1 flex-col px-3 pt-4 sm:px-6 sm:pt-6">
+        <div className="mx-auto flex w-full max-w-3xl min-w-0 flex-1 flex-col px-3 pt-16 sm:px-6 sm:pt-16">
           <AuiIf condition={(state) => state.thread.messages.length === 0}>
             <Welcome
               recentSeries={recentSeries}
               isBusy={isBusy}
+              onRefresh={recentSeries.retry}
               onSelect={(series) => { void sendMessage(seriesQueryText(series)); }}
             />
           </AuiIf>
@@ -155,7 +160,6 @@ export const Thread: FC<{ browserId?: string }> = ({ browserId }) => {
             </ThreadPrimitive.ScrollToBottom>
             <Composer
               browserId={browserId}
-              recentSeries={recentSeries}
               isBusy={isBusy}
               onSendMessage={sendMessage}
             />
@@ -177,8 +181,9 @@ export const Thread: FC<{ browserId?: string }> = ({ browserId }) => {
 const Welcome: FC<{
   recentSeries: RecentSeriesState;
   isBusy: boolean;
+  onRefresh: () => void;
   onSelect: (series: RecentSeriesCandidate) => void;
-}> = ({ recentSeries, isBusy, onSelect }) => (
+}> = ({ recentSeries, isBusy, onRefresh, onSelect }) => (
   <div className="welcome-intro flex flex-1 flex-col items-center justify-center gap-5 pb-12 text-center sm:pb-20">
     <div className="flex items-center gap-3">
       <div className="flex size-[67px] items-center justify-center rounded-2xl bg-[#b92d1e] text-[#fff4e1] shadow-[0_8px_20px_rgb(115_31_24_/_20%)]">
@@ -189,7 +194,21 @@ const Welcome: FC<{
       <h1 className="text-[1.8rem] font-semibold tracking-tight">DotaMind</h1>
     </div>
     <section className="w-full max-w-2xl text-left" aria-label="🔥最近赛事">
-      <h2 className="mb-2 px-3 text-sm font-semibold">🔥最近赛事</h2>
+      <div className="mb-1 flex items-center justify-between px-3">
+        <h2 className="text-sm font-semibold">🔥最近赛事</h2>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          aria-label="刷新近期赛事"
+          title="刷新近期赛事"
+          disabled={recentSeries.loading}
+          onClick={onRefresh}
+        >
+          <RefreshCwIcon className={`size-3.5 ${recentSeries.loading ? "animate-spin" : ""}`} />
+          刷新
+        </Button>
+      </div>
       <RecentSeriesContent
         state={recentSeries}
         count={5}
@@ -303,10 +322,9 @@ function traceFromMetadata(custom: unknown): { trace_id: string; expires_at: str
 
 const Composer: FC<{
   browserId?: string;
-  recentSeries: RecentSeriesState;
   isBusy: boolean;
-  onSendMessage: (message?: string) => Promise<void>;
-}> = ({ browserId, recentSeries, isBusy, onSendMessage }) => {
+  onSendMessage: (message: string) => Promise<boolean>;
+}> = ({ browserId, isBusy, onSendMessage }) => {
   const aui = useAui();
   const composerInput = unstable_useComposerInput();
   const { entry, snapshot } = useDotaMindThreadState();
@@ -315,85 +333,77 @@ const Composer: FC<{
   const composerText = useAuiState((state) => state.composer.text);
   const composerInputRef = useRef<HTMLTextAreaElement>(null);
   const previousThreadIdRef = useRef(threadItemId);
-  const [draftReplacement, setDraftReplacement] = useState<{
-    previousText: string;
-    filledText: string;
-    threadItemId: string;
-  } | null>(null);
+  const draftRevisionRef = useRef(0);
+  const modeRevisionRef = useRef(0);
+  const [mode, setMode] = useState<ComposerMode>(null);
 
   useEffect(() => {
     if (previousThreadIdRef.current === threadItemId) return;
     previousThreadIdRef.current = threadItemId;
-    setDraftReplacement(null);
+    modeRevisionRef.current += 1;
+    setMode(null);
   }, [threadItemId]);
 
-  const fillDraft = (text: string) => {
-    const previousText = composerInput.value;
-    const activeThreadItemId = aui.threadListItem.getState().id;
-    setDraftReplacement(previousText && previousText !== text
-      ? { previousText, filledText: text, threadItemId: activeThreadItemId }
-      : null);
-    composerInput.setText(text);
+  const changeMode = (nextMode: ComposerMode) => {
+    modeRevisionRef.current += 1;
+    setMode(nextMode);
     composerInputRef.current?.focus();
   };
 
-  const undoDraftReplacement = () => {
-    if (!draftReplacement) return;
-    const currentThreadItemId = aui.threadListItem.getState().id;
-    if (
-      currentThreadItemId !== draftReplacement.threadItemId ||
-      composerInput.value !== draftReplacement.filledText
-    ) {
-      setDraftReplacement(null);
-      return;
+  const submitComposerMessage = async () => {
+    const rawText = aui.composer.getState().text;
+    if (!rawText.trim()) return;
+
+    const capturedMode = mode;
+    const capturedDraftRevision = draftRevisionRef.current;
+    const capturedModeRevision = modeRevisionRef.current;
+    const capturedThreadItemId = aui.threadListItem.getState().id;
+    const accepted = await onSendMessage(composeModeMessage(capturedMode, rawText));
+    if (!accepted || aui.threadListItem.getState().id !== capturedThreadItemId) return;
+
+    if (draftRevisionRef.current === capturedDraftRevision) {
+      composerInput.setText("");
+      draftRevisionRef.current += 1;
+      if (modeRevisionRef.current === capturedModeRevision) {
+        modeRevisionRef.current += 1;
+        setMode(null);
+      }
     }
-    composerInput.setText(draftReplacement.previousText);
-    setDraftReplacement(null);
-    composerInputRef.current?.focus();
   };
-
-  const canUndoDraftReplacement = Boolean(
-    draftReplacement &&
-    draftReplacement.threadItemId === threadItemId &&
-    draftReplacement.filledText === composerText,
-  );
 
   return (
-    <div>
-      <QuickQueryPanels
-        recentSeries={recentSeries}
-        isBusy={isBusy}
-        onSelectSeries={(series) => { void onSendMessage(seriesQueryText(series)); }}
-        onFill={fillDraft}
-      />
-      <ComposerPrimitive.Root
-        onSubmit={(event) => {
-          event.preventDefault();
-          setDraftReplacement(null);
-          void onSendMessage();
+    <ComposerPrimitive.Root
+      onSubmit={(event) => {
+        event.preventDefault();
+        void submitComposerMessage();
+      }}
+      className="rounded-3xl border bg-popover p-2 shadow-sm focus-within:ring-2 focus-within:ring-ring/30 sm:p-2.5"
+    >
+      {composerModeLabel(mode) && (
+        <p data-testid="composer-mode-label" className="px-3 pt-2 text-sm font-semibold">
+          {composerModeLabel(mode)}
+        </p>
+      )}
+      <ComposerPrimitive.Input
+        placeholder={composerModePlaceholder(mode)}
+        className="max-h-40 min-h-[5.5rem] w-full min-w-0 resize-none overflow-y-auto bg-transparent px-3 py-2 text-base outline-none placeholder:text-muted-foreground"
+        rows={1}
+        ref={composerInputRef}
+        autoFocus
+        enterKeyHint="send"
+        aria-label="消息输入框"
+        onChange={() => {
+          draftRevisionRef.current += 1;
         }}
-        className="rounded-3xl border bg-popover p-1.5 shadow-sm focus-within:ring-2 focus-within:ring-ring/30 sm:p-2"
-      >
-        <ComposerPrimitive.Input
-          placeholder="询问 Dota 2 电竞赛事、英雄攻略与比赛数据…"
-          className="max-h-40 min-h-12 w-full min-w-0 resize-none bg-transparent px-3 py-2 text-base outline-none placeholder:text-muted-foreground"
-          rows={1}
-          ref={composerInputRef}
-          autoFocus
-          enterKeyHint="send"
-          aria-label="消息输入框"
-          onChange={(event) => {
-            if (draftReplacement && event.target.value !== draftReplacement.filledText) {
-              setDraftReplacement(null);
-            }
-          }}
-        />
-        <div className="flex justify-end px-1 pb-1">
+      />
+      <div className="flex min-w-0 items-end justify-between gap-2 px-1 pb-1 pt-1">
+        <ComposerModeSwitch mode={mode} onChange={changeMode} />
+        <div className="flex shrink-0 items-center justify-end">
           {!isBusy && (
             <Button
               type="button"
               size="icon"
-              className="size-8 rounded-full"
+              className="size-10 rounded-full"
               aria-label="发送消息"
               disabled={
                 !composerText.trim() ||
@@ -401,10 +411,7 @@ const Composer: FC<{
                 snapshot.is_submitting
               }
               onMouseDown={(event) => event.preventDefault()}
-              onClick={() => {
-                setDraftReplacement(null);
-                void onSendMessage();
-              }}
+              onClick={() => void submitComposerMessage()}
             >
               <ArrowUpIcon className="size-4" />
             </Button>
@@ -413,43 +420,31 @@ const Composer: FC<{
             <DotaMindStopButton />
           )}
         </div>
-        {snapshot.is_submitting && (
-          <p role="status" className="px-3 pb-2 text-xs text-muted-foreground">正在准备会话…</p>
-        )}
-        {snapshot.notice === "initialization" && (
-          <p role="alert" className="px-3 pb-2 text-xs text-destructive">无法建立聊天，请重试。</p>
-        )}
-        {snapshot.notice === "history" && (
-          <div className="flex items-center gap-2 px-3 pb-2 text-xs text-destructive">
-            <span role="alert">聊天记录未能加载。</span>
-            {remoteSessionId && browserId && (
-              <button
-                type="button"
-                className="underline underline-offset-2"
-                onClick={() => void entry.loadHistory(remoteSessionId, async (signal) => {
-                  const response = await getChatSession(browserId, remoteSessionId, signal);
-                  return transcriptToInitialMessages(response);
-                })}
-              >
-                重试
-              </button>
-            )}
-          </div>
-        )}
-      </ComposerPrimitive.Root>
-      {canUndoDraftReplacement && (
-        <p className="px-3 pt-2 text-xs text-muted-foreground" role="status">
-          已填入问题 ·{" "}
-          <button
-            type="button"
-            className="underline underline-offset-2 hover:text-foreground"
-            onClick={undoDraftReplacement}
-          >
-            撤销替换
-          </button>
-        </p>
+      </div>
+      {snapshot.is_submitting && (
+        <p role="status" className="px-3 pb-2 text-xs text-muted-foreground">正在准备会话…</p>
       )}
-    </div>
+      {snapshot.notice === "initialization" && (
+        <p role="alert" className="px-3 pb-2 text-xs text-destructive">无法建立聊天，请重试。</p>
+      )}
+      {snapshot.notice === "history" && (
+        <div className="flex items-center gap-2 px-3 pb-2 text-xs text-destructive">
+          <span role="alert">聊天记录未能加载。</span>
+          {remoteSessionId && browserId && (
+            <button
+              type="button"
+              className="underline underline-offset-2"
+              onClick={() => void entry.loadHistory(remoteSessionId, async (signal) => {
+                const response = await getChatSession(browserId, remoteSessionId, signal);
+                return transcriptToInitialMessages(response);
+              })}
+            >
+              重试
+            </button>
+          )}
+        </div>
+      )}
+    </ComposerPrimitive.Root>
   );
 };
 

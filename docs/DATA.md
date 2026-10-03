@@ -74,7 +74,7 @@ against an operational data root or Redis cache. The conceptual data areas are
 
 ## 首页近期赛事候选
 
-首页和“赛事查询”展开层共用一组最多十条的 Series 候选。候选保留足以展示
+后端返回最多十条 Series 候选，首页展示其前五条；前端不再提供候选展开层。候选保留足以展示
 和继续查询的来源事实：Series ID、Series 身份、名称、League 名称、状态、开始／结束时间，
 以及可用时的冠军战队名称。首页使用候选顺序中的前五条。赛事仍是 Series
 届次，不转换成 Tournament 或 Match。

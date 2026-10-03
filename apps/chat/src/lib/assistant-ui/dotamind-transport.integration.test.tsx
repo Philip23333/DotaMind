@@ -550,17 +550,16 @@ describe("normal AssistantTransport chat integration", () => {
     expect(screen.queryByRole("button", { name: "停止生成" })).toBeNull();
   });
 
-  it("sends a selected homepage Series as one plain-text transport message and preserves the draft", async () => {
+  it("sends a homepage Series directly and preserves the current composer draft and mode", async () => {
     render(<TestChat />);
-    expect(await screen.findByRole("button", { name: /已结束，The International · Season 2026/ })).toBeTruthy();
-    expect(backend.calls.filter((call) => call.url.endsWith("/api/v1/home/recent-series"))).toHaveLength(1);
-    fireEvent.click(screen.getByRole("button", { name: "赛事查询" }));
+    const eventRow = await screen.findByRole("button", { name: /已结束，The International · Season 2026/ });
     expect(backend.calls.filter((call) => call.url.endsWith("/api/v1/home/recent-series"))).toHaveLength(1);
     await selectSession("session-a");
 
     const input = screen.getByRole("textbox", { name: "消息输入框" }) as HTMLTextAreaElement;
     fireEvent.change(input, { target: { value: "保留这段草稿" } });
-    fireEvent.click(within(screen.getByRole("region", { name: "赛事查询" })).getByRole("button", { name: /已结束，The International · Season 2026/ }));
+    fireEvent.click(screen.getByRole("button", { name: "英雄攻略" }));
+    fireEvent.click(eventRow);
 
     const request = await waitForRequest(backend, 1);
     expect(request.sessionId).toBe("session-a");
@@ -573,98 +572,116 @@ describe("normal AssistantTransport chat integration", () => {
     expect(commands[0]?.message).toEqual({ role: "user", parts: [{ type: "text", text: request.text }] });
     expect(commands[0]?.message).not.toHaveProperty("metadata");
     expect(input.value).toBe("保留这段草稿");
+    expect(screen.getByRole("button", { name: "英雄攻略" }).getAttribute("aria-pressed")).toBe("true");
     expect(backend.requests).toHaveLength(1);
     expect(backend.calls.filter((call) => call.url.includes("/transport"))).toHaveLength(1);
     expect(backend.calls.filter((call) => call.url.includes("/messages"))).toHaveLength(0);
     request.close();
   });
 
-  it("fills a hero query into the editable draft and sends it only after the user submits", async () => {
+  it("refreshes the homepage Series list without sending a chat request", async () => {
+    render(<TestChat />);
+    expect(await screen.findByRole("button", { name: /已结束，The International · Season 2026/ })).toBeTruthy();
+    expect(backend.calls.filter((call) => call.url.endsWith("/api/v1/home/recent-series"))).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "刷新近期赛事" }));
+    await waitFor(() => {
+      expect(backend.calls.filter((call) => call.url.endsWith("/api/v1/home/recent-series"))).toHaveLength(2);
+    });
+    expect(backend.requests).toHaveLength(0);
+  });
+
+  it("sends a mode query once as plain text and resets the mode after acceptance", async () => {
     render(<TestChat />);
     await selectSession("session-a");
     const input = screen.getByRole("textbox", { name: "消息输入框" }) as HTMLTextAreaElement;
-    fireEvent.change(input, { target: { value: "第一行草稿\n第二行草稿" } });
-
+    const rawText = "斯温，1号位，重点看出装\n补充一条要求";
+    fireEvent.change(input, { target: { value: rawText } });
     fireEvent.click(screen.getByRole("button", { name: "英雄攻略" }));
-    fireEvent.change(screen.getByRole("textbox", { name: "英雄名称" }), { target: { value: "斯温" } });
-    fireEvent.click(screen.getByRole("button", { name: "填入问题" }));
-
-    const question = "查询英雄斯温的1～5号位攻略";
-    expect(input.value).toBe(question);
-    expect(document.activeElement).toBe(input);
-    expect(screen.getByRole("status").textContent).toContain("已填入问题");
-    expect(backend.requests).toHaveLength(0);
-    expect(backend.calls.filter((call) => call.url.includes("/transport"))).toHaveLength(0);
-    expect(backend.calls.filter((call) => call.method === "POST" && call.url.endsWith("/chat/sessions"))).toHaveLength(0);
-
-    fireEvent.click(screen.getByRole("button", { name: "撤销替换" }));
-    expect(input.value).toBe("第一行草稿\n第二行草稿");
-    expect(document.activeElement).toBe(input);
-
-    fireEvent.click(screen.getByRole("button", { name: "英雄攻略" }));
-    fireEvent.change(screen.getByRole("textbox", { name: "英雄名称" }), { target: { value: "斯温" } });
-    fireEvent.click(screen.getByRole("button", { name: "填入问题" }));
-    expect(input.value).toBe(question);
-    expect(backend.requests).toHaveLength(0);
-
+    expect(input.placeholder).toBe("输入英雄以及定位，不填定位默认全位置…");
+    expect(screen.getByTestId("composer-mode-label").textContent).toBe("英雄攻略");
     fireEvent.click(screen.getByRole("button", { name: "发送消息" }));
     const request = await waitForRequest(backend, 1);
-    expect(request.text).toBe(question);
+    expect(request.text).toBe(`英雄攻略（未指定位置时默认查询全部位置）：\n${rawText}`);
     expect(backend.calls.filter((call) => call.url.includes("/transport"))).toHaveLength(1);
     expect(backend.calls.filter((call) => call.method === "POST" && call.url.endsWith("/chat/sessions"))).toHaveLength(0);
+    await waitFor(() => {
+      expect(input.value).toBe("");
+      expect(screen.queryByTestId("composer-mode-label")).toBeNull();
+      expect(input.placeholder).toBe("询问 Dota 2 电竞赛事、英雄攻略与比赛数据…");
+    });
     request.close();
   });
 
-  it("keeps quick panel filling available during a run while event selection stays disabled", async () => {
+  it("does not send blank mode prompts and preserves mode and draft when session preparation fails", async () => {
     render(<TestChat />);
-    await selectSession("session-a");
-    await submit("keep this run active");
-    const request = await waitForRequest(backend, 1);
-    await act(async () => startRun(request));
-
-    fireEvent.click(screen.getByRole("button", { name: "玩家战绩" }));
-    fireEvent.change(screen.getByRole("textbox", { name: "Dota 2 好友 ID（Steam32 ID）" }), {
-      target: { value: "123456789" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "填入问题" }));
-    expect((screen.getByRole("textbox", { name: "消息输入框" }) as HTMLTextAreaElement).value)
-      .toBe("查询 Steam32 ID 为123456789的玩家近期战绩");
-    expect(request.signal.aborted).toBe(false);
-    expect(backend.requests).toHaveLength(1);
-
-    fireEvent.click(screen.getByRole("button", { name: "赛事查询" }));
-    const eventRow = screen.getByRole("button", { name: /已结束，The International · Season 2026/ });
-    expect((eventRow as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.click(eventRow);
-    expect(backend.requests).toHaveLength(1);
-    expect(screen.getByRole("button", { name: "停止生成" })).toBeTruthy();
-    await act(async () => complete(request));
-  });
-
-  it("invalidates a draft replacement undo when the user edits or switches sessions", async () => {
-    render(<TestChat />);
-    await selectSession("session-a");
+    await screen.findByRole("button", { name: /已结束，The International · Season 2026/ });
+    fireEvent.click(screen.getByRole("button", { name: "新建聊天" }));
     const input = screen.getByRole("textbox", { name: "消息输入框" }) as HTMLTextAreaElement;
-    fireEvent.change(input, { target: { value: "original" } });
-    fireEvent.click(screen.getByRole("button", { name: "英雄攻略" }));
-    fireEvent.change(screen.getByRole("textbox", { name: "英雄名称" }), { target: { value: "敌法师" } });
-    fireEvent.click(screen.getByRole("button", { name: "填入问题" }));
-    expect(screen.getByRole("button", { name: "撤销替换" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "玩家战绩" }));
+    fireEvent.change(input, { target: { value: " \n " } });
+    fireEvent.submit(input.closest("form")!);
+    expect(backend.requests).toHaveLength(0);
+    expect(backend.calls.filter((call) => call.url.includes("/transport"))).toHaveLength(0);
 
-    fireEvent.change(input, { target: { value: "user edited this" } });
-    expect(screen.queryByRole("button", { name: "撤销替换" })).toBeNull();
-    expect(input.value).toBe("user edited this");
-
-    fireEvent.click(screen.getByRole("button", { name: "英雄攻略" }));
-    fireEvent.change(screen.getByRole("textbox", { name: "英雄名称" }), { target: { value: "敌法师" } });
-    fireEvent.click(screen.getByRole("button", { name: "填入问题" }));
-    expect(screen.getByRole("button", { name: "撤销替换" })).toBeTruthy();
-    await selectSession("session-b");
-    expect(screen.queryByRole("button", { name: "撤销替换" })).toBeNull();
+    backend.failCreate = true;
+    fireEvent.change(input, { target: { value: "76561198012345678 可补充要求" } });
+    fireEvent.click(screen.getByRole("button", { name: "发送消息" }));
+    expect(await screen.findByRole("alert")).toBeTruthy();
+    expect(input.value).toBe("76561198012345678 可补充要求");
+    expect(screen.getByTestId("composer-mode-label").textContent).toBe("玩家战绩");
     expect(backend.requests).toHaveLength(0);
   });
 
-  it("keeps regular chat usable while the homepage request is loading and after it fails", async () => {
+  it("keeps the submitted text and mode snapshot while the user edits the next draft during preparation", async () => {
+    const createGate = deferred();
+    const createStarted = deferred();
+    backend.createGate = createGate;
+    backend.createStarted = createStarted.resolve;
+    render(<TestChat />);
+    await screen.findByRole("button", { name: "新建聊天" });
+    fireEvent.click(screen.getByRole("button", { name: "新建聊天" }));
+
+    const input = screen.getByRole("textbox", { name: "消息输入框" }) as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: "斯温的全位置攻略" } });
+    fireEvent.click(screen.getByRole("button", { name: "英雄攻略" }));
+    fireEvent.click(screen.getByRole("button", { name: "发送消息" }));
+    await createStarted.promise;
+
+    fireEvent.change(input, { target: { value: "下一条草稿" } });
+    fireEvent.click(screen.getByRole("button", { name: "玩家战绩" }));
+    createGate.resolve();
+
+    const request = await waitForRequest(backend, 1);
+    expect(request.sessionId).toBe("created-1");
+    expect(request.text).toBe("英雄攻略（未指定位置时默认查询全部位置）：\n斯温的全位置攻略");
+    expect(input.value).toBe("下一条草稿");
+    expect(screen.getByTestId("composer-mode-label").textContent).toBe("玩家战绩");
+    request.close();
+  });
+
+  it("resets the selected mode on session change and keeps composer available during a run", async () => {
+    render(<TestChat />);
+    await selectSession("session-a");
+    const input = screen.getByRole("textbox", { name: "消息输入框" }) as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: "keep this run active" } });
+    fireEvent.click(screen.getByRole("button", { name: "英雄攻略" }));
+    await selectSession("session-b");
+    expect(screen.queryByTestId("composer-mode-label")).toBeNull();
+
+    await submit("start a run");
+    const request = await waitForRequest(backend, 1);
+    await act(async () => startRun(request));
+    fireEvent.click(screen.getByRole("button", { name: "玩家战绩" }));
+    fireEvent.change(input, { target: { value: "下一条草稿" } });
+    expect(screen.getByRole("button", { name: "停止生成" })).toBeTruthy();
+    expect(input.value).toBe("下一条草稿");
+    expect(request.signal.aborted).toBe(false);
+    expect(backend.requests).toHaveLength(1);
+    await act(async () => complete(request));
+  });
+
+  it("keeps regular chat usable while homepage events are still loading", async () => {
     const gate = deferred();
     const started = deferred();
     backend.recentGate = gate;
@@ -677,14 +694,18 @@ describe("normal AssistantTransport chat integration", () => {
     expect(first.text).toBe("ordinary while events load");
     await act(async () => complete(first));
 
-    backend.failRecentSeries = true;
-    fireEvent.click(screen.getByRole("button", { name: "赛事查询" }));
     gate.resolve();
+    await waitFor(() => expect(backend.calls.filter((call) => call.url.endsWith("/api/v1/home/recent-series"))).toHaveLength(1));
+  });
+
+  it("keeps chat usable when the homepage events endpoint is unavailable", async () => {
+    backend.failRecentSeries = true;
+    render(<TestChat />);
     expect(await screen.findByText("赛事列表暂时不可用")).toBeTruthy();
     await submit("ordinary after event failure");
-    const second = await waitForRequest(backend, 2);
-    expect(second.text).toBe("ordinary after event failure");
-    second.close();
+    const request = await waitForRequest(backend, 1);
+    expect(request.text).toBe("ordinary after event failure");
+    request.close();
   });
 
   it("locks the selected Series during session creation, preserves edits made while waiting, and ignores a double click", async () => {
@@ -736,22 +757,6 @@ describe("normal AssistantTransport chat integration", () => {
     expect(await screen.findByText("聊天记录未能加载。")).toBeTruthy();
     expect(input.value).toBe("历史失败草稿");
     expect(backend.requests).toHaveLength(0);
-  });
-
-  it("keeps the event panel browseable during a run but disables its send rows", async () => {
-    render(<TestChat />);
-    await selectSession("session-a");
-    await submit("ordinary request");
-    const request = await waitForRequest(backend, 1);
-
-    fireEvent.click(screen.getByRole("button", { name: "赛事查询" }));
-    const eventRow = screen.getByRole("button", { name: /已结束，The International · Season 2026/ });
-    expect(eventRow).toBeTruthy();
-    expect((eventRow as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.click(eventRow);
-    expect(backend.requests).toHaveLength(1);
-    expect(screen.getByRole("button", { name: "停止生成" })).toBeTruthy();
-    request.close();
   });
 
   it("does not route an event to a different session after the user switches during history loading", async () => {

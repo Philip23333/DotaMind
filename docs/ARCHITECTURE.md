@@ -505,7 +505,7 @@ contract, ephemeral activity, canonical
 history/metadata boundary, and phase acceptance are owned by
 [`agent/product_run_state.md`](agent/product_run_state.md).
 
-## 首页赛事与快捷查询（四个快捷入口已实现）
+## 首页赛事与输入框查询模式（四种模式已实现）
 
 首页赛事列表走普通后端数据接口，不调用模型。后端查询服务通过现有
 PandaScore Provider 层获取 Series 及必要的冠军身份事实，并将排序后的候选
@@ -516,10 +516,11 @@ Series 原始对象中的 `league.name` 经 Provider 生命周期模型、近期
 快照和只读 API 传递到前端；缺失或无效时为 `null`。前端只用来源值组合
 `League · Series` 显示名和普通查询文本，不改写共享模型工具的 Series DTO。
 
-赛事点击会发送包含显示名、Series 语义和 ID 的普通文本；英雄、玩家和单局面板
-只把经过基础输入校验的问题填入现有 Composer，由用户主动发送。快捷入口不预排
-工具调用、不增加结构化消息或第二套聊天协议；消息使用现有 AssistantTransport
-和 Agent Runtime。前端文本生成与草稿行为已有自动化验证，真实模型查询表现未验证。
+首页 Series 点击会发送包含显示名、Series 语义和 ID 的普通文本，并保留输入框草稿及
+查询模式。Composer 持有赛事、英雄、玩家、单局模式状态；用户输入始终是可编辑的自由
+文本，发送时在文本前附加一行纯文本模式说明。该入口不预排工具调用、不增加结构化消息
+或第二套聊天协议；消息使用现有 AssistantTransport 和 Agent Runtime。前端文本生成与
+草稿行为已有自动化验证，真实模型查询表现未验证。
 
 ```text
 首页 -> 普通后端接口 -> Series 候选服务 <-> 共享缓存
@@ -527,16 +528,22 @@ Series 原始对象中的 `league.name` 经 Provider 生命周期模型、近期
                                 +-> 现有 PandaScore Provider 层
 
 赛事点击 -> 普通聊天文本 -> AssistantTransport -> Agent Runtime -> Agent
-快捷面板 -> Composer 草稿 -> 用户发送 -> AssistantTransport -> Agent Runtime -> Agent
+输入框模式 -> 纯文本说明 + Composer 文本 -> AssistantTransport -> Agent Runtime -> Agent
 ```
 
-首页列表不触发模型调用。聊天壳统一持有左侧聊天记录与右侧 Trace 的展开状态：
-桌面从 1024px 起采用可独立收起的三列，窄屏使用互斥覆盖抽屉。抽屉开合不重挂载
-RuntimeProvider 或 Thread。Trace 列表仅在抽屉打开时按当前会话读取；Test Observer
-仍保持独立。
+首页最多十条候选只在欢迎页展示前五条，不另设十条展开层。最近赛事显式刷新与错误重试
+仍由同一只读数据接口完成，不触发模型调用。Composer 主动发送在消息交给运行时后清理
+未被用户改动的草稿并返回普通模式；准备失败保留草稿和模式，会话切换重置模式。
+
+聊天壳统一持有左侧聊天记录与右侧 Trace 的展开状态：桌面从 1024px 起采用可独立收起的
+三列，抽屉宽度以 180ms ease-out 动画变化；窄屏使用互斥覆盖抽屉和同步淡入淡出的遮罩。
+抽屉关闭时立即 inert，收放不重挂载 RuntimeProvider 或 Thread。Trace 列表仅在右抽屉
+逻辑打开时读取；Test Observer 仍保持独立。顶部 header 被删除，侧栏切换按钮在中间聊天
+区域的两侧悬浮定位，错误提示仅在需要时浮层呈现。
 
 Series 生命周期读取、候选组装、共享 Redis 缓存、普通只读接口、首页五条展示、
-赛事点击链路及三个草稿面板已实现。不改变工具注册、Artifact 或 Run State 契约。
+赛事点击链路、四种输入模式及两个会话抽屉已实现。不改变工具注册、Artifact 或 Run State
+契约。
 
 ## Migration order
 

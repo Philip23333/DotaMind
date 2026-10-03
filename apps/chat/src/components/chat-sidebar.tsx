@@ -46,26 +46,32 @@ export function ChatSidebar({
 }: ChatSidebarProps) {
   return (
     <>
-      {mobileMode && open && (
+      {mobileMode && (
         <button
           type="button"
-          className="fixed inset-0 z-40 bg-black/30"
+          className={`chat-drawer-backdrop fixed inset-0 z-40 bg-black/30 ${
+            open ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
+          }`}
           aria-label="关闭聊天列表"
+          aria-hidden={!open}
+          tabIndex={-1}
+          inert={!open}
           onClick={onClose}
         />
       )}
       <aside
         ref={drawerRef}
         id="chat-history-drawer"
-        className={`chat-sidebar-surface flex shrink-0 flex-col transition-transform ${mobileMode
-          ? `fixed inset-y-0 left-0 z-50 w-[min(86vw,18rem)] ${open ? "translate-x-0" : "-translate-x-full"}`
-          : `relative z-auto h-full w-72 ${open ? "" : "hidden"}`}`}
+        className={`chat-sidebar-surface min-w-0 shrink-0 overflow-hidden ${mobileMode
+          ? `chat-drawer-slide fixed inset-y-0 left-0 z-50 w-[min(86vw,18rem)] ${open ? "translate-x-0" : "-translate-x-full pointer-events-none"}`
+          : `chat-sidebar-width relative z-auto h-full ${open ? "w-72" : "w-0 pointer-events-none"}`}`}
         aria-label="聊天列表"
         aria-hidden={!open}
         aria-modal={mobileMode && open ? true : undefined}
         role={mobileMode && open ? "dialog" : undefined}
         inert={!open}
       >
+        <div className={`${mobileMode ? "h-full w-full" : "h-full w-72 min-w-72"} flex flex-col`}>
         <div className="chat-sidebar__header flex items-center justify-between px-3 py-3">
           <div className="flex items-center gap-2 text-sm font-semibold">
             <MessageSquareIcon className="size-4" />
@@ -116,6 +122,7 @@ export function ChatSidebar({
             </ThreadListPrimitive.Items>
           </div>
         </ThreadListPrimitive.Root>
+        </div>
       </aside>
     </>
   );

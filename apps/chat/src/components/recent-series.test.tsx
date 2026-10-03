@@ -1,13 +1,11 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } from "@testing-library/react";
-import { useEffect, useRef, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { getRecentSeries, type RecentSeriesCandidate, type RecentSeriesResponse } from "@/lib/home-api";
 import {
   RecentSeriesContent,
   RecentSeriesList,
-  RecentSeriesPanel,
   type RecentSeriesViewState,
   useRecentSeries,
 } from "./recent-series";
@@ -18,47 +16,6 @@ vi.mock("@/lib/home-api", async (importOriginal) => {
 });
 
 const getRecentSeriesMock = vi.mocked(getRecentSeries);
-
-function ControlledRecentSeriesPanel(props: {
-  state: RecentSeriesViewState;
-  disabled?: boolean;
-  onSelect: (series: RecentSeriesCandidate) => void;
-  onRetry: () => void;
-  onOpen: () => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    if (!open) return undefined;
-    const handlePointerDown = (event: PointerEvent) => {
-      if (!(event.target instanceof Node) || rootRef.current?.contains(event.target)) return;
-      setOpen(false);
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      setOpen(false);
-      triggerRef.current?.focus();
-    };
-    document.addEventListener("pointerdown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [open]);
-  return (
-    <div ref={rootRef}>
-      <RecentSeriesPanel
-        {...props}
-        open={open}
-        onOpenChange={setOpen}
-        triggerRef={triggerRef}
-      />
-    </div>
-  );
-}
 
 const candidates: RecentSeriesCandidate[] = Array.from({ length: 11 }, (_, index) => ({
   series_id: 100 + index,
@@ -123,25 +80,19 @@ describe("RecentSeriesList", () => {
 });
 
 describe("useRecentSeries", () => {
-  it("shares its initial request and refreshes fresh data only after 600 seconds", async () => {
-    const baseTime = 1_000_000;
-    const now = vi.spyOn(Date, "now").mockReturnValue(baseTime);
+  it("shares its initial request and allows an explicit refresh", async () => {
     getRecentSeriesMock
       .mockResolvedValueOnce(response("fresh"))
       .mockResolvedValueOnce(response("fresh"));
     const { result } = renderHook(() => useRecentSeries());
     await waitFor(() => expect(result.current.response?.status).toBe("fresh"));
 
-    act(() => result.current.refreshOnOpen());
-    expect(getRecentSeriesMock).toHaveBeenCalledOnce();
-
-    now.mockReturnValue(baseTime + 600_001);
-    act(() => result.current.refreshOnOpen());
+    act(() => result.current.retry());
     await waitFor(() => expect(getRecentSeriesMock).toHaveBeenCalledTimes(2));
   });
 
   it.each(["stale", "unavailable"] as const)(
-    "refreshes a %s response when the panel opens",
+    "can refresh a %s response",
     async (status) => {
       getRecentSeriesMock
         .mockResolvedValueOnce(response(status))
@@ -149,32 +100,32 @@ describe("useRecentSeries", () => {
       const { result } = renderHook(() => useRecentSeries());
       await waitFor(() => expect(result.current.response?.status).toBe(status));
 
-      act(() => result.current.refreshOnOpen());
+      act(() => result.current.retry());
       await waitFor(() => expect(getRecentSeriesMock).toHaveBeenCalledTimes(2));
       await waitFor(() => expect(result.current.response?.status).toBe("fresh"));
     },
   );
 
-  it("retries a failed read when the panel opens", async () => {
+  it("retries a failed read when retry is requested", async () => {
     getRecentSeriesMock
       .mockRejectedValueOnce(new Error("network error"))
       .mockResolvedValueOnce(response("fresh"));
     const { result } = renderHook(() => useRecentSeries());
     await waitFor(() => expect(result.current.error).toBe(true));
 
-    act(() => result.current.refreshOnOpen());
+    act(() => result.current.retry());
     await waitFor(() => expect(getRecentSeriesMock).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(result.current.response?.status).toBe("fresh"));
     expect(result.current.error).toBe(false);
   });
 
-  it("reuses an in-flight request when the panel opens", async () => {
+  it("reuses an in-flight request when refresh is requested", async () => {
     let resolveRead!: (value: RecentSeriesResponse) => void;
     getRecentSeriesMock.mockImplementationOnce(() => new Promise((resolve) => { resolveRead = resolve; }));
     const { result } = renderHook(() => useRecentSeries());
     await waitFor(() => expect(getRecentSeriesMock).toHaveBeenCalledOnce());
 
-    act(() => result.current.refreshOnOpen());
+    act(() => result.current.retry());
     expect(getRecentSeriesMock).toHaveBeenCalledOnce();
     await act(async () => resolveRead(response("fresh")));
     await waitFor(() => expect(result.current.response?.status).toBe("fresh"));
@@ -217,78 +168,7 @@ describe("RecentSeriesContent", () => {
   });
 });
 
-describe("RecentSeriesPanel", () => {
-  it("opens and closes by toggle or Escape, returns focus to its trigger, and stays open when busy", () => {
-    const onOpen = vi.fn();
-    const onSelect = vi.fn();
-    render(
-      <ControlledRecentSeriesPanel
-        state={viewState(response("fresh"))}
-        disabled
-        onOpen={onOpen}
-        onRetry={vi.fn()}
-        onSelect={onSelect}
-      />,
-    );
-
-    const trigger = screen.getByRole("button", { name: "赛事查询" });
-    fireEvent.click(trigger);
-    expect(trigger.getAttribute("aria-expanded")).toBe("true");
-    expect(onOpen).toHaveBeenCalledOnce();
-    const panel = screen.getByRole("region", { name: "赛事查询" });
-    expect(panel.classList.contains("recent-series-panel-scrollbar")).toBe(true);
-    expect(panel.classList.contains("overflow-y-auto")).toBe(true);
-    expect(screen.getAllByRole("button", { name: /^(进行中|已结束)，/ })).toHaveLength(10);
-    expect((screen.getByRole("button", { name: /^进行中，Series 1，/ }) as HTMLButtonElement).disabled).toBe(true);
-
-    act(() => fireEvent.keyDown(document, { key: "Escape" }));
-    expect(screen.queryByRole("region", { name: "赛事查询" })).toBeNull();
-    expect(document.activeElement).toBe(trigger);
-
-    fireEvent.click(trigger);
-    fireEvent.click(trigger);
-    expect(trigger.getAttribute("aria-expanded")).toBe("false");
-  });
-
-  it("selects only from the currently displayed source rows and closes after one selection", () => {
-    const onSelect = vi.fn();
-    render(
-      <ControlledRecentSeriesPanel
-        state={viewState(response("fresh"))}
-        onOpen={vi.fn()}
-        onRetry={vi.fn()}
-        onSelect={onSelect}
-      />,
-    );
-    fireEvent.click(screen.getByRole("button", { name: "赛事查询" }));
-    fireEvent.click(screen.getByRole("button", { name: /^进行中，Series 1，/ }));
-    expect(onSelect).toHaveBeenCalledWith(candidates[0]);
-    expect(screen.queryByRole("region", { name: "赛事查询" })).toBeNull();
-  });
-
-  it("closes on outside pointer without stealing focus and keeps clicks inside open", () => {
-    render(
-      <div>
-        <ControlledRecentSeriesPanel
-          state={viewState(response("fresh"))}
-          onOpen={vi.fn()}
-          onRetry={vi.fn()}
-          onSelect={vi.fn()}
-        />
-        <button type="button">聊天输入</button>
-      </div>,
-    );
-    const trigger = screen.getByRole("button", { name: "赛事查询" });
-    fireEvent.click(trigger);
-    fireEvent.pointerDown(screen.getByRole("region", { name: "赛事查询" }));
-    expect(screen.getByRole("region", { name: "赛事查询" })).toBeTruthy();
-
-    const input = screen.getByRole("button", { name: "聊天输入" });
-    fireEvent.pointerDown(input);
-    expect(screen.queryByRole("region", { name: "赛事查询" })).toBeNull();
-    expect(document.activeElement).not.toBe(trigger);
-  });
-
+describe("homepage recent-series list", () => {
   it("renders the first five rows when requested", () => {
     const { container } = render(<RecentSeriesList items={candidates} count={5} onSelect={vi.fn()} />);
     expect(within(container).getAllByRole("button")).toHaveLength(5);
