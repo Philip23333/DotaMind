@@ -4,9 +4,9 @@ import { MarkdownText } from "@/components/markdown-text";
 import { TraceDownloadAction } from "@/components/trace-download-action";
 import { Button } from "@/components/ui/button";
 import { RunProcessPanel } from "@/components/run-process-panel";
+import { QuickQueryPanels } from "@/components/quick-query-panels";
 import {
   RecentSeriesContent,
-  RecentSeriesPanel,
   useRecentSeries,
   type RecentSeriesState,
 } from "@/components/recent-series";
@@ -17,6 +17,7 @@ import {
   ErrorPrimitive,
   MessagePrimitive,
   ThreadPrimitive,
+  unstable_useComposerInput,
   useAui,
   useAuiState,
 } from "@assistant-ui/react";
@@ -29,7 +30,7 @@ import {
 } from "lucide-react";
 import { siDota2 } from "simple-icons";
 import { DOTAMIND_ASSISTANT_METADATA_KEY } from "@/lib/assistant-ui/migration-contract";
-import { useEffect, useMemo, useRef, type FC } from "react";
+import { useEffect, useMemo, useRef, useState, type FC } from "react";
 import { createUuidV4 } from "@/lib/uuid";
 import { getChatSession, transcriptToInitialMessages } from "@/lib/dotamind-api";
 import { useDotaMindThreadState } from "@/lib/assistant-ui/dotamind-transport-runtime";
@@ -126,7 +127,11 @@ export const Thread: FC<{ browserId?: string }> = ({ browserId }) => {
       <ThreadPrimitive.Viewport className="relative z-10 flex min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto scroll-smooth">
         <div className="mx-auto flex w-full max-w-3xl min-w-0 flex-1 flex-col px-3 pt-4 sm:px-6 sm:pt-6">
           <AuiIf condition={(state) => state.thread.messages.length === 0}>
-            <Welcome recentSeries={recentSeries} onSelect={(series) => { void sendMessage(seriesQueryText(series)); }} />
+            <Welcome
+              recentSeries={recentSeries}
+              isBusy={isBusy}
+              onSelect={(series) => { void sendMessage(seriesQueryText(series)); }}
+            />
           </AuiIf>
 
           <div className="flex flex-col gap-10 pb-16 empty:hidden">
@@ -171,8 +176,9 @@ export const Thread: FC<{ browserId?: string }> = ({ browserId }) => {
 
 const Welcome: FC<{
   recentSeries: RecentSeriesState;
+  isBusy: boolean;
   onSelect: (series: RecentSeriesCandidate) => void;
-}> = ({ recentSeries, onSelect }) => (
+}> = ({ recentSeries, isBusy, onSelect }) => (
   <div className="welcome-intro flex flex-1 flex-col items-center justify-center gap-5 pb-12 text-center sm:pb-20">
     <div className="flex items-center gap-3">
       <div className="flex size-[67px] items-center justify-center rounded-2xl bg-[#b92d1e] text-[#fff4e1] shadow-[0_8px_20px_rgb(115_31_24_/_20%)]">
@@ -187,6 +193,7 @@ const Welcome: FC<{
       <RecentSeriesContent
         state={recentSeries}
         count={5}
+        disabled={isBusy}
         onSelect={onSelect}
         onRetry={recentSeries.retry}
       />
@@ -300,24 +307,69 @@ const Composer: FC<{
   isBusy: boolean;
   onSendMessage: (message?: string) => Promise<void>;
 }> = ({ browserId, recentSeries, isBusy, onSendMessage }) => {
+  const aui = useAui();
+  const composerInput = unstable_useComposerInput();
   const { entry, snapshot } = useDotaMindThreadState();
   const remoteSessionId = useAuiState((state) => state.threadListItem.remoteId);
+  const threadItemId = useAuiState((state) => state.threadListItem.id);
   const composerText = useAuiState((state) => state.composer.text);
+  const composerInputRef = useRef<HTMLTextAreaElement>(null);
+  const previousThreadIdRef = useRef(threadItemId);
+  const [draftReplacement, setDraftReplacement] = useState<{
+    previousText: string;
+    filledText: string;
+    threadItemId: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (previousThreadIdRef.current === threadItemId) return;
+    previousThreadIdRef.current = threadItemId;
+    setDraftReplacement(null);
+  }, [threadItemId]);
+
+  const fillDraft = (text: string) => {
+    const previousText = composerInput.value;
+    const activeThreadItemId = aui.threadListItem.getState().id;
+    setDraftReplacement(previousText && previousText !== text
+      ? { previousText, filledText: text, threadItemId: activeThreadItemId }
+      : null);
+    composerInput.setText(text);
+    composerInputRef.current?.focus();
+  };
+
+  const undoDraftReplacement = () => {
+    if (!draftReplacement) return;
+    const currentThreadItemId = aui.threadListItem.getState().id;
+    if (
+      currentThreadItemId !== draftReplacement.threadItemId ||
+      composerInput.value !== draftReplacement.filledText
+    ) {
+      setDraftReplacement(null);
+      return;
+    }
+    composerInput.setText(draftReplacement.previousText);
+    setDraftReplacement(null);
+    composerInputRef.current?.focus();
+  };
+
+  const canUndoDraftReplacement = Boolean(
+    draftReplacement &&
+    draftReplacement.threadItemId === threadItemId &&
+    draftReplacement.filledText === composerText,
+  );
 
   return (
     <div>
-      <div className="relative mb-2 rounded-xl bg-muted/50 p-2">
-      <RecentSeriesPanel
-        state={recentSeries}
-        disabled={isBusy}
-        onOpen={recentSeries.refreshOnOpen}
-        onRetry={recentSeries.retry}
-        onSelect={(series) => { void onSendMessage(seriesQueryText(series)); }}
+      <QuickQueryPanels
+        recentSeries={recentSeries}
+        isBusy={isBusy}
+        onSelectSeries={(series) => { void onSendMessage(seriesQueryText(series)); }}
+        onFill={fillDraft}
       />
-      </div>
       <ComposerPrimitive.Root
         onSubmit={(event) => {
           event.preventDefault();
+          setDraftReplacement(null);
           void onSendMessage();
         }}
         className="rounded-3xl border bg-popover p-1.5 shadow-sm focus-within:ring-2 focus-within:ring-ring/30 sm:p-2"
@@ -326,9 +378,15 @@ const Composer: FC<{
           placeholder="询问 Dota 2 电竞赛事、英雄攻略与比赛数据…"
           className="max-h-40 min-h-12 w-full min-w-0 resize-none bg-transparent px-3 py-2 text-base outline-none placeholder:text-muted-foreground"
           rows={1}
+          ref={composerInputRef}
           autoFocus
           enterKeyHint="send"
           aria-label="消息输入框"
+          onChange={(event) => {
+            if (draftReplacement && event.target.value !== draftReplacement.filledText) {
+              setDraftReplacement(null);
+            }
+          }}
         />
         <div className="flex justify-end px-1 pb-1">
           {!isBusy && (
@@ -343,7 +401,10 @@ const Composer: FC<{
                 snapshot.is_submitting
               }
               onMouseDown={(event) => event.preventDefault()}
-              onClick={() => void onSendMessage()}
+              onClick={() => {
+                setDraftReplacement(null);
+                void onSendMessage();
+              }}
             >
               <ArrowUpIcon className="size-4" />
             </Button>
@@ -376,6 +437,18 @@ const Composer: FC<{
           </div>
         )}
       </ComposerPrimitive.Root>
+      {canUndoDraftReplacement && (
+        <p className="px-3 pt-2 text-xs text-muted-foreground" role="status">
+          已填入问题 ·{" "}
+          <button
+            type="button"
+            className="underline underline-offset-2 hover:text-foreground"
+            onClick={undoDraftReplacement}
+          >
+            撤销替换
+          </button>
+        </p>
+      )}
     </div>
   );
 };

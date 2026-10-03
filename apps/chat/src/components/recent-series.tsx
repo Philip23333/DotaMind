@@ -7,7 +7,7 @@ import {
   type RecentSeriesCandidate,
   type RecentSeriesResponse,
 } from "@/lib/home-api";
-import { useCallback, useEffect, useRef, useState, type FC } from "react";
+import { useCallback, useEffect, useRef, useState, type FC, type RefObject } from "react";
 
 const REFRESH_AFTER_MS = 600_000;
 
@@ -183,48 +183,30 @@ export const RecentSeriesContent: FC<RecentSeriesContentProps> = ({ state, count
 };
 
 type RecentSeriesPanelProps = Omit<RecentSeriesContentProps, "count"> & {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  triggerRef: RefObject<HTMLButtonElement | null>;
   onOpen: () => void;
 };
 
-export const RecentSeriesPanel: FC<RecentSeriesPanelProps> = ({ state, disabled, onSelect, onRetry, onOpen }) => {
-  const [open, setOpen] = useState(false);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const panelRef = useRef<HTMLElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        setOpen(false);
-        triggerRef.current?.focus();
-      }
-    };
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (!(target instanceof Node)) return;
-      if (panelRef.current?.contains(target) || triggerRef.current?.contains(target)) return;
-      setOpen(false);
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    document.addEventListener("pointerdown", handlePointerDown);
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-      document.removeEventListener("pointerdown", handlePointerDown);
-    };
-  }, [open]);
-
+export const RecentSeriesPanel: FC<RecentSeriesPanelProps> = ({
+  state,
+  disabled,
+  onSelect,
+  onRetry,
+  open,
+  onOpenChange,
+  triggerRef,
+  onOpen,
+}) => {
   const toggle = () => {
-    if (open) {
-      setOpen(false);
-    } else {
-      setOpen(true);
-      onOpen();
-    }
+    const nextOpen = !open;
+    onOpenChange(nextOpen);
+    if (nextOpen) onOpen();
   };
 
   return (
-    <div className="relative">
+    <div className="min-w-0">
       <Button
         ref={triggerRef}
         type="button"
@@ -233,14 +215,13 @@ export const RecentSeriesPanel: FC<RecentSeriesPanelProps> = ({ state, disabled,
         aria-expanded={open}
         aria-controls="recent-series-panel"
         onClick={toggle}
-        className="h-8 bg-muted/75 px-3 text-xs hover:bg-accent aria-expanded:bg-accent"
+        className="h-8 w-full bg-muted/75 px-3 text-xs hover:bg-accent aria-expanded:bg-accent"
       >
         赛事查询
       </Button>
       {open && (
         <section
           id="recent-series-panel"
-          ref={panelRef}
           aria-label="赛事查询"
           className="recent-series-panel-scrollbar absolute inset-x-0 bottom-full z-20 mb-2 max-h-[min(60vh,28rem)] overflow-y-auto rounded-2xl border bg-popover p-3 shadow-lg"
         >
@@ -251,7 +232,7 @@ export const RecentSeriesPanel: FC<RecentSeriesPanelProps> = ({ state, disabled,
             disabled={disabled}
             onSelect={(series) => {
               onSelect(series);
-              setOpen(false);
+              onOpenChange(false);
             }}
             onRetry={onRetry}
           />

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } from "@testing-library/react";
+import { useEffect, useRef, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { getRecentSeries, type RecentSeriesCandidate, type RecentSeriesResponse } from "@/lib/home-api";
@@ -17,6 +18,47 @@ vi.mock("@/lib/home-api", async (importOriginal) => {
 });
 
 const getRecentSeriesMock = vi.mocked(getRecentSeries);
+
+function ControlledRecentSeriesPanel(props: {
+  state: RecentSeriesViewState;
+  disabled?: boolean;
+  onSelect: (series: RecentSeriesCandidate) => void;
+  onRetry: () => void;
+  onOpen: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!(event.target instanceof Node) || rootRef.current?.contains(event.target)) return;
+      setOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setOpen(false);
+      triggerRef.current?.focus();
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
+  return (
+    <div ref={rootRef}>
+      <RecentSeriesPanel
+        {...props}
+        open={open}
+        onOpenChange={setOpen}
+        triggerRef={triggerRef}
+      />
+    </div>
+  );
+}
 
 const candidates: RecentSeriesCandidate[] = Array.from({ length: 11 }, (_, index) => ({
   series_id: 100 + index,
@@ -180,7 +222,7 @@ describe("RecentSeriesPanel", () => {
     const onOpen = vi.fn();
     const onSelect = vi.fn();
     render(
-      <RecentSeriesPanel
+      <ControlledRecentSeriesPanel
         state={viewState(response("fresh"))}
         disabled
         onOpen={onOpen}
@@ -211,7 +253,7 @@ describe("RecentSeriesPanel", () => {
   it("selects only from the currently displayed source rows and closes after one selection", () => {
     const onSelect = vi.fn();
     render(
-      <RecentSeriesPanel
+      <ControlledRecentSeriesPanel
         state={viewState(response("fresh"))}
         onOpen={vi.fn()}
         onRetry={vi.fn()}
@@ -227,7 +269,7 @@ describe("RecentSeriesPanel", () => {
   it("closes on outside pointer without stealing focus and keeps clicks inside open", () => {
     render(
       <div>
-        <RecentSeriesPanel
+        <ControlledRecentSeriesPanel
           state={viewState(response("fresh"))}
           onOpen={vi.fn()}
           onRetry={vi.fn()}

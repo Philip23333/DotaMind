@@ -505,7 +505,7 @@ contract, ephemeral activity, canonical
 history/metadata boundary, and phase acceptance are owned by
 [`agent/product_run_state.md`](agent/product_run_state.md).
 
-## 首页赛事与快捷查询（Series 入口已实现）
+## 首页赛事与快捷查询（四个快捷入口已实现）
 
 首页赛事列表走普通后端数据接口，不调用模型。后端查询服务通过现有
 PandaScore Provider 层获取 Series 及必要的冠军身份事实，并将排序后的候选
@@ -516,9 +516,10 @@ Series 原始对象中的 `league.name` 经 Provider 生命周期模型、近期
 快照和只读 API 传递到前端；缺失或无效时为 `null`。前端只用来源值组合
 `League · Series` 显示名和普通查询文本，不改写共享模型工具的 Series DTO。
 
-目前赛事点击会发送包含显示名、Series 语义和 ID 的普通文本。其他快捷面板仍是
-产品设计目标，尚未接入。已实现的入口只组织用户输入，不预排工具调用、不增加
-结构化消息或第二套聊天协议；消息使用现有 AssistantTransport 和 Agent Runtime。
+赛事点击会发送包含显示名、Series 语义和 ID 的普通文本；英雄、玩家和单局面板
+只把经过基础输入校验的问题填入现有 Composer，由用户主动发送。快捷入口不预排
+工具调用、不增加结构化消息或第二套聊天协议；消息使用现有 AssistantTransport
+和 Agent Runtime。前端文本生成与草稿行为已有自动化验证，真实模型查询表现未验证。
 
 ```text
 首页 -> 普通后端接口 -> Series 候选服务 <-> 共享缓存
@@ -526,6 +527,7 @@ Series 原始对象中的 `league.name` 经 Provider 生命周期模型、近期
                                 +-> 现有 PandaScore Provider 层
 
 赛事点击 -> 普通聊天文本 -> AssistantTransport -> Agent Runtime -> Agent
+快捷面板 -> Composer 草稿 -> 用户发送 -> AssistantTransport -> Agent Runtime -> Agent
 ```
 
 首页列表不触发模型调用。聊天壳统一持有左侧聊天记录与右侧 Trace 的展开状态：
@@ -533,9 +535,8 @@ Series 原始对象中的 `league.name` 经 Provider 生命周期模型、近期
 RuntimeProvider 或 Thread。Trace 列表仅在抽屉打开时按当前会话读取；Test Observer
 仍保持独立。
 
-Series 生命周期读取、候选组装、共享 Redis 缓存、普通只读接口、首页五条展示和
-赛事点击链路已实现。英雄、玩家和单局输入面板仍待实现。不改变工具注册、Artifact
-或 Run State 契约。
+Series 生命周期读取、候选组装、共享 Redis 缓存、普通只读接口、首页五条展示、
+赛事点击链路及三个草稿面板已实现。不改变工具注册、Artifact 或 Run State 契约。
 
 ## Migration order
 
