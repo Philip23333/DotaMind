@@ -37,7 +37,6 @@ from app.vnext.data_updates.patch_refresh import (
 )
 from app.vnext.data_updates.refresh_all import RefreshAllReport
 from app.vnext.data_updates.refresh_all import refresh_all as run_refresh_all
-from app.vnext.hero_guides import cli as hero_guide_cli
 from app.vnext.hero_guides.cache import (
     HeroGuideCacheDataError,
     HeroGuideCacheUnavailableError,
@@ -88,7 +87,6 @@ def main(
     environ: Mapping[str, str] | None = None,
     stdout: TextIO | None = None,
     stderr: TextIO | None = None,
-    refresh_lock_path: str | os.PathLike[str] | None = None,
     refresh_clock: Callable[[], datetime] | None = None,
     refresh_sleep: Callable[[float], Awaitable[None]] | None = None,
     refresh_all_clock: Callable[[], datetime] | None = None,
@@ -145,7 +143,6 @@ def main(
         return 1
 
     data_lock_fd: int | None = None
-    refresh_lock_fd: int | None = None
     result: tuple[dict[str, Any], int] | None = None
     lock_error = False
     try:
@@ -170,67 +167,28 @@ def main(
                     3,
                 )
             elif operation == "migrate-guides":
-                old_lock_path = (
-                    hero_guide_cli._LOCK_PATH
-                    if refresh_lock_path is None
-                    else refresh_lock_path
+                result = _run_migration_command(
+                    data_root=data_root,
+                    redis_url=redis_url,
+                    operation=operation,
                 )
-                try:
-                    refresh_lock_fd = _try_acquire_lock(old_lock_path)
-                except OSError:
-                    result = (_failed(operation, "storage_error"), 1)
-                else:
-                    if refresh_lock_fd is None:
-                        result = (_skipped_already_running(), 3)
-                    else:
-                        result = _run_migration_command(
-                            data_root=data_root,
-                            redis_url=redis_url,
-                            operation=operation,
-                        )
             elif operation == "refresh-guides":
-                old_lock_path = (
-                    hero_guide_cli._LOCK_PATH
-                    if refresh_lock_path is None
-                    else refresh_lock_path
+                result = _run_refresh_guides_command(
+                    data_root=data_root,
+                    clock=refresh_clock,
+                    sleep=refresh_sleep,
                 )
-                try:
-                    refresh_lock_fd = _try_acquire_lock(old_lock_path)
-                except OSError:
-                    result = (_failed(operation, "storage_error"), 1)
-                else:
-                    if refresh_lock_fd is None:
-                        result = (_refresh_skipped_already_running(), 3)
-                    else:
-                        result = _run_refresh_guides_command(
-                            data_root=data_root,
-                            clock=refresh_clock,
-                            sleep=refresh_sleep,
-                        )
             elif operation == "refresh-all":
                 assert workers is not None and image_workers is not None
-                old_lock_path = (
-                    hero_guide_cli._LOCK_PATH
-                    if refresh_lock_path is None
-                    else refresh_lock_path
+                result = _run_refresh_all_command(
+                    data_root=data_root,
+                    workers=workers,
+                    image_workers=image_workers,
+                    force=args.force,
+                    guide_clock=refresh_clock,
+                    guide_sleep=refresh_sleep,
+                    report_clock=refresh_all_clock,
                 )
-                try:
-                    refresh_lock_fd = _try_acquire_lock(old_lock_path)
-                except OSError:
-                    result = (_failed(operation, "storage_error"), 1)
-                else:
-                    if refresh_lock_fd is None:
-                        result = (_refresh_all_skipped_already_running(), 3)
-                    else:
-                        result = _run_refresh_all_command(
-                            data_root=data_root,
-                            workers=workers,
-                            image_workers=image_workers,
-                            force=args.force,
-                            guide_clock=refresh_clock,
-                            guide_sleep=refresh_sleep,
-                            report_clock=refresh_all_clock,
-                        )
             elif operation == "refresh-catalog":
                 assert workers is not None
                 result = _run_refresh_catalog_command(
@@ -271,11 +229,6 @@ def main(
     except Exception as exc:
         result = (_failed(operation, _safe_reason(exc)), 1)
     finally:
-        if refresh_lock_fd is not None:
-            try:
-                _release_lock(refresh_lock_fd)
-            except OSError:
-                lock_error = True
         if data_lock_fd is not None:
             try:
                 _release_lock(data_lock_fd)

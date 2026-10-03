@@ -44,7 +44,7 @@ from app.vnext.composition import (
 )
 from app.vnext.data_updates.catalog_loader import CatalogSnapshotLoader
 from app.vnext.data_updates.catalog_store import CatalogSnapshotStore
-from app.vnext.hero_guides.cache import HeroGuideReader, RedisHeroGuideCache
+from app.vnext.hero_guides.cache import HeroGuideReader
 from app.vnext.hero_guides.file_cache import FileHeroGuideCache
 from app.vnext.homepage.recent_series import RedisRecentSeriesCache
 from app.vnext.product import (
@@ -141,10 +141,7 @@ async def lifespan(app: FastAPI):
                 vnext_redis,
                 ttl_seconds=vnext_settings.trace_ttl_seconds,
             )
-        hero_guide_cache = _hero_guide_cache_for_data_dir(
-            vnext_settings.data_dir,
-            vnext_redis,
-        )
+        hero_guide_cache = _hero_guide_cache_for_data_dir(vnext_settings.data_dir)
         vnext_services = build_vnext_services(
             vnext_settings,
             hero_guide_cache=hero_guide_cache,
@@ -263,12 +260,9 @@ def _repository_provider_for_loader(
 
 def _hero_guide_cache_for_data_dir(
     data_dir: Path | None,
-    redis_client: object | None,
 ) -> HeroGuideReader | None:
     if data_dir is not None:
         return FileHeroGuideCache(data_dir)
-    if redis_client is not None:
-        return RedisHeroGuideCache(redis_client)
     return None
 
 

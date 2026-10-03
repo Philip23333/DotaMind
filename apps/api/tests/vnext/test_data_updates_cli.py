@@ -97,7 +97,6 @@ def _invoke(
     argv: list[str],
     *,
     environ: dict[str, str] | None = None,
-    refresh_lock_path: Path,
     refresh_clock: Any = None,
     refresh_sleep: Any = None,
     refresh_all_clock: Any = None,
@@ -109,7 +108,6 @@ def _invoke(
         environ={} if environ is None else environ,
         stdout=stdout,
         stderr=stderr,
-        refresh_lock_path=refresh_lock_path,
         refresh_clock=refresh_clock,
         refresh_sleep=refresh_sleep,
         refresh_all_clock=refresh_all_clock,
@@ -186,9 +184,9 @@ async def _no_sleep(_delay: float) -> None:
     return None
 
 
-def _initialize(data_dir: Path, refresh_lock_path: Path) -> dict[str, Any]:
+def _initialize(data_dir: Path) -> dict[str, Any]:
     code, payload, _raw, _stderr = _invoke(
-        _catalog_args(data_dir), refresh_lock_path=refresh_lock_path
+        _catalog_args(data_dir)
     )
     assert code == 0
     assert payload is not None
@@ -233,7 +231,6 @@ def test_data_directory_configuration_is_required_and_absolute(
     code, payload, _raw, _stderr = _invoke(
         argv,
         environ=environ,
-        refresh_lock_path=tmp_path / "refresh.lock",
     )
 
     assert code == 2
@@ -267,7 +264,6 @@ def test_migration_requires_a_valid_data_directory_before_redis(
     code, payload, _raw, _stderr = _invoke(
         argv,
         environ=environ,
-        refresh_lock_path=tmp_path / "refresh.lock",
     )
 
     assert code == 2
@@ -288,7 +284,6 @@ def test_init_catalog_parameter_takes_precedence_over_environment(
     code, payload, _raw, _stderr = _invoke(
         ["--data-dir", str(data_dir), "init-catalog"],
         environ={"DOTAMIND_DATA_DIR": "relative/ignored"},
-        refresh_lock_path=tmp_path / "refresh.lock",
     )
 
     assert code == 0
@@ -303,7 +298,7 @@ def test_init_catalog_publishes_bundled_five_files_and_reports_real_patch(
     source_bytes = {name: (CATALOG_DIR / name).read_bytes() for name in _CATALOG_FILES}
 
     code, payload, _raw, _stderr = _invoke(
-        _catalog_args(data_dir), refresh_lock_path=tmp_path / "refresh.lock"
+        _catalog_args(data_dir)
     )
 
     assert code == 0
@@ -327,12 +322,10 @@ def test_init_catalog_second_run_skips_without_reading_source_or_revision_change
     tmp_path: Path,
 ) -> None:
     data_dir = tmp_path / "persistent-data"
-    refresh_lock = tmp_path / "refresh.lock"
-    first = _initialize(data_dir, refresh_lock)
+    first = _initialize(data_dir)
 
     code, second, _raw, _stderr = _invoke(
         _catalog_args(data_dir, tmp_path / "source-that-does-not-exist"),
-        refresh_lock_path=refresh_lock,
     )
 
     assert code == 0
@@ -352,7 +345,7 @@ def test_corrupt_current_pointer_is_not_overwritten(tmp_path: Path) -> None:
     pointer.write_bytes(b"{corrupt")
 
     code, payload, _raw, _stderr = _invoke(
-        _catalog_args(data_dir), refresh_lock_path=tmp_path / "refresh.lock"
+        _catalog_args(data_dir)
     )
 
     assert code == 1
@@ -373,7 +366,7 @@ def test_invalid_catalog_source_does_not_publish_a_pointer(tmp_path: Path) -> No
     (source / _CATALOG_FILES[0]).write_bytes(b"{}")
 
     code, payload, _raw, _stderr = _invoke(
-        _catalog_args(data_dir, source), refresh_lock_path=tmp_path / "refresh.lock"
+        _catalog_args(data_dir, source)
     )
 
     assert code == 1
@@ -388,7 +381,7 @@ def test_data_lock_busy_skips_without_catalog_publication(tmp_path: Path) -> Non
     assert held_fd is not None
     try:
         code, payload, _raw, _stderr = _invoke(
-            _catalog_args(data_dir), refresh_lock_path=tmp_path / "refresh.lock"
+            _catalog_args(data_dir)
         )
     finally:
         cli._release_lock(held_fd)
@@ -403,8 +396,7 @@ def test_data_lock_busy_skips_migration_before_opening_redis(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     data_dir = tmp_path / "persistent-data"
-    refresh_lock = tmp_path / "refresh.lock"
-    _initialize(data_dir, refresh_lock)
+    _initialize(data_dir)
     pointer_before = (data_dir / "catalog" / "current.json").read_bytes()
     held_fd = cli._try_acquire_lock(data_dir / ".update.lock")
     assert held_fd is not None
@@ -416,7 +408,6 @@ def test_data_lock_busy_skips_migration_before_opening_redis(
         code, payload, _raw, _stderr = _invoke(
             ["migrate-guides", "--data-dir", str(data_dir)],
             environ={"DOTAMIND_REDIS_URL": "redis://fake"},
-            refresh_lock_path=refresh_lock,
         )
     finally:
         cli._release_lock(held_fd)
@@ -436,7 +427,6 @@ def test_help_has_no_data_or_redis_side_effects(tmp_path: Path) -> None:
         environ={},
         stdout=stdout,
         stderr=stderr,
-        refresh_lock_path=tmp_path / "refresh.lock",
     )
 
     assert code == 0
@@ -456,7 +446,6 @@ def test_subcommand_help_has_no_side_effects(command: str, tmp_path: Path) -> No
         environ={},
         stdout=stdout,
         stderr=stderr,
-        refresh_lock_path=tmp_path / "refresh.lock",
     )
 
     assert code == 0
@@ -476,7 +465,6 @@ def test_migrate_requires_catalog_before_creating_redis_client(
     code, payload, _raw, _stderr = _invoke(
         ["migrate-guides", "--data-dir", str(data_dir)],
         environ={"DOTAMIND_REDIS_URL": "redis://fake"},
-        refresh_lock_path=tmp_path / "refresh.lock",
     )
 
     assert code == 1
@@ -502,7 +490,6 @@ def test_corrupt_catalog_pointer_prevents_redis_creation(
     code, payload, _raw, _stderr = _invoke(
         ["migrate-guides", "--data-dir", str(data_dir)],
         environ={"DOTAMIND_REDIS_URL": "redis://fake"},
-        refresh_lock_path=tmp_path / "refresh.lock",
     )
 
     assert code == 1
@@ -521,7 +508,6 @@ def test_redis_url_is_required_before_any_lock_or_client_creation(
     code, payload, _raw, _stderr = _invoke(
         ["migrate-guides", "--data-dir", str(data_dir)],
         environ={},
-        refresh_lock_path=tmp_path / "refresh.lock",
     )
 
     assert code == 2
@@ -535,8 +521,6 @@ def test_migration_uses_catalog_snapshot_heroes_and_existing_importer(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     data_dir = tmp_path / "persistent-data"
-    old_lock_path = tmp_path / "old-refresh.lock"
-    old_lock_path.parent.mkdir(exist_ok=True)
     redis_client = FakeRedis()
     events: list[Any] = []
 
@@ -560,7 +544,6 @@ def test_migration_uses_catalog_snapshot_heroes_and_existing_importer(
         assert url == "redis://fake"
         assert decode_responses is True
         assert cli._try_acquire_lock(data_dir / ".update.lock") is None
-        assert cli._try_acquire_lock(old_lock_path) is None
         events.append("redis_create")
         return redis_client
 
@@ -579,7 +562,6 @@ def test_migration_uses_catalog_snapshot_heroes_and_existing_importer(
     code, payload, _raw, _stderr = _invoke(
         ["migrate-guides", "--data-dir", str(data_dir)],
         environ={"DOTAMIND_REDIS_URL": "redis://fake"},
-        refresh_lock_path=old_lock_path,
     )
 
     assert code == 0
@@ -596,9 +578,7 @@ def test_migration_uses_catalog_snapshot_heroes_and_existing_importer(
     assert redis_client.ping_calls == 1
     assert redis_client.close_calls == 1
     data_lock = cli._try_acquire_lock(data_dir / ".update.lock")
-    refresh_lock_fd = cli._try_acquire_lock(old_lock_path)
-    assert data_lock is not None and refresh_lock_fd is not None
-    cli._release_lock(refresh_lock_fd)
+    assert data_lock is not None
     cli._release_lock(data_lock)
 
 
@@ -607,8 +587,7 @@ def test_migration_imports_and_readback_skips_identical_guide_files(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     data_dir = tmp_path / "persistent-data"
-    refresh_lock = tmp_path / "refresh.lock"
-    _initialize(data_dir, refresh_lock)
+    _initialize(data_dir)
     catalog = CatalogSnapshotStore(data_dir).load_current()
     assert catalog is not None
     hero_id = catalog.repository.list_heroes()[0].hero_id
@@ -623,10 +602,10 @@ def test_migration_imports_and_readback_skips_identical_guide_files(
     args = ["migrate-guides", "--data-dir", str(data_dir)]
     environ = {"DOTAMIND_REDIS_URL": "redis://fake"}
     first_code, first, _first_raw, _ = _invoke(
-        args, environ=environ, refresh_lock_path=refresh_lock
+        args, environ=environ
     )
     second_code, second, _second_raw, _ = _invoke(
-        args, environ=environ, refresh_lock_path=refresh_lock
+        args, environ=environ
     )
 
     total = len(catalog.repository.list_heroes()) * 6
@@ -644,57 +623,6 @@ def test_migration_imports_and_readback_skips_identical_guide_files(
     assert redis_client.delete_calls == []
     assert redis_client.expire_calls == []
     assert redis_client.close_calls == 2
-
-
-def test_refresh_lock_busy_skips_without_accessing_redis(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    data_dir = tmp_path / "persistent-data"
-    refresh_lock = tmp_path / "refresh.lock"
-    _initialize(data_dir, refresh_lock)
-    held_fd = cli._try_acquire_lock(refresh_lock)
-    assert held_fd is not None
-    redis_calls: list[str] = []
-    monkeypatch.setattr(cli, "from_url", lambda *_args, **_kwargs: redis_calls.append("redis"))
-    try:
-        code, payload, _raw, _stderr = _invoke(
-            ["migrate-guides", "--data-dir", str(data_dir)],
-            environ={"DOTAMIND_REDIS_URL": "redis://fake"},
-            refresh_lock_path=refresh_lock,
-        )
-    finally:
-        cli._release_lock(held_fd)
-
-    assert code == 3
-    assert payload == {"status": "skipped", "reason": "already_running"}
-    assert redis_calls == []
-    data_lock = cli._try_acquire_lock(data_dir / ".update.lock")
-    assert data_lock is not None
-    cli._release_lock(data_lock)
-
-
-def test_second_lock_open_failure_releases_data_lock_before_returning(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    data_dir = tmp_path / "persistent-data"
-    _initialize(data_dir, tmp_path / "refresh.lock")
-    redis_calls: list[str] = []
-    monkeypatch.setattr(cli, "from_url", lambda *_args, **_kwargs: redis_calls.append("redis"))
-
-    code, payload, _raw, _stderr = _invoke(
-        ["migrate-guides", "--data-dir", str(data_dir)],
-        environ={"DOTAMIND_REDIS_URL": "redis://fake"},
-        refresh_lock_path=tmp_path / "missing-parent" / "refresh.lock",
-    )
-
-    assert code == 1
-    assert payload is not None and payload["reason"] == "storage_error"
-    assert redis_calls == []
-    data_lock = cli._try_acquire_lock(data_dir / ".update.lock")
-    assert data_lock is not None
-    cli._release_lock(data_lock)
 
 
 @pytest.mark.parametrize(
@@ -715,8 +643,7 @@ def test_migration_failures_have_fixed_reasons_and_close_redis(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     data_dir = tmp_path / "persistent-data"
-    old_lock = tmp_path / "refresh.lock"
-    _initialize(data_dir, old_lock)
+    _initialize(data_dir)
     redis_client = FakeRedis()
     monkeypatch.setattr(
         cli,
@@ -731,7 +658,6 @@ def test_migration_failures_have_fixed_reasons_and_close_redis(
     code, payload, raw, _stderr = _invoke(
         ["migrate-guides", "--data-dir", str(data_dir)],
         environ={"DOTAMIND_REDIS_URL": "redis://user:secret@host"},
-        refresh_lock_path=old_lock,
     )
 
     assert code == 1
@@ -748,8 +674,7 @@ def test_redis_ping_failure_closes_client_without_exposing_url(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     data_dir = tmp_path / "persistent-data"
-    refresh_lock = tmp_path / "refresh.lock"
-    _initialize(data_dir, refresh_lock)
+    _initialize(data_dir)
     redis_client = FakeRedis()
     redis_client.ping_error = RedisError("redis://user:secret@host")
     monkeypatch.setattr(cli, "from_url", lambda *_args, **_kwargs: redis_client)
@@ -757,7 +682,6 @@ def test_redis_ping_failure_closes_client_without_exposing_url(
     code, payload, raw, _stderr = _invoke(
         ["migrate-guides", "--data-dir", str(data_dir)],
         environ={"DOTAMIND_REDIS_URL": "redis://user:secret@host"},
-        refresh_lock_path=refresh_lock,
     )
 
     assert code == 1
@@ -766,13 +690,12 @@ def test_redis_ping_failure_closes_client_without_exposing_url(
     assert redis_client.close_calls == 1
 
 
-def test_cancellation_closes_redis_and_releases_both_locks(
+def test_cancellation_closes_redis_and_releases_data_lock(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     data_dir = tmp_path / "persistent-data"
-    refresh_lock = tmp_path / "refresh.lock"
-    _initialize(data_dir, refresh_lock)
+    _initialize(data_dir)
     redis_client = FakeRedis()
     monkeypatch.setattr(cli, "from_url", lambda *_args, **_kwargs: redis_client)
 
@@ -783,16 +706,13 @@ def test_cancellation_closes_redis_and_releases_both_locks(
     code, payload, _raw, _stderr = _invoke(
         ["migrate-guides", "--data-dir", str(data_dir)],
         environ={"DOTAMIND_REDIS_URL": "redis://fake"},
-        refresh_lock_path=refresh_lock,
     )
 
     assert code == 130
     assert payload == {"status": "cancelled"}
     assert redis_client.close_calls == 1
     data_lock = cli._try_acquire_lock(data_dir / ".update.lock")
-    refresh_lock_fd = cli._try_acquire_lock(refresh_lock)
-    assert data_lock is not None and refresh_lock_fd is not None
-    cli._release_lock(refresh_lock_fd)
+    assert data_lock is not None
     cli._release_lock(data_lock)
 
 
@@ -816,7 +736,6 @@ def test_refresh_guides_help_has_no_storage_or_provider_side_effects(
         environ={},
         stdout=stdout,
         stderr=stderr,
-        refresh_lock_path=tmp_path / "refresh.lock",
     )
 
     assert code == 0
@@ -829,7 +748,6 @@ def test_refresh_guides_uses_files_without_redis_and_emits_complete_report(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     data_dir = tmp_path / "persistent-data"
-    refresh_lock = tmp_path / "old-refresh.lock"
     client = FakeD2PTClient()
     monkeypatch.setattr(cli, "D2PTClient", lambda: client)
     monkeypatch.setattr(
@@ -839,7 +757,6 @@ def test_refresh_guides_uses_files_without_redis_and_emits_complete_report(
     code, payload, raw, stderr = _invoke(
         _refresh_args(data_dir),
         environ={},
-        refresh_lock_path=refresh_lock,
         refresh_clock=lambda: _NOW,
         refresh_sleep=_no_sleep,
     )
@@ -883,7 +800,6 @@ def test_refresh_guides_explicit_data_dir_precedes_environment(
     code, payload, _raw, _stderr = _invoke(
         _refresh_args(explicit),
         environ={"DOTAMIND_DATA_DIR": "relative/ignored"},
-        refresh_lock_path=tmp_path / "refresh.lock",
         refresh_sleep=_no_sleep,
     )
 
@@ -915,7 +831,6 @@ def test_refresh_guides_rejects_invalid_data_dir_before_provider_or_locks(
     code, payload, _raw, _stderr = _invoke(
         argv,
         environ=environ,
-        refresh_lock_path=tmp_path / "refresh.lock",
     )
 
     assert code == 2
@@ -941,7 +856,6 @@ def test_refresh_guides_data_lock_busy_does_not_start_d2pt(
     try:
         code, payload, _raw, _stderr = _invoke(
             _refresh_args(data_dir),
-            refresh_lock_path=tmp_path / "refresh.lock",
         )
     finally:
         cli._release_lock(held_fd)
@@ -952,61 +866,6 @@ def test_refresh_guides_data_lock_busy_does_not_start_d2pt(
         "operation": "refresh-guides",
         "reason": "already_running",
     }
-
-
-def test_refresh_guides_second_lock_busy_releases_data_lock_without_d2pt(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    data_dir = tmp_path / "persistent-data"
-    data_dir.mkdir()
-    refresh_lock = tmp_path / "refresh.lock"
-    held_fd = cli._try_acquire_lock(refresh_lock)
-    assert held_fd is not None
-    monkeypatch.setattr(
-        cli, "D2PTClient", lambda: pytest.fail("D2PT must not start")
-    )
-    try:
-        code, payload, _raw, _stderr = _invoke(
-            _refresh_args(data_dir), refresh_lock_path=refresh_lock
-        )
-    finally:
-        cli._release_lock(held_fd)
-
-    assert code == 3
-    assert payload == {
-        "status": "skipped",
-        "operation": "refresh-guides",
-        "reason": "already_running",
-    }
-    data_lock = cli._try_acquire_lock(data_dir / ".update.lock")
-    assert data_lock is not None
-    cli._release_lock(data_lock)
-
-
-def test_refresh_guides_second_lock_open_failure_releases_data_lock(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    data_dir = tmp_path / "persistent-data"
-    monkeypatch.setattr(
-        cli, "D2PTClient", lambda: pytest.fail("D2PT must not start")
-    )
-
-    code, payload, _raw, _stderr = _invoke(
-        _refresh_args(data_dir),
-        refresh_lock_path=tmp_path / "missing-parent" / "refresh.lock",
-    )
-
-    assert code == 1
-    assert payload == {
-        "status": "failed",
-        "operation": "refresh-guides",
-        "reason": "storage_error",
-    }
-    data_lock = cli._try_acquire_lock(data_dir / ".update.lock")
-    assert data_lock is not None
-    cli._release_lock(data_lock)
 
 
 @pytest.mark.parametrize(
@@ -1036,7 +895,6 @@ def test_refresh_guides_report_status_maps_to_exit_code(
 
     code, payload, raw, _stderr = _invoke(
         _refresh_args(data_dir),
-        refresh_lock_path=tmp_path / "refresh.lock",
         refresh_clock=lambda: _NOW,
         refresh_sleep=_no_sleep,
     )
@@ -1079,7 +937,6 @@ def test_refresh_guides_execution_errors_are_safe_and_release_locks(
     monkeypatch.setattr(FileHeroGuideCache, "publish", fail_publish)
     code, payload, raw, _stderr = _invoke(
         _refresh_args(data_dir),
-        refresh_lock_path=tmp_path / "refresh.lock",
         refresh_sleep=_no_sleep,
     )
 
@@ -1091,18 +948,15 @@ def test_refresh_guides_execution_errors_are_safe_and_release_locks(
     }
     assert "secret provider payload" not in raw
     data_lock = cli._try_acquire_lock(data_dir / ".update.lock")
-    refresh_lock_fd = cli._try_acquire_lock(tmp_path / "refresh.lock")
-    assert data_lock is not None and refresh_lock_fd is not None
-    cli._release_lock(refresh_lock_fd)
+    assert data_lock is not None
     cli._release_lock(data_lock)
 
 
-def test_refresh_guides_cancellation_waits_for_file_worker_before_releasing_locks(
+def test_refresh_guides_cancellation_waits_for_file_worker_before_releasing_data_lock(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     data_dir = tmp_path / "persistent-data"
-    refresh_lock = tmp_path / "refresh.lock"
     write_started = threading.Event()
     release_write = threading.Event()
     command_finished = threading.Event()
@@ -1143,8 +997,7 @@ def test_refresh_guides_cancellation_waits_for_file_worker_before_releasing_lock
             os.kill(os.getpid(), signal.SIGTERM)
             assert not command_finished.wait(timeout=0.15)
             data_lock = cli._try_acquire_lock(data_dir / ".update.lock")
-            refresh_lock_fd = cli._try_acquire_lock(refresh_lock)
-            assert data_lock is None and refresh_lock_fd is None
+            assert data_lock is None
             monitor_checked.set()
         except BaseException as exc:
             monitor_errors.append(exc)
@@ -1155,7 +1008,6 @@ def test_refresh_guides_cancellation_waits_for_file_worker_before_releasing_lock
     monitor.start()
     code, payload, raw, _stderr = _invoke(
         _refresh_args(data_dir),
-        refresh_lock_path=refresh_lock,
         refresh_sleep=_no_sleep,
     )
     monitor.join(timeout=5)
@@ -1169,9 +1021,7 @@ def test_refresh_guides_cancellation_waits_for_file_worker_before_releasing_lock
     assert raw.count("\n") == 1
     assert client.calls == [("heroes_list",), ("pub_builds", 18, 1)]
     data_lock = cli._try_acquire_lock(data_dir / ".update.lock")
-    refresh_lock_fd = cli._try_acquire_lock(refresh_lock)
-    assert data_lock is not None and refresh_lock_fd is not None
-    cli._release_lock(refresh_lock_fd)
+    assert data_lock is not None
     cli._release_lock(data_lock)
 
 
@@ -1209,7 +1059,6 @@ def test_refresh_catalog_uses_one_bounded_session_without_redis_or_guide_lock(
     code, payload, raw, stderr = _invoke(
         _catalog_refresh_args(data_dir, "--workers", "4", "--force"),
         environ={},
-        refresh_lock_path=old_guide_lock,
     )
 
     assert code == 0
@@ -1246,7 +1095,6 @@ def test_refresh_catalog_help_has_no_storage_or_provider_side_effects(
         environ={},
         stdout=stdout,
         stderr=stderr,
-        refresh_lock_path=tmp_path / "legacy-guide.lock",
     )
 
     assert code == 0
@@ -1267,7 +1115,7 @@ def test_refresh_catalog_lock_busy_skips_before_client_creation(
     monkeypatch.setattr(cli, "ValveDatafeedClient", lambda: client_calls.append(None))
     try:
         code, payload, _raw, _stderr = _invoke(
-            _catalog_refresh_args(data_dir), refresh_lock_path=tmp_path / "legacy.lock"
+            _catalog_refresh_args(data_dir)
         )
     finally:
         cli._release_lock(lock_fd)
@@ -1293,7 +1141,6 @@ def test_refresh_catalog_rejects_invalid_workers_before_lock_or_client(
 
     code, payload, _raw, _stderr = _invoke(
         _catalog_refresh_args(data_dir, "--workers", workers),
-        refresh_lock_path=tmp_path / "legacy.lock",
     )
 
     assert code == 2
@@ -1328,7 +1175,7 @@ def test_refresh_catalog_failure_is_safe_and_releases_data_lock(
 
     monkeypatch.setattr(cli, "refresh_catalog", fail)
     code, payload, raw, _stderr = _invoke(
-        _catalog_refresh_args(data_dir), refresh_lock_path=tmp_path / "legacy.lock"
+        _catalog_refresh_args(data_dir)
     )
 
     assert code == 1
@@ -1399,7 +1246,6 @@ def test_refresh_catalog_cancellation_waits_for_worker_before_releasing_lock(
     monitor.start()
     code, payload, raw, _stderr = _invoke(
         _catalog_refresh_args(data_dir),
-        refresh_lock_path=old_guide_lock,
     )
     monitor.join(timeout=5)
 
@@ -1449,7 +1295,6 @@ def test_refresh_patches_uses_one_session_data_lock_and_no_redis_or_guide_lock(
     code, payload, raw, stderr = _invoke(
         _patch_refresh_args(data_dir, "--force"),
         environ={"DOTAMIND_DATA_DIR": str(environment_dir)},
-        refresh_lock_path=old_guide_lock,
     )
 
     assert code == 0
@@ -1488,7 +1333,6 @@ def test_refresh_patches_help_has_no_storage_or_provider_side_effects(
         environ={},
         stdout=stdout,
         stderr=stderr,
-        refresh_lock_path=tmp_path / "legacy-guide.lock",
     )
 
     assert code == 0
@@ -1509,7 +1353,6 @@ def test_refresh_patches_lock_busy_skips_before_client_creation(
     try:
         code, payload, _raw, _stderr = _invoke(
             _patch_refresh_args(data_dir),
-            refresh_lock_path=tmp_path / "legacy.lock",
         )
     finally:
         cli._release_lock(lock_fd)
@@ -1532,7 +1375,6 @@ def test_refresh_patches_rejects_relative_data_dir_before_client_creation(
 
     code, payload, _raw, _stderr = _invoke(
         ["refresh-patches", "--data-dir", "relative-data"],
-        refresh_lock_path=tmp_path / "legacy.lock",
     )
 
     assert code == 2
@@ -1568,7 +1410,7 @@ def test_refresh_patches_failure_is_safe_and_releases_data_lock(
 
     monkeypatch.setattr(cli, "refresh_patches", fail)
     code, payload, raw, _stderr = _invoke(
-        _patch_refresh_args(data_dir), refresh_lock_path=tmp_path / "legacy.lock"
+        _patch_refresh_args(data_dir)
     )
 
     assert code == 1
@@ -1639,7 +1481,6 @@ def test_refresh_patches_cancellation_waits_for_worker_before_releasing_lock(
     monitor.start()
     code, payload, raw, _stderr = _invoke(
         _patch_refresh_args(data_dir),
-        refresh_lock_path=old_guide_lock,
     )
     monitor.join(timeout=5)
 
@@ -1689,7 +1530,6 @@ def test_refresh_images_uses_data_lock_and_fake_client_without_redis_or_guide_lo
     code, payload, raw, stderr = _invoke(
         _image_refresh_args(data_dir, "--workers", "4", "--force"),
         environ={"DOTAMIND_DATA_DIR": str(environment_dir)},
-        refresh_lock_path=old_guide_lock,
     )
 
     assert code == 0
@@ -1741,7 +1581,7 @@ def test_refresh_images_partial_failures_return_exit_code_four(
     )
 
     code, payload, _raw, _stderr = _invoke(
-        _image_refresh_args(data_dir), refresh_lock_path=tmp_path / "legacy.lock"
+        _image_refresh_args(data_dir)
     )
 
     assert code == 4
@@ -1792,7 +1632,7 @@ def test_refresh_images_lock_busy_skips_before_client_creation(
     monkeypatch.setattr(cli, "ValveImageClient", lambda: client_calls.append(None))
     try:
         code, payload, _raw, _stderr = _invoke(
-            _image_refresh_args(data_dir), refresh_lock_path=tmp_path / "legacy.lock"
+            _image_refresh_args(data_dir)
         )
     finally:
         cli._release_lock(lock_fd)
@@ -1818,7 +1658,6 @@ def test_refresh_images_rejects_workers_before_lock_or_download(
 
     code, payload, _raw, _stderr = _invoke(
         _image_refresh_args(data_dir, "--workers", workers),
-        refresh_lock_path=tmp_path / "legacy.lock",
     )
 
     assert code == 2
@@ -1844,7 +1683,7 @@ def test_refresh_images_catalog_missing_is_safe_and_releases_lock(
     )
 
     code, payload, raw, _stderr = _invoke(
-        _image_refresh_args(data_dir), refresh_lock_path=tmp_path / "legacy.lock"
+        _image_refresh_args(data_dir)
     )
 
     assert code == 1
@@ -1904,7 +1743,7 @@ def test_refresh_images_cancellation_waits_for_worker_before_releasing_lock(
     monitor = threading.Thread(target=cancel_when_worker_starts)
     monitor.start()
     code, payload, raw, _stderr = _invoke(
-        _image_refresh_args(data_dir), refresh_lock_path=tmp_path / "legacy.lock"
+        _image_refresh_args(data_dir)
     )
     monitor.join(timeout=5)
 
@@ -1962,7 +1801,6 @@ def test_refresh_all_help_has_no_directory_or_client_side_effects(
         environ={},
         stdout=stdout,
         stderr=StringIO(),
-        refresh_lock_path=tmp_path / "legacy-guide.lock",
     )
 
     assert code == 0
@@ -1995,7 +1833,6 @@ def test_refresh_all_rejects_invalid_worker_bounds_before_storage(
     data_dir = tmp_path / "data"
     code, payload, _raw, _stderr = _invoke(
         ["refresh-all", "--data-dir", str(data_dir), option, value],
-        refresh_lock_path=tmp_path / "legacy.lock",
     )
 
     assert code == 2
@@ -2022,7 +1859,6 @@ def test_refresh_all_first_lock_busy_starts_no_clients(
     try:
         code, payload, _raw, _stderr = _invoke(
             ["refresh-all", "--data-dir", str(data_dir)],
-            refresh_lock_path=tmp_path / "legacy.lock",
         )
     finally:
         cli._release_lock(held_fd)
@@ -2036,45 +1872,11 @@ def test_refresh_all_first_lock_busy_starts_no_clients(
     assert calls == []
 
 
-def test_refresh_all_second_lock_busy_releases_data_lock_before_any_client(
+def test_refresh_all_cli_passes_one_bounded_session_under_data_lock(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     data_dir = tmp_path / "data"
-    data_dir.mkdir()
-    guide_lock = tmp_path / "legacy.lock"
-    held_fd = cli._try_acquire_lock(guide_lock)
-    assert held_fd is not None
-    calls: list[str] = []
-    monkeypatch.setattr(cli, "ValveDatafeedClient", lambda: calls.append("valve"))
-    monkeypatch.setattr(cli, "D2PTClient", lambda: calls.append("d2pt"))
-    monkeypatch.setattr(cli, "ValveImageClient", lambda: calls.append("image"))
-    try:
-        code, payload, _raw, _stderr = _invoke(
-            ["refresh-all", "--data-dir", str(data_dir)],
-            refresh_lock_path=guide_lock,
-        )
-        data_fd = cli._try_acquire_lock(data_dir / ".update.lock")
-        assert data_fd is not None
-        cli._release_lock(data_fd)
-    finally:
-        cli._release_lock(held_fd)
-
-    assert code == 3
-    assert payload == {
-        "status": "skipped",
-        "operation": "refresh-all",
-        "reason": "already_running",
-    }
-    assert calls == []
-
-
-def test_refresh_all_cli_passes_one_bounded_session_and_both_locks(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    data_dir = tmp_path / "data"
-    guide_lock = tmp_path / "legacy.lock"
     valve_client = object()
     image_client = object()
     sessions: list[tuple[object, int, object]] = []
@@ -2092,7 +1894,6 @@ def test_refresh_all_cli_passes_one_bounded_session_and_both_locks(
 
     async def fake_refresh_all(**kwargs: Any) -> RefreshAllReport:
         assert cli._try_acquire_lock(data_dir / ".update.lock") is None
-        assert cli._try_acquire_lock(guide_lock) is None
         call_args.append(kwargs)
         return _refresh_all_success_report()
 
@@ -2108,7 +1909,6 @@ def test_refresh_all_cli_passes_one_bounded_session_and_both_locks(
             "6",
             "--force",
         ],
-        refresh_lock_path=guide_lock,
         refresh_all_clock=lambda: _NOW,
     )
 
@@ -2179,7 +1979,6 @@ def test_refresh_all_cli_partial_module_report_returns_exit_code_four(
 
     code, payload, _raw, _stderr = _invoke(
         ["refresh-all", "--data-dir", str(tmp_path / "data")],
-        refresh_lock_path=tmp_path / "legacy.lock",
     )
 
     assert code == 4
@@ -2207,7 +2006,6 @@ def test_refresh_all_cli_sanitizes_unexpected_operation_failure(
     monkeypatch.setattr(cli, "run_refresh_all", fake_refresh_all)
     code, payload, raw, _stderr = _invoke(
         ["refresh-all", "--data-dir", str(tmp_path / "data")],
-        refresh_lock_path=tmp_path / "legacy.lock",
     )
 
     assert code == 1
@@ -2219,12 +2017,11 @@ def test_refresh_all_cli_sanitizes_unexpected_operation_failure(
     assert "secret response payload" not in raw
 
 
-def test_refresh_all_cancellation_waits_for_worker_before_releasing_both_locks(
+def test_refresh_all_cancellation_waits_for_worker_before_releasing_data_lock(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     data_dir = tmp_path / "data"
-    guide_lock = tmp_path / "legacy.lock"
     worker_started = threading.Event()
     release_worker = threading.Event()
     command_finished = threading.Event()
@@ -2263,7 +2060,6 @@ def test_refresh_all_cancellation_waits_for_worker_before_releasing_both_locks(
             os.kill(os.getpid(), signal.SIGTERM)
             assert not command_finished.wait(timeout=0.15)
             assert cli._try_acquire_lock(data_dir / ".update.lock") is None
-            assert cli._try_acquire_lock(guide_lock) is None
             locks_checked.set()
         except BaseException as exc:
             monitor_errors.append(exc)
@@ -2274,7 +2070,6 @@ def test_refresh_all_cancellation_waits_for_worker_before_releasing_both_locks(
     monitor.start()
     code, payload, raw, _stderr = _invoke(
         ["refresh-all", "--data-dir", str(data_dir)],
-        refresh_lock_path=guide_lock,
     )
     monitor.join(timeout=5)
 
@@ -2286,7 +2081,5 @@ def test_refresh_all_cancellation_waits_for_worker_before_releasing_both_locks(
     assert payload == {"status": "cancelled", "operation": "refresh-all"}
     assert raw.count("\n") == 1
     data_fd = cli._try_acquire_lock(data_dir / ".update.lock")
-    guide_fd = cli._try_acquire_lock(guide_lock)
-    assert data_fd is not None and guide_fd is not None
-    cli._release_lock(guide_fd)
+    assert data_fd is not None
     cli._release_lock(data_fd)

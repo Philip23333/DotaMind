@@ -36,7 +36,6 @@ from app.vnext.data_updates.catalog_store import CatalogSnapshotStore
 from app.vnext.hero_guides.cache import (
     GuideCacheEntry,
     GuideCacheSnapshot,
-    RedisHeroGuideCache,
 )
 from app.vnext.hero_guides.file_cache import FileHeroGuideCache
 from app.vnext.llm.protocol import ToolCall
@@ -147,31 +146,8 @@ def _tree(root: Path) -> tuple[dict[str, bytes], dict[str, int]]:
     )
 
 
-def test_file_cache_selection_has_priority_and_never_falls_back_to_redis(
-    tmp_path: Path,
-) -> None:
+def test_guide_api_uses_files_only_when_data_dir_is_configured(tmp_path: Path) -> None:
     from app.main import _hero_guide_cache_for_data_dir
-
-    class MemoryRedis:
-        def __init__(self) -> None:
-            self.hashes: dict[str, dict[str, str]] = {}
-            self.reads: list[str] = []
-
-        async def hset(self, key: str, *, mapping: dict[str, str]) -> None:
-            self.hashes[key] = dict(mapping)
-
-        async def hgetall(self, key: str) -> dict[str, str]:
-            self.reads.append(key)
-            return self.hashes.get(key, {})
-
-    redis = MemoryRedis()
-    redis_cache = RedisHeroGuideCache(redis)
-    redis_entry = _fixture_snapshot("pub_sven_pos1.json", sample_type="pub", position=1)
-    redis_entry = redis_entry.model_copy(
-        update={"pub_guides": [PubGuide(build_id=777, statistics={"source": "redis"})]}
-    )
-    _run(redis_cache.publish(redis_entry, attempted_at=_NOW))
-    redis.reads.clear()
 
     root = tmp_path / "data"
     file_cache = FileHeroGuideCache(root)
@@ -181,7 +157,7 @@ def test_file_cache_selection_has_priority_and_never_falls_back_to_redis(
     )
     _run(file_cache.publish(file_snapshot, attempted_at=_NOW))
 
-    chosen = _hero_guide_cache_for_data_dir(root, redis)
+    chosen = _hero_guide_cache_for_data_dir(root)
     assert isinstance(chosen, FileHeroGuideCache)
     services = build_vnext_services(
         VNextSettings(data_dir=root),
@@ -191,14 +167,13 @@ def test_file_cache_selection_has_priority_and_never_falls_back_to_redis(
     result = _run(services.hero_guide(HeroGuideInput(hero_id=18, position=1)))
     assert [guide.build_id for guide in result.pub_guides] == [888]
     assert result.pub_guides[0].statistics["source"] == "file"
-    assert redis.reads == []
     assert chosen._guides_directory == root / "guides"
 
-    assert isinstance(_hero_guide_cache_for_data_dir(root, None), FileHeroGuideCache)
+    assert isinstance(_hero_guide_cache_for_data_dir(root), FileHeroGuideCache)
     file_only_settings = VNextSettings(data_dir=root)
     file_only_services = build_vnext_services(
         file_only_settings,
-        hero_guide_cache=_hero_guide_cache_for_data_dir(root, None),
+        hero_guide_cache=_hero_guide_cache_for_data_dir(root),
     )
     file_only_names = {
         tool.name
@@ -208,11 +183,7 @@ def test_file_cache_selection_has_priority_and_never_falls_back_to_redis(
         ).schemas()
     }
     assert "hero.guide" in file_only_names
-    assert isinstance(
-        _hero_guide_cache_for_data_dir(None, redis),
-        RedisHeroGuideCache,
-    )
-    assert _hero_guide_cache_for_data_dir(None, None) is None
+    assert _hero_guide_cache_for_data_dir(None) is None
     assert build_vnext_services(VNextSettings()).hero_guide is None
 
 
