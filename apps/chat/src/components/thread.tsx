@@ -6,8 +6,8 @@ import { Button } from "@/components/ui/button";
 import { RunProcessPanel } from "@/components/run-process-panel";
 import {
   ComposerModeSwitch,
-  composeModeMessage,
   composerModeLabel,
+  composeModeMessage,
   composerModePlaceholder,
   type ComposerMode,
 } from "@/components/composer-mode-switch";
@@ -347,7 +347,9 @@ const Composer: FC<{
   const changeMode = (nextMode: ComposerMode) => {
     modeRevisionRef.current += 1;
     setMode(nextMode);
-    composerInputRef.current?.focus();
+    requestAnimationFrame(() => {
+      composerInputRef.current?.focus();
+    });
   };
 
   const submitComposerMessage = async () => {
@@ -379,23 +381,30 @@ const Composer: FC<{
       }}
       className="rounded-3xl border bg-popover p-2 shadow-sm focus-within:ring-2 focus-within:ring-ring/30 sm:p-2.5"
     >
-      {composerModeLabel(mode) && (
-        <p data-testid="composer-mode-label" className="px-3 pt-2 text-sm font-semibold">
-          {composerModeLabel(mode)}
-        </p>
-      )}
-      <ComposerPrimitive.Input
-        placeholder={composerModePlaceholder(mode)}
-        className="max-h-40 min-h-[5.5rem] w-full min-w-0 resize-none overflow-y-auto bg-transparent px-3 py-2 text-base outline-none placeholder:text-muted-foreground"
-        rows={1}
-        ref={composerInputRef}
-        autoFocus
-        enterKeyHint="send"
-        aria-label="消息输入框"
-        onChange={() => {
-          draftRevisionRef.current += 1;
-        }}
-      />
+      <div className="relative">
+        {mode !== null && (
+          <span
+            data-testid="composer-mode-indicator"
+            aria-hidden="true"
+            className="pointer-events-none absolute left-3 top-2 z-10 select-none text-base font-semibold leading-6 text-foreground"
+          >
+            {composerModeLabel(mode)}：
+          </span>
+        )}
+        <ComposerPrimitive.Input
+          placeholder={composerModePlaceholder(mode)}
+          className="max-h-40 min-h-[5.5rem] w-full min-w-0 resize-none overflow-y-auto bg-transparent px-3 py-2 text-base leading-6 outline-none placeholder:text-muted-foreground"
+          style={mode !== null ? { textIndent: "5.5em" } : undefined}
+          rows={1}
+          ref={composerInputRef}
+          autoFocus
+          enterKeyHint="send"
+          aria-label="消息输入框"
+          onChange={() => {
+            draftRevisionRef.current += 1;
+          }}
+        />
+      </div>
       <div className="flex min-w-0 items-end justify-between gap-2 px-1 pb-1 pt-1">
         <ComposerModeSwitch mode={mode} onChange={changeMode} />
         <div className="flex shrink-0 items-center justify-end">

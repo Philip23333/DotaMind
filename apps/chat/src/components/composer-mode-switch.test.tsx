@@ -5,19 +5,24 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   ComposerModeSwitch,
-  composeModeMessage,
   composerModeLabel,
+  composeModeMessage,
   composerModePlaceholder,
   type ComposerMode,
 } from "./composer-mode-switch";
 
 function ModeHarness() {
   const [mode, setMode] = useState<ComposerMode>(null);
+  const draft = "原草稿";
   return (
     <>
       <ComposerModeSwitch mode={mode} onChange={setMode} />
-      {composerModeLabel(mode) && <p data-testid="mode-label">{composerModeLabel(mode)}</p>}
-      <textarea aria-label="消息输入框" placeholder={composerModePlaceholder(mode)} value="原草稿" readOnly />
+      {mode !== null && (
+        <span data-testid="composer-mode-indicator" aria-hidden="true">
+          {composerModeLabel(mode)}：
+        </span>
+      )}
+      <textarea aria-label="消息输入框" placeholder={composerModePlaceholder(mode)} value={draft} readOnly />
     </>
   );
 }
@@ -25,7 +30,7 @@ function ModeHarness() {
 afterEach(() => cleanup());
 
 describe("ComposerModeSwitch", () => {
-  it("toggles a mode without replacing the draft and exposes its label and placeholder", () => {
+  it("shows a non-editable mode hint and preserves the draft", () => {
     render(<ModeHarness />);
     const input = screen.getByRole("textbox", { name: "消息输入框" }) as HTMLTextAreaElement;
 
@@ -33,14 +38,15 @@ describe("ComposerModeSwitch", () => {
     expect(input.value).toBe("原草稿");
     fireEvent.click(screen.getByRole("button", { name: "英雄攻略" }));
 
-    expect(screen.getByTestId("mode-label").textContent).toBe("英雄攻略");
-    expect(input.placeholder).toBe("输入英雄以及定位，不填定位默认全位置…");
     expect(input.value).toBe("原草稿");
+    expect(screen.getByTestId("composer-mode-indicator").textContent).toBe("英雄攻略：");
+    expect(screen.getByTestId("composer-mode-indicator").getAttribute("aria-hidden")).toBe("true");
+    expect(input.placeholder).toBe("输入英雄以及定位，不填定位默认全位置…");
     expect(screen.getByRole("button", { name: "英雄攻略" }).getAttribute("aria-pressed")).toBe("true");
 
     fireEvent.click(screen.getByRole("button", { name: "英雄攻略" }));
-    expect(screen.queryByTestId("mode-label")).toBeNull();
     expect(input.placeholder).toBe("询问 Dota 2 电竞赛事、英雄攻略与比赛数据…");
+    expect(screen.queryByTestId("composer-mode-indicator")).toBeNull();
     expect(input.value).toBe("原草稿");
   });
 
@@ -67,8 +73,13 @@ describe("composeModeMessage", () => {
     expect(composeModeMessage(mode, text)).toBe(`${instruction}\n${text}`);
   });
 
+  it("adds the full instruction without changing the user text", () => {
+    const text = "斯温，1号位";
+    expect(composeModeMessage("hero", text)).toBe(`英雄攻略（未指定位置时默认查询全部位置）：\n${text}`);
+  });
+
   it("leaves ordinary and blank input untouched", () => {
     expect(composeModeMessage(null, "原始\n问题")).toBe("原始\n问题");
-    expect(composeModeMessage("hero", "  \n ")).toBe("  \n ");
+    expect(composeModeMessage("hero", " \n ")).toBe(" \n ");
   });
 });

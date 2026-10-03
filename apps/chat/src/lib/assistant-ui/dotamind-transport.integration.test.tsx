@@ -599,7 +599,8 @@ describe("normal AssistantTransport chat integration", () => {
     fireEvent.change(input, { target: { value: rawText } });
     fireEvent.click(screen.getByRole("button", { name: "英雄攻略" }));
     expect(input.placeholder).toBe("输入英雄以及定位，不填定位默认全位置…");
-    expect(screen.getByTestId("composer-mode-label").textContent).toBe("英雄攻略");
+    expect(input.value).toBe(rawText);
+    expect(screen.getByTestId("composer-mode-indicator").textContent).toBe("英雄攻略：");
     fireEvent.click(screen.getByRole("button", { name: "发送消息" }));
     const request = await waitForRequest(backend, 1);
     expect(request.text).toBe(`英雄攻略（未指定位置时默认查询全部位置）：\n${rawText}`);
@@ -607,8 +608,8 @@ describe("normal AssistantTransport chat integration", () => {
     expect(backend.calls.filter((call) => call.method === "POST" && call.url.endsWith("/chat/sessions"))).toHaveLength(0);
     await waitFor(() => {
       expect(input.value).toBe("");
-      expect(screen.queryByTestId("composer-mode-label")).toBeNull();
       expect(input.placeholder).toBe("询问 Dota 2 电竞赛事、英雄攻略与比赛数据…");
+      expect(screen.queryByTestId("composer-mode-indicator")).toBeNull();
     });
     request.close();
   });
@@ -619,6 +620,9 @@ describe("normal AssistantTransport chat integration", () => {
     fireEvent.click(screen.getByRole("button", { name: "新建聊天" }));
     const input = screen.getByRole("textbox", { name: "消息输入框" }) as HTMLTextAreaElement;
     fireEvent.click(screen.getByRole("button", { name: "玩家战绩" }));
+    expect(input.value).toBe("");
+    expect(screen.getByTestId("composer-mode-indicator").textContent).toBe("玩家战绩：");
+    expect((screen.getByRole("button", { name: "发送消息" }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.change(input, { target: { value: " \n " } });
     fireEvent.submit(input.closest("form")!);
     expect(backend.requests).toHaveLength(0);
@@ -629,7 +633,8 @@ describe("normal AssistantTransport chat integration", () => {
     fireEvent.click(screen.getByRole("button", { name: "发送消息" }));
     expect(await screen.findByRole("alert")).toBeTruthy();
     expect(input.value).toBe("76561198012345678 可补充要求");
-    expect(screen.getByTestId("composer-mode-label").textContent).toBe("玩家战绩");
+    expect(screen.getByRole("button", { name: "玩家战绩" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByTestId("composer-mode-indicator").textContent).toBe("玩家战绩：");
     expect(backend.requests).toHaveLength(0);
   });
 
@@ -656,7 +661,7 @@ describe("normal AssistantTransport chat integration", () => {
     expect(request.sessionId).toBe("created-1");
     expect(request.text).toBe("英雄攻略（未指定位置时默认查询全部位置）：\n斯温的全位置攻略");
     expect(input.value).toBe("下一条草稿");
-    expect(screen.getByTestId("composer-mode-label").textContent).toBe("玩家战绩");
+    expect(screen.getByTestId("composer-mode-indicator").textContent).toBe("玩家战绩：");
     request.close();
   });
 
@@ -667,7 +672,7 @@ describe("normal AssistantTransport chat integration", () => {
     fireEvent.change(input, { target: { value: "keep this run active" } });
     fireEvent.click(screen.getByRole("button", { name: "英雄攻略" }));
     await selectSession("session-b");
-    expect(screen.queryByTestId("composer-mode-label")).toBeNull();
+    expect(screen.queryByTestId("composer-mode-indicator")).toBeNull();
 
     await submit("start a run");
     const request = await waitForRequest(backend, 1);

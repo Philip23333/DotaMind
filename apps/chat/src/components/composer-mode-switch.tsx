@@ -29,18 +29,18 @@ const MODE_COPY = {
   },
 } as const;
 
-export function composerModeLabel(mode: ComposerMode): string | null {
-  return mode === null ? null : MODE_COPY[mode].label;
-}
-
 export function composerModePlaceholder(mode: ComposerMode): string {
   return mode === null
     ? "询问 Dota 2 电竞赛事、英雄攻略与比赛数据…"
     : MODE_COPY[mode].placeholder;
 }
 
+export function composerModeLabel(mode: ComposerMode): string | null {
+  return mode === null ? null : MODE_COPY[mode].label;
+}
+
 export function composeModeMessage(mode: ComposerMode, text: string): string {
-  if (!text.trim() || mode === null) return text;
+  if (mode === null || !text.trim()) return text;
   return `${MODE_COPY[mode].instruction}\n${text}`;
 }
 
