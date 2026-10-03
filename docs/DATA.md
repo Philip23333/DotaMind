@@ -84,9 +84,20 @@ against an operational data root or Redis cache. The conceptual data areas are
 相应排序日期的记录排在有日期的记录之后；数据不足十条时返回实际数量，不
 填充虚构记录。
 
-冠军只从明确的 Series 获胜对象解析。只有获胜对象可以确认为战队且战队名称
-解析成功时，候选才包含冠军名称；不能从阶段胜者、赛事名称或模型常识推断。
-未结束、获胜对象缺失或名称无法解析时不显示冠军。
+冠军优先从明确的 Series 获胜对象解析。只有获胜对象类型为 `Team` 且战队名称
+解析成功时，候选才包含冠军名称。若 past Series 的 `winner_id` 为 `null`，服务
+按 Series ID 查询其 Tournament，取名称经首尾空格去除并大小写折叠后精确等于
+`playoffs` 的阶段；仅当该阶段明确给出 `winner_type="Team"` 和 `winner_id`，且
+战队名称解析成功时，才补充冠军。`Finals`、`Main Event` 等别名不匹配，也不查询
+Match 或推断赛制。Series 有非空胜者 ID 但类型不是 Team，或 Series Team 名称解析
+失败时，不使用 Tournament 覆盖。未结束、获胜对象缺失或名称无法解析时不显示冠军。
+
+候选的 `champion_source` 记录成功名称的来源（`series` 或 `tournament`）；来自
+Tournament 时，`champion_tournament_id` 保留来源 ID。没有解析出冠军名称时这两个
+字段与 `champion_name` 均为 `null`。旧 Redis 快照缺少来源字段时使用 `null` 默认值；
+保留旧冠军名称，不反推其来源。只有最终入选的最多十条候选会触发 Playoffs 查询。
+一次刷新内 Team 名称按 ID 复用。Playoffs 查询或 Team 名称查询发生已知 Provider
+错误时，保留赛事行、留空冠军，不把可选补全错误登记为整份列表失败。
 
 候选使用十分钟共享缓存和按需刷新。已有成功快照过期时，请求立即返回旧快照，
 并启动最多一个由服务持有的后台刷新；刷新结束不会推送或改写已返回的响应。冷
@@ -109,14 +120,17 @@ HTTP 项目响应保留该字段。字段设有 `null` 默认值，旧 Redis 快
 首页读取接口为 `GET /api/v1/home/recent-series`。响应包含 `status`、`items`、
 `retrieved_at`、`last_attempt_at` 和安全错误码 `last_error`；状态为 `fresh`、
 `stale` 或 `unavailable`。候选字段为 Series ID、展示名称、`league_name`、生命
-周期、起止时间和可选冠军战队名称。`name` 优先取 `full_name`，缺失时取 `name`；
+周期、起止时间、可选冠军战队名称及其来源字段。`name` 优先取 `full_name`，缺失时取 `name`；
 `league_name` 来自 Series 响应的 `league.name`。前端以可用的 League 和 Series
 名称组合显示与查询用名，不能根据文本猜测 League。
 
 Provider 读取分别调用 running 与 past Series 生命周期端点，候选服务按开始／结束
 时间本地排序，日期缺失项排在有日期项之后，稳定保留相同日期的来源顺序；去重后
-最多取十条。只有 past Series 明确给出 `winner_type="Team"` 和获胜 ID 时才查询
-对应 Team；Team 请求失败、结果缺失或名称为空只会省略冠军名称，不阻止赛事候选。
+最多取十条。已结束 Series 缺少 `winner_id` 时额外读取
+`GET /dota2/tournaments?filter[serie_id]=<series_id>&page=1&per_page=100`，只使用
+名称精确匹配 `Playoffs` 的阶段胜者；Series 自身存在非 Team 胜者时不回退查询。Team
+请求失败、结果缺失或名称为空只会省略冠军名称，不阻止赛事候选。冠军来源和
+Tournament ID 随首页候选及 Redis 快照保存；旧快照缺失新字段仍可读取。
 
 共享快照存于 Redis。十分钟是基于 `retrieved_at` 的新鲜度窗口；成功快照不设置
 Redis TTL，以便刷新失败时继续返回旧数据并标记 `stale`。失败尝试单独更新

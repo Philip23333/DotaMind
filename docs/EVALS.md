@@ -53,8 +53,9 @@ providers, and it does not change the product registry.
 
 - 进行中 Series 按开始时间倒序优先、结束项按结束时间倒序补齐；超过上限、
   不足上限、ID 重复、日期缺失和有效空列表都得到契约规定的结果。
-- 候选最多十条，首页取相同顺序的前五条；冠军只在 Series 获胜对象明确且
-  战队名称解析成功时展示，其他情况不推断、不展示冠军。
+- 候选最多十条，首页取相同顺序的前五条；原生 Series Team 胜者优先，只有 Series
+  `winner_id` 缺失时才查询该 Series 的 Tournament，并且只接受名称精确匹配
+  `Playoffs` 的 Team 胜者。名称解析失败时不展示冠军，未知赛制不作推断。
 - `league_name` 只取 Series 的 `league.name`，首尾空格会去除；字段缺失、非字符串
   或空文本变成 `null`。旧 Redis 快照和旧 HTTP 响应缺少该字段仍能读取；前端显示
   与点击查询使用同一个 League／Series 组合名。
@@ -90,6 +91,12 @@ Provider，也不依赖长时间等待。它验证旧快照在刷新阻塞时立
 失败元数据写入失败时的实例内兜底，以及关闭时的任务取消和回收。提供者真实数据
 验收另行确认真实候选和获胜对象映射；确定性 fixture 不能证明上游长期稳定或冠军
 信息始终可用。
+
+冠军补全的离线回归分别覆盖：Series 原生 Team 胜者优先且不请求 Tournament；
+Series 缺少胜者时经 `httpx.MockTransport` 验证 Tournament 过滤请求、Playoffs
+来源字段映射、精确 Team 名称解析及快照往返；Playoffs 没有 Team 胜者或其请求失败
+时仍返回赛事列表并省略冠军。该验收使用合成响应，不请求真实 PandaScore，也不代表
+真实 Provider 当前数据或所有 Series 均能解析冠军。
 
 ## Enabled capability inventory and guide answers
 

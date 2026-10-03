@@ -22,6 +22,7 @@ from app.vnext.providers.pandascore.series_lifecycle import (
     SeriesLifecycleItem,
     SeriesLifecycleResult,
 )
+from app.vnext.providers.pandascore.tournament_winners import TournamentWinnerSource
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +61,8 @@ class RecentSeriesCandidate(BaseModel):
     begin_at: datetime | None = None
     end_at: datetime | None = None
     champion_name: str | None = None
+    champion_source: Literal["series", "tournament"] | None = None
+    champion_tournament_id: int | None = None
 
 
 class RecentSeriesSnapshot(BaseModel):
@@ -123,6 +126,10 @@ class LifecycleSeriesReader(Protocol):
 
 class TeamSearcher(Protocol):
     async def __call__(self, query: TeamSearchInput) -> TeamSearchResult: ...
+
+
+class TournamentWinnerSourceReader(Protocol):
+    async def __call__(self, *, series_id: int) -> list[TournamentWinnerSource]: ...
 
 
 class RecentSeriesCache(Protocol):
@@ -196,11 +203,13 @@ class HomepageRecentSeriesService:
         *,
         read_lifecycle: LifecycleSeriesReader,
         search_team: TeamSearcher,
+        list_tournament_winner_sources: TournamentWinnerSourceReader,
         cache: RecentSeriesCache,
         now: Callable[[], datetime] | None = None,
     ) -> None:
         self._read_lifecycle = read_lifecycle
         self._search_team = search_team
+        self._list_tournament_winner_sources = list_tournament_winner_sources
         self._cache = cache
         self._now = now or _utc_now
         self._refresh_lock = asyncio.Lock()
@@ -374,11 +383,44 @@ class HomepageRecentSeriesService:
         candidates: list[RecentSeriesCandidate] = []
         for item, lifecycle in selected:
             champion_name = None
-            if lifecycle == "past" and item.winner_type == "Team" and item.winner_id:
-                team_id = item.winner_id
-                if team_id not in champion_names:
-                    champion_names[team_id] = await self._resolve_team_name(team_id)
-                champion_name = champion_names[team_id]
+            champion_source: Literal["series", "tournament"] | None = None
+            champion_tournament_id = None
+            if lifecycle == "past":
+                if item.winner_id is not None:
+                    if item.winner_type == "Team":
+                        champion_name = await self._cached_team_name(
+                            item.winner_id,
+                            champion_names,
+                        )
+                        if champion_name is not None:
+                            champion_source = "series"
+                else:
+                    try:
+                        tournament_sources = await self._list_tournament_winner_sources(
+                            series_id=item.id
+                        )
+                    except _ProviderError:
+                        tournament_sources = []
+                    playoffs = next(
+                        (
+                            source
+                            for source in tournament_sources
+                            if (source.name or "").strip().casefold() == "playoffs"
+                        ),
+                        None,
+                    )
+                    if (
+                        playoffs is not None
+                        and playoffs.winner_type == "Team"
+                        and playoffs.winner_id is not None
+                    ):
+                        champion_name = await self._cached_team_name(
+                            playoffs.winner_id,
+                            champion_names,
+                        )
+                        if champion_name is not None:
+                            champion_source = "tournament"
+                            champion_tournament_id = playoffs.id
             candidates.append(
                 RecentSeriesCandidate(
                     series_id=item.id,
@@ -388,9 +430,20 @@ class HomepageRecentSeriesService:
                     begin_at=item.begin_at,
                     end_at=item.end_at,
                     champion_name=champion_name,
+                    champion_source=champion_source,
+                    champion_tournament_id=champion_tournament_id,
                 )
             )
         return candidates
+
+    async def _cached_team_name(
+        self,
+        team_id: int,
+        cache: dict[int, str | None],
+    ) -> str | None:
+        if team_id not in cache:
+            cache[team_id] = await self._resolve_team_name(team_id)
+        return cache[team_id]
 
     async def _resolve_team_name(self, team_id: int) -> str | None:
         try:

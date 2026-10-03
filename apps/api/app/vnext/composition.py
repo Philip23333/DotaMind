@@ -419,6 +419,7 @@ def build_vnext_services(
         homepage_recent_series = HomepageRecentSeriesService(
             read_lifecycle=series_adapter.list_by_lifecycle,
             search_team=team_adapter.search,
+            list_tournament_winner_sources=tournament_adapter.list_winner_sources,
             cache=recent_series_cache,
         )
     player_profile: PlayerProfileService | None = None

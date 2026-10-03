@@ -20,10 +20,13 @@ from app.vnext.homepage.recent_series import (
     RecentSeriesSnapshot,
     RedisRecentSeriesCache,
 )
+from app.vnext.providers.pandascore.client import PandaScoreClient
 from app.vnext.providers.pandascore.series_lifecycle import (
     SeriesLifecycleItem,
     SeriesLifecycleResult,
 )
+from app.vnext.providers.pandascore.team_adapter import PandaScoreTeamAdapter
+from app.vnext.providers.pandascore.tournament_adapter import PandaScoreTournamentAdapter
 
 NOW = datetime(2026, 10, 2, 12, tzinfo=UTC)
 
@@ -132,9 +135,11 @@ def _service(
     *,
     clock: Clock | None = None,
     team_ids: set[int] | None = None,
+    tournament_reader=None,
 ) -> HomepageRecentSeriesService:
     resolved_team_ids = team_ids or set()
     team_calls: list[int] = []
+    tournament_calls: list[int] = []
 
     async def search_team(query) -> TeamSearchResult:
         team_calls.append(query.id)
@@ -145,13 +150,21 @@ def _service(
         )
         return TeamSearchResult(items=matches, page=query.page, limit=query.limit)
 
+    async def list_tournament_winner_sources(*, series_id: int):
+        tournament_calls.append(series_id)
+        if tournament_reader is None:
+            return []
+        return await tournament_reader(series_id=series_id)
+
     service = HomepageRecentSeriesService(
         read_lifecycle=provider.read_lifecycle,
         search_team=search_team,
+        list_tournament_winner_sources=list_tournament_winner_sources,
         cache=cache,
         now=clock,
     )
     service.team_calls = team_calls
+    service.tournament_calls = tournament_calls
     return service
 
 
@@ -186,12 +199,146 @@ def test_candidate_order_dedupes_and_resolves_only_explicit_team_winners() -> No
         "past",
     ]
     assert response.items[3].champion_name == "Team 70"
+    assert response.items[3].champion_source == "series"
+    assert response.items[3].champion_tournament_id is None
     assert response.items[4].champion_name is None
     assert response.items[5].champion_name is None
     assert response.items[6].champion_name == "Team 70"
+    assert response.items[6].champion_source == "series"
+    assert response.items[6].champion_tournament_id is None
     assert all(item.league_name is None for item in response.items)
     assert service.team_calls == [70]
+    assert service.tournament_calls == []
     assert provider.calls == [("running", 1, 100), ("past", 1, 100)]
+
+
+def test_playoffs_winner_fills_missing_series_champion_and_is_cached() -> None:
+    calls: list[tuple[str, dict[str, str]]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append((request.url.path, dict(request.url.params)))
+        if request.url.path == "/dota2/tournaments":
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "id": 800,
+                        "serie_id": 500,
+                        "name": "  PlayOffs  ",
+                        "winner_id": 70,
+                        "winner_type": " Team ",
+                    }
+                ],
+                request=request,
+            )
+        if request.url.path == "/dota2/teams":
+            return httpx.Response(200, json=[{"id": 70, "name": " Team 70 "}], request=request)
+        return httpx.Response(404, request=request)
+
+    client = PandaScoreClient(
+        base_url="https://api.pandascore.test",
+        token="test-token",
+        transport=httpx.MockTransport(handler),
+    )
+    provider = FakeProvider([], [_series(500, winner_id=None)])
+    cache = RedisRecentSeriesCache(FakeRedis())
+    service = HomepageRecentSeriesService(
+        read_lifecycle=provider.read_lifecycle,
+        search_team=PandaScoreTeamAdapter(client).search,
+        list_tournament_winner_sources=PandaScoreTournamentAdapter(
+            client
+        ).list_winner_sources,
+        cache=cache,
+        now=Clock(),
+    )
+
+    response = asyncio.run(service.get_recent_series())
+    cached = asyncio.run(cache.get())
+
+    assert response.status == "fresh"
+    assert len(response.items) == 1
+    candidate = response.items[0]
+    assert candidate.champion_name == "Team 70"
+    assert candidate.champion_source == "tournament"
+    assert candidate.champion_tournament_id == 800
+    assert calls == [
+        (
+            "/dota2/tournaments",
+            {"filter[serie_id]": "500", "page": "1", "per_page": "100"},
+        ),
+        (
+            "/dota2/teams",
+            {"page": "1", "per_page": "1", "filter[id]": "70"},
+        ),
+    ]
+    assert cached.snapshot is not None
+    assert cached.snapshot.items[0].champion_source == "tournament"
+    assert cached.snapshot.items[0].champion_tournament_id == 800
+
+
+@pytest.mark.parametrize(
+    "failure_mode",
+    [
+        "playoffs_without_winner",
+        "tournament_request_error",
+        "team_name_request_error",
+    ],
+)
+def test_playoffs_fallback_failure_keeps_candidate_without_champion(
+    failure_mode: str,
+) -> None:
+    calls: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        if failure_mode == "tournament_request_error" and request.url.path == "/dota2/tournaments":
+            return httpx.Response(503, request=request)
+        if request.url.path == "/dota2/tournaments":
+            winner_available = failure_mode == "team_name_request_error"
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "id": 801,
+                        "serie_id": 501,
+                        "name": "Playoffs",
+                        "winner_id": 70 if winner_available else None,
+                        "winner_type": "Team" if winner_available else None,
+                    }
+                ],
+                request=request,
+            )
+        if request.url.path == "/dota2/teams":
+            return httpx.Response(503, request=request)
+        return httpx.Response(404, request=request)
+
+    client = PandaScoreClient(
+        base_url="https://api.pandascore.test",
+        token="test-token",
+        transport=httpx.MockTransport(handler),
+    )
+    provider = FakeProvider([], [_series(501, winner_id=None)])
+    service = HomepageRecentSeriesService(
+        read_lifecycle=provider.read_lifecycle,
+        search_team=PandaScoreTeamAdapter(client).search,
+        list_tournament_winner_sources=PandaScoreTournamentAdapter(
+            client
+        ).list_winner_sources,
+        cache=RedisRecentSeriesCache(FakeRedis()),
+        now=Clock(),
+    )
+
+    response = asyncio.run(service.get_recent_series())
+
+    assert response.status == "fresh"
+    assert len(response.items) == 1
+    assert response.items[0].series_id == 501
+    assert response.items[0].champion_name is None
+    assert response.items[0].champion_source is None
+    assert response.items[0].champion_tournament_id is None
+    assert response.last_error is None
+    assert len(calls) == (2 if failure_mode == "team_name_request_error" else 1)
+    assert calls[0].url.path == "/dota2/tournaments"
 
 
 def test_candidate_cap_and_missing_dates_sort_after_dated_items() -> None:
@@ -206,6 +353,7 @@ def test_candidate_cap_and_missing_dates_sort_after_dated_items() -> None:
 
     assert len(response.items) == 10
     assert [item.series_id for item in response.items] == [12, 11, 10, 9, 8, 7, 6, 5, 4, 1]
+    assert service.tournament_calls == []
 
 
 def test_valid_empty_data_is_cached_and_distinct_from_source_failure() -> None:
@@ -670,6 +818,7 @@ def test_legacy_redis_snapshot_without_league_name_defaults_to_null() -> None:
     redis.hashes["dotamind:vnext:homepage:recent-series:v1"] = {
         "snapshot": (
             '{"items":[{"series_id":19,"name":"Old Series",'
+            '"champion_name":"Old Champion",'
             '"lifecycle":"past"}],"retrieved_at":"2026-10-02T12:00:00Z"}'
         ),
         "last_attempt_at": NOW.isoformat(),
@@ -680,6 +829,9 @@ def test_legacy_redis_snapshot_without_league_name_defaults_to_null() -> None:
 
     assert entry.snapshot is not None
     assert entry.snapshot.items[0].league_name is None
+    assert entry.snapshot.items[0].champion_name == "Old Champion"
+    assert entry.snapshot.items[0].champion_source is None
+    assert entry.snapshot.items[0].champion_tournament_id is None
 
 
 def test_homepage_cache_entry_defaults_to_empty() -> None:

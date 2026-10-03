@@ -18,6 +18,7 @@ from app.vnext.capabilities.esports.tournament import (
 )
 
 from .client import PandaScoreClient
+from .tournament_winners import TournamentWinnerSource
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +58,41 @@ class PandaScoreTournamentAdapter:
             limit=query.limit,
             anomalies=anomalies,
         )
+
+    async def list_winner_sources(
+        self,
+        *,
+        series_id: int,
+    ) -> list[TournamentWinnerSource]:
+        if isinstance(series_id, bool) or not isinstance(series_id, int) or series_id <= 0:
+            raise ValueError("series_id must be a positive integer")
+
+        rows = await self.client.get_list(
+            "/dota2/tournaments",
+            params={"filter[serie_id]": series_id, "page": 1, "per_page": 100},
+        )
+        items: list[TournamentWinnerSource] = []
+        for index, row in enumerate(rows):
+            if not isinstance(row, dict):
+                logger.warning("Failed to map PandaScore tournament winner source item")
+                continue
+            try:
+                items.append(
+                    TournamentWinnerSource(
+                        id=int(row["id"]),
+                        series_id=int(row["serie_id"]),
+                        name=self._optional_text(row.get("name")),
+                        winner_id=row.get("winner_id"),
+                        winner_type=self._optional_text(row.get("winner_type")),
+                    )
+                )
+            except (KeyError, TypeError, ValueError) as exc:
+                logger.warning(
+                    "Failed to map PandaScore tournament winner source item at index %s: %s",
+                    index,
+                    self._mapping_reason(exc),
+                )
+        return items
 
     @staticmethod
     def _params(query: TournamentSearchInput) -> dict[str, Any]:
