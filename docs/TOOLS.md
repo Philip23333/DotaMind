@@ -247,10 +247,9 @@ capability contract and its tests, not to this generic registry baseline.
 
 The input and DTO contract for `hero.guide(hero_id, position, section)` is
 defined in `app.vnext.capabilities.hero.guide`. The application registers this
-tool when it can inject a guide reader: `DOTAMIND_DATA_DIR` selects the file
-cache, otherwise a configured Redis connection selects the Redis cache. With
-neither configured, the tool is not registered. File mode takes priority over
-Redis and a missing or invalid file partition does not fall back to Redis. The
+tool only when `DOTAMIND_DATA_DIR` selects the shared file cache. Without that
+setting the tool is not registered; Redis is not a guide-cache fallback. A
+missing or invalid file partition does not fall back to Redis. The
 public input, section values, Pub/Pro boundaries, and DTO remain unchanged.
 `hero_id` is a strict positive
 integer, `position` is a strict integer from 1 through 5, and `section` is one
@@ -271,11 +270,10 @@ skill candidates.
 Source metadata can represent available, empty, or missing data, and can retain
 stale available data alongside a last refresh error. Retrieval and attempt times
 require timezones; the source `updated_at` remains an unparsed string. The D2PT
-HTTP client, pure Pub/Pro parsers, Redis snapshot cache, `FileHeroGuideCache`,
-`HeroGuideService`, and `hero.guide` tool are implemented. With
-`DOTAMIND_DATA_DIR`, the API reads the file partitions from that same directory
-used by the Catalog loader; otherwise it uses the existing Redis connection when
-available. The Service reads both partitions once per query, never refreshes on a
+HTTP client, pure Pub/Pro parsers, `FileHeroGuideCache`, `HeroGuideService`, and
+`hero.guide` tool are implemented. With `DOTAMIND_DATA_DIR`, the API reads the
+file partitions from that same directory used by the Catalog loader. The Service
+reads both partitions once per query, never refreshes on a
 miss, and does not expose the raw body or complete source rows. File reads do not
 cache contents or write, repair, or refresh files, so an atomic replacement is
 visible on the next query.
@@ -303,13 +301,13 @@ catalog, not D2PT or OpenDota source fields. When `DOTAMIND_DATA_DIR` is
 configured, each query creates its resolver from the active snapshot before the
 first cache read and keeps it for that query; without the setting it uses the
 bundled catalog repository.
-The current operator-only command `python -m app.vnext.hero_guides refresh`
-invokes the guide-only serial refresher using `DOTAMIND_REDIS_URL` from the
-process environment. It is not a model-facing tool or HTTP endpoint. The future
-unified update entrypoint is not implemented, so no command for it is specified
-here. A model cannot trigger refresh, migrate snapshots, or perform entity-ID
-mapping; cache misses remain ordinary missing-source results. The existing
-generic Artifact externalization and retrieval contract is unchanged.
+The operator-only command `python -m app.vnext.data_updates refresh-guides`
+invokes the serial refresher with `FileHeroGuideCache`; the daily `refresh-all`
+task uses the same file-backed guide path. Neither is a model-facing tool or HTTP
+endpoint. `migrate-guides` remains an operator-only one-time importer for legacy
+Redis snapshots. A model cannot trigger refresh or migration, or perform
+entity-ID mapping; cache misses remain ordinary missing-source results. The
+existing generic Artifact externalization and retrieval contract is unchanged.
 
 ## Steam player and game-detail tools
 

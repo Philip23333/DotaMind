@@ -54,8 +54,10 @@ streaming responses. Override `DOTAMIND_WEB_PORT` or `DOTAMIND_API_PORT` in
 `.env` if these ports are occupied. Ports bind to the laptop's loopback interface.
 
 The script uses the WSL Docker CLI when available, or Docker Desktop's Windows
-CLI through WSL interop. With WSL Integration enabled, the equivalent command is
-`docker compose -f compose.wsl.yml up -d --build --wait`.
+CLI through WSL interop. It always loads both `compose.wsl.yml` and
+`compose.data.yml`: the API reads the shared data volume read-only, and the
+updater writes to that same volume. With WSL Integration enabled, the equivalent
+command is `docker compose -f compose.wsl.yml -f compose.data.yml up -d --build --wait`.
 
 This configuration uses the `dotamind` Compose project and its existing
 `dotamind_postgres-data` / `dotamind_redis-data` volumes. The database password
@@ -81,7 +83,7 @@ environment, root .env, then code defaults; .env.example is a template only.
 Compose injects the root file into the API container while retaining its
 container-specific database and Redis addresses. The real .env is excluded
 from the API build context and image. After changing API settings, recreate the
-container with `docker compose -f compose.wsl.yml up -d --no-deps --force-recreate api`.
+container with `docker compose -f compose.wsl.yml -f compose.data.yml up -d --no-deps --force-recreate api`.
 
 ### Agent time budgets
 

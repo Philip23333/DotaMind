@@ -71,21 +71,21 @@ Team 胜者；Series 没有 `winner_id` 时，可使用同一 Series 下名称�
 ### 输入框模式与会话抽屉
 
 输入框底部左侧有四个按钮：“赛事查询”“英雄攻略”“玩家战绩”“单局解析”。
-普通模式不标注名称；选中模式会在输入区顶部显示粗体名称并切换占位提示。再次点击
-当前模式会返回普通聊天，切换模式始终保留已有文字。文字输入接受自由文本，允许在
-Steam32 或比赛 ID 后补充要求。发送时只在普通消息前附加一行对应说明：
+普通模式不显示模式提示；选中模式后，输入框首行开头显示独立的不可编辑提示，不另占
+顶部一行。它不属于草稿文本，切换或取消模式不会改动正文。文字输入接受自由文本，允许在
+Steam32 或比赛 ID 后补充要求。发送时在未改动的用户正文前附加完整说明行：
 
-| 模式 | 发送说明 | 占位提示 |
+| 模式 | 输入框提示（不可编辑） | 发送说明 |
 | --- | --- | --- |
-| 赛事查询 | `赛事查询（以赛事届次 Series 为查询对象）：` | 输入赛事名称或你想了解的赛程、战况… |
-| 英雄攻略 | `英雄攻略（未指定位置时默认查询全部位置）：` | 输入英雄以及定位，不填定位默认全位置… |
-| 玩家战绩 | `玩家战绩（账号使用 Dota 2 好友 ID / Steam32）：` | 输入 Dota 2 好友 ID（Steam32），可补充查询要求… |
-| 单局解析 | `单局解析（比赛 ID 为 Valve 单局 ID）：` | 输入比赛 ID，可补充分析要求… |
+| 赛事查询 | `赛事查询：` | `赛事查询（以赛事届次 Series 为查询对象）：` |
+| 英雄攻略 | `英雄攻略：` | `英雄攻略（未指定位置时默认查询全部位置）：` |
+| 玩家战绩 | `玩家战绩：` | `玩家战绩（账号使用 Dota 2 好友 ID / Steam32）：` |
+| 单局解析 | `单局解析：` | `单局解析（比赛 ID 为 Valve 单局 ID）：` |
 
-用户输入内容和换行原样保留。空白输入不能因模式说明而变为可发送内容。聊天记录显示的
-文本就是发送给 Agent 的纯文本。Composer 主动发送后，成功交给聊天运行时即清空本次
-草稿并返回普通模式，不等待回答结束；会话创建或历史加载失败时保留草稿和模式。发送
-准备期间编辑的新草稿不会被清除。切换或新建会话会重置模式，不由应用额外清除运行时
+用户正文和换行原样保留。不可编辑提示不进入草稿，空正文不能因此变为可发送内容；
+聊天记录显示完整发送说明和用户正文组成的纯文本。Composer 主动发送后，成功交给聊天
+运行时即清空本次草稿并返回普通模式，不等待回答结束；会话创建或历史加载失败时保留草稿和模式。
+发送准备期间编辑的新草稿不会被清除。切换或新建会话会重置模式，不由应用额外清除运行时
 管理的草稿。生成期间仍可编辑下一条消息、切换模式，并保留原有停止行为。
 
 聊天记录侧栏和会话 Trace 抽屉默认收起。桌面宽度达到 1024px 后，二者可独立
@@ -95,21 +95,19 @@ Steam32 或比赛 ID 后补充要求。发送时只在普通消息前附加一�
 遮罩同步淡入淡出。减少动态效果设置下关闭过渡。中央对话保持挂载。Test Observer
 仍是独立调试入口，悬浮 Trace 按钮为其留出空间。
 
-## Hero guides and shared game data (Redis query and operator refresh implemented; file updates pending)
+## Hero guides and shared game data (file-backed query and scheduled updates implemented)
 
 The hero-guide tool answers a request for one specified Valve hero ID and
 position. Pub build data is the primary guide; recent professional matches for
 the same hero and position provide separate practical examples. The two sources
 remain distinguishable, and a professional example is not presented as
 evidence that its player followed a particular Pub build. The query reads the
-shared Redis cache only and does not trigger a D2PT request or refresh. When the
-cache has not been populated, it reports the source as missing.
-
-Today, the query reads guide snapshots from the injected Redis cache, and an
-operator-only CLI can refresh those snapshots. The Valve entity catalog is
-loaded from files bundled with the API code. The shared file store, unified
-update task, and API hot reload described below are target behavior; they are
-not part of the current query path.
+shared file-backed guide partitions and does not trigger a D2PT request or
+refresh. When a partition has not been populated, it reports the source as
+missing. The daily shared-data update writes guide partitions into the persistent
+data volume; the API mounts that volume read-only and reads the files directly.
+Redis is not a guide query cache. It remains available for unrelated application
+storage such as sessions and traces.
 
 This journey is a specified-hero guide lookup. It does not add an all-hero
 strength ranking, matchup/counter analysis, or draft recommendation. Pub and Pro
@@ -121,28 +119,27 @@ window. `hero.guide` now adds English and Chinese hero, item, and ability names
 from the bundled Valve catalog to the fields selected by its result section. The
 result includes the catalog snapshot version; IDs and provider-supplied labels
 remain intact, and unresolved IDs remain visible with empty catalog names. This
-enrichment happens when queried and does not write into Redis, so existing cache
-snapshots need no refresh for the names to appear. The same resolver is not yet
+enrichment happens when queried and does not write into guide snapshots, so
+existing partitions need no refresh for the names to appear. The same resolver is not yet
 connected to `game.detail`.
 
-## Shared game-data updates (target)
+## Shared game-data updates
 
 Heroes, abilities and talents, items and recipes, images, patch records, and
-Pub/Pro guides are shared application data. The target update task publishes new
-data in the background; user queries read the last successfully published data
+Pub/Pro guides are shared application data. The update task publishes new data
+in the background; user queries read the last successfully published data
 and never trigger a remote refresh. Entity catalogs update by default when the
 official patch changes, while guide partitions update daily. Images and patch
 records are maintained independently from the entity-catalog version.
 
-After the shared file store and API hot reload are deployed, routine data
-updates should not require an API restart or redeployment. If an update fails,
+Routine updates publish to the shared file store and do not require an API
+restart or redeployment. If an update fails,
 the last successful catalog or guide partition remains available, while missing,
 stale, and failed-source states remain visible to the query. The official latest
 patch, the patch represented by the last successful catalog, the catalog
 snapshot number, guide source scope and retrieval time, and image-resource
-version describe different things and must not be conflated. This is a confirmed
-implementation target; it does not describe current file-backed guide storage or
-hot reload.
+version describe different things and must not be conflated. This describes the
+WSL file-backed deployment; production activation is tracked separately.
 
 ## Steam-account and game-detail scope
 

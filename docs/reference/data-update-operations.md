@@ -44,12 +44,12 @@ profile, writes `shared-data` at `/var/lib/dotamind/data`, and defaults to
 step. `docker compose run --rm` removes the one-shot container; it does not remove
 the named volume.
 
-`compose.data.yml` is an explicit API-only overlay. It sets
-`DOTAMIND_DATA_DIR=/var/lib/dotamind/data` and mounts the volume read-only. The
-original Compose files do not load this overlay, so ordinary deployments retain
-their current API data mode. API and updater must use the same Compose project
-name. Do not supply a different `-p`/`COMPOSE_PROJECT_NAME` when running the
-updater.
+`compose.data.yml` sets `DOTAMIND_DATA_DIR=/var/lib/dotamind/data` and mounts the
+volume read-only in the API. The WSL helper `scripts/compose-wsl.sh` loads both
+`compose.wsl.yml` and `compose.data.yml` by default. Direct `docker compose`
+commands must include the overlay explicitly when file-backed API reads are
+required. API and updater must use the same Compose project name. Do not supply a
+different `-p`/`COMPOSE_PROJECT_NAME` when running the updater.
 
 The new unified updater acquires `<data_root>/.update.lock`, shared by all
 containers mounting the same project volume. The old Redis-only guide command
@@ -63,11 +63,12 @@ without an image manifest or downloaded image files.
 
 ## Select the Compose project
 
-For WSL, run from the repository root. The file declares project name `dotamind`:
+For WSL, run the helper from the repository root. It includes the read-only data
+overlay and the file declares project name `dotamind`:
 
 ```bash
 cd /home/lip233/code/dotamind
-docker compose -f compose.wsl.yml
+./scripts/compose-wsl.sh ps
 ```
 
 For production, run from `/opt/dotamind` and use the same project name as the
@@ -85,9 +86,10 @@ before continuing.
 
 ## Migration and cutover order
 
-Follow these steps for WSL or production, substituting `compose.wsl.yml` for
-`compose.prod.yml` as appropriate. Add `-f compose.data.yml` only for the API
-switch and updater runs shown below.
+Follow these steps for WSL or production. Production commands use
+`compose.prod.yml` and add `-f compose.data.yml` where shown. WSL commands can use
+`scripts/compose-wsl.sh`, which includes the data overlay by default, or direct
+Compose commands with both `compose.wsl.yml` and `compose.data.yml`.
 
 1. Record the current API image, Compose project name, and old guide timer state.
    Check the actual host because repository templates do not establish installed
@@ -120,8 +122,9 @@ switch and updater runs shown below.
    docker compose -f compose.prod.yml run --rm --no-deps -T data-updater init-catalog
    ```
 
-   Substitute the WSL Compose file when operating locally. This first `run`
-   creates the Compose-scoped named volume if needed.
+   For WSL, run `./scripts/compose-wsl.sh run --rm --no-deps -T data-updater
+   init-catalog`. This first `run` creates the Compose-scoped named volume if
+   needed.
 
 5. Import and verify guide files from the existing Redis data only when
    preserving that data is part of the cutover. Redis must already be reachable
@@ -132,16 +135,20 @@ switch and updater runs shown below.
    docker compose -f compose.prod.yml run --rm --no-deps -T data-updater migrate-guides
    ```
 
+   For WSL, run `./scripts/compose-wsl.sh run --rm --no-deps -T data-updater
+   migrate-guides`.
+
    Review the complete safe JSON report. Preserve the Redis source data. If the
    importer reports a conflict or invalid entry, investigate it; do not force
-   overwrite. For the current WSL fresh deployment, skip `migrate-guides`: the
-   file guide store starts empty, and the old Docker Desktop Redis volume remains
-   untouched.
+   overwrite. The WSL data root was populated directly by the file refresher, so
+   no Redis import was used there; the old Docker Desktop Redis volume remains
+   untouched. For another host, decide explicitly whether its Redis guide data
+   must be imported before switching reads.
 
 6. Confirm the current Catalog remains valid. For a Redis migration, also verify
    the imported guide partitions passed the importer's read-back verification.
-   For the WSL fresh deployment, confirm the file guide store is empty before
-   starting the API; this is expected. Repeating `init-catalog` should report an
+   For WSL, verify the existing Catalog and representative guide files rather
+   than expecting an empty guide store. Repeating `init-catalog` should report an
    already initialized valid snapshot. Resolve any Catalog error before
    switching the API.
 
@@ -152,9 +159,9 @@ switch and updater runs shown below.
      up -d --no-deps --force-recreate api
    ```
 
-   Use `compose.wsl.yml` instead for WSL. This API mount is read-only. The updater
-   remains writable. The ordinary base Compose command still does not select file
-   mode.
+   For WSL, run `./scripts/compose-wsl.sh up -d --no-deps --force-recreate api`.
+   This API mount is read-only. The updater remains writable. A direct base-only
+   Compose command does not configure the API for file reads.
 
 8. Verify API health, startup from the data root, a representative Catalog
    lookup, and a representative guide query. Check the API container mount is
@@ -170,7 +177,8 @@ switch and updater runs shown below.
      refresh-all --workers 8 --image-workers 8
    ```
 
-   The WSL command substitutes `compose.wsl.yml`. Exit code 4 means partial
+   For WSL, run `./scripts/compose-wsl.sh run --rm --no-deps -T data-updater
+   refresh-all --workers 8 --image-workers 8`. Exit code 4 means partial
    completion and requires review; it is not treated as success by systemd.
 
 10. Install the new systemd service and timer, then confirm the next trigger time.
@@ -232,8 +240,9 @@ Confirm the old guide timer is disabled before enabling the new one.
    docker compose -f compose.prod.yml up -d --no-deps --force-recreate api
    ```
 
-   Use `compose.wsl.yml` for WSL. Without the overlay, API reads its bundled
-   Catalog and uses Redis guides when configured.
+   Use `compose.wsl.yml` for WSL. Without the overlay, API uses its bundled
+   Catalog and does not register `hero.guide` because `DOTAMIND_DATA_DIR` is
+   unset. Redis remains available to unrelated API stores.
 
 3. Keep both the `shared-data` volume and Redis data. Do not run
    `docker compose down -v`. If resuming the old Redis guide schedule, first

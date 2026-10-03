@@ -108,12 +108,12 @@ before a second concrete implementation demonstrates the need.
   section bounds, cache compatibility, composition sharing, and Artifact reads.
   `game.detail` name enrichment is a later independent follow-up.
 
-## Shared data update migration (catalog API, file guide reads, and file refresh implemented; migration and deployment pending)
+## Shared data updates (file guide reads and scheduled refresh active on WSL; production deployment pending)
 
-Current priority is moving shared game data from the committed Valve catalog and
-Redis guide cache to a persistent file-backed update path with API hot reload.
-The standalone catalog storage boundary is implemented; the remaining sequence
-is:
+Shared game data uses a persistent file-backed update path. The WSL API reads
+guide partitions from the same shared data root written by the update task. The
+remaining deployment boundary is production activation and any needed one-time
+import of legacy Redis guide snapshots.
 
 1. **Implemented:** `CatalogSnapshotStore` copies the existing five
    catalog JSON files byte-for-byte, validates the copied models, catalog
@@ -128,30 +128,27 @@ is:
    `--data-dir` or `DOTAMIND_DATA_DIR`; the production data directory remains
    uninitialized. The WSL fresh-data volume now has patch `7.41f`,
    revision `d0446e97add94e0fb29a30fdf4cc0905`.
-3. **Implemented, not executed:** the standalone `FileHeroGuideCache` and
-   callable `migrate_redis_guides()` component. Offline FakeRedis and `tmp_path`
-   tests cover full-entry import and read-back verification. Configured API
-   instances read file partitions; instances without `DOTAMIND_DATA_DIR` use
-   Redis when configured. With neither store, the guide tool is absent. The
-   legacy Redis refresh CLI remains available; its WSL timer is disabled. No real
-   Redis migration has been run.
-4. **Implemented, not run:** expose
-   `python -m app.vnext.data_updates migrate-guides` to use the current catalog's
-   hero list and existing Redis importer. Run and verify it against the intended
-   Redis cache and persistent data root before configuring production API guide
-   reads from that root. It shares the data-root update lock and the guide refresh CLI lock,
-   which only coordinates processes in the same API container.
+3. **Implemented and used in WSL:** `FileHeroGuideCache` provides direct API
+   reads and atomic partition writes. With `DOTAMIND_DATA_DIR` unset, the guide
+   tool is not registered; API guide queries never fall back to Redis. The
+   `migrate_redis_guides()` component and `migrate-guides` command remain only as
+   a one-time importer for deployments that need to preserve existing Redis
+   snapshots. No real Redis migration has been run.
+4. **Implemented, not run in production:** `migrate-guides` uses the current
+   Catalog hero list to import existing Redis partitions into files. Run it only
+   if preserving that deployment's Redis guide data is required, then verify the
+   import before switching its API to the shared data root. WSL uses its direct
+   file refresh and did not import the old Redis volume.
 5. **Implemented and run in WSL:** expose
    `python -m app.vnext.data_updates refresh-guides --data-dir ...`, reusing the
    serial `HeroGuideRefresher` with `FileHeroGuideCache`. It does not require a
-   catalog snapshot or Redis URL. It acquires the data-root lock and then the
-   existing container-local guide refresh lock. Offline fake-client tests cover
+   catalog snapshot or Redis URL. It acquires the shared data-root lock. Offline
+   fake-client tests cover
    file publication and cancellation cleanup. WSL published data for 127 heroes
    with 763 requests and no guide fetch failures. The API reads files when
-   `DOTAMIND_DATA_DIR` is configured and Redis when the data directory is unset
-   and Redis is configured; with neither
-   store the tool is absent. The old WSL Redis timer is disabled.
-   Do not install both commands as daily jobs.
+   `DOTAMIND_DATA_DIR` is configured; with no data root, the guide tool is absent.
+   The legacy Redis refresh CLI and timer templates have been removed. The
+   unified WSL timer is the supported daily job.
 6. **Implemented:** add a loader that checks the current pointer by
    default every 30 seconds, validates changed snapshots in the background, and
    switches one in-memory snapshot reference only after a successful load.
@@ -256,45 +253,35 @@ data-update migration.
    发送带名称、Series 语义和 ID 的普通文本，并保留输入草稿及当前模式。列表加载、空和
    失败不阻塞聊天。真实自由文本赛事理解仍需独立评估。
 3. **已完成：输入框查询模式**：将赛事查询、英雄攻略、玩家战绩、单局解析整合为同一
-   Composer 的四种模式。用户自由文本原样保留，发送时附加一行模式说明，继续使用普通
-   AssistantTransport 消息。成功交给运行时后清理未改动的草稿并重置模式；准备失败保留
+   Composer 的四种模式。模式提示以不可编辑标记显示在输入框首行开头，不另占输入区顶端一行，
+   也不修改草稿；发送时在正文前附加一行完整说明，继续使用普通 AssistantTransport 消息。成功交给运行时后清理未改动的草稿并重置模式；准备失败保留
    草稿。前端组件与 transport 集成测试通过；未验证真实模型的查询理解或回答质量。
 4. **已完成：首页布局与抽屉交互**：调整品牌尺寸和赛事行，移除中央顶部 header，以
    两侧悬浮按钮控制聊天记录与 Trace 抽屉。桌面列宽 288px／360px 以 180ms 过渡，窄屏
    使用滑入式覆盖抽屉和淡入遮罩；关闭后立即 inert。真实 Provider 刷新、部署 Redis 行为
    与真实模型回答仍需分别验收。
 
-## Hero guides (Redis/file query, both refresh commands, and file/import components implemented; operational migration pending)
+## Hero guides (file-backed query and refresh active on WSL)
 
-The internal query DTOs and two fixed raw Sven fixtures are implemented and
-covered by offline tests. A synchronous, bounded D2PT HTTP client is also
-implemented and tested with a fake opener; those tests make no live request. The
-`RedisHeroGuideCache` is implemented as an injected, offline-testable component.
-It stores exact response bytes, parsed source rows, and DTO projections in
-whole-snapshot Redis hashes without TTL; failed attempts retain the last good
-snapshot. Its tests use fake Redis and do not verify deployed AOF/restart
-persistence. The application injects the file reader when `DOTAMIND_DATA_DIR` is
-configured, otherwise its existing Redis connection when available. It registers
-the cache-only `hero.guide` tool only when a reader is supplied. A Service combines
-independent Pub and Pro source states, filters Pro examples by position, applies
-section projections, and exposes pre-projection totals. Cache misses do not
-trigger D2PT requests. The internal `HeroGuideRefresher` fetches the hero list
-once and requests Pub positions 1 through 5, then Pro once, for each hero in
-source order. Client calls are sequential and followed by a one-second wait;
-successful responses are parsed and published as whole snapshots, while a fetch
-or parse failure records partition attempt metadata and preserves its prior
-snapshot. Cache write errors abort the run. The legacy operator CLI writes to
-Redis using the API container's `DOTAMIND_REDIS_URL`; the file-backed
-`data_updates refresh-guides` command reuses the refresher with
-`FileHeroGuideCache` and does not need Redis or catalog initialization. The file
-command takes the data-root update lock followed by the existing container-local
-refresh lock. Offline fake-client tests cover the entrypoint, which completed a
-real D2PT run on WSL. The old Redis timer is disabled on WSL; the unified WSL timer
-is enabled. Do not install both commands as daily jobs. Host installation and
-timer state are environment-specific. The local WSL setup has its own WSL-path
-unit and active unified timer. Neither CLI is a
-public endpoint or model-facing tool, and application startup is not wired to
-refresh. A historical local full refresh and its limits are recorded below and in
+The internal query DTOs, bounded D2PT client, pure parsers, and fixed response
+fixtures are covered by offline tests. The supported online path is file-backed:
+the API registers `hero.guide` only when `DOTAMIND_DATA_DIR` selects the shared
+file store, reads requested partitions directly, and never falls back to Redis.
+The Service combines independent Pub and Pro source states, filters Pro examples
+by position, applies section projections, and exposes pre-projection totals.
+Cache misses do not trigger D2PT requests.
+
+`HeroGuideRefresher` fetches the hero list once and requests Pub positions 1
+through 5, then Pro once, for each hero in source order. Requests are sequential
+with a one-second interval; successful responses publish complete file snapshots,
+while fetch or parse failures preserve the prior partition. `data_updates
+refresh-guides` and the daily `refresh-all` task write through
+`FileHeroGuideCache`. The WSL unified timer uses the file-backed update path. The
+old Redis refresh CLI and systemd timer templates have been removed.
+`RedisHeroGuideCache` and `migrate-guides` remain only for an explicit one-time
+import of legacy Redis snapshots during a deployment cutover. Neither refresh nor
+migration is a public endpoint or model-facing tool. Application startup does not
+refresh guides. Operational evidence is recorded in [`EVALS.md`](EVALS.md) and
 [`reference/hero-guide-operations.md`](reference/hero-guide-operations.md).
 
 Implementation and acceptance proceed in this order:
@@ -316,26 +303,23 @@ Implementation and acceptance proceed in this order:
    cache uses no TTL; freshness and Pro position filtering belong to the query
    Service.
 5. **Complete:** add the cache-only `hero.guide(hero_id, position, section)`
-   query capability. `DOTAMIND_DATA_DIR` selects file reads; without it, a
-   configured Redis connection supplies the reader. With neither store, the tool
-   is not registered. Query registration does not populate cache.
+   query capability. `DOTAMIND_DATA_DIR` selects file reads; without it, the
+   guide tool is not registered. Redis is not a guide-query fallback. Query
+   registration does not populate data.
 6. **Complete: serial refresh executor.** Use one hero-list response in source
    order, then five Pub position requests and one Pro request per hero. Wait one
    second after every response or D2PT error, parse before publishing, retain the
    last good partition on fetch/parse failure, and abort on cache write failure.
-   Offline tests use fake clients, clocks, sleeps, and Redis; no provider or
-   production cache was contacted.
-7. **Implemented in the repository:** add the legacy Redis operator CLI, a
-   non-blocking per-container process lock, and systemd service/timer templates. The
-   repository template targets the production Compose path. Host installation
-   and timer state are environment-specific; the local WSL setup has a separate
-   WSL-path unit and a recorded enabled timer. The lock remains container-local,
-   and neither application startup nor a `hero.guide` query refreshes data.
-8. **Implemented and run in WSL:** add the `data_updates refresh-guides` CLI over the
-   same serial refresher and file cache; protect the data-root and legacy refresh
-   locks, output a safe report, and wait for worker I/O on cancellation. The API
-   reads files when `DOTAMIND_DATA_DIR` is configured; the unified WSL timer uses
-   `refresh-all`. The first scheduled firing remains unobserved.
+   Offline tests use fake clients, clocks, sleeps, and file writers; no provider
+   or production cache was contacted.
+7. **Retired:** remove the Redis refresh CLI and its systemd templates. Retain
+   the Redis adapter only for the one-time `migrate-guides` importer; scheduled
+   jobs and API reads use files.
+8. **Implemented and run in WSL:** add the `data_updates refresh-guides` CLI over
+   the same serial refresher and file cache; protect the data root, output a safe
+   report, and wait for worker I/O on cancellation. The API reads files when
+   `DOTAMIND_DATA_DIR` is configured; the unified WSL timer uses `refresh-all`.
+   The first scheduled firing remains unobserved.
 9. **WSL deployment evidence:** a full file refresh and successful Sven and
    Anti-Mage Service queries after API-only recreation are recorded in
    [`EVALS.md`](EVALS.md) and

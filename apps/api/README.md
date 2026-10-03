@@ -67,9 +67,10 @@ VNextSettings.from_env() uses process environment values first, then root .env,
 then code defaults. The root .env.example is a template only. Docker Compose
 injects the same root file into the API container; the real .env is excluded
 from the build context and image. Compose's explicit database and Redis
-environment values retain their container-network addresses. Recreate the API
-container after changing .env:
-`docker compose -f compose.wsl.yml up -d --no-deps --force-recreate api`.
+environment values retain their container-network addresses. WSL starts the API
+with both Compose files so it reads guides from the shared data volume. Recreate
+the API container after changing .env:
+`docker compose -f compose.wsl.yml -f compose.data.yml up -d --no-deps --force-recreate api`.
 
 The model window must be established from the actual configured model; this
 project does not infer or provide a model-to-window mapping. A configured window

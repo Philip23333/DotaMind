@@ -71,9 +71,9 @@ providers, and it does not change the product registry.
 - 状态分别用蓝色与绿色标签呈现；缺冠军不出现占位文字。名称组合、状态色和小屏换行
   不覆盖日期或冠军。
 - Composer 模式按钮顺序和可访问名称固定为赛事查询、英雄攻略、玩家战绩、单局解析。
-  点击切换／取消模式保留输入文本，并显示匹配的粗体模式名和 Placeholder；悬浮与键盘聚焦
-  显示按钮说明。每种模式附加对应的纯文本说明，保留用户输入和换行。空白草稿不能因模式说明
-  变成可发送消息。
+  点击模式后，在输入框首行开头显示不可编辑提示；切换或取消模式不改变草稿文本。悬浮与键盘
+  聚焦显示按钮说明。发送时附加完整纯文本说明，保留用户正文和换行。只有模式提示而正文为空时
+  仍不可发送。
 - AssistantTransport 集成测试验证每次模式发送只产生一条普通用户消息；运行时接受后恢复普通
   模式并清除未改动的原草稿。历史准备失败保留模式和草稿。发送等待期间捕获的文本不被后续
   编辑替换，用户新写的草稿和新模式不被清理。会话切换会重置模式；生成期间仍可编辑下一条
@@ -299,20 +299,19 @@ not turn into deterministic test failures.
 Never commit credentials, authorization headers, request tokens, or material
 user data.
 
-## Hero guide evaluation (Redis/file query paths and file refresh/import components implemented; migration and deployment pending)
+## Hero guide evaluation (file-backed query and refresh active on WSL; production deployment pending)
 
 The D2PT probe recorded in [`reference/d2pt.md`](reference/d2pt.md) is a live
 connectivity and sample-shape check for one Sven Pub row and one Sven Pro row.
 It is distinct from the historical local full refresh recorded below. Neither
-result proves the shared-file migration, API hot reload, a successful automatic
-timer firing, full parser correctness for every source shape, or model answer
-quality.
+result proves a successful automatic timer firing, full parser correctness for
+every source shape, or model answer quality.
 
 The current offline acceptance covers strict DTO inputs, independent Pub/Pro
 metadata, source-shaped JSON preservation, byte/hash/shape checks for the fixed
 raw response fixtures, deterministic HTTP-client behavior through an
-injected fake opener, Pub/Pro fixture parsing, the standalone Redis cache, and
-the internal `HeroGuideRefresher`.
+injected fake opener, Pub/Pro fixture parsing, the file cache, and the internal
+`HeroGuideRefresher`. Fake Redis coverage remains for the one-time legacy import.
 Client tests cover request URLs and headers, timeout and response-size bounds,
 status/error handling, JSON and minimal schema validation, and response closure.
 Parser tests cover the observed Sven fields and counts, the additional Pro
@@ -341,22 +340,17 @@ verify those events and source fields survive parsing; this is regression
 coverage for the observed pattern, not Pro full-hero acceptance or evidence that
 other previously failed heroes now parse.
 
-The legacy Redis CLI tests exercise help/argument handling, environment-only
-Redis configuration, same-container non-blocking lock behavior, one-line safe
-JSON results, fixed exit codes, resource cleanup, and SIGINT/SIGTERM cleanup
-while a worker request is in flight. They use fake Redis/client/refresher
-dependencies and a local process lock; they make no D2PT, Redis, Docker, or model
-calls. The repository service/timer files are templates; a separate historical
-WSL record says the local timer was enabled. Enablement alone does not show that
-a scheduled invocation succeeded.
+The former Redis guide-refresh CLI tests were removed with that entrypoint and
+its systemd templates. Redis remains an application dependency for unrelated
+stores and is used by `migrate-guides` only when an operator explicitly imports
+legacy guide partitions.
 
 The `refresh-guides` data-update CLI is covered with a fake D2PT client and
 temporary data roots. Tests verify that no Redis URL or client is required, the
-data-root and existing guide-refresh locks are acquired in order, either lock
-prevents provider construction, the report is emitted as one safe JSON line with
-ISO timestamps and fixed exit codes, cache errors are redacted, and cancellation
-waits for a blocked file-write worker before either lock is released. No real
-refresh is performed by these tests.
+shared data-root lock prevents provider construction when busy, the report is
+emitted as one safe JSON line with ISO timestamps and fixed exit codes, cache
+errors are redacted, and cancellation waits for a blocked file-write worker before
+the lock is released. No real refresh is performed by these tests.
 
 The standalone `FileHeroGuideCache` acceptance uses temporary directories and
 the committed Sven Pub/Pro fixtures plus all three Pro fixtures containing
@@ -377,8 +371,8 @@ failure retention followed by recovery, and abort on file-write failure. It does
 not access D2PT, Redis, catalog files, or images.
 
 `test_file_guide_api_wiring.py` verifies that `DOTAMIND_DATA_DIR` selects file
-guide reads even when Redis is configured, that file mode also registers the
-tool without Redis, and that no configured store leaves the tool unavailable.
+guide reads, and that no data directory leaves the guide tool unavailable even
+when the application has Redis for unrelated stores.
 It runs the existing Sven fixtures through the real file cache, Service, tool,
 and Artifact read path; checks names, source metadata, totals, sections, and
 exclusion of raw bytes/source rows; and covers immediate visibility after an
