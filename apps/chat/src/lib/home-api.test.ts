@@ -1,12 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { getRecentSeries, type RecentSeriesResponse } from "./home-api";
+import { getRecentSeries, recentSeriesDisplayName, type RecentSeriesResponse } from "./home-api";
 
 const fresh: RecentSeriesResponse = {
   status: "fresh",
   items: [{
     series_id: 12345,
     name: "The International",
+    league_name: "The International",
     lifecycle: "past",
     begin_at: "2026-09-01T00:00:00Z",
     end_at: "2026-09-10T00:00:00Z",
@@ -50,6 +51,16 @@ describe("getRecentSeries", () => {
     },
   );
 
+  it("normalizes an absent league_name from an older server response to null", async () => {
+    const legacy = structuredClone(fresh) as RecentSeriesResponse;
+    delete (legacy.items[0] as Partial<RecentSeriesResponse["items"][number]>).league_name;
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(legacy)));
+
+    await expect(getRecentSeries()).resolves.toMatchObject({
+      items: [{ league_name: null }],
+    });
+  });
+
   it("does not expose provider errors from an HTTP failure", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ detail: "private upstream data" }, 503)));
     await expect(getRecentSeries()).rejects.toThrow("赛事列表暂时不可用。");
@@ -63,5 +74,16 @@ describe("getRecentSeries", () => {
 
     await expect(getRecentSeries()).rejects.toThrow("近期赛事响应无效。");
     await expect(getRecentSeries()).rejects.toThrow("近期赛事响应无效。");
+  });
+});
+
+describe("recentSeriesDisplayName", () => {
+  it.each([
+    [{ league_name: " League ", name: " Season 1 " }, "League · Season 1"],
+    [{ league_name: null, name: " Season 2 " }, "Season 2"],
+    [{ league_name: "League", name: null }, "League · 未命名赛事"],
+    [{ league_name: null, name: null }, "未命名赛事"],
+  ] as const)("formats the available names consistently", (series, expected) => {
+    expect(recentSeriesDisplayName(series)).toBe(expected);
   });
 });

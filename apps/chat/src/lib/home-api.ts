@@ -3,6 +3,7 @@ import { getApiUrl } from "./api-url";
 export type RecentSeriesCandidate = {
   series_id: number;
   name: string | null;
+  league_name: string | null;
   lifecycle: "running" | "past";
   begin_at: string | null;
   end_at: string | null;
@@ -35,6 +36,7 @@ function isRecentSeriesCandidate(value: unknown): value is RecentSeriesCandidate
     Number.isSafeInteger(candidate.series_id) &&
     candidate.series_id > 0 &&
     isNullableText(candidate.name) &&
+    (candidate.league_name === undefined || isNullableText(candidate.league_name)) &&
     (candidate.lifecycle === "running" || candidate.lifecycle === "past") &&
     isNullableDate(candidate.begin_at) &&
     isNullableDate(candidate.end_at) &&
@@ -78,5 +80,15 @@ export async function getRecentSeries(signal?: AbortSignal): Promise<RecentSerie
   }
 
   if (!isRecentSeriesResponse(payload)) throw new Error(INVALID_RESPONSE);
-  return payload;
+  return {
+    ...payload,
+    items: payload.items.map((item) => ({ ...item, league_name: item.league_name ?? null })),
+  };
+}
+
+export function recentSeriesDisplayName(series: Pick<RecentSeriesCandidate, "name" | "league_name">): string {
+  const leagueName = series.league_name?.trim();
+  const seriesName = series.name?.trim();
+  if (leagueName) return `${leagueName} · ${seriesName || "未命名赛事"}`;
+  return seriesName || "未命名赛事";
 }

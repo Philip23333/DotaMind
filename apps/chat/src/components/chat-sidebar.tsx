@@ -5,7 +5,7 @@ import {
   ThreadListPrimitive,
   useAuiState,
 } from "@assistant-ui/react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import {
   CheckIcon,
   MessageSquareIcon,
@@ -23,7 +23,9 @@ import { useSessionUnreadCount } from "@/lib/assistant-ui/thread-unread";
 
 type ChatSidebarProps = {
   disabled?: boolean;
-  mobileOpen?: boolean;
+  open?: boolean;
+  mobileMode?: boolean;
+  drawerRef?: RefObject<HTMLElement | null>;
   onClose?: () => void;
   onNew: () => void;
   onRename: (sessionId: string, title: string) => Promise<void>;
@@ -33,7 +35,9 @@ type ChatSidebarProps = {
 
 export function ChatSidebar({
   disabled = false,
-  mobileOpen = false,
+  open = false,
+  mobileMode = false,
+  drawerRef,
   onClose,
   onNew,
   onRename,
@@ -42,19 +46,25 @@ export function ChatSidebar({
 }: ChatSidebarProps) {
   return (
     <>
-      {mobileOpen && (
+      {mobileMode && open && (
         <button
           type="button"
-          className="fixed inset-0 z-40 bg-black/30 md:hidden"
+          className="fixed inset-0 z-40 bg-black/30"
           aria-label="关闭聊天列表"
           onClick={onClose}
         />
       )}
       <aside
-        className={`chat-sidebar-surface fixed inset-y-0 left-0 z-50 flex w-[min(86vw,18rem)] shrink-0 flex-col transition-transform md:static md:z-auto md:w-72 md:translate-x-0 ${
-          mobileOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
+        ref={drawerRef}
+        id="chat-history-drawer"
+        className={`chat-sidebar-surface flex shrink-0 flex-col transition-transform ${mobileMode
+          ? `fixed inset-y-0 left-0 z-50 w-[min(86vw,18rem)] ${open ? "translate-x-0" : "-translate-x-full"}`
+          : `relative z-auto h-full w-72 ${open ? "" : "hidden"}`}`}
         aria-label="聊天列表"
+        aria-hidden={!open}
+        aria-modal={mobileMode && open ? true : undefined}
+        role={mobileMode && open ? "dialog" : undefined}
+        inert={!open}
       >
         <div className="chat-sidebar__header flex items-center justify-between px-3 py-3">
           <div className="flex items-center gap-2 text-sm font-semibold">
@@ -74,7 +84,7 @@ export function ChatSidebar({
             <Button
               variant="ghost"
               size="icon"
-              className="size-10 md:hidden"
+              className="size-10"
               onClick={onClose}
               aria-label="关闭聊天列表"
             >
@@ -96,6 +106,7 @@ export function ChatSidebar({
                     title={threadListItem.title ?? "新聊天"}
                     isPinned={threadListItem.custom?.isPinned === true}
                     disabled={disabled}
+                    onSelect={mobileMode ? onClose : undefined}
                     onRename={onRename}
                     onPin={onPin}
                     onDelete={onDelete}
@@ -115,6 +126,7 @@ function ChatSidebarItem({
   title,
   isPinned,
   disabled,
+  onSelect,
   onRename,
   onPin,
   onDelete,
@@ -123,6 +135,7 @@ function ChatSidebarItem({
   title: string;
   isPinned: boolean;
   disabled: boolean;
+  onSelect?: () => void;
   onRename: (sessionId: string, title: string) => Promise<void>;
   onPin: (sessionId: string, isPinned: boolean) => Promise<void>;
   onDelete: (sessionId: string) => Promise<void>;
@@ -198,6 +211,7 @@ function ChatSidebarItem({
       ) : (
         <ThreadListItemPrimitive.Trigger
           disabled={disabled}
+          onClick={onSelect}
           data-testid={`switch-${remoteId}`}
           className="flex min-w-0 flex-1 items-center gap-1.5 px-1 py-2 text-left text-sm"
         >

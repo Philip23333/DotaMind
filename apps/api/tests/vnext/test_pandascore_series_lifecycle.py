@@ -39,6 +39,7 @@ def _row(**overrides: Any) -> dict[str, Any]:
         "end_at": "2026-09-01T00:00:00Z",
         "winner_id": 123,
         "winner_type": "Team",
+        "league": {"name": " The International "},
         "tier": "s",
         "slug": "the-international-2026",
     }
@@ -116,6 +117,7 @@ def test_lifecycle_read_preserves_series_fields_and_normalizes_winner_type() -> 
         "tier": "s",
         "slug": "the-international-2026",
         "winner_type": "Team",
+        "league_name": "The International",
     }
     assert result.items[1].winner_id == 123
     assert result.items[1].begin_at is None
@@ -131,6 +133,27 @@ def test_lifecycle_read_preserves_series_fields_and_normalizes_winner_type() -> 
         "unknown-kind",
         None,
     ]
+    assert [item.league_name for item in result.items] == ["The International"] * 9
+
+
+@pytest.mark.parametrize(
+    ("league", "expected"),
+    [
+        ({"name": "  League Name  "}, "League Name"),
+        ({"name": "  "}, None),
+        ({"name": 42}, None),
+        ([], None),
+        (None, None),
+    ],
+)
+def test_lifecycle_read_normalizes_only_series_league_name(league, expected) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=[_row(league=league)], request=request)
+
+    result = asyncio.run(_adapter(handler).list_by_lifecycle(lifecycle="running"))
+
+    assert result.items[0].league_name == expected
+    assert result.items[0].name == "The International"
 
 
 def test_lifecycle_read_distinguishes_empty_response_from_bad_rows() -> None:

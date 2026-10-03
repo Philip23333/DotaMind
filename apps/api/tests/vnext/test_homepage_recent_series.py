@@ -111,6 +111,7 @@ def _series(
     name: str | None = None,
     winner_id: int | None = None,
     winner_type: str | None = None,
+    league_name: str | None = None,
 ) -> SeriesLifecycleItem:
     return SeriesLifecycleItem(
         id=series_id,
@@ -121,6 +122,7 @@ def _series(
         end_at=end_at,
         winner_id=winner_id,
         winner_type=winner_type,
+        league_name=league_name,
     )
 
 
@@ -187,6 +189,7 @@ def test_candidate_order_dedupes_and_resolves_only_explicit_team_winners() -> No
     assert response.items[4].champion_name is None
     assert response.items[5].champion_name is None
     assert response.items[6].champion_name == "Team 70"
+    assert all(item.league_name is None for item in response.items)
     assert service.team_calls == [70]
     assert provider.calls == [("running", 1, 100), ("past", 1, 100)]
 
@@ -630,7 +633,9 @@ def test_redis_cache_round_trip_and_failure_keep_successful_snapshot() -> None:
 
 
 def test_home_route_returns_candidates_and_is_unavailable_without_service() -> None:
-    provider = FakeProvider([_series(4, full_name="Series Four")], [])
+    provider = FakeProvider(
+        [_series(4, full_name="Series Four", league_name="League Four")], []
+    )
     service = _service(provider, RedisRecentSeriesCache(FakeRedis()))
     app = FastAPI()
     app.include_router(router, prefix="/api/v1")
@@ -650,6 +655,7 @@ def test_home_route_returns_candidates_and_is_unavailable_without_service() -> N
     }
     assert response.json()["items"][0]["series_id"] == 4
     assert response.json()["items"][0]["name"] == "Series Four"
+    assert response.json()["items"][0]["league_name"] == "League Four"
 
     unavailable_app = FastAPI()
     unavailable_app.include_router(router, prefix="/api/v1")
@@ -657,6 +663,23 @@ def test_home_route_returns_candidates_and_is_unavailable_without_service() -> N
         unavailable = client.get("/api/v1/home/recent-series")
     assert unavailable.status_code == 503
     assert unavailable.json()["detail"]["code"] == "homepage_series_unavailable"
+
+
+def test_legacy_redis_snapshot_without_league_name_defaults_to_null() -> None:
+    redis = FakeRedis()
+    redis.hashes["dotamind:vnext:homepage:recent-series:v1"] = {
+        "snapshot": (
+            '{"items":[{"series_id":19,"name":"Old Series",'
+            '"lifecycle":"past"}],"retrieved_at":"2026-10-02T12:00:00Z"}'
+        ),
+        "last_attempt_at": NOW.isoformat(),
+        "last_error": "",
+    }
+
+    entry = asyncio.run(RedisRecentSeriesCache(redis).get())
+
+    assert entry.snapshot is not None
+    assert entry.snapshot.items[0].league_name is None
 
 
 def test_homepage_cache_entry_defaults_to_empty() -> None:

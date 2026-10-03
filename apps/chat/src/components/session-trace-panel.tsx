@@ -3,14 +3,19 @@
 import { Button } from "@/components/ui/button";
 import { listSessionTraces, type SessionTraceSummary } from "@/lib/vnext-trace-api";
 import { useAuiState } from "@assistant-ui/react";
-import { ChevronDownIcon, RefreshCwIcon } from "lucide-react";
-import { useEffect, useState, type FC } from "react";
+import { RefreshCwIcon, XIcon } from "lucide-react";
+import { useEffect, useState, type FC, type RefObject } from "react";
 
 import { TraceDownloadAction } from "./trace-download-action";
 
-export const SessionTracePanel: FC<{ browserId?: string }> = ({ browserId }) => {
+export const SessionTracePanel: FC<{
+  browserId?: string;
+  open: boolean;
+  mobileMode: boolean;
+  drawerRef?: RefObject<HTMLElement | null>;
+  onClose: () => void;
+}> = ({ browserId, open, mobileMode, drawerRef, onClose }) => {
   const sessionId = useAuiState((state) => state.threadListItem.remoteId);
-  const [expanded, setExpanded] = useState(false);
   const [refreshToken, setRefreshToken] = useState(0);
   const [loadResult, setLoadResult] = useState<
     | { key: string; traces: SessionTraceSummary[] }
@@ -20,7 +25,7 @@ export const SessionTracePanel: FC<{ browserId?: string }> = ({ browserId }) => 
   const requestKey = `${browserId ?? ""}:${sessionId ?? ""}:${refreshToken}`;
 
   useEffect(() => {
-    if (!expanded || !browserId || !sessionId) {
+    if (!open || !browserId || !sessionId) {
       return;
     }
 
@@ -45,34 +50,39 @@ export const SessionTracePanel: FC<{ browserId?: string }> = ({ browserId }) => 
         });
       });
     return () => controller.abort();
-  }, [browserId, expanded, requestKey, sessionId]);
+  }, [browserId, open, requestKey, sessionId]);
 
   const activeResult = loadResult?.key === requestKey ? loadResult : null;
-  const loading = Boolean(expanded && browserId && sessionId && !activeResult);
-
-  const toggleExpanded = () => {
-    if (!expanded) setRefreshToken((value) => value + 1);
-    setExpanded((value) => !value);
-  };
+  const loading = Boolean(open && browserId && sessionId && !activeResult);
 
   return (
-    <section className="mb-4 rounded-xl border bg-background/70">
-      <div className="flex items-center justify-between gap-3 px-3 py-2">
+    <>
+      {mobileMode && open && (
         <button
           type="button"
-          className="flex min-w-0 items-center gap-2 text-left text-sm font-medium"
-          aria-expanded={expanded}
-          onClick={toggleExpanded}
-        >
-          <ChevronDownIcon
-            className={`size-4 shrink-0 transition-transform ${expanded ? "rotate-180" : ""}`}
-          />
-          <span>会话 Trace</span>
-          <span className="truncate text-xs font-normal text-muted-foreground">
-            最近最多 100 条
-          </span>
-        </button>
-        {expanded && sessionId && browserId && (
+          className="fixed inset-0 z-40 bg-black/30"
+          aria-label="关闭 Trace 抽屉"
+          onClick={onClose}
+        />
+      )}
+      <aside
+        ref={drawerRef}
+        id="session-trace-drawer"
+        className={`chat-trace-surface flex shrink-0 flex-col border-l bg-card ${mobileMode
+          ? `fixed inset-y-0 right-0 z-50 w-[min(92vw,24rem)] transition-transform ${open ? "translate-x-0" : "translate-x-full"}`
+          : `relative h-full w-[360px] ${open ? "" : "hidden"}`}`}
+        aria-label="会话 Trace"
+        aria-hidden={!open}
+        aria-modal={mobileMode && open ? true : undefined}
+        role={mobileMode && open ? "dialog" : undefined}
+        inert={!open}
+      >
+        <header className="flex min-h-16 items-center gap-2 border-b px-3 py-3">
+          <div className="min-w-0 flex-1">
+            <h2 className="text-sm font-semibold">会话 Trace</h2>
+            <p className="text-xs text-muted-foreground">最近最多 100 条</p>
+          </div>
+        {open && sessionId && browserId && (
           <Button
             type="button"
             variant="ghost"
@@ -85,10 +95,11 @@ export const SessionTracePanel: FC<{ browserId?: string }> = ({ browserId }) => 
             <RefreshCwIcon className={`size-4 ${loading ? "animate-spin" : ""}`} />
           </Button>
         )}
-      </div>
-
-      {expanded && (
-        <div className="border-t px-3 py-3">
+          <Button type="button" variant="ghost" size="icon" className="size-9" aria-label="关闭会话 Trace" onClick={onClose}>
+            <XIcon className="size-4" />
+          </Button>
+        </header>
+        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
           {!sessionId ? (
             <p className="text-sm text-muted-foreground">发送第一条消息后即可查看。</p>
           ) : !browserId ? (
@@ -123,8 +134,8 @@ export const SessionTracePanel: FC<{ browserId?: string }> = ({ browserId }) => 
             </p>
           )}
         </div>
-      )}
-    </section>
+      </aside>
+    </>
   );
 };
 

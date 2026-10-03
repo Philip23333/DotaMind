@@ -133,6 +133,7 @@ class PandaScoreSeriesAdapter:
                     SeriesLifecycleItem(
                         **normalized.model_dump(),
                         winner_type=self._optional_text(row.get("winner_type")),
+                        league_name=self._league_name(row.get("league")),
                     )
                 )
             except (KeyError, TypeError, ValueError) as exc:
@@ -196,6 +197,12 @@ class PandaScoreSeriesAdapter:
             return None
         normalized = value.strip()
         return normalized or None
+
+    @classmethod
+    def _league_name(cls, value: Any) -> str | None:
+        if not isinstance(value, dict):
+            return None
+        return cls._optional_text(value.get("name"))
 
     @staticmethod
     def _provider_id(value: Any) -> int | None:

@@ -505,31 +505,37 @@ contract, ephemeral activity, canonical
 history/metadata boundary, and phase acceptance are owned by
 [`agent/product_run_state.md`](agent/product_run_state.md).
 
-## 首页赛事与快捷查询（已确认设计，待实现）
+## 首页赛事与快捷查询（Series 入口已实现）
 
 首页赛事列表走普通后端数据接口，不调用模型。后端查询服务通过现有
 PandaScore Provider 层获取 Series 及必要的冠军身份事实，并将排序后的候选
-和刷新元数据放在共享缓存中；首页读取同一份最多十条候选，展示前三条。
-缓存和 Provider 的具体实现细节由代码阶段核实，本设计不固定缓存介质、
-HTTP 路径或冠军查询端点。
+和刷新元数据放在共享缓存中；首页读取同一份最多十条候选，首页展示前五条。
+接口为 `GET /api/v1/home/recent-series`。
 
-快捷面板只组织用户输入：赛事点击发送包含 Series 名称、类型和 ID 的普通
-文本；英雄攻略、玩家战绩、单局解析将生成的问题填入现有聊天草稿。之后
-全部进入 AssistantTransport 和现有 Agent Runtime。前端做必要的空值及格式
-提示，现有工具继续负责其既有参数校验。
+Series 原始对象中的 `league.name` 经 Provider 生命周期模型、近期候选、Redis
+快照和只读 API 传递到前端；缺失或无效时为 `null`。前端只用来源值组合
+`League · Series` 显示名和普通查询文本，不改写共享模型工具的 Series DTO。
+
+目前赛事点击会发送包含显示名、Series 语义和 ID 的普通文本。其他快捷面板仍是
+产品设计目标，尚未接入。已实现的入口只组织用户输入，不预排工具调用、不增加
+结构化消息或第二套聊天协议；消息使用现有 AssistantTransport 和 Agent Runtime。
 
 ```text
 首页 -> 普通后端接口 -> Series 候选服务 <-> 共享缓存
                                 |
                                 +-> 现有 PandaScore Provider 层
 
-快捷面板 -> 普通聊天文本／草稿 -> AssistantTransport -> Agent Runtime -> Agent
+赛事点击 -> 普通聊天文本 -> AssistantTransport -> Agent Runtime -> Agent
 ```
 
-首页列表不触发模型调用。快捷入口不预排工具调用、不附加结构化消息对象，
-也不创建第二套聊天协议；它不改变工具注册、Artifact 或 Run State 契约。
-Series 生命周期读取、候选组装、共享 Redis 缓存和普通只读接口已实现；前端
-消费接口以及快捷查询交互仍待实现。接口为 `GET /api/v1/home/recent-series`。
+首页列表不触发模型调用。聊天壳统一持有左侧聊天记录与右侧 Trace 的展开状态：
+桌面从 1024px 起采用可独立收起的三列，窄屏使用互斥覆盖抽屉。抽屉开合不重挂载
+RuntimeProvider 或 Thread。Trace 列表仅在抽屉打开时按当前会话读取；Test Observer
+仍保持独立。
+
+Series 生命周期读取、候选组装、共享 Redis 缓存、普通只读接口、首页五条展示和
+赛事点击链路已实现。英雄、玩家和单局输入面板仍待实现。不改变工具注册、Artifact
+或 Run State 契约。
 
 ## Migration order
 

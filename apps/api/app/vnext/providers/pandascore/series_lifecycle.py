@@ -8,9 +8,10 @@ from app.vnext.capabilities.esports.dtos import ResponseAnomaly, SeriesDTO
 
 
 class SeriesLifecycleItem(SeriesDTO):
-    """A Series source item with its provider-declared winner entity type."""
+    """A Series source item with provider-declared league and winner facts."""
 
     winner_type: str | None = None
+    league_name: str | None = None
 
 
 class SeriesLifecycleResult(BaseModel):

@@ -55,6 +55,7 @@ class RecentSeriesCandidate(BaseModel):
 
     series_id: int
     name: str | None
+    league_name: str | None = None
     lifecycle: Literal["running", "past"]
     begin_at: datetime | None = None
     end_at: datetime | None = None
@@ -382,6 +383,7 @@ class HomepageRecentSeriesService:
                 RecentSeriesCandidate(
                     series_id=item.id,
                     name=item.full_name or item.name,
+                    league_name=item.league_name,
                     lifecycle=lifecycle,
                     begin_at=item.begin_at,
                     end_at=item.end_at,

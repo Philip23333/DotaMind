@@ -241,26 +241,25 @@ data-update migration.
 4. Register the capability only after its focused acceptance passes.
 5. Remove transitional code once the replacement is accepted.
 
-## 首页与快捷查询优化（已确认设计，待实现）
+## 首页与快捷查询优化
 
 按 [PRODUCT.md](PRODUCT.md) 的首页交互契约实施；赛事候选和缓存由
 [DATA.md](DATA.md) 定义，验收清单见 [EVALS.md](EVALS.md)。本阶段不新增独立
 方案文档，不改变工具、Artifact 或聊天传输契约。
 
-1. **后端完成：赛事数据与缓存**：经普通后端接口和现有 Provider 层提供 Series 候选，
+1. **已完成：赛事数据与缓存**：经普通后端接口和现有 Provider 层提供 Series 候选，
    实现排序、去重、冠军解析、十分钟共享缓存、并发刷新合并，以及旧数据保留。
    `GET /api/v1/home/recent-series` 已就绪。离线测试通过；真实 Provider 刷新与
-   部署 Redis 行为尚未验收。该项不代表首页 UI 已接通。
-2. **赛事展示与点击发送**：替换硬编码 TI 宣传，显示最近三条并提供最多十条
-   展开列表；点击发送带 Series 名称、类型和 ID 的普通文本。出口：首页和
-   展开层候选一致，点击可在既有聊天中准确消歧；加载、空和失败不阻塞聊天。
-3. **英雄、玩家和单局面板**：加入英雄名称与位置多选、Steam32 ID、比赛 ID
+   部署 Redis 行为尚未验收。
+2. **已完成：赛事展示与点击发送**：替换硬编码 TI 宣传，首页显示最近五条并提供
+   最多十条展开列表；显示来源 League 与 Series 名称，点击发送带名称、Series 语义
+   和 ID 的普通文本。入口加载、空和失败不阻塞聊天。真实自由文本赛事理解仍需独立评估。
+3. **待实现：英雄、玩家和单局面板**：加入英雄名称与位置多选、Steam32 ID、比赛 ID
    输入及基础校验。填入问题替换草稿并支持撤销或明确确认，不自动发送；Enter
    只填入。出口：字段、生成文本、草稿恢复、面板状态和生成期间行为通过验收。
-4. **首页布局与整体交互**：调整品牌、赛事、四入口和输入框布局；保留聊天后
-   的快捷入口，完成小屏、键盘、触屏、Trace 调试入口及加载／空／失败状态验收。
-   出口：四条查询路径都进入现有 AssistantTransport 聊天链路；点击赛事消歧
-   与自由文本赛事理解分别验收。
+4. **部分完成：首页布局与整体交互**：已调整品牌尺寸、赛事行和赛事快捷区，增加
+   默认收起的聊天记录与 Trace 抽屉；桌面两侧可独立展开，窄屏使用覆盖抽屉。其余
+   三个输入面板与完整四条快捷路径仍待实现；真实 Provider 和部署 Redis 行为未验收。
 
 ## Hero guides (Redis/file query, both refresh commands, and file/import components implemented; operational migration pending)
 

@@ -14,6 +14,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Thread } from "@/components/thread";
 import { ChatSidebar } from "@/components/chat-sidebar";
+import { DotaMindChatShell } from "@/app/assistant";
 import type { DotamindActivityItem, DotamindRunStage } from "./dotamind-run-state";
 import { DotaMindRuntimeProvider } from "./runtime-provider";
 import { DotaMindThreadState } from "./dotamind-thread-state";
@@ -64,7 +65,8 @@ const homepageSeries = {
   items: [
     {
       series_id: 9001,
-      name: "The International 2026",
+      name: "Season 2026",
+      league_name: "The International",
       lifecycle: "past" as const,
       begin_at: "2026-09-01T00:00:00Z",
       end_at: "2026-09-10T00:00:00Z",
@@ -73,6 +75,7 @@ const homepageSeries = {
     {
       series_id: 9002,
       name: null,
+      league_name: null,
       lifecycle: "running" as const,
       begin_at: null,
       end_at: null,
@@ -88,6 +91,7 @@ class ControlledBackend {
   readonly calls: Array<{ url: string; method: string; headers: Headers; body?: Record<string, unknown> }> = [];
   readonly requests: TransportRequest[] = [];
   readonly sessions = new Map<string, Session>();
+  readonly traceGates = new Map<string, DeferredVoid>();
   failCreate = false;
   failHistory = false;
   failRecentSeries = false;
@@ -118,6 +122,21 @@ class ControlledBackend {
     }
     if (url.pathname === "/api/v1/chat/sessions" && method === "GET") {
       return json({ sessions: [...this.sessions.values()] });
+    }
+    const tracesMatch = url.pathname.match(/^\/api\/v1\/chat\/sessions\/([^/]+)\/traces$/);
+    if (tracesMatch && method === "GET") {
+      const sessionId = decodeURIComponent(tracesMatch[1]!);
+      await this.traceGates.get(sessionId)?.promise;
+      return json({
+        traces: sessionId === "session-a" ? [{
+          trace_id: "trace-a",
+          request_id: "request-a",
+          status: "completed",
+          recording_mode: "test",
+          created_at: "2026-09-25T00:00:00Z",
+          expires_at: "2026-10-25T00:00:00Z",
+        }] : [],
+      });
     }
     if (url.pathname === "/api/v1/chat/sessions" && method === "POST") {
       this.createStarted?.();
@@ -216,6 +235,7 @@ function TestThreadSelectors() {
   useActiveSessionReadState(activeSessionId);
   return (
     <ChatSidebar
+      open
       onNew={() => aui.threads.switchToNewThread()}
       onRename={async () => undefined}
       onPin={async () => undefined}
@@ -425,6 +445,85 @@ afterEach(() => {
 });
 
 describe("normal AssistantTransport chat integration", () => {
+  it("keeps the chat mounted while desktop drawers toggle and loads traces only for the active session", async () => {
+    vi.stubGlobal("matchMedia", vi.fn(() => ({
+      matches: true,
+      media: "(min-width: 1024px)",
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })));
+    const traceGate = deferred();
+    backend.traceGates.set("session-a", traceGate);
+
+    const { container } = render(
+      <DotaMindRuntimeProvider browserId="browser-test">
+        <DotaMindChatShell browserId="browser-test" />
+      </DotaMindRuntimeProvider>,
+    );
+    const threadRoot = await waitFor(() => {
+      const root = container.querySelector(".chat-main-surface");
+      expect(root).toBeTruthy();
+      return root;
+    });
+
+    const leftToggle = await screen.findByRole("button", { name: "展开聊天记录" });
+    const rightToggle = screen.getByRole("button", { name: "展开会话 Trace" });
+    expect(backend.calls.some((call) => call.url.includes("/traces"))).toBe(false);
+    fireEvent.click(leftToggle);
+    await selectSession("session-a");
+    fireEvent.click(rightToggle);
+    await waitFor(() => expect(backend.calls.some((call) => call.url.endsWith("/session-a/traces"))).toBe(true));
+    expect(screen.getByRole("button", { name: "收起聊天记录" }).getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByRole("button", { name: "收起会话 Trace" }).getAttribute("aria-expanded")).toBe("true");
+
+    await selectSession("session-b");
+    expect(await screen.findByText("当前会话还没有 Trace。取消记录可能稍后才会出现，可手动刷新。")).toBeTruthy();
+    await act(async () => traceGate.resolve());
+    await waitFor(() => expect(screen.queryByText("请求 ID：request-a")).toBeNull());
+
+    await submit("layout while streaming");
+    const request = await waitForRequest(backend, 1);
+    await act(async () => startRun(request));
+    await act(async () => append(request, "visible during layout change"));
+    fireEvent.click(screen.getByRole("button", { name: "收起会话 Trace" }));
+    fireEvent.click(screen.getByRole("button", { name: "收起聊天记录" }));
+    expect(container.querySelector(".chat-main-surface")).toBe(threadRoot);
+    expect(request.signal.aborted).toBe(false);
+    expect(await chatView().findByText("visible during layout change")).toBeTruthy();
+    expect(backend.requests).toHaveLength(1);
+    expect(backend.calls.filter((call) => call.method === "POST" && call.url.endsWith("/chat/sessions"))).toHaveLength(0);
+    await act(async () => complete(request));
+  });
+
+  it("uses an exclusive mobile drawer overlay with Escape and scrim close behavior", async () => {
+    vi.stubGlobal("matchMedia", vi.fn(() => ({
+      matches: false,
+      media: "(min-width: 1024px)",
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })));
+    render(
+      <DotaMindRuntimeProvider browserId="browser-test">
+        <DotaMindChatShell browserId="browser-test" />
+      </DotaMindRuntimeProvider>,
+    );
+
+    const leftToggle = await screen.findByRole("button", { name: "展开聊天记录" });
+    fireEvent.click(leftToggle);
+    expect(screen.getByRole("dialog", { name: "聊天列表" })).toBeTruthy();
+    expect(document.getElementById("chat-main-content")?.hasAttribute("inert")).toBe(true);
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "聊天列表" })).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(leftToggle));
+
+    const rightToggle = screen.getByRole("button", { name: "展开会话 Trace" });
+    fireEvent.click(rightToggle);
+    expect(screen.getByRole("dialog", { name: "会话 Trace" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "关闭 Trace 抽屉" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "会话 Trace" })).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(rightToggle));
+  });
+
   it("sends once to the matching session with one request ID and streams before the response ends", async () => {
     render(<TestChat />);
     await selectSession("session-a");
@@ -453,7 +552,7 @@ describe("normal AssistantTransport chat integration", () => {
 
   it("sends a selected homepage Series as one plain-text transport message and preserves the draft", async () => {
     render(<TestChat />);
-    expect(await screen.findByRole("button", { name: /已结束，The International 2026/ })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: /已结束，The International · Season 2026/ })).toBeTruthy();
     expect(backend.calls.filter((call) => call.url.endsWith("/api/v1/home/recent-series"))).toHaveLength(1);
     fireEvent.click(screen.getByRole("button", { name: "赛事查询" }));
     expect(backend.calls.filter((call) => call.url.endsWith("/api/v1/home/recent-series"))).toHaveLength(1);
@@ -461,11 +560,11 @@ describe("normal AssistantTransport chat integration", () => {
 
     const input = screen.getByRole("textbox", { name: "消息输入框" }) as HTMLTextAreaElement;
     fireEvent.change(input, { target: { value: "保留这段草稿" } });
-    fireEvent.click(within(screen.getByRole("region", { name: "赛事查询" })).getByRole("button", { name: /已结束，The International 2026/ }));
+    fireEvent.click(within(screen.getByRole("region", { name: "赛事查询" })).getByRole("button", { name: /已结束，The International · Season 2026/ }));
 
     const request = await waitForRequest(backend, 1);
     expect(request.sessionId).toBe("session-a");
-    expect(request.text).toBe("查询赛事「The International 2026」的最新战况和赛程（赛事届次 Series ID：9001）。");
+    expect(request.text).toBe("查询赛事「The International · Season 2026」的最新战况和赛程（赛事届次 Series ID：9001）。");
     expect(request.body).not.toHaveProperty("series_id");
     expect(request.body).not.toHaveProperty("series");
     const commands = request.body.commands as Array<{ type: string; message: Record<string, unknown> }>;
@@ -505,7 +604,7 @@ describe("normal AssistantTransport chat integration", () => {
 
   it("locks the selected Series during session creation, preserves edits made while waiting, and ignores a double click", async () => {
     render(<TestChat />);
-    await screen.findByRole("button", { name: /已结束，The International 2026/ });
+    await screen.findByRole("button", { name: /已结束，The International · Season 2026/ });
     fireEvent.click(screen.getByRole("button", { name: "新建聊天" }));
     const input = screen.getByRole("textbox", { name: "消息输入框" }) as HTMLTextAreaElement;
     fireEvent.change(input, { target: { value: "原草稿" } });
@@ -514,7 +613,7 @@ describe("normal AssistantTransport chat integration", () => {
     const started = deferred();
     backend.createGate = gate;
     backend.createStarted = started.resolve;
-    const eventRow = screen.getByRole("button", { name: /已结束，The International 2026/ });
+    const eventRow = screen.getByRole("button", { name: /已结束，The International · Season 2026/ });
     fireEvent.click(eventRow);
     fireEvent.click(eventRow);
     await started.promise;
@@ -523,7 +622,7 @@ describe("normal AssistantTransport chat integration", () => {
 
     const request = await waitForRequest(backend, 1);
     expect(request.sessionId).toBe("created-1");
-    expect(request.text).toBe("查询赛事「The International 2026」的最新战况和赛程（赛事届次 Series ID：9001）。");
+    expect(request.text).toBe("查询赛事「The International · Season 2026」的最新战况和赛程（赛事届次 Series ID：9001）。");
     expect(input.value).toBe("等待期间的新草稿");
     expect(backend.calls.filter((call) => call.method === "POST" && call.url.endsWith("/chat/sessions"))).toHaveLength(1);
     expect(backend.requests).toHaveLength(1);
@@ -532,12 +631,12 @@ describe("normal AssistantTransport chat integration", () => {
 
   it("does not send when session creation or history preparation fails, and leaves the draft intact", async () => {
     render(<TestChat />);
-    await screen.findByRole("button", { name: /已结束，The International 2026/ });
+    await screen.findByRole("button", { name: /已结束，The International · Season 2026/ });
     fireEvent.click(screen.getByRole("button", { name: "新建聊天" }));
     const input = screen.getByRole("textbox", { name: "消息输入框" }) as HTMLTextAreaElement;
     fireEvent.change(input, { target: { value: "草稿不应丢失" } });
     backend.failCreate = true;
-    fireEvent.click(screen.getByRole("button", { name: /已结束，The International 2026/ }));
+    fireEvent.click(screen.getByRole("button", { name: /已结束，The International · Season 2026/ }));
 
     expect(await screen.findByRole("alert")).toBeTruthy();
     expect(input.value).toBe("草稿不应丢失");
@@ -548,7 +647,7 @@ describe("normal AssistantTransport chat integration", () => {
     backend.failHistory = true;
     await selectSession("session-a");
     fireEvent.change(input, { target: { value: "历史失败草稿" } });
-    fireEvent.click(screen.getByRole("button", { name: /已结束，The International 2026/ }));
+    fireEvent.click(screen.getByRole("button", { name: /已结束，The International · Season 2026/ }));
     expect(await screen.findByText("聊天记录未能加载。")).toBeTruthy();
     expect(input.value).toBe("历史失败草稿");
     expect(backend.requests).toHaveLength(0);
@@ -561,7 +660,7 @@ describe("normal AssistantTransport chat integration", () => {
     const request = await waitForRequest(backend, 1);
 
     fireEvent.click(screen.getByRole("button", { name: "赛事查询" }));
-    const eventRow = screen.getByRole("button", { name: /已结束，The International 2026/ });
+    const eventRow = screen.getByRole("button", { name: /已结束，The International · Season 2026/ });
     expect(eventRow).toBeTruthy();
     expect((eventRow as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(eventRow);
@@ -574,9 +673,9 @@ describe("normal AssistantTransport chat integration", () => {
     const gate = deferred();
     backend.historyGates.set("session-a", gate);
     render(<TestChat />);
-    await screen.findByRole("button", { name: /已结束，The International 2026/ });
+    await screen.findByRole("button", { name: /已结束，The International · Season 2026/ });
     await selectSession("session-a");
-    fireEvent.click(screen.getByRole("button", { name: /已结束，The International 2026/ }));
+    fireEvent.click(screen.getByRole("button", { name: /已结束，The International · Season 2026/ }));
     await waitFor(() => expect(backend.calls.some((call) => call.url.endsWith("/chat/sessions/session-a"))).toBe(true));
 
     await selectSession("session-b");

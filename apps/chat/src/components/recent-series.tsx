@@ -1,7 +1,12 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { getRecentSeries, type RecentSeriesCandidate, type RecentSeriesResponse } from "@/lib/home-api";
+import {
+  getRecentSeries,
+  recentSeriesDisplayName,
+  type RecentSeriesCandidate,
+  type RecentSeriesResponse,
+} from "@/lib/home-api";
 import { useCallback, useEffect, useRef, useState, type FC } from "react";
 
 const REFRESH_AFTER_MS = 600_000;
@@ -93,21 +98,27 @@ export const RecentSeriesList: FC<RecentSeriesListProps> = ({ items, count, disa
     <ul className="flex flex-col gap-1.5">
       {visibleItems.map((series) => {
         const details = formatSeriesDetails(series);
+        const fullName = recentSeriesDisplayName(series);
+        const running = series.lifecycle === "running";
         return (
           <li key={series.series_id}>
             <button
               type="button"
-              className="flex w-full min-w-0 items-start gap-2 rounded-lg px-3 py-2 text-left transition-colors hover:bg-accent/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-55"
-              aria-label={`${series.lifecycle === "running" ? "进行中" : "已结束"}，${displayName(series)}，${details}`}
+              className="flex w-full min-w-0 flex-wrap items-center gap-x-3 gap-y-1 rounded-lg px-3 py-2 text-left transition-colors hover:bg-accent/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-55"
+              aria-label={`${running ? "进行中" : "已结束"}，${fullName}，${details.dates}${details.champion ? `，冠军：${details.champion}` : ""}`}
+              title={fullName}
               disabled={disabled}
               onClick={() => onSelect(series)}
             >
-              <span className="mt-0.5 shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
-                {series.lifecycle === "running" ? "进行中" : "已结束"}
+              <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                running ? "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-200" : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
+              }`}>
+                {running ? "进行中" : "已结束"}
               </span>
-              <span className="min-w-0 flex-1">
-                <span className="block break-words text-sm font-medium">{displayName(series)}</span>
-                <span className="mt-0.5 block text-xs text-muted-foreground">{details}</span>
+              <span className="min-w-0 flex-1 truncate text-sm font-medium">{fullName}</span>
+              <span className="ml-auto flex shrink-0 flex-wrap items-center gap-x-3 text-xs text-muted-foreground">
+                <span className="whitespace-nowrap">{formatSeriesDates(series)}</span>
+                {details.champion && <span className="whitespace-nowrap">冠军：{details.champion}</span>}
               </span>
             </button>
           </li>
@@ -178,6 +189,7 @@ type RecentSeriesPanelProps = Omit<RecentSeriesContentProps, "count"> & {
 export const RecentSeriesPanel: FC<RecentSeriesPanelProps> = ({ state, disabled, onSelect, onRetry, onOpen }) => {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -188,8 +200,18 @@ export const RecentSeriesPanel: FC<RecentSeriesPanelProps> = ({ state, disabled,
         triggerRef.current?.focus();
       }
     };
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (panelRef.current?.contains(target) || triggerRef.current?.contains(target)) return;
+      setOpen(false);
+    };
     document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("pointerdown", handlePointerDown);
+    };
   }, [open]);
 
   const toggle = () => {
@@ -202,7 +224,7 @@ export const RecentSeriesPanel: FC<RecentSeriesPanelProps> = ({ state, disabled,
   };
 
   return (
-    <div className="relative mb-2">
+    <div className="relative">
       <Button
         ref={triggerRef}
         type="button"
@@ -211,15 +233,16 @@ export const RecentSeriesPanel: FC<RecentSeriesPanelProps> = ({ state, disabled,
         aria-expanded={open}
         aria-controls="recent-series-panel"
         onClick={toggle}
-        className="h-8 px-3 text-xs"
+        className="h-8 bg-muted/75 px-3 text-xs hover:bg-accent aria-expanded:bg-accent"
       >
         赛事查询
       </Button>
       {open && (
         <section
           id="recent-series-panel"
+          ref={panelRef}
           aria-label="赛事查询"
-          className="absolute inset-x-0 bottom-full z-20 mb-2 max-h-[min(60vh,28rem)] overflow-y-auto rounded-2xl border bg-popover p-3 shadow-lg"
+          className="recent-series-panel-scrollbar absolute inset-x-0 bottom-full z-20 mb-2 max-h-[min(60vh,28rem)] overflow-y-auto rounded-2xl border bg-popover p-3 shadow-lg"
         >
           <h2 className="mb-2 px-3 text-sm font-semibold">🔥最近赛事</h2>
           <RecentSeriesContent
@@ -245,15 +268,13 @@ const StatusWithRetry: FC<{ message: string; onRetry: () => void }> = ({ message
   </div>
 );
 
-function displayName(series: RecentSeriesCandidate): string {
-  return series.name?.trim() || "未命名赛事";
+function formatSeriesDetails(series: RecentSeriesCandidate): { dates: string; champion: string | null } {
+  const champion = series.lifecycle === "past" ? series.champion_name?.trim() : "";
+  return { dates: formatSeriesDates(series), champion: champion || null };
 }
 
-function formatSeriesDetails(series: RecentSeriesCandidate): string {
-  const start = formatBeijingDate(series.begin_at);
-  const end = formatBeijingDate(series.end_at);
-  const champion = series.lifecycle === "past" ? series.champion_name?.trim() : "";
-  return `${start} ～ ${end}${champion ? `　冠军：${champion}` : ""}`;
+function formatSeriesDates(series: RecentSeriesCandidate): string {
+  return `${formatBeijingDate(series.begin_at)} ～ ${formatBeijingDate(series.end_at)}`;
 }
 
 function formatBeijingDate(value: string | null): string {

@@ -72,11 +72,11 @@ and Redis-import commands, but neither initialization nor migration has been run
 against an operational data root or Redis cache. The conceptual data areas are
 `catalog`, `patches`, `images`, and `guides`.
 
-## 首页近期赛事候选（已确认设计，待实现）
+## 首页近期赛事候选
 
 首页和“赛事查询”展开层共用一组最多十条的 Series 候选。候选保留足以展示
-和继续查询的来源事实：Series ID、Series 身份、名称、状态、开始／结束时间，
-以及可用时的冠军战队名称。首页使用候选顺序中的前三条。赛事仍是 Series
+和继续查询的来源事实：Series ID、Series 身份、名称、League 名称、状态、开始／结束时间，
+以及可用时的冠军战队名称。首页使用候选顺序中的前五条。赛事仍是 Series
 届次，不转换成 Tournament 或 Match。
 
 候选按状态分组排序：进行中的 Series 按开始时间倒序优先；数量不足十条时，
@@ -98,12 +98,20 @@ against an operational data root or Redis cache. The conceptual data areas are
 用，不能互相替代。没有成功缓存且刷新失败时也必须报告不可用状态。下面记录当前
 后端实现采用的缓存、接口和冠军名称查询方式。
 
+Provider 生命周期结果中的 `league_name` 只取 Series 原始响应的 `league.name`。
+对象或名称缺失、名称不是字符串或去除首尾空格后为空时，值为 `null`。不额外
+查询 League、不翻译，也不把它拼回共享 `SeriesDTO.name`。近期候选、Redis 快照和
+HTTP 项目响应保留该字段。字段设有 `null` 默认值，旧 Redis 快照缺少它仍可读取；
+前端也将旧响应中缺失的字段归一为 `null`。
+
 ### 当前后端实现
 
 首页读取接口为 `GET /api/v1/home/recent-series`。响应包含 `status`、`items`、
 `retrieved_at`、`last_attempt_at` 和安全错误码 `last_error`；状态为 `fresh`、
-`stale` 或 `unavailable`。候选字段为 Series ID、展示名称、生命周期、起止时间
-和可选冠军战队名称。展示名称优先取 `full_name`，缺失时取 `name`。
+`stale` 或 `unavailable`。候选字段为 Series ID、展示名称、`league_name`、生命
+周期、起止时间和可选冠军战队名称。`name` 优先取 `full_name`，缺失时取 `name`；
+`league_name` 来自 Series 响应的 `league.name`。前端以可用的 League 和 Series
+名称组合显示与查询用名，不能根据文本猜测 League。
 
 Provider 读取分别调用 running 与 past Series 生命周期端点，候选服务按开始／结束
 时间本地排序，日期缺失项排在有日期项之后，稳定保留相同日期的来源顺序；去重后
@@ -120,10 +128,11 @@ HTTP 503。旧快照在后台 Provider 请求结束前立即返回。冷缓存�
 应用关闭时先取消并等待首页刷新，再关闭共享 Redis 客户端。刷新任务只在单个 API
 进程内合并；没有跨进程刷新锁。
 
-离线测试覆盖 Provider 读取后的排序、去重、冠军条件、空与坏数据区分、缓存旧值
+离线测试覆盖 Provider 读取后的 League 名称归一化、排序、去重、冠军条件、空与坏数据区分、缓存旧值
 保留、旧值立即返回、冷／热缓存刷新合并、单个等待者取消隔离、600 秒失败间隔、
-关闭时任务回收和 HTTP 路由。确定性测试不代表真实 PandaScore 刷新或部署环境中的
-Redis 行为已验收；前端尚未消费该接口。
+关闭时任务回收和 HTTP 路由。前端对有／无 League 名称、赛事名缺失和旧响应字段
+缺失有离线回归。确定性测试不代表真实 PandaScore 刷新或部署环境中的 Redis 行为
+已验收。
 
 ### Catalog snapshot publication
 

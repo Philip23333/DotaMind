@@ -1,7 +1,6 @@
 "use client";
 
 import { MarkdownText } from "@/components/markdown-text";
-import { SessionTracePanel } from "@/components/session-trace-panel";
 import { TraceDownloadAction } from "@/components/trace-download-action";
 import { Button } from "@/components/ui/button";
 import { RunProcessPanel } from "@/components/run-process-panel";
@@ -35,7 +34,7 @@ import { createUuidV4 } from "@/lib/uuid";
 import { getChatSession, transcriptToInitialMessages } from "@/lib/dotamind-api";
 import { useDotaMindThreadState } from "@/lib/assistant-ui/dotamind-transport-runtime";
 import type { DotamindMessageMetadata } from "@/lib/assistant-ui/dotamind-run-state";
-import type { RecentSeriesCandidate } from "@/lib/home-api";
+import { recentSeriesDisplayName, type RecentSeriesCandidate } from "@/lib/home-api";
 
 export const Thread: FC<{ browserId?: string }> = ({ browserId }) => {
   const aui = useAui();
@@ -126,7 +125,6 @@ export const Thread: FC<{ browserId?: string }> = ({ browserId }) => {
       </div>
       <ThreadPrimitive.Viewport className="relative z-10 flex min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto scroll-smooth">
         <div className="mx-auto flex w-full max-w-3xl min-w-0 flex-1 flex-col px-3 pt-4 sm:px-6 sm:pt-6">
-          <SessionTracePanel browserId={browserId} />
           <AuiIf condition={(state) => state.thread.messages.length === 0}>
             <Welcome recentSeries={recentSeries} onSelect={(series) => { void sendMessage(seriesQueryText(series)); }} />
           </AuiIf>
@@ -177,18 +175,18 @@ const Welcome: FC<{
 }> = ({ recentSeries, onSelect }) => (
   <div className="welcome-intro flex flex-1 flex-col items-center justify-center gap-5 pb-12 text-center sm:pb-20">
     <div className="flex items-center gap-3">
-      <div className="flex size-14 items-center justify-center rounded-2xl bg-[#b92d1e] text-[#fff4e1] shadow-[0_8px_20px_rgb(115_31_24_/_20%)]">
-        <svg className="size-9" viewBox="0 0 24 24" aria-hidden="true">
+      <div className="flex size-[67px] items-center justify-center rounded-2xl bg-[#b92d1e] text-[#fff4e1] shadow-[0_8px_20px_rgb(115_31_24_/_20%)]">
+        <svg className="size-[43px]" viewBox="0 0 24 24" aria-hidden="true">
           <path fill="currentColor" d={siDota2.path} />
         </svg>
       </div>
-      <h1 className="text-2xl font-semibold tracking-tight">DotaMind</h1>
+      <h1 className="text-[1.8rem] font-semibold tracking-tight">DotaMind</h1>
     </div>
     <section className="w-full max-w-2xl text-left" aria-label="🔥最近赛事">
       <h2 className="mb-2 px-3 text-sm font-semibold">🔥最近赛事</h2>
       <RecentSeriesContent
         state={recentSeries}
-        count={3}
+        count={5}
         onSelect={onSelect}
         onRetry={recentSeries.retry}
       />
@@ -307,7 +305,8 @@ const Composer: FC<{
   const composerText = useAuiState((state) => state.composer.text);
 
   return (
-    <div className="relative">
+    <div>
+      <div className="relative mb-2 rounded-xl bg-muted/50 p-2">
       <RecentSeriesPanel
         state={recentSeries}
         disabled={isBusy}
@@ -315,6 +314,7 @@ const Composer: FC<{
         onRetry={recentSeries.retry}
         onSelect={(series) => { void onSendMessage(seriesQueryText(series)); }}
       />
+      </div>
       <ComposerPrimitive.Root
         onSubmit={(event) => {
           event.preventDefault();
@@ -381,10 +381,8 @@ const Composer: FC<{
 };
 
 function seriesQueryText(series: RecentSeriesCandidate): string {
-  const name = series.name?.trim();
-  return name
-    ? `查询赛事「${name}」的最新战况和赛程（赛事届次 Series ID：${series.series_id}）。`
-    : `查询赛事届次 Series ID 为 ${series.series_id} 的最新战况和赛程。`;
+  const name = recentSeriesDisplayName(series);
+  return `查询赛事「${name}」的最新战况和赛程（赛事届次 Series ID：${series.series_id}）。`;
 }
 
 function transportMetadataFromCustom(custom: unknown): DotamindMessageMetadata | null {

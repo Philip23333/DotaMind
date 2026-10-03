@@ -243,6 +243,15 @@
   display: none;
 }
 
+.recent-series-panel-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.recent-series-panel-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 .startup-overlay {
   position: fixed;
   inset: 0;

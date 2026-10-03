@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { getRecentSeries, type RecentSeriesCandidate, type RecentSeriesResponse } from "@/lib/home-api";
@@ -21,6 +21,7 @@ const getRecentSeriesMock = vi.mocked(getRecentSeries);
 const candidates: RecentSeriesCandidate[] = Array.from({ length: 11 }, (_, index) => ({
   series_id: 100 + index,
   name: index === 1 ? null : `Series ${index + 1}`,
+  league_name: index === 2 ? "League Example" : null,
   lifecycle: index === 0 ? "running" : "past",
   begin_at: "2026-09-01T18:00:00Z",
   end_at: index === 0 ? null : "2026-09-10T00:00:00Z",
@@ -61,15 +62,15 @@ describe("RecentSeriesList", () => {
 
     expect(screen.getByText("Series 1")).toBeTruthy();
     expect(screen.getByText("未命名赛事")).toBeTruthy();
-    expect(screen.getByText("Series 3")).toBeTruthy();
+    expect(screen.getByText("League Example · Series 3")).toBeTruthy();
     expect(screen.queryByText("Series 4")).toBeNull();
     expect(screen.getByText("进行中")).toBeTruthy();
     expect(screen.getAllByText("已结束")).toHaveLength(2);
-    expect(screen.getByText(/2026-09-02 ～ 待定/)).toBeTruthy();
-    expect(screen.getByText(/冠军：Team Example/)).toBeTruthy();
+    expect(screen.getByText("2026-09-02 ～ 待定")).toBeTruthy();
+    expect(screen.getByText("冠军：Team Example")).toBeTruthy();
     expect(screen.queryByText(/Running result must stay hidden/)).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: /Series 3/ }));
+    fireEvent.click(screen.getByRole("button", { name: /League Example · Series 3/ }));
     expect(onSelect).toHaveBeenCalledWith(candidates[2]);
   });
 
@@ -192,7 +193,9 @@ describe("RecentSeriesPanel", () => {
     fireEvent.click(trigger);
     expect(trigger.getAttribute("aria-expanded")).toBe("true");
     expect(onOpen).toHaveBeenCalledOnce();
-    expect(screen.getByRole("region", { name: "赛事查询" })).toBeTruthy();
+    const panel = screen.getByRole("region", { name: "赛事查询" });
+    expect(panel.classList.contains("recent-series-panel-scrollbar")).toBe(true);
+    expect(panel.classList.contains("overflow-y-auto")).toBe(true);
     expect(screen.getAllByRole("button", { name: /^(进行中|已结束)，/ })).toHaveLength(10);
     expect((screen.getByRole("button", { name: /^进行中，Series 1，/ }) as HTMLButtonElement).disabled).toBe(true);
 
@@ -219,5 +222,33 @@ describe("RecentSeriesPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: /^进行中，Series 1，/ }));
     expect(onSelect).toHaveBeenCalledWith(candidates[0]);
     expect(screen.queryByRole("region", { name: "赛事查询" })).toBeNull();
+  });
+
+  it("closes on outside pointer without stealing focus and keeps clicks inside open", () => {
+    render(
+      <div>
+        <RecentSeriesPanel
+          state={viewState(response("fresh"))}
+          onOpen={vi.fn()}
+          onRetry={vi.fn()}
+          onSelect={vi.fn()}
+        />
+        <button type="button">聊天输入</button>
+      </div>,
+    );
+    const trigger = screen.getByRole("button", { name: "赛事查询" });
+    fireEvent.click(trigger);
+    fireEvent.pointerDown(screen.getByRole("region", { name: "赛事查询" }));
+    expect(screen.getByRole("region", { name: "赛事查询" })).toBeTruthy();
+
+    const input = screen.getByRole("button", { name: "聊天输入" });
+    fireEvent.pointerDown(input);
+    expect(screen.queryByRole("region", { name: "赛事查询" })).toBeNull();
+    expect(document.activeElement).not.toBe(trigger);
+  });
+
+  it("renders the first five rows when requested", () => {
+    const { container } = render(<RecentSeriesList items={candidates} count={5} onSelect={vi.fn()} />);
+    expect(within(container).getAllByRole("button")).toHaveLength(5);
   });
 });
