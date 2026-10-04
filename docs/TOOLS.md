@@ -11,6 +11,14 @@ with its opaque Artifact reference. That observation is capped at 35 KiB and
 may still include small scalar leaves. Artifact retrieval tools remain inline;
 `artifact.read` applies its own 35 KiB serialized-result bound.
 
+“Not executed” and “executed and failed” describe different facts. The planned
+response-level all-batch rejection applies only to malformed tool-argument JSON
+and tool-call response truncation, as defined in
+[`agent/model_output_and_recovery.md`](agent/model_output_and_recovery.md);
+that contract is not implemented yet. Valid JSON with invalid tool fields and
+checkpoint-source errors keep their existing per-call rules. Failure feedback
+does not become a checkpoint source and does not change TaskState completion.
+
 The clean-slate default registry currently exposes:
 
 ```text

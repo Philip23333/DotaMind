@@ -603,3 +603,44 @@ existing four-file ZIP, which remains at `recording_version: 1`. Older traces
 without these fields mean that the evidence was not collected at that time; they
 do not establish that the failure did not occur. Diagnostic persistence is
 best-effort and cannot replace or suppress the original Runtime error.
+
+## Dynamic output budgets and response recovery (design confirmed; pending)
+
+The target contract is defined in
+[`agent/model_output_and_recovery.md`](agent/model_output_and_recovery.md).
+Current code may still use the older output budget and failure exits. The
+following deterministic offline cases are required before this design can be
+marked implemented:
+
+| Case | Required evidence |
+| --- | --- |
+| Two-call batch; second argument JSON is invalid | Neither handler runs; both calls receive matching error results and the shared not-executed explanation |
+| Tool-call response ends with `finish_reason=length` | Zero handlers run even if received argument fragments parse |
+| Rejected call history | Raw argument text and identity are retained; paired results encode, persist, and compact as one indivisible history group |
+| Consecutive response-level failures | At most two corrective generations; a normal complete response resets the consecutive counter |
+| Cancellation and execution deadline | Corrections do not reset the deadline; cancellation and expiry stop further correction |
+| Correction exhaustion | Completed checkpoints remain; partial answers state missing scope; no plan does not imply complete work |
+| Primary and degraded answer truncation | Failed attempts are replaced; degraded truncation reaches deterministic fallback; truncated text is never canonical or saved as success |
+| Normal ToolRegistry schema errors and provider overflow | Existing per-call feedback and one-time overflow compaction remain; completed tools are not replayed |
+| Dynamic output budget | Cover sufficient room, output clipping, no usable room, and recomputation after compaction |
+| Early-compaction threshold | Calculate the test threshold from expected output before clipping; capacity-check the request with actual output after clipping |
+
+Full test recording and diagnostic traces continue to use the existing four-file
+ZIP and `recording_version: 1`. A call record should expose:
+
+- expected output cap, actual output cap, and whether/how input capacity clipped
+  it;
+- every actual model call and its bounded failure diagnosis;
+- response-level whole-batch rejection reason, confirmed zero-execution result,
+  and correction attempt number;
+- execution end reason, task coverage, and answer delivery result as distinct
+  facts.
+
+The original failed call and raw argument string belong to effective Runtime
+conversation history for model feedback. Trace entries remain bounded diagnostic
+records and must never be used to reconstruct a call or returned history. Existing
+diagnostic truncation/redaction and recording limits continue to apply.
+
+Live Provider compatibility and historical response-shape compatibility are
+later verification items. Offline implementation acceptance does not claim that
+online providers have been checked.

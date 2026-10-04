@@ -122,6 +122,7 @@ turn. Answer attempts change independently of request/message identity.
 | --- | --- |
 | Request accepted | Associate one request and assistant message; running/execution, answer pending |
 | Tool started/completed/failed | Update that call's activity; a tool failure alone does not fail the run |
+| Response-level tool batch rejected | Target behavior: show every call as not executed with its paired error result; do not mark a handler as successful |
 | Answer stage entered | Set stage to answer even before answer text exists |
 | Answer text delta received | Append to the current answer attempt immediately; answer streaming, Runtime still running |
 | Answer generation fails | Replace the failed attempt with fallback in the same message; do not preserve its text as the active answer |
@@ -131,6 +132,23 @@ turn. Answer attempts change independently of request/message identity.
 | Runtime fails before final | Failed run with a safe execution error; no synthetic successful answer |
 | User cancellation before final | Cancelled run; settle active process UI without declaring success |
 | Connection ends without terminal confirmation | Stop the local busy state and report interruption; do not infer server success or failure |
+
+### Planned model-response recovery state
+
+The response-recovery design is confirmed, but its Runtime and UI implementation
+are pending in [`model_output_and_recovery.md`](model_output_and_recovery.md).
+Correction exhaustion first ends execution and enters the existing Answer Stage;
+it does not jump directly to `degraded_answer`. Completed TaskState items remain
+completed, incomplete items remain incomplete, and the absence of a task plan does
+not imply full completion. A partial answer identifies the missing scope; without
+reliable completed results, the answer clearly reports failure.
+
+Primary or degraded answer text ending with `finish_reason=length` is a failed
+attempt, never a canonical final. The existing answer-attempt replacement
+mechanism clears the failed text before publishing a replacement. A successful
+delivered answer may make Runtime `completed`, while execution end reason and
+task coverage stay separate. A rejected tool activity is explicitly “not
+executed”; it is distinct from a tool handler that ran and failed.
 
 If user cancellation or disconnection interrupts an answer already streaming,
 retain its visible partial text and mark it interrupted. It

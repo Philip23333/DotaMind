@@ -125,6 +125,11 @@ input exceeds that 256 KiB limit fails before a model call. The complete rebuilt
 model request remains subject to capacity checks. Ordinary answer output
 continues to use `DOTAMIND_CONTEXT_OUTPUT_RESERVE_TOKENS`.
 
+Dynamic output budgeting and model-response recovery have a confirmed target
+design in [model_output_and_recovery.md](docs/agent/model_output_and_recovery.md),
+but are not implemented or available as configuration yet. The setting above
+describes current behavior until that implementation is accepted.
+
 Automatic compaction uses the production threshold when the test override is
 blank:
 

@@ -4,6 +4,9 @@
 > model-visible budget-state baseline. Context compaction, Artifact lifecycle,
 > and pressure-triggered compression are now extended by the authoritative
 > [`context_governance_evidence_lifecycle.md`](context_governance_evidence_lifecycle.md).
+> Dynamic output budgets and model-response recovery are defined by the separate
+> authoritative [`model_output_and_recovery.md`](model_output_and_recovery.md);
+> this early baseline remains historical and is not rewritten here.
 > The exclusions below remain true for the currently implemented Budget v1;
 > they are not a rejection of the later governance phases.
 

@@ -113,16 +113,21 @@ provider usage 估算单组消息。完整工具调用/返回组不可拆分；�
 业务重要性挑选。
 
 生产水位为严格大于关系：令 `W=context_window_tokens`、
-`R=compaction_reserve_tokens`、`E=estimated_input_tokens`，生产阈值为
-`W-R+1`，也就是 `E > W-R` 时进入 `HIGH`。配置窗口时必须满足 `R < W`。
-保留测试提前触发的独立配置
+`R=compaction_reserve_tokens`、`E=estimated_input_tokens`，生产触发条件仍为
+`E > W-R`（整数阈值 `W-R+1`）。配置窗口时必须满足 `R < W`。
+
+动态输出预算与模型响应失败恢复的权威目标契约见
+[`model_output_and_recovery.md`](model_output_and_recovery.md)。设计已确认，实现与验收待完成；
+当前代码可能仍采用旧输出预算和失败出口。目标区分裁剪前的**期望输出上限**和按当前输入
+空间裁剪后的**实际输出上限**。测试提前触发的独立配置
 `context_compaction_test_trigger_percent=P`（环境变量
-`DOTAMIND_CONTEXT_COMPACTION_TEST_TRIGGER_PERCENT`）：当前请求输入预算
-`A=max(0, W-request_output_tokens-context_safety_margin_tokens)`，测试阈值为
-`ceil(A×P/100)`，最终阈值取生产与测试阈值的较小值，因此覆盖只能提前、不能推迟。
-未配置测试百分比时使用生产公式。`CRITICAL` 硬容量边界优先于 `HIGH` 水位；实际输出
-预留较大时，可能先到达 `CRITICAL`。没有模型窗口时容量治理关闭，即使设置测试百分比
-也不会推断窗口。
+`DOTAMIND_CONTEXT_COMPACTION_TEST_TRIGGER_PERCENT`）基于期望输出上限计算：
+`A=max(0, W-expected_output_cap-context_safety_margin_tokens)`，
+测试阈值为 `ceil(A×P/100)`，最终阈值仍取生产与测试阈值的较小值，因此覆盖只能提前、
+不能推迟。实际请求容量检查改用实际输出上限，即
+`E+actual_output_cap+safety_margin <= W`。配置上下文窗口时，若仍无足够空间，先沿用
+正常容量/压缩流程并在输入变化后重算；`CRITICAL` 硬容量边界优先于 `HIGH` 水位。
+没有模型窗口时容量治理关闭，即使设置测试百分比也不会推断窗口。
 
 即使单个用户任务很长，也可压缩其早期查询、读取和分析，保留最近调用继续执行。
 系统指令按正常请求构建保留。当前用户消息原文始终可见；若已在保留历史中，
@@ -144,9 +149,12 @@ provider usage 估算单组消息。完整工具调用/返回组不可拆分；�
 
 输出 token 限额与输入 UTF-8 字节限额是不同边界。摘要正文没有独立的字节上限，
 但每个摘要请求输入仍受 `compaction_max_input_bytes` 限制（当前 256 KiB），提交后的
-完整请求也由容量检查计量。普通回答继续使用独立的 `context_output_reserve_tokens`。
-reserve 同时参与生产触发线和摘要输出额度推导，不要通过把 reserve 调成窗口的 70%
-模拟 30% 测试水位。增加 reserve 可降低摘要被截断的概率，但不能保证摘要一定完成。
+完整请求也由容量检查计量。摘要输出仍独立使用各自的 reserve 派生额度和可选摘要模型上限。
+目标设计取消 `context_output_reserve_tokens` 对普通请求输出预算的旧用途；后续实现应删除
+该旧用途，不暗中把它映射成模型上限、应用上限或安全余量。当前代码和配置尚可能继续使用它，
+不能在本轮文档修改中将目标写成现状。reserve 仍参与生产触发线和摘要预算推导；不要通过把
+reserve 调成窗口的 70% 模拟 30% 测试水位。增加 reserve 可降低摘要被截断的概率，但不能保证
+摘要一定完成。
 
 ## 6. 摘要调用
 
@@ -230,6 +238,10 @@ observation 的 checkpoint 来源归属；它不控制 Artifact 是否可读、�
 - 摘要截断（`finish_reason=length`）、空摘要、非法响应、额度耗尽及其他确定性错误不重试。
   摘要失败或提交版本冲突会停止当前任务并保留原有效历史；两段都成功前不提交任何候选。
   摘要输入超出字节预算时不发起调用。普通业务模型请求不因该配置增加重试。
+- 另有一项已确认、尚待实现的普通模型响应纠错设计：执行中的工具参数 JSON 非法或带工具调用的
+  响应被截断时，整批不执行，最多再生成两次；连续失败计数在一次正常完整响应后清零。纠错与
+  摘要重试分别计数，不共享重试额度，并共同受原执行 deadline 和用户取消约束。详细规则见
+  [`model_output_and_recovery.md`](model_output_and_recovery.md)。
 - 用户取消停止执行；已提交版本保留，未提交候选丢弃。
 - 摘要耗时、token 与费用计入当前用户请求，单独记录维护调用；不重置业务步数
   或时间预算，不绕过 deadline。保留正常回答所需时间。
@@ -244,6 +256,12 @@ observation 的 checkpoint 来源归属；它不控制 Artifact 是否可读、�
 只在整次压缩成功后重试失败的业务模型调用，不重放已完成工具。摘要临时错误重试
 与这一次溢出恢复是两种独立机制；摘要自身上下文超限不会递归压缩。摘要失败或无
 合法压缩范围沿用原阶段失败出口，未提交候选不会进入会话。
+
+三种调用计数保持独立：普通响应纠错按连续失败计算，最多两次补充生成且正常完整响应后清零；
+摘要重试按摘要段计算并沿用其现有配置范围；Provider overflow 为每个用户请求最多一次，由执行与
+主回答共享。任何机制均不重置原阶段 deadline；overflow 仍按现有一次压缩再试规则，不重跑已经
+完成的工具。目标纠错历史中的原调用和配对错误结果组成不可拆分的完整消息组；错误结果不构成
+checkpoint 来源。更细规则以 [`model_output_and_recovery.md`](model_output_and_recovery.md) 为准。
 
 正常产品入口从 `DOTAMIND_CONTEXT_WINDOW_TOKENS` 读取容量窗口，并将其传入会话
 Runtime。窗口留空时自动容量治理关闭；设置有效窗口并重启服务后启用。生产示例将
@@ -282,6 +300,22 @@ Checkpoint 如保留，仅承担任务进度语义。
 | 压缩后仍过大、无可压缩范围 | 明确容量出口，不发送已知超限请求 |
 | 跨会话或会话状态丢失 | 隔离读取，不宣称失效资料仍可恢复 |
 
+上述已完成场景不表示新的输出预算与响应纠错已实现。该设计的离线验收另行待完成：
+
+| 待验收场景 | 必须验证 |
+| --- | --- |
+| 一批两次调用，后一个参数 JSON 非法 | 两个 handler 均未调用；每个调用都有匹配的未执行错误结果 |
+| 工具调用响应以 length 结束 | 即使现有参数可解析，整批仍为零执行 |
+| 失败调用历史组 | 原始参数字符串与身份保留；配对历史可编码、持久化并压缩，组不可拆分 |
+| 连续响应级失败与计数重置 | 最多两次重新生成；中间正常完整响应清零后可重新计数 |
+| 取消或执行 deadline | 纠错不重置 deadline；取消和超时按原出口结束 |
+| 纠错耗尽 | 已完成 checkpoint 保留；部分回答说明缺口；无任务计划时也不推断完整完成 |
+| 主回答和降级回答截断 | 失败 attempt 被替换；降级截断转确定性兜底，不保存截断文本为 canonical final |
+| 普通 schema 错误和 provider overflow | 保持现有逐工具反馈和一次压缩恢复，不重放已完成工具 |
+| 动态输出预算 | 覆盖空间充足、需要裁剪、没有可用空间及压缩后按新输入重算 |
+
+以上为设计待验收项，不代表代码、Provider 兼容或线上历史响应已验证。
+
 确定性测试验证机械边界；真实模型 traces / evals 验证摘要质量及任务行为。
 记录回答正确性/遗漏、完整请求峰值、摘要和定位清单开销、压缩/恢复次数、
 重读次数、总 token 与延迟。与未压缩且可运行的任务基线比较。
@@ -289,15 +323,25 @@ Checkpoint 如保留，仅承担任务进度语义。
 
 ## 11. Pi 参考与本项目差异
 
-参考 Pi 默认机制：阈值触发、旧摘要与旧消息迭代总结、近期原始历史、合法切分点、
-完整会话记录与当前上下文分离、机械保留文件线索，以及有界的溢出恢复。
-参考源码会演进，实现时核对实际版本，不将默认数值或全部扩展能力视为本项目契约。
+Pi 对照固定为已核对提交
+[`1eee081e29c1323c40b98db11d0a62b919831881`](https://github.com/earendil-works/pi/tree/1eee081e29c1323c40b98db11d0a62b919831881)。
+该提交的压缩材料记录阈值触发、迭代摘要、近期原始历史、合法切分点、
+完整会话记录与当前上下文分离、机械文件线索和上下文溢出恢复；这些是对照行为，
+不是 DotaMind 的默认数值或本项目契约。
 
-- [压缩设计](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/docs/compaction.md)
-- [摘要与切分](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/src/core/compaction/compaction.ts)
-- [文件线索](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/src/core/compaction/utils.ts)
-- [会话与恢复](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/src/core/agent-session.ts)
+- [压缩设计](https://github.com/earendil-works/pi/blob/1eee081e29c1323c40b98db11d0a62b919831881/packages/coding-agent/docs/compaction.md)
+- [摘要与切分](https://github.com/earendil-works/pi/blob/1eee081e29c1323c40b98db11d0a62b919831881/packages/coding-agent/src/core/compaction/compaction.ts)
+- [文件线索](https://github.com/earendil-works/pi/blob/1eee081e29c1323c40b98db11d0a62b919831881/packages/coding-agent/src/core/compaction/utils.ts)
+- [会话与恢复](https://github.com/earendil-works/pi/blob/1eee081e29c1323c40b98db11d0a62b919831881/packages/coding-agent/src/core/agent-session.ts)
+- [模型与请求类型](https://github.com/earendil-works/pi/blob/1eee081e29c1323c40b98db11d0a62b919831881/packages/ai/src/types.ts)
+- [Agent 调用循环](https://github.com/earendil-works/pi/blob/1eee081e29c1323c40b98db11d0a62b919831881/packages/agent/src/agent-loop.ts)
 
-Dotamind 的必要差异：当前用户原文固定可见；现有 Artifact 数据路径；有界 FIFO
-定位清单而非无限累计引用；进程内线性记录；每问已有 deadline/步骤约束。
-这些选择服务于赛事分析和独立开发成本，不引入 Pi 的会话树或插件框架。
+在该固定版本中，AI 类型分别表达 contextWindow、模型 maxTokens 与单次请求
+maxTokens。Agent loop 按调用校验参数；一个调用准备失败时可生成该调用的错误结果，
+同批其他已准备调用仍可执行。stopReason 为 error 或 aborted 时该 loop 调用终止。
+这些实现事实不含 DotaMind 目标中的整批原子拒绝或两次响应纠错。
+
+DotaMind 保留当前用户原文、现有 Artifact 数据路径、有界 FIFO 定位清单和进程内线性记录。
+普通执行仍以连续纠错次数、deadline 与取消为界；没有生产总步数上限。该目标选择整批拒绝
+响应级 JSON/截断错误、保留配对的未执行结果、最多两次连续纠错后进入回答阶段；这不是
+Pi 默认行为，也不引入 Pi 的会话树或插件框架。

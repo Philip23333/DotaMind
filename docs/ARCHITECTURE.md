@@ -379,8 +379,8 @@ These changes do not alter the session Artifact storage contract.
 
 ## Runtime boundary
 
-The Controller owns decision shape, schema adherence, reference validation, and
-capability-boundary errors. The execution runtime owns budgets, retries,
+The Controller owns the model-authored ExecutionPlan shape, reference validation,
+and capability-boundary errors. The execution runtime owns budgets, retries,
 tracing, and persistence. Complete-request context capacity and automatic
 compaction govern effective history; there is no independent cumulative Raw
 admission budget. Execution has no step-count ceiling; Runtime retains
@@ -388,6 +388,15 @@ step numbering for traces, while the execution deadline, cancellation, plan
 completion, and existing context-capacity or error exits control its lifecycle.
 Steps-pressure calculations remain available for isolated tests, but production
 Runtime does not supply a step budget.
+
+The planned model-output and response-recovery contract is owned by
+[`agent/model_output_and_recovery.md`](agent/model_output_and_recovery.md);
+implementation and acceptance are pending. Its layer responsibilities are:
+Adapter strictly parses responses, preserves failed-call data, and encodes
+history; Runtime grants or denies whole-batch execution, creates error feedback,
+counts consecutive corrections, and finalizes execution; ToolRegistry continues
+normal schema and business validation; Answer Stage answers from available
+results and does not repair execution calls.
 
 Execution and answering have separate wall-clock deadlines. The execution
 deadline defaults to 300 seconds and the answer deadline defaults to 60 seconds;
