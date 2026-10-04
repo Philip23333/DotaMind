@@ -604,13 +604,19 @@ without these fields mean that the evidence was not collected at that time; they
 do not establish that the failure did not occur. Diagnostic persistence is
 best-effort and cannot replace or suppress the original Runtime error.
 
-## Dynamic output budgets and response recovery (design confirmed; pending)
+## Dynamic output budgets and response recovery
 
-The target contract is defined in
+The authoritative contract is
 [`agent/model_output_and_recovery.md`](agent/model_output_and_recovery.md).
-Current code may still use the older output budget and failure exits. The
-following deterministic offline cases are required before this design can be
-marked implemented:
+Dynamic budget calculation, configuration, Runtime wiring, capacity checks, and
+trace capture are implemented and covered by deterministic offline tests. Those
+tests cover sufficient space, clipping, zero remaining space, recalculation after
+input changes, the expected-output-based early threshold, all three ordinary
+stages, and equality between the actual request cap, capacity record, trace, and
+OpenAI-compatible `max_tokens`. Summary calls retain their separate budgets.
+
+The following response-recovery cases remain required before that portion of the
+design can be marked implemented:
 
 | Case | Required evidence |
 | --- | --- |
@@ -622,8 +628,6 @@ marked implemented:
 | Correction exhaustion | Completed checkpoints remain; partial answers state missing scope; no plan does not imply complete work |
 | Primary and degraded answer truncation | Failed attempts are replaced; degraded truncation reaches deterministic fallback; truncated text is never canonical or saved as success |
 | Normal ToolRegistry schema errors and provider overflow | Existing per-call feedback and one-time overflow compaction remain; completed tools are not replayed |
-| Dynamic output budget | Cover sufficient room, output clipping, no usable room, and recomputation after compaction |
-| Early-compaction threshold | Calculate the test threshold from expected output before clipping; capacity-check the request with actual output after clipping |
 
 Full test recording and diagnostic traces continue to use the existing four-file
 ZIP and `recording_version: 1`. A call record should expose:

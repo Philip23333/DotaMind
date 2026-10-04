@@ -34,7 +34,7 @@ def _limits(
 ) -> AgentLimits:
     return AgentLimits(
         context_window_tokens=window,
-        context_output_reserve_tokens=reserve,
+        application_max_output_tokens=reserve,
         context_safety_margin_tokens=margin,
         context_estimate_bytes_per_token=bytes_per_token,
         context_compaction_test_trigger_percent=test_trigger_percent,
@@ -50,7 +50,7 @@ def test_unconfigured_context_window_disables_capacity_assessment() -> None:
     ("field", "value"),
     [
         ("context_window_tokens", True),
-        ("context_output_reserve_tokens", "20"),
+        ("application_max_output_tokens", "20"),
         ("context_safety_margin_tokens", 1.5),
         ("context_estimate_bytes_per_token", False),
         ("context_compaction_test_trigger_percent", True),
@@ -65,11 +65,11 @@ def test_context_capacity_fields_are_strictly_validated(field: str, value: objec
         AgentLimits(**{field: value})
 
 
-def test_context_reserve_and_margin_must_fit_inside_configured_window() -> None:
+def test_safety_margin_must_fit_inside_configured_window() -> None:
     with pytest.raises(ValidationError, match="smaller than the context window"):
-        _limits(window=30, reserve=20, margin=10)
+        _limits(window=30, reserve=20, margin=30)
 
-    assert _limits(window=31, reserve=20, margin=10).context_window_tokens == 31
+    assert _limits(window=31, reserve=200, margin=10).context_window_tokens == 31
 
 
 @pytest.mark.parametrize("compaction_reserve", [100, 101])
@@ -99,22 +99,23 @@ def test_capacity_uses_utf8_bytes_and_ceiling_ratio() -> None:
     assert result.estimated_input_tokens == (context_bytes + 6) // 7
 
 
-def test_default_and_explicit_output_reserves_are_reported_separately() -> None:
-    default_limits = AgentLimits(
+def test_expected_and_actual_output_budgets_are_reported_separately() -> None:
+    request = _request()
+    limits = AgentLimits(
         context_window_tokens=10_000,
+        model_max_output_tokens=500,
+        application_max_output_tokens=300,
+        context_safety_margin_tokens=100,
+        context_estimate_bytes_per_token=1,
         compaction_reserve_tokens=1000,
     )
-    default_result = assess_request_capacity(_request(), default_limits)
-    explicit_result = assess_request_capacity(
-        _request(max_output_tokens=123),
-        default_limits,
-    )
+    result = assess_request_capacity(request, limits)
 
-    assert default_result is not None
-    assert explicit_result is not None
-    assert default_result.reserved_output_tokens == 4096
-    assert explicit_result.reserved_output_tokens == 123
-    assert explicit_result.available_input_tokens == 10_000 - 123 - 1024
+    assert result is not None
+    assert result.expected_output_tokens == 300
+    assert result.actual_output_tokens == 300
+    assert result.remaining_output_tokens == 10_000 - result.estimated_input_tokens - 100
+    assert not result.clipped_by_context
 
 
 def _request_with_estimated_input_tokens(target: int) -> ModelRequest:
@@ -145,12 +146,19 @@ def test_production_trigger_uses_first_integer_above_window_minus_reserve() -> N
         ContextPressure.NORMAL,
         ContextPressure.NORMAL,
         ContextPressure.HIGH,
-        ContextPressure.CRITICAL,
+        ContextPressure.HIGH,
     ]
     assert capacities[2] is not None
     assert capacities[2].production_trigger_input_tokens == 83_617
     assert capacities[2].trigger_input_tokens == 83_617
-    assert capacities[2].available_input_tokens == 94_880
+    assert capacities[2].test_input_budget_tokens == 94_880
+    assert capacities[3] is not None
+    assert capacities[3].actual_output_tokens == 4096
+    assert (
+        capacities[3].estimated_input_tokens + capacities[3].actual_output_tokens + 1024
+        == 100_000
+    )
+    assert capacities[3].pressure is not ContextPressure.CRITICAL
 
 
 def test_test_trigger_uses_ceiling_and_can_only_advance_production_trigger() -> None:
@@ -164,7 +172,7 @@ def test_test_trigger_uses_ceiling_and_can_only_advance_production_trigger() -> 
     )
     result = assess_request_capacity(_request_with_estimated_input_tokens(28_465), limits)
     assert result is not None
-    assert result.available_input_tokens == 94_881
+    assert result.test_input_budget_tokens == 94_881
     assert result.test_trigger_percent == 30
     assert result.production_trigger_input_tokens == 83_618
     assert result.trigger_input_tokens == 28_465
@@ -184,13 +192,13 @@ def test_test_trigger_uses_ceiling_and_can_only_advance_production_trigger() -> 
     assert high_test_threshold is not None
     assert high_test_threshold.production_trigger_input_tokens == 83_617
     assert (
-        high_test_threshold.available_input_tokens * 99 + 99
+        high_test_threshold.test_input_budget_tokens * 99 + 99
     ) // 100 > high_test_threshold.production_trigger_input_tokens
     assert high_test_threshold.trigger_input_tokens == 83_617
     assert high_test_threshold.pressure is ContextPressure.HIGH
 
     critical = assess_request_capacity(
-        _request_with_estimated_input_tokens(94_880),
+        _request_with_estimated_input_tokens(98_976),
         _limits(
             window=100_000,
             reserve=4096,
@@ -213,7 +221,7 @@ def test_unconfigured_window_disables_test_override_and_output_budget_is_unchang
         is None
     )
     limits = _limits(test_trigger_percent=30)
-    assert limits.context_output_reserve_tokens == 20
+    assert limits.application_max_output_tokens == 20
     assert limits.compaction_reserve_tokens == 20
     production_limits = limits.model_copy(update={"context_compaction_test_trigger_percent": None})
     for kind in ("history", "turn_prefix"):
@@ -228,14 +236,15 @@ def test_unconfigured_window_disables_test_override_and_output_budget_is_unchang
         )
 
 
-def test_explicit_output_reserve_can_exhaust_input_budget() -> None:
+def test_zero_remaining_space_is_critical_and_not_sendable() -> None:
     result = assess_request_capacity(
-        _request("small", max_output_tokens=1_000),
-        _limits(window=100, reserve=20, margin=10),
+        _request("x" * 120),
+        _limits(window=100, reserve=20, margin=10, bytes_per_token=1),
     )
 
     assert result is not None
-    assert result.available_input_tokens == 0
+    assert result.remaining_output_tokens == 0
+    assert result.actual_output_tokens == 0
     assert result.pressure is ContextPressure.CRITICAL
 
 

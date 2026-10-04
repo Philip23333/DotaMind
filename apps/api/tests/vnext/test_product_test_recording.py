@@ -20,6 +20,7 @@ from app.vnext.agent.events import (
     AnswerAttemptStarted,
     AnswerStageStarted,
 )
+from app.vnext.agent.limits import AgentLimits
 from app.vnext.agent.runtime import AgentRuntime
 from app.vnext.llm.openai_compatible import OpenAICompatibleModelClient
 from app.vnext.llm.protocol import FinalMessage, ModelRequest, ModelResponse, UserMessage
@@ -111,6 +112,14 @@ def _service(
     )
 
 
+def _runtime(model, tools=None) -> AgentRuntime:
+    return AgentRuntime(
+        model,
+        tools or ToolRegistry(),
+        limits=AgentLimits(application_max_output_tokens=4096),
+    )
+
+
 def _transport_request(request_id: UUID, session_id: UUID, query: str) -> dict[str, object]:
     return {
         "request_id": str(request_id),
@@ -190,7 +199,7 @@ def test_completed_recording_is_exported_and_replay_reuses_its_reference() -> No
                 ModelResponse.from_final("delivered answer", usage={"prompt_tokens": 9}),
             ]
         )
-        runtime = AgentRuntime(model, ToolRegistry())
+        runtime = _runtime(model, ToolRegistry())
         service = _service(repository, runtime, trace_store)
         browser_id = str(uuid4())
         session_id = uuid4()
@@ -276,7 +285,7 @@ def test_replay_after_service_recreation_does_not_rerun_model_and_keeps_trace_li
         )
         first_service = _service(
             repository,
-            AgentRuntime(first_model, ToolRegistry()),
+            _runtime(first_model, ToolRegistry()),
             trace_store,
         )
         prepared = await first_service.prepare_turn(**request)
@@ -285,7 +294,7 @@ def test_replay_after_service_recreation_does_not_rerun_model_and_keeps_trace_li
         after_restart_model = ScriptedModelClient([])
         after_restart = _service(
             repository,
-            AgentRuntime(after_restart_model, ToolRegistry()),
+            _runtime(after_restart_model, ToolRegistry()),
             trace_store,
         )
         replay = await after_restart.prepare_turn(**request)
@@ -312,7 +321,7 @@ def test_replay_after_service_recreation_does_not_rerun_model_and_keeps_trace_li
 def test_failure_is_saved_in_test_mode_and_keeps_error_event_reference() -> None:
     repository = _Repository()
     trace_store = _TraceStore()
-    runtime = AgentRuntime(
+    runtime = _runtime(
         ScriptedModelClient([RuntimeError("synthetic provider failure")]),
         ToolRegistry(),
     )
@@ -406,7 +415,7 @@ def test_parsing_failure_diagnostics_round_trip_through_existing_trace_zip(
         )
         service = _service(
             repository,
-            AgentRuntime(model, ToolRegistry()),
+            _runtime(model, ToolRegistry()),
             trace_store,
             test_recording_enabled=test_recording_enabled,
         )
@@ -477,7 +486,7 @@ def test_trace_store_write_failure_does_not_change_answer_or_runtime_error() -> 
     async def exercise_success():
         service = _service(
             _Repository(),
-            AgentRuntime(
+            _runtime(
                 ScriptedModelClient(
                     [
                         ModelResponse.from_final("execution"),
@@ -878,7 +887,7 @@ def test_completed_runtime_trace_stays_completed_when_chat_persistence_fails() -
         trace_store = _TraceStore()
         service = _service(
             repository,
-            AgentRuntime(
+            _runtime(
                 ScriptedModelClient(
                     [
                         ModelResponse.from_final("execution"),
@@ -923,7 +932,7 @@ def test_visual_enrichment_failure_saves_answer_and_completed_runtime_trace() ->
         trace_store = _TraceStore()
         service = _service(
             repository,
-            AgentRuntime(
+            _runtime(
                 ScriptedModelClient(
                     [
                         ModelResponse.from_final("execution"),

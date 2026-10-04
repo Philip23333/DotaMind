@@ -15,7 +15,8 @@ class AgentLimits(BaseModel):
     compaction_model_max_output_tokens: int | None = Field(default=None, gt=0, strict=True)
     compaction_max_retries: int = Field(default=1, ge=0, le=3, strict=True)
     context_window_tokens: int | None = Field(default=None, gt=0, strict=True)
-    context_output_reserve_tokens: int = Field(default=4096, gt=0, strict=True)
+    model_max_output_tokens: int | None = Field(default=None, gt=0, strict=True)
+    application_max_output_tokens: int | None = Field(default=None, gt=0, strict=True)
     context_safety_margin_tokens: int = Field(default=1024, gt=0, strict=True)
     context_estimate_bytes_per_token: int = Field(default=2, gt=0, strict=True)
     context_compaction_test_trigger_percent: int | None = Field(
@@ -29,12 +30,9 @@ class AgentLimits(BaseModel):
     def _validate_context_reserve(self) -> "AgentLimits":
         if (
             self.context_window_tokens is not None
-            and self.context_output_reserve_tokens + self.context_safety_margin_tokens
-            >= self.context_window_tokens
+            and self.context_safety_margin_tokens >= self.context_window_tokens
         ):
-            raise ValueError(
-                "context output reserve and safety margin must be smaller than the context window"
-            )
+            raise ValueError("context safety margin must be smaller than the context window")
         if (
             self.context_window_tokens is not None
             and self.compaction_reserve_tokens >= self.context_window_tokens

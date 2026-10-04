@@ -177,7 +177,6 @@ def _probe_request(
         execution_history=history,
         step=1,
         deadline=_Deadline(None),
-        auto_compaction_enabled=True,
     )
     return request
 
@@ -197,7 +196,7 @@ def _limits_for_available(
         compaction_max_input_bytes=100_000,
         compaction_reserve_tokens=160,
         context_window_tokens=available_input_tokens + reserve + margin,
-        context_output_reserve_tokens=reserve,
+        application_max_output_tokens=reserve,
         context_safety_margin_tokens=margin,
         context_estimate_bytes_per_token=1,
         context_compaction_test_trigger_percent=test_trigger_percent,
@@ -230,16 +229,21 @@ def _run(
     return asyncio.run(_run_with_timeout(runtime, history, request_id, **kwargs))
 
 
-def test_context_capacity_is_disabled_by_default() -> None:
+def test_context_capacity_can_be_disabled_while_output_cap_stays_finite() -> None:
     model = ScriptedModelClient(
         [ModelResponse.from_final("execution"), ModelResponse.from_final("answer")]
     )
     trace = AgentTraceCollector()
-    runtime = AgentRuntime(model, _echo_registry(), limits=AgentLimits(deadline_seconds=5))
+    runtime = AgentRuntime(
+        model,
+        _echo_registry(),
+        limits=AgentLimits(deadline_seconds=5, application_max_output_tokens=4096),
+    )
 
     _run(runtime, *_history(), trace_collector=trace)
 
-    assert model.requests[0].max_output_tokens is None
+    assert model.requests[0].max_output_tokens == 4096
+    assert model.requests[1].max_output_tokens == 4096
     assert "context_capacity_checks" not in trace.snapshot()
 
 
@@ -250,7 +254,7 @@ def test_compaction_reserve_defines_the_production_watermark_trigger() -> None:
     )
     small_reserve = AgentLimits(
         context_window_tokens=5_000,
-        context_output_reserve_tokens=500,
+        application_max_output_tokens=500,
         context_safety_margin_tokens=200,
         context_estimate_bytes_per_token=1,
         compaction_reserve_tokens=2,
@@ -315,7 +319,7 @@ def test_auto_compaction_validates_history_before_execution(case: str) -> None:
         assert execution_history.revision == before_revision
 
 
-def test_auto_mode_sets_request_output_reserve() -> None:
+def test_auto_mode_sets_request_output_cap_and_traces_budget() -> None:
     history, request_id = _history()
     model = ScriptedModelClient(
         [ModelResponse.from_final("execution"), ModelResponse.from_final("answer")]
@@ -326,7 +330,7 @@ def test_auto_mode_sets_request_output_reserve() -> None:
         _echo_registry(),
         limits=AgentLimits(
             context_window_tokens=10_000,
-            context_output_reserve_tokens=37,
+            application_max_output_tokens=37,
             context_safety_margin_tokens=10,
             compaction_reserve_tokens=160,
             deadline_seconds=5,
@@ -336,6 +340,9 @@ def test_auto_mode_sets_request_output_reserve() -> None:
     _run(runtime, history, request_id, trace_collector=trace)
 
     assert model.requests[0].max_output_tokens == 37
+    output_budget = trace.snapshot()["steps"][0]["output_budget"]
+    assert output_budget["expected_output_tokens"] == 37
+    assert output_budget["actual_output_tokens"] == model.requests[0].max_output_tokens
     checks = trace.snapshot()["context_capacity_checks"]
     assert [check["stage"] for check in checks] == ["execution", "primary_answer"]
     assert [check["phase"] for check in checks] == ["before_model", "before_model"]
@@ -343,7 +350,10 @@ def test_auto_mode_sets_request_output_reserve() -> None:
     capacity = checks[0]["capacity"]
     assert capacity["context_window_tokens"] == 10_000
     assert capacity["estimated_input_tokens"] > 0
-    assert capacity["reserved_output_tokens"] == 37
+    assert capacity["expected_output_tokens"] == 37
+    assert capacity["actual_output_tokens"] == 37
+    assert capacity["remaining_output_tokens"] is not None
+    assert capacity["clipped_by_context"] is False
     assert capacity["safety_margin_tokens"] == 10
     assert capacity["compaction_reserve_tokens"] == 160
     assert capacity["production_trigger_input_tokens"] == 9841
@@ -354,7 +364,7 @@ def test_auto_mode_sets_request_output_reserve() -> None:
 def test_tool_schemas_are_included_in_runtime_capacity() -> None:
     limits = AgentLimits(
         context_window_tokens=10_000,
-        context_output_reserve_tokens=64,
+        application_max_output_tokens=64,
         context_safety_margin_tokens=16,
         compaction_reserve_tokens=160,
         deadline_seconds=5,
@@ -442,7 +452,7 @@ def test_production_formula_triggers_a_real_compaction_without_test_override() -
         deadline_seconds=5,
         answer_timeout_seconds=5,
         context_window_tokens=1_000_000,
-        context_output_reserve_tokens=64,
+        application_max_output_tokens=64,
         context_safety_margin_tokens=16,
         context_estimate_bytes_per_token=1,
         compaction_reserve_tokens=160,
@@ -493,7 +503,7 @@ def test_test_override_compacts_the_same_history_before_production_boundary() ->
     registry = _echo_registry()
     probe_limits = AgentLimits(
         context_window_tokens=1_000_000,
-        context_output_reserve_tokens=64,
+        application_max_output_tokens=64,
         context_safety_margin_tokens=16,
         context_estimate_bytes_per_token=1,
         compaction_reserve_tokens=160,
@@ -511,7 +521,7 @@ def test_test_override_compacts_the_same_history_before_production_boundary() ->
             deadline_seconds=5,
             answer_timeout_seconds=5,
             context_window_tokens=window,
-            context_output_reserve_tokens=64,
+            application_max_output_tokens=64,
             context_safety_margin_tokens=16,
             context_estimate_bytes_per_token=1,
             compaction_reserve_tokens=160,
@@ -666,7 +676,7 @@ def test_critical_after_compaction_enters_answer_capacity_exit() -> None:
     final_request = _probe_request(compacted, registry, limits=probe_limits)
     final_capacity = assess_request_capacity(final_request, probe_limits)
     assert final_capacity is not None
-    limits = _limits_for_available(final_capacity.estimated_input_tokens)
+    limits = _limits_for_available(final_capacity.estimated_input_tokens - 64)
     model = ScriptedModelClient(
         [
             ModelResponse.from_final(
@@ -686,7 +696,7 @@ def test_critical_after_compaction_enters_answer_capacity_exit() -> None:
         trace_collector=trace,
     )
 
-    assert "context budget was exhausted" in result.content
+    assert "available context budget" in result.content
     assert len(model.requests) == 1
     assert len(trace.snapshot()["compaction_commits"]) == 1
     assert trace.snapshot()["execution_outcome"]["reason"] == "context_capacity"
@@ -803,7 +813,7 @@ def test_continuous_watermarks_compact_again_after_new_tool_output() -> None:
                 item["phase"],
                 item["capacity"]["pressure"],
                 item["capacity"]["context_bytes"],
-                item["capacity"]["available_input_tokens"],
+                item["capacity"]["test_input_budget_tokens"],
             )
             for item in trace.snapshot()["context_capacity_checks"]
         ],
@@ -898,7 +908,7 @@ def test_critical_without_compactable_range_fails_before_business_execution() ->
     candidate = _probe_request(history, registry, limits=probe_limits)
     capacity = assess_request_capacity(candidate, probe_limits)
     assert capacity is not None
-    limits = _limits_for_available(capacity.estimated_input_tokens)
+    limits = _limits_for_available(capacity.estimated_input_tokens - 64)
     before_messages = history.effective_messages()
     before_records = history.records
     model = ScriptedModelClient([])
@@ -916,7 +926,7 @@ def test_critical_without_compactable_range_fails_before_business_execution() ->
         trace_collector=trace,
     )
 
-    assert "context budget was exhausted" in result.content
+    assert "available context budget" in result.content
     assert model.requests == []
     assert history.effective_messages()[:-1] == before_messages
     assert history.records[:-1] == before_records

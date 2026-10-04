@@ -235,7 +235,11 @@ def test_follow_up_model_request_reuses_effective_history_and_reused_provider_id
         )
     )
     model = _runtime_model()
-    runtime = AgentRuntime(model, registry, limits=AgentLimits(deadline_seconds=2))
+    runtime = AgentRuntime(
+        model,
+        registry,
+        limits=AgentLimits(deadline_seconds=2, application_max_output_tokens=4096),
+    )
     repository = _Repository()
     service = VNextChatService(
         repository,  # type: ignore[arg-type]
@@ -432,7 +436,7 @@ def test_product_follow_up_uses_automatic_compaction_and_fresh_task_state(
         deadline_seconds=5,
         answer_timeout_seconds=5,
         context_window_tokens=24_000,
-        context_output_reserve_tokens=256,
+        application_max_output_tokens=256,
         context_safety_margin_tokens=128,
         context_estimate_bytes_per_token=1,
         context_compaction_test_trigger_percent=75,
@@ -555,7 +559,7 @@ def test_product_overflow_recovery_budget_resets_for_each_user_request(monkeypat
             deadline_seconds=5,
             answer_timeout_seconds=5,
             context_window_tokens=100_000,
-            context_output_reserve_tokens=128,
+            application_max_output_tokens=128,
             context_safety_margin_tokens=32,
             context_estimate_bytes_per_token=1,
             compaction_keep_recent_tokens=1,
@@ -706,7 +710,7 @@ def test_product_follow_up_succeeds_after_summary_validation_failure(monkeypatch
             deadline_seconds=5,
             answer_timeout_seconds=5,
             context_window_tokens=100_000,
-            context_output_reserve_tokens=128,
+            application_max_output_tokens=128,
             context_safety_margin_tokens=32,
             context_estimate_bytes_per_token=1,
             compaction_keep_recent_tokens=1,

@@ -17,6 +17,7 @@ def _isolate(monkeypatch: pytest.MonkeyPatch, env_file) -> None:
     monkeypatch.setattr(composition, "_VNEXT_ENV_PATH", env_file)
     for name in _ENV_NAMES:
         monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("DOTAMIND_APPLICATION_MAX_OUTPUT_TOKENS", "4096")
 
 
 def test_opendota_configuration_defaults_and_dotenv_values(tmp_path, monkeypatch) -> None:

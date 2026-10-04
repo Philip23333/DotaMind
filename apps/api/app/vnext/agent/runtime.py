@@ -64,6 +64,10 @@ from app.vnext.agent.evidence_summary_lifecycle import (
 )
 from app.vnext.agent.instructions import ANSWER_INSTRUCTION, DEGRADED_ANSWER_INSTRUCTION
 from app.vnext.agent.limits import AgentLimits
+from app.vnext.agent.output_budget import (
+    OutputBudget,
+    derive_output_budget,
+)
 from app.vnext.agent.runtime_context import RuntimeContext, classify_time_pressure
 from app.vnext.agent.runtime_prompt import render_runtime_prompt
 from app.vnext.agent.task_state import TaskPlan, TaskStateCoordinator
@@ -322,10 +326,18 @@ class AgentRuntime:
                         execution_history=execution_history,
                         step=step,
                         deadline=execution_deadline,
-                        auto_compaction_enabled=True,
+                    )
+                    candidate_request, candidate_budget = self._apply_output_budget(
+                        execution_request_data[0]
+                    )
+                    execution_request_data = (
+                        candidate_request,
+                        *execution_request_data[1:],
                     )
                     candidate_capacity = assess_request_capacity(
-                        execution_request_data[0], self.limits
+                        candidate_request,
+                        self.limits,
+                        output_budget=candidate_budget,
                     )
                     assert candidate_capacity is not None
                     if explicit_compaction:
@@ -388,7 +400,6 @@ class AgentRuntime:
                         execution_history=execution_history,
                         step=step,
                         deadline=execution_deadline,
-                        auto_compaction_enabled=auto_compaction_enabled,
                     )
                 (
                     request,
@@ -397,8 +408,20 @@ class AgentRuntime:
                     task_context_messages,
                     task_context_payload,
                 ) = execution_request_data
+                request, output_budget = self._apply_output_budget(request)
+                execution_request_data = (
+                    request,
+                    runtime_context,
+                    conversation_messages,
+                    task_context_messages,
+                    task_context_payload,
+                )
                 if auto_compaction_enabled:
-                    final_capacity = assess_request_capacity(request, self.limits)
+                    final_capacity = assess_request_capacity(
+                        request,
+                        self.limits,
+                        output_budget=output_budget,
+                    )
                     assert final_capacity is not None
                     if trace_collector is not None:
                         trace_collector.context_capacity_check(
@@ -422,6 +445,7 @@ class AgentRuntime:
                             conversation_messages=conversation_messages,
                             task_context_messages=task_context_messages,
                             task_context_payload=task_context_payload,
+                            output_budget=output_budget,
                         )
                     yield await self._publish(
                         ModelRequested(
@@ -441,6 +465,7 @@ class AgentRuntime:
                             step=step,
                             trace_collector=trace_collector,
                             publish_text=False,
+                            output_budget=output_budget,
                         )
                     except AgentCancelledError:
                         if recovery_pending and trace_collector is not None:
@@ -630,9 +655,13 @@ class AgentRuntime:
                             execution_history=execution_history,
                             step=step,
                             deadline=execution_deadline,
-                            auto_compaction_enabled=True,
                         )
-                        final_capacity = assess_request_capacity(request, self.limits)
+                        request, output_budget = self._apply_output_budget(request)
+                        final_capacity = assess_request_capacity(
+                            request,
+                            self.limits,
+                            output_budget=output_budget,
+                        )
                         assert final_capacity is not None
                         if trace_collector is not None:
                             trace_collector.context_capacity_check(
@@ -869,14 +898,16 @@ class AgentRuntime:
                     context=primary_context,
                     step=answer_step,
                     deadline=answer_deadline,
-                    max_output_tokens=(
-                        self.limits.context_output_reserve_tokens
-                        if auto_compaction_enabled
-                        else None
-                    ),
+                )
+                answer_request, answer_output_budget = self._apply_output_budget(
+                    answer_request
                 )
                 if auto_compaction_enabled:
-                    primary_capacity = assess_request_capacity(answer_request, self.limits)
+                    primary_capacity = assess_request_capacity(
+                        answer_request,
+                        self.limits,
+                        output_budget=answer_output_budget,
+                    )
                     assert primary_capacity is not None
                     if (
                         primary_capacity.pressure.value in {"high", "critical"}
@@ -932,10 +963,16 @@ class AgentRuntime:
                                 context=primary_context,
                                 step=answer_step,
                                 deadline=answer_deadline,
-                                max_output_tokens=self.limits.context_output_reserve_tokens,
+                            )
+                            answer_request, answer_output_budget = self._apply_output_budget(
+                                answer_request
                             )
                     self._check_controls(token, answer_deadline)
-                    final_capacity = assess_request_capacity(answer_request, self.limits)
+                    final_capacity = assess_request_capacity(
+                        answer_request,
+                        self.limits,
+                        output_budget=answer_output_budget,
+                    )
                     assert final_capacity is not None
                     if trace_collector is not None:
                         trace_collector.context_capacity_check(
@@ -952,7 +989,10 @@ class AgentRuntime:
                 recovery_pending = False
                 while True:
                     if trace_collector is not None:
-                        trace_collector.model_request(answer_request)
+                        trace_collector.model_request(
+                            answer_request,
+                            output_budget=answer_output_budget,
+                        )
                         trace_collector.answer_stage(answer_request, primary_context)
                         trace_collector.answer_projection(
                             answer_request,
@@ -980,6 +1020,7 @@ class AgentRuntime:
                                 trace_collector=trace_collector,
                                 publish_text=True,
                                 answer_attempt_id=primary_attempt_id,
+                                output_budget=answer_output_budget,
                             )
                         ) as invocation_stream:
                             async for invocation_item in invocation_stream:
@@ -1163,7 +1204,9 @@ class AgentRuntime:
                             context=primary_context,
                             step=answer_step,
                             deadline=answer_deadline,
-                            max_output_tokens=self.limits.context_output_reserve_tokens,
+                        )
+                        answer_request, answer_output_budget = self._apply_output_budget(
+                            answer_request
                         )
                         try:
                             self._check_controls(token, answer_deadline)
@@ -1187,7 +1230,11 @@ class AgentRuntime:
                                 )
                             recovery_pending = False
                             raise
-                        final_capacity = assess_request_capacity(answer_request, self.limits)
+                        final_capacity = assess_request_capacity(
+                            answer_request,
+                            self.limits,
+                            output_budget=answer_output_budget,
+                        )
                         assert final_capacity is not None
                         if trace_collector is not None:
                             trace_collector.context_capacity_check(
@@ -1330,15 +1377,17 @@ class AgentRuntime:
                     context=degraded_context,
                     step=degraded_step,
                     deadline=answer_deadline,
-                    max_output_tokens=(
-                        self.limits.context_output_reserve_tokens
-                        if auto_compaction_enabled
-                        else None
-                    ),
+                )
+                degraded_request, degraded_output_budget = self._apply_output_budget(
+                    degraded_request
                 )
                 degraded_precheck_error: AgentRuntimeError | None = None
                 if auto_compaction_enabled:
-                    degraded_capacity = assess_request_capacity(degraded_request, self.limits)
+                    degraded_capacity = assess_request_capacity(
+                        degraded_request,
+                        self.limits,
+                        output_budget=degraded_output_budget,
+                    )
                     assert degraded_capacity is not None
                     if trace_collector is not None:
                         trace_collector.context_capacity_check(
@@ -1358,7 +1407,10 @@ class AgentRuntime:
                         degraded_precheck_error = exc
                 if degraded_precheck_error is None:
                     if trace_collector is not None:
-                        trace_collector.model_request(degraded_request)
+                        trace_collector.model_request(
+                            degraded_request,
+                            output_budget=degraded_output_budget,
+                        )
                         trace_collector.answer_projection(
                             degraded_request,
                             degraded_context,
@@ -1387,6 +1439,7 @@ class AgentRuntime:
                             trace_collector=trace_collector,
                             publish_text=True,
                             answer_attempt_id=degraded_attempt_id,
+                            output_budget=degraded_output_budget,
                         )
                     ) as invocation_stream:
                         async for invocation_item in invocation_stream:
@@ -1637,7 +1690,6 @@ class AgentRuntime:
         context: Any,
         step: int,
         deadline: _Deadline,
-        max_output_tokens: int | None = None,
     ) -> ModelRequest:
         """Build an answer request with a fresh, ephemeral stage snapshot."""
 
@@ -1656,7 +1708,7 @@ class AgentRuntime:
             messages=messages,
             context=context,
             step=step,
-            max_output_tokens=max_output_tokens,
+            max_output_tokens=None,
         )
 
     def _build_execution_request(
@@ -1666,7 +1718,6 @@ class AgentRuntime:
         execution_history: Any | None,
         step: int,
         deadline: _Deadline,
-        auto_compaction_enabled: bool,
     ) -> tuple[
         ModelRequest,
         RuntimeContext,
@@ -1714,9 +1765,6 @@ class AgentRuntime:
             messages=turn_messages,
             tools=self.tools.schemas(),
             step=step,
-            max_output_tokens=(
-                self.limits.context_output_reserve_tokens if auto_compaction_enabled else None
-            ),
         )
         return (
             request,
@@ -1725,6 +1773,11 @@ class AgentRuntime:
             task_context_messages,
             task_context_payload,
         )
+
+    def _apply_output_budget(self, request: ModelRequest) -> tuple[ModelRequest, OutputBudget]:
+        budget = derive_output_budget(request, self.limits)
+        max_output_tokens = budget.actual_output_tokens or None
+        return request.model_copy(update={"max_output_tokens": max_output_tokens}), budget
 
     def _rebuild_after_compaction(
         self,
@@ -1781,6 +1834,7 @@ class AgentRuntime:
         step: int,
         trace_collector: AgentTraceCollector | None,
         publish_text: bool,
+        output_budget: OutputBudget | None = None,
         answer_attempt_id: str | None = None,
         record_step_text: bool = True,
         on_response: Callable[[ModelResponse], None] | None = None,
@@ -1795,6 +1849,7 @@ class AgentRuntime:
                     request,
                     step=step,
                     purpose=purpose,
+                    output_budget=output_budget,
                 )
             except Exception:
                 pass
@@ -1953,6 +2008,7 @@ class AgentRuntime:
         step: int,
         trace_collector: AgentTraceCollector | None,
         publish_text: bool,
+        output_budget: OutputBudget | None = None,
         answer_attempt_id: str | None = None,
         record_step_text: bool = True,
         on_response: Callable[[ModelResponse], None] | None = None,
@@ -1973,6 +2029,7 @@ class AgentRuntime:
                 step=step,
                 trace_collector=trace_collector,
                 publish_text=False,
+                output_budget=output_budget,
                 answer_attempt_id=answer_attempt_id,
                 record_step_text=record_step_text,
                 on_response=on_response,

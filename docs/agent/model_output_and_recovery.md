@@ -1,7 +1,8 @@
 # Model Output Budgets and Failure Recovery
 
-> **Status: design confirmed; implementation and acceptance are pending.**
-> Current code may still use the previous output budget and failure exits.
+> **Status: dynamic output budgets are implemented and offline-tested.**
+> Whole-batch rejection, generation correction, and answer-truncation recovery remain
+> pending; live Provider compatibility has not been verified.
 
 This document is the single authority for dynamic model output budgets,
 model-response failure representation, and bounded generation correction.
@@ -12,7 +13,7 @@ remain trace metadata.
 
 ## 1. Goal and scope
 
-The design establishes:
+The confirmed target establishes:
 
 - a request output cap derived from model limits and optional application
   configuration, then clipped to the capacity remaining for the current input;
@@ -25,10 +26,12 @@ The design establishes:
 - replacement of truncated answer attempts, followed by a deterministic fallback
   when the degraded answer is also truncated.
 
-This phase does not define content controls, prompt policy, or a new user-visible
-content limit. Those belong to a later design phase. It also does not add a total
-step limit, a new retry for provider transport failures, or a second overflow
-recovery allowance.
+The dynamic-budget portion is implemented: configuration, Runtime request caps,
+capacity checks, and trace fields use the rules below. Response classification,
+batch refusal, correction, and answer-truncation handling still describe the
+pending behavior. This work does not define content controls, prompt policy, or a
+new user-visible content limit. It also does not add a total step limit, a new
+retry for provider transport failures, or a second overflow recovery allowance.
 
 ## 2. Configuration responsibilities
 
@@ -113,11 +116,13 @@ compaction reduces I to 65, the cap is recalculated to 30. The early test
 threshold uses 30 before clipping; the request check uses the clipped 20.
 There is no feedback loop between the two calculations.
 
-The old context_output_reserve_tokens no longer has a target role in ordinary
-request budgeting. The later implementation removes that old usage; it must not
-silently map the old setting to the model maximum, application cap, or safety
-margin. Until then, the existing code and deployment configuration may still use
-it.
+`DOTAMIND_MODEL_MAX_OUTPUT_TOKENS` and
+`DOTAMIND_APPLICATION_MAX_OUTPUT_TOKENS` configure the ordinary output caps. At
+least one must be set for environment-loaded production settings. If both are
+missing, configuration fails; direct Runtime use also fails before an ordinary
+model request is dispatched. `DOTAMIND_CONTEXT_OUTPUT_RESERVE_TOKENS` is no
+longer read and is not mapped to either cap. The existing compaction reserve
+continues to set the production watermark and derive summary budgets.
 
 ## 4. Response classification
 

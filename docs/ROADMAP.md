@@ -430,21 +430,22 @@ required by the current design.
 
 ## Dynamic output budgets and generation recovery
 
-**Design confirmed; implementation and acceptance pending.** The target contract
-is defined in
+The target contract is defined in
 [`agent/model_output_and_recovery.md`](agent/model_output_and_recovery.md).
-Current code may still use the older fixed output budget and failure exits.
-Execution remains bounded by consecutive correction failures, the existing
-execution deadline, and user cancellation; there is no production total
-step-count ceiling.
+**Dynamic output budgets, configuration, Runtime/capacity wiring, and trace
+capture are implemented and offline-tested.** Response-level whole-batch refusal,
+generation correction, and answer-truncation recovery remain pending. Execution
+continues to have no production total step-count ceiling; the confirmed recovery
+boundary is consecutive failures, the existing execution deadline, and user
+cancellation.
 
 Implementation order:
 
-1. Derive expected and input-clipped actual output budgets.
+1. ~~Derive expected and input-clipped actual output budgets.~~
 2. Preserve failed call messages and encode paired non-execution results.
 3. Add Runtime whole-batch execution gating, bounded correction, and Answer Stage
    finalization.
-4. Complete the offline acceptance matrix and trace checks.
+4. Complete the response-recovery offline acceptance matrix and trace checks.
 5. Verify compatibility with live Providers and historical response shapes.
 
 Content control is a later phase. This work does not add a total step limit,

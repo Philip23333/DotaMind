@@ -83,6 +83,7 @@ def test_data_dir_environment_is_optional_but_must_be_nonempty_absolute(
 
     monkeypatch.setattr(composition, "dotenv_values", lambda _path: {})
     monkeypatch.delenv("DOTAMIND_DATA_DIR", raising=False)
+    monkeypatch.setenv("DOTAMIND_APPLICATION_MAX_OUTPUT_TOKENS", "4096")
     assert VNextSettings.from_env().data_dir is None
 
     for value in ("", "  ", "relative/catalog"):
@@ -305,6 +306,7 @@ def _patch_lifespan_dependencies(
         *,
         hero_guide_cache=None,
         catalog_repository_provider=None,
+        recent_series_cache=None,
     ) -> VNextServices:
         assert events[-1:] == ["loader_started"]
         captures["composition_provider"] = catalog_repository_provider
@@ -313,6 +315,7 @@ def _patch_lifespan_dependencies(
             _settings,
             hero_guide_cache=hero_guide_cache,
             catalog_repository_provider=catalog_repository_provider,
+            recent_series_cache=recent_series_cache,
         )
 
     def chat_service(*args: Any, **_kwargs: Any) -> object:

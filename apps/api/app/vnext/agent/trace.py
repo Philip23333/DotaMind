@@ -17,6 +17,7 @@ from app.vnext.agent.answer_stage import (
 )
 from app.vnext.agent.context_accounting import build_context_accounting
 from app.vnext.agent.context_capacity import RequestCapacity
+from app.vnext.agent.output_budget import OutputBudget
 from app.vnext.agent.runtime_context import RuntimeContext
 from app.vnext.agent.transcript_rewrite import TranscriptRewriteEvent
 from app.vnext.llm.diagnostics import ModelFailureDiagnostics
@@ -45,12 +46,12 @@ class AgentTraceCollector:
         *,
         step: int,
         purpose: Literal["execution", "primary_answer", "degraded_answer", "compaction"],
+        output_budget: OutputBudget | None = None,
     ) -> str | None:
         if not self._capture_full_calls:
             return None
         call_id = str(uuid4())
-        self._trace["model_calls"].append(
-            {
+        call = {
                 "call_id": call_id,
                 "step": step,
                 "purpose": purpose,
@@ -63,7 +64,9 @@ class AgentTraceCollector:
                 "error_code": None,
                 "failure_diagnostics": None,
             }
-        )
+        if output_budget is not None:
+            call["output_budget"] = output_budget.to_dict()
+        self._trace["model_calls"].append(call)
         return call_id
 
     def model_call_response(self, call_id: str | None, response: ModelResponse) -> None:
@@ -140,6 +143,7 @@ class AgentTraceCollector:
         conversation_messages: Sequence[Message] | None = None,
         task_context_messages: Sequence[Message] | None = None,
         task_context_payload: dict[str, Any] | None = None,
+        output_budget: OutputBudget | None = None,
     ) -> None:
         """Record one model invocation without persisting its runtime prompt."""
 
@@ -150,6 +154,8 @@ class AgentTraceCollector:
         )
         item = self._step(request.step)
         item["model_request"] = traced_request.model_dump(mode="json")
+        if output_budget is not None:
+            item["output_budget"] = output_budget.to_dict()
         item["runtime_context"] = (
             runtime_context_to_dict(runtime_context) if runtime_context is not None else None
         )
@@ -173,7 +179,13 @@ class AgentTraceCollector:
 
         item = self._step(step)
         attempt: dict[str, Any] = {}
-        for field in ("model_request", "runtime_context", "context_accounting", "streamed_text"):
+        for field in (
+            "model_request",
+            "runtime_context",
+            "context_accounting",
+            "output_budget",
+            "streamed_text",
+        ):
             if field in item:
                 attempt[field] = deepcopy(item.pop(field))
         attempt["error_code"] = error_code
@@ -442,10 +454,13 @@ class AgentTraceCollector:
                     "measurement": capacity.measurement,
                     "context_bytes": capacity.context_bytes,
                     "estimated_input_tokens": capacity.estimated_input_tokens,
-                    "reserved_output_tokens": capacity.reserved_output_tokens,
+                    "expected_output_tokens": capacity.expected_output_tokens,
+                    "actual_output_tokens": capacity.actual_output_tokens,
+                    "remaining_output_tokens": capacity.remaining_output_tokens,
+                    "clipped_by_context": capacity.clipped_by_context,
                     "safety_margin_tokens": capacity.safety_margin_tokens,
                     "context_window_tokens": capacity.context_window_tokens,
-                    "available_input_tokens": capacity.available_input_tokens,
+                    "test_input_budget_tokens": capacity.test_input_budget_tokens,
                     "compaction_reserve_tokens": capacity.compaction_reserve_tokens,
                     "production_trigger_input_tokens": capacity.production_trigger_input_tokens,
                     "test_trigger_percent": capacity.test_trigger_percent,

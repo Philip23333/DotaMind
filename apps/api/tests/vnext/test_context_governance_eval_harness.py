@@ -57,7 +57,7 @@ def _settings(*, window: int | None = 500_000) -> VNextSettings:
             compaction_max_input_bytes=100_000,
             compaction_reserve_tokens=320,
             context_window_tokens=window,
-            context_output_reserve_tokens=512,
+            application_max_output_tokens=512,
             context_safety_margin_tokens=128,
             context_estimate_bytes_per_token=2,
             context_compaction_test_trigger_percent=75,
@@ -146,7 +146,7 @@ def test_baseline_business_output_cap_matches_other_profiles_and_summary_keeps_i
             provider = _RecordingClient()
             evaluator = EvaluationModelClient(
                 provider,
-                output_token_limit=prepared.limits.context_output_reserve_tokens,
+                output_token_limit=prepared.limits.application_max_output_tokens,
                 max_model_calls=2,
                 max_wall_seconds=20,
                 started_at=0,
@@ -173,7 +173,7 @@ def test_baseline_business_output_cap_matches_other_profiles_and_summary_keeps_i
 
     business, summaries = asyncio.run(exercise())
     assert len(set(business)) == 1
-    assert business[0] == _settings().agent_limits.context_output_reserve_tokens
+    assert business[0] == _settings().agent_limits.application_max_output_tokens
     assert summaries == [256, 256, 256]
 
 
@@ -383,7 +383,7 @@ def test_two_questions_share_real_session_artifact_and_summary_and_reset_task_st
     started = 0.0
     evaluator_client = EvaluationModelClient(
         model,
-        output_token_limit=prepared.limits.context_output_reserve_tokens,
+        output_token_limit=prepared.limits.application_max_output_tokens,
         max_model_calls=12,
         max_wall_seconds=120,
         started_at=started,

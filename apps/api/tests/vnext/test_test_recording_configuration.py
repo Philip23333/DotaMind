@@ -18,6 +18,8 @@ def _clear_settings_environment(monkeypatch: pytest.MonkeyPatch) -> None:
         "DOTAMIND_LLM_BASE_URL",
         "DOTAMIND_LLM_MODEL",
         "DOTAMIND_CONTEXT_WINDOW_TOKENS",
+        "DOTAMIND_MODEL_MAX_OUTPUT_TOKENS",
+        "DOTAMIND_APPLICATION_MAX_OUTPUT_TOKENS",
         "DOTAMIND_COMPACTION_RESERVE_TOKENS",
         "DOTAMIND_CONTEXT_COMPACTION_TEST_TRIGGER_PERCENT",
         "VNEXT_TEST_RECORDING_ENABLED",
@@ -39,7 +41,7 @@ def test_model_and_context_settings_read_from_temporary_env_file(
         "DOTAMIND_LLM_BASE_URL=https://model.example/v1\n"
         "DOTAMIND_LLM_MODEL=unit-test-model\n"
         "DOTAMIND_CONTEXT_WINDOW_TOKENS=12000\n"
-        "DOTAMIND_CONTEXT_OUTPUT_RESERVE_TOKENS=300\n"
+        "DOTAMIND_APPLICATION_MAX_OUTPUT_TOKENS=300\n"
         "DOTAMIND_CONTEXT_SAFETY_MARGIN_TOKENS=200\n"
         "DOTAMIND_COMPACTION_RESERVE_TOKENS=10000\n",
         encoding="utf-8",
@@ -53,7 +55,7 @@ def test_model_and_context_settings_read_from_temporary_env_file(
     assert settings.llm_base_url == "https://model.example/v1"
     assert settings.llm_model == "unit-test-model"
     assert settings.agent_limits.context_window_tokens == 12000
-    assert settings.agent_limits.context_output_reserve_tokens == 300
+    assert settings.agent_limits.application_max_output_tokens == 300
     assert settings.agent_limits.context_safety_margin_tokens == 200
 
 
@@ -65,6 +67,7 @@ def test_missing_root_env_still_uses_model_and_context_environment(
     _clear_settings_environment(monkeypatch)
     monkeypatch.setenv("DOTAMIND_LLM_MODEL", "environment-model")
     monkeypatch.setenv("DOTAMIND_CONTEXT_WINDOW_TOKENS", "20000")
+    monkeypatch.setenv("DOTAMIND_APPLICATION_MAX_OUTPUT_TOKENS", "4096")
 
     settings = VNextSettings.from_env()
 
@@ -78,6 +81,7 @@ def test_test_recording_defaults_to_disabled(
 ) -> None:
     _isolate_settings_file(monkeypatch, tmp_path / "missing.env")
     monkeypatch.delenv("VNEXT_TEST_RECORDING_ENABLED", raising=False)
+    monkeypatch.setenv("DOTAMIND_APPLICATION_MAX_OUTPUT_TOKENS", "4096")
 
     assert VNextSettings().test_recording_enabled is False
     assert VNextSettings.from_env().test_recording_enabled is False
@@ -102,6 +106,7 @@ def test_test_recording_accepts_only_documented_boolean_values(
 ) -> None:
     _isolate_settings_file(monkeypatch, tmp_path / "missing.env")
     monkeypatch.setenv("VNEXT_TEST_RECORDING_ENABLED", value)
+    monkeypatch.setenv("DOTAMIND_APPLICATION_MAX_OUTPUT_TOKENS", "4096")
 
     assert VNextSettings.from_env().test_recording_enabled is expected
 
@@ -115,6 +120,7 @@ def test_environment_overrides_vnext_dotenv_values(
         "VNEXT_TEST_RECORDING_ENABLED=false\n"
         "DOTAMIND_LLM_MODEL=file-model\n"
         "DOTAMIND_CONTEXT_WINDOW_TOKENS=12000\n"
+        "DOTAMIND_APPLICATION_MAX_OUTPUT_TOKENS=4096\n"
         "DOTAMIND_COMPACTION_RESERVE_TOKENS=10000\n",
         encoding="utf-8",
     )
@@ -139,6 +145,7 @@ def test_invalid_test_recording_value_is_a_configuration_error(
 ) -> None:
     _isolate_settings_file(monkeypatch, tmp_path / "missing.env")
     monkeypatch.setenv("VNEXT_TEST_RECORDING_ENABLED", value)
+    monkeypatch.setenv("DOTAMIND_APPLICATION_MAX_OUTPUT_TOKENS", "4096")
 
     with pytest.raises(ValueError, match="VNEXT_TEST_RECORDING_ENABLED"):
         VNextSettings.from_env()

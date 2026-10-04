@@ -54,7 +54,9 @@ def _product_runtime(
         "OpenAICompatibleModelClient",
         lambda **_: model,
     )
-    settings = composition.VNextSettings(agent_limits=limits or AgentLimits())
+    settings = composition.VNextSettings(
+        agent_limits=limits or AgentLimits(application_max_output_tokens=4096)
+    )
     return composition.build_vnext_runtime(
         settings=settings,
         services=composition.VNextServices(),
@@ -93,7 +95,7 @@ def test_product_composition_shares_identity_with_execution_and_primary_answer(
         deadline_seconds=5,
         answer_timeout_seconds=5,
         context_window_tokens=100_000,
-        context_output_reserve_tokens=512,
+        application_max_output_tokens=512,
         context_safety_margin_tokens=128,
         context_estimate_bytes_per_token=1,
     )
@@ -195,6 +197,7 @@ def test_compaction_rebuild_does_not_duplicate_or_persist_product_identity(
     limits = AgentLimits(
         deadline_seconds=5,
         answer_timeout_seconds=5,
+        application_max_output_tokens=4096,
         compaction_keep_recent_tokens=1,
         compaction_max_input_bytes=10_000,
         compaction_reserve_tokens=160,
@@ -249,7 +252,11 @@ def test_general_runtime_remains_usable_without_product_identity() -> None:
     model = _StrictModel(
         [ModelResponse.from_final("execution"), ModelResponse.from_final("answer")]
     )
-    runtime = AgentRuntime(model, ToolRegistry(), limits=AgentLimits(deadline_seconds=5))
+    runtime = AgentRuntime(
+        model,
+        ToolRegistry(),
+        limits=AgentLimits(deadline_seconds=5, application_max_output_tokens=4096),
+    )
 
     result = _run(runtime.run([UserMessage(content="hello")]))
 

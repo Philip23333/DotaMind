@@ -121,7 +121,9 @@ def test_composition_uses_one_registry_for_schemas_and_shared_inventory(
 
     monkeypatch.setattr(composition, "build_vnext_registry", capture_builder)
     runtime = composition.build_vnext_runtime(
-        settings=composition.VNextSettings(),
+        settings=composition.VNextSettings(
+            agent_limits=AgentLimits(application_max_output_tokens=4096)
+        ),
         services=composition.VNextServices(hero_guide=_offline_guide if guide_enabled else None),
     )
     messages = [UserMessage(content="What can you do?")]
@@ -160,7 +162,9 @@ def test_empty_registry_is_explicit_and_is_the_runtime_registry(
     monkeypatch.setattr(composition, "OpenAICompatibleModelClient", lambda **_: model)
     monkeypatch.setattr(composition, "build_vnext_registry", build_empty)
     runtime = composition.build_vnext_runtime(
-        settings=composition.VNextSettings(),
+        settings=composition.VNextSettings(
+            agent_limits=AgentLimits(application_max_output_tokens=4096)
+        ),
         services=composition.VNextServices(),
     )
 
@@ -227,7 +231,9 @@ def test_old_refusals_do_not_hide_guide_schema_or_answer_evidence(
     model = ScriptedTranscriptModelClient([query_guide, finish_execution, answer])
     monkeypatch.setattr(composition, "OpenAICompatibleModelClient", lambda **_: model)
     runtime = composition.build_vnext_runtime(
-        settings=composition.VNextSettings(),
+        settings=composition.VNextSettings(
+            agent_limits=AgentLimits(application_max_output_tokens=4096)
+        ),
         services=composition.VNextServices(hero_guide=lookup),
     )
 
@@ -263,7 +269,7 @@ def test_answer_overflow_retry_and_degraded_answer_keep_inventory_once(
         compaction_max_input_bytes=100_000,
         compaction_reserve_tokens=160,
         context_window_tokens=100_000,
-        context_output_reserve_tokens=64,
+        application_max_output_tokens=64,
         context_safety_margin_tokens=16,
         context_estimate_bytes_per_token=1,
     )

@@ -116,10 +116,11 @@ provider usage 估算单组消息。完整工具调用/返回组不可拆分；�
 `R=compaction_reserve_tokens`、`E=estimated_input_tokens`，生产触发条件仍为
 `E > W-R`（整数阈值 `W-R+1`）。配置窗口时必须满足 `R < W`。
 
-动态输出预算与模型响应失败恢复的权威目标契约见
-[`model_output_and_recovery.md`](model_output_and_recovery.md)。设计已确认，实现与验收待完成；
-当前代码可能仍采用旧输出预算和失败出口。目标区分裁剪前的**期望输出上限**和按当前输入
-空间裁剪后的**实际输出上限**。测试提前触发的独立配置
+动态输出预算与模型响应失败恢复的权威契约见
+[`model_output_and_recovery.md`](model_output_and_recovery.md)。动态输出预算的配置、Runtime、
+容量检查和 trace 接线已实现并离线验收；整批拒绝、生成纠错与回答截断恢复仍待实现。
+当前运行时区分裁剪前的**期望输出上限**和按当前输入空间裁剪后的**实际输出上限**。
+测试提前触发的独立配置
 `context_compaction_test_trigger_percent=P`（环境变量
 `DOTAMIND_CONTEXT_COMPACTION_TEST_TRIGGER_PERCENT`）基于期望输出上限计算：
 `A=max(0, W-expected_output_cap-context_safety_margin_tokens)`，
@@ -150,9 +151,9 @@ provider usage 估算单组消息。完整工具调用/返回组不可拆分；�
 输出 token 限额与输入 UTF-8 字节限额是不同边界。摘要正文没有独立的字节上限，
 但每个摘要请求输入仍受 `compaction_max_input_bytes` 限制（当前 256 KiB），提交后的
 完整请求也由容量检查计量。摘要输出仍独立使用各自的 reserve 派生额度和可选摘要模型上限。
-目标设计取消 `context_output_reserve_tokens` 对普通请求输出预算的旧用途；后续实现应删除
-该旧用途，不暗中把它映射成模型上限、应用上限或安全余量。当前代码和配置尚可能继续使用它，
-不能在本轮文档修改中将目标写成现状。reserve 仍参与生产触发线和摘要预算推导；不要通过把
+普通模型输出上限通过 `DOTAMIND_MODEL_MAX_OUTPUT_TOKENS` 与可选的
+`DOTAMIND_APPLICATION_MAX_OUTPUT_TOKENS` 配置；旧
+`DOTAMIND_CONTEXT_OUTPUT_RESERVE_TOKENS` 不再读取，也不映射到新字段。reserve 仍参与生产触发线和摘要预算推导；不要通过把
 reserve 调成窗口的 70% 模拟 30% 测试水位。增加 reserve 可降低摘要被截断的概率，但不能保证
 摘要一定完成。
 
@@ -300,7 +301,8 @@ Checkpoint 如保留，仅承担任务进度语义。
 | 压缩后仍过大、无可压缩范围 | 明确容量出口，不发送已知超限请求 |
 | 跨会话或会话状态丢失 | 隔离读取，不宣称失效资料仍可恢复 |
 
-上述已完成场景不表示新的输出预算与响应纠错已实现。该设计的离线验收另行待完成：
+动态输出预算已完成以下离线验收：空间充足、按当前请求裁剪、无可用输出空间、压缩后重算、
+普通阶段预算与 trace 一致、未配置输出上限时不发送模型请求。以下**响应恢复**场景仍待验收：
 
 | 待验收场景 | 必须验证 |
 | --- | --- |
@@ -312,9 +314,8 @@ Checkpoint 如保留，仅承担任务进度语义。
 | 纠错耗尽 | 已完成 checkpoint 保留；部分回答说明缺口；无任务计划时也不推断完整完成 |
 | 主回答和降级回答截断 | 失败 attempt 被替换；降级截断转确定性兜底，不保存截断文本为 canonical final |
 | 普通 schema 错误和 provider overflow | 保持现有逐工具反馈和一次压缩恢复，不重放已完成工具 |
-| 动态输出预算 | 覆盖空间充足、需要裁剪、没有可用空间及压缩后按新输入重算 |
 
-以上为设计待验收项，不代表代码、Provider 兼容或线上历史响应已验证。
+以上剩余项仍为设计待验收项。动态输出预算的离线通过不代表 Provider 兼容或线上历史响应已验证。
 
 确定性测试验证机械边界；真实模型 traces / evals 验证摘要质量及任务行为。
 记录回答正确性/遗漏、完整请求峰值、摘要和定位清单开销、压缩/恢复次数、

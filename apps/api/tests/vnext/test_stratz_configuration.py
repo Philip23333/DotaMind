@@ -16,6 +16,7 @@ def _isolate_environment(monkeypatch: pytest.MonkeyPatch, env_file) -> None:
     monkeypatch.setattr(composition, "_VNEXT_ENV_PATH", env_file)
     for name in _STRATZ_ENV_NAMES:
         monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("DOTAMIND_APPLICATION_MAX_OUTPUT_TOKENS", "4096")
 
 
 def test_stratz_settings_default_and_root_dotenv_are_isolated(tmp_path, monkeypatch) -> None:

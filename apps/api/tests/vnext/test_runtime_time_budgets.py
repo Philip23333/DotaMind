@@ -112,7 +112,11 @@ def test_execution_prompt_tracks_40_and_20_percent_deadline_boundaries(
     runtime = _ClockedRuntime(
         model,
         _registry(),
-        limits=AgentLimits(deadline_seconds=100, answer_timeout_seconds=60),
+        limits=AgentLimits(
+            deadline_seconds=100,
+            answer_timeout_seconds=60,
+            application_max_output_tokens=4096,
+        ),
     )
 
     result = asyncio.run(runtime.run([UserMessage(content="hello")], trace_collector=collector))
@@ -147,7 +151,11 @@ def test_answer_gets_a_fresh_budget_after_execution_uses_its_deadline(
     runtime = _ClockedRuntime(
         model,
         ToolRegistry(),
-        limits=AgentLimits(deadline_seconds=10, answer_timeout_seconds=60),
+        limits=AgentLimits(
+            deadline_seconds=10,
+            answer_timeout_seconds=60,
+            application_max_output_tokens=4096,
+        ),
     )
 
     result = asyncio.run(runtime.run([UserMessage(content="hello")]))
@@ -174,7 +182,11 @@ def test_degraded_answer_uses_remaining_primary_answer_budget(monkeypatch) -> No
     runtime = _ClockedRuntime(
         model,
         ToolRegistry(),
-        limits=AgentLimits(deadline_seconds=10, answer_timeout_seconds=60),
+        limits=AgentLimits(
+            deadline_seconds=10,
+            answer_timeout_seconds=60,
+            application_max_output_tokens=4096,
+        ),
     )
 
     result = asyncio.run(runtime.run([UserMessage(content="hello")], trace_collector=collector))
@@ -202,7 +214,11 @@ def test_exhausted_answer_budget_skips_degraded_model_call(monkeypatch) -> None:
     runtime = _ClockedRuntime(
         model,
         ToolRegistry(),
-        limits=AgentLimits(deadline_seconds=10, answer_timeout_seconds=60),
+        limits=AgentLimits(
+            deadline_seconds=10,
+            answer_timeout_seconds=60,
+            application_max_output_tokens=4096,
+        ),
     )
 
     result = asyncio.run(runtime.run([UserMessage(content="hello")], trace_collector=collector))
@@ -233,7 +249,7 @@ def test_answer_runtime_prompt_is_capacity_counted_but_not_persisted(monkeypatch
         deadline_seconds=10,
         answer_timeout_seconds=60,
         context_window_tokens=100_000,
-        context_output_reserve_tokens=256,
+        application_max_output_tokens=256,
         context_safety_margin_tokens=64,
     )
     collector = AgentTraceCollector()

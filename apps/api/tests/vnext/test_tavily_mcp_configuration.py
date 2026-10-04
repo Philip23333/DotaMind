@@ -24,6 +24,7 @@ def test_tavily_settings_follow_environment_over_root_env_and_hide_key(
         encoding="utf-8",
     )
     monkeypatch.setattr("app.vnext.composition._VNEXT_ENV_PATH", env_file)
+    monkeypatch.setenv("DOTAMIND_APPLICATION_MAX_OUTPUT_TOKENS", "4096")
     monkeypatch.setenv("DOTAMIND_TAVILY_MCP_ENABLED", "true")
     monkeypatch.setenv("DOTAMIND_TAVILY_API_KEY", "environment-key-marker")
 
@@ -47,6 +48,7 @@ def test_tavily_timeout_requires_a_finite_positive_number(
         "app.vnext.composition._VNEXT_ENV_PATH",
         tmp_path / "missing.env",
     )
+    monkeypatch.setenv("DOTAMIND_APPLICATION_MAX_OUTPUT_TOKENS", "4096")
     monkeypatch.setenv("DOTAMIND_TAVILY_MCP_TIMEOUT_SECONDS", value)
     with pytest.raises(ValueError, match="DOTAMIND_TAVILY_MCP_TIMEOUT_SECONDS"):
         VNextSettings.from_env()

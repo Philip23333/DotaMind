@@ -101,7 +101,7 @@ def _limits(
         compaction_max_input_bytes=100_000,
         compaction_reserve_tokens=160,
         context_window_tokens=context_window_tokens,
-        context_output_reserve_tokens=64,
+        application_max_output_tokens=64,
         context_safety_margin_tokens=16,
         context_estimate_bytes_per_token=1,
     )
@@ -174,7 +174,6 @@ def _execution_request(
         execution_history=history,
         step=1,
         deadline=_Deadline(None),
-        auto_compaction_enabled=True,
     )
     return request
 

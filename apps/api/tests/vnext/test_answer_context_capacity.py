@@ -136,7 +136,7 @@ def _answer_request(
         context=context,
         step=step,
         max_output_tokens=(
-            limits.context_output_reserve_tokens
+            limits.application_max_output_tokens
             if limits.context_window_tokens is not None
             else None
         ),
@@ -231,7 +231,7 @@ def test_execution_critical_can_use_a_tool_free_answer_request() -> None:
     assert result.content == "answer"
     assert len(model.requests) == 1
     assert model.requests[0].tools == []
-    assert model.requests[0].max_output_tokens == limits.context_output_reserve_tokens
+    assert model.requests[0].max_output_tokens == limits.application_max_output_tokens
     assert [event.step for event in events if isinstance(event, ModelRequested)] == [2]
     assert not any(isinstance(event, ToolStarted) for event in events)
     checks = trace.snapshot()["context_capacity_checks"]
@@ -347,7 +347,7 @@ def test_execution_capacity_attempt_is_not_repeated_by_primary_answer() -> None:
     final_request = _probe_request(compacted, registry, limits=probe_limits)
     final_capacity = assess_request_capacity(final_request, probe_limits)
     assert final_capacity is not None
-    limits = _limits_for_available(final_capacity.estimated_input_tokens)
+    limits = _limits_for_available(final_capacity.estimated_input_tokens - 64)
     model = ScriptedModelClient(
         [ModelResponse.from_final("compressed background", finish_reason="stop")]
     )
@@ -360,7 +360,7 @@ def test_execution_capacity_attempt_is_not_repeated_by_primary_answer() -> None:
         trace_collector=trace,
     )
 
-    assert "context budget was exhausted" in result.content
+    assert "available context budget" in result.content
     assert len(trace.snapshot()["compaction_calls"]) == 1
     assert [commit["step"] for commit in trace.snapshot()["compaction_commits"]] == [1]
     assert not any(

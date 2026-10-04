@@ -121,14 +121,27 @@ token setting; the old byte variable is no longer read.
 These output-token limits are independent from the existing serialized-input
 byte limit (`DOTAMIND_COMPACTION_MAX_INPUT_BYTES`, currently 256 KiB). Summary
 text has no separate 8 KiB byte ceiling, but a summary request whose serialized
-input exceeds that 256 KiB limit fails before a model call. The complete rebuilt
-model request remains subject to capacity checks. Ordinary answer output
-continues to use `DOTAMIND_CONTEXT_OUTPUT_RESERVE_TOKENS`.
+input exceeds that 256 KiB limit fails before a model call. Summary calls keep
+their independent reserve-derived budgets.
 
-Dynamic output budgeting and model-response recovery have a confirmed target
-design in [model_output_and_recovery.md](docs/agent/model_output_and_recovery.md),
-but are not implemented or available as configuration yet. The setting above
-describes current behavior until that implementation is accepted.
+Ordinary execution and answer calls require at least one of
+`DOTAMIND_MODEL_MAX_OUTPUT_TOKENS` or
+`DOTAMIND_APPLICATION_MAX_OUTPUT_TOKENS`. The model cap records the known
+per-response limit for the configured model/provider; the application cap is an
+optional operator ceiling. If both are set, the lower value is the expected
+output cap. With `DOTAMIND_CONTEXT_WINDOW_TOKENS` configured, Runtime measures
+the complete request input and clips that expected cap to the space remaining
+after `DOTAMIND_CONTEXT_SAFETY_MARGIN_TOKENS`. Without a context window, calls
+still use the finite expected cap, while automatic capacity governance remains
+disabled. These values must be configured from verified model/provider limits;
+the repository does not assert a universal default. The former
+`DOTAMIND_CONTEXT_OUTPUT_RESERVE_TOKENS` setting is no longer read and is not
+mapped to either cap.
+
+Dynamic output budgeting is implemented. JSON correction, whole-batch refusal,
+and bounded generation recovery remain pending; live Provider compatibility
+validation is also pending. See the authoritative
+[model output and recovery contract](docs/agent/model_output_and_recovery.md).
 
 Automatic compaction uses the production threshold when the test override is
 blank:

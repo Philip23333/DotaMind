@@ -92,7 +92,7 @@ def _overflow_limits() -> AgentLimits:
         compaction_max_input_bytes=100_000,
         compaction_reserve_tokens=160,
         context_window_tokens=100_000,
-        context_output_reserve_tokens=64,
+        application_max_output_tokens=64,
         context_safety_margin_tokens=16,
         context_estimate_bytes_per_token=1,
     )
@@ -129,7 +129,11 @@ def test_normal_success_has_one_stage_and_primary_identity_for_text_and_final() 
             [ModelTextDelta(text="answer "), ModelResponse.from_final("answer")],
         ]
     )
-    runtime = AgentRuntime(model, ToolRegistry(), limits=AgentLimits(deadline_seconds=2))
+    runtime = AgentRuntime(
+        model,
+        ToolRegistry(),
+        limits=AgentLimits(deadline_seconds=2, application_max_output_tokens=4096),
+    )
 
     events = _collect_sync(runtime)
 
@@ -151,7 +155,7 @@ def test_direct_deterministic_answer_does_not_add_a_model_call() -> None:
     runtime = AgentRuntime(
         model,
         ToolRegistry(),
-        limits=AgentLimits(deadline_seconds=2),
+        limits=AgentLimits(deadline_seconds=2, application_max_output_tokens=4096),
         task_state_coordinator=coordinator,
     )
 
@@ -180,7 +184,11 @@ def test_primary_failure_then_degraded_success_uses_new_identity() -> None:
             [ModelTextDelta(text="degraded "), ModelResponse.from_final("degraded")],
         ]
     )
-    runtime = AgentRuntime(model, ToolRegistry(), limits=AgentLimits(deadline_seconds=2))
+    runtime = AgentRuntime(
+        model,
+        ToolRegistry(),
+        limits=AgentLimits(deadline_seconds=2, application_max_output_tokens=4096),
+    )
 
     events = _collect_sync(runtime)
 
@@ -203,7 +211,11 @@ def test_primary_and_degraded_failure_select_deterministic_once() -> None:
             RuntimeError("degraded unavailable"),
         ]
     )
-    runtime = AgentRuntime(model, ToolRegistry(), limits=AgentLimits(deadline_seconds=2))
+    runtime = AgentRuntime(
+        model,
+        ToolRegistry(),
+        limits=AgentLimits(deadline_seconds=2, application_max_output_tokens=4096),
+    )
 
     events = _collect_sync(runtime)
 
@@ -333,7 +345,11 @@ def test_primary_preparation_capacity_failure_has_attempt_without_model_call(
     model = ScriptedModelClient(
         [ModelResponse.from_final("execution"), ModelResponse.from_final("degraded")]
     )
-    runtime = AgentRuntime(model, ToolRegistry(), limits=AgentLimits(deadline_seconds=2))
+    runtime = AgentRuntime(
+        model,
+        ToolRegistry(),
+        limits=AgentLimits(deadline_seconds=2, application_max_output_tokens=4096),
+    )
 
     events = _collect_sync(runtime)
 
@@ -371,7 +387,11 @@ def test_cancellation_during_answer_does_not_fail_attempt_or_start_fallback() ->
     runtime = AgentRuntime(
         _BlockingModel(),  # type: ignore[arg-type]
         ToolRegistry(),
-        limits=AgentLimits(deadline_seconds=2, answer_timeout_seconds=2),
+        limits=AgentLimits(
+            deadline_seconds=2,
+            answer_timeout_seconds=2,
+            application_max_output_tokens=4096,
+        ),
     )
     events: list[object] = []
 
@@ -410,7 +430,11 @@ def test_attempt_identity_is_local_to_each_runtime_invocation() -> None:
             ModelResponse.from_final("answer 2"),
         ]
     )
-    runtime = AgentRuntime(model, ToolRegistry(), limits=AgentLimits(deadline_seconds=2))
+    runtime = AgentRuntime(
+        model,
+        ToolRegistry(),
+        limits=AgentLimits(deadline_seconds=2, application_max_output_tokens=4096),
+    )
 
     first = _collect_sync(runtime)
     second = _collect_sync(runtime)
@@ -428,7 +452,11 @@ def test_event_sink_receives_same_single_ordered_stream_as_iterator() -> None:
             [ModelTextDelta(text="answer"), ModelResponse.from_final("answer")],
         ]
     )
-    runtime = AgentRuntime(model, ToolRegistry(), limits=AgentLimits(deadline_seconds=2))
+    runtime = AgentRuntime(
+        model,
+        ToolRegistry(),
+        limits=AgentLimits(deadline_seconds=2, application_max_output_tokens=4096),
+    )
     sink_events: list[object] = []
 
     async def sink(event: object) -> None:

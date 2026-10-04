@@ -187,7 +187,11 @@ def test_multiple_bounded_reads_and_small_read_survive_old_cumulative_limit() ->
     store = SessionArtifactStore()
     lookup_count = [0]
     model = _LargeRawModel()
-    runtime = AgentRuntime(model, _registry(store, lookup_count=lookup_count))
+    runtime = AgentRuntime(
+        model,
+        _registry(store, lookup_count=lookup_count),
+        limits=AgentLimits(application_max_output_tokens=4096),
+    )
     history = SessionExecutionHistory()
     request_id = uuid4()
     query = "inspect one synthetic document"
@@ -296,7 +300,11 @@ class _TwoRequestRawModel:
 def test_large_raw_history_does_not_block_reads_in_a_followup_user_request() -> None:
     store = SessionArtifactStore()
     model = _TwoRequestRawModel()
-    runtime = AgentRuntime(model, _registry(store))
+    runtime = AgentRuntime(
+        model,
+        _registry(store),
+        limits=AgentLimits(application_max_output_tokens=4096),
+    )
     history = SessionExecutionHistory()
 
     first_id = uuid4()
@@ -367,7 +375,7 @@ def test_high_full_request_still_triggers_automatic_compaction_with_large_raw_re
         deadline_seconds=20,
         answer_timeout_seconds=10,
         context_window_tokens=300_000,
-        context_output_reserve_tokens=512,
+        application_max_output_tokens=512,
         context_safety_margin_tokens=128,
         context_estimate_bytes_per_token=1,
         context_compaction_test_trigger_percent=25,

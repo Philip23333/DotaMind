@@ -784,7 +784,7 @@ def run_evaluation(
 
         evaluated_client = EvaluationModelClient(
             provider_client,
-            output_token_limit=prepared.limits.context_output_reserve_tokens,
+            output_token_limit=prepared.limits.application_max_output_tokens,
             max_model_calls=prepared.max_model_calls,
             max_wall_seconds=prepared.max_wall_seconds,
             started_at=started_at,

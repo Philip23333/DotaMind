@@ -287,7 +287,6 @@ def _parse_bool_value(
 
 
 _AGENT_LIMIT_ENV_FIELDS = (
-    ("DOTAMIND_CONTEXT_OUTPUT_RESERVE_TOKENS", "context_output_reserve_tokens"),
     ("DOTAMIND_CONTEXT_SAFETY_MARGIN_TOKENS", "context_safety_margin_tokens"),
     ("DOTAMIND_CONTEXT_ESTIMATE_BYTES_PER_TOKEN", "context_estimate_bytes_per_token"),
     ("DOTAMIND_COMPACTION_KEEP_RECENT_TOKENS", "compaction_keep_recent_tokens"),
@@ -333,6 +332,21 @@ def _agent_limits_from_env(file_values: dict[str, str | None]) -> AgentLimits:
             model_output_name,
             model_output_value,
         )
+    for name, field_name in (
+        ("DOTAMIND_MODEL_MAX_OUTPUT_TOKENS", "model_max_output_tokens"),
+        ("DOTAMIND_APPLICATION_MAX_OUTPUT_TOKENS", "application_max_output_tokens"),
+    ):
+        raw_value = _env_value(name, None, file_values)
+        if raw_value is not None and raw_value.strip():
+            values[field_name] = _parse_positive_integer(name, raw_value)
+    if (
+        values.get("model_max_output_tokens") is None
+        and values.get("application_max_output_tokens") is None
+    ):
+        raise ValueError(
+            "configure DOTAMIND_MODEL_MAX_OUTPUT_TOKENS or "
+            "DOTAMIND_APPLICATION_MAX_OUTPUT_TOKENS before model calls"
+        )
     return AgentLimits(**values)
 
 
@@ -356,6 +370,13 @@ def _parse_required_integer(name: str, value: str) -> int:
     if not value.strip():
         raise ValueError(f"{name} must be an integer")
     return _parse_integer(name, value)
+
+
+def _parse_positive_integer(name: str, value: str) -> int:
+    parsed = _parse_required_integer(name, value)
+    if parsed <= 0:
+        raise ValueError(f"{name} must be a positive integer")
+    return parsed
 
 
 def _parse_integer(name: str, value: str) -> int:

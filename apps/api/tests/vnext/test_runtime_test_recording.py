@@ -97,7 +97,7 @@ def test_full_recording_captures_the_actual_request_and_response() -> None:
         limits=AgentLimits(
             deadline_seconds=2,
             context_window_tokens=100_000,
-            context_output_reserve_tokens=2048,
+            application_max_output_tokens=2048,
         ),
         system_instruction="runtime-owned system instruction",
     )
@@ -175,7 +175,11 @@ def test_split_compaction_calls_use_existing_full_call_recording() -> None:
     runtime = AgentRuntime(
         model,
         ToolRegistry(),
-        limits=AgentLimits(deadline_seconds=2, compaction_keep_recent_tokens=1),
+        limits=AgentLimits(
+            deadline_seconds=2,
+            compaction_keep_recent_tokens=1,
+            application_max_output_tokens=4096,
+        ),
     )
 
     asyncio.run(
@@ -596,6 +600,7 @@ def test_runtime_does_not_execute_tool_from_malformed_provider_arguments() -> No
             transport=httpx.MockTransport(handler),
         ),
         tools,
+        limits=AgentLimits(application_max_output_tokens=4096),
     )
     trace = AgentTraceCollector(capture_full_calls=True)
 
