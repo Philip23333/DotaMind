@@ -30,6 +30,38 @@ class ToolCall(_Message):
     arguments: dict[str, Any] = Field(default_factory=dict)
 
 
+class RawToolCall(_Message):
+    """A provider tool call retained before execution eligibility is decided."""
+
+    index: int = Field(ge=0, strict=True)
+    id: str = Field(min_length=1, strict=True)
+    name: str = Field(min_length=1, strict=True)
+    provider_name: str = Field(min_length=1, strict=True)
+    raw_arguments: str = Field(strict=True)
+
+
+class ToolArgumentFailure(_Message):
+    """Bounded parse location and category for one rejected argument value."""
+
+    call_index: int = Field(ge=0, strict=True)
+    kind: Literal["invalid_json", "non_object_json"]
+    message: str = Field(min_length=1)
+    position: int | None = Field(default=None, ge=0, strict=True)
+    line: int | None = Field(default=None, ge=1, strict=True)
+    column: int | None = Field(default=None, ge=1, strict=True)
+
+
+class RejectedToolCallBatch(_Message):
+    """Complete raw tool-call batch rejected before any call can execute."""
+
+    reason: Literal["invalid_tool_arguments", "tool_response_truncated"]
+    content: str | None = None
+    calls: list[RawToolCall] = Field(min_length=1)
+    argument_failures: list[ToolArgumentFailure] = Field(default_factory=list)
+    finish_reason: str | None = None
+    usage: dict[str, Any] = Field(default_factory=dict)
+
+
 class AssistantMessage(_Message):
     role: Literal["assistant"] = "assistant"
     content: str | None = None
@@ -139,8 +171,11 @@ __all__ = [
     "ModelResponse",
     "ModelTextDelta",
     "ModelTool",
+    "RawToolCall",
+    "RejectedToolCallBatch",
     "SystemMessage",
     "StreamingModelClient",
+    "ToolArgumentFailure",
     "ToolError",
     "ToolErrorCode",
     "ToolCall",

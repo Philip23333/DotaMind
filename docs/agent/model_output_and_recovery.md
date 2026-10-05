@@ -1,8 +1,9 @@
 # Model Output Budgets and Failure Recovery
 
-> **Status: dynamic output budgets are implemented and offline-tested.**
-> Whole-batch rejection, generation correction, and answer-truncation recovery remain
-> pending; live Provider compatibility has not been verified.
+> **Status: dynamic output budgets and Adapter-side tool-call batch classification are implemented and offline-tested.**
+> Runtime history encoding, paired non-execution feedback, generation correction,
+> and answer-truncation recovery remain pending; live Provider compatibility has
+> not been verified.
 
 This document is the single authority for dynamic model output budgets,
 model-response failure representation, and bounded generation correction.
@@ -26,12 +27,17 @@ The confirmed target establishes:
 - replacement of truncated answer attempts, followed by a deterministic fallback
   when the degraded answer is also truncated.
 
-The dynamic-budget portion is implemented: configuration, Runtime request caps,
-capacity checks, and trace fields use the rules below. Response classification,
-batch refusal, correction, and answer-truncation handling still describe the
-pending behavior. This work does not define content controls, prompt policy, or a
-new user-visible content limit. It also does not add a total step limit, a new
-retry for provider transport failures, or a second overflow recovery allowance.
+Dynamic budgets are implemented. The Adapter also now validates every tool call
+identity and argument carrier before parsing arguments, classifies every argument
+as a JSON object or a structured failure, and rejects tool-call responses ending
+with `finish_reason=length`. It preserves the rejected raw batch in a typed
+provider-neutral exception while attaching only existing bounded diagnostics.
+Runtime still follows its existing terminal model-error path for this exception:
+it does not yet create paired non-execution history results or retry generation.
+The rules below define that later Runtime behavior. This work does not define
+content controls, prompt policy, or a new user-visible content limit. It also does
+not add a total step limit, a new retry for provider transport failures, or a
+second overflow recovery allowance.
 
 ## 2. Configuration responsibilities
 
@@ -160,11 +166,24 @@ execution permission:
 | Explicit context-window overflow | Do not replay completed tools | Keep the existing single compaction recovery |
 | Other transport/authentication/rate-limit error | Not treated as a parameter error | Keep its existing handling |
 
+Adapter classification and typed rejected-batch preservation are implemented and
+offline-tested for complete and streamed responses. Runtime recovery actions in
+this matrix remain target behavior until the paired history and correction work
+is implemented. Protocol identity or outer-response errors still use the
+existing protocol-error exit.
+
 ## 5. Whole-batch execution gate and history
 
-Runtime waits for the response to finish, validates the outer call identities,
-and parses every call's raw argument string before starting any handler. If any
-argument JSON is invalid, or a response containing tool calls ends with
+This section is the target Runtime history contract. The current Adapter rejects
+the entire response before returning a ModelResponse, so handlers do not run,
+but Runtime still terminates through its existing model-error path and does not
+yet append the paired history described here.
+
+The Adapter waits for the response to finish and validates the outer call
+identities and every raw argument string before returning a usable ModelResponse.
+Runtime treats the typed rejected-batch exception as non-executable, appends its
+paired feedback, and only executes a valid ModelResponse. If any argument JSON
+is invalid, or a response containing tool calls ends with
 finish_reason=length, the whole batch has zero executions. A call whose JSON is
 valid does not get to run merely because another call in its batch failed.
 

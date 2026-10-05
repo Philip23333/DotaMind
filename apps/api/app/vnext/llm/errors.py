@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from app.vnext.llm.diagnostics import ModelFailureDiagnostics
+from app.vnext.llm.protocol import RejectedToolCallBatch
 
 
 class ModelResponseDiagnosticError(RuntimeError):
@@ -16,6 +17,22 @@ class ModelResponseDiagnosticError(RuntimeError):
     ) -> None:
         super().__init__(message)
         self.diagnostics = diagnostics
+
+
+class ModelToolCallBatchRejected(ModelResponseDiagnosticError):
+    """A complete tool-call response was rejected before any call could run."""
+
+    def __init__(
+        self,
+        *,
+        batch: RejectedToolCallBatch,
+        diagnostics: ModelFailureDiagnostics | None = None,
+    ) -> None:
+        super().__init__(
+            f"model tool-call batch rejected: {batch.reason}",
+            diagnostics=diagnostics,
+        )
+        self.batch = batch
 
 
 class ModelContextWindowError(RuntimeError):
@@ -34,5 +51,6 @@ class ModelTransientError(RuntimeError):
 __all__ = [
     "ModelContextWindowError",
     "ModelResponseDiagnosticError",
+    "ModelToolCallBatchRejected",
     "ModelTransientError",
 ]

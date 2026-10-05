@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import json
 
+import httpx
 import pytest
 from pydantic import BaseModel, ConfigDict
 
-from app.vnext.agent.errors import AgentCancelledError, ModelProtocolError
+from app.vnext.agent.errors import AgentCancelledError, ModelProtocolError, ModelProviderError
 from app.vnext.agent.events import AgentCompleted, TextDelta
 from app.vnext.agent.limits import AgentLimits
 from app.vnext.agent.runtime import AgentRuntime, CancellationToken
@@ -18,6 +20,7 @@ from app.vnext.agent.task_state import (
 )
 from app.vnext.agent.trace import AgentTraceCollector
 from app.vnext.artifacts import ArtifactReadResult
+from app.vnext.llm.openai_compatible import OpenAICompatibleModelClient
 from app.vnext.llm.protocol import (
     AssistantMessage,
     ModelResponse,
@@ -142,6 +145,78 @@ def test_tool_execution_is_followed_by_tool_free_answer_request() -> None:
     assert model.requests[1].messages[-1].tool_call_id == "call-1"  # type: ignore[union-attr]
     assert model.requests[2].tools == []
     assert "Other successful tool observations" in model.requests[2].messages[-1].content
+
+
+def test_rejected_tool_call_batch_stays_on_existing_terminal_runtime_path() -> None:
+    provider_requests = 0
+    handler_calls: list[int] = []
+
+    def provider(request: httpx.Request) -> httpx.Response:
+        nonlocal provider_requests
+        provider_requests += 1
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": None,
+                            "tool_calls": [
+                                {
+                                    "id": "call-valid",
+                                    "type": "function",
+                                    "function": {"name": "echo", "arguments": '{"value":1}'},
+                                },
+                                {
+                                    "id": "call-invalid",
+                                    "type": "function",
+                                    "function": {"name": "echo", "arguments": "{"},
+                                },
+                            ],
+                        },
+                        "finish_reason": "tool_calls",
+                    }
+                ]
+            },
+            request=request,
+        )
+
+    def handler(args: EchoInput) -> EchoOutput:
+        handler_calls.append(args.value)
+        return EchoOutput(value=args.value)
+
+    model = OpenAICompatibleModelClient(
+        api_key="test-key",
+        base_url="https://provider.test/v1",
+        model="test-model",
+        transport=httpx.MockTransport(provider),
+    )
+    coordinator = TaskStateCoordinator()
+    coordinator.plan = TaskPlan(
+        items=(TaskItem("A", "Collect A", TaskItemStatus.PENDING),),
+        current_key="A",
+    )
+    collector = AgentTraceCollector()
+    runtime = AgentRuntime(
+        model,
+        _registry(handler),
+        limits=AgentLimits(application_max_output_tokens=4096, deadline_seconds=2),
+        task_state_coordinator=coordinator,
+    )
+
+    with pytest.raises(ModelProviderError):
+        _run(runtime, trace_collector=collector)
+
+    assert provider_requests == 1
+    assert handler_calls == []
+    assert coordinator.store.list() == []
+    plan = coordinator.plan_snapshot()
+    assert plan is not None
+    assert plan.items[0].status == TaskItemStatus.PENDING
+    assert coordinator.source_owners_snapshot() == []
+    trace = collector.snapshot()
+    assert trace["terminal"]["status"] == "failed"
+    assert '"batch"' not in json.dumps(trace)
 
 
 def test_execution_continues_beyond_twenty_steps_then_answers() -> None:

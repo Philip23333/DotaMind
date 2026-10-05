@@ -1,8 +1,7 @@
 """Provider-neutral model protocol and transport adapters."""
 
-from app.vnext.llm.errors import ModelContextWindowError
+from app.vnext.llm.errors import ModelContextWindowError, ModelToolCallBatchRejected
 from app.vnext.llm.openai_compatible import (
-    MalformedToolArgumentsError,
     OpenAICompatibleAdapter,
     OpenAICompatibleModelClient,
     ProviderHTTPError,
@@ -17,8 +16,11 @@ from app.vnext.llm.protocol import (
     ModelResponse,
     ModelTextDelta,
     ModelTool,
+    RawToolCall,
+    RejectedToolCallBatch,
     StreamingModelClient,
     SystemMessage,
+    ToolArgumentFailure,
     ToolCall,
     ToolError,
     ToolErrorCode,
@@ -29,14 +31,16 @@ from app.vnext.llm.protocol import (
 __all__ = [
     "AssistantMessage",
     "FinalMessage",
-    "MalformedToolArgumentsError",
     "Message",
     "ModelContextWindowError",
+    "ModelToolCallBatchRejected",
     "ModelClient",
     "ModelRequest",
     "ModelResponse",
     "ModelTextDelta",
     "ModelTool",
+    "RawToolCall",
+    "RejectedToolCallBatch",
     "OpenAICompatibleAdapter",
     "OpenAICompatibleModelClient",
     "ProviderHTTPError",
@@ -45,6 +49,7 @@ __all__ = [
     "StreamingModelClient",
     "ToolError",
     "ToolErrorCode",
+    "ToolArgumentFailure",
     "ToolCall",
     "ToolResultMessage",
     "UserMessage",

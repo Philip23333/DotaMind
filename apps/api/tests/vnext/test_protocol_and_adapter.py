@@ -18,8 +18,8 @@ from app.vnext.llm.diagnostics import (
     MAX_DIAGNOSTIC_ARGUMENT_EDGE_BYTES,
     MAX_DIAGNOSTIC_TOTAL_ARGUMENT_BYTES,
 )
+from app.vnext.llm.errors import ModelToolCallBatchRejected
 from app.vnext.llm.openai_compatible import (
-    MalformedToolArgumentsError,
     OpenAICompatibleModelClient,
     ProviderHTTPError,
     ProviderProtocolError,
@@ -323,6 +323,277 @@ def _collect_stream(client: OpenAICompatibleModelClient, request: ModelRequest):
     return asyncio.run(collect())
 
 
+def _tool_batch_response(
+    response_mode: str,
+    calls: list[dict[str, Any]],
+    *,
+    finish_reason: str | None = "tool_calls",
+    content: str | None = None,
+) -> httpx.Response:
+    request = httpx.Request("POST", "https://provider.test/v1/chat/completions")
+    if response_mode == "complete":
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {"content": content, "tool_calls": calls},
+                        "finish_reason": finish_reason,
+                    }
+                ]
+            },
+            request=request,
+        )
+    stream_calls = [
+        {"index": index, **call}
+        for index, call in enumerate(calls)
+    ]
+    return httpx.Response(
+        200,
+        headers={"content-type": "text/event-stream"},
+        text=_sse_body(
+            {
+                "choices": [
+                    {
+                        "delta": {"content": content, "tool_calls": stream_calls},
+                        "finish_reason": finish_reason,
+                    }
+                ]
+            }
+        ),
+        request=request,
+    )
+
+
+def _tool_call(call_id: str, arguments: Any, *, name: str = "echo") -> dict[str, Any]:
+    return {
+        "id": call_id,
+        "type": "function",
+        "function": {"name": name, "arguments": arguments},
+    }
+
+
+def _read_tool_batch(client: OpenAICompatibleModelClient, response_mode: str) -> ModelResponse:
+    request = _request([UserMessage(content="run")])
+    if response_mode == "complete":
+        return asyncio.run(client.complete(request))
+    items = _collect_stream(client, request)
+    assert len(items) == 1
+    assert isinstance(items[0], ModelResponse)
+    return items[0]
+
+
+@pytest.mark.parametrize("response_mode", ["complete", "stream"])
+def test_tool_call_batch_rejection_retains_every_call_and_failure(response_mode: str) -> None:
+    raw_valid = '{"value":1, "label":"斯温\\n\\\"captain\\\""}'
+    raw_invalid = "{not-json"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        del request
+        return _tool_batch_response(
+            response_mode,
+            [_tool_call("call-valid", raw_valid), _tool_call("call-invalid", raw_invalid)],
+            content="provider note",
+        )
+
+    client = _adapter(handler)
+    with pytest.raises(ModelToolCallBatchRejected) as raised:
+        _read_tool_batch(client, response_mode)
+
+    batch = raised.value.batch
+    assert batch.reason == "invalid_tool_arguments"
+    assert batch.content == "provider note"
+    assert [call.id for call in batch.calls] == ["call-valid", "call-invalid"]
+    assert [call.raw_arguments for call in batch.calls] == [raw_valid, raw_invalid]
+    assert [failure.call_index for failure in batch.argument_failures] == [1]
+    assert batch.argument_failures[0].kind == "invalid_json"
+    assert batch.argument_failures[0].position is not None
+    assert str(raised.value) == "model tool-call batch rejected: invalid_tool_arguments"
+    assert raised.value.diagnostics is not None
+    assert raised.value.diagnostics.tool_calls[1].id == "call-invalid"
+
+
+@pytest.mark.parametrize("response_mode", ["complete", "stream"])
+def test_batch_classifies_all_invalid_arguments_without_reordering_calls(
+    response_mode: str,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        del request
+        return _tool_batch_response(
+            response_mode,
+            [
+                _tool_call("call-first-invalid", "{"),
+                _tool_call("call-valid", '{"value":2}'),
+                _tool_call("call-last-invalid", "[]"),
+            ],
+        )
+
+    with pytest.raises(ModelToolCallBatchRejected) as raised:
+        _read_tool_batch(_adapter(handler), response_mode)
+
+    assert [call.id for call in raised.value.batch.calls] == [
+        "call-first-invalid",
+        "call-valid",
+        "call-last-invalid",
+    ]
+    assert [failure.call_index for failure in raised.value.batch.argument_failures] == [0, 2]
+    assert [failure.kind for failure in raised.value.batch.argument_failures] == [
+        "invalid_json",
+        "non_object_json",
+    ]
+
+
+@pytest.mark.parametrize("response_mode", ["complete", "stream"])
+@pytest.mark.parametrize(
+    ("raw_arguments", "failure_kind"),
+    [
+        ("", "invalid_json"),
+        (" \n\t", "invalid_json"),
+        ("[]", "non_object_json"),
+        ("null", "non_object_json"),
+        ("12", "non_object_json"),
+        ('"text"', "non_object_json"),
+        ("false", "non_object_json"),
+        ("NaN", "invalid_json"),
+    ],
+)
+def test_tool_call_arguments_must_be_strict_json_objects(
+    response_mode: str,
+    raw_arguments: str,
+    failure_kind: str,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        del request
+        return _tool_batch_response(
+            response_mode,
+            [_tool_call("call-one", raw_arguments)],
+        )
+
+    with pytest.raises(ModelToolCallBatchRejected) as raised:
+        _read_tool_batch(_adapter(handler), response_mode)
+
+    failure = raised.value.batch.argument_failures[0]
+    assert failure.kind == failure_kind
+    assert raised.value.batch.calls[0].raw_arguments == raw_arguments
+    assert raised.value.batch.reason == "invalid_tool_arguments"
+
+
+@pytest.mark.parametrize("response_mode", ["complete", "stream"])
+def test_tool_call_batch_with_length_is_rejected_even_when_arguments_are_valid(
+    response_mode: str,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        del request
+        return _tool_batch_response(
+            response_mode,
+            [_tool_call("call-one", '{"value":1}')],
+            finish_reason="length",
+        )
+
+    with pytest.raises(ModelToolCallBatchRejected) as raised:
+        _read_tool_batch(_adapter(handler), response_mode)
+
+    assert raised.value.batch.reason == "tool_response_truncated"
+    assert raised.value.batch.argument_failures == []
+    assert raised.value.batch.calls[0].raw_arguments == '{"value":1}'
+
+
+@pytest.mark.parametrize("response_mode", ["complete", "stream"])
+def test_protocol_identity_errors_take_precedence_over_argument_json_errors(
+    response_mode: str,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        del request
+        return _tool_batch_response(
+            response_mode,
+            [
+                _tool_call("call-invalid", "{"),
+                {"type": "function", "function": {"name": "echo", "arguments": "{}"}},
+            ],
+        )
+
+    with pytest.raises(ProviderProtocolError, match="id"):
+        _read_tool_batch(_adapter(handler), response_mode)
+
+
+@pytest.mark.parametrize("response_mode", ["complete", "stream"])
+def test_duplicate_tool_call_ids_are_protocol_errors(response_mode: str) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        del request
+        return _tool_batch_response(
+            response_mode,
+            [_tool_call("call-same", "{"), _tool_call("call-same", "{}")],
+        )
+
+    with pytest.raises(ProviderProtocolError, match="IDs must be unique"):
+        _read_tool_batch(_adapter(handler), response_mode)
+
+
+@pytest.mark.parametrize("response_mode", ["complete", "stream"])
+@pytest.mark.parametrize("raw_arguments", [None, 42, [], {}])
+def test_non_string_argument_carriers_are_protocol_errors(
+    response_mode: str,
+    raw_arguments: Any,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        del request
+        return _tool_batch_response(
+            response_mode,
+            [_tool_call("call-one", raw_arguments)],
+        )
+
+    with pytest.raises(ProviderProtocolError, match="arguments must be"):
+        _read_tool_batch(_adapter(handler), response_mode)
+
+
+def test_raw_batch_keeps_full_arguments_while_trace_diagnostic_stays_bounded() -> None:
+    large_raw = '{"text":"' + "λ" * (MAX_DIAGNOSTIC_ARGUMENT_BYTES + 200) + '"}'
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        del request
+        return _tool_batch_response(
+            "complete",
+            [_tool_call("call-large", large_raw), _tool_call("call-invalid", "{")],
+        )
+
+    with pytest.raises(ModelToolCallBatchRejected) as raised:
+        _read_tool_batch(_adapter(handler), "complete")
+
+    assert raised.value.batch.calls[0].raw_arguments == large_raw
+    diagnostic = raised.value.diagnostics
+    assert diagnostic is not None
+    first_diagnostic_call = diagnostic.tool_calls[0]
+    assert first_diagnostic_call.arguments_truncated is True
+    assert first_diagnostic_call.raw_arguments is None
+
+
+def test_raw_tool_call_contract_is_strict_and_forbids_unknown_fields() -> None:
+    from app.vnext.llm.protocol import RawToolCall, RejectedToolCallBatch, ToolArgumentFailure
+
+    raw_call = RawToolCall(
+        index=0,
+        id="call-1",
+        name="echo",
+        provider_name="echo",
+        raw_arguments="{}",
+    )
+    batch = RejectedToolCallBatch(reason="invalid_tool_arguments", calls=[raw_call])
+    failure = ToolArgumentFailure(call_index=0, kind="invalid_json", message="bad json")
+    assert RejectedToolCallBatch.model_validate(batch.model_dump()) == batch
+    assert ToolArgumentFailure.model_validate(failure.model_dump()) == failure
+    with pytest.raises(ValidationError):
+        RawToolCall(index=True, id="call-1", name="echo", provider_name="echo", raw_arguments="{}")
+    with pytest.raises(ValidationError):
+        RawToolCall(
+            index=0,
+            id="call-1",
+            name="echo",
+            provider_name="echo",
+            raw_arguments="{}",
+            unexpected=True,
+        )
+
+
 def test_adapter_streams_text_deltas_and_emits_one_final_response() -> None:
     seen: dict[str, Any] = {}
 
@@ -584,8 +855,10 @@ def test_adapter_rejects_malformed_arguments_http_errors_and_protocol_shapes() -
             request=request,
         )
 
-    with pytest.raises(MalformedToolArgumentsError) as malformed_error:
+    with pytest.raises(ModelToolCallBatchRejected) as malformed_error:
         asyncio.run(_adapter(malformed_arguments).complete(_request([])))
+    assert malformed_error.value.batch.reason == "invalid_tool_arguments"
+    assert str(malformed_error.value) == "model tool-call batch rejected: invalid_tool_arguments"
     diagnostic = malformed_error.value.diagnostics
     assert diagnostic is not None
     assert diagnostic.response_mode == "complete"
@@ -605,8 +878,10 @@ def test_adapter_rejects_malformed_arguments_http_errors_and_protocol_shapes() -
         payload["choices"][0]["finish_reason"] = "length"
         return httpx.Response(200, json=payload, request=request)
 
-    with pytest.raises(MalformedToolArgumentsError) as metadata_error:
+    with pytest.raises(ModelToolCallBatchRejected) as metadata_error:
         asyncio.run(_adapter(malformed_arguments_with_metadata).complete(_request([])))
+    assert metadata_error.value.batch.reason == "tool_response_truncated"
+    assert metadata_error.value.batch.argument_failures[0].kind == "invalid_json"
     metadata_diagnostic = metadata_error.value.diagnostics
     assert metadata_diagnostic is not None
     assert metadata_diagnostic.finish_reason == "length"
@@ -685,14 +960,16 @@ def test_stream_tool_argument_failure_records_complete_multifragment_diagnostic(
         [UserMessage(content="run")],
         [ModelTool(name="task.checkpoint", description="checkpoint", input_schema={})],
     )
-    with pytest.raises(MalformedToolArgumentsError) as raised:
+    with pytest.raises(ModelToolCallBatchRejected) as raised:
         _collect_stream(_adapter(handler), request)
 
     diagnostic = raised.value.diagnostics
     assert diagnostic is not None
     assert diagnostic.stage == "tool_arguments_decode"
     assert diagnostic.response_mode == "stream"
-    assert diagnostic.original_error_type == "MalformedToolArgumentsError"
+    assert diagnostic.original_error_type == "ModelToolCallBatchRejected"
+    assert raised.value.batch.reason == "tool_response_truncated"
+    assert raised.value.batch.argument_failures[0].kind == "invalid_json"
     assert diagnostic.finish_reason == "length"
     assert diagnostic.usage == {"completion_tokens": 4096}
     assert diagnostic.stream_done_received is True
@@ -716,6 +993,11 @@ def test_stream_tool_argument_failure_records_complete_multifragment_diagnostic(
     assert diagnostic.json_error.position == expected_error.pos
     assert diagnostic.json_error.line == expected_error.lineno
     assert diagnostic.json_error.column == expected_error.colno
+    failure = raised.value.batch.argument_failures[0]
+    assert failure.message == expected_error.msg
+    assert failure.position == expected_error.pos
+    assert failure.line == expected_error.lineno
+    assert failure.column == expected_error.colno
 
 
 @pytest.mark.parametrize("finish_reason", ["tool_calls", None])
@@ -747,7 +1029,7 @@ def test_stream_argument_diagnostic_does_not_infer_finish_reason_or_usage(
             request=request,
         )
 
-    with pytest.raises(MalformedToolArgumentsError) as raised:
+    with pytest.raises(ModelToolCallBatchRejected) as raised:
         _collect_stream(_adapter(handler), _request([UserMessage(content="run")]))
     diagnostic = raised.value.diagnostics
     assert diagnostic is not None
@@ -901,18 +1183,15 @@ def test_diagnostic_build_failure_does_not_replace_parse_error(
 
     client = _adapter(handler)
     request = _request([UserMessage(content="go")])
-    expected_message = (
-        "stream tool call arguments are not valid JSON"
-        if response_mode == "stream"
-        else "tool call arguments are not valid JSON"
-    )
-    with pytest.raises(MalformedToolArgumentsError, match=expected_message) as raised:
+    expected_message = "model tool-call batch rejected: invalid_tool_arguments"
+    with pytest.raises(ModelToolCallBatchRejected, match=expected_message) as raised:
         if response_mode == "stream":
             _collect_stream(client, request)
         else:
             asyncio.run(client.complete(request))
 
     assert str(raised.value) == expected_message
+    assert raised.value.batch.reason == "invalid_tool_arguments"
     assert raised.value.diagnostics is None
 
 
@@ -991,7 +1270,7 @@ def test_complete_response_diagnostic_includes_prior_tool_calls_and_exact_metada
         [UserMessage(content="run")],
         [ModelTool(name="echo", description="echo", input_schema={})],
     )
-    with pytest.raises(MalformedToolArgumentsError) as raised:
+    with pytest.raises(ModelToolCallBatchRejected) as raised:
         asyncio.run(_adapter(handler).complete(request))
     diagnostic = raised.value.diagnostics
     assert diagnostic is not None
@@ -1005,6 +1284,7 @@ def test_complete_response_diagnostic_includes_prior_tool_calls_and_exact_metada
     assert [call.argument_fragment_count for call in diagnostic.tool_calls] == [None, None]
     assert diagnostic.tool_calls[1].raw_arguments == bad_arguments
     assert diagnostic.json_error is None
+    assert raised.value.batch.argument_failures[0].kind == "non_object_json"
 
 
 def test_complete_response_assembly_failure_keeps_observed_metadata() -> None:
@@ -1115,10 +1395,11 @@ def test_diagnostic_tool_call_count_is_capped_and_sorted_by_provider_index() -> 
             request=request,
         )
 
-    with pytest.raises(ProviderProtocolError) as raised:
+    with pytest.raises(ModelToolCallBatchRejected) as raised:
         _collect_stream(_adapter(handler), _request([UserMessage(content="go")]))
 
     diagnostic = raised.value.diagnostics
+    assert raised.value.batch.reason == "invalid_tool_arguments"
     assert diagnostic is not None
     assert diagnostic.tool_calls_total == 66
     assert diagnostic.tool_calls_truncated is True

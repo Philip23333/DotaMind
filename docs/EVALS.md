@@ -615,12 +615,17 @@ input changes, the expected-output-based early threshold, all three ordinary
 stages, and equality between the actual request cap, capacity record, trace, and
 OpenAI-compatible `max_tokens`. Summary calls retain their separate budgets.
 
-The following response-recovery cases remain required before that portion of the
-design can be marked implemented:
+Adapter-side classification is implemented and offline-tested for complete and
+streamed responses: all identities and argument carriers are checked before JSON
+classification; all arguments are retained and classified; malformed/non-object
+JSON and tool-call `finish_reason=length` produce a typed rejected batch; protocol
+identity damage remains a protocol error; diagnostics remain bounded. The
+rejected raw batch is not serialized into trace. Runtime response recovery remains
+pending and must satisfy these cases before that stage can be marked implemented:
 
 | Case | Required evidence |
 | --- | --- |
-| Two-call batch; second argument JSON is invalid | Neither handler runs; both calls receive matching error results and the shared not-executed explanation |
+| Two-call batch; second argument JSON is invalid | Adapter preserves and rejects the entire batch; the existing terminal Runtime path runs neither handler. Future Runtime recovery must pair results and include the shared not-executed explanation |
 | Tool-call response ends with `finish_reason=length` | Zero handlers run even if received argument fragments parse |
 | Rejected call history | Raw argument text and identity are retained; paired results encode, persist, and compact as one indivisible history group |
 | Consecutive response-level failures | At most two corrective generations; a normal complete response resets the consecutive counter |

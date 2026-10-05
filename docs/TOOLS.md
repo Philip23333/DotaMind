@@ -11,13 +11,15 @@ with its opaque Artifact reference. That observation is capped at 35 KiB and
 may still include small scalar leaves. Artifact retrieval tools remain inline;
 `artifact.read` applies its own 35 KiB serialized-result bound.
 
-“Not executed” and “executed and failed” describe different facts. The planned
-response-level all-batch rejection applies only to malformed tool-argument JSON
-and tool-call response truncation, as defined in
-[`agent/model_output_and_recovery.md`](agent/model_output_and_recovery.md);
-that contract is not implemented yet. Valid JSON with invalid tool fields and
-checkpoint-source errors keep their existing per-call rules. Failure feedback
-does not become a checkpoint source and does not change TaskState completion.
+“Not executed” and “executed and failed” describe different facts. The Adapter
+now classifies malformed tool-argument JSON and truncated tool-call responses
+before a ModelResponse reaches Runtime, preserving the rejected batch; see
+[`agent/model_output_and_recovery.md`](agent/model_output_and_recovery.md).
+Runtime does not yet turn this classification into paired “not executed” tool
+results or correction. The eventual feedback remains non-executable: it cannot
+become a checkpoint source or change TaskState completion. Valid JSON with
+invalid tool fields and checkpoint-source errors keep their existing per-call
+rules.
 
 The clean-slate default registry currently exposes:
 

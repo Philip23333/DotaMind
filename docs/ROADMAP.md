@@ -432,21 +432,24 @@ required by the current design.
 
 The target contract is defined in
 [`agent/model_output_and_recovery.md`](agent/model_output_and_recovery.md).
-**Dynamic output budgets, configuration, Runtime/capacity wiring, and trace
-capture are implemented and offline-tested.** Response-level whole-batch refusal,
-generation correction, and answer-truncation recovery remain pending. Execution
-continues to have no production total step-count ceiling; the confirmed recovery
-boundary is consecutive failures, the existing execution deadline, and user
-cancellation.
+**Dynamic output budgets, configuration, Runtime/capacity wiring, trace capture,
+and Adapter-side strict tool-call batch classification are implemented and
+offline-tested.** The Adapter retains the complete rejected batch and emits only
+bounded diagnostics to trace. Runtime history encoding and paired non-execution
+feedback, whole-batch execution gating, generation correction, and
+answer-truncation recovery remain pending. Execution continues to have no
+production total step-count ceiling; the confirmed recovery boundary is
+consecutive failures, the existing execution deadline, and user cancellation.
 
 Implementation order:
 
 1. ~~Derive expected and input-clipped actual output budgets.~~
-2. Preserve failed call messages and encode paired non-execution results.
-3. Add Runtime whole-batch execution gating, bounded correction, and Answer Stage
+2. ~~Strictly classify response batches and retain typed rejected-call data in the Adapter.~~
+3. Preserve failed call messages and encode paired non-execution results.
+4. Add Runtime whole-batch execution gating, bounded correction, and Answer Stage
    finalization.
-4. Complete the response-recovery offline acceptance matrix and trace checks.
-5. Verify compatibility with live Providers and historical response shapes.
+5. Complete the response-recovery offline acceptance matrix and trace checks.
+6. Verify compatibility with live Providers and historical response shapes.
 
 Content control is a later phase. This work does not add a total step limit,
 change provider transport-error handling, or replace the separate summary retry

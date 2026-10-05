@@ -389,14 +389,16 @@ completion, and existing context-capacity or error exits control its lifecycle.
 Steps-pressure calculations remain available for isolated tests, but production
 Runtime does not supply a step budget.
 
-The planned model-output and response-recovery contract is owned by
-[`agent/model_output_and_recovery.md`](agent/model_output_and_recovery.md);
-implementation and acceptance are pending. Its layer responsibilities are:
-Adapter strictly parses responses, preserves failed-call data, and encodes
-history; Runtime grants or denies whole-batch execution, creates error feedback,
-counts consecutive corrections, and finalizes execution; ToolRegistry continues
-normal schema and business validation; Answer Stage answers from available
-results and does not repair execution calls.
+The model-output and response-recovery contract is owned by
+[`agent/model_output_and_recovery.md`](agent/model_output_and_recovery.md).
+Dynamic output budgets and Adapter-side strict tool-call batch classification,
+rejected-batch preservation, and bounded diagnostics are implemented and
+offline-tested. Adapter strictly parses responses and preserves failed-call
+data; its Runtime history encoding remains pending. Runtime's whole-batch
+execution gate, paired error feedback, correction counter, and execution
+finalization remain pending. ToolRegistry continues normal schema and business
+validation; Answer Stage answers from available results and does not repair
+execution calls.
 
 Execution and answering have separate wall-clock deadlines. The execution
 deadline defaults to 300 seconds and the answer deadline defaults to 60 seconds;
