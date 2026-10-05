@@ -69,7 +69,7 @@ def test_hero_guide_is_registered_only_when_cache_is_injected() -> None:
     assert cache.reads == ["pub", "pro"]
 
 
-def test_application_lifespan_wraps_its_existing_redis_client_for_hero_guides(
+def test_application_lifespan_without_data_dir_does_not_enable_hero_guides(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import app.application.plan_service as plan_service_module
@@ -149,7 +149,11 @@ def test_application_lifespan_wraps_its_existing_redis_client_for_hero_guides(
             run_sweeper_interval_seconds=15,
         ),
     )
-    monkeypatch.setattr(main.VNextSettings, "from_env", classmethod(lambda _cls: VNextSettings()))
+    monkeypatch.setattr(
+        main.VNextSettings,
+        "from_env",
+        classmethod(lambda _cls: VNextSettings(data_dir=None)),
+    )
     monkeypatch.setattr(main, "create_database_resources", lambda _url: SimpleNamespace(
         engine=object(), session_factory=object()
     ))
@@ -213,8 +217,7 @@ def test_application_lifespan_wraps_its_existing_redis_client_for_hero_guides(
     async def exercise_lifespan() -> None:
         async with main.lifespan(main.app):
             services = main.app.state.vnext_services
-            guide_service = services.hero_guide.__self__
-            assert guide_service._cache._client is redis
+            assert services.hero_guide is None
             assert redis.hgetall_calls == []
 
     original_app_state = main.app.state._state.copy()
@@ -227,6 +230,5 @@ def test_application_lifespan_wraps_its_existing_redis_client_for_hero_guides(
     assert redis_urls == ["redis://fixture.invalid/0"]
     assert redis.ping_calls == 1
     assert redis.close_calls == 1
-    assert len(captured_caches) == 1
-    assert captured_caches[0]._client is redis
+    assert captured_caches == [None]
     assert redis.hgetall_calls == []
