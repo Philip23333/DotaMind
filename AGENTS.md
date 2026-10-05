@@ -300,6 +300,9 @@ while preserving generic search/read access.
   provider errors.
 - Run focused tests for every behavior change and report only checks that really
   ran.
+- During routine development, run tests for the changed module and its directly
+  dependent boundary tests; run Ruff only on changed Python files. Do not rerun
+  the full vNext suite after every small edit.
 - Update core documents only when their long-term contract changes. Git history
   and tags hold implementation history; do not keep progress archives in docs.
 - Keep `docs/reference/` for provider/cross-source facts expensive to rediscover;
