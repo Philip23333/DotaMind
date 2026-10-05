@@ -623,8 +623,10 @@ Original arguments are retained in effective conversation history, while trace
 records contain bounded rejection metadata rather than the full batch. Runtime
 pairs every rejected call with an explicitly non-executed result and permits at
 most two corrective generations after consecutive rejections. Primary/degraded
-answer `finish_reason=length` recovery remains pending; live Provider compatibility
-has not been verified.
+answer `finish_reason=length` recovery is implemented and offline-tested: failed
+attempts are replaced, truncated text is not delivered or persisted, and a
+truncated degraded answer reaches deterministic fallback. Live Provider
+compatibility has not been verified.
 
 | Case | Required evidence |
 | --- | --- |
@@ -634,7 +636,8 @@ has not been verified.
 | Consecutive response-level failures | At most two corrective generations; a normal complete response resets the consecutive counter |
 | Cancellation and execution deadline | Corrections do not reset the deadline; cancellation and expiry stop further correction |
 | Correction exhaustion | Completed checkpoints remain; only reliable current-request results can support a partial answer; without reliable results the answer explains the repeated rejected calls |
-| Primary and degraded answer truncation | Still pending: failed attempts must be replaced; degraded truncation must reach deterministic fallback; truncated text must never be canonical or saved as success |
+| Primary answer `finish_reason=length` | Attempt is marked failed with `answer_output_truncated`; degraded answer uses a new attempt identity; truncated text is not delivered or persisted |
+| Degraded answer `finish_reason=length` | Attempt is marked failed with `answer_output_truncated`; deterministic fallback replaces it; truncated text is not delivered or persisted |
 | Normal ToolRegistry schema errors and provider overflow | Existing per-call feedback and one-time overflow compaction remain; completed tools are not replayed |
 
 Full test recording and diagnostic traces continue to use the existing four-file

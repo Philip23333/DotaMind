@@ -215,6 +215,63 @@ def test_deterministic_fallback_can_complete_without_text_deltas() -> None:
     assert state.persistence == "pending"
 
 
+def test_dual_truncated_attempt_projection_keeps_only_deterministic_delivery() -> None:
+    projector = _projector()
+    _start_attempt(projector)
+    assert apply_runtime_event(
+        projector,
+        TextDelta(text="partial primary", attempt_id="primary-1"),
+    )
+    assert not apply_runtime_event(
+        projector,
+        AnswerAttemptFailed(
+            attempt_id="primary-1",
+            error_code="answer_output_truncated",
+        ),
+    )
+    assert apply_runtime_event(
+        projector,
+        AnswerAttemptStarted(attempt_id="degraded-1", answer_kind="degraded"),
+    )
+    assert projector.snapshot().answer.text == ""
+    assert apply_runtime_event(
+        projector,
+        TextDelta(text="partial degraded", attempt_id="degraded-1"),
+    )
+    assert not apply_runtime_event(
+        projector,
+        AnswerAttemptFailed(
+            attempt_id="degraded-1",
+            error_code="answer_output_truncated",
+        ),
+    )
+    assert apply_runtime_event(
+        projector,
+        AnswerAttemptStarted(attempt_id="deterministic-1", answer_kind="deterministic"),
+    )
+    final_text = (
+        "Execution stopped because the model repeatedly submitted invalid or truncated "
+        "tool-call batches.\n\n1 of 2 planned parts were completed. "
+        "The remaining parts were not completed, so I won't infer or fill them in."
+    )
+    assert apply_runtime_event(
+        projector,
+        AgentCompleted(
+            final=FinalMessage(content=final_text),
+            duration=0,
+            attempt_id="deterministic-1",
+        ),
+    )
+
+    state = projector.snapshot()
+    assert state.status == "completed"
+    assert state.answer.kind == "deterministic"
+    assert state.answer.text == final_text
+    assert "partial primary" not in state.answer.text
+    assert "partial degraded" not in state.answer.text
+    assert state.persistence == "pending"
+
+
 @pytest.mark.parametrize(
     ("event", "message"),
     [

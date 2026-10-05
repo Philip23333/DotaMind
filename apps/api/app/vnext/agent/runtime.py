@@ -30,6 +30,7 @@ from app.vnext.agent.errors import (
     AgentCancelledError,
     AgentDeadlineExceeded,
     AgentRuntimeError,
+    AnswerOutputTruncated,
     CompactionFailedError,
     ContextCapacityExceeded,
     ModelContextWindowExceeded,
@@ -2021,6 +2022,13 @@ class AgentRuntime:
                     on_response(response)
 
             self._check_controls(token, deadline)
+            if (
+                purpose in {"primary_answer", "degraded_answer"}
+                and response is not None
+                and isinstance(response.message, FinalMessage)
+                and response.finish_reason == "length"
+            ):
+                raise AnswerOutputTruncated()
             call_status = "completed"
             invocation_result = _ModelInvocationResult(
                 response=response,

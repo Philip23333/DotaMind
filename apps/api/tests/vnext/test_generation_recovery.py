@@ -16,6 +16,13 @@ from app.vnext.agent.generation_recovery import (
 )
 from app.vnext.agent.limits import AgentLimits
 from app.vnext.agent.runtime import AgentRuntime, CancellationToken, _has_reliable_tool_results
+from app.vnext.agent.task_state import (
+    TaskCheckpoint,
+    TaskItem,
+    TaskItemStatus,
+    TaskPlan,
+    TaskStateCoordinator,
+)
 from app.vnext.agent.trace import AgentTraceCollector
 from app.vnext.llm.errors import ModelToolCallBatchRejected
 from app.vnext.llm.protocol import (
@@ -310,6 +317,69 @@ def test_recovery_exhaustion_with_answer_provider_failures_uses_incomplete_fallb
         assert len(rejected_call.tool_calls) == 1
         assert rejected_call.tool_calls[0].id == rejected_result.tool_call_id
         assert rejected_result.status == "error"
+
+
+def test_recovery_exhaustion_then_both_answers_truncate_preserves_partial_coverage() -> None:
+    executed: list[int] = []
+    model = ScriptedModelClient(
+        [
+            _tool_turn("successful-call", 9),
+            _provider_error(_batch(call_ids=("reused-id",))),
+            _provider_error(_batch(call_ids=("reused-id",))),
+            _provider_error(_batch(call_ids=("reused-id",))),
+            ModelResponse.from_final("truncated primary", finish_reason="length"),
+            ModelResponse.from_final("truncated degraded", finish_reason="length"),
+        ]
+    )
+    coordinator = TaskStateCoordinator()
+    coordinator.plan = TaskPlan(
+        items=(
+            TaskItem("A", "Collect A", TaskItemStatus.COMPLETED),
+            TaskItem("B", "Collect B", TaskItemStatus.IN_PROGRESS),
+        ),
+        current_key="B",
+    )
+    coordinator.store.put(
+        TaskCheckpoint(
+            checkpoint_id="checkpoint:A",
+            key="A",
+            value={"fact": "verified A"},
+            source_tool_call_ids=(),
+        )
+    )
+    collector = AgentTraceCollector()
+    runtime = AgentRuntime(
+        model,
+        _registry(lambda args: executed.append(args.value) or EchoOutput(value=args.value)),
+        limits=AgentLimits(application_max_output_tokens=4096, deadline_seconds=2),
+        task_state_coordinator=coordinator,
+    )
+
+    result = asyncio.run(
+        runtime.run([UserMessage(content="hello")], trace_collector=collector)
+    )
+
+    snapshot = collector.snapshot()
+    assert executed == [9]
+    assert len(model.requests) == 6
+    assert snapshot["execution_outcome"]["reason"] == "generation_recovery_exhausted"
+    assert snapshot["answer_resolution"]["mode"] == "partial"
+    assert snapshot["answer_fallback"] == "deterministic"
+    assert "Execution stopped because the model repeatedly submitted" in result.content
+    assert "1 of 2 planned parts were completed" in result.content
+    assert "remaining parts were not completed" in result.content
+    assert "task execution completed" not in result.content.lower()
+    assert "truncated primary" not in result.content
+    assert "truncated degraded" not in result.content
+    assert [item["next_action"] for item in snapshot["generation_recoveries"]] == [
+        "correct",
+        "correct",
+        "finalize",
+    ]
+    assert [attempt["error_code"] for attempt in snapshot["answer_attempts"]] == [
+        "answer_output_truncated",
+        "answer_output_truncated",
+    ]
 
 
 def test_rejection_correction_stops_at_original_execution_deadline(monkeypatch) -> None:

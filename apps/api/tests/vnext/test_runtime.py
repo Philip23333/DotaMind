@@ -7,8 +7,15 @@ import httpx
 import pytest
 from pydantic import BaseModel, ConfigDict
 
-from app.vnext.agent.errors import AgentCancelledError, ModelProtocolError
-from app.vnext.agent.events import AgentCompleted, AgentFailed, TextDelta, ToolStarted
+from app.vnext.agent.errors import AgentCancelledError, AnswerOutputTruncated, ModelProtocolError
+from app.vnext.agent.events import (
+    AgentCompleted,
+    AgentFailed,
+    AnswerAttemptFailed,
+    AnswerAttemptStarted,
+    TextDelta,
+    ToolStarted,
+)
 from app.vnext.agent.limits import AgentLimits
 from app.vnext.agent.runtime import AgentRuntime, CancellationToken
 from app.vnext.agent.task_state import (
@@ -325,6 +332,133 @@ def test_primary_answer_protocol_failure_retries_with_degraded_answer() -> None:
     assert len(model.requests) == 3
     assert model.requests[1].tools == []
     assert model.requests[2].tools == []
+
+
+@pytest.mark.parametrize(
+    ("degraded_finish_reason", "expected_answer", "expected_fallback"),
+    [
+        (None, "degraded answer", "degraded_model"),
+        ("length", None, "deterministic"),
+    ],
+)
+def test_primary_answer_length_enters_degraded_or_deterministic_fallback(
+    degraded_finish_reason: str | None,
+    expected_answer: str | None,
+    expected_fallback: str,
+) -> None:
+    model = ScriptedModelClient(
+        [
+            ModelResponse.from_final("execution"),
+            ModelResponse.from_final(
+                "truncated primary",
+                finish_reason="length",
+                usage={"completion_tokens": 12},
+            ),
+            ModelResponse.from_final(
+                "truncated degraded" if degraded_finish_reason == "length" else "degraded answer",
+                finish_reason=degraded_finish_reason,
+                usage={"completion_tokens": 9},
+            ),
+        ]
+    )
+    collector = AgentTraceCollector(capture_full_calls=True)
+    events: list[object] = []
+    runtime = AgentRuntime(
+        model,
+        ToolRegistry(),
+        limits=AgentLimits(application_max_output_tokens=4096, deadline_seconds=2),
+    )
+
+    async def collect() -> None:
+        async for event in runtime.run_stream(
+            [UserMessage(content="hello")], trace_collector=collector
+        ):
+            events.append(event)
+
+    asyncio.run(collect())
+
+    completed = next(event for event in events if isinstance(event, AgentCompleted))
+    starts = [event for event in events if isinstance(event, AnswerAttemptStarted)]
+    failures = [event for event in events if isinstance(event, AnswerAttemptFailed)]
+    assert len(model.requests) == 3
+    assert [event.answer_kind for event in starts] == (
+        ["primary", "degraded"]
+        if degraded_finish_reason is None
+        else ["primary", "degraded", "deterministic"]
+    )
+    assert starts[0].attempt_id != starts[1].attempt_id
+    assert [event.error_code for event in failures] == [
+        AnswerOutputTruncated.code,
+        *([AnswerOutputTruncated.code] if degraded_finish_reason == "length" else []),
+    ]
+    assert completed.attempt_id == starts[-1].attempt_id
+    assert completed.final.content == (
+        expected_answer if expected_answer is not None else completed.final.content
+    )
+    if expected_answer is None:
+        assert "detailed final response" in completed.final.content
+        assert "truncated" not in completed.final.content
+    assert collector.snapshot()["answer_fallback"] == expected_fallback
+    answer_calls = [
+        call for call in collector.snapshot()["model_calls"] if call["purpose"].endswith("answer")
+    ]
+    assert [call["status"] for call in answer_calls] == (
+        ["failed", "completed"]
+        if degraded_finish_reason is None
+        else ["failed", "failed"]
+    )
+    assert answer_calls[0]["error_code"] == AnswerOutputTruncated.code
+    assert answer_calls[0]["response"]["finish_reason"] == "length"
+    assert answer_calls[0]["response"]["usage"] == {"completion_tokens": 12}
+
+
+def test_degraded_answer_length_after_primary_provider_error_uses_deterministic_fallback() -> None:
+    model = ScriptedModelClient(
+        [
+            ModelResponse.from_final("execution"),
+            RuntimeError("primary provider unavailable"),
+            ModelResponse.from_final("truncated degraded", finish_reason="length"),
+        ]
+    )
+    collector = AgentTraceCollector()
+    runtime = AgentRuntime(
+        model,
+        ToolRegistry(),
+        limits=AgentLimits(application_max_output_tokens=4096, deadline_seconds=2),
+    )
+
+    result = _run(runtime, trace_collector=collector)
+
+    assert "detailed final response" in result.content
+    assert "truncated degraded" not in result.content
+    assert len(model.requests) == 3
+    attempts = collector.snapshot()["answer_attempts"]
+    assert [attempt["kind"] for attempt in attempts] == ["primary", "degraded"]
+    assert [attempt["status"] for attempt in attempts] == ["error", "error"]
+    assert attempts[1]["error_code"] == AnswerOutputTruncated.code
+    assert collector.snapshot()["answer_fallback"] == "deterministic"
+
+
+def test_execution_final_with_length_finish_reason_keeps_existing_behavior() -> None:
+    model = ScriptedModelClient(
+        [
+            ModelResponse.from_final("execution text", finish_reason="length"),
+            ModelResponse.from_final("answer", finish_reason="stop"),
+        ]
+    )
+    collector = AgentTraceCollector(capture_full_calls=True)
+    runtime = AgentRuntime(
+        model,
+        ToolRegistry(),
+        limits=AgentLimits(application_max_output_tokens=4096, deadline_seconds=2),
+    )
+
+    assert _run(runtime, trace_collector=collector).content == "answer"
+    assert [call["status"] for call in collector.snapshot()["model_calls"]] == [
+        "completed",
+        "completed",
+    ]
+    assert collector.snapshot()["answer_fallback"] == "none"
 
 
 def test_primary_timeout_consumes_answer_budget_and_skips_degraded_call() -> None:

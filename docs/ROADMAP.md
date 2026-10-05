@@ -437,10 +437,10 @@ Adapter-side strict tool-call batch classification, rejected-call history,
 paired non-execution feedback, whole-batch execution gating, bounded generation
 correction, and execution finalization are implemented and offline-tested.**
 Trace records bounded rejection metadata without the raw batch. Primary/degraded
-answer-truncation recovery remains pending, and live Provider compatibility has
-not been verified. Execution continues to have no production total step-count
-ceiling; the recovery boundary is consecutive failures, the existing execution
-deadline, and user cancellation.
+answer-truncation recovery is also implemented and offline-tested; live Provider
+compatibility has not been verified. Execution continues to have no production
+total step-count ceiling; the recovery boundary is consecutive failures, the
+existing execution deadline, and user cancellation.
 
 Implementation order:
 

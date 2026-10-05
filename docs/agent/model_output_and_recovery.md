@@ -1,8 +1,7 @@
 # Model Output Budgets and Failure Recovery
 
-> **Status: dynamic output budgets and execution-stage tool-call rejection recovery are implemented and offline-tested.**
-> Primary/degraded answer-truncation recovery remains pending. Live Provider
-> compatibility has not been verified.
+> **Status: dynamic output budgets, execution-stage tool-call rejection recovery, and primary/degraded answer-truncation recovery are implemented and offline-tested.**
+> Live Provider compatibility has not been verified.
 
 This document is the single authority for dynamic model output budgets,
 model-response failure representation, and bounded generation correction.
@@ -34,10 +33,15 @@ raw batch in a typed provider-neutral exception while attaching only bounded
 diagnostics. Runtime stores the original calls with paired non-executable
 feedback, gates the entire batch from execution, and allows at most two
 corrective generations after consecutive rejections before finalizing into
-Answer Stage. Primary/degraded answer truncation recovery is still pending. This
-work does not define content controls, prompt policy, or a new user-visible
-content limit. It also does not add a total step limit, a new retry for provider
-transport failures, or a second overflow recovery allowance.
+Answer Stage. A primary answer ending with `finish_reason=length` fails through
+the existing answer-attempt path and enters the degraded attempt; a truncated
+degraded answer reaches deterministic fallback. The received response and usage
+remain available in trace, while neither truncated attempt can be delivered or
+saved as the final answer. This behavior is offline-tested; live Provider
+compatibility remains unverified. This work does not define content controls,
+prompt policy, or a new user-visible content limit. It also does not add a total
+step limit, a new retry for provider transport failures, or a second overflow
+recovery allowance.
 
 ## 2. Configuration responsibilities
 

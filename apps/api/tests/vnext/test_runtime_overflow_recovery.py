@@ -449,6 +449,51 @@ def test_primary_answer_overflow_rebuilds_tool_free_request() -> None:
     ]
 
 
+def test_primary_answer_length_after_overflow_recovery_degrades_without_more_compaction() -> None:
+    history, request_id = _history()
+    model = _PlannedModel(
+        [
+            _final("execution"),
+            _overflow(),
+            _summary(),
+            lambda request: ModelResponse.from_final(
+                "truncated retry answer", finish_reason="length"
+            ),
+            _final("degraded answer"),
+        ]
+    )
+    trace = AgentTraceCollector()
+
+    result = _run(
+        AgentRuntime(model, _registry(), limits=_limits()),
+        history,
+        request_id,
+        trace_collector=trace,
+    )
+
+    assert result.content == "degraded answer"  # type: ignore[union-attr]
+    assert len(model.requests) == 5
+    compaction_requests = [
+        request
+        for request in model.requests
+        if request.metadata.get("purpose") == "context_compaction"
+    ]
+    assert len(compaction_requests) == 1
+    assert trace.snapshot()["answer_fallback"] == "degraded_model"
+    assert trace.snapshot()["overflow_recoveries"] == [
+        {
+            "step": 2,
+            "stage": "primary_answer",
+            "status": "retry_failed",
+            "error_code": "answer_output_truncated",
+        }
+    ]
+    assert [attempt["error_code"] for attempt in trace.snapshot()["answer_attempts"]] == [
+        "answer_output_truncated",
+        None,
+    ]
+
+
 def test_rebuild_deadline_expires_before_retry_event_or_request() -> None:
     history, request_id = _history()
     model = _PlannedModel([_overflow(), _summary()])

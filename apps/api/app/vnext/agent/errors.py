@@ -96,6 +96,13 @@ class ModelProtocolError(AgentRuntimeError):
     code = "model_protocol_error"
 
 
+class AnswerOutputTruncated(ModelProtocolError):
+    code = "answer_output_truncated"
+
+    def __init__(self) -> None:
+        super().__init__("answer response ended with finish_reason=length")
+
+
 class ContextCapacityExceeded(AgentRuntimeError):
     """The local request estimate cannot fit within the configured budget."""
 
@@ -114,6 +121,7 @@ __all__ = [
     "AgentDeadlineExceeded",
     "AgentDeadlineExceededError",
     "AgentRuntimeError",
+    "AnswerOutputTruncated",
     "CompactionFailedError",
     "ContextCapacityExceeded",
     "ModelContextWindowExceeded",

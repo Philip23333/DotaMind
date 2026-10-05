@@ -21,7 +21,9 @@ generations for consecutive rejected batches. Rejected calls never invoke
 ToolRegistry or become checkpoint evidence. If correction is exhausted, Answer
 Stage uses only reliable results already produced in the current request. Valid
 JSON with invalid tool fields and checkpoint-source errors keep their existing
-per-call rules. Primary/degraded answer truncation recovery remains pending.
+per-call rules. Primary answer truncation enters the degraded attempt; degraded
+answer truncation reaches deterministic fallback. Both paths are offline-tested;
+live Provider compatibility remains unverified.
 
 The clean-slate default registry currently exposes:
 

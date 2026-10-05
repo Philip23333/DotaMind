@@ -4,6 +4,7 @@ import asyncio
 import json
 from uuid import UUID, uuid4
 
+import pytest
 from pydantic import BaseModel
 
 from app.agentic.conversation.models import DialogueTurn
@@ -289,6 +290,76 @@ def test_follow_up_model_request_reuses_effective_history_and_reused_provider_id
     assert [record.kind for record in state.history.records].count("delivery_answer") == 2
     assert state.history.summary == "first request summary"
     assert [locator.ref for locator in state.history.artifact_locators] == [LOCATOR_REF]
+
+
+@pytest.mark.parametrize(
+    ("degraded_finish_reason", "expected_answer"),
+    [("stop", "degraded answer"), ("length", None)],
+)
+def test_truncated_answer_attempts_persist_only_the_final_delivery(
+    degraded_finish_reason: str,
+    expected_answer: str | None,
+) -> None:
+    model = ScriptedTranscriptModelClient(
+        [
+            lambda _request: ModelResponse.from_final("execution"),
+            lambda _request: ModelResponse.from_final(
+                "truncated primary", finish_reason="length"
+            ),
+            lambda _request: ModelResponse.from_final(
+                "truncated degraded"
+                if degraded_finish_reason == "length"
+                else "degraded answer",
+                finish_reason=degraded_finish_reason,
+            ),
+        ]
+    )
+    runtime = AgentRuntime(
+        model,
+        ToolRegistry(),
+        limits=AgentLimits(deadline_seconds=2, application_max_output_tokens=4096),
+    )
+    repository = _Repository()
+    service = VNextChatService(
+        repository,  # type: ignore[arg-type]
+        runtime,
+        ConversationContextBuilder(),
+        DotaVisualEntityEnricher(),
+    )
+    session_id = uuid4()
+
+    async def exercise():
+        prepared = await service.prepare_turn(
+            browser_id="browser",
+            session_id=session_id,
+            request_id=uuid4(),
+            query="hello",
+        )
+        return [event async for event in service.stream_turn_states(prepared)]
+
+    events = asyncio.run(exercise())
+    completed = events[-1]
+    final_text = completed.state.answer.text
+
+    assert completed.state.status == "completed"
+    assert completed.state.answer.status == "ready"
+    assert final_text
+    if expected_answer is not None:
+        assert final_text == expected_answer
+    else:
+        assert "detailed final response" in final_text
+    assert "truncated primary" not in final_text
+    assert "truncated degraded" not in final_text
+    assert len(model.requests) == 3
+    assert len(repository.appended) == 1
+    assert repository.appended[0]["assistant_message"] == final_text
+
+    history_messages = service._sessions[session_id].history.effective_messages()
+    final_messages = [
+        message.content for message in history_messages if isinstance(message, FinalMessage)
+    ]
+    assert final_messages[-1] == final_text
+    assert all("truncated" not in content for content in final_messages)
 
 
 def test_product_follow_up_uses_automatic_compaction_and_fresh_task_state(

@@ -396,9 +396,10 @@ rejected-batch history encoding, paired non-execution feedback, and bounded
 Runtime correction through execution finalization are implemented and
 offline-tested. A rejected batch never reaches ToolRegistry. Ordinary valid-JSON
 calls still use ToolRegistry schema and business validation; exhausted correction
-enters Answer Stage using reliable results. Recovery from primary or degraded
-answer truncation remains pending, and live Provider compatibility has not been
-verified.
+enters Answer Stage using reliable results. A primary or degraded answer ending
+with `finish_reason=length` fails that attempt and follows the existing
+replacement path; degraded truncation reaches deterministic fallback. This is
+offline-tested, while live Provider compatibility has not been verified.
 
 Execution and answering have separate wall-clock deadlines. The execution
 deadline defaults to 300 seconds and the answer deadline defaults to 60 seconds;

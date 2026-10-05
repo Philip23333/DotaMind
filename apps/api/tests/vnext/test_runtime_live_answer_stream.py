@@ -5,7 +5,8 @@ from uuid import uuid4
 
 import pytest
 
-from app.vnext.agent.errors import AgentCancelledError
+import app.vnext.agent.runtime as runtime_module
+from app.vnext.agent.errors import AgentCancelledError, AnswerOutputTruncated
 from app.vnext.agent.events import (
     AgentCancelled,
     AgentCompleted,
@@ -257,6 +258,182 @@ def test_partial_degraded_text_then_failure_is_replaced_by_deterministic_answer(
     assert len({event.attempt_id for event in starts}) == 3
     assert completed.attempt_id == starts[2].attempt_id
     assert completed.final.content not in [event.text for event in deltas]
+
+
+@pytest.mark.parametrize("degraded_is_truncated", [False, True])
+def test_streamed_length_attempts_are_replaced_without_concatenating_text(
+    degraded_is_truncated: bool,
+) -> None:
+    class _TruncatedAnswerModel:
+        def stream(self, request: ModelRequest):
+            async def generate():
+                if request.step == 1:
+                    yield ModelResponse.from_final("execution")
+                    return
+                if request.step == 2:
+                    yield ModelTextDelta(text="partial primary")
+                    yield ModelResponse.from_final(
+                        "truncated primary response",
+                        finish_reason="length",
+                        usage={"completion_tokens": 13},
+                    )
+                    return
+                yield ModelTextDelta(text="partial degraded")
+                yield ModelResponse.from_final(
+                    "truncated degraded response" if degraded_is_truncated else "degraded answer",
+                    finish_reason="length" if degraded_is_truncated else "stop",
+                    usage={"completion_tokens": 7},
+                )
+
+            return generate()
+
+    model = _TruncatedAnswerModel()
+    trace = AgentTraceCollector(capture_full_calls=True)
+    events = asyncio.run(
+        _consume_stream(
+            _runtime(model).run_stream([UserMessage(content="hello")], trace_collector=trace),
+            [],
+        )
+    )
+
+    starts = [event for event in events if isinstance(event, AnswerAttemptStarted)]
+    failures = [event for event in events if isinstance(event, AnswerAttemptFailed)]
+    deltas = [event for event in events if isinstance(event, TextDelta)]
+    completed = next(event for event in events if isinstance(event, AgentCompleted))
+    assert [event.text for event in deltas] == ["partial primary", "partial degraded"]
+    assert [event.answer_kind for event in starts] == (
+        ["primary", "degraded", "deterministic"]
+        if degraded_is_truncated
+        else ["primary", "degraded"]
+    )
+    assert [event.error_code for event in failures] == (
+        [AnswerOutputTruncated.code, AnswerOutputTruncated.code]
+        if degraded_is_truncated
+        else [AnswerOutputTruncated.code]
+    )
+    assert len({event.attempt_id for event in starts}) == len(starts)
+    assert completed.attempt_id == starts[-1].attempt_id
+    assert completed.final.content not in {
+        "truncated primary response",
+        "truncated degraded response",
+        "partial primary",
+        "partial degraded",
+    }
+    if not degraded_is_truncated:
+        assert completed.final.content == "degraded answer"
+    else:
+        assert "detailed final response" in completed.final.content
+    answer_calls = [
+        call
+        for call in trace.snapshot()["model_calls"]
+        if call["purpose"] in {"primary_answer", "degraded_answer"}
+    ]
+    assert [call["status"] for call in answer_calls] == (
+        ["failed", "failed"] if degraded_is_truncated else ["failed", "completed"]
+    )
+    assert answer_calls[0]["error_code"] == AnswerOutputTruncated.code
+    assert answer_calls[0]["response"]["finish_reason"] == "length"
+    assert answer_calls[0]["response"]["usage"] == {"completion_tokens": 13}
+    assert trace.snapshot()["answer_fallback"] == (
+        "deterministic" if degraded_is_truncated else "degraded_model"
+    )
+
+
+def test_cancellation_at_truncated_response_takes_priority_and_skips_degraded_call() -> None:
+    token = CancellationToken()
+
+    class _CancelBeforeTerminalModel:
+        def stream(self, request: ModelRequest):
+            async def generate():
+                if request.step == 1:
+                    yield ModelResponse.from_final("execution")
+                    return
+                token.cancel()
+                yield ModelResponse.from_final("truncated", finish_reason="length")
+
+            return generate()
+
+    trace = AgentTraceCollector(capture_full_calls=True)
+    runtime = _runtime(_CancelBeforeTerminalModel())
+    events: list[object] = []
+
+    async def collect_cancelled_stream() -> None:
+        async for event in runtime.run_stream(
+            [UserMessage(content="hello")], cancellation_token=token, trace_collector=trace
+        ):
+            events.append(event)
+
+    with pytest.raises(AgentCancelledError):
+        asyncio.run(collect_cancelled_stream())
+
+    assert not any(isinstance(event, (AgentCompleted, AnswerAttemptFailed)) for event in events)
+    assert [event.answer_kind for event in events if isinstance(event, AnswerAttemptStarted)] == [
+        "primary"
+    ]
+    assert len(trace.snapshot()["model_calls"]) == 2
+    assert trace.snapshot()["model_calls"][-1]["status"] == "cancelled"
+    assert trace.snapshot()["model_calls"][-1]["response"]["finish_reason"] == "length"
+
+
+def test_answer_deadline_after_length_response_skips_degraded_model_call(monkeypatch) -> None:
+    class _Clock:
+        value = 0.0
+
+        def __call__(self) -> float:
+            return self.value
+
+    clock = _Clock()
+    monkeypatch.setattr(runtime_module, "monotonic", clock)
+
+    class _ExpireAfterPrimaryResponseTrace(AgentTraceCollector):
+        def __init__(self) -> None:
+            super().__init__(capture_full_calls=True)
+            self.responses = 0
+
+        def model_call_response(self, call_id, response) -> None:
+            super().model_call_response(call_id, response)
+            self.responses += 1
+            if self.responses == 2:
+                clock.value = 2.01
+
+    model = ScriptedModelClient(
+        [
+            ModelResponse.from_final("execution"),
+            ModelResponse.from_final(
+                "truncated primary", finish_reason="length", usage={"completion_tokens": 15}
+            ),
+        ]
+    )
+    trace = _ExpireAfterPrimaryResponseTrace()
+    runtime = AgentRuntime(
+        model,
+        ToolRegistry(),
+        limits=AgentLimits(
+            application_max_output_tokens=4096,
+            deadline_seconds=10,
+            answer_timeout_seconds=2,
+        ),
+    )
+
+    result = asyncio.run(runtime.run([UserMessage(content="hello")], trace_collector=trace))
+
+    assert "detailed final response" in result.content
+    assert len(model.requests) == 2
+    assert [attempt["kind"] for attempt in trace.snapshot()["answer_attempts"]] == [
+        "primary",
+        "degraded",
+    ]
+    assert [attempt["status"] for attempt in trace.snapshot()["answer_attempts"]] == [
+        "timeout",
+        "timeout",
+    ]
+    answer_calls = [
+        call for call in trace.snapshot()["model_calls"] if call["purpose"] == "primary_answer"
+    ]
+    assert len(answer_calls) == 1
+    assert answer_calls[0]["status"] == "deadline"
+    assert answer_calls[0]["response"]["finish_reason"] == "length"
+    assert answer_calls[0]["response"]["usage"] == {"completion_tokens": 15}
 
 
 @pytest.mark.parametrize(
