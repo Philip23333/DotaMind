@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, TypeAdapter
 
+import app.vnext.agent.runtime as runtime_module
 from app.vnext.agent.answer_stage import _tool_evidence
 from app.vnext.agent.errors import AgentCancelledError, ModelProviderError
 from app.vnext.agent.events import AgentCompleted, AgentFailed, ToolStarted
@@ -252,6 +253,141 @@ def test_exhaustion_answers_partially_only_after_current_request_evidence() -> N
     recovery = collector.snapshot()["generation_recoveries"]
     assert [entry["consecutive_rejections"] for entry in recovery] == [1, 2, 3]
     assert collector.snapshot()["answer_resolution"]["mode"] == "partial"
+
+
+def test_recovery_exhaustion_with_answer_provider_failures_uses_incomplete_fallback() -> None:
+    executed: list[int] = []
+    model = ScriptedModelClient(
+        [
+            _tool_turn("successful-call", 9),
+            _provider_error(_batch(call_ids=("reused-id",))),
+            _provider_error(_batch(call_ids=("reused-id",))),
+            _provider_error(_batch(call_ids=("reused-id",))),
+            ModelProviderError("primary answer provider unavailable"),
+            ModelProviderError("degraded answer provider unavailable"),
+        ]
+    )
+    runtime = AgentRuntime(
+        model,
+        _registry(lambda args: executed.append(args.value) or EchoOutput(value=args.value)),
+        limits=AgentLimits(application_max_output_tokens=4096, deadline_seconds=2),
+    )
+    collector = AgentTraceCollector()
+
+    result = asyncio.run(
+        runtime.run([UserMessage(content="hello")], trace_collector=collector)
+    )
+
+    snapshot = collector.snapshot()
+    assert executed == [9]
+    assert len(model.requests) == 6
+    assert snapshot["execution_outcome"]["reason"] == "generation_recovery_exhausted"
+    assert snapshot["answer_resolution"]["mode"] == "partial"
+    assert snapshot["answer_fallback"] == "deterministic"
+    assert snapshot["terminal"]["status"] == "completed"
+    assert "repeatedly submitted invalid or truncated tool-call batches" in result.content
+    assert "The task execution completed" not in result.content
+    assert [item["next_action"] for item in snapshot["generation_recoveries"]] == [
+        "correct",
+        "correct",
+        "finalize",
+    ]
+
+    answer_messages = model.requests[-1].messages
+    rejected_calls = [
+        message
+        for message in answer_messages
+        if isinstance(message, RejectedAssistantMessage)
+    ]
+    assert len(rejected_calls) == 3
+    rejected_results = [
+        message
+        for message in answer_messages
+        if isinstance(message, ToolResultMessage) and message.executed is False
+    ]
+    assert len(rejected_results) == 3
+    for rejected_call, rejected_result in zip(rejected_calls, rejected_results, strict=True):
+        assert len(rejected_call.tool_calls) == 1
+        assert rejected_call.tool_calls[0].id == rejected_result.tool_call_id
+        assert rejected_result.status == "error"
+
+
+def test_rejection_correction_stops_at_original_execution_deadline(monkeypatch) -> None:
+    class Clock:
+        value = 0.0
+
+        def __call__(self) -> float:
+            return self.value
+
+        def advance(self, seconds: float) -> None:
+            self.value += seconds
+
+    clock = Clock()
+    monkeypatch.setattr(runtime_module, "monotonic", clock)
+
+    class ClockedRuntime(AgentRuntime):
+        async def _await_controlled(self, awaitable, token, deadline):
+            self._check_controls(token, deadline)
+            result = await awaitable
+            self._check_controls(token, deadline)
+            return result
+
+    class Model:
+        def __init__(self) -> None:
+            self.requests = []
+
+        async def complete(self, request):
+            self.requests.append(request)
+            if len(self.requests) == 1:
+                raise _provider_error(_batch(call_ids=("first-rejected",)))
+            if len(self.requests) == 2:
+                clock.advance(2.01)
+                raise _provider_error(_batch(call_ids=("late-rejected",)))
+            raise AssertionError("deadline must prevent another execution request")
+
+    model = Model()
+    executed: list[int] = []
+    runtime = ClockedRuntime(
+        model,
+        _registry(lambda args: executed.append(args.value) or EchoOutput(value=args.value)),
+        limits=AgentLimits(application_max_output_tokens=4096, deadline_seconds=2),
+    )
+    history = SessionExecutionHistory()
+    request_id = uuid4()
+    messages = history.begin_request(request_id, "hello")
+    collector = AgentTraceCollector()
+
+    async def run():
+        return await asyncio.wait_for(
+            runtime.run(
+                messages,
+                execution_history=history,
+                request_id=request_id,
+                trace_collector=collector,
+            ),
+            timeout=1,
+        )
+
+    result = asyncio.run(run())
+
+    assert clock.value == 2.01
+    assert len(model.requests) == 2
+    assert executed == []
+    assert collector.snapshot()["execution_outcome"]["reason"] == "deadline"
+    assert len(collector.snapshot()["generation_recoveries"]) == 1
+    recorded = history.effective_messages()
+    rejected_calls = [
+        message for message in recorded if isinstance(message, RejectedAssistantMessage)
+    ]
+    rejected_results = [
+        message
+        for message in recorded
+        if isinstance(message, ToolResultMessage) and message.executed is False
+    ]
+    assert len(rejected_calls) == len(rejected_results) == 1
+    assert rejected_calls[0].tool_calls[0].id == "first-rejected"
+    assert rejected_results[0].tool_call_id == "first-rejected"
+    assert "execution stopped before a verified result" in result.content
 
 
 def test_successful_response_resets_consecutive_rejection_allowance() -> None:

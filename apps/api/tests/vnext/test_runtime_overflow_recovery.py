@@ -21,12 +21,19 @@ from app.vnext.agent.events import ModelRequested, TextDelta, ToolStarted
 from app.vnext.agent.limits import AgentLimits
 from app.vnext.agent.runtime import AgentRuntime, CancellationToken, _Deadline
 from app.vnext.agent.trace import AgentTraceCollector
-from app.vnext.llm.errors import ModelContextWindowError, ModelTransientError
+from app.vnext.llm.errors import (
+    ModelContextWindowError,
+    ModelToolCallBatchRejected,
+    ModelTransientError,
+)
 from app.vnext.llm.protocol import (
     AssistantMessage,
     ModelRequest,
     ModelResponse,
     ModelTextDelta,
+    RawToolCall,
+    RejectedToolCallBatch,
+    ToolArgumentFailure,
     ToolCall,
     ToolResultMessage,
     UserMessage,
@@ -132,6 +139,40 @@ def _overflow(status_code: int = 400) -> Callable[[ModelRequest], ModelResponse]
             ),
             provider_code="context_length_exceeded",
             status_code=status_code,
+        )
+
+    return fail
+
+
+def _rejected(call_id: str) -> Callable[[ModelRequest], ModelResponse]:
+    batch = RejectedToolCallBatch(
+        reason="invalid_tool_arguments",
+        calls=[
+            RawToolCall(
+                index=0,
+                id=call_id,
+                name="echo",
+                provider_name="echo",
+                raw_arguments='{"text":',
+            )
+        ],
+        argument_failures=[
+            ToolArgumentFailure(
+                call_index=0,
+                kind="invalid_json",
+                message="Expecting value",
+                position=8,
+                line=1,
+                column=9,
+            )
+        ],
+        finish_reason="tool_calls",
+    )
+
+    def fail(request: ModelRequest) -> ModelResponse:
+        raise ModelProviderError(
+            "model provider request failed",
+            cause=ModelToolCallBatchRejected(batch=batch),
         )
 
     return fail
@@ -546,6 +587,120 @@ def test_retry_overflow_does_not_start_a_second_recovery() -> None:
         == 1
     )
     assert trace.snapshot()["overflow_recoveries"][0]["status"] == "retry_failed"
+
+
+def test_generation_recovery_survives_one_overflow_compaction() -> None:
+    history, request_id = _history()
+    executed: list[str] = []
+    model = _PlannedModel(
+        [
+            lambda request: ModelResponse.from_assistant(
+                AssistantMessage(tool_calls=[_call("already-completed", "already")])
+            ),
+            _rejected("rejected-before-overflow"),
+            _overflow(),
+            _summary("compressed after overflow"),
+            _summary("compressed turn prefix"),
+            _rejected("rejected-after-overflow"),
+            lambda request: ModelResponse.from_assistant(
+                AssistantMessage(tool_calls=[_call("corrected-call", "corrected")])
+            ),
+            _final("execution"),
+            _final("answer"),
+        ]
+    )
+    trace = AgentTraceCollector()
+    events: list[object] = []
+
+    result = _run(
+        AgentRuntime(model, _registry(executed), limits=_limits()),
+        history,
+        request_id,
+        trace_collector=trace,
+        event_sink=events.append,
+    )
+
+    snapshot = trace.snapshot()
+    assert result.content == "answer"  # type: ignore[union-attr]
+    assert executed == ["already", "corrected"]
+    assert len(model.requests) == 9
+    compaction_requests = [
+        request
+        for request in model.requests
+        if request.metadata.get("purpose") == "context_compaction"
+    ]
+    assert len(compaction_requests) == 2
+    assert [item["consecutive_rejections"] for item in snapshot["generation_recoveries"]] == [1, 2]
+    assert snapshot["generation_recoveries"][-1]["next_action"] == "correct"
+    assert snapshot["overflow_recoveries"] == [
+        {
+            "step": 3,
+            "stage": "execution",
+            "status": "retry_failed",
+            "error_code": "model_provider_error",
+        }
+    ]
+    assert [event.tool_call_id for event in events if isinstance(event, ToolStarted)] == [
+        "already-completed",
+        "corrected-call",
+    ]
+    assert [
+        request.step for request in model.requests if not request.metadata.get("purpose")
+    ] == [1, 2, 3, 3, 4, 5, 6]
+    assert history.compaction_records
+
+
+def test_second_overflow_after_rejection_uses_existing_exhausted_quota_error() -> None:
+    history, request_id = _history()
+    executed: list[str] = []
+    model = _PlannedModel(
+        [
+            lambda request: ModelResponse.from_assistant(
+                AssistantMessage(tool_calls=[_call("already-completed", "already")])
+            ),
+            _overflow(),
+            _summary("compressed after overflow"),
+            _summary("compressed turn prefix"),
+            _rejected("rejected-after-overflow"),
+            _overflow(),
+        ]
+    )
+    trace = AgentTraceCollector()
+
+    with pytest.raises(ModelContextWindowExceeded):
+        _run(
+            AgentRuntime(model, _registry(executed), limits=_limits()),
+            history,
+            request_id,
+            trace_collector=trace,
+        )
+
+    snapshot = trace.snapshot()
+    assert executed == ["already"]
+    assert len(model.requests) == 6
+    compaction_requests = [
+        request
+        for request in model.requests
+        if request.metadata.get("purpose") == "context_compaction"
+    ]
+    assert len(compaction_requests) == 2
+    assert len(history.compaction_records) == 1
+    assert len(snapshot["generation_recoveries"]) == 1
+    assert snapshot["generation_recoveries"][0]["consecutive_rejections"] == 1
+    assert snapshot["overflow_recoveries"] == [
+        {
+            "step": 2,
+            "stage": "execution",
+            "status": "retry_failed",
+            "error_code": "model_provider_error",
+        }
+    ]
+    assert [request.step for request in model.requests if not request.metadata.get("purpose")] == [
+        1,
+        2,
+        2,
+        3,
+    ]
 
 
 def test_summary_failure_does_not_retry_business_call() -> None:

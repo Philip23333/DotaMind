@@ -194,6 +194,34 @@ def build_answer_fallback(
         )
         return FinalMessage(content=f"{execution_note}\n\n{coverage}{remaining}")
 
+    if outcome.reason is ExecutionStopReason.GENERATION_RECOVERY_EXHAUSTED:
+        lines = [
+            "Execution stopped because the model repeatedly submitted invalid or truncated "
+            "tool-call batches."
+        ]
+        if resolution.total_items is None:
+            lines.append(
+                "I wasn't able to produce a reliable detailed answer from the available results."
+            )
+        else:
+            completed = len(resolution.completed_keys)
+            if resolution.remaining_keys:
+                lines.append(
+                    f"{completed} of {resolution.total_items} planned parts were completed. "
+                    "The remaining parts were not completed, so I won't infer or fill them in."
+                )
+            else:
+                lines.append(
+                    f"{completed} of {resolution.total_items} planned parts had been completed "
+                    "before execution stopped."
+                )
+        if context_capacity_exhausted:
+            lines.append(
+                "The detailed final response also could not be generated within the available "
+                "context budget."
+            )
+        return FinalMessage(content="\n\n".join(lines))
+
     answer_capacity_message = (
         "I wasn't able to generate the detailed final response within the available context budget."
         if context_capacity_exhausted

@@ -289,6 +289,65 @@ def test_capacity_stop_is_explained_in_deterministic_answers() -> None:
     )
 
 
+def test_generation_recovery_fallback_without_plan_does_not_claim_execution_completed() -> None:
+    resolution = AnswerResolution(
+        mode=AnswerResolutionMode.PARTIAL,
+        total_items=None,
+        completed_keys=(),
+        remaining_keys=(),
+    )
+
+    text = build_answer_fallback(
+        resolution,
+        _outcome(ExecutionStopReason.GENERATION_RECOVERY_EXHAUSTED),
+    ).content
+
+    assert "repeatedly submitted invalid or truncated tool-call batches" in text
+    assert "I wasn't able to produce a reliable detailed answer from the available results." in text
+    assert "task execution completed" not in text.lower()
+    assert "all processing was completed" not in text.lower()
+
+
+def test_generation_recovery_fallback_with_plan_preserves_incomplete_coverage() -> None:
+    resolution = AnswerResolution(
+        mode=AnswerResolutionMode.PARTIAL,
+        total_items=3,
+        completed_keys=("A",),
+        remaining_keys=("B", "C"),
+    )
+
+    text = build_answer_fallback(
+        resolution,
+        _outcome(ExecutionStopReason.GENERATION_RECOVERY_EXHAUSTED),
+    ).content
+
+    assert "repeatedly submitted invalid or truncated tool-call batches" in text
+    assert "1 of 3 planned parts were completed" in text
+    assert "remaining parts were not completed" in text
+    assert "task execution completed" not in text.lower()
+    assert "all processing was completed" not in text.lower()
+
+
+def test_generation_recovery_fallback_keeps_stop_reason_when_answer_capacity_is_exhausted() -> None:
+    resolution = AnswerResolution(
+        mode=AnswerResolutionMode.PARTIAL,
+        total_items=None,
+        completed_keys=(),
+        remaining_keys=(),
+    )
+
+    text = build_answer_fallback(
+        resolution,
+        _outcome(ExecutionStopReason.GENERATION_RECOVERY_EXHAUSTED),
+        context_capacity_exhausted=True,
+    ).content
+
+    assert "repeatedly submitted invalid or truncated tool-call batches" in text
+    assert "available context budget" in text
+    assert "task execution completed" not in text.lower()
+    assert "all processing was completed" not in text.lower()
+
+
 def test_projection_includes_task_state_plan_and_active_artifact_range() -> None:
     coordinator = TaskStateCoordinator()
     coordinator.create_plan(

@@ -9,16 +9,28 @@ from pydantic import BaseModel
 from app.vnext.agent.compaction_budget import resolve_compaction_output_tokens
 from app.vnext.agent.context_accounting import measure_request_context_bytes
 from app.vnext.agent.context_capacity import assess_request_capacity
-from app.vnext.agent.errors import AgentCancelledError, AgentRuntimeError, ModelProtocolError
+from app.vnext.agent.errors import (
+    AgentCancelledError,
+    AgentRuntimeError,
+    ModelProtocolError,
+    ModelProviderError,
+)
 from app.vnext.agent.events import AgentFailed, CompactionFailed, ModelRequested, ToolStarted
+from app.vnext.agent.generation_recovery import build_rejected_tool_call_history
 from app.vnext.agent.limits import AgentLimits
+from app.vnext.agent.output_budget import derive_output_budget
 from app.vnext.agent.runtime import AgentRuntime, CancellationToken, _Deadline
 from app.vnext.agent.runtime_context import ContextPressure
 from app.vnext.agent.trace import AgentTraceCollector
+from app.vnext.llm.errors import ModelToolCallBatchRejected
 from app.vnext.llm.protocol import (
     AssistantMessage,
     ModelRequest,
     ModelResponse,
+    RawToolCall,
+    RejectedAssistantMessage,
+    RejectedToolCallBatch,
+    ToolArgumentFailure,
     ToolCall,
     ToolResultMessage,
     UserMessage,
@@ -64,6 +76,47 @@ def _echo_call(call_id: str, text: str = "value") -> ToolCall:
         id=call_id,
         name="echo",
         arguments={"text": text},
+    )
+
+
+def _rejected_batch_error(raw_argument_size: int, *, call_count: int = 1) -> ModelProviderError:
+    raw_arguments = '{"text":"' + ("x" * raw_argument_size)
+    batch = RejectedToolCallBatch(
+        reason="invalid_tool_arguments",
+        calls=[
+            RawToolCall(
+                index=0,
+                id="rejected-long-call",
+                name="echo",
+                provider_name="echo",
+                raw_arguments=raw_arguments,
+            )
+        ]
+        + [
+            RawToolCall(
+                index=index,
+                id=f"rejected-peer-{index}",
+                name="echo",
+                provider_name="echo",
+                raw_arguments='{"text":"peer"}',
+            )
+            for index in range(1, call_count)
+        ],
+        argument_failures=[
+            ToolArgumentFailure(
+                call_index=0,
+                kind="invalid_json",
+                message="unterminated string",
+                position=len(raw_arguments),
+                line=1,
+                column=len(raw_arguments) + 1,
+            )
+        ],
+        finish_reason="tool_calls",
+    )
+    return ModelProviderError(
+        "model provider request failed",
+        cause=ModelToolCallBatchRejected(batch=batch),
     )
 
 
@@ -443,6 +496,163 @@ def test_high_watermark_compacts_once_and_rebuilds_execution_request() -> None:
     ]
     assert snapshot["compaction_commits"][0]["trigger"] == "watermark"
     assert len(snapshot["compaction_commits"]) == 1
+
+
+def test_rejected_batch_compacts_atomically_and_keeps_correction_count_and_budget() -> None:
+    history, request_id = _history_with_old_group(size=18_000)
+    registry = _echo_registry()
+    first_rejection = _rejected_batch_error(12_000, call_count=2)
+    assert isinstance(first_rejection.cause, ModelToolCallBatchRejected)
+    rejected_assistant, rejected_results = build_rejected_tool_call_history(
+        first_rejection.cause.batch
+    )
+    after_rejection, _ = _history(
+        [*history.effective_messages(), rejected_assistant, *rejected_results]
+    )
+    compacted_probe = _committed_history(
+        after_rejection,
+        cut_index=3,
+        summary="compressed background",
+    )
+    base_limits = AgentLimits(
+        context_window_tokens=1_000_000,
+        application_max_output_tokens=8_000,
+        context_safety_margin_tokens=16,
+        compaction_reserve_tokens=160,
+        compaction_keep_recent_tokens=1,
+        compaction_max_input_bytes=100_000,
+        context_estimate_bytes_per_token=1,
+        deadline_seconds=5,
+        answer_timeout_seconds=5,
+    )
+    initial_probe = _probe_request(history, registry, limits=base_limits)
+    rejected_probe = _probe_request(after_rejection, registry, limits=base_limits)
+    compacted_probe_request = _probe_request(compacted_probe, registry, limits=base_limits)
+    selected_limits: AgentLimits | None = None
+    for window in range(1_000, 40_000, 50):
+        candidate_limits = base_limits.model_copy(update={"context_window_tokens": window})
+        initial_capacity = assess_request_capacity(initial_probe, candidate_limits)
+        rejected_capacity = assess_request_capacity(rejected_probe, candidate_limits)
+        compacted_capacity = assess_request_capacity(compacted_probe_request, candidate_limits)
+        assert initial_capacity is not None
+        assert rejected_capacity is not None
+        assert compacted_capacity is not None
+        initial_budget = derive_output_budget(initial_probe, candidate_limits)
+        compacted_budget = derive_output_budget(compacted_probe_request, candidate_limits)
+        if (
+            initial_capacity.pressure is ContextPressure.NORMAL
+            and rejected_capacity.pressure in {ContextPressure.HIGH, ContextPressure.CRITICAL}
+            and compacted_capacity.pressure is ContextPressure.NORMAL
+            and initial_budget.actual_output_tokens < compacted_budget.actual_output_tokens
+        ):
+            selected_limits = candidate_limits
+            break
+
+    assert selected_limits is not None, (
+        "could not find budgets that isolate post-rejection compaction"
+    )
+
+    executed: list[str] = []
+    second_rejection = _rejected_batch_error(32)
+
+    class Model:
+        def __init__(self) -> None:
+            self.requests: list[ModelRequest] = []
+
+        async def complete(self, request: ModelRequest) -> ModelResponse:
+            self.requests.append(request)
+            if request.metadata.get("purpose") == "context_compaction":
+                return ModelResponse.from_final("compressed background", finish_reason="stop")
+            if request.step == 1:
+                raise _rejected_batch_error(12_000, call_count=2)
+            if request.step == 2:
+                raise second_rejection
+            if request.step == 3:
+                return ModelResponse.from_assistant(
+                    AssistantMessage(tool_calls=[_echo_call("corrected-call", "recovered")])
+                )
+            if request.step == 4:
+                return ModelResponse.from_final("execution done")
+            return ModelResponse.from_final("answer")
+
+    model = Model()
+    registry = _echo_registry(calls=executed)
+    trace = AgentTraceCollector()
+
+    result = _run(
+        AgentRuntime(model, registry, limits=selected_limits),
+        history,
+        request_id,
+        trace_collector=trace,
+    )
+
+    assert result.content == "answer"
+    assert executed == ["recovered"]
+    snapshot = trace.snapshot()
+    execution_checks = [
+        item for item in snapshot["context_capacity_checks"] if item["stage"] == "execution"
+    ]
+    assert execution_checks[0]["phase"] == "before_model"
+    assert execution_checks[0]["capacity"]["pressure"] == "normal"
+    assert execution_checks[1]["phase"] == "before_compaction"
+    assert execution_checks[1]["capacity"]["pressure"] in {"high", "critical"}
+    assert execution_checks[2]["phase"] == "before_model"
+    assert execution_checks[2]["capacity"]["pressure"] == "normal"
+    assert [item["consecutive_rejections"] for item in snapshot["generation_recoveries"]] == [1, 2]
+    assert [commit["trigger"] for commit in snapshot["compaction_commits"]] == ["watermark"]
+    assert len(history.compaction_records) == 1
+
+    retry_request = next(
+        request for request in model.requests if request.step == 2 and request.tools
+    )
+    assert measure_request_context_bytes(retry_request) < measure_request_context_bytes(
+        rejected_probe
+    )
+    retry_budget = derive_output_budget(retry_request, selected_limits)
+    initial_budget = derive_output_budget(initial_probe, selected_limits)
+    assert retry_request.max_output_tokens == retry_budget.actual_output_tokens
+    assert retry_budget.actual_output_tokens > initial_budget.actual_output_tokens
+    step_two_trace = next(item for item in snapshot["steps"] if item["step"] == 2)
+    assert (
+        step_two_trace["output_budget"]["actual_output_tokens"]
+        == retry_request.max_output_tokens
+    )
+
+    rejection_index = next(
+        index
+        for index, message in enumerate(retry_request.messages)
+        if isinstance(message, RejectedAssistantMessage)
+    )
+    rejected_message = retry_request.messages[rejection_index]
+    assert isinstance(rejected_message, RejectedAssistantMessage)
+    assert len(rejected_message.tool_calls) == 2
+    assert len(rejected_message.tool_calls[0].raw_arguments) > 12_000
+    paired_results = retry_request.messages[
+        rejection_index + 1 : rejection_index + 1 + len(rejected_message.tool_calls)
+    ]
+    assert len(paired_results) == 2
+    assert all(isinstance(message, ToolResultMessage) for message in paired_results)
+    assert [message.tool_call_id for message in paired_results] == [
+        call.id for call in rejected_message.tool_calls
+    ]
+    assert all(message.executed is False for message in paired_results)
+    assert retry_request.max_output_tokens is not None
+    assert retry_request.metadata.get("purpose") is None
+
+    summary_requests = [
+        request
+        for request in model.requests
+        if request.metadata.get("purpose") == "context_compaction"
+    ]
+    assert summary_requests
+    assert all(request.tools == [] for request in summary_requests)
+    for request in summary_requests:
+        kind = request.metadata["compaction_kind"]
+        assert request.max_output_tokens == resolve_compaction_output_tokens(
+            kind=kind,
+            reserve_tokens=selected_limits.compaction_reserve_tokens,
+            model_max_output_tokens=selected_limits.compaction_model_max_output_tokens,
+        )
 
 
 def test_production_formula_triggers_a_real_compaction_without_test_override() -> None:
