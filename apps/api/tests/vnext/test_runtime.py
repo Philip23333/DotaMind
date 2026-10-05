@@ -7,8 +7,8 @@ import httpx
 import pytest
 from pydantic import BaseModel, ConfigDict
 
-from app.vnext.agent.errors import AgentCancelledError, ModelProtocolError, ModelProviderError
-from app.vnext.agent.events import AgentCompleted, TextDelta
+from app.vnext.agent.errors import AgentCancelledError, ModelProtocolError
+from app.vnext.agent.events import AgentCompleted, AgentFailed, TextDelta, ToolStarted
 from app.vnext.agent.limits import AgentLimits
 from app.vnext.agent.runtime import AgentRuntime, CancellationToken
 from app.vnext.agent.task_state import (
@@ -147,13 +147,15 @@ def test_tool_execution_is_followed_by_tool_free_answer_request() -> None:
     assert "Other successful tool observations" in model.requests[2].messages[-1].content
 
 
-def test_rejected_tool_call_batch_stays_on_existing_terminal_runtime_path() -> None:
+def test_rejected_tool_call_batch_is_recorded_and_exhaustion_enters_answer_stage() -> None:
     provider_requests = 0
+    provider_payloads: list[dict] = []
     handler_calls: list[int] = []
 
     def provider(request: httpx.Request) -> httpx.Response:
         nonlocal provider_requests
         provider_requests += 1
+        provider_payloads.append(json.loads(request.read()))
         return httpx.Response(
             200,
             json={
@@ -170,7 +172,10 @@ def test_rejected_tool_call_batch_stays_on_existing_terminal_runtime_path() -> N
                                 {
                                     "id": "call-invalid",
                                     "type": "function",
-                                    "function": {"name": "echo", "arguments": "{"},
+                                    "function": {
+                                        "name": "echo",
+                                        "arguments": '{ "secret": "RAW_SENTINEL" ',
+                                    },
                                 },
                             ],
                         },
@@ -191,6 +196,7 @@ def test_rejected_tool_call_batch_stays_on_existing_terminal_runtime_path() -> N
         model="test-model",
         transport=httpx.MockTransport(provider),
     )
+    model.stream = None  # type: ignore[method-assign]
     coordinator = TaskStateCoordinator()
     coordinator.plan = TaskPlan(
         items=(TaskItem("A", "Collect A", TaskItemStatus.PENDING),),
@@ -204,10 +210,16 @@ def test_rejected_tool_call_batch_stays_on_existing_terminal_runtime_path() -> N
         task_state_coordinator=coordinator,
     )
 
-    with pytest.raises(ModelProviderError):
-        _run(runtime, trace_collector=collector)
+    events = []
+    result = asyncio.run(
+        runtime.run(
+            [UserMessage(content="hello")],
+            trace_collector=collector,
+            event_sink=events.append,
+        )
+    )
 
-    assert provider_requests == 1
+    assert provider_requests == 3
     assert handler_calls == []
     assert coordinator.store.list() == []
     plan = coordinator.plan_snapshot()
@@ -215,8 +227,36 @@ def test_rejected_tool_call_batch_stays_on_existing_terminal_runtime_path() -> N
     assert plan.items[0].status == TaskItemStatus.PENDING
     assert coordinator.source_owners_snapshot() == []
     trace = collector.snapshot()
-    assert trace["terminal"]["status"] == "failed"
-    assert '"batch"' not in json.dumps(trace)
+    recoveries = trace["generation_recoveries"]
+    assert [entry["correction_attempt"] for entry in recoveries] == [0, 1, 2]
+    assert [entry["next_action"] for entry in recoveries] == [
+        "correct",
+        "correct",
+        "finalize",
+    ]
+    assert all(entry["executed_count"] == 0 for entry in recoveries)
+    assert trace["execution_outcome"]["reason"] == "generation_recovery_exhausted"
+    assert trace["terminal"]["status"] == "completed"
+    assert "RAW_SENTINEL" not in json.dumps(trace)
+    assert "invalid or truncated tool-call batches" in result.content
+    assert sum(isinstance(event, ToolStarted) for event in events) == 0
+    assert sum(isinstance(event, AgentFailed) for event in events) == 0
+    assert sum(isinstance(event, AgentCompleted) for event in events) == 1
+    assert len(provider_payloads) == 3
+    assert len(
+        [
+            message
+            for message in provider_payloads[1]["messages"]
+            if message.get("role") == "assistant" and message.get("tool_calls")
+        ]
+    ) == 1
+    assert any(
+        message.get("tool_call_id") == "call-invalid"
+        and "RAW_SENTINEL" not in message.get("content", "")
+        and "本批所有调用均未执行" in message.get("content", "")
+        for message in provider_payloads[1]["messages"]
+        if message.get("role") == "tool"
+    )
 
 
 def test_execution_continues_beyond_twenty_steps_then_answers() -> None:

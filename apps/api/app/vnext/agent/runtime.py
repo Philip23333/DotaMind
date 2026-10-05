@@ -62,6 +62,7 @@ from app.vnext.agent.evidence_summary_lifecycle import (
     prepare_compaction,
     validate_compaction_response,
 )
+from app.vnext.agent.generation_recovery import build_rejected_tool_call_history
 from app.vnext.agent.instructions import ANSWER_INSTRUCTION, DEGRADED_ANSWER_INSTRUCTION
 from app.vnext.agent.limits import AgentLimits
 from app.vnext.agent.output_budget import (
@@ -76,6 +77,7 @@ from app.vnext.agent.transcript_rewrite import TranscriptRewriter
 from app.vnext.llm.errors import (
     ModelContextWindowError,
     ModelResponseDiagnosticError,
+    ModelToolCallBatchRejected,
     ModelTransientError,
 )
 from app.vnext.llm.protocol import (
@@ -276,6 +278,8 @@ class AgentRuntime:
         compaction_attempted_since_progress = False
         overflow_recovery_used = False
         answer_attempt_count = 0
+        consecutive_generation_rejections = 0
+        has_reliable_results = False
 
         def next_answer_attempt_id() -> str:
             nonlocal answer_attempt_count
@@ -437,6 +441,7 @@ class AgentRuntime:
                         )
                         break
                 recovery_pending = False
+                correction_requested = False
                 while True:
                     if trace_collector is not None:
                         trace_collector.model_request(
@@ -467,6 +472,7 @@ class AgentRuntime:
                             publish_text=False,
                             output_budget=output_budget,
                         )
+                        consecutive_generation_rejections = 0
                     except AgentCancelledError:
                         if recovery_pending and trace_collector is not None:
                             trace_collector.overflow_recovery(
@@ -713,6 +719,77 @@ class AgentRuntime:
                                 error_code=overflow_error.code,
                             )
                         continue
+                    except ModelProviderError as model_error:
+                        if recovery_pending and trace_collector is not None:
+                            trace_collector.overflow_recovery(
+                                step=step,
+                                stage="execution",
+                                status="retry_failed",
+                                error_code=model_error.code,
+                            )
+                        recovery_pending = False
+                        rejected = model_error.cause
+                        if not isinstance(rejected, ModelToolCallBatchRejected):
+                            raise
+                        try:
+                            self._check_controls(token, execution_deadline)
+                        except AgentDeadlineExceeded:
+                            outcome = ExecutionOutcome(ExecutionStopReason.DEADLINE, step)
+                            break
+
+                        batch = rejected.batch
+                        rejected_assistant, rejected_results = build_rejected_tool_call_history(
+                            batch
+                        )
+                        group: list[Message] = [rejected_assistant, *rejected_results]
+                        request_messages.extend(group)
+                        if execution_history is not None and request_id is not None:
+                            execution_history.record(
+                                request_id,
+                                rejected_assistant,
+                                kind="assistant_rejected",
+                            )
+                            for result in rejected_results:
+                                execution_history.record(
+                                    request_id,
+                                    result,
+                                    kind="tool_result",
+                                )
+                            _history_set_effective(
+                                execution_history,
+                                _persistent_history_messages(
+                                    request_messages,
+                                    self.system_instruction,
+                                ),
+                            )
+                        consecutive_generation_rejections += 1
+                        next_action: Literal["correct", "finalize"] = (
+                            "correct"
+                            if consecutive_generation_rejections <= 2
+                            else "finalize"
+                        )
+                        if trace_collector is not None:
+                            trace_collector.generation_recovery(
+                                step=step,
+                                reason=batch.reason,
+                                call_ids=[call.id for call in batch.calls],
+                                consecutive_rejections=consecutive_generation_rejections,
+                                correction_attempt=consecutive_generation_rejections - 1,
+                                next_action=next_action,
+                            )
+                        try:
+                            self._check_controls(token, execution_deadline)
+                        except AgentDeadlineExceeded:
+                            outcome = ExecutionOutcome(ExecutionStopReason.DEADLINE, step)
+                            break
+                        if next_action == "correct":
+                            correction_requested = True
+                        else:
+                            outcome = ExecutionOutcome(
+                                ExecutionStopReason.GENERATION_RECOVERY_EXHAUSTED,
+                                step,
+                            )
+                        break
                     except AgentRuntimeError as model_error:
                         if recovery_pending and trace_collector is not None:
                             trace_collector.overflow_recovery(
@@ -736,6 +813,8 @@ class AgentRuntime:
 
                 if outcome is not None:
                     break
+                if correction_requested:
+                    continue
                 assistant = response.message
                 if execution_history is not None and request_id is not None:
                     execution_history.record(
@@ -783,8 +862,16 @@ class AgentRuntime:
                         yield tool_event
                     self._check_controls(token, execution_deadline)
                 except AgentDeadlineExceeded:
+                    has_reliable_results = has_reliable_results or _has_reliable_tool_results(
+                        calls,
+                        results,
+                    )
                     outcome = ExecutionOutcome(ExecutionStopReason.DEADLINE, step)
                     break
+                has_reliable_results = has_reliable_results or _has_reliable_tool_results(
+                    calls,
+                    results,
+                )
                 candidate_messages = [*request_messages, assistant, *results]
                 if self.transcript_rewriter is None:
                     request_messages = candidate_messages
@@ -821,6 +908,7 @@ class AgentRuntime:
             resolution = resolve_answer(
                 outcome=outcome,
                 task_state_coordinator=self.task_state_coordinator,
+                has_reliable_results=has_reliable_results,
             )
             if trace_collector is not None:
                 trace_collector.answer_resolution(
@@ -2831,6 +2919,33 @@ def _persistent_history_messages(
         for message in messages
         if not (isinstance(message, SystemMessage) and message.content == system_instruction)
     ]
+
+
+def _has_reliable_tool_results(
+    calls: Sequence[ToolCall],
+    results: Sequence[ToolResultMessage],
+) -> bool:
+    """Return whether this request produced a successful non-control observation."""
+
+    names = {call.id: call.name for call in calls}
+    for result in results:
+        tool_name = names.get(result.tool_call_id)
+        if (
+            result.status != "ok"
+            or tool_name is None
+            or tool_name in {"task.plan", "task.checkpoint"}
+            or _is_receipt_only(result.content)
+        ):
+            continue
+        return True
+    return False
+
+
+def _is_receipt_only(content: Any) -> bool:
+    if not isinstance(content, dict):
+        return False
+    marker = content.get("_artifact_observation")
+    return isinstance(marker, dict) and marker.get("state") == "receipt_only"
 
 
 def _record_delivery(

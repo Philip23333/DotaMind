@@ -11,6 +11,8 @@ from app.vnext.llm.protocol import (
     Message,
     ModelRequest,
     ModelTool,
+    RawToolCall,
+    RejectedAssistantMessage,
     SystemMessage,
     ToolCall,
     ToolResultMessage,
@@ -89,6 +91,45 @@ def test_context_accounting_is_deterministic_and_split_by_role() -> None:
         "active_raw": {"count": 0, "serialized_bytes": 0},
         "receipts": {"count": 0, "serialized_bytes": 0},
     }
+
+
+def test_rejected_calls_are_counted_as_history_but_not_artifact_evidence() -> None:
+    raw_arguments = '{ "id" : 7, "unfinished" : '
+    rejected = RejectedAssistantMessage(
+        tool_calls=[
+            RawToolCall(
+                index=0,
+                id="bad-call",
+                name="lookup",
+                provider_name="lookup",
+                raw_arguments=raw_arguments,
+            )
+        ]
+    )
+    result = ToolResultMessage(
+        tool_call_id="bad-call",
+        content="本批所有调用均未执行，请重新提交完整调用。",
+        status="error",
+        error={
+            "code": "model_tool_arguments_invalid",
+            "message": "本批所有调用均未执行，请重新提交完整调用。",
+            "details": {},
+        },
+        executed=False,
+    )
+    request = ModelRequest(messages=[UserMessage(content="query"), rejected, result])
+
+    accounting = build_context_accounting(request).to_dict()
+
+    assert accounting["stable_messages"]["count"] == 3
+    assert accounting["stable_messages"]["by_role"]["assistant"]["count"] == 1
+    assert accounting["stable_messages"]["by_role"]["tool"]["count"] == 1
+    assert accounting["effective_request"]["serialized_bytes"] == measure_request_context_bytes(
+        request
+    )
+    assert accounting["artifact_observations"]["active_raw"]["count"] == 0
+    assert accounting["artifact_observations"]["receipts"]["count"] == 0
+    assert raw_arguments in str(request.messages[1].model_dump(mode="json"))
 
 
 def test_measure_request_context_bytes_matches_effective_request_accounting() -> None:

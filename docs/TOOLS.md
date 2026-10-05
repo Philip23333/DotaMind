@@ -15,11 +15,13 @@ may still include small scalar leaves. Artifact retrieval tools remain inline;
 now classifies malformed tool-argument JSON and truncated tool-call responses
 before a ModelResponse reaches Runtime, preserving the rejected batch; see
 [`agent/model_output_and_recovery.md`](agent/model_output_and_recovery.md).
-Runtime does not yet turn this classification into paired “not executed” tool
-results or correction. The eventual feedback remains non-executable: it cannot
-become a checkpoint source or change TaskState completion. Valid JSON with
-invalid tool fields and checkpoint-source errors keep their existing per-call
-rules.
+Runtime records the rejected assistant call and one paired, explicitly
+non-executed error result per call, then permits at most two corrective
+generations for consecutive rejected batches. Rejected calls never invoke
+ToolRegistry or become checkpoint evidence. If correction is exhausted, Answer
+Stage uses only reliable results already produced in the current request. Valid
+JSON with invalid tool fields and checkpoint-source errors keep their existing
+per-call rules. Primary/degraded answer truncation recovery remains pending.
 
 The clean-slate default registry currently exposes:
 

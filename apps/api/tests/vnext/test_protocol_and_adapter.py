@@ -6,7 +6,7 @@ from typing import Any
 
 import httpx
 import pytest
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, TypeAdapter, ValidationError
 
 from app.vnext.agent.evidence_summary_lifecycle import (
     CompactionSummaryError,
@@ -27,16 +27,19 @@ from app.vnext.llm.openai_compatible import (
 from app.vnext.llm.protocol import (
     AssistantMessage,
     FinalMessage,
+    Message,
     ModelRequest,
     ModelResponse,
     ModelTextDelta,
     ModelTool,
+    RawToolCall,
+    RejectedAssistantMessage,
     SystemMessage,
     ToolCall,
     ToolResultMessage,
     UserMessage,
 )
-from app.vnext.tools import ToolDefinition, ToolRegistry
+from app.vnext.tools import ToolDefinition, ToolError, ToolRegistry
 
 
 class EchoInput(BaseModel):
@@ -192,6 +195,62 @@ def test_adapter_serializes_messages_tools_and_tool_result_ids() -> None:
     assert "max_output_tokens" not in payload
     assert "max_completion_tokens" not in payload
     assert seen["headers"]["authorization"] == "Bearer test-key"
+
+
+def test_rejected_history_round_trips_and_serializes_raw_arguments_verbatim() -> None:
+    raw_arguments = ' { "player": 1, "note": "keep spacing" } '
+    rejected = RejectedAssistantMessage(
+        content="provider text",
+        tool_calls=[
+            RawToolCall(
+                index=0,
+                id="reused-call-id",
+                name="esports.player.search",
+                provider_name="player_lookup",
+                raw_arguments=raw_arguments,
+            )
+        ],
+    )
+    result = ToolResultMessage(
+        tool_call_id="reused-call-id",
+        status="error",
+        content="本批所有调用均未执行，请重新提交完整调用。",
+        error=ToolError(
+            code="model_tool_arguments_invalid",
+            message="本批所有调用均未执行，请重新提交完整调用。",
+            details={"reason": "invalid_tool_arguments"},
+        ),
+        executed=False,
+    )
+    request = _request([rejected, result])
+    round_tripped = [
+        TypeAdapter(Message).validate_python(message.model_dump(mode="json"))
+        for message in request.messages
+    ]
+    assert round_tripped == request.messages
+    with pytest.raises(ValidationError):
+        ModelResponse(message=rejected)  # type: ignore[arg-type]
+
+    seen: dict[str, Any] = {}
+
+    def handler(http_request: httpx.Request) -> httpx.Response:
+        seen["payload"] = json.loads(http_request.read())
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}]},
+            request=http_request,
+        )
+
+    asyncio.run(_adapter(handler).complete(request))
+    provider_messages = seen["payload"]["messages"]
+    assert provider_messages[0]["tool_calls"][0] == {
+        "id": "reused-call-id",
+        "type": "function",
+        "function": {"name": "player_lookup", "arguments": raw_arguments},
+    }
+    encoded_result = json.loads(provider_messages[1]["content"])
+    assert encoded_result["executed"] is False
+    assert encoded_result["error"]["code"] == "model_tool_arguments_invalid"
 
 
 def test_adapter_complete_maps_explicit_output_limit_to_provider_payload() -> None:

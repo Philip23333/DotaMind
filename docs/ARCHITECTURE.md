@@ -391,14 +391,14 @@ Runtime does not supply a step budget.
 
 The model-output and response-recovery contract is owned by
 [`agent/model_output_and_recovery.md`](agent/model_output_and_recovery.md).
-Dynamic output budgets and Adapter-side strict tool-call batch classification,
-rejected-batch preservation, and bounded diagnostics are implemented and
-offline-tested. Adapter strictly parses responses and preserves failed-call
-data; its Runtime history encoding remains pending. Runtime's whole-batch
-execution gate, paired error feedback, correction counter, and execution
-finalization remain pending. ToolRegistry continues normal schema and business
-validation; Answer Stage answers from available results and does not repair
-execution calls.
+Dynamic output budgets, strict Adapter-side tool-call batch classification,
+rejected-batch history encoding, paired non-execution feedback, and bounded
+Runtime correction through execution finalization are implemented and
+offline-tested. A rejected batch never reaches ToolRegistry. Ordinary valid-JSON
+calls still use ToolRegistry schema and business validation; exhausted correction
+enters Answer Stage using reliable results. Recovery from primary or degraded
+answer truncation remains pending, and live Provider compatibility has not been
+verified.
 
 Execution and answering have separate wall-clock deadlines. The execution
 deadline defaults to 300 seconds and the answer deadline defaults to 60 seconds;

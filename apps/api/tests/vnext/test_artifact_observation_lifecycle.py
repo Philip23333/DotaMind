@@ -8,10 +8,13 @@ from app.vnext.agent.limits import AgentLimits
 from app.vnext.agent.runtime import AgentRuntime
 from app.vnext.agent.trace import AgentTraceCollector
 from app.vnext.artifacts import ArtifactObservationTranscriptRewriter, ArtifactReadResult
+from app.vnext.artifacts.lifecycle import collect_active_artifact_observations
 from app.vnext.llm.protocol import (
     AssistantMessage,
     FinalMessage,
     ModelResponse,
+    RawToolCall,
+    RejectedAssistantMessage,
     ToolCall,
     ToolResultMessage,
     UserMessage,
@@ -438,3 +441,40 @@ def test_runtime_rewrites_previous_result_but_trace_keeps_raw_result() -> None:
     assert step["transcript_rewrites"][0]["reason"] == "duplicate"
     assert trace.snapshot()["steps"][0]["tool_results"][0]["result"]["content"]["value"] == rows
     assert len(str(first_result.content)) < len(str(second_result.content))
+
+
+def test_rejected_result_does_not_steal_reused_artifact_call_id() -> None:
+    rejected = RejectedAssistantMessage(
+        tool_calls=[
+            RawToolCall(
+                index=0,
+                id="reused-id",
+                name="artifact.read",
+                provider_name="artifact.read",
+                raw_arguments="{bad",
+            )
+        ]
+    )
+    rejected_result = ToolResultMessage(
+        tool_call_id="reused-id",
+        content="not executed",
+        status="error",
+        error={
+            "code": "model_tool_arguments_invalid",
+            "message": "not executed",
+            "details": {},
+        },
+        executed=False,
+    )
+    messages = [
+        rejected,
+        rejected_result,
+        AssistantMessage(tool_calls=[_call("reused-id")]),
+        _result("reused-id", [{"id": 1}]),
+    ]
+
+    observations = collect_active_artifact_observations(messages)
+
+    assert len(observations) == 1
+    assert observations[0].tool_call_id == "reused-id"
+    assert observations[0].value == [{"id": 1}]

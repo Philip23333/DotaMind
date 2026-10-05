@@ -12,7 +12,13 @@ from uuid import uuid4
 from app.vnext.artifacts.lifecycle import (
     collect_active_artifact_observations,
 )
-from app.vnext.llm.protocol import AssistantMessage, Message, ToolCall, ToolResultMessage
+from app.vnext.llm.protocol import (
+    AssistantMessage,
+    Message,
+    RejectedAssistantMessage,
+    ToolCall,
+    ToolResultMessage,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -528,12 +534,16 @@ def _collect_active_inline_sources(
     claimed_tool_call_ids: Collection[str],
     message_index_offset: int,
 ) -> list[CheckpointSource]:
-    calls: dict[str, list[ToolCall]] = {}
+    calls: dict[str, list[ToolCall | None]] = {}
     sources: list[CheckpointSource] = []
     for message_index, message in enumerate(messages):
         if isinstance(message, AssistantMessage):
             for call in message.tool_calls:
                 calls.setdefault(call.id, []).append(call)
+            continue
+        if isinstance(message, RejectedAssistantMessage):
+            for call in message.tool_calls:
+                calls.setdefault(call.id, []).append(None)
             continue
         if not isinstance(message, ToolResultMessage):
             continue

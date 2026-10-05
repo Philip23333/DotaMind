@@ -615,33 +615,36 @@ input changes, the expected-output-based early threshold, all three ordinary
 stages, and equality between the actual request cap, capacity record, trace, and
 OpenAI-compatible `max_tokens`. Summary calls retain their separate budgets.
 
-Adapter-side classification is implemented and offline-tested for complete and
-streamed responses: all identities and argument carriers are checked before JSON
-classification; all arguments are retained and classified; malformed/non-object
-JSON and tool-call `finish_reason=length` produce a typed rejected batch; protocol
-identity damage remains a protocol error; diagnostics remain bounded. The
-rejected raw batch is not serialized into trace. Runtime response recovery remains
-pending and must satisfy these cases before that stage can be marked implemented:
+Adapter and Runtime response-level rejection recovery are implemented and
+offline-tested for complete and streamed responses: all identities and argument
+carriers are checked before JSON classification; malformed/non-object JSON and
+tool-call `finish_reason=length` reject the complete batch before execution.
+Original arguments are retained in effective conversation history, while trace
+records contain bounded rejection metadata rather than the full batch. Runtime
+pairs every rejected call with an explicitly non-executed result and permits at
+most two corrective generations after consecutive rejections. Primary/degraded
+answer `finish_reason=length` recovery remains pending; live Provider compatibility
+has not been verified.
 
 | Case | Required evidence |
 | --- | --- |
-| Two-call batch; second argument JSON is invalid | Adapter preserves and rejects the entire batch; the existing terminal Runtime path runs neither handler. Future Runtime recovery must pair results and include the shared not-executed explanation |
-| Tool-call response ends with `finish_reason=length` | Zero handlers run even if received argument fragments parse |
-| Rejected call history | Raw argument text and identity are retained; paired results encode, persist, and compact as one indivisible history group |
+| Two-call batch; second argument JSON is invalid | Entire batch is rejected; neither handler runs; paired results include the shared not-executed explanation |
+| Tool-call response ends with `finish_reason=length` | Zero handlers run even if received argument fragments parse; the batch enters bounded correction |
+| Rejected call history | Raw argument text and identity are retained; paired results encode, persist, and compact as one indivisible history group; rejected calls are not evidence |
 | Consecutive response-level failures | At most two corrective generations; a normal complete response resets the consecutive counter |
 | Cancellation and execution deadline | Corrections do not reset the deadline; cancellation and expiry stop further correction |
-| Correction exhaustion | Completed checkpoints remain; partial answers state missing scope; no plan does not imply complete work |
-| Primary and degraded answer truncation | Failed attempts are replaced; degraded truncation reaches deterministic fallback; truncated text is never canonical or saved as success |
+| Correction exhaustion | Completed checkpoints remain; only reliable current-request results can support a partial answer; without reliable results the answer explains the repeated rejected calls |
+| Primary and degraded answer truncation | Still pending: failed attempts must be replaced; degraded truncation must reach deterministic fallback; truncated text must never be canonical or saved as success |
 | Normal ToolRegistry schema errors and provider overflow | Existing per-call feedback and one-time overflow compaction remain; completed tools are not replayed |
 
 Full test recording and diagnostic traces continue to use the existing four-file
-ZIP and `recording_version: 1`. A call record should expose:
+ZIP and `recording_version: 1`. A generation-recovery record exposes:
 
 - expected output cap, actual output cap, and whether/how input capacity clipped
   it;
 - every actual model call and its bounded failure diagnosis;
-- response-level whole-batch rejection reason, confirmed zero-execution result,
-  and correction attempt number;
+- response-level whole-batch rejection reason, call IDs, confirmed zero-execution
+  result, consecutive rejection count, correction attempt, and next action;
 - execution end reason, task coverage, and answer delivery result as distinct
   facts.
 

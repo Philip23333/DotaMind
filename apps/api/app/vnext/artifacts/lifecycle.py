@@ -13,7 +13,12 @@ from app.vnext.agent.transcript_rewrite import (
     TranscriptRewriteEvent,
     TranscriptRewriteResult,
 )
-from app.vnext.llm.protocol import AssistantMessage, Message, ToolResultMessage
+from app.vnext.llm.protocol import (
+    AssistantMessage,
+    Message,
+    RejectedAssistantMessage,
+    ToolResultMessage,
+)
 
 from .retrieval import ArtifactReadResult
 
@@ -115,10 +120,12 @@ class ArtifactObservationTranscriptRewriter:
 def _artifact_read_calls(messages: Sequence[Message]) -> dict[str, list[bool]]:
     calls: dict[str, list[bool]] = {}
     for message in messages:
-        if not isinstance(message, AssistantMessage):
-            continue
-        for call in message.tool_calls:
-            calls.setdefault(call.id, []).append(call.name == "artifact.read")
+        if isinstance(message, AssistantMessage):
+            for call in message.tool_calls:
+                calls.setdefault(call.id, []).append(call.name == "artifact.read")
+        elif isinstance(message, RejectedAssistantMessage):
+            for call in message.tool_calls:
+                calls.setdefault(call.id, []).append(False)
     return calls
 
 

@@ -145,6 +145,56 @@ def test_resolve_without_plan_preserves_simple_model_done_and_closes_deadline() 
     )
 
 
+def test_generation_recovery_exhaustion_uses_only_reliable_current_request_evidence() -> None:
+    outcome = _outcome(ExecutionStopReason.GENERATION_RECOVERY_EXHAUSTED)
+
+    assert (
+        resolve_answer(
+            outcome=outcome,
+            task_state_coordinator=None,
+            has_reliable_results=False,
+        ).mode
+        is AnswerResolutionMode.FAILURE
+    )
+    assert (
+        resolve_answer(
+            outcome=outcome,
+            task_state_coordinator=None,
+            has_reliable_results=True,
+        ).mode
+        is AnswerResolutionMode.PARTIAL
+    )
+    assert "invalid or truncated tool-call batches" in build_failure_answer(
+        resolve_answer(
+            outcome=outcome,
+            task_state_coordinator=None,
+            has_reliable_results=False,
+        ),
+        outcome,
+    ).content
+
+
+def test_generation_recovery_with_task_plan_keeps_checkpoint_coverage_boundary() -> None:
+    coordinator = _coordinator_for_resolution(
+        [
+            ("A", TaskItemStatus.COMPLETED),
+            ("B", TaskItemStatus.PENDING),
+        ],
+        ["A"],
+    )
+    outcome = _outcome(ExecutionStopReason.GENERATION_RECOVERY_EXHAUSTED)
+
+    resolution = resolve_answer(
+        outcome=outcome,
+        task_state_coordinator=coordinator,
+        has_reliable_results=True,
+    )
+
+    assert resolution.mode is AnswerResolutionMode.PARTIAL
+    assert resolution.completed_keys == ("A",)
+    assert resolution.remaining_keys == ("B",)
+
+
 def test_resolve_completed_plan_without_state_is_not_full() -> None:
     coordinator = _coordinator_for_resolution(
         [("A", TaskItemStatus.COMPLETED)],

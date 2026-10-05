@@ -35,6 +35,7 @@ from app.vnext.llm.protocol import (
     ModelTextDelta,
     ModelTool,
     RawToolCall,
+    RejectedAssistantMessage,
     RejectedToolCallBatch,
     ToolArgumentFailure,
     ToolCall,
@@ -986,6 +987,22 @@ class OpenAICompatibleModelClient:
         message: Message,
         agent_to_provider: Mapping[str, str],
     ) -> dict[str, Any]:
+        if isinstance(message, RejectedAssistantMessage):
+            return {
+                "role": "assistant",
+                "content": message.content,
+                "tool_calls": [
+                    {
+                        "id": call.id,
+                        "type": "function",
+                        "function": {
+                            "name": call.provider_name,
+                            "arguments": call.raw_arguments,
+                        },
+                    }
+                    for call in message.tool_calls
+                ],
+            }
         if message.role == "system":
             return {"role": "system", "content": message.content}
         if message.role == "user":
@@ -1017,6 +1034,8 @@ class OpenAICompatibleModelClient:
                     "error": message.error.model_dump(mode="json") if message.error else None,
                     "content": content,
                 }
+                if message.executed is not None:
+                    content["executed"] = message.executed
             return {
                 "role": "tool",
                 "tool_call_id": message.tool_call_id,

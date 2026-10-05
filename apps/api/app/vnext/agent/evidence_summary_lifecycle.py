@@ -18,6 +18,7 @@ from app.vnext.llm.protocol import (
     Message,
     ModelRequest,
     ModelResponse,
+    RejectedAssistantMessage,
     SystemMessage,
     ToolResultMessage,
     UserMessage,
@@ -199,6 +200,33 @@ def _group_history(messages: Sequence[Message], *, bytes_per_token: int = 1) -> 
             continue
         if isinstance(message, ToolResultMessage):
             raise HistoryCompactionRangeError("invalid_history_structure")
+        if isinstance(message, RejectedAssistantMessage):
+            call_ids = [call.id for call in message.tool_calls]
+            if len(set(call_ids)) != len(call_ids):
+                raise HistoryCompactionRangeError("invalid_history_structure")
+            expected = set(call_ids)
+            results: list[ToolResultMessage] = []
+            result_ids: set[str] = set()
+            for _ in call_ids:
+                result_index = index + 1 + len(results)
+                if result_index >= len(source):
+                    raise HistoryCompactionRangeError("invalid_history_structure")
+                result = source[result_index]
+                if (
+                    not isinstance(result, ToolResultMessage)
+                    or result.tool_call_id not in expected
+                    or result.tool_call_id in result_ids
+                    or result.status != "error"
+                    or result.executed is not False
+                ):
+                    raise HistoryCompactionRangeError("invalid_history_structure")
+                result_ids.add(result.tool_call_id)
+                results.append(result)
+            if result_ids != expected:
+                raise HistoryCompactionRangeError("invalid_history_structure")
+            groups.append(_make_group((message, *results), bytes_per_token=bytes_per_token))
+            index += 1 + len(results)
+            continue
         if not isinstance(message, AssistantMessage):
             raise HistoryCompactionRangeError("invalid_history_structure")
         if not message.tool_calls:

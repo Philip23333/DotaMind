@@ -1,9 +1,8 @@
 # Model Output Budgets and Failure Recovery
 
-> **Status: dynamic output budgets and Adapter-side tool-call batch classification are implemented and offline-tested.**
-> Runtime history encoding, paired non-execution feedback, generation correction,
-> and answer-truncation recovery remain pending; live Provider compatibility has
-> not been verified.
+> **Status: dynamic output budgets and execution-stage tool-call rejection recovery are implemented and offline-tested.**
+> Primary/degraded answer-truncation recovery remains pending. Live Provider
+> compatibility has not been verified.
 
 This document is the single authority for dynamic model output budgets,
 model-response failure representation, and bounded generation correction.
@@ -27,17 +26,18 @@ The confirmed target establishes:
 - replacement of truncated answer attempts, followed by a deterministic fallback
   when the degraded answer is also truncated.
 
-Dynamic budgets are implemented. The Adapter also now validates every tool call
-identity and argument carrier before parsing arguments, classifies every argument
-as a JSON object or a structured failure, and rejects tool-call responses ending
-with `finish_reason=length`. It preserves the rejected raw batch in a typed
-provider-neutral exception while attaching only existing bounded diagnostics.
-Runtime still follows its existing terminal model-error path for this exception:
-it does not yet create paired non-execution history results or retry generation.
-The rules below define that later Runtime behavior. This work does not define
-content controls, prompt policy, or a new user-visible content limit. It also does
-not add a total step limit, a new retry for provider transport failures, or a
-second overflow recovery allowance.
+Dynamic budgets and execution-stage rejection recovery are implemented. The
+Adapter validates every tool-call identity and argument carrier before parsing,
+classifies every argument as a JSON object or a structured failure, and rejects
+tool-call responses ending with `finish_reason=length`. It preserves the rejected
+raw batch in a typed provider-neutral exception while attaching only bounded
+diagnostics. Runtime stores the original calls with paired non-executable
+feedback, gates the entire batch from execution, and allows at most two
+corrective generations after consecutive rejections before finalizing into
+Answer Stage. Primary/degraded answer truncation recovery is still pending. This
+work does not define content controls, prompt policy, or a new user-visible
+content limit. It also does not add a total step limit, a new retry for provider
+transport failures, or a second overflow recovery allowance.
 
 ## 2. Configuration responsibilities
 
@@ -167,17 +167,15 @@ execution permission:
 | Other transport/authentication/rate-limit error | Not treated as a parameter error | Keep its existing handling |
 
 Adapter classification and typed rejected-batch preservation are implemented and
-offline-tested for complete and streamed responses. Runtime recovery actions in
-this matrix remain target behavior until the paired history and correction work
-is implemented. Protocol identity or outer-response errors still use the
-existing protocol-error exit.
+offline-tested for complete and streamed responses. Runtime recovery in this
+matrix is implemented and offline-tested. Protocol identity or outer-response
+errors still use the existing protocol-error exit.
 
 ## 5. Whole-batch execution gate and history
 
-This section is the target Runtime history contract. The current Adapter rejects
-the entire response before returning a ModelResponse, so handlers do not run,
-but Runtime still terminates through its existing model-error path and does not
-yet append the paired history described here.
+This section describes the Runtime history contract. The current Adapter rejects
+the entire response before returning a ModelResponse, so handlers do not run.
+Runtime appends the paired history described here before any corrective request.
 
 The Adapter waits for the response to finish and validates the outer call
 identities and every raw argument string before returning a usable ModelResponse.
@@ -300,8 +298,8 @@ This is a DotaMind target contract, not a claim about Pi defaults.
 
 ## 10. Implementation and acceptance status
 
-This document records a confirmed target design. It does not mean the behavior
-is implemented or accepted. Offline acceptance is specified in
-[EVALS.md](../EVALS.md). Online Provider compatibility and historical response
-behavior remain later verification items and cannot substitute for offline
-acceptance.
+Execution-stage rejection handling and correction are implemented and covered by
+offline acceptance in [EVALS.md](../EVALS.md). Primary/degraded answer truncation
+recovery remains unimplemented. Online Provider compatibility and historical
+response behavior remain later verification items and cannot substitute for
+offline acceptance.

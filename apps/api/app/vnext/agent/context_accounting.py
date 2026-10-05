@@ -7,7 +7,13 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from app.vnext.llm.protocol import AssistantMessage, Message, ModelRequest, ToolResultMessage
+from app.vnext.llm.protocol import (
+    AssistantMessage,
+    Message,
+    ModelRequest,
+    RejectedAssistantMessage,
+    ToolResultMessage,
+)
 
 MEASUREMENT = "canonical_json_utf8_bytes"
 
@@ -245,10 +251,14 @@ def _artifact_observation_usage(
 ) -> ArtifactObservationsUsage:
     artifact_read_call_ids: dict[str, list[bool]] = {}
     for message in messages:
-        if not isinstance(message, AssistantMessage):
-            continue
-        for call in message.tool_calls:
-            artifact_read_call_ids.setdefault(call.id, []).append(call.name == "artifact.read")
+        if isinstance(message, AssistantMessage):
+            for call in message.tool_calls:
+                artifact_read_call_ids.setdefault(call.id, []).append(
+                    call.name == "artifact.read"
+                )
+        elif isinstance(message, RejectedAssistantMessage):
+            for call in message.tool_calls:
+                artifact_read_call_ids.setdefault(call.id, []).append(False)
     active_raw_count = 0
     active_raw_bytes = 0
     receipt_count = 0

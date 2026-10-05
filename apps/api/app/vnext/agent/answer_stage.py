@@ -14,7 +14,13 @@ from app.vnext.artifacts.lifecycle import (
     ArtifactObservation,
     collect_active_artifact_observations,
 )
-from app.vnext.llm.protocol import AssistantMessage, FinalMessage, Message, ToolResultMessage
+from app.vnext.llm.protocol import (
+    AssistantMessage,
+    FinalMessage,
+    Message,
+    RejectedAssistantMessage,
+    ToolResultMessage,
+)
 
 
 class ExecutionStopReason(str, Enum):
@@ -24,6 +30,7 @@ class ExecutionStopReason(str, Enum):
     PLAN_COMPLETE = "plan_complete"
     DEADLINE = "deadline"
     CONTEXT_CAPACITY = "context_capacity"
+    GENERATION_RECOVERY_EXHAUSTED = "generation_recovery_exhausted"
 
 
 class AnswerResolutionMode(str, Enum):
@@ -63,6 +70,7 @@ def resolve_answer(
     *,
     outcome: ExecutionOutcome,
     task_state_coordinator: TaskStateCoordinator | None,
+    has_reliable_results: bool = False,
 ) -> AnswerResolution:
     """Classify durable execution coverage without inspecting raw evidence."""
 
@@ -77,7 +85,13 @@ def resolve_answer(
             AnswerResolutionMode.FULL
             if outcome.reason in {ExecutionStopReason.MODEL_DONE, ExecutionStopReason.PLAN_COMPLETE}
             else AnswerResolutionMode.PARTIAL
-            if outcome.reason is ExecutionStopReason.CONTEXT_CAPACITY
+            if (
+                outcome.reason is ExecutionStopReason.CONTEXT_CAPACITY
+                or (
+                    outcome.reason is ExecutionStopReason.GENERATION_RECOVERY_EXHAUSTED
+                    and has_reliable_results
+                )
+            )
             else AnswerResolutionMode.FAILURE
         )
         return AnswerResolution(
@@ -140,6 +154,11 @@ def build_failure_answer(
     ]
     if outcome.reason is ExecutionStopReason.CONTEXT_CAPACITY:
         lines.append("The execution stopped because the available context budget was exhausted.")
+    elif outcome.reason is ExecutionStopReason.GENERATION_RECOVERY_EXHAUSTED:
+        lines.append(
+            "The model repeatedly submitted invalid or truncated tool-call batches, "
+            "so execution stopped."
+        )
     if resolution.total_items is not None:
         lines.append(
             f"{len(resolution.completed_keys)} of {resolution.total_items} planned "
@@ -329,11 +348,14 @@ def _artifact_evidence(observation: ArtifactObservation) -> dict[str, Any]:
 
 
 def _tool_evidence(messages: Sequence[Message]) -> list[dict[str, Any]]:
-    tool_names: dict[str, list[str]] = {}
+    tool_names: dict[str, list[str | None]] = {}
     for message in messages:
         if isinstance(message, AssistantMessage):
             for call in message.tool_calls:
                 tool_names.setdefault(call.id, []).append(call.name)
+        elif isinstance(message, RejectedAssistantMessage):
+            for call in message.tool_calls:
+                tool_names.setdefault(call.id, []).append(None)
     excluded = {"task.plan", "task.checkpoint", "artifact.read"}
     evidence: list[dict[str, Any]] = []
     for message in messages:

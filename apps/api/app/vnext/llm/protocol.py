@@ -68,12 +68,21 @@ class AssistantMessage(_Message):
     tool_calls: list[ToolCall] = Field(default_factory=list)
 
 
+class RejectedAssistantMessage(_Message):
+    """A rejected provider batch retained as non-executable conversation history."""
+
+    role: Literal["assistant"] = "assistant"
+    content: str | None = None
+    tool_calls: list[RawToolCall] = Field(min_length=1)
+
+
 class ToolResultMessage(_Message):
     role: Literal["tool"] = "tool"
     tool_call_id: str = Field(min_length=1)
     content: Any = None
     status: Literal["ok", "error"] = "ok"
     error: ToolError | None = None
+    executed: bool | None = Field(default=None, exclude_if=lambda value: value is None)
 
     @model_validator(mode="after")
     def validate_error_shape(self) -> ToolResultMessage:
@@ -91,7 +100,14 @@ class FinalMessage(_Message):
     content: str
 
 
-Message = SystemMessage | UserMessage | AssistantMessage | ToolResultMessage | FinalMessage
+Message = (
+    SystemMessage
+    | UserMessage
+    | RejectedAssistantMessage
+    | AssistantMessage
+    | ToolResultMessage
+    | FinalMessage
+)
 
 
 class ModelTool(_Message):
@@ -172,6 +188,7 @@ __all__ = [
     "ModelTextDelta",
     "ModelTool",
     "RawToolCall",
+    "RejectedAssistantMessage",
     "RejectedToolCallBatch",
     "SystemMessage",
     "StreamingModelClient",

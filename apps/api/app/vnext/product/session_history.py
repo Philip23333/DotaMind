@@ -18,6 +18,7 @@ from app.vnext.llm.protocol import (
     AssistantMessage,
     FinalMessage,
     Message,
+    RejectedAssistantMessage,
     ToolCall,
     ToolResultMessage,
     UserMessage,
@@ -26,6 +27,7 @@ from app.vnext.llm.protocol import (
 RecordKind = Literal[
     "user",
     "assistant_tool_call",
+    "assistant_rejected",
     "execution_final",
     "tool_result",
     "delivery_answer",
@@ -360,7 +362,7 @@ class SessionExecutionHistory:
         self._sequence += 1
         tool_call_ids = (
             tuple(call.id for call in message.tool_calls)
-            if isinstance(message, AssistantMessage)
+            if isinstance(message, AssistantMessage | RejectedAssistantMessage)
             else ()
         )
         tool_call_id = (

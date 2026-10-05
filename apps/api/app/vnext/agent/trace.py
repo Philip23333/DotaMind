@@ -25,6 +25,7 @@ from app.vnext.llm.protocol import (
     Message,
     ModelRequest,
     ModelResponse,
+    RejectedAssistantMessage,
     ToolCall,
     ToolResultMessage,
 )
@@ -55,7 +56,11 @@ class AgentTraceCollector:
                 "call_id": call_id,
                 "step": step,
                 "purpose": purpose,
-                "request": deepcopy(request.model_dump(mode="json")),
+                "request": deepcopy(
+                    request.model_copy(
+                        update={"messages": _trace_safe_messages(request.messages)}
+                    ).model_dump(mode="json")
+                ),
                 "response": None,
                 "partial_text": "",
                 "status": "started",
@@ -132,7 +137,9 @@ class AgentTraceCollector:
         return None
 
     def begin(self, messages: Sequence[Message], tool_schemas: list[dict[str, Any]]) -> None:
-        self._trace["initial_messages"] = [message.model_dump(mode="json") for message in messages]
+        self._trace["initial_messages"] = [
+            message.model_dump(mode="json") for message in _trace_safe_messages(messages)
+        ]
         self._trace["tool_schemas"] = tool_schemas
 
     def model_request(
@@ -148,9 +155,9 @@ class AgentTraceCollector:
         """Record one model invocation without persisting its runtime prompt."""
 
         traced_request = (
-            request.model_copy(update={"messages": list(conversation_messages)})
+            request.model_copy(update={"messages": _trace_safe_messages(conversation_messages)})
             if conversation_messages is not None
-            else request
+            else request.model_copy(update={"messages": _trace_safe_messages(request.messages)})
         )
         item = self._step(request.step)
         item["model_request"] = traced_request.model_dump(mode="json")
@@ -205,6 +212,30 @@ class AgentTraceCollector:
                 "stage": stage,
                 "status": status,
                 "error_code": error_code,
+            }
+        )
+
+    def generation_recovery(
+        self,
+        *,
+        step: int,
+        reason: str,
+        call_ids: Sequence[str],
+        consecutive_rejections: int,
+        correction_attempt: int,
+        next_action: Literal["correct", "finalize"],
+    ) -> None:
+        """Record bounded rejection metadata without copying the rejected batch."""
+
+        self._trace.setdefault("generation_recoveries", []).append(
+            {
+                "step": step,
+                "reason": reason,
+                "call_ids": list(call_ids),
+                "consecutive_rejections": consecutive_rejections,
+                "correction_attempt": correction_attempt,
+                "next_action": next_action,
+                "executed_count": 0,
             }
         )
 
@@ -481,6 +512,28 @@ class AgentTraceCollector:
         item = {"step": normalized_step}
         self._trace["steps"].append(item)
         return item
+
+
+def _trace_safe_messages(messages: Sequence[Message]) -> list[Message]:
+    """Keep rejected-call structure in traces without copying raw argument bodies."""
+
+    safe: list[Message] = []
+    for message in messages:
+        if isinstance(message, RejectedAssistantMessage):
+            safe.append(
+                message.model_copy(
+                    update={
+                        "tool_calls": [
+                            call.model_copy(update={"raw_arguments": "[omitted from trace]"})
+                            for call in message.tool_calls
+                        ]
+                    }
+                )
+            )
+        else:
+            safe.append(message.model_copy(deep=True))
+    return safe
+
 
 def runtime_context_to_dict(context: RuntimeContext) -> dict[str, object]:
     """Convert a RuntimeContext snapshot into JSON-safe trace fields."""

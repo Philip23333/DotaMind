@@ -15,6 +15,8 @@ from app.vnext.agent.evidence_summary_lifecycle import (
 from app.vnext.llm.protocol import (
     AssistantMessage,
     FinalMessage,
+    RawToolCall,
+    RejectedAssistantMessage,
     SystemMessage,
     ToolCall,
     ToolResultMessage,
@@ -404,6 +406,77 @@ def test_validate_compaction_cut_rejects_tool_call_and_return_boundaries() -> No
         with pytest.raises(HistoryCompactionRangeError) as error:
             validate_compaction_cut(messages, cut_index=cut_index)
         assert error.value.code == "invalid_compaction_boundary"
+
+
+def test_rejected_assistant_and_all_non_execution_results_are_one_group() -> None:
+    rejected = RejectedAssistantMessage(
+        tool_calls=[
+            RawToolCall(
+                index=index,
+                id=call_id,
+                name="lookup",
+                provider_name="lookup",
+                raw_arguments="{}",
+            )
+            for index, call_id in enumerate(("same", "other"))
+        ]
+    )
+    results = [
+        ToolResultMessage(
+            tool_call_id=call_id,
+            content="本批所有调用均未执行，请重新提交完整调用。",
+            status="error",
+            error=ToolError(
+                code="model_tool_batch_rejected",
+                message="本批所有调用均未执行，请重新提交完整调用。",
+            ),
+            executed=False,
+        )
+        for call_id in ("same", "other")
+    ]
+    messages = [UserMessage(content="old"), rejected, *results, UserMessage(content="new")]
+
+    validate_compaction_cut(messages, cut_index=4)
+    for cut_index in (2, 3):
+        with pytest.raises(HistoryCompactionRangeError) as error:
+            validate_compaction_cut(messages, cut_index=cut_index)
+        assert error.value.code == "invalid_compaction_boundary"
+
+
+def test_rejected_tool_call_ids_may_be_reused_in_later_turn_groups() -> None:
+    def rejected_group():
+        assistant = RejectedAssistantMessage(
+            tool_calls=[
+                RawToolCall(
+                    index=0,
+                    id="reused",
+                    name="lookup",
+                    provider_name="lookup",
+                    raw_arguments="{bad",
+                )
+            ]
+        )
+        result = ToolResultMessage(
+            tool_call_id="reused",
+            content="not executed",
+            status="error",
+            error=ToolError(
+                code="model_tool_arguments_invalid",
+                message="not executed",
+            ),
+            executed=False,
+        )
+        return [assistant, result]
+
+    messages = [
+        UserMessage(content="old"),
+        *rejected_group(),
+        *rejected_group(),
+        UserMessage(content="new"),
+    ]
+
+    validate_compaction_cut(messages, cut_index=3)
+    validate_compaction_cut(messages, cut_index=5)
 
 
 @pytest.mark.parametrize("cut_index", [0, 5, 6, -1, True, False])

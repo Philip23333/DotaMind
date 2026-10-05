@@ -613,15 +613,25 @@ def test_runtime_does_not_execute_tool_from_malformed_provider_arguments() -> No
             )
         ]
 
-    with pytest.raises(ModelProviderError) as raised:
-        asyncio.run(run())
+    events = asyncio.run(run())
 
-    assert raised.value.code == "model_provider_error"
     assert executions == 0
-    call = trace.snapshot()["model_calls"][0]
-    assert call["response"] is None
-    assert call["partial_text"] == "partial answer"
-    assert call["failure_diagnostics"]["tool_calls"][0]["raw_arguments"] == raw_arguments
+    assert not any(type(event).__name__.startswith("Tool") for event in events)
+    snapshot = trace.snapshot()
+    recoveries = snapshot["generation_recoveries"]
+    assert len(recoveries) == 3
+    assert all(item["executed_count"] == 0 for item in recoveries)
+    assert [item["next_action"] for item in recoveries] == [
+        "correct",
+        "correct",
+        "finalize",
+    ]
+    assert "RAW" not in json.dumps(recoveries)
+    assert any(
+        entry.get("failure_diagnostics", {}).get("tool_calls", [{}])[0].get("agent_name")
+        == "sample.lookup"
+        for entry in snapshot["model_calls"]
+    )
 
 
 def test_truncated_summary_response_is_kept_when_candidate_is_rejected() -> None:

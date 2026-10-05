@@ -28,6 +28,9 @@ ToolErrorCode = Literal[
     "provider_timeout",
     "provider_http_error",
     "provider_schema_error",
+    "model_tool_arguments_invalid",
+    "model_tool_response_truncated",
+    "model_tool_batch_rejected",
 ]
 
 

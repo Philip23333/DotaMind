@@ -433,22 +433,23 @@ required by the current design.
 The target contract is defined in
 [`agent/model_output_and_recovery.md`](agent/model_output_and_recovery.md).
 **Dynamic output budgets, configuration, Runtime/capacity wiring, trace capture,
-and Adapter-side strict tool-call batch classification are implemented and
-offline-tested.** The Adapter retains the complete rejected batch and emits only
-bounded diagnostics to trace. Runtime history encoding and paired non-execution
-feedback, whole-batch execution gating, generation correction, and
-answer-truncation recovery remain pending. Execution continues to have no
-production total step-count ceiling; the confirmed recovery boundary is
-consecutive failures, the existing execution deadline, and user cancellation.
+Adapter-side strict tool-call batch classification, rejected-call history,
+paired non-execution feedback, whole-batch execution gating, bounded generation
+correction, and execution finalization are implemented and offline-tested.**
+Trace records bounded rejection metadata without the raw batch. Primary/degraded
+answer-truncation recovery remains pending, and live Provider compatibility has
+not been verified. Execution continues to have no production total step-count
+ceiling; the recovery boundary is consecutive failures, the existing execution
+deadline, and user cancellation.
 
 Implementation order:
 
 1. ~~Derive expected and input-clipped actual output budgets.~~
 2. ~~Strictly classify response batches and retain typed rejected-call data in the Adapter.~~
-3. Preserve failed call messages and encode paired non-execution results.
-4. Add Runtime whole-batch execution gating, bounded correction, and Answer Stage
-   finalization.
-5. Complete the response-recovery offline acceptance matrix and trace checks.
+3. ~~Preserve failed call messages and encode paired non-execution results.~~
+4. ~~Add Runtime whole-batch execution gating, bounded correction, and Answer Stage
+   finalization.~~
+5. ~~Complete the response-recovery offline acceptance matrix and trace checks.~~
 6. Verify compatibility with live Providers and historical response shapes.
 
 Content control is a later phase. This work does not add a total step limit,
