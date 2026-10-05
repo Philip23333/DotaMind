@@ -6,6 +6,7 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
+from app.vnext.agent.limits import AgentLimits
 from app.vnext.agent.runtime import AgentRuntime
 from app.vnext.agent.task_state import TaskStateCoordinator
 from app.vnext.artifacts import ArtifactObservationTranscriptRewriter
@@ -128,6 +129,7 @@ def test_console_does_not_replay_runtime_transcript_across_turns(tmp_path: Path)
     runtime = AgentRuntime(
         model,
         traced_tools,
+        limits=AgentLimits(application_max_output_tokens=4096),
         system_instruction="runtime system",
     )
     conversation = _ConversationTrace(name="two_turns", result_dir=tmp_path)
@@ -257,6 +259,7 @@ def test_console_tracing_runtime_preserves_lifecycle_capabilities() -> None:
     base_runtime = AgentRuntime(
         ScriptedModelClient([]),
         ToolRegistry(),
+        limits=AgentLimits(application_max_output_tokens=4096),
         system_instruction="runtime system",
         transcript_rewriter=rewriter,
         task_state_coordinator=coordinator,

@@ -65,7 +65,9 @@ def _runtime(model: object) -> AgentRuntime:
     return AgentRuntime(
         model,  # type: ignore[arg-type]
         ToolRegistry(),
-        limits=AgentLimits(deadline_seconds=3, answer_timeout_seconds=3),
+        limits=AgentLimits(
+            application_max_output_tokens=4096, deadline_seconds=3, answer_timeout_seconds=3
+        ),
     )
 
 
@@ -374,20 +376,14 @@ def test_runtime_fallback_snapshot_clears_primary_text_before_degraded_text() ->
             return generate()
 
     states = asyncio.run(
-        _collect_states(
-            _runtime(_FallbackModel()).run_stream([UserMessage(content="hello")])
-        )
+        _collect_states(_runtime(_FallbackModel()).run_stream([UserMessage(content="hello")]))
     )
 
-    primary_partial = next(
-        state for state in states if state.answer.text == "partial primary"
-    )
+    primary_partial = next(state for state in states if state.answer.text == "partial primary")
     degraded_reset = next(
         state for state in states if state.answer.kind == "degraded" and not state.answer.text
     )
-    degraded_partial = next(
-        state for state in states if state.answer.text == "degraded answer"
-    )
+    degraded_partial = next(state for state in states if state.answer.text == "degraded answer")
     completed = states[-1]
     assert primary_partial.answer.kind == "primary"
     assert degraded_reset.answer.status == "pending"

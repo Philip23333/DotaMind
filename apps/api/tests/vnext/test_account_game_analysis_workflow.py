@@ -98,7 +98,9 @@ def _chat(
     runtime = AgentRuntime(
         model,
         registry,
-        limits=AgentLimits(deadline_seconds=5, answer_timeout_seconds=5),
+        limits=AgentLimits(
+            application_max_output_tokens=4096, deadline_seconds=5, answer_timeout_seconds=5
+        ),
         system_instruction=AGENT_INSTRUCTION,
         shared_instruction=PRODUCT_INSTRUCTION,
     )

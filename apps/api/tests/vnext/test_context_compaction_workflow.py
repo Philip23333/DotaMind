@@ -147,6 +147,7 @@ def _user_count(request: ModelRequest, content: str) -> int:
 
 def _limits() -> AgentLimits:
     return AgentLimits(
+        application_max_output_tokens=4096,
         deadline_seconds=5,
         answer_timeout_seconds=5,
         compaction_keep_recent_tokens=1,

@@ -6,7 +6,7 @@ from app.vnext.capabilities.esports.dtos import PlayerDTO, TeamDTO, TeamRefDTO
 from app.vnext.capabilities.esports.match import MatchSearchInput, MatchSearchResult
 from app.vnext.capabilities.esports.player import PlayerSearchInput, PlayerSearchResult
 from app.vnext.capabilities.esports.team import TeamSearchInput, TeamSearchResult
-from app.vnext.composition import VNextServices, build_vnext_registry
+from app.vnext.composition import VNextServices, VNextSettings, build_vnext_registry
 from app.vnext.llm.protocol import ToolCall
 
 
@@ -51,7 +51,8 @@ def test_team_identity_composes_with_match_and_player_search() -> None:
             match_search=match_search,
             team_search=team_search,
             player_search=player_search,
-        )
+        ),
+        settings=VNextSettings(),
     )
 
     async def discover() -> list[tuple[str, object]]:

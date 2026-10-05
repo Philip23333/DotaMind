@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from app.vnext.agent.errors import AgentCancelledError
 from app.vnext.agent.events import ToolCompleted
+from app.vnext.agent.limits import AgentLimits
 from app.vnext.agent.runtime import AgentRuntime, CancellationToken
 from app.vnext.artifacts import (
     ArtifactBackedToolResultProcessor,
@@ -102,7 +103,11 @@ def test_tool_completed_cancellation_records_raw_result_and_keeps_effective_hist
     model = ScriptedModelClient(
         [ModelResponse(message=AssistantMessage(tool_calls=[_call("call-1")]))]
     )
-    runtime = AgentRuntime(model, _registry([_definition("tool", tool)]))
+    runtime = AgentRuntime(
+        model,
+        _registry([_definition("tool", tool)]),
+        limits=AgentLimits(application_max_output_tokens=4096),
+    )
     history, request_id, messages = _history()
     token = CancellationToken()
     events: list[object] = []
@@ -162,6 +167,7 @@ def test_parallel_cancellation_records_only_tools_that_returned() -> None:
                 _definition("slow", slow, parallel_safe=True),
             ]
         ),
+        limits=AgentLimits(application_max_output_tokens=4096),
     )
     history, request_id, messages = _history()
     token = CancellationToken()
@@ -210,6 +216,7 @@ def test_successful_and_failed_tool_results_are_each_recorded_once() -> None:
     runtime = AgentRuntime(
         model,
         _registry([_definition("success", success), _definition("failure", failure)]),
+        limits=AgentLimits(application_max_output_tokens=4096),
     )
     history, request_id, messages = _history()
 
@@ -259,6 +266,7 @@ def test_successful_materializing_results_are_visible_in_history_without_cumulat
                 )
             ]
         ),
+        limits=AgentLimits(application_max_output_tokens=4096),
     )
     history, request_id, messages = _history()
 
@@ -310,6 +318,7 @@ def test_cancellation_preserves_externalized_locator_and_executes_tool_once() ->
             ],
             result_processor=_externalizing_processor(store),
         ),
+        limits=AgentLimits(application_max_output_tokens=4096),
     )
     history, request_id, messages = _history()
     token = CancellationToken()
@@ -365,6 +374,7 @@ def test_externalized_materializing_result_preserves_preview_and_executes_once()
             ],
             result_processor=_externalizing_processor(store),
         ),
+        limits=AgentLimits(application_max_output_tokens=4096),
     )
     history, request_id, messages = _history()
 

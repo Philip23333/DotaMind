@@ -9,7 +9,7 @@ from app.vnext.capabilities.esports.series import (
     SeriesTeamsInput,
     SeriesTeamsResult,
 )
-from app.vnext.composition import VNextServices, build_vnext_registry
+from app.vnext.composition import VNextServices, VNextSettings, build_vnext_registry
 from app.vnext.llm.protocol import ToolCall
 from app.vnext.tools.esports import register_series_teams_tool
 from app.vnext.tools.registry import ToolRegistry
@@ -112,7 +112,10 @@ def test_series_teams_inherits_generic_externalization() -> None:
     async def search_teams(query: SeriesTeamsInput) -> SeriesTeamsResult:
         return SeriesTeamsResult(items=teams, page=query.page, limit=query.limit)
 
-    registry = build_vnext_registry(VNextServices(series_teams=search_teams))
+    registry = build_vnext_registry(
+        VNextServices(series_teams=search_teams),
+        settings=VNextSettings(),
+    )
     result = asyncio.run(
         registry.execute(
             ToolCall(

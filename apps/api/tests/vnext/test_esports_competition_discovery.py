@@ -17,7 +17,7 @@ from app.vnext.capabilities.esports.tournament import (
     TournamentSearchInput,
     TournamentSearchResult,
 )
-from app.vnext.composition import VNextServices, build_vnext_registry
+from app.vnext.composition import VNextServices, VNextSettings, build_vnext_registry
 from app.vnext.llm.protocol import ToolCall
 
 
@@ -72,7 +72,8 @@ def test_esports_competition_discovery_contract_is_composable() -> None:
             series_search=series_search,
             tournament_search=tournament_search,
             match_search=match_search,
-        )
+        ),
+        settings=VNextSettings(),
     )
 
     async def discover() -> list[tuple[str, object]]:

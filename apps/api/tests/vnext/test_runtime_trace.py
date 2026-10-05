@@ -63,7 +63,7 @@ def test_trace_records_execution_context_and_answer_stage_metrics() -> None:
         AgentRuntime(
             model,
             _registry(),
-            limits=AgentLimits(deadline_seconds=2),
+            limits=AgentLimits(application_max_output_tokens=4096, deadline_seconds=2),
         ),
         collector,
     )
@@ -128,7 +128,7 @@ def test_trace_context_has_no_steps_pressure_in_production_runtime() -> None:
         AgentRuntime(
             model,
             _registry(),
-            limits=AgentLimits(deadline_seconds=2),
+            limits=AgentLimits(application_max_output_tokens=4096, deadline_seconds=2),
         ),
         collector,
     )

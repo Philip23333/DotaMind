@@ -178,6 +178,7 @@ def _runtime(
         model,  # type: ignore[arg-type]
         _registry(),
         limits=AgentLimits(
+            application_max_output_tokens=4096,
             deadline_seconds=2,
             compaction_keep_recent_tokens=recent_tokens,
             compaction_max_input_bytes=100_000,
@@ -431,7 +432,7 @@ def test_compaction_entry_rejects_wrong_request_before_reset_or_execution() -> N
     runtime = AgentRuntime(
         model,
         registry,
-        limits=AgentLimits(deadline_seconds=2),
+        limits=AgentLimits(application_max_output_tokens=4096, deadline_seconds=2),
         task_state_coordinator=coordinator,
     )
 
@@ -558,6 +559,7 @@ def test_compaction_cleans_removed_source_owners_and_keeps_retained_checkpoint_s
         model,
         _compaction_workflow_registry(coordinator),
         limits=AgentLimits(
+            application_max_output_tokens=4096,
             deadline_seconds=5,
             answer_timeout_seconds=5,
             compaction_keep_recent_tokens=1,

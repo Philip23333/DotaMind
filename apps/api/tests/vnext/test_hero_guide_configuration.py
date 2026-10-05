@@ -195,12 +195,14 @@ def test_application_lifespan_wraps_its_existing_redis_client_for_hero_guides(
         settings: VNextSettings,
         *,
         hero_guide_cache=None,
+        recent_series_cache=None,
         catalog_repository_provider=None,
     ):
         captured_caches.append(hero_guide_cache)
         return original_builder(
             settings,
             hero_guide_cache=hero_guide_cache,
+            recent_series_cache=recent_series_cache,
             catalog_repository_provider=catalog_repository_provider,
         )
 

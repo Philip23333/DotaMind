@@ -140,6 +140,7 @@ def _run(
     runtime = AgentRuntime(
         model,
         _read_registry(coordinator, value=read_value),
+        limits=AgentLimits(application_max_output_tokens=4096),
         transcript_rewriter=ArtifactObservationTranscriptRewriter(),
         task_state_coordinator=coordinator,
     )
@@ -785,6 +786,7 @@ def test_runtime_checkpoints_eight_small_inline_match_records_without_artifacts(
     runtime = AgentRuntime(
         model,
         registry,
+        limits=AgentLimits(application_max_output_tokens=4096),
         transcript_rewriter=ArtifactObservationTranscriptRewriter(),
         task_state_coordinator=coordinator,
     )
@@ -1064,6 +1066,7 @@ def test_real_artifact_reads_after_task_completion_keep_owner_and_runtime_recove
     runtime = AgentRuntime(
         model,
         registry,
+        limits=AgentLimits(application_max_output_tokens=4096),
         transcript_rewriter=ArtifactObservationTranscriptRewriter(),
         task_state_coordinator=coordinator,
     )
@@ -1193,6 +1196,7 @@ def test_real_artifact_remains_readable_after_compaction_removes_old_observation
         model,
         registry,
         limits=AgentLimits(
+            application_max_output_tokens=4096,
             deadline_seconds=5,
             answer_timeout_seconds=5,
             compaction_keep_recent_tokens=1,
@@ -1338,6 +1342,7 @@ def test_externalized_preview_is_not_checkpointable_but_artifact_read_is() -> No
     runtime = AgentRuntime(
         model,
         registry,
+        limits=AgentLimits(application_max_output_tokens=4096),
         transcript_rewriter=ArtifactObservationTranscriptRewriter(),
         task_state_coordinator=coordinator,
     )

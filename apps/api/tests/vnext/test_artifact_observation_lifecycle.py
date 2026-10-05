@@ -4,6 +4,7 @@ import asyncio
 
 from pydantic import BaseModel
 
+from app.vnext.agent.limits import AgentLimits
 from app.vnext.agent.runtime import AgentRuntime
 from app.vnext.agent.trace import AgentTraceCollector
 from app.vnext.artifacts import ArtifactObservationTranscriptRewriter, ArtifactReadResult
@@ -417,6 +418,7 @@ def test_runtime_rewrites_previous_result_but_trace_keeps_raw_result() -> None:
     runtime = AgentRuntime(
         model,
         registry,
+        limits=AgentLimits(application_max_output_tokens=4096),
         transcript_rewriter=ArtifactObservationTranscriptRewriter(),
     )
 

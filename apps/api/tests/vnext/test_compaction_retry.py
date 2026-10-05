@@ -179,7 +179,9 @@ def _runtime(model: object, *, retries: int = 1) -> AgentRuntime:
     return AgentRuntime(
         model,  # type: ignore[arg-type]
         ToolRegistry(),
-        limits=AgentLimits(deadline_seconds=2, compaction_max_retries=retries),
+        limits=AgentLimits(
+            application_max_output_tokens=4096, deadline_seconds=2, compaction_max_retries=retries
+        ),
     )
 
 
@@ -582,6 +584,7 @@ def test_outer_runtime_publishes_one_compaction_failure_then_agent_failure() -> 
         model,  # type: ignore[arg-type]
         ToolRegistry(),
         limits=AgentLimits(
+            application_max_output_tokens=4096,
             deadline_seconds=2,
             compaction_max_retries=3,
             compaction_keep_recent_tokens=1,

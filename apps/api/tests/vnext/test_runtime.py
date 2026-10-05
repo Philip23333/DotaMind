@@ -109,7 +109,11 @@ def test_execution_final_is_discarded_and_answer_stage_is_user_visible() -> None
     model = ScriptedModelClient(
         [ModelResponse.from_final("execution draft"), ModelResponse.from_final("answer")]
     )
-    runtime = AgentRuntime(model, ToolRegistry(), limits=AgentLimits(deadline_seconds=2))
+    runtime = AgentRuntime(
+        model,
+        ToolRegistry(),
+        limits=AgentLimits(application_max_output_tokens=4096, deadline_seconds=2),
+    )
 
     result = _run(runtime)
 
@@ -127,7 +131,11 @@ def test_tool_execution_is_followed_by_tool_free_answer_request() -> None:
             ModelResponse.from_final("answer"),
         ]
     )
-    runtime = AgentRuntime(model, _registry(), limits=AgentLimits(deadline_seconds=2))
+    runtime = AgentRuntime(
+        model,
+        _registry(),
+        limits=AgentLimits(application_max_output_tokens=4096, deadline_seconds=2),
+    )
 
     assert _run(runtime).content == "answer"
     assert len(model.requests) == 3
@@ -148,7 +156,7 @@ def test_execution_continues_beyond_twenty_steps_then_answers() -> None:
     runtime = AgentRuntime(
         model,
         _registry(),
-        limits=AgentLimits(deadline_seconds=10),
+        limits=AgentLimits(application_max_output_tokens=4096, deadline_seconds=10),
     )
 
     result = _run(runtime, trace_collector=collector)
@@ -174,7 +182,11 @@ def test_execution_text_deltas_are_traced_but_not_published() -> None:
         ]
     )
     events = []
-    runtime = AgentRuntime(model, ToolRegistry(), limits=AgentLimits(deadline_seconds=2))
+    runtime = AgentRuntime(
+        model,
+        ToolRegistry(),
+        limits=AgentLimits(application_max_output_tokens=4096, deadline_seconds=2),
+    )
 
     async def collect() -> None:
         async for event in runtime.run_stream([UserMessage(content="hello")]):
@@ -188,7 +200,11 @@ def test_execution_text_deltas_are_traced_but_not_published() -> None:
 
 def test_primary_answer_protocol_failure_retries_with_degraded_answer() -> None:
     model = ScriptedModelClient([ModelResponse.from_final("execution"), _tool_turn(_call())])
-    runtime = AgentRuntime(model, _registry(), limits=AgentLimits(deadline_seconds=2))
+    runtime = AgentRuntime(
+        model,
+        _registry(),
+        limits=AgentLimits(application_max_output_tokens=4096, deadline_seconds=2),
+    )
 
     assert _run(runtime).content == "execution"
     assert len(model.requests) == 3
@@ -207,6 +223,7 @@ def test_primary_timeout_consumes_answer_budget_and_skips_degraded_call() -> Non
         model,
         ToolRegistry(),
         limits=AgentLimits(
+            application_max_output_tokens=4096,
             deadline_seconds=2,
             answer_timeout_seconds=0.03,
         ),
@@ -231,6 +248,7 @@ def test_primary_and_degraded_timeout_use_deterministic_fallback() -> None:
         model,
         ToolRegistry(),
         limits=AgentLimits(
+            application_max_output_tokens=4096,
             deadline_seconds=2,
             answer_timeout_seconds=0.03,
         ),
@@ -271,6 +289,7 @@ def test_partial_double_answer_failure_reports_completed_coverage() -> None:
         model,
         ToolRegistry(),
         limits=AgentLimits(
+            application_max_output_tokens=4096,
             deadline_seconds=2,
             answer_timeout_seconds=0.03,
         ),
@@ -310,6 +329,7 @@ def test_full_double_answer_failure_reports_completed_coverage() -> None:
         model,
         ToolRegistry(),
         limits=AgentLimits(
+            application_max_output_tokens=4096,
             deadline_seconds=2,
             answer_timeout_seconds=0.03,
         ),
@@ -330,7 +350,11 @@ def test_primary_provider_failure_retries_with_degraded_answer() -> None:
             ModelResponse.from_final("compact"),
         ]
     )
-    runtime = AgentRuntime(model, ToolRegistry(), limits=AgentLimits(deadline_seconds=2))
+    runtime = AgentRuntime(
+        model,
+        ToolRegistry(),
+        limits=AgentLimits(application_max_output_tokens=4096, deadline_seconds=2),
+    )
 
     assert _run(runtime).content == "compact"
     assert len(model.requests) == 3
@@ -352,7 +376,11 @@ def test_failed_primary_stream_text_is_not_published() -> None:
     )
     events = []
     collector = AgentTraceCollector()
-    runtime = AgentRuntime(model, _registry(), limits=AgentLimits(deadline_seconds=2))
+    runtime = AgentRuntime(
+        model,
+        _registry(),
+        limits=AgentLimits(application_max_output_tokens=4096, deadline_seconds=2),
+    )
 
     async def collect() -> None:
         async for event in runtime.run_stream(
@@ -382,17 +410,32 @@ def test_cancellation_during_primary_answer_skips_degraded_retry() -> None:
     runtime = AgentRuntime(
         model,
         ToolRegistry(),
-        limits=AgentLimits(deadline_seconds=2, answer_timeout_seconds=1),
+        limits=AgentLimits(
+            application_max_output_tokens=4096, deadline_seconds=2, answer_timeout_seconds=1
+        ),
     )
 
     async def run_and_cancel() -> None:
         task = asyncio.create_task(
             runtime.run([UserMessage(content="hello")], cancellation_token=token)
         )
-        await primary_started.wait()
-        token.cancel()
-        with pytest.raises(AgentCancelledError):
-            await task
+        try:
+            try:
+                await asyncio.wait_for(primary_started.wait(), timeout=2)
+            except TimeoutError:
+                if task.done():
+                    await task
+                raise
+            token.cancel()
+            with pytest.raises(AgentCancelledError):
+                await asyncio.wait_for(task, timeout=2)
+        finally:
+            if not task.done():
+                task.cancel()
+                try:
+                    await task
+                except (AgentCancelledError, asyncio.CancelledError):
+                    pass
 
     asyncio.run(run_and_cancel())
     assert len(model.requests) == 2
@@ -408,7 +451,9 @@ def test_deadline_without_durable_state_closes_with_failure_answer() -> None:
     runtime = AgentRuntime(
         model,
         ToolRegistry(),
-        limits=AgentLimits(deadline_seconds=0.03, answer_timeout_seconds=1),
+        limits=AgentLimits(
+            application_max_output_tokens=4096, deadline_seconds=0.03, answer_timeout_seconds=1
+        ),
     )
 
     result = _run(runtime, trace_collector=collector)
@@ -459,7 +504,7 @@ def test_partial_task_state_still_runs_answer_stage() -> None:
     runtime = AgentRuntime(
         model,
         ToolRegistry(),
-        limits=AgentLimits(deadline_seconds=2),
+        limits=AgentLimits(application_max_output_tokens=4096, deadline_seconds=2),
         task_state_coordinator=coordinator,
     )
 
@@ -510,7 +555,7 @@ def test_partial_primary_request_excludes_uncheckpointed_evidence() -> None:
     runtime = AgentRuntime(
         model,
         _projection_registry(),
-        limits=AgentLimits(deadline_seconds=2),
+        limits=AgentLimits(application_max_output_tokens=4096, deadline_seconds=2),
         task_state_coordinator=coordinator,
     )
 
@@ -568,6 +613,7 @@ def test_degraded_plan_projection_is_smaller_than_primary() -> None:
         model,
         _projection_registry(),
         limits=AgentLimits(
+            application_max_output_tokens=4096,
             deadline_seconds=2,
             answer_timeout_seconds=1,
         ),
@@ -616,6 +662,7 @@ def test_degraded_no_plan_projection_preserves_verified_evidence() -> None:
         model,
         _projection_registry(),
         limits=AgentLimits(
+            application_max_output_tokens=4096,
             deadline_seconds=2,
             answer_timeout_seconds=1,
         ),
@@ -636,7 +683,11 @@ def test_cancellation_during_execution_skips_answer_stage() -> None:
         return ModelResponse.from_final("late")
 
     model = ScriptedModelClient([slow(), ModelResponse.from_final("never")])
-    runtime = AgentRuntime(model, ToolRegistry(), limits=AgentLimits(deadline_seconds=2))
+    runtime = AgentRuntime(
+        model,
+        ToolRegistry(),
+        limits=AgentLimits(application_max_output_tokens=4096, deadline_seconds=2),
+    )
 
     async def run_and_cancel() -> None:
         task = asyncio.create_task(
@@ -658,7 +709,7 @@ def test_system_instruction_is_execution_only() -> None:
     runtime = AgentRuntime(
         model,
         ToolRegistry(),
-        limits=AgentLimits(deadline_seconds=2),
+        limits=AgentLimits(application_max_output_tokens=4096, deadline_seconds=2),
         system_instruction="query discipline",
     )
 
@@ -722,7 +773,13 @@ def test_parallel_group_advances_once_and_runs_following_serial_call() -> None:
     )
 
     assert (
-        _run(AgentRuntime(model, registry, limits=AgentLimits(deadline_seconds=2))).content
+        _run(
+            AgentRuntime(
+                model,
+                registry,
+                limits=AgentLimits(application_max_output_tokens=4096, deadline_seconds=2),
+            )
+        ).content
         == "answer"
     )
 
@@ -739,7 +796,11 @@ def test_trace_records_execution_outcome_and_answer_metrics() -> None:
         [ModelResponse.from_final("execution"), ModelResponse.from_final("answer")]
     )
     collector = AgentTraceCollector()
-    runtime = AgentRuntime(model, ToolRegistry(), limits=AgentLimits(deadline_seconds=2))
+    runtime = AgentRuntime(
+        model,
+        ToolRegistry(),
+        limits=AgentLimits(application_max_output_tokens=4096, deadline_seconds=2),
+    )
 
     _run(runtime, trace_collector=collector)
 
@@ -755,7 +816,7 @@ def test_runtime_rejects_caller_system_message_when_system_instruction_configure
     runtime = AgentRuntime(
         model,
         ToolRegistry(),
-        limits=AgentLimits(deadline_seconds=2),
+        limits=AgentLimits(application_max_output_tokens=4096, deadline_seconds=2),
         system_instruction="runtime system",
     )
 

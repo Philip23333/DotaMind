@@ -170,7 +170,7 @@ def _runtime(
     return AgentRuntime(
         model,  # type: ignore[arg-type]
         registry or ToolRegistry(),
-        limits=limits or AgentLimits(deadline_seconds=2),
+        limits=limits or AgentLimits(application_max_output_tokens=4096, deadline_seconds=2),
         task_state_coordinator=task_state_coordinator,
         event_sink=event_sink,
     )
@@ -546,6 +546,7 @@ def test_configured_model_output_limit_caps_both_summary_requests() -> None:
     runtime = _runtime(
         model,
         limits=AgentLimits(
+            application_max_output_tokens=4096,
             deadline_seconds=2,
             compaction_model_max_output_tokens=4096,
         ),

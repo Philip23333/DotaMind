@@ -34,7 +34,9 @@ def _runtime(model: object, **kwargs: object) -> AgentRuntime:
     return AgentRuntime(
         model,  # type: ignore[arg-type]
         ToolRegistry(),
-        limits=AgentLimits(deadline_seconds=3, answer_timeout_seconds=3),
+        limits=AgentLimits(
+            application_max_output_tokens=4096, deadline_seconds=3, answer_timeout_seconds=3
+        ),
         **kwargs,
     )
 
@@ -135,9 +137,7 @@ def test_degraded_first_delta_arrives_before_its_terminal_response() -> None:
             release_terminal.set()
             await asyncio.wait_for(task, timeout=1)
 
-        degraded_start = [
-            event for event in events if isinstance(event, AnswerAttemptStarted)
-        ][1]
+        degraded_start = [event for event in events if isinstance(event, AnswerAttemptStarted)][1]
         delta = next(event for event in events if isinstance(event, TextDelta))
         completed = next(event for event in events if isinstance(event, AgentCompleted))
         assert terminal_produced.is_set()
@@ -235,9 +235,7 @@ def test_partial_degraded_text_then_failure_is_replaced_by_deterministic_answer(
 
     events = asyncio.run(
         _consume_stream(
-            _runtime(_FailBothAnswerAttemptsModel()).run_stream(
-                [UserMessage(content="hello")]
-            ),
+            _runtime(_FailBothAnswerAttemptsModel()).run_stream([UserMessage(content="hello")]),
             [],
         )
     )
@@ -479,6 +477,7 @@ def test_execution_and_compaction_text_are_traced_but_not_answer_events() -> Non
         _PrivateTextModel(),  # type: ignore[arg-type]
         ToolRegistry(),
         limits=AgentLimits(
+            application_max_output_tokens=4096,
             deadline_seconds=3,
             answer_timeout_seconds=3,
             compaction_keep_recent_tokens=1,
@@ -502,10 +501,7 @@ def test_execution_and_compaction_text_are_traced_but_not_answer_events() -> Non
     assert [event.text for event in events if isinstance(event, TextDelta)] == [
         "visible answer text"
     ]
-    partial_text = "".join(
-        call.get("partial_text", "")
-        for call in trace.snapshot()["model_calls"]
-    )
+    partial_text = "".join(call.get("partial_text", "") for call in trace.snapshot()["model_calls"])
     assert [call["purpose"] for call in trace.snapshot()["model_calls"]] == [
         "compaction",
         "compaction",

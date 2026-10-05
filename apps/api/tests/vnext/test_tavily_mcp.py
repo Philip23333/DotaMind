@@ -123,7 +123,7 @@ def test_disabled_search_is_not_initialized_and_tool_inventory_is_unchanged(
     monkeypatch.setattr("app.vnext.composition.MCPRemoteClient", fail_if_created)
     services = build_vnext_services(VNextSettings())
     result = asyncio.run(initialize_vnext_services(VNextSettings(), services))
-    names = {tool.name for tool in build_vnext_registry(result).schemas()}
+    names = {tool.name for tool in build_vnext_registry(result, settings=VNextSettings()).schemas()}
 
     assert result is services
     assert result.tavily_web_search is None

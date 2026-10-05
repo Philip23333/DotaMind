@@ -88,7 +88,7 @@ def _run(
     runtime = AgentRuntime(
         model,  # type: ignore[arg-type]
         registry or ToolRegistry(),
-        limits=AgentLimits(deadline_seconds=2),
+        limits=AgentLimits(application_max_output_tokens=4096, deadline_seconds=2),
         system_instruction=system_instruction,
     )
     run_messages = messages
