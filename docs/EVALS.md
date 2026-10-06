@@ -168,9 +168,11 @@ exceeds `context_window_tokens - compaction_reserve_tokens`. A test percentage
 is rounded up from the input capacity remaining after the current request's
 output reserve and safety margin; the effective threshold is the earlier of
 the production and test thresholds. Capacity estimates use configured UTF-8
-bytes-per-token ratios rather than an exact tokenizer. The summary input is
-still limited by `compaction_max_input_bytes` (currently 256 KiB), regardless
-of the configured model window.
+bytes-per-token ratios rather than an exact tokenizer. Each complete summary
+request, including its instruction, prior summary, and source history, must fit
+its model window with the summary-specific output allowance and safety margin.
+When both history and turn-prefix summaries are needed, both are checked before
+the first summary call. No fixed summary-input byte limit applies.
 
 The default shared limits are at most 12 model calls (including summary and
 retry calls) and 180 wall-clock seconds for both questions together. CLI

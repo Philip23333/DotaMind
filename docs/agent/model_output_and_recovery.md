@@ -100,6 +100,16 @@ input change requires recalculating the actual cap before the next model call.
 Summary calls remain independent and use their existing reserve-derived budgets
 and optional summary-model cap; they do not use the ordinary business-call cap.
 
+Each fully constructed summary request is measured with the same canonical JSON
+UTF-8 context metric as ordinary requests. Its estimated input tokens, the
+summary-specific output allowance, and the safety margin must fit the configured
+window (`I + O + S <= W`). The input includes the compaction instruction, any
+prior summary, and the applicable history. All summary requests in one compaction
+are checked before the first summary model call; an oversized request fails with
+`context_compaction_failed` and `summary_context_capacity_exceeded`, with zero
+attempts. No fixed 256 KiB summary-input ceiling remains. With no configured
+window, explicit compaction remains enabled and trace records `fits: null`.
+
 The test-only early-compaction percentage is based on the expected cap before
 input-dependent clipping. This avoids a circular threshold:
 

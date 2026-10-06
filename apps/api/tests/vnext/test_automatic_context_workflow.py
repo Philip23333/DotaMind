@@ -227,7 +227,6 @@ def test_automatic_watermarks_keep_artifacts_rereadable_across_two_compactions()
         context_estimate_bytes_per_token=1,
         context_compaction_test_trigger_percent=70,
         compaction_keep_recent_tokens=1_000,
-        compaction_max_input_bytes=100_000,
         compaction_reserve_tokens=160,
     )
     runtime = AgentRuntime(model, _registry(store, documents), limits=limits)
@@ -413,7 +412,6 @@ def test_real_adapter_overflow_classification_compacts_and_retries_same_step() -
         context_safety_margin_tokens=128,
         context_estimate_bytes_per_token=1,
         compaction_keep_recent_tokens=1,
-        compaction_max_input_bytes=100_000,
         compaction_reserve_tokens=160,
     )
     history = SessionExecutionHistory()

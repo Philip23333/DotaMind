@@ -512,7 +512,6 @@ def test_product_follow_up_uses_automatic_compaction_and_fresh_task_state(
         context_estimate_bytes_per_token=1,
         context_compaction_test_trigger_percent=75,
         compaction_keep_recent_tokens=1,
-        compaction_max_input_bytes=100_000,
         compaction_reserve_tokens=160,
     )
     runtime = AgentRuntime(model, registry, limits=limits, task_state_coordinator=coordinator)
@@ -634,7 +633,6 @@ def test_product_overflow_recovery_budget_resets_for_each_user_request(monkeypat
             context_safety_margin_tokens=32,
             context_estimate_bytes_per_token=1,
             compaction_keep_recent_tokens=1,
-            compaction_max_input_bytes=100_000,
             compaction_reserve_tokens=160,
         ),
     )
@@ -785,7 +783,6 @@ def test_product_follow_up_succeeds_after_summary_validation_failure(monkeypatch
             context_safety_margin_tokens=32,
             context_estimate_bytes_per_token=1,
             compaction_keep_recent_tokens=1,
-            compaction_max_input_bytes=100_000,
             compaction_reserve_tokens=160,
         ),
     )

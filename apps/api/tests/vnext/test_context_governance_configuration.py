@@ -86,6 +86,20 @@ def test_environment_requires_at_least_one_ordinary_output_cap(
         VNextSettings.from_env()
 
 
+def test_removed_summary_byte_cap_environment_variable_is_ignored(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _isolate_env(monkeypatch)
+    monkeypatch.setattr(composition, "_VNEXT_ENV_PATH", Path("/does/not/exist"))
+    monkeypatch.setenv("DOTAMIND_APPLICATION_MAX_OUTPUT_TOKENS", "4096")
+    monkeypatch.setenv("DOTAMIND_COMPACTION_MAX_INPUT_BYTES", "1")
+
+    limits = VNextSettings.from_env().agent_limits
+
+    assert not hasattr(limits, "compaction_max_input_bytes")
+    assert limits.compaction_reserve_tokens == AgentLimits().compaction_reserve_tokens
+
+
 def test_legacy_context_output_reserve_does_not_supply_an_ordinary_output_cap(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -137,7 +151,6 @@ DOTAMIND_CONTEXT_SAFETY_MARGIN_TOKENS=200
 DOTAMIND_CONTEXT_ESTIMATE_BYTES_PER_TOKEN=3
 DOTAMIND_CONTEXT_COMPACTION_TEST_TRIGGER_PERCENT=75
 DOTAMIND_COMPACTION_KEEP_RECENT_TOKENS=4000
-DOTAMIND_COMPACTION_MAX_INPUT_BYTES=50000
 DOTAMIND_COMPACTION_RESERVE_TOKENS=10000
 DOTAMIND_COMPACTION_MODEL_MAX_OUTPUT_TOKENS=500
 DOTAMIND_COMPACTION_MAX_RETRIES=2
@@ -156,7 +169,6 @@ DOTAMIND_ANSWER_DEADLINE_SECONDS=75.25
         "context_estimate_bytes_per_token": 3,
         "context_compaction_test_trigger_percent": 75,
         "compaction_keep_recent_tokens": 4000,
-        "compaction_max_input_bytes": 50000,
         "compaction_reserve_tokens": 10000,
         "compaction_model_max_output_tokens": 500,
         "compaction_max_retries": 2,
@@ -347,7 +359,6 @@ def test_empty_process_window_explicitly_disables_file_window(
         ("DOTAMIND_CONTEXT_WINDOW_TOKENS", "1.5"),
         ("DOTAMIND_APPLICATION_MAX_OUTPUT_TOKENS", "true"),
         ("DOTAMIND_CONTEXT_ESTIMATE_BYTES_PER_TOKEN", "128k"),
-        ("DOTAMIND_COMPACTION_MAX_INPUT_BYTES", ""),
         ("DOTAMIND_COMPACTION_RESERVE_TOKENS", ""),
         ("DOTAMIND_COMPACTION_MODEL_MAX_OUTPUT_TOKENS", "1.5"),
         ("DOTAMIND_COMPACTION_MAX_RETRIES", "1.5"),
@@ -418,7 +429,6 @@ def test_build_runtime_receives_an_isolated_configured_limits(
         context_estimate_bytes_per_token=3,
         context_compaction_test_trigger_percent=75,
         compaction_keep_recent_tokens=4000,
-        compaction_max_input_bytes=50000,
         compaction_reserve_tokens=625,
         compaction_model_max_output_tokens=500,
     )
@@ -513,7 +523,6 @@ def test_product_chat_entry_uses_environment_configured_context_governance(
         "DOTAMIND_CONTEXT_ESTIMATE_BYTES_PER_TOKEN": "1",
         "DOTAMIND_CONTEXT_COMPACTION_TEST_TRIGGER_PERCENT": "80",
         "DOTAMIND_COMPACTION_KEEP_RECENT_TOKENS": "1",
-        "DOTAMIND_COMPACTION_MAX_INPUT_BYTES": "100000",
         "DOTAMIND_COMPACTION_RESERVE_TOKENS": "160",
         "DOTAMIND_COMPACTION_MODEL_MAX_OUTPUT_TOKENS": "128",
     }.items():

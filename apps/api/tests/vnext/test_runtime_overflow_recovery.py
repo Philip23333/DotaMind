@@ -9,6 +9,10 @@ from uuid import uuid4
 import pytest
 from pydantic import BaseModel
 
+from app.vnext.agent.compaction_budget import (
+    assess_compaction_request_capacity,
+    resolve_compaction_output_tokens,
+)
 from app.vnext.agent.context_capacity import assess_request_capacity
 from app.vnext.agent.errors import (
     AgentCancelledError,
@@ -18,6 +22,10 @@ from app.vnext.agent.errors import (
     ModelProviderError,
 )
 from app.vnext.agent.events import ModelRequested, TextDelta, ToolStarted
+from app.vnext.agent.evidence_summary_lifecycle import (
+    build_history_compaction_request,
+    prepare_compaction,
+)
 from app.vnext.agent.limits import AgentLimits
 from app.vnext.agent.runtime import AgentRuntime, CancellationToken, _Deadline
 from app.vnext.agent.trace import AgentTraceCollector
@@ -105,7 +113,6 @@ def _limits(
         deadline_seconds=5,
         answer_timeout_seconds=5,
         compaction_keep_recent_tokens=1,
-        compaction_max_input_bytes=100_000,
         compaction_reserve_tokens=160,
         context_window_tokens=context_window_tokens,
         application_max_output_tokens=64,
@@ -377,9 +384,31 @@ def test_overflow_compaction_that_remains_critical_does_not_retry() -> None:
     compacted_capacity = assess_request_capacity(compacted_request, probe_limits)
     assert initial_capacity is not None
     assert compacted_capacity is not None
+    snapshot = history.context_snapshot()
+    preparation = prepare_compaction(
+        snapshot.messages,
+        recent_history_tokens=probe_limits.compaction_keep_recent_tokens,
+        bytes_per_token=probe_limits.context_estimate_bytes_per_token,
+    )
+    assert preparation is not None and preparation.history_messages
+    summary_request = build_history_compaction_request(
+        previous_summary=snapshot.summary,
+        history_messages=preparation.history_messages,
+        max_output_tokens=resolve_compaction_output_tokens(
+            kind="history",
+            reserve_tokens=probe_limits.compaction_reserve_tokens,
+            model_max_output_tokens=probe_limits.compaction_model_max_output_tokens,
+        ),
+    )
+    summary_capacity = assess_compaction_request_capacity(
+        summary_request,
+        context_window_tokens=None,
+        safety_margin_tokens=probe_limits.context_safety_margin_tokens,
+        bytes_per_token=probe_limits.context_estimate_bytes_per_token,
+    )
     limits: AgentLimits | None = None
     for window in range(
-        max(initial_capacity.estimated_input_tokens + 80, 100),
+        max(initial_capacity.estimated_input_tokens + 80, summary_capacity.required_tokens, 100),
         compacted_capacity.estimated_input_tokens + 160,
     ):
         candidate_limits = _limits(context_window_tokens=window)

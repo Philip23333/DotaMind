@@ -10,7 +10,6 @@ class AgentLimits(BaseModel):
     answer_timeout_seconds: float | None = Field(default=60.0, gt=0)
     default_tool_timeout: float | None = Field(default=60.0, gt=0)
     compaction_keep_recent_tokens: int = Field(default=20_000, gt=0, strict=True)
-    compaction_max_input_bytes: int = Field(default=256 * 1024, gt=0, strict=True)
     compaction_reserve_tokens: int = Field(default=16384, ge=2, strict=True)
     compaction_model_max_output_tokens: int | None = Field(default=None, gt=0, strict=True)
     compaction_max_retries: int = Field(default=1, ge=0, le=3, strict=True)

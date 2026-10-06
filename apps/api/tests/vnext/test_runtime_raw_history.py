@@ -380,7 +380,6 @@ def test_high_full_request_still_triggers_automatic_compaction_with_large_raw_re
         context_estimate_bytes_per_token=1,
         context_compaction_test_trigger_percent=25,
         compaction_keep_recent_tokens=1_500,
-        compaction_max_input_bytes=200_000,
         compaction_reserve_tokens=50_000,
     )
     runtime = AgentRuntime(model, _registry(store), limits=limits)

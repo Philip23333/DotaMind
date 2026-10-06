@@ -40,7 +40,6 @@ def _request() -> ModelRequest:
     return build_history_compaction_request(
         previous_summary="previous summary",
         history_messages=[UserMessage(content="old history")],
-        max_input_bytes=100_000,
         max_output_tokens=128,
     )
 

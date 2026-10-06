@@ -199,7 +199,6 @@ def test_compaction_rebuild_does_not_duplicate_or_persist_product_identity(
         answer_timeout_seconds=5,
         application_max_output_tokens=4096,
         compaction_keep_recent_tokens=1,
-        compaction_max_input_bytes=10_000,
         compaction_reserve_tokens=160,
     )
     runtime = _product_runtime(monkeypatch, model, limits=limits)

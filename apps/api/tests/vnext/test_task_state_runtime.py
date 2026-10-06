@@ -1200,7 +1200,6 @@ def test_real_artifact_remains_readable_after_compaction_removes_old_observation
             deadline_seconds=5,
             answer_timeout_seconds=5,
             compaction_keep_recent_tokens=1,
-            compaction_max_input_bytes=100_000,
             compaction_reserve_tokens=160,
             context_estimate_bytes_per_token=1,
         ),

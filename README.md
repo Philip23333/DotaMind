@@ -118,11 +118,13 @@ are kept intact even when one group crosses the target. When migrating an
 existing `.env`, replace `DOTAMIND_COMPACTION_RECENT_HISTORY_BYTES` with this
 token setting; the old byte variable is no longer read.
 
-These output-token limits are independent from the existing serialized-input
-byte limit (`DOTAMIND_COMPACTION_MAX_INPUT_BYTES`, currently 256 KiB). Summary
-text has no separate 8 KiB byte ceiling, but a summary request whose serialized
-input exceeds that 256 KiB limit fails before a model call. Summary calls keep
-their independent reserve-derived budgets.
+Summary requests have no separate fixed input byte ceiling. Runtime measures each
+fully constructed summary request, including its instruction, prior summary when
+present, and source history, using the same canonical UTF-8 byte-ratio estimate
+as ordinary requests. A summary call is sent only when its estimated input tokens,
+its reserve-derived summary output allowance, and the configured safety margin
+fit within the model context window. Without a configured window, explicit
+compaction remains available and the trace marks its capacity as unvalidated.
 
 Ordinary execution and answer calls require at least one of
 `DOTAMIND_MODEL_MAX_OUTPUT_TOKENS` or

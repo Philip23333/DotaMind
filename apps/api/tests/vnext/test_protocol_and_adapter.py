@@ -1480,7 +1480,6 @@ def test_compaction_request_limit_reaches_http_and_length_is_rejected() -> None:
     request = build_history_compaction_request(
         previous_summary=None,
         history_messages=[UserMessage(content="history")],
-        max_input_bytes=100_000,
         max_output_tokens=256,
     )
     assert request.tools == []
@@ -1506,7 +1505,6 @@ def test_compaction_request_normal_stop_returns_valid_summary() -> None:
     request = build_history_compaction_request(
         previous_summary="old",
         history_messages=[UserMessage(content="history")],
-        max_input_bytes=100_000,
         max_output_tokens=256,
     )
     response = asyncio.run(_adapter(handler).complete(request))

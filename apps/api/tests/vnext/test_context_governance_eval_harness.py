@@ -54,7 +54,6 @@ def _settings(*, window: int | None = 500_000) -> VNextSettings:
             deadline_seconds=10,
             answer_timeout_seconds=5,
             compaction_keep_recent_tokens=10_000,
-            compaction_max_input_bytes=100_000,
             compaction_reserve_tokens=320,
             context_window_tokens=window,
             application_max_output_tokens=512,

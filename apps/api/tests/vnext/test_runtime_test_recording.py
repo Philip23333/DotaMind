@@ -646,7 +646,6 @@ def test_truncated_summary_response_is_kept_when_candidate_is_rejected() -> None
     request = build_history_compaction_request(
         previous_summary=None,
         history_messages=[UserMessage(content="older history")],
-        max_input_bytes=10_000,
         max_output_tokens=64,
     )
 

@@ -7,6 +7,8 @@ from uuid import UUID, uuid4
 import pytest
 from pydantic import BaseModel
 
+from app.vnext.agent.compaction_budget import assess_compaction_request_capacity
+from app.vnext.agent.context_accounting import measure_request_context_bytes
 from app.vnext.agent.errors import (
     AgentCancelledError,
     AgentDeadlineExceeded,
@@ -54,17 +56,6 @@ def _message_bytes(message: object) -> int:
     return len(
         json.dumps(
             message.model_dump(mode="json"),  # type: ignore[union-attr]
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
-        ).encode("utf-8")
-    )
-
-
-def _request_bytes(request: ModelRequest) -> int:
-    return len(
-        json.dumps(
-            request.model_dump(mode="json"),
             ensure_ascii=False,
             sort_keys=True,
             separators=(",", ":"),
@@ -185,7 +176,6 @@ def _compact(
     trace: AgentTraceCollector | None = None,
     token: CancellationToken | None = None,
     deadline: _Deadline | None = None,
-    max_input_bytes: int = 100_000,
 ) -> bool:
     async def run() -> bool:
         try:
@@ -197,7 +187,6 @@ def _compact(
                     deadline=deadline or _Deadline(2),
                     step=4,
                     recent_history_tokens=recent_history_tokens,
-                    max_input_bytes=max_input_bytes,
                     trace_collector=trace,
                 ),
                 timeout=2,
@@ -295,6 +284,8 @@ def test_first_compaction_selects_generates_and_commits_one_range() -> None:
     assert history.records == before_records
     assert history.artifact_locators == before_locators
     assert trace.snapshot()["compaction_calls"][0]["status"] == "generated"
+    assert trace.snapshot()["compaction_capacity_checks"][0]["fits"] is None
+    assert trace.snapshot()["compaction_capacity_checks"][0]["summary_kind"] == "history"
 
 
 def test_split_turn_summaries_commit_once_after_both_requests_succeed() -> None:
@@ -415,10 +406,10 @@ def test_first_summary_failure_skips_turn_prefix_and_keeps_session_state() -> No
     assert history.compaction_records == ()
 
 
-def test_second_request_input_limit_is_checked_before_first_model_call() -> None:
+def test_turn_prefix_capacity_is_checked_before_first_summary_model_call() -> None:
     history, request_id, _, _, recent_tokens = _history_with_split_turn(
-        query="current question " + "q" * 2_000,
-        early_progress="progress " + "p" * 2_000,
+        query="current question " + "q" * 10_000,
+        early_progress="progress " + "p" * 10_000,
     )
     model = ScriptedModelClient([])
     before = history.context_snapshot()
@@ -431,30 +422,93 @@ def test_second_request_input_limit_is_checked_before_first_model_call() -> None
     history_request = build_history_compaction_request(
         previous_summary=before.summary,
         history_messages=preparation.history_messages,
-        max_input_bytes=100_000,
         max_output_tokens=13_107,
     )
     turn_request = build_turn_prefix_compaction_request(
         turn_prefix_messages=preparation.turn_prefix_messages,
-        max_input_bytes=100_000,
         max_output_tokens=8_192,
     )
-    history_limit = _request_bytes(history_request)
-    assert _request_bytes(turn_request) > history_limit
+    history_capacity = assess_compaction_request_capacity(
+        history_request,
+        context_window_tokens=None,
+        safety_margin_tokens=1,
+        bytes_per_token=1,
+    )
+    turn_capacity = assess_compaction_request_capacity(
+        turn_request,
+        context_window_tokens=None,
+        safety_margin_tokens=1,
+        bytes_per_token=1,
+    )
+    assert turn_capacity.required_tokens > history_capacity.required_tokens
+    window = max(history_capacity.required_tokens, 16_385)
+    assert turn_capacity.required_tokens > window
+    limits = AgentLimits(
+        context_window_tokens=window,
+        context_safety_margin_tokens=1,
+        context_estimate_bytes_per_token=1,
+        compaction_reserve_tokens=16_384,
+        application_max_output_tokens=4096,
+        deadline_seconds=2,
+    )
+    trace = AgentTraceCollector()
 
     with pytest.raises(CompactionSummaryError) as error:
         _compact(
-            _runtime(model),
+            _runtime(model, limits=limits),
             history,
             request_id,
             recent_history_tokens=recent_tokens,
-            max_input_bytes=history_limit,
+            trace=trace,
         )
 
-    assert error.value.code == "summary_input_too_large"
+    assert error.value.code == "summary_context_capacity_exceeded"
+    checks = trace.snapshot()["compaction_capacity_checks"]
+    assert [check["summary_kind"] for check in checks] == ["history", "turn_prefix"]
+    assert [check["fits"] for check in checks] == [True, False]
     assert model.requests == []
     assert history.context_snapshot() == before
     assert history.compaction_records == ()
+
+
+def test_large_summary_request_over_legacy_limit_fits_window_and_commits() -> None:
+    history, request_id, _, _, recent_tokens = _history_with_split_turn(
+        early_progress="progress " + ("x" * (300 * 1024))
+    )
+    model = ScriptedModelClient(
+        [
+            ModelResponse.from_final("history summary", finish_reason="stop"),
+            ModelResponse.from_final("turn summary", finish_reason="stop"),
+        ]
+    )
+    trace = AgentTraceCollector()
+    limits = AgentLimits(
+        context_window_tokens=1_048_576,
+        model_max_output_tokens=393_216,
+        application_max_output_tokens=32_768,
+        context_safety_margin_tokens=1_024,
+        context_estimate_bytes_per_token=2,
+        compaction_keep_recent_tokens=20_000,
+        compaction_reserve_tokens=16_384,
+    )
+    before = history.context_snapshot()
+
+    result = _compact(
+        _runtime(model, limits=limits),
+        history,
+        request_id,
+        recent_history_tokens=recent_tokens,
+        trace=trace,
+    )
+
+    assert result is True
+    assert len(model.requests) == 2
+    assert max(measure_request_context_bytes(request) for request in model.requests) > 256 * 1024
+    assert all(
+        check["fits"] is True for check in trace.snapshot()["compaction_capacity_checks"]
+    )
+    assert history.context_snapshot().revision > before.revision
+    assert len(history.compaction_records) == 1
 
 
 def test_cancellation_after_history_summary_prevents_turn_prefix_call_and_commit() -> None:
@@ -673,24 +727,34 @@ def test_no_compaction_range_returns_false_without_model_or_state_change(case: s
     assert history.compaction_records == ()
 
 
-def test_input_budget_failure_does_not_call_model_or_commit() -> None:
+def test_summary_capacity_failure_does_not_call_model_or_commit() -> None:
     history, request_id, messages, _, second_group = _history_with_two_groups()
     current = messages[-1]
     assert isinstance(current, UserMessage)
     before_effective = history.effective_messages()
     before_revision = history.revision
     model = ScriptedModelClient([])
+    trace = AgentTraceCollector()
+    limits = AgentLimits(
+        context_window_tokens=100,
+        context_safety_margin_tokens=10,
+        context_estimate_bytes_per_token=1,
+        compaction_reserve_tokens=50,
+        application_max_output_tokens=20,
+        deadline_seconds=2,
+    )
 
     with pytest.raises(CompactionSummaryError) as error:
         _compact(
-            _runtime(model),
+            _runtime(model, limits=limits),
             history,
             request_id,
             recent_history_tokens=_recent_budget_for_second_group(second_group, current),
-            max_input_bytes=1,
+            trace=trace,
         )
 
-    assert error.value.code == "summary_input_too_large"
+    assert error.value.code == "summary_context_capacity_exceeded"
+    assert trace.snapshot()["compaction_capacity_checks"][0]["fits"] is False
     assert model.requests == []
     assert history.effective_messages() == before_effective
     assert history.revision == before_revision
@@ -842,7 +906,6 @@ def test_compaction_version_change_during_generation_is_not_overwritten() -> Non
                 deadline=_Deadline(2),
                 step=4,
                 recent_history_tokens=_recent_budget_for_second_group(second_group, current),
-                max_input_bytes=100_000,
                 trace_collector=trace,
             )
         )

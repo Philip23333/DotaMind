@@ -24,7 +24,10 @@ from app.vnext.agent.answer_stage import (
     build_failure_answer,
     resolve_answer,
 )
-from app.vnext.agent.compaction_budget import resolve_compaction_output_tokens
+from app.vnext.agent.compaction_budget import (
+    assess_compaction_request_capacity,
+    resolve_compaction_output_tokens,
+)
 from app.vnext.agent.context_capacity import assess_request_capacity
 from app.vnext.agent.errors import (
     AgentCancelledError,
@@ -370,7 +373,6 @@ class AgentRuntime:
                             deadline=execution_deadline,
                             step=step,
                             recent_history_tokens=self.limits.compaction_keep_recent_tokens,
-                            max_input_bytes=self.limits.compaction_max_input_bytes,
                             trace_collector=trace_collector,
                             trigger=compaction_trigger,
                             stage="execution",
@@ -520,7 +522,6 @@ class AgentRuntime:
                                 deadline=execution_deadline,
                                 step=step,
                                 recent_history_tokens=self.limits.compaction_keep_recent_tokens,
-                                max_input_bytes=self.limits.compaction_max_input_bytes,
                                 trace_collector=trace_collector,
                                 trigger="overflow",
                                 stage="execution",
@@ -1018,7 +1019,6 @@ class AgentRuntime:
                             deadline=answer_deadline,
                             step=answer_step,
                             recent_history_tokens=(self.limits.compaction_keep_recent_tokens),
-                            max_input_bytes=self.limits.compaction_max_input_bytes,
                             trace_collector=trace_collector,
                             trigger="watermark",
                             stage="primary_answer",
@@ -1181,7 +1181,6 @@ class AgentRuntime:
                                 deadline=answer_deadline,
                                 step=answer_step,
                                 recent_history_tokens=(self.limits.compaction_keep_recent_tokens),
-                                max_input_bytes=self.limits.compaction_max_input_bytes,
                                 trace_collector=trace_collector,
                                 trigger="overflow",
                                 stage="primary_answer",
@@ -2306,7 +2305,6 @@ class AgentRuntime:
         deadline: _Deadline,
         step: int,
         recent_history_tokens: int,
-        max_input_bytes: int,
         trace_collector: AgentTraceCollector | None,
         trigger: Literal["explicit", "watermark", "overflow"] = "explicit",
         stage: Literal["execution", "primary_answer"] = "execution",
@@ -2321,7 +2319,6 @@ class AgentRuntime:
                 deadline=deadline,
                 step=step,
                 recent_history_tokens=recent_history_tokens,
-                max_input_bytes=max_input_bytes,
                 trace_collector=trace_collector,
             )
         except (AgentCancelledError, AgentDeadlineExceeded, asyncio.CancelledError):
@@ -2369,15 +2366,12 @@ class AgentRuntime:
         deadline: _Deadline,
         step: int,
         recent_history_tokens: int,
-        max_input_bytes: int,
         trace_collector: AgentTraceCollector | None,
     ) -> bool:
 
         self._check_controls(token, deadline)
         if type(recent_history_tokens) is not int or recent_history_tokens <= 0:
             raise HistoryCompactionRangeError("invalid_recent_history_budget")
-        if type(max_input_bytes) is not int or max_input_bytes <= 0:
-            raise CompactionSummaryError("invalid_summary_budget")
         snapshot_method = getattr(execution_history, "context_snapshot", None)
         if not callable(snapshot_method):
             raise ModelProtocolError("execution history does not provide a context snapshot")
@@ -2426,7 +2420,6 @@ class AgentRuntime:
                 history_request = build_history_compaction_request(
                     previous_summary=snapshot.summary,
                     history_messages=preparation.history_messages,
-                    max_input_bytes=max_input_bytes,
                     max_output_tokens=history_output_tokens,
                 )
                 _validate_compaction_call(history_request, kind="history")
@@ -2446,7 +2439,6 @@ class AgentRuntime:
                 )
                 turn_prefix_request = build_turn_prefix_compaction_request(
                     turn_prefix_messages=preparation.turn_prefix_messages,
-                    max_input_bytes=max_input_bytes,
                     max_output_tokens=turn_prefix_output_tokens,
                 )
                 _validate_compaction_call(turn_prefix_request, kind="turn_prefix")
@@ -2459,6 +2451,49 @@ class AgentRuntime:
                 ) from exc
         if history_request is None and turn_prefix_request is None:
             return False
+
+        # Preflight every constructed summary request before spending a model
+        # call. A later request that cannot fit must not follow an earlier call.
+        capacity_checks = []
+        for summary_kind, request in (
+            ("history", history_request),
+            ("turn_prefix", turn_prefix_request),
+        ):
+            if request is None:
+                continue
+            capacity = assess_compaction_request_capacity(
+                request,
+                context_window_tokens=self.limits.context_window_tokens,
+                safety_margin_tokens=self.limits.context_safety_margin_tokens,
+                bytes_per_token=self.limits.context_estimate_bytes_per_token,
+            )
+            capacity_checks.append((summary_kind, capacity))
+            if trace_collector is not None:
+                trace_collector.compaction_capacity_check(
+                    step=step,
+                    summary_kind=summary_kind,
+                    measurement=capacity.measurement,
+                    context_bytes=capacity.context_bytes,
+                    estimated_input_tokens=capacity.estimated_input_tokens,
+                    context_window_tokens=capacity.context_window_tokens,
+                    max_output_tokens=capacity.max_output_tokens,
+                    safety_margin_tokens=capacity.safety_margin_tokens,
+                    required_tokens=capacity.required_tokens,
+                    fits=capacity.fits,
+                )
+        failed_capacity = next(
+            ((kind, capacity) for kind, capacity in capacity_checks if capacity.fits is False),
+            None,
+        )
+        if failed_capacity is not None:
+            summary_kind, _ = failed_capacity
+            cause = CompactionSummaryError("summary_context_capacity_exceeded")
+            raise _CompactionFailureDetails(
+                summary_kind=summary_kind,
+                attempt_count=0,
+                reason_code=cause.code,
+                cause=cause,
+            ) from cause
 
         history_summary = snapshot.summary
         if history_request is not None:

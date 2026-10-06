@@ -140,23 +140,28 @@ provider usage 估算单组消息。完整工具调用/返回组不可拆分；�
 沿用 [Context Accounting](context_accounting.md) 的 UTF-8 字节指标作诊断，
 不将其伪装为 token。按配置模型选择合适计数/估算并预留余量；provider usage
 可校准，但压缩前的 usage 不得直接当作压缩后占用。
-摘要请求输入仍受 `compaction_max_input_bytes` 限制；不得将已超限历史原样转发。
-摘要输出使用各自 token 预算：历史摘要为 `floor(reserve_tokens × 0.8)`，单轮前缀摘要
-为 `floor(reserve_tokens × 0.5)`，再受可选的
-`DOTAMIND_COMPACTION_MODEL_MAX_OUTPUT_TOKENS` 上限裁剪。默认 reserve 为 16384，
-它是预算参数，不代表模型能力。完整摘要请求仍分别受
-`compaction_max_input_bytes` 限制。没有新增历史时复用旧摘要；历史摘要和轮次前缀
-摘要串行调用，前者失败不启动后者，后者失败也不会提交前者的临时候选。两份成功后
-只做字符串拼接并提交一次，不调用第三次模型合并。
+每个摘要请求先完整构造，再以与普通请求相同的 `measure_request_context_bytes()`
+计量，包含摘要指令、旧摘要（如有）和对应历史。使用配置的字节/token 比率估算输入：
+`I = ceil(context_bytes / B)`。历史摘要输出额度为
+`floor(compaction_reserve_tokens × 0.8)`，单轮前缀摘要为
+`floor(compaction_reserve_tokens × 0.5)`；设置
+`DOTAMIND_COMPACTION_MODEL_MAX_OUTPUT_TOKENS` 时再取两者较小值。窗口已配置时，
+仅当 `I + O + S <= W` 才允许发送；不通过减小输出、截断或分块来绕过容量检查。
+因此摘要输入不再受独立的固定 256 KiB 限制。
 
-输出 token 限额与输入 UTF-8 字节限额是不同边界。摘要正文没有独立的字节上限，
-但每个摘要请求输入仍受 `compaction_max_input_bytes` 限制（当前 256 KiB），提交后的
-完整请求也由容量检查计量。摘要输出仍独立使用各自的 reserve 派生额度和可选摘要模型上限。
-普通模型输出上限通过 `DOTAMIND_MODEL_MAX_OUTPUT_TOKENS` 与可选的
+未配置模型窗口时，显式压缩仍可执行，trace 将容量记录为 `fits: null`，不猜测窗口。
+超出容量时以 `context_compaction_failed` / `summary_context_capacity_exceeded`
+拒绝，`attempt_count=0`；如果同次压缩有多个摘要请求，必须先检查全部请求，任何一个
+不合格都不能先调用另一个。容量记录写入 trace 的 `compaction_capacity_checks`，只含
+计量和预算字段，不复制历史正文。没有新增历史时复用旧摘要；历史摘要和轮次前缀摘要
+仍串行调用并原子提交，摘要调用失败时保留原重试、取消、deadline 和状态边界。
+
+摘要输出额度与输入估算是不同配置边界。默认 reserve 为 16384，它是预算参数，不代表模型
+能力。普通模型输出上限通过 `DOTAMIND_MODEL_MAX_OUTPUT_TOKENS` 与可选的
 `DOTAMIND_APPLICATION_MAX_OUTPUT_TOKENS` 配置；旧
-`DOTAMIND_CONTEXT_OUTPUT_RESERVE_TOKENS` 不再读取，也不映射到新字段。reserve 仍参与生产触发线和摘要预算推导；不要通过把
-reserve 调成窗口的 70% 模拟 30% 测试水位。增加 reserve 可降低摘要被截断的概率，但不能保证
-摘要一定完成。
+`DOTAMIND_CONTEXT_OUTPUT_RESERVE_TOKENS` 不再读取，也不映射到新字段。reserve 仍参与
+生产触发线和摘要预算推导；不要通过把 reserve 调成窗口的 70% 模拟 30% 测试水位。增加
+reserve 可降低摘要被截断的概率，但不能保证摘要一定完成。
 
 ## 6. 摘要调用
 

@@ -523,12 +523,10 @@ def test_snapshot_compaction_preparation_splits_old_history_and_current_turn() -
     history_request = build_history_compaction_request(
         previous_summary=snapshot.summary,
         history_messages=preparation.history_messages,
-        max_input_bytes=100_000,
         max_output_tokens=256,
     )
     prefix_request = build_turn_prefix_compaction_request(
         turn_prefix_messages=preparation.turn_prefix_messages,
-        max_input_bytes=100_000,
         max_output_tokens=128,
     )
     history_payload = json.loads(history_request.messages[1].content)  # type: ignore[union-attr]

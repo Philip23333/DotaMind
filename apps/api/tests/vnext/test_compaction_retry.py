@@ -204,7 +204,6 @@ def _run_compaction(
                 deadline=deadline or _Deadline(2),
                 step=1,
                 recent_history_tokens=recent_tokens,
-                max_input_bytes=100_000,
                 trace_collector=trace,
             ),
             timeout=1,
@@ -588,7 +587,6 @@ def test_outer_runtime_publishes_one_compaction_failure_then_agent_failure() -> 
             deadline_seconds=2,
             compaction_max_retries=3,
             compaction_keep_recent_tokens=1,
-            compaction_max_input_bytes=100_000,
         ),
     )
     events: list[object] = []

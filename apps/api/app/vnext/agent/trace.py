@@ -439,6 +439,35 @@ class AgentTraceCollector:
             }
         )
 
+    def compaction_capacity_check(
+        self,
+        *,
+        step: int,
+        summary_kind: Literal["history", "turn_prefix"],
+        measurement: str,
+        context_bytes: int,
+        estimated_input_tokens: int,
+        context_window_tokens: int | None,
+        max_output_tokens: int,
+        safety_margin_tokens: int,
+        required_tokens: int,
+        fits: bool | None,
+    ) -> None:
+        self._trace.setdefault("compaction_capacity_checks", []).append(
+            {
+                "step": step,
+                "summary_kind": summary_kind,
+                "measurement": measurement,
+                "context_bytes": context_bytes,
+                "estimated_input_tokens": estimated_input_tokens,
+                "context_window_tokens": context_window_tokens,
+                "max_output_tokens": max_output_tokens,
+                "safety_margin_tokens": safety_margin_tokens,
+                "required_tokens": required_tokens,
+                "fits": fits,
+            }
+        )
+
     def compaction_commit(
         self,
         *,

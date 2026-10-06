@@ -5,6 +5,7 @@ import json
 
 import pytest
 
+from app.vnext.agent.context_accounting import measure_request_context_bytes
 from app.vnext.agent.evidence_summary_lifecycle import (
     CompactionSummaryError,
     HistoryCompactionRangeError,
@@ -33,28 +34,15 @@ def _request_data(request: ModelRequest) -> dict:
     return json.loads(request.messages[1].content)
 
 
-def _request_bytes(request: ModelRequest) -> int:
-    return len(
-        json.dumps(
-            request.model_dump(mode="json"),
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
-        ).encode("utf-8")
-    )
-
-
 def _build(
     *,
     previous_summary: str | None = None,
     history: list | None = None,
-    max_input_bytes: int = 100_000,
     max_output_tokens: int = 256,
 ) -> ModelRequest:
     return build_history_compaction_request(
         previous_summary=previous_summary,
         history_messages=([UserMessage(content="old history")] if history is None else history),
-        max_input_bytes=max_input_bytes,
         max_output_tokens=max_output_tokens,
     )
 
@@ -109,7 +97,6 @@ def test_turn_prefix_request_contains_only_its_turn_and_has_distinct_metadata() 
     turn = [UserMessage(content="original request"), AssistantMessage(content="early progress")]
     request = build_turn_prefix_compaction_request(
         turn_prefix_messages=turn,
-        max_input_bytes=100_000,
         max_output_tokens=8192,
     )
 
@@ -127,7 +114,6 @@ def test_turn_prefix_request_contains_only_its_turn_and_has_distinct_metadata() 
 def test_turn_prefix_request_does_not_mix_old_summary_or_recent_history() -> None:
     request = build_turn_prefix_compaction_request(
         turn_prefix_messages=[UserMessage(content="first question")],
-        max_input_bytes=100_000,
         max_output_tokens=128,
     )
     encoded = request.messages[1].content
@@ -212,33 +198,11 @@ def test_building_request_does_not_mutate_messages_or_nested_tool_content() -> N
     assert prefix == before
 
 
-def test_input_budget_includes_the_complete_request_and_allows_exact_boundary() -> None:
-    request = _build()
-    budget = _request_bytes(request)
+def test_summary_request_builder_accepts_input_larger_than_legacy_byte_limit() -> None:
+    request = _build(history=[UserMessage(content="x" * (256 * 1024 + 1024))])
 
-    assert request.model_dump(mode="json")["max_output_tokens"] == 256
-    assert _request_bytes(_build(max_input_bytes=budget)) == budget
-    with pytest.raises(CompactionSummaryError) as error:
-        _build(max_input_bytes=budget - 1)
-
-    assert error.value.code == "summary_input_too_large"
-
-
-def test_turn_prefix_input_budget_is_checked_before_model_call() -> None:
-    kwargs = {
-        "turn_prefix_messages": [UserMessage(content="x" * 100)],
-        "max_output_tokens": 128,
-    }
-    request = build_turn_prefix_compaction_request(max_input_bytes=10_000, **kwargs)
-    budget = _request_bytes(request)
-
-    assert (
-        _request_bytes(build_turn_prefix_compaction_request(max_input_bytes=budget, **kwargs))
-        == budget
-    )
-    with pytest.raises(CompactionSummaryError) as error:
-        build_turn_prefix_compaction_request(max_input_bytes=budget - 1, **kwargs)
-    assert error.value.code == "summary_input_too_large"
+    assert measure_request_context_bytes(request) > 256 * 1024
+    assert request.max_output_tokens == 256
 
 
 def test_input_budget_counts_utf8_bytes() -> None:
@@ -246,10 +210,9 @@ def test_input_budget_counts_utf8_bytes() -> None:
     request = _build(history=prefix)
 
     assert len(request.messages[1].content.encode("utf-8")) > len(request.messages[1].content)
-    assert _request_bytes(request) == _request_bytes(
+    assert measure_request_context_bytes(request) == measure_request_context_bytes(
         _build(
             history=prefix,
-            max_input_bytes=100_000,
         )
     )
 
@@ -272,13 +235,6 @@ def test_deferred_and_receipt_observations_are_kept_as_returned_data() -> None:
 
     assert history[1]["content"] == {"_context_materialization": {"state": "deferred"}}
     assert history[2]["content"] == {"_artifact_observation": {"state": "receipt_only"}}
-
-
-@pytest.mark.parametrize("budget", [0, -1, True, False])
-def test_invalid_compaction_input_budgets_are_rejected(budget: object) -> None:
-    with pytest.raises(CompactionSummaryError) as build_error:
-        _build(max_input_bytes=budget)  # type: ignore[arg-type]
-    assert build_error.value.code == "invalid_summary_budget"
 
 
 @pytest.mark.parametrize("max_output_tokens", [0, -1, True, False, 1.5, "256"])

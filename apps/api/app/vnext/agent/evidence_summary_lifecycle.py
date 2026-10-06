@@ -46,7 +46,7 @@ class CompactionSummaryError(ValueError):
         "invalid_summary_budget": "compaction budgets must be positive integers",
         "empty_compaction_history": "compaction history must contain source material",
         "invalid_current_user_position": "current user position is not valid for compaction",
-        "summary_input_too_large": "compaction request exceeds its input byte budget",
+        "summary_context_capacity_exceeded": "compaction request exceeds the model context window",
         "invalid_summary_response": "compaction response must be a final message",
         "summary_output_truncated": "compaction summary was truncated",
         "summary_completion_unconfirmed": "compaction completion was not confirmed",
@@ -286,12 +286,10 @@ def build_history_compaction_request(
     *,
     previous_summary: str | None,
     history_messages: Sequence[Message],
-    max_input_bytes: int,
     max_output_tokens: int,
 ) -> ModelRequest:
     """Build a request that updates the session's compressed history."""
 
-    _validate_summary_budget(max_input_bytes)
     _validate_summary_budget(max_output_tokens)
     if not history_messages:
         raise CompactionSummaryError("empty_compaction_history")
@@ -305,7 +303,6 @@ def build_history_compaction_request(
         instruction=HISTORY_COMPACTION_INSTRUCTION,
         payload=payload,
         kind="history",
-        max_input_bytes=max_input_bytes,
         max_output_tokens=max_output_tokens,
     )
     return request
@@ -314,12 +311,10 @@ def build_history_compaction_request(
 def build_turn_prefix_compaction_request(
     *,
     turn_prefix_messages: Sequence[Message],
-    max_input_bytes: int,
     max_output_tokens: int,
 ) -> ModelRequest:
     """Build a request that summarizes only the cut portion of one turn."""
 
-    _validate_summary_budget(max_input_bytes)
     _validate_summary_budget(max_output_tokens)
     if not turn_prefix_messages:
         raise CompactionSummaryError("empty_compaction_history")
@@ -331,7 +326,6 @@ def build_turn_prefix_compaction_request(
         instruction=TURN_PREFIX_COMPACTION_INSTRUCTION,
         payload=payload,
         kind="turn_prefix",
-        max_input_bytes=max_input_bytes,
         max_output_tokens=max_output_tokens,
     )
 
@@ -341,7 +335,6 @@ def _build_compaction_request(
     instruction: str,
     payload: dict[str, Any],
     kind: str,
-    max_input_bytes: int,
     max_output_tokens: int,
 ) -> ModelRequest:
     serialized_payload = json.dumps(
@@ -360,8 +353,6 @@ def _build_compaction_request(
         metadata={"purpose": "context_compaction", "compaction_kind": kind},
         max_output_tokens=max_output_tokens,
     )
-    if _serialized_request_bytes(request) > max_input_bytes:
-        raise CompactionSummaryError("summary_input_too_large")
     return request
 
 
@@ -383,16 +374,6 @@ def validate_compaction_response(response: ModelResponse) -> str:
 def _validate_summary_budget(value: int) -> None:
     if type(value) is not int or value <= 0:
         raise CompactionSummaryError("invalid_summary_budget")
-
-
-def _serialized_request_bytes(request: ModelRequest) -> int:
-    serialized = json.dumps(
-        request.model_dump(mode="json"),
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-    return len(serialized.encode("utf-8"))
 
 
 __all__ = [
