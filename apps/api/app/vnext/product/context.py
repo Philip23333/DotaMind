@@ -4,9 +4,11 @@ from collections.abc import Sequence
 
 from app.agentic.conversation.models import DialogueTurn
 from app.vnext.llm.protocol import FinalMessage, Message, UserMessage
+from app.vnext.session_limits import SessionContextLimits
 
-DEFAULT_MAX_TURNS = 12
-DEFAULT_MAX_HISTORY_CHARS = 40_000
+_DEFAULTS = SessionContextLimits()
+DEFAULT_MAX_TURNS = _DEFAULTS.history_bootstrap_max_turns
+DEFAULT_MAX_HISTORY_CHARS = _DEFAULTS.history_bootstrap_max_chars
 
 
 class ConversationContextBuilder:

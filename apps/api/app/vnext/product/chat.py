@@ -28,6 +28,7 @@ from app.vnext.agent.trace import AgentTraceCollector
 from app.vnext.llm.protocol import FinalMessage, Message, UserMessage
 from app.vnext.product.run_state import AnswerKind, ProductRunState, ProductRunStateProjector
 from app.vnext.product.runtime_projection import apply_runtime_event
+from app.vnext.session_limits import SessionContextLimits
 
 from .context import ConversationContextBuilder
 from .presentation import DotaVisualEntityEnricher, ProductVisualEntity
@@ -103,6 +104,7 @@ class VNextChatService:
         trace_ttl_seconds: int = 72 * 60 * 60,
         test_recording_enabled: bool = False,
         persistence_timeout_seconds: float = 15.0,
+        session_context_limits: SessionContextLimits | None = None,
     ) -> None:
         if test_recording_enabled and trace_store is None:
             raise ValueError("test recording requires a configured TraceStore")
@@ -124,6 +126,9 @@ class VNextChatService:
         self._trace_ttl_seconds = trace_ttl_seconds
         self._test_recording_enabled = test_recording_enabled
         self._persistence_timeout_seconds = float(persistence_timeout_seconds)
+        self._session_context_limits = (
+            SessionContextLimits() if session_context_limits is None else session_context_limits
+        )
 
     async def prepare_turn(
         self,
@@ -779,7 +784,14 @@ class VNextChatService:
         if state is None:
             state = _SessionState(
                 runtime=self._runtime_for(session_id),
-                history=SessionExecutionHistory(),
+                history=SessionExecutionHistory(
+                    artifact_locator_capacity=(
+                        self._session_context_limits.artifact_locator_capacity
+                    ),
+                    artifact_locator_hint_chars=(
+                        self._session_context_limits.artifact_locator_hint_chars
+                    ),
+                ),
                 lock=Lock(),
                 completed={},
             )

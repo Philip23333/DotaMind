@@ -23,6 +23,9 @@ from app.vnext.llm.protocol import (
     ToolResultMessage,
     UserMessage,
 )
+from app.vnext.session_limits import SessionContextLimits
+
+_DEFAULT_SESSION_CONTEXT_LIMITS = SessionContextLimits()
 
 RecordKind = Literal[
     "user",
@@ -119,8 +122,12 @@ class SessionExecutionHistory:
     def __init__(
         self,
         *,
-        artifact_locator_capacity: int = 16,
-        artifact_locator_hint_chars: int = 256,
+        artifact_locator_capacity: int = (
+            _DEFAULT_SESSION_CONTEXT_LIMITS.artifact_locator_capacity
+        ),
+        artifact_locator_hint_chars: int = (
+            _DEFAULT_SESSION_CONTEXT_LIMITS.artifact_locator_hint_chars
+        ),
     ) -> None:
         if type(artifact_locator_capacity) is not int or artifact_locator_capacity <= 0:
             raise ValueError("artifact_locator_capacity must be a positive integer")

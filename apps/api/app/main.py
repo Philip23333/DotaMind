@@ -153,19 +153,30 @@ async def lifespan(app: FastAPI):
         await initialize_vnext_services(vnext_settings, vnext_services)
         app.state.vnext_services = vnext_services
         app.state.homepage_recent_series = vnext_services.homepage_recent_series
-        app.state.vnext_runtime = build_vnext_runtime(services=vnext_services)
+        session_limits = vnext_settings.session_context_limits
+        app.state.vnext_runtime = build_vnext_runtime(
+            settings=vnext_settings,
+            services=vnext_services,
+        )
         app.state.vnext_chat_service = VNextChatService(
             app.state.chat_repository,
             app.state.vnext_runtime,
-            ConversationContextBuilder(),
+            ConversationContextBuilder(
+                max_turns=session_limits.history_bootstrap_max_turns,
+                max_history_chars=session_limits.history_bootstrap_max_chars,
+            ),
             DotaVisualEntityEnricher(
                 catalog_repository_provider,
                 image_manifest_reader,
             ),
             trace_store=trace_store,
-            runtime_factory=lambda: build_vnext_runtime(services=vnext_services),
+            runtime_factory=lambda: build_vnext_runtime(
+                settings=vnext_settings,
+                services=vnext_services,
+            ),
             trace_ttl_seconds=vnext_settings.trace_ttl_seconds,
             test_recording_enabled=vnext_settings.test_recording_enabled,
+            session_context_limits=session_limits,
         )
         app.state.chat_run_repository = PostgresChatRunRepository(database.session_factory)
         app.state.session_store = store

@@ -5,6 +5,7 @@ import pytest
 from app.agentic.conversation.models import DialogueTurn
 from app.vnext.llm.protocol import FinalMessage, UserMessage
 from app.vnext.product.context import ConversationContextBuilder
+from app.vnext.session_limits import SessionContextLimits
 
 
 def _turn(index: int) -> DialogueTurn:
@@ -118,6 +119,43 @@ def test_current_query_is_not_counted_against_the_history_budget() -> None:
 
     assert ConversationContextBuilder(max_history_chars=1).build([], query) == [
         UserMessage(content=query)
+    ]
+
+
+def test_session_context_limits_configure_only_initial_history_projection() -> None:
+    turns_limited = SessionContextLimits(
+        history_bootstrap_max_turns=2,
+        history_bootstrap_max_chars=100,
+    )
+    chars_limited = SessionContextLimits(
+        history_bootstrap_max_turns=3,
+        history_bootstrap_max_chars=25,
+    )
+    dialogue = [
+        DialogueTurn(turn_index=1, user_message="old user", assistant_message="old answer"),
+        DialogueTurn(turn_index=2, user_message="mid user", assistant_message="mid answer"),
+        DialogueTurn(turn_index=3, user_message="new user", assistant_message="new answer"),
+    ]
+    by_turns = ConversationContextBuilder(
+        max_turns=turns_limited.history_bootstrap_max_turns,
+        max_history_chars=turns_limited.history_bootstrap_max_chars,
+    ).build(dialogue, "current")
+    by_chars = ConversationContextBuilder(
+        max_turns=chars_limited.history_bootstrap_max_turns,
+        max_history_chars=chars_limited.history_bootstrap_max_chars,
+    ).build(dialogue, "q" * 100)
+
+    assert by_turns == [
+        UserMessage(content="mid user"),
+        FinalMessage(content="mid answer"),
+        UserMessage(content="new user"),
+        FinalMessage(content="new answer"),
+        UserMessage(content="current"),
+    ]
+    assert by_chars == [
+        UserMessage(content="new user"),
+        FinalMessage(content="new answer"),
+        UserMessage(content="q" * 100),
     ]
 
 

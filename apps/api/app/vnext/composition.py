@@ -80,6 +80,7 @@ from app.vnext.providers.tavily.web_search import (
     TAVILY_REMOTE_SEARCH_TOOL,
 )
 from app.vnext.providers.valve.catalog_lookup import ValveCatalogLookupAdapter
+from app.vnext.session_limits import SessionContextLimits
 from app.vnext.tools.artifacts import register_artifact_tools
 from app.vnext.tools.catalog import register_catalog_lookup_tool
 from app.vnext.tools.esports import (
@@ -141,6 +142,7 @@ class VNextSettings:
     data_dir: Path | None = None
     agent_limits: AgentLimits = field(default_factory=AgentLimits)
     artifact_limits: ArtifactLimits = field(default_factory=ArtifactLimits)
+    session_context_limits: SessionContextLimits = field(default_factory=SessionContextLimits)
 
     def __post_init__(self) -> None:
         if self.data_dir is not None and (
@@ -244,6 +246,7 @@ class VNextSettings:
             ),
             agent_limits=_agent_limits_from_env(file_values),
             artifact_limits=_artifact_limits_from_env(file_values),
+            session_context_limits=_session_context_limits_from_env(file_values),
         )
 
 
@@ -300,6 +303,7 @@ _AGENT_LIMIT_ENV_FIELDS = (
 _AGENT_DEADLINE_ENV_FIELDS = (
     ("DOTAMIND_EXECUTION_DEADLINE_SECONDS", "deadline_seconds"),
     ("DOTAMIND_ANSWER_DEADLINE_SECONDS", "answer_timeout_seconds"),
+    ("DOTAMIND_TOOL_TIMEOUT_SECONDS", "default_tool_timeout"),
 )
 
 
@@ -367,6 +371,27 @@ def _artifact_limits_from_env(file_values: dict[str, str | None]) -> ArtifactLim
             raw_value = str(default)
         values[field_name] = _parse_positive_integer(name, raw_value)
     return ArtifactLimits(**values)
+
+
+def _session_context_limits_from_env(
+    file_values: dict[str, str | None],
+) -> SessionContextLimits:
+    defaults = SessionContextLimits()
+    values: dict[str, int] = {}
+    for name, field_name in (
+        ("DOTAMIND_HISTORY_BOOTSTRAP_MAX_TURNS", "history_bootstrap_max_turns"),
+        ("DOTAMIND_HISTORY_BOOTSTRAP_MAX_CHARS", "history_bootstrap_max_chars"),
+        ("DOTAMIND_ARTIFACT_LOCATOR_CAPACITY", "artifact_locator_capacity"),
+        ("DOTAMIND_ARTIFACT_LOCATOR_HINT_CHARS", "artifact_locator_hint_chars"),
+    ):
+        default = getattr(defaults, field_name)
+        raw_value = _env_value(name, str(default), file_values)
+        if raw_value is None:
+            if name in file_values:
+                raise ValueError(f"{name} must be a positive integer")
+            raw_value = str(default)
+        values[field_name] = _parse_positive_integer(name, raw_value)
+    return SessionContextLimits(**values)
 
 
 def _parse_positive_finite_float(name: str, value: str) -> float:

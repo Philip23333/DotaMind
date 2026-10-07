@@ -16,6 +16,13 @@ bound. Both limits use UTF-8 serialized bytes and are configured by
 the root `.env` or process environment; the inline limit must not exceed the
 observation limit.
 
+Tools without an individual timeout use `DOTAMIND_TOOL_TIMEOUT_SECONDS` (60
+seconds by default, finite positive seconds; decimal values are allowed). A
+timeout declared by a tool takes precedence. The operation remains bounded by
+the original execution deadline and cancellation; a per-tool timeout does not
+restart that deadline. Configure the default in the root `.env` or process
+environment, with process values taking precedence.
+
 “Not executed” and “executed and failed” describe different facts. The Adapter
 now classifies malformed tool-argument JSON and truncated tool-call responses
 before a ModelResponse reaches Runtime, preserving the rejected batch; see

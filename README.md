@@ -70,6 +70,27 @@ current behavior: `DOTAMIND_TOOL_INLINE_MAX_BYTES=12288` keeps results up to
 inline limit cannot exceed the observation limit. Restart the API after changing
 either value.
 
+### Session context and tool timeout
+
+`DOTAMIND_HISTORY_BOOTSTRAP_MAX_TURNS=12` and
+`DOTAMIND_HISTORY_BOOTSTRAP_MAX_CHARS=40000` limit only the complete recent
+dialogue turns loaded from the database when a product session is first restored.
+The character count uses Python string length. These limits do not trim the
+active session's Runtime execution history. Process environment values override
+the root `.env`, which overrides these defaults.
+
+`DOTAMIND_ARTIFACT_LOCATOR_CAPACITY=16` limits the number of FIFO Artifact
+references carried in one active session, and
+`DOTAMIND_ARTIFACT_LOCATOR_HINT_CHARS=256` limits each serialized query hint by
+characters. When the list is full, the oldest locator is removed; the Artifact
+body remains stored and can still be read if its reference is otherwise known.
+
+`DOTAMIND_TOOL_TIMEOUT_SECONDS=60` is the finite positive default timeout in
+seconds for a tool without its own timeout; decimal values are allowed. A
+tool-specific timeout takes precedence, and the existing execution deadline
+still caps the operation. Changing these settings takes effect after the API
+restarts or its container is recreated.
+
 This configuration uses the `dotamind` Compose project and its existing
 `dotamind_postgres-data` / `dotamind_redis-data` volumes. The database password
 must match the existing volume (`dotamind` by default; override with

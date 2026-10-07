@@ -35,6 +35,7 @@ from app.vnext.llm.protocol import (
 from app.vnext.product.chat import VNextChatService
 from app.vnext.product.context import ConversationContextBuilder
 from app.vnext.product.presentation import DotaVisualEntityEnricher
+from app.vnext.session_limits import SessionContextLimits
 from app.vnext.tools.artifacts import register_artifact_tools
 from app.vnext.tools.definition import ToolContextEffect, ToolDefinition
 from app.vnext.tools.registry import ToolRegistry
@@ -290,6 +291,50 @@ def test_follow_up_model_request_reuses_effective_history_and_reused_provider_id
     assert [record.kind for record in state.history.records].count("delivery_answer") == 2
     assert state.history.summary == "first request summary"
     assert [locator.ref for locator in state.history.artifact_locators] == [LOCATOR_REF]
+
+
+def test_active_session_history_is_not_rebuilt_with_bootstrap_limits() -> None:
+    repository = _Repository()
+    service = VNextChatService(
+        repository,  # type: ignore[arg-type]
+        object(),  # type: ignore[arg-type]
+        ConversationContextBuilder(max_turns=1, max_history_chars=1),
+        DotaVisualEntityEnricher(),
+        session_context_limits=SessionContextLimits(
+            history_bootstrap_max_turns=1,
+            history_bootstrap_max_chars=1,
+        ),
+    )
+    session_id = uuid4()
+    first_request_id = uuid4()
+    state = service._session_for(session_id)
+    state.history.begin_request(
+        first_request_id,
+        "active request",
+        initial_messages=[UserMessage(content="active request")],
+    )
+    state.history.set_effective(
+        [
+            UserMessage(content="active request"),
+            FinalMessage(content="active execution result"),
+        ]
+    )
+
+    prepared = asyncio.run(
+        service.prepare_turn(
+            browser_id="browser",
+            session_id=session_id,
+            request_id=uuid4(),
+            query="follow up",
+        )
+    )
+
+    assert prepared.history == [
+        UserMessage(content="active request"),
+        FinalMessage(content="active execution result"),
+        UserMessage(content="follow up"),
+    ]
+    assert repository.get_calls == 0
 
 
 @pytest.mark.parametrize(

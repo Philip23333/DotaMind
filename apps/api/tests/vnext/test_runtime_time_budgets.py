@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 import app.vnext.agent.runtime as runtime_module
 from app.vnext.agent.limits import AgentLimits
-from app.vnext.agent.runtime import AgentRuntime
+from app.vnext.agent.runtime import AgentRuntime, _Deadline
 from app.vnext.agent.trace import AgentTraceCollector
 from app.vnext.llm.protocol import (
     AssistantMessage,
@@ -280,3 +280,39 @@ def test_answer_runtime_prompt_is_capacity_counted_but_not_persisted(monkeypatch
         "Runtime state:" not in str(message.model_dump(mode="json"))
         for message in history.effective_messages()
     )
+
+
+def test_tool_specific_timeout_overrides_configured_default() -> None:
+    default_runtime = AgentRuntime(
+        ScriptedModelClient([]),
+        _registry(),
+        limits=AgentLimits(
+            default_tool_timeout=12.5,
+            application_max_output_tokens=4096,
+        ),
+    )
+    default_call = ToolCall(id="default", name="echo", arguments={"value": 1})
+
+    explicit_registry = ToolRegistry()
+    explicit_registry.register(
+        ToolDefinition(
+            name="echo",
+            description="Return the input value.",
+            input_model=_EchoInput,
+            output_model=_EchoOutput,
+            handler=_echo,
+            timeout=3.5,
+        )
+    )
+    explicit_runtime = AgentRuntime(
+        ScriptedModelClient([]),
+        explicit_registry,
+        limits=AgentLimits(
+            default_tool_timeout=12.5,
+            application_max_output_tokens=4096,
+        ),
+    )
+    explicit_call = ToolCall(id="explicit", name="echo", arguments={"value": 1})
+
+    assert default_runtime._tool_timeout(default_call, _Deadline(None)) == 12.5
+    assert explicit_runtime._tool_timeout(explicit_call, _Deadline(None)) == 3.5
