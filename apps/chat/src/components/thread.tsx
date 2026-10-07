@@ -196,7 +196,11 @@ const Welcome: FC<{
     <section className="w-full max-w-2xl text-left" aria-label="🔥最近赛事">
       <div className="mb-1 flex items-center justify-between px-3">
         <h2 className="text-sm font-semibold">🔥最近赛事</h2>
-        <RecentSeriesRefreshButton loading={recentSeries.loading} onRefresh={onRefresh} />
+        <RecentSeriesRefreshButton
+          loading={recentSeries.loading}
+          cooldownSeconds={recentSeries.manualRefreshSecondsRemaining}
+          onRefresh={onRefresh}
+        />
       </div>
       <RecentSeriesContent
         state={recentSeries}

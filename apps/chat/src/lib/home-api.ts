@@ -16,6 +16,8 @@ export type RecentSeriesResponse = {
   retrieved_at: string | null;
   last_attempt_at: string | null;
   last_error: string | null;
+  server_time: string;
+  manual_refresh_available_at: string | null;
 };
 
 const INVALID_RESPONSE = "近期赛事响应无效。";
@@ -53,24 +55,40 @@ function isRecentSeriesResponse(value: unknown): value is RecentSeriesResponse {
     response.items.every(isRecentSeriesCandidate) &&
     isNullableDate(response.retrieved_at) &&
     isNullableDate(response.last_attempt_at) &&
-    isNullableText(response.last_error)
+    isNullableText(response.last_error) &&
+    typeof response.server_time === "string" &&
+    isNullableDate(response.server_time) &&
+    isNullableDate(response.manual_refresh_available_at)
   );
 }
 
 export type GetRecentSeriesOptions = {
   signal?: AbortSignal;
-  waitForRefresh?: boolean;
 };
 
 export async function getRecentSeries({
   signal,
-  waitForRefresh = false,
 }: GetRecentSeriesOptions = {}): Promise<RecentSeriesResponse> {
+  return readRecentSeries("GET", signal);
+}
+
+export async function refreshRecentSeries({
+  signal,
+}: Pick<GetRecentSeriesOptions, "signal"> = {}): Promise<RecentSeriesResponse> {
+  return readRecentSeries("POST", signal);
+}
+
+async function readRecentSeries(
+  method: "GET" | "POST",
+  signal?: AbortSignal,
+): Promise<RecentSeriesResponse> {
   let response: Response;
-  const query = waitForRefresh ? "?wait_for_refresh=true" : "";
   try {
-    response = await fetch(`${getApiUrl()}/api/v1/home/recent-series${query}`, {
-      method: "GET",
+    const path = method === "POST"
+      ? "/api/v1/home/recent-series/refresh"
+      : "/api/v1/home/recent-series";
+    response = await fetch(`${getApiUrl()}${path}`, {
+      method,
       cache: "no-store",
       ...(signal ? { signal } : {}),
     });

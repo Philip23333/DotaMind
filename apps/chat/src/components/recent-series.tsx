@@ -3,6 +3,7 @@
 import {
   getRecentSeries,
   recentSeriesDisplayName,
+  refreshRecentSeries,
   type RecentSeriesCandidate,
   type RecentSeriesResponse,
 } from "@/lib/home-api";
@@ -14,6 +15,7 @@ export type RecentSeriesViewState = {
   response: RecentSeriesResponse | null;
   loading: boolean;
   error: boolean;
+  manualRefreshSecondsRemaining: number;
 };
 
 export type RecentSeriesState = RecentSeriesViewState & {
@@ -25,19 +27,35 @@ export function useRecentSeries(): RecentSeriesState {
     response: null,
     loading: false,
     error: false,
+    manualRefreshSecondsRemaining: 0,
   });
   const mounted = useRef(false);
   const requestRef = useRef<Promise<void> | null>(null);
+  const cooldownSecondsRef = useRef(0);
+  const [cooldownClock, setCooldownClock] = useState<{
+    remainingMs: number;
+    startedAt: number;
+  } | null>(null);
 
-  const load = useCallback((waitForRefresh = false) => {
+  const load = useCallback((manual = false) => {
     if (requestRef.current) return requestRef.current;
 
     setState((previous) => ({ ...previous, loading: true, error: false }));
 
-    const request = getRecentSeries({ waitForRefresh })
+    const request = (manual ? refreshRecentSeries() : getRecentSeries())
       .then((response) => {
         if (!mounted.current) return;
-        setState({ response, loading: false, error: false });
+        const remainingMs = getManualRefreshRemainingMs(response);
+        const receivedAt = performance.now();
+        const remainingSeconds = Math.max(0, Math.ceil(remainingMs / 1000));
+        cooldownSecondsRef.current = remainingSeconds;
+        setCooldownClock(remainingMs > 0 ? { remainingMs, startedAt: receivedAt } : null);
+        setState({
+          response,
+          loading: false,
+          error: false,
+          manualRefreshSecondsRemaining: remainingSeconds,
+        });
       })
       .catch(() => {
         if (!mounted.current) return;
@@ -51,6 +69,24 @@ export function useRecentSeries(): RecentSeriesState {
   }, []);
 
   useEffect(() => {
+    if (!cooldownClock || cooldownClock.remainingMs <= 0) return;
+
+    const updateCountdown = () => {
+      const elapsed = performance.now() - cooldownClock.startedAt;
+      const remainingMs = Math.max(0, cooldownClock.remainingMs - elapsed);
+      const remainingSeconds = Math.max(0, Math.ceil(remainingMs / 1000));
+      cooldownSecondsRef.current = remainingSeconds;
+      setState((previous) => previous.manualRefreshSecondsRemaining === remainingSeconds
+        ? previous
+        : { ...previous, manualRefreshSecondsRemaining: remainingSeconds });
+      if (remainingSeconds === 0) clearInterval(interval);
+    };
+
+    const interval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(interval);
+  }, [cooldownClock]);
+
+  useEffect(() => {
     mounted.current = true;
     void load();
     return () => {
@@ -58,29 +94,42 @@ export function useRecentSeries(): RecentSeriesState {
     };
   }, [load]);
 
+  const retry = useCallback(() => {
+    if (requestRef.current || cooldownSecondsRef.current > 0) return;
+    void load(true);
+  }, [load]);
+
   return {
     ...state,
-    retry: () => void load(true),
+    retry,
   };
 }
 
 export const RecentSeriesRefreshButton: FC<{
   loading: boolean;
+  cooldownSeconds: number;
   onRefresh: () => void;
-}> = ({ loading, onRefresh }) => (
-  <Button
-    type="button"
-    variant="ghost"
-    size="sm"
-    aria-label={loading ? "刷新中" : "刷新近期赛事"}
-    title={loading ? "刷新中…" : "刷新近期赛事"}
-    disabled={loading}
-    onClick={onRefresh}
-  >
-    <RefreshCwIcon className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
-    {loading ? "刷新中…" : "刷新"}
-  </Button>
-);
+}> = ({ loading, cooldownSeconds, onRefresh }) => {
+  const label = loading
+    ? "正在刷新..."
+    : cooldownSeconds > 0
+      ? `刷新（剩余 ${cooldownSeconds} 秒）`
+      : "刷新";
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      aria-label={label}
+      title={label}
+      disabled={loading || cooldownSeconds > 0}
+      onClick={onRefresh}
+    >
+      <RefreshCwIcon className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
+      {label}
+    </Button>
+  );
+};
 
 export type RecentSeriesListProps = {
   items: RecentSeriesCandidate[];
@@ -139,6 +188,7 @@ export const RecentSeriesContent: FC<RecentSeriesContentProps> = ({ state, count
   const { response } = state;
   const items = response?.items ?? [];
   const statusUnavailable = response?.status === "unavailable";
+  const retryDisabled = state.loading || state.manualRefreshSecondsRemaining > 0;
 
   return (
     <div className="min-w-0 space-y-2">
@@ -149,18 +199,30 @@ export const RecentSeriesContent: FC<RecentSeriesContentProps> = ({ state, count
         <StatusWithRetry
           message={response ? "读取失败，仍显示上次可用数据" : "赛事列表暂时不可用"}
           onRetry={onRetry}
+          disabled={retryDisabled}
         />
       )}
       {!state.error && statusUnavailable && (
-        <StatusWithRetry message="赛事列表暂时不可用" onRetry={onRetry} />
+        <StatusWithRetry message="赛事列表暂时不可用" onRetry={onRetry} disabled={retryDisabled} />
       )}
       {!state.error && response?.status === "stale" && (
         <div className="space-y-1 px-3 text-xs text-muted-foreground">
           <p>当前为上次更新的数据</p>
           {response.last_error?.trim() && (
-            <StatusWithRetry message="更新暂未成功，可稍后重试" onRetry={onRetry} />
+            <StatusWithRetry
+              message="更新暂未成功，可稍后重试"
+              onRetry={onRetry}
+              disabled={retryDisabled}
+            />
           )}
         </div>
+      )}
+      {!state.error && response?.status === "fresh" && response.last_error?.trim() && (
+        <StatusWithRetry
+          message="更新暂未成功，可稍后重试"
+          onRetry={onRetry}
+          disabled={retryDisabled}
+        />
       )}
       {items.length > 0 && <p className="px-3 text-[11px] text-muted-foreground">赛事日期均为北京时间</p>}
       {response?.status === "fresh" && response.retrieved_at && (
@@ -181,12 +243,31 @@ export const RecentSeriesContent: FC<RecentSeriesContentProps> = ({ state, count
   );
 };
 
-const StatusWithRetry: FC<{ message: string; onRetry: () => void }> = ({ message, onRetry }) => (
+const StatusWithRetry: FC<{ message: string; onRetry: () => void; disabled: boolean }> = ({
+  message,
+  onRetry,
+  disabled,
+}) => (
   <div className="flex items-center justify-between gap-2 px-3 py-2 text-sm text-muted-foreground">
     <span role="status">{message}</span>
-    <button type="button" className="shrink-0 underline underline-offset-2" onClick={onRetry}>重试</button>
+    <button
+      type="button"
+      className="shrink-0 underline underline-offset-2 disabled:cursor-not-allowed disabled:opacity-55"
+      disabled={disabled}
+      onClick={onRetry}
+    >
+      重试
+    </button>
   </div>
 );
+
+function getManualRefreshRemainingMs(response: RecentSeriesResponse): number {
+  if (!response.manual_refresh_available_at) return 0;
+  const serverTime = Date.parse(response.server_time);
+  const allowedAt = Date.parse(response.manual_refresh_available_at);
+  if (!Number.isFinite(serverTime) || !Number.isFinite(allowedAt)) return 0;
+  return Math.max(0, allowedAt - serverTime);
+}
 
 function formatSeriesDetails(series: RecentSeriesCandidate): { dates: string; champion: string | null } {
   const champion = series.lifecycle === "past" ? series.champion_name?.trim() : "";

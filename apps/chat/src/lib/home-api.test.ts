@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { getRecentSeries, recentSeriesDisplayName, type RecentSeriesResponse } from "./home-api";
+import {
+  getRecentSeries,
+  recentSeriesDisplayName,
+  refreshRecentSeries,
+  type RecentSeriesResponse,
+} from "./home-api";
 
 const fresh: RecentSeriesResponse = {
   status: "fresh",
@@ -16,6 +21,8 @@ const fresh: RecentSeriesResponse = {
   retrieved_at: "2026-09-10T00:00:00Z",
   last_attempt_at: "2026-09-10T00:00:00Z",
   last_error: null,
+  server_time: "2026-09-10T00:00:00Z",
+  manual_refresh_available_at: null,
 };
 
 function jsonResponse(payload: unknown, status = 200): Response {
@@ -28,7 +35,7 @@ function jsonResponse(payload: unknown, status = 200): Response {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("getRecentSeries", () => {
-  it("requests the shared endpoint without a wait parameter by default", async () => {
+  it("requests ordinary reads with GET and no-store", async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(fresh));
     vi.stubGlobal("fetch", fetchMock);
 
@@ -40,17 +47,17 @@ describe("getRecentSeries", () => {
     );
   });
 
-  it("requests the same endpoint in wait mode and retains the caller signal", async () => {
+  it("requests manual refresh with POST and retains the caller signal", async () => {
     const controller = new AbortController();
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(fresh));
     vi.stubGlobal("fetch", fetchMock);
 
-    await getRecentSeries({ signal: controller.signal, waitForRefresh: true });
+    await refreshRecentSeries({ signal: controller.signal });
 
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8001/api/v1/home/recent-series?wait_for_refresh=true",
-      { method: "GET", cache: "no-store", signal: controller.signal },
+      "http://localhost:8001/api/v1/home/recent-series/refresh",
+      { method: "POST", cache: "no-store", signal: controller.signal },
     );
   });
 

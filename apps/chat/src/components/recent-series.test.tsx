@@ -2,7 +2,12 @@
 import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { getRecentSeries, type RecentSeriesCandidate, type RecentSeriesResponse } from "@/lib/home-api";
+import {
+  getRecentSeries,
+  refreshRecentSeries,
+  type RecentSeriesCandidate,
+  type RecentSeriesResponse,
+} from "@/lib/home-api";
 import {
   RecentSeriesContent,
   RecentSeriesList,
@@ -13,10 +18,15 @@ import {
 
 vi.mock("@/lib/home-api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/home-api")>();
-  return { ...actual, getRecentSeries: vi.fn() };
+  return {
+    ...actual,
+    getRecentSeries: vi.fn(),
+    refreshRecentSeries: vi.fn(),
+  };
 });
 
 const getRecentSeriesMock = vi.mocked(getRecentSeries);
+const refreshRecentSeriesMock = vi.mocked(refreshRecentSeries);
 
 const candidates: RecentSeriesCandidate[] = Array.from({ length: 11 }, (_, index) => ({
   series_id: 100 + index,
@@ -31,7 +41,9 @@ const candidates: RecentSeriesCandidate[] = Array.from({ length: 11 }, (_, index
 afterEach(() => {
   cleanup();
   getRecentSeriesMock.mockReset();
+  refreshRecentSeriesMock.mockReset();
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 function response(
@@ -45,14 +57,25 @@ function response(
     retrieved_at: "2026-09-10T00:00:00Z",
     last_attempt_at: "2026-09-10T00:00:00Z",
     last_error: lastError,
+    server_time: "2026-09-10T00:00:00Z",
+    manual_refresh_available_at: null,
   };
 }
 
 function viewState(
   result: RecentSeriesResponse | null,
-  options: Partial<Pick<RecentSeriesViewState, "loading" | "error">> = {},
+  options: Partial<Pick<
+    RecentSeriesViewState,
+    "loading" | "error" | "manualRefreshSecondsRemaining"
+  >> = {},
 ): RecentSeriesViewState {
-  return { response: result, loading: false, error: false, ...options };
+  return {
+    response: result,
+    loading: false,
+    error: false,
+    manualRefreshSecondsRemaining: 0,
+    ...options,
+  };
 }
 
 describe("RecentSeriesList", () => {
@@ -81,43 +104,42 @@ describe("RecentSeriesList", () => {
 });
 
 describe("useRecentSeries", () => {
-  it("uses immediate mode initially and wait mode for an explicit refresh", async () => {
+  it("uses GET initially and POST for an explicit refresh", async () => {
     getRecentSeriesMock
-      .mockResolvedValueOnce(response("fresh"))
       .mockResolvedValueOnce(response("fresh"));
+    refreshRecentSeriesMock.mockResolvedValueOnce(response("fresh"));
     const { result } = renderHook(() => useRecentSeries());
     await waitFor(() => expect(result.current.response?.status).toBe("fresh"));
 
     act(() => result.current.retry());
-    await waitFor(() => expect(getRecentSeriesMock).toHaveBeenCalledTimes(2));
-    expect(getRecentSeriesMock).toHaveBeenNthCalledWith(1, { waitForRefresh: false });
-    expect(getRecentSeriesMock).toHaveBeenNthCalledWith(2, { waitForRefresh: true });
+    await waitFor(() => expect(refreshRecentSeriesMock).toHaveBeenCalledOnce());
+    expect(getRecentSeriesMock).toHaveBeenCalledOnce();
+    expect(refreshRecentSeriesMock).toHaveBeenCalledWith();
   });
 
   it.each(["stale", "unavailable"] as const)(
     "can refresh a %s response",
     async (status) => {
-      getRecentSeriesMock
-        .mockResolvedValueOnce(response(status))
-        .mockResolvedValueOnce(response("fresh"));
+      getRecentSeriesMock.mockResolvedValueOnce(response(status));
+      refreshRecentSeriesMock.mockResolvedValueOnce(response("fresh"));
       const { result } = renderHook(() => useRecentSeries());
       await waitFor(() => expect(result.current.response?.status).toBe(status));
 
       act(() => result.current.retry());
-      await waitFor(() => expect(getRecentSeriesMock).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(refreshRecentSeriesMock).toHaveBeenCalledOnce());
       await waitFor(() => expect(result.current.response?.status).toBe("fresh"));
     },
   );
 
   it("retries a failed read when retry is requested", async () => {
     getRecentSeriesMock
-      .mockRejectedValueOnce(new Error("network error"))
-      .mockResolvedValueOnce(response("fresh"));
+      .mockRejectedValueOnce(new Error("network error"));
+    refreshRecentSeriesMock.mockResolvedValueOnce(response("fresh"));
     const { result } = renderHook(() => useRecentSeries());
     await waitFor(() => expect(result.current.error).toBe(true));
 
     act(() => result.current.retry());
-    await waitFor(() => expect(getRecentSeriesMock).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(refreshRecentSeriesMock).toHaveBeenCalledOnce());
     await waitFor(() => expect(result.current.response?.status).toBe("fresh"));
     expect(result.current.error).toBe(false);
   });
@@ -130,23 +152,30 @@ describe("useRecentSeries", () => {
 
     act(() => result.current.retry());
     expect(getRecentSeriesMock).toHaveBeenCalledOnce();
+    expect(refreshRecentSeriesMock).not.toHaveBeenCalled();
     await act(async () => resolveRead(response("fresh")));
     await waitFor(() => expect(result.current.response?.status).toBe("fresh"));
   });
 
-  it("keeps old rows and shows a disabled refreshing button until the wait request completes", async () => {
+  it("keeps old rows and shows a disabled refreshing button until the POST completes", async () => {
     const updated = response("fresh", candidates, null);
     updated.retrieved_at = "2026-09-10T01:00:00Z";
+    updated.server_time = "2026-09-10T01:00:00Z";
     let finishRefresh!: (value: RecentSeriesResponse) => void;
-    getRecentSeriesMock
-      .mockResolvedValueOnce(response("fresh"))
-      .mockImplementationOnce(() => new Promise((resolve) => { finishRefresh = resolve; }));
+    getRecentSeriesMock.mockResolvedValueOnce(response("fresh"));
+    refreshRecentSeriesMock.mockImplementationOnce(
+      () => new Promise((resolve) => { finishRefresh = resolve; }),
+    );
 
     function RecentSeriesPanel() {
       const state = useRecentSeries();
       return (
         <>
-          <RecentSeriesRefreshButton loading={state.loading} onRefresh={state.retry} />
+          <RecentSeriesRefreshButton
+            loading={state.loading}
+            cooldownSeconds={state.manualRefreshSecondsRemaining}
+            onRefresh={state.retry}
+          />
           <RecentSeriesContent state={state} count={3} onSelect={vi.fn()} onRetry={state.retry} />
         </>
       );
@@ -156,32 +185,145 @@ describe("useRecentSeries", () => {
     await waitFor(() => expect(screen.getByText("Series 1")).toBeTruthy());
     expect(screen.getByText(/数据更新于 2026-09-10 08:00（北京时间）/)).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "刷新近期赛事" }));
-    await waitFor(() => expect(getRecentSeriesMock).toHaveBeenCalledTimes(2));
+    fireEvent.click(screen.getByRole("button", { name: "刷新" }));
+    await waitFor(() => expect(refreshRecentSeriesMock).toHaveBeenCalledOnce());
     expect(screen.getByText("Series 1")).toBeTruthy();
-    const refreshingButton = screen.getByRole("button", { name: "刷新中" }) as HTMLButtonElement;
+    const refreshingButton = screen.getByRole("button", { name: "正在刷新..." }) as HTMLButtonElement;
     expect(refreshingButton.disabled).toBe(true);
-    expect(refreshingButton.textContent).toContain("刷新中…");
+    expect(refreshingButton.textContent).toContain("正在刷新...");
     expect(refreshingButton.querySelector("svg")?.getAttribute("class")).toContain("animate-spin");
 
     await act(async () => finishRefresh(updated));
-    await waitFor(() => expect(screen.getByRole("button", { name: "刷新近期赛事" }).textContent).toContain("刷新"));
+    await waitFor(() => expect(screen.getByRole("button", { name: "刷新" }).textContent).toContain("刷新"));
     expect(screen.getByText("Series 1")).toBeTruthy();
     expect(screen.getByText(/数据更新于 2026-09-10 09:00（北京时间）/)).toBeTruthy();
-    expect(getRecentSeriesMock).toHaveBeenNthCalledWith(2, { waitForRefresh: true });
+    expect(refreshRecentSeriesMock).toHaveBeenCalledOnce();
   });
 
-  it("preserves old rows after a network failure during wait mode", async () => {
-    getRecentSeriesMock
-      .mockResolvedValueOnce(response("fresh"))
-      .mockRejectedValueOnce(new Error("network error"));
+  it("preserves old rows after a network failure during manual refresh", async () => {
+    getRecentSeriesMock.mockResolvedValueOnce(response("fresh"));
+    refreshRecentSeriesMock.mockRejectedValueOnce(new Error("network error"));
     const { result } = renderHook(() => useRecentSeries());
     await waitFor(() => expect(result.current.response?.status).toBe("fresh"));
 
     act(() => result.current.retry());
     await waitFor(() => expect(result.current.error).toBe(true));
     expect(result.current.response?.items[0].name).toBe("Series 1");
-    expect(getRecentSeriesMock).toHaveBeenNthCalledWith(2, { waitForRefresh: true });
+    expect(refreshRecentSeriesMock).toHaveBeenCalledOnce();
+  });
+
+  it("shows a backend-provided failure cooldown and blocks every retry entry", async () => {
+    getRecentSeriesMock.mockResolvedValueOnce(response("fresh"));
+    const failed = response("stale", candidates, "timeout");
+    failed.server_time = "2026-09-10T00:10:00Z";
+    failed.manual_refresh_available_at = "2026-09-10T00:20:00Z";
+    refreshRecentSeriesMock.mockResolvedValueOnce(failed);
+
+    function RecentSeriesPanel() {
+      const state = useRecentSeries();
+      return (
+        <>
+          <RecentSeriesRefreshButton
+            loading={state.loading}
+            cooldownSeconds={state.manualRefreshSecondsRemaining}
+            onRefresh={state.retry}
+          />
+          <RecentSeriesContent state={state} count={3} onSelect={vi.fn()} onRetry={state.retry} />
+        </>
+      );
+    }
+
+    render(<RecentSeriesPanel />);
+    await waitFor(() => expect(screen.getByText("Series 1")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "刷新" }));
+    await waitFor(() => expect(screen.getByText("更新暂未成功，可稍后重试")).toBeTruthy());
+
+    const refreshButton = screen.getByRole("button", { name: "刷新（剩余 600 秒）" }) as HTMLButtonElement;
+    expect(refreshButton.disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "重试" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText("Series 1")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "重试" }));
+    expect(refreshRecentSeriesMock).toHaveBeenCalledOnce();
+  });
+
+  it("shows and counts down a GET cooldown from server timestamps, then cleans its timer", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2035-01-01T00:00:00Z"));
+    const limited = response("fresh");
+    limited.server_time = "2026-09-10T00:00:00Z";
+    limited.manual_refresh_available_at = "2026-09-10T00:00:04.100Z";
+    getRecentSeriesMock.mockResolvedValueOnce(limited);
+
+    function RecentSeriesPanel() {
+      const state = useRecentSeries();
+      return (
+        <RecentSeriesRefreshButton
+          loading={state.loading}
+          cooldownSeconds={state.manualRefreshSecondsRemaining}
+          onRefresh={state.retry}
+        />
+      );
+    }
+
+    const { unmount } = render(<RecentSeriesPanel />);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const initialButton = screen.getByRole("button", { name: "刷新（剩余 5 秒）" }) as HTMLButtonElement;
+    expect(initialButton.disabled).toBe(true);
+    expect(refreshRecentSeriesMock).not.toHaveBeenCalled();
+
+    act(() => vi.advanceTimersByTime(1000));
+    expect(screen.getByRole("button", { name: "刷新（剩余 4 秒）" })).toBeTruthy();
+    act(() => vi.advanceTimersByTime(4000));
+    const availableButton = screen.getByRole("button", { name: "刷新" }) as HTMLButtonElement;
+    expect(availableButton.disabled).toBe(false);
+    unmount();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("keeps the refresh button busy past the cooldown until its request finishes", async () => {
+    vi.useFakeTimers();
+    let finishRefresh!: (value: RecentSeriesResponse) => void;
+    getRecentSeriesMock.mockResolvedValueOnce(response("fresh"));
+    refreshRecentSeriesMock.mockImplementationOnce(
+      () => new Promise((resolve) => { finishRefresh = resolve; }),
+    );
+
+    function RecentSeriesPanel() {
+      const state = useRecentSeries();
+      return (
+        <>
+          <RecentSeriesRefreshButton
+            loading={state.loading}
+            cooldownSeconds={state.manualRefreshSecondsRemaining}
+            onRefresh={state.retry}
+          />
+          <RecentSeriesContent state={state} count={3} onSelect={vi.fn()} onRetry={state.retry} />
+        </>
+      );
+    }
+
+    render(<RecentSeriesPanel />);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "刷新" }));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    act(() => vi.advanceTimersByTime(65_000));
+    const busyButton = screen.getByRole("button", { name: "正在刷新..." }) as HTMLButtonElement;
+    expect(busyButton.disabled).toBe(true);
+    expect(refreshRecentSeriesMock).toHaveBeenCalledOnce();
+
+    const finished = response("fresh");
+    finished.server_time = "2026-09-10T00:01:05Z";
+    await act(async () => finishRefresh(finished));
+    expect((screen.getByRole("button", { name: "刷新" }) as HTMLButtonElement).disabled).toBe(false);
   });
 });
 
@@ -232,6 +374,20 @@ describe("RecentSeriesContent", () => {
     expect(screen.getByText("当前为上次更新的数据")).toBeTruthy();
     expect(screen.getByText("更新暂未成功，可稍后重试")).toBeTruthy();
     expect(screen.queryByText("数据已更新")).toBeNull();
+    expect(screen.getByText("Series 1")).toBeTruthy();
+  });
+
+  it("shows a failed refresh even while the retained snapshot is still fresh", () => {
+    render(
+      <RecentSeriesContent
+        state={viewState(response("fresh", candidates, "timeout"))}
+        count={3}
+        onSelect={vi.fn()}
+        onRetry={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("更新暂未成功，可稍后重试")).toBeTruthy();
+    expect(screen.getByText(/数据更新于 2026-09-10 08:00（北京时间）/)).toBeTruthy();
     expect(screen.getByText("Series 1")).toBeTruthy();
   });
 

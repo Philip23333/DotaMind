@@ -6,7 +6,7 @@ import asyncio
 import json
 import logging
 from collections.abc import Callable, Mapping
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Literal, Protocol
 
 import httpx
@@ -27,8 +27,14 @@ from app.vnext.providers.pandascore.tournament_winners import TournamentWinnerSo
 logger = logging.getLogger(__name__)
 
 _CACHE_KEY = "dotamind:vnext:homepage:recent-series:v1"
-_CACHE_FIELDS = {"snapshot", "last_attempt_at", "last_error"}
+_CACHE_FIELDS = {
+    "snapshot",
+    "last_attempt_at",
+    "last_error",
+    "manual_refresh_available_at",
+}
 _REFRESH_SECONDS = 600
+_MANUAL_REFRESH_COOLDOWN_SECONDS = 60
 _CANDIDATE_LIMIT = 10
 _PROVIDER_PAGE_LIMIT = 100
 _ERROR_CODES = {
@@ -85,12 +91,20 @@ class RecentSeriesCacheEntry(BaseModel):
     snapshot: RecentSeriesSnapshot | None = None
     last_attempt_at: datetime | None = None
     last_error: str | None = None
+    manual_refresh_available_at: datetime | None = None
 
     @field_validator("last_attempt_at")
     @classmethod
     def require_attempt_timezone(cls, value: datetime | None) -> datetime | None:
         if value is not None and (value.tzinfo is None or value.utcoffset() is None):
             raise ValueError("last_attempt_at must include a timezone")
+        return value
+
+    @field_validator("manual_refresh_available_at")
+    @classmethod
+    def require_manual_refresh_timezone(cls, value: datetime | None) -> datetime | None:
+        if value is not None and (value.tzinfo is None or value.utcoffset() is None):
+            raise ValueError("manual_refresh_available_at must include a timezone")
         return value
 
 
@@ -104,6 +118,15 @@ class RecentSeriesResponse(BaseModel):
     retrieved_at: datetime | None = None
     last_attempt_at: datetime | None = None
     last_error: str | None = None
+    server_time: datetime
+    manual_refresh_available_at: datetime | None = None
+
+    @field_validator("server_time", "manual_refresh_available_at")
+    @classmethod
+    def require_response_timezone(cls, value: datetime | None) -> datetime | None:
+        if value is not None and (value.tzinfo is None or value.utcoffset() is None):
+            raise ValueError("response timestamps must include a timezone")
+        return value
 
 
 class RecentSeriesCacheUnavailableError(RuntimeError):
@@ -138,6 +161,8 @@ class RecentSeriesCache(Protocol):
     async def publish(self, snapshot: RecentSeriesSnapshot, *, attempted_at: datetime) -> None: ...
 
     async def record_failure(self, *, attempted_at: datetime, error_code: str) -> None: ...
+
+    async def set_manual_refresh_available_at(self, value: datetime) -> None: ...
 
 
 class RedisRecentSeriesCache:
@@ -186,6 +211,12 @@ class RedisRecentSeriesCache:
             }
         )
 
+    async def set_manual_refresh_available_at(self, value: datetime) -> None:
+        _validate_aware_datetime(value)
+        # Update only cooldown metadata so a concurrent snapshot publication is
+        # never replaced with an older cache entry.
+        await self._hset({"manual_refresh_available_at": value.isoformat()})
+
     async def _hset(self, mapping: dict[str, str]) -> None:
         try:
             await self._client.hset(_CACHE_KEY, mapping=mapping)
@@ -214,18 +245,15 @@ class HomepageRecentSeriesService:
         self._now = now or _utc_now
         self._refresh_lock = asyncio.Lock()
         self._refresh_task: asyncio.Task[RecentSeriesResponse] | None = None
+        self._refresh_started_at: datetime | None = None
         self._local_failure: tuple[datetime, str] | None = None
         self._closed = False
 
-    async def get_recent_series(
-        self,
-        *,
-        wait_for_refresh: bool = False,
-    ) -> RecentSeriesResponse:
+    async def get_recent_series(self) -> RecentSeriesResponse:
         requested_at = _ensure_aware(self._now())
         entry = await self._cache.get()
         if _is_fresh(entry.snapshot, requested_at):
-            return _response(entry, status="fresh")
+            return self._entry_response(entry, status="fresh")
 
         async with self._refresh_lock:
             # Recheck the shared snapshot after acquiring the short state lock.
@@ -233,7 +261,7 @@ class HomepageRecentSeriesService:
             entry = await self._cache.get()
             now = _ensure_aware(self._now())
             if _is_fresh(entry.snapshot, now):
-                return _response(entry, status="fresh")
+                return self._entry_response(entry, status="fresh")
             if self._closed:
                 return self._entry_response(
                     entry,
@@ -243,6 +271,7 @@ class HomepageRecentSeriesService:
             task = self._refresh_task
             if task is not None and task.done():
                 self._refresh_task = None
+                self._refresh_started_at = None
                 task = None
             if task is None and _failure_cooldown_active(
                 entry,
@@ -254,17 +283,73 @@ class HomepageRecentSeriesService:
                     status="stale" if entry.snapshot is not None else "unavailable",
                 )
             if task is None:
+                self._refresh_started_at = now
                 task = asyncio.create_task(self._refresh(entry))
                 self._refresh_task = task
                 task.add_done_callback(self._consume_refresh_result)
 
-        if entry.snapshot is not None and not wait_for_refresh:
+        if entry.snapshot is not None:
             # Stale snapshots are useful immediately. The owned task continues
             # in the background and later requests will observe its result.
             return self._entry_response(entry, status="stale")
 
-        # Waiting callers share the service-owned refresh and cannot cancel it.
+        # Cold-cache callers share the service-owned refresh and cannot cancel it.
         return await asyncio.shield(task)
+
+    async def refresh_recent_series(self) -> RecentSeriesResponse:
+        async with self._refresh_lock:
+            now = _ensure_aware(self._now())
+            if self._closed:
+                entry = await self._cache.get()
+                return self._entry_response(
+                    entry,
+                    status=_entry_status(entry, now),
+                )
+
+            task = self._refresh_task
+            if task is not None and task.done():
+                self._refresh_task = None
+                self._refresh_started_at = None
+                task = None
+
+            entry = await self._cache.get()
+            now = _ensure_aware(self._now())
+            if task is None:
+                available_at = _manual_refresh_available_at(
+                    entry,
+                    now,
+                    local_failure=self._local_failure,
+                )
+                if available_at is not None:
+                    return self._entry_response(
+                        entry,
+                        status=_entry_status(entry, now),
+                    )
+                started_at = now
+            else:
+                # A manual request joining an automatic refresh uses the
+                # original task start; additional waiters do not extend it.
+                started_at = self._refresh_started_at or now
+
+            manual_available_at = started_at + timedelta(
+                seconds=_MANUAL_REFRESH_COOLDOWN_SECONDS
+            )
+            if (
+                entry.manual_refresh_available_at is None
+                or entry.manual_refresh_available_at < manual_available_at
+            ):
+                await self._cache.set_manual_refresh_available_at(manual_available_at)
+            if task is None:
+                self._refresh_started_at = started_at
+                task = asyncio.create_task(self._refresh(entry))
+                self._refresh_task = task
+                task.add_done_callback(self._consume_refresh_result)
+
+        # The cache mutation and lock are complete before waiting; cancellation
+        # of this request cannot cancel the service-owned refresh task.
+        refresh_result = await asyncio.shield(task)
+        refreshed_entry = await self._cache.get()
+        return self._entry_response(refreshed_entry, status=refresh_result.status)
 
     async def aclose(self) -> None:
         async with self._refresh_lock:
@@ -282,6 +367,7 @@ class HomepageRecentSeriesService:
         finally:
             if self._refresh_task is current_task:
                 self._refresh_task = None
+                self._refresh_started_at = None
 
     async def _perform_refresh(
         self,
@@ -301,17 +387,23 @@ class HomepageRecentSeriesService:
             except RecentSeriesCacheUnavailableError:
                 self._local_failure = (attempted_at, error_code)
                 if previous_entry.snapshot is None:
-                    return _unavailable(attempted_at, error_code)
-                return _response(
+                    return self._entry_response(
+                        previous_entry,
+                        status="unavailable",
+                        last_attempt_at=attempted_at,
+                        last_error=error_code,
+                    )
+                return self._entry_response(
                     previous_entry,
-                    status="stale",
+                    status=_entry_status(previous_entry, attempted_at),
                     last_attempt_at=attempted_at,
                     last_error=error_code,
                 )
             failed_entry = await self._cache.get()
-            if failed_entry.snapshot is None:
-                return _response(failed_entry, status="unavailable")
-            return _response(failed_entry, status="stale")
+            return self._entry_response(
+                failed_entry,
+                status=_entry_status(failed_entry, _ensure_aware(self._now())),
+            )
 
         retrieved_at = _ensure_aware(self._now())
         snapshot = RecentSeriesSnapshot(items=items, retrieved_at=retrieved_at)
@@ -320,40 +412,50 @@ class HomepageRecentSeriesService:
         except RecentSeriesCacheUnavailableError:
             self._local_failure = (retrieved_at, "cache_unavailable")
             if previous_entry.snapshot is None:
-                return _unavailable(retrieved_at, "cache_unavailable")
-            return _response(
+                return self._entry_response(
+                    previous_entry,
+                    status="unavailable",
+                    last_attempt_at=retrieved_at,
+                    last_error="cache_unavailable",
+                )
+            return self._entry_response(
                 previous_entry,
-                status="stale",
+                status=_entry_status(previous_entry, retrieved_at),
                 last_attempt_at=retrieved_at,
                 last_error="cache_unavailable",
             )
         self._local_failure = None
-        return _response(
-            RecentSeriesCacheEntry(
-                snapshot=snapshot,
-                last_attempt_at=retrieved_at,
-            ),
-            status="fresh",
-        )
+        published_entry = await self._cache.get()
+        return self._entry_response(published_entry, status="fresh")
 
     def _entry_response(
         self,
         entry: RecentSeriesCacheEntry,
         *,
         status: Literal["fresh", "stale", "unavailable"],
+        last_attempt_at: datetime | None = None,
+        last_error: str | None = None,
     ) -> RecentSeriesResponse:
+        now = _ensure_aware(self._now())
         local_failure = self._local_failure
         if (
             local_failure is not None
             and (entry.last_attempt_at is None or local_failure[0] >= entry.last_attempt_at)
         ):
-            return _response(
+            last_attempt_at = local_failure[0]
+            last_error = local_failure[1]
+        return _response(
+            entry,
+            status=status,
+            server_time=now,
+            manual_refresh_available_at=_manual_refresh_available_at(
                 entry,
-                status=status,
-                last_attempt_at=local_failure[0],
-                last_error=local_failure[1],
-            )
-        return _response(entry, status=status)
+                now,
+                local_failure=local_failure,
+            ),
+            last_attempt_at=last_attempt_at,
+            last_error=last_error,
+        )
 
     @staticmethod
     def _consume_refresh_result(task: asyncio.Task[RecentSeriesResponse]) -> None:
@@ -523,10 +625,40 @@ def _failure_cooldown_active(
     return any((now - failed_at).total_seconds() < _REFRESH_SECONDS for failed_at in failure_times)
 
 
+def _entry_status(
+    entry: RecentSeriesCacheEntry,
+    now: datetime,
+) -> Literal["fresh", "stale", "unavailable"]:
+    if _is_fresh(entry.snapshot, now):
+        return "fresh"
+    return "stale" if entry.snapshot is not None else "unavailable"
+
+
+def _manual_refresh_available_at(
+    entry: RecentSeriesCacheEntry,
+    now: datetime,
+    *,
+    local_failure: tuple[datetime, str] | None,
+) -> datetime | None:
+    available_times: list[datetime] = []
+    if entry.manual_refresh_available_at is not None:
+        available_times.append(entry.manual_refresh_available_at)
+    if entry.last_error is not None and entry.last_attempt_at is not None:
+        available_times.append(entry.last_attempt_at + timedelta(seconds=_REFRESH_SECONDS))
+    if local_failure is not None and (
+        entry.last_attempt_at is None or local_failure[0] >= entry.last_attempt_at
+    ):
+        available_times.append(local_failure[0] + timedelta(seconds=_REFRESH_SECONDS))
+    active_limits = [value for value in available_times if value > now]
+    return max(active_limits) if active_limits else None
+
+
 def _response(
     entry: RecentSeriesCacheEntry,
     *,
     status: Literal["fresh", "stale", "unavailable"],
+    server_time: datetime,
+    manual_refresh_available_at: datetime | None,
     last_attempt_at: datetime | None = None,
     last_error: str | None = None,
 ) -> RecentSeriesResponse:
@@ -537,15 +669,8 @@ def _response(
         retrieved_at=snapshot.retrieved_at if snapshot is not None else None,
         last_attempt_at=last_attempt_at or entry.last_attempt_at,
         last_error=last_error if last_error is not None else entry.last_error,
-    )
-
-
-def _unavailable(attempted_at: datetime, error_code: str) -> RecentSeriesResponse:
-    return RecentSeriesResponse(
-        status="unavailable",
-        items=[],
-        last_attempt_at=attempted_at,
-        last_error=error_code,
+        server_time=server_time,
+        manual_refresh_available_at=manual_refresh_available_at,
     )
 
 
@@ -564,7 +689,15 @@ def _decode_entry(raw_hash: object) -> RecentSeriesCacheEntry:
                 raise RecentSeriesCacheDataError("recent Series cache data is invalid")
             fields[key] = value
         if not {"last_attempt_at", "last_error"}.issubset(fields):
-            raise RecentSeriesCacheDataError("recent Series cache data is invalid")
+            # A manual request persists its cooldown before it starts provider
+            # work. On an empty cache this is a valid cooldown-only hash.
+            if set(fields) != {"manual_refresh_available_at"}:
+                raise RecentSeriesCacheDataError("recent Series cache data is invalid")
+            return RecentSeriesCacheEntry(
+                manual_refresh_available_at=datetime.fromisoformat(
+                    fields["manual_refresh_available_at"]
+                )
+            )
         snapshot = (
             RecentSeriesSnapshot.model_validate_json(fields["snapshot"])
             if "snapshot" in fields
@@ -572,12 +705,18 @@ def _decode_entry(raw_hash: object) -> RecentSeriesCacheEntry:
         )
         last_attempt_at = datetime.fromisoformat(fields["last_attempt_at"])
         last_error = fields["last_error"] or None
+        manual_refresh_available_at = (
+            datetime.fromisoformat(fields["manual_refresh_available_at"])
+            if "manual_refresh_available_at" in fields
+            else None
+        )
         if last_error is not None and last_error not in _ERROR_CODES:
             raise RecentSeriesCacheDataError("recent Series cache data is invalid")
         return RecentSeriesCacheEntry(
             snapshot=snapshot,
             last_attempt_at=last_attempt_at,
             last_error=last_error,
+            manual_refresh_available_at=manual_refresh_available_at,
         )
     except RecentSeriesCacheDataError:
         raise

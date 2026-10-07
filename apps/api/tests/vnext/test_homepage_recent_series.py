@@ -17,6 +17,7 @@ from app.vnext.composition import VNextServices, VNextSettings, build_vnext_serv
 from app.vnext.homepage.recent_series import (
     HomepageRecentSeriesService,
     RecentSeriesCacheEntry,
+    RecentSeriesCacheUnavailableError,
     RecentSeriesSnapshot,
     RedisRecentSeriesCache,
 )
@@ -490,19 +491,19 @@ def test_expired_snapshot_returns_immediately_while_refresh_is_blocked() -> None
     asyncio.run(run())
 
 
-def test_wait_mode_blocks_on_expired_snapshot_and_returns_the_new_snapshot() -> None:
+def test_manual_refresh_bypasses_a_fresh_snapshot_and_returns_new_data() -> None:
     async def run() -> None:
         cache = RedisRecentSeriesCache(FakeRedis())
-        old_snapshot = RecentSeriesSnapshot(
+        current_snapshot = RecentSeriesSnapshot(
             items=[{"series_id": 1, "name": "Old", "lifecycle": "running"}],
-            retrieved_at=NOW - timedelta(seconds=601),
+            retrieved_at=NOW - timedelta(seconds=10),
         )
-        await cache.publish(old_snapshot, attempted_at=old_snapshot.retrieved_at)
+        await cache.publish(current_snapshot, attempted_at=current_snapshot.retrieved_at)
         provider = FakeProvider([_series(2)], [])
         provider.release = asyncio.Event()
         service = _service(provider, cache, clock=Clock())
 
-        request = asyncio.create_task(service.get_recent_series(wait_for_refresh=True))
+        request = asyncio.create_task(service.refresh_recent_series())
         await provider.started.wait()
         assert not request.done()
         assert len(provider.calls) == 1
@@ -511,12 +512,13 @@ def test_wait_mode_blocks_on_expired_snapshot_and_returns_the_new_snapshot() -> 
         response = await request
         assert response.status == "fresh"
         assert [item.series_id for item in response.items] == [2]
+        assert response.manual_refresh_available_at == NOW + timedelta(seconds=60)
         await service.aclose()
 
     asyncio.run(run())
 
 
-def test_wait_mode_reuses_refresh_started_by_default_stale_read() -> None:
+def test_manual_refresh_reuses_background_task_and_anchors_cooldown_at_start() -> None:
     async def run() -> None:
         cache = RedisRecentSeriesCache(FakeRedis())
         old_snapshot = RecentSeriesSnapshot(
@@ -534,7 +536,7 @@ def test_wait_mode_reuses_refresh_started_by_default_stale_read() -> None:
         assert immediate.status == "stale"
         assert shared_task is not None and not shared_task.done()
 
-        waiting = asyncio.create_task(service.get_recent_series(wait_for_refresh=True))
+        waiting = asyncio.create_task(service.refresh_recent_series())
         assert not waiting.done()
         assert service._refresh_task is shared_task
         assert len(provider.calls) == 1
@@ -561,12 +563,12 @@ def test_multiple_waiters_share_one_refresh_and_cancellation_isolated() -> None:
         provider.release = asyncio.Event()
         service = _service(provider, cache, clock=Clock())
 
-        first = asyncio.create_task(service.get_recent_series(wait_for_refresh=True))
+        first = asyncio.create_task(service.refresh_recent_series())
         await provider.started.wait()
         shared_task = service._refresh_task
         assert shared_task is not None and not shared_task.done()
-        second_request_reads = redis.watch_reads(redis.read_count + 2)
-        second = asyncio.create_task(service.get_recent_series(wait_for_refresh=True))
+        second_request_reads = redis.watch_reads(redis.read_count + 1)
+        second = asyncio.create_task(service.refresh_recent_series())
         await second_request_reads.wait()
         assert not first.done() and not second.done()
         assert len(provider.calls) == 1
@@ -586,7 +588,7 @@ def test_multiple_waiters_share_one_refresh_and_cancellation_isolated() -> None:
     asyncio.run(run())
 
 
-def test_wait_mode_returns_refresh_failure_with_and_without_old_snapshot() -> None:
+def test_manual_refresh_returns_failure_with_and_without_old_snapshot() -> None:
     async def run() -> None:
         stale_cache = RedisRecentSeriesCache(FakeRedis())
         old_snapshot = RecentSeriesSnapshot(
@@ -598,7 +600,7 @@ def test_wait_mode_returns_refresh_failure_with_and_without_old_snapshot() -> No
         stale_provider.fail_with = httpx.ConnectError("private upstream detail")
         stale_service = _service(stale_provider, stale_cache, clock=Clock())
 
-        stale = await stale_service.get_recent_series(wait_for_refresh=True)
+        stale = await stale_service.refresh_recent_series()
         assert stale.status == "stale"
         assert [item.series_id for item in stale.items] == [8]
         assert stale.last_error == "transport_error"
@@ -611,7 +613,7 @@ def test_wait_mode_returns_refresh_failure_with_and_without_old_snapshot() -> No
             RedisRecentSeriesCache(FakeRedis()),
             clock=Clock(),
         )
-        unavailable = await cold_service.get_recent_series(wait_for_refresh=True)
+        unavailable = await cold_service.refresh_recent_series()
         assert unavailable.status == "unavailable"
         assert unavailable.items == []
         assert unavailable.last_error == "transport_error"
@@ -620,7 +622,47 @@ def test_wait_mode_returns_refresh_failure_with_and_without_old_snapshot() -> No
     asyncio.run(run())
 
 
-def test_wait_mode_observes_fresh_cache_and_failure_cooldown_without_provider_calls() -> None:
+def test_manual_refresh_failure_with_a_fresh_snapshot_is_explicit() -> None:
+    async def run() -> None:
+        cache = RedisRecentSeriesCache(FakeRedis())
+        snapshot = RecentSeriesSnapshot(
+            items=[{"series_id": 81, "name": "Still fresh", "lifecycle": "running"}],
+            retrieved_at=NOW,
+        )
+        await cache.publish(snapshot, attempted_at=NOW)
+        provider = FakeProvider([], [])
+        provider.fail_with = httpx.ConnectError("private provider detail")
+        service = _service(provider, cache, clock=Clock())
+
+        failed = await service.refresh_recent_series()
+        assert failed.status == "fresh"
+        assert [item.series_id for item in failed.items] == [81]
+        assert failed.last_error == "transport_error"
+        assert failed.manual_refresh_available_at == NOW + timedelta(seconds=600)
+        await service.aclose()
+
+    asyncio.run(run())
+
+
+def test_manual_refresh_does_not_start_when_cooldown_cannot_be_persisted() -> None:
+    async def run() -> None:
+        redis = FakeRedis()
+        redis.hset_failures_remaining = 1
+        cache = RedisRecentSeriesCache(redis)
+        provider = FakeProvider([_series(82)], [])
+        service = _service(provider, cache, clock=Clock())
+
+        with pytest.raises(RecentSeriesCacheUnavailableError):
+            await service.refresh_recent_series()
+
+        assert provider.calls == []
+        assert service._refresh_task is None
+        await service.aclose()
+
+    asyncio.run(run())
+
+
+def test_manual_refresh_cooldown_does_not_change_fresh_get_behavior() -> None:
     async def run() -> None:
         fresh_cache = RedisRecentSeriesCache(FakeRedis())
         fresh_snapshot = RecentSeriesSnapshot(
@@ -630,7 +672,7 @@ def test_wait_mode_observes_fresh_cache_and_failure_cooldown_without_provider_ca
         await fresh_cache.publish(fresh_snapshot, attempted_at=NOW)
         fresh_provider = FakeProvider([], [])
         fresh_service = _service(fresh_provider, fresh_cache, clock=Clock())
-        fresh = await fresh_service.get_recent_series(wait_for_refresh=True)
+        fresh = await fresh_service.get_recent_series()
         assert fresh.status == "fresh"
         assert fresh_provider.calls == []
         await fresh_service.aclose()
@@ -644,12 +686,80 @@ def test_wait_mode_observes_fresh_cache_and_failure_cooldown_without_provider_ca
         await cooldown_cache.record_failure(attempted_at=NOW, error_code="timeout")
         cooldown_provider = FakeProvider([], [])
         cooldown_service = _service(cooldown_provider, cooldown_cache, clock=Clock())
-        cooling = await cooldown_service.get_recent_series(wait_for_refresh=True)
+        cooling = await cooldown_service.get_recent_series()
         assert cooling.status == "stale"
         assert [item.series_id for item in cooling.items] == [10]
         assert cooling.last_error == "timeout"
         assert cooldown_provider.calls == []
         await cooldown_service.aclose()
+
+    asyncio.run(run())
+
+
+def test_manual_refresh_starts_sixty_second_cooldown_before_provider_work() -> None:
+    async def run() -> None:
+        cache = RedisRecentSeriesCache(FakeRedis())
+        snapshot = RecentSeriesSnapshot(
+            items=[{"series_id": 11, "name": "Existing", "lifecycle": "running"}],
+            retrieved_at=NOW,
+        )
+        await cache.publish(snapshot, attempted_at=NOW)
+        clock = Clock()
+        provider = FakeProvider([_series(12)], [])
+        provider.release = asyncio.Event()
+        service = _service(provider, cache, clock=clock)
+
+        first = asyncio.create_task(service.refresh_recent_series())
+        await provider.started.wait()
+        stored = await cache.get()
+        assert stored.manual_refresh_available_at == NOW + timedelta(seconds=60)
+        assert not first.done()
+
+        clock.value = NOW + timedelta(seconds=10)
+        provider.release.set()
+        refreshed = await first
+        assert refreshed.manual_refresh_available_at == NOW + timedelta(seconds=60)
+        await service.aclose()
+
+        second_provider = FakeProvider([_series(13)], [])
+        second_service = _service(second_provider, cache, clock=clock)
+        clock.value = NOW + timedelta(seconds=59)
+        limited = await second_service.refresh_recent_series()
+        assert limited.status == "fresh"
+        assert limited.manual_refresh_available_at == NOW + timedelta(seconds=60)
+        assert second_provider.calls == []
+
+        clock.value = NOW + timedelta(seconds=60)
+        allowed = await second_service.refresh_recent_series()
+        assert allowed.status == "fresh"
+        assert allowed.manual_refresh_available_at == NOW + timedelta(seconds=120)
+        assert len(second_provider.calls) == 2
+        await second_service.aclose()
+
+    asyncio.run(run())
+
+
+def test_manual_waiters_do_not_extend_cooldown_from_original_task_start() -> None:
+    async def run() -> None:
+        cache = RedisRecentSeriesCache(FakeRedis())
+        provider = FakeProvider([_series(13)], [])
+        provider.release = asyncio.Event()
+        clock = Clock()
+        service = _service(provider, cache, clock=clock)
+
+        first = asyncio.create_task(service.refresh_recent_series())
+        await provider.started.wait()
+        second = asyncio.create_task(service.refresh_recent_series())
+        assert not first.done() and not second.done()
+        assert (await cache.get()).manual_refresh_available_at == NOW + timedelta(seconds=60)
+
+        clock.value = NOW + timedelta(seconds=65)
+        provider.release.set()
+        await asyncio.gather(first, second)
+        third = await service.refresh_recent_series()
+        assert third.manual_refresh_available_at == NOW + timedelta(seconds=125)
+        assert len(provider.calls) == 4
+        await service.aclose()
 
     asyncio.run(run())
 
@@ -763,27 +873,36 @@ def test_failed_refresh_cooldown_survives_service_reconstruction() -> None:
         assert failed_task is not None
         await failed_task
         assert first_provider.calls == [("running", 1, 100)]
-        assert (await cache.get()).last_error == "transport_error"
+        stored = await cache.get()
+        assert stored.last_error == "transport_error"
+
+        failure_limited = await first_service.refresh_recent_series()
+        assert failure_limited.status == "stale"
+        assert failure_limited.last_error == "transport_error"
+        assert failure_limited.manual_refresh_available_at == NOW + timedelta(seconds=600)
+        assert first_provider.calls == [("running", 1, 100)]
 
         clock.value += timedelta(seconds=599)
-        still_throttled = await first_service.get_recent_series()
+        still_throttled = await first_service.refresh_recent_series()
         assert still_throttled.status == "stale"
+        assert still_throttled.manual_refresh_available_at == NOW + timedelta(seconds=600)
         assert first_provider.calls == [("running", 1, 100)]
 
         second_provider = FakeProvider([], [])
         second_provider.fail_with = httpx.ConnectError("private provider detail")
         second_service = _service(second_provider, cache, clock=clock)
-        reconstructed_still_throttled = await second_service.get_recent_series()
+        reconstructed_still_throttled = await second_service.refresh_recent_series()
         assert reconstructed_still_throttled.status == "stale"
+        assert reconstructed_still_throttled.manual_refresh_available_at == (
+            NOW + timedelta(seconds=600)
+        )
         assert second_provider.calls == []
 
         clock.value += timedelta(seconds=1)
-        retry_response = await second_service.get_recent_series()
-        retry_task = second_service._refresh_task
+        retry_response = await second_service.refresh_recent_series()
         assert retry_response.status == "stale"
-        assert retry_task is not None
-        await retry_task
         assert second_provider.calls == [("running", 1, 100)]
+        assert retry_response.manual_refresh_available_at == NOW + timedelta(seconds=1200)
         await first_service.aclose()
         await second_service.aclose()
 
@@ -948,23 +1067,15 @@ def test_home_route_returns_candidates_and_is_unavailable_without_service() -> N
     provider = FakeProvider(
         [_series(4, full_name="Series Four", league_name="League Four")], []
     )
-    service = _service(provider, RedisRecentSeriesCache(FakeRedis()))
-    observed_wait_flags: list[bool] = []
-    get_recent_series = service.get_recent_series
-
-    async def capture_wait_mode(*, wait_for_refresh: bool = False):
-        observed_wait_flags.append(wait_for_refresh)
-        return await get_recent_series(wait_for_refresh=wait_for_refresh)
-
-    service.get_recent_series = capture_wait_mode  # type: ignore[method-assign]
+    service = _service(provider, RedisRecentSeriesCache(FakeRedis()), clock=Clock())
     app = FastAPI()
     app.include_router(router, prefix="/api/v1")
     app.state.homepage_recent_series = service
 
     with TestClient(app) as client:
         response = client.get("/api/v1/home/recent-series")
-        waited_response = client.get(
-            "/api/v1/home/recent-series?wait_for_refresh=true"
+        refreshed_response = client.post(
+            "/api/v1/home/recent-series/refresh"
         )
 
     assert response.status_code == 200
@@ -975,12 +1086,21 @@ def test_home_route_returns_candidates_and_is_unavailable_without_service() -> N
         "retrieved_at",
         "last_attempt_at",
         "last_error",
+        "server_time",
+        "manual_refresh_available_at",
     }
     assert response.json()["items"][0]["series_id"] == 4
     assert response.json()["items"][0]["name"] == "Series Four"
     assert response.json()["items"][0]["league_name"] == "League Four"
-    assert waited_response.status_code == 200
-    assert observed_wait_flags == [False, True]
+    assert response.json()["manual_refresh_available_at"] is None
+    assert refreshed_response.status_code == 200
+    assert refreshed_response.json()["status"] == "fresh"
+    assert refreshed_response.json()["items"][0]["series_id"] == 4
+    assert datetime.fromisoformat(
+        refreshed_response.json()["manual_refresh_available_at"].replace("Z", "+00:00")
+    ) == NOW + timedelta(seconds=60)
+    assert datetime.fromisoformat(response.json()["server_time"].replace("Z", "+00:00")) == NOW
+    assert len(provider.calls) == 4
 
     unavailable_app = FastAPI()
     unavailable_app.include_router(router, prefix="/api/v1")
@@ -1009,14 +1129,11 @@ def test_legacy_redis_snapshot_without_league_name_defaults_to_null() -> None:
     assert entry.snapshot.items[0].champion_name == "Old Champion"
     assert entry.snapshot.items[0].champion_source is None
     assert entry.snapshot.items[0].champion_tournament_id is None
+    assert entry.manual_refresh_available_at is None
 
 
 def test_homepage_cache_entry_defaults_to_empty() -> None:
-    assert RecentSeriesCacheEntry() == RecentSeriesCacheEntry(
-        snapshot=None,
-        last_attempt_at=None,
-        last_error=None,
-    )
+    assert RecentSeriesCacheEntry() == RecentSeriesCacheEntry()
 
 
 def test_composition_registers_homepage_read_service_only_with_shared_cache() -> None:

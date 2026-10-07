@@ -85,6 +85,8 @@ const homepageSeries = {
   retrieved_at: "2026-09-10T00:00:00Z",
   last_attempt_at: "2026-09-10T00:00:00Z",
   last_error: null,
+  server_time: "2026-09-10T00:00:00Z",
+  manual_refresh_available_at: null,
 };
 
 class ControlledBackend {
@@ -114,7 +116,10 @@ class ControlledBackend {
     const body = typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : undefined;
     this.calls.push({ url: url.toString(), method, headers, ...(body ? { body } : {}) });
 
-    if (url.pathname === "/api/v1/home/recent-series" && method === "GET") {
+    if (
+      url.pathname === "/api/v1/home/recent-series" && method === "GET"
+      || url.pathname === "/api/v1/home/recent-series/refresh" && method === "POST"
+    ) {
       this.recentStarted?.();
       if (this.recentGate) await this.recentGate.promise;
       if (this.failRecentSeries) return json({ detail: "private series failure" }, 503);
@@ -579,15 +584,16 @@ describe("normal AssistantTransport chat integration", () => {
     request.close();
   });
 
-  it("refreshes the homepage Series list without sending a chat request", async () => {
+  it("posts a manual homepage Series refresh without sending a chat request", async () => {
     render(<TestChat />);
     expect(await screen.findByRole("button", { name: /已结束，The International · Season 2026/ })).toBeTruthy();
     expect(backend.calls.filter((call) => call.url.endsWith("/api/v1/home/recent-series"))).toHaveLength(1);
 
-    fireEvent.click(screen.getByRole("button", { name: "刷新近期赛事" }));
+    fireEvent.click(screen.getByRole("button", { name: "刷新" }));
     await waitFor(() => {
-      expect(backend.calls.filter((call) => call.url.endsWith("/api/v1/home/recent-series"))).toHaveLength(2);
+      expect(backend.calls.filter((call) => call.url.endsWith("/api/v1/home/recent-series/refresh"))).toHaveLength(1);
     });
+    expect(backend.calls.filter((call) => call.url.endsWith("/api/v1/home/recent-series"))).toHaveLength(1);
     expect(backend.requests).toHaveLength(0);
   });
 
