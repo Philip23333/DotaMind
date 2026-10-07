@@ -5,9 +5,9 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from collections.abc import Callable, Mapping
+from collections.abc import Awaitable, Callable, Iterable, Mapping
 from datetime import UTC, datetime, timedelta
-from typing import Any, Literal, Protocol
+from typing import Any, Literal, Protocol, TypeVar
 
 import httpx
 from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
@@ -35,6 +35,7 @@ _CACHE_FIELDS = {
 }
 _REFRESH_SECONDS = 600
 _MANUAL_REFRESH_COOLDOWN_SECONDS = 60
+_HOMEPAGE_REFRESH_CONCURRENCY = 6
 _CANDIDATE_LIMIT = 10
 _PROVIDER_PAGE_LIMIT = 100
 _ERROR_CODES = {
@@ -53,6 +54,7 @@ _ProviderError = (
     UnicodeDecodeError,
 )
 _OPTIONAL_TEAM_ERRORS = (*_ProviderError, ValueError)
+_T = TypeVar("_T")
 
 
 class RecentSeriesCandidate(BaseModel):
@@ -471,89 +473,122 @@ class HomepageRecentSeriesService:
             )
 
     async def _load_candidates(self) -> list[RecentSeriesCandidate]:
-        running = await self._read_lifecycle(
-            lifecycle="running",
-            page=1,
-            limit=_PROVIDER_PAGE_LIMIT,
-        )
-        past = await self._read_lifecycle(
-            lifecycle="past",
-            page=1,
-            limit=_PROVIDER_PAGE_LIMIT,
-        )
-        _require_mappable_response(running)
-        _require_mappable_response(past)
+        semaphore = asyncio.Semaphore(_HOMEPAGE_REFRESH_CONCURRENCY)
 
-        selected = _select_candidates(running.items, past.items)
-        champion_names: dict[int, str | None] = {}
-        candidates: list[RecentSeriesCandidate] = []
-        for item, lifecycle in selected:
-            champion_name = None
-            champion_source: Literal["series", "tournament"] | None = None
-            champion_tournament_id = None
-            if lifecycle == "past":
-                if item.winner_id is not None:
-                    if item.winner_type == "Team":
-                        champion_name = await self._cached_team_name(
-                            item.winner_id,
-                            champion_names,
-                        )
-                        if champion_name is not None:
-                            champion_source = "series"
-                else:
-                    try:
-                        tournament_sources = await self._list_tournament_winner_sources(
-                            series_id=item.id
-                        )
-                    except _ProviderError:
-                        tournament_sources = []
-                    playoffs = next(
-                        (
-                            source
-                            for source in tournament_sources
-                            if (source.name or "").strip().casefold() == "playoffs"
-                        ),
-                        None,
-                    )
-                    if (
-                        playoffs is not None
-                        and playoffs.winner_type == "Team"
-                        and playoffs.winner_id is not None
-                    ):
-                        champion_name = await self._cached_team_name(
-                            playoffs.winner_id,
-                            champion_names,
-                        )
-                        if champion_name is not None:
-                            champion_source = "tournament"
-                            champion_tournament_id = playoffs.id
-            candidates.append(
-                RecentSeriesCandidate(
-                    series_id=item.id,
-                    name=item.full_name or item.name,
-                    league_name=item.league_name,
+        async def read_lifecycle(
+            lifecycle: Literal["running", "past"],
+        ) -> SeriesLifecycleResult:
+            async with semaphore:
+                return await self._read_lifecycle(
                     lifecycle=lifecycle,
-                    begin_at=item.begin_at,
-                    end_at=item.end_at,
-                    champion_name=champion_name,
-                    champion_source=champion_source,
-                    champion_tournament_id=champion_tournament_id,
+                    page=1,
+                    limit=_PROVIDER_PAGE_LIMIT,
                 )
-            )
-        return candidates
 
-    async def _cached_team_name(
+        async def list_tournament_winner_sources(
+            *, series_id: int,
+        ) -> list[TournamentWinnerSource]:
+            async with semaphore:
+                return await self._list_tournament_winner_sources(series_id=series_id)
+
+        lifecycle_tasks = [
+            asyncio.create_task(read_lifecycle(lifecycle))
+            for lifecycle in ("running", "past")
+        ]
+        candidate_tasks: list[asyncio.Task[RecentSeriesCandidate]] = []
+        team_tasks: dict[int, asyncio.Task[str | None]] = {}
+
+        async def team_name(team_id: int) -> str | None:
+            task = team_tasks.get(team_id)
+            if task is None:
+                task = asyncio.create_task(self._resolve_team_name(team_id, semaphore))
+                team_tasks[team_id] = task
+            # Candidate cancellation must not cancel a lookup shared by other
+            # candidates; the refresh owns and reaps these tasks below.
+            return await asyncio.shield(task)
+
+        try:
+            running, past = await _gather_ordered(lifecycle_tasks)
+            _require_mappable_response(running)
+            _require_mappable_response(past)
+
+            selected = _select_candidates(running.items, past.items)
+            candidate_tasks = [
+                asyncio.create_task(
+                    self._build_candidate(
+                        item,
+                        lifecycle,
+                        team_name=team_name,
+                        list_tournament_winner_sources=list_tournament_winner_sources,
+                    )
+                )
+                for item, lifecycle in selected
+            ]
+            return await _gather_ordered(candidate_tasks)
+        finally:
+            await _cancel_and_wait((*candidate_tasks, *team_tasks.values()))
+
+    async def _build_candidate(
+        self,
+        item: SeriesLifecycleItem,
+        lifecycle: Literal["running", "past"],
+        *,
+        team_name: Callable[[int], Awaitable[str | None]],
+        list_tournament_winner_sources: TournamentWinnerSourceReader,
+    ) -> RecentSeriesCandidate:
+        champion_name = None
+        champion_source: Literal["series", "tournament"] | None = None
+        champion_tournament_id = None
+        if lifecycle == "past":
+            if item.winner_id is not None:
+                if item.winner_type == "Team":
+                    champion_name = await team_name(item.winner_id)
+                    if champion_name is not None:
+                        champion_source = "series"
+            else:
+                try:
+                    tournament_sources = await list_tournament_winner_sources(
+                        series_id=item.id
+                    )
+                except _ProviderError:
+                    tournament_sources = []
+                playoffs = next(
+                    (
+                        source
+                        for source in tournament_sources
+                        if (source.name or "").strip().casefold() == "playoffs"
+                    ),
+                    None,
+                )
+                if (
+                    playoffs is not None
+                    and playoffs.winner_type == "Team"
+                    and playoffs.winner_id is not None
+                ):
+                    champion_name = await team_name(playoffs.winner_id)
+                    if champion_name is not None:
+                        champion_source = "tournament"
+                        champion_tournament_id = playoffs.id
+        return RecentSeriesCandidate(
+            series_id=item.id,
+            name=item.full_name or item.name,
+            league_name=item.league_name,
+            lifecycle=lifecycle,
+            begin_at=item.begin_at,
+            end_at=item.end_at,
+            champion_name=champion_name,
+            champion_source=champion_source,
+            champion_tournament_id=champion_tournament_id,
+        )
+
+    async def _resolve_team_name(
         self,
         team_id: int,
-        cache: dict[int, str | None],
+        semaphore: asyncio.Semaphore,
     ) -> str | None:
-        if team_id not in cache:
-            cache[team_id] = await self._resolve_team_name(team_id)
-        return cache[team_id]
-
-    async def _resolve_team_name(self, team_id: int) -> str | None:
         try:
-            result = await self._search_team(TeamSearchInput(id=team_id, limit=1))
+            async with semaphore:
+                result = await self._search_team(TeamSearchInput(id=team_id, limit=1))
         except _OPTIONAL_TEAM_ERRORS:
             return None
         team = next((item for item in result.items if item.id == team_id), None)
@@ -561,6 +596,23 @@ class HomepageRecentSeriesService:
             return None
         name = team.name.strip()
         return name or None
+
+
+async def _gather_ordered(tasks: list[asyncio.Task[_T]]) -> list[_T]:
+    try:
+        return list(await asyncio.gather(*tasks))
+    except BaseException:
+        await _cancel_and_wait(tasks)
+        raise
+
+
+async def _cancel_and_wait(tasks: Iterable[asyncio.Task[Any]]) -> None:
+    owned_tasks = tuple(tasks)
+    for task in owned_tasks:
+        if not task.done():
+            task.cancel()
+    if owned_tasks:
+        await asyncio.gather(*owned_tasks, return_exceptions=True)
 
 
 def _require_mappable_response(result: SeriesLifecycleResult) -> None:

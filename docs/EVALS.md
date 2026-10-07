@@ -54,6 +54,14 @@ providers, and it does not change the product registry.
 
 - 进行中 Series 按开始时间倒序优先、结束项按结束时间倒序补齐；超过上限、
   不足上限、ID 重复、日期缺失和有效空列表都得到契约规定的结果。
+- 每轮刷新先并行启动 running/past，再按候选顺序并行补全；lifecycle、Tournament、Team
+  的实际 Provider 请求共用最多六个并发槽。事件控制测试验证峰值达到六时第七个请求等待，
+  释放请求后继续执行；六是上限，不要求每轮都达到峰值。
+- Tournament 完成前不启动对应 Team 查询；同一 Team ID 的并发候选共享一个查询任务，
+  包括查询未命中或可选 Provider 错误后的 `null` 结果。反序完成的补全仍按原候选顺序发布。
+- 可选 Tournament/Team 查询失败只留空冠军并保留赛事行；running/past 任一必需查询失败时，
+  取消并等待兄弟请求，保留旧快照且不发布部分列表。服务关闭会回收 lifecycle、候选和 Team 子任务；
+  测试使用事件而非真实网络或固定睡眠控制这些边界。
 - 候选最多十条，首页只显示其前五条；原生 Series Team 胜者优先，只有 Series
   `winner_id` 缺失时才查询该 Series 的 Tournament，并且只接受名称精确匹配
   `Playoffs` 的 Team 胜者。名称解析失败时不展示冠军，未知赛制不作推断。

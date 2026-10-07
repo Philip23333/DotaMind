@@ -95,7 +95,7 @@ Match 或推断赛制。Series 有非空胜者 ID 但类型不是 Team，或 Ser
 Tournament 时，`champion_tournament_id` 保留来源 ID。没有解析出冠军名称时这两个
 字段与 `champion_name` 均为 `null`。旧 Redis 快照缺少来源字段时使用 `null` 默认值；
 保留旧冠军名称，不反推其来源。只有最终入选的最多十条候选会触发 Playoffs 查询。
-一次刷新内 Team 名称按 ID 复用。Playoffs 查询或 Team 名称查询发生已知 Provider
+一次刷新内 Team 查询按 ID 复用同一个进行中或已完成的任务。Playoffs 查询或 Team 名称查询发生已知 Provider
 错误时，保留赛事行、留空冠军，不把可选补全错误登记为整份列表失败。
 
 候选使用十分钟共享缓存和按需刷新。普通 GET 在已有成功快照过期时立即返回旧快照，并启动最多一个由
@@ -128,13 +128,19 @@ HTTP 项目响应保留该字段。字段设有 `null` 默认值，旧 Redis 快
 `league_name` 来自 Series 响应的 `league.name`。前端以可用的 League 和 Series
 名称组合显示与查询用名，不能根据文本猜测 League。
 
-Provider 读取分别调用 running 与 past Series 生命周期端点，候选服务按开始／结束
-时间本地排序，日期缺失项排在有日期项之后，稳定保留相同日期的来源顺序；去重后
+每轮首页刷新在三个阶段工作：running 与 past Series 生命周期端点并行读取；按现有规则
+排序、去重并选出最多十条；再并行补全入选候选的冠军并按候选原顺序组装。该轮的
+lifecycle、Tournament 与 Team Provider 调用共用一个最多六路的局部并发上限；六是上限，
+不保证始终有六个请求在途。请求结束、出错或取消时释放名额。Provider 读取分别调用 running 与 past
+Series 生命周期端点，候选服务按开始／结束时间本地排序，日期缺失项排在有日期项之后，稳定保留相同日期的来源顺序；去重后
 最多取十条。已结束 Series 缺少 `winner_id` 时额外读取
 `GET /dota2/tournaments?filter[serie_id]=<series_id>&page=1&per_page=100`，只使用
 名称精确匹配 `Playoffs` 的阶段胜者；Series 自身存在非 Team 胜者时不回退查询。Team
 请求失败、结果缺失或名称为空只会省略冠军名称，不阻止赛事候选。冠军来源和
-Tournament ID 随首页候选及 Redis 快照保存；旧快照缺失新字段仍可读取。
+Tournament ID 随首页候选及 Redis 快照保存；旧快照缺失新字段仍可读取。每个候选保持
+Tournament 结果先于其 Team 查询的依赖顺序；多个候选可并行补全，但最终列表仍按入选顺序。
+必需的 running/past 查询任一失败会取消并回收兄弟请求，整轮不发布部分快照；刷新关闭或取消时，
+候选及共享 Team 子任务也会全部回收。可选冠军查询失败仍只影响冠军字段。
 
 共享快照存于 Redis。十分钟是基于 `retrieved_at` 的新鲜度窗口；成功快照不设置
 Redis TTL，以便刷新失败时继续返回旧数据并标记 `stale`。失败尝试单独更新
@@ -147,7 +153,8 @@ HTTP 503。普通 GET 的旧快照在后台 Provider 请求结束前立即返回
 应用关闭时先取消并等待首页刷新，再关闭共享 Redis 客户端。刷新任务只在单个 API
 进程内合并；没有跨进程刷新锁。
 
-离线测试覆盖 Provider 读取后的 League 名称归一化、排序、去重、冠军条件、空与坏数据区分、缓存旧值
+离线测试覆盖 Provider 读取后的 League 名称归一化、生命周期并行、六路请求上限、候选顺序稳定、
+进行中 Team 任务去重、Tournament→Team 顺序、取消回收、排序、去重、冠军条件、空与坏数据区分、缓存旧值
 保留、普通 GET 旧值立即返回、手动 POST 绕过新鲜缓存并等待完成、冷却起点与 59/60 秒边界、冷／热缓存刷新合并、单个等待者取消隔离、600 秒失败间隔、
 关闭时任务回收和 HTTP 路由。前端对有／无 League 名称、赛事名缺失和旧响应字段
 缺失有离线回归。确定性测试不代表真实 PandaScore 刷新或部署环境中的 Redis 行为
