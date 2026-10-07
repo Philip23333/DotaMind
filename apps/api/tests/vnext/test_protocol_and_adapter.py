@@ -13,10 +13,9 @@ from app.vnext.agent.evidence_summary_lifecycle import (
     build_history_compaction_request,
     validate_compaction_response,
 )
-from app.vnext.llm.diagnostics import (
-    MAX_DIAGNOSTIC_ARGUMENT_BYTES,
-    MAX_DIAGNOSTIC_ARGUMENT_EDGE_BYTES,
-    MAX_DIAGNOSTIC_TOTAL_ARGUMENT_BYTES,
+from app.vnext.llm.diagnostic_limits import (
+    DEFAULT_MODEL_DIAGNOSTIC_LIMITS,
+    ModelDiagnosticLimits,
 )
 from app.vnext.llm.errors import ModelToolCallBatchRejected
 from app.vnext.llm.openai_compatible import (
@@ -50,12 +49,18 @@ class EchoOutput(BaseModel):
     value: int
 
 
-def _adapter(handler) -> OpenAICompatibleModelClient:
+def _adapter(
+    handler,
+    *,
+    diagnostic_limits: ModelDiagnosticLimits | None = None,
+) -> OpenAICompatibleModelClient:
+    kwargs = {} if diagnostic_limits is None else {"diagnostic_limits": diagnostic_limits}
     return OpenAICompatibleModelClient(
         api_key="test-key",
         base_url="https://provider.test/v1",
         model="test-model",
         transport=httpx.MockTransport(handler),
+        **kwargs,
     )
 
 
@@ -606,7 +611,9 @@ def test_non_string_argument_carriers_are_protocol_errors(
 
 
 def test_raw_batch_keeps_full_arguments_while_trace_diagnostic_stays_bounded() -> None:
-    large_raw = '{"text":"' + "λ" * (MAX_DIAGNOSTIC_ARGUMENT_BYTES + 200) + '"}'
+    large_raw = (
+        '{"text":"' + "λ" * (DEFAULT_MODEL_DIAGNOSTIC_LIMITS.argument_max_bytes + 200) + '"}'
+    )
 
     def handler(request: httpx.Request) -> httpx.Response:
         del request
@@ -624,6 +631,181 @@ def test_raw_batch_keeps_full_arguments_while_trace_diagnostic_stays_bounded() -
     first_diagnostic_call = diagnostic.tool_calls[0]
     assert first_diagnostic_call.arguments_truncated is True
     assert first_diagnostic_call.raw_arguments is None
+
+
+@pytest.mark.parametrize("response_mode", ["complete", "stream"])
+def test_configured_diagnostic_budgets_bound_tool_argument_copies(
+    response_mode: str,
+) -> None:
+    limits = ModelDiagnosticLimits(
+        max_tool_calls=3,
+        argument_max_bytes=8,
+        total_argument_max_bytes=12,
+        argument_edge_bytes=3,
+    )
+    raw_values = ['{"payload":"' + "x" * 12 for _ in range(3)]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        del request
+        return _tool_batch_response(
+            response_mode,
+            [
+                _tool_call(f"call-{index}", raw_arguments)
+                for index, raw_arguments in enumerate(raw_values)
+            ],
+        )
+
+    with pytest.raises(ModelToolCallBatchRejected) as raised:
+        _read_tool_batch(_adapter(handler, diagnostic_limits=limits), response_mode)
+
+    assert [call.raw_arguments for call in raised.value.batch.calls] == raw_values
+    diagnostic = raised.value.diagnostics
+    assert diagnostic is not None
+    assert diagnostic.tool_calls_total == 3
+    assert diagnostic.tool_calls_truncated is False
+    retained_bytes = 0
+    for index, call in enumerate(diagnostic.tool_calls):
+        assert call.arguments_utf8_bytes == len(raw_values[index].encode("utf-8"))
+        assert call.arguments_truncated is True
+        assert call.raw_arguments is None
+        for fragment in (call.arguments_prefix, call.arguments_suffix):
+            if fragment is not None:
+                encoded = fragment.encode("utf-8")
+                assert encoded.decode("utf-8") == fragment
+                assert len(encoded) <= limits.argument_edge_bytes
+                retained_bytes += len(encoded)
+    assert retained_bytes == limits.total_argument_max_bytes
+    assert diagnostic.tool_calls[2].arguments_prefix is None
+    assert diagnostic.tool_calls[2].arguments_suffix is None
+
+
+def test_configured_call_limit_does_not_change_rejected_batch_contents() -> None:
+    limits = ModelDiagnosticLimits(
+        max_tool_calls=1,
+        argument_max_bytes=16,
+        total_argument_max_bytes=32,
+        argument_edge_bytes=8,
+    )
+    raw_values = ["{bad-one", "{bad-two", "{bad-three"]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        del request
+        return _tool_batch_response(
+            "complete",
+            [
+                _tool_call(f"call-{index}", raw_arguments)
+                for index, raw_arguments in enumerate(raw_values)
+            ],
+        )
+
+    with pytest.raises(ModelToolCallBatchRejected) as raised:
+        _read_tool_batch(_adapter(handler, diagnostic_limits=limits), "complete")
+
+    assert [call.raw_arguments for call in raised.value.batch.calls] == raw_values
+    assert raised.value.diagnostics is not None
+    assert raised.value.diagnostics.tool_calls_total == 3
+    assert raised.value.diagnostics.tool_calls_truncated is True
+    assert [call.index for call in raised.value.diagnostics.tool_calls] == [0]
+
+
+@pytest.mark.parametrize(
+    "failure_path", ["complete_assembly", "stream_protocol", "stream_assembly"]
+)
+def test_configured_limits_cover_non_batch_diagnostic_entry_points(failure_path: str) -> None:
+    limits = ModelDiagnosticLimits(
+        max_tool_calls=2,
+        argument_max_bytes=8,
+        total_argument_max_bytes=12,
+        argument_edge_bytes=3,
+    )
+    raw_arguments = '{"payload":"' + "x" * 12
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if failure_path == "complete_assembly":
+            return _tool_batch_response(
+                "complete",
+                [
+                    {
+                        "id": "call-one",
+                        "type": "function",
+                        "function": {"name": "", "arguments": raw_arguments},
+                    }
+                ],
+            )
+        chunk = {
+            "choices": [
+                {
+                    "delta": {
+                        "tool_calls": [
+                            {
+                                "index": 0,
+                                **({} if failure_path == "stream_assembly" else {"id": "call-one"}),
+                                "function": {"name": "echo", "arguments": raw_arguments},
+                            }
+                        ]
+                    },
+                    "finish_reason": "tool_calls",
+                }
+            ]
+        }
+        body = _sse_body(chunk)
+        if failure_path == "stream_protocol":
+            body = body.replace("data: [DONE]\n\n", "")
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            text=body,
+            request=request,
+        )
+
+    client = _adapter(handler, diagnostic_limits=limits)
+    with pytest.raises(ProviderProtocolError) as raised:
+        if failure_path == "complete_assembly":
+            asyncio.run(client.complete(_request([UserMessage(content="run")])))
+        else:
+            _collect_stream(client, _request([UserMessage(content="run")]))
+
+    diagnostic = raised.value.diagnostics
+    assert diagnostic is not None
+    assert diagnostic.tool_calls_total == 1
+    call = diagnostic.tool_calls[0]
+    assert call.arguments_utf8_bytes == len(raw_arguments.encode("utf-8"))
+    assert call.arguments_truncated is True
+    assert call.raw_arguments is None
+    assert call.arguments_prefix is not None or call.arguments_suffix is not None
+
+
+def test_adapter_instances_keep_independent_diagnostic_limits() -> None:
+    calls = [_tool_call("call-one", "{bad"), _tool_call("call-two", "{bad")]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        del request
+        return _tool_batch_response("complete", calls)
+
+    single = _adapter(
+        handler,
+        diagnostic_limits=ModelDiagnosticLimits(
+            max_tool_calls=1,
+            argument_max_bytes=8,
+            total_argument_max_bytes=16,
+            argument_edge_bytes=4,
+        ),
+    )
+    double = _adapter(
+        handler,
+        diagnostic_limits=ModelDiagnosticLimits(
+            max_tool_calls=2,
+            argument_max_bytes=8,
+            total_argument_max_bytes=16,
+            argument_edge_bytes=4,
+        ),
+    )
+
+    for client, expected_count in ((single, 1), (double, 2), (single, 1)):
+        with pytest.raises(ModelToolCallBatchRejected) as raised:
+            _read_tool_batch(client, "complete")
+        assert raised.value.diagnostics is not None
+        assert len(raised.value.diagnostics.tool_calls) == expected_count
 
 
 def test_raw_tool_call_contract_is_strict_and_forbids_unknown_fields() -> None:
@@ -1411,18 +1593,24 @@ def test_diagnostic_argument_capture_respects_per_call_total_and_utf8_caps() -> 
     for call in diagnostic.tool_calls:
         if call.raw_arguments is not None:
             retained_bytes += len(call.raw_arguments.encode("utf-8"))
-            assert call.arguments_utf8_bytes <= MAX_DIAGNOSTIC_ARGUMENT_BYTES
+            assert call.arguments_utf8_bytes <= DEFAULT_MODEL_DIAGNOSTIC_LIMITS.argument_max_bytes
         else:
             assert call.arguments_truncated
             for fragment in (call.arguments_prefix, call.arguments_suffix):
                 if fragment is not None:
                     fragment_bytes = fragment.encode("utf-8")
                     assert fragment_bytes.decode("utf-8") == fragment
-                    assert len(fragment_bytes) <= MAX_DIAGNOSTIC_ARGUMENT_EDGE_BYTES
+                    assert (
+                        len(fragment_bytes)
+                        <= DEFAULT_MODEL_DIAGNOSTIC_LIMITS.argument_edge_bytes
+                    )
                     retained_bytes += len(fragment_bytes)
         assert call.arguments_utf8_bytes == len(raw_values[call.index].encode("utf-8"))
-    assert retained_bytes <= MAX_DIAGNOSTIC_TOTAL_ARGUMENT_BYTES
-    assert diagnostic.tool_calls[0].arguments_utf8_bytes > MAX_DIAGNOSTIC_ARGUMENT_BYTES
+    assert retained_bytes <= DEFAULT_MODEL_DIAGNOSTIC_LIMITS.total_argument_max_bytes
+    assert (
+        diagnostic.tool_calls[0].arguments_utf8_bytes
+        > DEFAULT_MODEL_DIAGNOSTIC_LIMITS.argument_max_bytes
+    )
     assert diagnostic.tool_calls[0].raw_arguments is None
 
 

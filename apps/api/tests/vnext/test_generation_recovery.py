@@ -24,6 +24,8 @@ from app.vnext.agent.task_state import (
     TaskStateCoordinator,
 )
 from app.vnext.agent.trace import AgentTraceCollector
+from app.vnext.llm.diagnostic_limits import ModelDiagnosticLimits
+from app.vnext.llm.diagnostics import ToolCallDiagnosticInput, build_model_failure_diagnostics
 from app.vnext.llm.errors import ModelToolCallBatchRejected
 from app.vnext.llm.protocol import (
     AssistantMessage,
@@ -169,9 +171,36 @@ def test_rejected_batch_is_corrected_without_tool_execution_and_kept_in_session_
         executed.append(args.value)
         return EchoOutput(value=args.value)
 
+    rejected_batch = _batch()
+    diagnostic_limits = ModelDiagnosticLimits(
+        max_tool_calls=1,
+        argument_max_bytes=8,
+        total_argument_max_bytes=16,
+        argument_edge_bytes=4,
+    )
+    diagnostic = build_model_failure_diagnostics(
+        stage="tool_arguments_decode",
+        response_mode="complete",
+        original_error_type="ModelToolCallBatchRejected",
+        finish_reason=rejected_batch.finish_reason,
+        usage={},
+        stream_done_received=None,
+        tool_calls=[
+            ToolCallDiagnosticInput(
+                index=call.index,
+                call_id=call.id,
+                provider_name=call.provider_name,
+                agent_name=None,
+                argument_fragments=(call.raw_arguments,),
+                argument_fragment_count=None,
+            )
+            for call in rejected_batch.calls
+        ],
+        limits=diagnostic_limits,
+    )
     model = ScriptedModelClient(
         [
-            _provider_error(_batch()),
+            ModelToolCallBatchRejected(batch=rejected_batch, diagnostics=diagnostic),
             _tool_turn("real-call", 4),
             ModelResponse.from_final("execution done"),
             ModelResponse.from_final("answer"),
@@ -221,6 +250,12 @@ def test_rejected_batch_is_corrected_without_tool_execution_and_kept_in_session_
         for entry in collector.snapshot()["generation_recoveries"]
     ] == [0]
     assert collector.snapshot()["model_calls"][0]["status"] == "failed"
+    recorded_diagnostic = collector.snapshot()["model_calls"][0]["failure_diagnostics"]
+    assert recorded_diagnostic["tool_calls"][0]["arguments_truncated"] is True
+    assert recorded_diagnostic["tool_calls"][0]["raw_arguments"] is None
+    assert recorded_diagnostic["tool_calls"][0]["arguments_utf8_bytes"] == len(
+        rejected_batch.calls[0].raw_arguments.encode("utf-8")
+    )
     assert "RAW_bad-call" not in json.dumps(collector.snapshot())
     assert sum(isinstance(event, ToolStarted) for event in events) == 1
     assert sum(isinstance(event, AgentFailed) for event in events) == 0

@@ -590,11 +590,15 @@ diagnostics also record whether `[DONE]` arrived and how many argument fragments
 were collected. Missing provider fields remain `null` or `{}`; they are not
 inferred. A valid JSON value that is not an object retains `json_error: null`.
 
-Full test recording may retain bounded tool-argument evidence: at most 64 calls,
-64 KiB per call, and 256 KiB across one failure. Oversized arguments keep only
-UTF-8-safe prefix and suffix snippets of up to 4 KiB each, subject to the same
-cumulative budget, with `arguments_truncated` and the original UTF-8 byte count.
-These diagnostics describe model-response parsing; they are not raw HTTP or SSE
+Full test recording may retain bounded tool-argument evidence. The defaults are
+64 calls, 64 KiB per call, and 256 KiB cumulatively across one failure. These
+limits are configurable through `DOTAMIND_DIAGNOSTIC_*`; oversized arguments
+keep only UTF-8-safe prefix and suffix snippets of up to 4 KiB each, subject to
+the cumulative argument-copy budget, with `arguments_truncated` and the original
+UTF-8 byte count. These limits apply only to diagnostic copies, not actual tool
+calls or Runtime correction history. The byte budget covers argument text and
+snippets, not the complete trace file. These diagnostics
+describe model-response parsing; they are not raw HTTP or SSE
 traffic and never include response headers or complete provider response bodies.
 The default diagnostic-only recording removes raw argument text and snippets
 while keeping the parsing stage, locations, counts, truncation flags, and

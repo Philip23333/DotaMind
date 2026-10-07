@@ -228,6 +228,45 @@ When migrating an existing `.env`, remove the obsolete
 `DOTAMIND_COMPACTION_MAX_SUMMARY_BYTES` entries; they are no longer read. An
 unset/blank model output cap means unknown, while a blank reserve is invalid.
 
+### vNext budget configuration reference
+
+The settings below cover the recent context, Artifact, session, and diagnostic
+budget changes. Values load once at API startup with precedence **process
+environment → repository-root `.env` → code default**. After changing API values,
+restart the API or recreate its container. Defaults shown here match
+`.env.example`; context-window and model output caps have no universal default.
+
+| Area | Setting | Default | Unit | Purpose |
+| --- | --- | ---: | --- | --- |
+| Context | `DOTAMIND_CONTEXT_WINDOW_TOKENS` | blank | tokens | Verified model window; blank disables automatic capacity governance. |
+| Context | `DOTAMIND_MODEL_MAX_OUTPUT_TOKENS` | blank | tokens | Known model/provider per-response output cap. |
+| Context | `DOTAMIND_APPLICATION_MAX_OUTPUT_TOKENS` | blank | tokens | Optional application output ceiling; configure this or the model cap. |
+| Context | `DOTAMIND_CONTEXT_SAFETY_MARGIN_TOKENS` | `1024` | tokens | Capacity held back after input estimation. |
+| Context | `DOTAMIND_CONTEXT_ESTIMATE_BYTES_PER_TOKEN` | `2` | bytes/token | UTF-8 request-size estimation heuristic. |
+| Compaction | `DOTAMIND_CONTEXT_COMPACTION_TEST_TRIGGER_PERCENT` | blank | percent | Optional local early-trigger override; leave blank in production, set `30` for pressure tests. |
+| Compaction | `DOTAMIND_COMPACTION_KEEP_RECENT_TOKENS` | `20000` | estimated tokens | Recent history target kept in raw form. |
+| Compaction | `DOTAMIND_COMPACTION_RESERVE_TOKENS` | `16384` | tokens | Summary output reserve and production compaction threshold. |
+| Compaction | `DOTAMIND_COMPACTION_MODEL_MAX_OUTPUT_TOKENS` | blank | tokens | Optional cap on reserve-derived summary output. |
+| Compaction | `DOTAMIND_COMPACTION_MAX_RETRIES` | `1` | retries after first call | Retry budget for classified temporary summary failures. |
+| Tool results | `DOTAMIND_TOOL_INLINE_MAX_BYTES` | `12288` | UTF-8 bytes | Results at or below this size stay inline; larger results become complete Artifacts. |
+| Tool results | `DOTAMIND_TOOL_OBSERVATION_MAX_BYTES` | `35840` | UTF-8 bytes | Maximum serialized preview and successful `artifact.read` observation. |
+| Session | `DOTAMIND_HISTORY_BOOTSTRAP_MAX_TURNS` | `12` | turns | Complete turns loaded on first database-history restore. |
+| Session | `DOTAMIND_HISTORY_BOOTSTRAP_MAX_CHARS` | `40000` | Python characters | Character cap for that initial history restore only. |
+| Session | `DOTAMIND_ARTIFACT_LOCATOR_CAPACITY` | `16` | references | FIFO locator entries retained in active context; eviction does not delete an Artifact. |
+| Session | `DOTAMIND_ARTIFACT_LOCATOR_HINT_CHARS` | `256` | characters | Maximum serialized query-hint length per locator. |
+| Tools | `DOTAMIND_TOOL_TIMEOUT_SECONDS` | `60` | seconds | Default finite timeout when a tool has no specific timeout. |
+| Diagnostics | `DOTAMIND_DIAGNOSTIC_MAX_TOOL_CALLS` | `64` | calls | Maximum tool-call entries copied into one failure diagnostic. |
+| Diagnostics | `DOTAMIND_DIAGNOSTIC_ARGUMENT_MAX_BYTES` | `65536` | UTF-8 bytes | Per-call argument-copy limit before retaining snippets. |
+| Diagnostics | `DOTAMIND_DIAGNOSTIC_TOTAL_ARGUMENT_MAX_BYTES` | `262144` | UTF-8 bytes | Cumulative raw-argument and snippet copy budget per diagnostic. |
+| Diagnostics | `DOTAMIND_DIAGNOSTIC_ARGUMENT_EDGE_BYTES` | `4096` | UTF-8 bytes per edge | Maximum prefix or suffix snippet size. |
+
+Diagnostic limits apply only to copied tool-call records and their arguments.
+The byte budgets count argument text and snippets; they do not limit actual tool
+calls, truncate Runtime correction history, or limit the complete trace ZIP or
+summary request input. The 256 KiB default is a per-diagnostic argument-copy
+budget. Full test recordings may retain argument evidence;
+ordinary trace diagnostics continue to omit raw arguments and snippets.
+
 ### Run the processes locally
 
 Start the API:

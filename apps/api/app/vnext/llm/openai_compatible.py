@@ -12,6 +12,10 @@ from typing import Any
 
 import httpx
 
+from app.vnext.llm.diagnostic_limits import (
+    DEFAULT_MODEL_DIAGNOSTIC_LIMITS,
+    ModelDiagnosticLimits,
+)
 from app.vnext.llm.diagnostics import (
     DiagnosticResponseMode,
     DiagnosticStage,
@@ -122,6 +126,7 @@ class OpenAICompatibleModelClient:
         timeout: float | httpx.Timeout = 90.0,
         transport: httpx.AsyncBaseTransport | None = None,
         client: httpx.AsyncClient | None = None,
+        diagnostic_limits: ModelDiagnosticLimits = DEFAULT_MODEL_DIAGNOSTIC_LIMITS,
     ) -> None:
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
@@ -129,11 +134,16 @@ class OpenAICompatibleModelClient:
         self.timeout = timeout
         self.transport = transport
         self._client = client
+        self.diagnostic_limits = diagnostic_limits
 
     async def complete(self, request: ModelRequest) -> ModelResponse:
         agent_to_provider, provider_to_agent = self._tool_name_maps(request.tools)
         response = await self._post(self._payload(request, agent_to_provider))
-        return self._parse_response(response, provider_to_agent)
+        return self._parse_response(
+            response,
+            provider_to_agent,
+            diagnostic_limits=self.diagnostic_limits,
+        )
 
     async def stream(
         self,
@@ -206,6 +216,7 @@ class OpenAICompatibleModelClient:
                 finish_reason,
                 usage,
                 provider_to_agent,
+                diagnostic_limits=self.diagnostic_limits,
             )
         except ProviderProtocolError as exc:
             if exc.diagnostics is None:
@@ -220,6 +231,7 @@ class OpenAICompatibleModelClient:
                         usage=usage,
                         stream_done_received=saw_done,
                         failed_tool_call_index=exc.failed_tool_call_index,
+                        diagnostic_limits=self.diagnostic_limits,
                     ),
                 )
             raise
@@ -377,6 +389,8 @@ class OpenAICompatibleModelClient:
         cls,
         response: httpx.Response,
         provider_to_agent: Mapping[str, str],
+        *,
+        diagnostic_limits: ModelDiagnosticLimits,
     ) -> ModelResponse:
         try:
             data = response.json()
@@ -392,6 +406,7 @@ class OpenAICompatibleModelClient:
                     usage=None,
                     stream_done_received=None,
                     tool_calls=(),
+                    limits=diagnostic_limits,
                 ),
             )
             raise error from exc
@@ -406,6 +421,7 @@ class OpenAICompatibleModelClient:
                     finish_reason=None,
                     usage=None,
                     failed_tool_call_index=None,
+                    diagnostic_limits=diagnostic_limits,
                 ),
             )
             raise error
@@ -458,6 +474,7 @@ class OpenAICompatibleModelClient:
                     usage=usage,
                     response_mode="complete",
                     stream_done_received=None,
+                    diagnostic_limits=diagnostic_limits,
                 )
                 return ModelResponse(
                     message=AssistantMessage(content=content, tool_calls=tool_calls),
@@ -482,6 +499,7 @@ class OpenAICompatibleModelClient:
                         finish_reason=finish_reason,
                         usage=usage,
                         failed_tool_call_index=exc.failed_tool_call_index,
+                        diagnostic_limits=diagnostic_limits,
                     ),
                 )
             raise
@@ -601,6 +619,8 @@ class OpenAICompatibleModelClient:
         finish_reason: str | None,
         usage: dict[str, Any],
         provider_to_agent: Mapping[str, str],
+        *,
+        diagnostic_limits: ModelDiagnosticLimits,
     ) -> ModelResponse:
         content = "".join(content_parts) if content_parts else None
         if tool_calls:
@@ -636,6 +656,7 @@ class OpenAICompatibleModelClient:
                 usage=usage,
                 response_mode="stream",
                 stream_done_received=True,
+                diagnostic_limits=diagnostic_limits,
             )
             return ModelResponse(
                 message=AssistantMessage(content=content, tool_calls=assembled_calls),
@@ -667,6 +688,7 @@ class OpenAICompatibleModelClient:
         usage: Mapping[str, Any] | None,
         stream_done_received: bool | None,
         failed_tool_call_index: int | None,
+        diagnostic_limits: ModelDiagnosticLimits,
         json_error: ModelJSONErrorDiagnostic | None = None,
     ) -> ModelFailureDiagnostics:
         inputs = [
@@ -694,6 +716,7 @@ class OpenAICompatibleModelClient:
             tool_calls=inputs,
             failed_tool_call_index=failed_tool_call_index,
             json_error=json_error,
+            limits=diagnostic_limits,
         )
 
     @classmethod
@@ -706,6 +729,7 @@ class OpenAICompatibleModelClient:
         finish_reason: str | None,
         usage: Mapping[str, Any] | None,
         failed_tool_call_index: int | None,
+        diagnostic_limits: ModelDiagnosticLimits,
         stage: DiagnosticStage = "response_assembly",
         json_error: ModelJSONErrorDiagnostic | None = None,
     ) -> ModelFailureDiagnostics:
@@ -747,6 +771,7 @@ class OpenAICompatibleModelClient:
             tool_calls=inputs,
             failed_tool_call_index=failed_tool_call_index,
             json_error=json_error,
+            limits=diagnostic_limits,
         )
 
     @classmethod
@@ -805,6 +830,7 @@ class OpenAICompatibleModelClient:
         usage: Mapping[str, Any],
         response_mode: DiagnosticResponseMode,
         stream_done_received: bool | None,
+        diagnostic_limits: ModelDiagnosticLimits,
     ) -> list[ToolCall]:
         ids: set[str] = set()
         for candidate in candidates:
@@ -882,6 +908,7 @@ class OpenAICompatibleModelClient:
                     usage=usage,
                     response_mode=response_mode,
                     stream_done_received=stream_done_received,
+                    diagnostic_limits=diagnostic_limits,
                 ),
             )
             raise error
@@ -913,6 +940,7 @@ class OpenAICompatibleModelClient:
         usage: Mapping[str, Any],
         response_mode: DiagnosticResponseMode,
         stream_done_received: bool | None,
+        diagnostic_limits: ModelDiagnosticLimits,
     ) -> ModelFailureDiagnostics:
         first_failure = failures[0] if failures else None
         json_error = (
@@ -948,6 +976,7 @@ class OpenAICompatibleModelClient:
                 first_failure.call_index if first_failure is not None else None
             ),
             json_error=json_error,
+            limits=diagnostic_limits,
         )
 
     @staticmethod

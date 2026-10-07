@@ -20,6 +20,7 @@ from app.vnext.agent.evidence_summary_lifecycle import (
 from app.vnext.agent.limits import AgentLimits
 from app.vnext.agent.runtime import AgentRuntime, CancellationToken, _Deadline
 from app.vnext.agent.trace import AgentTraceCollector
+from app.vnext.llm.diagnostic_limits import ModelDiagnosticLimits
 from app.vnext.llm.openai_compatible import OpenAICompatibleModelClient
 from app.vnext.llm.protocol import (
     AssistantMessage,
@@ -430,6 +431,12 @@ def test_response_diagnostics_are_associated_with_all_call_purposes(
         base_url="https://provider.test/v1",
         model="test-model",
         transport=httpx.MockTransport(handler),
+        diagnostic_limits=ModelDiagnosticLimits(
+            max_tool_calls=64,
+            argument_max_bytes=1024,
+            total_argument_max_bytes=2048,
+            argument_edge_bytes=256,
+        ),
     )
     executions = 0
 

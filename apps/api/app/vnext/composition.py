@@ -61,6 +61,7 @@ from app.vnext.homepage.recent_series import (
     RecentSeriesCache,
 )
 from app.vnext.integrations.mcp import MCPRemoteClient, MCPRemoteError
+from app.vnext.llm.diagnostic_limits import ModelDiagnosticLimits
 from app.vnext.llm.openai_compatible import OpenAICompatibleModelClient
 from app.vnext.providers.opendota import OpenDotaClient, OpenDotaGameDetailAdapter
 from app.vnext.providers.pandascore.client import PandaScoreClient
@@ -143,6 +144,9 @@ class VNextSettings:
     agent_limits: AgentLimits = field(default_factory=AgentLimits)
     artifact_limits: ArtifactLimits = field(default_factory=ArtifactLimits)
     session_context_limits: SessionContextLimits = field(default_factory=SessionContextLimits)
+    model_diagnostic_limits: ModelDiagnosticLimits = field(
+        default_factory=ModelDiagnosticLimits
+    )
 
     def __post_init__(self) -> None:
         if self.data_dir is not None and (
@@ -247,6 +251,7 @@ class VNextSettings:
             agent_limits=_agent_limits_from_env(file_values),
             artifact_limits=_artifact_limits_from_env(file_values),
             session_context_limits=_session_context_limits_from_env(file_values),
+            model_diagnostic_limits=_model_diagnostic_limits_from_env(file_values),
         )
 
 
@@ -392,6 +397,27 @@ def _session_context_limits_from_env(
             raw_value = str(default)
         values[field_name] = _parse_positive_integer(name, raw_value)
     return SessionContextLimits(**values)
+
+
+def _model_diagnostic_limits_from_env(
+    file_values: dict[str, str | None],
+) -> ModelDiagnosticLimits:
+    defaults = ModelDiagnosticLimits()
+    values: dict[str, int] = {}
+    for name, field_name in (
+        ("DOTAMIND_DIAGNOSTIC_MAX_TOOL_CALLS", "max_tool_calls"),
+        ("DOTAMIND_DIAGNOSTIC_ARGUMENT_MAX_BYTES", "argument_max_bytes"),
+        ("DOTAMIND_DIAGNOSTIC_TOTAL_ARGUMENT_MAX_BYTES", "total_argument_max_bytes"),
+        ("DOTAMIND_DIAGNOSTIC_ARGUMENT_EDGE_BYTES", "argument_edge_bytes"),
+    ):
+        default = getattr(defaults, field_name)
+        raw_value = _env_value(name, str(default), file_values)
+        if raw_value is None:
+            if name in file_values:
+                raise ValueError(f"{name} must be a positive integer")
+            raw_value = str(default)
+        values[field_name] = _parse_positive_integer(name, raw_value)
+    return ModelDiagnosticLimits(**values)
 
 
 def _parse_positive_finite_float(name: str, value: str) -> float:
@@ -677,6 +703,7 @@ def build_vnext_runtime(
         base_url=config.llm_base_url,
         model=config.llm_model,
         timeout=config.llm_timeout_seconds,
+        diagnostic_limits=config.model_diagnostic_limits,
     )
     task_state_coordinator = TaskStateCoordinator()
     registry = build_vnext_registry(

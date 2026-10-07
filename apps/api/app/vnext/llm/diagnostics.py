@@ -9,10 +9,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-MAX_DIAGNOSTIC_TOOL_CALLS = 64
-MAX_DIAGNOSTIC_ARGUMENT_BYTES = 64 * 1024
-MAX_DIAGNOSTIC_TOTAL_ARGUMENT_BYTES = 256 * 1024
-MAX_DIAGNOSTIC_ARGUMENT_EDGE_BYTES = 4 * 1024
+from app.vnext.llm.diagnostic_limits import ModelDiagnosticLimits
 
 DiagnosticStage = Literal["tool_arguments_decode", "response_assembly", "stream_protocol"]
 DiagnosticResponseMode = Literal["stream", "complete"]
@@ -78,20 +75,21 @@ def build_model_failure_diagnostics(
     usage: Mapping[str, Any] | None,
     stream_done_received: bool | None,
     tool_calls: Sequence[ToolCallDiagnosticInput],
+    limits: ModelDiagnosticLimits,
     failed_tool_call_index: int | None = None,
     json_error: ModelJSONErrorDiagnostic | None = None,
 ) -> ModelFailureDiagnostics:
     """Build a capped diagnostic while preserving complete byte counts."""
 
     ordered_calls = sorted(tool_calls, key=lambda call: call.index)
-    selected_calls = ordered_calls[:MAX_DIAGNOSTIC_TOOL_CALLS]
-    remaining_budget = MAX_DIAGNOSTIC_TOTAL_ARGUMENT_BYTES
+    selected_calls = ordered_calls[: limits.max_tool_calls]
+    remaining_budget = limits.total_argument_max_bytes
     records: list[ModelToolCallDiagnostic] = []
 
     for call in selected_calls:
         fragments = call.argument_fragments
         byte_count = sum(len(_encode_arguments(fragment)) for fragment in fragments or ())
-        truncated = byte_count > MAX_DIAGNOSTIC_ARGUMENT_BYTES or byte_count > remaining_budget
+        truncated = byte_count > limits.argument_max_bytes or byte_count > remaining_budget
 
         raw_arguments: str | None = None
         prefix: str | None = None
@@ -102,7 +100,7 @@ def build_model_failure_diagnostics(
         elif remaining_budget > 0 and byte_count:
             snippet_budget = min(
                 remaining_budget,
-                MAX_DIAGNOSTIC_ARGUMENT_EDGE_BYTES * 2,
+                limits.argument_edge_bytes * 2,
                 byte_count,
             )
             prefix_budget = snippet_budget // 2
@@ -137,7 +135,7 @@ def build_model_failure_diagnostics(
         failed_tool_call_index=failed_tool_call_index,
         tool_calls=tuple(records),
         tool_calls_total=len(ordered_calls),
-        tool_calls_truncated=len(ordered_calls) > MAX_DIAGNOSTIC_TOOL_CALLS,
+        tool_calls_truncated=len(ordered_calls) > limits.max_tool_calls,
         json_error=json_error,
     )
 
@@ -179,10 +177,6 @@ def _encoded_size(value: str | None) -> int:
 __all__ = [
     "DiagnosticResponseMode",
     "DiagnosticStage",
-    "MAX_DIAGNOSTIC_ARGUMENT_BYTES",
-    "MAX_DIAGNOSTIC_ARGUMENT_EDGE_BYTES",
-    "MAX_DIAGNOSTIC_TOOL_CALLS",
-    "MAX_DIAGNOSTIC_TOTAL_ARGUMENT_BYTES",
     "ModelFailureDiagnostics",
     "ModelJSONErrorDiagnostic",
     "ModelToolCallDiagnostic",
