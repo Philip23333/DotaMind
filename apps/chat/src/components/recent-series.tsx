@@ -6,7 +6,9 @@ import {
   type RecentSeriesCandidate,
   type RecentSeriesResponse,
 } from "@/lib/home-api";
+import { Button } from "@/components/ui/button";
 import { useCallback, useEffect, useRef, useState, type FC } from "react";
+import { RefreshCwIcon } from "lucide-react";
 
 export type RecentSeriesViewState = {
   response: RecentSeriesResponse | null;
@@ -27,12 +29,12 @@ export function useRecentSeries(): RecentSeriesState {
   const mounted = useRef(false);
   const requestRef = useRef<Promise<void> | null>(null);
 
-  const load = useCallback(() => {
+  const load = useCallback((waitForRefresh = false) => {
     if (requestRef.current) return requestRef.current;
 
     setState((previous) => ({ ...previous, loading: true, error: false }));
 
-    const request = getRecentSeries()
+    const request = getRecentSeries({ waitForRefresh })
       .then((response) => {
         if (!mounted.current) return;
         setState({ response, loading: false, error: false });
@@ -58,9 +60,27 @@ export function useRecentSeries(): RecentSeriesState {
 
   return {
     ...state,
-    retry: () => void load(),
+    retry: () => void load(true),
   };
 }
+
+export const RecentSeriesRefreshButton: FC<{
+  loading: boolean;
+  onRefresh: () => void;
+}> = ({ loading, onRefresh }) => (
+  <Button
+    type="button"
+    variant="ghost"
+    size="sm"
+    aria-label={loading ? "刷新中" : "刷新近期赛事"}
+    title={loading ? "刷新中…" : "刷新近期赛事"}
+    disabled={loading}
+    onClick={onRefresh}
+  >
+    <RefreshCwIcon className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
+    {loading ? "刷新中…" : "刷新"}
+  </Button>
+);
 
 export type RecentSeriesListProps = {
   items: RecentSeriesCandidate[];
@@ -143,7 +163,7 @@ export const RecentSeriesContent: FC<RecentSeriesContentProps> = ({ state, count
         </div>
       )}
       {items.length > 0 && <p className="px-3 text-[11px] text-muted-foreground">赛事日期均为北京时间</p>}
-      {response?.status === "fresh" && response.items.length > 0 && response.retrieved_at && (
+      {response?.status === "fresh" && response.retrieved_at && (
         <p className="px-3 text-[11px] text-muted-foreground">
           数据更新于 {formatBeijingDateTime(response.retrieved_at)}（北京时间）
         </p>

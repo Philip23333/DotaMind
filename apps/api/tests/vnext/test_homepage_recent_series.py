@@ -490,6 +490,170 @@ def test_expired_snapshot_returns_immediately_while_refresh_is_blocked() -> None
     asyncio.run(run())
 
 
+def test_wait_mode_blocks_on_expired_snapshot_and_returns_the_new_snapshot() -> None:
+    async def run() -> None:
+        cache = RedisRecentSeriesCache(FakeRedis())
+        old_snapshot = RecentSeriesSnapshot(
+            items=[{"series_id": 1, "name": "Old", "lifecycle": "running"}],
+            retrieved_at=NOW - timedelta(seconds=601),
+        )
+        await cache.publish(old_snapshot, attempted_at=old_snapshot.retrieved_at)
+        provider = FakeProvider([_series(2)], [])
+        provider.release = asyncio.Event()
+        service = _service(provider, cache, clock=Clock())
+
+        request = asyncio.create_task(service.get_recent_series(wait_for_refresh=True))
+        await provider.started.wait()
+        assert not request.done()
+        assert len(provider.calls) == 1
+
+        provider.release.set()
+        response = await request
+        assert response.status == "fresh"
+        assert [item.series_id for item in response.items] == [2]
+        await service.aclose()
+
+    asyncio.run(run())
+
+
+def test_wait_mode_reuses_refresh_started_by_default_stale_read() -> None:
+    async def run() -> None:
+        cache = RedisRecentSeriesCache(FakeRedis())
+        old_snapshot = RecentSeriesSnapshot(
+            items=[{"series_id": 1, "name": "Old", "lifecycle": "running"}],
+            retrieved_at=NOW - timedelta(seconds=601),
+        )
+        await cache.publish(old_snapshot, attempted_at=old_snapshot.retrieved_at)
+        provider = FakeProvider([_series(3)], [])
+        provider.release = asyncio.Event()
+        service = _service(provider, cache, clock=Clock())
+
+        immediate = await service.get_recent_series()
+        await provider.started.wait()
+        shared_task = service._refresh_task
+        assert immediate.status == "stale"
+        assert shared_task is not None and not shared_task.done()
+
+        waiting = asyncio.create_task(service.get_recent_series(wait_for_refresh=True))
+        assert not waiting.done()
+        assert service._refresh_task is shared_task
+        assert len(provider.calls) == 1
+        provider.release.set()
+        refreshed = await waiting
+        assert refreshed.status == "fresh"
+        assert [item.series_id for item in refreshed.items] == [3]
+        assert len(provider.calls) == 2
+        await service.aclose()
+
+    asyncio.run(run())
+
+
+def test_multiple_waiters_share_one_refresh_and_cancellation_isolated() -> None:
+    async def run() -> None:
+        redis = FakeRedis()
+        cache = RedisRecentSeriesCache(redis)
+        old_snapshot = RecentSeriesSnapshot(
+            items=[{"series_id": 1, "name": "Old", "lifecycle": "running"}],
+            retrieved_at=NOW - timedelta(seconds=601),
+        )
+        await cache.publish(old_snapshot, attempted_at=old_snapshot.retrieved_at)
+        provider = FakeProvider([_series(5)], [])
+        provider.release = asyncio.Event()
+        service = _service(provider, cache, clock=Clock())
+
+        first = asyncio.create_task(service.get_recent_series(wait_for_refresh=True))
+        await provider.started.wait()
+        shared_task = service._refresh_task
+        assert shared_task is not None and not shared_task.done()
+        second_request_reads = redis.watch_reads(redis.read_count + 2)
+        second = asyncio.create_task(service.get_recent_series(wait_for_refresh=True))
+        await second_request_reads.wait()
+        assert not first.done() and not second.done()
+        assert len(provider.calls) == 1
+
+        first.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await first
+        assert not shared_task.cancelled() and not shared_task.done()
+
+        provider.release.set()
+        response = await second
+        assert response.status == "fresh"
+        assert [item.series_id for item in response.items] == [5]
+        assert len(provider.calls) == 2
+        await service.aclose()
+
+    asyncio.run(run())
+
+
+def test_wait_mode_returns_refresh_failure_with_and_without_old_snapshot() -> None:
+    async def run() -> None:
+        stale_cache = RedisRecentSeriesCache(FakeRedis())
+        old_snapshot = RecentSeriesSnapshot(
+            items=[{"series_id": 8, "name": "Old", "lifecycle": "running"}],
+            retrieved_at=NOW - timedelta(seconds=601),
+        )
+        await stale_cache.publish(old_snapshot, attempted_at=old_snapshot.retrieved_at)
+        stale_provider = FakeProvider([], [])
+        stale_provider.fail_with = httpx.ConnectError("private upstream detail")
+        stale_service = _service(stale_provider, stale_cache, clock=Clock())
+
+        stale = await stale_service.get_recent_series(wait_for_refresh=True)
+        assert stale.status == "stale"
+        assert [item.series_id for item in stale.items] == [8]
+        assert stale.last_error == "transport_error"
+        await stale_service.aclose()
+
+        cold_provider = FakeProvider([], [])
+        cold_provider.fail_with = httpx.ConnectError("private upstream detail")
+        cold_service = _service(
+            cold_provider,
+            RedisRecentSeriesCache(FakeRedis()),
+            clock=Clock(),
+        )
+        unavailable = await cold_service.get_recent_series(wait_for_refresh=True)
+        assert unavailable.status == "unavailable"
+        assert unavailable.items == []
+        assert unavailable.last_error == "transport_error"
+        await cold_service.aclose()
+
+    asyncio.run(run())
+
+
+def test_wait_mode_observes_fresh_cache_and_failure_cooldown_without_provider_calls() -> None:
+    async def run() -> None:
+        fresh_cache = RedisRecentSeriesCache(FakeRedis())
+        fresh_snapshot = RecentSeriesSnapshot(
+            items=[{"series_id": 9, "name": "Fresh", "lifecycle": "running"}],
+            retrieved_at=NOW,
+        )
+        await fresh_cache.publish(fresh_snapshot, attempted_at=NOW)
+        fresh_provider = FakeProvider([], [])
+        fresh_service = _service(fresh_provider, fresh_cache, clock=Clock())
+        fresh = await fresh_service.get_recent_series(wait_for_refresh=True)
+        assert fresh.status == "fresh"
+        assert fresh_provider.calls == []
+        await fresh_service.aclose()
+
+        cooldown_cache = RedisRecentSeriesCache(FakeRedis())
+        stale_snapshot = RecentSeriesSnapshot(
+            items=[{"series_id": 10, "name": "Stale", "lifecycle": "running"}],
+            retrieved_at=NOW - timedelta(seconds=601),
+        )
+        await cooldown_cache.publish(stale_snapshot, attempted_at=stale_snapshot.retrieved_at)
+        await cooldown_cache.record_failure(attempted_at=NOW, error_code="timeout")
+        cooldown_provider = FakeProvider([], [])
+        cooldown_service = _service(cooldown_provider, cooldown_cache, clock=Clock())
+        cooling = await cooldown_service.get_recent_series(wait_for_refresh=True)
+        assert cooling.status == "stale"
+        assert [item.series_id for item in cooling.items] == [10]
+        assert cooling.last_error == "timeout"
+        assert cooldown_provider.calls == []
+        await cooldown_service.aclose()
+
+    asyncio.run(run())
+
+
 def test_expired_successful_empty_snapshot_uses_stale_refresh_path() -> None:
     async def run() -> None:
         cache = RedisRecentSeriesCache(FakeRedis())
@@ -785,12 +949,23 @@ def test_home_route_returns_candidates_and_is_unavailable_without_service() -> N
         [_series(4, full_name="Series Four", league_name="League Four")], []
     )
     service = _service(provider, RedisRecentSeriesCache(FakeRedis()))
+    observed_wait_flags: list[bool] = []
+    get_recent_series = service.get_recent_series
+
+    async def capture_wait_mode(*, wait_for_refresh: bool = False):
+        observed_wait_flags.append(wait_for_refresh)
+        return await get_recent_series(wait_for_refresh=wait_for_refresh)
+
+    service.get_recent_series = capture_wait_mode  # type: ignore[method-assign]
     app = FastAPI()
     app.include_router(router, prefix="/api/v1")
     app.state.homepage_recent_series = service
 
     with TestClient(app) as client:
         response = client.get("/api/v1/home/recent-series")
+        waited_response = client.get(
+            "/api/v1/home/recent-series?wait_for_refresh=true"
+        )
 
     assert response.status_code == 200
     assert response.json()["status"] == "fresh"
@@ -804,6 +979,8 @@ def test_home_route_returns_candidates_and_is_unavailable_without_service() -> N
     assert response.json()["items"][0]["series_id"] == 4
     assert response.json()["items"][0]["name"] == "Series Four"
     assert response.json()["items"][0]["league_name"] == "League Four"
+    assert waited_response.status_code == 200
+    assert observed_wait_flags == [False, True]
 
     unavailable_app = FastAPI()
     unavailable_app.include_router(router, prefix="/api/v1")

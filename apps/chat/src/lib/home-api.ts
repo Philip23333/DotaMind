@@ -57,10 +57,19 @@ function isRecentSeriesResponse(value: unknown): value is RecentSeriesResponse {
   );
 }
 
-export async function getRecentSeries(signal?: AbortSignal): Promise<RecentSeriesResponse> {
+export type GetRecentSeriesOptions = {
+  signal?: AbortSignal;
+  waitForRefresh?: boolean;
+};
+
+export async function getRecentSeries({
+  signal,
+  waitForRefresh = false,
+}: GetRecentSeriesOptions = {}): Promise<RecentSeriesResponse> {
   let response: Response;
+  const query = waitForRefresh ? "?wait_for_refresh=true" : "";
   try {
-    response = await fetch(`${getApiUrl()}/api/v1/home/recent-series`, {
+    response = await fetch(`${getApiUrl()}/api/v1/home/recent-series${query}`, {
       method: "GET",
       cache: "no-store",
       ...(signal ? { signal } : {}),

@@ -442,7 +442,9 @@ history/metadata boundary, and phase acceptance are owned by
 首页赛事列表走普通后端数据接口，不调用模型。后端查询服务通过现有
 PandaScore Provider 层获取 Series 及必要的冠军身份事实，并将排序后的候选
 和刷新元数据放在共享缓存中；首页读取同一份最多十条候选，首页展示前五条。
-接口为 `GET /api/v1/home/recent-series`。
+接口为 `GET /api/v1/home/recent-series`。默认读取在刷新时立即返回过期快照；
+可选 `wait_for_refresh=true` 使手动读取等待同一个服务持有的刷新任务。两种读取
+遵守相同的十分钟新鲜缓存和 600 秒失败限频，等待模式不会强制刷新。
 
 Series 原始对象中的 `league.name` 经 Provider 生命周期模型、近期候选、Redis
 快照和只读 API 传递到前端；缺失或无效时为 `null`。前端只用来源值组合
@@ -464,7 +466,9 @@ Series 原始对象中的 `league.name` 经 Provider 生命周期模型、近期
 ```
 
 首页最多十条候选只在欢迎页展示前五条，不另设十条展开层。最近赛事显式刷新与错误重试
-仍由同一只读数据接口完成，不触发模型调用。Composer 主动发送在消息交给运行时后清理
+仍由同一只读数据接口完成，不触发模型调用。手动刷新等待后台任务时保留旧列表并显示
+刷新中；结束后依据 `fresh`、`stale` 或 `unavailable` 与真实 `retrieved_at` 展示结果。
+刷新失败不清除旧列表，也不把 HTTP 200 一律视为成功。Composer 主动发送在消息交给运行时后清理
 未被用户改动的草稿并返回普通模式；准备失败保留草稿和模式，会话切换重置模式。
 
 聊天壳统一持有左侧聊天记录与右侧 Trace 的展开状态：桌面从 1024px 起采用可独立收起的

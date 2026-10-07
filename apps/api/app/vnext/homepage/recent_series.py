@@ -217,7 +217,11 @@ class HomepageRecentSeriesService:
         self._local_failure: tuple[datetime, str] | None = None
         self._closed = False
 
-    async def get_recent_series(self) -> RecentSeriesResponse:
+    async def get_recent_series(
+        self,
+        *,
+        wait_for_refresh: bool = False,
+    ) -> RecentSeriesResponse:
         requested_at = _ensure_aware(self._now())
         entry = await self._cache.get()
         if _is_fresh(entry.snapshot, requested_at):
@@ -254,12 +258,12 @@ class HomepageRecentSeriesService:
                 self._refresh_task = task
                 task.add_done_callback(self._consume_refresh_result)
 
-        if entry.snapshot is not None:
+        if entry.snapshot is not None and not wait_for_refresh:
             # Stale snapshots are useful immediately. The owned task continues
             # in the background and later requests will observe its result.
             return self._entry_response(entry, status="stale")
 
-        # Shield the shared cold-start refresh from cancellation of one request.
+        # Waiting callers share the service-owned refresh and cannot cancel it.
         return await asyncio.shield(task)
 
     async def aclose(self) -> None:

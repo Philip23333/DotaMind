@@ -28,16 +28,28 @@ function jsonResponse(payload: unknown, status = 200): Response {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("getRecentSeries", () => {
-  it("requests the shared endpoint with GET, no-store, and the caller signal", async () => {
+  it("requests the shared endpoint without a wait parameter by default", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(fresh));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await getRecentSeries();
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8001/api/v1/home/recent-series",
+      { method: "GET", cache: "no-store" },
+    );
+  });
+
+  it("requests the same endpoint in wait mode and retains the caller signal", async () => {
     const controller = new AbortController();
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(fresh));
     vi.stubGlobal("fetch", fetchMock);
 
-    await getRecentSeries(controller.signal);
+    await getRecentSeries({ signal: controller.signal, waitForRefresh: true });
 
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8001/api/v1/home/recent-series",
+      "http://localhost:8001/api/v1/home/recent-series?wait_for_refresh=true",
       { method: "GET", cache: "no-store", signal: controller.signal },
     );
   });

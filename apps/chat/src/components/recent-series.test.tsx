@@ -6,6 +6,7 @@ import { getRecentSeries, type RecentSeriesCandidate, type RecentSeriesResponse 
 import {
   RecentSeriesContent,
   RecentSeriesList,
+  RecentSeriesRefreshButton,
   type RecentSeriesViewState,
   useRecentSeries,
 } from "./recent-series";
@@ -80,7 +81,7 @@ describe("RecentSeriesList", () => {
 });
 
 describe("useRecentSeries", () => {
-  it("shares its initial request and allows an explicit refresh", async () => {
+  it("uses immediate mode initially and wait mode for an explicit refresh", async () => {
     getRecentSeriesMock
       .mockResolvedValueOnce(response("fresh"))
       .mockResolvedValueOnce(response("fresh"));
@@ -89,6 +90,8 @@ describe("useRecentSeries", () => {
 
     act(() => result.current.retry());
     await waitFor(() => expect(getRecentSeriesMock).toHaveBeenCalledTimes(2));
+    expect(getRecentSeriesMock).toHaveBeenNthCalledWith(1, { waitForRefresh: false });
+    expect(getRecentSeriesMock).toHaveBeenNthCalledWith(2, { waitForRefresh: true });
   });
 
   it.each(["stale", "unavailable"] as const)(
@@ -130,6 +133,56 @@ describe("useRecentSeries", () => {
     await act(async () => resolveRead(response("fresh")));
     await waitFor(() => expect(result.current.response?.status).toBe("fresh"));
   });
+
+  it("keeps old rows and shows a disabled refreshing button until the wait request completes", async () => {
+    const updated = response("fresh", candidates, null);
+    updated.retrieved_at = "2026-09-10T01:00:00Z";
+    let finishRefresh!: (value: RecentSeriesResponse) => void;
+    getRecentSeriesMock
+      .mockResolvedValueOnce(response("fresh"))
+      .mockImplementationOnce(() => new Promise((resolve) => { finishRefresh = resolve; }));
+
+    function RecentSeriesPanel() {
+      const state = useRecentSeries();
+      return (
+        <>
+          <RecentSeriesRefreshButton loading={state.loading} onRefresh={state.retry} />
+          <RecentSeriesContent state={state} count={3} onSelect={vi.fn()} onRetry={state.retry} />
+        </>
+      );
+    }
+
+    render(<RecentSeriesPanel />);
+    await waitFor(() => expect(screen.getByText("Series 1")).toBeTruthy());
+    expect(screen.getByText(/数据更新于 2026-09-10 08:00（北京时间）/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "刷新近期赛事" }));
+    await waitFor(() => expect(getRecentSeriesMock).toHaveBeenCalledTimes(2));
+    expect(screen.getByText("Series 1")).toBeTruthy();
+    const refreshingButton = screen.getByRole("button", { name: "刷新中" }) as HTMLButtonElement;
+    expect(refreshingButton.disabled).toBe(true);
+    expect(refreshingButton.textContent).toContain("刷新中…");
+    expect(refreshingButton.querySelector("svg")?.getAttribute("class")).toContain("animate-spin");
+
+    await act(async () => finishRefresh(updated));
+    await waitFor(() => expect(screen.getByRole("button", { name: "刷新近期赛事" }).textContent).toContain("刷新"));
+    expect(screen.getByText("Series 1")).toBeTruthy();
+    expect(screen.getByText(/数据更新于 2026-09-10 09:00（北京时间）/)).toBeTruthy();
+    expect(getRecentSeriesMock).toHaveBeenNthCalledWith(2, { waitForRefresh: true });
+  });
+
+  it("preserves old rows after a network failure during wait mode", async () => {
+    getRecentSeriesMock
+      .mockResolvedValueOnce(response("fresh"))
+      .mockRejectedValueOnce(new Error("network error"));
+    const { result } = renderHook(() => useRecentSeries());
+    await waitFor(() => expect(result.current.response?.status).toBe("fresh"));
+
+    act(() => result.current.retry());
+    await waitFor(() => expect(result.current.error).toBe(true));
+    expect(result.current.response?.items[0].name).toBe("Series 1");
+    expect(getRecentSeriesMock).toHaveBeenNthCalledWith(2, { waitForRefresh: true });
+  });
 });
 
 describe("RecentSeriesContent", () => {
@@ -165,6 +218,34 @@ describe("RecentSeriesContent", () => {
     );
     expect(screen.getByRole("status").textContent).toBe("读取失败，仍显示上次可用数据");
     expect(screen.getByText("Series 1")).toBeTruthy();
+  });
+
+  it("shows a returned stale failure as an update failure instead of success", () => {
+    render(
+      <RecentSeriesContent
+        state={viewState(response("stale", candidates, "timeout"), { loading: false })}
+        count={3}
+        onSelect={vi.fn()}
+        onRetry={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("当前为上次更新的数据")).toBeTruthy();
+    expect(screen.getByText("更新暂未成功，可稍后重试")).toBeTruthy();
+    expect(screen.queryByText("数据已更新")).toBeNull();
+    expect(screen.getByText("Series 1")).toBeTruthy();
+  });
+
+  it("shows the retrieved time for a valid empty fresh response", () => {
+    render(
+      <RecentSeriesContent
+        state={viewState(response("fresh", []))}
+        count={3}
+        onSelect={vi.fn()}
+        onRetry={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("暂无近期赛事")).toBeTruthy();
+    expect(screen.getByText(/数据更新于 2026-09-10 08:00（北京时间）/)).toBeTruthy();
   });
 });
 

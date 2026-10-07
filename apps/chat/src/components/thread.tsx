@@ -13,6 +13,7 @@ import {
 } from "@/components/composer-mode-switch";
 import {
   RecentSeriesContent,
+  RecentSeriesRefreshButton,
   useRecentSeries,
   type RecentSeriesState,
 } from "@/components/recent-series";
@@ -32,7 +33,6 @@ import {
   ArrowUpIcon,
   CheckIcon,
   CopyIcon,
-  RefreshCwIcon,
   SquareIcon,
 } from "lucide-react";
 import { siDota2 } from "simple-icons";
@@ -196,18 +196,7 @@ const Welcome: FC<{
     <section className="w-full max-w-2xl text-left" aria-label="🔥最近赛事">
       <div className="mb-1 flex items-center justify-between px-3">
         <h2 className="text-sm font-semibold">🔥最近赛事</h2>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          aria-label="刷新近期赛事"
-          title="刷新近期赛事"
-          disabled={recentSeries.loading}
-          onClick={onRefresh}
-        >
-          <RefreshCwIcon className={`size-3.5 ${recentSeries.loading ? "animate-spin" : ""}`} />
-          刷新
-        </Button>
+        <RecentSeriesRefreshButton loading={recentSeries.loading} onRefresh={onRefresh} />
       </div>
       <RecentSeriesContent
         state={recentSeries}
