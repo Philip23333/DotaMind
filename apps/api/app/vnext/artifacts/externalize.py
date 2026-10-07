@@ -6,9 +6,10 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
+from .limits import DEFAULT_ARTIFACT_LIMITS
 from .store import SessionArtifactStore
 
-INLINE_TOOL_RESPONSE_MAX_BYTES = 12 * 1024
+INLINE_TOOL_RESPONSE_MAX_BYTES = DEFAULT_ARTIFACT_LIMITS.inline_max_bytes
 
 
 class ToolResponseArtifactError(RuntimeError):
@@ -31,11 +32,17 @@ def serialized_size(value: Any) -> int:
 class ToolResponseExternalizer:
     """Keep small responses inline and spill complete large responses once."""
 
-    def __init__(self, store: SessionArtifactStore) -> None:
+    def __init__(
+        self,
+        store: SessionArtifactStore,
+        *,
+        inline_max_bytes: int = INLINE_TOOL_RESPONSE_MAX_BYTES,
+    ) -> None:
         self._store = store
+        self._inline_max_bytes = inline_max_bytes
 
     async def externalize(self, response: Any) -> ExternalizedToolResponse:
-        if serialized_size(response) <= INLINE_TOOL_RESPONSE_MAX_BYTES:
+        if serialized_size(response) <= self._inline_max_bytes:
             return ExternalizedToolResponse(artifact_ref=None)
         try:
             return ExternalizedToolResponse(artifact_ref=await self._store.put(response))

@@ -9,6 +9,7 @@ from .externalize import (
 )
 from .grep import ArtifactGrepMatch, ArtifactGrepper, ArtifactGrepResult
 from .lifecycle import ArtifactObservation, ArtifactObservationTranscriptRewriter
+from .limits import DEFAULT_ARTIFACT_LIMITS, ArtifactLimits
 from .manuals import DOCUMENTED_MANUAL_REFS, MANUAL_REFS, ManualResolver
 from .observation import MAX_MODEL_TOOL_OBSERVATION_BYTES, build_bounded_observation
 from .processor import (
@@ -27,6 +28,7 @@ from .store import ArtifactNotFoundError, InvalidArtifactRefError, SessionArtifa
 __all__ = [
     "ArtifactGrepMatch",
     "ArtifactGrepResult",
+    "ArtifactLimits",
     "ArtifactObservation",
     "ArtifactObservationTranscriptRewriter",
     "ArtifactGrepper",
@@ -42,6 +44,7 @@ __all__ = [
     "ManualResolver",
     "MAX_MODEL_TOOL_OBSERVATION_BYTES",
     "DOCUMENTED_MANUAL_REFS",
+    "DEFAULT_ARTIFACT_LIMITS",
     "MANUAL_REFS",
     "SessionArtifactStore",
     "ProcessedToolResult",

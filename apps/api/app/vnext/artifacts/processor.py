@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from .externalize import ToolResponseExternalizer
-from .observation import build_bounded_observation
+from .observation import MAX_MODEL_TOOL_OBSERVATION_BYTES, build_bounded_observation
 
 
 @dataclass(frozen=True)
@@ -31,9 +31,12 @@ class ArtifactBackedToolResultProcessor:
         self,
         externalizer: ToolResponseExternalizer,
         observation_builder: ObservationBuilder = build_bounded_observation,
+        *,
+        observation_max_bytes: int = MAX_MODEL_TOOL_OBSERVATION_BYTES,
     ) -> None:
         self._externalizer = externalizer
         self._observation_builder = observation_builder
+        self._observation_max_bytes = observation_max_bytes
 
     async def process(self, output: Any) -> ProcessedToolResult:
         decision = await self._externalizer.externalize(output)
@@ -43,6 +46,7 @@ class ArtifactBackedToolResultProcessor:
             content=self._observation_builder(
                 output,
                 artifact_ref=decision.artifact_ref,
+                max_bytes=self._observation_max_bytes,
             ),
             artifact_ref=decision.artifact_ref,
         )

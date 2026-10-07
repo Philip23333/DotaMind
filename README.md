@@ -59,6 +59,17 @@ CLI through WSL interop. It always loads both `compose.wsl.yml` and
 updater writes to that same volume. With WSL Integration enabled, the equivalent
 command is `docker compose -f compose.wsl.yml -f compose.data.yml up -d --build --wait`.
 
+### Tool-result Artifact budgets
+
+The API reads two UTF-8 serialized-byte limits from the root `.env` or process
+environment; process environment values take precedence. The defaults preserve
+current behavior: `DOTAMIND_TOOL_INLINE_MAX_BYTES=12288` keeps results up to
+12 KiB inline, while larger results are stored as complete Artifacts, and
+`DOTAMIND_TOOL_OBSERVATION_MAX_BYTES=35840` bounds the preview and successful
+`artifact.read` results to 35 KiB. Both values must be positive integers and the
+inline limit cannot exceed the observation limit. Restart the API after changing
+either value.
+
 This configuration uses the `dotamind` Compose project and its existing
 `dotamind_postgres-data` / `dotamind_redis-data` volumes. The database password
 must match the existing volume (`dotamind` by default; override with

@@ -7,8 +7,8 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict
 
 from .externalize import serialized_size
+from .limits import DEFAULT_ARTIFACT_LIMITS
 from .manuals import ManualResolver
-from .observation import MAX_MODEL_TOOL_OBSERVATION_BYTES
 from .store import ArtifactNotFoundError, SessionArtifactStore
 
 
@@ -43,9 +43,12 @@ class ArtifactReader:
         self,
         store: SessionArtifactStore,
         manuals: ManualResolver | None = None,
+        *,
+        observation_max_bytes: int = DEFAULT_ARTIFACT_LIMITS.observation_max_bytes,
     ) -> None:
         self._store = store
         self._manuals = manuals
+        self._observation_max_bytes = observation_max_bytes
 
     async def outline(self, ref: str) -> ArtifactReadResult:
         """Return a structural root view without reading a selected path."""
@@ -57,9 +60,9 @@ class ArtifactReader:
                 path=None,
                 value={"paths": [{"path": "content", "kind": "text"}]},
             )
-            return _fit_result_to_model_budget(result)
+            return _fit_result_to_model_budget(result, self._observation_max_bytes)
         result = ArtifactReadResult(ref=ref, path=None, value=_outline(await self._store.get(ref)))
-        return _fit_result_to_model_budget(result)
+        return _fit_result_to_model_budget(result, self._observation_max_bytes)
 
     async def read(
         self,
@@ -92,12 +95,15 @@ class ArtifactReader:
                 total=len(value),
                 truncated=end < len(value),
             )
-            return _fit_list_result_to_model_budget(result)
+            return _fit_list_result_to_model_budget(result, self._observation_max_bytes)
         if pagination_requested:
             raise ArtifactReadValidationError(
                 "pagination is only valid when the final value is a list"
             )
-        return _fit_result_to_model_budget(ArtifactReadResult(ref=ref, path=path, value=value))
+        return _fit_result_to_model_budget(
+            ArtifactReadResult(ref=ref, path=path, value=value),
+            self._observation_max_bytes,
+        )
 
     def _manual_content(self, ref: str) -> str:
         if self._manuals is None:
@@ -114,10 +120,13 @@ def _validate_pagination(offset: int, limit: int) -> None:
         )
 
 
-def _fit_result_to_model_budget(result: ArtifactReadResult) -> ArtifactReadResult:
+def _fit_result_to_model_budget(
+    result: ArtifactReadResult,
+    max_bytes: int,
+) -> ArtifactReadResult:
     """Ensure a successful artifact result fits the model observation budget."""
 
-    if serialized_size(result.model_dump(mode="json")) <= MAX_MODEL_TOOL_OBSERVATION_BYTES:
+    if serialized_size(result.model_dump(mode="json")) <= max_bytes:
         return result
     raise ArtifactReadValidationError(
         "selected artifact value exceeds the model observation budget; "
@@ -125,20 +134,23 @@ def _fit_result_to_model_budget(result: ArtifactReadResult) -> ArtifactReadResul
     )
 
 
-def _fit_list_result_to_model_budget(result: ArtifactReadResult) -> ArtifactReadResult:
+def _fit_list_result_to_model_budget(
+    result: ArtifactReadResult,
+    max_bytes: int,
+) -> ArtifactReadResult:
     """Drop only trailing complete list items until the result fits the budget."""
 
-    if serialized_size(result.model_dump(mode="json")) <= MAX_MODEL_TOOL_OBSERVATION_BYTES:
+    if serialized_size(result.model_dump(mode="json")) <= max_bytes:
         return result
 
     empty_result = result.model_copy(update={"value": [], "truncated": True})
-    if serialized_size(empty_result.model_dump(mode="json")) > MAX_MODEL_TOOL_OBSERVATION_BYTES:
-        return _fit_result_to_model_budget(empty_result)
+    if serialized_size(empty_result.model_dump(mode="json")) > max_bytes:
+        return _fit_result_to_model_budget(empty_result, max_bytes)
 
     candidate = list(result.value)
     while candidate:
         fitted = result.model_copy(update={"value": candidate, "truncated": True})
-        if serialized_size(fitted.model_dump(mode="json")) <= MAX_MODEL_TOOL_OBSERVATION_BYTES:
+        if serialized_size(fitted.model_dump(mode="json")) <= max_bytes:
             return fitted
         candidate.pop()
 

@@ -6,10 +6,15 @@ Agent-visible tools describe stable observation capabilities, not transport
 endpoints or provider implementation details. Oversized complete logical tool
 responses are retained as temporary Artifacts and explored through generic
 Artifact tools. The default registry externalizes a validated non-Artifact
-result larger than 12 KiB and returns a bounded structural observation together
-with its opaque Artifact reference. That observation is capped at 35 KiB and
-may still include small scalar leaves. Artifact retrieval tools remain inline;
-`artifact.read` applies its own 35 KiB serialized-result bound.
+result larger than the configured inline threshold (12 KiB by default) and
+returns a bounded structural observation together with its opaque Artifact
+reference. That observation uses the configured observation budget (35 KiB by
+default) and may still include small scalar leaves. Artifact retrieval tools
+remain inline; `artifact.read` applies the same configured serialized-result
+bound. Both limits use UTF-8 serialized bytes and are configured by
+`DOTAMIND_TOOL_INLINE_MAX_BYTES` and `DOTAMIND_TOOL_OBSERVATION_MAX_BYTES` in
+the root `.env` or process environment; the inline limit must not exceed the
+observation limit.
 
 “Not executed” and “executed and failed” describe different facts. The Adapter
 now classifies malformed tool-argument JSON and truncated tool-call responses
@@ -253,8 +258,8 @@ original owner and cannot drift into a later task's candidates.
 A checkpoint stores model-organized task state and source references. Success
 means that state was accepted and the plan advanced; it does not verify the
 business conclusions or guarantee completeness. Checkpointing does not force
-externalization, change the 12 KiB spill threshold, or release raw results from
-conversation history.
+externalization, change the configured spill threshold, or release raw results
+from conversation history.
 
 ## Future domain tools
 

@@ -12,9 +12,9 @@ model-directed release or pressure-driven unsummarized Raw eviction.
 
 Artifact Observation Lifecycle v1 governs only redundant `artifact.read`
 observations already present in the model transcript. It does not change the
-`artifact.read` input or output contract, the 35 KiB observation budget,
-Artifact storage, runtime deadlines, finalization, context pressure, or
-`TaskState`.
+`artifact.read` input or output contract, the configured observation budget
+(35 KiB by default), Artifact storage, runtime deadlines, finalization, context
+pressure, or `TaskState`.
 
 The complete validated tool result remains in the Artifact. The transcript
 rewrite only changes an older `ToolResultMessage.content` after a later result

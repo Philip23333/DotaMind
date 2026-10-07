@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from .externalize import serialized_size
+from .externalize import ToolResponseArtifactError, serialized_size
+from .limits import DEFAULT_ARTIFACT_LIMITS
 
-MAX_MODEL_TOOL_OBSERVATION_BYTES = 35 * 1024
+MAX_MODEL_TOOL_OBSERVATION_BYTES = DEFAULT_ARTIFACT_LIMITS.observation_max_bytes
 
 
 def build_bounded_observation(
@@ -17,7 +18,7 @@ def build_bounded_observation(
 ) -> dict[str, Any]:
     """Build a small structural view while preserving paths into ``payload``."""
 
-    if max_bytes < 1:
+    if isinstance(max_bytes, bool) or not isinstance(max_bytes, int) or max_bytes < 1:
         raise ValueError("max_bytes must be greater than zero")
 
     envelope = {
@@ -35,6 +36,10 @@ def build_bounded_observation(
     if isinstance(projected, dict):
         projected = _trim_root(projected, envelope, max_bytes)
         envelope["value"] = projected
+    if serialized_size(envelope) > max_bytes:
+        raise ToolResponseArtifactError(
+            "could not fit tool observation within configured byte budget"
+        )
     return envelope
 
 

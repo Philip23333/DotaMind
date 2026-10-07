@@ -77,6 +77,24 @@ def test_small_tool_output_remains_inline() -> None:
     assert store._documents == {}
 
 
+def test_configured_inline_threshold_includes_equal_size_only() -> None:
+    async def exercise():
+        store = SessionArtifactStore()
+        payload = {"value": "x"}
+        threshold = serialized_size(payload)
+        externalizer = ToolResponseExternalizer(store, inline_max_bytes=threshold)
+        equal = await externalizer.externalize(payload)
+        over = await externalizer.externalize({"value": "xx"})
+        return store, threshold, equal, over
+
+    store, threshold, equal, over = asyncio.run(exercise())
+
+    assert threshold == serialized_size({"value": "x"})
+    assert equal.artifact_ref is None
+    assert over.artifact_ref is not None
+    assert asyncio.run(store.get(over.artifact_ref)) == {"value": "xx"}
+
+
 def test_large_tool_output_is_externalized_with_bounded_observation() -> None:
     store = SessionArtifactStore()
     registry = _registry(store)

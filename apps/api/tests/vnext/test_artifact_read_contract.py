@@ -18,6 +18,7 @@ from app.vnext.artifacts import (
     ArtifactGrepper,
     ArtifactReader,
     ArtifactReadResult,
+    ArtifactReadValidationError,
     SessionArtifactStore,
     serialized_size,
 )
@@ -74,7 +75,7 @@ def test_artifact_read_schema_explains_granularity_choices() -> None:
     assert "six complete adjacent rows" in properties["offset"]["description"]
     assert "one bounded parent-list read" in properties["limit"]["description"]
     assert "actual number returned may be lower" in properties["limit"]["description"]
-    assert "fixed model observation-size budget" in registry.get("artifact.read").description
+    assert "configured model observation-size budget" in registry.get("artifact.read").description
     assert "max_bytes" not in properties
     assert "max_tokens" not in properties
     assert "budget" not in properties
@@ -353,6 +354,35 @@ def test_oversized_non_list_values_are_rejected() -> None:
         assert result.status == "error"
         assert result.error is not None
         assert result.error.code == "invalid_arguments"
+
+
+def test_reader_uses_custom_budget_for_outline_list_and_non_list_results() -> None:
+    async def exercise():
+        store = SessionArtifactStore()
+        ref = await store.put(
+            {
+                "rows": [
+                    {"id": index, "payload": "x" * 150}
+                    for index in range(20)
+                ],
+                "large_text": "x" * 1_000,
+            }
+        )
+        reader = ArtifactReader(store, observation_max_bytes=500)
+        rows = await reader.read(ref, "rows", limit=20)
+        with pytest.raises(ArtifactReadValidationError, match="narrower nested path"):
+            await reader.read(ref, "large_text")
+        with pytest.raises(ArtifactReadValidationError, match="narrower nested path"):
+            await reader.outline(ref)
+        return rows
+
+    rows = asyncio.run(exercise())
+
+    assert rows.total == 20
+    assert rows.truncated is True
+    assert 0 < len(rows.value) < 20
+    assert all(set(item) == {"id", "payload"} for item in rows.value)
+    assert serialized_size(rows.model_dump(mode="json")) <= 500
 
 
 def test_small_scalar_read_remains_unchanged() -> None:

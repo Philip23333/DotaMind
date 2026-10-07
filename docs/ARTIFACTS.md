@@ -30,17 +30,21 @@ allowlisted and use the same generic read/grep contract.
 ## Spill contract
 
 Tools first construct and validate their complete logical response. Small
-responses stay inline. A response larger than
-`INLINE_TOOL_RESPONSE_MAX_BYTES` (12 KiB) is stored at the Artifact root and
-returns a bounded structural observation plus `artifact_ref`. The model
-observation bound is `MAX_MODEL_TOOL_OBSERVATION_BYTES` (35 KiB), so the
-observation can still include small scalar leaves even after the full response
-has been externalized. A preview's `_artifact_path` is copied unchanged into
+responses stay inline. A response larger than the configured inline threshold
+(12 KiB by default, `DOTAMIND_TOOL_INLINE_MAX_BYTES`) is stored at the Artifact
+root and returns a bounded structural observation plus `artifact_ref`. The
+configured model observation bound defaults to 35 KiB
+(`DOTAMIND_TOOL_OBSERVATION_MAX_BYTES`), so the observation can still include
+small scalar leaves even after the full response has been externalized. A
+preview's `_artifact_path` is copied unchanged into
 `artifact.read(mode="read", path=...)`; `outline` is only needed when the
 document structure is unknown. Artifact retrieval tools explicitly bypass the
-generic spill processor: `artifact.read` enforces the same 35 KiB serialized
+generic spill processor: `artifact.read` enforces the same configured serialized
 result bound itself, while `artifact.grep` is bounded by match and preview
-limits but has no separate serialized-result byte budget.
+limits but has no separate serialized-result byte budget. Limits use UTF-8
+serialized bytes, must be positive, and the inline threshold cannot exceed the
+observation budget. Environment values override `.env`; changing them requires
+restarting the API process.
 
 These per-operation bounds and externalization control individual tool outputs;
 there is no cumulative Raw admission budget across effective history. Overall

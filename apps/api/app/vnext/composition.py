@@ -26,6 +26,7 @@ from app.vnext.agent.task_state import TaskStateCoordinator
 from app.vnext.artifacts import (
     ArtifactBackedToolResultProcessor,
     ArtifactGrepper,
+    ArtifactLimits,
     ArtifactReader,
     ManualResolver,
     SessionArtifactStore,
@@ -139,6 +140,7 @@ class VNextSettings:
     test_recording_enabled: bool = False
     data_dir: Path | None = None
     agent_limits: AgentLimits = field(default_factory=AgentLimits)
+    artifact_limits: ArtifactLimits = field(default_factory=ArtifactLimits)
 
     def __post_init__(self) -> None:
         if self.data_dir is not None and (
@@ -241,6 +243,7 @@ class VNextSettings:
                 _env_value("DOTAMIND_DATA_DIR", None, file_values)
             ),
             agent_limits=_agent_limits_from_env(file_values),
+            artifact_limits=_artifact_limits_from_env(file_values),
         )
 
 
@@ -347,6 +350,23 @@ def _agent_limits_from_env(file_values: dict[str, str | None]) -> AgentLimits:
             "DOTAMIND_APPLICATION_MAX_OUTPUT_TOKENS before model calls"
         )
     return AgentLimits(**values)
+
+
+def _artifact_limits_from_env(file_values: dict[str, str | None]) -> ArtifactLimits:
+    defaults = ArtifactLimits()
+    values: dict[str, int] = {}
+    for name, field_name in (
+        ("DOTAMIND_TOOL_INLINE_MAX_BYTES", "inline_max_bytes"),
+        ("DOTAMIND_TOOL_OBSERVATION_MAX_BYTES", "observation_max_bytes"),
+    ):
+        default = getattr(defaults, field_name)
+        raw_value = _env_value(name, str(default), file_values)
+        if raw_value is None:
+            if name in file_values:
+                raise ValueError(f"{name} must be a positive integer")
+            raw_value = str(default)
+        values[field_name] = _parse_positive_integer(name, raw_value)
+    return ArtifactLimits(**values)
 
 
 def _parse_positive_finite_float(name: str, value: str) -> float:
@@ -554,12 +574,23 @@ def build_vnext_registry(
     resolved_services = services or build_vnext_services(config)
     artifact_store = SessionArtifactStore()
     manuals = ManualResolver()
+    artifact_limits = config.artifact_limits
     registry = ToolRegistry(
-        result_processor=ArtifactBackedToolResultProcessor(ToolResponseExternalizer(artifact_store))
+        result_processor=ArtifactBackedToolResultProcessor(
+            ToolResponseExternalizer(
+                artifact_store,
+                inline_max_bytes=artifact_limits.inline_max_bytes,
+            ),
+            observation_max_bytes=artifact_limits.observation_max_bytes,
+        )
     )
     register_artifact_tools(
         registry,
-        ArtifactReader(artifact_store, manuals),
+        ArtifactReader(
+            artifact_store,
+            manuals,
+            observation_max_bytes=artifact_limits.observation_max_bytes,
+        ),
         ArtifactGrepper(artifact_store, manuals),
     )
     if resolved_services.league_search is not None:
