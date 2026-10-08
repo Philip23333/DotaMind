@@ -428,11 +428,13 @@ The execution-commentary data path is implemented: Runtime publishes confirmed
 execution commentary, tool lifecycle, stage, and timing facts; Product Run State
 projects bounded ordered activities and authoritative timing; AssistantTransport
 replicates product state; the converter places it in message metadata; and the
-existing process panel minimally renders commentary. The new timeline, Chinese
-labels, adjacent-tool grouping, animation, timer display, and folding behavior
-remain pending. Runtime does not choose presentation labels, merge display
-groups, or control folding. Product projection does not infer or summarize model
-text, and the frontend does not infer model thoughts from tool names.
+process panel presents a compact timeline with a locally advancing execution
+timer, fixed backend duration, confirmed Chinese tool labels, adjacent-call
+grouping, and one-time folding on entry to Answer Stage. Runtime does not choose
+presentation labels, merge display groups, or control folding. Product projection
+does not infer or summarize model text, and the frontend does not infer model
+thoughts from tool names. The display is fixture-tested; observation of real model
+commentary remains pending.
 Final-answer deltas remain on their independent streaming path. The detailed
 contract is in [`agent/product_run_state.md`](agent/product_run_state.md).
 

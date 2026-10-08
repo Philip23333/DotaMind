@@ -12,16 +12,14 @@ registry keeps each thread's connection and run state alive when selection
 changes. The frontend reconciles request/message identities, streams canonical
 Markdown, and tracks unread counts per session in browser storage. Selecting a
 thread clears only its unread count, and the sidebar reads that local state
-directly. The current process panel renders ordered stage, commentary, and tool
-activity, stops showing a running tool as active after connection termination,
-and folds when the answer becomes ready unless the user has chosen its local
-expansion state. Runtime-confirmed commentary, bounded Run State projection,
-authoritative execution timing, transport conversion, and minimal rendering in
-the existing panel are implemented. The new timeline, labels, grouping,
-animation, and one-time collapse behavior remain pending. Deterministic
-regression coverage uses the state stream; the separate `/runs` Test Observer
-event stream remains an independent feature.
-前端已接入 `/transport`，页面内多会话连接与按会话未读状态已实现；现有过程面板展示有序工具活动和整段过程说明。后端权威计时已进入消息 metadata，但新时间线与折叠时机仍待实现。
+directly. Runtime-confirmed commentary, bounded Run State projection,
+authoritative execution timing, transport conversion, and the compact timeline
+are implemented. The panel stops showing a running tool as active after
+connection termination and uses confirmed Chinese labels, adjacent-call grouping,
+and one-time folding on Answer Stage entry. Real model text observation remains
+pending. Deterministic regression coverage uses the state stream; the separate
+`/runs` Test Observer event stream remains an independent feature.
+前端已接入 `/transport`，页面内多会话连接与按会话未读状态已实现；紧凑时间线展示有序工具活动和整段过程说明，并按后端事实显示执行计时。真实模型文本的阅读效果仍待观察。
 Code remains the authority for current behavior. This document owns the product
 Run State contract; `../ROADMAP.md` owns delivery order.
 
@@ -35,9 +33,9 @@ Not included: raw model reasoning display, an extra model call to generate
 progress summaries, resumable streams, cross-tab synchronization, durable
 execution recovery, or a full trace viewer. Refresh restores saved dialogue; it
 does not promise to reconnect to an in-flight run. The execution-timer UI
-described below is not implemented. Ordinary execution commentary and backend
-execution timing now cross the transport, and commentary is rendered in the
-existing panel.
+described below is implemented. Ordinary execution commentary and backend
+execution timing cross the transport, and the compact timeline renders
+commentary, tool groups, status, and duration.
 
 ## Decisions and boundaries
 
@@ -234,9 +232,9 @@ summaries. Tool details are bounded, product-safe projections, not full results.
 
 The UI may group process activity, tool activity, and the final answer visually,
 but must preserve the underlying occurrence order. Do not assume one reasoning
-block followed by one tool block. The target folding behavior is specified below;
-the current implementation folds when the answer becomes ready and is not yet the
-target one-time transition on entering Answer Stage.
+block followed by one tool block. The timeline preserves occurrence order while
+hiding stage rows; stage events still form boundaries between adjacent tool
+groups. The target folding behavior is specified below and is implemented.
 
 Stream final-answer text as the model produces it in the first version. A short
 pending indicator before the first fragment is allowed, but a persistent
@@ -251,13 +249,12 @@ projection reconciles the canonical final once, without appending it a second
 time. Persistence starts only after canonical completion and must not gate live
 text.
 
-### Execution commentary and duration (data path implemented; enhanced UI pending)
+### Execution commentary and duration (implemented; real-text observation pending)
 
-The Runtime event, product projection, transport conversion, and minimal
-commentary rendering in the existing panel are implemented. The new timeline
-visual design, timer display, Chinese tool labels, grouping, animation, and
-one-time folding behavior remain pending. This section defines the complete
-target behavior; implementation status must remain explicit.
+The Runtime event, product projection, transport conversion, and compact timeline
+are implemented. Fixture-based tests cover the presentation contract; observation
+of real model commentary remains pending. This section defines the complete
+behavior and implementation status.
 
 #### Commentary activity
 
@@ -286,8 +283,7 @@ indicator continues to disclose omitted items.
 
 Tool labels are presentation-only mappings; the active registry remains the
 source of which tools exist. Unknown tool IDs display as “工具调用” and do not
-block activity rendering. This mapping is not yet implemented; the existing
-panel still displays internal tool names.
+block activity rendering. The confirmed mapping is implemented in the frontend.
 
 | Internal tool ID | Display label |
 | --- | --- |
@@ -309,13 +305,14 @@ panel still displays internal tool names.
 | `task.checkpoint` | 任务进度记录 |
 | `web.search` | 网页搜索 |
 
-The frontend may merge adjacent activities only when their internal tool IDs are
+The frontend merges adjacent activities only when their internal tool IDs are
 exactly equal. This is a display projection; underlying call identity, order, and
-outcome remain unchanged. Commentary and a different tool break a group. A group
-retains its count and any failed or unconfirmed outcome. Parallel calls do not
-represent serial progress, and their durations are not added together. If the
-future timeline animates active text, the animation applies to **正在执行的工具文字**,
-not to commentary. Commentary is published as a complete static segment.
+outcome remain unchanged. Commentary, different tools, and hidden stage activities
+break a group. A group retains its count and any failed or unconfirmed outcome.
+Parallel calls do not represent serial progress, and their durations are not
+added together. The subtle animation applies only to **正在执行的工具文字**, not to
+commentary; reduced-motion mode disables it. Commentary is published as a
+complete static segment.
 
 #### Execution duration
 
@@ -338,10 +335,11 @@ not receive a fabricated duration.
 During execution, the process area starts expanded and the user may collapse it.
 On the first transition into Answer Stage, collapse it once by default. If the
 user reopens it afterward, preserve that choice through answer deltas, answer
-retries, and persistence updates; do not force another collapse. Cancellation or
-failure before Answer Stage does not simulate a normal stage transition. Error,
-stop, connection, and save-failure indicators stay visible outside the collapsible
-process area.
+retries, and persistence updates; do not force another collapse. A component
+first mounted in Answer Stage starts collapsed. A new request starts with its own
+default state. Cancellation or failure before Answer Stage does not simulate a
+normal stage transition. Error, stop, connection, and save-failure indicators
+stay visible outside the collapsible process area.
 
 Commentary and process activities remain ephemeral current-page display data.
 Do not append commentary to the final answer, persist a process log in dialogue,
@@ -673,27 +671,25 @@ Acceptance:
 ### Phase 5: process UI
 
 Implemented in the production chat message view. The process panel renders
-Run State stage, commentary, and tool activity in array order, updates a tool
-row in place, shows omitted activity counts, and labels unfinished tool results
-as unconfirmed after a local connection ends. Commentary is ordinary text with
-preserved line breaks and an explicit truncation label. The frontend carries
-execution timing in message metadata; the current panel does not display it.
-The canonical message body continues to stream through the existing Markdown
-renderer. The panel defaults open until answer readiness and then folds; a
-per-message manual choice takes precedence over later persistence and metadata
-updates. Cancellation, safe execution errors, connection errors, and persistence
-errors remain outside the collapsible process content. No reasoning summary is
+ordered commentary and adjacent tool groups, hides stage rows while preserving
+them as grouping boundaries, shows omitted activity counts, and labels unfinished
+tool results as unconfirmed after a local connection ends. Commentary is ordinary
+wrapped text with preserved line breaks and an explicit truncation label. The
+header displays a live execution timer and then the authoritative backend
+duration; it stops on an unconfirmed disconnect. The canonical message body
+continues to stream through the existing Markdown renderer. The panel starts open
+during execution, folds on first Answer Stage entry, and preserves later user
+choice. A new request does not inherit the previous request's expansion state.
+Cancellation, safe execution errors, connection errors, and persistence errors
+remain outside the collapsible process content. No reasoning summary is
 available or inferred.
 
-The new timeline appearance, timer display, Chinese tool labels, adjacent tool
-grouping, tool-text animation, and the one-time collapse on entering Answer Stage
-remain pending follow-up work defined above.
-
-Acceptance covers ordered activity, live answer deltas, automatic folding,
-commentary ordering and truncation, timing freeze boundaries, manual expansion
-through save completion, and no empty panel for history without process metadata.
-Browser review still checks real scroll behavior and visual layout; no forced
-scroll is added for deltas or panel changes.
+Automated acceptance covers ordered grouping, timer formatting/freeze/disconnect,
+Chinese labels and unknown tools, terminal states, one-time folding, user choice,
+and no empty panel for history without process metadata. Desktop and narrow
+fixture-based browser review remains a visual check; real model commentary is
+still pending qualitative observation. No forced scroll is added for deltas or
+panel changes.
 
 ### Phase 6: regression and cleanup
 

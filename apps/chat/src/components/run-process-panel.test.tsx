@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { RunProcessPanel } from "./run-process-panel";
 import type {
@@ -42,36 +42,48 @@ function toolActivity(
 }
 
 function buttonExpanded(): boolean {
-  return screen.getByRole("button", { name: "处理过程" }).getAttribute("aria-expanded") === "true";
+  return screen.getByTestId("run-process-toggle").getAttribute("aria-expanded") === "true";
 }
 
-function KeyedPanel({ run }: { run: DotamindMessageRunMetadata }) {
-  return <RunProcessPanel key={run.request_id} run={run} />;
+function activityRows(): HTMLElement[] {
+  return within(screen.getByRole("list", { name: "运行活动" })).getAllByRole("listitem");
 }
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 describe("RunProcessPanel", () => {
-  it("renders execution and tool activity in the original array order", () => {
+  it("keeps activity order and merges only adjacent identical tools", () => {
     const activity: DotamindActivityItem[] = [
       { kind: "stage", id: "stage-execution", stage: "execution" },
-      toolActivity(),
+      toolActivity({ id: "tool-1", status: "completed" }),
+      toolActivity({ id: "tool-2", status: "failed", error_code: "provider_timeout" }),
+      toolActivity({ id: "tool-3", status: "running" }),
+      { kind: "commentary", id: "commentary:1", text: "正在查询赛事。", truncated: false },
+      toolActivity({ id: "tool-4", status: "completed" }),
       { kind: "stage", id: "stage-answer", stage: "answer" },
+      toolActivity({ id: "tool-5", status: "completed" }),
+      toolActivity({ id: "tool-6", status: "completed" }),
+      toolActivity({ id: "tool-7", status: "completed" }),
     ];
-    render(<RunProcessPanel run={runState({ activity, stage: "answer" })} />);
+    render(<RunProcessPanel run={runState({ activity })} />);
 
-    const rows = within(screen.getByRole("list", { name: "运行活动" })).getAllByRole("listitem");
+    const rows = activityRows();
     expect(rows.map((row) => row.getAttribute("data-testid"))).toEqual([
-      "activity-stage-execution",
-      "activity-tool-1",
-      "activity-stage-answer",
+      "tool-group-tool-1",
+      "activity-commentary:1",
+      "tool-group-tool-4",
+      "tool-group-tool-5",
     ]);
-    expect(rows[0]?.textContent).toContain("开始处理请求");
-    expect(rows[1]?.textContent).toContain("调用 esports.match.search");
-    expect(rows[2]?.textContent).toContain("开始生成回答");
+    expect(rows[0]?.textContent).toContain("正在使用对阵查询… · 3次，其中1次失败");
+    expect(rows[0]?.textContent).toContain("调用失败（provider_timeout）");
+    expect(rows[2]?.textContent).toBe("已使用对阵查询");
+    expect(rows[3]?.textContent).toBe("已使用对阵查询 · 3次");
   });
 
-  it("renders commentary as ordinary ordered text, not as a tool", () => {
+  it("renders commentary as ordinary ordered text with line breaks and truncation notice", () => {
     const commentary = "正在查询职业比赛样本。\n接下来读取攻略详情。";
     render(<RunProcessPanel run={runState({ activity: [
       { kind: "stage", id: "stage-execution", stage: "execution" },
@@ -79,120 +91,237 @@ describe("RunProcessPanel", () => {
       toolActivity(),
     ] })} />);
 
-    const rows = within(screen.getByRole("list", { name: "运行活动" })).getAllByRole("listitem");
+    const rows = activityRows();
     expect(rows.map((row) => row.getAttribute("data-testid"))).toEqual([
-      "activity-stage-execution",
       "activity-commentary:1",
-      "activity-tool-1",
+      "tool-group-tool-1",
     ]);
-    expect(rows[1]?.querySelector("p")?.textContent).toBe(commentary);
-    expect(rows[1]?.querySelector("p")?.className).toContain("whitespace-pre-wrap");
-    expect(within(rows[1]!).getByText("内容已截断")).toBeTruthy();
-    expect(rows[1]?.textContent).not.toContain("调用");
+    expect(rows[0]?.querySelector("p")?.textContent).toBe(commentary);
+    expect(rows[0]?.querySelector("p")?.className).toContain("whitespace-pre-wrap");
+    expect(within(rows[0]!).getByText("内容已截断")).toBeTruthy();
+    expect(rows[0]?.textContent).not.toContain("调用");
   });
 
-  it.each([
-    { status: "completed" as const, duration_seconds: 0.25, label: "已完成 · 250 毫秒" },
-    { status: "failed" as const, duration_seconds: null, error_code: "provider_timeout", label: "失败（provider_timeout）" },
-  ])("updates a tool in place when its status becomes $status", ({ status, duration_seconds, error_code, label }) => {
-    const { rerender } = render(<RunProcessPanel run={runState({ activity: [toolActivity()] })} />);
-    rerender(
-      <RunProcessPanel
-        run={runState({
-          activity: [toolActivity({ status, duration_seconds, error_code: error_code ?? null })],
-        })}
-      />,
-    );
+  it("uses Chinese tool labels and never exposes an unmapped internal name", () => {
+    render(<RunProcessPanel run={runState({ activity: [
+      toolActivity({ id: "known", tool_name: "esports.series.search" }),
+      toolActivity({ id: "unknown", tool_name: "private.internal.endpoint" }),
+    ] })} />);
 
-    expect(screen.getAllByTestId("activity-tool-1")).toHaveLength(1);
-    expect(screen.getByTestId("tool-status-tool-1").textContent).toBe(label);
+    expect(screen.getByTestId("tool-group-known").textContent).toContain("正在使用联赛届次查询…");
+    expect(screen.getByTestId("tool-group-unknown").textContent).toContain("正在使用工具调用…");
+    expect(screen.queryByText(/private\.internal\.endpoint/)).toBeNull();
   });
 
-  it("reports exactly how many earlier activity items were omitted", () => {
-    render(<RunProcessPanel run={runState({ omitted_activity_count: 7 })} />);
-    expect(screen.getByText("另有 7 条较早活动未展示")).toBeTruthy();
+  it("keeps the divider visible whether expanded or collapsed", () => {
+    const { container } = render(<RunProcessPanel run={runState({ activity: [toolActivity()] })} />);
+    expect(container.querySelector("section")?.className).not.toMatch(/rounded|border\s|bg-muted/);
+    expect(container.querySelector(".border-t")).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId("run-process-toggle"));
+    expect(buttonExpanded()).toBe(false);
+    expect(container.querySelector(".border-t")).toBeTruthy();
+    expect(screen.queryByRole("list", { name: "运行活动" })).toBeNull();
   });
 
-  it("starts expanded and folds when the answer becomes ready", () => {
-    const { rerender } = render(<RunProcessPanel run={runState({ activity: [toolActivity()] })} />);
-    expect(buttonExpanded()).toBe(true);
+  it("shows a live execution timer and freezes on the backend duration in Answer Stage", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-09T02:00:00.000Z"));
+    const timing = {
+      started_at: "2026-10-09T02:00:00.000Z",
+      finished_at: null,
+      duration_seconds: null,
+    };
+    const initial = runState({
+      activity: [toolActivity()],
+      execution_timing: timing,
+    });
+    const { rerender } = render(<RunProcessPanel run={initial} />);
+    expect(screen.getByTestId("run-process-toggle").textContent).toContain("已处理：0秒");
+
+    act(() => vi.advanceTimersByTime(2_400));
+    expect(screen.getByTestId("run-process-toggle").textContent).toContain("已处理：2秒");
 
     rerender(<RunProcessPanel run={runState({
+      ...initial,
+      stage: "answer",
+      execution_timing: {
+        ...timing,
+        finished_at: "2026-10-09T02:00:19.200Z",
+        duration_seconds: 19.2,
+      },
+      answer: { ...initial.answer, status: "streaming" },
+    })} />);
+    expect(screen.getByTestId("run-process-toggle").textContent).toContain("处理用时：19秒");
+    expect(buttonExpanded()).toBe(false);
+
+    fireEvent.click(screen.getByTestId("run-process-toggle"));
+    expect(buttonExpanded()).toBe(true);
+    act(() => vi.advanceTimersByTime(5_000));
+    rerender(<RunProcessPanel run={runState({
+      ...initial,
       status: "completed",
       stage: "answer",
-      activity: [toolActivity({ status: "completed", duration_seconds: 1 })],
-      answer: { attempt_id: "attempt-a", kind: "primary", status: "ready" },
-      persistence: "saving",
+      execution_timing: {
+        ...timing,
+        finished_at: "2026-10-09T02:00:19.200Z",
+        duration_seconds: 19.2,
+      },
+      answer: { ...initial.answer, status: "ready" },
+      persistence: "saved",
     })} />);
-    expect(buttonExpanded()).toBe(false);
+    expect(screen.getByTestId("run-process-toggle").textContent).toContain("处理用时：19秒");
+    expect(buttonExpanded()).toBe(true);
   });
 
-  it("keeps a manual expansion through saving and saved metadata updates", () => {
-    const ready = runState({
+  it("formats a minute with a zero-padded seconds part", () => {
+    const run = runState({
       status: "completed",
       stage: "answer",
       activity: [toolActivity({ status: "completed" })],
-      answer: { attempt_id: "attempt-a", kind: "primary", status: "ready" },
-      persistence: "saving",
+      execution_timing: {
+        started_at: "2026-10-09T02:00:00.000Z",
+        finished_at: "2026-10-09T02:01:03.900Z",
+        duration_seconds: 63.9,
+      },
     });
-    const { rerender } = render(<RunProcessPanel run={ready} />);
-    fireEvent.click(screen.getByRole("button", { name: "处理过程" }));
-    expect(buttonExpanded()).toBe(true);
-
-    rerender(<RunProcessPanel run={{ ...ready, persistence: "saved" }} />);
-    expect(buttonExpanded()).toBe(true);
+    render(<RunProcessPanel run={run} />);
+    expect(screen.getByTestId("run-process-toggle").textContent).toContain("处理用时：1分03秒");
   });
 
-  it("keeps an early manual collapse during later activity updates", () => {
+  it("shows terminal execution status with fixed time, without counting the answer stage", () => {
+    const run = runState({
+      status: "cancelled",
+      stage: "execution",
+      execution_timing: {
+        started_at: "2026-10-09T02:00:00.000Z",
+        finished_at: "2026-10-09T02:00:12.900Z",
+        duration_seconds: 12.9,
+      },
+      activity: [toolActivity({ status: "running" })],
+    });
+    render(<RunProcessPanel run={run} />);
+    expect(screen.getByTestId("run-process-toggle").textContent).toContain("已停止 · 用时12秒");
+  });
+
+  it("stops the local timer on disconnect and does not invent a duration", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-09T02:00:08.000Z"));
+    const run = runState({
+      activity: [toolActivity()],
+      execution_timing: {
+        started_at: "2026-10-09T02:00:00.000Z",
+        finished_at: null,
+        duration_seconds: null,
+      },
+    });
+    const { rerender } = render(<RunProcessPanel run={run} />);
+    act(() => vi.advanceTimersByTime(0));
+    expect(screen.getByTestId("run-process-toggle").textContent).toContain("已处理：8秒");
+
+    rerender(<RunProcessPanel run={run} connectionStatus="error" />);
+    expect(screen.getByTestId("run-process-toggle").textContent).toContain("连接中断");
+    act(() => vi.advanceTimersByTime(5_000));
+    expect(screen.getByTestId("run-process-toggle").textContent).toContain("连接中断");
+    expect(screen.getByTestId("run-process-toggle").textContent).not.toMatch(/\d+秒/);
+    expect(screen.getByTestId("tool-group-tool-1").textContent).toContain("结果未确认");
+  });
+
+  it("does not fabricate timing for runs without timing data", () => {
+    const { rerender } = render(<RunProcessPanel run={runState({ activity: [toolActivity()] })} />);
+    expect(screen.getByTestId("run-process-toggle").textContent).toContain("正在处理请求");
+    expect(screen.getByTestId("run-process-toggle").textContent).not.toMatch(/\d+秒/);
+
+    rerender(<RunProcessPanel run={runState({
+      status: "failed",
+      activity: [toolActivity({ status: "failed" })],
+    })} />);
+    expect(screen.getByTestId("run-process-toggle").textContent).toContain("处理失败");
+    expect(screen.getByTestId("run-process-toggle").textContent).not.toMatch(/\d+秒/);
+  });
+
+  it("folds on first Answer Stage entry, preserves reopening, and resets for a new request", () => {
     const initial = runState({ activity: [toolActivity()] });
     const { rerender } = render(<RunProcessPanel run={initial} />);
-    fireEvent.click(screen.getByRole("button", { name: "处理过程" }));
-    expect(buttonExpanded()).toBe(false);
-
-    rerender(<RunProcessPanel run={{
-      ...initial,
-      activity: [toolActivity(), { kind: "stage", id: "stage-answer", stage: "answer" }],
-      stage: "answer",
-      answer: { attempt_id: "attempt-a", kind: "primary", status: "streaming" },
-    }} />);
-    expect(buttonExpanded()).toBe(false);
-  });
-
-  it("does not carry one message's manual choice into the next message", () => {
-    const first = runState({
-      request_id: "request-a",
-      answer: { attempt_id: "attempt-a", kind: "primary", status: "ready" },
-      activity: [toolActivity()],
-    });
-    const { rerender } = render(<KeyedPanel run={first} />);
-    fireEvent.click(screen.getByRole("button", { name: "处理过程" }));
     expect(buttonExpanded()).toBe(true);
 
-    rerender(<KeyedPanel run={runState({
+    rerender(<RunProcessPanel run={runState({
+      ...initial,
+      stage: "answer",
+      activity: [toolActivity({ status: "completed" })],
+      answer: { ...initial.answer, status: "streaming" },
+    })} />);
+    expect(buttonExpanded()).toBe(false);
+
+    fireEvent.click(screen.getByTestId("run-process-toggle"));
+    expect(buttonExpanded()).toBe(true);
+    rerender(<RunProcessPanel run={runState({
+      ...initial,
+      status: "completed",
+      stage: "answer",
+      activity: [toolActivity({ status: "completed" })],
+      answer: { ...initial.answer, status: "ready" },
+      persistence: "saved",
+    })} />);
+    expect(buttonExpanded()).toBe(true);
+
+    rerender(<RunProcessPanel run={runState({
       request_id: "request-b",
       assistant_message_id: "assistant:request-b",
-      answer: { attempt_id: "attempt-b", kind: "primary", status: "ready" },
-      activity: [toolActivity({ id: "tool-2" })],
+      activity: [toolActivity({ id: "tool-b" })],
+    })} />);
+    expect(buttonExpanded()).toBe(true);
+  });
+
+  it("starts collapsed when first mounted in Answer Stage", () => {
+    render(<RunProcessPanel run={runState({
+      stage: "answer",
+      activity: [toolActivity({ status: "completed" })],
+      execution_timing: {
+        started_at: "2026-10-09T02:00:00.000Z",
+        finished_at: "2026-10-09T02:00:19.000Z",
+        duration_seconds: 19,
+      },
     })} />);
     expect(buttonExpanded()).toBe(false);
   });
 
-  it("stops the running icon and marks unfinished tool results unconfirmed after disconnect", () => {
-    const run = runState({ activity: [toolActivity()] });
-    const { rerender } = render(<RunProcessPanel run={run} connectionStatus="error" />);
-    expect(screen.getByTestId("tool-status-tool-1").textContent).toBe("结果未确认");
-    expect(screen.queryByTestId("tool-running-icon")).toBeNull();
-
-    rerender(<RunProcessPanel
-      run={{ ...run, status: "cancelled", answer: { ...run.answer, status: "interrupted" } }}
-      connectionStatus="cancelled"
-    />);
-    expect(screen.getByTestId("tool-status-tool-1").textContent).toBe("结果未确认");
-    expect(screen.queryByTestId("tool-running-icon")).toBeNull();
+  it.each([
+    { status: "cancelled" as const, label: "已停止" },
+    { status: "failed" as const, label: "处理失败" },
+  ])("does not auto-fold an execution $status", ({ status, label }) => {
+    render(<RunProcessPanel run={runState({ status, activity: [toolActivity()] })} />);
+    expect(buttonExpanded()).toBe(true);
+    expect(screen.getByTestId("run-process-toggle").textContent).toContain(label);
   });
 
-  it("does not render an empty panel for a historical message without process data", () => {
-    const { container } = render(<RunProcessPanel run={null} />);
+  it("keeps active-tool wording only while running and retains failure information", () => {
+    const activity = [
+      toolActivity({ id: "tool-1", status: "running" }),
+      toolActivity({ id: "tool-2", status: "failed", error_code: "provider_timeout" }),
+    ];
+    const { rerender } = render(<RunProcessPanel run={runState({ activity })} />);
+    expect(screen.getByTestId("tool-group-tool-1").textContent).toContain(
+      "正在使用对阵查询… · 2次，其中1次失败",
+    );
+
+    rerender(<RunProcessPanel run={runState({
+      status: "cancelled",
+      activity,
+    })} />);
+    const row = screen.getByTestId("tool-group-tool-1");
+    expect(row.textContent).toContain("对阵查询 · 结果未确认");
+    expect(row.textContent).toContain("调用失败（provider_timeout）");
+    expect(row.textContent).not.toContain("正在使用");
+    expect(row.querySelector(".execution-tool-text")).toBeNull();
+  });
+
+  it("preserves omitted-activity count and does not render an empty historical panel", () => {
+    render(<RunProcessPanel run={runState({ omitted_activity_count: 7 })} />);
+    expect(screen.getByText("另有 7 条较早活动未展示")).toBeTruthy();
+
+    cleanup();
+    const { container } = render(<RunProcessPanel run={runState()} />);
     expect(container.querySelector("section")).toBeNull();
   });
 });

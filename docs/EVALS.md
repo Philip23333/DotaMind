@@ -119,12 +119,11 @@ Series 缺少胜者时经 `httpx.MockTransport` 验证 Tournament 过滤请求�
 时仍返回赛事列表并省略冠军。该验收使用合成响应，不请求真实 PandaScore，也不代表
 真实 Provider 当前数据或所有 Series 均能解析冠军。
 
-## Chat process commentary and duration (data path implemented; enhanced UI pending)
+## Chat process commentary and compact timeline (implemented; real-text observation pending)
 
 The contract is owned by [`agent/product_run_state.md`](agent/product_run_state.md).
-Focused tests verify the implemented Runtime event boundary, ordered bounded
-projection, execution timing, transport metadata, and minimal text rendering in
-the existing panel:
+Focused tests verify the Runtime event boundary, ordered bounded projection,
+execution timing, transport metadata, and the compact timeline:
 
 - Accepted non-empty ordinary content is published once before tool activities;
   no-tool conclusions and rejected responses do not appear as commentary.
@@ -134,20 +133,24 @@ the existing panel:
   earlier failure/cancellation; answer output and saving are excluded.
 - Answer retries, completion, and persistence updates do not change frozen timing.
 
-The remaining target UI work still needs focused acceptance:
+Focused frontend acceptance covers the presentation projection:
 
 - Adjacent calls with identical tool IDs merge in presentation, commentary breaks
   the group, and failure/unconfirmed status remains visible.
 - The process area collapses once on first Answer Stage entry; reopening it
   preserves the user's choice through answer and persistence updates.
+- Tool labels use the confirmed Chinese map, unknown tools use a generic label,
+  and terminal runs do not retain active wording or animation.
+- The timer advances only during active execution, freezes to backend timing,
+  stops on an unconfirmed disconnect, and does not fabricate historical time.
 
-Manual browser observation of the enhanced timeline remains pending. It should
-cover desktop and narrow layouts, divider and tool-state readability, the timer
-display, and final-answer streaming. Observe mixed language, length, internal
-terminology, and perceived timing. This is qualitative review; the existing
-prompt is unchanged. No A/B prompt test is a prerequisite, and passing does not
-require all commentary to be Chinese or short. Ordinary process text is not a
-verified fact or a required summary.
+Browser fixture review covers desktop and narrow layouts, long commentary,
+repeated tools, timer, folding, and final-answer separation. Real model text
+observation remains pending: observe mixed language, length, internal terminology,
+and perceived timing. This is qualitative review; the existing prompt is
+unchanged. No A/B prompt test is a prerequisite, and passing does not require all
+commentary to be Chinese or short. Ordinary process text is not a verified fact
+or a required summary.
 
 ## Enabled capability inventory and guide answers
 

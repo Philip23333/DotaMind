@@ -363,6 +363,15 @@
   to { transform: translateX(0); }
 }
 
+@keyframes execution-tool-text-pulse {
+  0%, 100% { color: var(--muted-foreground); }
+  50% { color: var(--foreground); }
+}
+
+.execution-tool-text {
+  animation: execution-tool-text-pulse 1.5s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .chat-sidebar-width,
   .chat-trace-width,
@@ -377,5 +386,9 @@
   .startup-overlay__progress::after,
   .welcome-intro {
     animation-duration: 1ms;
+  }
+
+  .execution-tool-text {
+    animation: none;
   }
 }

@@ -519,22 +519,21 @@ cross-tab recovery, raw reasoning display, and durable execution recovery are
 outside this work. Failure semantics are designed in Phase 1 and tested with
 each implementation phase, not postponed until the final regression phase.
 
-## 处理过程展示优化（设计已确认，数据链路已实现）
+## 处理过程展示优化（时间线已实现，真实文本观察待完成）
 
 Design is confirmed. The existing six-phase Run State and AssistantTransport
 baseline remains implemented. Runtime commentary, bounded product projection,
-authoritative execution timing, transport conversion, and minimal rendering in
-the existing process panel are implemented. The enhanced timeline UI and its
-visual acceptance remain pending. This work does not add raw reasoning, a
-summary-generation call, or durable process logs.
+authoritative execution timing, transport conversion, and the compact timeline
+are implemented. Real model text observation remains pending. This work does not
+add raw reasoning, a summary-generation call, or durable process logs.
 The detailed contract is in
 [`agent/product_run_state.md`](agent/product_run_state.md).
 
 1. **已实现：** 将已接受工具调用响应中的过程说明作为有界 Run State 活动发布，
    并提供执行用时与终止时间事实；现有面板可按顺序显示说明文本。
-2. **待实现：** 实现轻量时间线、中文工具名称、相邻调用合并、工具活动文字动画，以及首次进入
-   回答阶段时自动收起并保留后续用户选择。
-3. **待验收：** 第二项完成后检查增强 UI 的自动化行为并观察桌面和窄屏真实页面，再决定是否需要调整提示词。
+2. **已实现：** 轻量时间线、中文工具名称、相邻调用合并、工具活动文字动画、执行计时及首次进入
+   回答阶段时自动收起并保留后续用户选择；确定性前端测试覆盖这些行为。
+3. **待验收：** 观察真实模型过程说明的语言、长度、内部术语和页面节奏，再决定是否需要调整提示词。
 
 ## Not planned in the baseline
 

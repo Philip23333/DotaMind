@@ -787,7 +787,7 @@ describe("normal AssistantTransport chat integration", () => {
     expect(backend.calls.filter((call) => call.url.includes("/transport"))).toHaveLength(0);
   });
 
-  it("shows ordered activity and live Markdown, then folds ready state without overriding manual expansion", async () => {
+  it("shows ordered activity and live Markdown, folds on Answer Stage entry, and preserves manual expansion", async () => {
     render(<TestChat />);
     await selectSession("session-a");
     await submit("show the real run process");
@@ -806,9 +806,9 @@ describe("normal AssistantTransport chat integration", () => {
       },
     ];
     await act(async () => publishActivity(request, "execution", initialActivity));
-    expect(screen.getByRole("button", { name: "处理过程" }).getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByTestId("run-process-toggle").getAttribute("aria-expanded")).toBe("true");
     expect(screen.getByText("正在处理请求")).toBeTruthy();
-    expect(screen.getByText("调用 esports.match.search")).toBeTruthy();
+    expect(screen.getByText("正在使用对阵查询…")).toBeTruthy();
 
     const answerActivity: DotamindActivityItem[] = [
       initialActivity[0]!,
@@ -823,25 +823,27 @@ describe("normal AssistantTransport chat integration", () => {
       { kind: "stage", id: "stage-answer", stage: "answer" },
     ];
     await act(async () => publishActivity(request, "answer", answerActivity));
-    expect(screen.getAllByTestId("activity-tool-match")).toHaveLength(1);
-    expect(screen.getByTestId("tool-status-tool-match").textContent).toBe("已完成 · 400 毫秒");
+    expect(screen.getByTestId("run-process-toggle").getAttribute("aria-expanded")).toBe("false");
 
     await act(async () => append(request, "第一个回答片段"));
     expect(await screen.findByText("第一个回答片段")).toBeTruthy();
     expect(request.closed).toBe(false);
-    expect(screen.getByRole("button", { name: "处理过程" }).getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByTestId("run-process-toggle").getAttribute("aria-expanded")).toBe("false");
     await act(async () => append(request, "，后续回答片段"));
     expect(screen.getByText("第一个回答片段，后续回答片段")).toBeTruthy();
 
-    await act(async () => completeWhileSaving(request, answerActivity));
-    const processButton = screen.getByRole("button", { name: "处理过程" });
-    expect(processButton.getAttribute("aria-expanded")).toBe("false");
-    expect(screen.getByText("第一个回答片段，后续回答片段")).toBeTruthy();
-
+    const processButton = screen.getByTestId("run-process-toggle");
     fireEvent.click(processButton);
     expect(processButton.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getAllByTestId("tool-group-tool-match")).toHaveLength(1);
+    expect(screen.getByTestId("tool-group-tool-match").textContent).toBe("已使用对阵查询");
+
+    await act(async () => completeWhileSaving(request, answerActivity));
+    expect(processButton.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByText("第一个回答片段，后续回答片段")).toBeTruthy();
+
     await act(async () => finishSaving(request));
-    expect(screen.getByRole("button", { name: "处理过程" }).getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByTestId("run-process-toggle").getAttribute("aria-expanded")).toBe("true");
     expect(screen.getByText("第一个回答片段，后续回答片段")).toBeTruthy();
   });
 
@@ -980,9 +982,7 @@ describe("normal AssistantTransport chat integration", () => {
     }]);
     request.close();
     expect(await screen.findByText("回答已生成，但未能确认保存结果，请重试保存。")).toBeTruthy();
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: "处理过程" }).getAttribute("aria-expanded")).toBe("false");
-    });
+    expect(screen.queryByTestId("run-process-toggle")).toBeNull();
     expect(screen.getByText("body retained")).toBeTruthy();
     expect(backend.requests).toHaveLength(1);
   });
