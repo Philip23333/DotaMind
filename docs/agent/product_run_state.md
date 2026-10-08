@@ -12,25 +12,29 @@ registry keeps each thread's connection and run state alive when selection
 changes. The frontend reconciles request/message identities, streams canonical
 Markdown, and tracks unread counts per session in browser storage. Selecting a
 thread clears only its unread count, and the sidebar reads that local state
-directly. The process panel renders ordered stage/tool activity, stops showing a
-running tool as active after connection termination, and folds when the answer
-becomes ready unless the user has chosen its local expansion state. Deterministic
-regression coverage uses the state stream; the separate `/runs` Test Observer
-event stream remains an independent feature.
-前端已接入 `/transport`，页面内多会话连接与按会话未读状态已实现；过程面板展示有序活动，并在回答就绪时自动折叠。
+directly. The current process panel renders ordered stage/tool activity, stops
+showing a running tool as active after connection termination, and folds when
+the answer becomes ready unless the user has chosen its local expansion state.
+Execution-response commentary and authoritative execution duration are not yet
+implemented. Their confirmed target, including a one-time collapse on entering
+Answer Stage, is specified below. Deterministic regression coverage uses the
+state stream; the separate `/runs` Test Observer event stream remains an
+independent feature.
+前端已接入 `/transport`，页面内多会话连接与按会话未读状态已实现；现有过程面板展示有序工具活动。执行说明、后端权威计时及本次确认的折叠时机仍待实现。
 Code remains the authority for current behavior. This document owns the product
 Run State contract; `../ROADMAP.md` owns delivery order.
 
-The first version exposes real execution activity, tool progress, and a final
-answer streamed as it is generated, following the ChatGPT-style interaction
-requested for this product. It keeps canonical answer text separate
-from presentation metadata and makes generation, cancellation, and persistence
+The target first version exposes real execution activity, bounded ordinary
+commentary from accepted tool-call responses, tool progress, and a final answer
+streamed as it is generated. It keeps canonical answer text separate from
+presentation metadata and makes generation, cancellation, and persistence
 outcomes explicit.
 
-Not included: raw model reasoning display,
-model-generated progress summaries, resumable streams, cross-tab synchronization,
-durable execution recovery, or a full trace viewer. Refresh restores saved
-dialogue; it does not promise to reconnect to an in-flight run.
+Not included: raw model reasoning display, an extra model call to generate
+progress summaries, resumable streams, cross-tab synchronization, durable
+execution recovery, or a full trace viewer. Refresh restores saved dialogue; it
+does not promise to reconnect to an in-flight run. Ordinary execution commentary
+and the execution timer described below are design targets, not current behavior.
 
 ## Decisions and boundaries
 
@@ -71,9 +75,9 @@ for history, authorization, tool configuration, or saved completion.
 ## State semantics
 
 The lifecycle semantics below are approved. The following type illustrates them;
-exact wire field names, activity/error shapes, and bounds remain implementation
-details to specify before behavior changes. Prefer the smallest shape satisfying
-these invariants.
+exact wire field names and activity/error shapes remain implementation details.
+The execution-commentary display bound and reuse of the existing activity-count
+bound are specified below. Prefer the smallest shape satisfying these invariants.
 
 ```ts
 type RunState = {
@@ -222,10 +226,9 @@ summaries. Tool details are bounded, product-safe projections, not full results.
 
 The UI may group process activity, tool activity, and the final answer visually,
 but must preserve the underlying occurrence order. Do not assume one reasoning
-block followed by one tool block. Once the canonical final is ready, collapse
-the process area by default; let the user reopen it. Saving/error indicators
-remain visible independently. Do not repeatedly override manual expansion on
-subsequent state updates.
+block followed by one tool block. The target folding behavior is specified below;
+the current implementation folds when the answer becomes ready and is not yet the
+target one-time transition on entering Answer Stage.
 
 Stream final-answer text as the model produces it in the first version. A short
 pending indicator before the first fragment is allowed, but a persistent
@@ -239,6 +242,100 @@ execution text and raw reasoning out of the final-answer channel. The product
 projection reconciles the canonical final once, without appending it a second
 time. Persistence starts only after canonical completion and must not gate live
 text.
+
+### Execution commentary and duration (design confirmed; implementation pending)
+
+This section defines the target behavior. The current Runtime projection and UI
+do not yet publish execution-response commentary or an authoritative execution
+duration. Do not describe these additions as implemented until the Runtime,
+product projection, transport, frontend, and acceptance work is complete.
+
+#### Commentary activity
+
+Publish a commentary activity only after an execution-stage model response has
+completed, the response contains tool calls, and Runtime has accepted that batch
+for execution. For that response, publish its non-empty ordinary `content` once,
+then publish the corresponding tool-start and terminal activities in their real
+order. The commentary is a separate activity with its own stable identity in the
+existing ordered activity list. Empty content creates no activity. A no-tool
+execution conclusion is not process commentary. A response-level rejected batch
+creates no accepted-call commentary activity; its explicit not-executed call
+results remain governed by the rejected-batch contract.
+
+Use only the response's ordinary `content`. Do not reuse final-answer delta events,
+publish both stream fragments and the completed text, infer language or intent,
+rewrite the text, or read internal reasoning fields. Commentary is an intermediate
+model statement, not a verified conclusion. The final answer remains on its
+independent live-streaming path.
+
+Commentary counts toward the existing ordered-activity item limit. Each displayed
+commentary is capped at 2,000 Unicode code points; longer text is truncated in
+the product display projection with “内容已截断”. These display bounds do not
+modify model context or raw Trace evidence. The existing activity omission
+indicator continues to disclose omitted items.
+
+Tool labels are presentation-only mappings; the active registry remains the
+source of which tools exist. Unknown tool IDs display as “工具调用” and do not
+block activity rendering.
+
+| Internal tool ID | Display label |
+| --- | --- |
+| `esports.league.search` | 联赛查询 |
+| `esports.series.search` | 联赛届次查询 |
+| `esports.series.teams` | 参赛战队查询 |
+| `esports.tournament.search` | 赛事阶段查询 |
+| `esports.match.search` | 对阵查询 |
+| `esports.team.search` | 战队查询 |
+| `esports.player.search` | 职业选手查询 |
+| `hero.guide` | 英雄攻略查询 |
+| `player.profile` | 玩家资料查询 |
+| `player.recent_games` | 玩家近期战绩查询 |
+| `game.detail` | 单局详情查询 |
+| `catalog.lookup` | 游戏资料读取 |
+| `artifact.grep` | 外置结果搜索 |
+| `artifact.read` | 外置结果读取 |
+| `task.plan` | 任务规划 |
+| `task.checkpoint` | 任务进度记录 |
+| `web.search` | 网页搜索 |
+
+The frontend may merge adjacent activities only when their internal tool IDs are
+exactly equal. This is a display projection; underlying call identity, order, and
+outcome remain unchanged. Commentary and a different tool break a group. A group
+retains its count and any failed or unconfirmed outcome. Parallel calls do not
+represent serial progress, and their durations are not added together. Active
+commentary may use a subtle brightness animation; stop it on completion, failure,
+user stop, or connection termination.
+
+#### Execution duration
+
+The backend owns the authoritative timing facts. Start timing when backend
+processing for the request begins. Normal execution duration ends when Runtime
+enters Answer Stage; final-answer generation and persistence are excluded. If
+execution instead stops or fails, freeze duration at that event and expose the
+corresponding terminal status rather than normal completion. Do not derive
+duration by summing tool times or restart timing when a frontend component mounts.
+
+The frontend may advance the display locally while the run is active, based on
+the backend timing fact. Answer retries do not restart execution timing. If the
+connection ends without terminal confirmation, stop the local clock and label
+the connection as interrupted; do not present its local estimate as a
+server-confirmed successful duration. Historical messages without timing data do
+not receive a fabricated duration.
+
+#### Collapse and persistence
+
+During execution, the process area starts expanded and the user may collapse it.
+On the first transition into Answer Stage, collapse it once by default. If the
+user reopens it afterward, preserve that choice through answer deltas, answer
+retries, and persistence updates; do not force another collapse. Cancellation or
+failure before Answer Stage does not simulate a normal stage transition. Error,
+stop, connection, and save-failure indicators stay visible outside the collapsible
+process area.
+
+Commentary and process activities remain ephemeral current-page display data.
+Do not append commentary to the final answer, persist a process log in dialogue,
+or change SessionExecutionHistory, context compaction, or Trace responsibilities.
+Refresh need not reconstruct the complete timeline.
 
 ## History and metadata
 
@@ -573,6 +670,10 @@ then folds; a per-message manual choice takes precedence over later persistence
 and metadata updates. Cancellation, safe execution errors, connection errors,
 and persistence errors remain outside the collapsible process content.
 No reasoning summary is available or inferred.
+
+This phase describes the implemented baseline only. Execution-response commentary,
+backend-authoritative execution duration, and the one-time collapse on entering
+Answer Stage remain pending follow-up work defined above.
 
 Acceptance covers ordered activity, live answer deltas, automatic folding,
 manual expansion through save completion, and no empty panel for history without

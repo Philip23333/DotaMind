@@ -424,6 +424,16 @@ Execution outcome, canonical answer readiness, and dialogue persistence are
 separate facts; a storage failure does not turn a completed Runtime into a failed
 execution. Runtime must not depend on assistant-ui or presentation state.
 
+The target execution-commentary path is Runtime confirmed execution commentary,
+tool lifecycle, stage, and timing facts -> Product Run State bounded ordered
+activities -> AssistantTransport product-state replication -> frontend labels,
+adjacent-tool grouping, animation, timer display, and folding. Runtime does not
+choose Chinese labels, merge display groups, or control folding. Product projection
+does not infer or summarize model text, and the frontend does not infer model
+thoughts from tool names. Final-answer deltas remain on their independent streaming
+path. These additions are design-confirmed but not yet implemented; the detailed
+contract is in [`agent/product_run_state.md`](agent/product_run_state.md).
+
 The production chat path uses AssistantTransport for state replication and a
 frontend converter for message integration. A page-lifetime registry owns each
 thread's connection and local Run State; changing the selected thread does not

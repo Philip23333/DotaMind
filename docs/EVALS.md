@@ -106,6 +106,34 @@ providers, and it does not change the product registry.
 自动化测试验证状态和数据流；180ms 抽屉动效不以持续时间断言，桌面、窄屏布局及 reduced-motion
 样式仍需浏览器视觉检查。真实模型查询理解、工具选择与回答质量未在本轮验证。
 
+## Chat process commentary and duration (design confirmed; implementation pending)
+
+The target contract is owned by
+[`agent/product_run_state.md`](agent/product_run_state.md). It adds bounded
+ordinary execution commentary and backend-authoritative execution duration to
+the existing process UI; no code or page behavior is claimed as implemented by
+this design entry. Focused automation acceptance must verify:
+
+- Non-empty ordinary content from one completed, accepted tool-call response is
+  published once before its corresponding tool activity; a no-tool execution
+  conclusion is not shown as commentary.
+- Commentary stays separate from final-answer text. The 2,000-Unicode-code-point
+  display cap and the existing activity-count cap both apply.
+- Duration freezes at Answer Stage entry or at an earlier failure/cancellation;
+  answer output and saving are excluded, and retries do not restart the timer.
+- Adjacent calls with identical tool IDs merge in presentation, commentary breaks
+  the group, and failure/unconfirmed status remains visible.
+- The process area collapses once on first Answer Stage entry; reopening it
+  preserves the user's choice through answer and persistence updates.
+
+Manual browser observation must cover desktop and narrow layouts: no prominent
+outer box, readable divider and tool states, complete commentary appearing after
+each eligible response, and final-answer streaming remaining live. Observe mixed
+language, length, internal terminology, and perceived timing. This is qualitative review;
+the existing prompt is unchanged. No A/B prompt test is a prerequisite, and
+passing does not require all commentary to be Chinese or short. Ordinary process
+text is not a verified fact or a required summary.
+
 本轮新增的刷新生命周期测试使用 Fake Redis、假时钟和异步事件，不调用真实
 Provider，也不依赖长时间等待。它验证普通旧快照立即返回、手动 POST 强制刷新、冷／热并发
 合并、单个请求取消隔离、手动冷却在 59 秒与 60 秒的边界、600 秒失败间隔、服务重建后的限制、
