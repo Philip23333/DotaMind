@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import type {
+  DotamindActivityItem,
   DotamindConnectionStatus,
   DotamindMessageRunMetadata,
   DotamindToolActivity,
@@ -57,21 +58,27 @@ export function RunProcessPanel({ run, connectionStatus }: RunProcessPanelProps)
       {expanded && (
         <div className="border-t px-3 py-2">
           <ol className="flex flex-col gap-2" aria-label="运行活动">
-            {run.activity.map((activity) => activity.kind === "stage"
-              ? (
-                <li key={activity.id} data-testid={`activity-${activity.id}`} className="flex items-center gap-2 text-muted-foreground">
-                  <span className="size-1.5 shrink-0 rounded-full bg-current" aria-hidden="true" />
-                  <span>{activity.stage === "execution" ? "开始处理请求" : "开始生成回答"}</span>
-                </li>
-              )
-              : (
+            {run.activity.map((activity) => {
+              if (activity.kind === "stage") {
+                return (
+                  <li key={activity.id} data-testid={`activity-${activity.id}`} className="flex items-center gap-2 text-muted-foreground">
+                    <span className="size-1.5 shrink-0 rounded-full bg-current" aria-hidden="true" />
+                    <span>{activity.stage === "execution" ? "开始处理请求" : "开始生成回答"}</span>
+                  </li>
+                );
+              }
+              if (activity.kind === "commentary") {
+                return <CommentaryActivityRow key={activity.id} activity={activity} />;
+              }
+              return (
                 <ToolActivityRow
                   key={activity.id}
                   activity={activity}
                   isConnectionEnded={connectionEnded}
                   runStatus={run.status}
                 />
-              ))}
+              );
+            })}
           </ol>
           {run.omitted_activity_count > 0 && (
             <p className="mt-2 text-xs text-muted-foreground">
@@ -81,6 +88,21 @@ export function RunProcessPanel({ run, connectionStatus }: RunProcessPanelProps)
         </div>
       )}
     </section>
+  );
+}
+
+function CommentaryActivityRow({
+  activity,
+}: {
+  activity: Extract<DotamindActivityItem, { kind: "commentary" }>;
+}) {
+  return (
+    <li data-testid={`activity-${activity.id}`} className="min-w-0">
+      <p className="whitespace-pre-wrap break-words">{activity.text}</p>
+      {activity.truncated && (
+        <p className="mt-1 text-xs text-muted-foreground">内容已截断</p>
+      )}
+    </li>
   );
 }
 

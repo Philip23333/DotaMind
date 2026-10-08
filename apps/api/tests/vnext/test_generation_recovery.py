@@ -9,7 +9,12 @@ from pydantic import BaseModel, ConfigDict, TypeAdapter
 import app.vnext.agent.runtime as runtime_module
 from app.vnext.agent.answer_stage import _tool_evidence
 from app.vnext.agent.errors import AgentCancelledError, ModelProviderError
-from app.vnext.agent.events import AgentCompleted, AgentFailed, ToolStarted
+from app.vnext.agent.events import (
+    AgentCompleted,
+    AgentFailed,
+    ExecutionCommentary,
+    ToolStarted,
+)
 from app.vnext.agent.generation_recovery import (
     NOT_EXECUTED_FEEDBACK,
     build_rejected_tool_call_history,
@@ -258,6 +263,7 @@ def test_rejected_batch_is_corrected_without_tool_execution_and_kept_in_session_
     )
     assert "RAW_bad-call" not in json.dumps(collector.snapshot())
     assert sum(isinstance(event, ToolStarted) for event in events) == 1
+    assert not any(isinstance(event, ExecutionCommentary) for event in events)
     assert sum(isinstance(event, AgentFailed) for event in events) == 0
     assert sum(isinstance(event, AgentCompleted) for event in events) == 1
 

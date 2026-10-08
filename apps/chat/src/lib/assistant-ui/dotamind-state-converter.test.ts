@@ -46,6 +46,7 @@ function runState(
     stage: "answer",
     activity: [],
     omitted_activity_count: 0,
+    execution_timing: null,
     answer: {
       attempt_id: "attempt-primary",
       kind: "primary",
@@ -712,6 +713,32 @@ describe("convertDotaMindState", () => {
 
     expect(value).toEqual(before);
     expect(value.current_state?.trace).toBe(trace);
+  });
+
+  it("passes commentary and execution timing through run metadata, separate from answer text", () => {
+    const current = envelope({ run: runState({
+      stage: "execution",
+      activity: [{
+        kind: "commentary",
+        id: "commentary:2",
+        text: "正在查询赛事。",
+        truncated: false,
+      }],
+      execution_timing: {
+        started_at: "2026-10-09T01:00:00Z",
+        finished_at: null,
+        duration_seconds: null,
+      },
+      answer: { attempt_id: null, kind: null, text: "", status: "pending" },
+    }) });
+
+    const result = convert(input({ current_state: current }));
+    const message = assistant(result.messages);
+    const metadata = productMetadata(message);
+    expect(message.content).toEqual([{ type: "text", text: "" }]);
+    expect(metadata.run?.activity).toEqual(current.run.activity);
+    expect(metadata.run?.execution_timing).toEqual(current.run.execution_timing);
+    expect(metadata.run?.execution_timing).not.toBe(current.run.execution_timing);
   });
 
   it("shows a sent request as running before the server's first snapshot", () => {

@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Annotated, Literal, TypeAlias
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 RunStatus: TypeAlias = Literal["running", "completed", "failed", "cancelled"]
 RunStage: TypeAlias = Literal["execution", "answer"]
@@ -31,6 +32,27 @@ class ProductAnswerState(_ProductRunModel):
     status: AnswerStatus = "pending"
 
 
+class ExecutionTiming(_ProductRunModel):
+    started_at: AwareDatetime
+    finished_at: AwareDatetime | None = None
+    duration_seconds: float | None = Field(default=None, ge=0)
+
+    @field_validator("started_at", "finished_at")
+    @classmethod
+    def _store_utc(cls, value: datetime | None) -> datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("execution timing timestamps must include a timezone")
+        return value.astimezone(timezone.utc)
+
+    @model_validator(mode="after")
+    def _finished_values_are_paired(self) -> ExecutionTiming:
+        if (self.finished_at is None) != (self.duration_seconds is None):
+            raise ValueError("finished_at and duration_seconds must be set together")
+        return self
+
+
 class StageActivity(_ProductRunModel):
     kind: Literal["stage"] = "stage"
     id: str = Field(min_length=1)
@@ -46,8 +68,15 @@ class ToolActivity(_ProductRunModel):
     error_code: str | None = Field(default=None, min_length=1)
 
 
+class CommentaryActivity(_ProductRunModel):
+    kind: Literal["commentary"] = "commentary"
+    id: str = Field(min_length=1)
+    text: str
+    truncated: bool = False
+
+
 ActivityItem: TypeAlias = Annotated[
-    StageActivity | ToolActivity,
+    StageActivity | ToolActivity | CommentaryActivity,
     Field(discriminator="kind"),
 ]
 
@@ -59,6 +88,7 @@ class ProductRunState(_ProductRunModel):
     stage: RunStage = "execution"
     activity: list[ActivityItem] = Field(default_factory=list)
     omitted_activity_count: int = Field(default=0, ge=0)
+    execution_timing: ExecutionTiming | None = None
     answer: ProductAnswerState = Field(default_factory=ProductAnswerState)
     persistence: PersistenceStatus = "pending"
     error: ProductRunError | None = None
@@ -68,6 +98,7 @@ class ProductRunStateProjector:
     """Synchronously project lifecycle facts into a bounded product Run State."""
 
     MAX_ACTIVITY_ITEMS = 100
+    MAX_COMMENTARY_CODE_POINTS = 2_000
 
     def __init__(self, request_id: UUID, assistant_message_id: str) -> None:
         self._state = ProductRunState(
@@ -112,7 +143,36 @@ class ProductRunStateProjector:
 
         return self._state.model_copy(deep=True)
 
-    def enter_stage(self, stage: RunStage) -> None:
+    def start_execution(self, started_at: datetime) -> None:
+        if self._state.status != "running" or self._state.execution_timing is not None:
+            return
+        self._state.execution_timing = ExecutionTiming(started_at=started_at)
+
+    def add_commentary(self, step: int, text: str) -> None:
+        if (
+            self._state.status != "running"
+            or self._state.stage != "execution"
+            or not text.strip()
+        ):
+            return
+
+        activity_id = f"commentary:{step}"
+        if any(
+            isinstance(item, CommentaryActivity) and item.id == activity_id
+            for item in self._state.activity
+        ):
+            return
+
+        display_text = text[: self.MAX_COMMENTARY_CODE_POINTS]
+        self._append_activity(
+            CommentaryActivity(
+                id=activity_id,
+                text=display_text,
+                truncated=len(text) > self.MAX_COMMENTARY_CODE_POINTS,
+            )
+        )
+
+    def enter_stage(self, stage: RunStage, *, timestamp: datetime | None = None) -> None:
         if self._state.status != "running":
             return
         if stage not in ("execution", "answer"):
@@ -122,6 +182,7 @@ class ProductRunStateProjector:
         if self._state.stage == "answer":
             raise ValueError("cannot return to the execution stage")
 
+        self._finish_execution(timestamp)
         self._state.stage = "answer"
         self._append_activity(StageActivity(id="stage:answer", stage="answer"))
 
@@ -203,18 +264,26 @@ class ProductRunStateProjector:
         if self._state.error is not None and self._state.error.scope == "execution":
             self._state.error = None
 
-    def cancel(self) -> None:
+    def cancel(self, *, timestamp: datetime | None = None) -> None:
         if self._state.status != "running":
             return
 
+        self._finish_execution(timestamp)
         self._state.status = "cancelled"
         if self._state.answer.text:
             self._state.answer.status = "interrupted"
 
-    def fail_execution(self, code: str, message: str) -> None:
+    def fail_execution(
+        self,
+        code: str,
+        message: str,
+        *,
+        timestamp: datetime | None = None,
+    ) -> None:
         if self._state.status != "running":
             return
 
+        self._finish_execution(timestamp)
         error = ProductRunError(scope="execution", code=code, message=message)
         self._state.status = "failed"
         self._state.error = error
@@ -256,9 +325,32 @@ class ProductRunStateProjector:
             del self._state.activity[:excess]
             self._state.omitted_activity_count += excess
 
+    def _finish_execution(self, timestamp: datetime | None) -> None:
+        timing = self._state.execution_timing
+        if timing is None or timing.finished_at is not None:
+            return
+
+        finished_at = _as_utc(timestamp or datetime.now(timezone.utc))
+        self._state.execution_timing = ExecutionTiming(
+            started_at=timing.started_at,
+            finished_at=finished_at,
+            duration_seconds=max(
+                0.0,
+                (finished_at - timing.started_at).total_seconds(),
+            ),
+        )
+
+
+def _as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError("execution timing timestamps must include a timezone")
+    return value.astimezone(timezone.utc)
+
 
 __all__ = [
     "ActivityItem",
+    "CommentaryActivity",
+    "ExecutionTiming",
     "ProductAnswerState",
     "ProductRunError",
     "ProductRunState",

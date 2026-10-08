@@ -50,6 +50,7 @@ from app.vnext.agent.events import (
     AnswerAttemptStarted,
     AnswerStageStarted,
     CompactionFailed,
+    ExecutionCommentary,
     ModelRequested,
     ModelResponded,
     TextDelta,
@@ -847,6 +848,11 @@ class AgentRuntime:
                 if not calls:
                     raise ModelProtocolError(
                         "execution model response had neither content nor tool calls"
+                    )
+                if assistant.content is not None and assistant.content.strip():
+                    yield await self._publish(
+                        ExecutionCommentary(step=step, text=assistant.content),
+                        sink,
                     )
                 results: list[ToolResultMessage] = []
                 try:

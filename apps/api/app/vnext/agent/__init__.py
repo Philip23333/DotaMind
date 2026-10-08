@@ -23,6 +23,7 @@ _EXPORTS = {
     "AnswerAttemptFailed": ("app.vnext.agent.events", "AnswerAttemptFailed"),
     "AnswerAttemptStarted": ("app.vnext.agent.events", "AnswerAttemptStarted"),
     "AnswerStageStarted": ("app.vnext.agent.events", "AnswerStageStarted"),
+    "ExecutionCommentary": ("app.vnext.agent.events", "ExecutionCommentary"),
     "CancellationToken": ("app.vnext.agent.runtime", "CancellationToken"),
     "ModelProviderError": ("app.vnext.agent.errors", "ModelProviderError"),
     "ModelProtocolError": ("app.vnext.agent.errors", "ModelProtocolError"),

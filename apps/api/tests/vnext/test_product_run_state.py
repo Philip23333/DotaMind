@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
 
 from app.vnext.product.run_state import (
+    CommentaryActivity,
     ProductRunStateProjector,
     StageActivity,
     ToolActivity,
@@ -40,6 +42,7 @@ def test_initial_state_has_stable_identity_and_execution_activity() -> None:
     assert state.stage == "execution"
     assert state.activity == [StageActivity(id="stage:execution", stage="execution")]
     assert state.omitted_activity_count == 0
+    assert state.execution_timing is None
     assert state.answer.model_dump() == {
         "attempt_id": None,
         "kind": None,
@@ -80,6 +83,7 @@ def test_restore_completed_server_answer_without_synthetic_activity(
     assert state.answer.text == "stored answer"
     assert state.answer.status == "ready"
     assert state.persistence == "pending"
+    assert state.execution_timing is None
 
 
 def test_restore_completed_answer_rejects_partial_attempt_identity() -> None:
@@ -90,6 +94,91 @@ def test_restore_completed_answer_rejects_partial_attempt_identity() -> None:
             "stored answer",
             attempt_id="attempt-1",
         )
+
+
+def test_commentary_is_ordered_bounded_and_included_in_activity_eviction() -> None:
+    projector = _projector()
+    source = "a" * 1_999 + "🐉" + "tail"
+    projector.add_commentary(1, source)
+    projector.tool_started("call-1", "game.detail")
+
+    activity = projector.snapshot().activity
+    commentary = activity[1]
+    assert isinstance(commentary, CommentaryActivity)
+    assert commentary.id == "commentary:1"
+    assert commentary.text == source[:2_000]
+    assert len(commentary.text) == 2_000
+    assert commentary.text.endswith("🐉")
+    assert commentary.truncated is True
+    assert activity[2].id == "call-1"  # type: ignore[union-attr]
+
+    for index in range(99):
+        projector.tool_started(f"extra-{index}", "tool")
+    state = projector.snapshot()
+    assert len(state.activity) == ProductRunStateProjector.MAX_ACTIVITY_ITEMS
+    assert state.omitted_activity_count == 2
+    assert all(not isinstance(item, CommentaryActivity) for item in state.activity)
+
+
+def test_blank_and_duplicate_commentary_are_ignored() -> None:
+    projector = _projector()
+    projector.add_commentary(1, " \n ")
+    projector.add_commentary(1, "first")
+    projector.add_commentary(1, "duplicate")
+
+    assert [
+        item.text for item in projector.snapshot().activity
+        if isinstance(item, CommentaryActivity)
+    ] == ["first"]
+
+
+def test_execution_timing_uses_runtime_boundaries_and_freezes_after_answer_start() -> None:
+    projector = _projector()
+    started_at = datetime(2026, 10, 9, 1, 0, tzinfo=timezone.utc)
+    answer_started_at = started_at + timedelta(seconds=7, milliseconds=250)
+    projector.start_execution(started_at)
+    started_timing = projector.snapshot().execution_timing
+    assert started_timing is not None
+    assert started_timing.finished_at is None
+    assert started_timing.duration_seconds is None
+
+    projector.enter_stage("answer", timestamp=answer_started_at)
+    frozen_timing = projector.snapshot().execution_timing
+    assert frozen_timing is not None
+    assert frozen_timing.started_at == started_at
+    assert frozen_timing.finished_at == answer_started_at
+    assert frozen_timing.duration_seconds == 7.25
+
+    projector.start_answer_attempt("primary", "primary")
+    projector.start_answer_attempt("degraded", "degraded")
+    projector.complete_answer("degraded", "answer")
+    assert projector.snapshot().execution_timing == frozen_timing
+
+
+@pytest.mark.parametrize("terminal", ["cancel", "fail"])
+def test_execution_timing_ends_at_early_cancel_or_failure(terminal: str) -> None:
+    projector = _projector()
+    started_at = datetime(2026, 10, 9, 1, 0, tzinfo=timezone.utc)
+    stopped_at = started_at + timedelta(seconds=2)
+    projector.start_execution(started_at)
+    if terminal == "cancel":
+        projector.cancel(timestamp=stopped_at)
+    else:
+        projector.fail_execution("runtime_error", "safe", timestamp=stopped_at)
+
+    timing = projector.snapshot().execution_timing
+    assert timing is not None
+    assert timing.finished_at == stopped_at
+    assert timing.duration_seconds == 2
+
+
+def test_execution_timing_is_not_invented_without_agent_started() -> None:
+    projector = _projector()
+    projector.enter_stage("answer")
+    projector.start_answer_attempt("attempt-1", "primary")
+    projector.complete_answer("attempt-1", "answer")
+
+    assert projector.snapshot().execution_timing is None
 
 
 def test_normal_lifecycle_reconciles_final_text_and_saves_separately() -> None:

@@ -27,7 +27,23 @@ export type DotamindToolActivity = {
   error_code: string | null;
 };
 
-export type DotamindActivityItem = DotamindStageActivity | DotamindToolActivity;
+export type DotamindCommentaryActivity = {
+  kind: "commentary";
+  id: string;
+  text: string;
+  truncated: boolean;
+};
+
+export type DotamindActivityItem =
+  | DotamindStageActivity
+  | DotamindToolActivity
+  | DotamindCommentaryActivity;
+
+export type DotamindExecutionTiming = {
+  started_at: string;
+  finished_at: string | null;
+  duration_seconds: number | null;
+};
 
 export type DotamindAnswerState = {
   attempt_id: string | null;
@@ -43,6 +59,7 @@ export type DotamindProductRunState = {
   stage: DotamindRunStage;
   activity: DotamindActivityItem[];
   omitted_activity_count: number;
+  execution_timing: DotamindExecutionTiming | null;
   answer: DotamindAnswerState;
   persistence: DotamindPersistenceStatus;
   error: DotamindRunError | null;

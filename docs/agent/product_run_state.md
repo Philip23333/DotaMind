@@ -12,15 +12,16 @@ registry keeps each thread's connection and run state alive when selection
 changes. The frontend reconciles request/message identities, streams canonical
 Markdown, and tracks unread counts per session in browser storage. Selecting a
 thread clears only its unread count, and the sidebar reads that local state
-directly. The current process panel renders ordered stage/tool activity, stops
-showing a running tool as active after connection termination, and folds when
-the answer becomes ready unless the user has chosen its local expansion state.
-Execution-response commentary and authoritative execution duration are not yet
-implemented. Their confirmed target, including a one-time collapse on entering
-Answer Stage, is specified below. Deterministic regression coverage uses the
-state stream; the separate `/runs` Test Observer event stream remains an
-independent feature.
-前端已接入 `/transport`，页面内多会话连接与按会话未读状态已实现；现有过程面板展示有序工具活动。执行说明、后端权威计时及本次确认的折叠时机仍待实现。
+directly. The current process panel renders ordered stage, commentary, and tool
+activity, stops showing a running tool as active after connection termination,
+and folds when the answer becomes ready unless the user has chosen its local
+expansion state. Runtime-confirmed commentary, bounded Run State projection,
+authoritative execution timing, transport conversion, and minimal rendering in
+the existing panel are implemented. The new timeline, labels, grouping,
+animation, and one-time collapse behavior remain pending. Deterministic
+regression coverage uses the state stream; the separate `/runs` Test Observer
+event stream remains an independent feature.
+前端已接入 `/transport`，页面内多会话连接与按会话未读状态已实现；现有过程面板展示有序工具活动和整段过程说明。后端权威计时已进入消息 metadata，但新时间线与折叠时机仍待实现。
 Code remains the authority for current behavior. This document owns the product
 Run State contract; `../ROADMAP.md` owns delivery order.
 
@@ -33,8 +34,10 @@ outcomes explicit.
 Not included: raw model reasoning display, an extra model call to generate
 progress summaries, resumable streams, cross-tab synchronization, durable
 execution recovery, or a full trace viewer. Refresh restores saved dialogue; it
-does not promise to reconnect to an in-flight run. Ordinary execution commentary
-and the execution timer described below are design targets, not current behavior.
+does not promise to reconnect to an in-flight run. The execution-timer UI
+described below is not implemented. Ordinary execution commentary and backend
+execution timing now cross the transport, and commentary is rendered in the
+existing panel.
 
 ## Decisions and boundaries
 
@@ -86,6 +89,11 @@ type RunState = {
   status: "running" | "completed" | "failed" | "cancelled";
   stage: "execution" | "answer";
   activity: ActivityItem[];
+  execution_timing: {
+    started_at: string;
+    finished_at: string | null;
+    duration_seconds: number | null;
+  } | null;
   answer: {
     attemptId: string | null;
     kind: "primary" | "degraded" | "deterministic" | null;
@@ -243,12 +251,13 @@ projection reconciles the canonical final once, without appending it a second
 time. Persistence starts only after canonical completion and must not gate live
 text.
 
-### Execution commentary and duration (design confirmed; implementation pending)
+### Execution commentary and duration (data path implemented; enhanced UI pending)
 
-This section defines the target behavior. The current Runtime projection and UI
-do not yet publish execution-response commentary or an authoritative execution
-duration. Do not describe these additions as implemented until the Runtime,
-product projection, transport, frontend, and acceptance work is complete.
+The Runtime event, product projection, transport conversion, and minimal
+commentary rendering in the existing panel are implemented. The new timeline
+visual design, timer display, Chinese tool labels, grouping, animation, and
+one-time folding behavior remain pending. This section defines the complete
+target behavior; implementation status must remain explicit.
 
 #### Commentary activity
 
@@ -257,7 +266,8 @@ completed, the response contains tool calls, and Runtime has accepted that batch
 for execution. For that response, publish its non-empty ordinary `content` once,
 then publish the corresponding tool-start and terminal activities in their real
 order. The commentary is a separate activity with its own stable identity in the
-existing ordered activity list. Empty content creates no activity. A no-tool
+existing ordered activity list; the implementation uses `commentary:<step>`.
+Empty content creates no activity. A no-tool
 execution conclusion is not process commentary. A response-level rejected batch
 creates no accepted-call commentary activity; its explicit not-executed call
 results remain governed by the rejected-batch contract.
@@ -276,7 +286,8 @@ indicator continues to disclose omitted items.
 
 Tool labels are presentation-only mappings; the active registry remains the
 source of which tools exist. Unknown tool IDs display as “工具调用” and do not
-block activity rendering.
+block activity rendering. This mapping is not yet implemented; the existing
+panel still displays internal tool names.
 
 | Internal tool ID | Display label |
 | --- | --- |
@@ -302,15 +313,15 @@ The frontend may merge adjacent activities only when their internal tool IDs are
 exactly equal. This is a display projection; underlying call identity, order, and
 outcome remain unchanged. Commentary and a different tool break a group. A group
 retains its count and any failed or unconfirmed outcome. Parallel calls do not
-represent serial progress, and their durations are not added together. Active
-commentary may use a subtle brightness animation; stop it on completion, failure,
-user stop, or connection termination.
+represent serial progress, and their durations are not added together. If the
+future timeline animates active text, the animation applies to **正在执行的工具文字**,
+not to commentary. Commentary is published as a complete static segment.
 
 #### Execution duration
 
-The backend owns the authoritative timing facts. Start timing when backend
-processing for the request begins. Normal execution duration ends when Runtime
-enters Answer Stage; final-answer generation and persistence are excluded. If
+The backend owns the authoritative timing facts. Start timing at the
+`AgentStarted` event timestamp. Normal execution duration ends at the
+`AnswerStageStarted` event timestamp; final-answer generation and persistence are excluded. If
 execution instead stops or fails, freeze duration at that event and expose the
 corresponding terminal status rather than normal completion. Do not derive
 duration by summing tool times or restart timing when a frontend component mounts.
@@ -662,23 +673,27 @@ Acceptance:
 ### Phase 5: process UI
 
 Implemented in the production chat message view. The process panel renders
-Run State activity in array order, updates a tool row in place, shows omitted
-activity counts, and labels unfinished tool results as unconfirmed after a local
-connection ends. The canonical message body continues to stream through the
-existing Markdown renderer. The panel defaults open until answer readiness and
-then folds; a per-message manual choice takes precedence over later persistence
-and metadata updates. Cancellation, safe execution errors, connection errors,
-and persistence errors remain outside the collapsible process content.
-No reasoning summary is available or inferred.
+Run State stage, commentary, and tool activity in array order, updates a tool
+row in place, shows omitted activity counts, and labels unfinished tool results
+as unconfirmed after a local connection ends. Commentary is ordinary text with
+preserved line breaks and an explicit truncation label. The frontend carries
+execution timing in message metadata; the current panel does not display it.
+The canonical message body continues to stream through the existing Markdown
+renderer. The panel defaults open until answer readiness and then folds; a
+per-message manual choice takes precedence over later persistence and metadata
+updates. Cancellation, safe execution errors, connection errors, and persistence
+errors remain outside the collapsible process content. No reasoning summary is
+available or inferred.
 
-This phase describes the implemented baseline only. Execution-response commentary,
-backend-authoritative execution duration, and the one-time collapse on entering
-Answer Stage remain pending follow-up work defined above.
+The new timeline appearance, timer display, Chinese tool labels, adjacent tool
+grouping, tool-text animation, and the one-time collapse on entering Answer Stage
+remain pending follow-up work defined above.
 
 Acceptance covers ordered activity, live answer deltas, automatic folding,
-manual expansion through save completion, and no empty panel for history without
-process metadata. Browser review still checks real scroll behavior and visual
-layout; no forced scroll is added for deltas or panel changes.
+commentary ordering and truncation, timing freeze boundaries, manual expansion
+through save completion, and no empty panel for history without process metadata.
+Browser review still checks real scroll behavior and visual layout; no forced
+scroll is added for deltas or panel changes.
 
 ### Phase 6: regression and cleanup
 

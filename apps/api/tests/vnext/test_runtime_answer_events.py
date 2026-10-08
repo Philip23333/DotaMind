@@ -5,6 +5,7 @@ from collections.abc import Callable
 from uuid import uuid4
 
 import pytest
+from pydantic import BaseModel
 
 import app.vnext.agent.runtime as runtime_module
 from app.vnext.agent.answer_stage import AnswerProjectionMode
@@ -19,7 +20,9 @@ from app.vnext.agent.events import (
     AnswerAttemptFailed,
     AnswerAttemptStarted,
     AnswerStageStarted,
+    ExecutionCommentary,
     TextDelta,
+    ToolStarted,
 )
 from app.vnext.agent.limits import AgentLimits
 from app.vnext.agent.runtime import AgentRuntime, CancellationToken
@@ -37,7 +40,7 @@ from app.vnext.llm.protocol import (
     UserMessage,
 )
 from app.vnext.product.session_history import SessionExecutionHistory
-from app.vnext.tools import ToolRegistry
+from app.vnext.tools import ToolDefinition, ToolRegistry
 from tests.vnext.fakes import ScriptedModelClient, ScriptedStreamingModelClient
 
 
@@ -145,6 +148,93 @@ def test_normal_success_has_one_stage_and_primary_identity_for_text_and_final() 
     assert events.index(stages[0]) < events.index(starts[0]) < events.index(deltas[0])
     assert deltas[0].attempt_id == starts[0].attempt_id == completed[0].attempt_id
     assert events.index(deltas[0]) < events.index(completed[0])
+    assert not any(isinstance(event, ExecutionCommentary) for event in events)
+
+
+def test_accepted_multi_tool_response_publishes_one_commentary_before_tools() -> None:
+    class _ToolInput(BaseModel):
+        value: int
+
+    class _ToolOutput(BaseModel):
+        value: int
+
+    registry = ToolRegistry()
+    registry.register(
+        ToolDefinition(
+            name="echo",
+            description="Echo an integer.",
+            input_model=_ToolInput,
+            output_model=_ToolOutput,
+            handler=lambda args: _ToolOutput(value=args.value),
+            parallel_safe=True,
+        )
+    )
+    response = ModelResponse(
+        message=AssistantMessage(
+            content="  正在查询赛事。\n准备读取详情。  ",
+            tool_calls=[
+                ToolCall(id="call-1", name="echo", arguments={"value": 1}),
+                ToolCall(id="call-2", name="echo", arguments={"value": 2}),
+            ],
+        )
+    )
+    model = _PlannedModel([lambda _request: response, _final("最终回答")])
+    runtime = AgentRuntime(
+        model,
+        registry,
+        limits=AgentLimits(deadline_seconds=2, application_max_output_tokens=4096),
+    )
+
+    events = _collect_sync(runtime)
+
+    commentary = [event for event in events if isinstance(event, ExecutionCommentary)]
+    tool_starts = [event for event in events if isinstance(event, ToolStarted)]
+    assert len(commentary) == 1
+    assert commentary[0].step == 1
+    assert commentary[0].text == "  正在查询赛事。\n准备读取详情。  "
+    assert len(tool_starts) == 2
+    assert events.index(commentary[0]) < min(events.index(event) for event in tool_starts)
+    completed = next(event for event in events if isinstance(event, AgentCompleted))
+    assert "正在查询赛事" not in completed.final.content
+    assert all(
+        not isinstance(event, TextDelta) or "正在查询赛事" not in event.text
+        for event in events
+    )
+
+
+def test_blank_commentary_on_an_accepted_tool_call_is_not_published() -> None:
+    class _ToolInput(BaseModel):
+        value: int
+
+    class _ToolOutput(BaseModel):
+        value: int
+
+    registry = ToolRegistry()
+    registry.register(
+        ToolDefinition(
+            name="echo",
+            description="Echo an integer.",
+            input_model=_ToolInput,
+            output_model=_ToolOutput,
+            handler=lambda args: _ToolOutput(value=args.value),
+        )
+    )
+    response = ModelResponse(
+        message=AssistantMessage(
+            content=" \n\t ",
+            tool_calls=[ToolCall(id="call-1", name="echo", arguments={"value": 1})],
+        )
+    )
+    model = _PlannedModel([lambda _request: response, _final("done")])
+    runtime = AgentRuntime(
+        model,
+        registry,
+        limits=AgentLimits(deadline_seconds=2, application_max_output_tokens=4096),
+    )
+
+    events = _collect_sync(runtime)
+
+    assert not any(isinstance(event, ExecutionCommentary) for event in events)
 
 
 def test_direct_deterministic_answer_does_not_add_a_model_call() -> None:

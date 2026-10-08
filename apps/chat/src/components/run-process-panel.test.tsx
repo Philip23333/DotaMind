@@ -19,6 +19,7 @@ function runState(
     stage: "execution",
     activity: [],
     omitted_activity_count: 0,
+    execution_timing: null,
     answer: { attempt_id: "attempt-a", kind: "primary", status: "pending" },
     persistence: "pending",
     error: null,
@@ -68,6 +69,26 @@ describe("RunProcessPanel", () => {
     expect(rows[0]?.textContent).toContain("开始处理请求");
     expect(rows[1]?.textContent).toContain("调用 esports.match.search");
     expect(rows[2]?.textContent).toContain("开始生成回答");
+  });
+
+  it("renders commentary as ordinary ordered text, not as a tool", () => {
+    const commentary = "正在查询职业比赛样本。\n接下来读取攻略详情。";
+    render(<RunProcessPanel run={runState({ activity: [
+      { kind: "stage", id: "stage-execution", stage: "execution" },
+      { kind: "commentary", id: "commentary:1", text: commentary, truncated: true },
+      toolActivity(),
+    ] })} />);
+
+    const rows = within(screen.getByRole("list", { name: "运行活动" })).getAllByRole("listitem");
+    expect(rows.map((row) => row.getAttribute("data-testid"))).toEqual([
+      "activity-stage-execution",
+      "activity-commentary:1",
+      "activity-tool-1",
+    ]);
+    expect(rows[1]?.querySelector("p")?.textContent).toBe(commentary);
+    expect(rows[1]?.querySelector("p")?.className).toContain("whitespace-pre-wrap");
+    expect(within(rows[1]!).getByText("内容已截断")).toBeTruthy();
+    expect(rows[1]?.textContent).not.toContain("调用");
   });
 
   it.each([

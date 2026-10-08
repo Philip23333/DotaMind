@@ -272,6 +272,7 @@ function rootEnvelope(request: TransportRequest, text = "") {
       stage: "answer",
       activity: [],
       omitted_activity_count: 0,
+      execution_timing: null,
       answer: { attempt_id: "primary", kind: "primary", text, status: text ? "streaming" : "pending" },
       persistence: "pending",
       error: null,

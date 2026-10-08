@@ -44,6 +44,12 @@ class ModelResponded(AgentEvent):
     duration: float = Field(ge=0)
 
 
+class ExecutionCommentary(AgentEvent):
+    kind: Literal["execution_commentary"] = "execution_commentary"
+    step: int = Field(ge=1)
+    text: str = Field(min_length=1)
+
+
 class AnswerStageStarted(AgentEvent):
     kind: Literal["answer_stage_started"] = "answer_stage_started"
 
@@ -135,6 +141,7 @@ __all__ = [
     "AnswerAttemptStarted",
     "AnswerStageStarted",
     "CompactionFailed",
+    "ExecutionCommentary",
     "ModelRequested",
     "ModelResponded",
     "TextDelta",

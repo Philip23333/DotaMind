@@ -519,20 +519,22 @@ cross-tab recovery, raw reasoning display, and durable execution recovery are
 outside this work. Failure semantics are designed in Phase 1 and tested with
 each implementation phase, not postponed until the final regression phase.
 
-## 处理过程展示优化（设计已确认，实现待完成）
+## 处理过程展示优化（设计已确认，数据链路已实现）
 
-Design is confirmed; implementation and acceptance are pending. The existing
-six-phase Run State and AssistantTransport baseline remains implemented. This
-follow-up adds ordinary execution commentary and authoritative execution timing
-without adding raw reasoning, a summary-generation call, or durable process logs.
+Design is confirmed. The existing six-phase Run State and AssistantTransport
+baseline remains implemented. Runtime commentary, bounded product projection,
+authoritative execution timing, transport conversion, and minimal rendering in
+the existing process panel are implemented. The enhanced timeline UI and its
+visual acceptance remain pending. This work does not add raw reasoning, a
+summary-generation call, or durable process logs.
 The detailed contract is in
 [`agent/product_run_state.md`](agent/product_run_state.md).
 
-1. **待实现：** 将已接受工具调用响应中的过程说明作为有界 Run State 活动发布，
-   并提供执行用时与终止时间事实。
-2. **待实现：** 实现轻量时间线、中文工具名称、相邻调用合并、活动动画，以及首次进入
+1. **已实现：** 将已接受工具调用响应中的过程说明作为有界 Run State 活动发布，
+   并提供执行用时与终止时间事实；现有面板可按顺序显示说明文本。
+2. **待实现：** 实现轻量时间线、中文工具名称、相邻调用合并、工具活动文字动画，以及首次进入
    回答阶段时自动收起并保留后续用户选择。
-3. **待验收：** 完成聚焦自动化检查并观察桌面和窄屏真实页面，再决定是否需要调整提示词。
+3. **待验收：** 第二项完成后检查增强 UI 的自动化行为并观察桌面和窄屏真实页面，再决定是否需要调整提示词。
 
 ## Not planned in the baseline
 

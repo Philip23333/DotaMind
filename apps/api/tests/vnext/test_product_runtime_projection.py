@@ -15,6 +15,7 @@ from app.vnext.agent.events import (
     AnswerAttemptFailed,
     AnswerAttemptStarted,
     AnswerStageStarted,
+    ExecutionCommentary,
     ModelRequested,
     ModelResponded,
     TextDelta,
@@ -32,6 +33,7 @@ from app.vnext.llm.protocol import (
     UserMessage,
 )
 from app.vnext.product.run_state import (
+    CommentaryActivity,
     ProductRunState,
     ProductRunStateProjector,
     ToolActivity,
@@ -91,7 +93,13 @@ async def _collect_states(
 
 def test_mapping_projects_tool_lifecycle_without_exposing_raw_error_text() -> None:
     projector = _projector()
-    assert not apply_runtime_event(projector, AgentStarted())
+    started_at = AgentStarted().timestamp
+    assert apply_runtime_event(projector, AgentStarted(timestamp=started_at))
+    assert not apply_runtime_event(projector, AgentStarted(timestamp=started_at))
+    assert apply_runtime_event(
+        projector,
+        ExecutionCommentary(step=1, text="正在读取赛事资料。"),
+    )
     assert not apply_runtime_event(
         projector,
         ModelRequested(step=1, message_count=2, tool_count=1),
@@ -135,6 +143,13 @@ def test_mapping_projects_tool_lifecycle_without_exposing_raw_error_text() -> No
     ]
     assert [item.error_code for item in tools] == [None, "provider_unavailable"]
     assert state.status == "running"
+    commentary = [item for item in state.activity if isinstance(item, CommentaryActivity)]
+    assert [(item.id, item.text) for item in commentary] == [
+        ("commentary:1", "正在读取赛事资料。")
+    ]
+    assert state.activity.index(commentary[0]) < state.activity.index(tools[0])
+    assert state.execution_timing is not None
+    assert state.execution_timing.started_at == started_at
     assert "sensitive provider response" not in state.model_dump_json()
 
 
@@ -347,7 +362,10 @@ def test_incomplete_upstream_stream_becomes_safe_terminal_failure() -> None:
 
 
 def test_upstream_exception_becomes_safe_terminal_failure() -> None:
+    started_at = AgentStarted().timestamp
+
     async def failing_events() -> AsyncIterator[AgentEvent]:
+        yield AgentStarted(timestamp=started_at)
         yield AnswerStageStarted()
         yield AnswerAttemptStarted(attempt_id="primary-1", answer_kind="primary")
         yield TextDelta(text="partial answer", attempt_id="primary-1")
@@ -363,6 +381,10 @@ def test_upstream_exception_becomes_safe_terminal_failure() -> None:
     assert final.answer.status == "interrupted"
     assert final.answer.text == "partial answer"
     assert "secret" not in final.model_dump_json()
+    assert final.execution_timing is not None
+    assert final.execution_timing.started_at == started_at
+    assert final.execution_timing.finished_at is not None
+    assert final.execution_timing.duration_seconds is not None
 
 
 def test_runtime_first_fragment_projects_before_model_terminal_response() -> None:
@@ -391,12 +413,17 @@ def test_runtime_first_fragment_projects_before_model_terminal_response() -> Non
         )
         try:
             initial = await asyncio.wait_for(anext(state_stream), timeout=1)
+            started = await asyncio.wait_for(anext(state_stream), timeout=1)
             answer_stage = await asyncio.wait_for(anext(state_stream), timeout=1)
             attempt = await asyncio.wait_for(anext(state_stream), timeout=1)
             streaming = await asyncio.wait_for(anext(state_stream), timeout=1)
 
             assert initial.stage == "execution"
+            assert started.execution_timing is not None
+            assert started.execution_timing.finished_at is None
             assert answer_stage.stage == "answer"
+            assert answer_stage.execution_timing is not None
+            assert answer_stage.execution_timing.finished_at is not None
             assert attempt.answer.attempt_id is not None
             assert streaming.answer.status == "streaming"
             assert streaming.answer.text == "first "
@@ -474,6 +501,7 @@ def test_explicit_state_stream_close_closes_runtime_provider_without_fallback() 
             assistant_message_id="assistant-cancelled",
         )
         try:
+            await asyncio.wait_for(anext(state_stream), timeout=1)
             await asyncio.wait_for(anext(state_stream), timeout=1)
             await asyncio.wait_for(anext(state_stream), timeout=1)
             await asyncio.wait_for(anext(state_stream), timeout=1)

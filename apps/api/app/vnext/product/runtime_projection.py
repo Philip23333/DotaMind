@@ -15,6 +15,7 @@ from app.vnext.agent.events import (
     AnswerAttemptFailed,
     AnswerAttemptStarted,
     AnswerStageStarted,
+    ExecutionCommentary,
     ModelRequested,
     ModelResponded,
     TextDelta,
@@ -35,8 +36,12 @@ def apply_runtime_event(
 
     before = projector.snapshot()
 
-    if isinstance(event, (AgentStarted, ModelRequested, ModelResponded, AnswerAttemptFailed)):
+    if isinstance(event, AgentStarted):
+        projector.start_execution(event.timestamp)
+    elif isinstance(event, (ModelRequested, ModelResponded, AnswerAttemptFailed)):
         pass
+    elif isinstance(event, ExecutionCommentary):
+        projector.add_commentary(event.step, event.text)
     elif isinstance(event, ToolStarted):
         projector.tool_started(event.tool_call_id, event.tool_name)
     elif isinstance(event, ToolCompleted):
@@ -51,7 +56,7 @@ def apply_runtime_event(
             error_code=event.error_code,
         )
     elif isinstance(event, AnswerStageStarted):
-        projector.enter_stage("answer")
+        projector.enter_stage("answer", timestamp=event.timestamp)
     elif isinstance(event, AnswerAttemptStarted):
         projector.start_answer_attempt(event.attempt_id, event.answer_kind)
     elif isinstance(event, TextDelta):
@@ -65,9 +70,13 @@ def apply_runtime_event(
             return False
         projector.complete_answer(attempt_id, event.final.content)
     elif isinstance(event, AgentCancelled):
-        projector.cancel()
+        projector.cancel(timestamp=event.timestamp)
     elif isinstance(event, AgentFailed):
-        projector.fail_execution(event.error_code, _SAFE_FAILURE_MESSAGE)
+        projector.fail_execution(
+            event.error_code,
+            _SAFE_FAILURE_MESSAGE,
+            timestamp=event.timestamp,
+        )
 
     return projector.snapshot() != before
 

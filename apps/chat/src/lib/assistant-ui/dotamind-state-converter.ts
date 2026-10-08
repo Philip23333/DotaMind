@@ -310,6 +310,9 @@ function transportAssistantMetadata(
     ...envelope.run,
     answer,
     activity: envelope.run.activity.map((item) => ({ ...item })),
+    execution_timing: envelope.run.execution_timing
+      ? { ...envelope.run.execution_timing }
+      : null,
     error: envelope.run.error ? { ...envelope.run.error } : null,
   };
   return {
