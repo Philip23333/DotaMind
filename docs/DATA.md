@@ -40,20 +40,62 @@ Names are added to the query result and generic Artifact output; they are not
 written into guide snapshots. Old snapshots remain readable because enrichment
 DTO fields have defaults. `game.detail` has not yet integrated the resolver.
 
-The Valve catalog sync also retains positive ability IDs from the bilingual
-ability list when hero detail responses do not define them, including records
-whose internal names use `special_bonus_`. Hero detail records remain
-authoritative for duplicate IDs; supplemental records have no inferred hero
-association. These supplements retain their validated ID/internal name and
-renderable bilingual display names; they do not extend hero ability lists,
-talent trees, or the existing talent-value candidate set. Missing or unresolved
-localized display names stay empty, while malformed identity and other required
-source errors still fail synchronization. Ability ID zero remains excluded.
-Image downloads are best effort: failures are
-reported, successful and previously available files remain usable, and the
-catalog snapshot can still be published. Chat visual metadata is created only
-when the corresponding local image file exists; catalog name lookup does not
-depend on images.
+## Explicit entity display records and team-asset refresh (design confirmed, implementation pending)
+
+This section owns the shared display-record and update-data contract. User-visible
+placement and exclusions are defined in [PRODUCT.md](PRODUCT.md); reference
+syntax is defined in [agent/product_run_state.md](agent/product_run_state.md).
+Nothing in this section describes a currently deployed feature.
+
+### Display records
+
+Each record is keyed by a stable `display_ref` and retains the entity type, source,
+and identity within that source. It also provides the latest display name, the
+identifier of the most recently successful local image resource when one exists,
+the latest observed image URL, the URL associated with the last successful
+download, the successful-download time, and the month through which the required
+monthly image refresh has completed. Exact field and file names remain an
+implementation choice.
+
+Entity identity comes from an explicit source identity, never from a display name,
+team acronym, or image filename. An image content hash identifies image bytes,
+not the entity. Name updates and image updates are independent. If a later source
+listing omits an already recorded entity, the record and its local image are not
+automatically deleted. History stores no name or image snapshot; rendering looks
+up the current shared record when the saved answer is loaded.
+
+### Team directory and image updates
+
+The shared updater reads the complete PandaScore Dota 2 team collection once per
+day at 03:00 in `Asia/Shanghai`, requesting 100 teams per page and fetching pages
+serially. It publishes a new team directory only after every required page has
+been fetched and validated. A pagination or response failure leaves the previous
+directory intact.
+
+Team image downloads share one bounded image-download concurrency ceiling with
+the existing Valve image update task. This is a combined limit: the updater must
+not create a separate, equally sized concurrency pool for each source. A team
+image is eligible when the team is new, its source URL changed, or its local asset
+is missing or damaged. On the first day of each month, existing team images are
+also downloaded again even when the URL is unchanged, so changed bytes at a stable
+URL can be detected. This uses the existing daily update entry point; it does not
+add a timer or change systemd catch-up settings.
+
+An image failure does not block publishing a complete team directory. The last
+successful local image remains associated with the record; if no image has ever
+downloaded, the record remains usable without one. A missing source URL also
+retains the prior image and does not count as a successful refresh. A changed URL
+and the URL of the last successful download remain distinguishable. The monthly
+completion marker advances only after the required download succeeds. A missed
+run or failed image remains eligible on a later daily run; the system does not
+mark incomplete work as successful.
+
+The initial migration uses the historical team list to restore explicit source
+identity mappings for the existing team assets and reuses those image files. It
+does not restore the legacy name matcher or its full synchronization code. Any
+historical entry without a verified source identity stays unresolved until that
+identity is supplied; names and acronyms are not used to manufacture a mapping.
+Observed investigation counts are not fixed limits on the directory.
 
 ## Shared data storage and update target
 
@@ -215,6 +257,20 @@ and persistent publication are now available through the separate
 `refresh-catalog` operation; the legacy synchronization command above still writes
 to the bundled repository paths and does not publish to the configured data root.
 
+The Valve catalog sync retains positive ability IDs from the bilingual ability
+list when hero detail responses do not define them, including records whose
+internal names use `special_bonus_`. Hero detail records remain authoritative for
+duplicate IDs; supplemental records have no inferred hero association. These
+supplements retain their validated ID/internal name and renderable bilingual
+display names; they do not extend hero ability lists, talent trees, or the existing
+talent-value candidate set. Missing or unresolved localized display names stay
+empty, while malformed identity and other required source errors still fail
+synchronization. Ability ID zero remains excluded. Image downloads are best
+effort: failures are reported, successful and previously available files remain
+usable, and the catalog snapshot can still be published. Chat visual metadata is
+created only when the corresponding local image file exists; catalog name lookup
+does not depend on images.
+
 `CatalogSnapshotLoader` loads the current complete snapshot at startup and then
 checks the pointer revision in the background, defaulting to a 30-second interval.
 With `DOTAMIND_DATA_DIR` configured, API startup waits for this first load and
@@ -222,10 +278,12 @@ fails if the pointer or snapshot is missing or invalid; it does not initialize a
 directory or fall back to bundled data. An unchanged revision does not reload the
 five files. A new revision is fully validated before one in-memory snapshot
 reference is switched; failed checks or loads keep the last successful snapshot
-available. `catalog.lookup`, guide name enrichment, and answer name matching use
-the current snapshot, each pinning one repository for its operation. The check
-interval does not bound validation or IO time. Offline tests do not establish
-power-loss recovery or deployed persistent-volume behavior.
+available. `catalog.lookup`, guide name enrichment, and the current legacy answer
+name-matching path use the current snapshot, each pinning one repository for its
+operation. That answer-matching path is current code, not the target display
+contract; the confirmed explicit-reference design above remains pending. The
+check interval does not bound validation or IO time. Offline tests do not
+establish power-loss recovery or deployed persistent-volume behavior.
 
 The `refresh-catalog` operation writes one temporary five-file source and
 delegates validation and publication to `CatalogSnapshotStore`. It never replaces

@@ -153,10 +153,12 @@ import of legacy Redis guide snapshots.
    default every 30 seconds, validates changed snapshots in the background, and
    switches one in-memory snapshot reference only after a successful load.
    Unchanged revisions are not reloaded; failures retain the previous snapshot.
-7. **Implemented:** wire API lifecycle, `catalog.lookup`, hero-guide name
-   enrichment, and answer name matching to the loader. Each operation fixes one
-   repository reference; a configured missing or invalid snapshot fails startup.
-   This switches catalog-backed names only; it does not hot-reload image files.
+7. **Implemented current behavior:** wire API lifecycle, `catalog.lookup`,
+   hero-guide name enrichment, and the legacy answer name-matching path to the
+   loader. Each operation fixes one repository reference; a configured missing or
+   invalid snapshot fails startup. The answer matcher is transitional and is
+   superseded by the explicit-reference design below; do not extend it as the
+   target rendering path.
 8. **Implemented first step:** move the existing Valve catalog, patch-record,
    and image synchronization code into `app.integrations.valve.game_data_sync`,
    retaining the script as a thin entrypoint and preserving current behavior.
@@ -260,6 +262,25 @@ data-update migration.
    两侧悬浮按钮控制聊天记录与 Trace 抽屉。桌面列宽 288px／360px 以 180ms 过渡，窄屏
    使用滑入式覆盖抽屉和淡入遮罩；关闭后立即 inert。真实 Provider 刷新、部署 Redis 行为
    与真实模型回答仍需分别验收。
+
+## Explicit entity display (design confirmed, implementation pending)
+
+The user-visible contract is owned by [PRODUCT.md](PRODUCT.md), data and team
+asset refresh semantics by [DATA.md](DATA.md), and the unique Markdown reference
+syntax by [agent/product_run_state.md](agent/product_run_state.md). Every step
+below remains pending; this roadmap entry does not claim implementation or
+acceptance.
+
+1. Build the shared display directory and validate the `display_ref` lookup and
+   rendering contract.
+2. Import the historical Team identity mappings and existing image assets, then
+   add complete PandaScore team pagination and best-effort local image refresh.
+3. Attach references to explicitly identified entities in capability DTOs before
+   generic result externalization.
+4. Render complete explicit references in final and historical answers using the
+   latest display records; preserve canonical Markdown and readable copy output.
+5. Complete focused offline, browser, and real-model acceptance, then remove the
+   superseded answer name-matching display path.
 
 ## Hero guides (file-backed query and refresh active on WSL)
 

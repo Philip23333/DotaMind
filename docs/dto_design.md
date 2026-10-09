@@ -1,6 +1,6 @@
 # DotaMind Esports DTO Design
 
-> Status: DTO Design Frozen  
+> Status: Existing DTO baseline frozen; explicit display-reference extension design confirmed, implementation pending
 > Scope: PandaScore-backed Dota 2 esports domains  
 > Provider query contract: see `docs/pandascore_dota_contract_baseline.md`
 
@@ -208,7 +208,13 @@ class TeamRefDTO(BaseModel):
     location: str | None = None
     slug: str | None = None
     image_url: str | None = None
+    display_ref: str | None = None
 ```
+
+`display_ref` is a confirmed target addition and is not yet emitted by the
+current DTO implementation. It is a local presentation handle, distinct from
+the provider's `image_url`, which remains source data. Reference syntax and
+rendering semantics are owned by `docs/agent/product_run_state.md`.
 
 Consumers:
 
@@ -802,11 +808,18 @@ class TeamDTO(BaseModel):
     location: str | None = None
     slug: str | None = None
     image_url: str | None = None
+    display_ref: str | None = None
 
     current_roster: list[CurrentRosterPlayerDTO] = Field(
         default_factory=list
     )
 ```
+
+The nullable `TeamDTO.display_ref` field is also a confirmed target addition
+pending implementation. A Player has no display reference in the first version;
+a Team-valued `TeamRefDTO` such as `PlayerDTO.current_team` may have one. Existing
+Provider `image_url` fields remain available as source facts and are not the
+local display handle.
 
 Provider:
 

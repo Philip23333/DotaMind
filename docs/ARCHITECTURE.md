@@ -333,27 +333,53 @@ schedule -> updater -> persistent data
                  business Service -> tool result
 ```
 
-With a configured data directory, composition and answer presentation receive the
-same callable that returns the loader's current repository. `catalog.lookup`
-captures one repository per invocation; `hero.guide` creates one resolver before
-its first cache read; and each answer-text match obtains one repository. Each
-operation keeps that reference for its full duration, so a result cannot mix
-catalog versions. Presentation rebuilds its current name-match records when the
-repository object changes, including publications with the same patch number.
+With a configured data directory, composition and catalog consumers receive the
+loader's current repository. `catalog.lookup` captures one repository per
+invocation and `hero.guide` creates one resolver before its first cache read;
+each operation keeps that reference for its full duration. The configured
+snapshot backs the internal entity-name resolver and catalog query capability.
+Publishing a Catalog never rewrites previously generated Artifacts. API processes
+may detect a Catalog publication at different checks within the 30-second
+interval; the design does not promise a simultaneous fleet-wide switch.
 
-The configured snapshot backs the internal entity-name resolver, catalog query
-capability, and chat name matching. In persistent data mode, each answer-text match
-captures one current Catalog repository and reads the image manifest once. A valid
-entry is used only when its entity ID and internal name match the Catalog and its
-content-hash asset exists; the source patch does not need to match the current
-Catalog patch. A new manifest affects the next match without restarting the API.
-On manifest read or validation failure, the process keeps its last valid manifest;
-if none has been valid, catalog images are omitted. It never falls back to bundled
-Catalog images in persistent mode. With no configured data directory, the existing
-bundled image behavior remains. Team images are unchanged. Publishing a Catalog
-never rewrites previously generated Artifacts. API processes may detect a Catalog
-publication at different checks within the 30-second interval; the design does not
-promise a simultaneous fleet-wide switch.
+The current code also retains a server-side `DotaVisualEntityEnricher` that
+matches answer text against catalog and team names and stores
+`catalog_visual_entities` metadata. This is current implementation behavior, not
+the accepted target for entity display. The normal `/transport` message body
+remains canonical Markdown; the new design below replaces name-based association
+with references explicitly included beside identified entities. Existing local
+Catalog lookup, image-manifest reading, content-addressed image assets, and the
+hash-serving route can be reused without bringing name matching into the new path.
+
+### Explicit entity display (design confirmed, implementation pending)
+
+The target data flow is:
+
+```text
+Capability obtains an explicitly identified entity
+  -> local display directory supplies its display_ref
+  -> the reference follows that entity in the capability result or Artifact
+  -> the model explicitly cites the returned reference in its final answer
+  -> Product parses complete display references in batches
+  -> frontend renders the latest name and any available local image
+```
+
+Capabilities attach references only at fields whose entity identity they already
+know. They do not scan arbitrary JSON or infer an entity from a name, acronym, or
+image filename. The display directory is shared across sessions and reuses the
+existing Catalog and local image resources. The shared-data update task writes
+display records and assets; chat requests read them only and never download or
+refresh images. The API reads the shared directory through its read-only data
+mount.
+
+Provider adapters retain source transport and source facts; they do not choose
+presentation. Runtime does not select images, layout entities, or parse
+display-reference Markdown. The presentation layer consumes program-supplied
+references, while generic Artifact tools preserve those references without
+resolving them. The detailed reference syntax belongs to
+[`agent/product_run_state.md`](agent/product_run_state.md), and record/update
+semantics belong to [`DATA.md`](DATA.md). All behavior in this section is a
+confirmed design that remains unimplemented.
 
 Persistent Dota image URLs include the asset SHA-256. The read-only API route
 validates the requested hash, PNG signature, size limit, and bytes before serving

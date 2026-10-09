@@ -124,6 +124,12 @@ optional `page` and `limit` bounds. Each item is a `TeamRefDTO` containing
 exposed because series participation is historical while embedded Team players
 reflect a current roster snapshot.
 
+Both participant tools use one semantic collection request and inherit the
+generic result processor for oversized responses. `TeamDTO.current_roster`
+preserves the current membership snapshot while
+`TournamentParticipantDTO.expected_roster` remains the historical/expected
+tournament-context relation.
+
 `esports.match.search` is a closed semantic match-search capability. Its input
 uses `id`, `league_id`, `series_id`, `tournament_id`, `team_id`, `name`,
 `winner_id`, `status`, `lifecycle`, `sort`, `page`, and `limit`. It returns a
@@ -157,11 +163,26 @@ to multiple roles such as `["carry", "mid"]`; `current_team` is a lightweight
 current-team reference and does not embed a roster. A missing `current_team`
 is valid for a free agent.
 
-Both participant tools use one semantic collection request and inherit the
-generic result processor for oversized responses. `TeamDTO.current_roster`
-preserves the current membership snapshot while
-`TournamentParticipantDTO.expected_roster` remains the historical/expected
-tournament-context relation.
+## Explicit entity display references (design confirmed, implementation pending)
+
+When implemented, a capability may attach a program-generated `display_ref` to
+an entity whose identity it already knows. The model may copy a returned
+reference into the final answer; it must not construct one from a name, acronym,
+provider ID, or image URL. The reference is for final-answer rendering, not a
+tool input or a new lookup capability. Its syntax is owned by
+[`agent/product_run_state.md`](agent/product_run_state.md), and the shared
+records are owned by [`DATA.md`](DATA.md).
+
+The first version covers Hero, Item, Ability, and Team. A Player entity does not
+receive a reference, although a Team already present as a `TeamRefDTO` relation
+may. Hero-guide and Catalog results follow the same rule for explicitly known
+entities. Unknown or unresolved entities receive no fabricated reference. The
+reference follows the entity in the result before generic Artifact
+externalization; it is not emitted as a separate cross-reference table.
+
+This design adds no image-search or image-insertion tool. Existing provider
+`image_url` fields remain source facts and are not model-created display handles.
+Current capability schemas do not yet emit `display_ref`.
 
 ## Optional web search
 

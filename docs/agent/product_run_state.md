@@ -3,8 +3,10 @@
 ## Status and scope
 
 This document defines the accepted target for the chat execution experience.
-Phases 1-6 are implemented, including Markdown-only rendering, independent
-thread runs, and removal of the obsolete chat NDJSON protocol. The product Run
+Phases 1-6 are implemented, including independent thread runs and removal of
+the obsolete chat NDJSON protocol. The current normal frontend renders standard
+Markdown only; explicit entity display is a confirmed design with implementation
+pending. The product Run
 State schema, Runtime-event adapter, persistence, completed-answer retry,
 repository replay, and AssistantTransport endpoint are implemented. The
 production `runtime-provider` uses `/transport`; the page-lifetime thread
@@ -66,12 +68,53 @@ AgentRuntime -> structured runtime events
   and rendering integration. DotaMind supplies history adapters and conversion;
   its repository remains authoritative for saved dialogue.
 - Presentation owns collapse/expand behavior and standard Markdown rendering.
-  Catalog entity enhancement is deferred.
+  Catalog entity enhancement has a confirmed explicit-reference design;
+  implementation remains pending.
 
 Only product-approved fields cross the transport boundary. Do not replicate
 SessionExecutionHistory, model requests, raw reasoning, full tool observations,
 or Runtime internal state. Client-supplied transport state is not authoritative
 for history, authorization, tool configuration, or saved completion.
+
+## Explicit entity display references (design confirmed, implementation pending)
+
+This document is the single owner of the reference syntax. A capability supplies
+the reference in the result for an explicitly identified entity; the model copies
+that exact value into the final Markdown link. It does not infer or construct
+references from text, acronyms, or IDs.
+
+```json
+{"display_ref": "display:valve:hero:14"}
+```
+
+```markdown
+[帕吉](display:valve:hero:14)
+```
+
+The target reference form is `display:<source>:<entity-type>:<source-id>`.
+Valve Hero, Item, and Ability records use Valve identity; Team records use their
+explicit PandaScore identity. The `display:` link is a rendering instruction,
+not a navigable URL or a tool argument.
+
+The renderer parses only complete explicit references outside code regions and
+does not scan ordinary Markdown text for entity names. An incomplete streamed
+reference shows no icon; complete content is parsed in a batch. A valid reference
+uses the latest display name and local image from the shared directory. If that
+record has no image, render its name alone. If the reference is invalid or no
+longer resolves, retain the Markdown link label as readable text.
+
+Persist the canonical answer with its reference syntax unchanged. Copying a
+rendered answer emits readable entity names and never exposes the internal
+`display:` marker. Loading a historical answer resolves it against the latest
+directory rather than a saved name/image snapshot or legacy
+`catalog_visual_entities` metadata. Ordinary answer text is not rewritten, and
+an already-open page need not update immediately when the directory changes.
+Process timeline activities remain separate from final-answer entity rendering.
+
+The current code still has a name-matching visual-enrichment path; the target
+implementation must replace that path rather than extend name matching. This
+section records design only and does not claim the renderer or data flow is
+implemented.
 
 ## State semantics
 
@@ -99,10 +142,11 @@ type RunState = {
     status: "pending" | "streaming" | "ready" | "interrupted";
   };
   persistence: "pending" | "saving" | "saved" | "failed";
-  // Existing visual metadata may be retained; first-version UI does not use it.
-  visualEntities?: CatalogVisualEntity[];
 };
 ```
+
+Legacy persisted messages may still contain `catalog_visual_entities` metadata.
+The explicit-reference target below does not depend on that metadata.
 
 `status` describes the Runtime outcome. `stage` identifies its current or last
 stage. `persistence` describes saving the canonical dialogue turn; pending means
@@ -356,13 +400,13 @@ reasoning, tool logs, drafts, or fabricated answers to dialogue history.
 This rule does not remove the Agent's SessionExecutionHistory or change context
 compaction, effective-history retention, or follow-up behavior.
 
-The backend already stores canonical final text and catalog visual entities
-separately. Preserve existing stored metadata without requiring the frontend to
-consume it. First-version live and historical answers share standard Markdown
-rendering only. Remove catalog-mention text rewriting from the normal display
-path; do not replace it with entity enhancement in this phase. Standard Markdown
-images and links explicitly present in the answer remain renderable. Copying and
-persistence use canonical text, with no injected icon/image Markdown.
+The current backend may retain `catalog_visual_entities` metadata generated by
+the legacy name matcher; new rendering must not require or consult it. The
+confirmed target renders only explicit `display:` links in canonical Markdown,
+using the shared directory at render time. Standard Markdown images and links
+explicitly present in the answer remain renderable. Persist the original answer
+with its explicit references; copying exposes readable labels rather than
+internal reference markers. This target is not implemented yet.
 After refresh, saved messages need not reconstruct an ephemeral process panel.
 
 ## Six implementation phases
@@ -600,16 +644,17 @@ mounted chat integration covers independent thread connections, switching,
 stopping one request, history reconciliation, and unread indication/clearing.
 
 **Decision:** Switching threads changes the selected view only. Existing runs
-continue receiving streamed text and saving their final answers. Render only
-standard Markdown in this version, without catalog entity enhancement.
+continue receiving streamed text and saving their final answers. Phase 4 kept
+the normal renderer on standard Markdown; explicit `display:` references are a
+separate confirmed design with implementation pending, as described above.
 
 **Reason:** Users can inspect or use another conversation without abandoning an
 answer. A shared Markdown renderer keeps live/history behavior consistent without
 expanding this migration into a visual-entity feature.
 
-**Not included:** Cross-tab coordination, continuing after actual disconnect,
-resuming streams after reload, new edit/branch/regenerate features, or enhanced
-entity rendering. Existing stored visual metadata need not be deleted.
+**Not included in Phase 4:** Cross-tab coordination, continuing after actual
+disconnect, resuming streams after reload, new edit/branch/regenerate features,
+or enhanced entity rendering. Existing stored visual metadata need not be deleted.
 
 Own per-thread connections and run state outside the currently selected view.
 Reuse assistant-ui's thread/runtime facilities where they satisfy this lifecycle;
@@ -638,13 +683,14 @@ completes. Refresh restores saved dialogue only; no durable draft store is added
 Live and restored messages share one canonical message conversion and Markdown
 renderer. Preserve request/message identity across optimistic user acceptance,
 streaming, save completion, and history hydration. Historical messages without
-process data do not fabricate activity panels. The vNext history path now keeps
-canonical Markdown unchanged and does not apply `decorateCatalogMentions`; the
-converter carries state without catalog enhancement. The production real-time
-path uses the runtime-provider and AssistantTransport. Visual
-metadata may stay stored but must not be required for readable answers or consumed
-for entity enhancement. Preserve trace links and existing message actions through
-structured metadata; this restriction is about catalog visuals, not all metadata.
+process data do not fabricate activity panels. The current vNext history path
+keeps canonical Markdown unchanged and does not apply `decorateCatalogMentions`;
+the explicit-reference design above is a separate pending presentation feature.
+The production real-time path uses the runtime-provider and AssistantTransport.
+Visual metadata may remain in old records but is not required for readable answers
+or used by the target renderer. Preserve trace links and existing message actions
+through structured metadata; this boundary concerns entity visuals, not all
+metadata.
 
 The old chat NDJSON encoder/parser, transport event types, accumulated-text
 converter, and superseded lifecycle adapters have been removed. History,

@@ -115,6 +115,21 @@ Steam32 或比赛 ID 后补充要求。发送时在未改动的用户正文前�
 
 过程活动只用于当前页面展示，不承诺刷新后恢复完整时间线。最终回答、错误提示和保存状态独立呈现，不因过程区折叠而隐藏。
 
+## 回答中的显式实体展示（设计已确认，实现待完成）
+
+第一版支持 Hero、Item、Ability 和 Team，不支持 Player 实体本身。模型只在程序
+随明确实体提供 `display_ref` 时，才可在最终回答中显式引用该实体；普通文字、名称和
+缩写不会被扫描或自动配图。模型根据回答内容决定是否以及在哪些位置使用已返回的引用。
+引用语法及流式、历史和复制行为由
+[product_run_state.md](agent/product_run_state.md) 统一定义，数据记录和刷新规则由
+[DATA.md](DATA.md) 定义。
+
+图片建议用于对阵双方、攻略标题、装备列表和技能序列等实体明确且有助于识别的位置；分析正文应避免反复插入相同图标。图标旁始终显示实体名称。实体有有效引用但没有本地图片时显示名称；引用无效时保留回答中的原标签文字。
+
+历史回答保存带显式引用的原始正文。加载历史时按当前展示目录解析，使用目录中的最新名称和图片；不改写普通正文，也不要求已经打开的页面实时跟随目录更新。
+
+本版不包含实体详情跳转、悬浮卡片、比分卡或完整攻略组件。以上均为目标行为，尚未实现或验收。
+
 ## Hero guides and shared game data (file-backed query and scheduled updates implemented)
 
 The hero-guide tool answers a request for one specified Valve hero ID and

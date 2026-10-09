@@ -37,10 +37,10 @@ copy it.
 | What DotaMind does and excludes | `PRODUCT.md` |
 | Layer and capability/provider boundaries | `ARCHITECTURE.md` |
 | Agent-visible capability contracts | `TOOLS.md` |
-| Source identity, locators, provider facts, Valve identity, and normalization | `DATA.md` |
+| Source identity, locators, provider facts, Valve identity, normalization, shared display records, and asset refresh | `DATA.md` |
 | Large-result externalization, Artifact storage, corpus, and migration | `ARTIFACTS.md` |
 | Context Governance: Runtime-driven compaction, FIFO locators, and same-session continuation | `agent/context_governance_evidence_lifecycle.md` |
-| Product Run State, chat transport, activity presentation, and dialogue consistency | `agent/product_run_state.md` |
+| Product Run State, chat transport, activity presentation, explicit display-reference syntax, and dialogue consistency | `agent/product_run_state.md` |
 | Behavioral and integration acceptance | `EVALS.md` |
 | Delivery order | `ROADMAP.md` |
 | Costly external implementation facts | `reference/` |
