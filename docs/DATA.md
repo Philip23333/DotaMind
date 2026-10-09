@@ -49,13 +49,22 @@ Nothing in this section describes a currently deployed feature.
 
 ### Display records
 
-Each record is keyed by a stable `display_ref` and retains the entity type, source,
+The Team snapshot is published at `<data_root>/display/teams.json` with
+`schema_version: 1`; teams are indexed by their decimal PandaScore ID. Each record
+is keyed at runtime by a stable `display_ref` and retains the entity type, source,
 and identity within that source. It also provides the latest display name, the
 identifier of the most recently successful local image resource when one exists,
 the latest observed image URL, the URL associated with the last successful
 download, the successful-download time, and the month through which the required
-monthly image refresh has completed. Exact field and file names remain an
-implementation choice.
+monthly image refresh has completed. The file record fields are `source_id`,
+`label`, `observed_image_url`, `downloaded_image_url`, `image_asset`,
+`image_downloaded_at`, and `monthly_refresh_completed`.
+`image_asset` is a lowercase SHA-256 content hash for
+`<data_root>/images/assets/<hash>.png`; the reader returns the existing local
+by-hash image route only when that file exists, never the upstream CDN URL. A
+missing or invalid initial snapshot produces an empty Team directory. After a
+valid snapshot has been read, a damaged replacement leaves that last valid
+snapshot in use; the next valid publication is visible on a later read.
 
 Entity identity comes from an explicit source identity, never from a display name,
 team acronym, or image filename. An image content hash identifies image bytes,
