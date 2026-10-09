@@ -2,12 +2,8 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
-import os
-import tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -15,13 +11,21 @@ from typing import Any, Literal
 from app.integrations.valve import game_data_sync
 from app.integrations.valve.catalog_repository import CatalogSnapshotError
 from app.integrations.valve.image_client import (
-    MAX_IMAGE_BYTES,
-    PNG_SIGNATURE,
     ImageKind,
     ValveImageClient,
     ValveImageError,
 )
 from app.vnext.data_updates.catalog_store import CatalogSnapshotStore, CatalogStoreError
+from app.vnext.data_updates.image_assets import (
+    ImageAssetError,
+    content_asset_is_valid,
+    content_sha256,
+    is_png_payload,
+    store_content_addressed_png,
+)
+from app.vnext.data_updates.image_assets import (
+    atomic_write as _shared_atomic_write,
+)
 from app.vnext.data_updates.image_manifest import parse_image_manifest, validate_image_manifest
 
 ImageRefreshErrorReason = Literal["catalog_missing", "invalid_manifest", "storage_error"]
@@ -144,7 +148,7 @@ def refresh_images(
                 if not _is_png_payload(payload):
                     failures_by_key[key] = "invalid_image"
                     continue
-                content_hash = hashlib.sha256(payload).hexdigest()
+                content_hash = content_sha256(payload)
                 _store_asset(assets_directory, content_hash, payload)
                 entries[key] = {
                     "kind": target.kind,
@@ -207,36 +211,26 @@ def _entry_key(kind: str, entity_id: int) -> str:
 
 
 def _is_png_payload(payload: object) -> bool:
-    return (
-        isinstance(payload, bytes)
-        and 0 < len(payload) <= MAX_IMAGE_BYTES
-        and payload.startswith(PNG_SIGNATURE)
-    )
+    return is_png_payload(payload)
 
 
 def _asset_is_valid(assets_directory: Path, content_hash: str) -> bool:
-    path = assets_directory / f"{content_hash}.png"
     try:
-        payload = path.read_bytes()
-    except FileNotFoundError:
-        return False
-    except OSError:
+        return content_asset_is_valid(assets_directory, content_hash)
+    except ImageAssetError:
         raise ImageRefreshError("storage_error") from None
-    return _is_png_payload(payload) and hashlib.sha256(payload).hexdigest() == content_hash
 
 
 def _store_asset(assets_directory: Path, content_hash: str, payload: bytes) -> None:
-    path = assets_directory / f"{content_hash}.png"
     try:
-        assets_directory.mkdir(parents=True, exist_ok=True)
-        if _asset_is_valid(assets_directory, content_hash):
-            return
-        _atomic_write(path, payload)
-    except ImageRefreshError:
-        raise
-    except OSError:
+        store_content_addressed_png(
+            assets_directory,
+            payload,
+            expected_hash=content_hash,
+            atomic_writer=_atomic_write,
+        )
+    except ImageAssetError:
         raise ImageRefreshError("storage_error") from None
-
 
 def _write_manifest(path: Path, content: bytes) -> None:
     try:
@@ -247,25 +241,7 @@ def _write_manifest(path: Path, content: bytes) -> None:
 
 
 def _atomic_write(path: Path, content: bytes) -> None:
-    descriptor: int | None = None
-    temporary_path: Path | None = None
-    try:
-        descriptor, temporary_name = tempfile.mkstemp(
-            prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
-        )
-        temporary_path = Path(temporary_name)
-        with os.fdopen(descriptor, "wb") as temporary_file:
-            descriptor = None
-            temporary_file.write(content)
-        os.replace(temporary_path, path)
-        temporary_path = None
-    finally:
-        if descriptor is not None:
-            with suppress(OSError):
-                os.close(descriptor)
-        if temporary_path is not None:
-            with suppress(OSError):
-                temporary_path.unlink()
+    _shared_atomic_write(path, content)
 
 
 __all__ = [

@@ -1,0 +1,366 @@
+{
+  "schema_version": 1,
+  "source_commit": "180058efcb897b9aaceb1433bde6754bfeb9680f",
+  "teams": [
+    {
+      "source_id": 1647,
+      "label": "Team Liquid",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/1647/527px_team_liquid_2023_lightmode.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/1647.png"
+    },
+    {
+      "source_id": 1651,
+      "label": "Virtus.pro",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/1651/921px_virtus.pro_2019_allmode.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/1651.png"
+    },
+    {
+      "source_id": 1654,
+      "label": "OG",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/1654/438px_og_2026_allmode.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/1654.png"
+    },
+    {
+      "source_id": 1657,
+      "label": "LGD Gaming",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/1657/600px_lgd_gaming_dec_2019_allmode.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/1657.png"
+    },
+    {
+      "source_id": 1660,
+      "label": "Execration",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/1660/771px_execration_2024_full_allmode.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/1660.png"
+    },
+    {
+      "source_id": 1669,
+      "label": "Team Spirit",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/1669/153px_team_spirit_2022_lightmode.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/1669.png"
+    },
+    {
+      "source_id": 1676,
+      "label": "Vici Gaming",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/1676/Vici_Gaming.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/1676.png"
+    },
+    {
+      "source_id": 1680,
+      "label": "Midas Club",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/1680/600px_midas_clublogo_2019.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/1680.png"
+    },
+    {
+      "source_id": 1699,
+      "label": "Natus Vincere",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/1699/Na_vi_logo.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/1699.png"
+    },
+    {
+      "source_id": 1931,
+      "label": "Yellow Submarine",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/1931/yellow_submarine.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/1931.png"
+    },
+    {
+      "source_id": 1948,
+      "label": "Level UP",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/1948/t11113.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/1948.png"
+    },
+    {
+      "source_id": 2227,
+      "label": "Nemiga Gaming",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/2227/222px_nemiga_gaming_2020_temporary.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/2227.png"
+    },
+    {
+      "source_id": 126099,
+      "label": "Team Bald",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/126099/bald.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/126099.png"
+    },
+    {
+      "source_id": 126591,
+      "label": "Myanmar",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/126591/285px_flag_of_myanmar_4_by_3.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/126591.png"
+    },
+    {
+      "source_id": 126592,
+      "label": "Philippines",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/126592/285px_flag_of_philippines_4_by_3.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/126592.png"
+    },
+    {
+      "source_id": 126594,
+      "label": "Thailand",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/126594/190px_flag_of_thailand_4_by_3.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/126594.png"
+    },
+    {
+      "source_id": 128329,
+      "label": "Xtreme Gaming",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/128329/t72899.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/128329.png"
+    },
+    {
+      "source_id": 128357,
+      "label": "PuckChamp",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/128357/puck_champ__russian_team__logo.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/128357.png"
+    },
+    {
+      "source_id": 129609,
+      "label": "Nigma Galaxy",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/129609/614985375154c.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/129609.png"
+    },
+    {
+      "source_id": 130713,
+      "label": "Rune Eaters",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/130713/467px_rune_eaters_esports_lightmode.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/130713.png"
+    },
+    {
+      "source_id": 130768,
+      "label": "BetBoom Team",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/130768/bet_boom_team_2024_allmode.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/130768.png"
+    },
+    {
+      "source_id": 133868,
+      "label": "Team Falcons",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/133868/team_falconslogo_square.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/133868.png"
+    },
+    {
+      "source_id": 133882,
+      "label": "Aurora",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/133882/600px_aurora_gaming_2025_allmode.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/133882.png"
+    },
+    {
+      "source_id": 133973,
+      "label": "Australia",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/133973/67px_flag_of_australia_4_by_3.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/133973.png"
+    },
+    {
+      "source_id": 134134,
+      "label": "L1ga Team",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/134134/l1_ga_team_lightmode.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/134134.png"
+    },
+    {
+      "source_id": 134536,
+      "label": "1win",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/134536/800px_1win_team_2024_allmode.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/134536.png"
+    },
+    {
+      "source_id": 134559,
+      "label": "MOUZ",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/134559/139px_mouz_2021_allmode.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/134559.png"
+    },
+    {
+      "source_id": 134592,
+      "label": "Dandelions",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/134592/ezgif_6d95045d809eb047.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/134592.png"
+    },
+    {
+      "source_id": 135697,
+      "label": "Yakult Brothers",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/135697/yakult_brothers_lightmode.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/135697.png"
+    },
+    {
+      "source_id": 135712,
+      "label": "PARIVISION",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/135712/250px_parivision_allmode.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/135712.png"
+    },
+    {
+      "source_id": 135854,
+      "label": "Zero Tenacity",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/135854/1200px_zero_tenacity_2025_lightmode.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/135854.png"
+    },
+    {
+      "source_id": 136531,
+      "label": "Team Lynx",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/136531/109px_team_lynx_lightmode.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/136531.png"
+    },
+    {
+      "source_id": 136650,
+      "label": "Team Nemesis",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/136650/159px_team_nem_lightmode.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/136650.png"
+    },
+    {
+      "source_id": 136960,
+      "label": "YBN Team",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/136960/ybn_team_bbsb14_allmode.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/136960.png"
+    },
+    {
+      "source_id": 136962,
+      "label": "Stray Team",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/136962/stray_team_bbsb13_allmode(2).png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/136962.png"
+    },
+    {
+      "source_id": 136963,
+      "label": "Travoman Team",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/136963/travoman_team_bbsb14_allmode.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/136963.png"
+    },
+    {
+      "source_id": 136967,
+      "label": "Rostik Team",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/136967/rostik_team_bbsb14_allmode.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/136967.png"
+    },
+    {
+      "source_id": 136968,
+      "label": "VooDooSh Team",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/136968/voo_doo_sh_team_bbsb14_allmode.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/136968.png"
+    },
+    {
+      "source_id": 137073,
+      "label": "Team Yandex",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/137073/249px_team_yandex_allmode.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/137073.png"
+    },
+    {
+      "source_id": 137156,
+      "label": "REKONIX",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/137156/adf1bd68_733c_4fcc_aa2f_d9ff5f83294b_removalai_preview.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/137156.png"
+    },
+    {
+      "source_id": 137417,
+      "label": "Inner Circle x Insanity",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/137417/600px_inner_circle_2025_allmode.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/137417.png"
+    },
+    {
+      "source_id": 137540,
+      "label": "Spirit Academy",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/137540/185px_team_spirit_academy_2021_lightmode.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/137540.png"
+    },
+    {
+      "source_id": 137588,
+      "label": "GamerLegion",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/137588/900px_gamer_legion_cs_2023_allmode.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/137588.png"
+    },
+    {
+      "source_id": 137657,
+      "label": "Ilbirs eSports",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/137657/566px_ilbirs_e_sports_allmode.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/137657.png"
+    },
+    {
+      "source_id": 137685,
+      "label": "Amaru Gaming",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/137685/181px_amaru_gaming_allmode.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/137685.png"
+    },
+    {
+      "source_id": 137870,
+      "label": "Power Rangers",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/137870/power_rangers_lightmode.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/137870.png"
+    },
+    {
+      "source_id": 137885,
+      "label": "PlayTime",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/137885/585px_play_time_allmode.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/137885.png"
+    },
+    {
+      "source_id": 138168,
+      "label": "GLYPH",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/138168/544px_glyph_lightmode.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/138168.png"
+    },
+    {
+      "source_id": 138494,
+      "label": "Team Resilience",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/138494/800px_team_resilience__dota2__lightmode.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/138494.png"
+    },
+    {
+      "source_id": 138747,
+      "label": "Enjoy",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/138747/enjoy_allmode.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/138747.png"
+    },
+    {
+      "source_id": 138839,
+      "label": "TEAM VISION",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/138839/619px_team_vision_allmode.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/138839.png"
+    },
+    {
+      "source_id": 138842,
+      "label": "HULIGANI",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/138842/800px_huligani_lightmode.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/138842.png"
+    },
+    {
+      "source_id": 138857,
+      "label": "Team Syntax",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/138857/599px_team_syntax_allmode.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/138857.png"
+    },
+    {
+      "source_id": 138858,
+      "label": "RE.Arise",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/138858/re_arise_lightmode.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/138858.png"
+    },
+    {
+      "source_id": 138865,
+      "label": "New Zealand",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/138865/100px_flag_of_new_zealand_4_by_3.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/138865.png"
+    },
+    {
+      "source_id": 138993,
+      "label": "BoomBoys",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/138993/800px_boom_boys_allmode.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/138993.png"
+    },
+    {
+      "source_id": 138994,
+      "label": "Iron Wing",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/138994/10150413.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/138994.png"
+    },
+    {
+      "source_id": 139006,
+      "label": "avice Team",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/139006/avice_team_bbsb14_allmode.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/139006.png"
+    },
+    {
+      "source_id": 139007,
+      "label": "Daxak Team",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/139007/daxak_team_bbsb14_allmode.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/139007.png"
+    },
+    {
+      "source_id": 139008,
+      "label": "NS Team",
+      "source_url": "https://cdn-api.pandascore.co/images/team/image/139008/ns_team_bbsb14_allmode.png",
+      "legacy_image_path": "/api/v1/assets/esports/teams/139008.png"
+    }
+  ]
+}
