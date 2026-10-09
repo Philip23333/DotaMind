@@ -68,7 +68,7 @@ def test_team_search_schema_is_semantic_and_closed() -> None:
         assert forbidden not in rendered
 
 
-def test_team_dtos_are_strict_and_have_frozen_fields() -> None:
+def test_team_dtos_are_strict_with_optional_display_reference() -> None:
     assert set(CurrentRosterPlayerDTO.model_fields) == {
         "id",
         "name",
@@ -87,6 +87,7 @@ def test_team_dtos_are_strict_and_have_frozen_fields() -> None:
         "location",
         "slug",
         "image_url",
+        "display_ref",
         "current_roster",
     }
     player = CurrentRosterPlayerDTO(
@@ -153,6 +154,7 @@ def test_team_search_returns_team_identity() -> None:
                 "location": "NL",
                 "slug": "team-liquid",
                 "image_url": "https://example.test/liquid.png",
+                "display_ref": None,
                 "current_roster": [
                     {
                         "id": 1,

@@ -178,34 +178,38 @@ tools with missing cache data or failed reads from unsupported capabilities.
 Capability questions should be answered without executing tools; concrete guide
 requests should not be rejected solely because of an earlier assistant claim.
 
-## Explicit entity display (design confirmed, implementation pending)
+## Explicit entity display (Team capability injection implemented; rendering pending)
 
-The following are acceptance requirements, not completed tests. The documentation
-change does not implement or verify the display path.
+Offline regressions now cover Team reference injection for the five explicit
+capability result paths, same-acronym Teams resolved by ID, missing local records
+and images, provider-fact preservation, non-mutating copies, one deduplicated
+directory batch per result, and reference retention through the composed tool,
+Artifact externalization, and `artifact.read` path. They make no PandaScore call
+and do not establish answer rendering.
 
-1. **Identity and display:** Bristleback and two distinct teams sharing the
-   `BB` acronym resolve only through their supplied references; ordinary mentions
-   and abbreviations remain plain text.
-2. **Data path:** a reference attached to an explicitly identified DTO remains
-   with its entity through result externalization, `artifact.read`, and the final
-   answer, where the shared directory resolves it.
+The Team refresher's pagination, old-directory retention, image-failure retry,
+and monthly refresh rules have their own offline tests under the data-update
+acceptance. Remaining answer and rendering requirements are:
+
+1. **Rendered identity:** Bristleback and distinct Teams sharing the `BB`
+   acronym display only through supplied references; ordinary mentions and
+   abbreviations remain plain text.
+2. **Final answer path:** a returned reference is used beside the correct entity;
+   the already-tested Artifact path does not establish that the model or renderer
+   preserves it in an answer.
 3. **Message behavior:** a partial streamed reference shows no image before it is
    complete; code regions are untouched; missing images retain the entity name;
    invalid references retain the Markdown label; history uses current directory
    data; copying produces readable text without the internal marker.
-4. **Update behavior:** a failed team-list page leaves the published directory
-   intact; failed downloads after a URL change preserve the prior local image and
-   remain eligible for retry; a missed monthly refresh or partial failure is
-   completed by later daily runs without a false success marker.
-5. **Browser review:** check the rendered name/image, fallback states, streaming,
+4. **Browser review:** check the rendered name/image, fallback states, streaming,
    and copy behavior at desktop and narrow widths.
-6. **Real-model observation:** separately inspect one hero-guide answer and one
+5. **Real-model observation:** separately inspect one hero-guide answer and one
    esports-query answer for whether the model places returned references beside
    the correct entities. This is not established by fixture or scripted-model
    tests.
 
-Offline contract tests, browser rendering review, and real-model behavior are
-separate acceptance layers; none is claimed complete by this design record.
+Offline Team injection tests have passed. Browser rendering review and real-model
+behavior are separate acceptance layers and remain pending.
 
 ## Context Governance harness
 

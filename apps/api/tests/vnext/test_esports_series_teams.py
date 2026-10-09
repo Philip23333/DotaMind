@@ -92,6 +92,7 @@ def test_series_teams_tool_returns_participant_team_contract() -> None:
                 "location": "cn",
                 "slug": None,
                 "image_url": None,
+                "display_ref": None,
             }
         ],
         "page": 2,
@@ -163,6 +164,7 @@ def test_team_ref_dto_is_strict_with_optional_metadata() -> None:
         "location",
         "slug",
         "image_url",
+        "display_ref",
     }
     assert TeamRefDTO(id=128329, name="Xtreme Gaming").model_dump() == {
         "id": 128329,
@@ -171,6 +173,7 @@ def test_team_ref_dto_is_strict_with_optional_metadata() -> None:
         "location": None,
         "slug": None,
         "image_url": None,
+        "display_ref": None,
     }
     with pytest.raises(ValueError):
         TeamRefDTO(id=128329, name="Xtreme Gaming", players=[])

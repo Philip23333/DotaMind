@@ -40,13 +40,13 @@ Names are added to the query result and generic Artifact output; they are not
 written into guide snapshots. Old snapshots remain readable because enrichment
 DTO fields have defaults. `game.detail` has not yet integrated the resolver.
 
-## Explicit entity display records and Team assets (design confirmed; refresh integrated, display pending)
+## Explicit entity display records and Team assets (Team directory, refresh, and capability injection implemented; rendering pending)
 
 This section owns the shared display-record and update-data contract. User-visible
 placement and exclusions are defined in [PRODUCT.md](PRODUCT.md); reference
 syntax is defined in [agent/product_run_state.md](agent/product_run_state.md).
 The implemented refresh wiring below is not evidence of a deployed or successful
-Team refresh, and the user-facing entity display path remains pending.
+Team refresh. User-visible answer rendering remains pending.
 
 ### Display records
 
@@ -72,7 +72,13 @@ team acronym, or image filename. An image content hash identifies image bytes,
 not the entity. Name updates and image updates are independent. If a later source
 listing omits an already recorded entity, the record and its local image are not
 automatically deleted. History stores no name or image snapshot; rendering looks
-up the current shared record when the saved answer is loaded.
+up the current shared record when the saved answer is loaded. Capability
+composition attaches Team references only at explicit Team DTO fields in team,
+series-team, tournament-participant, match-participant, and player current-team
+results. The Team ID must exist in the local directory; this check does not
+replace the Provider's current name or image URL. Missing images do not block
+references. Model guidance and user-visible answer rendering remain
+unimplemented.
 
 ### Team directory and image updates
 

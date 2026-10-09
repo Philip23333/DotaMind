@@ -8,6 +8,7 @@ import os
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TypeVar
 
 from dotenv import dotenv_values
 
@@ -34,6 +35,13 @@ from app.vnext.artifacts import (
 )
 from app.vnext.artifacts.lifecycle import ArtifactObservationTranscriptRewriter
 from app.vnext.capabilities.catalog.lookup import CatalogLookupInput, CatalogLookupResult
+from app.vnext.capabilities.esports.display_enrichment import (
+    enrich_match_search_result,
+    enrich_player_search_result,
+    enrich_series_teams_result,
+    enrich_team_search_result,
+    enrich_tournament_search_result,
+)
 from app.vnext.capabilities.esports.league import LeagueSearchInput, LeagueSearchResult
 from app.vnext.capabilities.esports.match import MatchSearchInput, MatchSearchResult
 from app.vnext.capabilities.esports.player import PlayerSearchInput, PlayerSearchResult
@@ -55,6 +63,7 @@ from app.vnext.capabilities.player.recent_games import (
 )
 from app.vnext.catalog import EntityNameResolver
 from app.vnext.data_updates.image_reader import ImageManifestReader
+from app.vnext.entity_display import EntityDisplayDirectory
 from app.vnext.hero_guides.cache import HeroGuideReader
 from app.vnext.homepage.recent_series import (
     HomepageRecentSeriesService,
@@ -116,6 +125,21 @@ PlayerProfileService = Callable[[PlayerProfileInput], Awaitable[PlayerProfileRes
 GameDetailService = Callable[[GameDetailInput], Awaitable[GameDetailResult]]
 CatalogLookupService = Callable[[CatalogLookupInput], Awaitable[CatalogLookupResult]]
 HeroGuideLookup = Callable[[HeroGuideInput], Awaitable[HeroGuideResult]]
+_QueryT = TypeVar("_QueryT")
+_ResultT = TypeVar("_ResultT")
+
+
+def _with_team_display_refs(
+    handler: Callable[[_QueryT], Awaitable[_ResultT]],
+    directory: EntityDisplayDirectory,
+    enrich: Callable[[_ResultT, EntityDisplayDirectory], _ResultT],
+) -> Callable[[_QueryT], Awaitable[_ResultT]]:
+    """Enrich a typed capability result before registry validation/externalization."""
+
+    async def wrapped(query: _QueryT) -> _ResultT:
+        return enrich(await handler(query), directory)
+
+    return wrapped
 
 
 @dataclass(frozen=True, slots=True)
@@ -480,6 +504,7 @@ class VNextServices:
     homepage_recent_series: HomepageRecentSeriesService | None = None
     catalog_lookup: CatalogLookupService | None = None
     tavily_web_search: TavilyWebSearch | None = None
+    entity_display_directory: EntityDisplayDirectory | None = None
 
     async def aclose(self) -> None:
         if self.homepage_recent_series is not None:
@@ -539,6 +564,11 @@ def build_vnext_services(
         if catalog_repository_provider is not None
         else load_default_catalog_repository
     )
+    entity_display_directory = (
+        EntityDisplayDirectory(repository_provider, data_root=config.data_dir)
+        if config.data_dir is not None
+        else None
+    )
     catalog_lookup = ValveCatalogLookupAdapter(repository_provider).lookup
     hero_guide: HeroGuideLookup | None = None
     if hero_guide_cache is not None:
@@ -560,6 +590,7 @@ def build_vnext_services(
         hero_guide=hero_guide,
         homepage_recent_series=homepage_recent_series,
         catalog_lookup=catalog_lookup,
+        entity_display_directory=entity_display_directory,
     )
 
 
@@ -649,15 +680,50 @@ def build_vnext_registry(
     if resolved_services.series_search is not None:
         register_series_tool(registry, resolved_services.series_search)
     if resolved_services.series_teams is not None:
-        register_series_teams_tool(registry, resolved_services.series_teams)
+        service = resolved_services.series_teams
+        if resolved_services.entity_display_directory is not None:
+            service = _with_team_display_refs(
+                service,
+                resolved_services.entity_display_directory,
+                enrich_series_teams_result,
+            )
+        register_series_teams_tool(registry, service)
     if resolved_services.tournament_search is not None:
-        register_tournament_tool(registry, resolved_services.tournament_search)
+        service = resolved_services.tournament_search
+        if resolved_services.entity_display_directory is not None:
+            service = _with_team_display_refs(
+                service,
+                resolved_services.entity_display_directory,
+                enrich_tournament_search_result,
+            )
+        register_tournament_tool(registry, service)
     if resolved_services.match_search is not None:
-        register_match_tool(registry, resolved_services.match_search)
+        service = resolved_services.match_search
+        if resolved_services.entity_display_directory is not None:
+            service = _with_team_display_refs(
+                service,
+                resolved_services.entity_display_directory,
+                enrich_match_search_result,
+            )
+        register_match_tool(registry, service)
     if resolved_services.team_search is not None:
-        register_team_tool(registry, resolved_services.team_search)
+        service = resolved_services.team_search
+        if resolved_services.entity_display_directory is not None:
+            service = _with_team_display_refs(
+                service,
+                resolved_services.entity_display_directory,
+                enrich_team_search_result,
+            )
+        register_team_tool(registry, service)
     if resolved_services.player_search is not None:
-        register_player_tool(registry, resolved_services.player_search)
+        service = resolved_services.player_search
+        if resolved_services.entity_display_directory is not None:
+            service = _with_team_display_refs(
+                service,
+                resolved_services.entity_display_directory,
+                enrich_player_search_result,
+            )
+        register_player_tool(registry, service)
     if resolved_services.player_profile is not None:
         register_player_profile_tool(registry, resolved_services.player_profile)
     if resolved_services.player_recent_games is not None:

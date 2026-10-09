@@ -1,6 +1,6 @@
 # DotaMind Esports DTO Design
 
-> Status: Existing DTO baseline frozen; explicit display-reference extension design confirmed, implementation pending
+> Status: Existing DTO baseline frozen; optional Team display references are implemented at capability output assembly
 > Scope: PandaScore-backed Dota 2 esports domains  
 > Provider query contract: see `docs/pandascore_dota_contract_baseline.md`
 
@@ -211,10 +211,12 @@ class TeamRefDTO(BaseModel):
     display_ref: str | None = None
 ```
 
-`display_ref` is a confirmed target addition and is not yet emitted by the
-current DTO implementation. It is a local presentation handle, distinct from
-the provider's `image_url`, which remains source data. Reference syntax and
-rendering semantics are owned by `docs/agent/product_run_state.md`.
+`display_ref` is an optional local presentation handle attached by application
+composition only when the shared display directory confirms this Team ID. It is
+distinct from the provider's `image_url`, which remains source data. A missing
+local image does not prevent a reference, and a missing directory record leaves
+the field null. Reference syntax and rendering semantics are owned by
+`docs/agent/product_run_state.md`.
 
 Consumers:
 
@@ -815,11 +817,11 @@ class TeamDTO(BaseModel):
     )
 ```
 
-The nullable `TeamDTO.display_ref` field is also a confirmed target addition
-pending implementation. A Player has no display reference in the first version;
-a Team-valued `TeamRefDTO` such as `PlayerDTO.current_team` may have one. Existing
-Provider `image_url` fields remain available as source facts and are not the
-local display handle.
+The nullable `TeamDTO.display_ref` field is populated by application composition
+only when the shared display directory confirms the Team ID. A Player has no
+display reference in the first version; a Team-valued `TeamRefDTO` such as
+`PlayerDTO.current_team` may have one. Existing Provider `image_url` fields
+remain available as source facts and are not the local display handle.
 
 Provider:
 

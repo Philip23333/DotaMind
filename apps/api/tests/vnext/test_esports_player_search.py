@@ -178,6 +178,7 @@ def test_player_search_returns_identity_and_current_team() -> None:
             "location": None,
             "slug": None,
             "image_url": None,
+            "display_ref": None,
         },
     }
     assert result.content["anomalies"] == []

@@ -53,7 +53,7 @@ class SeriesDTO(BaseModel):
 
 
 class TeamRefDTO(BaseModel):
-    """Stable lightweight team reference for embedded esports relations."""
+    """Stable lightweight Team relation with an optional local display handle."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -64,6 +64,13 @@ class TeamRefDTO(BaseModel):
     location: str | None = None
     slug: str | None = None
     image_url: str | None = None
+    display_ref: str | None = Field(
+        default=None,
+        description=(
+            "Program-provided local presentation reference; not a business "
+            "identity or tool query parameter."
+        ),
+    )
 
 
 class PlayerRole(str, Enum):
@@ -94,7 +101,7 @@ class CurrentRosterPlayerDTO(BaseModel):
 
 
 class TeamDTO(BaseModel):
-    """Stable DotaMind representation of a Team and its current roster."""
+    """Stable Team facts and current roster, with an optional local display handle."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -105,6 +112,13 @@ class TeamDTO(BaseModel):
     location: str | None = None
     slug: str | None = None
     image_url: str | None = None
+    display_ref: str | None = Field(
+        default=None,
+        description=(
+            "Program-provided local presentation reference; not a business "
+            "identity or tool query parameter."
+        ),
+    )
 
     current_roster: list[CurrentRosterPlayerDTO] = Field(default_factory=list)
 

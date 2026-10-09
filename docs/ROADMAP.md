@@ -263,22 +263,26 @@ data-update migration.
    使用滑入式覆盖抽屉和淡入遮罩；关闭后立即 inert。真实 Provider 刷新、部署 Redis 行为
    与真实模型回答仍需分别验收。
 
-## Explicit entity display (design confirmed, implementation pending)
+## Explicit entity display (Team capability data path implemented; rendering pending)
 
 The user-visible contract is owned by [PRODUCT.md](PRODUCT.md), data and team
 asset refresh semantics by [DATA.md](DATA.md), and the unique Markdown reference
-syntax by [agent/product_run_state.md](agent/product_run_state.md). Every step
-below remains pending; this roadmap entry does not claim implementation or
-acceptance.
+syntax by [agent/product_run_state.md](agent/product_run_state.md). The first
+three data-path steps below are implemented; user-visible rendering and its
+acceptance remain pending.
 
-1. Build the shared display directory and validate the `display_ref` lookup and
-   rendering contract.
-2. Import the historical Team identity mappings and existing image assets, then
-   add complete PandaScore team pagination and best-effort local image refresh.
-3. Attach references to explicitly identified entities in capability DTOs before
-   generic result externalization.
+1. **Implemented:** build the shared display directory and validate the
+   `display_ref` lookup contract.
+2. **Implemented:** import the historical Team identity mappings and existing
+   image assets, then add complete PandaScore team pagination and best-effort
+   local image refresh through the unified updater.
+3. **Implemented for Team:** attach references to explicitly identified Team DTOs
+   in team search, series teams, tournament participants, match participants, and
+   player current-team results before generic result externalization. Hero, Item,
+   and Ability result injection remains pending.
 4. Render complete explicit references in final and historical answers using the
    latest display records; preserve canonical Markdown and readable copy output.
+   Model guidance and rendering are not enabled yet.
 5. Complete focused offline, browser, and real-model acceptance, then remove the
    superseded answer name-matching display path.
 

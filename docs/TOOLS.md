@@ -163,26 +163,38 @@ to multiple roles such as `["carry", "mid"]`; `current_team` is a lightweight
 current-team reference and does not embed a roster. A missing `current_team`
 is valid for a free agent.
 
-## Explicit entity display references (design confirmed, implementation pending)
+## Explicit entity display references (Team capability injection implemented; answer rendering pending)
 
-When implemented, a capability may attach a program-generated `display_ref` to
-an entity whose identity it already knows. The model may copy a returned
-reference into the final answer; it must not construct one from a name, acronym,
-provider ID, or image URL. The reference is for final-answer rendering, not a
-tool input or a new lookup capability. Its syntax is owned by
-[`agent/product_run_state.md`](agent/product_run_state.md), and the shared
-records are owned by [`DATA.md`](DATA.md).
+Application composition now attaches a program-generated `display_ref` to
+explicit Team objects when the configured local display directory confirms their
+PandaScore IDs. The injected paths are `esports.team.search` items,
+`esports.series.teams` items, `esports.tournament.search` participant Teams,
+`esports.match.search` participant Teams, and non-null
+`esports.player.search.current_team` values. It batches each result's distinct
+Team references before the generic result processor runs. Provider names and
+image URLs remain unchanged; the directory's current snapshot is used only to
+confirm identity, not to replace Provider facts. A Team without a local image
+still receives a reference, while an absent local Team record leaves the field
+null. No reference is inferred from `winner_id` or arbitrary fields.
+
+The model may copy a returned reference into the final answer; it must not
+construct one from a name, acronym, provider ID, or image URL. The reference is
+for final-answer rendering, not a tool input or a new lookup capability. Its
+syntax is owned by [`agent/product_run_state.md`](agent/product_run_state.md),
+and the shared records are owned by [`DATA.md`](DATA.md). Hero, Item, and
+Ability injection, model guidance, and answer rendering remain pending; this
+change does not enable model use of references.
 
 The first version covers Hero, Item, Ability, and Team. A Player entity does not
 receive a reference, although a Team already present as a `TeamRefDTO` relation
 may. Hero-guide and Catalog results follow the same rule for explicitly known
-entities. Unknown or unresolved entities receive no fabricated reference. The
-reference follows the entity in the result before generic Artifact
+entities when integrated. Unknown or unresolved entities receive no fabricated
+reference. The reference follows the entity in the result before generic Artifact
 externalization; it is not emitted as a separate cross-reference table.
 
 This design adds no image-search or image-insertion tool. Existing provider
 `image_url` fields remain source facts and are not model-created display handles.
-Current capability schemas do not yet emit `display_ref`.
+Only the Team output paths listed above currently emit the optional field.
 
 ## Optional web search
 
