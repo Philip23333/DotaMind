@@ -570,7 +570,8 @@ The catalog store, patch-gated Catalog refresh, independent patch-record refresh
 persistent image refresh, unified refresh coordinator, loader, and configured API
 consumer wiring have focused offline acceptance. A fresh WSL data root, live
 `refresh-all`, read-only API mount, API-only recreation, and WSL timer activation
-have also been checked. Production and an actual scheduled firing remain pending.
+have also been checked. That live refresh predates Team integration and does not
+verify a live Team fetch. Production and an actual scheduled firing remain pending.
 
 | Layer | Evidence and remaining scope |
 |---|---|
@@ -578,7 +579,8 @@ have also been checked. Production and an actual scheduled firing remain pending
 | Patch records | Offline tests cover validation, skip/force, SHA-256 reporting, and atomic replacement. The WSL run wrote patch `7.41f` with 100 changes and content SHA-256 `50e10530e0d2de4967df94a1331b43f8f4b13b16ab455cb9a8ca99db099b30df`. Historical patch backfill is not implemented. |
 | Migration execution and guide switch | This WSL cutover used a fresh file store, so no Redis guide migration was run and old Docker Desktop volumes remain untouched. File guide refresh succeeded for 127 heroes with 763 requests. The API reads the same file volume; Sven and Anti-Mage position-1 Service queries each returned one Pub guide and five Pro examples. The old WSL Redis timer is disabled. Production migration remains separate. |
 | Catalog version gate | Offline tests verify that a valid same-patch Catalog skips full entity fetching, `--force` refreshes the same patch, version-check failures do not skip, and a failed update is attempted again on the next invocation. This is DotaMind policy, not a Valve guarantee about same-patch data changes. |
-| Fetch sharing and bounds | `refresh-all` starts Catalog and patch work with the same session and response cache; its configured Datafeed ceiling is shared by those branches. Images wait for Catalog success or skip and use the independent 1–16 image-worker bound. Guides run alongside them through the existing serial refresher and one-second request spacing. Offline tests cover gating, report retention, failure isolation, and cancellation cleanup. |
+| Fetch sharing and bounds | `refresh-all` starts Catalog and patch work with the same session and response cache; its configured Datafeed ceiling is shared by those branches. Valve images wait for Catalog success or skip. The Valve and Team image stages run sequentially with the same 1–16 `image_workers` bound, so their combined download concurrency stays within that value. Guides run alongside them through the existing serial refresher and one-second request spacing. Offline tests cover stage order, failure isolation, report status, and cancellation cleanup. |
+| Team refresh integration | Focused offline tests cover Team execution after the Valve image phase, continuation when Catalog blocks Valve images or Valve images are partial, `teams` status/report output, and missing-token isolation. No real PandaScore Team refresh has been run for this integration; production and scheduled Team refresh remain unverified. |
 | Catalog hot reload | Offline tests prove validated snapshot switching and per-operation pinning. WSL API startup and file reads passed; Catalog hot-switch was not exercised because the live patch gate skipped fetching. The API container was recreated and retained its Catalog and guide reads. |
 | Images | The WSL run downloaded 1,338 of 1,488 targets; 150 ability images reported `download_failed`. A Sven hash URL returned PNG bytes with matching SHA-256 and immutable cache headers. API image reads are backed by the persistent volume. |
 | Container configuration | Compose uses the same API image for API and updater. The WSL updater wrote the project-scoped volume; the API mount is `RW=false`. Recreating only the API kept Catalog, guide, and image reads available; other service container IDs remained unchanged. |
@@ -587,7 +589,7 @@ have also been checked. Production and an actual scheduled firing remain pending
 
 ### WSL live refresh evidence (2026-10-02)
 
-The first unified refresh ran from 2026-10-02 15:20 to 15:49 CST with no `--force`.
+The pre-Team-integration unified refresh ran from 2026-10-02 15:20 to 15:49 CST with no `--force`.
 Catalog checked Valve's latest patch and skipped full entity fetching because
 `7.41f` matched revision `d0446e97add94e0fb29a30fdf4cc0905`. Patch records updated
 with 100 changes. The guide module succeeded for 127 heroes with 763 requests,

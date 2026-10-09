@@ -23,14 +23,32 @@ from app.vnext.data_updates.patch_refresh import (
     PatchRefreshReport,
     refresh_patches,
 )
+from app.vnext.data_updates.team_directory_store import TeamDirectoryStoreError
+from app.vnext.data_updates.team_refresh import (
+    TeamImageFetcher,
+    TeamMetadataReader,
+    TeamRefreshReport,
+    refresh_team_directory,
+)
 from app.vnext.hero_guides.cache import HeroGuideCacheDataError, HeroGuideCacheUnavailableError
 from app.vnext.hero_guides.file_cache import FileHeroGuideCache
 from app.vnext.hero_guides.refresh import HeroGuideRefresher, HeroGuideRefreshReport
 from app.vnext.providers.d2pt import D2PTClient
+from app.vnext.providers.pandascore.client import (
+    PandaScoreConfigurationError,
+    PandaScoreProtocolError,
+)
+from app.vnext.providers.pandascore.team_directory import PandaScoreTeamDirectoryError
 
 ModuleStatus = Literal["success", "skipped", "partial", "failed", "blocked"]
 OverallStatus = Literal["success", "partial", "failed"]
-_Report = CatalogRefreshReport | PatchRefreshReport | ImageRefreshReport | HeroGuideRefreshReport
+_Report = (
+    CatalogRefreshReport
+    | PatchRefreshReport
+    | ImageRefreshReport
+    | HeroGuideRefreshReport
+    | TeamRefreshReport
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,15 +93,18 @@ async def refresh_all(
     force: bool = False,
     guide_client: D2PTClient | None = None,
     image_client: ValveImageClient | None = None,
+    team_metadata_reader: TeamMetadataReader,
+    team_image_client: TeamImageFetcher,
     guide_clock: Callable[[], datetime] | None = None,
     guide_sleep: Callable[[float], Awaitable[None]] | None = None,
+    team_clock: Callable[[], datetime] | None = None,
     clock: Callable[[], datetime] | None = None,
 ) -> RefreshAllReport:
-    """Refresh Catalog, patch notes, images, and guide files under one owner.
+    """Refresh shared data under one owner with serial image-source phases.
 
     Catalog and patch-note fetches share the supplied session and run alongside
-    the serial guide refresher. Image work starts only after Catalog succeeds or
-    reports a normal same-patch skip.
+    the serial guide refresher. Valve images wait for Catalog success or a normal
+    skip; Team images start only after the Valve image phase has finished.
     """
 
     if type(workers) is not int or not 1 <= workers <= 16:
@@ -152,12 +173,26 @@ async def refresh_all(
                 reason="catalog_failed",
             )
 
+        teams_task = asyncio.create_task(
+            _run_team_refresh(
+                data_root=data_root,
+                metadata_reader=team_metadata_reader,
+                image_client=team_image_client,
+                image_workers=image_workers,
+                clock=team_clock,
+            ),
+            name="refresh-all-teams",
+        )
+        tasks.append(teams_task)
+        teams_outcome = await teams_task
+
         patches_outcome, guides_outcome = await asyncio.gather(patches_task, guides_task)
         modules = {
             "catalog": catalog_result,
             "patches": _module_result(patches_outcome, "patches"),
             "images": images_result,
             "guides": _module_result(guides_outcome, "guides"),
+            "teams": _module_result(teams_outcome, "teams"),
         }
         status, exit_code = _overall_result(modules)
         return RefreshAllReport(
@@ -175,6 +210,27 @@ async def refresh_all(
 async def _run_sync(function: Callable[..., _Report], **kwargs: Any) -> _Outcome:
     try:
         report = await asyncio.to_thread(function, **kwargs)
+    except Exception as exc:
+        return _Outcome(reason=_failure_reason(exc))
+    return _Outcome(report=report)
+
+
+async def _run_team_refresh(
+    *,
+    data_root: Path,
+    metadata_reader: TeamMetadataReader,
+    image_client: TeamImageFetcher,
+    image_workers: int,
+    clock: Callable[[], datetime] | None,
+) -> _Outcome:
+    try:
+        report = await refresh_team_directory(
+            data_root=data_root,
+            metadata_reader=metadata_reader,
+            image_client=image_client,
+            image_workers=image_workers,
+            clock=clock,
+        )
     except Exception as exc:
         return _Outcome(reason=_failure_reason(exc))
     return _Outcome(report=report)
@@ -239,6 +295,14 @@ def _failure_reason(error: Exception) -> str:
     if isinstance(error, PatchRefreshError):
         return error.reason
     if isinstance(error, ImageRefreshError):
+        return error.reason
+    if isinstance(error, TeamDirectoryStoreError):
+        return error.reason
+    if isinstance(error, PandaScoreConfigurationError):
+        return "pandascore_configuration_error"
+    if isinstance(error, PandaScoreProtocolError):
+        return "pandascore_protocol_error"
+    if isinstance(error, PandaScoreTeamDirectoryError):
         return error.reason
     if isinstance(error, HeroGuideCacheDataError):
         return "cache_invalid_data"

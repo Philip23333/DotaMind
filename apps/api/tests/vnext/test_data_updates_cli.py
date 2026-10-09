@@ -15,7 +15,9 @@ import pytest
 from redis.exceptions import RedisError
 
 from app.integrations.valve.catalog_repository import CATALOG_DIR
+from app.integrations.valve.image_client import PNG_SIGNATURE
 from app.vnext.data_updates import cli
+from app.vnext.data_updates import refresh_all as refresh_all_module
 from app.vnext.data_updates.catalog_refresh import CatalogRefreshReport
 from app.vnext.data_updates.catalog_store import CatalogSnapshotStore, CatalogStoreError
 from app.vnext.data_updates.image_refresh import (
@@ -43,7 +45,9 @@ from app.vnext.hero_guides.migration import (
     GuideMigrationReport,
     GuideMigrationVerificationError,
 )
+from app.vnext.hero_guides.refresh import HeroGuideRefreshReport
 from app.vnext.providers.d2pt import D2PTResponse, D2PTTimeoutError
+from app.vnext.providers.pandascore.team_directory import PandaScoreTeamMetadata
 
 _NOW = datetime(2026, 9, 30, 3, 0, tzinfo=UTC)
 _CATALOG_FILES = (
@@ -1781,6 +1785,18 @@ def _refresh_all_success_report() -> RefreshAllReport:
                 status="success",
                 report={"status": "success", "request_count": 7},
             ),
+            "teams": RefreshAllModuleResult(
+                status="success",
+                report={
+                    "observed_team_count": 0,
+                    "retained_old_records": 0,
+                    "migrated_records": 0,
+                    "downloaded": 0,
+                    "skipped": 0,
+                    "no_url": 0,
+                    "failures": (),
+                },
+            ),
         },
         exit_code=0,
     )
@@ -1892,6 +1908,29 @@ def test_refresh_all_cli_passes_one_bounded_session_under_data_lock(
     monkeypatch.setattr(cli, "ValveImageClient", lambda: image_client)
     monkeypatch.setattr(cli, "from_url", lambda *_args, **_kwargs: pytest.fail("Redis is unused"))
 
+    pandascore_values: list[dict[str, Any]] = []
+    pandascore_clients: list[object] = []
+    team_reader_clients: list[object] = []
+    team_reader_value = object()
+    team_image_value = object()
+
+    class FakePandaScoreClient:
+        def __init__(self, **kwargs: Any) -> None:
+            pandascore_values.append(kwargs)
+            pandascore_clients.append(self)
+
+    def make_team_reader(client: object) -> object:
+        team_reader_clients.append(client)
+        return team_reader_value
+
+    monkeypatch.setattr(cli, "PandaScoreClient", FakePandaScoreClient)
+    monkeypatch.setattr(
+        cli,
+        "PandaScoreTeamDirectoryReader",
+        make_team_reader,
+    )
+    monkeypatch.setattr(cli, "PandaScoreTeamImageClient", lambda: team_image_value)
+
     async def fake_refresh_all(**kwargs: Any) -> RefreshAllReport:
         assert cli._try_acquire_lock(data_dir / ".update.lock") is None
         call_args.append(kwargs)
@@ -1909,6 +1948,11 @@ def test_refresh_all_cli_passes_one_bounded_session_under_data_lock(
             "6",
             "--force",
         ],
+        environ={
+            "DOTAMIND_PANDASCORE_BASE_URL": "https://pandascore.example/api",
+            "DOTAMIND_PANDASCORE_TOKEN": "test-secret-token",
+            "DOTAMIND_PANDASCORE_TIMEOUT_SECONDS": "37.5",
+        },
         refresh_all_clock=lambda: _NOW,
     )
 
@@ -1935,6 +1979,18 @@ def test_refresh_all_cli_passes_one_bounded_session_under_data_lock(
                 "status": "success",
                 "report": {"status": "success", "request_count": 7},
             },
+            "teams": {
+                "status": "success",
+                "report": {
+                    "observed_team_count": 0,
+                    "retained_old_records": 0,
+                    "migrated_records": 0,
+                    "downloaded": 0,
+                    "skipped": 0,
+                    "no_url": 0,
+                    "failures": [],
+                },
+            },
         },
     }
     assert raw.count("\n") == 1
@@ -1947,6 +2003,17 @@ def test_refresh_all_cli_passes_one_bounded_session_under_data_lock(
     assert call_args[0]["force"] is True
     assert call_args[0]["image_client"] is image_client
     assert call_args[0]["data_root"] == data_dir
+    assert pandascore_values == [
+        {
+            "base_url": "https://pandascore.example/api",
+            "token": "test-secret-token",
+            "timeout_seconds": 37.5,
+        }
+    ]
+    assert team_reader_clients == pandascore_clients
+    assert call_args[0]["team_metadata_reader"] is team_reader_value
+    assert call_args[0]["team_image_client"] is team_image_value
+    assert call_args[0]["team_clock"] is call_args[0]["guide_clock"]
 
 
 def test_refresh_all_cli_partial_module_report_returns_exit_code_four(
@@ -2017,6 +2084,83 @@ def test_refresh_all_cli_sanitizes_unexpected_operation_failure(
     assert "secret response payload" not in raw
 
 
+def test_refresh_all_without_pandascore_token_fails_only_team_module(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(cli, "ValveDatafeedClient", object)
+    monkeypatch.setattr(cli, "ValveFetchSession", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(cli, "D2PTClient", object)
+    monkeypatch.setattr(cli, "ValveImageClient", object)
+    monkeypatch.setattr(cli, "PandaScoreTeamImageClient", object)
+    monkeypatch.setattr(
+        refresh_all_module,
+        "refresh_catalog",
+        lambda **_kwargs: CatalogRefreshReport(
+            action="skipped",
+            reason="patch_unchanged",
+            previous_patch="7.41f",
+            target_patch="7.41f",
+            revision="a" * 32,
+        ),
+    )
+    monkeypatch.setattr(
+        refresh_all_module,
+        "refresh_patches",
+        lambda **_kwargs: PatchRefreshReport(
+            action="updated",
+            reason="missing",
+            patch="7.41f",
+            content_sha256="b" * 64,
+            change_count=1,
+        ),
+    )
+    monkeypatch.setattr(
+        refresh_all_module,
+        "refresh_images",
+        lambda **_kwargs: ImageRefreshReport("c" * 32, "7.41f", 0, 0, 0, ()),
+    )
+    monkeypatch.setattr(
+        refresh_all_module,
+        "_run_guides",
+        lambda **_kwargs: asyncio.sleep(
+            0,
+            result=refresh_all_module._Outcome(
+                report=HeroGuideRefreshReport(
+                    status="success",
+                    started_at=_NOW,
+                    finished_at=_NOW,
+                    hero_count=0,
+                    request_count=1,
+                    pub_published=0,
+                    pro_published=0,
+                    pub_empty=0,
+                    pro_empty=0,
+                    failures=[],
+                )
+            ),
+        ),
+    )
+
+    code, payload, raw, _stderr = _invoke(
+        ["refresh-all", "--data-dir", str(tmp_path / "data")],
+        environ={},
+    )
+
+    assert code == 4
+    assert payload is not None
+    assert payload["modules"]["teams"] == {
+        "status": "failed",
+        "reason": "pandascore_configuration_error",
+    }
+    assert payload["modules"]["catalog"]["status"] == "skipped"
+    assert payload["modules"]["patches"]["status"] == "success"
+    assert payload["modules"]["images"]["status"] == "success"
+    assert payload["modules"]["guides"]["status"] == "success"
+    assert "PandaScore token" not in raw
+    assert "Bearer" not in raw
+
+
 def test_refresh_all_cancellation_waits_for_worker_before_releasing_data_lock(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2070,6 +2214,127 @@ def test_refresh_all_cancellation_waits_for_worker_before_releasing_data_lock(
     monitor.start()
     code, payload, raw, _stderr = _invoke(
         ["refresh-all", "--data-dir", str(data_dir)],
+    )
+    monitor.join(timeout=5)
+
+    assert not monitor.is_alive()
+    assert monitor_errors == []
+    assert locks_checked.is_set()
+    assert command_finished.is_set()
+    assert code == 130
+    assert payload == {"status": "cancelled", "operation": "refresh-all"}
+    assert raw.count("\n") == 1
+    data_fd = cli._try_acquire_lock(data_dir / ".update.lock")
+    assert data_fd is not None
+    cli._release_lock(data_fd)
+
+
+def test_refresh_all_team_image_cancellation_waits_before_releasing_data_lock(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data_dir = tmp_path / "data"
+    worker_started = threading.Event()
+    release_worker = threading.Event()
+    command_finished = threading.Event()
+    locks_checked = threading.Event()
+    monitor_errors: list[BaseException] = []
+
+    class FakeTeamReader:
+        async def read_all(self) -> list[PandaScoreTeamMetadata]:
+            return [PandaScoreTeamMetadata(139340, "Team BB", "https://images/team.png")]
+
+    class BlockingTeamImageClient:
+        def fetch_png(self, _url: str) -> bytes:
+            worker_started.set()
+            if not release_worker.wait(timeout=5):
+                raise TimeoutError("test Team image worker was not released")
+            return PNG_SIGNATURE + b"team-image"
+
+    monkeypatch.setattr(cli, "ValveDatafeedClient", object)
+    monkeypatch.setattr(cli, "ValveFetchSession", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(cli, "D2PTClient", object)
+    monkeypatch.setattr(cli, "ValveImageClient", object)
+    monkeypatch.setattr(cli, "PandaScoreClient", lambda **_kwargs: object())
+    monkeypatch.setattr(cli, "PandaScoreTeamDirectoryReader", lambda _client: FakeTeamReader())
+    monkeypatch.setattr(cli, "PandaScoreTeamImageClient", BlockingTeamImageClient)
+    monkeypatch.setattr(
+        refresh_all_module,
+        "refresh_catalog",
+        lambda **_kwargs: CatalogRefreshReport(
+            action="skipped",
+            reason="patch_unchanged",
+            previous_patch="7.41f",
+            target_patch="7.41f",
+            revision="a" * 32,
+        ),
+    )
+    monkeypatch.setattr(
+        refresh_all_module,
+        "refresh_patches",
+        lambda **_kwargs: PatchRefreshReport(
+            action="updated",
+            reason="missing",
+            patch="7.41f",
+            content_sha256="b" * 64,
+            change_count=1,
+        ),
+    )
+    monkeypatch.setattr(
+        refresh_all_module,
+        "refresh_images",
+        lambda **_kwargs: ImageRefreshReport("c" * 32, "7.41f", 0, 0, 0, ()),
+    )
+    monkeypatch.setattr(
+        refresh_all_module,
+        "_run_guides",
+        lambda **_kwargs: asyncio.sleep(
+            0,
+            result=refresh_all_module._Outcome(
+                report=HeroGuideRefreshReport(
+                    status="success",
+                    started_at=_NOW,
+                    finished_at=_NOW,
+                    hero_count=0,
+                    request_count=1,
+                    pub_published=0,
+                    pro_published=0,
+                    pub_empty=0,
+                    pro_empty=0,
+                    failures=[],
+                )
+            ),
+        ),
+    )
+    original_main = cli.main
+
+    def monitored_main(*args: Any, **kwargs: Any) -> int:
+        try:
+            return original_main(*args, **kwargs)
+        finally:
+            command_finished.set()
+
+    monkeypatch.setattr(cli, "main", monitored_main)
+
+    def cancel_when_worker_starts() -> None:
+        try:
+            assert worker_started.wait(timeout=5)
+            os.kill(os.getpid(), signal.SIGTERM)
+            assert not command_finished.wait(timeout=0.15)
+            os.kill(os.getpid(), signal.SIGTERM)
+            assert not command_finished.wait(timeout=0.15)
+            assert cli._try_acquire_lock(data_dir / ".update.lock") is None
+            locks_checked.set()
+        except BaseException as exc:
+            monitor_errors.append(exc)
+        finally:
+            release_worker.set()
+
+    monitor = threading.Thread(target=cancel_when_worker_starts)
+    monitor.start()
+    code, payload, raw, _stderr = _invoke(
+        ["refresh-all", "--data-dir", str(data_dir)],
+        environ={"DOTAMIND_PANDASCORE_TOKEN": "test-token"},
     )
     monitor.join(timeout=5)
 

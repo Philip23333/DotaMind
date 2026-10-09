@@ -40,12 +40,13 @@ Names are added to the query result and generic Artifact output; they are not
 written into guide snapshots. Old snapshots remain readable because enrichment
 DTO fields have defaults. `game.detail` has not yet integrated the resolver.
 
-## Explicit entity display records and team-asset refresh (design confirmed, implementation pending)
+## Explicit entity display records and Team assets (design confirmed; refresh integrated, display pending)
 
 This section owns the shared display-record and update-data contract. User-visible
 placement and exclusions are defined in [PRODUCT.md](PRODUCT.md); reference
 syntax is defined in [agent/product_run_state.md](agent/product_run_state.md).
-Nothing in this section describes a currently deployed feature.
+The implemented refresh wiring below is not evidence of a deployed or successful
+Team refresh, and the user-facing entity display path remains pending.
 
 ### Display records
 
@@ -98,6 +99,20 @@ and the URL of the last successful download remain distinguishable. The monthly
 completion marker advances only after the required download succeeds. A missed
 run or failed image remains eligible on a later daily run; the system does not
 mark incomplete work as successful.
+
+The existing `refresh-all` entry point runs the Team metadata and image phase
+after the Valve image phase has ended. Both phases receive the same
+`image_workers` value and run sequentially, so their combined image-download
+concurrency cannot exceed that value. Catalog failure blocks Valve image work
+but does not block Team refresh; Valve image failure or partial success also does
+not block Team. A Team failure is reported independently from the other modules.
+`--force` applies to Catalog, patch records, and Valve images; Team images still
+follow the URL, local-asset, and monthly-refresh checks above. The updater needs
+`DOTAMIND_PANDASCORE_TOKEN`; a missing token is reported as a Team configuration
+failure while the other refresh modules continue. The production Compose updater
+passes the existing PandaScore base URL, token, and timeout settings. This code
+integration does not by itself establish a successful deployed or scheduled Team
+refresh.
 
 The initial migration uses the historical team list to restore explicit source
 identity mappings for the existing team assets and reuses those image files. It
@@ -354,21 +369,30 @@ python -m app.vnext.data_updates refresh-all \
   --data-dir /absolute/data/root --workers 8 --image-workers 8
 ```
 
-It runs the current Catalog, latest patch-record,
-image, and file-guide refresh components in one invocation. `--force` is passed
-to Catalog, patch, and image refresh; guides refresh on every run. Catalog and
+It runs the current Catalog, latest patch-record, Valve image, file-guide, and
+Team directory refresh components in one invocation. `--force` is passed to
+Catalog, patch, and Valve image refresh; Team images still follow their URL,
+asset, and monthly-refresh checks, and guides refresh on every run. Catalog and
 patch work run in parallel with the guide refresher and share one
 `ValveFetchSession`, response cache, and Datafeed concurrency ceiling. The
-independent image worker limit controls CDN downloads. Images begin only after
-Catalog succeeds or skips; Catalog failure marks images blocked, while patch or
-guide failure does not cancel other work. The guide refresher retains its
-existing serial hero/request order and one-second post-request wait.
+image worker limit controls CDN downloads. Valve images begin only after Catalog
+succeeds or skips; Catalog failure marks Valve images blocked. The Team stage
+runs after the Valve image stage (or after it is blocked), so the two image
+sources never overlap and share the same concurrency ceiling. Patch, guide, and
+Team failures do not cancel other work. The guide refresher retains its existing
+serial hero/request order and one-second post-request wait. Team metadata reads
+use `DOTAMIND_PANDASCORE_TOKEN`, `DOTAMIND_PANDASCORE_BASE_URL` (default
+`https://api.pandascore.co`), and `DOTAMIND_PANDASCORE_TIMEOUT_SECONDS` (default
+`20`). Missing token or invalid Team metadata is reported in the `teams` module;
+it does not silently turn into a successful empty result.
 
 The command acquires `<data_root>/.update.lock` before creating clients or making
 requests. The shared data-root lock remains held through thread and coroutine
 cleanup. It emits one
-ordered module summary and returns success, partial, or failed according to the
-module results. The first real WSL run completed as partial: Catalog skipped
+ordered module summary, including the `teams` status/report/reason, and returns
+success, partial, or failed according to the module results. Existing WSL
+live-refresh evidence predates the unified Team integration and does not verify
+a Team fetch. The first real WSL run completed as partial: Catalog skipped
 because patch `7.41f` was unchanged, patch notes updated, file guides succeeded,
 and images downloaded 1,338 targets with 150 ability-image failures. The full
 safe report is recorded in the local operations evidence below.

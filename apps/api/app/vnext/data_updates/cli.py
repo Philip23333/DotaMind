@@ -53,10 +53,26 @@ from app.vnext.hero_guides.migration import (
 )
 from app.vnext.hero_guides.refresh import HeroGuideRefresher, HeroGuideRefreshReport
 from app.vnext.providers.d2pt import D2PTClient
+from app.vnext.providers.pandascore.client import (
+    PandaScoreClient,
+    PandaScoreConfigurationError,
+    PandaScoreProtocolError,
+)
+from app.vnext.providers.pandascore.team_directory import (
+    PandaScoreTeamDirectoryError,
+    PandaScoreTeamDirectoryReader,
+    PandaScoreTeamMetadata,
+)
+from app.vnext.providers.pandascore.team_image_client import PandaScoreTeamImageClient
 
 _DATA_LOCK_NAME = ".update.lock"
 _BUSY_ERRNOS = {errno.EACCES, errno.EAGAIN}
 _OperationResult = TypeVar("_OperationResult")
+
+
+class _PandaScoreConfigurationFailureReader:
+    async def read_all(self) -> list[PandaScoreTeamMetadata]:
+        raise PandaScoreConfigurationError("PandaScore configuration is invalid")
 
 
 class _OutputArgumentParser(argparse.ArgumentParser):
@@ -188,6 +204,7 @@ def main(
                     guide_clock=refresh_clock,
                     guide_sleep=refresh_sleep,
                     report_clock=refresh_all_clock,
+                    environment=environment,
                 )
             elif operation == "refresh-catalog":
                 assert workers is not None
@@ -367,7 +384,10 @@ def _build_parser(stdout: TextIO, stderr: TextIO) -> argparse.ArgumentParser:
     refresh_all_parser.add_argument(
         "--force",
         action="store_true",
-        help="refresh Catalog, patch notes, and current images even when already current",
+        help=(
+            "force Catalog, patch notes, and Valve images; Team images still use "
+            "URL, asset, and monthly-refresh rules"
+        ),
     )
     return parser
 
@@ -534,9 +554,23 @@ def _run_refresh_all_command(
     guide_clock: Callable[[], datetime] | None,
     guide_sleep: Callable[[float], Awaitable[None]] | None,
     report_clock: Callable[[], datetime] | None,
+    environment: Mapping[str, str],
 ) -> tuple[dict[str, Any], int]:
     async def run() -> RefreshAllReport:
         session = ValveFetchSession(ValveDatafeedClient(), max_concurrency=workers)
+        raw_timeout = environment.get("DOTAMIND_PANDASCORE_TIMEOUT_SECONDS", "20")
+        try:
+            pandascore_timeout = float(raw_timeout)
+        except (TypeError, ValueError, OverflowError):
+            team_metadata_reader = _PandaScoreConfigurationFailureReader()
+        else:
+            pandascore_client = PandaScoreClient(
+                base_url=environment.get("DOTAMIND_PANDASCORE_BASE_URL")
+                or "https://api.pandascore.co",
+                token=environment.get("DOTAMIND_PANDASCORE_TOKEN") or "",
+                timeout_seconds=pandascore_timeout,
+            )
+            team_metadata_reader = PandaScoreTeamDirectoryReader(pandascore_client)
         return await run_refresh_all(
             data_root=data_root,
             session=session,
@@ -545,8 +579,11 @@ def _run_refresh_all_command(
             force=force,
             guide_client=D2PTClient(),
             image_client=ValveImageClient(),
+            team_metadata_reader=team_metadata_reader,
+            team_image_client=PandaScoreTeamImageClient(),
             guide_clock=guide_clock,
             guide_sleep=guide_sleep,
+            team_clock=guide_clock,
             clock=report_clock,
         )
 
@@ -816,6 +853,12 @@ def _safe_reason(error: Exception) -> str:
     if isinstance(error, PatchRefreshError):
         return error.reason
     if isinstance(error, ImageRefreshError):
+        return error.reason
+    if isinstance(error, PandaScoreConfigurationError):
+        return "pandascore_configuration_error"
+    if isinstance(error, PandaScoreProtocolError):
+        return "pandascore_protocol_error"
+    if isinstance(error, PandaScoreTeamDirectoryError):
         return error.reason
     if isinstance(error, GuideMigrationConflictError):
         return "migration_conflict"

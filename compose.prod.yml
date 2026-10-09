@@ -74,6 +74,9 @@ services:
     environment:
       DOTAMIND_REDIS_URL: redis://redis:6379/0
       DOTAMIND_DATA_DIR: /var/lib/dotamind/data
+      DOTAMIND_PANDASCORE_BASE_URL: ${DOTAMIND_PANDASCORE_BASE_URL:-https://api.pandascore.co}
+      DOTAMIND_PANDASCORE_TOKEN: ${DOTAMIND_PANDASCORE_TOKEN:-}
+      DOTAMIND_PANDASCORE_TIMEOUT_SECONDS: ${DOTAMIND_PANDASCORE_TIMEOUT_SECONDS:-20}
       HTTP_PROXY: http://vless-proxy:7890
       HTTPS_PROXY: http://vless-proxy:7890
       NO_PROXY: localhost,127.0.0.1,::1,postgres,redis,vless-proxy

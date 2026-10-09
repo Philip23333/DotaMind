@@ -59,6 +59,30 @@ CLI through WSL interop. It always loads both `compose.wsl.yml` and
 updater writes to that same volume. With WSL Integration enabled, the equivalent
 command is `docker compose -f compose.wsl.yml -f compose.data.yml up -d --build --wait`.
 
+### Unified data refresh and Team assets
+
+The existing `refresh-all` updater now includes the PandaScore Team display
+directory and its local images:
+
+```bash
+python -m app.vnext.data_updates refresh-all \
+  --data-dir /absolute/data/root --workers 8 --image-workers 8
+```
+
+Configure `DOTAMIND_PANDASCORE_TOKEN` for the Team metadata request.
+`DOTAMIND_PANDASCORE_BASE_URL` defaults to `https://api.pandascore.co`, and
+`DOTAMIND_PANDASCORE_TIMEOUT_SECONDS` defaults to `20`. WSL Compose reads these
+values from the root `.env`; the production `data-updater` explicitly receives
+the same variables. A missing token reports the Team module as failed while
+other refresh modules continue.
+
+Valve image refresh finishes before Team image refresh starts. Both stages use
+the same `--image-workers` limit, so their image downloads do not overlap.
+`--force` applies to Catalog, patch records, and Valve images; Team images still
+use their URL, local-asset, and monthly-refresh checks. Wiring the existing
+daily entry point does not establish that a deployed or scheduled Team refresh
+has succeeded.
+
 ### Tool-result Artifact budgets
 
 The API reads two UTF-8 serialized-byte limits from the root `.env` or process

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from functools import wraps
 from pathlib import Path
@@ -10,14 +11,51 @@ from typing import Any
 import pytest
 
 from app.integrations.valve.fetch_session import ValveFetchSession
+from app.integrations.valve.image_client import PNG_SIGNATURE
 from app.vnext.data_updates import refresh_all as refresh_all_module
 from app.vnext.data_updates.catalog_refresh import CatalogRefreshReport
 from app.vnext.data_updates.image_refresh import ImageRefreshFailure, ImageRefreshReport
 from app.vnext.data_updates.patch_refresh import PatchRefreshReport
 from app.vnext.hero_guides.refresh import HeroGuideRefreshReport
 from app.vnext.providers.d2pt import D2PTResponse
+from app.vnext.providers.pandascore.client import PandaScoreConfigurationError
+from app.vnext.providers.pandascore.team_directory import PandaScoreTeamMetadata
+from app.vnext.providers.pandascore.team_image_client import TeamImageError
 
 _NOW = datetime(2026, 10, 1, 3, 0, tzinfo=UTC)
+
+
+class _EmptyTeamMetadataReader:
+    async def read_all(self) -> list[PandaScoreTeamMetadata]:
+        return []
+
+
+class _StaticTeamMetadataReader:
+    def __init__(
+        self,
+        teams: list[PandaScoreTeamMetadata] | None = None,
+        error: Exception | None = None,
+    ) -> None:
+        self.teams = [] if teams is None else teams
+        self.error = error
+        self.calls = 0
+
+    async def read_all(self) -> list[PandaScoreTeamMetadata]:
+        self.calls += 1
+        if self.error is not None:
+            raise self.error
+        return self.teams
+
+
+class _UnusedTeamImageClient:
+    def fetch_png(self, _url: str) -> bytes:
+        raise AssertionError("no Team image should be requested")
+
+
+async def _refresh_all(**kwargs: Any) -> refresh_all_module.RefreshAllReport:
+    kwargs.setdefault("team_metadata_reader", _EmptyTeamMetadataReader())
+    kwargs.setdefault("team_image_client", _UnusedTeamImageClient())
+    return await refresh_all_module.refresh_all(**kwargs)
 
 
 def _run_async(test: Any) -> Any:
@@ -111,7 +149,7 @@ async def test_catalog_patches_and_guides_start_together_images_wait_for_catalog
     monkeypatch.setattr(refresh_all_module, "refresh_images", images)
     monkeypatch.setattr(refresh_all_module, "_run_guides", guides)
 
-    report = await refresh_all_module.refresh_all(
+    report = await _refresh_all(
         data_root=tmp_path,
         session=session,  # type: ignore[arg-type]
         workers=3,
@@ -121,11 +159,12 @@ async def test_catalog_patches_and_guides_start_together_images_wait_for_catalog
         clock=lambda: _NOW,
     )
 
-    assert list(report.modules) == ["catalog", "patches", "images", "guides"]
+    assert list(report.modules) == ["catalog", "patches", "images", "guides", "teams"]
     assert report.modules["catalog"].status == "skipped"
     assert report.modules["patches"].status == "skipped"
     assert report.modules["images"].status == "success"
     assert report.modules["guides"].status == "success"
+    assert report.modules["teams"].status == "success"
     assert report.status == "success" and report.exit_code == 0
     assert image_calls == [
         {
@@ -166,9 +205,11 @@ async def test_catalog_failure_blocks_images_but_patch_and_guides_continue(
     monkeypatch.setattr(refresh_all_module, "refresh_images", images)
     monkeypatch.setattr(refresh_all_module, "_run_guides", guides)
 
-    report = await refresh_all_module.refresh_all(
+    team_reader = _StaticTeamMetadataReader()
+    report = await _refresh_all(
         data_root=tmp_path,
         session=object(),  # type: ignore[arg-type]
+        team_metadata_reader=team_reader,
         clock=lambda: _NOW,
     )
 
@@ -181,6 +222,8 @@ async def test_catalog_failure_blocks_images_but_patch_and_guides_continue(
     assert report.modules["catalog"].reason == "operation_failed"
     assert report.modules["images"].status == "blocked"
     assert report.modules["images"].reason == "catalog_failed"
+    assert report.modules["teams"].status == "success"
+    assert team_reader.calls == 1
     assert report.modules["patches"].status == "success"
     assert report.modules["guides"].status == "success"
     assert report.status == "partial" and report.exit_code == 4
@@ -217,9 +260,18 @@ async def test_patch_or_guide_failure_does_not_cancel_other_refreshes(
     monkeypatch.setattr(refresh_all_module, "refresh_images", images)
     monkeypatch.setattr(refresh_all_module, "_run_guides", guides)
 
-    report = await refresh_all_module.refresh_all(
+    team_reader = _StaticTeamMetadataReader([PandaScoreTeamMetadata(18, "Team 18", "https://images/18.png")])
+
+    class TeamImages:
+        def fetch_png(self, _url: str) -> bytes:
+            return PNG_SIGNATURE + b"team-image"
+
+    report = await _refresh_all(
         data_root=tmp_path,
         session=object(),  # type: ignore[arg-type]
+        team_metadata_reader=team_reader,
+        team_image_client=TeamImages(),
+        image_workers=2,
         clock=lambda: _NOW,
     )
 
@@ -239,6 +291,7 @@ async def test_patch_or_guide_failure_does_not_cancel_other_refreshes(
         ),
     }
     assert report.modules["guides"].status == "failed"
+    assert report.modules["teams"].status == "success"
     assert report.status == "partial" and report.exit_code == 4
 
 
@@ -258,9 +311,12 @@ async def test_all_executable_modules_failed_returns_exit_one(
 
     monkeypatch.setattr(refresh_all_module, "_run_guides", guides)
 
-    report = await refresh_all_module.refresh_all(
+    report = await _refresh_all(
         data_root=tmp_path,
         session=object(),  # type: ignore[arg-type]
+        team_metadata_reader=_StaticTeamMetadataReader(
+            error=PandaScoreConfigurationError("private configuration detail")
+        ),
         clock=lambda: _NOW,
     )
 
@@ -269,7 +325,145 @@ async def test_all_executable_modules_failed_returns_exit_one(
         result.status in {"failed", "blocked"}
         for result in report.modules.values()
     )
+    assert report.modules["teams"].status == "failed"
+    assert report.modules["teams"].reason == "pandascore_configuration_error"
     assert report.status == "failed" and report.exit_code == 1
+
+
+@_run_async
+async def test_valve_and_team_image_phases_are_serial_and_share_worker_bound(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workers = 2
+    lock = threading.Lock()
+    active = 0
+    peak = 0
+    phase_events: list[str] = []
+    valve_finished = threading.Event()
+    valve_barrier = threading.Barrier(workers)
+    team_barrier = threading.Barrier(workers)
+
+    def enter(phase: str) -> None:
+        nonlocal active, peak
+        with lock:
+            assert phase != "team" or valve_finished.is_set()
+            active += 1
+            peak = max(peak, active)
+            phase_events.append(f"{phase}:start")
+
+    def leave(phase: str) -> None:
+        nonlocal active
+        with lock:
+            phase_events.append(f"{phase}:end")
+            active -= 1
+
+    def images(**kwargs: Any) -> ImageRefreshReport:
+        assert kwargs["workers"] == workers
+
+        def download(_index: int) -> None:
+            enter("valve")
+            try:
+                valve_barrier.wait(timeout=3)
+            finally:
+                leave("valve")
+
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            list(executor.map(download, range(4)))
+        valve_finished.set()
+        return _image_report()
+
+    class TeamReader:
+        async def read_all(self) -> list[PandaScoreTeamMetadata]:
+            assert valve_finished.is_set()
+            assert active == 0
+            phase_events.append("team:metadata")
+            return [
+                PandaScoreTeamMetadata(i, f"Team {i}", f"https://images/{i}.png")
+                for i in range(1, 5)
+            ]
+
+    class TeamImages:
+        def fetch_png(self, url: str) -> bytes:
+            enter("team")
+            try:
+                team_barrier.wait(timeout=3)
+                return PNG_SIGNATURE + url.encode("ascii")
+            finally:
+                leave("team")
+
+    monkeypatch.setattr(refresh_all_module, "refresh_catalog", lambda **_kwargs: _catalog_report())
+    monkeypatch.setattr(refresh_all_module, "refresh_patches", lambda **_kwargs: _patch_report())
+    monkeypatch.setattr(refresh_all_module, "refresh_images", images)
+    monkeypatch.setattr(
+        refresh_all_module,
+        "_run_guides",
+        lambda **_kwargs: asyncio.sleep(
+            0, result=refresh_all_module._Outcome(report=_guide_report())
+        ),
+    )
+
+    report = await _refresh_all(
+        data_root=tmp_path,
+        session=object(),  # type: ignore[arg-type]
+        image_workers=workers,
+        team_metadata_reader=TeamReader(),
+        team_image_client=TeamImages(),
+        clock=lambda: _NOW,
+        team_clock=lambda: _NOW,
+    )
+
+    assert report.modules["images"].status == "success"
+    assert report.modules["teams"].status == "success"
+    assert report.modules["teams"].report is not None
+    assert report.modules["teams"].report["downloaded"] == 4
+    assert peak == workers
+    assert active == 0
+    assert max(
+        i for i, event in enumerate(phase_events) if event == "valve:end"
+    ) < phase_events.index("team:metadata")
+
+
+@_run_async
+async def test_team_partial_image_failure_is_reported_without_blocking_other_modules(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(refresh_all_module, "refresh_catalog", lambda **_kwargs: _catalog_report())
+    monkeypatch.setattr(refresh_all_module, "refresh_patches", lambda **_kwargs: _patch_report())
+    monkeypatch.setattr(refresh_all_module, "refresh_images", lambda **_kwargs: _image_report())
+    monkeypatch.setattr(
+        refresh_all_module,
+        "_run_guides",
+        lambda **_kwargs: asyncio.sleep(
+            0, result=refresh_all_module._Outcome(report=_guide_report())
+        ),
+    )
+
+    class TeamImages:
+        def fetch_png(self, _url: str) -> bytes:
+            raise TeamImageError("download_failed")
+
+    report = await _refresh_all(
+        data_root=tmp_path,
+        session=object(),  # type: ignore[arg-type]
+        team_metadata_reader=_StaticTeamMetadataReader(
+            [PandaScoreTeamMetadata(139340, "Team BB", "https://images/team.png")]
+        ),
+        team_image_client=TeamImages(),
+        clock=lambda: _NOW,
+        team_clock=lambda: _NOW,
+    )
+
+    teams = report.modules["teams"]
+    assert teams.status == "partial"
+    assert teams.report is not None
+    assert teams.report["failures"] == ({"source_id": 139340, "error_code": "download_failed"},)
+    assert report.modules["catalog"].status == "success"
+    assert report.modules["patches"].status == "success"
+    assert report.modules["images"].status == "success"
+    assert report.modules["guides"].status == "success"
+    assert report.status == "partial" and report.exit_code == 4
 
 
 class _BarrierDatafeed:
@@ -343,7 +537,7 @@ async def test_catalog_and_patches_share_session_cache_bound_force_and_workers(
         return refresh_all_module._Outcome(report=_guide_report())
 
     monkeypatch.setattr(refresh_all_module, "_run_guides", guides)
-    report = await refresh_all_module.refresh_all(
+    report = await _refresh_all(
         data_root=tmp_path,
         session=session,
         workers=2,
@@ -405,7 +599,7 @@ async def test_guides_reuse_serial_file_refresher_independently_of_force(
     async def no_sleep(_duration: float) -> None:
         return None
 
-    report = await refresh_all_module.refresh_all(
+    report = await _refresh_all(
         data_root=tmp_path,
         session=object(),  # type: ignore[arg-type]
         force=True,
@@ -462,7 +656,7 @@ async def test_cancel_waits_for_started_threads_and_does_not_start_images(
 
     monkeypatch.setattr(refresh_all_module, "_run_guides", guides)
     refresh_task = asyncio.create_task(
-        refresh_all_module.refresh_all(data_root=tmp_path, session=object())  # type: ignore[arg-type]
+        _refresh_all(data_root=tmp_path, session=object())  # type: ignore[arg-type]
     )
     await asyncio.to_thread(worker_started.wait, 3)
     await guide_started.wait()
