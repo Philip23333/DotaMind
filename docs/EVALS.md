@@ -45,6 +45,20 @@ providers, and it does not change the product registry.
    evaluation step; provider volatility and outages are not deterministic test
    failures.
 
+## Entity display resolution API (implemented; renderer pending)
+
+Offline route tests exercise `POST /api/v1/display/resolve` with the actual local
+`EntityDisplayDirectory`, the bundled Valve Catalog, and temporary Team snapshots.
+They cover mixed Hero/Item/Ability/Team references, duplicates, malformed and
+unknown references, known entities without images, and visibility of a newly
+atomically published Team snapshot on the next request. They also verify that
+responses contain only local asset URLs, an unset data root still resolves Valve
+entities but not Team entities, request types and 100-entry/128-character bounds
+are strict, unavailable service returns the stable 503 code, responses use
+`Cache-Control: no-store`, and OpenAPI registers the route. These tests make no
+Provider or model calls. Browser rendering, historical-message rendering, and
+real-model use of explicit references remain pending.
+
 ## 首页赛事、输入框模式与抽屉验收
 
 后端 Provider、候选服务、缓存和 HTTP 路由有离线确定性测试。前端实现首页近期 Series

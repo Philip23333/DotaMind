@@ -4,11 +4,12 @@
 
 This document defines the accepted target for the chat execution experience.
 Phases 1-6 are implemented, including independent thread runs and removal of
-the obsolete chat NDJSON protocol. The current normal frontend renders standard
-Markdown only; explicit entity display is a confirmed design with implementation
-pending. The product Run
-State schema, Runtime-event adapter, persistence, completed-answer retry,
-repository replay, and AssistantTransport endpoint are implemented. The
+the obsolete chat NDJSON protocol. The shared entity display directory and its
+batch resolution API are implemented; the current normal frontend still renders
+standard Markdown only, and model guidance plus explicit-reference rendering are
+pending. The product Run State schema, Runtime-event adapter, persistence,
+completed-answer retry, repository replay, and AssistantTransport endpoint are
+implemented. The
 production `runtime-provider` uses `/transport`; the page-lifetime thread
 registry keeps each thread's connection and run state alive when selection
 changes. The frontend reconciles request/message identities, streams canonical
@@ -68,15 +69,15 @@ AgentRuntime -> structured runtime events
   and rendering integration. DotaMind supplies history adapters and conversion;
   its repository remains authoritative for saved dialogue.
 - Presentation owns collapse/expand behavior and standard Markdown rendering.
-  Catalog entity enhancement has a confirmed explicit-reference design;
-  implementation remains pending.
+  The explicit-reference directory and resolution API are implemented; final
+  answer entity rendering remains pending.
 
 Only product-approved fields cross the transport boundary. Do not replicate
 SessionExecutionHistory, model requests, raw reasoning, full tool observations,
 or Runtime internal state. Client-supplied transport state is not authoritative
 for history, authorization, tool configuration, or saved completion.
 
-## Explicit entity display references (design confirmed, implementation pending)
+## Explicit entity display references (directory and API implemented; model and renderer pending)
 
 This document is the single owner of the reference syntax. A capability supplies
 the reference in the result for an explicitly identified entity; the model copies
@@ -96,12 +97,17 @@ Valve Hero, Item, and Ability records use Valve identity; Team records use their
 explicit PandaScore identity. The `display:` link is a rendering instruction,
 not a navigable URL or a tool argument.
 
-The renderer parses only complete explicit references outside code regions and
-does not scan ordinary Markdown text for entity names. An incomplete streamed
+The future renderer parses only complete explicit references outside code regions
+and does not scan ordinary Markdown text for entity names. An incomplete streamed
 reference shows no icon; complete content is parsed in a batch. A valid reference
-uses the latest display name and local image from the shared directory. If that
-record has no image, render its name alone. If the reference is invalid or no
-longer resolves, retain the Markdown link label as readable text.
+uses the latest display name and local image from the shared directory. The
+frontend-facing batch endpoint is `POST /api/v1/display/resolve`; it accepts at
+most 100 strict strings, each no longer than 128 characters, and returns an
+`entities` mapping for known references. Invalid or unknown references are
+omitted. It returns `Cache-Control: no-store`, and an unassembled directory
+produces `503 entity_display_unavailable`. An entity with no image renders as
+text alone. If a reference is invalid or no longer resolves, retain the Markdown
+link label as readable text.
 
 Persist the canonical answer with its reference syntax unchanged. Copying a
 rendered answer emits readable entity names and never exposes the internal
@@ -111,10 +117,11 @@ directory rather than a saved name/image snapshot or legacy
 an already-open page need not update immediately when the directory changes.
 Process timeline activities remain separate from final-answer entity rendering.
 
-The current code still has a name-matching visual-enrichment path; the target
-implementation must replace that path rather than extend name matching. This
-section records design only and does not claim the renderer or data flow is
-implemented.
+The shared directory, Team and Valve capability-reference enrichment, and batch
+resolution API are implemented. The current code still has a name-matching
+visual-enrichment path; the target renderer must replace that path rather than
+extend name matching. Model guidance, frontend rendering, and historical-answer
+resolution through this endpoint remain pending.
 
 ## State semantics
 

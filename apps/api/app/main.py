@@ -13,6 +13,7 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from app.api.v1.chat_routes import router as chat_router
 from app.api.v1.chat_run_routes import router as chat_run_router
+from app.api.v1.entity_display_routes import router as entity_display_router
 from app.api.v1.home_routes import router as home_router
 from app.api.v1.persistent_image_routes import router as persistent_image_router
 from app.api.v1.routes import router as v1_router
@@ -294,6 +295,7 @@ app.add_middleware(
 
 app.include_router(v1_router, prefix=settings.api_v1_prefix)
 app.include_router(home_router, prefix=settings.api_v1_prefix)
+app.include_router(entity_display_router, prefix=settings.api_v1_prefix)
 app.include_router(chat_router, prefix=settings.api_v1_prefix)
 app.include_router(vnext_chat_router, prefix=settings.api_v1_prefix)
 app.include_router(vnext_trace_router, prefix=settings.api_v1_prefix)

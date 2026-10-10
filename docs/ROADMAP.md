@@ -268,7 +268,7 @@ data-update migration.
 The user-visible contract is owned by [PRODUCT.md](PRODUCT.md), data and team
 asset refresh semantics by [DATA.md](DATA.md), and the unique Markdown reference
 syntax by [agent/product_run_state.md](agent/product_run_state.md). The first
-three data-path steps below are implemented; user-visible rendering and its
+four data-path steps below are implemented; user-visible rendering and its
 acceptance remain pending.
 
 1. **Implemented:** build the shared display directory and validate the
@@ -283,10 +283,14 @@ acceptance remain pending.
    explicitly resolved Hero, Item, and Ability name objects after filtering and
    section projection. References are attached before generic result
    externalization; model guidance and rendering remain pending.
-4. Render complete explicit references in final and historical answers using the
+4. **Implemented:** expose `POST /api/v1/display/resolve` for bounded batches.
+   It reuses the shared directory to return current labels and local image URLs;
+   malformed or missing references are omitted, and responses are not cached.
+   This is an ordinary frontend data endpoint, not a model tool.
+5. Render complete explicit references in final and historical answers using the
    latest display records; preserve canonical Markdown and readable copy output.
    Model guidance and rendering are not enabled yet.
-5. Complete focused offline, browser, and real-model acceptance, then remove the
+6. Complete focused offline, browser, and real-model acceptance, then remove the
    superseded answer name-matching display path.
 
 ## Hero guides (file-backed query and refresh active on WSL)

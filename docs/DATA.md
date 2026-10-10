@@ -76,9 +76,36 @@ up the current shared record when the saved answer is loaded. Capability
 composition attaches Team references only at explicit Team DTO fields in team,
 series-team, tournament-participant, match-participant, and player current-team
 results. The Team ID must exist in the local directory; this check does not
-replace the Provider's current name or image URL. Missing images do not block
-references. Model guidance and user-visible answer rendering remain
-unimplemented.
+replace the Provider's current name or image URL. Catalog lookup also attaches
+references to found Hero and Item entries, and `hero.guide` attaches references
+to explicitly resolved Hero, Item, and Ability name objects after filtering and
+section projection. Missing images do not block references. Model guidance and
+user-visible answer rendering remain unimplemented.
+
+### Batch display resolution API
+
+`POST /api/v1/display/resolve` accepts a JSON object with a `refs` string array
+and returns an `entities` mapping keyed by each resolved reference. The request
+is limited to 100 entries and 128 characters per string; strings are validated
+strictly, extra request fields are rejected, and invalid request shapes or
+limits return `422`. Duplicate references are resolved once. An empty array
+returns `200` with an empty mapping. Malformed references and valid references
+whose entities are absent from the local directory are omitted from the mapping.
+
+Each returned value contains `display_ref`, `kind`, the latest directory `label`,
+and a nullable `image_url`. Image URLs are local by-hash asset routes only; the
+response never exposes an upstream CDN URL or filesystem path. A known entity
+without a local image is still returned with `image_url: null`. The route uses
+the same `EntityDisplayDirectory` instance as capability enrichment and resolves
+the whole batch in one call. It is read-only and sends `Cache-Control: no-store`;
+it does not add Redis or TTL caching. A Team snapshot atomically replaced after
+one request is visible to the next request. With no configured data root, Valve
+entities can still resolve from the local Catalog while Team references remain
+absent. If the display directory is not assembled, the route returns `503` with
+`entity_display_unavailable`.
+
+This is a frontend data endpoint, not a model-facing tool. The model prompt and
+frontend renderer do not yet use it; historical-answer rendering remains pending.
 
 ### Team directory and image updates
 
