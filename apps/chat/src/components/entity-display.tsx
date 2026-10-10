@@ -35,27 +35,23 @@ export const EntityDisplayMessage: FC<PropsWithChildren<{
   isComplete: boolean;
 }>> = ({ messageId, markdown, isComplete, children }) => {
   const [entities, setEntities] = useState<Record<string, ResolvedDisplayEntity>>({});
-  const attemptedRefs = useRef(new Set<string>());
+  const seenRefs = useRef(new Set<string>());
   const pendingRefs = useRef(new Set<string>());
+  const readyRefs = useRef<string[]>([]);
   const inFlight = useRef(false);
-  const flushRequested = useRef(false);
   const activeController = useRef<AbortController | null>(null);
   const mounted = useRef(false);
   const mergeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const drainQueue = useCallback(async () => {
     if (!mounted.current) return;
-    flushRequested.current = true;
+    readyRefs.current.push(...pendingRefs.current);
+    pendingRefs.current.clear();
     if (inFlight.current) return;
     inFlight.current = true;
     try {
-      while (pendingRefs.current.size > 0 && mounted.current && flushRequested.current) {
-        flushRequested.current = false;
-        const batch = [...pendingRefs.current].slice(0, 100);
-        for (const ref of batch) {
-          pendingRefs.current.delete(ref);
-          attemptedRefs.current.add(ref);
-        }
+      while (readyRefs.current.length > 0 && mounted.current) {
+        const batch = readyRefs.current.splice(0, 100);
 
         const controller = new AbortController();
         activeController.current = controller;
@@ -69,12 +65,9 @@ export const EntityDisplayMessage: FC<PropsWithChildren<{
           // while this message remains mounted.
           if (controller.signal.aborted) {
             for (const ref of batch) {
-              attemptedRefs.current.delete(ref);
-              if (mounted.current) pendingRefs.current.add(ref);
+              seenRefs.current.delete(ref);
             }
-            // Strict Mode performs a development-only cleanup/setup cycle.
-            // If that cycle aborted this request, drain the requeued batch.
-            flushRequested.current = mounted.current;
+            if (mounted.current) readyRefs.current.unshift(...batch);
           }
         } finally {
           if (activeController.current === controller) activeController.current = null;
@@ -88,7 +81,8 @@ export const EntityDisplayMessage: FC<PropsWithChildren<{
   const queueReferences = useCallback((refs: readonly string[]) => {
     if (!mounted.current) return;
     for (const ref of refs) {
-      if (attemptedRefs.current.has(ref)) continue;
+      if (seenRefs.current.has(ref)) continue;
+      seenRefs.current.add(ref);
       pendingRefs.current.add(ref);
     }
     if (pendingRefs.current.size === 0) return;

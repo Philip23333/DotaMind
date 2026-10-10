@@ -135,6 +135,78 @@ describe("entity display message", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("drains all batches for a complete history message without another render", async () => {
+    const refs = Array.from({ length: 101 }, (_, index) => `display:valve:item:${index + 1}`);
+    const batchSizes: number[] = [];
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { refs: string[] };
+      batchSizes.push(body.refs.length);
+      const entities = Object.fromEntries(body.refs.map((displayRef) => [displayRef, {
+        display_ref: displayRef,
+        kind: "item",
+        label: `Resolved ${displayRef}`,
+        image_url: null,
+      }]));
+      return new Response(JSON.stringify({ entities }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <EntityDisplayMessage
+        messageId="assistant-history-101"
+        markdown={refs.map((displayRef) => `[source](${displayRef})`).join("\n")}
+        isComplete
+      >
+        {refs.map((displayRef) => (
+          <EntityDisplayReference key={displayRef} data-display-ref={displayRef}>
+            source
+          </EntityDisplayReference>
+        ))}
+      </EntityDisplayMessage>,
+    );
+
+    expect(await screen.findByText("Resolved display:valve:item:101")).toBeTruthy();
+    expect(batchSizes).toEqual([100, 1]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("continues to the next batch after a failed batch without retrying the first", async () => {
+    const refs = Array.from({ length: 101 }, (_, index) => `display:valve:item:${index + 1}`);
+    const batchSizes: number[] = [];
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { refs: string[] };
+      batchSizes.push(body.refs.length);
+      if (batchSizes.length === 1) return new Response("unavailable", { status: 503 });
+      const entities = Object.fromEntries(body.refs.map((displayRef) => [displayRef, {
+        display_ref: displayRef,
+        kind: "item",
+        label: `Resolved ${displayRef}`,
+        image_url: null,
+      }]));
+      return new Response(JSON.stringify({ entities }), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { container } = render(
+      <EntityDisplayMessage
+        messageId="assistant-history-failed-batch"
+        markdown={refs.map((displayRef) => `[source](${displayRef})`).join("\n")}
+        isComplete
+      >
+        {refs.map((displayRef, index) => (
+          <EntityDisplayReference key={displayRef} data-display-ref={displayRef}>
+            {`Fallback ${index + 1}`}
+          </EntityDisplayReference>
+        ))}
+      </EntityDisplayMessage>,
+    );
+
+    expect(await screen.findByText("Resolved display:valve:item:101")).toBeTruthy();
+    expect(container.textContent).toContain("Fallback 1");
+    expect(batchSizes).toEqual([100, 1]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("keeps readable text after lookup failure and does not retry the same reference", async () => {
     const fetchMock = vi.fn(async () => new Response("{}", { status: 503 }));
     vi.stubGlobal("fetch", fetchMock);
