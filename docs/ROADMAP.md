@@ -263,7 +263,7 @@ data-update migration.
    使用滑入式覆盖抽屉和淡入遮罩；关闭后立即 inert。真实 Provider 刷新、部署 Redis 行为
    与真实模型回答仍需分别验收。
 
-## Explicit entity display (Team capability data path implemented; rendering pending)
+## Explicit entity display (Team and Valve capability data paths implemented; rendering pending)
 
 The user-visible contract is owned by [PRODUCT.md](PRODUCT.md), data and team
 asset refresh semantics by [DATA.md](DATA.md), and the unique Markdown reference
@@ -276,10 +276,13 @@ acceptance remain pending.
 2. **Implemented:** import the historical Team identity mappings and existing
    image assets, then add complete PandaScore team pagination and best-effort
    local image refresh through the unified updater.
-3. **Implemented for Team:** attach references to explicitly identified Team DTOs
-   in team search, series teams, tournament participants, match participants, and
-   player current-team results before generic result externalization. Hero, Item,
-   and Ability result injection remains pending.
+3. **Implemented for Team and Valve entities:** attach references to explicitly
+   identified Team DTOs in team search, series teams, tournament participants,
+   match participants, and player current-team results. `catalog.lookup` adds
+   references to found Hero/Item entries, and `hero.guide` adds references to
+   explicitly resolved Hero, Item, and Ability name objects after filtering and
+   section projection. References are attached before generic result
+   externalization; model guidance and rendering remain pending.
 4. Render complete explicit references in final and historical answers using the
    latest display records; preserve canonical Markdown and readable copy output.
    Model guidance and rendering are not enabled yet.

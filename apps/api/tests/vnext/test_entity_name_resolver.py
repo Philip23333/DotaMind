@@ -79,6 +79,7 @@ def test_resolver_dispatches_kind_and_preserves_catalog_names_and_version(
         "status": "found",
         "name_en": record.name_en,
         "name_zh": record.name_zh,
+        "display_ref": None,
     }
     assert result.catalog_version.model_dump() == {
         "source": "valve_dota2_datafeed",
@@ -122,6 +123,7 @@ def test_only_catalog_lookup_errors_become_unknown() -> None:
         "status": "unknown",
         "name_en": None,
         "name_zh": None,
+        "display_ref": None,
     }
 
     repository.errors[("item", 100)] = OSError("catalog read failed")

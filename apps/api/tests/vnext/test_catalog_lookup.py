@@ -24,12 +24,14 @@ def test_catalog_lookup_maps_exact_hero_and_item_ids_with_snapshot_version() -> 
         "status": "found",
         "name_en": repository.get_hero(1).name_en,
         "name_zh": repository.get_hero(1).name_zh,
+        "display_ref": None,
     }
     assert hero.entries[1].model_dump() == {
         "id": 2**31 - 1,
         "status": "unknown",
         "name_en": None,
         "name_zh": None,
+        "display_ref": None,
     }
     assert item.entries[0].name_en == repository.get_item(1).name_en
     assert item.entries[0].status == "found"

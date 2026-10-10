@@ -25,6 +25,12 @@ class ResolvedEntityName(_ResolverModel):
     status: Literal["found", "unknown"]
     name_en: StrictStr | None
     name_zh: StrictStr | None
+    display_ref: StrictStr | None = Field(
+        default=None,
+        description=(
+            "Program-provided local presentation reference; not a tool query parameter."
+        ),
+    )
 
 
 class EntityNameCatalogVersion(_ResolverModel):

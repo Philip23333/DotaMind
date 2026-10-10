@@ -163,7 +163,7 @@ to multiple roles such as `["carry", "mid"]`; `current_team` is a lightweight
 current-team reference and does not embed a roster. A missing `current_team`
 is valid for a free agent.
 
-## Explicit entity display references (Team capability injection implemented; answer rendering pending)
+## Explicit entity display references (Team and Valve capability injection implemented; answer rendering pending)
 
 Application composition now attaches a program-generated `display_ref` to
 explicit Team objects when the configured local display directory confirms their
@@ -177,24 +177,35 @@ confirm identity, not to replace Provider facts. A Team without a local image
 still receives a reference, while an absent local Team record leaves the field
 null. No reference is inferred from `winner_id` or arbitrary fields.
 
+The same application-level enrichment now attaches Valve references to
+`catalog.lookup` entries and `hero.guide` name objects. Catalog references are
+limited to found Hero and Item entries; its input remains unchanged and does not
+add Ability lookup. Guide references cover `hero_name`, Pub starting items,
+progression and situational items, Pub skill abilities, and Pro item/ability
+timeline name objects. Enrichment runs after cache reading, Pro position
+filtering, section projection, and existing Catalog name resolution, but before
+generic result externalization. Only explicitly typed IDs in the returned
+result are considered; unknown IDs (including ability ID `0`) receive no
+reference. Repeated ability entries remain in their original order.
+
 The model may copy a returned reference into the final answer; it must not
 construct one from a name, acronym, provider ID, or image URL. The reference is
 for final-answer rendering, not a tool input or a new lookup capability. Its
 syntax is owned by [`agent/product_run_state.md`](agent/product_run_state.md),
-and the shared records are owned by [`DATA.md`](DATA.md). Hero, Item, and
-Ability injection, model guidance, and answer rendering remain pending; this
-change does not enable model use of references.
+and the shared records are owned by [`DATA.md`](DATA.md). Model guidance and
+answer rendering remain pending; this change does not enable model use of
+references.
 
 The first version covers Hero, Item, Ability, and Team. A Player entity does not
 receive a reference, although a Team already present as a `TeamRefDTO` relation
-may. Hero-guide and Catalog results follow the same rule for explicitly known
-entities when integrated. Unknown or unresolved entities receive no fabricated
-reference. The reference follows the entity in the result before generic Artifact
+may. Unknown or unresolved entities receive no fabricated reference. The
+reference follows the entity in the result before generic Artifact
 externalization; it is not emitted as a separate cross-reference table.
 
 This design adds no image-search or image-insertion tool. Existing provider
 `image_url` fields remain source facts and are not model-created display handles.
-Only the Team output paths listed above currently emit the optional field.
+The Team paths and the Catalog/hero-guide paths described above currently emit
+the optional field.
 
 ## Optional web search
 

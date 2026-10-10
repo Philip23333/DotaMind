@@ -1,6 +1,6 @@
 # DotaMind Esports DTO Design
 
-> Status: Existing DTO baseline frozen; optional Team display references are implemented at capability output assembly
+> Status: Existing esports DTO baseline frozen; optional Team and Valve entity display references are implemented at capability output assembly
 > Scope: PandaScore-backed Dota 2 esports domains  
 > Provider query contract: see `docs/pandascore_dota_contract_baseline.md`
 
@@ -1120,6 +1120,33 @@ Provider nested objects
 Mapper
 → no additional HTTP lookup
 ```
+
+## Supplement: Valve display references in Catalog and hero-guide results
+
+`CatalogLookupEntry` and `ResolvedEntityName` expose an optional nullable
+`display_ref`. Application composition fills it only when the local display
+directory confirms the explicit Valve identity. `EntityNameResolver` remains
+responsible only for names and Catalog version; it does not create display
+references.
+
+For `hero.guide`, references stay on existing name objects:
+
+- `hero_name.display_ref` identifies the requested Hero.
+- Pub starting-item entries use `items[].resolved_name.display_ref`.
+- Pub progression and situational entries use
+  `item_progression[].resolved_name.display_ref` and
+  `situational_items[].resolved_name.display_ref`.
+- Pub skill entries use `skill_sequences[].abilities[].display_ref`.
+- Pro item and ability events use
+  `item_timeline[].resolved_name.display_ref` and
+  `ability_timeline[].resolved_name.display_ref`.
+
+Only entities in the filtered and projected result are enriched. Unknown IDs,
+including ability ID `0`, retain their name status and have no display reference.
+Repeated skill occurrences and source order are preserved. References are
+generated at query time and are not written into the guide cache or source
+records. Catalog lookup continues to accept Hero and Item IDs only; Ability
+references are supplied by explicit guide ability entries.
 
 ## 27. Design Principle
 

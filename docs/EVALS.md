@@ -178,14 +178,16 @@ tools with missing cache data or failed reads from unsupported capabilities.
 Capability questions should be answered without executing tools; concrete guide
 requests should not be rejected solely because of an earlier assistant claim.
 
-## Explicit entity display (Team capability injection implemented; rendering pending)
+## Explicit entity display (Team and Valve capability injection implemented; rendering pending)
 
-Offline regressions now cover Team reference injection for the five explicit
-capability result paths, same-acronym Teams resolved by ID, missing local records
-and images, provider-fact preservation, non-mutating copies, one deduplicated
-directory batch per result, and reference retention through the composed tool,
-Artifact externalization, and `artifact.read` path. They make no PandaScore call
-and do not establish answer rendering.
+Offline regressions cover Team reference injection for the five explicit
+capability result paths and Valve references on Catalog and hero-guide results.
+They check same-acronym Teams by ID, local-directory misses and missing images,
+no-data-directory Valve references, preservation of Provider facts and source
+order, non-mutating copies, deduplicated batch resolution, section projection,
+unknown IDs and ability ID `0`, and reference retention through composed tools,
+Artifact externalization, and `artifact.read`. These tests make no Provider
+calls and do not establish answer rendering.
 
 The Team refresher's pagination, old-directory retention, image-failure retry,
 and monthly refresh rules have their own offline tests under the data-update
@@ -208,8 +210,8 @@ acceptance. Remaining answer and rendering requirements are:
    the correct entities. This is not established by fixture or scripted-model
    tests.
 
-Offline Team injection tests have passed. Browser rendering review and real-model
-behavior are separate acceptance layers and remain pending.
+Offline Team and Valve injection tests have passed. Browser rendering review and
+real-model behavior are separate acceptance layers and remain pending.
 
 ## Context Governance harness
 

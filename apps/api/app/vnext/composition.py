@@ -34,6 +34,9 @@ from app.vnext.artifacts import (
     ToolResponseExternalizer,
 )
 from app.vnext.artifacts.lifecycle import ArtifactObservationTranscriptRewriter
+from app.vnext.capabilities.catalog.display_enrichment import (
+    enrich_catalog_lookup_result,
+)
 from app.vnext.capabilities.catalog.lookup import CatalogLookupInput, CatalogLookupResult
 from app.vnext.capabilities.esports.display_enrichment import (
     enrich_match_search_result,
@@ -54,6 +57,9 @@ from app.vnext.capabilities.esports.series import (
 from app.vnext.capabilities.esports.team import TeamSearchInput, TeamSearchResult
 from app.vnext.capabilities.esports.tournament import TournamentSearchInput, TournamentSearchResult
 from app.vnext.capabilities.game.detail import GameDetailInput, GameDetailResult
+from app.vnext.capabilities.hero.display_enrichment import (
+    enrich_hero_guide_display_refs,
+)
 from app.vnext.capabilities.hero.guide import HeroGuideInput, HeroGuideResult
 from app.vnext.capabilities.hero.service import HeroGuideService
 from app.vnext.capabilities.player.profile import PlayerProfileInput, PlayerProfileResult
@@ -129,7 +135,7 @@ _QueryT = TypeVar("_QueryT")
 _ResultT = TypeVar("_ResultT")
 
 
-def _with_team_display_refs(
+def _with_display_enrichment(
     handler: Callable[[_QueryT], Awaitable[_ResultT]],
     directory: EntityDisplayDirectory,
     enrich: Callable[[_ResultT, EntityDisplayDirectory], _ResultT],
@@ -564,10 +570,9 @@ def build_vnext_services(
         if catalog_repository_provider is not None
         else load_default_catalog_repository
     )
-    entity_display_directory = (
-        EntityDisplayDirectory(repository_provider, data_root=config.data_dir)
-        if config.data_dir is not None
-        else None
+    entity_display_directory = EntityDisplayDirectory(
+        repository_provider,
+        data_root=config.data_dir,
     )
     catalog_lookup = ValveCatalogLookupAdapter(repository_provider).lookup
     hero_guide: HeroGuideLookup | None = None
@@ -682,7 +687,7 @@ def build_vnext_registry(
     if resolved_services.series_teams is not None:
         service = resolved_services.series_teams
         if resolved_services.entity_display_directory is not None:
-            service = _with_team_display_refs(
+            service = _with_display_enrichment(
                 service,
                 resolved_services.entity_display_directory,
                 enrich_series_teams_result,
@@ -691,7 +696,7 @@ def build_vnext_registry(
     if resolved_services.tournament_search is not None:
         service = resolved_services.tournament_search
         if resolved_services.entity_display_directory is not None:
-            service = _with_team_display_refs(
+            service = _with_display_enrichment(
                 service,
                 resolved_services.entity_display_directory,
                 enrich_tournament_search_result,
@@ -700,7 +705,7 @@ def build_vnext_registry(
     if resolved_services.match_search is not None:
         service = resolved_services.match_search
         if resolved_services.entity_display_directory is not None:
-            service = _with_team_display_refs(
+            service = _with_display_enrichment(
                 service,
                 resolved_services.entity_display_directory,
                 enrich_match_search_result,
@@ -709,7 +714,7 @@ def build_vnext_registry(
     if resolved_services.team_search is not None:
         service = resolved_services.team_search
         if resolved_services.entity_display_directory is not None:
-            service = _with_team_display_refs(
+            service = _with_display_enrichment(
                 service,
                 resolved_services.entity_display_directory,
                 enrich_team_search_result,
@@ -718,7 +723,7 @@ def build_vnext_registry(
     if resolved_services.player_search is not None:
         service = resolved_services.player_search
         if resolved_services.entity_display_directory is not None:
-            service = _with_team_display_refs(
+            service = _with_display_enrichment(
                 service,
                 resolved_services.entity_display_directory,
                 enrich_player_search_result,
@@ -731,9 +736,23 @@ def build_vnext_registry(
     if config.opendota_enabled and resolved_services.game_detail is not None:
         register_game_detail_tool(registry, resolved_services.game_detail)
     if resolved_services.hero_guide is not None:
-        register_hero_guide_tool(registry, resolved_services.hero_guide)
+        service = resolved_services.hero_guide
+        if resolved_services.entity_display_directory is not None:
+            service = _with_display_enrichment(
+                service,
+                resolved_services.entity_display_directory,
+                enrich_hero_guide_display_refs,
+            )
+        register_hero_guide_tool(registry, service)
     if resolved_services.catalog_lookup is not None:
-        register_catalog_lookup_tool(registry, resolved_services.catalog_lookup)
+        service = resolved_services.catalog_lookup
+        if resolved_services.entity_display_directory is not None:
+            service = _with_display_enrichment(
+                service,
+                resolved_services.entity_display_directory,
+                enrich_catalog_lookup_result,
+            )
+        register_catalog_lookup_tool(registry, service)
     if resolved_services.tavily_web_search is not None:
         register_web_search_tool(registry, resolved_services.tavily_web_search)
     if task_state_coordinator is not None:

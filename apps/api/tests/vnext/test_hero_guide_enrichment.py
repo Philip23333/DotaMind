@@ -269,6 +269,7 @@ def test_service_enriches_all_visible_entity_fields_with_batched_names() -> None
         "status": "unknown",
         "name_en": None,
         "name_zh": None,
+        "display_ref": None,
     }
     assert zero_event.source_fields == {"ability_id": 0, "time": 20}
     assert example.ability_timeline[1].resolved_name is not sequence.abilities[0]

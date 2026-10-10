@@ -54,6 +54,12 @@ class CatalogLookupEntry(BaseModel):
     name_zh: str | None = Field(
         description="Simplified Chinese static catalog label when available."
     )
+    display_ref: str | None = Field(
+        default=None,
+        description=(
+            "Program-provided local presentation reference; not a tool query parameter."
+        ),
+    )
 
 
 class CatalogLookupResult(BaseModel):
