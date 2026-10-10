@@ -64,9 +64,6 @@ export const EntityDisplayMessage: FC<PropsWithChildren<{
           // Network failures are best-effort; aborted requests are requeued only
           // while this message remains mounted.
           if (controller.signal.aborted) {
-            for (const ref of batch) {
-              seenRefs.current.delete(ref);
-            }
             if (mounted.current) readyRefs.current.unshift(...batch);
           }
         } finally {

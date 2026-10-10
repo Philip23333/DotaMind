@@ -123,7 +123,7 @@ describe("entity display message", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    render(
+    const rendered = render(
       <StrictMode>
         <EntityDisplayMessage messageId="assistant-strict" markdown={`[帕吉](${ref})`} isComplete>
           <EntityDisplayReference data-display-ref={ref}>帕吉</EntityDisplayReference>
@@ -132,6 +132,16 @@ describe("entity display message", () => {
     );
 
     expect(await screen.findByText("帕吉最新名称")).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    rendered.rerender(
+      <StrictMode>
+        <EntityDisplayMessage messageId="assistant-strict" markdown={`[新标签](${ref})`} isComplete>
+          <EntityDisplayReference data-display-ref={ref}>新标签</EntityDisplayReference>
+        </EntityDisplayMessage>
+      </StrictMode>,
+    );
+
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
