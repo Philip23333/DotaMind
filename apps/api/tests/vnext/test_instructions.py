@@ -58,6 +58,25 @@ def test_shared_capability_rules_use_current_inventory_and_distinguish_data_avai
     assert "subject to the current stage's permissions" in instruction
 
 
+def test_explicit_display_guidance_only_reuses_program_supplied_entity_references() -> None:
+    instruction = " ".join(PRODUCT_INSTRUCTION.lower().split())
+
+    assert (
+        "contains a `display_ref` on an explicitly identified hero, item, ability, or team object"
+        in instruction
+    )
+    assert "use the entity's readable label as the link text" in instruction
+    assert "copy the destination from that same object's `display_ref` field" in instruction
+    assert "never construct or edit a reference" in instruction
+    assert "attach it to a different entity based on a name, acronym, or id" in instruction
+    assert "keep normal prose and repeated analysis mentions as plain text" in instruction
+    assert (
+        "do not create references for players or entities without a returned `display_ref`"
+        in instruction
+    )
+    assert "as a navigable url or a tool input" in instruction
+
+
 def test_task_plan_policy_allows_bounded_cross_partition_batching() -> None:
     instruction = " ".join(AGENT_INSTRUCTION.lower().split())
 

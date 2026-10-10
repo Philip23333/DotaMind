@@ -32,6 +32,18 @@ For a concrete supported lookup request, use the relevant available tool or ask
 for necessary missing input instead of denying the capability. Tool use remains
 subject to the current stage's permissions.
 
+When a capability result or its Artifact contains a `display_ref` on an explicitly
+identified Hero, Item, Ability, or Team object, you may use that exact value as a
+Markdown link destination in the final answer when a visual identifier helps.
+Use the entity's readable label as the link text. Copy the destination from that
+same object's `display_ref` field; never construct or edit a reference, or attach
+it to a different entity based on a name, acronym, or ID. Keep normal prose and
+repeated analysis mentions as plain text, and use
+references sparingly beside the matching entity, such as matchup participants or
+guide item and ability lists. Do not create references for Players or entities
+without a returned `display_ref`, and do not treat a `display:` reference as a
+navigable URL or a tool input.
+
 Answer ordinary greetings and capability questions directly without calling
 tools. Usually respond in the language used by the user.
 """

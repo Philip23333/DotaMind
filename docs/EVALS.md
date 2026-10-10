@@ -191,7 +191,7 @@ tools with missing cache data or failed reads from unsupported capabilities.
 Capability questions should be answered without executing tools; concrete guide
 requests should not be rejected solely because of an earlier assistant claim.
 
-## Explicit entity display (directory, API, and frontend rendering implemented; model guidance pending)
+## Explicit entity display (directory, API, frontend rendering, and prompt guidance implemented)
 
 Offline regressions cover Team reference injection for the five explicit
 capability result paths and Valve references on Catalog and hero-guide results.
@@ -200,7 +200,7 @@ no-data-directory Valve references, preservation of Provider facts and source
 order, non-mutating copies, deduplicated batch resolution, section projection,
 unknown IDs and ability ID `0`, and reference retention through composed tools,
 Artifact externalization, and `artifact.read`. These tests make no Provider
-calls and do not establish answer rendering.
+calls.
 
 The Team refresher's pagination, old-directory retention, image-failure retry,
 and monthly refresh rules have their own offline tests under the data-update
@@ -209,6 +209,13 @@ recognition, code exclusion, incomplete stream fragments, two distinct Teams,
 latest labels, local-image validation and failure fallback, sequential batches,
 clipboard output, and historical answers. These use fixtures only and make no
 Provider or model calls.
+
+Prompt tests verify that the shared product instruction reaches execution and
+answer requests and tells the model to copy only a program-supplied reference
+from the same Hero, Item, Ability, or Team object. It prohibits constructing
+references from names or IDs and recommends sparse placement in the final answer.
+These checks establish instruction content and request plumbing, not live-model
+behavior.
 
 Remaining acceptance:
 
@@ -220,8 +227,8 @@ Remaining acceptance:
    the correct entities. This is not established by fixture or scripted-model
    tests.
 
-Automated rendering coverage has passed. Browser review and real-model placement
-behavior remain separate acceptance layers.
+Automated rendering and prompt-plumbing coverage has passed. Browser review and
+real-model placement behavior remain separate acceptance layers.
 
 ## Context Governance harness
 

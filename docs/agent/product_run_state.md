@@ -76,7 +76,7 @@ SessionExecutionHistory, model requests, raw reasoning, full tool observations,
 or Runtime internal state. Client-supplied transport state is not authoritative
 for history, authorization, tool configuration, or saved completion.
 
-## Explicit entity display references (directory, API, and renderer implemented; model guidance pending)
+## Explicit entity display references (directory, API, renderer, and model guidance implemented; real-model review pending)
 
 This document is the single owner of the reference syntax. A capability supplies
 the reference in the result for an explicitly identified entity; the model copies
@@ -122,10 +122,10 @@ immediately when the directory changes. Process timeline activities remain
 separate from final-answer entity rendering.
 
 The shared directory, Team and Valve capability-reference enrichment, batch
-resolution API, and frontend answer/history rendering are implemented. Model
-guidance and real-model observation remain pending. The legacy name-matching
-enrichment path remains present and will be removed in a later cleanup after the
-explicit-reference path is accepted.
+resolution API, frontend answer/history rendering, and shared product-prompt
+guidance are implemented. Real-model reference selection and placement remain
+unverified. The legacy name-matching enrichment path remains present and will be
+removed in a later cleanup after the explicit-reference path is accepted.
 
 ## State semantics
 

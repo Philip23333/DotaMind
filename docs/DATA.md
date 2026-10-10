@@ -40,13 +40,13 @@ Names are added to the query result and generic Artifact output; they are not
 written into guide snapshots. Old snapshots remain readable because enrichment
 DTO fields have defaults. `game.detail` has not yet integrated the resolver.
 
-## Explicit entity display records and Team assets (Team directory, refresh, and capability injection implemented; rendering pending)
+## Explicit entity display records and Team assets (directory, refresh, capability injection, renderer, and prompt guidance implemented)
 
 This section owns the shared display-record and update-data contract. User-visible
 placement and exclusions are defined in [PRODUCT.md](PRODUCT.md); reference
 syntax is defined in [agent/product_run_state.md](agent/product_run_state.md).
 The implemented refresh wiring below is not evidence of a deployed or successful
-Team refresh. User-visible answer rendering remains pending.
+Team refresh. Real-model use and placement of references remain unverified.
 
 ### Display records
 
@@ -79,8 +79,10 @@ results. The Team ID must exist in the local directory; this check does not
 replace the Provider's current name or image URL. Catalog lookup also attaches
 references to found Hero and Item entries, and `hero.guide` attaches references
 to explicitly resolved Hero, Item, and Ability name objects after filtering and
-section projection. Missing images do not block references. Model guidance and
-user-visible answer rendering remain unimplemented.
+section projection. Missing images do not block references. The shared product
+prompt instructs the model to reuse only the reference attached to the same
+entity and not infer references from names or IDs. User-visible rendering uses
+the latest directory data.
 
 ### Batch display resolution API
 
@@ -104,8 +106,10 @@ entities can still resolve from the local Catalog while Team references remain
 absent. If the display directory is not assembled, the route returns `503` with
 `entity_display_unavailable`.
 
-This is a frontend data endpoint, not a model-facing tool. The model prompt and
-frontend renderer do not yet use it; historical-answer rendering remains pending.
+This is a frontend data endpoint, not a model-facing tool. The renderer calls it
+for complete references in current and historical answers; the model prompt only
+instructs the model to reuse program-supplied references and does not call this
+endpoint. Real-model placement remains to be evaluated.
 
 ### Team directory and image updates
 

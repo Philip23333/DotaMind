@@ -351,7 +351,7 @@ with references explicitly included beside identified entities. Existing local
 Catalog lookup, image-manifest reading, content-addressed image assets, and the
 hash-serving route can be reused without bringing name matching into the new path.
 
-### Explicit entity display (design confirmed, implementation pending)
+### Explicit entity display (directory, capability injection, API, renderer, and model guidance implemented)
 
 The target data flow is:
 
@@ -374,12 +374,14 @@ mount.
 
 Provider adapters retain source transport and source facts; they do not choose
 presentation. Runtime does not select images, layout entities, or parse
-display-reference Markdown. The presentation layer consumes program-supplied
-references, while generic Artifact tools preserve those references without
-resolving them. The detailed reference syntax belongs to
+display-reference Markdown. The shared product prompt tells the model to copy a
+reference only from the matching entity object's program-supplied `display_ref`,
+never to construct one from text or IDs, and to use references sparingly in the
+final answer. The presentation layer consumes those references, while generic
+Artifact tools preserve them without resolving them. The detailed reference syntax belongs to
 [`agent/product_run_state.md`](agent/product_run_state.md), and record/update
-semantics belong to [`DATA.md`](DATA.md). All behavior in this section is a
-confirmed design that remains unimplemented.
+semantics belong to [`DATA.md`](DATA.md). Real-model placement quality remains
+subject to separate observation.
 
 Persistent Dota image URLs include the asset SHA-256. The read-only API route
 validates the requested hash, PNG signature, size limit, and bytes before serving

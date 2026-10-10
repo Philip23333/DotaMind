@@ -67,16 +67,17 @@ characters, at most 100 matches, and previews of at most 200 characters.
 Neither operation searches a corpus, infers business meaning, resolves
 identities, or fetches a provider.
 
-## Explicit display references (design confirmed, implementation pending)
+## Explicit display references (implemented)
 
-When implemented, a `display_ref` remains attached to its entity in the complete
-tool result and Artifact. `artifact.read` and `artifact.grep` preserve and return
-that value as ordinary document content; they do not resolve it, read images, or
-download resources. A `display_ref` locates the durable shared display directory;
-an `artifact_ref` locates a temporary session tool result. Historical answer
-rendering therefore must not depend on an Artifact still existing. The reference
-syntax is owned by [`agent/product_run_state.md`](agent/product_run_state.md), and
-record/update semantics by [`DATA.md`](DATA.md).
+A `display_ref` remains attached to its entity in the complete tool result and
+Artifact. `artifact.read` and `artifact.grep` preserve and return that value as
+ordinary document content; they do not resolve it, read images, or download
+resources. The shared product prompt permits copying a reference from that same
+entity into the final answer. A `display_ref` locates the durable shared display
+directory; an `artifact_ref` locates a temporary session tool result. Historical
+answer rendering therefore does not depend on an Artifact still existing. The
+reference syntax is owned by [`agent/product_run_state.md`](agent/product_run_state.md),
+and record/update semantics by [`DATA.md`](DATA.md).
 
 ## Non-goals
 

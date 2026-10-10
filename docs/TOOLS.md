@@ -163,7 +163,7 @@ to multiple roles such as `["carry", "mid"]`; `current_team` is a lightweight
 current-team reference and does not embed a roster. A missing `current_team`
 is valid for a free agent.
 
-## Explicit entity display references (Team and Valve capability injection implemented; answer rendering pending)
+## Explicit entity display references (capability injection, answer rendering, and model guidance implemented)
 
 Application composition now attaches a program-generated `display_ref` to
 explicit Team objects when the configured local display directory confirms their
@@ -188,13 +188,14 @@ generic result externalization. Only explicitly typed IDs in the returned
 result are considered; unknown IDs (including ability ID `0`) receive no
 reference. Repeated ability entries remain in their original order.
 
-The model may copy a returned reference into the final answer; it must not
-construct one from a name, acronym, provider ID, or image URL. The reference is
-for final-answer rendering, not a tool input or a new lookup capability. Its
-syntax is owned by [`agent/product_run_state.md`](agent/product_run_state.md),
-and the shared records are owned by [`DATA.md`](DATA.md). Model guidance and
-answer rendering remain pending; this change does not enable model use of
-references.
+The shared product prompt tells the model to copy a reference only from the
+matching entity object's returned `display_ref`, never to construct one from a
+name, acronym, provider ID, or image URL. It recommends sparse use in the final
+answer where an image helps identify the entity. The reference is for rendering,
+not a tool input or a new lookup capability. Its syntax is owned by
+[`agent/product_run_state.md`](agent/product_run_state.md), and the shared records
+are owned by [`DATA.md`](DATA.md). Real-model selection and placement quality
+remain to be evaluated.
 
 The first version covers Hero, Item, Ability, and Team. A Player entity does not
 receive a reference, although a Team already present as a `TeamRefDTO` relation

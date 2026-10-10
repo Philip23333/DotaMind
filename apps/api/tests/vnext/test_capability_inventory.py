@@ -61,9 +61,11 @@ def _system_text(request: ModelRequest) -> str:
 
 def _assert_inventory(request: ModelRequest, names: list[str]) -> None:
     text = _system_text(request)
+    normalized_text = " ".join(text.lower().split())
     assert _inventory(text) == names
     assert len(names) == len(set(names))
     assert text.count(PRODUCT_INSTRUCTION) == 1
+    assert "copy the destination from that same object's `display_ref` field" in normalized_text
     assert STAGE_BOUNDARY in text
     assert "The inventory is not evidence that any lookup succeeded." in text
     assert "they do not override the current inventory" in text
