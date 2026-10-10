@@ -15,6 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Thread } from "@/components/thread";
 import { ChatSidebar } from "@/components/chat-sidebar";
 import { DotaMindChatShell } from "@/app/assistant";
+import type { ResolvedDisplayEntity } from "@/lib/entity-display-api";
 import type { DotamindActivityItem, DotamindRunStage } from "./dotamind-run-state";
 import { DotaMindRuntimeProvider } from "./runtime-provider";
 import { DotaMindThreadState } from "./dotamind-thread-state";
@@ -103,6 +104,8 @@ class ControlledBackend {
   createGate: DeferredVoid | null = null;
   createStarted: (() => void) | null = null;
   readonly historyGates = new Map<string, DeferredVoid>();
+  readonly historyTurns = new Map<string, Array<Record<string, unknown>>>();
+  readonly displayEntities = new Map<string, ResolvedDisplayEntity>();
   nextId = 1;
 
   constructor(initialSessions: string[] = ["session-a", "session-b"]) {
@@ -115,6 +118,18 @@ class ControlledBackend {
     const headers = new Headers(init?.headers);
     const body = typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : undefined;
     this.calls.push({ url: url.toString(), method, headers, ...(body ? { body } : {}) });
+
+    if (url.pathname === "/api/v1/display/resolve" && method === "POST") {
+      const refs = Array.isArray(body?.refs)
+        ? body.refs.filter((ref): ref is string => typeof ref === "string")
+        : [];
+      return json({
+        entities: Object.fromEntries(refs.flatMap((ref) => {
+          const entity = this.displayEntities.get(ref);
+          return entity ? [[ref, entity]] : [];
+        })),
+      });
+    }
 
     if (
       url.pathname === "/api/v1/home/recent-series" && method === "GET"
@@ -206,7 +221,7 @@ class ControlledBackend {
       if (this.failHistory) return json({ detail: "private history failure" }, 503);
       const session = this.sessions.get(sessionId);
       return session
-        ? json({ session, turns: [] })
+        ? json({ session, turns: this.historyTurns.get(sessionId) ?? [] })
         : json({ detail: "not found" }, 404);
     }
     return json({ detail: "not found" }, 404);
@@ -420,6 +435,7 @@ function installBackend(backend: ControlledBackend) {
 }
 
 let backend: ControlledBackend;
+let originalClipboard: PropertyDescriptor | undefined;
 
 class TestResizeObserver {
   observe() {}
@@ -429,6 +445,7 @@ class TestResizeObserver {
 
 beforeEach(() => {
   window.localStorage.clear();
+  originalClipboard = Object.getOwnPropertyDescriptor(navigator, "clipboard");
   vi.stubGlobal("ResizeObserver", TestResizeObserver);
   Object.defineProperty(HTMLElement.prototype, "scrollTo", {
     configurable: true,
@@ -447,6 +464,11 @@ afterEach(() => {
   }
   cleanup();
   vi.unstubAllGlobals();
+  if (originalClipboard) {
+    Object.defineProperty(navigator, "clipboard", originalClipboard);
+  } else {
+    Reflect.deleteProperty(navigator, "clipboard");
+  }
   window.localStorage.clear();
 });
 
@@ -554,6 +576,131 @@ describe("normal AssistantTransport chat integration", () => {
     await act(async () => complete(request));
     expect(await chatView().findByText("first fragment")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "停止生成" })).toBeNull();
+  });
+
+  it("streams explicit references, resolves them without changing source text, and copies readable names", async () => {
+    const heroRef = "display:valve:hero:14";
+    const teamRef = "display:pandascore:team:1669";
+    const opponentRef = "display:pandascore:team:1700";
+    const itemRef = "display:valve:item:1";
+    const missingRef = "display:valve:item:9999";
+    backend.displayEntities.set(heroRef, {
+      display_ref: heroRef,
+      kind: "hero",
+      label: "帕吉（最新名称）",
+      image_url: `/api/v1/assets/dota/by-hash/${"a".repeat(64)}.png`,
+    });
+    backend.displayEntities.set(teamRef, {
+      display_ref: teamRef,
+      kind: "team",
+      label: "Team Spirit 新名称",
+      image_url: null,
+    });
+    backend.displayEntities.set(opponentRef, {
+      display_ref: opponentRef,
+      kind: "team",
+      label: "BB 新名称",
+      image_url: null,
+    });
+    backend.displayEntities.set(itemRef, {
+      display_ref: itemRef,
+      kind: "item",
+      label: "隐刀最新名称",
+      image_url: null,
+    });
+
+    const clipboardWrite = vi.fn()
+      .mockRejectedValueOnce(new Error("clipboard unavailable"))
+      .mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: clipboardWrite },
+    });
+
+    render(<TestChat />);
+    await selectSession("session-a");
+    await submit("show explicit entities");
+    const request = await waitForRequest(backend, 1);
+    await act(async () => startRun(request));
+    const partial = `暂未完整的引用：[旧名](${heroRef}`;
+    await act(async () => append(request, partial));
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 175)); });
+    expect(backend.calls.filter((call) => call.url.endsWith("/api/v1/display/resolve"))).toHaveLength(0);
+
+    const remainder = `)。\n\n对阵：[旧战队](${teamRef}) 与 [BB](${opponentRef})。\n\n装备：[旧装备](${itemRef})\n\n| 对阵 | 英雄 |\n| --- | --- |\n| BB | [旧名](${heroRef}) |\n\n缺少目录实体：[目录缺失](${missingRef})。\n\n普通链接：[官网](https://example.com)。\n\n\`代码引用 [示例](${heroRef})\``;
+    await act(async () => append(request, remainder));
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 175)); });
+
+    const entityRequests = backend.calls.filter((call) => call.url.endsWith("/api/v1/display/resolve"));
+    expect(entityRequests).toHaveLength(1);
+    expect(entityRequests[0]?.body?.refs).toEqual([heroRef, teamRef, opponentRef, itemRef, missingRef]);
+    await waitFor(() => expect(chatView().getAllByText("Team Spirit 新名称")).toHaveLength(1));
+    expect(chatView().getByText("BB 新名称")).toBeTruthy();
+    expect(chatView().getAllByText("帕吉（最新名称）")).toHaveLength(2);
+    expect(await chatView().findByText("隐刀最新名称")).toBeTruthy();
+    expect(document.querySelector(".aui-md")?.textContent).toContain("目录缺失");
+    expect(chatView().getByRole("link", { name: "官网" }).getAttribute("href")).toBe("https://example.com");
+    expect(document.querySelector(".chat-main-surface a[href^='display:']")).toBeNull();
+    expect([...document.querySelectorAll(".aui-md code")].some(
+      (code) => code.textContent === `代码引用 [示例](${heroRef})`,
+    )).toBe(true);
+
+    await act(async () => append(request, `\n\n再次提到 [帕吉](${heroRef}) 与 [目录缺失](${missingRef})。`));
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 175)); });
+    expect(backend.calls.filter((call) => call.url.endsWith("/api/v1/display/resolve"))).toHaveLength(1);
+
+    const originalMarkdown = partial + remainder + `\n\n再次提到 [帕吉](${heroRef}) 与 [目录缺失](${missingRef})。`;
+    expect(request.responseText).toBe(originalMarkdown);
+    await act(async () => complete(request));
+    const copyButton = await chatView().findByRole("button", { name: "复制回答" });
+    fireEvent.click(copyButton);
+    await waitFor(() => expect(clipboardWrite).toHaveBeenCalledTimes(1));
+    expect(copyButton.querySelector("svg.lucide-check")).toBeNull();
+    fireEvent.click(copyButton);
+    await waitFor(() => expect(clipboardWrite).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(copyButton.querySelector("svg.lucide-check")).toBeTruthy());
+    const copied = clipboardWrite.mock.calls[1]?.[0] as string;
+    expect(copied).toContain("Team Spirit 新名称");
+    expect(copied).toContain("帕吉（最新名称）");
+    expect(copied).toContain("隐刀最新名称");
+    expect(copied).toContain(`\`代码引用 [示例](${heroRef})\``);
+    expect(copied).not.toContain(`[旧名](${heroRef})`);
+    expect(copied).not.toContain(`[目录缺失](${missingRef})`);
+    expect(copied).toContain("目录缺失");
+    expect(copied).toContain("[官网](https://example.com)");
+    expect(request.responseText).toBe(originalMarkdown);
+  });
+
+  it("resolves historical answer references against the current display directory", async () => {
+    const ref = "display:pandascore:team:1669";
+    backend.displayEntities.set(ref, {
+      display_ref: ref,
+      kind: "team",
+      label: "最新的 Team Spirit 名称",
+      image_url: null,
+    });
+    backend.historyTurns.set("session-a", [{
+      turn_index: 1,
+      request_id: "old-request",
+      user_query: "旧问题",
+      public_response: {
+        status: "completed",
+        answer: { summary: `历史中的 [旧名称](${ref})` },
+        catalog_visual_entities: [{ kind: "team", name: "陈旧名称" }],
+      },
+      created_at: "2026-09-25T00:00:00Z",
+    }]);
+
+    render(<TestChat />);
+    await selectSession("session-a");
+    await submit("继续提问");
+    const request = await waitForRequest(backend, 1);
+
+    expect(await chatView().findByText("最新的 Team Spirit 名称")).toBeTruthy();
+    expect(chatView().queryByText("陈旧名称")).toBeNull();
+    expect(backend.calls.filter((call) => call.url.endsWith("/api/v1/display/resolve"))).toHaveLength(1);
+    expect(document.querySelector(".chat-main-surface a[href^='display:']")).toBeNull();
+    request.close();
   });
 
   it("sends a homepage Series directly and preserves the current composer draft and mode", async () => {

@@ -13,12 +13,18 @@ import { type FC, memo, useState } from "react";
 import { CheckIcon, CopyIcon } from "lucide-react";
 
 import { TooltipIconButton } from "@/components/tooltip-icon-button";
+import { EntityDisplayReference } from "@/components/entity-display";
+import { remarkDisplayReferences } from "@/lib/entity-display-markdown";
 import { cn } from "@/lib/utils";
+
+const displayComponents = {
+  "display-reference": EntityDisplayReference,
+};
 
 const MarkdownTextImpl = () => {
   return (
     <MarkdownTextPrimitive
-      remarkPlugins={[remarkGfm]}
+      remarkPlugins={[remarkGfm, remarkDisplayReferences]}
       className="aui-md"
       components={defaultComponents}
       smooth={false}
@@ -78,6 +84,7 @@ const useCopyToClipboard = ({
 };
 
 const defaultComponents = memoizeMarkdownComponents({
+  ...displayComponents,
   h1: ({ className, ...props }) => (
     <h1
       className={cn(

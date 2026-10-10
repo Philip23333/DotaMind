@@ -4,10 +4,9 @@
 
 This document defines the accepted target for the chat execution experience.
 Phases 1-6 are implemented, including independent thread runs and removal of
-the obsolete chat NDJSON protocol. The shared entity display directory and its
-batch resolution API are implemented; the current normal frontend still renders
-standard Markdown only, and model guidance plus explicit-reference rendering are
-pending. The product Run State schema, Runtime-event adapter, persistence,
+the obsolete chat NDJSON protocol. The shared entity display directory, batch
+resolution API, and frontend explicit-reference renderer are implemented; model
+guidance remains pending. The product Run State schema, Runtime-event adapter, persistence,
 completed-answer retry, repository replay, and AssistantTransport endpoint are
 implemented. The
 production `runtime-provider` uses `/transport`; the page-lifetime thread
@@ -68,16 +67,16 @@ AgentRuntime -> structured runtime events
 - assistant-ui owns frontend thread/message interaction, scrolling, actions,
   and rendering integration. DotaMind supplies history adapters and conversion;
   its repository remains authoritative for saved dialogue.
-- Presentation owns collapse/expand behavior and standard Markdown rendering.
-  The explicit-reference directory and resolution API are implemented; final
-  answer entity rendering remains pending.
+- Presentation owns collapse/expand behavior, standard Markdown rendering, and
+  explicit entity rendering. The renderer resolves only complete AST links in
+  message content; it does not scan ordinary prose for entity names.
 
 Only product-approved fields cross the transport boundary. Do not replicate
 SessionExecutionHistory, model requests, raw reasoning, full tool observations,
 or Runtime internal state. Client-supplied transport state is not authoritative
 for history, authorization, tool configuration, or saved completion.
 
-## Explicit entity display references (directory and API implemented; model and renderer pending)
+## Explicit entity display references (directory, API, and renderer implemented; model guidance pending)
 
 This document is the single owner of the reference syntax. A capability supplies
 the reference in the result for an explicitly identified entity; the model copies
@@ -97,31 +96,36 @@ Valve Hero, Item, and Ability records use Valve identity; Team records use their
 explicit PandaScore identity. The `display:` link is a rendering instruction,
 not a navigable URL or a tool argument.
 
-The future renderer parses only complete explicit references outside code regions
-and does not scan ordinary Markdown text for entity names. An incomplete streamed
-reference shows no icon; complete content is parsed in a batch. A valid reference
-uses the latest display name and local image from the shared directory. The
-frontend-facing batch endpoint is `POST /api/v1/display/resolve`; it accepts at
-most 100 strict strings, each no longer than 128 characters, and returns an
-`entities` mapping for known references. Invalid or unknown references are
-omitted. It returns `Cache-Control: no-store`, and an unassembled directory
-produces `503 entity_display_unavailable`. An entity with no image renders as
-text alone. If a reference is invalid or no longer resolves, retain the Markdown
-link label as readable text.
+The frontend parses only complete AST links outside code regions and does not
+scan ordinary Markdown text for entity names. While streaming, complete
+references are collected after a 150 ms merge window; a completed message flushes
+remaining references immediately. Requests are sequential batches of at most 100
+references, with at most one request in flight per message. An incomplete streamed
+reference stays ordinary text and is never submitted. A valid reference uses the
+latest display name and local image from the shared directory. The frontend-facing
+batch endpoint is `POST /api/v1/display/resolve`; it accepts at most 100 strict
+strings, each no longer than 128 characters, and returns an `entities` mapping
+for known references. Invalid or unknown references are omitted. It returns
+`Cache-Control: no-store`, and an unassembled directory produces
+`503 entity_display_unavailable`. An entity with no image, a broken image, or an
+unresolved reference renders as readable text; invalid references retain the
+Markdown link label.
 
 Persist the canonical answer with its reference syntax unchanged. Copying a
-rendered answer emits readable entity names and never exposes the internal
-`display:` marker. Loading a historical answer resolves it against the latest
-directory rather than a saved name/image snapshot or legacy
-`catalog_visual_entities` metadata. Ordinary answer text is not rewritten, and
-an already-open page need not update immediately when the directory changes.
-Process timeline activities remain separate from final-answer entity rendering.
+rendered answer emits resolved names or the original link label and removes
+display-link destinations; code examples remain unchanged. Loading a historical
+answer resolves it against the latest directory rather than a saved name/image
+snapshot or legacy `catalog_visual_entities` metadata. Request failure leaves
+ordinary text in place and does not trigger global error UI or retries. Ordinary
+answer text is not rewritten, and an already-open page need not update
+immediately when the directory changes. Process timeline activities remain
+separate from final-answer entity rendering.
 
-The shared directory, Team and Valve capability-reference enrichment, and batch
-resolution API are implemented. The current code still has a name-matching
-visual-enrichment path; the target renderer must replace that path rather than
-extend name matching. Model guidance, frontend rendering, and historical-answer
-resolution through this endpoint remain pending.
+The shared directory, Team and Valve capability-reference enrichment, batch
+resolution API, and frontend answer/history rendering are implemented. Model
+guidance and real-model observation remain pending. The legacy name-matching
+enrichment path remains present and will be removed in a later cleanup after the
+explicit-reference path is accepted.
 
 ## State semantics
 

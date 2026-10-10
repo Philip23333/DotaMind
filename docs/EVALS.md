@@ -45,7 +45,7 @@ providers, and it does not change the product registry.
    evaluation step; provider volatility and outages are not deterministic test
    failures.
 
-## Entity display resolution API (implemented; renderer pending)
+## Entity display resolution API (implemented)
 
 Offline route tests exercise `POST /api/v1/display/resolve` with the actual local
 `EntityDisplayDirectory`, the bundled Valve Catalog, and temporary Team snapshots.
@@ -56,8 +56,7 @@ responses contain only local asset URLs, an unset data root still resolves Valve
 entities but not Team entities, request types and 100-entry/128-character bounds
 are strict, unavailable service returns the stable 503 code, responses use
 `Cache-Control: no-store`, and OpenAPI registers the route. These tests make no
-Provider or model calls. Browser rendering, historical-message rendering, and
-real-model use of explicit references remain pending.
+Provider or model calls.
 
 ## 首页赛事、输入框模式与抽屉验收
 
@@ -192,7 +191,7 @@ tools with missing cache data or failed reads from unsupported capabilities.
 Capability questions should be answered without executing tools; concrete guide
 requests should not be rejected solely because of an earlier assistant claim.
 
-## Explicit entity display (Team and Valve capability injection implemented; rendering pending)
+## Explicit entity display (directory, API, and frontend rendering implemented; model guidance pending)
 
 Offline regressions cover Team reference injection for the five explicit
 capability result paths and Valve references on Catalog and hero-guide results.
@@ -205,27 +204,24 @@ calls and do not establish answer rendering.
 
 The Team refresher's pagination, old-directory retention, image-failure retry,
 and monthly refresh rules have their own offline tests under the data-update
-acceptance. Remaining answer and rendering requirements are:
+acceptance. Frontend unit and transport integration tests cover AST-only
+recognition, code exclusion, incomplete stream fragments, two distinct Teams,
+latest labels, local-image validation and failure fallback, sequential batches,
+clipboard output, and historical answers. These use fixtures only and make no
+Provider or model calls.
 
-1. **Rendered identity:** Bristleback and distinct Teams sharing the `BB`
-   acronym display only through supplied references; ordinary mentions and
-   abbreviations remain plain text.
-2. **Final answer path:** a returned reference is used beside the correct entity;
-   the already-tested Artifact path does not establish that the model or renderer
-   preserves it in an answer.
-3. **Message behavior:** a partial streamed reference shows no image before it is
-   complete; code regions are untouched; missing images retain the entity name;
-   invalid references retain the Markdown label; history uses current directory
-   data; copying produces readable text without the internal marker.
-4. **Browser review:** check the rendered name/image, fallback states, streaming,
-   and copy behavior at desktop and narrow widths.
-5. **Real-model observation:** separately inspect one hero-guide answer and one
+Remaining acceptance:
+
+1. **Browser review:** inspect a two-Team matchup, item/ability sequence, table,
+   and long label at desktop and 360px width; check wrapping, streaming, fallback,
+   and copy behavior.
+2. **Real-model observation:** separately inspect one hero-guide answer and one
    esports-query answer for whether the model places returned references beside
    the correct entities. This is not established by fixture or scripted-model
    tests.
 
-Offline Team and Valve injection tests have passed. Browser rendering review and
-real-model behavior are separate acceptance layers and remain pending.
+Automated rendering coverage has passed. Browser review and real-model placement
+behavior remain separate acceptance layers.
 
 ## Context Governance harness
 

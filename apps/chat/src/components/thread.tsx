@@ -31,8 +31,6 @@ import {
 import {
   ArrowDownIcon,
   ArrowUpIcon,
-  CheckIcon,
-  CopyIcon,
   SquareIcon,
 } from "lucide-react";
 import { siDota2 } from "simple-icons";
@@ -43,6 +41,7 @@ import { getChatSession, transcriptToInitialMessages } from "@/lib/dotamind-api"
 import { useDotaMindThreadState } from "@/lib/assistant-ui/dotamind-transport-runtime";
 import type { DotamindMessageMetadata } from "@/lib/assistant-ui/dotamind-run-state";
 import { recentSeriesDisplayName, type RecentSeriesCandidate } from "@/lib/home-api";
+import { EntityDisplayCopyButton, EntityDisplayMessage } from "@/components/entity-display";
 
 export const Thread: FC<{ browserId?: string }> = ({ browserId }) => {
   const aui = useAui();
@@ -230,11 +229,24 @@ const UserMessage: FC = () => (
 );
 
 const AssistantMessage: FC<{ browserId?: string }> = ({ browserId }) => {
+  const messageId = useAuiState((state) => state.message.id);
+  const messageContent = useAuiState((state) => state.message.content);
+  const messageStatus = useAuiState((state) => state.message.status?.type);
   const metadata = useAuiState((state) => state.message.metadata?.custom);
   const trace = useMemo(() => traceFromMetadata(metadata), [metadata]);
   const transport = useMemo(() => transportMetadataFromCustom(metadata), [metadata]);
+  const markdown = messageContent
+    .filter((part) => part.type === "text")
+    .map((part) => part.text)
+    .join("\n\n");
 
   return (
+    <EntityDisplayMessage
+      key={messageId}
+      messageId={messageId}
+      markdown={markdown}
+      isComplete={messageStatus !== "running"}
+    >
     <MessagePrimitive.Root className="group relative min-w-0 pr-2 sm:pr-8">
       <div className="min-w-0 leading-relaxed wrap-break-word">
         {transport?.source === "pending" && transport.connection_status === "sending" && (
@@ -280,24 +292,14 @@ const AssistantMessage: FC<{ browserId?: string }> = ({ browserId }) => {
         className="absolute left-0 top-full mt-2 flex items-center gap-1 text-muted-foreground"
       >
         <AuiIf condition={(state) => state.message.status?.type === "complete"}>
-          <ActionBarPrimitive.Copy
-            render={
-              <Button variant="ghost" size="icon" className="size-8" aria-label="复制回答" />
-            }
-          >
-            <AuiIf condition={(state) => state.message.isCopied}>
-              <CheckIcon className="size-4" />
-            </AuiIf>
-            <AuiIf condition={(state) => !state.message.isCopied}>
-              <CopyIcon className="size-4" />
-            </AuiIf>
-          </ActionBarPrimitive.Copy>
+          <EntityDisplayCopyButton />
         </AuiIf>
         {browserId && trace && (
           <TraceDownloadAction browserId={browserId} traceId={trace.trace_id} />
         )}
       </ActionBarPrimitive.Root>
     </MessagePrimitive.Root>
+    </EntityDisplayMessage>
   );
 };
 

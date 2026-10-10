@@ -263,13 +263,13 @@ data-update migration.
    使用滑入式覆盖抽屉和淡入遮罩；关闭后立即 inert。真实 Provider 刷新、部署 Redis 行为
    与真实模型回答仍需分别验收。
 
-## Explicit entity display (Team and Valve capability data paths implemented; rendering pending)
+## Explicit entity display (data paths and frontend rendering implemented; model guidance pending)
 
 The user-visible contract is owned by [PRODUCT.md](PRODUCT.md), data and team
 asset refresh semantics by [DATA.md](DATA.md), and the unique Markdown reference
 syntax by [agent/product_run_state.md](agent/product_run_state.md). The first
-four data-path steps below are implemented; user-visible rendering and its
-acceptance remain pending.
+first five implementation steps below are implemented; model guidance, manual
+browser review, real-model observation, and legacy-path cleanup remain pending.
 
 1. **Implemented:** build the shared display directory and validate the
    `display_ref` lookup contract.
@@ -282,15 +282,15 @@ acceptance remain pending.
    references to found Hero/Item entries, and `hero.guide` adds references to
    explicitly resolved Hero, Item, and Ability name objects after filtering and
    section projection. References are attached before generic result
-   externalization; model guidance and rendering remain pending.
+   externalization; model guidance remains pending.
 4. **Implemented:** expose `POST /api/v1/display/resolve` for bounded batches.
    It reuses the shared directory to return current labels and local image URLs;
    malformed or missing references are omitted, and responses are not cached.
    This is an ordinary frontend data endpoint, not a model tool.
-5. Render complete explicit references in final and historical answers using the
-   latest display records; preserve canonical Markdown and readable copy output.
-   Model guidance and rendering are not enabled yet.
-6. Complete focused offline, browser, and real-model acceptance, then remove the
+5. **Implemented:** render complete explicit references in final and historical
+   answers using the latest display records; preserve canonical Markdown and
+   produce readable copy output. Model guidance is not enabled yet.
+6. Complete the manual browser review and real-model observation, then remove the
    superseded answer name-matching display path.
 
 ## Hero guides (file-backed query and refresh active on WSL)
