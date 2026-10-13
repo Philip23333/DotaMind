@@ -203,6 +203,40 @@ item labels may be resolved from the bundled Valve catalog; unknown IDs remain
 unknown. Missing timelines or purchase data are evidence gaps, not proof that
 events or purchases did not occur.
 
+### Esports Match-to-game-detail journey (planned)
+
+PandaScore match and game discovery already exists, and `game.detail` already
+reads one OpenDota game by `valve_game_id`. The cross-source identity-resolution
+capability that would connect them has not been implemented or registered.
+Its planned user journey is:
+
+```text
+discover an event
+→ the user or model selects game N within that Match
+→ resolve that game's Valve identity
+→ request the existing game detail
+→ answer from fields actually returned
+```
+
+The user can ask for a game such as “game four” without providing a Valve ID:
+the selected game ordinal and the trusted Match context identify the resolution
+target. Other games in the Match may help establish context, but the product
+does not automatically fetch full details for every game. If one game's identity
+cannot be confirmed, results for other
+confirmed games remain usable. A scheduled Game, a forfeit record, and an
+actually played Game are distinct; a forfeit may have no Valve game. When
+identity remains unresolved, the answer retains known esports facts and says
+that the detail path could not be connected. A resolved identity still does not
+guarantee that OpenDota has every field: missing economy or draft data stays
+unknown rather than being described as absent from the game. Reading a detail
+does not submit a replay for parsing.
+
+This is separate from the existing Steam32 → recent games → detail journey and
+does not associate a PandaScore professional player with a Steam account. The
+cross-source evidence boundary and unresolved outcomes are defined in
+[`DATA.md`](DATA.md); observed source limitations are summarized in
+[`reference/opendota-cross-source-identity.md`](reference/opendota-cross-source-identity.md).
+
 ## Product boundaries
 
 Current integrated capabilities are described by the enabled tool inventory

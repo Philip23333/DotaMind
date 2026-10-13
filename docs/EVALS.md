@@ -397,6 +397,39 @@ heuristic input measure rather than a precise token count. The stage status and
 known limitations are maintained in
 [`agent/context_governance_evidence_lifecycle.md`](agent/context_governance_evidence_lifecycle.md).
 
+### Esports Match-to-OpenDota game resolution (planned; not accepted)
+
+The current PandaScore esports capabilities and `game.detail` exist, but the
+cross-source resolution Service and model-facing tool have not been implemented
+or registered. Planned acceptance has three separate layers:
+
+| Layer | Evidence required |
+|---|---|
+| Deterministic tests | Fixed source records exercise candidate filtering, evidence comparisons, whole-Match consistency, and distinct unresolved/failure results |
+| Real Provider validation | Candidate coverage, source-field semantics, selected identities, and game-detail coverage are measured against bounded live samples |
+| Full Agent acceptance | The model discovers a Match, selects a game, requests identity resolution, calls `game.detail` only after confirmation, and distinguishes missing fields from absent events |
+
+Deterministic cases must include ordinary best-of-three/five series; multiple
+same-team games on one day; multiple equally plausible candidates; differing
+OpenDota `series_id` values across correctly related games; changed in-game
+Team IDs; absent participant objects; swapped Radiant/Dire sides; anomalous
+time fields; duplicate Valve IDs assigned to different Games; one failed game
+alongside other successful games; scheduled and forfeited records; timeout,
+rate-limit, and budget exhaustion; and missing economy or draft fields after a
+confirmed identity. A source failure or exhausted search budget must never be
+reported as a match that does not exist.
+
+Real Provider reports should record target-game candidate coverage, confirmed
+and unresolved counts with reasons, actual request volume and search scope, and
+which detail fields were available. No accuracy, latency, or request-count
+target is set until representative samples are reviewed. Direct API comparison
+is data evidence, not an implementation test or Agent acceptance. The existing
+2026-10-13 observations and their limitations are recorded in
+[`reference/opendota-cross-source-identity.md`](reference/opendota-cross-source-identity.md);
+they are curated sample evidence, not an accuracy measurement for an automatic
+resolver. No new tests or live Provider calls were run by this documentation
+change.
+
 ## Live source checks
 
 Live source smoke tests are separate from both deterministic tests and the

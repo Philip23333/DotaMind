@@ -411,6 +411,34 @@ from the local Valve catalog, and keep the prior list available for ordinal
 follow-ups. This verifies scripted orchestration only, not real-model tool
 selection or answer quality. Real provider/model evaluation remains separate.
 
+## PandaScore Match to OpenDota game identity (planned)
+
+Connect one selected PandaScore Game to the existing `game.detail` capability
+without changing the Steam32 account-to-game journey. The user and product
+contract is in [`PRODUCT.md`](PRODUCT.md), matching semantics in
+[`DATA.md`](DATA.md), the proposed tool boundary in [`TOOLS.md`](TOOLS.md),
+and current sampled source evidence in
+[`reference/opendota-cross-source-identity.md`](reference/opendota-cross-source-identity.md).
+This work is not implemented or registered.
+
+1. **Candidate data boundary:** specify trusted PandaScore Match context,
+   OpenDota candidate inputs and outputs, bounded coverage, and distinct failure
+   results; validate source fields against focused real samples.
+2. **Offline identity resolution:** compare one target game, gather only needed
+   evidence, enforce whole-Match consistency, and return explainable confirmed
+   or unresolved outcomes using fixed source fixtures.
+3. **Service and tool:** coordinate finite candidate and on-demand detail reads,
+   cancellation, and stable errors; finalize the semantic input/output schema
+   before adding a tool to the registry.
+4. **Real-source and Agent acceptance:** measure provider coverage first, then
+   verify that the model selects the intended game, calls `game.detail` only
+   with a confirmed `valve_game_id`, and reports missing detail fields
+   accurately.
+
+Each phase should deliver one boundary with focused tests. Do not introduce a
+persistent mapping library, recurring background synchronization, provider
+routing, or automatic replay parsing in advance of an evidenced need.
+
 ## Optional Tavily MCP web search (implemented; live provider call unverified)
 
 - Add the opt-in `web.search` capability through the official Python MCP SDK

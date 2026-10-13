@@ -40,6 +40,83 @@ Names are added to the query result and generic Artifact output; they are not
 written into guide snapshots. Old snapshots remain readable because enrichment
 DTO fields have defaults. `game.detail` has not yet integrated the resolver.
 
+## Cross-source esports game identity (planned)
+
+This section owns the matching semantics for a future path from a PandaScore
+Game to the existing OpenDota `game.detail(valve_game_id)` capability. The
+resolution capability, Service, and tool are not implemented or registered.
+Observed provider behavior and sampled counterexamples are summarized in
+[`reference/opendota-cross-source-identity.md`](reference/opendota-cross-source-identity.md).
+
+### Identity boundary
+
+PandaScore Match, PandaScore Game, PandaScore Series, PandaScore Tournament,
+OpenDota League, and OpenDota `series_id` are source-specific identities and
+hierarchy levels. A numeric ID from one source is never converted into an ID
+from another. Names, acronyms, or a shared year are candidate-search clues, not
+identity proof. One OpenDota League can contain games from multiple PandaScore
+Series or tournaments. OpenDota Team IDs identify in-game teams in a match and
+must not be treated as permanent equivalents of real esports teams. Matching
+PandaScore and OpenDota `series_id` values by name or numeric resemblance is
+not a contract; even within one PandaScore Match, the observed OpenDota value
+can differ between games or be null/zero.
+
+### Candidate retrieval
+
+Competition name, edition, and season can narrow a finite candidate scope.
+Start time and game duration can filter individual-game candidates, but a
+unique result after those filters is not sufficient by itself to confirm
+identity. Name normalization and aliases may help locate candidates; they are
+not a validated global entity map. The candidate endpoint and any fallback
+search path must preserve coverage limitations and source failures rather than
+turning them into “no match.”
+
+### Identity confirmation
+
+The resolver compares whatever source facts are available for the selected
+game, potentially including:
+
+- both participants and their source identities;
+- the game winner;
+- start times and their difference;
+- game durations and their difference;
+- neighboring games within the parent Match; and
+- exact player `account_id` sets when roster evidence is needed.
+
+The sufficient evidence combinations and acceptance thresholds require fixture
+and live-sample evaluation. This design does not prescribe a weighted score or
+automatic acceptance formula. A time/duration-only unique candidate remains
+unconfirmed unless the later acceptance contract establishes enough additional
+evidence.
+
+### Recovery and whole-Match consistency
+
+When the normal bounded search finds no candidate, implementation may widen
+search within an explicit finite budget. A widened candidate needs stronger
+corroboration; a larger search window alone is not acceptance. If source time
+fields conflict, preserve their original values and the conflict. A confirmed
+neighboring game can provide a roster comparison anchor, but current team
+rosters are not historical lineups. Compare exact player account IDs by
+participant side, allowing Radiant and Dire to swap sides between games. A
+neighboring lineup does not create a global PandaScore Player-to-Steam identity
+database.
+
+Across one Match, two different PandaScore Games must not both be automatically
+assigned to the same Valve game. Game order and time should be consistent, but
+the Nth OpenDota list row is not necessarily the Nth PandaScore Game. Explicit
+identity or winner contradictions cannot be overridden by a weak signal.
+Scheduled games, forfeits, missing games, and remakes remain distinguishable;
+they are not erased by renumbering. One unresolved game does not invalidate
+other independently confirmed games.
+
+Confirmed results should retain the inference method, participating sources,
+retrieval time, and matching evidence so a later persistent mapping can be
+audited and corrected. Persistence format, TTL, and recurring synchronization
+are not selected by this design. The complete product journey, candidate
+workflow, tool proposal, and acceptance layers are described respectively in
+[`PRODUCT.md`](PRODUCT.md), [`ARCHITECTURE.md`](ARCHITECTURE.md),
+[`TOOLS.md`](TOOLS.md), and [`EVALS.md`](EVALS.md).
+
 ## Explicit entity display records and Team assets (directory, refresh, capability injection, renderer, and prompt guidance implemented)
 
 This section owns the shared display-record and update-data contract. User-visible

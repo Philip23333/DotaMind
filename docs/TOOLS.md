@@ -466,3 +466,45 @@ the game. Missing statistics remain missing, and the tool does not derive win
 rates or other aggregates. The game-detail adapter rejects unusable or
 mismatched source detail rather than returning an empty successful result.
 Reading existing game data does not submit a replay for parsing.
+
+## Esports game-resolution capability (planned; not registered)
+
+The existing `esports.match.search` returns PandaScore Match identities, and
+`game.detail(valve_game_id)` reads one OpenDota game. A planned capability would
+resolve one selected Game within a known Match. The current suggested shape is:
+
+```text
+esports.game.resolve(match_id, game_position)
+```
+
+The name and final schema are not settled, and no such tool is in the registry.
+`match_id` refers to a Match returned by the existing esports capability;
+`game_position` selects a game by its position in that Match. The Service obtains
+the Game and trusted Match context from source data. Whether it reuses an earlier
+trusted response or re-queries that context is an implementation decision; this
+design does not require a new snapshot store. The model does not submit handcrafted
+team, time, duration, or winner dictionaries and does not need OpenDota League,
+Team, or `series_id` values as inputs.
+
+The output contract is semantic rather than a frozen full DTO:
+
+| Outcome | Required meaning |
+|---|---|
+| Confirmed | The selected Game, a positive `valve_game_id`, cross-source provenance, and the evidence and material differences used |
+| Unresolved | A distinct reason and only bounded candidate facts when useful; no confirmed identity |
+| Source or budget failure | Which operation failed and whether its finite budget was exhausted; never a successful empty result |
+
+Possible reason categories are `not_found`, `ambiguous`,
+`insufficient_evidence`, `source_unavailable`, and `budget_exhausted`. These are
+semantic categories, not final error codes or a finalized result hierarchy.
+The resolver confirms identity only:
+
+```text
+esports.game.resolve → valve_game_id → model may call game.detail
+```
+
+It does not return a complete game report, and `game.detail` does not gain a
+PandaScore ID input. Large resolution results use generic Artifact handling;
+there is no resolution-specific Artifact type. The evidence rules and known
+source limitations are owned by [`DATA.md`](DATA.md) and
+[`reference/opendota-cross-source-identity.md`](reference/opendota-cross-source-identity.md).

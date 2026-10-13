@@ -542,6 +542,54 @@ Series 生命周期读取、候选组装、共享 Redis 缓存、普通只读接
 - provider routers before a second concrete implementation exists;
 - Artifact corpus discovery or hidden provider fetches.
 
+## Cross-source esports game identity resolution (planned)
+
+The current tool registry remains unchanged. A future semantic capability may
+connect a selected PandaScore Match/Game to the existing `game.detail` input;
+this resolver and its tool are not implemented or registered. Its planned
+control flow is:
+
+```text
+Model
+  → esports single-game resolution capability
+  → Resolution Service
+      → obtain trusted PandaScore Match context
+      → retrieve a bounded OpenDota League candidate set
+      → enumerate candidate games
+      → filter candidates for the selected PandaScore Game
+      → read a small number of candidate details only when evidence is needed
+      → compare single-game evidence and whole-Match consistency
+  → confirmed valve_game_id or an explicit unresolved result
+
+Model
+  → game.detail(valve_game_id)
+  → existing OpenDota game-detail capability
+  → generic Artifact handling
+```
+
+The resolution target is one game; its parent Match provides context. More than
+one League or match candidate may remain after initial filtering, so the Service
+must not choose one merely because it is first or currently unique. Candidate
+details are fetched only when they can add evidence. Search and detail reads are
+bounded; continued pagination or time-window expansion cannot run indefinitely.
+No-candidate, insufficient-evidence, ambiguity, source failure, and exhausted
+budget remain distinguishable. A failure for one selected game does not clear
+other resolved games. There is no invariant that all games in a Match share one
+OpenDota `series_id` or the same in-game Team IDs.
+
+| Layer | Owns | Does not own |
+|---|---|---|
+| Resolution Service | Trusted context, request coordination, finite budgets, cancellation, and result organization | Asking the model to invent matching fields or maintaining a second Runtime state machine |
+| Provider implementation and adapters | Source requests, response validation, and source-field preservation | Deciding the answer or hiding a failed request as an empty success |
+| Offline identity-resolution logic | Comparing collected facts, candidate filtering, and consistency checks | Network requests, model calls, or Artifact reads/writes |
+
+The resolver is a small, independently testable responsibility; this design does
+not require an abstract base class, strategy plugin, provider router, or a
+particular package layout. Runtime and generic Artifact primitives remain
+unaware of esports matching semantics. The identity evidence, recovery rules,
+and external observations belong to [`DATA.md`](DATA.md) and its linked
+[`cross-source reference`](reference/opendota-cross-source-identity.md).
+
 ## Steam player and game-detail boundaries
 
 The `capabilities/player` and `capabilities/game` contracts define closed
