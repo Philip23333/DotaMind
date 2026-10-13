@@ -34,7 +34,7 @@ class OpenDotaResponseError(OpenDotaError):
 
 
 class OpenDotaClient:
-    """Fetch one match and always close the per-request HTTP resources."""
+    """Fetch OpenDota resources and close per-request HTTP resources."""
 
     def __init__(
         self,
@@ -75,6 +75,17 @@ class OpenDotaClient:
         )
 
     async def get_match(self, valve_game_id: int) -> Any:
+        return await self._get_json(f"matches/{valve_game_id}")
+
+    async def get_leagues(self) -> Any:
+        return await self._get_json("leagues")
+
+    async def get_league_matches(self, league_id: int) -> Any:
+        if type(league_id) is not int or league_id <= 0:
+            raise ValueError("OpenDota league_id must be a positive integer")
+        return await self._get_json(f"leagues/{league_id}/matches")
+
+    async def _get_json(self, endpoint: str) -> Any:
         params = {"api_key": self.api_key} if self.api_key else None
         try:
             async with httpx.AsyncClient(
@@ -82,7 +93,7 @@ class OpenDotaClient:
                 timeout=self.timeout_seconds,
                 transport=self.transport,
             ) as client:
-                response = await client.get(f"matches/{valve_game_id}", params=params)
+                response = await client.get(endpoint, params=params)
         except httpx.TimeoutException:
             raise OpenDotaTimeoutError() from None
         except httpx.RequestError:

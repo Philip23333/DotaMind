@@ -1,4 +1,4 @@
-"""OpenDota provider implementation for existing single-game records."""
+"""OpenDota provider implementations for game detail and League discovery."""
 
 from .client import (
     OpenDotaClient,
@@ -7,10 +7,12 @@ from .client import (
     OpenDotaTimeoutError,
     OpenDotaTransportError,
 )
+from .discovery import OpenDotaDiscoveryAdapter
 from .game_detail import OpenDotaGameDetailAdapter
 
 __all__ = [
     "OpenDotaClient",
+    "OpenDotaDiscoveryAdapter",
     "OpenDotaGameDetailAdapter",
     "OpenDotaHTTPError",
     "OpenDotaResponseError",
