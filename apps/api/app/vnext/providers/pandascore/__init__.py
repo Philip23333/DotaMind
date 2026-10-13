@@ -5,8 +5,10 @@ from .client import (
     PandaScoreConfigurationError,
     PandaScoreProtocolError,
 )
+from .match_context import PandaScoreMatchContextAdapter
 
 __all__ = [
+    "PandaScoreMatchContextAdapter",
     "PandaScoreClient",
     "PandaScoreConfigurationError",
     "PandaScoreProtocolError",
