@@ -95,14 +95,24 @@ class EsportsGameResolveInput(BaseModel):
 
     match_artifact_ref: StrictStr = Field(
         min_length=1,
-        description="Artifact reference returned by esports.match.search.",
+        description=(
+            "Exact Artifact reference returned by esports.match.search in the current "
+            "session; do not pass a resolution-result or game-detail Artifact reference."
+        ),
     )
     match_path: StrictStr = Field(
         pattern=_MATCH_ARTIFACT_PATH_PATTERN,
-        description="Path to one Match in the search result, formatted as items.N.",
+        description=(
+            "Selects a Match in the stored search document using items.N, where N is "
+            "a zero-based result index; this selects a Match, not a Game. Do not add "
+            "the inline envelope prefix value."
+        ),
     )
     game_position: _PositiveStrictInt = Field(
-        description="Source Game position within the selected Match, not an array index."
+        description=(
+            "Source Game position within the selected Match, such as 4 for position "
+            "four; this is not a Game ID or an array index."
+        )
     )
 
 

@@ -11,36 +11,33 @@ from app.vnext.tools.registry import ToolRegistry
 MatchSearchHandler = Callable[[MatchSearchInput], Awaitable[MatchSearchResult]]
 
 MATCH_SEARCH_DESCRIPTION = """\
-Search Dota 2 matches.
+Find Dota 2 Match records, including schedules, participants, scores, status,
+and the basic Game records supplied with a Match. A Match can contain multiple
+Games; this search does not provide complete in-game data.
 
-Use this tool to find match schedules, opponents, results, scores, winners, and
-match status. Matches belong to tournaments, series, and leagues and involve
-teams. Use known entity IDs to narrow the search whenever possible.
+Keep the user's known team, competition, and date constraints together whenever
+the available fields can express them. Prefer the most specific known
+competition constraint (tournament_id, then series_id, then league_id), and use
+known entity IDs to narrow the search. Use team_id for matches involving a known
+team and winner_id for matches won by a known team. Use lifecycle to distinguish
+past, running, and upcoming matches. begin_at filters by a UTC calendar date.
 
-Prefer the most specific known competition context:
-tournament_id > series_id > league_id.
+The past collection can include canceled and other non-finished matches. To find
+completed matches, combine lifecycle="past" with status="finished". There is no
+native two-team intersection filter, so inspect the returned participants when a
+specific matchup is needed.
 
-Use team_id to find matches involving a known team, and winner_id to find
-matches won by a known team. Use lifecycle to distinguish past, currently
-running, and upcoming matches.
+Use sort="begin_at_desc" to find recent candidates. Do not infer that the last
+match by time is the final; check the returned name, stage, and participants
+against the event context. Use id when the exact Match ID is already known.
 
-Use begin_at when the requested scope identifies a specific UTC calendar date.
-Preserve known entity, competition, and time constraints together whenever the
-available fields can express them instead of broadening to unrelated historical
-matches and filtering them manually afterwards.
-
-Use relationship filters such as team_id, series_id, tournament_id, or league_id
-whenever the related entity is already known.
-
-The past collection includes canceled and other non-finished past matches. To
-find completed matches, combine lifecycle="past" with status="finished".
-
-There is no native two-team intersection filter. Inspect the returned opponents
-when a specific matchup is needed.
-
-When looking for the latest or final match in a known event, prefer the known
-event ID with lifecycle="past" and sort="begin_at_desc" rather than relying only
-on match-name search. Use id when the exact match ID is already known.
+Every successful search returns an artifact_ref, including empty and small
+results. If esports.game.resolve is available and one Match needs a Valve Game
+identity, continue with that artifact_ref, the selected Match path (for example,
+items.0), and the source Game's game_position. You can continue directly when
+the current observation is enough to select the Match; artifact.read is not
+required first. The Match path is relative to the stored search document, so do
+not prefix it with value.
 """
 
 

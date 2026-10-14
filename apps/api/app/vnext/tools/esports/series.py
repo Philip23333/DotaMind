@@ -13,25 +13,21 @@ SeriesSearchHandler = Callable[[SeriesSearchInput], Awaitable[SeriesSearchResult
 SERIES_SEARCH_DESCRIPTION = """\
 Search Dota 2 series.
 
-A series is one specific season or edition of a recurring league.
+A Series usually represents one season or edition of a recurring competition.
+Source Series names can also contain a qualifier, region, or Play-In stage, so do
+not infer a strict competition level from the name alone.
 
-Use league_id when the parent league is already known.
+Use league_id when a known League provides useful context. Use year and season
+to narrow an edition lookup, but do not assume either value identifies a unique
+Series.
 
-Use year when the user refers to a specific yearly edition, such as
-The International 2026.
+Use name for fuzzy discovery and id when the exact Series ID is known. If a
+known Series has a Tournament stage that needs to be found, use
+esports.tournament.search with series_id. Do not re-query a parent object when
+the available context is already sufficient.
 
-Use season for season-style editions such as DreamLeague Season 28.
-
-Use year or season to narrow the result, but do not assume either is unique.
-
-Use name only for fuzzy discovery of a series name. Do not use this tool to
-search for tournament stages such as Group Stage or Playoffs; use
-esports.tournament.search with series_id instead.
-
-Use esports.series.teams with series_id to find the teams participating in a
-known series.
-
-Use id when the exact series ID is already known.
+Use esports.series.teams with series_id to find teams participating in a known
+Series.
 """
 
 

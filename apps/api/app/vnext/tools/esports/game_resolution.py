@@ -16,18 +16,24 @@ GameResolutionHandler = Callable[
 ]
 
 GAME_RESOLUTION_DESCRIPTION = """\
-Resolve one Dota 2 game from a Match returned by esports.match.search.
+Resolve the Valve identity of one Game within a Match returned by
+esports.match.search. Use the Match-search Artifact from the current session.
+match_path selects a Match in the stored search document (for example,
+items.0 selects the first Match); game_position selects that Match's source Game
+position (for example, 4 selects position 4). These values are independent. The
+path is relative to the stored document even when the inline observation nests
+the results under value, so pass items.0 without a value. prefix.
 
-Pass the Match-search artifact_ref and select one result with match_path such as
-items.0. game_position is the source Match Game's position, not an array index.
-The tool validates that the Artifact was produced by esports.match.search and
-extracts the Match identity from the stored result. Do not provide provider IDs,
-team dictionaries, timestamps, or matching budgets.
+Only status="resolved" confirms the returned valve_game_id as this Game's
+identity; that Valve ID can be passed to game.detail. An unresolved result is
+not a confirmed identity: inspect its reason and evidence, and do not choose an
+ID from candidate evidence yourself. This tool resolves identity; it does not
+read the full game detail or call game.detail automatically. The complete
+resolution evidence is stored in the returned Artifact and can be inspected when
+needed.
 
-The result confirms a Valve game identity only when the collected evidence
-supports it. Otherwise inspect its unresolved reason and evidence. Confirmed
-game mappings are not retained across separate tool calls, so this tool does not
-guarantee whole-Match consistency across multiple resolutions.
+Confirmed mappings are not retained across separate calls, so this tool does
+not guarantee whole-Match consistency across separate resolutions.
 """
 
 

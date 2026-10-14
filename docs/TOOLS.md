@@ -104,8 +104,11 @@ accepts `id`, `league_id`, `name`, `season`, `year`, `winner_id`, `tier`, `page`
 and `limit`, and returns the frozen `SeriesDTO`: series identity, edition,
 timing, winner, and tier metadata together with `league_id`. It does not expose
 the parent `league{}` object or navigation-only `tournaments[]`; use
-`esports.tournament.search(series_id=...)` for tournament stages. Use
-`league_id` and `year` for a bounded edition lookup.
+`esports.tournament.search(series_id=...)` to find Tournament stages within a
+known Series. Source Series names can themselves include qualifiers, regions, or
+Play-In stages, so do not infer a strict hierarchy from a name. Use `league_id`
+and `year` for a bounded edition lookup; do not re-query a parent when the
+available context is sufficient.
 
 `esports.tournament.search` resolves a competition stage within one series. It
 accepts `id`, `series_id`, `name`, `page`, and `limit`, and returns a
@@ -116,7 +119,9 @@ navigate through `esports.match.search(tournament_id=...)` instead. Provider
 `team` is the tournament-level participation identity and whose
 `expected_roster` represents tournament-context expected or historical roster
 membership. It does not assert an exact starting five or historical `role` or
-`active` values.
+`active` values. A final may not have a separate Tournament record; locate its
+Match from the records and Match details rather than assuming one exists. The
+tool does not require a fixed League-to-Series-to-Tournament query sequence.
 
 `esports.series.teams` returns participating team identities for one known
 series. It requires `series_id` from `esports.series.search` and accepts
@@ -149,14 +154,16 @@ usual bounded structural observation. Other tools retain their existing size-bas
 externalization behavior. The stored Artifact records `esports.match.search` as
 its producing tool in session metadata, outside the business document.
 
-A future single-game resolver is expected to continue from
-`esports.game.resolve(match_artifact_ref, match_path, game_position)`. For example,
-`match_path="items.0"` selects one Match from the stored search result. That future
-entry point must verify the Artifact's producing tool, document shape, and
-selected Match before extracting its PandaScore ID on the server. It will not
-accept an arbitrary model-supplied ID object. The resolver tool is not registered
-yet; generic `artifact.read` and `artifact.grep` remain unaware of Match
-resolution semantics.
+When `esports.game.resolve` is available, it can continue from this search
+Artifact using `match_artifact_ref`, `match_path`, and `game_position`.
+`match_path="items.0"` selects the first Match in the stored search document;
+`game_position=4` selects source position 4 within that Match. The path is
+relative to the stored document even when an inline observation nests results
+under `value`, so do not prefix the path with `value.`. If the current observation
+is enough to select a Match, continue directly without first calling
+`artifact.read`. The resolver validates the producing tool, document, and Match
+before extracting its PandaScore ID on the server. Generic `artifact.read` and
+`artifact.grep` remain unaware of Match-resolution semantics.
 
 `esports.team.search` resolves a Dota 2 team name, acronym, or exact ID to team
 identity. Its closed input contains only `id`, `name`, `acronym`, `page`, and
@@ -438,9 +445,11 @@ describes public free-tier use without a key. Composition and registry creation
 do not make provider calls. Process environment variables take precedence over
 the root `.env`.
 
-The input is a Valve game ID, not a PandaScore identifier. The tool preserves
-the validated OpenDota business object, including unknown JSON extensions and
-nullable values. Player rows and core fields are type-checked when present;
+The input is a Valve single-game ID, not a PandaScore Match, Series, or Game ID.
+It may come from the user, `player.recent_games`, or a resolved
+`esports.game.resolve` result. The tool preserves the validated OpenDota business
+object, including unknown JSON extensions and nullable values. Player rows and
+core fields are type-checked when present;
 anonymous players and missing optional or parsed fields remain valid. The
 returned data depends on what OpenDota already has: missing process data does
 not show that an event did not happen, and the lookup does not request replay
@@ -499,10 +508,13 @@ esports.game.resolve(match_artifact_ref, match_path, game_position)
 `match_artifact_ref` must identify a document in the current session store,
 `match_path` must be exactly `items.<non-negative integer>`, and
 `game_position` is a strict positive integer identifying the source Game
-position, not an array index. The continuation verifies the producing tool from
-Artifact store metadata, validates the complete document as a `MatchSearchResult`,
-selects the requested Match, and extracts its strict positive ID on the server.
-It does not trust a source field embedded in the document. The model cannot pass
+position, not a Game ID or array index. The path chooses a Match in the stored
+search document; the position independently chooses a Game within that Match.
+Do not add the inline envelope's `value.` prefix to `match_path`. The continuation
+verifies the producing tool from Artifact store metadata, validates the complete
+document as a `MatchSearchResult`, selects the requested Match, and extracts its
+strict positive ID on the server. It does not trust a source field embedded in
+the document. The model cannot pass
 a provider-private Match ID, a handcrafted Match object, team dictionaries,
 timestamps, time windows, or read budgets.
 
@@ -546,6 +558,13 @@ Unresolved reasons distinguish `match_not_found`, target-game failures,
 stable `tool_execution_error` with `budget_exhausted` details; it is not returned
 as an unresolved success. Provider structured errors and cancellation propagate.
 An invalid internal attempt raises a contract error.
+
+Only `status="resolved"` confirms `valve_game_id` as the selected Game's identity
+and makes it valid input to `game.detail`. For `status="unresolved"`, inspect the
+reason and evidence; do not select a candidate ID yourself. The complete
+resolution evidence is saved in the returned Artifact. This tool resolves
+identity only and does not fetch full game detail or call `game.detail`
+automatically.
 
 The resolver confirms identity only:
 

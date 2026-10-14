@@ -14,7 +14,11 @@ class GameDetailInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     valve_game_id: Annotated[StrictInt, Field(gt=0)] = Field(
-        description="Positive Valve single-game ID, such as one returned by player.recent_games."
+        description=(
+            "Positive Valve single-game ID, such as one returned by player.recent_games "
+            "or a resolved esports.game.resolve result; PandaScore Match, Series, and "
+            "Game IDs are not valid here."
+        )
     )
 
 

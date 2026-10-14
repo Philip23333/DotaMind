@@ -72,7 +72,8 @@ def test_match_search_tool_schema_exposes_only_semantic_fields() -> None:
     assert "match_type" not in schema
     assert "winner_type" not in schema
     assert "always_artifact" not in schema
-    assert "esports.game.resolve" not in schema
+    input_schema = json.dumps(registry.schemas()[0].input_schema, ensure_ascii=False)
+    assert "esports.game.resolve" not in input_schema
 
 
 def test_match_search_accepts_semantic_begin_at_date() -> None:

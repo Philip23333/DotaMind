@@ -15,17 +15,19 @@ TournamentSearchHandler = Callable[[TournamentSearchInput], Awaitable[Tournament
 TOURNAMENT_SEARCH_DESCRIPTION = """\
 Search Dota 2 tournaments.
 
-A tournament is a competition stage within one series, such as Group Stage,
-Playoffs, Swiss Stage, or Main Event.
+A Tournament is a competition grouping or stage under a Series in the source
+hierarchy. Common examples include Group Stage and Playoffs.
 
-Use series_id whenever the parent series is known.
+Use series_id to constrain the search when the Series is known. You do not need
+to query League and Series in a fixed sequence when the available context is
+already sufficient.
 
-Use name to find a stage within that series.
+Use name to find a Tournament grouping or stage, and id when the exact
+Tournament ID is known.
 
-Prefer resolving the league and series first instead of searching tournament
-names globally.
-
-Use id when the exact tournament ID is already known.
+The final may not have its own Tournament record. Locate a Match using the
+returned records and Match details instead of assuming a separate final stage
+exists.
 """
 
 
