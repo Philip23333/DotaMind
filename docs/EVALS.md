@@ -401,13 +401,14 @@ known limitations are maintained in
 
 The current PandaScore esports capabilities and `game.detail` exist. Provider-
 side offline League candidate discovery, game candidate filtering, evidence
-comparison, and normal-window resolution are implemented. The cross-source
+comparison, single-League resolution, and multi-League normal-window resolution
+are implemented. The cross-source
 resolution Service and model-facing tool have not been implemented or registered.
 Acceptance has three separate layers:
 
 | Layer | Evidence required |
 |---|---|
-| Deterministic tests | League brand/season/year candidates and explicit limits; game candidate filtering; detail-ID validation; same-window detail recheck; participant/winner evidence; competing candidates; mapping conflicts; input immutability; and distinct unresolved results |
+| Deterministic tests | League brand/season/year candidates and explicit limits; game candidate filtering; global decisions across selected League scopes; absent versus explicitly empty lists; repeated Valve IDs and per-League assessment merging; detail-ID validation; same-window detail recheck; participant/winner evidence; competing candidates; mapping conflicts; input immutability; and distinct unresolved results |
 | Real Provider validation | Bounded live samples measure League candidate coverage, source-field semantics, selected identities, and detail availability |
 | Full Agent acceptance | The model discovers a Match, selects a game, requests identity resolution, calls `game.detail` only after confirmation, and distinguishes missing fields from absent events |
 
@@ -417,14 +418,18 @@ actual start times and durations; and the old blood Game 2 missing-Dire case.
 The South America Game 3 outside-window case uses fixed local records. These are
 historical response regressions, not live Provider validation. Sample-specific
 tolerances are explicit test inputs and do not define production defaults.
-League candidate cases also cover BLAST Slam VIII, DreamLeague Season 30
-qualifiers, EPL Masters 2026, and a Western Europe qualifier whose missing
-season remains unspecified; the latter can produce a broad candidate scope or
-exceed its explicit test budget. These are fixed local records, not a live
-availability check. Synthetic tests separately cover ambiguous candidates,
-winner conflicts, missing details, mapping conflicts, and invalid detail
-identities. These tests do not measure resolution accuracy or establish that any
-live provider data is currently available.
+League candidate cases also use saved PandaScore fields for BLAST Slam Season 8,
+DreamLeague China Closed Qualifier Season 30, EPL Masters Play-In Season 3, and
+a Western Europe Open Qualifier whose missing season remains unspecified. The
+multi-League resolver reuses the saved BLAST Game 4 identity fields and separately
+uses synthetic competing scopes to test global ambiguity, missing details, and
+cross-League assessment conflicts; those synthetic scopes are not asserted as
+historical Provider facts. The Western Europe candidate search can produce a
+broad scope or exceed its explicit test budget. These are fixed local records,
+not live availability checks. Synthetic tests also cover winner conflicts,
+mapping conflicts, and invalid detail identities. These tests do not measure
+resolution accuracy or establish that any live provider data is currently
+available.
 
 Whole-Match consistency, strict cross-source League identity association, search
 widening, neighboring-game roster evidence, exact player `account_id`

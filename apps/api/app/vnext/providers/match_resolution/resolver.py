@@ -25,6 +25,19 @@ ResolutionCategory = Literal[
     "ambiguous_target_game",
     "target_not_ready",
 ]
+MultiLeagueResolutionCategory = Literal[
+    "resolved",
+    "ambiguous",
+    "evidence_insufficient",
+    "mapping_conflict",
+    "no_acceptable_candidate",
+    "no_candidates",
+    "insufficient_signals",
+    "target_game_not_found",
+    "ambiguous_target_game",
+    "target_not_ready",
+    "search_scope_incomplete",
+]
 
 
 @dataclass(frozen=True)
@@ -54,6 +67,49 @@ class GameResolutionResult:
     method: Literal["inferred_cross_source"] | None
     candidate_assessments: tuple[CandidateAssessment, ...]
     unusable_record_count: int
+    reason: str | None
+
+
+@dataclass(frozen=True)
+class LeagueScopedCandidateAssessment:
+    """One League's assessment of a Valve game candidate."""
+
+    league_id: int
+    assessment: CandidateAssessment
+
+
+@dataclass(frozen=True)
+class MultiLeagueCandidateAssessment:
+    """Merged assessment for one Valve ID with every League evaluation retained."""
+
+    candidate_valve_game_id: int
+    league_assessments: tuple[LeagueScopedCandidateAssessment, ...]
+    status: CandidateAssessmentStatus
+    reasons: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class LeagueSearchDiagnostic:
+    """Candidate-list quality for a selected League; None means not supplied."""
+
+    league_id: int
+    unusable_record_count: int | None
+
+
+@dataclass(frozen=True)
+class MultiLeagueGameResolutionResult:
+    """Cross-League result; selected Leagues remain search scopes, not identities."""
+
+    category: MultiLeagueResolutionCategory
+    pandascore_match_id: int | None
+    pandascore_game_id: int | None
+    game_position: int
+    searched_league_ids: tuple[int, ...]
+    missing_league_ids: tuple[int, ...]
+    valve_game_id: int | None
+    method: Literal["inferred_cross_source"] | None
+    candidate_assessments: tuple[MultiLeagueCandidateAssessment, ...]
+    league_search_diagnostics: tuple[LeagueSearchDiagnostic, ...]
     reason: str | None
 
 
@@ -199,6 +255,244 @@ def resolve_game(
         candidate_assessments=assessments,
         unusable_record_count=initial.unusable_record_count,
         reason=None,
+    )
+
+
+def resolve_game_across_leagues(
+    match_context: Mapping[str, JsonValue],
+    game_position: int,
+    league_ids: Sequence[int],
+    league_matches_by_id: Mapping[int, Sequence[Mapping[str, JsonValue]]],
+    candidate_details: Mapping[int, Mapping[str, JsonValue]],
+    *,
+    start_time_tolerance_seconds: int,
+    duration_tolerance_seconds: int,
+    confirmed_mappings: Mapping[int, int],
+) -> MultiLeagueGameResolutionResult:
+    """Resolve a selected game across every caller-selected League scope.
+
+    Candidate assessments are merged only after each League has been evaluated.
+    A missing selected list leaves the search incomplete, even if the supplied
+    Leagues otherwise yield a unique accepted candidate.
+    """
+
+    if not isinstance(match_context, Mapping):
+        raise ValueError("match_context must be an object")
+    selected_league_ids = _validate_league_ids(league_ids)
+    validated_lists = _validate_league_match_map(league_matches_by_id)
+    _validate_candidate_details(candidate_details)
+    if not isinstance(confirmed_mappings, Mapping):
+        raise ValueError("confirmed_mappings must be a mapping")
+
+    # Reuse the existing target selection and signal validation before examining
+    # any League. An empty list is enough to validate and retain the target facts.
+    probe_league_id = selected_league_ids[0] if selected_league_ids else 1
+    target_probe = find_game_candidates(
+        match_context,
+        game_position,
+        probe_league_id,
+        [],
+        start_time_tolerance_seconds=start_time_tolerance_seconds,
+        duration_tolerance_seconds=duration_tolerance_seconds,
+    )
+    pandascore_match_id = _positive_int(match_context.get("id"))
+    target_game = target_probe.target_game
+    pandascore_game_id = (
+        _positive_int(target_game.get("id")) if target_game is not None else None
+    )
+
+    if not selected_league_ids:
+        return _multi_league_result(
+            target_probe,
+            pandascore_match_id,
+            pandascore_game_id,
+            game_position,
+            (),
+            (),
+            (),
+            (),
+            "no_candidates",
+            "no_league_candidates",
+        )
+
+    if target_probe.category not in {"candidates_found", "no_candidates"}:
+        diagnostics = tuple(
+            LeagueSearchDiagnostic(league_id, None)
+            for league_id in selected_league_ids
+        )
+        return _multi_league_result(
+            target_probe,
+            pandascore_match_id,
+            pandascore_game_id,
+            game_position,
+            selected_league_ids,
+            tuple(
+                league_id
+                for league_id in selected_league_ids
+                if league_id not in validated_lists
+            ),
+            (),
+            diagnostics,
+            target_probe.category,
+            target_probe.reason,
+        )
+
+    missing_league_ids = tuple(
+        league_id
+        for league_id in selected_league_ids
+        if league_id not in validated_lists
+    )
+    assessments_by_candidate: dict[int, list[LeagueScopedCandidateAssessment]] = {}
+    diagnostics_by_league: dict[int, LeagueSearchDiagnostic] = {}
+
+    for league_id in selected_league_ids:
+        league_matches = validated_lists.get(league_id)
+        if league_matches is None:
+            diagnostics_by_league[league_id] = LeagueSearchDiagnostic(
+                league_id, None
+            )
+            continue
+
+        result = resolve_game(
+            match_context,
+            game_position,
+            league_id,
+            league_matches,
+            candidate_details,
+            start_time_tolerance_seconds=start_time_tolerance_seconds,
+            duration_tolerance_seconds=duration_tolerance_seconds,
+            confirmed_mappings={},
+        )
+        diagnostics_by_league[league_id] = LeagueSearchDiagnostic(
+            league_id, result.unusable_record_count
+        )
+        for assessment in result.candidate_assessments:
+            assessments_by_candidate.setdefault(
+                assessment.candidate_valve_game_id, []
+            ).append(
+                LeagueScopedCandidateAssessment(
+                    league_id=league_id,
+                    assessment=assessment,
+                )
+            )
+
+    merged_assessments = tuple(
+        _merge_league_assessments(candidate_id, source_assessments)
+        for candidate_id, source_assessments in assessments_by_candidate.items()
+    )
+    diagnostics = tuple(diagnostics_by_league[league_id] for league_id in selected_league_ids)
+
+    if missing_league_ids:
+        return _multi_league_result(
+            target_probe,
+            pandascore_match_id,
+            pandascore_game_id,
+            game_position,
+            selected_league_ids,
+            missing_league_ids,
+            merged_assessments,
+            diagnostics,
+            "search_scope_incomplete",
+            "selected_league_list_missing",
+        )
+
+    accepted = [item for item in merged_assessments if item.status == "accepted"]
+    unresolved = [item for item in merged_assessments if item.status == "unresolved"]
+
+    if len(accepted) > 1:
+        return _multi_league_result(
+            target_probe,
+            pandascore_match_id,
+            pandascore_game_id,
+            game_position,
+            selected_league_ids,
+            (),
+            merged_assessments,
+            diagnostics,
+            "ambiguous",
+            "multiple_candidates_accepted",
+        )
+    if unresolved:
+        return _multi_league_result(
+            target_probe,
+            pandascore_match_id,
+            pandascore_game_id,
+            game_position,
+            selected_league_ids,
+            (),
+            merged_assessments,
+            diagnostics,
+            "evidence_insufficient",
+            "unresolved_competing_candidate"
+            if accepted
+            else "candidate_evidence_incomplete",
+        )
+    if not accepted:
+        if merged_assessments:
+            category: MultiLeagueResolutionCategory = "no_acceptable_candidate"
+            reason = "all_candidates_excluded"
+        else:
+            category = "no_candidates"
+            reason = "no_candidates_in_selected_leagues"
+        return _multi_league_result(
+            target_probe,
+            pandascore_match_id,
+            pandascore_game_id,
+            game_position,
+            selected_league_ids,
+            (),
+            merged_assessments,
+            diagnostics,
+            category,
+            reason,
+        )
+
+    if pandascore_match_id is None or pandascore_game_id is None:
+        return _multi_league_result(
+            target_probe,
+            pandascore_match_id,
+            pandascore_game_id,
+            game_position,
+            selected_league_ids,
+            (),
+            merged_assessments,
+            diagnostics,
+            "evidence_insufficient",
+            "pandascore_identity_missing",
+        )
+
+    mapping_conflict = _find_mapping_conflict(
+        confirmed_mappings,
+        pandascore_game_id=pandascore_game_id,
+        valve_game_id=accepted[0].candidate_valve_game_id,
+    )
+    if mapping_conflict is not None:
+        return _multi_league_result(
+            target_probe,
+            pandascore_match_id,
+            pandascore_game_id,
+            game_position,
+            selected_league_ids,
+            (),
+            merged_assessments,
+            diagnostics,
+            "mapping_conflict",
+            mapping_conflict,
+        )
+
+    return _multi_league_result(
+        target_probe,
+        pandascore_match_id,
+        pandascore_game_id,
+        game_position,
+        selected_league_ids,
+        (),
+        merged_assessments,
+        diagnostics,
+        "resolved",
+        None,
+        valve_game_id=accepted[0].candidate_valve_game_id,
+        method="inferred_cross_source",
     )
 
 
@@ -414,10 +708,109 @@ def _result(
     )
 
 
+def _validate_league_ids(league_ids: Sequence[int]) -> tuple[int, ...]:
+    if not isinstance(league_ids, Sequence) or isinstance(
+        league_ids, (str, bytes, bytearray)
+    ):
+        raise ValueError("league_ids must be a sequence")
+    result: list[int] = []
+    seen: set[int] = set()
+    for league_id in league_ids:
+        if type(league_id) is not int or league_id <= 0:
+            raise ValueError("league_ids must contain positive integers")
+        if league_id not in seen:
+            seen.add(league_id)
+            result.append(league_id)
+    return tuple(result)
+
+
+def _validate_league_match_map(
+    league_matches_by_id: Mapping[int, Sequence[Mapping[str, JsonValue]]],
+) -> Mapping[int, Sequence[Mapping[str, JsonValue]]]:
+    if not isinstance(league_matches_by_id, Mapping):
+        raise ValueError("league_matches_by_id must be a mapping")
+    for league_id, matches in league_matches_by_id.items():
+        if type(league_id) is not int or league_id <= 0:
+            raise ValueError("league match keys must be positive integers")
+        if not isinstance(matches, Sequence) or isinstance(
+            matches, (str, bytes, bytearray)
+        ):
+            raise ValueError("each League match value must be a sequence")
+    return league_matches_by_id
+
+
+def _merge_league_assessments(
+    candidate_id: int,
+    source_assessments: list[LeagueScopedCandidateAssessment],
+) -> MultiLeagueCandidateAssessment:
+    statuses = {item.assessment.status for item in source_assessments}
+    reasons = list(
+        dict.fromkeys(
+            reason
+            for item in source_assessments
+            for reason in item.assessment.reasons
+        )
+    )
+    has_cross_source_conflict = {"accepted", "excluded"}.issubset(statuses)
+    if has_cross_source_conflict and "cross_league_assessment_conflict" not in reasons:
+        reasons.append("cross_league_assessment_conflict")
+
+    if statuses == {"accepted"}:
+        status: CandidateAssessmentStatus = "accepted"
+        reasons = []
+    elif statuses == {"excluded"}:
+        status = "excluded"
+    else:
+        status = "unresolved"
+
+    return MultiLeagueCandidateAssessment(
+        candidate_valve_game_id=candidate_id,
+        league_assessments=tuple(source_assessments),
+        status=status,
+        reasons=tuple(reasons),
+    )
+
+
+def _multi_league_result(
+    _target_probe: GameCandidateResult,
+    pandascore_match_id: int | None,
+    pandascore_game_id: int | None,
+    game_position: int,
+    searched_league_ids: tuple[int, ...],
+    missing_league_ids: tuple[int, ...],
+    candidate_assessments: tuple[MultiLeagueCandidateAssessment, ...],
+    league_search_diagnostics: tuple[LeagueSearchDiagnostic, ...],
+    category: MultiLeagueResolutionCategory,
+    reason: str | None,
+    *,
+    valve_game_id: int | None = None,
+    method: Literal["inferred_cross_source"] | None = None,
+) -> MultiLeagueGameResolutionResult:
+    return MultiLeagueGameResolutionResult(
+        category=category,
+        pandascore_match_id=pandascore_match_id,
+        pandascore_game_id=pandascore_game_id,
+        game_position=game_position,
+        searched_league_ids=searched_league_ids,
+        missing_league_ids=missing_league_ids,
+        valve_game_id=valve_game_id,
+        method=method,
+        candidate_assessments=candidate_assessments,
+        league_search_diagnostics=league_search_diagnostics,
+        reason=reason,
+    )
+
+
 __all__ = [
     "CandidateAssessment",
     "CandidateAssessmentStatus",
     "GameResolutionResult",
+    "LeagueScopedCandidateAssessment",
+    "LeagueSearchDiagnostic",
+    "MultiLeagueCandidateAssessment",
+    "MultiLeagueGameResolutionResult",
+    "MultiLeagueResolutionCategory",
     "ResolutionCategory",
+    "resolve_game_across_leagues",
     "resolve_game",
 ]

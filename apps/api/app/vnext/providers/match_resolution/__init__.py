@@ -22,7 +22,13 @@ from .leagues import (
 from .resolver import (
     CandidateAssessment,
     GameResolutionResult,
+    LeagueScopedCandidateAssessment,
+    LeagueSearchDiagnostic,
+    MultiLeagueCandidateAssessment,
+    MultiLeagueGameResolutionResult,
+    MultiLeagueResolutionCategory,
     resolve_game,
+    resolve_game_across_leagues,
 )
 
 __all__ = [
@@ -36,10 +42,16 @@ __all__ = [
     "LeagueFieldComparison",
     "GameResolutionResult",
     "CandidateAssessment",
+    "LeagueScopedCandidateAssessment",
+    "LeagueSearchDiagnostic",
+    "MultiLeagueCandidateAssessment",
+    "MultiLeagueGameResolutionResult",
+    "MultiLeagueResolutionCategory",
     "ParticipantAssociation",
     "ParticipantFact",
     "compare_game_identity_evidence",
     "find_game_candidates",
     "find_league_candidates",
+    "resolve_game_across_leagues",
     "resolve_game",
 ]

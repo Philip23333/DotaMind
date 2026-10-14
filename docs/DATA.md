@@ -44,11 +44,11 @@ DTO fields have defaults. `game.detail` has not yet integrated the resolver.
 
 This section owns the matching semantics for a path from a PandaScore Game to
 the existing OpenDota `game.detail(valve_game_id)` capability. The Provider-side
-offline League candidate discovery, game candidate, evidence, and normal-window
-resolver functions are implemented. They accept already-read source records and
-make no network or model calls. The resolution Service and model-facing tool are
-not implemented or registered. Observed provider behavior and sampled
-counterexamples are summarized in
+offline League candidate discovery, game candidate, evidence, single-League,
+and multi-League normal-window resolver functions are implemented. They accept
+already-read source records and make no network or model calls. The resolution
+Service and model-facing tool are not implemented or registered. Observed
+provider behavior and sampled counterexamples are summarized in
 [`reference/opendota-cross-source-identity.md`](reference/opendota-cross-source-identity.md).
 
 ### Identity boundary
@@ -67,18 +67,28 @@ can differ between games or be null/zero.
 ### Candidate retrieval
 
 `find_game_candidates()` selects a PandaScore Game by its explicit `position`
-and filters one caller-supplied OpenDota League list using both start-time and
-duration tolerances. Tolerances are explicit inputs; there is no production
-default. `resolve_game()` then uses only the caller-supplied detail records for
-the distinct candidate Valve IDs, verifies that each League row ID, detail-map
-key, and detail `match_id` are the same strict positive integer, and checks the
-detail time and duration against the same normal tolerances. It does not select
-a League, widen the search, or fetch missing details.
+and filters one supplied OpenDota League list using both start-time and duration
+tolerances. Tolerances are explicit inputs; there is no production default.
+`resolve_game()` evaluates that single supplied League scope. The
+`resolve_game_across_leagues()` entry point accepts the caller's complete,
+already-selected League IDs and their lists, then applies the same per-candidate
+detail and identity checks across the combined scope. It verifies that each
+League row ID, detail-map key, and detail `match_id` are the same strict positive
+integer. Neither resolver selects or widens League scope, nor fetches missing
+details.
+
+For `league_matches_by_id`, a present key with `[]` means that League was read
+and produced no rows; an absent selected key means the search scope is
+incomplete. An incomplete selected scope is reported as `search_scope_incomplete`
+and cannot produce a resolved identity, even if an available League has one
+accepted candidate. League IDs are strict positive integers and duplicates are
+deduplicated in first-seen order.
 
 A unique result from time and duration alone is not sufficient to confirm
 identity. Candidate coverage and source failures remain scoped to the supplied
-League result; `no_candidates` means only that no row in that current scope met
-the supplied tolerances, not that the game does not exist.
+League result or the full selected multi-League scope; `no_candidates` means
+only that no row in that current scope met the supplied tolerances, not that the
+game does not exist.
 
 ### League candidate discovery
 
@@ -122,12 +132,18 @@ candidate:
   OpenDota `radiant_win` result; and
 - the evidence contains no source-field contradiction.
 
-All candidates are considered before returning a result. Two or more accepted
-candidates produce `ambiguous`. One accepted candidate with any unresolved
+All candidates across the complete selected scope are considered before
+returning a result. Two or more distinct accepted Valve IDs produce `ambiguous`.
+If the same Valve ID appears in multiple League lists, its per-League
+assessments are retained together and count as one candidate: all accepted
+assessments merge to accepted, all excluded assessments merge to excluded, and
+any unresolved assessment keeps the group unresolved. A mixture of accepted and
+excluded assessments for one Valve ID is also unresolved and records a
+cross-League assessment conflict. One accepted candidate with any unresolved
 competitor remains `evidence_insufficient`. A unique accepted candidate is
-`resolved` only when every other candidate has an explicit exclusion reason,
-such as a detail outside the current window or a winner conflict after its
-participants were supported. Missing details, missing timing, missing
+`resolved` only when every other distinct candidate has an explicit exclusion
+reason, such as a detail outside the current window or a winner conflict after
+its participants were supported. Missing details, missing timing, missing
 participants or winner, unaligned names, and source conflicts remain unresolved;
 they are not treated as evidence against a candidate. If all candidates are
 explicitly excluded, the result is `no_acceptable_candidate`.
@@ -139,12 +155,12 @@ or a similarity score, and does not copy full OpenDota details into its result.
 
 ### Recovery and whole-Match consistency
 
-The current game resolver is limited to one supplied League and the caller's
-normal time/duration window. Search widening, strict cross-source League identity
-confirmation, neighboring-game roster corroboration, and exact player
-`account_id` comparisons remain future work. If source time fields conflict,
-preserve their original values; do not repair them by substituting another
-timestamp or duration.
+The multi-League resolver is limited to the selected, fully supplied League
+lists and the caller's normal time/duration window. It does not prove that a
+PandaScore League or Series is identical to an OpenDota League. Search widening,
+neighboring-game roster corroboration, and exact player `account_id` comparisons
+remain future work. If source time fields conflict, preserve their original
+values; do not repair them by substituting another timestamp or duration.
 
 Across one Match, two different PandaScore Games must not both be automatically
 assigned to the same Valve game. Game order and time should be consistent, but
