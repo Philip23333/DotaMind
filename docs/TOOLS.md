@@ -447,16 +447,33 @@ the root `.env`.
 
 The input is a Valve single-game ID, not a PandaScore Match, Series, or Game ID.
 It may come from the user, `player.recent_games`, or a resolved
-`esports.game.resolve` result. The tool preserves the validated OpenDota business
-object, including unknown JSON extensions and nullable values. Player rows and
-core fields are type-checked when present;
-anonymous players and missing optional or parsed fields remain valid. The
-returned data depends on what OpenDota already has: missing process data does
-not show that an event did not happen, and the lookup does not request replay
-parsing. Large results use normal Artifact externalization and narrower
-`artifact.read` paths. Deterministic coverage uses local HTTP mocks. The prior
-live cross-check for `8960882635` supports the ID mapping for that observed
-match only; this implementation has not yet been tested against live OpenDota.
+`esports.game.resolve` result.
+
+**Current implementation:** the validated OpenDota business object, including
+unknown JSON extensions and nullable values, is returned in `data` and passed
+to generic Artifact externalization.
+
+**Accepted target:** keep the input and outer provenance envelope, then return
+the eight-section `data` DTO defined in
+[`agent/game_detail_data.md`](agent/game_detail_data.md). The OpenDota source
+identity is validated before projection. The result Artifact contains the
+complete governed DTO, with no raw-object field or model-facing way to retrieve
+the original response. Generic `artifact.read` and `artifact.grep` remain
+ordinary document operations.
+
+The DTO keeps source absence distinct from zero and empty values, and a missing
+field does not show that an event did not happen. The lookup does not request
+replay parsing. Large results continue to use generic Artifact externalization
+and narrower `artifact.read` paths. Deterministic coverage uses local HTTP
+mocks. The prior live cross-check for `8960882635` supports the ID mapping for
+that observed match only; this implementation has not yet been tested against
+live OpenDota.
+
+The current `esports.game.resolve` result also serializes candidate detail
+data in its Artifact. Its internal matcher needs validated source facts. Before
+the no-raw target is complete, that model-visible output must not provide a
+separate route to the full OpenDota detail; the detailed dependency is tracked in
+[`DATA.md`](DATA.md) and [`EVALS.md`](EVALS.md).
 
 `catalog.lookup(kind, ids)` resolves up to 20 exact positive hero or item IDs
 against the active local Valve Dota 2 catalog snapshot. It returns each requested

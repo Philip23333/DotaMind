@@ -404,6 +404,51 @@ higher priority.
   HTTP-mock tests do not establish live OpenDota availability. The prior
   `8960882635` cross-source ID check remains single-match evidence only.
 
+### Game detail eight-section projection (contract accepted; code migration pending)
+
+The target data contract is owned by
+[`agent/game_detail_data.md`](agent/game_detail_data.md). The current code still
+returns the full validated OpenDota object. The target retains
+`game.detail(valve_game_id)`, the outer provenance envelope, pre-projection
+identity validation, and generic Artifact handling. Its Artifact will contain
+the complete governed eight-section DTO, with no raw-object field or alternate
+model-facing read path. No frontend, HTTP route, persistence, replay task, or
+deployment work is part of this migration.
+
+Implementation order:
+
+1. **Pending prerequisite audit:** use the owner contract's confirmed field
+   tables; separately decide additional candidates and verify unresolved source
+   meanings without reopening the agreed minimum. Trace every current
+   `GameDetailResult.data` consumer. Preserve the exact validated source
+   timestamp, OpenDota side-specific team IDs, source identity checks, and any
+   already accepted same-game team-to-side association until internal
+   conversion is complete.
+2. **Pending source/evidence boundary:** the existing `esports.game.resolve`
+   Artifact currently serializes candidate details. Keep validated detail facts
+   available to its internal matcher while removing model-visible access to the
+   full candidate response. Select the reduced resolution evidence fields in
+   the cross-source contract before changing that output.
+3. **Pending projection:** map the validated OpenDota object into the eight
+   sections in the owner contract. Do not add a raw payload or let the generic
+   Artifact layer perform source mapping. Preserve missing, empty, zero, false,
+   negative-time, and conflict semantics as documented.
+4. **Pending focused acceptance:** cover field mappings, invalid identity,
+   missing logs and alignment, objective and actor mappings, exact catalog
+   resolution, the `9040460429` representative sample, generic Artifact
+   externalization/read, and the internal resolver path. Do not report this
+   capability as implemented or accepted before these checks pass.
+
+Confirmed mappings include final scoreboard/farming/combat fields, player
+sides, minimal source-team identities, complete death records, Moon Shard and
+other final build states, direct hero-only interactions, and structured
+`coverage.missing`/`coverage.conflicts`. Source-semantics checks and internal
+consumer audits are verification tasks, not requests to approve these fields
+again. Additional candidates remain separate from that confirmed minimum.
+
+The sample is an explanation and source-mapping check, not a completeness,
+accuracy, or DTO-size guarantee. Static labels remain separate catalog facts.
+
 The account-to-game workflow is covered with deterministic Runtime composition:
 the agent can continue from an account's bounded recent-games list to one
 selected match, locate the exact account row, resolve known hero/item labels

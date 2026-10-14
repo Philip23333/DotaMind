@@ -100,10 +100,20 @@ used. The internal read attempt retains the complete successfully read PandaScor
 Match, OpenDota League collection, each selected League list, and each complete
 `GameDetailResult` including its provider and retrieval time. Its own
 `retrieved_at` is the attempt completion time, not a claim that all sources were
-read simultaneously. These records are not yet written to an Artifact or exposed
-as a separate Artifact. The continuation tool exposes the serialized read attempt
+read simultaneously. The continuation tool exposes the serialized read attempt
 inside the capability result and stores that complete result through the generic
-Artifact processor.
+Artifact processor. **This is current behavior.** Candidate detail data is
+therefore available through the resolution Artifact today.
+
+The accepted `game.detail` data projection is defined in
+[`agent/game_detail_data.md`](agent/game_detail_data.md). It changes the
+public detail result and its Artifact to the governed DTO while preserving
+internal source facts required for identity checks. The current resolution
+Artifact is a separate model-visible path to candidate detail. Before claiming
+the no-raw target is complete, the implementation must keep those facts
+available to its internal matcher and stop exposing the full candidate response
+through that Artifact. The reduced resolution evidence fields remain an
+implementation dependency; this document does not choose them.
 
 ### Capability result and Service
 
@@ -1078,15 +1088,52 @@ one participant returned 20 rows with nonincreasing raw timestamps under
 `8960882635` predates the oldest row in that bounded sample and was not
 returned. This verifies one account/query sample, not general provider
 availability or universal ordering behavior.
-`game.detail` registers only when `DOTAMIND_OPENDOTA_ENABLED` is true. It
-preserves the full validated OpenDota object, including unknown JSON extensions,
-null values, zeroes, and booleans. The returned positive `match_id` must equal
-the requested Valve ID; known fields are type-checked when present. Anonymous
-player rows and absent optional or parsed fields are valid. Missing process
-data does not prove an event did not occur, and the lookup does not trigger
-replay parsing. Tests use HTTP mocks. The earlier live cross-source check of
-`8960882635` is a single-match observation, not live verification of this new
-client.
+`game.detail` currently registers only when `DOTAMIND_OPENDOTA_ENABLED` is
+true. It preserves the full validated OpenDota object, including unknown JSON
+extensions, null values, zeroes, and booleans. The returned positive
+`match_id` must equal the requested Valve ID; known fields are type-checked
+when present. Anonymous player rows and absent optional or parsed fields are
+valid. Missing process data does not prove an event did not occur, and the
+lookup does not trigger replay parsing. Tests use HTTP mocks. The earlier live
+cross-source check of `8960882635` is a single-match observation, not live
+verification of this new client. The target projection and its source/missing
+rules are owned by [`agent/game_detail_data.md`](agent/game_detail_data.md);
+the implementation still returns the full source object.
+
+### Game detail data projection (accepted target; not implemented)
+
+The model-facing input remains `game.detail(valve_game_id)`. The outer
+`valve_game_id`, `provider`, and `retrieved_at` fields remain unique
+provenance metadata. The `data` value contains the eight sections
+`match`, `draft`, `players`, `economy`, `builds`,
+`events`, `interactions`, and `coverage`. The source identity is
+validated before mapping. The complete governed DTO, rather than the raw
+OpenDota response, is the logical detail result stored by generic Artifact
+externalization.
+
+The contract owner is
+[`agent/game_detail_data.md`](agent/game_detail_data.md). It deliberately
+separates source facts from deterministic date, count, ordering, and enum
+transformations. It defines the confirmed final-stat minimum, player sides,
+minimal source-team identities, build fields, death records, hero-only direct
+interaction maps, and structured missing/conflict records. Only additional
+candidate inclusion and explicitly uncertain provider semantics remain open;
+the confirmed fields do not require another approval.
+
+Implementation must audit internal consumers before changing `GameDetailResult.data`.
+The current identity resolver reads candidate detail identity, winner, and
+side-specific team facts. Any converter that consumes a game must retain the
+precise validated source timestamp and source team identities until it has
+finished using them. A model-facing DTO or Artifact must not expose the original
+detail as a raw member or equivalent retrieval path. The existing resolver
+Artifact currently exposes candidate details; the implementation needs a
+separate internal-source/public-evidence boundary before the no-raw target can
+be claimed.
+
+The pending fields and source meanings are enumerated in the owner contract.
+Documentation does not settle its listed verification items, and this target
+does not select frontend rendering, an HTTP shape, persistent storage, replay
+parsing, or deployment changes.
 
 ## Account-to-game evidence and local catalog labels
 

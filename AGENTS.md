@@ -70,6 +70,7 @@ Before architecture or product work, read:
    Artifact storage/search/read, or the current simplification migration
 6. `docs/EVALS.md`
 7. `docs/ROADMAP.md` when the work belongs to a planned phase
+8. `docs/agent/game_detail_data.md` when work touches `game.detail`
 
 Code may intentionally lag the target documents during an active migration. Do
 not preserve Legacy or transitional vNext structure merely because it exists.
@@ -159,7 +160,7 @@ capability contract, not on PandaScore/OpenDota endpoint vocabulary or provider
 DTOs. The Provider decides how to satisfy that contract from its source. An
 Adapter should remain focused on provider transport and source validation.
 
-`game.detail` is the accepted reference implementation for this pattern:
+`game.detail` is the accepted reference implementation for the capability seam:
 
 ```text
 Model
@@ -170,10 +171,12 @@ GameDetailService
   ↓
 OpenDota implementation / adapter (`match_id` internally)
   ↓
-complete validated source entity
+validated source entity and capability-owned output contract
   ↓
-Game Artifact + bounded observation
+generic Artifact handling + bounded observation
 ```
+
+The current output is the complete validated OpenDota source object. The accepted target projects it into the explicit eight-section DTO owned by [`docs/agent/game_detail_data.md`](docs/agent/game_detail_data.md). Keep those statuses distinct.
 
 Esports discovery is currently being redesigned as a PandaScore-oriented agent
 tool seam; the previous unified `esports.search` capability (tool, service,
@@ -189,14 +192,17 @@ reason to differ:
 - keep provider names, endpoints, pagination, and private IDs below that contract;
 - let the Service coordinate capability semantics, Artifact externalization, and
   stable result/error behavior;
-- let the Provider/Adapter retain complete validated provider business facts;
+- let the Provider/Adapter retain complete validated provider business facts
+  by default; for the explicit `game.detail` projection exception below, keep
+  the source facts required by internal consumers available before projection;
 - externalize large facts to an Artifact and return only a bounded observation;
 - let the model choose what to inspect later with generic Artifact primitives;
 - do not create scenario DTOs or manually curate fields merely because a current
   question only needs a subset of the source response.
 
-Artifact fidelity and model context are separate concerns. The default data path
-for a large provider result is:
+Artifact fidelity and model context are separate concerns. For a capability
+whose output contract is source-shaped, the default data path for a large
+provider result is:
 
 ```text
 Provider response
@@ -204,7 +210,15 @@ Provider response
   └─→ bounded model-facing observation
 ```
 
-Do not replace that with:
+Do not replace that default with a scenario DTO chosen only for one prompt.
+An explicit, reviewed capability contract may define a narrower projection when
+the product data boundary itself requires it. `game.detail` is the accepted
+exception: its source mappings, exclusions, missing-data behavior, and open
+questions are owned by [`docs/agent/game_detail_data.md`](docs/agent/game_detail_data.md).
+Its Artifact stores the complete governed DTO, while generic Artifact tools stay
+unaware of game semantics.
+
+Do not replace source-shaped outputs without an accepted contract with:
 
 ```text
 Provider response
@@ -216,9 +230,8 @@ Validation, harmless normalization, and explicit capability enrichment are
 allowed. They must not silently discard valid provider business facts merely
 because DotaMind does not yet have a consumer for those fields.
 
-`game.detail` must follow the same implementation philosophy. Its public input is
-`valve_game_id`; OpenDota may continue to use its native `match_id` internally.
-The intended path is conceptually:
+For `game.detail`, the public input remains `valve_game_id` and OpenDota may
+continue to use its native `match_id` internally. Its status and target path are:
 
 ```text
 Model
@@ -227,18 +240,28 @@ game.detail(valve_game_id)
   ↓
 Game detail capability/service
   ↓
-OpenDota implementation / adapter (`match_id` internally)
-  ↓
-complete validated OpenDota game response
-  ↓
-Game Artifact + bounded observation
+current: complete validated source object → generic result processor
+target: validate source identity → capability-owned eight-section DTO
+        → generic Artifact handling + bounded observation
 ```
 
-Do not rebuild the historical GameSummary field-selection pipeline as the core of
-`game.detail`. Historical GameSummary schemas may remain frozen for migration,
-but the new detailed-game capability should preserve the provider's complete
-validated game fact space and let Artifact access control what reaches model
-context.
+The accepted target is an explicit DotaMind projection for minute-state review and
+final statistics, not a raw OpenDota object. The detailed schema and exclusions
+are in [`docs/agent/game_detail_data.md`](docs/agent/game_detail_data.md).
+Historical GameSummary schemas remain frozen. The generic Artifact layer stores
+the complete logical tool result it receives; it does not perform this projection.
+The projection must not add a `raw` member or another model-visible route to the
+original response.
+
+The provider adapter must continue to validate that source `match_id` equals
+the requested Valve ID before producing a successful result. Before public
+projection, implementation must preserve the exact source facts needed by
+internal consumers, including validated timestamps, side-specific OpenDota team
+IDs, and identity-resolution inputs. Use an already accepted same-game
+team-to-side association when one exists. `game.detail` does not query
+PandaScore or repeat name matching. Audit `esports.game.resolve` separately:
+its current result Artifact serializes candidate detail data, which must not
+remain a model-visible raw-detail escape path after the no-raw target is claimed.
 
 A second provider may justify a shared Provider protocol/router later. One
 provider alone does not justify speculative provider-selection machinery; the
@@ -274,7 +297,9 @@ while preserving generic search/read access.
   not a universal Dota object graph.
 - Preserve complete validated provider business facts by default. Do not decide
   field-by-field what is worth retaining based on known prompts or current
-  product scenarios.
+  product scenarios. `game.detail` is the accepted explicit projection
+  exception defined in its owner contract; the Artifact retains that complete
+  governed DTO.
 - Validation may normalize source values harmlessly, but it must not intentionally
   narrow a source document into a summary. Provider HTTP headers, credentials,
   request tokens, and transport/pagination envelopes are not business facts and

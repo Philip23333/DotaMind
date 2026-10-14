@@ -101,6 +101,27 @@ The model-facing contract never exposes wire routes, credentials, pagination
 syntax, or transport-private IDs. A single provider does not justify a router or
 plugin framework.
 
+### Game-detail data governance (accepted target; not implemented)
+
+The current `game.detail` output is the complete validated OpenDota object.
+Its accepted target is the explicit eight-section DTO in
+[`agent/game_detail_data.md`](agent/game_detail_data.md). Source identity
+validation and the projection belong at the capability/provider data boundary.
+Runtime and the generic Artifact processor do not perform gameplay or provider
+field mapping. After migration, generic Artifact handling stores the complete
+governed DTO it receives, and generic reads remain provider-agnostic.
+
+Internal consumers can require validated source facts before projection. The
+current cross-source game resolver reads detail identity, winner, and
+side-specific team facts. Any game converter must retain exact source time and
+team identity until it uses those facts and must consume an already accepted
+same-game team-to-side association. Audit these consumers before changing
+`GameDetailResult.data`. The resolver's current result Artifact also
+serializes candidate details; the target requires an internal-source/public-
+evidence boundary so that output cannot retrieve the raw detail object. Its
+reduced evidence schema remains part of the cross-source contract in
+[`DATA.md`](DATA.md).
+
 The optional web-search integration is initialized asynchronously in the API
 lifespan before Runtime construction. Synchronous/offline composition performs
 no MCP I/O. Startup discovers and validates the exact remote search capability;
@@ -608,7 +629,7 @@ establish live Provider availability or real-model behavior.
 ## Steam player and game-detail boundaries
 
 The `capabilities/player` and `capabilities/game` contracts define closed
-inputs, provenance, and source-shaped JSON outputs. `player.profile` and
+inputs, provenance, and JSON outputs. `player.profile` and
 `player.recent_games` share the STRATZ GraphQL client and register only when a
 STRATZ token is configured. The recent-games adapter sends `take`,
 `orderBy: DESC`, and `playerList: SINGLE`, validates the outer and row Steam32
@@ -623,9 +644,12 @@ The supplied match predates that sample and was not among those 20. This is
 single-account sample evidence, not a guarantee for every account or general
 provider availability. `game.detail` is implemented by an opt-in OpenDota
 adapter. It requires the returned `match_id` to match the requested Valve ID,
-checks known fields only when present, and preserves the complete source object
-for the generic Artifact processor. Missing process data does not trigger
-replay parsing. OpenDota composition and registry construction are network-free.
+checks known fields only when present, and currently preserves the complete
+source object for the generic Artifact processor. The accepted target replaces
+that public object with the governed DTO in
+[`agent/game_detail_data.md`](agent/game_detail_data.md). Missing process
+data does not trigger replay parsing. OpenDota composition and registry
+construction are network-free.
 Steam32 and PandaScore player identities remain separate unless a future
 evidence-backed identity capability is designed.
 

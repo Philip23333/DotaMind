@@ -77,7 +77,7 @@ result processor run together; only HTTP is replaced by a strict
 from its generated Match Artifact to resolve game position 1 as Valve Game
 `9042720328`, then passes that confirmed ID to `game.detail`. Match search and
 Match-context reads are separate requests, as are candidate-detail and later
-`game.detail` reads. The full detail result remains in its Artifact.
+`game.detail` reads. The current implementation's full detail result remains in its Artifact.
 
 The same composition tests verify default-off registration, enabled configuration
 and injected dependency failures, policy propagation, per-registry Artifact
@@ -416,6 +416,74 @@ Steam32 account and a PandaScore professional player from explicit evidence;
 the shared appearance of a player or event is not sufficient. These tests do
 not establish general current STRATZ availability or every source business
 meaning.
+
+### Game detail eight-section projection (accepted target; not implemented)
+
+The owner contract is
+[`agent/game_detail_data.md`](agent/game_detail_data.md). The current adapter
+and its tests still return the complete validated OpenDota object. The checks
+below are future acceptance requirements; they are not implemented or passed.
+
+Deterministic acceptance must verify:
+
+- The unchanged closed `valve_game_id` input, single outer provenance envelope,
+  positive matching `match_id`, and existing stable provider-error behavior.
+- Beijing-date conversion from `start_time`, formal duration from `duration`,
+  strict `radiant_win` mapping, score retention, and the limited `team=0/1`
+  mapping for pick/ban records only.
+- Null, empty, zero, false, and absent values remain distinct; no `raw` field or
+  equivalent public read path appears in the game-detail result or its Artifact.
+- Player identity includes strict `isRadiant` to `side` mapping; source team
+  records retain the confirmed `source_team_id` and `name` fields. Final stats
+  retain K/D/A, level, last hits, denies, net worth, hero damage, tower damage,
+  and hero healing from their own source fields, preserving zeros and nulls.
+- Player IDs and slots remain identities only; minute arrays use same-player
+  source axes; kill/death curves count valid events through each node, including
+  events before zero; a missing log never becomes a zero curve; no interpolation
+  or final-stat backfill occurs.
+- Team advantage arrays are aligned only after length and time correspondence
+  checks. Gold advantage is not named net-worth difference, and `gold_t` is not
+  described as wallet balance.
+- Purchase parts and finished items remain distinct source events; no recipe,
+  delivery, usability, total-spend, or item-switching inference is added.
+- Final loadouts retain six inventory and three backpack slots, source neutral
+  slots, and explicit Scepter, Shard, and Moon Shard state values. Skill order
+  reads `ability_upgrades_arr`; neutral history preserves source time, item,
+  and enhancement independently, without inferring the action represented.
+- Deaths are not double-counted from kill logs; negative and end-tail event
+  times are retained; same-second ordering is not inferred; conflicting
+  first-blood sources remain unresolved.
+- Death records retain victim and confirmed killer player slots, source killer
+  units, exact hero IDs, `gold_lost`, `gold_fed`, and source death duration;
+  unavailable killer identities and optional fields remain null.
+- Interactions associate players by `player_slot` and select hero entries from
+  `killed`, `damage`, and `healing` directly, including self-healing. Non-hero
+  entries are excluded; nested `damage_targets` is not aggregated. Target
+  records use `target_unit_key`, `target_hero_id`, and `value`; IDs use exact
+  catalog matches, unresolved hero unit keys remain visible, and absent maps
+  do not become zero pairs.
+- `coverage` contains only promised-data gaps and material source conflicts.
+  Missing entries contain DTO `path` and `reason`, including unavailable data
+  caused by alignment failures with source arrays present. Conflict entries
+  contain source `paths` and corresponding scalar `values`.
+  Missing optional data in one section does not erase other usable sections.
+- Generic Artifact spill and read return the complete governed DTO while
+  respecting existing bounds. The cross-source resolver can still consume
+  required validated source facts internally, and its model-visible Artifact
+  cannot retrieve the full candidate detail.
+
+Use game `9040460429` for representative source/mapping checks only. Include a
+Beijing date, 48:24 duration, winner, one pick/ban, one minute node and final
+values, a few component/completed purchases, one event, one interaction count,
+and the first-blood disagreement. Tests must not promote the sample into a
+universal availability or accuracy guarantee. No final DTO byte-size target is
+set in this phase.
+
+Implementation must honor the confirmed minimum without reopening it. Decide
+additional candidate fields separately, verify unknown neutral-slot/history
+meanings and event-code/actor mappings before assigning them a business meaning,
+and audit internal converter dependencies. Tests must not claim those pending
+semantics are verified.
 
 The account-to-game workflow tests use the real Runtime, registry, session
 history, Artifact externalization/read path, and local Valve catalog with
