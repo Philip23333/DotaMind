@@ -30,13 +30,18 @@ allowlisted and use the same generic read/grep contract.
 ## Spill contract
 
 Tools first construct and validate their complete logical response. Small
-responses stay inline. A response larger than the configured inline threshold
-(12 KiB by default, `DOTAMIND_TOOL_INLINE_MAX_BYTES`) is stored at the Artifact
-root and returns a bounded structural observation plus `artifact_ref`. The
+responses normally stay inline. A response larger than the configured inline
+threshold (12 KiB by default, `DOTAMIND_TOOL_INLINE_MAX_BYTES`) is stored at the
+Artifact root and returns a bounded structural observation plus `artifact_ref`.
+Tools may explicitly require an Artifact even for a small response; this still
+uses the same full-document store and configured observation bound. The
 configured model observation bound defaults to 35 KiB
 (`DOTAMIND_TOOL_OBSERVATION_MAX_BYTES`), so the observation can still include
-small scalar leaves even after the full response has been externalized. A
-preview's `_artifact_path` is copied unchanged into
+small scalar leaves even after the full response has been externalized. When an
+explicitly stored response is small enough, its `value` contains the complete
+logical response; if the added envelope would exceed the observation bound, the
+existing bounded structural observation is used. Stored documents never include
+the externalization envelope. A preview's `_artifact_path` is copied unchanged into
 `artifact.read(mode="read", path=...)`; `outline` is only needed when the
 document structure is unknown. Artifact retrieval tools explicitly bypass the
 generic spill processor: `artifact.read` enforces the same configured serialized
@@ -45,6 +50,14 @@ limits but has no separate serialized-result byte budget. Limits use UTF-8
 serialized bytes, must be positive, and the inline threshold cannot exceed the
 observation budget. Environment values override `.env`; changing them requires
 restarting the API process.
+
+The session store may separately record the producing tool name as internal
+Artifact metadata. The registry supplies this value from the registered tool
+definition; it is not read from or written into the business document. Automatic
+large-result spills and explicitly stored small results both retain this source.
+Direct anonymous `put()` calls remain readable through the generic retrieval
+tools and have no source. Source lookup uses the same opaque reference and
+session-local existence boundary as document reads.
 
 These per-operation bounds and externalization control individual tool outputs;
 there is no cumulative Raw admission budget across effective history. Overall

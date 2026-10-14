@@ -29,6 +29,21 @@ The Context Governance evaluation adds only its local `fixture.edition.lookup`
 fixture tool to that evaluation's registry. It does not register live esports
 providers, and it does not change the product registry.
 
+## Match Artifact continuation
+
+Offline tool-result tests verify that ordinary tools still inline small results
+and automatically externalize large results with the registered tool name stored
+outside the document. `esports.match.search` always stores its complete logical
+response exactly once and returns an Artifact reference for small, large, and
+empty results; a small result is fully included in `value` only when its
+externalization envelope fits the configured observation budget. Tests cover
+source metadata isolation from document fields, anonymous Artifact read/grep,
+session isolation, storage failure, and the required-processor check before a
+forced tool handler runs. Match input/output DTOs and model schemas remain
+unchanged, and no `esports.game.resolve` tool is registered. This verifies
+continuation storage mechanics only, not Match selection or single-game
+resolution behavior.
+
 ## Three evaluation layers
 
 1. **Deterministic tests** use local fakes and fixed payloads to verify schemas,

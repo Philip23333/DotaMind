@@ -38,11 +38,16 @@ class ToolDefinition:
     metadata: Mapping[str, Any] = field(default_factory=dict)
     externalize_result: bool = True
     context_effect: ToolContextEffect = ToolContextEffect.BOUNDED
+    always_artifact: bool = False
     _json_schema_validator: Any = field(init=False, default=None, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         if not self.name:
             raise ValueError("tool name must not be empty")
+        if not isinstance(self.always_artifact, bool):
+            raise TypeError("always_artifact must be a bool")
+        if self.always_artifact and not self.externalize_result:
+            raise ValueError("always_artifact requires externalize_result=True")
         if not self.description:
             raise ValueError(f"tool description must not be empty: {self.name}")
         if self.input_model is None:

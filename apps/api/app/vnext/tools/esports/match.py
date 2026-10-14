@@ -57,6 +57,7 @@ def register_match_tool(registry: ToolRegistry, search: MatchSearchHandler) -> N
             handler=handler,
             read_only=True,
             parallel_safe=True,
+            always_artifact=True,
             metadata={"game": "dota2", "domain": "match"},
         )
     )

@@ -138,10 +138,24 @@ uses `id`, `league_id`, `series_id`, `tournament_id`, `team_id`, `name`,
 `TeamRefDTO`, and `games[]` becomes `MatchGameDTO[]`. A missing provider result
 maps to `score=None`, while an explicit provider score of `0` remains `0`. The
 schema intentionally does not expose provider query syntax or provider-private
-field names. One invocation maps to one bounded provider collection request. If
-its complete validated response exceeds the inline bound, the generic registry
-result processor stores that response as an Artifact and returns a bounded
-observation instead.
+field names. One invocation maps to one bounded provider collection request.
+Every successful `esports.match.search` result is stored once as a complete
+session Artifact and returns an `artifact_ref`, including empty and small results.
+For a response within the configured inline size limit, `value` contains the
+complete response only when the added envelope also fits the observation budget.
+Larger responses and small responses whose envelopes exceed that budget use the
+usual bounded structural observation. Other tools retain their existing size-based
+externalization behavior. The stored Artifact records `esports.match.search` as
+its producing tool in session metadata, outside the business document.
+
+A future single-game resolver is expected to continue from
+`esports.game.resolve(match_artifact_ref, match_path, game_position)`. For example,
+`match_path="items.0"` selects one Match from the stored search result. That future
+entry point must verify the Artifact's producing tool, document shape, and
+selected Match before extracting its PandaScore ID on the server. It will not
+accept an arbitrary model-supplied ID object. The resolver tool is not registered
+yet; generic `artifact.read` and `artifact.grep` remain unaware of Match
+resolution semantics.
 
 `esports.team.search` resolves a Dota 2 team name, acronym, or exact ID to team
 identity. Its closed input contains only `id`, `name`, `acronym`, `page`, and

@@ -19,6 +19,7 @@ class ToolResponseArtifactError(RuntimeError):
 @dataclass(frozen=True)
 class ExternalizedToolResponse:
     artifact_ref: str | None
+    inline_eligible: bool = False
 
     @property
     def spilled(self) -> bool:
@@ -41,11 +42,21 @@ class ToolResponseExternalizer:
         self._store = store
         self._inline_max_bytes = inline_max_bytes
 
-    async def externalize(self, response: Any) -> ExternalizedToolResponse:
-        if serialized_size(response) <= self._inline_max_bytes:
-            return ExternalizedToolResponse(artifact_ref=None)
+    async def externalize(
+        self,
+        response: Any,
+        *,
+        source_tool: str | None = None,
+        force_artifact: bool = False,
+    ) -> ExternalizedToolResponse:
+        inline_eligible = serialized_size(response) <= self._inline_max_bytes
+        if inline_eligible and not force_artifact:
+            return ExternalizedToolResponse(artifact_ref=None, inline_eligible=True)
         try:
-            return ExternalizedToolResponse(artifact_ref=await self._store.put(response))
+            return ExternalizedToolResponse(
+                artifact_ref=await self._store.put(response, source_tool=source_tool),
+                inline_eligible=inline_eligible,
+            )
         except Exception as exc:
             raise ToolResponseArtifactError("could not externalize tool response") from exc
 

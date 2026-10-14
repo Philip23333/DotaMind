@@ -62,6 +62,14 @@ class ToolRegistry:
                 {"tool_name": call.name},
             )
 
+        if definition.always_artifact and self._result_processor is None:
+            return self._error_result(
+                call,
+                "artifact_error",
+                f"required artifact processor unavailable: {call.name}",
+                {"tool_name": call.name},
+            )
+
         try:
             if definition.input_model is None:
                 validation_errors = definition.json_schema_errors(call.arguments)
@@ -151,7 +159,11 @@ class ToolRegistry:
             output = validated_output.model_dump(mode="json")
             content = output
             if self._result_processor is not None and definition.externalize_result:
-                processed = await self._result_processor.process(output)
+                processed = await self._result_processor.process(
+                    output,
+                    source_tool=definition.name,
+                    force_artifact=definition.always_artifact,
+                )
                 content = processed.content
         except ValidationError as exc:
             details = {

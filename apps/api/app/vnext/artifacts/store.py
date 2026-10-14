@@ -21,10 +21,13 @@ class SessionArtifactStore:
 
     def __init__(self) -> None:
         self._documents: dict[str, Any] = {}
+        self._source_tools: dict[str, str] = {}
 
-    async def put(self, document: Any) -> str:
+    async def put(self, document: Any, source_tool: str | None = None) -> str:
         ref = f"{self.PREFIX}{uuid4().hex}"
         self._documents[ref] = document
+        if source_tool is not None:
+            self._source_tools[ref] = source_tool
         return ref
 
     async def get(self, ref: str) -> Any:
@@ -33,6 +36,14 @@ class SessionArtifactStore:
             return self._documents[ref]
         except KeyError as exc:
             raise ArtifactNotFoundError(f"artifact not found: {ref}") from exc
+
+    async def get_source_tool(self, ref: str) -> str | None:
+        """Return the producing tool stored alongside an existing document."""
+
+        self._validate_ref(ref)
+        if ref not in self._documents:
+            raise ArtifactNotFoundError(f"artifact not found: {ref}")
+        return self._source_tools.get(ref)
 
     @classmethod
     def _validate_ref(cls, ref: str) -> None:

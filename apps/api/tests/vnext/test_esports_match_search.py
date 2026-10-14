@@ -5,12 +5,25 @@ import json
 
 import pytest
 
+from app.vnext.artifacts import (
+    ArtifactBackedToolResultProcessor,
+    SessionArtifactStore,
+    ToolResponseExternalizer,
+)
 from app.vnext.capabilities.esports.dtos import MatchDTO, MatchGameDTO, MatchParticipantDTO
 from app.vnext.capabilities.esports.match import MatchSearchInput, MatchSearchResult
 from app.vnext.composition import VNextSettings, build_vnext_registry
 from app.vnext.llm.protocol import ToolCall
 from app.vnext.tools.esports import register_match_tool
 from app.vnext.tools.registry import ToolRegistry
+
+
+def _registry_with_artifacts() -> tuple[ToolRegistry, SessionArtifactStore]:
+    store = SessionArtifactStore()
+    registry = ToolRegistry(
+        result_processor=ArtifactBackedToolResultProcessor(ToolResponseExternalizer(store))
+    )
+    return registry, store
 
 
 def test_match_search_input_is_closed_and_bounded() -> None:
@@ -58,6 +71,8 @@ def test_match_search_tool_schema_exposes_only_semantic_fields() -> None:
     assert "opponent_id" not in schema
     assert "match_type" not in schema
     assert "winner_type" not in schema
+    assert "always_artifact" not in schema
+    assert "esports.game.resolve" not in schema
 
 
 def test_match_search_accepts_semantic_begin_at_date() -> None:
@@ -75,7 +90,7 @@ def test_match_search_accepts_semantic_begin_at_date() -> None:
 
 def test_match_search_tool_validates_and_returns_contract_output() -> None:
     seen: list[MatchSearchInput] = []
-    registry = ToolRegistry()
+    registry, store = _registry_with_artifacts()
 
     async def search(query: MatchSearchInput) -> MatchSearchResult:
         seen.append(query)
@@ -93,13 +108,34 @@ def test_match_search_tool_validates_and_returns_contract_output() -> None:
     )
 
     assert result.status == "ok"
-    assert result.content == {
-        "items": [],
-        "page": 1,
-        "limit": 5,
-        "anomalies": [],
-    }
+    assert result.content["externalized"] is True
+    ref = result.content["artifact_ref"]
+    expected = {"items": [], "page": 1, "limit": 5, "anomalies": []}
+    assert result.content["value"] == expected
+    assert asyncio.run(store.get(ref)) == expected
+    assert asyncio.run(store.get_source_tool(ref)) == "esports.match.search"
     assert seen[0].tournament_id == 3
+
+
+def test_match_search_requires_artifact_processor_before_search() -> None:
+    called = False
+    registry = ToolRegistry()
+
+    async def search(_query: MatchSearchInput) -> MatchSearchResult:
+        nonlocal called
+        called = True
+        return MatchSearchResult(items=[], page=1, limit=20)
+
+    register_match_tool(registry, search)
+    result = asyncio.run(
+        registry.execute(
+            ToolCall(id="match-without-processor", name="esports.match.search", arguments={})
+        )
+    )
+
+    assert result.status == "error"
+    assert result.error is not None and result.error.code == "artifact_error"
+    assert called is False
 
 
 def test_match_search_accepts_relationship_and_result_filters() -> None:
@@ -177,7 +213,7 @@ def test_match_dtos_are_strict_and_have_frozen_fields() -> None:
 
 
 def test_match_search_tool_returns_new_match_dto_shape() -> None:
-    registry = ToolRegistry()
+    registry, store = _registry_with_artifacts()
 
     async def search(query: MatchSearchInput) -> MatchSearchResult:
         return MatchSearchResult(
@@ -210,7 +246,9 @@ def test_match_search_tool_returns_new_match_dto_shape() -> None:
     )
 
     assert result.status == "ok"
-    assert result.content["items"] == [
+    assert result.content["externalized"] is True
+    ref = result.content["artifact_ref"]
+    assert result.content["value"]["items"] == [
         {
             "id": 42,
             "name": "Grand Final",
@@ -234,7 +272,39 @@ def test_match_search_tool_returns_new_match_dto_shape() -> None:
             "rescheduled": False,
         }
     ]
-    assert result.content["anomalies"] == []
+    assert result.content["value"]["anomalies"] == []
+    stored = asyncio.run(store.get(ref))
+    assert stored == result.content["value"]
+    assert asyncio.run(store.get_source_tool(ref)) == "esports.match.search"
+    assert len(store._documents) == 1
+
+
+def test_empty_match_search_still_returns_artifact_continuation() -> None:
+    registry, store = _registry_with_artifacts()
+
+    async def search(query: MatchSearchInput) -> MatchSearchResult:
+        return MatchSearchResult(items=[], page=query.page, limit=query.limit)
+
+    register_match_tool(registry, search)
+    result = asyncio.run(
+        registry.execute(
+            ToolCall(id="empty-match", name="esports.match.search", arguments={})
+        )
+    )
+
+    assert result.status == "ok"
+    assert result.content["externalized"] is True
+    assert result.content["value"] == {
+        "items": [],
+        "page": 1,
+        "limit": 20,
+        "anomalies": [],
+    }
+    assert asyncio.run(store.get(result.content["artifact_ref"])) == result.content["value"]
+    assert (
+        asyncio.run(store.get_source_tool(result.content["artifact_ref"]))
+        == "esports.match.search"
+    )
 
 
 def test_default_vnext_registry_contains_artifacts_and_esports_search_tools() -> None:
@@ -252,3 +322,5 @@ def test_default_vnext_registry_contains_artifacts_and_esports_search_tools() ->
         "esports.player.search",
         "catalog.lookup",
     }
+    assert registry.get("esports.match.search").always_artifact is True
+    assert "esports.game.resolve" not in {tool.name for tool in registry.list()}
