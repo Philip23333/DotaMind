@@ -397,27 +397,36 @@ heuristic input measure rather than a precise token count. The stage status and
 known limitations are maintained in
 [`agent/context_governance_evidence_lifecycle.md`](agent/context_governance_evidence_lifecycle.md).
 
-### Esports Match-to-OpenDota game resolution (planned; not accepted)
+### Esports Match-to-OpenDota game resolution (offline core implemented; Service and Agent acceptance pending)
 
 The current PandaScore esports capabilities and `game.detail` exist, but the
-cross-source resolution Service and model-facing tool have not been implemented
-or registered. Planned acceptance has three separate layers:
+Provider-side offline candidate filtering, evidence comparison, and normal-window
+resolution are implemented. The cross-source resolution Service and
+model-facing tool have not been implemented or registered. Acceptance has three
+separate layers:
 
 | Layer | Evidence required |
 |---|---|
-| Deterministic tests | Fixed source records exercise candidate filtering, evidence comparisons, whole-Match consistency, and distinct unresolved/failure results |
-| Real Provider validation | Candidate coverage, source-field semantics, selected identities, and game-detail coverage are measured against bounded live samples |
+| Deterministic tests | Candidate filtering, detail-ID validation, same-window detail recheck, participant/winner evidence, competing candidates, mapping conflicts, input immutability, and distinct unresolved results |
+| Real Provider validation | Bounded live samples measure League candidate coverage, source-field semantics, selected identities, and detail availability |
 | Full Agent acceptance | The model discovers a Match, selects a game, requests identity resolution, calls `game.detail` only after confirmation, and distinguishes missing fields from absent events |
 
-Deterministic cases must include ordinary best-of-three/five series; multiple
-same-team games on one day; multiple equally plausible candidates; differing
-OpenDota `series_id` values across correctly related games; changed in-game
-Team IDs; absent participant objects; swapped Radiant/Dire sides; anomalous
-time fields; duplicate Valve IDs assigned to different Games; one failed game
-alongside other successful games; scheduled and forfeited records; timeout,
-rate-limit, and budget exhaustion; and missing economy or draft fields after a
-confirmed identity. A source failure or exhausted search budget must never be
-reported as a match that does not exist.
+The offline suite uses saved historical response fields for the BLAST Game 4
+candidate and participant/winner facts; Yakult Games 1 and 2, including their
+actual start times and durations; and the old blood Game 2 missing-Dire case.
+The South America Game 3 outside-window case uses fixed local records. These are
+historical response regressions, not live Provider validation. Sample-specific
+tolerances are explicit test inputs and do not define production defaults.
+Synthetic tests separately cover ambiguous candidates, winner conflicts,
+missing details, mapping conflicts, and invalid detail identities. These tests
+do not measure resolution accuracy or establish that any live provider data is
+currently available.
+
+Whole-Match consistency, League association, search widening, neighboring-game
+roster evidence, exact player `account_id` corroboration, scheduled-game
+handling, provider failures, request budgets, and missing game-detail fields
+remain for later Service and live-evaluation work. A source failure or exhausted
+search scope must never be reported as proof that a match does not exist.
 
 Real Provider reports should record target-game candidate coverage, confirmed
 and unresolved counts with reasons, actual request volume and search scope, and
@@ -427,8 +436,8 @@ is data evidence, not an implementation test or Agent acceptance. The existing
 2026-10-13 observations and their limitations are recorded in
 [`reference/opendota-cross-source-identity.md`](reference/opendota-cross-source-identity.md);
 they are curated sample evidence, not an accuracy measurement for an automatic
-resolver. No new tests or live Provider calls were run by this documentation
-change.
+resolver. The offline resolver tests use fixed local records only; this unit made
+no live Provider calls and does not validate the future Service or Agent path.
 
 ## Live source checks
 

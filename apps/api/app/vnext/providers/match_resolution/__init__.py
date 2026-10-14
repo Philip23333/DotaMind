@@ -12,14 +12,22 @@ from .evidence import (
     ParticipantFact,
     compare_game_identity_evidence,
 )
+from .resolver import (
+    CandidateAssessment,
+    GameResolutionResult,
+    resolve_game,
+)
 
 __all__ = [
     "GameCandidate",
     "GameCandidateResult",
     "GameIdentityEvidence",
     "GameIdentityFacts",
+    "GameResolutionResult",
+    "CandidateAssessment",
     "ParticipantAssociation",
     "ParticipantFact",
     "compare_game_identity_evidence",
     "find_game_candidates",
+    "resolve_game",
 ]
