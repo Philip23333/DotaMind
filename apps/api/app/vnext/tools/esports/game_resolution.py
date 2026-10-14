@@ -27,10 +27,10 @@ the results under value, so pass items.0 without a value. prefix.
 Only status="resolved" confirms the returned valve_game_id as this Game's
 identity; that Valve ID can be passed to game.detail. An unresolved result is
 not a confirmed identity: inspect its reason and evidence, and do not choose an
-ID from candidate evidence yourself. This tool resolves identity; it does not
-read the full game detail or call game.detail automatically. The complete
-resolution evidence is stored in the returned Artifact and can be inspected when
-needed.
+ID from candidate evidence yourself. This tool confirms identity and may fetch
+candidate game details as evidence. It does not automatically invoke the
+game.detail tool. The complete resolution evidence is stored in the returned
+Artifact and can be inspected when needed.
 
 Confirmed mappings are not retained across separate calls, so this tool does
 not guarantee whole-Match consistency across separate resolutions.

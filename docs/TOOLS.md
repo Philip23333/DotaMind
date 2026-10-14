@@ -562,9 +562,9 @@ An invalid internal attempt raises a contract error.
 Only `status="resolved"` confirms `valve_game_id` as the selected Game's identity
 and makes it valid input to `game.detail`. For `status="unresolved"`, inspect the
 reason and evidence; do not select a candidate ID yourself. The complete
-resolution evidence is saved in the returned Artifact. This tool resolves
-identity only and does not fetch full game detail or call `game.detail`
-automatically.
+resolution evidence is saved in the returned Artifact. This tool confirms
+identity and may fetch candidate game details as evidence. It does not
+automatically invoke the `game.detail` tool.
 
 The resolver confirms identity only:
 
