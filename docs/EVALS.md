@@ -40,9 +40,28 @@ externalization envelope fits the configured observation budget. Tests cover
 source metadata isolation from document fields, anonymous Artifact read/grep,
 session isolation, storage failure, and the required-processor check before a
 forced tool handler runs. Match input/output DTOs and model schemas remain
-unchanged, and no `esports.game.resolve` tool is registered. This verifies
-continuation storage mechanics only, not Match selection or single-game
-resolution behavior.
+unchanged, and the default product registry does not include
+`esports.game.resolve`. This verifies continuation storage mechanics only, not
+Match selection or single-game resolution behavior.
+
+## Artifact-based single-game resolution tool (callable implemented; product wiring pending)
+
+Offline continuation tests verify that `esports.game.resolve` accepts only a
+session Match-search Artifact reference, an `items.N` path, and a strict positive
+source game position. The continuation trusts the Artifact store's producing-tool
+metadata, validates the saved document as a complete `MatchSearchResult`, checks
+the selected Match ID, and calls the existing `GameResolutionService` with an
+empty confirmed-mapping set. Invalid references, source, document, path, or ID
+cannot call the Service; Service errors and cancellation retain their existing
+semantics.
+
+Tool tests verify the closed three-field schema, required Artifact processor,
+full result storage, inline small results, bounded large observations containing
+the key resolution fields, and preservation of the complete evidence document.
+The tool registration function is exercised in an isolated registry; it is not
+yet wired into the product Runtime or default tool inventory. These tests make
+no Provider or model calls and do not establish cross-call mapping reuse,
+whole-Match consistency, real-model tool selection, or answer quality.
 
 ## Three evaluation layers
 

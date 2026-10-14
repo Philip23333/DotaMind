@@ -49,9 +49,10 @@ multi-League normal-window resolver functions, and their bounded serialized
 Provider read flow are implemented. Offline functions accept already-read source
 records and make no network or model calls. The read flow coordinates the
 existing adapters; the capability Service converts its result and errors without
-repeating matching logic or registering a model-facing tool. The model-facing
-tool is not implemented or registered. Observed provider behavior and sampled
-counterexamples are summarized in
+repeating matching logic or registering a model-facing tool. The separate
+Artifact-continuation tool can be registered in an isolated registry, but product
+Runtime assembly and default tool registration are pending. Observed provider
+behavior and sampled counterexamples are summarized in
 [`reference/opendota-cross-source-identity.md`](reference/opendota-cross-source-identity.md).
 
 ### Identity boundary
@@ -100,7 +101,9 @@ Match, OpenDota League collection, each selected League list, and each complete
 `GameDetailResult` including its provider and retrieval time. Its own
 `retrieved_at` is the attempt completion time, not a claim that all sources were
 read simultaneously. These records are not yet written to an Artifact or exposed
-as a tool result.
+as a separate Artifact. The continuation tool exposes the serialized read attempt
+inside the capability result and stores that complete result through the generic
+Artifact processor.
 
 ### Capability result and Service
 
@@ -135,9 +138,11 @@ unresolved result. Provider `StructuredToolError` and cancellation propagate
 unchanged. An internally inconsistent attempt is a contract error rather than a
 successful empty result.
 
-This Service result is not yet registered as a model tool or passed through
-Artifact externalization. Those boundaries remain part of later capability and
-Agent acceptance work.
+The Artifact-continuation tool validates the Match-search Artifact source and
+selected Match, extracts its ID server-side, and invokes this Service. A registered
+tool stores the complete result through the generic Artifact processor and returns
+its inline or bounded observation. Product Runtime assembly and default tool
+registration remain pending; cross-call mapping persistence is not implemented.
 
 For `league_matches_by_id`, a present key with `[]` means that League was read
 and produced no rows; an absent selected key means the search scope is

@@ -12,6 +12,7 @@ from pydantic import (
     Field,
     JsonValue,
     StrictInt,
+    StrictStr,
     TypeAdapter,
     field_validator,
     model_validator,
@@ -48,6 +49,7 @@ ResolutionProviderId = Literal["pandascore", "opendota"]
 _PositiveStrictInt = Annotated[StrictInt, Field(gt=0)]
 _ATTEMPT_ADAPTER = TypeAdapter(GameResolutionReadAttempt)
 _JSON_OBJECT_ADAPTER = TypeAdapter(dict[str, JsonValue])
+_MATCH_ARTIFACT_PATH_PATTERN = r"^items\.[0-9]+$"
 _RESOLUTION_CATEGORIES = frozenset(
     {
         "resolved",
@@ -84,6 +86,24 @@ _UNRESOLVED_REASONS = frozenset(
 
 class GameResolutionContractError(ValueError):
     """The internal Provider returned an incomplete or contradictory attempt."""
+
+
+class EsportsGameResolveInput(BaseModel):
+    """Continue from one Match-search Artifact and select a source game position."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    match_artifact_ref: StrictStr = Field(
+        min_length=1,
+        description="Artifact reference returned by esports.match.search.",
+    )
+    match_path: StrictStr = Field(
+        pattern=_MATCH_ARTIFACT_PATH_PATTERN,
+        description="Path to one Match in the search result, formatted as items.N.",
+    )
+    game_position: _PositiveStrictInt = Field(
+        description="Source Game position within the selected Match, not an array index."
+    )
 
 
 class EsportsGameResolutionResult(BaseModel):
@@ -392,6 +412,7 @@ def _serialize_attempt(attempt: GameResolutionReadAttempt) -> dict[str, JsonValu
 
 
 __all__ = [
+    "EsportsGameResolveInput",
     "EsportsGameResolutionResult",
     "GameResolutionContractError",
     "GameResolutionService",

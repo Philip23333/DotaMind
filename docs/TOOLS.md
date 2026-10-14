@@ -481,27 +481,34 @@ rates or other aggregates. The game-detail adapter rejects unusable or
 mismatched source detail rather than returning an empty successful result.
 Reading existing game data does not submit a replay for parsing.
 
-## Esports game-resolution capability (Service implemented; tool not registered)
+## Esports game-resolution capability (Artifact continuation callable implemented; product registration pending)
 
-The existing `esports.match.search` returns PandaScore Match identities, and
-`game.detail(valve_game_id)` reads one OpenDota game. The offline resolver,
-bounded Provider read flow, and capability Service are implemented for one
-selected Game within a known Match. No model-facing tool is registered, and its
-final input schema is not settled. A provisional tool shape is:
+The existing `esports.match.search` stores its complete logical response in a
+session Artifact and records `esports.match.search` as storage metadata. A
+separately registerable `esports.game.resolve` tool continues from that Artifact;
+it is not yet added to the product's default Runtime registry. Its closed input
+is:
 
 ```text
-esports.game.resolve(match_id, game_position)
+esports.game.resolve(match_artifact_ref, match_path, game_position)
 ```
 
-The suggested tool name and input shape remain provisional. `match_id` refers to
-a Match returned by the existing esports capability; `game_position` selects a
-game by its position in that Match. The current
-`GameResolutionService.resolve(match_id, game_position, confirmed_mappings=...)`
-calls the bounded Provider once with its configured read policy. The Provider
-obtains trusted Match context and the finite OpenDota search data; the Service
-only converts the read attempt and its outcome. A future tool must not ask the
-model for handcrafted team, time, duration, or winner dictionaries, or for
-OpenDota League, Team, or `series_id` values.
+`match_artifact_ref` must identify a document in the current session store,
+`match_path` must be exactly `items.<non-negative integer>`, and
+`game_position` is a strict positive integer identifying the source Game
+position, not an array index. The continuation verifies the producing tool from
+Artifact store metadata, validates the complete document as a `MatchSearchResult`,
+selects the requested Match, and extracts its strict positive ID on the server.
+It does not trust a source field embedded in the document. The model cannot pass
+a provider-private Match ID, a handcrafted Match object, team dictionaries,
+timestamps, time windows, or read budgets.
+
+The existing `GameResolutionService.resolve(match_id, game_position,
+confirmed_mappings=...)` calls the bounded Provider once with its configured read
+policy. The Provider obtains trusted Match context and finite OpenDota search
+data; the Service only converts the read attempt and its outcome. The continuation
+currently passes an empty mapping. Duplicate assignment and mapping reuse across
+separate tool calls, and whole-Match consistency, are therefore not guaranteed.
 
 The implemented internal capability result is `EsportsGameResolutionResult`:
 
@@ -530,9 +537,10 @@ esports.game.resolve → valve_game_id → model may call game.detail
 ```
 
 It does not return a complete game report, and `game.detail` does not gain a
-PandaScore ID input. The Service currently does not register a tool or invoke
-generic Artifact externalization. If the later tool result is large, it should
-use the existing generic Artifact path rather than a resolution-specific
-Artifact type. The evidence rules and known source limitations are owned by
+PandaScore ID input. The separately registered tool always stores the complete
+resolution result once through generic Artifact externalization and returns the
+normal inline or bounded observation. It does not add a resolution-specific
+Artifact type. Runtime dependency assembly and default product registration are
+pending. The evidence rules and known source limitations are owned by
 [`DATA.md`](DATA.md) and
 [`reference/opendota-cross-source-identity.md`](reference/opendota-cross-source-identity.md).
