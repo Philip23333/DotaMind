@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "source": {
+    "file": "C:/Users/10721/.codex/visualizations/2026/10/13/01a13442-81bb-7c01-bbb2-0ac5157fb2c8/game-mapping-test/evidence.json",
+    "observed_at": "2026-10-13T16:34:21.665870+08:00",
+    "historical_only": true,
+    "extraction": {
+      "pandascore_match_1743565.json": "p_matches_11104.data: complete object with id=1743565; integration test wraps it in a one-element list to model the exact-match collection response",
+      "opendota_leagues.json": "od_leagues.data: complete collection",
+      "opendota_league_19944_matches.json": "od_matches_19944.data: complete collection",
+      "opendota_game_9042720328.json": "detail_9042720328.data: complete object"
+    }
+  },
+  "fixtures": {
+    "pandascore_match_1743565.json": {
+      "sha256": "d30041536ef44df22556343bff3bb9869e747c19ec9a4109395c35dd1b0ac444"
+    },
+    "opendota_leagues.json": {
+      "sha256": "780967251eae2c2d39c2843d68fca2d59899a92ba3329d1d366d93df53326664"
+    },
+    "opendota_league_19944_matches.json": {
+      "sha256": "c608fbc0f1384be79a6fd27080c144964e0c3adb07f15348ebcc19506aa8edb7"
+    },
+    "opendota_game_9042720328.json": {
+      "sha256": "5bc24dac237d089fe9e8e682723b113cbe8780322df4f25ab25ec0a2e1f93c5a"
+    }
+  },
+  "baseline": {
+    "pandascore_match_id": 1743565,
+    "match_name": "LYNX vs Z10",
+    "parent_match_status": "running",
+    "pandascore_game_id": 740250,
+    "game_position": 1,
+    "game_begin_at": "2026-10-13T07:05:15Z",
+    "game_length_seconds": 2090,
+    "opendota_league_id": 19944,
+    "opendota_valve_game_id": 9042720328,
+    "opendota_start_time": 1791874958,
+    "opendota_duration_seconds": 2090,
+    "start_delta_seconds": -157,
+    "duration_delta_seconds": 0
+  },
+  "counts": {
+    "opendota_leagues": 10352,
+    "opendota_league_matches": 353
+  },
+  "note": "These saved responses are historical observations, not current live provider data. Fixture JSON is reformatted but preserves the extracted JSON values; HTTP bytes are not represented as preserved."
+}

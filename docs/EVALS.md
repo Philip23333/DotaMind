@@ -443,6 +443,23 @@ successful reads, and Provider errors or cancellation stop later calls. These
 tests validate local orchestration and conversion only; they do not call
 PandaScore or OpenDota and do not validate live source availability.
 
+The historical-response integration test adds a separate adapter-backed offline
+layer. It loads the complete saved PandaScore Match `1743565`, OpenDota League
+collection (10,352 rows), League `19944` match list (353 rows), and Valve Game
+detail `9042720328`, then runs the real PandaScore/OpenDota clients, all three
+adapters, the bounded Provider read flow, the multi-League resolver, and the
+capability Service through `httpx.MockTransport`. The baseline uses four mocked
+GETs and resolves PandaScore Game `740250` at position 1 to Valve Game
+`9042720328`; the complete source JSON values are compared with the saved
+fixtures. The parent PandaScore Match retains its historical `running` status.
+The manifest records the historical capture time, extraction locations, baseline
+facts, and fixture hashes. A request-budget stop, empty Match response, malformed
+League-list shape, mismatched detail identity, HTTP 429, and detail timeout are
+separate synthetic transport faults; they do not alter the baseline fixtures.
+The wider tolerances and request limits are explicit test inputs, not production
+defaults. This verifies the historical local adapter chain, not present-day
+provider availability, a live request, or general resolution accuracy.
+
 Whole-Match consistency, strict cross-source League identity association, search
 widening, neighboring-game roster evidence, exact player `account_id`
 corroboration, and scheduled-game handling remain future work. Provider failure
@@ -460,8 +477,10 @@ is data evidence, not an implementation test or Agent acceptance. The existing
 2026-10-13 observations and their limitations are recorded in
 [`reference/opendota-cross-source-identity.md`](reference/opendota-cross-source-identity.md);
 they are curated sample evidence, not an accuracy measurement for an automatic
-resolver. The offline resolver tests use fixed local records only; this unit made
-no live Provider calls and does not validate the future Service or Agent path.
+resolver. The offline resolver and adapter-backed fixture tests use fixed local
+records and make no live Provider calls. The adapter-backed fixture test verifies
+the local Service path, but neither test validates a model-facing tool or Agent
+path.
 
 ## Live source checks
 

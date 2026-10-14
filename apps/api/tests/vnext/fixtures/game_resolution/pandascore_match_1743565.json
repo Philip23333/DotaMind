@@ -1,0 +1,188 @@
+{
+  "opponents": [
+    {
+      "type": "Team",
+      "opponent": {
+        "id": 136531,
+        "name": "Team Lynx",
+        "location": "UA",
+        "slug": "team-lynx",
+        "modified_at": "2026-10-12T11:43:30Z",
+        "acronym": "LYNX",
+        "image_url": "https://cdn-api.pandascore.co/images/team/image/136531/109px_team_lynx_lightmode.png",
+        "dark_mode_image_url": "https://cdn-api.pandascore.co/dark_images/team/dark_image/136531/109px_team_lynx_darkmode.png"
+      }
+    },
+    {
+      "type": "Team",
+      "opponent": {
+        "id": 135854,
+        "name": "Zero Tenacity",
+        "location": "RS",
+        "slug": "zero-tenacity-dota-2",
+        "modified_at": "2026-10-11T20:18:02Z",
+        "acronym": "Z10",
+        "image_url": "https://cdn-api.pandascore.co/images/team/image/135854/1200px_zero_tenacity_2025_lightmode.png",
+        "dark_mode_image_url": "https://cdn-api.pandascore.co/dark_images/team/dark_image/135854/1200px_zero_tenacity_2025_lightmode.png"
+      }
+    }
+  ],
+  "streams_list": [
+    {
+      "main": true,
+      "language": "en",
+      "embed_url": "https://player.kick.com/epldota_en2",
+      "official": true,
+      "raw_url": "https://kick.com/epldota_en2"
+    },
+    {
+      "main": false,
+      "language": "ru",
+      "embed_url": "https://player.twitch.tv/?channel=ya4iller",
+      "official": false,
+      "raw_url": "https://www.twitch.tv/ya4iller"
+    }
+  ],
+  "videogame": {
+    "id": 4,
+    "name": "Dota 2",
+    "slug": "dota-2"
+  },
+  "serie": {
+    "id": 11104,
+    "name": "Play-In",
+    "year": 2026,
+    "begin_at": "2026-10-12T07:00:00Z",
+    "end_at": "2026-10-17T20:00:00Z",
+    "winner_id": null,
+    "winner_type": "Team",
+    "slug": "dota-2-epl-masters-play-in-3-2026",
+    "modified_at": "2026-10-11T20:29:05Z",
+    "league_id": 5544,
+    "season": "3",
+    "full_name": "Play-In season 3 2026"
+  },
+  "original_scheduled_at": "2026-10-13T07:00:00Z",
+  "begin_at": "2026-10-13T07:05:14Z",
+  "slug": "team-lynx-vs-zero-tenacity-2026-10-13",
+  "videogame_title": null,
+  "forfeit": false,
+  "modified_at": "2026-10-13T08:15:45Z",
+  "status": "running",
+  "results": [
+    {
+      "team_id": 136531,
+      "score": 1
+    },
+    {
+      "team_id": 135854,
+      "score": 0
+    }
+  ],
+  "game_advantage": null,
+  "scheduled_at": "2026-10-13T07:00:00Z",
+  "draw": false,
+  "number_of_games": 3,
+  "id": 1743565,
+  "name": "LYNX vs Z10",
+  "league": {
+    "id": 5544,
+    "name": "EPL Masters",
+    "url": null,
+    "slug": "dota-2-epl-masters",
+    "modified_at": "2026-07-16T14:21:14Z",
+    "image_url": null
+  },
+  "winner_type": "Team",
+  "tournament": {
+    "id": 22187,
+    "name": "Group A",
+    "type": "online",
+    "country": null,
+    "begin_at": "2026-10-12T10:00:00Z",
+    "detailed_stats": true,
+    "end_at": "2026-10-17T22:00:00Z",
+    "winner_id": null,
+    "winner_type": "Team",
+    "slug": "dota-2-epl-masters-play-in-3-2026-group-a",
+    "region": "WEU",
+    "serie_id": 11104,
+    "modified_at": "2026-10-12T18:53:31Z",
+    "league_id": 5544,
+    "prizepool": null,
+    "tier": "d",
+    "has_bracket": false,
+    "live_supported": false
+  },
+  "serie_id": 11104,
+  "games": [
+    {
+      "complete": true,
+      "id": 740250,
+      "position": 1,
+      "status": "finished",
+      "length": 2090,
+      "finished": true,
+      "match_id": 1743565,
+      "begin_at": "2026-10-13T07:05:15Z",
+      "detailed_stats": true,
+      "end_at": "2026-10-13T07:52:47Z",
+      "forfeit": false,
+      "winner_type": "Team",
+      "winner": {
+        "id": 136531,
+        "type": "Team"
+      }
+    },
+    {
+      "complete": false,
+      "id": 740251,
+      "position": 2,
+      "status": "running",
+      "length": null,
+      "finished": false,
+      "match_id": 1743565,
+      "begin_at": "2026-10-13T08:07:33Z",
+      "detailed_stats": true,
+      "end_at": null,
+      "forfeit": false,
+      "winner_type": "Team",
+      "winner": {
+        "id": null,
+        "type": "Team"
+      }
+    },
+    {
+      "complete": false,
+      "id": 740252,
+      "position": 3,
+      "status": "not_started",
+      "length": null,
+      "finished": false,
+      "match_id": 1743565,
+      "begin_at": null,
+      "detailed_stats": true,
+      "end_at": null,
+      "forfeit": false,
+      "winner_type": "Team",
+      "winner": {
+        "id": null,
+        "type": "Team"
+      }
+    }
+  ],
+  "detailed_stats": true,
+  "rescheduled": false,
+  "end_at": null,
+  "winner_id": null,
+  "live": {
+    "supported": false,
+    "url": null,
+    "opens_at": null
+  },
+  "tournament_id": 22187,
+  "videogame_version": null,
+  "league_id": 5544,
+  "match_type": "best_of",
+  "winner": null
+}
