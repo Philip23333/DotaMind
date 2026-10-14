@@ -397,18 +397,20 @@ heuristic input measure rather than a precise token count. The stage status and
 known limitations are maintained in
 [`agent/context_governance_evidence_lifecycle.md`](agent/context_governance_evidence_lifecycle.md).
 
-### Esports Match-to-OpenDota game resolution (offline core implemented; Service and Agent acceptance pending)
+### Esports Match-to-OpenDota game resolution (offline core and capability Service implemented; tool and Agent acceptance pending)
 
 The current PandaScore esports capabilities and `game.detail` exist. Provider-
 side offline League candidate discovery, game candidate filtering, evidence
-comparison, single-League and multi-League normal-window resolution, and a
-bounded serialized adapter-read flow are implemented. The cross-source
-resolution Service and model-facing tool have not been implemented or registered.
-Acceptance has three separate layers:
+comparison, single-League and multi-League normal-window resolution, a bounded
+serialized adapter-read flow, and the capability result/Service conversion are
+implemented. The Service validates attempt identity, preserves the complete
+attempt as JSON, maps unresolved categories, and converts budget exhaustion to a
+stable structured error. No model-facing tool is registered. Acceptance has
+three separate layers:
 
 | Layer | Evidence required |
 |---|---|
-| Deterministic tests | League brand/season/year candidates and explicit limits; serialized Match/League/list/detail reads; phase-wide request and record-budget prechecks; duplicate League and Valve IDs; provider-error classification and cancellation; complete source-record retention; global decisions across selected League scopes; absent versus explicitly empty lists; per-League assessment merging; detail-ID validation; same-window detail recheck; participant/winner evidence; competing candidates; mapping conflicts; input immutability; and distinct unresolved results |
+| Deterministic tests | League brand/season/year candidates and explicit limits; serialized Match/League/list/detail reads; phase-wide request and record-budget prechecks; duplicate League and Valve IDs; provider-error classification and cancellation; complete source-record retention; global decisions across selected League scopes; absent versus explicitly empty lists; per-League assessment merging; detail-ID validation; same-window detail recheck; participant/winner evidence; competing candidates; mapping conflicts; input immutability; capability result invariants and closed reasons; one Provider call with unchanged inputs; stable budget-error mapping; unchanged Provider errors/cancellation; complete attempt serialization; and the historical BLAST Game 4 result through the bounded read flow and Service |
 | Real Provider validation | Bounded live samples measure League candidate coverage, source-field semantics, selected identities, and detail availability |
 | Full Agent acceptance | The model discovers a Match, selects a game, requests identity resolution, calls `game.detail` only after confirmation, and distinguishes missing fields from absent events |
 
@@ -432,19 +434,23 @@ resolution accuracy or establish that any live provider data is currently
 available.
 
 The request-flow tests use adapter substitutes and assert exact call order and
-arguments, including the historical BLAST Game 4 result. They also prove that
-budget failures do not start a partial list/detail phase, repeated source IDs do
-not trigger duplicate reads, empty lists remain successful reads, and Provider
-errors or cancellation stop later calls. These tests validate local orchestration
-only; they do not call PandaScore or OpenDota and do not validate live source
-availability.
+arguments, including the historical BLAST Game 4 result. The Service tests pass
+that same flow's attempt through the capability conversion and verify the
+confirmed `valve_game_id`, complete source JSON, and provider provenance. They
+also prove that budget failures do not start a partial list/detail phase,
+repeated source IDs do not trigger duplicate reads, empty lists remain
+successful reads, and Provider errors or cancellation stop later calls. These
+tests validate local orchestration and conversion only; they do not call
+PandaScore or OpenDota and do not validate live source availability.
 
 Whole-Match consistency, strict cross-source League identity association, search
 widening, neighboring-game roster evidence, exact player `account_id`
-corroboration, scheduled-game handling, provider failures, request budgets, and
-missing game-detail fields remain for later Service and live-evaluation work. A
-source failure or exhausted search scope must never be reported as proof that a
-match does not exist.
+corroboration, and scheduled-game handling remain future work. Provider failure
+propagation and request-budget conversion have deterministic Service tests, but
+live provider availability and field coverage are unverified. Missing
+game-detail fields remain distinct from absent events. A source failure or
+exhausted search scope must never be reported as proof that a match does not
+exist.
 
 Real Provider reports should record target-game candidate coverage, confirmed
 and unresolved counts with reasons, actual request volume and search scope, and

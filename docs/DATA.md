@@ -40,7 +40,7 @@ Names are added to the query result and generic Artifact output; they are not
 written into guide snapshots. Old snapshots remain readable because enrichment
 DTO fields have defaults. `game.detail` has not yet integrated the resolver.
 
-## Cross-source esports game identity (normal-window resolver and bounded reads implemented)
+## Cross-source esports game identity (offline resolver, bounded reads, and capability Service implemented)
 
 This section owns the matching semantics for a path from a PandaScore Game to
 the existing OpenDota `game.detail(valve_game_id)` capability. The Provider-side
@@ -48,9 +48,10 @@ offline League candidate discovery, game candidate, evidence, single-League and
 multi-League normal-window resolver functions, and their bounded serialized
 Provider read flow are implemented. Offline functions accept already-read source
 records and make no network or model calls. The read flow coordinates the
-existing adapters; it does not register a model-facing tool. The resolution
-Service and model-facing tool are not implemented or registered. Observed
-provider behavior and sampled counterexamples are summarized in
+existing adapters; the capability Service converts its result and errors without
+repeating matching logic or registering a model-facing tool. The model-facing
+tool is not implemented or registered. Observed provider behavior and sampled
+counterexamples are summarized in
 [`reference/opendota-cross-source-identity.md`](reference/opendota-cross-source-identity.md).
 
 ### Identity boundary
@@ -100,6 +101,43 @@ Match, OpenDota League collection, each selected League list, and each complete
 `retrieved_at` is the attempt completion time, not a claim that all sources were
 read simultaneously. These records are not yet written to an Artifact or exposed
 as a tool result.
+
+### Capability result and Service
+
+`GameResolutionService` calls the bounded Provider once with the requested
+PandaScore Match ID, game position, read policy, and confirmed mapping object.
+It validates that the returned attempt belongs to that request, then converts
+the attempt's final category into `EsportsGameResolutionResult`. It performs no
+additional reads and does not redo candidate selection, evidence comparison, or
+identity confirmation.
+
+The result has `status` (`resolved` or `unresolved`), the selected positive
+`game_position`, optional confirmed `valve_game_id` and
+`inferred_cross_source` method, a closed unresolved `reason`, the successfully
+read source IDs in read order, the attempt completion `retrieved_at`, and `data`.
+`data` is the complete JSON serialization of the internal
+`GameResolutionReadAttempt`, including source records, read counts, candidate
+and evidence results, and `GameDetailResult` provider/retrieval metadata. It
+preserves source fields rather than creating a summary projection. Provider
+source-private Match, League, and Series IDs remain inside `data`; only a
+confirmed Valve game ID appears in the top-level identity field.
+
+The public reason categories distinguish missing Match, target-game selection
+failures, insufficient target signals or competition context, no League scope,
+no game candidates in a searched scope, ambiguity, incomplete evidence, mapping
+conflict, explicit candidate rejection, and incomplete search scope. Completed
+League discovery with no candidates maps to `no_league_candidates`; a completed
+search of selected League match lists with no game candidates maps to
+`no_candidates`. A missing required intermediate result is a contract error.
+`ResolutionBudgetExceeded`
+becomes a stable `tool_execution_error` with `budget_exhausted` details, not an
+unresolved result. Provider `StructuredToolError` and cancellation propagate
+unchanged. An internally inconsistent attempt is a contract error rather than a
+successful empty result.
+
+This Service result is not yet registered as a model tool or passed through
+Artifact externalization. Those boundaries remain part of later capability and
+Agent acceptance work.
 
 For `league_matches_by_id`, a present key with `[]` means that League was read
 and produced no rows; an absent selected key means the search scope is
