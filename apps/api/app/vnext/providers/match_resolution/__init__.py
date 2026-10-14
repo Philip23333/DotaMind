@@ -12,6 +12,13 @@ from .evidence import (
     ParticipantFact,
     compare_game_identity_evidence,
 )
+from .leagues import (
+    LeagueCandidate,
+    LeagueCandidateCategory,
+    LeagueCandidateResult,
+    LeagueFieldComparison,
+    find_league_candidates,
+)
 from .resolver import (
     CandidateAssessment,
     GameResolutionResult,
@@ -23,11 +30,16 @@ __all__ = [
     "GameCandidateResult",
     "GameIdentityEvidence",
     "GameIdentityFacts",
+    "LeagueCandidate",
+    "LeagueCandidateCategory",
+    "LeagueCandidateResult",
+    "LeagueFieldComparison",
     "GameResolutionResult",
     "CandidateAssessment",
     "ParticipantAssociation",
     "ParticipantFact",
     "compare_game_identity_evidence",
     "find_game_candidates",
+    "find_league_candidates",
     "resolve_game",
 ]

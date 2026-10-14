@@ -399,15 +399,15 @@ known limitations are maintained in
 
 ### Esports Match-to-OpenDota game resolution (offline core implemented; Service and Agent acceptance pending)
 
-The current PandaScore esports capabilities and `game.detail` exist, but the
-Provider-side offline candidate filtering, evidence comparison, and normal-window
-resolution are implemented. The cross-source resolution Service and
-model-facing tool have not been implemented or registered. Acceptance has three
-separate layers:
+The current PandaScore esports capabilities and `game.detail` exist. Provider-
+side offline League candidate discovery, game candidate filtering, evidence
+comparison, and normal-window resolution are implemented. The cross-source
+resolution Service and model-facing tool have not been implemented or registered.
+Acceptance has three separate layers:
 
 | Layer | Evidence required |
 |---|---|
-| Deterministic tests | Candidate filtering, detail-ID validation, same-window detail recheck, participant/winner evidence, competing candidates, mapping conflicts, input immutability, and distinct unresolved results |
+| Deterministic tests | League brand/season/year candidates and explicit limits; game candidate filtering; detail-ID validation; same-window detail recheck; participant/winner evidence; competing candidates; mapping conflicts; input immutability; and distinct unresolved results |
 | Real Provider validation | Bounded live samples measure League candidate coverage, source-field semantics, selected identities, and detail availability |
 | Full Agent acceptance | The model discovers a Match, selects a game, requests identity resolution, calls `game.detail` only after confirmation, and distinguishes missing fields from absent events |
 
@@ -417,16 +417,21 @@ actual start times and durations; and the old blood Game 2 missing-Dire case.
 The South America Game 3 outside-window case uses fixed local records. These are
 historical response regressions, not live Provider validation. Sample-specific
 tolerances are explicit test inputs and do not define production defaults.
-Synthetic tests separately cover ambiguous candidates, winner conflicts,
-missing details, mapping conflicts, and invalid detail identities. These tests
-do not measure resolution accuracy or establish that any live provider data is
-currently available.
+League candidate cases also cover BLAST Slam VIII, DreamLeague Season 30
+qualifiers, EPL Masters 2026, and a Western Europe qualifier whose missing
+season remains unspecified; the latter can produce a broad candidate scope or
+exceed its explicit test budget. These are fixed local records, not a live
+availability check. Synthetic tests separately cover ambiguous candidates,
+winner conflicts, missing details, mapping conflicts, and invalid detail
+identities. These tests do not measure resolution accuracy or establish that any
+live provider data is currently available.
 
-Whole-Match consistency, League association, search widening, neighboring-game
-roster evidence, exact player `account_id` corroboration, scheduled-game
-handling, provider failures, request budgets, and missing game-detail fields
-remain for later Service and live-evaluation work. A source failure or exhausted
-search scope must never be reported as proof that a match does not exist.
+Whole-Match consistency, strict cross-source League identity association, search
+widening, neighboring-game roster evidence, exact player `account_id`
+corroboration, scheduled-game handling, provider failures, request budgets, and
+missing game-detail fields remain for later Service and live-evaluation work. A
+source failure or exhausted search scope must never be reported as proof that a
+match does not exist.
 
 Real Provider reports should record target-game candidate coverage, confirmed
 and unresolved counts with reasons, actual request volume and search scope, and

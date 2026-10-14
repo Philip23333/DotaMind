@@ -44,11 +44,11 @@ DTO fields have defaults. `game.detail` has not yet integrated the resolver.
 
 This section owns the matching semantics for a path from a PandaScore Game to
 the existing OpenDota `game.detail(valve_game_id)` capability. The Provider-side
-offline candidate, evidence, and normal-window resolver functions are
-implemented. They accept already-read source records and make no network or
-model calls. The resolution Service and model-facing tool are not implemented
-or registered. Observed provider behavior and sampled counterexamples are
-summarized in
+offline League candidate discovery, game candidate, evidence, and normal-window
+resolver functions are implemented. They accept already-read source records and
+make no network or model calls. The resolution Service and model-facing tool are
+not implemented or registered. Observed provider behavior and sampled
+counterexamples are summarized in
 [`reference/opendota-cross-source-identity.md`](reference/opendota-cross-source-identity.md).
 
 ### Identity boundary
@@ -79,6 +79,34 @@ A unique result from time and duration alone is not sufficient to confirm
 identity. Candidate coverage and source failures remain scoped to the supplied
 League result; `no_candidates` means only that no row in that current scope met
 the supplied tolerances, not that the game does not exist.
+
+### League candidate discovery
+
+`find_league_candidates()` uses the explicit PandaScore `league.name` as the
+competition-brand search term against an already-read OpenDota League collection.
+It preserves `serie.name`, `serie.full_name`, `serie.season`, and `serie.year` as
+the source context used to explain the comparison; Series names are not required
+to match League names. Text matching applies Unicode NFKC, case folding, and
+complete token matching with whitespace and punctuation as separators. It does
+not translate, expand abbreviations, use aliases, or rank candidates.
+
+An explicit positive PandaScore season and an OpenDota `Season N` value are
+compared as editions. A canonical Roman numeral directly after the matched brand,
+such as `BLAST SLAM VIII`, can also provide the OpenDota edition. Four-digit years
+are not treated as season numbers. Explicit `serie.year` values are compared with
+four-digit years or a clear year range in the OpenDota League name. Each
+comparison is `matched`, `conflicting`, or `unspecified`. A candidate with an
+explicit conflict is excluded; missing or unrecognized comparison data remains
+`unspecified` and does not exclude a brand match. Qualifier numbers and regional
+or stage names are not season evidence.
+
+The caller supplies a strict positive `max_candidates` budget. Candidates retain
+OpenDota source order and complete source records. If the remaining scope exceeds
+the budget, the result reports `candidate_limit_exceeded` and the full count with
+no truncated candidate list. A returned League is only a search scope: even one
+candidate does not establish a PandaScore-to-OpenDota League identity or confirm
+a Valve Game. In particular, a Series with no explicit season can leave a broad
+range or exceed the caller's budget; the function does not infer a missing season.
 
 ### Identity confirmation
 
@@ -111,11 +139,12 @@ or a similarity score, and does not copy full OpenDota details into its result.
 
 ### Recovery and whole-Match consistency
 
-The current resolver is limited to one supplied League and the caller's normal
-time/duration window. Search widening, League association, neighboring-game
-roster corroboration, and exact player `account_id` comparisons remain future
-work. If source time fields conflict, preserve their original values; do not
-repair them by substituting another timestamp or duration.
+The current game resolver is limited to one supplied League and the caller's
+normal time/duration window. Search widening, strict cross-source League identity
+confirmation, neighboring-game roster corroboration, and exact player
+`account_id` comparisons remain future work. If source time fields conflict,
+preserve their original values; do not repair them by substituting another
+timestamp or duration.
 
 Across one Match, two different PandaScore Games must not both be automatically
 assigned to the same Valve game. Game order and time should be consistent, but
