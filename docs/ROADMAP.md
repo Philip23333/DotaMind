@@ -424,11 +424,12 @@ Implementation order:
    timestamp, OpenDota side-specific team IDs, source identity checks, and any
    already accepted same-game team-to-side association until internal
    conversion is complete.
-2. **Pending source/evidence boundary:** the existing `esports.game.resolve`
-   Artifact currently serializes candidate details. Keep validated detail facts
-   available to its internal matcher while removing model-visible access to the
-   full candidate response. Select the reduced resolution evidence fields in
-   the cross-source contract before changing that output.
+2. **Implemented resolver source/evidence boundary:** keep complete validated
+   reads in the internal attempt and expose only request/stage/read-count
+   metadata and the existing target, League-selection, and resolution results
+   defined in the cross-source contract. The result Artifact excludes full
+   source collections and candidate detail bodies. Preserve this separation
+   when changing `game.detail`; the detail DTO migration remains pending.
 3. **Pending projection:** map the validated OpenDota object into the eight
    sections in the owner contract. Do not add a raw payload or let the generic
    Artifact layer perform source mapping. Preserve missing, empty, zero, false,

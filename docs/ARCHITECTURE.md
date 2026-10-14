@@ -116,10 +116,12 @@ current cross-source game resolver reads detail identity, winner, and
 side-specific team facts. Any game converter must retain exact source time and
 team identity until it uses those facts and must consume an already accepted
 same-game team-to-side association. Audit these consumers before changing
-`GameDetailResult.data`. The resolver's current result Artifact also
-serializes candidate details; the target requires an internal-source/public-
-evidence boundary so that output cannot retrieve the raw detail object. Its
-reduced evidence schema remains part of the cross-source contract in
+`GameDetailResult.data`. The resolver now separates internal complete source
+reads from its public evidence projection: its Artifact retains matching
+outcomes and evidence but cannot retrieve candidate detail bodies or full
+source collections. This capability-owned boundary leaves the offline matcher,
+Provider reads, Runtime, and generic Artifact mechanics unchanged. The evidence
+schema is part of the cross-source contract in
 [`DATA.md`](DATA.md).
 
 The optional web-search integration is initialized asynchronously in the API

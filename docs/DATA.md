@@ -100,20 +100,20 @@ used. The internal read attempt retains the complete successfully read PandaScor
 Match, OpenDota League collection, each selected League list, and each complete
 `GameDetailResult` including its provider and retrieval time. Its own
 `retrieved_at` is the attempt completion time, not a claim that all sources were
-read simultaneously. The continuation tool exposes the serialized read attempt
-inside the capability result and stores that complete result through the generic
-Artifact processor. **This is current behavior.** Candidate detail data is
-therefore available through the resolution Artifact today.
+read simultaneously. These complete source records stay in the internal read
+attempt. The Service publishes only the selected resolution evidence described
+below; the continuation tool stores that complete public result through the
+generic Artifact processor. It does not store the internal read attempt or a
+handle for retrieving candidate details.
 
 The accepted `game.detail` data projection is defined in
 [`agent/game_detail_data.md`](agent/game_detail_data.md). It changes the
 public detail result and its Artifact to the governed DTO while preserving
-internal source facts required for identity checks. The current resolution
-Artifact is a separate model-visible path to candidate detail. Before claiming
-the no-raw target is complete, the implementation must keep those facts
-available to its internal matcher and stop exposing the full candidate response
-through that Artifact. The reduced resolution evidence fields remain an
-implementation dependency; this document does not choose them.
+internal source facts required for identity checks. The resolver's public
+evidence boundary is implemented independently of that pending projection:
+the matcher still consumes complete candidate details, while its Artifact cannot
+retrieve them. `game.detail` itself still returns the full OpenDota object until
+its separate DTO migration is complete.
 
 ### Capability result and Service
 
@@ -128,12 +128,31 @@ The result has `status` (`resolved` or `unresolved`), the selected positive
 `game_position`, optional confirmed `valve_game_id` and
 `inferred_cross_source` method, a closed unresolved `reason`, the successfully
 read source IDs in read order, the attempt completion `retrieved_at`, and `data`.
-`data` is the complete JSON serialization of the internal
-`GameResolutionReadAttempt`, including source records, read counts, candidate
-and evidence results, and `GameDetailResult` provider/retrieval metadata. It
-preserves source fields rather than creating a summary projection. Provider
-source-private Match, League, and Series IDs remain inside `data`; only a
-confirmed Valve game ID appears in the top-level identity field.
+`data` is an explicit projection of the existing offline results, not the whole
+internal `GameResolutionReadAttempt`. Its complete field set is:
+
+| Field | Retained evidence |
+|---|---|
+| `match_id`, `game_position` | Internal request identity and selected source position |
+| `stage`, `reason`, `requests_started` | Completed read stage, its reason, and adapter-read count |
+| `target_game_result` | Target readiness/category, reason, and selected PandaScore Game record; `null` if not reached |
+| `league_candidate_result` | League selection/category, selected candidate records and comparisons, total count, and reason; `null` if not reached |
+| `resolution_result` | Existing cross-League outcome, scopes/diagnostics, candidate statuses/reasons, timing differences, participant/winner source facts, and per-game team-to-side associations; `null` if not reached |
+
+The projection preserves these nested results and their source facts without
+rerunning matching or inventing conclusions. Candidate IDs in evidence remain
+unconfirmed unless the top-level status is `resolved`. Provider-private IDs
+remain evidence, not new tool inputs. Top-level `retrieved_at` remains the
+attempt completion time and is not duplicated in `data`.
+
+The four internal source collections `pandascore_match_context`,
+`opendota_leagues`, `league_matches_by_id`, and `candidate_details` are excluded
+from the public result, inline observation, and Artifact. This excludes complete
+candidate detail bodies and their per-read envelopes. It preserves the relevant
+selected Game/League records already carried by the offline evidence results;
+it does not store the complete League catalog or League match lists. There is
+no raw field or alternate Artifact reference to those internal collections.
+Generic Artifact read/grep behavior is unchanged.
 
 The public reason categories distinguish missing Match, target-game selection
 failures, insufficient target signals or competition context, no League scope,
@@ -1125,10 +1144,9 @@ The current identity resolver reads candidate detail identity, winner, and
 side-specific team facts. Any converter that consumes a game must retain the
 precise validated source timestamp and source team identities until it has
 finished using them. A model-facing DTO or Artifact must not expose the original
-detail as a raw member or equivalent retrieval path. The existing resolver
-Artifact currently exposes candidate details; the implementation needs a
-separate internal-source/public-evidence boundary before the no-raw target can
-be claimed.
+detail as a raw member or equivalent retrieval path. The resolver already keeps
+complete source collections internal and exposes only the resolution evidence
+defined above. Preserve that boundary when implementing the separate detail DTO.
 
 The pending fields and source meanings are enumerated in the owner contract.
 Documentation does not settle its listed verification items, and this target

@@ -191,21 +191,16 @@ async def test_historical_responses_resolve_through_real_clients_adapters_and_se
     assert all(not request.url.params for request in requests[1:])
 
     match = _read_fixture("pandascore_match_1743565.json")
-    leagues = _read_fixture("opendota_leagues.json")
-    league_matches = _read_fixture("opendota_league_19944_matches.json")
-    game_detail = _read_fixture("opendota_game_9042720328.json")
     assert match["status"] == "running"
     target_game = next(game for game in match["games"] if game["position"] == 1)
     assert target_game["id"] == _PANDASCORE_GAME_ID
     assert target_game["begin_at"] == "2026-10-13T07:05:15Z"
     assert target_game["length"] == 2090
-    assert result.data["pandascore_match_context"] == match
-    assert result.data["opendota_leagues"] == leagues
-    assert len(result.data["opendota_leagues"]) == 10_352
-    assert result.data["league_matches_by_id"][str(_LEAGUE_ID)] == league_matches
-    assert len(result.data["league_matches_by_id"][str(_LEAGUE_ID)]) == 353
-    retained_detail = result.data["candidate_details"][str(_VALVE_GAME_ID)]
-    assert retained_detail["data"] == game_detail
+    assert result.data["target_game_result"]["target_game"] == target_game
+    assert not {
+        "pandascore_match_context", "opendota_leagues",
+        "league_matches_by_id", "candidate_details",
+    } & result.data.keys()
 
     resolution = result.data["resolution_result"]
     assert resolution["searched_league_ids"] == [_LEAGUE_ID]
@@ -250,7 +245,10 @@ async def test_empty_match_response_stops_before_opendota() -> None:
     assert result.status == "unresolved"
     assert result.reason == "match_not_found"
     assert result.providers == ["pandascore"]
-    assert result.data["opendota_leagues"] is None
+    assert result.data["stage"] == "match_context"
+    assert result.data["target_game_result"] is None
+    assert result.data["league_candidate_result"] is None
+    assert result.data["resolution_result"] is None
     assert len(requests) == 1
     assert requests[0].url.host == "pandascore.test"
 

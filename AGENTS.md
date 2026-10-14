@@ -259,9 +259,11 @@ projection, implementation must preserve the exact source facts needed by
 internal consumers, including validated timestamps, side-specific OpenDota team
 IDs, and identity-resolution inputs. Use an already accepted same-game
 team-to-side association when one exists. `game.detail` does not query
-PandaScore or repeat name matching. Audit `esports.game.resolve` separately:
-its current result Artifact serializes candidate detail data, which must not
-remain a model-visible raw-detail escape path after the no-raw target is claimed.
+PandaScore or repeat name matching. Preserve the `esports.game.resolve`
+internal-source/public-evidence boundary: complete candidate details stay
+available to its matcher, while its result Artifact stores only the resolution
+evidence defined in `docs/DATA.md`, without raw source collections or a retrieval
+handle for candidate details.
 
 A second provider may justify a shared Provider protocol/router later. One
 provider alone does not justify speculative provider-selection machinery; the

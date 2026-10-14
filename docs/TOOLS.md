@@ -469,10 +469,10 @@ mocks. The prior live cross-check for `8960882635` supports the ID mapping for
 that observed match only; this implementation has not yet been tested against
 live OpenDota.
 
-The current `esports.game.resolve` result also serializes candidate detail
-data in its Artifact. Its internal matcher needs validated source facts. Before
-the no-raw target is complete, that model-visible output must not provide a
-separate route to the full OpenDota detail; the detailed dependency is tracked in
+`esports.game.resolve` keeps complete candidate detail reads internal and exposes
+only resolution evidence in its Artifact. It cannot be used as a separate route
+to retrieve those raw details. This boundary is implemented; the `game.detail`
+DTO itself is still pending. The evidence contract and checks are tracked in
 [`DATA.md`](DATA.md) and [`EVALS.md`](EVALS.md).
 
 `catalog.lookup(kind, ids)` resolves up to 20 exact positive hero or item IDs
@@ -566,7 +566,7 @@ The implemented internal capability result is `EsportsGameResolutionResult`:
 | `reason` | Closed unresolved category; absent for a resolved identity |
 | `providers` | Sources whose reads returned successfully, in read order |
 | `retrieved_at` | Completion time of the internal read attempt, with timezone |
-| `data` | Complete serialized `GameResolutionReadAttempt`, including source facts and matching evidence |
+| `data` | Request/stage/read-count metadata and existing target, League-selection, and resolution results; excludes internal raw source collections |
 
 Unresolved reasons distinguish `match_not_found`, target-game failures,
 `insufficient_signals`, `insufficient_context`, `no_league_candidates`,
@@ -581,7 +581,12 @@ and makes it valid input to `game.detail`. For `status="unresolved"`, inspect th
 reason and evidence; do not select a candidate ID yourself. The complete
 resolution evidence is saved in the returned Artifact. This tool confirms
 identity and may fetch candidate game details as evidence. It does not
-automatically invoke the `game.detail` tool.
+automatically invoke the `game.detail` tool. The Artifact retains selection
+results, timing differences, participant/winner comparisons, team-to-side
+associations, and unresolved reasons. It excludes the complete Match context,
+League catalog, League match lists, and candidate detail bodies. Selected
+Game/League source records already carried by matching evidence remain visible.
+Request game facts separately with `game.detail(valve_game_id)` after confirmation.
 
 The resolver confirms identity only:
 

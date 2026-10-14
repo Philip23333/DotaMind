@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from copy import deepcopy
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -293,6 +294,7 @@ async def test_service_preserves_each_target_failure_category(
     assert result.status == "unresolved"
     assert result.reason == expected_reason
     assert result.providers == ["pandascore"]
+    assert result.data["target_game_result"]["reason"] == target_reason
 
 
 @pytest.mark.parametrize(
@@ -345,6 +347,10 @@ async def test_service_maps_source_stop_reasons_and_actual_sources(
     assert result.reason == expected_reason
     assert result.valve_game_id is None
     assert result.providers == expected_providers
+    assert not {
+        "pandascore_match_context", "opendota_leagues",
+        "league_matches_by_id", "candidate_details",
+    } & result.data.keys()
 
 
 @pytest.mark.parametrize(
@@ -371,6 +377,8 @@ async def test_service_preserves_resolver_outcome_without_confirming_unresolved_
     assert result.reason == category
     assert result.valve_game_id is None
     assert result.method is None
+    assert "candidate_details" not in result.data
+    assert result.data["resolution_result"]["category"] == category
 
 
 @pytest.mark.parametrize(
@@ -495,14 +503,16 @@ async def test_unknown_or_internally_incomplete_resolution_is_a_contract_error(
 
 
 @_async_test
-async def test_complete_attempt_serialization_preserves_facts_without_mutation() -> None:
+async def test_resolution_evidence_retains_associations_without_exposing_raw_reads() -> None:
     attempt = _resolver_attempt()
     context = attempt.pandascore_match_context
     league = attempt.opendota_leagues[0]  # type: ignore[index]
     row = attempt.league_matches_by_id[19_102][0]
     detail = attempt.candidate_details[_VALVE_GAME_ID]
+    detail.data["players"] = [{"raw_detail_marker": "internal_only", "gold_t": [0, 123]}]
     mappings = {}
     before = deepcopy((context, league, row, detail, mappings))
+    before_resolution = deepcopy(attempt.resolution_result)
     provider = _FakeProvider(attempt)
 
     result = await _service(provider).resolve(
@@ -512,22 +522,34 @@ async def test_complete_attempt_serialization_preserves_facts_without_mutation()
     assert (context, league, row, detail, mappings) == before
     assert result.providers == ["pandascore", "opendota"]
     assert result.retrieved_at == _RETRIEVED_AT
-    assert result.data["pandascore_match_context"]["unmodeled_match_fact"] == {
-        "ordered": ["first", "second"]
+    assert "raw_detail_marker" not in json.dumps(result.model_dump(mode="json"))
+    assert set(result.data) == {
+        "match_id", "game_position", "stage", "target_game_result",
+        "league_candidate_result", "resolution_result", "reason", "requests_started",
     }
-    assert result.data["pandascore_match_context"]["games"][0]["unmodeled_game_fact"] == [
+    assert result.data["target_game_result"]["target_game"]["unmodeled_game_fact"] == [
         0,
         False,
         None,
     ]
-    assert result.data["opendota_leagues"][0]["extension"] == {"keep": True}
-    assert result.data["league_matches_by_id"]["19102"][0] == {
-        **row,
+    assessment = result.data["resolution_result"]["candidate_assessments"][0][
+        "league_assessments"
+    ][0]["assessment"]
+    assert assessment["status"] == "accepted"
+    identity = assessment["identity_evidence"]
+    assert identity["winner_status"] == "consistent"
+    assert identity["facts"]["opendota_radiant_win"] is True
+    assert identity["participant_associations"][0] == {
+        "pandascore_team_id": 137_073,
+        "opendota_side": "radiant",
+        "opendota_team_id": 9_823_272,
+        "pandascore_name": "Team Yandex",
+        "opendota_name": "Team Yandex",
     }
-    detail_json = result.data["candidate_details"][str(_VALVE_GAME_ID)]
-    assert detail_json["provider"] == "opendota"
-    assert detail_json["retrieved_at"] == _RETRIEVED_AT.isoformat().replace("+00:00", "Z")
-    assert detail_json["data"]["extension"] == {"zero": 0, "false": False, "null": None}
+    result.data["target_game_result"]["target_game"]["unmodeled_game_fact"].append("changed")
+    identity["participant_associations"][0]["opendota_name"] = "changed"
+    assert (context, league, row, detail, mappings) == before
+    assert attempt.resolution_result == before_resolution
     assert result.data["requests_started"] == 4
 
 

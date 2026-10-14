@@ -189,19 +189,27 @@ async def test_product_composition_runs_search_resolve_and_detail_chain(
     assert resolution_document["status"] == "resolved"
     assert resolution_document["valve_game_id"] == _VALVE_GAME_ID
     attempt_data = resolution_document["data"]
-    assert attempt_data["pandascore_match_context"] == _fixture(
-        "pandascore_match_1743565.json"
+    assert not {
+        "pandascore_match_context", "opendota_leagues",
+        "league_matches_by_id", "candidate_details",
+    } & attempt_data.keys()
+    assert attempt_data["resolution_result"]["valve_game_id"] == _VALVE_GAME_ID
+    assert attempt_data["requests_started"] == 4
+    resolution_ref = resolved.content["artifact_ref"]
+    evidence_read = await registry.execute(
+        _call("artifact.read", {
+            "ref": resolution_ref, "mode": "read", "path": "data.resolution_result",
+        })
     )
-    league_rows = _fixture("opendota_leagues.json")
-    league_match_rows = _fixture("opendota_league_19944_matches.json")
-    assert attempt_data["opendota_leagues"] == league_rows
-    assert len(attempt_data["opendota_leagues"]) == 10_352
-    assert attempt_data["league_matches_by_id"][str(_LEAGUE_ID)] == league_match_rows
-    assert len(attempt_data["league_matches_by_id"][str(_LEAGUE_ID)]) == 353
-    assert (
-        attempt_data["candidate_details"][str(_VALVE_GAME_ID)]["data"]
-        == _fixture("opendota_game_9042720328.json")
+    assert evidence_read.status == "ok"
+    rejected_read = await registry.execute(
+        _call("artifact.read", {
+            "ref": resolution_ref, "mode": "read", "path": "data.candidate_details",
+        })
     )
+    assert rejected_read.status == "error"
+    assert rejected_read.error is not None
+    assert rejected_read.error.code == "artifact_path_not_found"
     detail_document = await store.get(detail.content["artifact_ref"])
     assert detail_document["data"] == _fixture("opendota_game_9042720328.json")
     assert detail_document["valve_game_id"] == _VALVE_GAME_ID

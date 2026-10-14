@@ -29,8 +29,12 @@ identity; that Valve ID can be passed to game.detail. An unresolved result is
 not a confirmed identity: inspect its reason and evidence, and do not choose an
 ID from candidate evidence yourself. This tool confirms identity and may fetch
 candidate game details as evidence. It does not automatically invoke the
-game.detail tool. The complete resolution evidence is stored in the returned
-Artifact and can be inspected when needed.
+game.detail tool. The returned Artifact stores target selection, League
+selection, candidate assessments, timing differences, participant associations,
+winner comparisons, and unresolved reasons. Raw Match context, full League
+collections and match lists, and candidate game details are internal reads and
+are not stored in this result. Use game.detail with the confirmed valve_game_id
+to retrieve game facts.
 
 Confirmed mappings are not retained across separate calls, so this tool does
 not guarantee whole-Match consistency across separate resolutions.

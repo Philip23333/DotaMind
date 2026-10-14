@@ -117,7 +117,7 @@ class EsportsGameResolveInput(BaseModel):
 
 
 class EsportsGameResolutionResult(BaseModel):
-    """Small capability envelope with the complete read attempt in ``data``."""
+    """Capability envelope with resolution evidence, without raw read collections."""
 
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
@@ -205,7 +205,7 @@ class GameResolutionService:
 
         _validate_attempt_identity(attempt, match_id, game_position)
         status, valve_game_id, method, reason = _map_attempt(attempt)
-        data = _serialize_attempt(attempt)
+        data = _serialize_resolution_evidence(attempt)
         providers = ["pandascore"]
         if attempt.opendota_leagues is not None:
             providers.append("opendota")
@@ -403,21 +403,37 @@ def _require_empty_league_candidates(result: LeagueCandidateResult) -> None:
         raise GameResolutionContractError("League search returned an incomplete empty result")
 
 
-def _serialize_attempt(attempt: GameResolutionReadAttempt) -> dict[str, JsonValue]:
+def _serialize_resolution_evidence(attempt: GameResolutionReadAttempt) -> dict[str, JsonValue]:
     try:
-        document = _ATTEMPT_ADAPTER.dump_python(attempt, mode="json")
+        # Source collections stay internal; existing offline results carry the
+        # selection, timing, participant, winner, and failure evidence.
+        document = _ATTEMPT_ADAPTER.dump_python(
+            attempt,
+            mode="json",
+            include={
+                "match_id",
+                "game_position",
+                "stage",
+                "target_game_result",
+                "league_candidate_result",
+                "resolution_result",
+                "reason",
+                "requests_started",
+            },
+        )
     except Exception as error:
         raise GameResolutionContractError(
-            "Provider read attempt is not JSON serializable"
+            "Provider resolution evidence is not JSON serializable"
         ) from error
     if not isinstance(document, dict):
-        raise GameResolutionContractError("serialized Provider read attempt is not an object")
+        raise GameResolutionContractError(
+            "serialized Provider resolution evidence is not an object"
+        )
     try:
-        # Validate the entire nested document without pruning or normalizing facts.
         return _JSON_OBJECT_ADAPTER.validate_python(document)
     except (TypeError, ValueError) as error:
         raise GameResolutionContractError(
-            "serialized Provider read attempt is not valid JSON"
+            "serialized Provider resolution evidence is not valid JSON"
         ) from error
 
 

@@ -77,7 +77,11 @@ result processor run together; only HTTP is replaced by a strict
 from its generated Match Artifact to resolve game position 1 as Valve Game
 `9042720328`, then passes that confirmed ID to `game.detail`. Match search and
 Match-context reads are separate requests, as are candidate-detail and later
-`game.detail` reads. The current implementation's full detail result remains in its Artifact.
+`game.detail` reads. The current full detail result remains in the `game.detail`
+Artifact, while the resolver Artifact contains only the public evidence
+projection. Composition tests inspect that projection through generic
+`artifact.read`, reject `data.candidate_details` as `artifact_path_not_found`,
+and retain the separate successful detail lookup and its original request order.
 
 The same composition tests verify default-off registration, enabled configuration
 and injected dependency failures, policy propagation, per-registry Artifact
@@ -531,16 +535,16 @@ The current PandaScore esports capabilities and `game.detail` exist. Provider-
 side offline League candidate discovery, game candidate filtering, evidence
 comparison, single-League and multi-League normal-window resolution, a bounded
 serialized adapter-read flow, and the capability result/Service conversion are
-implemented. The Service validates attempt identity, preserves the complete
-attempt as JSON, maps unresolved categories, and converts budget exhaustion to a
-stable structured error. Product composition registers the model-facing tool only
+implemented. The Service validates attempt identity, publishes selected existing
+evidence results without raw read collections, maps unresolved categories, and
+converts budget exhaustion to a stable structured error. Product composition registers the model-facing tool only
 when its feature flag, OpenDota configuration, and PandaScore token are present;
 it remains absent from the default registry. Acceptance has three separate
 layers:
 
 | Layer | Evidence required |
 |---|---|
-| Deterministic tests | League brand/season/year candidates and explicit limits; serialized Match/League/list/detail reads; phase-wide request and record-budget prechecks; duplicate League and Valve IDs; provider-error classification and cancellation; complete source-record retention; global decisions across selected League scopes; absent versus explicitly empty lists; per-League assessment merging; detail-ID validation; same-window detail recheck; participant/winner evidence; competing candidates; mapping conflicts; input immutability; capability result invariants and closed reasons; one Provider call with unchanged inputs; stable budget-error mapping; unchanged Provider errors/cancellation; complete attempt serialization; and the historical BLAST Game 4 result through the bounded read flow and Service |
+| Deterministic tests | League brand/season/year candidates and explicit limits; serialized Match/League/list/detail reads; phase-wide request and record-budget prechecks; duplicate League and Valve IDs; provider-error classification and cancellation; internal complete source-record retention; global decisions across selected League scopes; absent versus explicitly empty lists; per-League assessment merging; detail-ID validation; same-window detail recheck; participant/winner evidence; competing candidates; mapping conflicts; input immutability; capability result invariants and closed reasons; one Provider call with unchanged inputs; stable budget-error mapping; unchanged Provider errors/cancellation; public evidence projection without raw source collections; and the historical BLAST Game 4 result through the bounded read flow and Service |
 | Real Provider validation | Bounded live samples measure League candidate coverage, source-field semantics, selected identities, and detail availability |
 | Full Agent acceptance | The model discovers a Match, selects a game, requests identity resolution, calls `game.detail` only after confirmation, and distinguishes missing fields from absent events |
 
@@ -566,7 +570,10 @@ available.
 The request-flow tests use adapter substitutes and assert exact call order and
 arguments, including the historical BLAST Game 4 result. The Service tests pass
 that same flow's attempt through the capability conversion and verify the
-confirmed `valve_game_id`, complete source JSON, and provider provenance. They
+confirmed `valve_game_id`, public selection/identity evidence, and provider
+provenance. They exclude raw read collections on resolved and unresolved paths, retain the
+accepted team-to-side association and winner facts, and verify that output
+mutation cannot change the internal source records or matching results. They
 also prove that budget failures do not start a partial list/detail phase,
 repeated source IDs do not trigger duplicate reads, empty lists remain
 successful reads, and Provider errors or cancellation stop later calls. These
@@ -580,8 +587,10 @@ detail `9042720328`, then runs the real PandaScore/OpenDota clients, all three
 adapters, the bounded Provider read flow, the multi-League resolver, and the
 capability Service through `httpx.MockTransport`. The baseline uses four mocked
 GETs and resolves PandaScore Game `740250` at position 1 to Valve Game
-`9042720328`; the complete source JSON values are compared with the saved
-fixtures. The parent PandaScore Match retains its historical `running` status.
+`9042720328`; selected source Game values and candidate timing, participant,
+and winner evidence are checked against the saved fixtures. Complete raw read
+collections are not part of the public result. The parent PandaScore Match
+retains its historical `running` status.
 The manifest records the historical capture time, extraction locations, baseline
 facts, and fixture hashes. A request-budget stop, empty Match response, malformed
 League-list shape, mismatched detail identity, HTTP 429, and detail timeout are
