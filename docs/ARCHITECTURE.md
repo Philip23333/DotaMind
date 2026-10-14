@@ -7,7 +7,9 @@ currently contains the generic Artifact tools and the closed
 `esports.league.search`, `esports.series.search`,
 `esports.series.teams`, `esports.tournament.search`,
 `esports.match.search`, `esports.team.search`, and `esports.player.search`
-capabilities. When explicitly enabled and discovered during application
+capabilities. When game resolution is explicitly enabled with its required
+PandaScore and OpenDota configuration, the registry also includes
+`esports.game.resolve`. When explicitly enabled and discovered during application
 startup, it also contains `web.search`, backed by Tavily's remote
 `tavily_search` MCP tool.
 Additional domain capabilities are introduced later as independent contracts.
@@ -542,29 +544,32 @@ Series 生命周期读取、候选组装、共享 Redis 缓存、普通只读接
 - provider routers before a second concrete implementation exists;
 - Artifact corpus discovery or hidden provider fetches.
 
-## Cross-source esports game identity resolution (planned)
+## Cross-source esports game identity resolution (implemented; opt-in)
 
-The current tool registry remains unchanged. A future semantic capability may
-connect a selected PandaScore Match/Game to the existing `game.detail` input;
-this resolver and its tool are not implemented or registered. Its planned
-control flow is:
+The offline resolver, bounded Provider read flow, capability Service, and
+Artifact-continuation tool are implemented. Product composition registers the
+tool only when `DOTAMIND_GAME_RESOLUTION_ENABLED=true`,
+`DOTAMIND_OPENDOTA_ENABLED=true`, and a PandaScore token is configured. It remains
+absent from the default registry. The product path connects a selected
+PandaScore Match/Game to the existing `game.detail` input:
 
 ```text
 Model
-  → esports single-game resolution capability
-  → Resolution Service
-      → obtain trusted PandaScore Match context
-      → retrieve a bounded OpenDota League candidate set
-      → enumerate candidate games
-      → filter candidates for the selected PandaScore Game
-      → read a small number of candidate details only when evidence is needed
-      → compare single-game evidence and whole-Match consistency
-  → confirmed valve_game_id or an explicit unresolved result
-
-Model
-  → game.detail(valve_game_id)
-  → existing OpenDota game-detail capability
-  → generic Artifact handling
+  → esports.match.search
+      → Match-search Artifact
+  → esports.game.resolve(match_artifact_ref, match_path, game_position)
+      → validate the Artifact and selected Match; extract its ID
+      → Resolution Service
+          → obtain trusted PandaScore Match context
+          → retrieve a bounded OpenDota League candidate set
+          → enumerate candidate games
+          → filter candidates for the selected PandaScore Game
+          → read a small number of candidate details only when evidence is needed
+          → compare selected-game evidence and any supplied mapping constraints
+      → confirmed valve_game_id or an explicit unresolved result
+  → model may call game.detail(valve_game_id)
+      → existing OpenDota game-detail capability
+      → generic Artifact handling
 ```
 
 The resolution target is one game; its parent Match provides context. More than
@@ -589,6 +594,16 @@ particular package layout. Runtime and generic Artifact primitives remain
 unaware of esports matching semantics. The identity evidence, recovery rules,
 and external observations belong to [`DATA.md`](DATA.md) and its linked
 [`cross-source reference`](reference/opendota-cross-source-identity.md).
+
+Services reuse one PandaScore client and the same OpenDota game-detail adapter
+for candidate-detail reads and `game.detail`. Registry composition binds the
+continuation to that registry's existing session Artifact store; the shared
+Services container does not own session state. The continuation currently passes
+an empty confirmed-mapping map, so duplicate assignment checks across calls and
+whole-Match consistency are not provided. Request-count limits do not override
+the Runtime tool timeout or original execution deadline. Offline product-chain
+acceptance uses saved historical responses through strict HTTP mocks and does not
+establish live Provider availability or real-model behavior.
 
 ## Steam player and game-detail boundaries
 

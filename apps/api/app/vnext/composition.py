@@ -45,6 +45,10 @@ from app.vnext.capabilities.esports.display_enrichment import (
     enrich_team_search_result,
     enrich_tournament_search_result,
 )
+from app.vnext.capabilities.esports.game_resolution import GameResolutionService
+from app.vnext.capabilities.esports.game_resolution_continuation import (
+    GameResolutionContinuation,
+)
 from app.vnext.capabilities.esports.league import LeagueSearchInput, LeagueSearchResult
 from app.vnext.capabilities.esports.match import MatchSearchInput, MatchSearchResult
 from app.vnext.capabilities.esports.player import PlayerSearchInput, PlayerSearchResult
@@ -78,10 +82,19 @@ from app.vnext.homepage.recent_series import (
 from app.vnext.integrations.mcp import MCPRemoteClient, MCPRemoteError
 from app.vnext.llm.diagnostic_limits import ModelDiagnosticLimits
 from app.vnext.llm.openai_compatible import OpenAICompatibleModelClient
-from app.vnext.providers.opendota import OpenDotaClient, OpenDotaGameDetailAdapter
+from app.vnext.providers.match_resolution import (
+    GameResolutionReadPolicy,
+    PandaScoreOpenDotaGameResolutionProvider,
+)
+from app.vnext.providers.opendota import (
+    OpenDotaClient,
+    OpenDotaDiscoveryAdapter,
+    OpenDotaGameDetailAdapter,
+)
 from app.vnext.providers.pandascore.client import PandaScoreClient
 from app.vnext.providers.pandascore.league_adapter import PandaScoreLeagueAdapter
 from app.vnext.providers.pandascore.match_adapter import PandaScoreMatchAdapter
+from app.vnext.providers.pandascore.match_context import PandaScoreMatchContextAdapter
 from app.vnext.providers.pandascore.player_adapter import PandaScorePlayerAdapter
 from app.vnext.providers.pandascore.series_adapter import PandaScoreSeriesAdapter
 from app.vnext.providers.pandascore.team_adapter import PandaScoreTeamAdapter
@@ -108,6 +121,7 @@ from app.vnext.tools.esports import (
     register_team_tool,
     register_tournament_tool,
 )
+from app.vnext.tools.esports.game_resolution import register_game_resolution_tool
 from app.vnext.tools.game.detail import register_game_detail_tool
 from app.vnext.tools.hero.guide import register_hero_guide_tool
 from app.vnext.tools.json_schema import compile_object_json_schema
@@ -133,6 +147,16 @@ CatalogLookupService = Callable[[CatalogLookupInput], Awaitable[CatalogLookupRes
 HeroGuideLookup = Callable[[HeroGuideInput], Awaitable[HeroGuideResult]]
 _QueryT = TypeVar("_QueryT")
 _ResultT = TypeVar("_ResultT")
+
+
+def _default_game_resolution_read_policy() -> GameResolutionReadPolicy:
+    return GameResolutionReadPolicy(
+        start_time_tolerance_seconds=1800,
+        duration_tolerance_seconds=5,
+        max_leagues=6,
+        max_candidate_details=8,
+        max_requests=16,
+    )
 
 
 def _with_display_enrichment(
@@ -164,6 +188,10 @@ class VNextSettings:
     opendota_base_url: str = "https://api.opendota.com/api"
     opendota_api_key: str = field(default="", repr=False)
     opendota_timeout_seconds: float = 20.0
+    game_resolution_enabled: bool = False
+    game_resolution_read_policy: GameResolutionReadPolicy = field(
+        default_factory=_default_game_resolution_read_policy
+    )
     tavily_mcp_enabled: bool = False
     tavily_mcp_url: str = "https://mcp.tavily.com/mcp"
     tavily_api_key: str = field(default="", repr=False)
@@ -179,6 +207,10 @@ class VNextSettings:
     )
 
     def __post_init__(self) -> None:
+        if type(self.game_resolution_enabled) is not bool:
+            raise ValueError("DOTAMIND_GAME_RESOLUTION_ENABLED must be a boolean")
+        if not isinstance(self.game_resolution_read_policy, GameResolutionReadPolicy):
+            raise ValueError("game_resolution_read_policy must be a GameResolutionReadPolicy")
         if self.data_dir is not None and (
             not isinstance(self.data_dir, Path) or not self.data_dir.is_absolute()
         ):
@@ -251,6 +283,12 @@ class VNextSettings:
                 "DOTAMIND_OPENDOTA_TIMEOUT_SECONDS",
                 _env_value("DOTAMIND_OPENDOTA_TIMEOUT_SECONDS", "20", file_values) or "",
             ),
+            game_resolution_enabled=_parse_bool_value(
+                "DOTAMIND_GAME_RESOLUTION_ENABLED",
+                False,
+                file_values,
+            ),
+            game_resolution_read_policy=_game_resolution_read_policy_from_env(file_values),
             tavily_mcp_enabled=_parse_bool_value(
                 "DOTAMIND_TAVILY_MCP_ENABLED",
                 False,
@@ -282,6 +320,19 @@ class VNextSettings:
             artifact_limits=_artifact_limits_from_env(file_values),
             session_context_limits=_session_context_limits_from_env(file_values),
             model_diagnostic_limits=_model_diagnostic_limits_from_env(file_values),
+        )
+
+
+def _validate_game_resolution_settings(settings: VNextSettings) -> None:
+    if not settings.pandascore_token.strip():
+        raise ValueError(
+            "DOTAMIND_PANDASCORE_TOKEN is required when "
+            "DOTAMIND_GAME_RESOLUTION_ENABLED=true"
+        )
+    if not settings.opendota_enabled:
+        raise ValueError(
+            "DOTAMIND_OPENDOTA_ENABLED=true is required when "
+            "DOTAMIND_GAME_RESOLUTION_ENABLED=true"
         )
 
 
@@ -450,6 +501,49 @@ def _model_diagnostic_limits_from_env(
     return ModelDiagnosticLimits(**values)
 
 
+def _game_resolution_read_policy_from_env(
+    file_values: dict[str, str | None],
+) -> GameResolutionReadPolicy:
+    defaults = _default_game_resolution_read_policy()
+    values: dict[str, int] = {}
+    for name, field_name in (
+        (
+            "DOTAMIND_GAME_RESOLUTION_START_TOLERANCE_SECONDS",
+            "start_time_tolerance_seconds",
+        ),
+        (
+            "DOTAMIND_GAME_RESOLUTION_DURATION_TOLERANCE_SECONDS",
+            "duration_tolerance_seconds",
+        ),
+    ):
+        default = getattr(defaults, field_name)
+        raw_value = _env_value(name, str(default), file_values)
+        if raw_value is None:
+            if name in file_values:
+                raise ValueError(f"{name} must be a non-negative integer")
+            raw_value = str(default)
+        parsed = _parse_required_integer(name, raw_value)
+        if parsed < 0:
+            raise ValueError(f"{name} must be a non-negative integer")
+        values[field_name] = parsed
+    for name, field_name in (
+        ("DOTAMIND_GAME_RESOLUTION_MAX_LEAGUES", "max_leagues"),
+        (
+            "DOTAMIND_GAME_RESOLUTION_MAX_CANDIDATE_DETAILS",
+            "max_candidate_details",
+        ),
+        ("DOTAMIND_GAME_RESOLUTION_MAX_REQUESTS", "max_requests"),
+    ):
+        default = getattr(defaults, field_name)
+        raw_value = _env_value(name, str(default), file_values)
+        if raw_value is None:
+            if name in file_values:
+                raise ValueError(f"{name} must be a positive integer")
+            raw_value = str(default)
+        values[field_name] = _parse_positive_integer(name, raw_value)
+    return GameResolutionReadPolicy(**values)
+
+
 def _parse_positive_finite_float(name: str, value: str) -> float:
     try:
         parsed = float(value.strip())
@@ -506,6 +600,7 @@ class VNextServices:
         Callable[[PlayerRecentGamesInput], Awaitable[PlayerRecentGamesResult]] | None
     ) = None
     game_detail: GameDetailService | None = None
+    game_resolution: GameResolutionService | None = None
     hero_guide: HeroGuideLookup | None = None
     homepage_recent_series: HomepageRecentSeriesService | None = None
     catalog_lookup: CatalogLookupService | None = None
@@ -525,6 +620,8 @@ def build_vnext_services(
     catalog_repository_provider: Callable[[], DotaCatalogRepository] | None = None,
 ) -> VNextServices:
     config = settings or VNextSettings.from_env()
+    if config.game_resolution_enabled:
+        _validate_game_resolution_settings(config)
     client = PandaScoreClient(
         base_url=config.pandascore_base_url,
         token=config.pandascore_token,
@@ -558,13 +655,31 @@ def build_vnext_services(
         player_profile = StratzPlayerProfileAdapter(stratz_client).get_profile
         player_recent_games = StratzPlayerRecentGamesAdapter(stratz_client).get_recent_games
     game_detail: GameDetailService | None = None
+    game_detail_adapter: OpenDotaGameDetailAdapter | None = None
+    opendota_client: OpenDotaClient | None = None
     if config.opendota_enabled:
         opendota_client = OpenDotaClient(
             base_url=config.opendota_base_url,
             api_key=config.opendota_api_key,
             timeout_seconds=config.opendota_timeout_seconds,
         )
-        game_detail = OpenDotaGameDetailAdapter(opendota_client).get_game_detail
+        game_detail_adapter = OpenDotaGameDetailAdapter(opendota_client)
+        game_detail = game_detail_adapter.get_game_detail
+    game_resolution: GameResolutionService | None = None
+    if config.game_resolution_enabled:
+        if opendota_client is None or game_detail_adapter is None:
+            raise ValueError(
+                "DOTAMIND_OPENDOTA_ENABLED=true is required for game resolution"
+            )
+        provider = PandaScoreOpenDotaGameResolutionProvider(
+            PandaScoreMatchContextAdapter(client),
+            OpenDotaDiscoveryAdapter(opendota_client),
+            game_detail_adapter,
+        )
+        game_resolution = GameResolutionService(
+            provider,
+            policy=config.game_resolution_read_policy,
+        )
     repository_provider = (
         catalog_repository_provider
         if catalog_repository_provider is not None
@@ -592,6 +707,7 @@ def build_vnext_services(
         player_profile=player_profile,
         player_recent_games=player_recent_games,
         game_detail=game_detail,
+        game_resolution=game_resolution,
         hero_guide=hero_guide,
         homepage_recent_series=homepage_recent_series,
         catalog_lookup=catalog_lookup,
@@ -659,6 +775,22 @@ def build_vnext_registry(
 ) -> ToolRegistry:
     config = settings or VNextSettings.from_env()
     resolved_services = services or build_vnext_services(config)
+    if config.game_resolution_enabled:
+        _validate_game_resolution_settings(config)
+        missing = [
+            name
+            for name, service in (
+                ("esports.match.search", resolved_services.match_search),
+                ("game_resolution", resolved_services.game_resolution),
+                ("game.detail", resolved_services.game_detail),
+            )
+            if service is None
+        ]
+        if missing:
+            raise ValueError(
+                "game resolution is enabled but required services are missing: "
+                + ", ".join(missing)
+            )
     artifact_store = SessionArtifactStore()
     manuals = ManualResolver()
     artifact_limits = config.artifact_limits
@@ -735,6 +867,13 @@ def build_vnext_registry(
         register_player_recent_games_tool(registry, resolved_services.player_recent_games)
     if config.opendota_enabled and resolved_services.game_detail is not None:
         register_game_detail_tool(registry, resolved_services.game_detail)
+    if config.game_resolution_enabled:
+        assert resolved_services.game_resolution is not None
+        continuation = GameResolutionContinuation(
+            artifact_store,
+            resolved_services.game_resolution,
+        )
+        register_game_resolution_tool(registry, continuation.resolve)
     if resolved_services.hero_guide is not None:
         service = resolved_services.hero_guide
         if resolved_services.entity_display_directory is not None:

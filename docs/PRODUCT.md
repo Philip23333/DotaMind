@@ -203,12 +203,13 @@ item labels may be resolved from the bundled Valve catalog; unknown IDs remain
 unknown. Missing timelines or purchase data are evidence gaps, not proof that
 events or purchases did not occur.
 
-### Esports Match-to-game-detail journey (planned)
+### Esports Match-to-game-detail journey (opt-in capability; real-model behavior unverified)
 
 PandaScore match and game discovery already exists, and `game.detail` already
-reads one OpenDota game by `valve_game_id`. The cross-source identity-resolution
-capability that would connect them has not been implemented or registered.
-Its planned user journey is:
+reads one OpenDota game by `valve_game_id`. When the opt-in game-resolution tool
+is enabled with PandaScore and OpenDota configured, it can connect a selected
+Match Artifact and Game position to a confirmed Valve identity. The model-driven
+user journey is:
 
 ```text
 discover an event
@@ -236,6 +237,10 @@ does not associate a PandaScore professional player with a Steam account. The
 cross-source evidence boundary and unresolved outcomes are defined in
 [`DATA.md`](DATA.md); observed source limitations are summarized in
 [`reference/opendota-cross-source-identity.md`](reference/opendota-cross-source-identity.md).
+The capability is absent from the default tool inventory, and enabling it does
+not guarantee provider availability or successful resolution. Cross-call
+mapping reuse and whole-Match consistency are not implemented; the model chooses
+whether to call `game.detail` after it receives a confirmed `valve_game_id`.
 
 ## Product boundaries
 

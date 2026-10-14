@@ -54,6 +54,7 @@ web.search                 # when Tavily MCP is enabled and discovery succeeds
 player.profile             # when a STRATZ token is configured
 player.recent_games        # when a STRATZ token is configured
 game.detail                # when OpenDota is explicitly enabled
+esports.game.resolve       # when game resolution and its required providers are enabled
 ```
 
 ## Esports search capabilities
@@ -481,13 +482,15 @@ rates or other aggregates. The game-detail adapter rejects unusable or
 mismatched source detail rather than returning an empty successful result.
 Reading existing game data does not submit a replay for parsing.
 
-## Esports game-resolution capability (Artifact continuation callable implemented; product registration pending)
+## Esports game-resolution capability (opt-in product registration implemented)
 
 The existing `esports.match.search` stores its complete logical response in a
-session Artifact and records `esports.match.search` as storage metadata. A
-separately registerable `esports.game.resolve` tool continues from that Artifact;
-it is not yet added to the product's default Runtime registry. Its closed input
-is:
+session Artifact and records `esports.match.search` as storage metadata.
+`esports.game.resolve` continues from that Artifact. Product composition registers
+it only when `DOTAMIND_GAME_RESOLUTION_ENABLED=true`,
+`DOTAMIND_OPENDOTA_ENABLED=true`, and `DOTAMIND_PANDASCORE_TOKEN` is non-empty.
+The OpenDota API key remains optional. Startup composition performs no provider
+probe. Its closed input is:
 
 ```text
 esports.game.resolve(match_artifact_ref, match_path, game_position)
@@ -506,9 +509,23 @@ timestamps, time windows, or read budgets.
 The existing `GameResolutionService.resolve(match_id, game_position,
 confirmed_mappings=...)` calls the bounded Provider once with its configured read
 policy. The Provider obtains trusted Match context and finite OpenDota search
-data; the Service only converts the read attempt and its outcome. The continuation
-currently passes an empty mapping. Duplicate assignment and mapping reuse across
-separate tool calls, and whole-Match consistency, are therefore not guaranteed.
+data; the Service only converts the read attempt and its outcome. Composition
+reuses the PandaScore client and the same OpenDota game-detail adapter for both
+resolution reads and `game.detail`. The continuation passes an empty mapping.
+Duplicate assignment and mapping reuse across separate tool calls, and
+whole-Match consistency, are therefore not guaranteed.
+
+The initial read policy defaults to 1,800 seconds start-time tolerance, 5 seconds
+duration tolerance, at most 6 League candidates, 8 candidate details, and 16
+total adapter requests. Configure it with
+`DOTAMIND_GAME_RESOLUTION_START_TOLERANCE_SECONDS`,
+`DOTAMIND_GAME_RESOLUTION_DURATION_TOLERANCE_SECONDS`,
+`DOTAMIND_GAME_RESOLUTION_MAX_LEAGUES`,
+`DOTAMIND_GAME_RESOLUTION_MAX_CANDIDATE_DETAILS`, and
+`DOTAMIND_GAME_RESOLUTION_MAX_REQUESTS`. These are adjustable request bounds,
+not validated accuracy or coverage targets. Runtime's default 60-second tool
+timeout and the original execution deadline still apply; the request budget does
+not guarantee that every permitted read finishes before the deadline.
 
 The implemented internal capability result is `EsportsGameResolutionResult`:
 
@@ -537,10 +554,10 @@ esports.game.resolve → valve_game_id → model may call game.detail
 ```
 
 It does not return a complete game report, and `game.detail` does not gain a
-PandaScore ID input. The separately registered tool always stores the complete
-resolution result once through generic Artifact externalization and returns the
-normal inline or bounded observation. It does not add a resolution-specific
-Artifact type. Runtime dependency assembly and default product registration are
-pending. The evidence rules and known source limitations are owned by
+PandaScore ID input. The tool always stores the complete resolution result once
+through generic Artifact externalization and returns the normal inline or bounded
+observation. It does not add a resolution-specific Artifact type. The tool is
+absent from the default inventory unless the opt-in setting and all required
+services are present. The evidence rules and known source limitations are owned by
 [`DATA.md`](DATA.md) and
 [`reference/opendota-cross-source-identity.md`](reference/opendota-cross-source-identity.md).

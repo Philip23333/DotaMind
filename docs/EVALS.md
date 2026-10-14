@@ -23,6 +23,8 @@ esports.player.search
 web.search                 # only when Tavily MCP discovery succeeds
 task.plan                 # when task-state coordination is enabled
 task.checkpoint           # when task-state coordination is enabled
+game.detail               # when OpenDota is explicitly enabled
+esports.game.resolve      # when game resolution and required providers are enabled
 ```
 
 The Context Governance evaluation adds only its local `fixture.edition.lookup`
@@ -44,7 +46,7 @@ unchanged, and the default product registry does not include
 `esports.game.resolve`. This verifies continuation storage mechanics only, not
 Match selection or single-game resolution behavior.
 
-## Artifact-based single-game resolution tool (callable implemented; product wiring pending)
+## Artifact-based single-game resolution tool (opt-in product wiring implemented)
 
 Offline continuation tests verify that `esports.game.resolve` accepts only a
 session Match-search Artifact reference, an `items.N` path, and a strict positive
@@ -58,10 +60,34 @@ semantics.
 Tool tests verify the closed three-field schema, required Artifact processor,
 full result storage, inline small results, bounded large observations containing
 the key resolution fields, and preservation of the complete evidence document.
-The tool registration function is exercised in an isolated registry; it is not
-yet wired into the product Runtime or default tool inventory. These tests make
-no Provider or model calls and do not establish cross-call mapping reuse,
-whole-Match consistency, real-model tool selection, or answer quality.
+Product composition registers the tool only when explicitly enabled and its
+PandaScore/OpenDota dependencies are configured. It remains absent from the
+default tool inventory. These tests make no live Provider or model calls and do
+not establish cross-call mapping reuse, whole-Match consistency, real-model tool
+selection, or answer quality.
+
+## Product-composed game-resolution chain
+
+Offline acceptance exercises the actual `build_vnext_services()` and
+`build_vnext_registry()` path with the historical Match, League, League-match,
+and game-detail fixtures. Real clients, adapters, the bounded Provider read flow,
+Resolver, Service, Artifact continuation, registry validation, and generic
+result processor run together; only HTTP is replaced by a strict
+`httpx.MockTransport`. The product registry searches Match `1743565`, continues
+from its generated Match Artifact to resolve game position 1 as Valve Game
+`9042720328`, then passes that confirmed ID to `game.detail`. Match search and
+Match-context reads are separate requests, as are candidate-detail and later
+`game.detail` reads. The full detail result remains in its Artifact.
+
+The same composition tests verify default-off registration, enabled configuration
+and injected dependency failures, policy propagation, per-registry Artifact
+isolation, unresolved and budget/provider errors, and cancellation stopping later
+reads. The saved data are historical; the HTTP responses are local fixtures, so
+this proves deterministic product wiring only. It does not establish present-day
+Provider availability, model tool selection, cross-call mapping reuse, or answer
+quality. The initial request budget is a ceiling; Runtime's 60-second default
+tool timeout and original execution deadline remain in force and may end a read
+sequence earlier.
 
 ## Three evaluation layers
 
@@ -431,7 +457,7 @@ heuristic input measure rather than a precise token count. The stage status and
 known limitations are maintained in
 [`agent/context_governance_evidence_lifecycle.md`](agent/context_governance_evidence_lifecycle.md).
 
-### Esports Match-to-OpenDota game resolution (offline core and capability Service implemented; tool and Agent acceptance pending)
+### Esports Match-to-OpenDota game resolution (offline core and opt-in tool implemented; live Provider and Agent acceptance pending)
 
 The current PandaScore esports capabilities and `game.detail` exist. Provider-
 side offline League candidate discovery, game candidate filtering, evidence
@@ -439,8 +465,10 @@ comparison, single-League and multi-League normal-window resolution, a bounded
 serialized adapter-read flow, and the capability result/Service conversion are
 implemented. The Service validates attempt identity, preserves the complete
 attempt as JSON, maps unresolved categories, and converts budget exhaustion to a
-stable structured error. No model-facing tool is registered. Acceptance has
-three separate layers:
+stable structured error. Product composition registers the model-facing tool only
+when its feature flag, OpenDota configuration, and PandaScore token are present;
+it remains absent from the default registry. Acceptance has three separate
+layers:
 
 | Layer | Evidence required |
 |---|---|

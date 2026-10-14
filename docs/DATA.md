@@ -40,7 +40,7 @@ Names are added to the query result and generic Artifact output; they are not
 written into guide snapshots. Old snapshots remain readable because enrichment
 DTO fields have defaults. `game.detail` has not yet integrated the resolver.
 
-## Cross-source esports game identity (offline resolver, bounded reads, and capability Service implemented)
+## Cross-source esports game identity (offline resolver, bounded reads, Service, and opt-in tool implemented)
 
 This section owns the matching semantics for a path from a PandaScore Game to
 the existing OpenDota `game.detail(valve_game_id)` capability. The Provider-side
@@ -49,10 +49,10 @@ multi-League normal-window resolver functions, and their bounded serialized
 Provider read flow are implemented. Offline functions accept already-read source
 records and make no network or model calls. The read flow coordinates the
 existing adapters; the capability Service converts its result and errors without
-repeating matching logic or registering a model-facing tool. The separate
-Artifact-continuation tool can be registered in an isolated registry, but product
-Runtime assembly and default tool registration are pending. Observed provider
-behavior and sampled counterexamples are summarized in
+repeating matching logic. Product composition can register the Artifact-
+continuation tool when its independent flag, OpenDota enablement, and PandaScore
+token are all present. It remains absent from the default tool inventory.
+Observed provider behavior and sampled counterexamples are summarized in
 [`reference/opendota-cross-source-identity.md`](reference/opendota-cross-source-identity.md).
 
 ### Identity boundary
@@ -139,10 +139,16 @@ unchanged. An internally inconsistent attempt is a contract error rather than a
 successful empty result.
 
 The Artifact-continuation tool validates the Match-search Artifact source and
-selected Match, extracts its ID server-side, and invokes this Service. A registered
-tool stores the complete result through the generic Artifact processor and returns
-its inline or bounded observation. Product Runtime assembly and default tool
-registration remain pending; cross-call mapping persistence is not implemented.
+selected Match, extracts its ID server-side, and invokes this Service. Product
+composition binds the continuation to the same session Artifact store used by
+`esports.match.search`, and stores the complete result through the generic
+Artifact processor. The tool is registered only when
+`DOTAMIND_GAME_RESOLUTION_ENABLED=true`, `DOTAMIND_OPENDOTA_ENABLED=true`, and a
+non-empty PandaScore token are configured. Its initial policy bounds League,
+candidate-detail, and total adapter reads; those request bounds do not guarantee
+completion within Runtime's tool timeout or execution deadline. The continuation
+passes an empty confirmed-mapping object, so cross-call mapping persistence,
+duplicate assignment protection, and whole-Match consistency are not implemented.
 
 For `league_matches_by_id`, a present key with `[]` means that League was read
 and produced no rows; an absent selected key means the search scope is

@@ -411,29 +411,29 @@ from the local Valve catalog, and keep the prior list available for ordinal
 follow-ups. This verifies scripted orchestration only, not real-model tool
 selection or answer quality. Real provider/model evaluation remains separate.
 
-## PandaScore Match to OpenDota game identity (planned)
+## PandaScore Match to OpenDota game identity (offline path implemented; live Agent evaluation pending)
 
 Connect one selected PandaScore Game to the existing `game.detail` capability
 without changing the Steam32 account-to-game journey. The user and product
 contract is in [`PRODUCT.md`](PRODUCT.md), matching semantics in
-[`DATA.md`](DATA.md), the proposed tool boundary in [`TOOLS.md`](TOOLS.md),
-and current sampled source evidence in
+[`DATA.md`](DATA.md), the tool boundary in [`TOOLS.md`](TOOLS.md), and current
+sampled source evidence in
 [`reference/opendota-cross-source-identity.md`](reference/opendota-cross-source-identity.md).
-This work is not implemented or registered.
 
-1. **Candidate data boundary:** specify trusted PandaScore Match context,
-   OpenDota candidate inputs and outputs, bounded coverage, and distinct failure
-   results; validate source fields against focused real samples.
-2. **Offline identity resolution:** compare one target game, gather only needed
-   evidence, enforce whole-Match consistency, and return explainable confirmed
-   or unresolved outcomes using fixed source fixtures.
-3. **Service and tool:** coordinate finite candidate and on-demand detail reads,
-   cancellation, and stable errors; finalize the semantic input/output schema
-   before adding a tool to the registry.
-4. **Real-source and Agent acceptance:** measure provider coverage first, then
-   verify that the model selects the intended game, calls `game.detail` only
-   with a confirmed `valve_game_id`, and reports missing detail fields
-   accurately.
+1. **Implemented:** read trusted PandaScore Match context and bounded OpenDota
+   League, match-list, and candidate-detail data; classify provider failures,
+   preserve evidence, and propagate cancellation.
+2. **Implemented:** discover League candidates and resolve one selected Game
+   across the complete caller-selected League scope using fixed historical
+   fixtures. This does not implement whole-Match consistency or cross-call mapping.
+3. **Implemented, opt-in:** compose the Service and `esports.game.resolve` from
+   the Match-search Artifact. It is absent by default and registers only when
+   enabled with PandaScore and OpenDota configured. A product-composed offline
+   fixture chain continues a confirmed ID to `game.detail`; mock transport proves
+   deterministic wiring, not live availability.
+4. **Pending:** evaluate bounded live Provider coverage, then observe a real model
+   selecting a game, invoking resolution, calling `game.detail` only after
+   confirmation, and describing missing fields accurately.
 
 Each phase should deliver one boundary with focused tests. Do not introduce a
 persistent mapping library, recurring background synchronization, provider
