@@ -401,14 +401,14 @@ known limitations are maintained in
 
 The current PandaScore esports capabilities and `game.detail` exist. Provider-
 side offline League candidate discovery, game candidate filtering, evidence
-comparison, single-League resolution, and multi-League normal-window resolution
-are implemented. The cross-source
+comparison, single-League and multi-League normal-window resolution, and a
+bounded serialized adapter-read flow are implemented. The cross-source
 resolution Service and model-facing tool have not been implemented or registered.
 Acceptance has three separate layers:
 
 | Layer | Evidence required |
 |---|---|
-| Deterministic tests | League brand/season/year candidates and explicit limits; game candidate filtering; global decisions across selected League scopes; absent versus explicitly empty lists; repeated Valve IDs and per-League assessment merging; detail-ID validation; same-window detail recheck; participant/winner evidence; competing candidates; mapping conflicts; input immutability; and distinct unresolved results |
+| Deterministic tests | League brand/season/year candidates and explicit limits; serialized Match/League/list/detail reads; phase-wide request and record-budget prechecks; duplicate League and Valve IDs; provider-error classification and cancellation; complete source-record retention; global decisions across selected League scopes; absent versus explicitly empty lists; per-League assessment merging; detail-ID validation; same-window detail recheck; participant/winner evidence; competing candidates; mapping conflicts; input immutability; and distinct unresolved results |
 | Real Provider validation | Bounded live samples measure League candidate coverage, source-field semantics, selected identities, and detail availability |
 | Full Agent acceptance | The model discovers a Match, selects a game, requests identity resolution, calls `game.detail` only after confirmation, and distinguishes missing fields from absent events |
 
@@ -430,6 +430,14 @@ not live availability checks. Synthetic tests also cover winner conflicts,
 mapping conflicts, and invalid detail identities. These tests do not measure
 resolution accuracy or establish that any live provider data is currently
 available.
+
+The request-flow tests use adapter substitutes and assert exact call order and
+arguments, including the historical BLAST Game 4 result. They also prove that
+budget failures do not start a partial list/detail phase, repeated source IDs do
+not trigger duplicate reads, empty lists remain successful reads, and Provider
+errors or cancellation stop later calls. These tests validate local orchestration
+only; they do not call PandaScore or OpenDota and do not validate live source
+availability.
 
 Whole-Match consistency, strict cross-source League identity association, search
 widening, neighboring-game roster evidence, exact player `account_id`

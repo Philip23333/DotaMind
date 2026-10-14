@@ -40,13 +40,15 @@ Names are added to the query result and generic Artifact output; they are not
 written into guide snapshots. Old snapshots remain readable because enrichment
 DTO fields have defaults. `game.detail` has not yet integrated the resolver.
 
-## Cross-source esports game identity (normal-window offline resolver implemented)
+## Cross-source esports game identity (normal-window resolver and bounded reads implemented)
 
 This section owns the matching semantics for a path from a PandaScore Game to
 the existing OpenDota `game.detail(valve_game_id)` capability. The Provider-side
-offline League candidate discovery, game candidate, evidence, single-League,
-and multi-League normal-window resolver functions are implemented. They accept
-already-read source records and make no network or model calls. The resolution
+offline League candidate discovery, game candidate, evidence, single-League and
+multi-League normal-window resolver functions, and their bounded serialized
+Provider read flow are implemented. Offline functions accept already-read source
+records and make no network or model calls. The read flow coordinates the
+existing adapters; it does not register a model-facing tool. The resolution
 Service and model-facing tool are not implemented or registered. Observed
 provider behavior and sampled counterexamples are summarized in
 [`reference/opendota-cross-source-identity.md`](reference/opendota-cross-source-identity.md).
@@ -76,6 +78,28 @@ detail and identity checks across the combined scope. It verifies that each
 League row ID, detail-map key, and detail `match_id` are the same strict positive
 integer. Neither resolver selects or widens League scope, nor fetches missing
 details.
+
+`PandaScoreOpenDotaGameResolutionProvider` performs the internal reads in this
+order: one PandaScore Match, target-Game validation, one complete OpenDota League
+collection, all selected League match lists, then each distinct candidate detail
+once. Reads are serial. `GameResolutionReadPolicy` requires explicit non-negative
+time and duration tolerances and positive limits for League candidates, detail
+reads, and total adapter reads; it has no production defaults. The read count
+includes failed adapter calls. Before a list or detail phase starts, the flow
+checks that the full selected phase fits its remaining request budget. A phase
+that exceeds a limit fails without reading an arbitrary subset.
+
+Match absence and offline target/League outcomes remain explicit. Adapter
+`StructuredToolError` codes and safe details are preserved with the failing
+operation and request count; transport, access, schema, and timeout failures are
+not converted into empty source data or `no_candidates`. Cancellation propagates
+unchanged, and no retry, parallel read, background task, or cross-call cache is
+used. The internal read attempt retains the complete successfully read PandaScore
+Match, OpenDota League collection, each selected League list, and each complete
+`GameDetailResult` including its provider and retrieval time. Its own
+`retrieved_at` is the attempt completion time, not a claim that all sources were
+read simultaneously. These records are not yet written to an Artifact or exposed
+as a tool result.
 
 For `league_matches_by_id`, a present key with `[]` means that League was read
 and produced no rows; an absent selected key means the search scope is
