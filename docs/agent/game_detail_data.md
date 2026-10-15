@@ -4,9 +4,9 @@
 
 This document is the sole detailed data contract for `game.detail`.
 
-- **Current implementation:** `game.detail` returns the complete validated OpenDota source object in `data`.
+- **Current implementation:** `game.detail` returns the governed eight-section DTO with bilingual entity/unit objects, normalized event types, scalar coverage evidence, and one Catalog/unit-mapping version per result.
 - **Accepted target:** `data` is an explicit eight-section DotaMind DTO containing source facts, necessary deterministic transformations, and locally resolved English/Chinese entity names.
-- **Implementation status:** the earlier ID/key-based DTO and eight-section OpenDota projector are implemented and tested offline. The independent non-hero unit resource and exact Catalog lookup are also implemented. Bilingual DTO objects, applying that unit lookup to events, normalized objective types, and mapping-gap fields remain accepted targets rather than implemented detail behavior. The public Service still returns the full OpenDota object; enrichment and the public tool/Artifact switch remain pending.
+- **Implementation status:** local unit lookup, entity enrichment, event conversion, the public Service switch, and generic tool/Artifact reads are implemented and verified with deterministic tests. Live provider availability and real-model behavior remain separate acceptance work.
 - **Use:** minute-by-minute state review and final-game statistics.
 - **Outside this contract:** performance ratings, role inference, lane-win judgments, teamfight classification, review recommendations, counterfactuals, simulated inventory states, and continuous map replay.
 
@@ -35,7 +35,7 @@ OpenDota `match_id` must be a positive integer equal to the requested `valve_gam
 
 The result and its Artifact contain the complete governed DTO. They contain no `raw` field and expose no model-facing handle that retrieves the original OpenDota object. Generic Artifact read and grep continue to read the stored DTO without provider-specific behavior.
 
-The internal/public type split is implemented: the OpenDota adapter returns `OpenDotaGameRecord` with native `match_id`, provider, retrieval time, and complete source data. The resolver consumes that record directly. `GameDetailService` separately constructs the public `GameDetailResult`; it currently preserves the full source body. The eight-section projection will belong at this Service boundary. Internal records are not public retrieval handles, and future DTO conversion must leave the resolver's source values intact.
+The internal/public type split is implemented: the OpenDota adapter returns `OpenDotaGameRecord` with native `match_id`, provider, retrieval time, and complete source data. The resolver consumes that record directly. `GameDetailService` separately constructs the public `GameDetailResult` by projecting that record with pinned local label resources. The eight-section projection belongs at this Service boundary. Internal records are not public retrieval handles, and future DTO conversion must leave the resolver's source values intact.
 
 ## Global data rules
 
@@ -89,7 +89,7 @@ Generic unit defaults do not establish a courier's side, a ward's owner, a domin
 
 Non-hero mappings live in a separate versioned static resource exposed through Catalog's local query boundary. Hero/item/ability records keep their current Catalog ownership. This does not add a sixth file to the existing five-file Catalog publication protocol or introduce remote lookup on a detail request. Initial unit resources are explicitly maintained and validated; automated import, refresh cadence, and changes to Catalog publication are outside this migration.
 
-The implemented code-internal `UnitCatalog` loads [`unit_mapping.json`](../../apps/api/app/data/units/unit_mapping.json) explicitly and offers exact `lookup(internal_name)` over 117 verified non-hero records. It returns an immutable record or `None` for an unmatched string; invalid query types raise `ValueError`, while missing/corrupt/unreadable resources propagate their errors. The snapshot keeps fixed source revisions and hashes. `version` is `sha256:` plus the hash of canonical validated snapshot JSON, independent of whitespace and request time; labels, attributes, or provenance changes produce a new version. One loaded instance retains its snapshot without reopening files during lookup. It is not yet injected into `game.detail`.
+The implemented code-internal `UnitCatalog` loads [`unit_mapping.json`](../../apps/api/app/data/units/unit_mapping.json) explicitly and offers exact `lookup(internal_name)` over 117 verified non-hero records. It returns an immutable record or `None` for an unmatched string; invalid query types raise `ValueError`, while missing/corrupt/unreadable resources propagate their errors. The snapshot keeps fixed source revisions and hashes. `version` is `sha256:` plus the hash of canonical validated snapshot JSON, independent of whitespace and request time; labels, attributes, or provenance changes produce a new version. One loaded instance retains its snapshot without reopening files during lookup. It is injected into `game.detail` composition and remains independent of the entity-Catalog publication protocol.
 
 Verified samples, source revisions, observed unit categories, and the mapping review table are owned by [`../reference/opendota-unit-identifiers.md`](../reference/opendota-unit-identifiers.md). The sample is evidence for explicit mappings, not an exhaustive future-unit registry.
 
@@ -232,7 +232,7 @@ Do not infer a killer player from similar names or nearby event times. Missing o
 
 Conflicting first-blood sources remain separate values in `coverage.conflicts`; do not adjudicate them. Preserve end-of-game timestamps even when they exceed `duration_seconds` by one second. The data contract does not add an anomaly warning or a frontend endpoint-display rule. Eye wards, runes, and pauses are outside the first-version event categories. Mapping unit names does not add ward events or non-hero interaction tables.
 
-The earlier offline projector classifies four objective codes and preserves opaque source fields. The accepted target instead uses the following exact business `type` mapping. These normalized types and bilingual units have not yet been implemented:
+The projector uses the following exact business `type` mapping and resolves bilingual event units before public output:
 
 | Source `objectives[].type` | Business `type` | Category |
 |---|---|---|
@@ -256,7 +256,7 @@ Additional target event fields are:
 | Objective players | `player_slot` and `victim_player_slot` are populated only from explicit same-name source fields matching one unique player slot in this record. A bare `slot`, `team`, or `killer` never supplies a player identity. |
 | First blood | Nullable `reported_time_seconds` from top-level `first_blood_time` and nullable `objective_events` containing the first-blood objective rows. Conflicts point to exact source `objectives[i].time`; neither view overwrites the other. |
 
-The earlier offline mapper accepts an optional exact hero index; the target Service supplies its pinned local catalog and unit resource. A killer player slot additionally requires one unique source player with that hero ID and slot. Unknown catalog keys, repeated hero IDs, or repeated slots leave the player unknown. A recognized summon type does not identify its controller. No fuzzy matching is used. Missing one player's event log adds a coverage gap while preserving other players' known events; all unavailable logs yield `null`, and explicitly empty logs yield `[]`. Each category retains source player/log order without claiming a global time order.
+The Service supplies one pinned local entity resolver and unit resource to the projector. A killer player slot additionally requires one unique source player with that hero ID and slot. Unknown catalog keys, repeated hero IDs, or repeated slots leave the player unknown. A recognized summon type does not identify its controller. No fuzzy matching is used. Missing one player's event log adds a coverage gap while preserving other players' known events; all unavailable logs yield `null`, and explicitly empty logs yield `[]`. Each category retains source player/log order without claiming a global time order.
 
 ### 7. `interactions`
 
@@ -264,7 +264,7 @@ The earlier offline mapper accepts an optional exact hero index; the target Serv
 
 The structure is `interactions.players[]`; each player entry contains `player_slot` (integer or `null`) and the three target lists. Each target record contains `target_hero` (hero entity object or `null`) and `value` (number). Resolve it only by an exact Valve catalog internal-name match. An unconvertible hero key leaves the entity null and retains that key in coverage; the known numeric amount and row remain. Do not expose `target_unit_key`, use fuzzy name similarity, or assign an unresolved target to a player.
 
-The earlier offline projector keeps source keys and amounts when no index is supplied. The target uses local bilingual entity objects as specified above, without remote lookups. A malformed hero amount makes only that target map unavailable and adds a coverage reason, preserving the player's other maps and final statistics.
+The projector uses local bilingual entity objects as specified above, without remote lookups. A malformed hero amount makes only that target map unavailable and adds a coverage reason, preserving the player's other maps and final statistics.
 
 | Target list | Direct source | Target scope |
 |---|---|---|
@@ -299,7 +299,7 @@ Conflict paths and values must have corresponding lengths and identify at least 
 
 ## Illustrative sample fragments
 
-The match values below were checked against one saved OpenDota response for game `9040460429`. Bilingual labels come from the local catalog rather than the match response. These fragments illustrate the accepted target, including enrichment that is not yet implemented; they do not guarantee that every game has these fields.
+The match values below were checked against one saved OpenDota response for game `9040460429`. Bilingual labels come from the local catalog rather than the match response. These fragments illustrate the implemented contract; they do not guarantee that every game has these fields.
 
 The source start time converts to the Beijing calendar date shown. The formal duration is 2,904 seconds; `radiant_win=false` maps to a Dire win. The source score is 17–33.
 
@@ -344,16 +344,16 @@ This contract does not promise a DTO byte-size target. The old 105 KB and 215 KB
 | Deliberate scope exclusions | `competition=null`, exactly ten final-stat fields, and only `source_team_id`/`name` for teams are settled for this version. Future extensions do not block implementation. |
 | Source-semantic limits | The meanings of the two neutral-item slots and actions in neutral-item history remain unverified. Unverified actor/team/reward encodings are retained only as scalar coverage evidence. The six objective types above, including Tormentor, are accepted mappings; new codes require verification. |
 | Mapping gaps | `dota_unknown` is explicit source uncertainty. Sampled `guardian_shell` has no exact record in the checked local Catalog; keep that field unknown with scalar evidence until a verified mapping is added. Neither blocks other match facts. |
-| Accepted enrichment, not implemented | The unit resource/lookup is implemented, but bilingual DTO objects, event conversion, outer snapshot provenance, and scalar mapping-gap fields still require implementation and acceptance. The earlier offline model alone does not satisfy this target. |
+| Implemented enrichment | Bilingual entity/unit objects, event conversion, snapshot provenance, and scalar mapping-gap fields are implemented and tested together with public tool/Artifact output. Unknown names/keys remain explicit. |
 | Implemented internal record split to preserve | The resolver consumes complete `OpenDotaGameRecord` values independently of the public `GameDetailResult` constructed by `GameDetailService`. Keep exact source timestamps, side-specific team IDs, identity-validation inputs, and accepted per-game associations available internally when adding the DTO projection. |
 | Log boundary | Verify that missing and explicitly empty event logs remain distinct, and that cumulative kills/deaths include valid pre-zero records without inventing a zero curve when logs are missing |
 | Implemented resolver boundary to preserve | `esports.game.resolve` retains complete reads internally and publishes only the resolution evidence owned by the cross-source contract in `DATA.md`. Its Artifact cannot retrieve candidate detail bodies or full source collections. Preserve this separation when changing the still-raw `game.detail` output. |
 | Non-blocking separation | Static names are locally materialized with their own provenance. They do not complete missing historical match facts. Images, frontend behavior, automated unit-data refresh, and deployment remain outside this change. |
 
-The first-version data scope and naming policy are settled. Source-semantic limits and newly encountered keys are handled by explicit unknown values and coverage, not speculative defaults or another field-approval round. Preserve the implemented internal record split and resolver public-evidence boundary. Local enrichment, the public switch, and end-to-end tool/Artifact acceptance remain implementation work.
+The first-version data scope and naming policy are settled. Source-semantic limits and newly encountered keys are handled by explicit unknown values and coverage, not speculative defaults or another field-approval round. Preserve the implemented internal record split and resolver public-evidence boundary. Local enrichment and the public switch have deterministic tool/Artifact acceptance. Live-provider and real-model behavior remain unverified.
 
 ## Ownership and acceptance
 
 The data boundary and migration notes live in [`../DATA.md`](../DATA.md). Tool behavior is summarized in [`../TOOLS.md`](../TOOLS.md), layer ownership in [`../ARCHITECTURE.md`](../ARCHITECTURE.md), deterministic acceptance in [`../EVALS.md`](../EVALS.md), and implementation order in [`../ROADMAP.md`](../ROADMAP.md).
 
-Passing those future checks would establish the documented projection and its failure behavior. It would not establish frontend behavior, live OpenDota availability, or analytical conclusions outside this contract.
+Deterministic checks establish the documented projection and its tested failure behavior. They do not establish frontend behavior, live OpenDota availability, or analytical conclusions outside this contract.

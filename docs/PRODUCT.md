@@ -155,8 +155,8 @@ from the bundled Valve catalog to the fields selected by its result section. The
 result includes the catalog snapshot version; IDs and provider-supplied labels
 remain intact, and unresolved IDs remain visible with empty catalog names. This
 enrichment happens when queried and does not write into guide snapshots, so
-existing partitions need no refresh for the names to appear. The same resolver is not yet
-connected to `game.detail`.
+existing partitions need no refresh for the names to appear. The same local resolver also supplies the governed `game.detail` DTO, with
+independent unit mappings for non-hero event participants.
 
 ## Shared game-data updates
 
@@ -198,13 +198,13 @@ that game's detail. The account's row in the detail must be matched by exact
 `account_id`; names and other player attributes are not identity proof. A
 follow-up such as “the second game” refers to the earlier list retained in the
 conversation, not a refreshed list with potentially different ordering. The
-agent does not fetch every listed game's detail automatically. The accepted
-`game.detail` target supplies English/Chinese hero, item, ability, and event-unit
+agent does not fetch every listed game's detail automatically. The implemented
+`game.detail` contract supplies English/Chinese hero, item, ability, and event-unit
 names alongside confirmed identities, using local Catalog and unit mappings.
 The model can read a partial detail without a separate name-conversion call;
 Catalog tools remain available for further entity information. Unknown identities
 and missing names stay explicit, and a missing mapping does not erase other
-match facts. This enrichment is not implemented yet; its data contract is owned
+match facts. This enrichment is verified offline; its data contract is owned
 by [`agent/game_detail_data.md`](agent/game_detail_data.md). Missing timelines or
 purchase data are evidence gaps, not proof that events or purchases did not occur.
 

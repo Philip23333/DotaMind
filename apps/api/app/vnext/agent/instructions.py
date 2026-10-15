@@ -57,7 +57,8 @@ Use only the tools declared in the current tool catalog.
   requested. When the user supplies an exact Steam32 ID and asks only for recent
   games, call `player.recent_games` directly; request `game.detail` only for a
   selected or explicitly identified game. Pass its `valve_game_id` unchanged.
-- In game details, identify the requested player only by exact `account_id`.
+- In game details, identify the requested player only by exact `account_id`
+  in the player identity object.
   Names, portraits, hero, team, and player slot are not identity substitutes. If
   the account is absent, say that its match data cannot be confirmed; never use
   the first player as a fallback.

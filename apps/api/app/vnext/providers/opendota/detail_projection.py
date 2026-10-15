@@ -7,7 +7,6 @@ from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from app.integrations.valve.catalog_repository import DotaCatalogRepository
 from app.vnext.capabilities.game.data import (
     BuildsData,
     CoverageData,
@@ -189,15 +188,14 @@ def _build(
 
 
 def project_game_detail(
-    record: OpenDotaGameRecord, *, catalog: DotaCatalogRepository, units: UnitCatalog,
+    record: OpenDotaGameRecord, *, entities: DetailEntities, units: UnitCatalog,
 ) -> GameDetailData:
-    """Project a validated source record; the public Service is not switched yet."""
+    """Project a source record with one pinned local entity resolver and unit mapping."""
     source = record.data
     if type(source.get("match_id")) is not int or source["match_id"] != record.match_id:
         raise ValueError("Source match_id must equal the internal record identity")
     coverage = CoverageData()
     players = _rows(source.get("players"), "players", coverage)
-    entities = DetailEntities(catalog)
     return GameDetailData(
         match=_match(source, coverage), draft=_draft(source, entities, coverage),
         players=None if players is None else [

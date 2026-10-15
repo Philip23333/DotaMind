@@ -11,6 +11,7 @@ from pydantic import ValidationError
 from app.integrations.valve.catalog_repository import DotaCatalogRepository
 from app.vnext.capabilities.game.data import FinalStats, GameDetailData
 from app.vnext.catalog import UnitCatalog
+from app.vnext.providers.opendota.detail_entities import DetailEntities
 from app.vnext.providers.opendota.detail_projection import project_game_detail
 from app.vnext.providers.opendota.game_detail import OpenDotaGameRecord
 
@@ -18,7 +19,7 @@ FIXTURE = Path(__file__).parent / "fixtures/game_detail/opendota_9040460429.json
 
 
 def project(value: OpenDotaGameRecord) -> GameDetailData:
-    return project_game_detail(value, catalog=DotaCatalogRepository.load_default(),
+    return project_game_detail(value, entities=DetailEntities(DotaCatalogRepository.load_default()),
                                units=UnitCatalog.load_default())
 
 

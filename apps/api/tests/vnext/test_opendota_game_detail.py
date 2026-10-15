@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 import asyncio
+import json
+from pathlib import Path
 from typing import Any
 
 import httpx
 import pytest
 
+from app.integrations.valve.catalog_repository import DotaCatalogRepository
+from app.vnext.artifacts.externalize import serialized_size
 from app.vnext.capabilities.game.detail import GameDetailInput, GameDetailResult
 from app.vnext.capabilities.game.service import GameDetailService
+from app.vnext.catalog import UnitCatalog
 from app.vnext.composition import (
     VNextServices,
     VNextSettings,
@@ -373,11 +378,17 @@ def test_registry_gate_services_composition_and_no_network_on_build(monkeypatch)
 
 
 def test_game_detail_result_spills_to_artifact_and_reads_narrow_player_path() -> None:
-    source = _match(extension="x" * 16_000)
+    fixture = Path(__file__).parent / "fixtures/game_detail/opendota_9040460429.json"
+    source = json.loads(fixture.read_text())
+    source["extension"] = "x" * 16000
+    valve_id = source["match_id"]
+    index = next(i for i, p in enumerate(source["players"]) if p["hero_id"] == 1)
     adapter, _ = _adapter(lambda request: httpx.Response(200, json=source, request=request))
     settings = VNextSettings(opendota_enabled=True)
     registry = build_vnext_registry(
-        VNextServices(game_detail=GameDetailService(adapter).get_game_detail),
+        VNextServices(game_detail=GameDetailService(
+            adapter, DotaCatalogRepository.load_default, UnitCatalog.load_default(),
+        ).get_game_detail),
         settings=settings,
     )
 
@@ -386,12 +397,13 @@ def test_game_detail_result_spills_to_artifact_and_reads_narrow_player_path() ->
             ToolCall(
                 id="detail",
                 name="game.detail",
-                arguments={"valve_game_id": _MATCH_ID},
+                arguments={"valve_game_id": valve_id},
             )
         )
     )
     assert result.status == "ok"
     assert result.content["externalized"] is True
+    assert serialized_size(result.content) <= settings.artifact_limits.observation_max_bytes
     ref = result.content["artifact_ref"]
     player_read = _run(
         registry.execute(
@@ -401,13 +413,31 @@ def test_game_detail_result_spills_to_artifact_and_reads_narrow_player_path() ->
                 arguments={
                     "ref": ref,
                     "mode": "read",
-                    "path": "data.players.0.hero_id",
+                    "path": f"data.players.{index}.identity.hero",
                 },
             )
         )
     )
     assert player_read.status == "ok"
-    assert player_read.content["value"] == 1
+    assert player_read.content["value"]["id"] == 1
+    assert player_read.content["value"]["name_en"] == "Anti-Mage"
+    assert serialized_size(player_read.content) <= settings.artifact_limits.observation_max_bytes
+    build_read = _run(registry.execute(ToolCall(
+        id="build-read", name="artifact.read", arguments={
+            "ref": ref, "mode": "read", "path": f"data.builds.players.{index}",
+        },
+    )))
+    assert build_read.status == "ok"
+    assert serialized_size(build_read.content) <= settings.artifact_limits.observation_max_bytes
+    assert any(e["item"] and e["item"]["name_en"] == "Manta Style"
+               for e in build_read.content["value"]["purchase_events"])
+    raw_read = _run(registry.execute(ToolCall(
+        id="raw-read", name="artifact.read", arguments={
+            "ref": ref, "mode": "read", "path": "data.extension",
+        },
+    )))
+    assert raw_read.status == "error"
+    assert raw_read.error.code == "artifact_path_not_found"
 
 
 def test_recent_games_tool_id_flows_into_game_detail_tool() -> None:
@@ -480,7 +510,9 @@ def test_recent_games_tool_id_flows_into_game_detail_tool() -> None:
     registry = build_vnext_registry(
         VNextServices(
             player_recent_games=stratz.get_recent_games,
-            game_detail=GameDetailService(opendota).get_game_detail,
+            game_detail=GameDetailService(
+                opendota, DotaCatalogRepository.load_default, UnitCatalog.load_default(),
+            ).get_game_detail,
         ),
         settings=VNextSettings(opendota_enabled=True),
     )
@@ -509,8 +541,9 @@ def test_recent_games_tool_id_flows_into_game_detail_tool() -> None:
     assert detail_result.status == "ok"
     detail = detail_result.content
     assert detail["valve_game_id"] == _MATCH_ID
-    assert detail["data"]["match_id"] == _MATCH_ID
-    assert detail["data"]["players"][0]["account_id"] == account_id
-    assert detail["data"]["players"][0]["hero_id"] == recent_match["players"][0]["heroId"]
-    assert detail["data"]["players"][0]["win"] == 0
+    assert detail["data"]["match"]["game_winner"] == "dire"
+    assert detail["data"]["players"][0]["identity"]["account_id"] == account_id
+    assert detail["data"]["players"][0]["identity"]["hero"]["id"] == (
+        recent_match["players"][0]["heroId"]
+    )
     assert recent_match["players"][0]["isVictory"] is False

@@ -449,15 +449,15 @@ The input is a Valve single-game ID, not a PandaScore Match, Series, or Game ID.
 It may come from the user, `player.recent_games`, or a resolved
 `esports.game.resolve` result.
 
-**Current implementation:** the validated OpenDota business object, including
-unknown JSON extensions and nullable values, is returned in `data` and passed
-to generic Artifact externalization. The tool binds to `GameDetailService`,
+**Current implementation:** the governed eight-section DTO is returned in
+`data` and passed to generic Artifact externalization. Complete validated source
+records remain internal. The tool binds to `GameDetailService`,
 which constructs its public result from an internal `OpenDotaGameRecord` read.
 The resolver consumes the internal record directly. Both use the same adapter
 and client, but changing the public result no longer changes the resolver's
 record type. No extra HTTP read is introduced by the Service.
 
-**Accepted target:** keep the input and outer provenance envelope, then return
+**Output contract:** keep the input and match provenance envelope, then return
 the eight-section `data` DTO defined in
 [`agent/game_detail_data.md`](agent/game_detail_data.md). The OpenDota source
 identity is validated before projection. The result Artifact contains the
@@ -465,15 +465,15 @@ complete governed DTO, with no raw-object field or model-facing way to retrieve
 the original response. Generic `artifact.read` and `artifact.grep` remain
 ordinary document operations.
 
-The accepted DTO includes English/Chinese entity names at typed hero, item,
+The DTO includes English/Chinese entity names at typed hero, item,
 ability, and event-unit fields, so reading a game does not require an explicit
 `catalog.lookup` call just to decode IDs or source unit/item keys. It retains
 canonical IDs, converts internal keys exactly using local data, and records one
 `catalog_version` and `unit_mapping_version` in the result envelope. Event types
 use fixed verified business enums. Unmapped keys/codes remain scalar evidence
 only in `coverage`; unknown entities or names do not erase known match facts.
-This enrichment and the public DTO switch are pending implementation. They do
-not change the Catalog tool input, introduce unit lookup as a new model tool,
+This enrichment and the public DTO switch are implemented and tested offline.
+They do not change the Catalog tool input, introduce unit lookup as a new model tool,
 or add image/display behavior.
 
 The DTO keeps source absence distinct from zero and empty values, and a missing
@@ -487,13 +487,13 @@ live OpenDota.
 `esports.game.resolve` keeps complete candidate detail reads internal and exposes
 only resolution evidence in its Artifact. It cannot be used as a separate route
 to retrieve those raw details. This boundary is implemented; the `game.detail`
-public DTO switch is still pending. The evidence contract and checks are tracked in
+public DTO switch is also implemented. The evidence contract and checks are tracked in
 [`DATA.md`](DATA.md) and [`EVALS.md`](EVALS.md).
 
-The offline eight-section mapper is implemented, but no tool currently invokes
-it. It still uses the earlier ID/key schema. Its existence does not change the
-registered `game.detail` schema or the current source-shaped Artifact body.
-Implement the accepted bilingual/unit/event mapping before the public switch.
+The public tool validates the closed DTO after conversion. Unknown source
+extensions and previous raw player/build paths are not retrievable from its
+Artifact. The model reads the needed DTO sections through ordinary generic
+Artifact paths, with names already attached to their entities.
 
 `catalog.lookup(kind, ids)` resolves up to 20 exact positive hero or item IDs
 against the active local Valve Dota 2 catalog snapshot. It returns each requested
@@ -503,7 +503,7 @@ when configured, it uses the file-backed snapshot managed by the API loader. Eac
 lookup captures one repository and uses it for all IDs and version metadata.
 These names are local catalog labels, not fields returned by STRATZ or OpenDota;
 unknown IDs remain unknown. The standalone lookup does not mutate a stored
-detail or make network requests. The accepted detail target performs local
+detail or make network requests. The detail Service performs local
 enrichment independently during DTO construction, before Artifact storage.
 
 For an account-to-game workflow, use `player.profile` only when profile data is

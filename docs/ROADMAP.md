@@ -88,9 +88,9 @@ before a second concrete implementation demonstrates the need.
   repository access; preserve first-seen order while deduplicating lookups.
 - Keep source-field extraction in each business capability. This component does
   not scan payloads, infer IDs, call providers, or register in `ToolRegistry`.
-- **Implemented:** `hero.guide` is integrated. `game.detail` remains a separate
-  follow-up and has not adopted the resolver. Its accepted bilingual/entity-unit
-  contract is part of the game-detail projection sequence below.
+- **Implemented:** `hero.guide` and the governed `game.detail` contract both
+  use the local entity-name resolver; detail also uses the independent unit
+  resource described below.
 
 ## Commit 10: hero-guide entity-name enrichment
 
@@ -107,7 +107,7 @@ before a second concrete implementation demonstrates the need.
   Artifact tools. Reuse generic Artifact externalization unchanged.
 - **Implemented:** deterministic tests cover existing fixtures, zero-ID samples,
   section bounds, cache compatibility, composition sharing, and Artifact reads.
-  `game.detail` name enrichment is a later independent follow-up.
+  `game.detail` name enrichment is implemented in its governed-detail contract below.
 
 ## Shared data updates (file guide reads and scheduled refresh active on WSL; production deployment pending)
 
@@ -229,9 +229,8 @@ Production migration, mounts, and timer remain pending. Patch records are
 independent of `refresh-catalog`; image URLs use content hashes independent of
 Catalog revision and patch.
 Offline tests do not establish power-loss recovery.
-`game.detail` entity-name enrichment remains unimplemented and belongs to its
-accepted governed-detail migration below; it does not add unit refresh work to
-this data-update migration.
+`game.detail` entity-name enrichment is implemented in its governed-detail
+contract below; it adds no unit refresh work to this data-update migration.
 
 ## Subsequent capability work
 
@@ -378,7 +377,7 @@ Deterministic regressions cover retained incorrect capability claims and an
 offline guide lookup. Real-model acceptance in both new conversations and
 conversations with old refusal history remains pending; scripted-model success
 does not establish that real-model refusal behavior is fixed. `game.detail`
-name enrichment remains a later independent item; shared data updates have
+name enrichment is implemented in its governed-detail contract; shared data updates have
 higher priority.
 
 ## Steam player and game-detail capabilities
@@ -406,79 +405,42 @@ higher priority.
   HTTP-mock tests do not establish live OpenDota availability. The prior
   `8960882635` cross-source ID check remains single-match evidence only.
 
-### Game detail eight-section projection (scope and bilingual contract accepted; public migration pending)
+### Game detail eight-section projection (implemented; deterministic acceptance passed)
 
-The target data contract is owned by
-[`agent/game_detail_data.md`](agent/game_detail_data.md). The current code still
-returns the full validated OpenDota object. The target retains
-`game.detail(valve_game_id)`, the outer provenance envelope, pre-projection
-identity validation, and generic Artifact handling. It adds exact local bilingual
-entity/unit names, one Catalog version and one unit-mapping version per result,
-normalized objective types, and scalar failed-conversion evidence. Its Artifact will contain
-the complete governed eight-section DTO, with no raw-object field or alternate
-model-facing read path. No frontend, HTTP route, persistence, replay task, or
-deployment work is part of this migration.
+The implemented contract is owned by
+[`agent/game_detail_data.md`](agent/game_detail_data.md). `game.detail(valve_game_id)`
+returns the complete governed DTO through generic Artifact handling. It preserves
+match provenance, adds one Catalog version and one unit-mapping version, and
+provides bilingual entity/unit objects, normalized objective types, and scalar
+failed-conversion evidence. There is no raw-object member or alternate public
+retrieval route. Frontend, HTTP route, persistence, replay, automatic unit refresh,
+and deployment changes remain outside this migration.
 
-Implementation order:
+Implemented boundaries:
 
-1. **First-version scope closed; internal split implemented:** use the
-   owner contract's confirmed field tables. Competition stays null, final stats
-   contain exactly ten fields, and additional candidates are deferred. Source
-   semantics that remain unverified stay unknown; they do not block known facts
-   or reopen scope. The resolver reads `OpenDotaGameRecord` directly;
-   `GameDetailService` constructs the separate public `GameDetailResult` and
-   currently preserves its full source body. Add the DTO conversion at this
-   Service boundary. Preserve exact source timestamps, side-specific team IDs,
-   source identity checks, and accepted per-game associations in the internal
-   record.
-2. **Implemented resolver source/evidence boundary:** keep complete validated
-   reads in the internal attempt and expose only request/stage/read-count
-   metadata and the existing target, League-selection, and resolution results
-   defined in the cross-source contract. The result Artifact excludes full
-   source collections and candidate detail bodies. Preserve this separation
-   when changing `game.detail`; the detail DTO migration remains pending.
-3. **Offline projection implemented; public switch pending:** closed DTO types
-   and static, minute, event, interaction, and coverage mappings are implemented
-   and locally tested with saved game `9040460429` and malformed/missing cases.
-   That earlier projector still uses IDs/source keys. It is intentionally not
-   connected to `GameDetailService` yet. Do not add a raw payload or let the generic
-   Artifact layer perform source mapping. Preserve missing, empty, zero, false,
-   negative-time, and conflict semantics as documented.
-4. **Accepted, implementation pending — local names and unit/event conversion:**
-   The standalone `UnitCatalog`, independent resource containing 117 verified
-   non-hero units, exact lookup, immutable loaded records, and content version are
-   implemented with focused tests. Detail conversion and composition remain pending:
-   replace typed hero/item/ability references with ID plus English/Chinese names,
-   and map non-hero event units through a separately maintained versioned local
-   resource exposed by Catalog. Reuse `EntityNameResolver` and exact internal-key
-   indexes; pin resources once per query, record versions once, preserve unknown
-   IDs, and move unconvertible source scalars into coverage. Normalize the six
-   verified objective types, including courier death and Tormentor kill. This
-   adds no model tool, remote name lookup, automatic unit refresh, new five-file
-   Catalog publication format, or ownership inference. Use the verified evidence
-   in [`reference/opendota-unit-identifiers.md`](reference/opendota-unit-identifiers.md).
-5. **Pending public switch and focused acceptance:** connect projection and
-   local enrichment at `GameDetailService`; cover field mappings, invalid identity,
-   missing logs and alignment, objective and actor mappings, exact catalog
-   resolution, the `9040460429` representative sample, generic Artifact
-   externalization/read, and the internal resolver path. Do not report this
-   capability as migrated or accepted before these checks pass. Include unknown
-   units/item keys, missing locales, fixed enum mappings, snapshot consistency,
-   no model Catalog call for names, and measured enriched DTO/read sizes.
+1. The OpenDota adapter validates identity and retains complete internal
+   `OpenDotaGameRecord` values. The resolver still uses exact timestamps,
+   source team IDs, and its accepted same-game associations from those records.
+2. The resolver publishes only its resolution evidence, excluding candidate
+   bodies and full source collections from its Artifact.
+3. Pure source projection retains the eight sections, same-player minute axes,
+   inclusive kill/death counts, final statistics, ordered builds, events,
+   hero-only interactions, and explicit missing/conflict semantics.
+4. Local Catalog resolution supplies hero/item/ability names. A separately
+   versioned `UnitCatalog` supplies 117 verified non-hero mappings. Exact indexes
+   resolve keys; known IDs survive missing names. Unknown keys/codes stay scalar
+   evidence in coverage, and fixed objective types include courier/Tormentor
+   events. Static default teams do not identify live unit ownership.
+5. `GameDetailService` pins the active entity repository before its source read,
+   projects the public DTO, and records static-resource versions. Registry,
+   generic Artifact, selected-account, and composed esports-resolution tests
+   verify this boundary without model Catalog calls merely to decode names.
 
-Confirmed mappings include final scoreboard/farming/combat fields, player
-sides, minimal source-team identities, complete death records, Moon Shard and
-other final build states, direct hero-only interactions, and structured
-`coverage.missing`/`coverage.conflicts`, including field-specific scalar mapping
-evidence. Bilingual names and verified unit/event mappings are also accepted.
-Source-semantics checks and internal
-consumer audits are verification tasks, not requests to approve these fields
-again. Additional candidates are excluded from this version.
-
-The sample is an explanation and source-mapping check, not a completeness,
-accuracy, or DTO-size guarantee. Static labels are materialized in the governed
-DTO with separate Catalog/unit-resource provenance; they do not fill missing
-historical mechanics. Image/display integration remains outside this change.
+First-version scope is closed: competition stays null, final stats contain the
+ten approved fields, and team identities retain only their confirmed minimum.
+Unknown neutral-slot/history semantics and actor encodings remain explicit
+limitations. They do not require another scope-approval round. Live OpenDota
+availability, real-model use, and frontend behavior require separate acceptance.
 
 The account-to-game workflow is covered with deterministic Runtime composition:
 the agent can continue from an account's bounded recent-games list to one

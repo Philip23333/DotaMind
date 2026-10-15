@@ -38,8 +38,7 @@ business result. The resolver is not a model tool. `hero.guide` uses it after
 section projection and preserves original IDs, source labels, and source fields.
 Names are added to the query result and generic Artifact output; they are not
 written into guide snapshots. Old snapshots remain readable because enrichment
-DTO fields have defaults. `game.detail` has not yet integrated the resolver.
-Its accepted target uses that local resolution during DTO construction, replaces
+DTO fields have defaults. `game.detail` also uses that local resolution during DTO construction, replaces
 source internal keys with exact bilingual entity/unit objects at typed fields,
 and keeps unmatched source scalars only in `coverage`. This explicit projection
 exception does not change guide source-label retention or generic Artifact tools.
@@ -116,8 +115,8 @@ public detail result and its Artifact to the governed DTO while preserving
 internal source facts required for identity checks. The resolver's public
 evidence boundary is implemented independently of that pending projection:
 the matcher still consumes complete candidate details, while its Artifact cannot
-retrieve them. `game.detail` itself still returns the full OpenDota object until
-its separate DTO migration is complete.
+retrieve them. `game.detail` itself returns the governed DTO and cannot retrieve the
+complete source record through an alternate public path.
 
 ### Capability result and Service
 
@@ -1112,8 +1111,8 @@ one participant returned 20 rows with nonincreasing raw timestamps under
 returned. This verifies one account/query sample, not general provider
 availability or universal ordering behavior.
 `game.detail` currently registers only when `DOTAMIND_OPENDOTA_ENABLED` is
-true. It preserves the full validated OpenDota object, including unknown JSON
-extensions, null values, zeroes, and booleans. The returned positive
+true. Its adapter preserves the complete validated source object internally,
+including JSON extensions, null values, zeroes, and booleans. The returned positive
 `match_id` must equal the requested Valve ID; known fields are type-checked
 when present. Anonymous player rows and absent optional or parsed fields are
 valid. Missing process data does not prove an event did not occur, and the
@@ -1121,17 +1120,15 @@ lookup does not trigger replay parsing. Tests use HTTP mocks. The earlier live
 cross-source check of `8960882635` is a single-match observation, not live
 verification of this new client. The target projection and its source/missing
 rules are owned by [`agent/game_detail_data.md`](agent/game_detail_data.md);
-the implementation still returns the full source object.
+the public implementation returns that DTO rather than the full source object.
 
-The pure OpenDota projector and closed eight-section `GameDetailData` model are
-implemented separately and tested using saved game `9040460429`. They cover
-static facts, source-aligned minutes, events, direct hero interactions, and
-structured coverage. That earlier mapper keeps source keys and an optional exact
-hero-ID index; it does not yet implement the accepted bilingual object schema,
-non-hero unit mapping, normalized objective types, or scalar mapping-gap fields.
-It performs no I/O and is not connected to the public Service yet. First-version
-scope is now closed: competition remains null and final stats contain exactly the
-ten approved fields. Other source-semantic limits remain explicit unknowns.
+The pure OpenDota projector and closed eight-section `GameDetailData` are
+implemented and connected to the public Service. They include source-aligned
+minutes, final statistics, typed bilingual entities/units, normalized objective
+types, direct hero interactions, and scalar coverage evidence. The source fixture
+still contains excluded fields, so tests protect projection boundaries. The
+first-version scope is closed: competition remains null and final stats contain
+exactly ten fields. Unverified source semantics remain explicit unknowns.
 
 The internal read and public result types are separate. The OpenDota adapter's
 `get_game_record(match_id)` validates source identity and known fields, then
@@ -1143,13 +1140,15 @@ source team IDs for its offline checks.
 `GameDetailService.get_game_detail(GameDetailInput)` calls that same adapter once
 and constructs the separate public `GameDetailResult`, mapping internal
 `match_id` to `valve_game_id` while retaining provider and retrieval time. It
-currently preserves the complete source body; the eight-section projection is
-not yet connected. Public and internal nested data do not share mutable values.
+pins one active local entity repository before the source read and projects the
+record with that resolver and one loaded unit resource. Its outer result includes
+`catalog_version` and `unit_mapping_version`. Public and internal data do not
+share mutable values.
 The Service adds no provider requests, retries, cache, or fallback; structured
 errors and cancellation propagate unchanged. Product wiring shares one adapter
 and client between this Service and the resolver, not one public result type.
 
-### Game detail data projection (offline mapper implemented; public switch pending)
+### Game detail data projection (implemented; deterministic tool/Artifact checks passed)
 
 The model-facing input remains `game.detail(valve_game_id)`. The outer
 `valve_game_id`, `provider`, and `retrieved_at` fields remain unique
@@ -1185,7 +1184,7 @@ mapping table are in
 
 The internal-consumer split is implemented: the resolver uses
 `OpenDotaGameRecord`, while `GameDetailService` owns construction of
-`GameDetailResult`. Add the public projection at this Service boundary without
+`GameDetailResult`. The public projection occurs at this Service boundary without
 changing the resolver's record. Any converter that consumes a game must retain the
 precise validated source timestamp and source team identities until it has
 finished using them. A model-facing DTO or Artifact must not expose the original
@@ -1215,7 +1214,6 @@ and returns display names with snapshot-version metadata. With
 the API uses the published file-backed snapshot and background loader. These
 labels have provenance separate from provider match facts. The accepted
 `game.detail` projection adds them to its governed DTO before Artifact storage;
-the complete internal OpenDota record is not rewritten. This integration remains
-pending. Unknown IDs remain visible as unknown. Match statistics support only the
+the complete internal OpenDota record is not rewritten. This integration is verified offline. Unknown IDs remain visible as unknown. Match statistics support only the
 conclusions they encode; missing timeline, purchase, or identity data remains
 unknown and must not be interpreted as proof that an event did not happen.

@@ -77,7 +77,7 @@ result processor run together; only HTTP is replaced by a strict
 from its generated Match Artifact to resolve game position 1 as Valve Game
 `9042720328`, then passes that confirmed ID to `game.detail`. Match search and
 Match-context reads are separate requests, as are candidate-detail and later
-`game.detail` reads. The current full detail result remains in the `game.detail`
+`game.detail` reads. The complete governed detail DTO remains in the `game.detail`
 Artifact, while the resolver Artifact contains only the public evidence
 projection. Composition tests inspect that projection through generic
 `artifact.read`, reject `data.candidate_details` as `artifact_path_not_found`,
@@ -421,13 +421,12 @@ the shared appearance of a player or event is not sufficient. These tests do
 not establish general current STRATZ availability or every source business
 meaning.
 
-### Game detail eight-section projection (offline mapper implemented; public switch pending)
+### Game detail eight-section projection (implemented; deterministic boundary checks passed)
 
 The owner contract is
-[`agent/game_detail_data.md`](agent/game_detail_data.md). The current adapter
-and public Service still return the complete validated OpenDota object. The checks
-below remain full-migration acceptance requirements, not a claim that the public
-tool already returns the DTO. Offline projection tests currently cover the
+[`agent/game_detail_data.md`](agent/game_detail_data.md). The adapter retains
+complete source records internally; the public Service now returns the governed
+DTO with bilingual entity/unit labels and version provenance. Offline tests cover the
 closed eight-section model, static mappings, strict enums, final statistics,
 slot-preserving loadouts, purchase/skill/neutral history, source identity, and
 missing versus explicit empty collections using saved game `9040460429`.
@@ -441,9 +440,9 @@ hero IDs; unknown and duplicate actor identities; negative and end-tail times;
 opaque objective codes; partial logs; direct hero-only maps and self-healing;
 absent versus empty maps; no nested target aggregation; and scalar conflicts
 with corresponding paths. Excluded fields remain in the source fixture to
-exercise the earlier closed projection. These tests do not establish the accepted
-bilingual entity/unit schema, normalized objective types, scalar mapping-gap
-fields, or public tool integration; those changes are still pending.
+exercise the closed projection. Entity and event tests additionally cover the
+bilingual object schema, exact unit matching, six normalized objective types,
+scalar mapping-gap fields, and partial labels without translation.
 
 Existing saved OpenDota responses for `9040460429`, `9040578015`, and
 `9042720328` were also sampled offline against the local entity Catalog and
@@ -464,20 +463,21 @@ ward, summon, neutral, fountain, and objective units retain unknown game sides.
 Tests also cover immutable loaded snapshots, content/provenance version changes,
 formatting-independent versions, missing locales, strict schema validation,
 duplicate identifiers, working-directory independence, and resource-error
-propagation. This verifies local unit lookup only; it does not wire names into
-game detail or change the public tool/Artifact schema.
+propagation. These tests isolate local unit lookup. Separate Service and registry tests
+verify its use in the public tool/Artifact schema.
 
 The internal/public type split is implemented independently of that projection.
-Focused Service tests verify one native-ID record read, unchanged public data
-and provenance, independent mutable nested values, and unchanged structured
+Focused Service tests verify one native-ID record read, governed public data
+with label provenance, active-snapshot pinning before the read, independent
+mutable nested values, and unchanged structured
 errors/cancellation. Adapter tests retain full source validation and reject
 invalid internal read IDs before HTTP. Product composition verifies that the
 resolver uses the same adapter/client through its internal record API, while
-the public tool binds to `GameDetailService`; its Artifact and direct detail
-behavior remain unchanged. These are deterministic local checks, not live
+the public tool binds to `GameDetailService`; its Artifact retains the complete governed DTO. Old raw player/build paths
+fail with artifact_path_not_found, while narrow entity reads return bilingual names. These are deterministic local checks, not live
 provider or model validation.
 
-Deterministic acceptance must verify:
+Deterministic acceptance checks cover:
 
 - The unchanged closed `valve_game_id` input, positive matching `match_id`, and
   existing stable provider-error behavior. One outer envelope records match
@@ -562,6 +562,13 @@ set in this phase. Measure compact UTF-8 DTO size and bounded Artifact-read
 behavior after bilingual enrichment; the earlier ID/key-only size is not evidence
 of final-model context cost.
 
+For the saved `9040460429` fixture, the implemented bilingual data body measured
+188,919 compact UTF-8 bytes; its fixture result envelope measured 189,244 bytes.
+The largest single-player record was 6,555 bytes and largest player-build record
+10,316 bytes. Those are fixture measurements, not fixed limits or fresh-provider
+retrieval evidence. Generic initial observations and Artifact reads retain their
+existing configured bounds; local whole-result size is not model context use.
+
 Implementation must honor the closed first-version scope without reopening it.
 Competition and extra final statistics are deferred, not acceptance blockers.
 Keep unknown neutral-slot/history meanings and additional actor/code semantics
@@ -593,8 +600,9 @@ skill-sequence alignment, unknown IDs, copied output objects, missing-cache
 hero names, version mismatch and resolver-error propagation, old Redis snapshot
 decoding, composition repository sharing, tool non-use of `catalog.lookup`, and
 name retrieval through the existing Artifact path. These are offline checks;
-they do not establish real-model answer quality. `game.detail` remains outside
-this integration.
+they do not establish real-model answer quality. The governed `game.detail`
+Service and its selected-account workflow now have separate offline coverage
+for direct bilingual-name reads without a Catalog tool call.
 
 Context Governance evaluation measures answer omissions, complete-request
 peaks, summary and locator overhead, successful compactions, recovery attempts,

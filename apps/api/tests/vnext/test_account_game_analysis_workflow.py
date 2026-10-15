@@ -12,12 +12,14 @@ from app.vnext.agent.instructions import AGENT_INSTRUCTION, PRODUCT_INSTRUCTION
 from app.vnext.agent.limits import AgentLimits
 from app.vnext.agent.runtime import AgentRuntime
 from app.vnext.capabilities.game.detail import GameDetailInput, GameDetailResult
+from app.vnext.capabilities.game.service import GameDetailService
 from app.vnext.capabilities.player.profile import PlayerProfileInput, PlayerProfileResult
 from app.vnext.capabilities.player.recent_games import (
     PlayerRecentGame,
     PlayerRecentGamesInput,
     PlayerRecentGamesResult,
 )
+from app.vnext.catalog import UnitCatalog
 from app.vnext.composition import VNextServices, VNextSettings, build_vnext_registry
 from app.vnext.llm.protocol import (
     AssistantMessage,
@@ -31,12 +33,23 @@ from app.vnext.llm.protocol import (
 from app.vnext.product.chat import VNextChatService
 from app.vnext.product.context import ConversationContextBuilder
 from app.vnext.product.presentation import DotaVisualEntityEnricher
+from app.vnext.providers.opendota.game_detail import OpenDotaGameRecord
 from app.vnext.providers.valve.catalog_lookup import ValveCatalogLookupAdapter
 from app.vnext.tools.errors import StructuredToolError
 from tests.vnext.fakes import ScriptedTranscriptModelClient
 
 ACCOUNT_ID = 7654321
 _NOW = datetime(2026, 9, 27, tzinfo=UTC)
+
+
+async def _detail_result(query: GameDetailInput, data: dict) -> GameDetailResult:
+    class Provider:
+        async def get_game_record(self, match_id):
+            return OpenDotaGameRecord(match_id=match_id, retrieved_at=_NOW, data=data)
+
+    return await GameDetailService(
+        Provider(), load_default_catalog_repository, UnitCatalog.load_default(),
+    ).get_game_detail(query)
 
 
 class _MemoryChatRepository:
@@ -211,7 +224,7 @@ def test_profile_question_uses_profile_without_recent_games_or_game_detail() -> 
     assert len(repository.appended) == 1
 
 
-def test_recent_games_selects_one_game_reads_exact_player_artifact_and_catalog_names() -> None:
+def test_recent_games_reads_exact_player_and_bilingual_names_without_catalog_call() -> None:
     recent_calls: list[int] = []
     detail_calls: list[int] = []
     source_data: dict[str, object] = {}
@@ -256,12 +269,7 @@ def test_recent_games_selects_one_game_reads_exact_player_artifact_and_catalog_n
                 "players": players,
             }
         )
-        return GameDetailResult(
-            valve_game_id=query.valve_game_id,
-            provider="opendota",
-            retrieved_at=_NOW,
-            data=source_data,
-        )
+        return await _detail_result(query, source_data)
 
     def recent_tool(request: ModelRequest) -> ModelResponse:
         assert _last_user(request).endswith(str(ACCOUNT_ID))
@@ -298,41 +306,27 @@ def test_recent_games_selects_one_game_reads_exact_player_artifact_and_catalog_n
                     "mode": "read",
                     "path": "data.players.5",
                 },
-            )
-        )
-
-    def lookup_names(request: ModelRequest) -> ModelResponse:
-        read_result = _tool_results(request)[-1].content
-        target = read_result["value"]
-        assert target["account_id"] == ACCOUNT_ID
-        assert target["hero_id"] == 1
-        assert target["win"] == 0
-        assert target["item_0"] == 1
-        assert "purchase_log" not in source_data
-        return _tool_turn(
-            ToolCall(
-                id="hero-name",
-                name="catalog.lookup",
-                arguments={"kind": "hero", "ids": [1, 999999]},
             ),
-            ToolCall(
-                id="item-name",
-                name="catalog.lookup",
-                arguments={"kind": "item", "ids": [1]},
-            ),
+            ToolCall(id="build-read", name="artifact.read", arguments={
+                "ref": detail_output["artifact_ref"], "mode": "read",
+                "path": "data.builds.players.5",
+            }),
         )
 
     def final_execution(request: ModelRequest) -> ModelResponse:
         results = _tool_results(request)
-        catalog_results = results[-2:]
-        assert catalog_results[0].content["entries"][0]["status"] == "found"
-        assert catalog_results[0].content["entries"][1] == {
-            "id": 999999,
-            "status": "unknown",
-            "name_en": None,
-            "name_zh": None,
-        }
-        assert catalog_results[1].content["entries"][0]["id"] == 1
+        target = results[-2].content["value"]
+        build = results[-1].content["value"]
+        assert target["identity"]["account_id"] == ACCOUNT_ID
+        assert target["identity"]["hero"]["id"] == 1
+        assert target["identity"]["hero"]["name_en"] == "Anti-Mage"
+        assert target["final_stats"]["kills"] == 5
+        assert build["final_loadout"]["inventory"][0]["id"] == 1
+        assert build["final_loadout"]["inventory"][0]["name_en"] == "Blink Dagger"
+        assert "purchase_log" not in source_data
+        calls = [call.name for message in request.messages if isinstance(message, AssistantMessage)
+                 for call in message.tool_calls]
+        assert "catalog.lookup" not in calls
         assert any(
             entry["data"]["players"][0]["isWinner"] is True
             for result in results
@@ -351,7 +345,7 @@ def test_recent_games_selects_one_game_reads_exact_player_artifact_and_catalog_n
         )
         assert any(
             isinstance(message, ToolResultMessage)
-            and message.content.get("value", {}).get("account_id") == ACCOUNT_ID
+            and message.content.get("value", {}).get("identity", {}).get("account_id") == ACCOUNT_ID
             for message in request.messages
             if isinstance(message.content, dict)
         )
@@ -362,7 +356,6 @@ def test_recent_games_selects_one_game_reads_exact_player_artifact_and_catalog_n
             recent_tool,
             selected_detail,
             read_target_player,
-            lookup_names,
             final_execution,
             final_answer,
         ]
@@ -402,15 +395,10 @@ def test_second_game_followup_uses_original_list_after_new_game_appears() -> Non
 
     async def detail(query: GameDetailInput) -> GameDetailResult:
         detail_calls.append(query.valve_game_id)
-        return GameDetailResult(
-            valve_game_id=query.valve_game_id,
-            provider="opendota",
-            retrieved_at=_NOW,
-            data={
-                "match_id": query.valve_game_id,
-                "players": [{"account_id": ACCOUNT_ID, "hero_id": 2, "win": 1}],
-            },
-        )
+        return await _detail_result(query, {
+            "match_id": query.valve_game_id,
+            "players": [{"account_id": ACCOUNT_ID, "hero_id": 2, "win": 1}],
+        })
 
     def initial_list(request: ModelRequest) -> ModelResponse:
         assert _last_user(request) == "Show my recent five games"
@@ -552,18 +540,13 @@ def test_missing_target_account_and_timeline_are_not_filled_from_similar_player(
 
     async def detail(query: GameDetailInput) -> GameDetailResult:
         detail_calls.append(query.valve_game_id)
-        return GameDetailResult(
-            valve_game_id=query.valve_game_id,
-            provider="opendota",
-            retrieved_at=_NOW,
-            data={
-                "match_id": query.valve_game_id,
-                "players": [
-                    {"account_id": ACCOUNT_ID + 1, "personaname": str(ACCOUNT_ID), "hero_id": 1},
-                    {"account_id": ACCOUNT_ID + 2, "personaname": "Synthetic target", "hero_id": 2},
-                ],
-            },
-        )
+        return await _detail_result(query, {
+            "match_id": query.valve_game_id,
+            "players": [
+                {"account_id": ACCOUNT_ID + 1, "personaname": str(ACCOUNT_ID), "hero_id": 1},
+                {"account_id": ACCOUNT_ID + 2, "personaname": "Synthetic target", "hero_id": 2},
+            ],
+        })
 
     def get_recent(_request: ModelRequest) -> ModelResponse:
         return _tool_turn(
@@ -585,8 +568,9 @@ def test_missing_target_account_and_timeline_are_not_filled_from_similar_player(
 
     def report_gap(request: ModelRequest) -> ModelResponse:
         detail_result = _tool_content(_tool_results(request)[-1])
-        assert detail_result["data"]["players"][0]["account_id"] == ACCOUNT_ID + 1
-        assert all(row["account_id"] != ACCOUNT_ID for row in detail_result["data"]["players"])
+        assert detail_result["data"]["players"][0]["identity"]["account_id"] == ACCOUNT_ID + 1
+        assert all(row["identity"]["account_id"] != ACCOUNT_ID
+                   for row in detail_result["data"]["players"])
         assert "purchase_log" not in detail_result["data"]
         instruction = " ".join(
             " ".join(

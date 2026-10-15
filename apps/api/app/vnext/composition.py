@@ -72,7 +72,7 @@ from app.vnext.capabilities.player.recent_games import (
     PlayerRecentGamesInput,
     PlayerRecentGamesResult,
 )
-from app.vnext.catalog import EntityNameResolver
+from app.vnext.catalog import EntityNameResolver, UnitCatalog
 from app.vnext.data_updates.image_reader import ImageManifestReader
 from app.vnext.entity_display import EntityDisplayDirectory
 from app.vnext.hero_guides.cache import HeroGuideReader
@@ -655,6 +655,11 @@ def build_vnext_services(
         )
         player_profile = StratzPlayerProfileAdapter(stratz_client).get_profile
         player_recent_games = StratzPlayerRecentGamesAdapter(stratz_client).get_recent_games
+    repository_provider = (
+        catalog_repository_provider
+        if catalog_repository_provider is not None
+        else load_default_catalog_repository
+    )
     game_detail: GameDetailLookup | None = None
     game_detail_adapter: OpenDotaGameDetailAdapter | None = None
     opendota_client: OpenDotaClient | None = None
@@ -665,7 +670,9 @@ def build_vnext_services(
             timeout_seconds=config.opendota_timeout_seconds,
         )
         game_detail_adapter = OpenDotaGameDetailAdapter(opendota_client)
-        game_detail = GameDetailService(game_detail_adapter).get_game_detail
+        game_detail = GameDetailService(
+            game_detail_adapter, repository_provider, UnitCatalog.load_default(),
+        ).get_game_detail
     game_resolution: GameResolutionService | None = None
     if config.game_resolution_enabled:
         if opendota_client is None or game_detail_adapter is None:
@@ -681,11 +688,6 @@ def build_vnext_services(
             provider,
             policy=config.game_resolution_read_policy,
         )
-    repository_provider = (
-        catalog_repository_provider
-        if catalog_repository_provider is not None
-        else load_default_catalog_repository
-    )
     entity_display_directory = EntityDisplayDirectory(
         repository_provider,
         data_root=config.data_dir,

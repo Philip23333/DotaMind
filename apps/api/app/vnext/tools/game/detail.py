@@ -16,15 +16,21 @@ may be explicitly provided by the user, returned by player.recent_games, or
 returned as valve_game_id by a resolved esports.game.resolve result. A PandaScore
 Match, Series, or Game ID is not a Valve Game ID and cannot be passed here.
 
-Returns the available OpenDota source record, which may include draft, player,
-economy, or other match facts depending on the source record. Availability is
-not guaranteed: missing fields do not mean an event did not occur or that a
-value was zero. The result is not necessarily a complete event timeline, and
-this tool does not request replay parsing. Large results are stored as an
-Artifact and can be read by narrower paths when needed.
+Returns eight governed sections: match, draft, players, economy, builds,
+events, interactions, and coverage. Hero, item, ability, and event-unit objects
+include confirmed IDs where applicable and English/Chinese names from local
+catalogs; no separate Catalog call is needed just to decode these entities.
+The result records label-resource versions separately from OpenDota provenance.
+
+Missing fields or unconvertible identifiers do not mean an event did not occur
+or that a value was zero. Inspect coverage for missing data, original unmapped
+scalar identifiers, and source conflicts. The result is not necessarily a
+complete event timeline, and this tool does not request replay parsing. Large
+results are stored as an Artifact; read only the needed section or player path.
+The raw provider response cannot be retrieved from this result.
 
 When analyzing a particular Steam32 account, locate its player row by exact
-account_id; do not substitute a row based on nickname, hero, team, or slot.
+identity.account_id; do not substitute a row based on nickname, hero, team, or slot.
 """
 
 

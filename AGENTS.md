@@ -176,7 +176,7 @@ validated source entity and capability-owned output contract
 generic Artifact handling + bounded observation
 ```
 
-The current output is the complete validated OpenDota source object. The accepted target projects it into the explicit eight-section DTO owned by [`docs/agent/game_detail_data.md`](docs/agent/game_detail_data.md). Keep those statuses distinct.
+The current `game.detail` output is the explicit eight-section DTO owned by [`docs/agent/game_detail_data.md`](docs/agent/game_detail_data.md), with local bilingual entity/unit names and version provenance. Complete OpenDota source records remain internal to validation and identity resolution.
 
 Esports discovery is currently being redesigned as a PandaScore-oriented agent
 tool seam; the previous unified `esports.search` capability (tool, service,
@@ -240,9 +240,9 @@ game.detail(valve_game_id)
   ↓
 Game detail capability/service
   ↓
-current: complete validated source object → generic result processor
-target: validate source identity → capability-owned eight-section DTO
-        → generic Artifact handling + bounded observation
+validate source identity → capability-owned eight-section DTO
+  + exact local bilingual entity/unit labels and version provenance
+  → generic Artifact handling + bounded observation
 ```
 
 The accepted target is an explicit DotaMind projection for minute-state review and

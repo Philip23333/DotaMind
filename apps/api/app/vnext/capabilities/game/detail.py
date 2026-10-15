@@ -5,7 +5,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, StrictInt, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr, field_validator
+
+from app.vnext.catalog import EntityNameCatalogVersion
+
+from .data import GameDetailData
 
 
 class GameDetailInput(BaseModel):
@@ -23,30 +27,20 @@ class GameDetailInput(BaseModel):
 
 
 class GameDetailResult(BaseModel):
-    """Complete source JSON observation for an existing game, without summary conversion."""
+    """Governed recorded-game facts with locally attributed bilingual labels."""
 
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
     valve_game_id: Annotated[StrictInt, Field(gt=0)]
     provider: Literal["opendota"]
     retrieved_at: datetime = Field(description="Time this response was retrieved, with timezone.")
-    data: dict[str, JsonValue] = Field(
-        description=(
-            "Non-empty source business object preserved as JSON, including nested extensions, "
-            "nulls, zeroes, and booleans."
-        )
-    )
+    catalog_version: EntityNameCatalogVersion
+    unit_mapping_version: StrictStr = Field(min_length=1)
+    data: GameDetailData = Field(description="Eight governed sections; no raw provider object.")
 
     @field_validator("retrieved_at")
     @classmethod
     def require_timezone(cls, value: datetime) -> datetime:
         if value.tzinfo is None or value.utcoffset() is None:
             raise ValueError("retrieved_at must include a timezone")
-        return value
-
-    @field_validator("data")
-    @classmethod
-    def require_nonempty_source_object(cls, value: dict[str, JsonValue]) -> dict[str, JsonValue]:
-        if not value:
-            raise ValueError("data must be a non-empty source JSON object")
         return value

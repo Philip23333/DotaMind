@@ -211,7 +211,21 @@ async def test_product_composition_runs_search_resolve_and_detail_chain(
     assert rejected_read.error is not None
     assert rejected_read.error.code == "artifact_path_not_found"
     detail_document = await store.get(detail.content["artifact_ref"])
-    assert detail_document["data"] == _fixture("opendota_game_9042720328.json")
+    assert set(detail_document["data"]) == {
+        "match", "draft", "players", "economy", "builds", "events", "interactions", "coverage",
+    }
+    assert detail_document["data"]["match"]["duration_seconds"] == (
+        _fixture("opendota_game_9042720328.json")["duration"]
+    )
+    assert detail_document["data"]["players"][0]["identity"]["hero"]["name_en"] == "Sven"
+    assert "match_id" not in detail_document["data"]
+    assert "version" not in detail_document["data"]
+    assert detail_document["unit_mapping_version"].startswith("sha256:")
+    blocked = await registry.execute(_call("artifact.read", {
+        "ref": detail.content["artifact_ref"], "mode": "read",
+        "path": "data.players.0.purchase_log",
+    }))
+    assert blocked.status == "error" and blocked.error.code == "artifact_path_not_found"
     assert detail_document["valve_game_id"] == _VALVE_GAME_ID
     assert await store.get_source_tool(match_ref) == "esports.match.search"
     assert await store.get_source_tool(resolved.content["artifact_ref"]) == "esports.game.resolve"

@@ -94,8 +94,7 @@ resolver returns the explicit IDs alongside resolved names and does not inspect
 arbitrary JSON, perform fuzzy matching, or register a model-facing tool. Its
 names are attributed to the local Valve catalog snapshot; upstream facts retain
 their source attribution. Unknown IDs remain present with empty names. The shared
-component is integrated into `hero.guide`; `game.detail` integration remains
-pending under its accepted bilingual DTO contract. The latter keeps IDs but
+component is integrated into `hero.guide` and the governed `game.detail` DTO. The latter keeps IDs but
 replaces source internal-key business fields with exact entity objects and
 retains unconvertible scalar evidence in coverage. This exception does not make
 the shared resolver a source-JSON scanner.
@@ -104,10 +103,9 @@ The model-facing contract never exposes wire routes, credentials, pagination
 syntax, or transport-private IDs. A single provider does not justify a router or
 plugin framework.
 
-### Game-detail data governance (offline mapper implemented; public switch pending)
+### Game-detail data governance (implemented; deterministic boundary checks passed)
 
-The current `game.detail` output is the complete validated OpenDota object.
-Its accepted target is the explicit eight-section DTO in
+The current `game.detail` output is the explicit eight-section DTO in
 [`agent/game_detail_data.md`](agent/game_detail_data.md). Source identity
 validation and the projection belong at the capability/provider data boundary.
 Runtime and the generic Artifact processor do not perform gameplay or provider
@@ -119,19 +117,15 @@ The internal/public type split is implemented. The OpenDota adapter returns
 detail DTOs. The resolver consumes that complete internal record. Product
 composition also gives the same adapter to `GameDetailService`, which owns
 construction of the public `GameDetailResult` and its Valve ID envelope.
-Currently it preserves the source body; add the eight-section projection here
-without altering the resolver's input. No provider router or generic conversion
+It projects the eight-section DTO here without altering the resolver's input. No provider router or generic conversion
 framework is introduced.
 
-The closed data model and pure OpenDota projector are implemented as separate
-capability/provider modules. Static, temporal, event, interaction, and coverage
-mappings can be exercised offline without changing the public Service. The
-earlier model still uses IDs/source keys; bilingual entity/unit objects,
-normalized event types, and scalar mapping-gap fields are accepted but pending.
-The Service still constructs the source-shaped result; local enrichment, the
-explicit DTO switch, and tool/Artifact boundary acceptance remain pending.
+The closed data model, pure OpenDota projector, local entity/unit enrichment,
+and public Service switch are implemented. Deterministic tests cover registry
+output, generic Artifact storage/reads, and the unchanged internal resolver path.
+They do not establish live-provider coverage or real-model behavior.
 
-The target Service captures one active entity Catalog and one versioned local
+The Service captures one active entity Catalog and one versioned local
 unit resource, projects source facts, and resolves names before output validation
 and generic Artifact handling. Explicit hero/item/ability IDs reuse
 `EntityNameResolver`; OpenDota-specific key extraction stays below the capability

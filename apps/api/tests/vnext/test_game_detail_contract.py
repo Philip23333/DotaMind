@@ -3,8 +3,11 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import ValidationError
 
+from app.integrations.valve.catalog_repository import DotaCatalogRepository
 from app.vnext.capabilities.game import GameDetailInput, GameDetailResult
 from app.vnext.capabilities.player import PlayerRecentGame, PlayerRecentGamesResult
+from app.vnext.catalog import EntityNameResolver, UnitCatalog
+from tests.vnext.test_game_detail_projection import project, record, source
 
 NOW = datetime(2026, 9, 27, 12, tzinfo=UTC)
 
@@ -18,48 +21,31 @@ def test_game_detail_input_uses_positive_strict_valve_game_id() -> None:
         GameDetailInput(valve_game_id=12345, game_id=12345)
 
 
-def test_game_detail_preserves_nonempty_nested_json_source_object() -> None:
-    result = GameDetailResult(
-        valve_game_id=12345,
-        provider="opendota",
-        retrieved_at=NOW,
-        data={"players": [{"purchase": None, "gold": 0, "radiant_win": False}]},
-    )
-    assert result.model_dump(mode="json")["data"] == {
-        "players": [{"purchase": None, "gold": 0, "radiant_win": False}]
+def test_game_detail_requires_closed_governed_data_and_unique_label_versions() -> None:
+    arguments = {
+        "valve_game_id": 12345, "provider": "opendota", "retrieved_at": NOW,
+        "catalog_version": EntityNameResolver(DotaCatalogRepository.load_default()).resolve_many(
+            kind="hero", ids=[],
+        ).catalog_version,
+        "unit_mapping_version": UnitCatalog.load_default().version,
+        "data": project(record(source(match_id=12345))),
     }
-
-    for data in ({}, {"unsupported": object()}, {"invalid_number": float("nan")}):
+    result = GameDetailResult(**arguments)
+    assert set(result.data.model_dump()) == {
+        "match", "draft", "players", "economy", "builds", "events", "interactions", "coverage",
+    }
+    for data in ({}, {"match_id": 12345, "players": []}, {"raw": {"source": True}}):
         with pytest.raises(ValidationError):
-            GameDetailResult(
-                valve_game_id=12345,
-                provider="opendota",
-                retrieved_at=NOW,
-                data=data,
-            )
-
+            GameDetailResult(**{**arguments, "data": data})
+    for key in ("catalog_version", "unit_mapping_version"):
+        with pytest.raises(ValidationError):
+            GameDetailResult(**{k: v for k, v in arguments.items() if k != key})
     with pytest.raises(ValidationError, match="timezone"):
-        GameDetailResult(
-            valve_game_id=12345,
-            provider="opendota",
-            retrieved_at=datetime(2026, 9, 27),
-            data={"players": []},
-        )
+        GameDetailResult(**{**arguments, "retrieved_at": datetime(2026, 9, 27)})
     with pytest.raises(ValidationError):
-        GameDetailResult(
-            valve_game_id=12345,
-            provider="stratz",
-            retrieved_at=NOW,
-            data={"players": []},
-        )
+        GameDetailResult(**{**arguments, "provider": "stratz"})
     with pytest.raises(ValidationError):
-        GameDetailResult(
-            valve_game_id=12345,
-            provider="opendota",
-            retrieved_at=NOW,
-            data={"players": []},
-            unexpected="field",
-        )
+        GameDetailResult(**arguments, raw={"source": True})
 
 
 def test_recent_game_id_composes_directly_into_game_detail_input() -> None:
