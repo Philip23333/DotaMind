@@ -431,6 +431,10 @@ tool already returns the DTO. Offline projection tests currently cover the
 closed eight-section model, static mappings, strict enums, final statistics,
 slot-preserving loadouts, purchase/skill/neutral history, source identity, and
 missing versus explicit empty collections using saved game `9040460429`.
+Minute tests additionally cover inclusive/pre-zero event accumulation, missing
+and malformed logs, duplicate or unsorted time axes, short metric arrays,
+explicit empty curves, real 600-second values, and team-axis correspondence.
+They retain raw advantage values when their time axis cannot be established.
 
 The internal/public type split is implemented independently of that projection.
 Focused Service tests verify one native-ID record read, unchanged public data

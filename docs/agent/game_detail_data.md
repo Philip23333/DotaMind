@@ -6,7 +6,7 @@ This document is the sole detailed data contract for `game.detail`.
 
 - **Current implementation:** `game.detail` returns the complete validated OpenDota source object in `data`.
 - **Accepted target:** `data` is an explicit DotaMind DTO containing source facts and necessary deterministic transformations.
-- **Implementation status:** closed DTO types and static OpenDota mappings are implemented as an offline projector; minute, event, and interaction mapping remains pending. The public Service still returns the full OpenDota object; the projector is not connected to the tool.
+- **Implementation status:** closed DTO types, static mappings, player minute timelines, and team economy mappings are implemented as an offline projector; event and interaction mapping remains pending. The public Service still returns the full OpenDota object; the projector is not connected to the tool.
 - **Use:** minute-by-minute state review and final-game statistics.
 - **Outside this contract:** performance ratings, role inference, lane-win judgments, teamfight classification, review recommendations, counterfactuals, simulated inventory states, and continuous map replay.
 
@@ -138,6 +138,8 @@ The source `radiant_gold_adv` remains named as the source's gold-advantage fact;
 | `time_seconds` | integer array or `null` | Reuse a player's `times` axis only after verifying all player axes agree and both team arrays have matching lengths and index correspondence. |
 
 Do not assume every player array shares the same axis or that an advantage array can be aligned merely because lengths match. When correspondence cannot be established, leave the affected axis or series unavailable and report only a material promised-data gap or conflict.
+
+The offline projector requires strictly increasing integer player axes; each metric must match its own player's axis length. A mismatched metric becomes unknown for those nodes without truncating other metrics. Invalid event times make that cumulative curve unavailable rather than silently undercounting. For team advantages, all provided player axes must agree, start at zero, and follow the source's minute buckets (`0, 60, ...`); both team arrays must also match that axis length. Otherwise keep the source advantage arrays with `time_seconds=null` and a coverage reason. The minute-bucket semantics are documented by the [OpenDota API schema](https://api.opendota.com/api); no team net-worth difference is added.
 
 The first-version team fields are the two source advantage arrays and their verified time axis listed above. Validate availability and correspondence for each response; additional economy fields require a separate decision.
 

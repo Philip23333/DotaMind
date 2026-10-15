@@ -433,7 +433,7 @@ Implementation order:
    source collections and candidate detail bodies. Preserve this separation
    when changing `game.detail`; the detail DTO migration remains pending.
 3. **Offline projection in progress; public switch pending:** closed DTO types
-   and static mappings are implemented and locally tested; minute, event, and
+   and static/minute mappings are implemented and locally tested; event and
    interaction mappings remain pending. Complete the eight sections before
    connecting the projector to `GameDetailService`. Do not add a raw payload or let the generic
    Artifact layer perform source mapping. Preserve missing, empty, zero, false,

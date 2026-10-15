@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 from collections.abc import Mapping
 from datetime import datetime
 from typing import Any
@@ -17,7 +16,6 @@ from app.vnext.capabilities.game.data import (
     FinalStats,
     GameDetailData,
     MatchData,
-    MissingData,
     NeutralItemEvent,
     PlayerBuild,
     PlayerData,
@@ -28,40 +26,12 @@ from app.vnext.capabilities.game.data import (
     TeamsData,
 )
 
+from .detail_timeline import project_economy, project_minutes
+from .detail_values import _missing, _rows, _value
 from .game_detail import OpenDotaGameRecord
 
 _FINAL_INTEGERS = ("kills", "deaths", "assists", "level", "last_hits", "denies")
 _FINAL_NUMBERS = ("net_worth", "hero_damage", "tower_damage", "hero_healing")
-
-
-def _missing(coverage: CoverageData, path: str, reason: str) -> None:
-    entry = MissingData(path=path, reason=reason)
-    if entry not in coverage.missing:
-        coverage.missing.append(entry)
-
-
-def _is_number(value: Any) -> bool:
-    return type(value) in (int, float) and math.isfinite(value)
-
-
-def _value(
-    source: Mapping[str, Any], key: str, kind: type, path: str,
-    coverage: CoverageData, *, required: bool = True,
-) -> Any:
-    value = source.get(key)
-    valid = _is_number(value) if kind is float else type(value) is kind
-    if valid:
-        return value
-    if required:
-        _missing(coverage, path, f"Source {key} is unavailable or invalid")
-    return None
-
-
-def _rows(value: Any, path: str, coverage: CoverageData) -> list[dict[str, Any]] | None:
-    if isinstance(value, list) and all(isinstance(row, dict) for row in value):
-        return value
-    _missing(coverage, path, "Source record list is unavailable or invalid")
-    return None
 
 
 def _side(value: Any) -> str | None:
@@ -145,7 +115,8 @@ def _player(source: Mapping[str, Any], i: int, coverage: CoverageData) -> Player
         **{key: _value(source, key, float, f"{path}.final_stats.{key}", coverage)
            for key in _FINAL_NUMBERS},
     )
-    return PlayerData(identity=identity, final_stats=stats)
+    return PlayerData(identity=identity, final_stats=stats,
+                      minute_timeline=project_minutes(source, i, coverage))
 
 
 def _build(source: Mapping[str, Any], i: int, coverage: CoverageData) -> PlayerBuild:
@@ -201,5 +172,6 @@ def project_game_detail(record: OpenDotaGameRecord) -> GameDetailData:
         builds=BuildsData(players=None if players is None else [
             _build(player, i, coverage) for i, player in enumerate(players)
         ]),
+        economy=project_economy(source, players, coverage),
         coverage=coverage,
     )
