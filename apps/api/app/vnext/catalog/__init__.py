@@ -7,6 +7,7 @@ from app.vnext.catalog.resolver import (
     EntityNameResolver,
     ResolvedEntityName,
 )
+from app.vnext.catalog.units import UnitCatalog, UnitCatalogRecord
 
 __all__ = [
     "EntityKind",
@@ -14,4 +15,6 @@ __all__ = [
     "EntityNameResolution",
     "EntityNameResolver",
     "ResolvedEntityName",
+    "UnitCatalog",
+    "UnitCatalogRecord",
 ]

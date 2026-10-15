@@ -457,6 +457,16 @@ evidence, not new automated-test results, production snapshot coverage, or
 exhaustive future-unit support. Reproducible source revisions and examples are in
 [`reference/opendota-unit-identifiers.md`](reference/opendota-unit-identifiers.md).
 
+The independent `UnitCatalog` now has focused offline tests for its bundled 117
+unique bilingual records, exact lookup and no prefix/display-name fallback,
+explicit tower/creep/barracks attributes, and unknown keys. Generic courier,
+ward, summon, neutral, fountain, and objective units retain unknown game sides.
+Tests also cover immutable loaded snapshots, content/provenance version changes,
+formatting-independent versions, missing locales, strict schema validation,
+duplicate identifiers, working-directory independence, and resource-error
+propagation. This verifies local unit lookup only; it does not wire names into
+game detail or change the public tool/Artifact schema.
+
 The internal/public type split is implemented independently of that projection.
 Focused Service tests verify one native-ID record read, unchanged public data
 and provenance, independent mutable nested values, and unchanged structured

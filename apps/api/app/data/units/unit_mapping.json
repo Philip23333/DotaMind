@@ -1,0 +1,1084 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "repository": "SteamDatabase/GameTracking-Dota2",
+      "revision": "fc24352806127812d3746b47d7c53ed5f802ffaa",
+      "path": "game/dota/pak01_dir/resource/localization/dota_english.txt",
+      "sha256": "3c7138f17b4ed569960218c70af01768a3139ec05269d98136d7ad4da3163d33"
+    },
+    {
+      "repository": "SteamDatabase/GameTracking-Dota2",
+      "revision": "fc24352806127812d3746b47d7c53ed5f802ffaa",
+      "path": "game/dota/pak01_dir/scripts/npc/npc_units.txt",
+      "sha256": "f9a4b9d946913324f4263af2d41a3be5436645fb17e411ac006350caa83e9d37"
+    },
+    {
+      "repository": "SteamDatabase/GameTracking-Dota2",
+      "revision": "fc24352806127812d3746b47d7c53ed5f802ffaa",
+      "path": "game/dota/pak01_dir/resource/localization/abilities_english.txt",
+      "sha256": "1d35f2b3d7c7d564e28f7e99364919f8596b9c0bec549104d2510951b3f03406"
+    },
+    {
+      "repository": "dotabuff/d2vpkr",
+      "revision": "68348f45cb38e5c29388e13bd2ca4f825393357d",
+      "path": "dota/resource/localization/abilities_schinese.txt",
+      "sha256": "61ea25747179d44146db70f8cb9aac1a58c304d624025e372f77f212b6698708"
+    }
+  ],
+  "units": [
+    {
+      "internal_name": "dota_fountain",
+      "kind": "fountain",
+      "name_zh": "泉水",
+      "name_en": "Fountain",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_badguys_fillers",
+      "kind": "building",
+      "name_zh": "建筑",
+      "name_en": "Building",
+      "side": "dire",
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_badguys_fort",
+      "kind": "ancient",
+      "name_zh": "夜魇遗迹",
+      "name_en": "Dire's Ancient",
+      "side": "dire",
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_badguys_melee_rax_bot",
+      "kind": "barracks",
+      "name_zh": "近战兵营",
+      "name_en": "Melee Barracks",
+      "side": "dire",
+      "lane": "bot",
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_badguys_melee_rax_mid",
+      "kind": "barracks",
+      "name_zh": "近战兵营",
+      "name_en": "Melee Barracks",
+      "side": "dire",
+      "lane": "mid",
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_badguys_melee_rax_top",
+      "kind": "barracks",
+      "name_zh": "近战兵营",
+      "name_en": "Melee Barracks",
+      "side": "dire",
+      "lane": "top",
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_badguys_range_rax_bot",
+      "kind": "barracks",
+      "name_zh": "远程兵营",
+      "name_en": "Ranged Barracks",
+      "side": "dire",
+      "lane": "bot",
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_badguys_range_rax_mid",
+      "kind": "barracks",
+      "name_zh": "远程兵营",
+      "name_en": "Ranged Barracks",
+      "side": "dire",
+      "lane": "mid",
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_badguys_range_rax_top",
+      "kind": "barracks",
+      "name_zh": "远程兵营",
+      "name_en": "Ranged Barracks",
+      "side": "dire",
+      "lane": "top",
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_badguys_siege",
+      "kind": "siege_creep",
+      "name_zh": "攻城单位",
+      "name_en": "Siege Creep",
+      "side": "dire",
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_badguys_siege_upgraded",
+      "kind": "siege_creep",
+      "name_zh": "高级攻城单位",
+      "name_en": "Super Siege Creep",
+      "side": "dire",
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_badguys_tower1_bot",
+      "kind": "tower",
+      "name_zh": "防御塔",
+      "name_en": "Tower",
+      "side": "dire",
+      "lane": "bot",
+      "tier": 1
+    },
+    {
+      "internal_name": "npc_dota_badguys_tower1_mid",
+      "kind": "tower",
+      "name_zh": "防御塔",
+      "name_en": "Tower",
+      "side": "dire",
+      "lane": "mid",
+      "tier": 1
+    },
+    {
+      "internal_name": "npc_dota_badguys_tower1_top",
+      "kind": "tower",
+      "name_zh": "防御塔",
+      "name_en": "Tower",
+      "side": "dire",
+      "lane": "top",
+      "tier": 1
+    },
+    {
+      "internal_name": "npc_dota_badguys_tower2_bot",
+      "kind": "tower",
+      "name_zh": "防御塔",
+      "name_en": "Tower",
+      "side": "dire",
+      "lane": "bot",
+      "tier": 2
+    },
+    {
+      "internal_name": "npc_dota_badguys_tower2_mid",
+      "kind": "tower",
+      "name_zh": "防御塔",
+      "name_en": "Tower",
+      "side": "dire",
+      "lane": "mid",
+      "tier": 2
+    },
+    {
+      "internal_name": "npc_dota_badguys_tower2_top",
+      "kind": "tower",
+      "name_zh": "防御塔",
+      "name_en": "Tower",
+      "side": "dire",
+      "lane": "top",
+      "tier": 2
+    },
+    {
+      "internal_name": "npc_dota_badguys_tower3_bot",
+      "kind": "tower",
+      "name_zh": "防御塔",
+      "name_en": "Tower",
+      "side": "dire",
+      "lane": "bot",
+      "tier": 3
+    },
+    {
+      "internal_name": "npc_dota_badguys_tower3_mid",
+      "kind": "tower",
+      "name_zh": "防御塔",
+      "name_en": "Tower",
+      "side": "dire",
+      "lane": "mid",
+      "tier": 3
+    },
+    {
+      "internal_name": "npc_dota_badguys_tower3_top",
+      "kind": "tower",
+      "name_zh": "防御塔",
+      "name_en": "Tower",
+      "side": "dire",
+      "lane": "top",
+      "tier": 3
+    },
+    {
+      "internal_name": "npc_dota_badguys_tower4",
+      "kind": "tower",
+      "name_zh": "防御塔",
+      "name_en": "Tower",
+      "side": "dire",
+      "lane": null,
+      "tier": 4
+    },
+    {
+      "internal_name": "npc_dota_brewmaster_earth_1",
+      "kind": "summoned_unit",
+      "name_zh": "大地战士",
+      "name_en": "Earth Brewling",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_brewmaster_earth_3",
+      "kind": "summoned_unit",
+      "name_zh": "大地战士",
+      "name_en": "Earth Brewling",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_brewmaster_earth_4",
+      "kind": "summoned_unit",
+      "name_zh": "大地战士",
+      "name_en": "Earth Brewling",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_brewmaster_fire_1",
+      "kind": "summoned_unit",
+      "name_zh": "烈火战士",
+      "name_en": "Fire Brewling",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_brewmaster_fire_3",
+      "kind": "summoned_unit",
+      "name_zh": "烈火战士",
+      "name_en": "Fire Brewling",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_brewmaster_fire_4",
+      "kind": "summoned_unit",
+      "name_zh": "烈火战士",
+      "name_en": "Fire Brewling",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_brewmaster_storm_1",
+      "kind": "summoned_unit",
+      "name_zh": "狂风战士",
+      "name_en": "Storm Brewling",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_brewmaster_storm_3",
+      "kind": "summoned_unit",
+      "name_zh": "狂风战士",
+      "name_en": "Storm Brewling",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_brewmaster_storm_4",
+      "kind": "summoned_unit",
+      "name_zh": "狂风战士",
+      "name_en": "Storm Brewling",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_courier",
+      "kind": "courier",
+      "name_zh": "信使",
+      "name_en": "Courier",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_creep_badguys_flagbearer",
+      "kind": "lane_creep",
+      "name_zh": "士兵旗手",
+      "name_en": "Flagbearer Creep",
+      "side": "dire",
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_creep_badguys_flagbearer_upgraded",
+      "kind": "lane_creep",
+      "name_zh": "高级士兵旗手",
+      "name_en": "Super Flagbearer Creep",
+      "side": "dire",
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_creep_badguys_melee",
+      "kind": "lane_creep",
+      "name_zh": "近战兵",
+      "name_en": "Melee Creep",
+      "side": "dire",
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_creep_badguys_melee_upgraded",
+      "kind": "lane_creep",
+      "name_zh": "高级近战兵",
+      "name_en": "Super Melee Creep",
+      "side": "dire",
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_creep_badguys_ranged",
+      "kind": "lane_creep",
+      "name_zh": "远程兵",
+      "name_en": "Ranged Creep",
+      "side": "dire",
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_creep_badguys_ranged_upgraded",
+      "kind": "lane_creep",
+      "name_zh": "高级远程兵",
+      "name_en": "Super Ranged Creep",
+      "side": "dire",
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_creep_goodguys_flagbearer",
+      "kind": "lane_creep",
+      "name_zh": "士兵旗手",
+      "name_en": "Flagbearer Creep",
+      "side": "radiant",
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_creep_goodguys_flagbearer_upgraded",
+      "kind": "lane_creep",
+      "name_zh": "高级士兵旗手",
+      "name_en": "Super Flagbearer Creep",
+      "side": "radiant",
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_creep_goodguys_melee",
+      "kind": "lane_creep",
+      "name_zh": "近战兵",
+      "name_en": "Melee Creep",
+      "side": "radiant",
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_creep_goodguys_melee_upgraded",
+      "kind": "lane_creep",
+      "name_zh": "高级近战兵",
+      "name_en": "Super Melee Creep",
+      "side": "radiant",
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_creep_goodguys_ranged",
+      "kind": "lane_creep",
+      "name_zh": "远程兵",
+      "name_en": "Ranged Creep",
+      "side": "radiant",
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_creep_goodguys_ranged_upgraded",
+      "kind": "lane_creep",
+      "name_zh": "高级远程兵",
+      "name_en": "Super Ranged Creep",
+      "side": "radiant",
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_dark_troll_warlord_skeleton_warrior",
+      "kind": "summoned_unit",
+      "name_zh": "骷髅战士",
+      "name_en": "Skeleton Warrior",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_enraged_wildkin_tornado",
+      "kind": "spell_unit",
+      "name_zh": "飓风",
+      "name_en": "Tornado",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_furion_treant",
+      "kind": "summoned_unit",
+      "name_zh": "树人",
+      "name_en": "Treant",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_goodguys_fillers",
+      "kind": "building",
+      "name_zh": "建筑",
+      "name_en": "Building",
+      "side": "radiant",
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_goodguys_fort",
+      "kind": "ancient",
+      "name_zh": "天辉遗迹",
+      "name_en": "Radiant's Ancient",
+      "side": "radiant",
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_goodguys_melee_rax_bot",
+      "kind": "barracks",
+      "name_zh": "近战兵营",
+      "name_en": "Melee Barracks",
+      "side": "radiant",
+      "lane": "bot",
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_goodguys_melee_rax_mid",
+      "kind": "barracks",
+      "name_zh": "近战兵营",
+      "name_en": "Melee Barracks",
+      "side": "radiant",
+      "lane": "mid",
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_goodguys_melee_rax_top",
+      "kind": "barracks",
+      "name_zh": "近战兵营",
+      "name_en": "Melee Barracks",
+      "side": "radiant",
+      "lane": "top",
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_goodguys_range_rax_bot",
+      "kind": "barracks",
+      "name_zh": "远程兵营",
+      "name_en": "Ranged Barracks",
+      "side": "radiant",
+      "lane": "bot",
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_goodguys_range_rax_mid",
+      "kind": "barracks",
+      "name_zh": "远程兵营",
+      "name_en": "Ranged Barracks",
+      "side": "radiant",
+      "lane": "mid",
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_goodguys_range_rax_top",
+      "kind": "barracks",
+      "name_zh": "远程兵营",
+      "name_en": "Ranged Barracks",
+      "side": "radiant",
+      "lane": "top",
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_goodguys_siege",
+      "kind": "siege_creep",
+      "name_zh": "攻城单位",
+      "name_en": "Siege Creep",
+      "side": "radiant",
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_goodguys_siege_upgraded",
+      "kind": "siege_creep",
+      "name_zh": "高级攻城单位",
+      "name_en": "Super Siege Creep",
+      "side": "radiant",
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_goodguys_tower1_bot",
+      "kind": "tower",
+      "name_zh": "防御塔",
+      "name_en": "Tower",
+      "side": "radiant",
+      "lane": "bot",
+      "tier": 1
+    },
+    {
+      "internal_name": "npc_dota_goodguys_tower1_mid",
+      "kind": "tower",
+      "name_zh": "防御塔",
+      "name_en": "Tower",
+      "side": "radiant",
+      "lane": "mid",
+      "tier": 1
+    },
+    {
+      "internal_name": "npc_dota_goodguys_tower1_top",
+      "kind": "tower",
+      "name_zh": "防御塔",
+      "name_en": "Tower",
+      "side": "radiant",
+      "lane": "top",
+      "tier": 1
+    },
+    {
+      "internal_name": "npc_dota_goodguys_tower2_bot",
+      "kind": "tower",
+      "name_zh": "防御塔",
+      "name_en": "Tower",
+      "side": "radiant",
+      "lane": "bot",
+      "tier": 2
+    },
+    {
+      "internal_name": "npc_dota_goodguys_tower2_mid",
+      "kind": "tower",
+      "name_zh": "防御塔",
+      "name_en": "Tower",
+      "side": "radiant",
+      "lane": "mid",
+      "tier": 2
+    },
+    {
+      "internal_name": "npc_dota_goodguys_tower2_top",
+      "kind": "tower",
+      "name_zh": "防御塔",
+      "name_en": "Tower",
+      "side": "radiant",
+      "lane": "top",
+      "tier": 2
+    },
+    {
+      "internal_name": "npc_dota_goodguys_tower3_bot",
+      "kind": "tower",
+      "name_zh": "防御塔",
+      "name_en": "Tower",
+      "side": "radiant",
+      "lane": "bot",
+      "tier": 3
+    },
+    {
+      "internal_name": "npc_dota_goodguys_tower3_mid",
+      "kind": "tower",
+      "name_zh": "防御塔",
+      "name_en": "Tower",
+      "side": "radiant",
+      "lane": "mid",
+      "tier": 3
+    },
+    {
+      "internal_name": "npc_dota_goodguys_tower3_top",
+      "kind": "tower",
+      "name_zh": "防御塔",
+      "name_en": "Tower",
+      "side": "radiant",
+      "lane": "top",
+      "tier": 3
+    },
+    {
+      "internal_name": "npc_dota_goodguys_tower4",
+      "kind": "tower",
+      "name_zh": "防御塔",
+      "name_en": "Tower",
+      "side": "radiant",
+      "lane": null,
+      "tier": 4
+    },
+    {
+      "internal_name": "npc_dota_miniboss",
+      "kind": "tormentor",
+      "name_zh": "痛苦魔方",
+      "name_en": "Tormentor",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_neutral_alpha_wolf",
+      "kind": "neutral_creep",
+      "name_zh": "头狼",
+      "name_en": "Alpha Wolf",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_neutral_ancient_frog",
+      "kind": "neutral_creep",
+      "name_zh": "远古长须蛙",
+      "name_en": "Ancient Croaker",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_neutral_ancient_frog_mage",
+      "kind": "neutral_creep",
+      "name_zh": "远古沼蛙法师",
+      "name_en": "Ancient Marshmage",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_neutral_big_thunder_lizard",
+      "kind": "neutral_creep",
+      "name_zh": "远古雷肤兽",
+      "name_en": "Ancient Thunderhide",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_neutral_black_dragon",
+      "kind": "neutral_creep",
+      "name_zh": "远古黑龙",
+      "name_en": "Ancient Black Dragon",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_neutral_black_drake",
+      "kind": "neutral_creep",
+      "name_zh": "远古黑蜉蝣",
+      "name_en": "Ancient Black Drake",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_neutral_centaur_khan",
+      "kind": "neutral_creep",
+      "name_zh": "半人马征服者",
+      "name_en": "Centaur Conqueror",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_neutral_centaur_outrunner",
+      "kind": "neutral_creep",
+      "name_zh": "半人马猎手",
+      "name_en": "Centaur Courser",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_neutral_dark_troll",
+      "kind": "neutral_creep",
+      "name_zh": "丘陵巨魔",
+      "name_en": "Hill Troll",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_neutral_dark_troll_warlord",
+      "kind": "neutral_creep",
+      "name_zh": "黑暗巨魔召唤法师",
+      "name_en": "Dark Troll Summoner",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_neutral_enraged_wildkin",
+      "kind": "neutral_creep",
+      "name_zh": "枭兽撕裂者",
+      "name_en": "Wildwing Ripper",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_neutral_fel_beast",
+      "kind": "neutral_creep",
+      "name_zh": "魔能之魂",
+      "name_en": "Fell Spirit",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_neutral_forest_troll_berserker",
+      "kind": "neutral_creep",
+      "name_zh": "丘陵巨魔狂战士",
+      "name_en": "Hill Troll Berserker",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_neutral_forest_troll_high_priest",
+      "kind": "neutral_creep",
+      "name_zh": "丘陵巨魔牧师",
+      "name_en": "Hill Troll Priest",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_neutral_froglet",
+      "kind": "neutral_creep",
+      "name_zh": "沼蛙",
+      "name_en": "Boglet",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_neutral_froglet_mage",
+      "kind": "neutral_creep",
+      "name_zh": "沼蛙法师学徒",
+      "name_en": "Marshmage Apprentice",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_neutral_frostbitten_golem",
+      "kind": "neutral_creep",
+      "name_zh": "远古霜害傀儡",
+      "name_en": "Ancient Frostbitten Golem",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_neutral_ghost",
+      "kind": "neutral_creep",
+      "name_zh": "鬼魂",
+      "name_en": "Ghost",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_neutral_giant_wolf",
+      "kind": "neutral_creep",
+      "name_zh": "巨狼",
+      "name_en": "Giant Wolf",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_neutral_gnoll_assassin",
+      "kind": "neutral_creep",
+      "name_zh": "豺狼人刺客",
+      "name_en": "Vhoul Assassin",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_neutral_granite_golem",
+      "kind": "neutral_creep",
+      "name_zh": "远古花岗石傀儡",
+      "name_en": "Ancient Granite Golem",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_neutral_grown_frog",
+      "kind": "neutral_creep",
+      "name_zh": "长须蛙",
+      "name_en": "Croaker",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_neutral_grown_frog_mage",
+      "kind": "neutral_creep",
+      "name_zh": "沼蛙法师",
+      "name_en": "Marshmage",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_neutral_harpy_scout",
+      "kind": "neutral_creep",
+      "name_zh": "鹰身女妖侦察者",
+      "name_en": "Harpy Scout",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_neutral_harpy_storm",
+      "kind": "neutral_creep",
+      "name_zh": "鹰身女妖风暴巫师",
+      "name_en": "Harpy Stormcrafter",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_neutral_ice_shaman",
+      "kind": "neutral_creep",
+      "name_zh": "远古寒冰萨满",
+      "name_en": "Ancient Ice Shaman",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_neutral_kobold",
+      "kind": "neutral_creep",
+      "name_zh": "狗头人",
+      "name_en": "Kobold",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_neutral_kobold_taskmaster",
+      "kind": "neutral_creep",
+      "name_zh": "狗头人长官",
+      "name_en": "Kobold Foreman",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_neutral_kobold_tunneler",
+      "kind": "neutral_creep",
+      "name_zh": "狗头人士兵",
+      "name_en": "Kobold Soldier",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_neutral_mud_golem",
+      "kind": "neutral_creep",
+      "name_zh": "泥土傀儡",
+      "name_en": "Mud Golem",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_neutral_mud_golem_split",
+      "kind": "neutral_creep",
+      "name_zh": "碎土傀儡",
+      "name_en": "Shard Golem",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_neutral_ogre_magi",
+      "kind": "neutral_creep",
+      "name_zh": "食人魔冰霜法师",
+      "name_en": "Ogre Frostmage",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_neutral_ogre_mauler",
+      "kind": "neutral_creep",
+      "name_zh": "食人魔拳手",
+      "name_en": "Ogre Bruiser",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_neutral_polar_furbolg_champion",
+      "kind": "neutral_creep",
+      "name_zh": "地狱熊怪",
+      "name_en": "Hellbear",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_neutral_polar_furbolg_ursa_warrior",
+      "kind": "neutral_creep",
+      "name_zh": "地狱熊怪粉碎者",
+      "name_en": "Hellbear Smasher",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_neutral_prowler_acolyte",
+      "kind": "neutral_creep",
+      "name_zh": "远古侍僧潜行者",
+      "name_en": "Ancient Prowler Acolyte",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_neutral_prowler_shaman",
+      "kind": "neutral_creep",
+      "name_zh": "远古萨满潜行者",
+      "name_en": "Ancient Prowler Shaman",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_neutral_rock_golem",
+      "kind": "neutral_creep",
+      "name_zh": "远古岩石傀儡",
+      "name_en": "Ancient Rock Golem",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_neutral_satyr_hellcaller",
+      "kind": "neutral_creep",
+      "name_zh": "萨特苦难使者",
+      "name_en": "Satyr Tormenter",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_neutral_satyr_soulstealer",
+      "kind": "neutral_creep",
+      "name_zh": "萨特窃神者",
+      "name_en": "Satyr Mindstealer",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_neutral_satyr_trickster",
+      "kind": "neutral_creep",
+      "name_zh": "萨特放逐者",
+      "name_en": "Satyr Banisher",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_neutral_small_thunder_lizard",
+      "kind": "neutral_creep",
+      "name_zh": "远古岚肤兽",
+      "name_en": "Ancient Rumblehide",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_neutral_tadpole",
+      "kind": "neutral_creep",
+      "name_zh": "蝌蚪",
+      "name_en": "Pollywog",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_neutral_warpine_raider",
+      "kind": "neutral_creep",
+      "name_zh": "斗松掠夺者",
+      "name_en": "Warpine Raider",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_neutral_wildkin",
+      "kind": "neutral_creep",
+      "name_zh": "枭兽",
+      "name_en": "Wildwing",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_observer_wards",
+      "kind": "ward",
+      "name_zh": "侦察守卫",
+      "name_en": "Observer Ward",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_roshan",
+      "kind": "roshan",
+      "name_zh": "肉山",
+      "name_en": "Roshan",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_sentry_wards",
+      "kind": "ward",
+      "name_zh": "岗哨守卫",
+      "name_en": "Sentry Ward",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_unit_roshans_banner",
+      "kind": "roshans_banner",
+      "name_zh": "肉山的战旗",
+      "name_en": "Roshan's Banner",
+      "side": null,
+      "lane": null,
+      "tier": null
+    },
+    {
+      "internal_name": "npc_dota_witch_doctor_death_ward",
+      "kind": "summoned_unit",
+      "name_zh": "死亡守卫",
+      "name_en": "Death Ward",
+      "side": null,
+      "lane": null,
+      "tier": null
+    }
+  ]
+}

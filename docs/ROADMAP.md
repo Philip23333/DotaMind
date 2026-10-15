@@ -445,6 +445,9 @@ Implementation order:
    Artifact layer perform source mapping. Preserve missing, empty, zero, false,
    negative-time, and conflict semantics as documented.
 4. **Accepted, implementation pending — local names and unit/event conversion:**
+   The standalone `UnitCatalog`, independent resource containing 117 verified
+   non-hero units, exact lookup, immutable loaded records, and content version are
+   implemented with focused tests. Detail conversion and composition remain pending:
    replace typed hero/item/ability references with ID plus English/Chinese names,
    and map non-hero event units through a separately maintained versioned local
    resource exposed by Catalog. Reuse `EntityNameResolver` and exact internal-key
