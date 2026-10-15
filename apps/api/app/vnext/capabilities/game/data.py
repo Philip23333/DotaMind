@@ -4,7 +4,16 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictFloat, StrictInt, StrictStr
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    StrictFloat,
+    StrictInt,
+    StrictStr,
+    model_validator,
+)
 
 Number = StrictInt | StrictFloat
 Scalar = StrictStr | Number | StrictBool | None
@@ -23,6 +32,12 @@ class MissingData(_Data):
 class SourceConflict(_Data):
     paths: list[str]
     values: list[Scalar]
+
+    @model_validator(mode="after")
+    def corresponding_values(self) -> SourceConflict:
+        if len(self.paths) < 2 or len(self.paths) != len(self.values):
+            raise ValueError("Conflict paths and scalar values must correspond")
+        return self
 
 
 class CoverageData(_Data):
@@ -46,7 +61,7 @@ class ScoreData(_Data):
 
 
 class MatchData(_Data):
-    match_date: str | None = None
+    match_date: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
     duration_seconds: StrictInt | None = None
     game_winner: Side | None = None
     score: ScoreData
@@ -165,12 +180,14 @@ class BuybackEvent(_Data):
 
 class ObjectiveEvent(_Data):
     time_seconds: Number | None = None
-    source_type: str | None = None
+    source_type: Scalar = None
     source_key: Scalar = None
     source_unit_key: str | None = None
     player_slot: StrictInt | None = None
+    victim_player_slot: StrictInt | None = None
     source_slot: Scalar = None
     source_player_slot: Scalar = None
+    source_victim_player_slot: Scalar = None
     source_team: Scalar = None
     source_killer: Scalar = None
     source_value: Scalar = None

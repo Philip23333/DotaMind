@@ -101,7 +101,7 @@ The model-facing contract never exposes wire routes, credentials, pagination
 syntax, or transport-private IDs. A single provider does not justify a router or
 plugin framework.
 
-### Game-detail data governance (accepted target; not implemented)
+### Game-detail data governance (offline mapper implemented; public switch pending)
 
 The current `game.detail` output is the complete validated OpenDota object.
 Its accepted target is the explicit eight-section DTO in
@@ -119,6 +119,12 @@ construction of the public `GameDetailResult` and its Valve ID envelope.
 Currently it preserves the source body; add the eight-section projection here
 without altering the resolver's input. No provider router or generic conversion
 framework is introduced.
+
+The closed data model and pure OpenDota projector are implemented as separate
+capability/provider modules. Static, temporal, event, interaction, and coverage
+mappings can be exercised offline without changing the public Service. The
+Service still constructs the source-shaped result; the explicit DTO switch and
+tool/Artifact boundary acceptance remain pending.
 
 Any game converter must retain exact source time and team identity until it
 uses those facts and must consume an already accepted same-game team-to-side

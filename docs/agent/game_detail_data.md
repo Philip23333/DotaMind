@@ -6,7 +6,7 @@ This document is the sole detailed data contract for `game.detail`.
 
 - **Current implementation:** `game.detail` returns the complete validated OpenDota source object in `data`.
 - **Accepted target:** `data` is an explicit DotaMind DTO containing source facts and necessary deterministic transformations.
-- **Implementation status:** closed DTO types, static mappings, player minute timelines, and team economy mappings are implemented as an offline projector; event and interaction mapping remains pending. The public Service still returns the full OpenDota object; the projector is not connected to the tool.
+- **Implementation status:** the closed DTO and eight-section OpenDota projector are implemented and tested offline. The public Service still returns the full OpenDota object; connecting the projector to the tool and verifying that public output is a separate pending step. Additional field candidates and opaque source-code meanings below remain unresolved.
 - **Use:** minute-by-minute state review and final-game statistics.
 - **Outside this contract:** performance ratings, role inference, lane-win judgments, teamfight classification, review recommendations, counterfactuals, simulated inventory states, and continuous map replay.
 
@@ -133,8 +133,8 @@ The source `radiant_gold_adv` remains named as the source's gold-advantage fact;
 
 | Target field | Type | Source and rule |
 |---|---|---|
-| `radiant_gold_adv` | number array or `null` | Preserve the OpenDota source array under its source name. |
-| `radiant_xp_adv` | number array or `null` | Preserve the OpenDota source array under its source name. |
+| `radiant_gold_adv` | nullable-number array or `null` | Preserve source samples; an invalid or unknown individual value remains `null` with a coverage gap. |
+| `radiant_xp_adv` | nullable-number array or `null` | Preserve source samples with the same missing-value rule. |
 | `time_seconds` | integer array or `null` | Reuse a player's `times` axis only after verifying all player axes agree and both team arrays have matching lengths and index correspondence. |
 
 Do not assume every player array shares the same axis or that an advantage array can be aligned merely because lengths match. When correspondence cannot be established, leave the affected axis or series unavailable and report only a material promised-data gap or conflict.
@@ -191,13 +191,24 @@ Do not infer a killer player from similar names or nearby event times. Missing o
 
 Conflicting first-blood sources remain separate values in `coverage.conflicts`; do not adjudicate them. Preserve end-of-game timestamps even when they exceed `duration_seconds` by one second. The data contract does not add an anomaly warning or a frontend endpoint-display rule. Eye wards, runes, and pauses are outside the first-version event categories. `MINIBOSS_KILL` and unverified objective actor/team fields remain untranslated until their source semantics are confirmed.
 
-Objective source-code mappings and additional non-death event-field lists still require verification before implementation. This does not reopen the confirmed death-record fields above.
+The projector classifies only exact observed source codes: `building_kill`, `CHAT_MESSAGE_ROSHAN_KILL`, `CHAT_MESSAGE_AEGIS`, and `CHAT_MESSAGE_FIRSTBLOOD`. Other codes, including `CHAT_MESSAGE_MINIBOSS_KILL`, remain in `other_objectives` without a guessed label. Additional implemented event fields are:
+
+| Event data | Fields and direct source mappings |
+|---|---|
+| Buyback | `time_seconds` from `time`; `player_slot` from the owning player; `source_slot` and `source_player_slot` preserve log `slot` and `player_slot` independently. Conflicting owner/source slots are retained and reported. |
+| Objectives | `time_seconds` from `time`; `source_type` from `type`; `source_key` from `key`; `source_unit_key` from `unit`; `source_slot`, `source_player_slot`, `source_victim_player_slot`, `source_team`, `source_killer`, and `source_value` from the corresponding source fields. Opaque fields retain scalar values (string, number, boolean, or `null`) without decoding their semantics. |
+| Objective players | `player_slot` and `victim_player_slot` are populated only from explicit same-name source fields matching one unique player slot in this record. A bare `slot`, `team`, or `killer` never supplies a player identity. |
+| First blood | Nullable `reported_time_seconds` from top-level `first_blood_time` and nullable `objective_events` containing the first-blood objective rows. Conflicts point to exact source `objectives[i].time`; neither view overwrites the other. |
+
+Hero IDs use an optional injected exact internal-name-to-ID catalog index. A killer player slot additionally requires one unique source player with that hero ID and slot. Unknown catalog keys, repeated hero IDs, or repeated slots leave the player unknown. No fuzzy matching is used. Missing one player's event log adds a coverage gap while preserving other players' known events; all unavailable logs yield `null`, and explicitly empty logs yield `[]`. Each category retains source player/log order without claiming a global time order.
 
 ### 7. `interactions`
 
 **Responsibility:** three per-player views of hero targets: `kills_by_target`, `damage_by_target`, and `healing_by_target`.
 
 The structure is `interactions.players[]`; each player entry contains `player_slot` (integer or `null`) and the three target lists. Each target record contains `target_unit_key` (string), `target_hero_id` (integer or `null`), and `value` (number). Resolve `target_hero_id` only by an exact Valve catalog internal-name match. Keep the source unit key for a hero entry when it has no exact mapping. Do not use fuzzy name similarity or assign an unresolved target to a player.
+
+The offline projector accepts an optional exact catalog index; without it source target keys and amounts remain available with null hero IDs. It never calls fuzzy search or a remote provider. A malformed hero amount makes only that target map unavailable and adds a coverage reason, preserving the player's other maps and final statistics.
 
 | Target list | Direct source | Target scope |
 |---|---|---|
@@ -223,6 +234,8 @@ The only fields are:
 For example, missing kill logs may produce `{"path": "players[1].minute_timeline.kills", "reason": "Source kill log unavailable"}`. Existing arrays whose time axes cannot be aligned can likewise explain an unavailable DTO path; `missing` is not limited to absent source keys. A first-blood conflict can retain `{"paths": ["first_blood_time", "objectives.first_blood.time"], "values": [0, -25]}`. These source-path labels describe evidence; they do not expose a raw-response retrieval route.
 
 Do not list features this version never promises. Do not warn for every optional event attribute. Do not add confidence or quality scores or long diagnostic prose. Missing data in a non-core section does not erase other usable sections. Invalid game identity or another root contract failure returns an error, never a successful DTO.
+
+Conflict paths and values must have corresponding lengths and identify at least two source observations. The projector uses exact source array indices where available. Missing optional event attributes do not generate per-event warnings; missing logs or event times that affect a promised view do.
 
 ## Illustrative sample fragments
 

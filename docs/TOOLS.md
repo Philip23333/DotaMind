@@ -476,8 +476,12 @@ live OpenDota.
 `esports.game.resolve` keeps complete candidate detail reads internal and exposes
 only resolution evidence in its Artifact. It cannot be used as a separate route
 to retrieve those raw details. This boundary is implemented; the `game.detail`
-DTO itself is still pending. The evidence contract and checks are tracked in
+public DTO switch is still pending. The evidence contract and checks are tracked in
 [`DATA.md`](DATA.md) and [`EVALS.md`](EVALS.md).
+
+The offline eight-section mapper is implemented, but no tool currently invokes
+it. Its existence does not change the registered `game.detail` schema or the
+current source-shaped Artifact body. A separate public-switch step is required.
 
 `catalog.lookup(kind, ids)` resolves up to 20 exact positive hero or item IDs
 against the active local Valve Dota 2 catalog snapshot. It returns each requested

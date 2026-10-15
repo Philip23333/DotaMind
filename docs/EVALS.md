@@ -421,11 +421,11 @@ the shared appearance of a player or event is not sufficient. These tests do
 not establish general current STRATZ availability or every source business
 meaning.
 
-### Game detail eight-section projection (accepted target; not implemented)
+### Game detail eight-section projection (offline mapper implemented; public switch pending)
 
 The owner contract is
 [`agent/game_detail_data.md`](agent/game_detail_data.md). The current adapter
-and its tests still return the complete validated OpenDota object. The checks
+and public Service still return the complete validated OpenDota object. The checks
 below remain full-migration acceptance requirements, not a claim that the public
 tool already returns the DTO. Offline projection tests currently cover the
 closed eight-section model, static mappings, strict enums, final statistics,
@@ -435,6 +435,13 @@ Minute tests additionally cover inclusive/pre-zero event accumulation, missing
 and malformed logs, duplicate or unsorted time axes, short metric arrays,
 explicit empty curves, real 600-second values, and team-axis correspondence.
 They retain raw advantage values when their time axis cannot be established.
+Event/interaction tests also check 50 deaths, three buybacks, 21 buildings, two
+Roshan kills, and two Aegis pickups from the saved sample; exact local-catalog
+hero IDs; unknown and duplicate actor identities; negative and end-tail times;
+opaque objective codes; partial logs; direct hero-only maps and self-healing;
+absent versus empty maps; no nested target aggregation; and scalar conflicts
+with corresponding paths. Excluded fields remain in the source fixture to
+exercise the closed projection.
 
 The internal/public type split is implemented independently of that projection.
 Focused Service tests verify one native-ID record read, unchanged public data

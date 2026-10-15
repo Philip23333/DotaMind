@@ -432,10 +432,12 @@ Implementation order:
    defined in the cross-source contract. The result Artifact excludes full
    source collections and candidate detail bodies. Preserve this separation
    when changing `game.detail`; the detail DTO migration remains pending.
-3. **Offline projection in progress; public switch pending:** closed DTO types
-   and static/minute mappings are implemented and locally tested; event and
-   interaction mappings remain pending. Complete the eight sections before
-   connecting the projector to `GameDetailService`. Do not add a raw payload or let the generic
+3. **Offline projection implemented; public switch pending:** closed DTO types
+   and static, minute, event, interaction, and coverage mappings are implemented
+   and locally tested with saved game `9040460429` and malformed/missing cases.
+   The projector is intentionally not connected to `GameDetailService` yet.
+   The next step is the explicit public switch and its boundary acceptance.
+   Do not add a raw payload or let the generic
    Artifact layer perform source mapping. Preserve missing, empty, zero, false,
    negative-time, and conflict semantics as documented.
 4. **Pending focused acceptance:** cover field mappings, invalid identity,

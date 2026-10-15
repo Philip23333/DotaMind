@@ -1119,6 +1119,14 @@ verification of this new client. The target projection and its source/missing
 rules are owned by [`agent/game_detail_data.md`](agent/game_detail_data.md);
 the implementation still returns the full source object.
 
+The pure OpenDota projector and closed eight-section `GameDetailData` model are
+implemented separately and tested using saved game `9040460429`. They cover
+static facts, source-aligned minutes, events, direct hero interactions, and
+structured coverage. An exact catalog index resolves hero unit keys; without
+it keys and amounts remain visible with null IDs. This mapper performs no I/O
+and is not connected to the public Service yet. Competition projection and
+additional candidate fields still require their owner-contract decisions.
+
 The internal read and public result types are separate. The OpenDota adapter's
 `get_game_record(match_id)` validates source identity and known fields, then
 returns `OpenDotaGameRecord(match_id, provider, retrieved_at, data)`. It does not
@@ -1135,7 +1143,7 @@ The Service adds no provider requests, retries, cache, or fallback; structured
 errors and cancellation propagate unchanged. Product wiring shares one adapter
 and client between this Service and the resolver, not one public result type.
 
-### Game detail data projection (accepted target; not implemented)
+### Game detail data projection (offline mapper implemented; public switch pending)
 
 The model-facing input remains `game.detail(valve_game_id)`. The outer
 `valve_game_id`, `provider`, and `retrieved_at` fields remain unique

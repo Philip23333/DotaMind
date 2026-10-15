@@ -26,6 +26,8 @@ from app.vnext.capabilities.game.data import (
     TeamsData,
 )
 
+from .detail_events import project_events
+from .detail_interactions import project_interactions
 from .detail_timeline import project_economy, project_minutes
 from .detail_values import _missing, _rows, _value
 from .game_detail import OpenDotaGameRecord
@@ -157,13 +159,16 @@ def _build(source: Mapping[str, Any], i: int, coverage: CoverageData) -> PlayerB
     )
 
 
-def project_game_detail(record: OpenDotaGameRecord) -> GameDetailData:
+def project_game_detail(
+    record: OpenDotaGameRecord, *, hero_ids: Mapping[str, int] | None = None,
+) -> GameDetailData:
     """Project a validated source record; the public Service is not switched yet."""
     source = record.data
     if type(source.get("match_id")) is not int or source["match_id"] != record.match_id:
         raise ValueError("Source match_id must equal the internal record identity")
     coverage = CoverageData()
     players = _rows(source.get("players"), "players", coverage)
+    hero_ids = {} if hero_ids is None else hero_ids
     return GameDetailData(
         match=_match(source, coverage), draft=_draft(source, coverage),
         players=None if players is None else [
@@ -173,5 +178,7 @@ def project_game_detail(record: OpenDotaGameRecord) -> GameDetailData:
             _build(player, i, coverage) for i, player in enumerate(players)
         ]),
         economy=project_economy(source, players, coverage),
+        events=project_events(source, players, hero_ids, coverage),
+        interactions=project_interactions(players, hero_ids, coverage),
         coverage=coverage,
     )
