@@ -8,12 +8,13 @@ from .client import (
     OpenDotaTransportError,
 )
 from .discovery import OpenDotaDiscoveryAdapter
-from .game_detail import OpenDotaGameDetailAdapter
+from .game_detail import OpenDotaGameDetailAdapter, OpenDotaGameRecord
 
 __all__ = [
     "OpenDotaClient",
     "OpenDotaDiscoveryAdapter",
     "OpenDotaGameDetailAdapter",
+    "OpenDotaGameRecord",
     "OpenDotaHTTPError",
     "OpenDotaResponseError",
     "OpenDotaTimeoutError",

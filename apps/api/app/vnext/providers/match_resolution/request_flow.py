@@ -9,9 +9,8 @@ from typing import Literal, TypeVar
 
 from pydantic import JsonValue
 
-from app.vnext.capabilities.game.detail import GameDetailInput, GameDetailResult
 from app.vnext.providers.opendota.discovery import OpenDotaDiscoveryAdapter
-from app.vnext.providers.opendota.game_detail import OpenDotaGameDetailAdapter
+from app.vnext.providers.opendota.game_detail import OpenDotaGameDetailAdapter, OpenDotaGameRecord
 from app.vnext.providers.pandascore.match_context import PandaScoreMatchContextAdapter
 from app.vnext.tools.errors import StructuredToolError
 
@@ -112,7 +111,7 @@ class GameResolutionReadAttempt:
     pandascore_match_context: Mapping[str, JsonValue] | None
     opendota_leagues: tuple[Mapping[str, JsonValue], ...] | None
     league_matches_by_id: Mapping[int, tuple[Mapping[str, JsonValue], ...]]
-    candidate_details: Mapping[int, GameDetailResult]
+    candidate_details: Mapping[int, OpenDotaGameRecord]
 
 
 class PandaScoreOpenDotaGameResolutionProvider:
@@ -144,7 +143,7 @@ class PandaScoreOpenDotaGameResolutionProvider:
         league_matches_by_id: dict[
             int, tuple[Mapping[str, JsonValue], ...]
         ] = {}
-        candidate_details: dict[int, GameDetailResult] = {}
+        candidate_details: dict[int, OpenDotaGameRecord] = {}
         target_game_result: TargetGameCheck | None = None
         league_candidate_result: LeagueCandidateResult | None = None
         resolution_result: MultiLeagueGameResolutionResult | None = None
@@ -274,13 +273,13 @@ class PandaScoreOpenDotaGameResolutionProvider:
         for valve_game_id in valve_game_ids:
             detail = await read(
                 "game_detail",
-                lambda valve_game_id=valve_game_id: self._opendota_game_detail.get_game_detail(
-                    GameDetailInput(valve_game_id=valve_game_id)
+                lambda valve_game_id=valve_game_id: self._opendota_game_detail.get_game_record(
+                    valve_game_id
                 ),
             )
-            if not isinstance(detail, GameDetailResult):
+            if not isinstance(detail, OpenDotaGameRecord):
                 raise TypeError("OpenDota detail adapter returned an invalid result")
-            if detail.valve_game_id != valve_game_id:
+            if detail.match_id != valve_game_id:
                 raise ValueError("OpenDota detail identity changed after validation")
             candidate_details[valve_game_id] = detail
 

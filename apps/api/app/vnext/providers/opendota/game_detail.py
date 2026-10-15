@@ -3,11 +3,18 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import Annotated, Any, Literal
 
-from pydantic import ValidationError
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    JsonValue,
+    StrictInt,
+    ValidationError,
+    field_validator,
+)
 
-from app.vnext.capabilities.game.detail import GameDetailInput, GameDetailResult
 from app.vnext.tools.errors import StructuredToolError
 
 from .client import (
@@ -50,15 +57,42 @@ _PLAYER_INTEGER_FIELDS = (
 _PLAYER_STRING_FIELDS = ("personaname", "name", "localized_name")
 
 
+class OpenDotaGameRecord(BaseModel):
+    """Internal validated OpenDota record, independent of the public detail DTO."""
+
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+    match_id: Annotated[StrictInt, Field(gt=0)]
+    provider: Literal["opendota"] = "opendota"
+    retrieved_at: datetime
+    data: dict[str, JsonValue]
+
+    @field_validator("retrieved_at")
+    @classmethod
+    def require_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("retrieved_at must include a timezone")
+        return value
+
+    @field_validator("data")
+    @classmethod
+    def require_nonempty_source_object(cls, value: dict[str, JsonValue]) -> dict[str, JsonValue]:
+        if not value:
+            raise ValueError("data must be a non-empty source JSON object")
+        return value
+
+
 class OpenDotaGameDetailAdapter:
     """Check response identity and known field types without narrowing source data."""
 
     def __init__(self, client: OpenDotaClient) -> None:
         self.client = client
 
-    async def get_game_detail(self, query: GameDetailInput) -> GameDetailResult:
+    async def get_game_record(self, match_id: int) -> OpenDotaGameRecord:
+        if type(match_id) is not int or match_id <= 0:
+            raise ValueError("match_id must be a positive integer")
         try:
-            payload = await self.client.get_match(query.valve_game_id)
+            payload = await self.client.get_match(match_id)
         except OpenDotaTimeoutError:
             raise StructuredToolError(
                 "provider_timeout",
@@ -85,11 +119,10 @@ class OpenDotaGameDetailAdapter:
                 {"provider": "opendota"},
             ) from None
 
-        match = _validate_match(payload, query.valve_game_id)
+        match = _validate_match(payload, match_id)
         try:
-            return GameDetailResult(
-                valve_game_id=query.valve_game_id,
-                provider="opendota",
+            return OpenDotaGameRecord(
+                match_id=match_id,
                 retrieved_at=datetime.now(UTC),
                 data=match,
             )
@@ -172,4 +205,4 @@ def _schema_error(path: str) -> StructuredToolError:
     )
 
 
-__all__ = ["OpenDotaGameDetailAdapter"]
+__all__ = ["OpenDotaGameDetailAdapter", "OpenDotaGameRecord"]

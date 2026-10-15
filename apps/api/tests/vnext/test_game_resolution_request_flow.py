@@ -8,12 +8,12 @@ from typing import Any
 
 import pytest
 
-from app.vnext.capabilities.game.detail import GameDetailInput, GameDetailResult
 from app.vnext.providers.match_resolution import (
     GameResolutionReadPolicy,
     PandaScoreOpenDotaGameResolutionProvider,
     ResolutionBudgetExceeded,
 )
+from app.vnext.providers.opendota.game_detail import OpenDotaGameRecord
 from app.vnext.tools.errors import StructuredToolError
 
 _START_TIME = 1_791_743_534
@@ -87,8 +87,8 @@ def _detail(
     start_time: int = _START_TIME,
     duration: int = 3400,
 ):
-    return GameDetailResult(
-        valve_game_id=valve_id,
+    return OpenDotaGameRecord(
+        match_id=valve_id,
         provider="opendota",
         retrieved_at=datetime(2026, 10, 14, tzinfo=UTC),
         data={
@@ -176,7 +176,7 @@ class _FakeGameDetail:
     def __init__(
         self,
         calls: list[tuple[str, int | None]],
-        details: dict[int, GameDetailResult],
+        details: dict[int, OpenDotaGameRecord],
         *,
         fail: str | None = None,
     ) -> None:
@@ -184,11 +184,11 @@ class _FakeGameDetail:
         self.details = details
         self.fail = fail
 
-    async def get_game_detail(self, query: GameDetailInput):
-        self.calls.append(("game_detail", query.valve_game_id))
+    async def get_game_record(self, match_id: int):
+        self.calls.append(("game_detail", match_id))
         if self.fail == "game_detail":
             raise _provider_error()
-        return self.details[query.valve_game_id]
+        return self.details[match_id]
 
 
 def _provider(
@@ -196,7 +196,7 @@ def _provider(
     match: dict[str, Any] | None | object = _DEFAULT_MATCH,
     leagues: list[dict[str, Any]] | None = None,
     league_matches: dict[int, list[dict[str, Any]]] | None = None,
-    details: dict[int, GameDetailResult] | None = None,
+    details: dict[int, OpenDotaGameRecord] | None = None,
     fail: str | None = None,
     entered: asyncio.Event | None = None,
     release: asyncio.Event | None = None,

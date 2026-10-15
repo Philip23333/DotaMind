@@ -61,6 +61,7 @@ from app.vnext.capabilities.esports.series import (
 from app.vnext.capabilities.esports.team import TeamSearchInput, TeamSearchResult
 from app.vnext.capabilities.esports.tournament import TournamentSearchInput, TournamentSearchResult
 from app.vnext.capabilities.game.detail import GameDetailInput, GameDetailResult
+from app.vnext.capabilities.game.service import GameDetailService
 from app.vnext.capabilities.hero.display_enrichment import (
     enrich_hero_guide_display_refs,
 )
@@ -142,7 +143,7 @@ MatchSearchService = Callable[[MatchSearchInput], Awaitable[MatchSearchResult]]
 PlayerSearchService = Callable[[PlayerSearchInput], Awaitable[PlayerSearchResult]]
 TeamSearchService = Callable[[TeamSearchInput], Awaitable[TeamSearchResult]]
 PlayerProfileService = Callable[[PlayerProfileInput], Awaitable[PlayerProfileResult]]
-GameDetailService = Callable[[GameDetailInput], Awaitable[GameDetailResult]]
+GameDetailLookup = Callable[[GameDetailInput], Awaitable[GameDetailResult]]
 CatalogLookupService = Callable[[CatalogLookupInput], Awaitable[CatalogLookupResult]]
 HeroGuideLookup = Callable[[HeroGuideInput], Awaitable[HeroGuideResult]]
 _QueryT = TypeVar("_QueryT")
@@ -599,7 +600,7 @@ class VNextServices:
     player_recent_games: (
         Callable[[PlayerRecentGamesInput], Awaitable[PlayerRecentGamesResult]] | None
     ) = None
-    game_detail: GameDetailService | None = None
+    game_detail: GameDetailLookup | None = None
     game_resolution: GameResolutionService | None = None
     hero_guide: HeroGuideLookup | None = None
     homepage_recent_series: HomepageRecentSeriesService | None = None
@@ -654,7 +655,7 @@ def build_vnext_services(
         )
         player_profile = StratzPlayerProfileAdapter(stratz_client).get_profile
         player_recent_games = StratzPlayerRecentGamesAdapter(stratz_client).get_recent_games
-    game_detail: GameDetailService | None = None
+    game_detail: GameDetailLookup | None = None
     game_detail_adapter: OpenDotaGameDetailAdapter | None = None
     opendota_client: OpenDotaClient | None = None
     if config.opendota_enabled:
@@ -664,7 +665,7 @@ def build_vnext_services(
             timeout_seconds=config.opendota_timeout_seconds,
         )
         game_detail_adapter = OpenDotaGameDetailAdapter(opendota_client)
-        game_detail = game_detail_adapter.get_game_detail
+        game_detail = GameDetailService(game_detail_adapter).get_game_detail
     game_resolution: GameResolutionService | None = None
     if config.game_resolution_enabled:
         if opendota_client is None or game_detail_adapter is None:

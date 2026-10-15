@@ -428,6 +428,16 @@ The owner contract is
 and its tests still return the complete validated OpenDota object. The checks
 below are future acceptance requirements; they are not implemented or passed.
 
+The internal/public type split is implemented independently of that projection.
+Focused Service tests verify one native-ID record read, unchanged public data
+and provenance, independent mutable nested values, and unchanged structured
+errors/cancellation. Adapter tests retain full source validation and reject
+invalid internal read IDs before HTTP. Product composition verifies that the
+resolver uses the same adapter/client through its internal record API, while
+the public tool binds to `GameDetailService`; its Artifact and direct detail
+behavior remain unchanged. These are deterministic local checks, not live
+provider or model validation.
+
 Deterministic acceptance must verify:
 
 - The unchanged closed `valve_game_id` input, single outer provenance envelope,

@@ -130,11 +130,11 @@ def _product_stack(
         is resolution_provider._pandascore_match_context.client
     )
     assert (
-        resolution_provider._opendota_game_detail is services.game_detail.__self__
+        resolution_provider._opendota_game_detail is services.game_detail.__self__._provider
     )
     assert (
         resolution_provider._opendota_discovery.client
-        is services.game_detail.__self__.client
+        is services.game_detail.__self__._provider.client
     )
     registry = build_vnext_registry(services, settings=settings)
     return settings, services, registry, requests

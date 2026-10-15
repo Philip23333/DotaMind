@@ -451,7 +451,11 @@ It may come from the user, `player.recent_games`, or a resolved
 
 **Current implementation:** the validated OpenDota business object, including
 unknown JSON extensions and nullable values, is returned in `data` and passed
-to generic Artifact externalization.
+to generic Artifact externalization. The tool binds to `GameDetailService`,
+which constructs its public result from an internal `OpenDotaGameRecord` read.
+The resolver consumes the internal record directly. Both use the same adapter
+and client, but changing the public result no longer changes the resolver's
+record type. No extra HTTP read is introduced by the Service.
 
 **Accepted target:** keep the input and outer provenance envelope, then return
 the eight-section `data` DTO defined in
@@ -540,7 +544,9 @@ confirmed_mappings=...)` calls the bounded Provider once with its configured rea
 policy. The Provider obtains trusted Match context and finite OpenDota search
 data; the Service only converts the read attempt and its outcome. Composition
 reuses the PandaScore client and the same OpenDota game-detail adapter for both
-resolution reads and `game.detail`. The continuation passes an empty mapping.
+resolution reads and the `GameDetailService` behind `game.detail`. The resolver
+uses internal `get_game_record(match_id)` results rather than public detail DTOs.
+The continuation passes an empty mapping.
 Duplicate assignment and mapping reuse across separate tool calls, and
 whole-Match consistency, are therefore not guaranteed.
 

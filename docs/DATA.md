@@ -98,7 +98,7 @@ not converted into empty source data or `no_candidates`. Cancellation propagates
 unchanged, and no retry, parallel read, background task, or cross-call cache is
 used. The internal read attempt retains the complete successfully read PandaScore
 Match, OpenDota League collection, each selected League list, and each complete
-`GameDetailResult` including its provider and retrieval time. Its own
+`OpenDotaGameRecord` including its provider and retrieval time. Its own
 `retrieved_at` is the attempt completion time, not a claim that all sources were
 read simultaneously. These complete source records stay in the internal read
 attempt. The Service publishes only the selected resolution evidence described
@@ -1119,6 +1119,22 @@ verification of this new client. The target projection and its source/missing
 rules are owned by [`agent/game_detail_data.md`](agent/game_detail_data.md);
 the implementation still returns the full source object.
 
+The internal read and public result types are separate. The OpenDota adapter's
+`get_game_record(match_id)` validates source identity and known fields, then
+returns `OpenDotaGameRecord(match_id, provider, retrieved_at, data)`. It does not
+depend on the model-facing `GameDetailInput` or `GameDetailResult`. The identity
+resolver reads that internal record directly, retaining exact timestamps and
+source team IDs for its offline checks.
+
+`GameDetailService.get_game_detail(GameDetailInput)` calls that same adapter once
+and constructs the separate public `GameDetailResult`, mapping internal
+`match_id` to `valve_game_id` while retaining provider and retrieval time. It
+currently preserves the complete source body; the eight-section projection is
+not yet connected. Public and internal nested data do not share mutable values.
+The Service adds no provider requests, retries, cache, or fallback; structured
+errors and cancellation propagate unchanged. Product wiring shares one adapter
+and client between this Service and the resolver, not one public result type.
+
 ### Game detail data projection (accepted target; not implemented)
 
 The model-facing input remains `game.detail(valve_game_id)`. The outer
@@ -1139,9 +1155,10 @@ interaction maps, and structured missing/conflict records. Only additional
 candidate inclusion and explicitly uncertain provider semantics remain open;
 the confirmed fields do not require another approval.
 
-Implementation must audit internal consumers before changing `GameDetailResult.data`.
-The current identity resolver reads candidate detail identity, winner, and
-side-specific team facts. Any converter that consumes a game must retain the
+The internal-consumer split is implemented: the resolver uses
+`OpenDotaGameRecord`, while `GameDetailService` owns construction of
+`GameDetailResult`. Add the public projection at this Service boundary without
+changing the resolver's record. Any converter that consumes a game must retain the
 precise validated source timestamp and source team identities until it has
 finished using them. A model-facing DTO or Artifact must not expose the original
 detail as a raw member or equivalent retrieval path. The resolver already keeps

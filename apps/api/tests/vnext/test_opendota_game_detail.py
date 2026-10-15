@@ -7,6 +7,7 @@ import httpx
 import pytest
 
 from app.vnext.capabilities.game.detail import GameDetailInput, GameDetailResult
+from app.vnext.capabilities.game.service import GameDetailService
 from app.vnext.composition import (
     VNextServices,
     VNextSettings,
@@ -71,16 +72,31 @@ def test_client_uses_match_endpoint_api_key_and_configured_timeout() -> None:
         return httpx.Response(200, json=_match(), request=request)
 
     adapter, client = _adapter(handler, key=_KEY, base_url="https://api.example/root/api/")
-    result = _run(adapter.get_game_detail(GameDetailInput(valve_game_id=_MATCH_ID)))
+    result = _run(adapter.get_game_record(_MATCH_ID))
 
     assert seen[0].url.path == f"/root/api/matches/{_MATCH_ID}"
     assert seen[0].url.params.get("api_key") == _KEY
     assert client.timeout_seconds == 3.25
-    assert result.valve_game_id == _MATCH_ID
+    assert result.match_id == _MATCH_ID
     assert result.provider == "opendota"
     assert result.data["match_id"] == _MATCH_ID
     assert _KEY not in repr(client)
     assert _KEY not in str(result)
+
+
+@pytest.mark.parametrize("match_id", [True, 0, -1, 1.0, "123"])
+def test_internal_record_read_rejects_invalid_identity_before_http(match_id: Any) -> None:
+    requests = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json=_match(), request=request)
+
+    adapter, _ = _adapter(handler)
+    with pytest.raises(ValueError, match="positive integer"):
+        _run(adapter.get_game_record(match_id))
+
+    assert requests == []
 
 
 def test_full_source_object_preserves_unknown_nested_fields_null_zero_and_false() -> None:
@@ -101,7 +117,7 @@ def test_full_source_object_preserves_unknown_nested_fields_null_zero_and_false(
     )
     adapter, _ = _adapter(lambda request: httpx.Response(200, json=source, request=request))
 
-    result = _run(adapter.get_game_detail(GameDetailInput(valve_game_id=_MATCH_ID)))
+    result = _run(adapter.get_game_record(_MATCH_ID))
 
     assert result.data == source
     assert result.model_dump(mode="json")["data"] == source
@@ -119,7 +135,7 @@ def test_full_source_object_preserves_unknown_nested_fields_null_zero_and_false(
 def test_missing_optional_players_and_explicit_nulls_are_preserved(source) -> None:
     adapter, _ = _adapter(lambda request: httpx.Response(200, json=source, request=request))
 
-    result = _run(adapter.get_game_detail(GameDetailInput(valve_game_id=_MATCH_ID)))
+    result = _run(adapter.get_game_record(_MATCH_ID))
 
     assert result.data == source
 
@@ -135,7 +151,7 @@ def test_non_json_finite_extension_value_is_rejected_as_source_schema_error() ->
     )
 
     with pytest.raises(StructuredToolError) as raised:
-        _run(adapter.get_game_detail(GameDetailInput(valve_game_id=_MATCH_ID)))
+        _run(adapter.get_game_record(_MATCH_ID))
 
     assert raised.value.code == "provider_schema_error"
     assert raised.value.details["path"] == "response"
@@ -171,7 +187,7 @@ def test_malformed_or_mismatched_source_records_are_schema_errors(payload, path:
     adapter, _ = _adapter(lambda request: httpx.Response(200, json=payload, request=request))
 
     with pytest.raises(StructuredToolError) as raised:
-        _run(adapter.get_game_detail(GameDetailInput(valve_game_id=_MATCH_ID)))
+        _run(adapter.get_game_record(_MATCH_ID))
 
     assert raised.value.code == "provider_schema_error"
     assert raised.value.details["path"] == path
@@ -191,7 +207,7 @@ def test_success_status_provider_error_object_is_not_a_match(error) -> None:
     )
 
     with pytest.raises(StructuredToolError) as raised:
-        _run(adapter.get_game_detail(GameDetailInput(valve_game_id=_MATCH_ID)))
+        _run(adapter.get_game_record(_MATCH_ID))
 
     assert raised.value.code == "provider_error"
     assert str(error) not in str(raised.value)
@@ -219,7 +235,7 @@ def test_http_errors_keep_only_structured_status(status: int, category: str) -> 
     adapter, _ = _adapter(handler, key=_KEY)
 
     with pytest.raises(StructuredToolError) as raised:
-        _run(adapter.get_game_detail(GameDetailInput(valve_game_id=_MATCH_ID)))
+        _run(adapter.get_game_record(_MATCH_ID))
 
     assert raised.value.code == "provider_http_error"
     assert raised.value.details == {
@@ -238,7 +254,7 @@ def test_non_json_success_is_a_sanitized_schema_error() -> None:
     )
 
     with pytest.raises(StructuredToolError) as raised:
-        _run(adapter.get_game_detail(GameDetailInput(valve_game_id=_MATCH_ID)))
+        _run(adapter.get_game_record(_MATCH_ID))
 
     assert raised.value.code == "provider_schema_error"
     assert raised.value.details == {"provider": "opendota", "path": "response"}
@@ -251,7 +267,7 @@ def test_timeout_is_structured_and_transport_error_does_not_leak_url() -> None:
 
     adapter, _ = _adapter(timeout_handler, key=_KEY)
     with pytest.raises(StructuredToolError) as raised:
-        _run(adapter.get_game_detail(GameDetailInput(valve_game_id=_MATCH_ID)))
+        _run(adapter.get_game_record(_MATCH_ID))
     assert raised.value.code == "provider_timeout"
     assert _KEY not in str(raised.value)
 
@@ -264,7 +280,7 @@ def test_timeout_is_structured_and_transport_error_does_not_leak_url() -> None:
 
     adapter, _ = _adapter(transport_error, key=_KEY)
     with pytest.raises(StructuredToolError) as transport_raised:
-        _run(adapter.get_game_detail(GameDetailInput(valve_game_id=_MATCH_ID)))
+        _run(adapter.get_game_record(_MATCH_ID))
     assert transport_raised.value.code == "provider_error"
     assert calls == 1
     assert _KEY not in str(transport_raised.value)
@@ -312,7 +328,7 @@ def test_cancel_propagates_and_closes_transport() -> None:
         transport = BlockingTransport()
         adapter = OpenDotaGameDetailAdapter(OpenDotaClient(transport=transport, api_key=_KEY))
         task = asyncio.create_task(
-            adapter.get_game_detail(GameDetailInput(valve_game_id=_MATCH_ID))
+            adapter.get_game_record(_MATCH_ID)
         )
         await asyncio.wait_for(transport.started.wait(), timeout=1)
         task.cancel()
@@ -361,7 +377,7 @@ def test_game_detail_result_spills_to_artifact_and_reads_narrow_player_path() ->
     adapter, _ = _adapter(lambda request: httpx.Response(200, json=source, request=request))
     settings = VNextSettings(opendota_enabled=True)
     registry = build_vnext_registry(
-        VNextServices(game_detail=adapter.get_game_detail),
+        VNextServices(game_detail=GameDetailService(adapter).get_game_detail),
         settings=settings,
     )
 
@@ -464,7 +480,7 @@ def test_recent_games_tool_id_flows_into_game_detail_tool() -> None:
     registry = build_vnext_registry(
         VNextServices(
             player_recent_games=stratz.get_recent_games,
-            game_detail=opendota.get_game_detail,
+            game_detail=GameDetailService(opendota).get_game_detail,
         ),
         settings=VNextSettings(opendota_enabled=True),
     )

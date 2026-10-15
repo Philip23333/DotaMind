@@ -417,13 +417,15 @@ deployment work is part of this migration.
 
 Implementation order:
 
-1. **Pending prerequisite audit:** use the owner contract's confirmed field
-   tables; separately decide additional candidates and verify unresolved source
-   meanings without reopening the agreed minimum. Trace every current
-   `GameDetailResult.data` consumer. Preserve the exact validated source
-   timestamp, OpenDota side-specific team IDs, source identity checks, and any
-   already accepted same-game team-to-side association until internal
-   conversion is complete.
+1. **Pending source/field verification; internal split implemented:** use the
+   owner contract's confirmed field tables; separately decide additional
+   candidates and verify unresolved source meanings without reopening the
+   agreed minimum. The resolver now reads `OpenDotaGameRecord` directly;
+   `GameDetailService` constructs the separate public `GameDetailResult` and
+   currently preserves its full source body. Add the DTO conversion at this
+   Service boundary. Preserve exact source timestamps, side-specific team IDs,
+   source identity checks, and accepted per-game associations in the internal
+   record.
 2. **Implemented resolver source/evidence boundary:** keep complete validated
    reads in the internal attempt and expose only request/stage/read-count
    metadata and the existing target, League-selection, and resolution results

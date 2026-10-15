@@ -16,7 +16,6 @@ from app.vnext.capabilities.esports.game_resolution import (
     GameResolutionContractError,
     GameResolutionService,
 )
-from app.vnext.capabilities.game.detail import GameDetailInput, GameDetailResult
 from app.vnext.providers.match_resolution import (
     GameResolutionReadAttempt,
     GameResolutionReadPolicy,
@@ -29,6 +28,7 @@ from app.vnext.providers.match_resolution import (
     find_league_candidates,
     resolve_game_across_leagues,
 )
+from app.vnext.providers.opendota.game_detail import OpenDotaGameRecord
 from app.vnext.tools.errors import StructuredToolError
 
 _MATCH_ID = 1_709_131
@@ -96,9 +96,9 @@ def _league_row() -> dict[str, Any]:
     }
 
 
-def _detail() -> GameDetailResult:
-    return GameDetailResult(
-        valve_game_id=_VALVE_GAME_ID,
+def _detail() -> OpenDotaGameRecord:
+    return OpenDotaGameRecord(
+        match_id=_VALVE_GAME_ID,
         provider="opendota",
         retrieved_at=_RETRIEVED_AT,
         data={
@@ -134,7 +134,7 @@ def _base_attempt(
     resolution_result: MultiLeagueGameResolutionResult | None = None,
     league_reads: tuple[dict[str, Any], ...] | None = None,
     league_rows: dict[int, tuple[dict[str, Any], ...]] | None = None,
-    details: dict[int, GameDetailResult] | None = None,
+    details: dict[int, OpenDotaGameRecord] | None = None,
 ) -> GameResolutionReadAttempt:
     context = _context() if match_context is None and stage != "match_context" else match_context
     if target_check is None and stage not in {"match_context"}:
@@ -598,8 +598,8 @@ class _FakeDiscovery:
 
 
 class _FakeGameDetail:
-    async def get_game_detail(self, query: GameDetailInput) -> GameDetailResult:
-        assert query.valve_game_id == _VALVE_GAME_ID
+    async def get_game_record(self, match_id: int) -> OpenDotaGameRecord:
+        assert match_id == _VALVE_GAME_ID
         return _detail()
 
 

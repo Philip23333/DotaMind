@@ -111,12 +111,18 @@ Runtime and the generic Artifact processor do not perform gameplay or provider
 field mapping. After migration, generic Artifact handling stores the complete
 governed DTO it receives, and generic reads remain provider-agnostic.
 
-Internal consumers can require validated source facts before projection. The
-current cross-source game resolver reads detail identity, winner, and
-side-specific team facts. Any game converter must retain exact source time and
-team identity until it uses those facts and must consume an already accepted
-same-game team-to-side association. Audit these consumers before changing
-`GameDetailResult.data`. The resolver now separates internal complete source
+The internal/public type split is implemented. The OpenDota adapter returns
+`OpenDotaGameRecord` using its native `match_id`; it does not import capability
+detail DTOs. The resolver consumes that complete internal record. Product
+composition also gives the same adapter to `GameDetailService`, which owns
+construction of the public `GameDetailResult` and its Valve ID envelope.
+Currently it preserves the source body; add the eight-section projection here
+without altering the resolver's input. No provider router or generic conversion
+framework is introduced.
+
+Any game converter must retain exact source time and team identity until it
+uses those facts and must consume an already accepted same-game team-to-side
+association. The resolver also separates internal complete source
 reads from its public evidence projection: its Artifact retains matching
 outcomes and evidence but cannot retrieve candidate detail bodies or full
 source collections. This capability-owned boundary leaves the offline matcher,

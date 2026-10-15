@@ -33,7 +33,7 @@ OpenDota `match_id` must be a positive integer equal to the requested `valve_gam
 
 The result and its Artifact contain the complete governed DTO. They contain no `raw` field and expose no model-facing handle that retrieves the original OpenDota object. Generic Artifact read and grep continue to read the stored DTO without provider-specific behavior.
 
-Internal consumers may need validated source values before public projection. Those values must be consumed or retained within the internal processing path described under implementation prerequisites; that path is not part of the public result or Artifact.
+The internal/public type split is implemented: the OpenDota adapter returns `OpenDotaGameRecord` with native `match_id`, provider, retrieval time, and complete source data. The resolver consumes that record directly. `GameDetailService` separately constructs the public `GameDetailResult`; it currently preserves the full source body. The eight-section projection will belong at this Service boundary. Internal records are not public retrieval handles, and future DTO conversion must leave the resolver's source values intact.
 
 ## Global data rules
 
@@ -268,12 +268,12 @@ This contract does not promise a DTO byte-size target. The old 105 KB and 215 KB
 |---|---|
 | Source semantics | The meanings of the two neutral-item slots and the action represented by neutral-item history; unverified objective codes, actor/team encodings including `MINIBOSS_KILL`, and any category-specific time semantics not already mapped above |
 | Additional field decisions | Only the additional `final_stats` candidates listed above, competition fields, and team fields beyond `source_team_id` and `name`; the confirmed minimum is not pending approval |
-| Converter dependency | Audit every consumer of the current `GameDetailResult.data`. Preserve exact validated source timestamp, side-specific OpenDota team IDs, and identity-validation inputs until internal conversion has completed. Use only an already accepted same-game team-to-side association. |
+| Implemented internal record split to preserve | The resolver consumes complete `OpenDotaGameRecord` values independently of the public `GameDetailResult` constructed by `GameDetailService`. Keep exact source timestamps, side-specific team IDs, identity-validation inputs, and accepted per-game associations available internally when adding the DTO projection. |
 | Log boundary | Verify that missing and explicitly empty event logs remain distinct, and that cumulative kills/deaths include valid pre-zero records without inventing a zero curve when logs are missing |
 | Implemented resolver boundary to preserve | `esports.game.resolve` retains complete reads internally and publishes only the resolution evidence owned by the cross-source contract in `DATA.md`. Its Artifact cannot retrieve candidate detail bodies or full source collections. Preserve this separation when changing the still-raw `game.detail` output. |
 | Non-blocking separation | Static names and images remain separate catalog/display facts; they do not complete missing historical match facts. |
 
-Keep these statuses separate: the confirmed field structures and mappings above are settled; additional candidate inclusion and unknown source semantics remain open; the converter audit, raw-output boundary, log handling, and alignment are implementation/validation work. Do not reopen settled fields or turn unresolved semantics into default values.
+Keep these statuses separate: the confirmed field structures and mappings above are settled; additional candidate inclusion and unknown source semantics remain open; the internal record split and resolver public-evidence boundary are implemented and must be preserved; DTO log handling and alignment remain implementation/validation work. Do not reopen settled fields or turn unresolved semantics into default values.
 
 ## Ownership and acceptance
 
