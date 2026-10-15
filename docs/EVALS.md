@@ -441,7 +441,21 @@ hero IDs; unknown and duplicate actor identities; negative and end-tail times;
 opaque objective codes; partial logs; direct hero-only maps and self-healing;
 absent versus empty maps; no nested target aggregation; and scalar conflicts
 with corresponding paths. Excluded fields remain in the source fixture to
-exercise the closed projection.
+exercise the earlier closed projection. These tests do not establish the accepted
+bilingual entity/unit schema, normalized objective types, scalar mapping-gap
+fields, or public tool integration; those changes are still pending.
+
+Existing saved OpenDota responses for `9040460429`, `9040578015`, and
+`9042720328` were also sampled offline against the local entity Catalog and
+pinned mirrors of Valve unit definitions and bilingual localization. The sample
+found 139 distinct unit keys (21 hero and 118 non-hero), with bilingual static
+names for 117 non-hero keys; `dota_unknown` remained source-unknown. Among keys
+retained by the earlier DTO, 40 of 41 non-hero keys had bilingual mappings. Four
+death logs identified non-hero killers. The sampled neutral-item key
+`guardian_shell` was absent from the checked local Catalog. These are mapping
+evidence, not new automated-test results, production snapshot coverage, or
+exhaustive future-unit support. Reproducible source revisions and examples are in
+[`reference/opendota-unit-identifiers.md`](reference/opendota-unit-identifiers.md).
 
 The internal/public type split is implemented independently of that projection.
 Focused Service tests verify one native-ID record read, unchanged public data
@@ -455,17 +469,30 @@ provider or model validation.
 
 Deterministic acceptance must verify:
 
-- The unchanged closed `valve_game_id` input, single outer provenance envelope,
-  positive matching `match_id`, and existing stable provider-error behavior.
+- The unchanged closed `valve_game_id` input, positive matching `match_id`, and
+  existing stable provider-error behavior. One outer envelope records match
+  provenance plus one Catalog version and one unit-mapping version; the whole
+  operation pins those same static resources without per-row version repetition.
 - Beijing-date conversion from `start_time`, formal duration from `duration`,
   strict `radiant_win` mapping, score retention, and the limited `team=0/1`
   mapping for pick/ban records only.
-- Null, empty, zero, false, and absent values remain distinct; no `raw` field or
-  equivalent public read path appears in the game-detail result or its Artifact.
+- Null, empty, zero, false, and absent values retain their documented meanings.
+  The explicit exception is source item ID zero mapping to a known empty slot;
+  a missing slot has a coverage gap, while an unknown nonzero ID keeps its ID and
+  null names. No `raw` field or equivalent public read path appears.
 - Player identity includes strict `isRadiant` to `side` mapping; source team
   records retain the confirmed `source_team_id` and `name` fields. Final stats
   retain K/D/A, level, last hits, denies, net worth, hero damage, tower damage,
   and hero healing from their own source fields, preserving zeros and nulls.
+  These are exactly ten final-stat fields. Competition remains null; extra
+  statistics and competition omissions do not create source-gap warnings.
+- Draft/player heroes, final items, purchases, skill order, neutral items, and
+  enhancements contain typed bilingual entity objects. IDs and sequence/slot
+  positions survive; duplicate skill upgrades are not deduplicated. Verify
+  exact `manta` to `item_manta` to ID 147, complete hero internal-name matching,
+  unknown IDs, unconvertible keys, and independently missing Chinese/English
+  labels. No fuzzy matching, runtime translation, Catalog tool invocation,
+  request-time remote lookup, or image dependency supplies a name.
 - Player IDs and slots remain identities only; minute arrays use same-player
   source axes; kill/death curves count valid events through each node, including
   events before zero; a missing log never becomes a zero curve; no interpolation
@@ -482,18 +509,33 @@ Deterministic acceptance must verify:
 - Deaths are not double-counted from kill logs; negative and end-tail event
   times are retained; same-second ordering is not inferred; conflicting
   first-blood sources remain unresolved.
-- Death records retain victim and confirmed killer player slots, source killer
-  units, exact hero IDs, `gold_lost`, `gold_fed`, and source death duration;
-  unavailable killer identities and optional fields remain null.
+- Death records retain victim and confirmed killer player slots, bilingual
+  `killer_unit`, exact hero IDs when applicable, `gold_lost`, `gold_fed`, and
+  source death duration. Cover real creep/tower killers, summons, unknown units,
+  partial localized names, and unmapped IDs. A static default team never assigns
+  a courier/ward/summon's game side, and a shared tower key never gains a left or
+  right instance identity. An unknown unit leaves the other death facts usable.
+- Objective records use the exact six-type mapping in the owner contract,
+  including courier death and Tormentor kill in `other_objectives`. Known keys
+  become `target_unit`/`actor_unit`; unknown event types or units keep known event
+  facts and field-specific coverage evidence. Source team/killer/slot/reward codes
+  are not guessed into identities or business values. Missing optional attributes
+  do not generate individual warnings.
 - Interactions associate players by `player_slot` and select hero entries from
   `killed`, `damage`, and `healing` directly, including self-healing. Non-hero
   entries are excluded; nested `damage_targets` is not aggregated. Target
-  records use `target_unit_key`, `target_hero_id`, and `value`; IDs use exact
-  catalog matches, unresolved hero unit keys remain visible, and absent maps
-  do not become zero pairs.
-- `coverage` contains only promised-data gaps and material source conflicts.
-  Missing entries contain DTO `path` and `reason`, including unavailable data
-  caused by alignment failures with source arrays present. Conflict entries
+  records use `target_hero` and `value`; exact matches provide a bilingual hero
+  object. Unmapped hero keys retain the amount and row with a null target and
+  coverage evidence. Non-hero lookup does not expand this hero-only scope;
+  absent maps do not become zero pairs.
+- `coverage` contains promised-data gaps, field-specific failed-conversion
+  evidence, and material source conflicts. Missing entries contain DTO `path`
+  and `reason`, including alignment failures with source arrays present. Present
+  unconvertible values additionally retain exact `source_path` and scalar
+  `source_value`; no source object/array or transport information is admitted.
+  Verify `dota_unknown` leaves the known building/time intact and
+  `guardian_shell` preserves neutral-history time and enhancement. Successfully
+  converted raw keys do not remain duplicated in business fields. Conflict entries
   contain source `paths` and corresponding scalar `values`.
   Missing optional data in one section does not erase other usable sections.
 - Generic Artifact spill and read return the complete governed DTO while
@@ -506,13 +548,17 @@ Beijing date, 48:24 duration, winner, one pick/ban, one minute node and final
 values, a few component/completed purchases, one event, one interaction count,
 and the first-blood disagreement. Tests must not promote the sample into a
 universal availability or accuracy guarantee. No final DTO byte-size target is
-set in this phase.
+set in this phase. Measure compact UTF-8 DTO size and bounded Artifact-read
+behavior after bilingual enrichment; the earlier ID/key-only size is not evidence
+of final-model context cost.
 
-Implementation must honor the confirmed minimum without reopening it. Decide
-additional candidate fields separately, verify unknown neutral-slot/history
-meanings and event-code/actor mappings before assigning them a business meaning,
-and audit internal converter dependencies. Tests must not claim those pending
-semantics are verified.
+Implementation must honor the closed first-version scope without reopening it.
+Competition and extra final statistics are deferred, not acceptance blockers.
+Keep unknown neutral-slot/history meanings and additional actor/code semantics
+explicit rather than assigning a business meaning, and audit internal converter
+dependencies. Unexpected local-resource failures must not be caught as ordinary
+lookup misses. Static label versions do not establish historical match-patch
+mechanics. Tests must not claim those limits are verified.
 
 The account-to-game workflow tests use the real Runtime, registry, session
 history, Artifact externalization/read path, and local Valve catalog with

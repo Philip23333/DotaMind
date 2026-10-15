@@ -89,7 +89,8 @@ before a second concrete implementation demonstrates the need.
 - Keep source-field extraction in each business capability. This component does
   not scan payloads, infer IDs, call providers, or register in `ToolRegistry`.
 - **Implemented:** `hero.guide` is integrated. `game.detail` remains a separate
-  follow-up and has not adopted the resolver.
+  follow-up and has not adopted the resolver. Its accepted bilingual/entity-unit
+  contract is part of the game-detail projection sequence below.
 
 ## Commit 10: hero-guide entity-name enrichment
 
@@ -228,8 +229,9 @@ Production migration, mounts, and timer remain pending. Patch records are
 independent of `refresh-catalog`; image URLs use content hashes independent of
 Catalog revision and patch.
 Offline tests do not establish power-loss recovery.
-`game.detail` entity-name enrichment remains a later independent item after this
-data-update migration.
+`game.detail` entity-name enrichment remains unimplemented and belongs to its
+accepted governed-detail migration below; it does not add unit refresh work to
+this data-update migration.
 
 ## Subsequent capability work
 
@@ -404,23 +406,26 @@ higher priority.
   HTTP-mock tests do not establish live OpenDota availability. The prior
   `8960882635` cross-source ID check remains single-match evidence only.
 
-### Game detail eight-section projection (contract accepted; code migration pending)
+### Game detail eight-section projection (scope and bilingual contract accepted; public migration pending)
 
 The target data contract is owned by
 [`agent/game_detail_data.md`](agent/game_detail_data.md). The current code still
 returns the full validated OpenDota object. The target retains
 `game.detail(valve_game_id)`, the outer provenance envelope, pre-projection
-identity validation, and generic Artifact handling. Its Artifact will contain
+identity validation, and generic Artifact handling. It adds exact local bilingual
+entity/unit names, one Catalog version and one unit-mapping version per result,
+normalized objective types, and scalar failed-conversion evidence. Its Artifact will contain
 the complete governed eight-section DTO, with no raw-object field or alternate
 model-facing read path. No frontend, HTTP route, persistence, replay task, or
 deployment work is part of this migration.
 
 Implementation order:
 
-1. **Pending source/field verification; internal split implemented:** use the
-   owner contract's confirmed field tables; separately decide additional
-   candidates and verify unresolved source meanings without reopening the
-   agreed minimum. The resolver now reads `OpenDotaGameRecord` directly;
+1. **First-version scope closed; internal split implemented:** use the
+   owner contract's confirmed field tables. Competition stays null, final stats
+   contain exactly ten fields, and additional candidates are deferred. Source
+   semantics that remain unverified stay unknown; they do not block known facts
+   or reopen scope. The resolver reads `OpenDotaGameRecord` directly;
    `GameDetailService` constructs the separate public `GameDetailResult` and
    currently preserves its full source body. Add the DTO conversion at this
    Service boundary. Preserve exact source timestamps, side-specific team IDs,
@@ -435,26 +440,42 @@ Implementation order:
 3. **Offline projection implemented; public switch pending:** closed DTO types
    and static, minute, event, interaction, and coverage mappings are implemented
    and locally tested with saved game `9040460429` and malformed/missing cases.
-   The projector is intentionally not connected to `GameDetailService` yet.
-   The next step is the explicit public switch and its boundary acceptance.
-   Do not add a raw payload or let the generic
+   That earlier projector still uses IDs/source keys. It is intentionally not
+   connected to `GameDetailService` yet. Do not add a raw payload or let the generic
    Artifact layer perform source mapping. Preserve missing, empty, zero, false,
    negative-time, and conflict semantics as documented.
-4. **Pending focused acceptance:** cover field mappings, invalid identity,
+4. **Accepted, implementation pending — local names and unit/event conversion:**
+   replace typed hero/item/ability references with ID plus English/Chinese names,
+   and map non-hero event units through a separately maintained versioned local
+   resource exposed by Catalog. Reuse `EntityNameResolver` and exact internal-key
+   indexes; pin resources once per query, record versions once, preserve unknown
+   IDs, and move unconvertible source scalars into coverage. Normalize the six
+   verified objective types, including courier death and Tormentor kill. This
+   adds no model tool, remote name lookup, automatic unit refresh, new five-file
+   Catalog publication format, or ownership inference. Use the verified evidence
+   in [`reference/opendota-unit-identifiers.md`](reference/opendota-unit-identifiers.md).
+5. **Pending public switch and focused acceptance:** connect projection and
+   local enrichment at `GameDetailService`; cover field mappings, invalid identity,
    missing logs and alignment, objective and actor mappings, exact catalog
    resolution, the `9040460429` representative sample, generic Artifact
    externalization/read, and the internal resolver path. Do not report this
-   capability as implemented or accepted before these checks pass.
+   capability as migrated or accepted before these checks pass. Include unknown
+   units/item keys, missing locales, fixed enum mappings, snapshot consistency,
+   no model Catalog call for names, and measured enriched DTO/read sizes.
 
 Confirmed mappings include final scoreboard/farming/combat fields, player
 sides, minimal source-team identities, complete death records, Moon Shard and
 other final build states, direct hero-only interactions, and structured
-`coverage.missing`/`coverage.conflicts`. Source-semantics checks and internal
+`coverage.missing`/`coverage.conflicts`, including field-specific scalar mapping
+evidence. Bilingual names and verified unit/event mappings are also accepted.
+Source-semantics checks and internal
 consumer audits are verification tasks, not requests to approve these fields
-again. Additional candidates remain separate from that confirmed minimum.
+again. Additional candidates are excluded from this version.
 
 The sample is an explanation and source-mapping check, not a completeness,
-accuracy, or DTO-size guarantee. Static labels remain separate catalog facts.
+accuracy, or DTO-size guarantee. Static labels are materialized in the governed
+DTO with separate Catalog/unit-resource provenance; they do not fill missing
+historical mechanics. Image/display integration remains outside this change.
 
 The account-to-game workflow is covered with deterministic Runtime composition:
 the agent can continue from an account's bounded recent-games list to one

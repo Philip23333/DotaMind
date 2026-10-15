@@ -312,7 +312,11 @@ while preserving generic search/read access.
   explicit; preserve source-shaped facts inside the document where useful.
 - Keep static Valve catalog facts separate from dynamic recorded-game facts.
   Prefer small `catalog.search` / batch `catalog.lookup` capabilities instead of
-  duplicating names/localization into every large result.
+  duplicating names/localization into every large result by default. The accepted
+  `game.detail` contract explicitly materializes bilingual entity/unit labels
+  through local Catalog queries, with one catalog/unit-mapping version per result.
+  Preserve canonical IDs; convert source keys exactly and retain unconvertible
+  scalar evidence only in `coverage`. Artifact tools do not perform enrichment.
 - `artifact.grep` and `artifact.read` remain generic document-observation
   primitives and must not learn provider or gameplay-scenario semantics.
 - Historical GameSummary v3/v4/v5 contracts remain frozen; do not silently
@@ -375,7 +379,10 @@ while preserving generic search/read access.
   guesses.
 - Static catalog lookup and dynamic recorded-game facts are separate fact
   spaces; combine them in the model unless a concrete product requirement
-  justifies materialization.
+  justifies materialization. `game.detail` has that accepted requirement: its
+  bilingual labels reduce explicit model lookup steps. Keep static-label
+  provenance distinct from match facts and never infer historical mechanics,
+  unit ownership, or player identity from a label.
 - Do not add DotaMind-derived gameplay analytics to source-backed documents.
 
 ## Delivery and review

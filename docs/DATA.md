@@ -39,6 +39,10 @@ section projection and preserves original IDs, source labels, and source fields.
 Names are added to the query result and generic Artifact output; they are not
 written into guide snapshots. Old snapshots remain readable because enrichment
 DTO fields have defaults. `game.detail` has not yet integrated the resolver.
+Its accepted target uses that local resolution during DTO construction, replaces
+source internal keys with exact bilingual entity/unit objects at typed fields,
+and keeps unmatched source scalars only in `coverage`. This explicit projection
+exception does not change guide source-label retention or generic Artifact tools.
 
 ## Cross-source esports game identity (offline resolver, bounded reads, Service, and opt-in tool implemented)
 
@@ -1122,10 +1126,12 @@ the implementation still returns the full source object.
 The pure OpenDota projector and closed eight-section `GameDetailData` model are
 implemented separately and tested using saved game `9040460429`. They cover
 static facts, source-aligned minutes, events, direct hero interactions, and
-structured coverage. An exact catalog index resolves hero unit keys; without
-it keys and amounts remain visible with null IDs. This mapper performs no I/O
-and is not connected to the public Service yet. Competition projection and
-additional candidate fields still require their owner-contract decisions.
+structured coverage. That earlier mapper keeps source keys and an optional exact
+hero-ID index; it does not yet implement the accepted bilingual object schema,
+non-hero unit mapping, normalized objective types, or scalar mapping-gap fields.
+It performs no I/O and is not connected to the public Service yet. First-version
+scope is now closed: competition remains null and final stats contain exactly the
+ten approved fields. Other source-semantic limits remain explicit unknowns.
 
 The internal read and public result types are separate. The OpenDota adapter's
 `get_game_record(match_id)` validates source identity and known fields, then
@@ -1147,7 +1153,8 @@ and client between this Service and the resolver, not one public result type.
 
 The model-facing input remains `game.detail(valve_game_id)`. The outer
 `valve_game_id`, `provider`, and `retrieved_at` fields remain unique
-provenance metadata. The `data` value contains the eight sections
+provenance metadata. The target also records one `catalog_version` and one
+`unit_mapping_version` in this outer envelope. The `data` value contains the eight sections
 `match`, `draft`, `players`, `economy`, `builds`,
 `events`, `interactions`, and `coverage`. The source identity is
 validated before mapping. The complete governed DTO, rather than the raw
@@ -1159,9 +1166,22 @@ The contract owner is
 separates source facts from deterministic date, count, ordering, and enum
 transformations. It defines the confirmed final-stat minimum, player sides,
 minimal source-team identities, build fields, death records, hero-only direct
-interaction maps, and structured missing/conflict records. Only additional
-candidate inclusion and explicitly uncertain provider semantics remain open;
-the confirmed fields do not require another approval.
+interaction maps, and structured missing/conflict records. The first version
+deliberately leaves competition null and excludes additional final statistics.
+Its accepted bilingual hero/item/ability objects keep canonical IDs. Exact
+source keys resolve before output; unconvertible keys and opaque codes become
+field-specific scalar coverage evidence rather than model-facing business keys.
+Unknown provider semantics remain limitations, not another scope-approval round.
+
+Non-hero unit names and types live in a separate versioned static resource
+queried through Catalog. This is independent of the existing five-file entity
+Catalog publication protocol; it adds no request-time fetch or automatic unit
+refresh in this migration. Capture one entity repository and one unit resource
+per detail operation. Name/ID misses are local gaps; unexpected resolver or
+resource failures must not be disguised as missing source keys. Generic unit
+default teams do not establish live ownership. The evidence and verified sample
+mapping table are in
+[`reference/opendota-unit-identifiers.md`](reference/opendota-unit-identifiers.md).
 
 The internal-consumer split is implemented: the resolver uses
 `OpenDotaGameRecord`, while `GameDetailService` owns construction of
@@ -1173,8 +1193,8 @@ detail as a raw member or equivalent retrieval path. The resolver already keeps
 complete source collections internal and exposes only the resolution evidence
 defined above. Preserve that boundary when implementing the separate detail DTO.
 
-The pending fields and source meanings are enumerated in the owner contract.
-Documentation does not settle its listed verification items, and this target
+The closed scope, source-semantic limits, and remaining implementation work are
+enumerated in the owner contract. This target
 does not select frontend rendering, an HTTP shape, persistent storage, replay
 parsing, or deployment changes.
 
@@ -1193,7 +1213,9 @@ instead of guessing which match an ordinal refers to.
 and returns display names with snapshot-version metadata. With
 `DOTAMIND_DATA_DIR` unset, that snapshot is bundled with the API; when configured,
 the API uses the published file-backed snapshot and background loader. These
-labels remain separate from provider match facts and do not rewrite OpenDota's
-`data`. Unknown IDs remain visible as unknown. Match statistics support only the
+labels have provenance separate from provider match facts. The accepted
+`game.detail` projection adds them to its governed DTO before Artifact storage;
+the complete internal OpenDota record is not rewritten. This integration remains
+pending. Unknown IDs remain visible as unknown. Match statistics support only the
 conclusions they encode; missing timeline, purchase, or identity data remains
 unknown and must not be interpreted as proof that an event did not happen.

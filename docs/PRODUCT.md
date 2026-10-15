@@ -198,10 +198,15 @@ that game's detail. The account's row in the detail must be matched by exact
 `account_id`; names and other player attributes are not identity proof. A
 follow-up such as “the second game” refers to the earlier list retained in the
 conversation, not a refreshed list with potentially different ordering. The
-agent does not fetch every listed game's detail automatically. Static hero and
-item labels may be resolved from the bundled Valve catalog; unknown IDs remain
-unknown. Missing timelines or purchase data are evidence gaps, not proof that
-events or purchases did not occur.
+agent does not fetch every listed game's detail automatically. The accepted
+`game.detail` target supplies English/Chinese hero, item, ability, and event-unit
+names alongside confirmed identities, using local Catalog and unit mappings.
+The model can read a partial detail without a separate name-conversion call;
+Catalog tools remain available for further entity information. Unknown identities
+and missing names stay explicit, and a missing mapping does not erase other
+match facts. This enrichment is not implemented yet; its data contract is owned
+by [`agent/game_detail_data.md`](agent/game_detail_data.md). Missing timelines or
+purchase data are evidence gaps, not proof that events or purchases did not occur.
 
 ### Esports Match-to-game-detail journey (opt-in capability; real-model behavior unverified)
 

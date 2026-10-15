@@ -5,8 +5,8 @@
 This document is the sole detailed data contract for `game.detail`.
 
 - **Current implementation:** `game.detail` returns the complete validated OpenDota source object in `data`.
-- **Accepted target:** `data` is an explicit DotaMind DTO containing source facts and necessary deterministic transformations.
-- **Implementation status:** the closed DTO and eight-section OpenDota projector are implemented and tested offline. The public Service still returns the full OpenDota object; connecting the projector to the tool and verifying that public output is a separate pending step. Additional field candidates and opaque source-code meanings below remain unresolved.
+- **Accepted target:** `data` is an explicit eight-section DotaMind DTO containing source facts, necessary deterministic transformations, and locally resolved English/Chinese entity names.
+- **Implementation status:** the earlier ID/key-based DTO and eight-section OpenDota projector are implemented and tested offline. The bilingual entity objects, non-hero unit mapping, normalized objective types, and mapping-gap fields specified below are accepted targets, not implemented behavior. The public Service still returns the full OpenDota object; enrichment and the public tool/Artifact switch remain pending.
 - **Use:** minute-by-minute state review and final-game statistics.
 - **Outside this contract:** performance ratings, role inference, lane-win judgments, teamfight classification, review recommendations, counterfactuals, simulated inventory states, and continuous map replay.
 
@@ -25,9 +25,11 @@ The result keeps one outer provenance envelope:
 | `valve_game_id` | positive integer | Requested canonical Valve single-game identity |
 | `provider` | `"opendota"` | Source that supplied the game record |
 | `retrieved_at` | timezone-aware timestamp | Time DotaMind retrieved the response |
+| `catalog_version` | object | The existing local entity-name resolver's snapshot metadata: `source`, `patch`, `generated_at`, and `schema_version`; one pinned snapshot per detail operation |
+| `unit_mapping_version` | string | Version of the validated, independently maintained unit mapping used for this result; not a game patch or a request timestamp |
 | `data` | `GameDetailData` | The eight governed sections below |
 
-The eight sections in `data` are `match`, `draft`, `players`, `economy`, `builds`, `events`, `interactions`, and `coverage`. Each section appears once. Section fields use `null` for missing or unknown source facts; source-declared empty collections remain empty collections.
+The eight sections in `data` are `match`, `draft`, `players`, `economy`, `builds`, `events`, `interactions`, and `coverage`. Each section appears once. Section fields use `null` for missing or unknown source facts; source-declared empty collections remain empty collections. Catalog and unit-mapping versions occur once in the outer result, not on every entity or timeline node. These versions attribute static labels and mapping rules; they do not claim historical match-patch mechanics.
 
 OpenDota `match_id` must be a positive integer equal to the requested `valve_game_id` before a successful result can be returned. The source identity check remains at the provider boundary. The DTO does not repeat `provider`, `retrieved_at`, or `valve_game_id` inside `data.match`.
 
@@ -41,19 +43,57 @@ The internal/public type split is implemented: the OpenDota adapter returns `Ope
 |---|---|
 | Source field is missing, null, or explicitly unknown | Emit `null`; do not substitute zero |
 | Source explicitly provides an empty array or object | Preserve `[]` or `{}` |
-| Source explicitly provides `0` or `false` | Preserve the value |
+| Source explicitly provides `0` or `false` | Preserve the value except for the documented empty item-slot mapping below |
 | Field rename or enum mapping | Record the source path and exact mapping below; leave unrecognized values unknown |
 | Deterministic accumulation | State the formula, input facts, ordering, and missing-input behavior |
 | Source facts disagree | Preserve the values and record a material conflict; do not select a winner |
 | Time values | Keep calendar date, exact match seconds, minute samples, and final statistics distinct |
-| Static names and images | Keep them outside recorded-game facts; do not use the current catalog to infer historical mechanics |
+| Static names | Add English/Chinese names at explicit entity fields before public output, with separate catalog/mapping provenance; do not infer historical mechanics |
+| Images and presentation | Outside this data change; do not add image fetching or a new display-reference contract |
 | Semantics not verified | Mark them pending; do not assign a business meaning |
 
 Counts, ordering, and field mappings are data transformations, not performance judgments. Each still needs a reproducible rule.
 
+## Entity names, units, and exact mapping
+
+The Service coordinates source projection and local enrichment before public output validation and generic Artifact handling. It uses one captured entity Catalog and one captured unit mapping for the whole result. It reuses the code-internal `EntityNameResolver` for explicit hero/item/ability IDs. OpenDota field extraction and exact internal-key conversion remain source-boundary responsibilities; the shared resolver does not scan arbitrary JSON, invoke `catalog.lookup`, make network requests, or perform fuzzy matching. The resolver's complete internal source record is unchanged.
+
+### Hero, item, and ability objects
+
+At explicitly typed `hero`, `item`, or `ability` fields, use a closed object with `id` (integer), `name_zh` (string or `null`), and `name_en` (string or `null`). The containing field establishes the ID namespace. IDs remain canonical facts; names are static labels. Do not repeat a sibling `hero_id`/`item_id`/`ability_id` merely to duplicate the same identity.
+
+- A source ID that has no Catalog entry remains in the entity object with null names and a mapping gap. A missing individual language remains `null`; never translate or substitute the other language.
+- A source internal key is converted only by an exact internal-name index. Hero unit keys match the complete `npc_dota_hero_*` name. OpenDota item keys such as `manta` match the Catalog's complete `item_manta` internal name under that explicit prefix rule. No human-name alias or fuzzy similarity supplies an identity.
+- If a key cannot be converted to an ID, the entity field is `null`; preserve the source scalar and exact source path only in `coverage.missing`. Successfully converted source keys do not remain duplicated in public business fields.
+- A source item ID of zero denotes an empty loadout slot and becomes `null`; an unknown nonzero ID remains an entity with that ID and null names. This is an explicit slot mapping, not the global missing/zero rule. Missing source slots also become `null` but have a source-gap record, so they remain distinguishable from known empty slots.
+- Entity labels occur at the owning player, draft, build, or event record. Minute nodes do not repeat hero labels.
+
+For example, a purchase at 1,478 seconds can contain `"item": {"id": 147, "name_zh": "幻影斧", "name_en": "Manta Style"}`. Item ID 147 and both names are verified local Catalog values.
+
+### Event unit objects
+
+An event participant can be a hero, lane creep, tower, or another unit. Do not force every `npc_dota_*` key into a hero object. The closed `Unit` object contains:
+
+| Field | Type | Rule |
+|---|---|---|
+| `kind` | fixed enum below or `null` | Exact verified unit mapping; unknown classification remains null |
+| `name_zh`, `name_en` | string or `null` | Source-backed static bilingual unit names |
+| `hero_id` | integer or `null` | Exact Valve hero ID for a hero unit only; do not invent IDs for other units |
+| `side` | `radiant`, `dire`, or `null` | Verified explicit unit-side encoding or an unambiguous same-game association; never a generic unit definition's default team |
+| `lane` | `top`, `mid`, `bot`, or `null` | Only a verified explicit lane in the unit mapping |
+| `tier` | integer or `null` | Verified tower tier only; do not infer a summoned unit's level from a name suffix |
+
+The first-version `kind` enum is `hero`, `lane_creep`, `siege_creep`, `neutral_creep`, `tower`, `barracks`, `ancient`, `building`, `fountain`, `courier`, `ward`, `roshan`, `tormentor`, `summoned_unit`, `spell_unit`, or `roshans_banner`. A mapped type can remain available when one localized name is missing. An entirely unmapped key or source `dota_unknown` produces a null unit and a field-specific coverage entry. Preserve other event facts.
+
+Generic unit defaults do not establish a courier's side, a ward's owner, a dominated neutral's controlling side, or a summon controller. A unit key identifies a unit type rather than a physical instance; a shared tier-four tower key cannot identify the left or right tower. Human-readable names stay as verified labels; use `side`, `lane`, and `tier` for known distinctions rather than fabricating a localized compound name.
+
+Non-hero mappings live in a separate versioned static resource exposed through Catalog's local query boundary. Hero/item/ability records keep their current Catalog ownership. This does not add a sixth file to the existing five-file Catalog publication protocol or introduce remote lookup on a detail request. Initial unit resources are explicitly maintained and validated; automated import, refresh cadence, and changes to Catalog publication are outside this migration.
+
+Verified samples, source revisions, observed unit categories, and the mapping review table are owned by [`../reference/opendota-unit-identifiers.md`](../reference/opendota-unit-identifiers.md). The sample is evidence for explicit mappings, not an exhaustive future-unit registry.
+
 ## Section contracts
 
-Every section below states its responsibility, target fields and types, source, transformation, and missing-data behavior. Where the plan has not approved an exact field list or source meaning, this document marks it pending instead of inventing a default.
+Every section below states its responsibility, target fields and types, source, transformation, and missing-data behavior. First-version scope is closed below. Unverified source meanings remain explicit limitations rather than blockers requiring speculative defaults.
 
 ### 1. `match`
 
@@ -65,7 +105,7 @@ Every section below states its responsibility, target fields and types, source, 
 | `duration_seconds` | integer or `null` | Source `duration`, representing formal game duration. Do not add `pre_game_duration` or expose a second pre-game duration. |
 | `game_winner` | `"radiant"`, `"dire"`, or `null` | Strict mapping: `radiant_win=true` gives `radiant`; `false` gives `dire`; absent or unknown gives `null`. |
 | `score` | object or `null` | Preserve source `radiant_score` and `dire_score` under those side keys. |
-| `competition` | currently `null` | Reserved pending approval of an exact field list; the offline projector does not copy a League body or infer competition facts. This unapproved projection is not reported as a per-game source gap. |
+| `competition` | `null` | Deliberately unpopulated in this version. A future PandaScore-context decision may define it separately; do not copy an OpenDota League body, mix ID namespaces, or report this scope exclusion as a per-game source gap. |
 | `teams` | side-keyed object or `null` | Preserve this game's OpenDota radiant and dire team identities using the confirmed minimal fields below. |
 
 Each available `teams.radiant` or `teams.dire` record contains `source_team_id` (integer or `null`) and `name` (string or `null`). Read them from `radiant_team.team_id/name` and `dire_team.team_id/name`, respectively. Missing team records remain `null`. Additional fields such as team tags, logos, and captain IDs are candidates, not part of this confirmed minimum.
@@ -83,7 +123,7 @@ The exact source timestamp is an internal conversion dependency. The public fiel
 | `picks_bans` | list or `null` | Source `picks_bans`, retaining source array order |
 | `order` | integer or `null` | Source `order` |
 | `action` | `"ban"`, `"pick"`, or `null` | `is_pick=true` maps to `pick`; `false` maps to `ban`; absent or unknown remains `null` |
-| `hero_id` | integer or `null` | Source Valve hero ID |
+| `hero` | entity object or `null` | Source `hero_id` plus exact local Catalog English/Chinese names |
 | `side` | `"radiant"`, `"dire"`, or `null` | Within `picks_bans` only, source `team=0` maps to `radiant` and `team=1` maps to `dire`; other values remain `null` |
 
 This `team` mapping is local to the pick/ban array. It does not define the meaning of `team` in objectives or other event records. Do not infer draft phase, action time, or timing from `timings`.
@@ -94,7 +134,7 @@ This `team` mapping is local to the pick/ban array. It does not define the meani
 
 Each player has three parts: `identity`, `final_stats`, and `minute_timeline`. Keep player records in source array order.
 
-`identity` contains `account_id`, `player_slot`, and `hero_id` as nullable source IDs, plus source-provided `name` and `personaname` as nullable strings. It also contains `side` (`"radiant"`, `"dire"`, or `null`): strictly map `players[].isRadiant=true` to `radiant` and `false` to `dire`; missing or unknown values remain `null`. `account_id` is the cross-game account identifier when supplied. `player_slot` associates rows within this game; it is not a position from one to five. Names are labels, never identity proof. `hero_variant` is outside the core contract; do not interpret zero as a particular facet.
+`identity` contains `account_id` and `player_slot` as nullable source IDs, a nullable `hero` entity object from source `hero_id`, plus source-provided `name` and `personaname` as nullable strings. It also contains `side` (`"radiant"`, `"dire"`, or `null`): strictly map `players[].isRadiant=true` to `radiant` and `false` to `dire`; missing or unknown values remain `null`. `account_id` is the cross-game account identifier when supplied. `player_slot` associates rows within this game; it is not a position from one to five. Names are labels, never identity proof. `hero_variant` is outside the core contract; do not interpret zero as a particular facet.
 
 `final_stats` contains these confirmed final scoreboard, farming/economy, and combat statistics. Every source path is relative to that player's OpenDota record:
 
@@ -108,7 +148,7 @@ Each player has three parts: `identity`, `final_stats`, and `minute_timeline`. K
 
 These are final values, not values copied from the last minute sample. Assists and level have final values only; hero damage, tower damage, and hero healing also stay here rather than entering the first-version minute timeline. Missing source values are `null`; explicit zeros remain zero.
 
-Additional early candidates still need a retention decision: wallet/spend/rate fields (`gold`, `gold_spent`, `gold_per_min`, `xp_per_min`); `stuns`; ward/resource counts (`obs_placed`, `sen_placed`, `camps_stacked`, `creeps_stacked`, `rune_pickups`); unit-category kill counts (`neutral_kills`, `lane_kills`, `ancient_kills`, `tower_kills`, `roshan_kills`, `courier_kills`, `observer_kills`, `sentry_kills`); and `buyback_count`, `actions_per_min`, `pings`, `life_state_dead`, `leaver_status`. They are not included in the confirmed minimum merely because an experimental DTO retained them. In particular, a source wallet value must never be replaced by cumulative `gold_t`.
+This version contains exactly the ten final-stat fields above. Wallet/spend/rate fields, `stuns`, ward/resource counts, unit-category kill counts, `buyback_count`, `actions_per_min`, `pings`, `life_state_dead`, and `leaver_status` are excluded, not unresolved first-version decisions. A later concrete consumer may justify an extension. A source wallet value must never be replaced by cumulative `gold_t`.
 
 `minute_timeline` is a list of records with these eight fields:
 
@@ -151,10 +191,10 @@ Each player build is associated by `player_slot` and contains:
 
 | Subsection | Target fields and source |
 |---|---|
-| `final_loadout` | `inventory` has six slots from `item_0` through `item_5`; `backpack` has three slots from `backpack_0` through `backpack_2`. Each slot is an integer item ID or `null`; preserve explicit zero values and positions. Retain `item_neutral` and `item_neutral2` as nullable source item IDs without assigning unverified meanings. Retain `aghanims_scepter`, `aghanims_shard`, and `moonshard` as nullable numeric final-state source values, without interpreting their values as equipment timing or converting them to booleans. |
-| `purchase_events` | Ordered `purchase_log` records with `time_seconds` (number or `null`), `item_key` (string or `null`), and optional `charges` (number or `null`). |
-| `ability_upgrade_sequence` | Source `ability_upgrades_arr`: integer Valve ability IDs in source upgrade order. Retain talent entries supplied by the source. |
-| `neutral_item_history` | Source `neutral_item_history` records: `time_seconds` (number or `null`) from `time`, `item_key` (string or `null`) from `item_neutral`, and `enhancement_key` (string or `null`) from `item_neutral_enhancement`. Retain source order and partial records. The action represented by a record remains unverified. |
+| `final_loadout` | `inventory` has six slots from `item_0` through `item_5`; `backpack` has three slots from `backpack_0` through `backpack_2`. Each position contains an item entity or `null`; preserve positions and apply the explicit zero/unknown slot rules above. `item_neutral` and `item_neutral2` likewise contain nullable item entities without assigning unverified meanings to the two source slots. Retain `aghanims_scepter`, `aghanims_shard`, and `moonshard` as nullable numeric final-state source values, without interpreting them as equipment timing or converting them to booleans. |
+| `purchase_events` | Ordered `purchase_log` records with `time_seconds` (number or `null`), `item` (entity object or `null`) from exact conversion of source `key`, and optional `charges` (number or `null`). |
+| `ability_upgrade_sequence` | Ability entity objects from `ability_upgrades_arr`, in exact source upgrade order with repeats and talent entries retained. Unknown source IDs remain present with null names. |
+| `neutral_item_history` | Source records with `time_seconds` from `time`, `item` from exact conversion of `item_neutral`, and `enhancement` from exact conversion of `item_neutral_enhancement`; each entity is nullable. Retain source order and partial records. The action represented by a record remains unverified. |
 
 Keep component purchases, intermediate items, and completed purchases as separate source records. Do not infer a missing completed item, create purchase parent/child links, sum purchase prices as total spend, reconstruct minute inventories, or claim that a purchase means delivery or usability. Ability sequence order carries no inferred time or hero level. Do not call neutral-item history “item switching” until that meaning is verified. Permanent buffs are excluded from the first version. The exact meaning and final names of the two neutral slots remain pending; do not describe them as two confirmed equipped items.
 
@@ -170,9 +210,9 @@ Keep component purchases, intermediate items, and completed purchases as separat
 | `roshan_kills` | Verified Roshan-kill objective records. |
 | `aegis_pickups` | Verified Aegis-pickup objective records. |
 | `first_blood` | Preserve the available first-blood source records and any disagreement. |
-| `other_objectives` | Preserve other recognized objective source records, including unknown source codes without guessing their meaning. |
+| `other_objectives` | Preserve courier/Tormentor events and other objective records; unknown codes use a null type with scalar evidence in coverage. |
 
-Use exact source event time in seconds, including negative values. Retain each category's source order; the separate category arrays do not imply a global event order. Equal-time records have no inferred ordering. Fill a killer hero ID only when its source unit maps exactly to a Valve hero; otherwise retain the source unit key and leave the hero ID unknown. Do not assign an event to a player or side from an unverified `team` or `killer` encoding.
+Use exact source event time in seconds, including negative values. Retain each category's source order; the separate category arrays do not imply a global event order. Equal-time records have no inferred ordering. Resolve event units explicitly using the local hero and non-hero mapping. Unknown units become field-specific coverage gaps rather than raw keys in business records. Do not assign an event to a player or side from an unverified `team` or `killer` encoding.
 
 For every event category, preserve an explicit empty source list as `[]` and represent a missing source list as `null`. Each `hero_deaths` record is built from one player's `deaths_log` entry:
 
@@ -181,34 +221,48 @@ For every event category, preserve an explicit empty source list as `[]` and rep
 | `time_seconds` | number or `null` | `deaths_log[].time` |
 | `victim_player_slot` | integer or `null` | The owning player's `player_slot` |
 | `killer_player_slot` | integer or `null` | Fill only when source evidence explicitly identifies the corresponding player; otherwise `null` |
-| `killer_unit_key` | string or `null` | `deaths_log[].key` |
-| `killer_hero_id` | integer or `null` | Exact Valve internal-name mapping of the killer unit; otherwise `null` |
+| `killer_unit` | unit object or `null` | Exact conversion of `deaths_log[].key`; distinguishes heroes, towers, creeps, and other verified units |
 | `gold_lost` | number or `null` | `deaths_log[].gold_lost` |
 | `gold_fed` | number or `null` | `deaths_log[].gold_fed` |
 | `time_dead_seconds` | number or `null` | `deaths_log[].time_dead` |
 
 Do not infer a killer player from similar names or nearby event times. Missing optional death fields remain `null` and do not require individual coverage warnings. Other event-row fields stay source-specific; their exact names and types must be verified before they are added.
 
-Conflicting first-blood sources remain separate values in `coverage.conflicts`; do not adjudicate them. Preserve end-of-game timestamps even when they exceed `duration_seconds` by one second. The data contract does not add an anomaly warning or a frontend endpoint-display rule. Eye wards, runes, and pauses are outside the first-version event categories. `MINIBOSS_KILL` and unverified objective actor/team fields remain untranslated until their source semantics are confirmed.
+Conflicting first-blood sources remain separate values in `coverage.conflicts`; do not adjudicate them. Preserve end-of-game timestamps even when they exceed `duration_seconds` by one second. The data contract does not add an anomaly warning or a frontend endpoint-display rule. Eye wards, runes, and pauses are outside the first-version event categories. Mapping unit names does not add ward events or non-hero interaction tables.
 
-The projector classifies only exact observed source codes: `building_kill`, `CHAT_MESSAGE_ROSHAN_KILL`, `CHAT_MESSAGE_AEGIS`, and `CHAT_MESSAGE_FIRSTBLOOD`. Other codes, including `CHAT_MESSAGE_MINIBOSS_KILL`, remain in `other_objectives` without a guessed label. Additional implemented event fields are:
+The earlier offline projector classifies four objective codes and preserves opaque source fields. The accepted target instead uses the following exact business `type` mapping. These normalized types and bilingual units have not yet been implemented:
+
+| Source `objectives[].type` | Business `type` | Category |
+|---|---|---|
+| `building_kill` | `building_destruction` | `building_destructions` |
+| `CHAT_MESSAGE_ROSHAN_KILL` | `roshan_kill` | `roshan_kills` |
+| `CHAT_MESSAGE_AEGIS` | `aegis_pickup` | `aegis_pickups` |
+| `CHAT_MESSAGE_FIRSTBLOOD` | `first_blood` | `first_blood.objective_events` |
+| `CHAT_MESSAGE_COURIER_LOST` | `courier_death` | `other_objectives` |
+| `CHAT_MESSAGE_MINIBOSS_KILL` | `tormentor_kill` | `other_objectives` |
+| Unrecognized or missing type | `null` | `other_objectives`; keep the event's known time and other facts, with the present unmapped code in coverage |
+
+Normalized objective types are the six fixed strings above or `null`. No free-form model classification is used. Event type normalization is separate from unit-name lookup. The unit `npc_dota_miniboss` has verified client names 痛苦魔方 / Tormentor; the corresponding objective type is now an accepted mapping, not an unresolved first-version category.
+
+Additional target event fields are:
 
 | Event data | Fields and direct source mappings |
 |---|---|
-| Buyback | `time_seconds` from `time`; `player_slot` from the owning player; `source_slot` and `source_player_slot` preserve log `slot` and `player_slot` independently. Conflicting owner/source slots are retained and reported. |
-| Objectives | `time_seconds` from `time`; `source_type` from `type`; `source_key` from `key`; `source_unit_key` from `unit`; `source_slot`, `source_player_slot`, `source_victim_player_slot`, `source_team`, `source_killer`, and `source_value` from the corresponding source fields. Opaque fields retain scalar values (string, number, boolean, or `null`) without decoding their semantics. |
+| Buyback | `time_seconds` from `time`; `player_slot` from the owning player. A disagreeing explicit source `player_slot` remains evidence in `coverage.conflicts`. Unverified present `slot` codes are retained only as field-specific coverage evidence, not decoded into a player. |
+| Objectives | `time_seconds` from `time`; normalized `type` from the table above; `target_unit` from `key` only when it is an exact mapped unit identifier; `actor_unit` from exact unit conversion of `unit`. Do not copy `source_type`, `source_key`, or `source_unit_key` into business fields. |
+| Other source codes | Present unverified `slot`, `team`, `killer`, `value`, or non-unit `key` values remain scalar evidence in coverage with exact source paths. They do not become business identities or inferred rewards. Missing optional values require no warning. |
 | Objective players | `player_slot` and `victim_player_slot` are populated only from explicit same-name source fields matching one unique player slot in this record. A bare `slot`, `team`, or `killer` never supplies a player identity. |
 | First blood | Nullable `reported_time_seconds` from top-level `first_blood_time` and nullable `objective_events` containing the first-blood objective rows. Conflicts point to exact source `objectives[i].time`; neither view overwrites the other. |
 
-Hero IDs use an optional injected exact internal-name-to-ID catalog index. A killer player slot additionally requires one unique source player with that hero ID and slot. Unknown catalog keys, repeated hero IDs, or repeated slots leave the player unknown. No fuzzy matching is used. Missing one player's event log adds a coverage gap while preserving other players' known events; all unavailable logs yield `null`, and explicitly empty logs yield `[]`. Each category retains source player/log order without claiming a global time order.
+The earlier offline mapper accepts an optional exact hero index; the target Service supplies its pinned local catalog and unit resource. A killer player slot additionally requires one unique source player with that hero ID and slot. Unknown catalog keys, repeated hero IDs, or repeated slots leave the player unknown. A recognized summon type does not identify its controller. No fuzzy matching is used. Missing one player's event log adds a coverage gap while preserving other players' known events; all unavailable logs yield `null`, and explicitly empty logs yield `[]`. Each category retains source player/log order without claiming a global time order.
 
 ### 7. `interactions`
 
 **Responsibility:** three per-player views of hero targets: `kills_by_target`, `damage_by_target`, and `healing_by_target`.
 
-The structure is `interactions.players[]`; each player entry contains `player_slot` (integer or `null`) and the three target lists. Each target record contains `target_unit_key` (string), `target_hero_id` (integer or `null`), and `value` (number). Resolve `target_hero_id` only by an exact Valve catalog internal-name match. Keep the source unit key for a hero entry when it has no exact mapping. Do not use fuzzy name similarity or assign an unresolved target to a player.
+The structure is `interactions.players[]`; each player entry contains `player_slot` (integer or `null`) and the three target lists. Each target record contains `target_hero` (hero entity object or `null`) and `value` (number). Resolve it only by an exact Valve catalog internal-name match. An unconvertible hero key leaves the entity null and retains that key in coverage; the known numeric amount and row remain. Do not expose `target_unit_key`, use fuzzy name similarity, or assign an unresolved target to a player.
 
-The offline projector accepts an optional exact catalog index; without it source target keys and amounts remain available with null hero IDs. It never calls fuzzy search or a remote provider. A malformed hero amount makes only that target map unavailable and adds a coverage reason, preserving the player's other maps and final statistics.
+The earlier offline projector keeps source keys and amounts when no index is supplied. The target uses local bilingual entity objects as specified above, without remote lookups. A malformed hero amount makes only that target map unavailable and adds a coverage reason, preserving the player's other maps and final statistics.
 
 | Target list | Direct source | Target scope |
 |---|---|---|
@@ -216,30 +270,34 @@ The offline projector accepts an optional exact catalog index; without it source
 | `damage_by_target` | `players[].damage` | Hero entries only; `value` is the source damage amount |
 | `healing_by_target` | `players[].healing` | Hero entries only, including self-healing; `value` is the source healing amount |
 
-Retain source map order when producing each list. For these source maps, hero entries use the `npc_dota_hero_` unit-key namespace; exclude creep, neutral, building, ward, and other non-hero entries. An unresolved hero unit key remains visible with a null hero ID. Do not aggregate nested `damage_targets`, expose ability/item breakdowns, or recompute last hits and denies from these maps. Final and minute last-hit/deny statistics already belong to `players`.
+Retain source map order when producing each list. For these source maps, hero entries use the `npc_dota_hero_` unit-key namespace; exclude creep, neutral, building, ward, and other non-hero entries. An unresolved hero row remains with a null `target_hero` and field-specific coverage evidence. Non-hero unit mapping does not expand this hero-only scope. Do not aggregate nested `damage_targets`, expose ability/item breakdowns, or recompute last hits and denies from these maps. Final and minute last-hit/deny statistics already belong to `players`.
 
 An absent source map is `null`; an explicitly empty source map is an empty list. Do not synthesize zeros for unobserved pairs. Do not add contribution ratings, assist inference, counter analysis, or deeper interaction tables. If an interaction count differs from another source view, preserve both and record a material conflict instead of rewriting either value.
 
 ### 8. `coverage`
 
-**Responsibility:** compactly identify promised data that is missing and source facts that materially disagree.
+**Responsibility:** compactly identify promised data that is missing, retain source scalars that cannot be reliably converted, and preserve material source disagreements.
 
 The only fields are:
 
 | Field | Type | Meaning |
 |---|---|---|
-| `missing` | list of `{path: string, reason: string}` | `path` identifies unavailable promised DTO data; `reason` briefly states the source gap, invalid input, or unalignable series that prevents providing it. |
+| `missing` | list of `{path: string, reason: string, source_path?: string, source_value?: scalar}` | `path` identifies the affected DTO field or containing record; `reason` states the source gap or failed conversion. For a present unmapped ID, key, code, or unavailable localized name, include its exact `source_path` and original scalar `source_value`. Do not copy source objects or arrays. |
 | `conflicts` | list of `{paths: string[], values: (string \| number \| boolean \| null)[]}` | Source paths and observed scalar values correspond by index and preserve a material disagreement without selecting the correct value. |
 
-For example, missing kill logs may produce `{"path": "players[1].minute_timeline.kills", "reason": "Source kill log unavailable"}`. Existing arrays whose time axes cannot be aligned can likewise explain an unavailable DTO path; `missing` is not limited to absent source keys. A first-blood conflict can retain `{"paths": ["first_blood_time", "objectives.first_blood.time"], "values": [0, -25]}`. These source-path labels describe evidence; they do not expose a raw-response retrieval route.
+A scalar is a string, finite number, boolean, or null. Optional source-evidence fields are omitted when there is no corresponding present source value; do not fabricate a source value for an absent key.
 
-Do not list features this version never promises. Do not warn for every optional event attribute. Do not add confidence or quality scores or long diagnostic prose. Missing data in a non-core section does not erase other usable sections. Invalid game identity or another root contract failure returns an error, never a successful DTO.
+For example, missing kill logs may produce `{"path": "players[1].minute_timeline.kills", "reason": "Source kill log unavailable"}`. Existing arrays whose time axes cannot be aligned can likewise explain an unavailable DTO path; `missing` is not limited to absent source keys. The saved sample's first-blood conflict can retain `{"paths": ["first_blood_time", "objectives[0].time"], "values": [0, -25]}`. These source-path labels describe evidence; they do not expose a raw-response retrieval route.
+
+For example, an unmapped neutral item can produce `{"path":"builds.players[6].neutral_item_history[1].item","reason":"Catalog key not found","source_path":"players[6].neutral_item_history[1].item_neutral","source_value":"guardian_shell"}`. Source and DTO indices must come from the actual row; this illustrates the shape, not a claim about that sample's exact indices. An unknown building-event actor sets only `actor_unit=null`, leaving its target building and time intact.
+
+Do not list features this version never promises, such as competition fields or extra final stats. Do not warn for every absent optional event attribute. Present source encodings that cannot be interpreted use the scalar mapping-gap rule; successfully converted keys are not copied again. Deduplicate identical gap entries without losing their affected paths. Do not add confidence or quality scores, long diagnostic prose, raw objects, or a raw-response retrieval handle. Missing data in a non-core section does not erase other usable sections. Invalid game identity or another root contract failure returns an error, never a successful DTO. Unexpected resolver/storage/programming failures are not silently converted into per-key misses.
 
 Conflict paths and values must have corresponding lengths and identify at least two source observations. The projector uses exact source array indices where available. Missing optional event attributes do not generate per-event warnings; missing logs or event times that affect a promised view do.
 
 ## Illustrative sample fragments
 
-The values below were checked against one saved OpenDota response for game `9040460429`. They demonstrate mappings and source limits; they are not a guarantee that every game has these fields.
+The match values below were checked against one saved OpenDota response for game `9040460429`. Bilingual labels come from the local catalog rather than the match response. These fragments illustrate the accepted target, including enrichment that is not yet implemented; they do not guarantee that every game has these fields.
 
 The source start time converts to the Beijing calendar date shown. The formal duration is 2,904 seconds; `radiant_win=false` maps to a Dire win. The source score is 17–33.
 
@@ -252,7 +310,7 @@ The source start time converts to the Beijing calendar date shown. The formal du
 
 The first source pick/ban row is a ban by source team code 0:
 
-    {"order": 0, "action": "ban", "hero_id": 59, "side": "radiant"}
+    {"order": 0, "action": "ban", "hero": {"id": 59, "name_zh": "哈斯卡", "name_en": "Huskar"}, "side": "radiant"}
 
 For the player with account ID `321580662`, the source player slot is 1 and the hero ID is 1. At game time 600 seconds the saved arrays contain net worth 3,440, cumulative gold 2,930, experience 2,383, 39 last hits, and 2 denies. The source logs give one kill and zero deaths through that time:
 
@@ -267,28 +325,30 @@ For the player with account ID `321580662`, the source player slot is 1 and the 
       "deaths": 0
     }
 
-The same saved player's final values include K/D/A 3/6/4, level 25, 605 last hits, 3 denies, and net worth 26,064. Source hero damage is 14,456, tower damage 686, and hero healing 0. These demonstrate the confirmed `final_stats` fields; they do not approve the additional candidates listed above.
+The same saved player's final values include K/D/A 3/6/4, level 25, 605 last hits, 3 denies, and net worth 26,064. Source hero damage is 14,456, tower damage 686, and hero healing 0. These demonstrate all ten approved `final_stats` fields; additional statistics are outside this version.
 
-The source purchase log includes component keys `faerie_fire` and `slippers` at -89 seconds, `power_treads` at 388 seconds, and `manta` at 1,478 seconds. They remain separate records; the example does not assert a recipe relationship.
+The source purchase log includes component keys `faerie_fire` and `slippers` at -89 seconds, `power_treads` at 388 seconds, and `manta` at 1,478 seconds. Convert each key into its own bilingual item entity while preserving those separate records; do not assert a recipe relationship. The last becomes `{"time_seconds":1478,"item":{"id":147,"name_zh":"幻影斧","name_en":"Manta Style"},"charges":null}`.
 
-A saved death record for this player is at 815 seconds and carries the source killer unit key `npc_dota_hero_pangolier`. The interaction map records one kill against `npc_dota_hero_monkey_king`; the exact local Valve catalog maps that unit key to hero ID 114.
+A saved death record for this player is at 815 seconds and carries source `npc_dota_hero_pangolier`, which supplies the bilingual hero `killer_unit`. The interaction map records one kill against `npc_dota_hero_monkey_king`; its target becomes `{"id":114,"name_zh":"齐天大圣","name_en":"Monkey King"}`. Source keys are conversion inputs, not duplicated public fields.
 
 The source `first_blood_time` is 0, while an objective record is marked `CHAT_MESSAGE_FIRSTBLOOD` at -25 seconds. Keep both source values and report the conflict. Do not select one as the correct time.
 
 This contract does not promise a DTO byte-size target. The old 105 KB and 215 KB experimental DTOs contain fields excluded or still unapproved here; they are not templates for the final schema.
 
-## Pending verification and implementation prerequisites
+## Closed scope, verification limits, and implementation prerequisites
 
 | Kind | Item |
 |---|---|
-| Source semantics | The meanings of the two neutral-item slots and the action represented by neutral-item history; unverified objective codes, actor/team encodings including `MINIBOSS_KILL`, and any category-specific time semantics not already mapped above |
-| Additional field decisions | Only the additional `final_stats` candidates listed above, competition fields, and team fields beyond `source_team_id` and `name`; the confirmed minimum is not pending approval |
+| Deliberate scope exclusions | `competition=null`, exactly ten final-stat fields, and only `source_team_id`/`name` for teams are settled for this version. Future extensions do not block implementation. |
+| Source-semantic limits | The meanings of the two neutral-item slots and actions in neutral-item history remain unverified. Unverified actor/team/reward encodings are retained only as scalar coverage evidence. The six objective types above, including Tormentor, are accepted mappings; new codes require verification. |
+| Mapping gaps | `dota_unknown` is explicit source uncertainty. Sampled `guardian_shell` has no exact record in the checked local Catalog; keep that field unknown with scalar evidence until a verified mapping is added. Neither blocks other match facts. |
+| Accepted enrichment, not implemented | Bilingual entity/unit objects, normalized event types, snapshot provenance, and scalar mapping-gap fields must be implemented and tested before claiming the accepted DTO is ready. The earlier offline model alone does not satisfy this target. |
 | Implemented internal record split to preserve | The resolver consumes complete `OpenDotaGameRecord` values independently of the public `GameDetailResult` constructed by `GameDetailService`. Keep exact source timestamps, side-specific team IDs, identity-validation inputs, and accepted per-game associations available internally when adding the DTO projection. |
 | Log boundary | Verify that missing and explicitly empty event logs remain distinct, and that cumulative kills/deaths include valid pre-zero records without inventing a zero curve when logs are missing |
 | Implemented resolver boundary to preserve | `esports.game.resolve` retains complete reads internally and publishes only the resolution evidence owned by the cross-source contract in `DATA.md`. Its Artifact cannot retrieve candidate detail bodies or full source collections. Preserve this separation when changing the still-raw `game.detail` output. |
-| Non-blocking separation | Static names and images remain separate catalog/display facts; they do not complete missing historical match facts. |
+| Non-blocking separation | Static names are locally materialized with their own provenance. They do not complete missing historical match facts. Images, frontend behavior, automated unit-data refresh, and deployment remain outside this change. |
 
-Keep these statuses separate: the confirmed field structures and mappings above are settled; additional candidate inclusion and unknown source semantics remain open; the internal record split and resolver public-evidence boundary are implemented and must be preserved; DTO log handling and alignment remain implementation/validation work. Do not reopen settled fields or turn unresolved semantics into default values.
+The first-version data scope and naming policy are settled. Source-semantic limits and newly encountered keys are handled by explicit unknown values and coverage, not speculative defaults or another field-approval round. Preserve the implemented internal record split and resolver public-evidence boundary. Local enrichment, the public switch, and end-to-end tool/Artifact acceptance remain implementation work.
 
 ## Ownership and acceptance
 

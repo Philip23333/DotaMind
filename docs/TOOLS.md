@@ -465,6 +465,17 @@ complete governed DTO, with no raw-object field or model-facing way to retrieve
 the original response. Generic `artifact.read` and `artifact.grep` remain
 ordinary document operations.
 
+The accepted DTO includes English/Chinese entity names at typed hero, item,
+ability, and event-unit fields, so reading a game does not require an explicit
+`catalog.lookup` call just to decode IDs or source unit/item keys. It retains
+canonical IDs, converts internal keys exactly using local data, and records one
+`catalog_version` and `unit_mapping_version` in the result envelope. Event types
+use fixed verified business enums. Unmapped keys/codes remain scalar evidence
+only in `coverage`; unknown entities or names do not erase known match facts.
+This enrichment and the public DTO switch are pending implementation. They do
+not change the Catalog tool input, introduce unit lookup as a new model tool,
+or add image/display behavior.
+
 The DTO keeps source absence distinct from zero and empty values, and a missing
 field does not show that an event did not happen. The lookup does not request
 replay parsing. Large results continue to use generic Artifact externalization
@@ -480,8 +491,9 @@ public DTO switch is still pending. The evidence contract and checks are tracked
 [`DATA.md`](DATA.md) and [`EVALS.md`](EVALS.md).
 
 The offline eight-section mapper is implemented, but no tool currently invokes
-it. Its existence does not change the registered `game.detail` schema or the
-current source-shaped Artifact body. A separate public-switch step is required.
+it. It still uses the earlier ID/key schema. Its existence does not change the
+registered `game.detail` schema or the current source-shaped Artifact body.
+Implement the accepted bilingual/unit/event mapping before the public switch.
 
 `catalog.lookup(kind, ids)` resolves up to 20 exact positive hero or item IDs
 against the active local Valve Dota 2 catalog snapshot. It returns each requested
@@ -490,8 +502,9 @@ snapshot version. With `DOTAMIND_DATA_DIR` unset, it uses the bundled snapshot;
 when configured, it uses the file-backed snapshot managed by the API loader. Each
 lookup captures one repository and uses it for all IDs and version metadata.
 These names are local catalog labels, not fields returned by STRATZ or OpenDota;
-unknown IDs remain unknown. The lookup does not modify match-detail data and
-makes no network request.
+unknown IDs remain unknown. The standalone lookup does not mutate a stored
+detail or make network requests. The accepted detail target performs local
+enrichment independently during DTO construction, before Artifact storage.
 
 For an account-to-game workflow, use `player.profile` only when profile data is
 requested, and query `player.recent_games` directly when a Steam32 account is
