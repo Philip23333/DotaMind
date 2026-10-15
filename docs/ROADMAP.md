@@ -432,8 +432,10 @@ Implementation order:
    defined in the cross-source contract. The result Artifact excludes full
    source collections and candidate detail bodies. Preserve this separation
    when changing `game.detail`; the detail DTO migration remains pending.
-3. **Pending projection:** map the validated OpenDota object into the eight
-   sections in the owner contract. Do not add a raw payload or let the generic
+3. **Offline projection in progress; public switch pending:** closed DTO types
+   and static mappings are implemented and locally tested; minute, event, and
+   interaction mappings remain pending. Complete the eight sections before
+   connecting the projector to `GameDetailService`. Do not add a raw payload or let the generic
    Artifact layer perform source mapping. Preserve missing, empty, zero, false,
    negative-time, and conflict semantics as documented.
 4. **Pending focused acceptance:** cover field mappings, invalid identity,

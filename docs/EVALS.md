@@ -426,7 +426,11 @@ meaning.
 The owner contract is
 [`agent/game_detail_data.md`](agent/game_detail_data.md). The current adapter
 and its tests still return the complete validated OpenDota object. The checks
-below are future acceptance requirements; they are not implemented or passed.
+below remain full-migration acceptance requirements, not a claim that the public
+tool already returns the DTO. Offline projection tests currently cover the
+closed eight-section model, static mappings, strict enums, final statistics,
+slot-preserving loadouts, purchase/skill/neutral history, source identity, and
+missing versus explicit empty collections using saved game `9040460429`.
 
 The internal/public type split is implemented independently of that projection.
 Focused Service tests verify one native-ID record read, unchanged public data

@@ -1,0 +1,219 @@
+"""Closed recorded-game data contract, independent of provider response shapes."""
+
+from __future__ import annotations
+
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictFloat, StrictInt, StrictStr
+
+Number = StrictInt | StrictFloat
+Scalar = StrictStr | Number | StrictBool | None
+Side = Literal["radiant", "dire"]
+
+
+class _Data(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True, allow_inf_nan=False)
+
+
+class MissingData(_Data):
+    path: str
+    reason: str
+
+
+class SourceConflict(_Data):
+    paths: list[str]
+    values: list[Scalar]
+
+
+class CoverageData(_Data):
+    missing: list[MissingData] = Field(default_factory=list)
+    conflicts: list[SourceConflict] = Field(default_factory=list)
+
+
+class TeamData(_Data):
+    source_team_id: StrictInt | None = None
+    name: str | None = None
+
+
+class TeamsData(_Data):
+    radiant: TeamData | None = None
+    dire: TeamData | None = None
+
+
+class ScoreData(_Data):
+    radiant: StrictInt | None = None
+    dire: StrictInt | None = None
+
+
+class MatchData(_Data):
+    match_date: str | None = None
+    duration_seconds: StrictInt | None = None
+    game_winner: Side | None = None
+    score: ScoreData
+    teams: TeamsData
+    # The competition field list has not been approved; no League body is copied.
+    competition: None = None
+
+
+class DraftAction(_Data):
+    order: StrictInt | None = None
+    action: Literal["ban", "pick"] | None = None
+    hero_id: StrictInt | None = None
+    side: Side | None = None
+
+
+class DraftData(_Data):
+    picks_bans: list[DraftAction] | None = None
+
+
+class PlayerIdentity(_Data):
+    account_id: StrictInt | None = None
+    player_slot: StrictInt | None = None
+    hero_id: StrictInt | None = None
+    name: str | None = None
+    personaname: str | None = None
+    side: Side | None = None
+
+
+class FinalStats(_Data):
+    kills: StrictInt | None = None
+    deaths: StrictInt | None = None
+    assists: StrictInt | None = None
+    level: StrictInt | None = None
+    last_hits: StrictInt | None = None
+    denies: StrictInt | None = None
+    net_worth: Number | None = None
+    hero_damage: Number | None = None
+    tower_damage: Number | None = None
+    hero_healing: Number | None = None
+
+
+class MinuteData(_Data):
+    time_seconds: StrictInt
+    net_worth: Number | None = None
+    earned_gold: Number | None = None
+    experience: Number | None = None
+    last_hits: Number | None = None
+    denies: Number | None = None
+    kills: StrictInt | None = None
+    deaths: StrictInt | None = None
+
+
+class PlayerData(_Data):
+    identity: PlayerIdentity
+    final_stats: FinalStats
+    minute_timeline: list[MinuteData] | None = None
+
+
+class EconomyData(_Data):
+    time_seconds: list[StrictInt] | None = None
+    radiant_gold_adv: list[Number | None] | None = None
+    radiant_xp_adv: list[Number | None] | None = None
+
+
+class FinalLoadout(_Data):
+    inventory: list[StrictInt | None] = Field(min_length=6, max_length=6)
+    backpack: list[StrictInt | None] = Field(min_length=3, max_length=3)
+    item_neutral: StrictInt | None = None
+    item_neutral2: StrictInt | None = None
+    aghanims_scepter: Number | None = None
+    aghanims_shard: Number | None = None
+    moonshard: Number | None = None
+
+
+class PurchaseEvent(_Data):
+    time_seconds: Number | None = None
+    item_key: str | None = None
+    charges: Number | None = None
+
+
+class NeutralItemEvent(_Data):
+    time_seconds: Number | None = None
+    item_key: str | None = None
+    enhancement_key: str | None = None
+
+
+class PlayerBuild(_Data):
+    player_slot: StrictInt | None = None
+    final_loadout: FinalLoadout
+    purchase_events: list[PurchaseEvent] | None = None
+    ability_upgrade_sequence: list[StrictInt] | None = None
+    neutral_item_history: list[NeutralItemEvent] | None = None
+
+
+class BuildsData(_Data):
+    players: list[PlayerBuild] | None = None
+
+
+class HeroDeath(_Data):
+    time_seconds: Number | None = None
+    victim_player_slot: StrictInt | None = None
+    killer_player_slot: StrictInt | None = None
+    killer_unit_key: str | None = None
+    killer_hero_id: StrictInt | None = None
+    gold_lost: Number | None = None
+    gold_fed: Number | None = None
+    time_dead_seconds: Number | None = None
+
+
+class BuybackEvent(_Data):
+    time_seconds: Number | None = None
+    player_slot: StrictInt | None = None
+    source_slot: Scalar = None
+    source_player_slot: Scalar = None
+
+
+class ObjectiveEvent(_Data):
+    time_seconds: Number | None = None
+    source_type: str | None = None
+    source_key: Scalar = None
+    source_unit_key: str | None = None
+    player_slot: StrictInt | None = None
+    source_slot: Scalar = None
+    source_player_slot: Scalar = None
+    source_team: Scalar = None
+    source_killer: Scalar = None
+    source_value: Scalar = None
+
+
+class FirstBloodData(_Data):
+    reported_time_seconds: Number | None = None
+    objective_events: list[ObjectiveEvent] | None = None
+
+
+class EventsData(_Data):
+    hero_deaths: list[HeroDeath] | None = None
+    buybacks: list[BuybackEvent] | None = None
+    building_destructions: list[ObjectiveEvent] | None = None
+    roshan_kills: list[ObjectiveEvent] | None = None
+    aegis_pickups: list[ObjectiveEvent] | None = None
+    first_blood: FirstBloodData
+    other_objectives: list[ObjectiveEvent] | None = None
+
+
+class TargetValue(_Data):
+    target_unit_key: str
+    target_hero_id: StrictInt | None = None
+    value: Number
+
+
+class PlayerInteractions(_Data):
+    player_slot: StrictInt | None = None
+    kills_by_target: list[TargetValue] | None = None
+    damage_by_target: list[TargetValue] | None = None
+    healing_by_target: list[TargetValue] | None = None
+
+
+class InteractionsData(_Data):
+    players: list[PlayerInteractions] | None = None
+
+
+class GameDetailData(_Data):
+    match: MatchData
+    draft: DraftData
+    players: list[PlayerData] | None = None
+    economy: EconomyData | None = None
+    builds: BuildsData
+    events: EventsData | None = None
+    interactions: InteractionsData | None = None
+    coverage: CoverageData

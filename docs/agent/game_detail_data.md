@@ -6,7 +6,7 @@ This document is the sole detailed data contract for `game.detail`.
 
 - **Current implementation:** `game.detail` returns the complete validated OpenDota source object in `data`.
 - **Accepted target:** `data` is an explicit DotaMind DTO containing source facts and necessary deterministic transformations.
-- **Implementation status:** the documented decisions and open questions are recorded here; the code still returns the full OpenDota object.
+- **Implementation status:** closed DTO types and static OpenDota mappings are implemented as an offline projector; minute, event, and interaction mapping remains pending. The public Service still returns the full OpenDota object; the projector is not connected to the tool.
 - **Use:** minute-by-minute state review and final-game statistics.
 - **Outside this contract:** performance ratings, role inference, lane-win judgments, teamfight classification, review recommendations, counterfactuals, simulated inventory states, and continuous map replay.
 
@@ -65,7 +65,7 @@ Every section below states its responsibility, target fields and types, source, 
 | `duration_seconds` | integer or `null` | Source `duration`, representing formal game duration. Do not add `pre_game_duration` or expose a second pre-game duration. |
 | `game_winner` | `"radiant"`, `"dire"`, or `null` | Strict mapping: `radiant_win=true` gives `radiant`; `false` gives `dire`; absent or unknown gives `null`. |
 | `score` | object or `null` | Preserve source `radiant_score` and `dire_score` under those side keys. |
-| `competition` | object or `null` | Preserve explicitly supplied OpenDota competition facts. The exact field whitelist is pending. |
+| `competition` | currently `null` | Reserved pending approval of an exact field list; the offline projector does not copy a League body or infer competition facts. This unapproved projection is not reported as a per-game source gap. |
 | `teams` | side-keyed object or `null` | Preserve this game's OpenDota radiant and dire team identities using the confirmed minimal fields below. |
 
 Each available `teams.radiant` or `teams.dire` record contains `source_team_id` (integer or `null`) and `name` (string or `null`). Read them from `radiant_team.team_id/name` and `dire_team.team_id/name`, respectively. Missing team records remain `null`. Additional fields such as team tags, logos, and captain IDs are candidates, not part of this confirmed minimum.
