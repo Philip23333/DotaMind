@@ -12,6 +12,7 @@ from pydantic import (
     StrictFloat,
     StrictInt,
     StrictStr,
+    model_serializer,
     model_validator,
 )
 
@@ -24,9 +25,32 @@ class _Data(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, allow_inf_nan=False)
 
 
+class EntityData(_Data):
+    id: StrictInt = Field(ge=0)
+    name_zh: StrictStr | None = None
+    name_en: StrictStr | None = None
+
+
 class MissingData(_Data):
     path: str
     reason: str
+    source_path: StrictStr | None = None
+    source_value: Scalar = None
+
+    @model_validator(mode="after")
+    def paired_source_evidence(self) -> MissingData:
+        present = self.model_fields_set & {"source_path", "source_value"}
+        if present and (len(present) != 2 or not self.source_path):
+            raise ValueError("Source evidence requires a path and corresponding scalar value")
+        return self
+
+    @model_serializer(mode="wrap")
+    def serialize_evidence(self, handler):
+        data = handler(self)
+        for key in ("source_path", "source_value"):
+            if key not in self.model_fields_set:
+                data.pop(key, None)
+        return data
 
 
 class SourceConflict(_Data):
@@ -73,7 +97,7 @@ class MatchData(_Data):
 class DraftAction(_Data):
     order: StrictInt | None = None
     action: Literal["ban", "pick"] | None = None
-    hero_id: StrictInt | None = None
+    hero: EntityData | None = None
     side: Side | None = None
 
 
@@ -84,7 +108,7 @@ class DraftData(_Data):
 class PlayerIdentity(_Data):
     account_id: StrictInt | None = None
     player_slot: StrictInt | None = None
-    hero_id: StrictInt | None = None
+    hero: EntityData | None = None
     name: str | None = None
     personaname: str | None = None
     side: Side | None = None
@@ -127,10 +151,10 @@ class EconomyData(_Data):
 
 
 class FinalLoadout(_Data):
-    inventory: list[StrictInt | None] = Field(min_length=6, max_length=6)
-    backpack: list[StrictInt | None] = Field(min_length=3, max_length=3)
-    item_neutral: StrictInt | None = None
-    item_neutral2: StrictInt | None = None
+    inventory: list[EntityData | None] = Field(min_length=6, max_length=6)
+    backpack: list[EntityData | None] = Field(min_length=3, max_length=3)
+    item_neutral: EntityData | None = None
+    item_neutral2: EntityData | None = None
     aghanims_scepter: Number | None = None
     aghanims_shard: Number | None = None
     moonshard: Number | None = None
@@ -138,21 +162,21 @@ class FinalLoadout(_Data):
 
 class PurchaseEvent(_Data):
     time_seconds: Number | None = None
-    item_key: str | None = None
+    item: EntityData | None = None
     charges: Number | None = None
 
 
 class NeutralItemEvent(_Data):
     time_seconds: Number | None = None
-    item_key: str | None = None
-    enhancement_key: str | None = None
+    item: EntityData | None = None
+    enhancement: EntityData | None = None
 
 
 class PlayerBuild(_Data):
     player_slot: StrictInt | None = None
     final_loadout: FinalLoadout
     purchase_events: list[PurchaseEvent] | None = None
-    ability_upgrade_sequence: list[StrictInt] | None = None
+    ability_upgrade_sequence: list[EntityData] | None = None
     neutral_item_history: list[NeutralItemEvent] | None = None
 
 
@@ -209,8 +233,7 @@ class EventsData(_Data):
 
 
 class TargetValue(_Data):
-    target_unit_key: str
-    target_hero_id: StrictInt | None = None
+    target_hero: EntityData | None = None
     value: Number
 
 

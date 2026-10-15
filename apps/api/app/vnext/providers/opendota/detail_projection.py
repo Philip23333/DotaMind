@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from app.integrations.valve.catalog_repository import DotaCatalogRepository
 from app.vnext.capabilities.game.data import (
     BuildsData,
     CoverageData,
@@ -26,10 +27,11 @@ from app.vnext.capabilities.game.data import (
     TeamsData,
 )
 
+from .detail_entities import DetailEntities
 from .detail_events import project_events
 from .detail_interactions import project_interactions
 from .detail_timeline import project_economy, project_minutes
-from .detail_values import _missing, _rows, _value
+from .detail_values import ABSENT, _missing, _rows, _value
 from .game_detail import OpenDotaGameRecord
 
 _FINAL_INTEGERS = ("kills", "deaths", "assists", "level", "last_hits", "denies")
@@ -77,7 +79,9 @@ def _match(source: Mapping[str, Any], coverage: CoverageData) -> MatchData:
     )
 
 
-def _draft(source: Mapping[str, Any], coverage: CoverageData) -> DraftData:
+def _draft(
+    source: Mapping[str, Any], entities: DetailEntities, coverage: CoverageData,
+) -> DraftData:
     rows = _rows(source.get("picks_bans"), "draft.picks_bans", coverage)
     if rows is None:
         return DraftData()
@@ -94,19 +98,24 @@ def _draft(source: Mapping[str, Any], coverage: CoverageData) -> DraftData:
             _missing(coverage, f"{path}.action", "Source is_pick is unavailable or invalid")
         result.append(DraftAction(
             order=_value(row, "order", int, f"{path}.order", coverage), action=action,
-            hero_id=_value(row, "hero_id", int, f"{path}.hero_id", coverage), side=side,
+            hero=entities.by_id(row.get("hero_id", ABSENT), "hero", f"{path}.hero",
+                                f"picks_bans[{i}].hero_id", coverage), side=side,
         ))
     return DraftData(picks_bans=result)
 
 
-def _player(source: Mapping[str, Any], i: int, coverage: CoverageData) -> PlayerData:
+def _player(
+    source: Mapping[str, Any], i: int, entities: DetailEntities, coverage: CoverageData,
+) -> PlayerData:
     path = f"players[{i}]"
     side = _side(source.get("isRadiant"))
     if side is None:
         _missing(coverage, f"{path}.identity.side", "Source isRadiant is unavailable or invalid")
     identity = PlayerIdentity(
         **{key: _value(source, key, int, f"{path}.identity.{key}", coverage)
-           for key in ("account_id", "player_slot", "hero_id")},
+           for key in ("account_id", "player_slot")},
+        hero=entities.by_id(source.get("hero_id", ABSENT), "hero", f"{path}.identity.hero",
+                            f"players[{i}].hero_id", coverage),
         **{key: _value(source, key, str, f"{path}.identity.{key}", coverage, required=False)
            for key in ("name", "personaname")},
         side=side,
@@ -121,37 +130,55 @@ def _player(source: Mapping[str, Any], i: int, coverage: CoverageData) -> Player
                       minute_timeline=project_minutes(source, i, coverage))
 
 
-def _build(source: Mapping[str, Any], i: int, coverage: CoverageData) -> PlayerBuild:
+def _build(
+    source: Mapping[str, Any], i: int, entities: DetailEntities, coverage: CoverageData,
+) -> PlayerBuild:
     path = f"builds.players[{i}]"
+    source_path = f"players[{i}]"
     loadout = {}
     for target, prefix, count in (("inventory", "item", 6), ("backpack", "backpack", 3)):
-        loadout[target] = [
-            _value(source, f"{prefix}_{slot}", int, f"{path}.final_loadout.{target}[{slot}]",
-                   coverage, required=False) for slot in range(count)
-        ]
-        if any(value is None for value in loadout[target]):
-            _missing(coverage, f"{path}.final_loadout.{target}",
-                     "Some source item slots are unavailable or invalid")
-    for key in ("item_neutral", "item_neutral2", "aghanims_scepter", "aghanims_shard", "moonshard"):
-        kind = int if key.startswith("item_") else float
-        loadout[key] = _value(source, key, kind, f"{path}.final_loadout.{key}", coverage)
+        loadout[target] = [entities.by_id(
+            source.get(f"{prefix}_{slot}", ABSENT), "item",
+            f"{path}.final_loadout.{target}[{slot}]", f"{source_path}.{prefix}_{slot}",
+            coverage, empty_zero=True,
+        ) for slot in range(count)]
+    for key in ("item_neutral", "item_neutral2"):
+        loadout[key] = entities.by_id(source.get(key, ABSENT), "item",
+                                     f"{path}.final_loadout.{key}", f"{source_path}.{key}",
+                                     coverage, empty_zero=True)
+    for key in ("aghanims_scepter", "aghanims_shard", "moonshard"):
+        loadout[key] = _value(source, key, float, f"{path}.final_loadout.{key}", coverage)
     purchases = _rows(source.get("purchase_log"), f"{path}.purchase_events", coverage)
     purchase_events = None if purchases is None else [PurchaseEvent(
         time_seconds=_value(row, "time", float, "", coverage, required=False),
-        item_key=_value(row, "key", str, "", coverage, required=False),
+        item=entities.by_key(row.get("key", ABSENT), "item", f"{path}.purchase_events[{j}].item",
+                             f"{source_path}.purchase_log[{j}].key", coverage),
         charges=_value(row, "charges", float, "", coverage, required=False),
-    ) for row in purchases]
+    ) for j, row in enumerate(purchases)]
     upgrades = source.get("ability_upgrades_arr")
-    if not (isinstance(upgrades, list) and all(type(item) is int for item in upgrades)):
+    if not (isinstance(upgrades, list) and all(
+        type(item) is int and item >= 0 for item in upgrades
+    )):
         upgrades = None
         _missing(coverage, f"{path}.ability_upgrade_sequence",
                  "Source ability_upgrades_arr is unavailable or invalid")
+    else:
+        upgrades = [entities.by_id(
+            identifier, "ability", f"{path}.ability_upgrade_sequence[{j}]",
+            f"{source_path}.ability_upgrades_arr[{j}]", coverage,
+        ) for j, identifier in enumerate(upgrades)]
     history = _rows(source.get("neutral_item_history"), f"{path}.neutral_item_history", coverage)
     neutral_events = None if history is None else [NeutralItemEvent(
         time_seconds=_value(row, "time", float, "", coverage, required=False),
-        item_key=_value(row, "item_neutral", str, "", coverage, required=False),
-        enhancement_key=_value(row, "item_neutral_enhancement", str, "", coverage, required=False),
-    ) for row in history]
+        item=entities.by_key(row.get("item_neutral", ABSENT), "item",
+                             f"{path}.neutral_item_history[{j}].item",
+                             f"{source_path}.neutral_item_history[{j}].item_neutral",
+                             coverage, required=False),
+        enhancement=entities.by_key(row.get("item_neutral_enhancement", ABSENT), "item",
+                                    f"{path}.neutral_item_history[{j}].enhancement",
+                                    f"{source_path}.neutral_item_history[{j}].item_neutral_enhancement",
+                                    coverage, required=False),
+    ) for j, row in enumerate(history)]
     return PlayerBuild(
         player_slot=_value(source, "player_slot", int, f"{path}.player_slot", coverage),
         final_loadout=FinalLoadout(**loadout), purchase_events=purchase_events,
@@ -160,7 +187,7 @@ def _build(source: Mapping[str, Any], i: int, coverage: CoverageData) -> PlayerB
 
 
 def project_game_detail(
-    record: OpenDotaGameRecord, *, hero_ids: Mapping[str, int] | None = None,
+    record: OpenDotaGameRecord, *, catalog: DotaCatalogRepository,
 ) -> GameDetailData:
     """Project a validated source record; the public Service is not switched yet."""
     source = record.data
@@ -168,17 +195,17 @@ def project_game_detail(
         raise ValueError("Source match_id must equal the internal record identity")
     coverage = CoverageData()
     players = _rows(source.get("players"), "players", coverage)
-    hero_ids = {} if hero_ids is None else hero_ids
+    entities = DetailEntities(catalog)
     return GameDetailData(
-        match=_match(source, coverage), draft=_draft(source, coverage),
+        match=_match(source, coverage), draft=_draft(source, entities, coverage),
         players=None if players is None else [
-            _player(player, i, coverage) for i, player in enumerate(players)
+            _player(player, i, entities, coverage) for i, player in enumerate(players)
         ],
         builds=BuildsData(players=None if players is None else [
-            _build(player, i, coverage) for i, player in enumerate(players)
+            _build(player, i, entities, coverage) for i, player in enumerate(players)
         ]),
         economy=project_economy(source, players, coverage),
-        events=project_events(source, players, hero_ids, coverage),
-        interactions=project_interactions(players, hero_ids, coverage),
+        events=project_events(source, players, entities.hero_ids, coverage),
+        interactions=project_interactions(players, entities, coverage),
         coverage=coverage,
     )

@@ -8,9 +8,19 @@ from typing import Any
 
 from app.vnext.capabilities.game.data import CoverageData, MissingData
 
+ABSENT = object()
 
-def _missing(coverage: CoverageData, path: str, reason: str) -> None:
-    entry = MissingData(path=path, reason=reason)
+
+def _missing(
+    coverage: CoverageData, path: str, reason: str, *,
+    source_path: str | None = None, source_value: Any = ABSENT,
+) -> None:
+    evidence = {}
+    if source_path is not None and (
+        source_value is None or type(source_value) in (str, bool) or _is_number(source_value)
+    ):
+        evidence = {"source_path": source_path, "source_value": source_value}
+    entry = MissingData(path=path, reason=reason, **evidence)
     if entry not in coverage.missing:
         coverage.missing.append(entry)
 

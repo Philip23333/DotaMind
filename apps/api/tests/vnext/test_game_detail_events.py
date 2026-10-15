@@ -8,8 +8,7 @@ from pydantic import ValidationError
 
 from app.integrations.valve.catalog_repository import DotaCatalogRepository
 from app.vnext.capabilities.game.data import SourceConflict
-from app.vnext.providers.opendota.detail_projection import project_game_detail
-from tests.vnext.test_game_detail_projection import FIXTURE, player, record, source
+from tests.vnext.test_game_detail_projection import FIXTURE, player, project, record, source
 
 
 def test_saved_game_event_counts_and_source_conflict_with_exact_catalog_ids() -> None:
@@ -17,7 +16,7 @@ def test_saved_game_event_counts_and_source_conflict_with_exact_catalog_ids() ->
     before = deepcopy(raw)
     hero_ids = {hero.internal_name: hero.hero_id
                 for hero in DotaCatalogRepository.load_default().list_heroes()}
-    data = project_game_detail(record(raw), hero_ids=hero_ids)
+    data = project(record(raw))
     events = data.events
     assert len(events.hero_deaths) == 50
     assert len(events.buybacks) == 3
@@ -52,8 +51,7 @@ def test_deaths_do_not_duplicate_kill_logs_and_do_not_guess_unknown_killers() ->
         {"time": 1, "key": "npc_dota_neutral_centaur_khan"},
         {"time": 1, "key": "npc_dota_hero_new_hero"},
     ])
-    data = project_game_detail(record(source(players=[p])),
-                               hero_ids={"npc_dota_hero_antimage": 1})
+    data = project(record(source(players=[p])))
     assert len(data.events.hero_deaths) == 2
     assert [e.time_seconds for e in data.events.hero_deaths] == [1, 1]
     assert all(e.killer_hero_id is None and e.killer_player_slot is None
@@ -62,7 +60,7 @@ def test_deaths_do_not_duplicate_kill_logs_and_do_not_guess_unknown_killers() ->
 
 
 def test_partial_player_logs_preserve_other_players_and_known_final_stats() -> None:
-    data = project_game_detail(record(source(players=[
+    data = project(record(source(players=[
         player(deaths_log=None, kills=2),
         player(player_slot=128, deaths_log=[{"time": 10, "key": "unknown"}]),
     ])))
@@ -73,18 +71,18 @@ def test_partial_player_logs_preserve_other_players_and_known_final_stats() -> N
 
 
 def test_empty_and_missing_event_logs_have_different_meanings() -> None:
-    missing = project_game_detail(record({"match_id": 123}))
+    missing = project(record({"match_id": 123}))
     assert missing.events.hero_deaths is None
     assert missing.events.buybacks is None
     assert missing.events.roshan_kills is None
-    empty = project_game_detail(record(source(players=[player()])))
+    empty = project(record(source(players=[player()])))
     assert empty.events.hero_deaths == []
     assert empty.events.buybacks == []
     assert empty.events.roshan_kills == []
 
 
 def test_unknown_objective_codes_and_opaque_actor_codes_remain_source_facts() -> None:
-    data = project_game_detail(record(source(players=[player()], objectives=[
+    data = project(record(source(players=[player()], objectives=[
         {"type": "UNKNOWN_CODE", "time": 13, "slot": 9, "team": 0, "killer": 8,
          "player_slot": 9, "extra_raw": {"do_not_copy": True}},
         {"type": "CHAT_MESSAGE_AEGIS", "time": 12, "slot": 0},
@@ -101,16 +99,16 @@ def test_unknown_objective_codes_and_opaque_actor_codes_remain_source_facts() ->
 
 
 def test_duplicate_hero_or_player_slots_do_not_confirm_a_killer() -> None:
-    data = project_game_detail(record(source(players=[
+    data = project(record(source(players=[
         player(deaths_log=[{"time": 1, "key": "npc_dota_hero_antimage"}]),
         player(player_slot=128),
-    ])), hero_ids={"npc_dota_hero_antimage": 1})
+    ])))
     assert data.events.hero_deaths[0].killer_hero_id == 1
     assert data.events.hero_deaths[0].killer_player_slot is None
 
 
 def test_buyback_owner_and_conflicting_source_slot_are_both_retained() -> None:
-    data = project_game_detail(record(source(players=[player(
+    data = project(record(source(players=[player(
         buyback_log=[{"time": 0, "slot": 7, "player_slot": 128}],
     )])))
     event = data.events.buybacks[0]

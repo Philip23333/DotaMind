@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from typing import Any
 
 from app.vnext.capabilities.game.data import (
@@ -12,11 +11,12 @@ from app.vnext.capabilities.game.data import (
     TargetValue,
 )
 
-from .detail_values import _hero_id, _is_number, _missing
+from .detail_entities import DetailEntities
+from .detail_values import _is_number, _missing
 
 
 def _targets(
-    value: Any, path: str, hero_ids: Mapping[str, int], coverage: CoverageData,
+    value: Any, path: str, source_path: str, entities: DetailEntities, coverage: CoverageData,
 ) -> list[TargetValue] | None:
     if not isinstance(value, dict):
         _missing(coverage, path, "Source hero-target map is unavailable or invalid")
@@ -26,12 +26,14 @@ def _targets(
     if any(not _is_number(amount) for _, amount in entries):
         _missing(coverage, path, "Source hero-target map has an invalid amount")
         return None
-    return [TargetValue(target_unit_key=key, target_hero_id=_hero_id(key, hero_ids), value=amount)
-            for key, amount in entries]
+    return [TargetValue(
+        target_hero=entities.by_key(key, "hero", f"{path}[{i}].target_hero",
+                                    f"{source_path}.{key}", coverage), value=amount,
+    ) for i, (key, amount) in enumerate(entries)]
 
 
 def project_interactions(
-    players: list[dict] | None, hero_ids: Mapping[str, int], coverage: CoverageData,
+    players: list[dict] | None, entities: DetailEntities, coverage: CoverageData,
 ) -> InteractionsData:
     if players is None:
         _missing(coverage, "interactions.players", "Source players are unavailable")
@@ -42,7 +44,7 @@ def project_interactions(
         result.append(PlayerInteractions(
             player_slot=slot if type(slot) is int else None,
             **{target: _targets(player.get(source), f"interactions.players[{i}].{target}",
-                                hero_ids, coverage)
+                                f"players[{i}].{source}", entities, coverage)
                for target, source in (("kills_by_target", "killed"),
                                       ("damage_by_target", "damage"),
                                       ("healing_by_target", "healing"))},

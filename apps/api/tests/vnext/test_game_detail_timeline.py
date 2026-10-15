@@ -5,13 +5,12 @@ from copy import deepcopy
 
 import pytest
 
-from app.vnext.providers.opendota.detail_projection import project_game_detail
-from tests.vnext.test_game_detail_projection import FIXTURE, player, record, source
+from tests.vnext.test_game_detail_projection import FIXTURE, player, project, record, source
 
 
 def test_saved_game_minutes_remain_distinct_from_final_statistics() -> None:
     raw = json.loads(FIXTURE.read_text())
-    data = project_game_detail(record(raw))
+    data = project(record(raw))
     p = next(p for p in data.players if p.identity.account_id == 321580662)
     assert len(p.minute_timeline) == 49
     assert p.minute_timeline[10].model_dump() == {
@@ -34,7 +33,7 @@ def test_logs_include_pre_zero_and_equal_time_events_without_reordering_source()
                lh_t=[0, 1, 3], dn_t=[0, 0, 1])
     raw = source(players=[p])
     before = deepcopy(raw)
-    data = project_game_detail(record(raw))
+    data = project(record(raw))
     nodes = data.players[0].minute_timeline
     assert [n.kills for n in nodes] == [1, 2, 3]
     assert [n.deaths for n in nodes] == [0, 1, 1]
@@ -46,7 +45,7 @@ def test_logs_include_pre_zero_and_equal_time_events_without_reordering_source()
 
 @pytest.mark.parametrize("log", [None, "bad", [{"time": None}], [{"time": True}]])
 def test_unavailable_or_invalid_logs_never_generate_a_zero_curve(log) -> None:
-    data = project_game_detail(record(source(players=[player(kills_log=log)])))
+    data = project(record(source(players=[player(kills_log=log)])))
     assert [node.kills for node in data.players[0].minute_timeline] == [None, None]
     assert [node.deaths for node in data.players[0].minute_timeline] == [0, 0]
     assert any(m.path == "players[0].minute_timeline.kills" for m in data.coverage.missing)
@@ -54,12 +53,12 @@ def test_unavailable_or_invalid_logs_never_generate_a_zero_curve(log) -> None:
 
 @pytest.mark.parametrize("axis", [None, [0, 0], [60, 0], [0, True], [0, "60"]])
 def test_unknown_or_invalid_player_axis_is_unavailable(axis) -> None:
-    data = project_game_detail(record(source(players=[player(times=axis)])))
+    data = project(record(source(players=[player(times=axis)])))
     assert data.players[0].minute_timeline is None
 
 
 def test_short_curve_does_not_shift_or_truncate_other_curves() -> None:
-    data = project_game_detail(record(source(players=[player(networth_t=[600], xp_t=[0, None])]))
+    data = project(record(source(players=[player(networth_t=[600], xp_t=[0, None])]))
     )
     nodes = data.players[0].minute_timeline
     assert [node.net_worth for node in nodes] == [None, None]
@@ -72,7 +71,7 @@ def test_short_curve_does_not_shift_or_truncate_other_curves() -> None:
 
 def test_explicit_empty_player_axis_is_not_filled_from_final_stats() -> None:
     p = player(times=[], networth_t=[], gold_t=[], xp_t=[], lh_t=[], dn_t=[], kills=3)
-    data = project_game_detail(record(source(players=[p])))
+    data = project(record(source(players=[p])))
     assert data.players[0].minute_timeline == []
     assert data.economy.time_seconds == []
 
@@ -80,11 +79,11 @@ def test_explicit_empty_player_axis_is_not_filled_from_final_stats() -> None:
 def test_team_axis_requires_correspondence_not_just_equal_lengths() -> None:
     raw = source(players=[player(), player(times=[0, 120])],
                  radiant_gold_adv=[0, 5], radiant_xp_adv=[0, -10])
-    data = project_game_detail(record(raw))
+    data = project(record(raw))
     assert data.economy.time_seconds is None
     assert data.economy.radiant_gold_adv == [0, 5]
     assert data.economy.radiant_xp_adv == [0, -10]
     assert any(m.path == "economy.time_seconds" and m.reason for m in data.coverage.missing)
     raw["players"][1]["times"] = [0, 60]
-    aligned = project_game_detail(record(raw))
+    aligned = project(record(raw))
     assert aligned.economy.time_seconds == [0, 60]
