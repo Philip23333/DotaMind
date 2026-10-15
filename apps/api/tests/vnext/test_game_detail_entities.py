@@ -8,6 +8,7 @@ from pydantic import ValidationError
 
 from app.integrations.valve.catalog_repository import DotaCatalogRepository
 from app.vnext.capabilities.game.data import MissingData
+from app.vnext.catalog import UnitCatalog
 from app.vnext.providers.opendota.detail_projection import project_game_detail
 from tests.vnext.test_game_detail_projection import FIXTURE, player, project, record, source
 
@@ -73,7 +74,7 @@ def test_missing_localized_name_preserves_other_language_and_original_key(
     ))
     data = project_game_detail(record(source(players=[player(
         purchase_log=[{"time": 1, "key": "manta"}],
-    )])), catalog=catalog)
+    )])), catalog=catalog, units=UnitCatalog.load_default())
     item = data.builds.players[0].purchase_events[0].item
     assert item.id == 147 and getattr(item, language) is None
     other = "name_en" if language == "name_zh" else "name_zh"
@@ -92,7 +93,8 @@ def test_unexpected_catalog_failure_does_not_become_unknown(
 
     monkeypatch.setattr(catalog, "get_hero", fail)
     with pytest.raises(OSError, match="catalog read failed"):
-        project_game_detail(record(source(players=[player()])), catalog=catalog)
+        project_game_detail(record(source(players=[player()])), catalog=catalog,
+                            units=UnitCatalog.load_default())
 
 
 def test_coverage_only_serializes_present_scalar_evidence() -> None:

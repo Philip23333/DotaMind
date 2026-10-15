@@ -1,4 +1,4 @@
-"""Death, buyback and objective source records without speculative actor decoding."""
+"""Typed event facts with exact unit lookup and scalar evidence for opaque encodings."""
 
 from __future__ import annotations
 
@@ -15,19 +15,19 @@ from app.vnext.capabilities.game.data import (
     ObjectiveEvent,
     SourceConflict,
 )
+from app.vnext.catalog import UnitCatalog
 
-from .detail_values import _hero_id, _is_number, _missing, _rows, _value
+from .detail_entities import DetailEntities
+from .detail_values import ABSENT, _missing, _rows, _value
 
 _OBJECTIVE_TYPES = {
-    "building_kill": "building_destructions",
-    "CHAT_MESSAGE_ROSHAN_KILL": "roshan_kills",
-    "CHAT_MESSAGE_AEGIS": "aegis_pickups",
-    "CHAT_MESSAGE_FIRSTBLOOD": "first_blood",
+    "building_kill": ("building_destruction", "building_destructions"),
+    "CHAT_MESSAGE_ROSHAN_KILL": ("roshan_kill", "roshan_kills"),
+    "CHAT_MESSAGE_AEGIS": ("aegis_pickup", "aegis_pickups"),
+    "CHAT_MESSAGE_FIRSTBLOOD": ("first_blood", "first_blood"),
+    "CHAT_MESSAGE_COURIER_LOST": ("courier_death", "other_objectives"),
+    "CHAT_MESSAGE_MINIBOSS_KILL": ("tormentor_kill", "other_objectives"),
 }
-
-
-def _scalar(value: Any) -> Any:
-    return value if type(value) in (str, bool) or _is_number(value) else None
 
 
 def _known_slot(value: Any, slots: Counter) -> int | None:
@@ -42,9 +42,17 @@ def _player_log(player: dict, key: str, index: int, path: str, coverage: Coverag
     return None
 
 
+def _opaque(row: dict, keys: tuple[str, ...], path: str, source_path: str,
+            coverage: CoverageData) -> None:
+    for key in keys:
+        if key in row:
+            _missing(coverage, path, f"Unverified source {key} encoding",
+                     source_path=f"{source_path}.{key}", source_value=row[key])
+
+
 def project_events(
     source: Mapping[str, Any], players: list[dict] | None,
-    hero_ids: Mapping[str, int], coverage: CoverageData,
+    entities: DetailEntities, units: UnitCatalog, coverage: CoverageData,
 ) -> EventsData:
     slots = Counter(p["player_slot"] for p in players or [] if type(p.get("player_slot")) is int)
     by_hero: dict[int, list[int]] = {}
@@ -52,6 +60,12 @@ def project_events(
         hero, slot = p.get("hero_id"), p.get("player_slot")
         if type(hero) is int and type(slot) is int:
             by_hero.setdefault(hero, []).append(slot)
+    hero_sides = {}
+    for p in players or []:
+        hero, slot = p.get("hero_id"), p.get("player_slot")
+        if (type(hero) is int and len(by_hero.get(hero, [])) == 1
+                and _known_slot(slot, slots) is not None and type(p.get("isRadiant")) is bool):
+            hero_sides[hero] = "radiant" if p["isRadiant"] else "dire"
     deaths: list[HeroDeath] = []
     buybacks: list[BuybackEvent] = []
     death_available = buyback_available = False
@@ -64,13 +78,15 @@ def project_events(
         death_log = _player_log(player, "deaths_log", i, "events.hero_deaths", coverage)
         if death_log is not None:
             death_available = True
-            for row in death_log:
-                key = _value(row, "key", str, "", coverage, required=False)
-                hero = _hero_id(key, hero_ids)
-                owners = by_hero.get(hero, [])
+            for j, row in enumerate(death_log):
+                path = f"events.hero_deaths[{len(deaths)}]"
+                source_path = f"players[{i}].deaths_log[{j}]"
+                unit = entities.unit(row.get("key", ABSENT), f"{path}.killer_unit",
+                                     f"{source_path}.key", coverage, units, hero_sides)
+                owners = by_hero.get(unit.hero_id, []) if unit else []
                 death = HeroDeath(
                     time_seconds=_value(row, "time", float, "", coverage, required=False),
-                    victim_player_slot=owner, killer_unit_key=key, killer_hero_id=hero,
+                    victim_player_slot=owner, killer_unit=unit,
                     killer_player_slot=_known_slot(owners[0], slots) if len(owners) == 1 else None,
                     gold_lost=_value(row, "gold_lost", float, "", coverage, required=False),
                     gold_fed=_value(row, "gold_fed", float, "", coverage, required=False),
@@ -83,55 +99,65 @@ def project_events(
         if buyback_log is not None:
             buyback_available = True
             for j, row in enumerate(buyback_log):
+                path = f"events.buybacks[{len(buybacks)}]"
+                source_path = f"players[{i}].buyback_log[{j}]"
                 event = BuybackEvent(
                     time_seconds=_value(row, "time", float, "", coverage, required=False),
-                    player_slot=owner, source_slot=_scalar(row.get("slot")),
-                    source_player_slot=_scalar(row.get("player_slot")),
+                    player_slot=owner,
                 )
+                _opaque(row, ("slot",), path, source_path, coverage)
                 if event.time_seconds is None:
                     _missing(coverage, "events.buybacks", "Some source event times are unknown")
                 if owner is not None and type(row.get("player_slot")) is int:
                     if row["player_slot"] != owner:
                         coverage.conflicts.append(SourceConflict(
-                            paths=[f"players[{i}].player_slot",
-                                   f"players[{i}].buyback_log[{j}].player_slot"],
+                            paths=[f"players[{i}].player_slot", f"{source_path}.player_slot"],
                             values=[owner, row["player_slot"]],
                         ))
+                elif "player_slot" in row:
+                    _opaque(row, ("player_slot",), path, source_path, coverage)
                 buybacks.append(event)
     if players == []:
         death_available = buyback_available = True
 
     objectives = _rows(source.get("objectives"), "events.objectives", coverage)
     groups: dict[str, list[ObjectiveEvent]] = {
-        name: [] for name in (*_OBJECTIVE_TYPES.values(), "other_objectives")
+        group: [] for _, group in _OBJECTIVE_TYPES.values()
     }
     reported = _value(source, "first_blood_time", float,
                       "events.first_blood.reported_time_seconds", coverage)
     for i, row in enumerate(objectives or []):
-        code = row.get("type")
-        group = _OBJECTIVE_TYPES.get(code, "other_objectives") if type(code) is str else (
-            "other_objectives"
-        )
+        code = row.get("type", ABSENT)
+        kind, group = _OBJECTIVE_TYPES.get(code, (None, "other_objectives")) if type(
+            code
+        ) is str else (None, "other_objectives")
+        target = "first_blood.objective_events" if group == "first_blood" else group
+        path = f"events.{target}[{len(groups[group])}]"
+        source_path = f"objectives[{i}]"
+        if kind is None:
+            _missing(coverage, f"{path}.type", "Objective type not mapped",
+                     source_path=f"{source_path}.type", source_value=code)
         event = ObjectiveEvent(
-            time_seconds=_value(row, "time", float, "", coverage, required=False),
-            source_type=_scalar(code),
-            source_key=_scalar(row.get("key")),
-            source_unit_key=_value(row, "unit", str, "", coverage, required=False),
+            time_seconds=_value(row, "time", float, "", coverage, required=False), type=kind,
+            target_unit=entities.unit(row.get("key", ABSENT), f"{path}.target_unit",
+                                      f"{source_path}.key", coverage, units, hero_sides),
+            actor_unit=entities.unit(row.get("unit", ABSENT), f"{path}.actor_unit",
+                                     f"{source_path}.unit", coverage, units, hero_sides),
             player_slot=_known_slot(row.get("player_slot"), slots),
             victim_player_slot=_known_slot(row.get("victim_player_slot"), slots),
-            source_slot=_scalar(row.get("slot")),
-            source_player_slot=_scalar(row.get("player_slot")),
-            source_victim_player_slot=_scalar(row.get("victim_player_slot")),
-            source_team=_scalar(row.get("team")), source_killer=_scalar(row.get("killer")),
-            source_value=_scalar(row.get("value")),
         )
+        for key in ("player_slot", "victim_player_slot"):
+            if key in row and getattr(event, key) is None:
+                _missing(coverage, f"{path}.{key}", "Source player slot is not uniquely known",
+                         source_path=f"{source_path}.{key}", source_value=row[key])
+        _opaque(row, ("slot", "team", "killer", "value"), path, source_path, coverage)
         groups[group].append(event)
         if event.time_seconds is None:
-            _missing(coverage, f"events.{group}", "Some source objective times are unknown")
+            _missing(coverage, f"events.{target}", "Some source objective times are unknown")
         if group == "first_blood" and reported is not None and event.time_seconds is not None:
             if reported != event.time_seconds:
                 coverage.conflicts.append(SourceConflict(
-                    paths=["first_blood_time", f"objectives[{i}].time"],
+                    paths=["first_blood_time", f"{source_path}.time"],
                     values=[reported, event.time_seconds],
                 ))
     return EventsData(

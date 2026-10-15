@@ -26,6 +26,7 @@ from app.vnext.capabilities.game.data import (
     TeamData,
     TeamsData,
 )
+from app.vnext.catalog import UnitCatalog
 
 from .detail_entities import DetailEntities
 from .detail_events import project_events
@@ -93,7 +94,8 @@ def _draft(
         pick = row.get("is_pick")
         action = "pick" if pick is True else "ban" if pick is False else None
         if side is None:
-            _missing(coverage, f"{path}.side", "Unrecognized source pick/ban team code")
+            _missing(coverage, f"{path}.side", "Unrecognized source pick/ban team code",
+                     source_path=f"picks_bans[{i}].team", source_value=row.get("team", ABSENT))
         if action is None:
             _missing(coverage, f"{path}.action", "Source is_pick is unavailable or invalid")
         result.append(DraftAction(
@@ -187,7 +189,7 @@ def _build(
 
 
 def project_game_detail(
-    record: OpenDotaGameRecord, *, catalog: DotaCatalogRepository,
+    record: OpenDotaGameRecord, *, catalog: DotaCatalogRepository, units: UnitCatalog,
 ) -> GameDetailData:
     """Project a validated source record; the public Service is not switched yet."""
     source = record.data
@@ -205,7 +207,7 @@ def project_game_detail(
             _build(player, i, entities, coverage) for i, player in enumerate(players)
         ]),
         economy=project_economy(source, players, coverage),
-        events=project_events(source, players, entities.hero_ids, coverage),
+        events=project_events(source, players, entities, units, coverage),
         interactions=project_interactions(players, entities, coverage),
         coverage=coverage,
     )

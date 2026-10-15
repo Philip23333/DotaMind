@@ -5,8 +5,8 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from app.integrations.valve.catalog_repository import DotaCatalogRepository
-from app.vnext.capabilities.game.data import CoverageData, EntityData
-from app.vnext.catalog import EntityKind, EntityNameResolver
+from app.vnext.capabilities.game.data import CoverageData, EntityData, UnitData
+from app.vnext.catalog import EntityKind, EntityNameResolver, UnitCatalog
 
 from .detail_values import ABSENT, _missing
 
@@ -76,3 +76,26 @@ class DetailEntities:
                      source_value=value)
             return None
         return self.by_id(identifier, kind, path, source_path, coverage, source_value=value)
+
+    def unit(
+        self, value: Any, path: str, source_path: str, coverage: CoverageData,
+        units: UnitCatalog, hero_sides: dict[int, str],
+    ) -> UnitData | None:
+        if value is ABSENT or value is None:
+            return None
+        if type(value) is str and value.startswith("npc_dota_hero_"):
+            hero = self.by_key(value, "hero", path, source_path, coverage)
+            if hero is None:
+                return None
+            return UnitData(kind="hero", hero_id=hero.id, name_zh=hero.name_zh,
+                            name_en=hero.name_en, side=hero_sides.get(hero.id))
+        row = units.lookup(value) if type(value) is str and value else None
+        if row is None:
+            reason = "Source unit unknown" if value == "dota_unknown" else "Unit key not mapped"
+            _missing(coverage, path, reason, source_path=source_path, source_value=value)
+            return None
+        for language in ("name_zh", "name_en"):
+            if getattr(row, language) is None:
+                _missing(coverage, f"{path}.{language}", "Unit localized name unavailable",
+                         source_path=source_path, source_value=value)
+        return UnitData(**row.model_dump(exclude={"internal_name"}))

@@ -184,12 +184,33 @@ class BuildsData(_Data):
     players: list[PlayerBuild] | None = None
 
 
+class UnitData(_Data):
+    kind: Literal[
+        "hero", "lane_creep", "siege_creep", "neutral_creep", "tower", "barracks",
+        "ancient", "building", "fountain", "courier", "ward", "roshan", "tormentor",
+        "summoned_unit", "spell_unit", "roshans_banner",
+    ] | None = None
+    name_zh: StrictStr | None = None
+    name_en: StrictStr | None = None
+    hero_id: StrictInt | None = None
+    side: Side | None = None
+    lane: Literal["top", "mid", "bot"] | None = None
+    tier: StrictInt | None = Field(default=None, ge=1, le=4)
+
+    @model_validator(mode="after")
+    def identities_are_typed(self) -> UnitData:
+        if self.hero_id is not None and self.kind != "hero":
+            raise ValueError("Only hero units have a hero ID")
+        if self.tier is not None and self.kind != "tower":
+            raise ValueError("Only tower units have a tower tier")
+        return self
+
+
 class HeroDeath(_Data):
     time_seconds: Number | None = None
     victim_player_slot: StrictInt | None = None
     killer_player_slot: StrictInt | None = None
-    killer_unit_key: str | None = None
-    killer_hero_id: StrictInt | None = None
+    killer_unit: UnitData | None = None
     gold_lost: Number | None = None
     gold_fed: Number | None = None
     time_dead_seconds: Number | None = None
@@ -198,23 +219,18 @@ class HeroDeath(_Data):
 class BuybackEvent(_Data):
     time_seconds: Number | None = None
     player_slot: StrictInt | None = None
-    source_slot: Scalar = None
-    source_player_slot: Scalar = None
 
 
 class ObjectiveEvent(_Data):
     time_seconds: Number | None = None
-    source_type: Scalar = None
-    source_key: Scalar = None
-    source_unit_key: str | None = None
+    type: Literal[
+        "building_destruction", "roshan_kill", "aegis_pickup", "first_blood",
+        "courier_death", "tormentor_kill",
+    ] | None = None
+    target_unit: UnitData | None = None
+    actor_unit: UnitData | None = None
     player_slot: StrictInt | None = None
     victim_player_slot: StrictInt | None = None
-    source_slot: Scalar = None
-    source_player_slot: Scalar = None
-    source_victim_player_slot: Scalar = None
-    source_team: Scalar = None
-    source_killer: Scalar = None
-    source_value: Scalar = None
 
 
 class FirstBloodData(_Data):

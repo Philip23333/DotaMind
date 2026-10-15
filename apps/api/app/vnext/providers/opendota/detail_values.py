@@ -29,13 +29,6 @@ def _is_number(value: Any) -> bool:
     return type(value) is int or (type(value) is float and math.isfinite(value))
 
 
-def _hero_id(key: Any, hero_ids: Mapping[str, int]) -> int | None:
-    if not isinstance(key, str) or not key.startswith("npc_dota_hero_"):
-        return None
-    value = hero_ids.get(key)
-    return value if type(value) is int and value > 0 else None
-
-
 def _value(
     source: Mapping[str, Any], key: str, kind: type, path: str,
     coverage: CoverageData, *, required: bool = True,
