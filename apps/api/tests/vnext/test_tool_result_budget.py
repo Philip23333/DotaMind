@@ -4,12 +4,27 @@ import pytest
 from pydantic import BaseModel
 
 from app.vnext.agent.answer_tools import AnswerToolSession
-from app.vnext.artifacts import ArtifactReader, SessionArtifactStore, serialized_size
+from app.vnext.agent.limits import AgentLimits
+from app.vnext.agent.runtime import AgentRuntime
+from app.vnext.artifacts import (
+    ArtifactGrepper,
+    ArtifactReader,
+    SessionArtifactStore,
+    serialized_size,
+)
 from app.vnext.artifacts.query import ArtifactQuerier, ArtifactQueryInput
-from app.vnext.llm.protocol import ToolCall
+from app.vnext.llm.protocol import (
+    AssistantMessage,
+    ModelResponse,
+    ToolCall,
+    ToolResultMessage,
+    UserMessage,
+)
+from app.vnext.tools.artifacts import register_artifact_tools
 from app.vnext.tools.definition import ToolAccess, ToolDefinition
 from app.vnext.tools.errors import StructuredToolError
 from app.vnext.tools.registry import ToolRegistry
+from tests.vnext.fakes import ScriptedModelClient
 
 
 class Empty(BaseModel):
@@ -131,5 +146,71 @@ def test_query_accepts_configured_result_above_old_fixed_ceiling():
         result = await ArtifactQuerier(store, observation_max_bytes=64 * 1024).query(args)
         assert 35 * 1024 < serialized_size(result.model_dump(mode="json")) <= 64 * 1024
         assert (await ArtifactReader(store).outline(ref)).ref == ref
+
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize("degraded", [False, True])
+def test_runtime_pages_grep_in_execution_answer_and_degraded_continuation(degraded):
+    async def exercise():
+        store = SessionArtifactStore()
+        ref = await store.put({"rows": [{"name": "needle中文" * 20} for _ in range(12)]})
+        budget = 1000
+        grepper = ArtifactGrepper(store, observation_max_bytes=budget)
+        first = await grepper.grep(ref, "needle")
+        assert first.truncated and first.next_offset == first.returned
+        registry = ToolRegistry(observation_max_bytes=budget)
+        register_artifact_tools(
+            registry,
+            ArtifactReader(store, observation_max_bytes=budget),
+            grepper,
+        )
+        args = {"ref": ref, "pattern": "needle"}
+
+        def response(ident, arguments):
+            return ModelResponse(
+                message=AssistantMessage(
+                    tool_calls=[
+                        ToolCall(id=ident, name="artifact.grep", arguments=arguments),
+                    ]
+                )
+            )
+
+        responses = [
+            response("execution-page", args),
+            ModelResponse.from_final("Execution found the first page."),
+            response("answer-recheck", args),
+        ]
+        if degraded:
+            responses.append(RuntimeError("primary answer unavailable"))
+        responses.extend(
+            [
+                response("answer-next-page", {**args, "offset": first.next_offset}),
+                ModelResponse.from_final("Verified two pages."),
+            ]
+        )
+        model = ScriptedModelClient(responses)
+        answer = await AgentRuntime(
+            model,
+            registry,
+            limits=AgentLimits(application_max_output_tokens=1024),
+        ).run([UserMessage(content=f"Read the existing artifact {ref}")])
+        assert answer.content == "Verified two pages."
+        results = {
+            m.tool_call_id: m
+            for request in model.requests
+            for m in request.messages
+            if isinstance(m, ToolResultMessage)
+        }
+        assert results["execution-page"].content == results["answer-recheck"].content
+        assert results["answer-next-page"].content["offset"] == first.next_offset
+        assert all(r.status == "ok" and registry.result_size(r) <= budget for r in results.values())
+        paths = [
+            m["path"]
+            for ident in ["execution-page", "answer-next-page"]
+            for m in results[ident].content["matches"]
+        ]
+        assert len(paths) == len(set(paths))
+        assert len(store._documents) == 1  # No retrieval-result re-externalization.
 
     asyncio.run(exercise())

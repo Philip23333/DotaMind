@@ -43,13 +43,10 @@ logical response; if the added envelope would exceed the observation bound, the
 existing bounded structural observation is used. Stored documents never include
 the externalization envelope. A preview's `_artifact_path` is copied unchanged into
 `artifact.read(mode="read", path=...)`; `outline` is only needed when the
-document structure is unknown. Artifact retrieval tools explicitly bypass the
-generic spill processor: `artifact.read` enforces the same configured serialized
-result bound itself, while `artifact.grep` is bounded by match and preview
-limits but has no separate serialized-result byte budget. Limits use UTF-8
-serialized bytes, must be positive, and the inline threshold cannot exceed the
-observation budget. Environment values override `.env`; changing them requires
-restarting the API process.
+document structure is unknown. Artifact retrieval tools bypass the generic spill
+processor: they read an existing document and must not externalize their own
+results into another Artifact merely to fit the observation budget. Their normal
+size handling and the shared final check are defined below.
 
 The session store may separately record the producing tool name as internal
 Artifact metadata. The registry supplies this value from the registered tool
@@ -68,14 +65,71 @@ Runtime compaction. Compaction changes effective history without rewriting the
 stored Artifact or append-only execution records. Checkpointing records task
 progress and evidence sources; it does not release raw results from history.
 
+## Shared tool-result byte budget
+
+The common result exit and configured read/query/ordinary-result budgets are
+implemented for both stages. Query no longer clamps independently to 35 KiB and
+answering no longer owns a separate size gate. Grep's byte-aware pagination uses
+the same injected budget; count/byte overflow normally yields a complete page,
+while the shared exit rejects unexpected oversized content in either stage.
+
+Root `.env` provides the two distinct byte settings, with process environment
+overrides taking precedence:
+
+```dotenv
+DOTAMIND_TOOL_INLINE_MAX_BYTES=12288
+DOTAMIND_TOOL_OBSERVATION_MAX_BYTES=35840
+```
+
+The first is the ordinary-result externalization threshold (12 KiB by default),
+not a second model-context ceiling. The second is the maximum single model-visible
+result (35 KiB by default). Retain these defaults. Parse and validate the settings
+once at composition, keep code fallback defaults in one configuration model, and
+inject the same observation budget into result processing, read, query, grep and
+the common result exit. Do not add tool-specific clamps or answer-only literals.
+Both values must be positive integers and inline must not exceed observation.
+Registry construction also rejects an observation budget too small to encode
+even its minimal structured rejection, rather than promising an impossible bound.
+Changes require an API restart; they do not introduce live configuration reload.
+
+Measure compact JSON serialized with UTF-8 and unescaped Unicode. The budget
+covers the complete model-visible success content or structured error, including
+references, paths, previews and pagination metadata; it is not only a limit on
+the selected business value. Transport message IDs/envelopes are not this byte
+measure. It is a per-result bound, not token accounting or a cumulative quota.
+
+| Result kind | Normal behavior when the requested result is too large |
+| --- | --- |
+| Ordinary capability result | Retain the complete validated logical result in an Artifact and return a budget-fitting observation/ref |
+| Read of a list | Return fewer complete list items and mark truncation; continue from the actual returned count |
+| Read of an object/scalar | Return an explicit error requesting a narrower path, without silently dropping fields |
+| Query | Return fewer complete projected records and a valid next offset; fail if even one record/fixed envelope cannot fit |
+| Grep | Return fewer complete matches and a valid next offset; fail if even one match/fixed envelope cannot fit |
+
+After each tool's normal result processing, a common tool-result exit checks the
+final content before it enters model-visible history. Apply the same configured
+budget in both stages, including local calculation and errors. Unexpected
+oversized content becomes a bounded structured error; the exit does not slice
+JSON, erase fields or invent pagination. This is an invariant check, not the
+normal paging mechanism. Remove the separate answer-only size gate while keeping
+answer permissions and request-local duplicate tracking. An otherwise identical
+local tool call must not succeed in execution and fail in answering solely due
+to a different size policy. Provider tools remain forbidden in answers.
+
+Overall request occupancy and high-watermark compaction remain Runtime-owned,
+as specified in [ARCHITECTURE.md](ARCHITECTURE.md#two-stage-context-governance).
+No total-call or cumulative-result-byte quota is restored by this contract.
+
 ## Retrieval contract
 
-The currently registered retrieval tools are `artifact.read` and `artifact.grep`.
-The structured-query contract below is implemented and registered in the default registry.
+The registered retrieval tools are `artifact.read`, `artifact.grep` and
+`artifact.query`. Their selection, simplified grep interface, byte-aware paging
+and shared result exit are implemented with deterministic checks. Source
+implementation does not imply a running-service restart or deployment.
 
 ```text
 artifact.read(ref, mode, path?, offset?, limit?)
-artifact.grep(ref, pattern, limit?)
+artifact.grep(ref, pattern, offset=0, limit=20)
 ```
 
 `outline` omits path, offset, and limit. `read` requires one dotted path; list
@@ -86,10 +140,86 @@ Neither operation searches a corpus, infers business meaning, resolves
 identities, or fetches a provider.
 
 `read` can select an exact scalar, object or list, but does not filter records by
-field values or select several fields in one operation. `grep` searches scalar
-values, not JSON member names or path strings. Its literal substring matches do
-not establish numeric equality, same-record conditions, or absence of source
-facts; nulls and empty containers are not searchable scalar leaves.
+field values or select several fields in one operation.
+
+`grep` recursively searches member names and scalar values (strings, numbers,
+booleans and JSON null) throughout one referenced document. There is no search
+mode or `scope` parameter; the model does not choose between keys and values.
+
+Member-name matching includes fields whose values are null, empty arrays or empty
+objects. It matches the member's own name, not the full ancestral path: searching
+`purchase` returns the `purchase_events` node without also matching every descendant
+merely because that ancestor matched. Traversal continues into that node, so a
+descendant whose own name or value matches still returns independently. Array
+indices are locations, not searchable member names. Traversal follows document
+order; a node matching both name and value produces one result.
+
+Each match contains only `ref`, a read-compatible dotted `path`, a preview of at most
+200 characters, and `value_type`
+(`object`, `array`, `string`, `number`, `boolean`, `null`). Container previews
+contain only type and direct item count, never the full nested value. Use `read`
+to inspect a discovered path or `query` to select records/fields. For example,
+searching `purchase` can discover `data.builds.players.1.purchase_events`, then
+query can select the player's specific item events.
+
+Manual text uses the same contract as one `content` string member. JSON member
+names must be nonempty strings without dots to produce read-compatible paths;
+encountering an unrepresentable name fails explicitly rather than silently
+omitting that subtree. Literal/case-insensitive matching, session isolation and
+read-only behavior remain unchanged. Numeric equality and same-record conditions
+belong to query. Do not add a new zero-match warning obligation to the prompts
+as part of this change; tool descriptions should explain actual search behavior.
+
+### Grep pagination and result
+
+Input is `ref`, nonblank literal `pattern` (at most 256 characters), strict
+nonnegative integer `offset` (default 0), and strict integer `limit` (default 20,
+range 1..100). Offset counts matching nodes after matching, not visited nodes or
+source array indexes. Preserve deterministic document traversal order for the
+same stored document and pattern; emit one record per matching node, even when
+both its name and value match. Do not expose `matched_on`.
+
+Success contains `matches`, `offset`, requested `limit`, actual `returned`,
+`next_offset` and `truncated`. For example, one player's discovered purchase array
+could appear in a page as:
+
+```json
+{
+  "matches": [
+    {
+      "ref": "<existing artifact_ref>",
+      "path": "data.builds.players.1.purchase_events",
+      "preview": "array (44 items)",
+      "value_type": "array"
+    }
+  ],
+  "offset": 0,
+  "limit": 20,
+  "returned": 1,
+  "next_offset": null,
+  "truncated": false
+}
+```
+
+This illustrates a document with only that matching field; the full governed
+match can have purchase fields for other players. This is a contract example,
+not a claim that grep filters by player.
+
+The complete serialized result must fit the shared configured observation budget.
+Stop at the first of the match-count limit or byte limit, preserving whole matches.
+Look ahead for a further match: if one exists, set `truncated=true` and
+`next_offset=offset+returned`; otherwise set `truncated=false` and
+`next_offset=null`. Continue with the same ref/pattern and that returned offset,
+not offset plus the requested limit. Every match appears once across pages, with
+no omission when byte limits reduce page length. Return no promised total count.
+
+If even the first match/fixed envelope cannot fit, return an explicit structured
+error, never an empty truncated page that cannot advance. A valid empty or past-end
+page returns no matches, zero returned, null next offset and false truncation.
+Do not return a partial path, partial match, or incomplete JSON. Count and byte
+limits govern the returned page, not a guarantee about the cost of scanning;
+retain tool timeout, stage deadline and cancellation behavior. Unknown refs and
+invalid arguments retain existing Artifact/registry errors, not Provider fallback.
 
 ## Structured query
 
@@ -190,7 +320,9 @@ matches instead of materializing all matches merely to compute a total; no
 `total` field is promised. Look ahead for a further match to establish truncation.
 
 The complete serialized model-facing result, including paths and pagination,
-must fit 35 KiB and any smaller configured observation bound, measured in UTF-8.
+must fit the shared configured observation budget (35 KiB by default), measured
+in UTF-8. Query uses that injected value without an independent fixed clamp;
+increasing the configured value does not leave a hidden 35 KiB ceiling.
 Return only complete projected records. If bytes permit fewer than `limit`,
 `returned` reflects the actual count. Set `truncated=true` only when a further
 matched record exists, and `next_offset=offset+returned`; otherwise use
@@ -216,7 +348,7 @@ Reuse the existing error envelope and codes; the accepted mapping is:
 | Tool timeout or stage cancellation/deadline | Existing timeout/control handling, without claiming a complete query |
 
 The tool stays inline and is classified `local_artifact_read`, read-only.
-In answers it follows the same permissions, 35 KiB per-result bound, duplicate
+In answers it follows the same configured per-result bound (default 35 KiB), duplicate
 rejection, deadlines and unified context governance as `read`, `grep` and
 calculation. There is no total call or cumulative byte quota; the full
 policy remains in [TOOLS.md](TOOLS.md).

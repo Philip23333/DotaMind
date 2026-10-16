@@ -268,3 +268,66 @@ def test_registry_no_scope_and_strict_paging_inputs() -> None:
             assert bad.status == "error" and bad.error.code == "invalid_arguments"
 
     asyncio.run(exercise())
+
+
+def test_worker_timeout_is_reported_without_claiming_worker_termination(monkeypatch) -> None:
+    from threading import Event
+
+    import app.vnext.artifacts.grep as module
+
+    started, release, finished = Event(), Event(), Event()
+    original = module._grep_document
+
+    def blocked(*args):
+        started.set()
+        release.wait(2)
+        try:
+            return original(*args)
+        finally:
+            finished.set()
+
+    monkeypatch.setattr(module, "_grep_document", blocked)
+
+    async def exercise():
+        store = SessionArtifactStore()
+        ref = await store.put({"name": "needle"})
+        registry = ToolRegistry()
+        register_artifact_tools(registry, ArtifactReader(store), ArtifactGrepper(store))
+        task = asyncio.create_task(
+            registry.execute(
+                ToolCall(
+                    id="timeout", name="artifact.grep", arguments={"ref": ref, "pattern": "needle"}
+                ),
+                timeout=0.05,
+            )
+        )
+        try:
+            assert await asyncio.to_thread(started.wait, 1)
+            result = await task
+            assert result.status == "error" and result.error.code == "tool_timeout"
+            assert not finished.is_set()
+        finally:
+            release.set()
+            assert await asyncio.to_thread(finished.wait, 1)
+
+    asyncio.run(exercise())
+
+
+def test_unknown_or_cross_session_ref_is_not_an_empty_page() -> None:
+    async def exercise():
+        first, second = SessionArtifactStore(), SessionArtifactStore()
+        foreign = await first.put({"name": "needle"})
+        registry = ToolRegistry()
+        register_artifact_tools(registry, ArtifactReader(second), ArtifactGrepper(second))
+        result = await registry.execute(
+            ToolCall(
+                id="foreign",
+                name="artifact.grep",
+                arguments={"ref": foreign, "pattern": "needle"},
+            )
+        )
+        assert result.status == "error" and result.error.code == "artifact_not_found"
+        assert result.content is None
+        assert not second._documents
+
+    asyncio.run(exercise())

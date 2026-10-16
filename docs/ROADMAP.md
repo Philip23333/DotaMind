@@ -55,6 +55,35 @@ GameDetail schema change, frontend feature, derived Artifact store, or
 Artifact-bound calculator variables. Deterministic acceptance does not replace
 the separate real-model comparison or imply a service restart/deployment.
 
+## Artifact discovery and shared result budgets (implemented; behavioral acceptance separate)
+
+The owner contracts are [ARTIFACTS.md](ARTIFACTS.md#retrieval-contract) and
+[shared tool-result byte budget](ARTIFACTS.md#shared-tool-result-byte-budget).
+
+1. Simplify grep to always recursively search keys and scalar values, remove
+   `scope`/`matched_on`, and add whole-match offset/limit paging with valid
+   `returned`, `next_offset` and `truncated`. Keep count/preview bounds and
+   read-compatible source paths; add no new zero-match prompt rule.
+2. Use one configured single-result budget throughout both stages. Keep the two
+   existing root `.env` settings and defaults (12 KiB spill threshold, 35 KiB
+   model-visible result budget). Parse centrally and inject; remove query/answer
+   literals without changing their tool permissions or context-capacity policy.
+3. Retain tool-owned normal externalization/paging/narrow-read failure behavior,
+   and move the unexpected-size check to the common result exit before model
+   history admission. Do not re-externalize Artifact retrieval results or restore
+   total-call/cumulative-byte quotas.
+4. Complete focused deterministic configuration, pagination and two-stage
+   acceptance, then repeat the frozen purchase-event failure scenario as a new
+   real-model variant. See [EVALS.md](EVALS.md#artifact-field-discovery-acceptance).
+
+The scoped grep interface and answer/query size literals are removed. Focused
+tests cover configuration injection, whole-result byte bounds, continuation,
+both stages and primary/degraded answering. This is separate from whole-context
+watermark compaction; no cumulative quota is restored. Frozen model replays must
+still separate numerical targets, discovery, source-coverage claims and answer
+rechecks. This unit does not change GameDetail, source retention, frontends,
+deployment or model selection.
+
 ## Commit 1: clean-slate tool layer
 
 - Establish an artifact-only default model-facing registry baseline.

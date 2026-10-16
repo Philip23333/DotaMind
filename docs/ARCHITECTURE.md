@@ -230,6 +230,33 @@ Generic Artifact retrieval owns it, below the model-facing tool and independentl
 of Provider/game capabilities. It must not reshape stored documents or implement
 gameplay logic. The full contract is owned by [ARTIFACTS.md](ARTIFACTS.md#structured-query).
 
+### Shared tool-result admission
+
+The same single-result policy must apply to execution and answering. Tools and
+the ordinary-result processor own useful budget-fitting observations: externalize
+ordinary capability results, page list reads/query/grep, or fail explicitly when
+an indivisible value cannot fit. A common result exit checks the processed
+model-visible content before history admission and returns a bounded error for
+unexpected oversized output. It does not silently trim data or externalize
+Artifact retrieval results into further Artifacts. Stage permissions can differ;
+the same local tool call must not encounter a stage-specific byte ceiling.
+
+Root `.env` owns the existing inline/externalization and observation byte settings,
+with defaults of 12 KiB and 35 KiB respectively. Parse once, validate centrally,
+and inject the same observation value into all producers and the final check;
+remove independent fixed clamps, including query and answer checks. Keep answer
+permissions and duplicate tracking when removing the answer-only size gate.
+The accepted grep contract has one key/value search behavior, no `scope` or
+`matched_on`, and whole-match pagination by actual returned count. The owner of
+all byte/configuration and retrieval details is
+[ARTIFACTS.md](ARTIFACTS.md#shared-tool-result-byte-budget).
+
+Shared admission, configured read/query/grep processing and byte-aware grep paging
+are implemented with deterministic tests, including smaller/larger budgets and
+primary/degraded continuation. This controls individual results separately from
+the answer watermark workflow; it does not change context capacity, permissions
+or source-data retention. It does not imply deployment or model compliance.
+
 ## Two-stage context governance
 
 Execution and answering use the same configured context window and full-request
@@ -254,7 +281,9 @@ Answer call/byte totals are diagnostic metrics, not cumulative admission quotas.
 An expired deadline stops preflight before another capacity/compaction attempt.
 This behavior is implemented with deterministic checks; live quality acceptance
 remains separate.
-Keep the 35 KiB per-result bound and generic access checks. Request-local duplicate
+Keep the configured per-result bound (default 35 KiB) and generic access checks;
+its shared exit is defined above, separately from this implemented
+context-capacity workflow. Request-local duplicate
 tracking and diagnostics survive rebuilding; compaction/retry must not reset the
 active deadline. Keep existing degraded-stage deadlines, cancellation and bounded
 failure behavior. There is no promise of unlimited run time or perfect summary

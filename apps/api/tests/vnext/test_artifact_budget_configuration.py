@@ -4,13 +4,16 @@ import asyncio
 from pathlib import Path
 
 import pytest
+from pydantic import BaseModel
 
 import app.vnext.composition as composition
+from app.vnext.agent.answer_tools import AnswerToolSession
 from app.vnext.artifacts import ArtifactLimits, serialized_size
 from app.vnext.capabilities.esports.dtos import MatchDTO
 from app.vnext.capabilities.esports.match import MatchSearchResult
 from app.vnext.composition import VNextServices, VNextSettings, build_vnext_registry
 from app.vnext.llm.protocol import ToolCall
+from app.vnext.tools.definition import ToolDefinition
 
 _BUDGET_ENV_NAMES = (
     "DOTAMIND_TOOL_INLINE_MAX_BYTES",
@@ -30,6 +33,69 @@ def test_defaults_preserve_existing_artifact_budgets() -> None:
 
     assert limits.inline_max_bytes == 12 * 1024
     assert limits.observation_max_bytes == 35 * 1024
+
+
+@pytest.mark.parametrize("budget", [1500, 65536])
+def test_environment_budget_reaches_all_retrieval_tools_and_both_stage_exits(
+    monkeypatch,
+    tmp_path,
+    budget,
+) -> None:
+    _isolate_configuration(monkeypatch, tmp_path)
+    monkeypatch.setenv("DOTAMIND_TOOL_INLINE_MAX_BYTES", "32")
+    monkeypatch.setenv("DOTAMIND_TOOL_OBSERVATION_MAX_BYTES", str(budget))
+    registry = build_vnext_registry(VNextServices(), settings=VNextSettings.from_env())
+
+    class Empty(BaseModel):
+        pass
+
+    class Rows(BaseModel):
+        rows: list[dict[str, str]]
+
+    registry.register(
+        ToolDefinition(
+            name="fixture.rows",
+            description="Frozen rows",
+            input_model=Empty,
+            output_model=Rows,
+            handler=lambda _: {"rows": [{"name": "needle中文" * 40} for _ in range(100)]},
+        )
+    )
+
+    async def exercise():
+        preview = await registry.execute(ToolCall(id="seed", name="fixture.rows", arguments={}))
+        assert preview.status == "ok" and serialized_size(preview.content) <= budget
+        ref = preview.content["artifact_ref"]
+        calls = [
+            ToolCall(
+                id="read",
+                name="artifact.read",
+                arguments={"ref": ref, "mode": "read", "path": "rows", "limit": 100},
+            ),
+            ToolCall(
+                id="query",
+                name="artifact.query",
+                arguments={"ref": ref, "expression": "$.rows[*]", "fields": ["name"], "limit": 100},
+            ),
+            ToolCall(
+                id="grep",
+                name="artifact.grep",
+                arguments={"ref": ref, "pattern": "needle", "limit": 100},
+            ),
+        ]
+        answer_session = AnswerToolSession(registry)
+        for call in calls:
+            execution = await registry.execute(call)
+            answer = await answer_session.execute(call, timeout=1)
+            assert execution.status == answer.status == "ok"
+            assert execution.content == answer.content
+            size = serialized_size(execution.content)
+            assert size <= budget
+            if budget > 35840:
+                assert size > 35840
+        assert str(budget) in answer_session.prompt()
+
+    asyncio.run(exercise())
 
 
 @pytest.mark.parametrize(

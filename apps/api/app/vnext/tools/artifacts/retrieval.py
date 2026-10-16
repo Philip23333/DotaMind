@@ -137,7 +137,8 @@ def register_artifact_tools(
                 "Returns original read paths, value_type and previews; containers show type "
                 "and direct item count only. Results are count- and byte-bounded: follow "
                 "next_offset with the same ref/pattern, since returned may be below limit. "
-                "Use grep to discover fields/content, read for known paths, query to select records."
+                "Use grep to discover fields/content, read for known paths, "
+                "query to select records."
             ),
             input_model=ArtifactGrepInput,
             output_model=ArtifactGrepResult,

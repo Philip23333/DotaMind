@@ -16,6 +16,14 @@ bound. Both limits use UTF-8 serialized bytes and are configured by
 the root `.env` or process environment; the inline limit must not exceed the
 observation limit.
 
+The accepted shared-result target uses these same two root `.env` settings in
+both stages: one centrally parsed/injected budget, tool-owned normal size handling,
+and a common final result-size check. Independent query/answer 35 KiB literals
+have been removed, while the default remains 35 KiB. Grep pages within that same
+budget. [ARTIFACTS.md](ARTIFACTS.md#shared-tool-result-byte-budget) owns the
+configuration, byte measure and per-result handling contract. Source implementation
+does not imply a running-service restart or deployment.
+
 Tools without an individual timeout use `DOTAMIND_TOOL_TIMEOUT_SECONDS` (60
 seconds by default, finite positive seconds; decimal values are allowed). A
 timeout declared by a tool takes precedence. The operation remains bounded by
@@ -109,9 +117,14 @@ use one full-request watermark preflight, with the same capacity rules and atomi
 compaction workflow as execution. Deterministic tests cover this behavior; live
 model quality remains a separate acceptance step.
 
-Each result remains capped at 35 KiB. Oversized content is replaced with a bounded
-error and never enters history/model context. Identical name/argument calls remain
-rejected; their request-local record survives compaction, retries and degraded
+Each result must fit the configured shared observation budget (default 35 KiB).
+Under the accepted target, tool-owned paging/externalization/narrow-read errors
+handle expected large results, then one common exit checks final content in
+both stages. Unexpected oversized content becomes a bounded error before entering
+model-visible history. This final check is not an additional answer-only quota;
+the former hardcoded answer gate has moved to the shared exit.
+Identical name/argument calls remain rejected; their request-local record survives
+compaction, retries and degraded
 attempts. Calls, errors and returned bytes remain observable metrics, not a
 cumulative admission quota. Stage deadlines, cancellation, access checks and
 existing protocol/failure handling remain in force; compaction or retry must not
@@ -140,7 +153,7 @@ owns its complete input/output, JSONPath subset, missing-value, continuation,
 error and resource-limit contract. It is registered in the default registry and
 available to execution and local answer verification, with deterministic checks.
 
-Use `grep` to discover scalar-value locations, `read` for known exact paths,
+Use `grep` to discover member-name and scalar-value locations, `read` for known exact paths,
 `query` for conditional record selection and multi-field retrieval, and
 `math.calculate` for temporary arithmetic from verified inputs. Query reads one
 stored Artifact, remains generic, and does not fetch Provider data, infer Dota
@@ -392,9 +405,26 @@ Anomaly paths use provider-source locations such as
 
 ## Artifact tools
 
-`artifact.grep` searches case-insensitive literal text in one exact opaque
-Artifact reference. `artifact.read` reads one exact reference using an explicit
-mode:
+`artifact.grep(ref, pattern, offset=0, limit=20)` recursively
+searches member names and scalar values in one exact referenced document, using
+case-insensitive literal substring matching. It has no search-mode parameter.
+Member names match at their own nodes, not as complete path strings. Null and
+empty-container fields are discoverable; an ancestor-name match does not repeat
+all descendants. Results contain `matches`, `offset`, `limit`, actual `returned`,
+`next_offset` and `truncated`; each match contains `ref`, the exact dotted `path`,
+`preview` and `value_type`, without `matched_on`. Containers expose only type and
+direct item count. Limit defaults to 20 and is at most 100; preview is at most
+200 characters. The complete result fits the shared configured observation budget
+(default 35 KiB), retaining whole matches. Continue with `next_offset`, which uses
+actual returned count; a single match/envelope that cannot fit fails explicitly.
+
+The simplified interface and paging/shared budget are implemented with deterministic
+checks. Use grep for discovery, read for exact paths, query for
+conditional record selection. The complete contract is owned by
+[ARTIFACTS.md](ARTIFACTS.md#retrieval-contract). No new zero-match prompt rule is
+part of this target.
+
+`artifact.read` reads one exact reference using an explicit mode:
 
 ```text
 artifact.read(ref, mode="outline")

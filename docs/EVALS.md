@@ -48,6 +48,63 @@ copying of results, original-field checks, calls/bytes, tokens and latency. Keep
 the existing replay framework; changed tools/DTO inputs require a new recorded
 variant rather than overwriting frozen experiment inputs.
 
+## Artifact field discovery acceptance
+
+`test_artifact_grep.py` covers the implemented contract in
+[ARTIFACTS.md](ARTIFACTS.md#retrieval-contract): one recursive key/value search
+behavior with no mode, no `matched_on`, and byte-aware pagination. The former
+intermediate scope interface is removed; these checks do not establish model
+compliance or a measured accuracy improvement.
+
+Deterministic coverage:
+
+- Removed `scope` input is rejected and `matched_on` is absent from output/schema.
+  Retain literal/case-insensitive search, null/empty-field discovery, one match per
+  node, ancestor-fanout avoidance, bounded previews, manual text and source paths.
+  Unsupported member names fail explicitly rather than silently hiding subtrees.
+- Offset applies after matching. Count/byte limits emit complete matches only;
+  fixed ref/pattern ordering and concatenated pages have no duplicates/omissions.
+  Byte-limited pages advance by actual returned count, not requested limit.
+- `truncated`/`next_offset` reflect a further match; empty/past-end pages complete
+  normally. A first match or envelope that cannot fit fails explicitly, without
+  a non-advancing empty truncated page. Count the entire UTF-8 serialized result,
+  including bilingual/escaped strings, paths, refs and continuation metadata.
+- Tool timeout/cancellation and unknown/cross-session refs preserve their errors;
+  no result storage mutation, Provider fallback or new zero-match prompt rule.
+
+A purchase-event regression preserves the observed replay shape and source
+times: searching `purchase` discovers the array, its returned path can be read,
+and query selects item 145 at 1004 seconds and item 147 at 1478 seconds. The public
+tool no longer offers a values-only mode. These are deterministic checks, not a
+claim that the model will always discover the field. Existing answer/tool,
+checkpoint and externalization boundary tests remain relevant. Preserve frozen
+real-model runs and use a new recorded variant for behavioral acceptance; do not
+overwrite earlier failures or treat these unit tests as a rerun. Recheck the
+same frozen purchase questions for the simplified/paginated contract, separating
+final target accuracy from answer-stage recheck behavior.
+
+## Shared single-result budget acceptance
+
+Owner: [ARTIFACTS.md](ARTIFACTS.md#shared-tool-result-byte-budget).
+`test_tool_result_budget.py` and `test_artifact_budget_configuration.py` cover the
+shared exit and tool-owned normal size handling in execution, primary/degraded answering
+and retries. Ordinary tool spill, list-page reduction and oversized object errors
+must preserve complete stored facts and explicit failure/continuation semantics;
+local retrieval must not spill its own result again.
+
+Verify the root `.env`/environment settings are parsed once and injected into
+preview generation, read, query, grep and the shared final check. Retain default
+12288/35840 bytes, positive-integer/order validation and environment precedence.
+Use both smaller and larger configured budgets to catch hidden 35 KiB clamps;
+identical permitted local tool calls must have the same byte outcome in both
+stages. Exact-budget content fits; unexpected oversized success/error content
+becomes a bounded structured error before model-history admission. Permissions,
+duplicate tracking, deadlines and cancellation remain intact. No call-count or
+cumulative-byte quota is restored; full-context watermark compaction remains
+independent. Unusable configuration that cannot encode the minimal rejection
+fails before dispatch. These are deterministic checks, not real-model accuracy
+or production acceptance.
+
 ## Structured query acceptance
 
 `artifact.query` is implemented and registered. Its owner is
@@ -117,8 +174,10 @@ Separate forced-pressure cases cover primary/degraded continuation, no-progress
 protection, still-critical fallback, cancellation and shared deadlines.
 
 - More than 12 permitted answer calls and more than 240 KiB cumulative results
-  remain possible within deadlines/capacity; the 35 KiB per-result limit still
-  applies. No replacement hidden cumulative quota is introduced.
+  remain possible within deadlines/capacity; the configured per-result limit
+  (default 35 KiB) still applies through the shared exit, with the additional
+  configuration/admission checks above. No replacement
+  hidden cumulative quota is introduced.
 - Every actual model request uses full-request accounting. A stage transition
   retains the carried history's occupancy rather than resetting it or summing
   historical billed tokens. With no configured window, preserve disabled governance.
