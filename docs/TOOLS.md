@@ -447,6 +447,12 @@ read/grep contract.
 
 ## Task planning and checkpoints
 
+Task-plan completion/checkpoint order is serial; retrieval may batch or run in
+parallel while prioritizing the current item. Do not infer a mandatory parent
+lookup chain for esports tools: a known target ID can be used directly by the
+capability accepting that ID. League lookup is needed when discovering the
+competition identity, not merely because a question mentions a year or edition.
+
 `task.checkpoint` accepts only `key` and `value`. Runtime automatically collects
 all eligible, unconsumed observations owned by the current task in the current
 request. Without a plan it collects unowned observations. Successful ordinary

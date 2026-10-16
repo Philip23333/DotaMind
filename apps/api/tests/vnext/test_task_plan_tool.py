@@ -32,7 +32,7 @@ def test_plan_description_excludes_synthesis_items() -> None:
     description = " ".join(TASK_PLAN_DESCRIPTION.lower().split())
 
     assert "every item must be an artifact-backed" not in description
-    assert "successful inline tool results" in description
+    assert "successful ordinary tool results" in description
     assert "saved with task.checkpoint" in description
     assert "task.checkpoint" in description
     assert "final synthesis" in description

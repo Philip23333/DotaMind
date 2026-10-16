@@ -358,6 +358,9 @@ def render_answer_context(context: AnswerContext) -> str:
             f"steps: {context.execution_steps}",
             "Task coverage:\n" + _json(context.task_plan),
             "Completed task state:\n" + _json(context.task_state),
+            "The observation lists below are supplemental projections, not a complete "
+            "evidence inventory. Empty lists do not imply missing evidence; retained "
+            "tool results may already be included in the conversation history.",
             "Artifact observations:\n" + _json(context.active_artifact_evidence),
             "Other successful tool observations:\n" + _json(context.tool_evidence),
         )

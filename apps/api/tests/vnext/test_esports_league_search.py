@@ -141,6 +141,8 @@ def test_default_vnext_registry_includes_league_and_match_search() -> None:
     assert {tool.name for tool in registry.list()} == {
         "artifact.grep",
         "artifact.read",
+        "artifact.query",
+        "math.calculate",
         "esports.league.search",
         "esports.series.search",
         "esports.tournament.search",

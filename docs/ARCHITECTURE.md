@@ -336,6 +336,11 @@ current execution conclusion, when one exists (internal assistant content)
 execution outcome, task completion and evidence gaps
 ```
 
+AnswerContext observation lists are supplemental projections, not a complete
+inventory of evidence. When effective history already carries tool results, the
+projection avoids duplicating them. Empty supplemental lists must not be described
+as proof that source observations or retrieval permissions are absent.
+
 Insert the conclusion as clearly attributed internal assistant content in the
 answer request, not as a system rule or a user-delivered final answer. No new
 public DTO or model-facing tool is needed. Existing prompt obligations to check

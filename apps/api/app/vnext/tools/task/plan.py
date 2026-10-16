@@ -27,7 +27,9 @@ class TaskPlanInput(DomainModel):
     items: list[TaskPlanItemInput] = Field(
         min_length=2,
         max_length=16,
-        description="Serial task items; the first item becomes active immediately.",
+        description=(
+            "Items completed in order; retrieval may batch or run in parallel. First is active."
+        ),
     )
 
 
@@ -37,14 +39,15 @@ class TaskPlanResult(DomainModel):
 
 
 TASK_PLAN_DESCRIPTION = """\
-Create a serial execution plan for a complex task that contains multiple
+Create a plan for a complex task that contains multiple
 independently completable result units.
 
 Partition by result units, such as years, entities, documents, or modules. Do
 not partition by retrieval stages or tool types. Each item should be a result
-unit that can be completed using successful inline tool results and/or raw
-artifact.read observations, then saved with task.checkpoint. Complete the
-current item before moving to the next item. Do not create items for final
+unit that can be completed using successful ordinary tool results and/or raw
+artifact.read observations, then saved with task.checkpoint. Checkpoint items
+in order; retrieval may batch or run in parallel while prioritizing the current
+item. Do not create items for final
 synthesis, comparison, aggregation, or answer composition; perform those after
 the plan is complete using the checkpointed TaskState.
 """

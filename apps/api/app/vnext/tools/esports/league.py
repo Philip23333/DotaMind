@@ -22,9 +22,10 @@ The International or DreamLeague.
 Use this tool to resolve a competition name to a league ID.
 
 A league can contain multiple series representing different seasons or
-editions. If the user refers to a specific year, season, or edition, first
-resolve the league here and use the returned league ID with the series
-capability when it is available.
+editions. When discovering a year, season, or edition from a competition name,
+resolve the league here if its ID is not already known, then use the series
+capability. If the relevant Series or another target ID is already known,
+use the capability accepting it directly; no parent lookup is required.
 
 Use id when the exact league ID is already known.
 """
