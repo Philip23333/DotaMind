@@ -101,9 +101,7 @@ def test_artifact_read_requires_a_valid_read_result_and_ignores_manual_refs() ->
         name="artifact.read",
         arguments={"ref": _ref(1), "path": "items"},
     )
-    valid = ArtifactReadResult(ref=_ref(1), path="items", value=[1]).model_dump(
-        mode="json"
-    )
+    valid = ArtifactReadResult(ref=_ref(1), path="items", value=[1]).model_dump(mode="json")
     history.remember_artifact_locators(valid_call, _result(valid_call, valid))
 
     invalid_call = _call(name="artifact.read")
@@ -127,12 +125,35 @@ def test_artifact_grep_records_unique_session_refs_in_result_order() -> None:
     call = _call(name="artifact.grep")
     content = ArtifactGrepResult(
         matches=[
-            ArtifactGrepMatch(ref=_ref(3), path="a", preview="a"),
-            ArtifactGrepMatch(ref=_ref(1), path="b", preview="b"),
-            ArtifactGrepMatch(ref=_ref(3), path="c", preview="c"),
-            ArtifactGrepMatch(ref="manual:context", path="content", preview="d"),
+            ArtifactGrepMatch(
+                ref=_ref(3),
+                path="a",
+                preview="a",
+                value_type="string",
+            ),
+            ArtifactGrepMatch(
+                ref=_ref(1),
+                path="b",
+                preview="b",
+                value_type="string",
+            ),
+            ArtifactGrepMatch(
+                ref=_ref(3),
+                path="c",
+                preview="array (0 items)",
+                value_type="array",
+            ),
+            ArtifactGrepMatch(
+                ref="manual:context",
+                path="content",
+                preview="d",
+                value_type="string",
+            ),
         ],
         returned=4,
+        offset=0,
+        limit=20,
+        next_offset=None,
         truncated=False,
     ).model_dump(mode="json")
 

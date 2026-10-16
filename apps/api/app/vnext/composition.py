@@ -810,7 +810,9 @@ def build_vnext_registry(
             manuals,
             observation_max_bytes=artifact_limits.observation_max_bytes,
         ),
-        ArtifactGrepper(artifact_store, manuals),
+        ArtifactGrepper(
+            artifact_store, manuals, observation_max_bytes=artifact_limits.observation_max_bytes
+        ),
     )
     register_calculate_tool(registry)
     register_artifact_query_tool(

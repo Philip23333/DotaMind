@@ -86,6 +86,17 @@ class ArtifactGrepInput(DomainModel):
         default=ArtifactGrepper.DEFAULT_LIMIT,
         ge=1,
         le=ArtifactGrepper.MAX_LIMIT,
+        strict=True,
+        description="Maximum matches on this page; byte limits may return fewer complete matches.",
+    )
+    offset: int = Field(
+        default=0,
+        ge=0,
+        strict=True,
+        description=(
+            "Offset in matching nodes, not visited nodes or array indexes. Continue with "
+            "next_offset from the previous page using the same ref and pattern."
+        ),
     )
 
     @field_validator("pattern")
@@ -112,6 +123,7 @@ def register_artifact_tools(
             args.ref,
             args.pattern,
             args.limit,
+            offset=args.offset,
         )
 
     registry.register(
@@ -119,7 +131,13 @@ def register_artifact_tools(
             name="artifact.grep",
             description=(
                 "Search case-insensitive literal text in exactly one opaque tool response ref or "
-                "documented static manual ref."
+                "documented static manual ref. Recursively searches both JSON member names "
+                "and scalar values, including null. Member names match at their own nodes, "
+                "not complete path strings; an ancestor match does not repeat all descendants. "
+                "Returns original read paths, value_type and previews; containers show type "
+                "and direct item count only. Results are count- and byte-bounded: follow "
+                "next_offset with the same ref/pattern, since returned may be below limit. "
+                "Use grep to discover fields/content, read for known paths, query to select records."
             ),
             input_model=ArtifactGrepInput,
             output_model=ArtifactGrepResult,
