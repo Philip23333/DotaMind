@@ -22,6 +22,7 @@ def test_default_registry_exposes_only_current_capabilities() -> None:
         "math.calculate",
         "artifact.grep",
         "artifact.read",
+        "artifact.query",
         "esports.league.search",
         "esports.series.search",
         "esports.tournament.search",

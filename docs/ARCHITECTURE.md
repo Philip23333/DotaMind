@@ -224,11 +224,11 @@ logical tool response; the bounded model observation is derived separately by
 the generic result processor for ordinary tools. A stored ref is not
 automatically restored into a later turn's dialogue context.
 
-The accepted `artifact.query` target adds conditional selection and direct-field
-projection of original object records. It is not implemented or registered.
+`artifact.query` adds conditional selection and direct-field projection of original
+object records. It is implemented and registered, with deterministic checks.
 Generic Artifact retrieval owns it, below the model-facing tool and independently
 of Provider/game capabilities. It must not reshape stored documents or implement
-gameplay logic. The full contract is owned by [ARTIFACTS.md](ARTIFACTS.md#structured-query-accepted-target-not-implemented).
+gameplay logic. The full contract is owned by [ARTIFACTS.md](ARTIFACTS.md#structured-query).
 
 ## Two-stage context governance
 

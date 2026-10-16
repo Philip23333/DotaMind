@@ -13,6 +13,7 @@ accepted esports capabilities, and request-scoped task planning when a
 ```text
 artifact.grep
 artifact.read
+artifact.query
 math.calculate
 esports.league.search
 esports.series.search
@@ -38,8 +39,8 @@ Deterministic acceptance covers decimal arithmetic/aggregates, four-place half-u
 rounding, generated equations/time labels, strict missing/type rejection, denied
 AST syntax and resource bounds. Runtime coverage includes Artifact-read-to-
 calculation continuation, history and Trace, property-based permissions, denied
-external dispatch, duplicate accounting, cumulative UTF-8 byte admission, shared
-primary/degraded budgets, cancellation and separation of tool commentary from
+external dispatch, duplicate accounting, per-result UTF-8 bounds, retained
+primary/degraded verification state, cancellation and separation of tool commentary from
 final text. These checks do not establish real-model compliance or answer accuracy.
 
 Real-model acceptance must separately score wrong input selection, incorrect
@@ -47,13 +48,18 @@ copying of results, original-field checks, calls/bytes, tokens and latency. Keep
 the existing replay framework; changed tools/DTO inputs require a new recorded
 variant rather than overwriting frozen experiment inputs.
 
-## Structured query acceptance (planned; implementation and checks pending)
+## Structured query acceptance
 
-`artifact.query` is an accepted target, not part of the current tool surface.
-Its owner is [ARTIFACTS.md](ARTIFACTS.md#structured-query-accepted-target-not-implemented).
-The following are implementation acceptance requirements, not tests reported as
-already passing. Use saved source-backed/local fixtures, with provenance, and no
-live Provider calls for deterministic checks.
+`artifact.query` is implemented and registered. Its owner is
+[ARTIFACTS.md](ARTIFACTS.md#structured-query). `test_artifact_query.py` and the
+default-surface/inventory tests cover exact selection, original path round trips,
+missing/null/type semantics, forbidden syntax, strict inputs, pagination/byte
+limits, document/condition limits, session isolation, both Runtime stages and
+caller timeout without claiming worker termination. Saved GameDetail fixture
+checks independently confirm Larl's 20/25/30-minute values and no 1230-second sample.
+These are offline mechanical checks; the controlled real-model comparison remains
+pending. Additional acceptance expectations are detailed below; do not infer that
+every proposed experiment has run merely because the tool is registered.
 
 The same-game selection regression uses Valve game `9040460429`, account
 `106305042` (Larl). Filter on `players[].identity.account_id` and the exact

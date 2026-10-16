@@ -71,7 +71,7 @@ progress and evidence sources; it does not release raw results from history.
 ## Retrieval contract
 
 The currently registered retrieval tools are `artifact.read` and `artifact.grep`.
-The structured-query contract below is accepted but not implemented or registered.
+The structured-query contract below is implemented and registered in the default registry.
 
 ```text
 artifact.read(ref, mode, path?, offset?, limit?)
@@ -91,7 +91,7 @@ values, not JSON member names or path strings. Its literal substring matches do
 not establish numeric equality, same-record conditions, or absence of source
 facts; nulls and empty containers are not searchable scalar leaves.
 
-## Structured query (accepted target; not implemented)
+## Structured query
 
 This section owns the complete `artifact.query` contract. The tool selects
 original object records from one existing session Artifact, then returns only
@@ -131,18 +131,20 @@ Initial complexity bounds are 16 segments per path (including relative filter
 paths), 32 comparison conditions, and logical nesting depth 8. The query document
 may contain at most 100000 JSON nodes, counting each container and scalar once.
 Check size without modifying the Artifact and fail when the cap is exceeded.
-These accepted initial limits require fixture/performance validation at
-implementation; returning few matches does not bound the number of candidates
+These limits have deterministic boundary and saved-fixture checks; returning few matches
+does not bound the number of candidates
 examined. Keep existing tool timeout, stage deadline and cancellation controls;
 do not describe a timeout as proof that a Python worker has been forcibly stopped.
 
-Prefer `python-jsonpath` with `JSONPathEnvironment(strict=True)` plus an explicit
+The implementation pins `python-jsonpath==2.2.1` and uses
+`JSONPathEnvironment(strict=True, filter_caching=False)` plus an explicit
 parsed-syntax allowlist, rather than a new parser or query language. Its documented
 `finditer` and match `parts` support incremental results and source locations.
 Strict RFC mode alone does not disable all features outside this subset.
-This is the selected implementation direction, not an installed dependency or a
-verified integration. Pin and validate the actual library version and complexity
-checks during implementation. See its [API](https://jg-rp.github.io/python-jsonpath/api/)
+Array-only selector guards reject object enumeration. Evaluation runs in a worker
+thread so the caller/event loop can respond to timeout or cancellation; a cancelled
+await does not forcibly stop the worker. Finite AST/document limits still apply.
+See its [API](https://jg-rp.github.io/python-jsonpath/api/)
 and [iteration examples](https://jg-rp.github.io/python-jsonpath/quickstart/#finditerpath-data).
 
 ### Result and source fidelity
@@ -213,10 +215,10 @@ Reuse the existing error envelope and codes; the accepted mapping is:
 | Artifact storage/read failure | Preserve the existing Artifact error path, without replacing it with empty data |
 | Tool timeout or stage cancellation/deadline | Existing timeout/control handling, without claiming a complete query |
 
-The target tool stays inline and is classified `local_artifact_read`, read-only.
+The tool stays inline and is classified `local_artifact_read`, read-only.
 In answers it follows the same permissions, 35 KiB per-result bound, duplicate
 rejection, deadlines and unified context governance as `read`, `grep` and
-calculation. The target has no total call or cumulative byte quota; the full
+calculation. There is no total call or cumulative byte quota; the full
 policy remains in [TOOLS.md](TOOLS.md).
 
 ### Complete example

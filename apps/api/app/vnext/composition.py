@@ -34,6 +34,7 @@ from app.vnext.artifacts import (
     ToolResponseExternalizer,
 )
 from app.vnext.artifacts.lifecycle import ArtifactObservationTranscriptRewriter
+from app.vnext.artifacts.query import ArtifactQuerier
 from app.vnext.capabilities.catalog.display_enrichment import (
     enrich_catalog_lookup_result,
 )
@@ -111,7 +112,7 @@ from app.vnext.providers.tavily.web_search import (
 )
 from app.vnext.providers.valve.catalog_lookup import ValveCatalogLookupAdapter
 from app.vnext.session_limits import SessionContextLimits
-from app.vnext.tools.artifacts import register_artifact_tools
+from app.vnext.tools.artifacts import register_artifact_query_tool, register_artifact_tools
 from app.vnext.tools.calculate import register_calculate_tool
 from app.vnext.tools.catalog import register_catalog_lookup_tool
 from app.vnext.tools.esports import (
@@ -811,6 +812,12 @@ def build_vnext_registry(
         ArtifactGrepper(artifact_store, manuals),
     )
     register_calculate_tool(registry)
+    register_artifact_query_tool(
+        registry,
+        ArtifactQuerier(
+            artifact_store, observation_max_bytes=artifact_limits.observation_max_bytes
+        ),
+    )
     if resolved_services.league_search is not None:
         register_league_tool(registry, resolved_services.league_search)
     if resolved_services.series_search is not None:

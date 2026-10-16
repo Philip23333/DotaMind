@@ -42,6 +42,7 @@ The clean-slate default registry currently exposes:
 ```text
 artifact.grep
 artifact.read
+artifact.query
 math.calculate
 esports.league.search
 esports.series.search
@@ -128,24 +129,24 @@ instructions do not guarantee compliance or correct input selection. Ordinary
 history and Trace retain verification calls/results, without Provider retrieval
 or task-checkpoint mutation. Artifact-bound calculator variables, result
 writeback and automated factual verification remain outside the calculator's
-first version. Structured Artifact query is the separate accepted target below.
+first version. Structured Artifact query is the separate generic capability below.
 
-## Structured Artifact query (accepted target; not registered)
+## Structured Artifact query
 
 `artifact.query(ref, expression, fields, offset=0, limit=20)` selects object
 records by exact field conditions and returns requested direct members with
-their original record paths. [ARTIFACTS.md](ARTIFACTS.md#structured-query-accepted-target-not-implemented)
+their original record paths. [ARTIFACTS.md](ARTIFACTS.md#structured-query)
 owns its complete input/output, JSONPath subset, missing-value, continuation,
-error and resource-limit contract. This section does not add it to the current
-registry or make it available to a model before implementation.
+error and resource-limit contract. It is registered in the default registry and
+available to execution and local answer verification, with deterministic checks.
 
 Use `grep` to discover scalar-value locations, `read` for known exact paths,
 `query` for conditional record selection and multi-field retrieval, and
 `math.calculate` for temporary arithmetic from verified inputs. Query reads one
 stored Artifact, remains generic, and does not fetch Provider data, infer Dota
-semantics, regenerate time labels or alter the stored document. The planned
+semantics, regenerate time labels or alter the stored document. The
 access property is `local_artifact_read`; normal execution and bounded answer
-verification may use it once registered. Answers follow the same stage permissions,
+verification may use it. Answers follow the same stage permissions,
 per-result bounds, deadlines and context governance; query adds no call or
 cumulative byte quota.
 

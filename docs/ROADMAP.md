@@ -21,9 +21,10 @@ Local time labels, `math.calculate`, and bounded answer-stage Artifact verificat
 are implemented with deterministic checks; real-model accuracy remains separate
 acceptance. Execution-conclusion handoff is implemented and deterministically
 tested. Unified two-stage context governance is also implemented with deterministic
-checks; `artifact.query` remains an unimplemented accepted target. Their contracts live in
+checks; `artifact.query` is implemented and registered with deterministic checks.
+The controlled real-model comparison remains pending. Their contracts live in
 [ARCHITECTURE.md](ARCHITECTURE.md#execution-to-answer-conclusion-handoff)
-and [ARTIFACTS.md](ARTIFACTS.md#structured-query-accepted-target-not-implemented).
+and [ARTIFACTS.md](ARTIFACTS.md#structured-query).
 
 Implementation units remain separate commit boundaries:
 
@@ -39,20 +40,20 @@ Implementation units remain separate commit boundaries:
    per-result bounds, duplicate rejection, stage deadlines and cancellation.
    Preserve conclusion handoff during rebuilding; see
    [ARCHITECTURE.md](ARCHITECTURE.md#two-stage-context-governance).
-3. **Structured Artifact query.** Implement the accepted JSONPath subset, direct
+3. **Structured Artifact query (implemented; live acceptance pending).** Implement the accepted JSONPath subset, direct
    field projection, original read-compatible paths, missing semantics, bounded
    continuation and resource checks; validate/pin `python-jsonpath` and register
    the tool as `local_artifact_read` under the unified context-governance policy,
    without total-call or cumulative byte quotas.
    Protect same-game selection and generic retrieval boundaries with focused tests.
 
-Use [EVALS.md](EVALS.md#structured-query-acceptance-planned-implementation-and-checks-pending)
+Use [EVALS.md](EVALS.md#structured-query-acceptance)
 for deterministic and separately controlled real-model acceptance. Preserve the
 existing replay framework and frozen samples; do not claim a measured accuracy
 gain from tool plumbing alone. These units add no Provider/replay integration,
 GameDetail schema change, frontend feature, derived Artifact store, or
-Artifact-bound calculator variables. Documented targets do not change the live
-registry or prompts until their implementation units are explicitly started.
+Artifact-bound calculator variables. Deterministic acceptance does not replace
+the separate real-model comparison or imply a service restart/deployment.
 
 ## Commit 1: clean-slate tool layer
 

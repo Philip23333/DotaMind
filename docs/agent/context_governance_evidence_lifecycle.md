@@ -211,8 +211,8 @@ FIFO 移出不删除 Artifact 或原始历史。摘要或近期消息仍有引�
 容量和单条线索长度可通过上述环境变量调整；淘汰只移除定位条目，不删除 Artifact、
 不修改 checkpoint，也不清除实际执行历史。具体数据结构复用现有状态，不建设来源知识库。
 
-恢复使用已有 artifact.read / artifact.grep，产生新 observation 并重新计入占用。
-已确认但尚未实现的 `artifact.query` 将按 [ARTIFACTS.md](../ARTIFACTS.md#structured-query-accepted-target-not-implemented)
+恢复使用已有 artifact.read / artifact.grep / artifact.query，产生新 observation 并重新计入占用。
+已实现并注册的 `artifact.query` 按 [ARTIFACTS.md](../ARTIFACTS.md#structured-query)
 提供同一文档的条件查询，沿用既有引用、会话边界和观察计量，不引入新存储或恢复引用。
 定位线索丢失或小结果没有 Artifact 时，执行阶段可重新调用业务工具；这产生新观察，
 不保证恢复旧快照。无法取得资料时明确不足。第一版不增加来源检索、模型历史搜索，

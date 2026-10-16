@@ -146,6 +146,7 @@ def test_composition_uses_one_registry_for_schemas_and_shared_inventory(
     assert {tool.name for tool in answer.tools} == {
         "artifact.read",
         "artifact.grep",
+        "artifact.query",
         "math.calculate",
     }
     assert AGENT_INSTRUCTION not in _system_text(answer)
@@ -229,6 +230,7 @@ def test_old_refusals_do_not_hide_guide_schema_or_answer_evidence(
         assert {tool.name for tool in request.tools} == {
             "artifact.read",
             "artifact.grep",
+            "artifact.query",
             "math.calculate",
         }
         _assert_inventory(request, [tool.name for tool in runtime.tools.list()])
@@ -319,6 +321,7 @@ def test_answer_overflow_retry_and_degraded_answer_keep_inventory_once(
         assert {tool.name for tool in request.tools} == {
             "artifact.read",
             "artifact.grep",
+            "artifact.query",
             "math.calculate",
         }
         assert AGENT_INSTRUCTION not in _system_text(request)
