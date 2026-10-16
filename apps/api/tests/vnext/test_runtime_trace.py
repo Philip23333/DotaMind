@@ -68,11 +68,14 @@ def test_trace_records_execution_context_and_answer_stage_metrics() -> None:
     )
 
     snapshot = collector.snapshot()
+    request_time = snapshot["steps"][0]["runtime_context"]["request_time"]
+    assert request_time.endswith("+08:00")
     assert snapshot["steps"][0]["runtime_context"] == {
         "phase": "exploration",
         "remaining_turns": None,
         "time_pressure": "healthy",
         "tools_available": True,
+        "request_time": request_time,
     }
     assert snapshot["execution_outcome"] == {
         "reason": "model_done",
@@ -163,4 +166,5 @@ def test_trace_context_conversion_accepts_dataclass_values() -> None:
         "remaining_turns": 4,
         "time_pressure": "healthy",
         "tools_available": True,
+        "request_time": None,
     }

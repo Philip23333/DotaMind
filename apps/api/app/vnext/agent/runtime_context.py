@@ -3,11 +3,20 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from enum import Enum
+from zoneinfo import ZoneInfo
 
 CONVERGING_THRESHOLD = 4
 TIME_PRESSURE_LIMITED_THRESHOLD = 0.40
 TIME_PRESSURE_CRITICAL_THRESHOLD = 0.20
+REQUEST_TIMEZONE = "Asia/Shanghai"
+
+
+def capture_request_time() -> str:
+    """Capture the user-request calendar anchor, independent of the host zone."""
+
+    return datetime.now(ZoneInfo(REQUEST_TIMEZONE)).isoformat(timespec="seconds")
 
 
 class RuntimePhase(str, Enum):
@@ -35,6 +44,7 @@ class RuntimeContext:
     remaining_turns: int | None
     time_pressure: TimePressure
     tools_available: bool
+    request_time: str | None = None
 
     @classmethod
     def from_state(
@@ -44,6 +54,7 @@ class RuntimeContext:
         max_steps: int | None = None,
         tools_available: bool = True,
         time_pressure: TimePressure = TimePressure.HEALTHY,
+        request_time: str | None = None,
     ) -> RuntimeContext:
         """Build a snapshot from state already computed by one invocation."""
 
@@ -53,6 +64,7 @@ class RuntimeContext:
             remaining_turns=remaining_turns,
             time_pressure=time_pressure,
             tools_available=tools_available,
+            request_time=request_time,
         )
 
 
@@ -91,10 +103,12 @@ def _phase(
 __all__ = [
     "CONVERGING_THRESHOLD",
     "ContextPressure",
+    "REQUEST_TIMEZONE",
     "RuntimeContext",
     "RuntimePhase",
     "TIME_PRESSURE_CRITICAL_THRESHOLD",
     "TIME_PRESSURE_LIMITED_THRESHOLD",
     "TimePressure",
     "classify_time_pressure",
+    "capture_request_time",
 ]

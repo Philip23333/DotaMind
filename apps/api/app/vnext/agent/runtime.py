@@ -75,7 +75,11 @@ from app.vnext.agent.output_budget import (
     OutputBudget,
     derive_output_budget,
 )
-from app.vnext.agent.runtime_context import RuntimeContext, classify_time_pressure
+from app.vnext.agent.runtime_context import (
+    RuntimeContext,
+    capture_request_time,
+    classify_time_pressure,
+)
 from app.vnext.agent.runtime_prompt import render_runtime_prompt
 from app.vnext.agent.task_state import TaskPlan, TaskStateCoordinator
 from app.vnext.agent.trace import AgentTraceCollector
@@ -276,6 +280,7 @@ class AgentRuntime:
             self.reset_request_state()
         token = cancellation_token or CancellationToken()
         sink = event_sink
+        request_time = capture_request_time()
         execution_deadline = _Deadline(self.limits.deadline_seconds)
         started_at = execution_deadline.started
         step = 0
@@ -337,6 +342,7 @@ class AgentRuntime:
                         execution_history=execution_history,
                         step=step,
                         deadline=execution_deadline,
+                        request_time=request_time,
                     )
                     candidate_request, candidate_budget = self._apply_output_budget(
                         execution_request_data[0]
@@ -410,6 +416,7 @@ class AgentRuntime:
                         execution_history=execution_history,
                         step=step,
                         deadline=execution_deadline,
+                        request_time=request_time,
                     )
                 (
                     request,
@@ -666,6 +673,7 @@ class AgentRuntime:
                             execution_history=execution_history,
                             step=step,
                             deadline=execution_deadline,
+                            request_time=request_time,
                         )
                         request, output_budget = self._apply_output_budget(request)
                         final_capacity = assess_request_capacity(
@@ -1042,6 +1050,7 @@ class AgentRuntime:
                             step=request.step,
                             deadline=deadline,
                             verification=verification,
+                            request_time=request_time,
                         )
                         request, budget = self._apply_output_budget(request)
                         capacity = assess_request_capacity(
@@ -1103,6 +1112,7 @@ class AgentRuntime:
                     step=answer_step,
                     deadline=answer_deadline,
                     verification=verification,
+                    request_time=request_time,
                 )
                 answer_request, answer_output_budget = self._apply_output_budget(answer_request)
                 answer_request, answer_output_budget = await prepare_answer_continuation(
@@ -1352,6 +1362,7 @@ class AgentRuntime:
                             step=answer_step,
                             deadline=answer_deadline,
                             verification=verification,
+                            request_time=request_time,
                         )
                         answer_request, answer_output_budget = self._apply_output_budget(
                             answer_request
@@ -1527,6 +1538,7 @@ class AgentRuntime:
                     step=degraded_step,
                     deadline=answer_deadline,
                     verification=verification,
+                    request_time=request_time,
                 )
                 degraded_request, degraded_output_budget = self._apply_output_budget(
                     degraded_request
@@ -1860,11 +1872,13 @@ class AgentRuntime:
         deadline: _Deadline,
         verification: AnswerToolSession | None = None,
         execution_conclusion: ModelResponse | None = None,
+        request_time: str | None = None,
     ) -> ModelRequest:
         """Build an answer request with a fresh, ephemeral stage snapshot."""
 
         runtime_context = RuntimeContext.from_state(
             current_step=step,
+            request_time=request_time,
             tools_available=bool(verification and verification.schemas()),
             time_pressure=classify_time_pressure(
                 remaining_seconds=deadline.remaining(),
@@ -1880,6 +1894,9 @@ class AgentRuntime:
             step=step,
             max_output_tokens=None,
             execution_conclusion=execution_conclusion,
+        )
+        request = request.model_copy(
+            update={"metadata": {**request.metadata, "request_time": request_time}}
         )
         if verification is not None and verification.enabled:
             request = request.model_copy(
@@ -2008,6 +2025,7 @@ class AgentRuntime:
                 )
             runtime_context = RuntimeContext.from_state(
                 current_step=step,
+                request_time=request.metadata.get("request_time"),
                 tools_available=bool(verification.schemas()),
                 time_pressure=classify_time_pressure(
                     remaining_seconds=deadline.remaining(),
@@ -2047,6 +2065,7 @@ class AgentRuntime:
         execution_history: Any | None,
         step: int,
         deadline: _Deadline,
+        request_time: str | None = None,
     ) -> tuple[
         ModelRequest,
         RuntimeContext,
@@ -2062,6 +2081,7 @@ class AgentRuntime:
         )
         runtime_context = RuntimeContext.from_state(
             current_step=step,
+            request_time=request_time,
             tools_available=True,
             time_pressure=time_pressure,
         )
@@ -2094,6 +2114,7 @@ class AgentRuntime:
             messages=turn_messages,
             tools=self.tools.schemas(),
             step=step,
+            metadata={"request_time": request_time},
         )
         return (
             request,

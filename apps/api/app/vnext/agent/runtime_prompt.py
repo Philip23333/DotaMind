@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from typing import Literal
 
-from app.vnext.agent.runtime_context import RuntimeContext, RuntimePhase, TimePressure
+from app.vnext.agent.runtime_context import (
+    REQUEST_TIMEZONE,
+    RuntimeContext,
+    RuntimePhase,
+    TimePressure,
+)
 
 _GUIDANCE: dict[RuntimePhase, str] = {
     RuntimePhase.EXPLORATION: (
@@ -55,7 +60,7 @@ def render_runtime_prompt(
             "Guidance:",
             _ANSWER_GUIDANCE[context.time_pressure],
         ]
-        return "\n".join(sections)
+        return "\n".join([*sections, *_request_time_sections(context)])
 
     sections = [
         "Runtime state:",
@@ -78,7 +83,21 @@ def render_runtime_prompt(
             _GUIDANCE[context.phase],
         ]
     )
-    return "\n".join(sections)
+    return "\n".join([*sections, *_request_time_sections(context)])
+
+
+def _request_time_sections(context: RuntimeContext) -> list[str]:
+    if context.request_time is None:
+        return []
+    return [
+        "",
+        "Request time anchor:",
+        "Date: " + context.request_time[:10],
+        "Datetime: " + context.request_time,
+        "Timezone: " + REQUEST_TIMEZONE,
+        "Interpret relative dates using this request-start anchor in both stages. "
+        "It is not a source update time or a match timestamp.",
+    ]
 
 
 __all__ = ["render_runtime_prompt"]

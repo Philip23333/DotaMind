@@ -1,5 +1,15 @@
 # Evals
 
+## Request calendar anchor acceptance
+
+Deterministic checks cover explicit `Asia/Shanghai` conversion, offset-aware
+ISO datetime and calendar date in both business stages, and one capture per
+user request. A frozen 23:59:59 anchor must survive answer tools, overflow
+recovery, watermark compaction and degraded answering; the next user request on
+the same Runtime must receive a new anchor. Trace retains the captured time.
+These checks verify injection and continuity, not the model's interpretation of
+relative dates or source freshness.
+
 Evaluation separates deterministic mechanical acceptance from real-model
 quality review. A successful tool execution or completed Runtime workflow is
 not, by itself, evidence that an answer is correct.

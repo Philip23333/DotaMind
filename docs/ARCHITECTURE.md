@@ -257,6 +257,21 @@ primary/degraded continuation. This controls individual results separately from
 the answer watermark workflow; it does not change context capacity, permissions
 or source-data retention. It does not imply deployment or model compliance.
 
+## Request calendar anchor
+
+Runtime captures one wall-clock timestamp at the start of each user request in
+`Asia/Shanghai`, independent of the server's local timezone. Both execution and
+answer prompts explicitly receive the Beijing calendar date, offset-aware ISO
+datetime (for example `2026-10-17T23:59:59+08:00`) and timezone name. Relative
+dates use this request-start anchor. Tool-loop continuations, compaction rebuilds,
+overflow retries and degraded answers retain the same anchor, even across midnight.
+The next user request captures a new anchor. It is request-local, not mutable
+shared Runtime state, and is retained in request metadata and execution Trace.
+
+This time is not a Provider update time or match timestamp. Source times retain
+their own semantics. Monotonic deadlines continue to control execution budgets;
+calendar injection does not extend them or change gameplay time formatting.
+
 ## Two-stage context governance
 
 Execution and answering use the same configured context window and full-request
