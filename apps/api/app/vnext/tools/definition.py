@@ -24,6 +24,14 @@ class ToolContextEffect(str, Enum):
     MATERIALIZING = "materializing"
 
 
+class ToolAccess(str, Enum):
+    """Resource access used by stage permissions; defaults to denied in answers."""
+
+    EXTERNAL_DATA = "external_data"
+    LOCAL_ARTIFACT_READ = "local_artifact_read"
+    PURE_COMPUTE = "pure_compute"
+
+
 @dataclass(frozen=True, slots=True)
 class ToolDefinition:
     name: str
@@ -39,11 +47,14 @@ class ToolDefinition:
     externalize_result: bool = True
     context_effect: ToolContextEffect = ToolContextEffect.BOUNDED
     always_artifact: bool = False
+    access: ToolAccess = ToolAccess.EXTERNAL_DATA
     _json_schema_validator: Any = field(init=False, default=None, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         if not self.name:
             raise ValueError("tool name must not be empty")
+        if not isinstance(self.access, ToolAccess):
+            raise TypeError("access must be a ToolAccess")
         if not isinstance(self.always_artifact, bool):
             raise TypeError("always_artifact must be a bool")
         if self.always_artifact and not self.externalize_result:
@@ -98,4 +109,4 @@ class ToolDefinition:
         ]
 
 
-__all__ = ["ToolContextEffect", "ToolDefinition", "ToolHandler"]
+__all__ = ["ToolAccess", "ToolContextEffect", "ToolDefinition", "ToolHandler"]

@@ -19,6 +19,7 @@ def test_default_registry_exposes_only_current_capabilities() -> None:
 
     tool_names = {tool.name for tool in registry.schemas()}
     assert tool_names == {
+        "math.calculate",
         "artifact.grep",
         "artifact.read",
         "esports.league.search",
@@ -68,9 +69,7 @@ def test_opt_in_registry_registers_resolution_and_keeps_game_detail() -> None:
         registry_services,
         settings=VNextSettings(),
     )
-    assert "esports.game.resolve" not in {
-        tool.name for tool in default_registry.schemas()
-    }
+    assert "esports.game.resolve" not in {tool.name for tool in default_registry.schemas()}
 
 
 def test_artifact_grep_requires_one_exact_ref() -> None:

@@ -273,6 +273,9 @@ def _answer_compaction_case() -> tuple[
             and _capacity_pressure(capacities, "post_tool_execution") == "normal"
             and _capacity_pressure(capacities, "before_answer") in {"high", "critical"}
             and _capacity_pressure(capacities, "after_answer") != "critical"
+            # The real two-part summary includes both history and turn-prefix text.
+            # Leave room for that difference from the compacted probe fixture.
+            and capacities["after_answer"].remaining_output_tokens >= 1024
         ),
         recent_tokens=500,
     )

@@ -247,7 +247,7 @@ def test_explicit_compaction_preserves_artifacts_and_supports_two_rereads() -> N
         return ModelResponse.from_final("execution complete")
 
     def answer(request: ModelRequest) -> ModelResponse:
-        assert request.tools == []
+        assert {tool.name for tool in request.tools} == {"artifact.read", "artifact.grep"}
         assert "summary two intentionally omits all artifact references" in _request_json(request)
         assert "FIRST_EDITION_REVISIT_DETAIL" in _request_json(request)
         assert "FIRST_EDITION_TEST_MARKER" not in _request_json(request)

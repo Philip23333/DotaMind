@@ -21,6 +21,9 @@ events, interactions, and coverage. Hero, item, ability, and event-unit objects
 include confirmed IDs where applicable and English/Chinese names from local
 catalogs; no separate Catalog call is needed just to decode these entities.
 The result records label-resource versions separately from OpenDota provenance.
+Game-relative time fields include program-generated display labels such as
+time_label and duration_label (MM:SS, preserving negative and fractional seconds).
+Use these labels for display; use the original seconds to match, sort, or calculate.
 
 Missing fields or unconvertible identifiers do not mean an event did not occur
 or that a value was zero. Inspect coverage for missing data, original unmapped

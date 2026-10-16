@@ -48,7 +48,9 @@ async def _detail_result(query: GameDetailInput, data: dict) -> GameDetailResult
             return OpenDotaGameRecord(match_id=match_id, retrieved_at=_NOW, data=data)
 
     return await GameDetailService(
-        Provider(), load_default_catalog_repository, UnitCatalog.load_default(),
+        Provider(),
+        load_default_catalog_repository,
+        UnitCatalog.load_default(),
     ).get_game_detail(query)
 
 
@@ -307,10 +309,15 @@ def test_recent_games_reads_exact_player_and_bilingual_names_without_catalog_cal
                     "path": "data.players.5",
                 },
             ),
-            ToolCall(id="build-read", name="artifact.read", arguments={
-                "ref": detail_output["artifact_ref"], "mode": "read",
-                "path": "data.builds.players.5",
-            }),
+            ToolCall(
+                id="build-read",
+                name="artifact.read",
+                arguments={
+                    "ref": detail_output["artifact_ref"],
+                    "mode": "read",
+                    "path": "data.builds.players.5",
+                },
+            ),
         )
 
     def final_execution(request: ModelRequest) -> ModelResponse:
@@ -324,8 +331,12 @@ def test_recent_games_reads_exact_player_and_bilingual_names_without_catalog_cal
         assert build["final_loadout"]["inventory"][0]["id"] == 1
         assert build["final_loadout"]["inventory"][0]["name_en"] == "Blink Dagger"
         assert "purchase_log" not in source_data
-        calls = [call.name for message in request.messages if isinstance(message, AssistantMessage)
-                 for call in message.tool_calls]
+        calls = [
+            call.name
+            for message in request.messages
+            if isinstance(message, AssistantMessage)
+            for call in message.tool_calls
+        ]
         assert "catalog.lookup" not in calls
         assert any(
             entry["data"]["players"][0]["isWinner"] is True
@@ -337,7 +348,11 @@ def test_recent_games_reads_exact_player_and_bilingual_names_without_catalog_cal
         return ModelResponse.from_final("synthetic match evidence organized")
 
     def final_answer(request: ModelRequest) -> ModelResponse:
-        assert not request.tools
+        assert {tool.name for tool in request.tools} == {
+            "artifact.read",
+            "artifact.grep",
+            "math.calculate",
+        }
         assert any(
             isinstance(message, UserMessage)
             and message.content == f"Analyze the latest game for Steam32 {ACCOUNT_ID}"
@@ -395,10 +410,13 @@ def test_second_game_followup_uses_original_list_after_new_game_appears() -> Non
 
     async def detail(query: GameDetailInput) -> GameDetailResult:
         detail_calls.append(query.valve_game_id)
-        return await _detail_result(query, {
-            "match_id": query.valve_game_id,
-            "players": [{"account_id": ACCOUNT_ID, "hero_id": 2, "win": 1}],
-        })
+        return await _detail_result(
+            query,
+            {
+                "match_id": query.valve_game_id,
+                "players": [{"account_id": ACCOUNT_ID, "hero_id": 2, "win": 1}],
+            },
+        )
 
     def initial_list(request: ModelRequest) -> ModelResponse:
         assert _last_user(request) == "Show my recent five games"
@@ -540,13 +558,16 @@ def test_missing_target_account_and_timeline_are_not_filled_from_similar_player(
 
     async def detail(query: GameDetailInput) -> GameDetailResult:
         detail_calls.append(query.valve_game_id)
-        return await _detail_result(query, {
-            "match_id": query.valve_game_id,
-            "players": [
-                {"account_id": ACCOUNT_ID + 1, "personaname": str(ACCOUNT_ID), "hero_id": 1},
-                {"account_id": ACCOUNT_ID + 2, "personaname": "Synthetic target", "hero_id": 2},
-            ],
-        })
+        return await _detail_result(
+            query,
+            {
+                "match_id": query.valve_game_id,
+                "players": [
+                    {"account_id": ACCOUNT_ID + 1, "personaname": str(ACCOUNT_ID), "hero_id": 1},
+                    {"account_id": ACCOUNT_ID + 2, "personaname": "Synthetic target", "hero_id": 2},
+                ],
+            },
+        )
 
     def get_recent(_request: ModelRequest) -> ModelResponse:
         return _tool_turn(
@@ -569,8 +590,9 @@ def test_missing_target_account_and_timeline_are_not_filled_from_similar_player(
     def report_gap(request: ModelRequest) -> ModelResponse:
         detail_result = _tool_content(_tool_results(request)[-1])
         assert detail_result["data"]["players"][0]["identity"]["account_id"] == ACCOUNT_ID + 1
-        assert all(row["identity"]["account_id"] != ACCOUNT_ID
-                   for row in detail_result["data"]["players"])
+        assert all(
+            row["identity"]["account_id"] != ACCOUNT_ID for row in detail_result["data"]["players"]
+        )
         assert "purchase_log" not in detail_result["data"]
         instruction = " ".join(
             " ".join(

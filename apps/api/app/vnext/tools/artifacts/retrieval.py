@@ -13,15 +13,13 @@ from app.vnext.artifacts import (
     ArtifactReadResult,
 )
 from app.vnext.domain.common.models import DomainModel
-from app.vnext.tools.definition import ToolContextEffect, ToolDefinition
+from app.vnext.tools.definition import ToolAccess, ToolContextEffect, ToolDefinition
 from app.vnext.tools.registry import ToolRegistry
 
 
 class ArtifactReadInput(DomainModel):
     ref: str = Field(
-        description=(
-            "Exact opaque reference returned by a tool, or a documented manual ref."
-        )
+        description=("Exact opaque reference returned by a tool, or a documented manual ref.")
     )
     mode: Literal["outline", "read"] = Field(
         description="outline inspects root structure; read resolves one explicit dotted path."
@@ -97,6 +95,7 @@ class ArtifactGrepInput(DomainModel):
             raise ValueError("pattern must not be blank")
         return value
 
+
 def register_artifact_tools(
     registry: ToolRegistry,
     reader: ArtifactReader,
@@ -127,6 +126,7 @@ def register_artifact_tools(
             handler=grep,
             parallel_safe=True,
             externalize_result=False,
+            access=ToolAccess.LOCAL_ARTIFACT_READ,
         )
     )
     registry.register(
@@ -159,6 +159,7 @@ def register_artifact_tools(
             parallel_safe=True,
             externalize_result=False,
             context_effect=ToolContextEffect.MATERIALIZING,
+            access=ToolAccess.LOCAL_ARTIFACT_READ,
         )
     )
 

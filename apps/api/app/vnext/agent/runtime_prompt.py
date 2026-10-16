@@ -53,7 +53,7 @@ def render_runtime_prompt(
             context.context_pressure.value,
             "",
             "Tools available:",
-            "no",
+            "yes" if context.tools_available else "no",
             "",
             "Guidance:",
             _ANSWER_GUIDANCE[context.time_pressure],

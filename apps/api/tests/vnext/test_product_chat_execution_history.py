@@ -348,13 +348,9 @@ def test_truncated_answer_attempts_persist_only_the_final_delivery(
     model = ScriptedTranscriptModelClient(
         [
             lambda _request: ModelResponse.from_final("execution"),
+            lambda _request: ModelResponse.from_final("truncated primary", finish_reason="length"),
             lambda _request: ModelResponse.from_final(
-                "truncated primary", finish_reason="length"
-            ),
-            lambda _request: ModelResponse.from_final(
-                "truncated degraded"
-                if degraded_finish_reason == "length"
-                else "degraded answer",
+                "truncated degraded" if degraded_finish_reason == "length" else "degraded answer",
                 finish_reason=degraded_finish_reason,
             ),
         ]
@@ -509,7 +505,7 @@ def test_product_follow_up_uses_automatic_compaction_and_fresh_task_state(
                     },
                 )
             if action == 7:
-                assert request.tools == []
+                assert {tool.name for tool in request.tools} == {"artifact.read", "artifact.grep"}
                 if turn_number == 0:
                     assert _session_context(request)["summary"]
                 self.phase += 1
@@ -786,7 +782,10 @@ def test_product_follow_up_succeeds_after_summary_validation_failure(monkeypatch
                         status_code=400,
                     )
                 raise AssertionError("failed request unexpectedly retried")
-            if request.tools:
+            if not any(
+                m.role == "system" and m.content.startswith("Execution has ended.")
+                for m in request.messages
+            ):
                 old_result = next(
                     message
                     for message in request.messages

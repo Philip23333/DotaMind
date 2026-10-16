@@ -351,10 +351,10 @@ def test_two_questions_share_real_session_artifact_and_summary_and_reset_task_st
                     return ModelResponse.from_final(
                         "first execution stopped at a verified checkpoint"
                     )
-                assert request.tools == []
+                assert {tool.name for tool in request.tools} == {"artifact.read", "artifact.grep"}
                 return ModelResponse.from_final("first synthetic comparison answer")
 
-            if request.tools:
+            if request.step == 1:
                 assert request.step == 1
                 session_message = next(
                     message

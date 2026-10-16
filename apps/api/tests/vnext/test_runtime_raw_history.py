@@ -134,7 +134,7 @@ class _LargeRawModel:
 
     async def complete(self, request: ModelRequest) -> ModelResponse:
         self.requests.append(request.model_copy(deep=True))
-        if not request.tools:
+        if self.phase == "done":
             assert self.phase == "done"
             return ModelResponse.from_final("verified synthetic document")
 
@@ -244,7 +244,7 @@ class _TwoRequestRawModel:
 
     async def complete(self, request: ModelRequest) -> ModelResponse:
         self.requests.append(request.model_copy(deep=True))
-        if not request.tools:
+        if self.phase in {3, 6}:
             assert self.phase in {3, 6}
             self.phase += 1
             return ModelResponse.from_final(f"answer-{self.phase}")
@@ -334,7 +334,10 @@ class _AutomaticCompactionModel:
         self.requests.append(request.model_copy(deep=True))
         if request.metadata.get("purpose") == "context_compaction":
             return ModelResponse.from_final("synthetic summary", finish_reason="stop")
-        if not request.tools:
+        if any(
+            m.role == "system" and m.content.startswith("Execution has ended.")
+            for m in request.messages
+        ):
             return ModelResponse.from_final("completed after automatic compaction")
 
         tool_results = _results(request)

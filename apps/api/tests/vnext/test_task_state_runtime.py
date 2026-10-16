@@ -150,9 +150,7 @@ def _run(
 
 def _system(request: ModelRequest) -> str:
     return next(
-        message.content
-        for message in request.messages
-        if isinstance(message, SystemMessage)
+        message.content for message in request.messages if isinstance(message, SystemMessage)
     )
 
 
@@ -232,16 +230,13 @@ def test_flow_j_checkpoint_source_error_recovers_with_available_candidate() -> N
         assert "Checkpoint candidates:" in system
         assert '"tool_call_id":"read-2025"' in system
         assert '"status":"ACTIVE_RAW"' in system
-        return _tool_response(
-            _checkpoint_call("bad-checkpoint", key="2025", source=["wrong-id"])
-        )
+        return _tool_response(_checkpoint_call("bad-checkpoint", key="2025", source=["wrong-id"]))
 
     def fourth(request: ModelRequest) -> ModelResponse:
         error = next(
             message
             for message in request.messages
-            if isinstance(message, ToolResultMessage)
-            and message.tool_call_id == "bad-checkpoint"
+            if isinstance(message, ToolResultMessage) and message.tool_call_id == "bad-checkpoint"
         )
         assert error.error is not None
         assert error.error.code == "invalid_checkpoint_source"
@@ -251,9 +246,7 @@ def test_flow_j_checkpoint_source_error_recovers_with_available_candidate() -> N
             "available_sources": ["read-2025"],
         }
         assert '"tool_call_id":"read-2025"' in _system(request)
-        return _tool_response(
-            _checkpoint_call("good-checkpoint", key="2025", source=["read-2025"])
-        )
+        return _tool_response(_checkpoint_call("good-checkpoint", key="2025", source=["read-2025"]))
 
     def fifth(request: ModelRequest) -> ModelResponse:
         system = _system(request)
@@ -265,10 +258,7 @@ def test_flow_j_checkpoint_source_error_recovers_with_available_candidate() -> N
     _run(model, coordinator, trace=trace)
 
     assert coordinator.plan_snapshot().current_key == "2026"  # type: ignore[union-attr]
-    assert all(
-        "partition_evidence_release" not in step
-        for step in trace.snapshot()["steps"]
-    )
+    assert all("partition_evidence_release" not in step for step in trace.snapshot()["steps"])
 
 
 def test_flow_c_same_key_replaced_and_new_key_is_latest_context() -> None:
@@ -446,10 +436,7 @@ def test_flow_f_plan_serially_checkpoints_each_result_unit() -> None:
     assert snapshot["steps"][1]["checkpoint_source_owners"] == [
         {"tool_call_id": "read-2025", "tool_name": "artifact.read", "task_key": "2025"}
     ]
-    assert all(
-        "partition_evidence_release" not in step
-        for step in snapshot["steps"]
-    )
+    assert all("partition_evidence_release" not in step for step in snapshot["steps"])
     assert snapshot["steps"][2]["source_owners_after_checkpoint"] == {
         "checkpoint_key": "2025",
         "source_owners": [],
@@ -512,9 +499,7 @@ def test_flow_i_future_partition_leases_survive_earlier_checkpoint() -> None:
         )
 
     def third(_: ModelRequest) -> ModelResponse:
-        return _tool_response(
-            _checkpoint_call("checkpoint-a", key="2025", source=["read-a"])
-        )
+        return _tool_response(_checkpoint_call("checkpoint-a", key="2025", source=["read-a"]))
 
     def fourth(request: ModelRequest) -> ModelResponse:
         system = _system(request)
@@ -527,9 +512,7 @@ def test_flow_i_future_partition_leases_survive_earlier_checkpoint() -> None:
             and message.content["value"] == [{"fact": "A"}]  # type: ignore[index]
             for message in request.messages
         )
-        return _tool_response(
-            _checkpoint_call("checkpoint-b", key="2026", source=["read-b"])
-        )
+        return _tool_response(_checkpoint_call("checkpoint-b", key="2026", source=["read-b"]))
 
     model = ScriptedTranscriptModelClient(
         [
@@ -558,9 +541,7 @@ def test_flow_h_invalid_plan_source_does_not_advance_or_claim_raw() -> None:
 
     def third(_: ModelRequest) -> ModelResponse:
         return _tool_response(
-            _checkpoint_call(
-                "bad-checkpoint", key="2025", source=["missing"], value={"year": 2025}
-            )
+            _checkpoint_call("bad-checkpoint", key="2025", source=["missing"], value={"year": 2025})
         )
 
     def fourth(request: ModelRequest) -> ModelResponse:
@@ -668,9 +649,7 @@ def test_runtime_checkpoints_eight_small_inline_match_records_without_artifacts(
         return _SyntheticMatchesOutput(matches=matches)
 
     registry = ToolRegistry(
-        result_processor=ArtifactBackedToolResultProcessor(
-            ToolResponseExternalizer(artifact_store)
-        )
+        result_processor=ArtifactBackedToolResultProcessor(ToolResponseExternalizer(artifact_store))
     )
     registry.register(
         ToolDefinition(
@@ -790,9 +769,7 @@ def test_runtime_checkpoints_eight_small_inline_match_records_without_artifacts(
         transcript_rewriter=ArtifactObservationTranscriptRewriter(),
         task_state_coordinator=coordinator,
     )
-    final = asyncio.run(
-        runtime.run([UserMessage(content="Compare the two synthetic editions.")])
-    )
+    final = asyncio.run(runtime.run([UserMessage(content="Compare the two synthetic editions.")]))
 
     assert calls == ["2025", "2026"]
     assert artifact_store._documents == {}
@@ -852,9 +829,7 @@ def _real_artifact_registry(
         )
 
     registry = ToolRegistry(
-        result_processor=ArtifactBackedToolResultProcessor(
-            ToolResponseExternalizer(artifact_store)
-        )
+        result_processor=ArtifactBackedToolResultProcessor(ToolResponseExternalizer(artifact_store))
     )
     registry.register(
         ToolDefinition(
@@ -945,9 +920,7 @@ def test_real_artifact_reads_after_task_completion_keep_owner_and_runtime_recove
             "read-a-unconsumed",
             "read-b-pending",
         }
-        return _tool_response(
-            _checkpoint_call("checkpoint-a", key="A", source=["read-a-consumed"])
-        )
+        return _tool_response(_checkpoint_call("checkpoint-a", key="A", source=["read-a-consumed"]))
 
     def fifth(request: ModelRequest) -> ModelResponse:
         system = _system(request)
@@ -1039,9 +1012,7 @@ def test_real_artifact_reads_after_task_completion_keep_owner_and_runtime_recove
             "invalid_sources": ["read-a-consumed"],
             "available_sources": ["read-b-pending", "read-b-second"],
         }
-        return _tool_response(
-            _checkpoint_call("checkpoint-b", key="B", source=["read-b-pending"])
-        )
+        return _tool_response(_checkpoint_call("checkpoint-b", key="B", source=["read-b-pending"]))
 
     def ninth(request: ModelRequest) -> ModelResponse:
         assert coordinator.plan_snapshot().current_key is None  # type: ignore[union-attr]
@@ -1108,10 +1079,11 @@ def test_real_artifact_remains_readable_after_compaction_removes_old_observation
                 message=FinalMessage(content="An earlier observation can be reread."),
                 finish_reason="stop",
             )
-        if not request.tools:
-            return ModelResponse(
-                message=FinalMessage(content="The artifact remained readable.")
-            )
+        if any(
+            isinstance(m, SystemMessage) and m.content.startswith("Execution has ended.")
+            for m in request.messages
+        ):
+            return ModelResponse(message=FinalMessage(content="The artifact remained readable."))
         if request.step == 1:
             return _tool_response(_two_task_plan_call())
         if request.step == 2:
@@ -1238,9 +1210,7 @@ def test_externalized_preview_is_not_checkpointable_but_artifact_read_is() -> No
         )
 
     registry = ToolRegistry(
-        result_processor=ArtifactBackedToolResultProcessor(
-            ToolResponseExternalizer(artifact_store)
-        )
+        result_processor=ArtifactBackedToolResultProcessor(ToolResponseExternalizer(artifact_store))
     )
     registry.register(
         ToolDefinition(
@@ -1277,8 +1247,7 @@ def test_externalized_preview_is_not_checkpointable_but_artifact_read_is() -> No
         preview = next(
             message
             for message in request.messages
-            if isinstance(message, ToolResultMessage)
-            and message.tool_call_id == "oversized-lookup"
+            if isinstance(message, ToolResultMessage) and message.tool_call_id == "oversized-lookup"
         )
         assert preview.content["externalized"] is True  # type: ignore[index]
         assert '"tool_call_id":"oversized-lookup"' not in _system(request)
@@ -1298,17 +1267,14 @@ def test_externalized_preview_is_not_checkpointable_but_artifact_read_is() -> No
     def fourth(request: ModelRequest) -> ModelResponse:
         assert '"tool_call_id":"read-2025"' in _system(request)
         assert '"source_kind":"artifact_read"' in _system(request)
-        return _tool_response(
-            _checkpoint_call("checkpoint-2025", key="2025", source=["read-2025"])
-        )
+        return _tool_response(_checkpoint_call("checkpoint-2025", key="2025", source=["read-2025"]))
 
     def fifth(request: ModelRequest) -> ModelResponse:
         assert "CURRENT: 2026" in _system(request)
         preview = next(
             message
             for message in request.messages
-            if isinstance(message, ToolResultMessage)
-            and message.tool_call_id == "oversized-lookup"
+            if isinstance(message, ToolResultMessage) and message.tool_call_id == "oversized-lookup"
         )
         return _tool_response(
             ToolCall(
@@ -1325,9 +1291,7 @@ def test_externalized_preview_is_not_checkpointable_but_artifact_read_is() -> No
 
     def sixth(request: ModelRequest) -> ModelResponse:
         assert '"tool_call_id":"read-2026"' in _system(request)
-        return _tool_response(
-            _checkpoint_call("checkpoint-2026", key="2026", source=["read-2026"])
-        )
+        return _tool_response(_checkpoint_call("checkpoint-2026", key="2026", source=["read-2026"]))
 
     def seventh(request: ModelRequest) -> ModelResponse:
         assert coordinator.plan_snapshot().current_key is None  # type: ignore[union-attr]
@@ -1335,9 +1299,7 @@ def test_externalized_preview_is_not_checkpointable_but_artifact_read_is() -> No
         assert '"2026":{"fact":"A"}' in _system(request)
         return ModelResponse(message=FinalMessage(content="Finished synthetic reads."))
 
-    model = ScriptedTranscriptModelClient(
-        [first, second, third, fourth, fifth, sixth, seventh]
-    )
+    model = ScriptedTranscriptModelClient([first, second, third, fourth, fifth, sixth, seventh])
     runtime = AgentRuntime(
         model,
         registry,

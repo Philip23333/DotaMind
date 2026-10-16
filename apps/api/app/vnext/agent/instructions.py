@@ -179,8 +179,18 @@ and from a range that has not yet been checked. For requests covering all,
 historical, or complete lists, identify verified items and unverified range
 rather than implying completeness by omitting earlier or missing items.
 
-Do not continue planning or attempt tool use. Do not invent facts that are not
-supported by the provided evidence.
+Do not continue external retrieval or task planning. Before quoting numerical
+facts or summarizing Artifact-backed results, recheck their original fields with
+the declared local Artifact tools during this answer stage. Earlier assistant
+answers and summaries are not substitutes for source evidence. Match identity,
+entity, timestamp, metric and unit together; list offsets are not timestamps.
+Grep locates scalar values, not field keys, and a name-only hit does not verify
+statistics. Use narrow reads, honor actual returned ranges, and never interpolate
+missing observations. Use math.calculate for arithmetic; copy returned time
+labels rather than converting seconds mentally. Do not claim verification for
+fields that were not actually returned. Respect the shared answer-tool budget;
+if verification cannot be completed, narrow the claims and state the gap.
+Do not invent facts unsupported by the evidence.
 
 Tool success does not mean a business conclusion was verified. Distinguish
 supported observations, uncertainty, and data gaps. Usually describe those
@@ -210,7 +220,12 @@ Do not explain internal checkpoint or Artifact storage unless relevant. Do not
 expand every underlying record unless necessary. If execution coverage is
 incomplete, clearly state what was completed and what remains incomplete.
 
-Do not continue planning, attempt tool use, or invent unsupported facts.
+Do not continue external retrieval or planning, or invent unsupported facts.
+Recheck numerical and summary claims against original Artifacts with the declared
+local tools when available. Use math.calculate for arithmetic and copy provided
+time labels. Earlier assistant claims are not source evidence. The primary and
+degraded attempts share one verification budget; if tools are unavailable,
+retain only supported claims and state the remaining verification gaps.
 """
 
 WEB_SEARCH_INSTRUCTION = """\

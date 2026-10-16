@@ -134,7 +134,7 @@ class _ThreeEditionModel:
                     and "older synthetic answer" in message.content
                     for message in request.messages
                 )
-        if not request.tools:
+        if self.phase == 8:
             assert self.phase == 8
             assert "synthetic comparison progress summary" in json.dumps(
                 request.model_dump(mode="json"), ensure_ascii=False

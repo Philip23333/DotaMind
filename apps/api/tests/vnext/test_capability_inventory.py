@@ -38,8 +38,8 @@ from tests.vnext.fakes import ScriptedModelClient, ScriptedTranscriptModelClient
 
 INVENTORY_HEADER = "Enabled tools for this run:\n"
 STAGE_BOUNDARY = (
-    "During the answer stage, tool calls are disabled because execution\n"
-    "has ended; this does not mean these capabilities are absent from the product."
+    "Stage instructions and current tool declarations define permissions;\n"
+    "answer-stage verification cannot fetch new external data."
 )
 
 
@@ -143,7 +143,11 @@ def test_composition_uses_one_registry_for_schemas_and_shared_inventory(
     assert [tool.name for tool in execution.tools] == names
     for request in model.requests:
         _assert_inventory(request, names)
-    assert answer.tools == []
+    assert {tool.name for tool in answer.tools} == {
+        "artifact.read",
+        "artifact.grep",
+        "math.calculate",
+    }
     assert AGENT_INSTRUCTION not in _system_text(answer)
     assert messages == before
 
@@ -222,7 +226,11 @@ def test_old_refusals_do_not_hide_guide_schema_or_answer_evidence(
         return ModelResponse.from_final("execution evidence ready")
 
     def answer(request: ModelRequest) -> ModelResponse:
-        assert request.tools == []
+        assert {tool.name for tool in request.tools} == {
+            "artifact.read",
+            "artifact.grep",
+            "math.calculate",
+        }
         _assert_inventory(request, [tool.name for tool in runtime.tools.list()])
         assert all(message in request.messages for message in before)
         evidence = "\n".join(message.model_dump_json() for message in request.messages)
@@ -308,7 +316,11 @@ def test_answer_overflow_retry_and_degraded_answer_keep_inventory_once(
     for request in (execution, primary, retry, degraded):
         _assert_inventory(request, names)
     for request in (primary, retry, degraded):
-        assert request.tools == []
+        assert {tool.name for tool in request.tools} == {
+            "artifact.read",
+            "artifact.grep",
+            "math.calculate",
+        }
         assert AGENT_INSTRUCTION not in _system_text(request)
     assert ANSWER_INSTRUCTION in _system_text(primary)
     assert ANSWER_INSTRUCTION in _system_text(retry)

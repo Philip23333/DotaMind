@@ -24,6 +24,7 @@ from app.vnext.agent.answer_stage import (
     build_failure_answer,
     resolve_answer,
 )
+from app.vnext.agent.answer_tools import AnswerToolSession
 from app.vnext.agent.compaction_budget import (
     assess_compaction_request_capacity,
     resolve_compaction_output_tokens,
@@ -767,9 +768,7 @@ class AgentRuntime:
                             )
                         consecutive_generation_rejections += 1
                         next_action: Literal["correct", "finalize"] = (
-                            "correct"
-                            if consecutive_generation_rejections <= 2
-                            else "finalize"
+                            "correct" if consecutive_generation_rejections <= 2 else "finalize"
                         )
                         if trace_collector is not None:
                             trace_collector.generation_recovery(
@@ -962,6 +961,7 @@ class AgentRuntime:
                 return
 
             answer_context_builder = AnswerContextBuilder()
+            verification = AnswerToolSession(self.tools)
             answer_deadline = _Deadline(self.limits.answer_timeout_seconds)
             primary_started = monotonic()
             primary_attempt_id = next_answer_attempt_id()
@@ -994,10 +994,9 @@ class AgentRuntime:
                     context=primary_context,
                     step=answer_step,
                     deadline=answer_deadline,
+                    verification=verification,
                 )
-                answer_request, answer_output_budget = self._apply_output_budget(
-                    answer_request
-                )
+                answer_request, answer_output_budget = self._apply_output_budget(answer_request)
                 if auto_compaction_enabled:
                     primary_capacity = assess_request_capacity(
                         answer_request,
@@ -1058,6 +1057,7 @@ class AgentRuntime:
                                 context=primary_context,
                                 step=answer_step,
                                 deadline=answer_deadline,
+                                verification=verification,
                             )
                             answer_request, answer_output_budget = self._apply_output_budget(
                                 answer_request
@@ -1099,14 +1099,14 @@ class AgentRuntime:
                         ModelRequested(
                             step=answer_step,
                             message_count=len(answer_request.messages),
-                            tool_count=0,
+                            tool_count=len(answer_request.tools),
                         ),
                         sink,
                     )
                     try:
                         invocation_result: _ModelInvocationResult | None = None
                         async with aclosing(
-                            self._stream_model_invocation(
+                            self._stream_answer_invocation(
                                 answer_request,
                                 purpose="primary_answer",
                                 token=token,
@@ -1116,10 +1116,17 @@ class AgentRuntime:
                                 publish_text=True,
                                 answer_attempt_id=primary_attempt_id,
                                 output_budget=answer_output_budget,
+                                verification=verification,
+                                request_messages=request_messages,
+                                execution_history=execution_history,
+                                request_id=request_id,
+                                next_attempt_id=next_answer_attempt_id,
                             )
                         ) as invocation_stream:
                             async for invocation_item in invocation_stream:
-                                if isinstance(invocation_item, TextDelta):
+                                if isinstance(invocation_item, AnswerAttemptStarted):
+                                    primary_attempt_id = invocation_item.attempt_id
+                                if isinstance(invocation_item, AgentEvent):
                                     yield await self._publish(invocation_item, sink)
                                 elif invocation_result is not None:
                                     raise ModelProtocolError(
@@ -1128,9 +1135,7 @@ class AgentRuntime:
                                 else:
                                     invocation_result = invocation_item
                         if invocation_result is None:
-                            raise ModelProtocolError(
-                                "model invocation ended without a result"
-                            )
+                            raise ModelProtocolError("model invocation ended without a result")
                         response = invocation_result.response
                         duration = invocation_result.duration_seconds
                     except AgentCancelledError:
@@ -1298,6 +1303,7 @@ class AgentRuntime:
                             context=primary_context,
                             step=answer_step,
                             deadline=answer_deadline,
+                            verification=verification,
                         )
                         answer_request, answer_output_budget = self._apply_output_budget(
                             answer_request
@@ -1471,6 +1477,7 @@ class AgentRuntime:
                     context=degraded_context,
                     step=degraded_step,
                     deadline=answer_deadline,
+                    verification=verification,
                 )
                 degraded_request, degraded_output_budget = self._apply_output_budget(
                     degraded_request
@@ -1515,7 +1522,7 @@ class AgentRuntime:
                         ModelRequested(
                             step=degraded_step,
                             message_count=len(degraded_request.messages),
-                            tool_count=0,
+                            tool_count=len(degraded_request.tools),
                         ),
                         sink,
                     )
@@ -1524,7 +1531,7 @@ class AgentRuntime:
                         raise degraded_precheck_error
                     degraded_invocation_result: _ModelInvocationResult | None = None
                     async with aclosing(
-                        self._stream_model_invocation(
+                        self._stream_answer_invocation(
                             degraded_request,
                             purpose="degraded_answer",
                             token=token,
@@ -1534,10 +1541,17 @@ class AgentRuntime:
                             publish_text=True,
                             answer_attempt_id=degraded_attempt_id,
                             output_budget=degraded_output_budget,
+                            verification=verification,
+                            request_messages=request_messages,
+                            execution_history=execution_history,
+                            request_id=request_id,
+                            next_attempt_id=next_answer_attempt_id,
                         )
                     ) as invocation_stream:
                         async for invocation_item in invocation_stream:
-                            if isinstance(invocation_item, TextDelta):
+                            if isinstance(invocation_item, AnswerAttemptStarted):
+                                degraded_attempt_id = invocation_item.attempt_id
+                            if isinstance(invocation_item, AgentEvent):
                                 yield await self._publish(invocation_item, sink)
                             elif degraded_invocation_result is not None:
                                 raise ModelProtocolError(
@@ -1784,18 +1798,19 @@ class AgentRuntime:
         context: Any,
         step: int,
         deadline: _Deadline,
+        verification: AnswerToolSession | None = None,
     ) -> ModelRequest:
         """Build an answer request with a fresh, ephemeral stage snapshot."""
 
         runtime_context = RuntimeContext.from_state(
             current_step=step,
-            tools_available=False,
+            tools_available=bool(verification and verification.schemas()),
             time_pressure=classify_time_pressure(
                 remaining_seconds=deadline.remaining(),
                 budget_seconds=self.limits.answer_timeout_seconds,
             ),
         )
-        return _build_answer_request(
+        request = _build_answer_request(
             instruction=instruction,
             runtime_prompt=render_runtime_prompt(runtime_context, stage="answer"),
             shared_instruction=self.shared_instruction,
@@ -1804,6 +1819,164 @@ class AgentRuntime:
             step=step,
             max_output_tokens=None,
         )
+        if verification is not None and verification.enabled:
+            request = request.model_copy(
+                update={
+                    "tools": verification.schemas(),
+                    "messages": [
+                        *request.messages[:-1],
+                        SystemMessage(content=verification.prompt()),
+                        request.messages[-1],
+                    ],
+                }
+            )
+        return request
+
+    async def _stream_answer_invocation(
+        self,
+        request: ModelRequest,
+        *,
+        purpose: Literal["primary_answer", "degraded_answer"],
+        token: CancellationToken,
+        deadline: _Deadline,
+        step: int,
+        trace_collector: AgentTraceCollector | None,
+        publish_text: bool,
+        answer_attempt_id: str,
+        output_budget: OutputBudget | None,
+        verification: AnswerToolSession,
+        request_messages: list[Message],
+        execution_history: Any | None,
+        request_id: Any | None,
+        next_attempt_id: Callable[[], str],
+    ) -> AsyncIterator[AgentEvent | _ModelInvocationResult]:
+        """Local verification loop with provisional-text replacement and live answers."""
+
+        while True:
+            self._check_controls(token, deadline)
+            capacity = assess_request_capacity(request, self.limits, output_budget=output_budget)
+            if capacity is not None and capacity.pressure.value == "critical":
+                raise ContextCapacityExceeded("answer verification exceeds context budget")
+            invocation: _ModelInvocationResult | None = None
+            async with aclosing(
+                self._stream_model_invocation(
+                    request,
+                    purpose=purpose,
+                    token=token,
+                    deadline=deadline,
+                    step=step,
+                    trace_collector=trace_collector,
+                    publish_text=publish_text,
+                    answer_attempt_id=answer_attempt_id,
+                    output_budget=output_budget,
+                )
+            ) as stream:
+                async for item in stream:
+                    if isinstance(item, TextDelta):
+                        yield item
+                    else:
+                        invocation = item
+            if invocation is None:
+                raise ModelProtocolError("answer invocation ended without a result")
+            message = invocation.response.message
+            if isinstance(message, FinalMessage):
+                yield invocation
+                return
+            if trace_collector is not None:
+                trace_collector.model_response(
+                    step, invocation.response, invocation.duration_seconds
+                )
+            yield ModelResponded(
+                step=step, has_tool_calls=True, duration=invocation.duration_seconds
+            )
+            calls = message.tool_calls
+            if (
+                not request.tools
+                or not calls
+                or len(calls) > verification.max_calls - verification.calls
+            ):
+                raise ModelProtocolError(
+                    "answer verification call budget or tool protocol exceeded"
+                )
+            request_messages.append(message)
+            if execution_history is not None and request_id is not None:
+                execution_history.record(request_id, message, kind="assistant_tool_call")
+            # Existing attempt replacement removes provisional tool commentary
+            # while the following final answer can still stream immediately.
+            answer_attempt_id = next_attempt_id()
+            yield AnswerAttemptStarted(
+                step=step,
+                attempt_id=answer_attempt_id,
+                answer_kind="primary" if purpose == "primary_answer" else "degraded",
+            )
+            results: list[ToolResultMessage] = []
+            for call in calls:
+                self._check_controls(token, deadline)
+                yield ToolStarted(step=step, tool_call_id=call.id, tool_name=call.name)
+                started = monotonic()
+                result = await self._await_controlled(
+                    verification.execute(call, timeout=self._tool_timeout(call, deadline)),
+                    token,
+                    deadline,
+                )
+                duration = max(0.0, monotonic() - started)
+                results.append(result)
+                request_messages.append(result)
+                if execution_history is not None and request_id is not None:
+                    execution_history.record(request_id, result, kind="tool_result")
+                    execution_history.remember_artifact_locators(call, result)
+                if trace_collector is not None:
+                    trace_collector.tool_result(step, result, duration, call=call)
+                if result.status == "ok":
+                    yield ToolCompleted(
+                        step=step, tool_call_id=call.id, tool_name=call.name, duration=duration
+                    )
+                else:
+                    yield ToolFailed(
+                        step=step,
+                        tool_call_id=call.id,
+                        tool_name=call.name,
+                        duration=duration,
+                        error_code=result.error.code,
+                        error_message=result.error.message,
+                    )
+            if execution_history is not None:
+                _history_set_effective(
+                    execution_history,
+                    _persistent_history_messages(request_messages, self.system_instruction),
+                )
+            runtime_context = RuntimeContext.from_state(
+                current_step=step,
+                tools_available=bool(verification.schemas()),
+                time_pressure=classify_time_pressure(
+                    remaining_seconds=deadline.remaining(),
+                    budget_seconds=self.limits.answer_timeout_seconds,
+                ),
+            )
+            messages = [
+                SystemMessage(content=render_runtime_prompt(runtime_context, stage="answer"))
+                if isinstance(m, SystemMessage) and m.content.startswith("Runtime state:\n")
+                else m
+                for m in request.messages
+                if not (isinstance(m, SystemMessage) and verification.is_prompt(m.content))
+            ]
+            request = request.model_copy(
+                update={
+                    "messages": [
+                        *messages,
+                        message,
+                        *results,
+                        SystemMessage(content=verification.prompt()),
+                    ],
+                    "tools": verification.schemas(),
+                }
+            )
+            request, output_budget = self._apply_output_budget(request)
+            if trace_collector is not None:
+                trace_collector.model_request(request, output_budget=output_budget)
+            yield ModelRequested(
+                step=step, message_count=len(request.messages), tool_count=len(request.tools)
+            )
 
     def _build_execution_request(
         self,
@@ -2138,9 +2311,7 @@ class AgentRuntime:
         ) as invocation_stream:
             async for invocation_item in invocation_stream:
                 if isinstance(invocation_item, TextDelta):
-                    raise ModelProtocolError(
-                        "non-answer model invocation produced a text event"
-                    )
+                    raise ModelProtocolError("non-answer model invocation produced a text event")
                 if invocation_result is not None:
                     raise ModelProtocolError("model invocation emitted more than one result")
                 invocation_result = invocation_item

@@ -12,9 +12,13 @@ from pydantic import (
     StrictFloat,
     StrictInt,
     StrictStr,
+    ValidationInfo,
+    field_validator,
     model_serializer,
     model_validator,
 )
+
+from app.vnext.domain.common.time_format import format_game_time
 
 Number = StrictInt | StrictFloat
 Scalar = StrictStr | Number | StrictBool | None
@@ -23,6 +27,23 @@ Side = Literal["radiant", "dire"]
 
 class _Data(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, allow_inf_nan=False)
+
+
+def _checked_time_label(seconds: Number | None, label: str | None) -> str | None:
+    expected = format_game_time(seconds)
+    if label is not None and label != expected:
+        raise ValueError("Time label must match its seconds field")
+    return expected
+
+
+class _TimedData(_Data):
+    time_seconds: Number | None = None
+    time_label: StrictStr | None = Field(default=None, validate_default=True)
+
+    @field_validator("time_label")
+    @classmethod
+    def derive_time_label(cls, label: str | None, info: ValidationInfo) -> str | None:
+        return _checked_time_label(info.data.get("time_seconds"), label)
 
 
 class EntityData(_Data):
@@ -87,11 +108,17 @@ class ScoreData(_Data):
 class MatchData(_Data):
     match_date: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
     duration_seconds: StrictInt | None = None
+    duration_label: StrictStr | None = Field(default=None, validate_default=True)
     game_winner: Side | None = None
     score: ScoreData
     teams: TeamsData
     # The competition field list has not been approved; no League body is copied.
     competition: None = None
+
+    @field_validator("duration_label")
+    @classmethod
+    def derive_duration_label(cls, label: str | None, info: ValidationInfo) -> str | None:
+        return _checked_time_label(info.data.get("duration_seconds"), label)
 
 
 class DraftAction(_Data):
@@ -127,7 +154,7 @@ class FinalStats(_Data):
     hero_healing: Number | None = None
 
 
-class MinuteData(_Data):
+class MinuteData(_TimedData):
     time_seconds: StrictInt
     net_worth: Number | None = None
     earned_gold: Number | None = None
@@ -146,8 +173,22 @@ class PlayerData(_Data):
 
 class EconomyData(_Data):
     time_seconds: list[StrictInt] | None = None
+    time_labels: list[StrictStr] | None = Field(default=None, validate_default=True)
     radiant_gold_adv: list[Number | None] | None = None
     radiant_xp_adv: list[Number | None] | None = None
+
+    @field_validator("time_labels")
+    @classmethod
+    def derive_time_labels(
+        cls,
+        labels: list[str] | None,
+        info: ValidationInfo,
+    ) -> list[str] | None:
+        axis = info.data.get("time_seconds")
+        expected = None if axis is None else [format_game_time(t) for t in axis]
+        if labels is not None and labels != expected:
+            raise ValueError("Time labels must match the seconds axis")
+        return expected
 
 
 class FinalLoadout(_Data):
@@ -160,14 +201,12 @@ class FinalLoadout(_Data):
     moonshard: Number | None = None
 
 
-class PurchaseEvent(_Data):
-    time_seconds: Number | None = None
+class PurchaseEvent(_TimedData):
     item: EntityData | None = None
     charges: Number | None = None
 
 
-class NeutralItemEvent(_Data):
-    time_seconds: Number | None = None
+class NeutralItemEvent(_TimedData):
     item: EntityData | None = None
     enhancement: EntityData | None = None
 
@@ -185,11 +224,27 @@ class BuildsData(_Data):
 
 
 class UnitData(_Data):
-    kind: Literal[
-        "hero", "lane_creep", "siege_creep", "neutral_creep", "tower", "barracks",
-        "ancient", "building", "fountain", "courier", "ward", "roshan", "tormentor",
-        "summoned_unit", "spell_unit", "roshans_banner",
-    ] | None = None
+    kind: (
+        Literal[
+            "hero",
+            "lane_creep",
+            "siege_creep",
+            "neutral_creep",
+            "tower",
+            "barracks",
+            "ancient",
+            "building",
+            "fountain",
+            "courier",
+            "ward",
+            "roshan",
+            "tormentor",
+            "summoned_unit",
+            "spell_unit",
+            "roshans_banner",
+        ]
+        | None
+    ) = None
     name_zh: StrictStr | None = None
     name_en: StrictStr | None = None
     hero_id: StrictInt | None = None
@@ -206,27 +261,37 @@ class UnitData(_Data):
         return self
 
 
-class HeroDeath(_Data):
-    time_seconds: Number | None = None
+class HeroDeath(_TimedData):
     victim_player_slot: StrictInt | None = None
     killer_player_slot: StrictInt | None = None
     killer_unit: UnitData | None = None
     gold_lost: Number | None = None
     gold_fed: Number | None = None
     time_dead_seconds: Number | None = None
+    time_dead_label: StrictStr | None = Field(default=None, validate_default=True)
+
+    @field_validator("time_dead_label")
+    @classmethod
+    def derive_time_dead_label(cls, label: str | None, info: ValidationInfo) -> str | None:
+        return _checked_time_label(info.data.get("time_dead_seconds"), label)
 
 
-class BuybackEvent(_Data):
-    time_seconds: Number | None = None
+class BuybackEvent(_TimedData):
     player_slot: StrictInt | None = None
 
 
-class ObjectiveEvent(_Data):
-    time_seconds: Number | None = None
-    type: Literal[
-        "building_destruction", "roshan_kill", "aegis_pickup", "first_blood",
-        "courier_death", "tormentor_kill",
-    ] | None = None
+class ObjectiveEvent(_TimedData):
+    type: (
+        Literal[
+            "building_destruction",
+            "roshan_kill",
+            "aegis_pickup",
+            "first_blood",
+            "courier_death",
+            "tormentor_kill",
+        ]
+        | None
+    ) = None
     target_unit: UnitData | None = None
     actor_unit: UnitData | None = None
     player_slot: StrictInt | None = None
@@ -235,7 +300,13 @@ class ObjectiveEvent(_Data):
 
 class FirstBloodData(_Data):
     reported_time_seconds: Number | None = None
+    reported_time_label: StrictStr | None = Field(default=None, validate_default=True)
     objective_events: list[ObjectiveEvent] | None = None
+
+    @field_validator("reported_time_label")
+    @classmethod
+    def derive_reported_time_label(cls, label: str | None, info: ValidationInfo) -> str | None:
+        return _checked_time_label(info.data.get("reported_time_seconds"), label)
 
 
 class EventsData(_Data):

@@ -112,6 +112,7 @@ from app.vnext.providers.tavily.web_search import (
 from app.vnext.providers.valve.catalog_lookup import ValveCatalogLookupAdapter
 from app.vnext.session_limits import SessionContextLimits
 from app.vnext.tools.artifacts import register_artifact_tools
+from app.vnext.tools.calculate import register_calculate_tool
 from app.vnext.tools.catalog import register_catalog_lookup_tool
 from app.vnext.tools.esports import (
     register_league_tool,
@@ -203,9 +204,7 @@ class VNextSettings:
     agent_limits: AgentLimits = field(default_factory=AgentLimits)
     artifact_limits: ArtifactLimits = field(default_factory=ArtifactLimits)
     session_context_limits: SessionContextLimits = field(default_factory=SessionContextLimits)
-    model_diagnostic_limits: ModelDiagnosticLimits = field(
-        default_factory=ModelDiagnosticLimits
-    )
+    model_diagnostic_limits: ModelDiagnosticLimits = field(default_factory=ModelDiagnosticLimits)
 
     def __post_init__(self) -> None:
         if type(self.game_resolution_enabled) is not bool:
@@ -314,9 +313,7 @@ class VNextSettings:
                 False,
                 file_values,
             ),
-            data_dir=_parse_data_dir(
-                _env_value("DOTAMIND_DATA_DIR", None, file_values)
-            ),
+            data_dir=_parse_data_dir(_env_value("DOTAMIND_DATA_DIR", None, file_values)),
             agent_limits=_agent_limits_from_env(file_values),
             artifact_limits=_artifact_limits_from_env(file_values),
             session_context_limits=_session_context_limits_from_env(file_values),
@@ -327,13 +324,11 @@ class VNextSettings:
 def _validate_game_resolution_settings(settings: VNextSettings) -> None:
     if not settings.pandascore_token.strip():
         raise ValueError(
-            "DOTAMIND_PANDASCORE_TOKEN is required when "
-            "DOTAMIND_GAME_RESOLUTION_ENABLED=true"
+            "DOTAMIND_PANDASCORE_TOKEN is required when DOTAMIND_GAME_RESOLUTION_ENABLED=true"
         )
     if not settings.opendota_enabled:
         raise ValueError(
-            "DOTAMIND_OPENDOTA_ENABLED=true is required when "
-            "DOTAMIND_GAME_RESOLUTION_ENABLED=true"
+            "DOTAMIND_OPENDOTA_ENABLED=true is required when DOTAMIND_GAME_RESOLUTION_ENABLED=true"
         )
 
 
@@ -671,14 +666,14 @@ def build_vnext_services(
         )
         game_detail_adapter = OpenDotaGameDetailAdapter(opendota_client)
         game_detail = GameDetailService(
-            game_detail_adapter, repository_provider, UnitCatalog.load_default(),
+            game_detail_adapter,
+            repository_provider,
+            UnitCatalog.load_default(),
         ).get_game_detail
     game_resolution: GameResolutionService | None = None
     if config.game_resolution_enabled:
         if opendota_client is None or game_detail_adapter is None:
-            raise ValueError(
-                "DOTAMIND_OPENDOTA_ENABLED=true is required for game resolution"
-            )
+            raise ValueError("DOTAMIND_OPENDOTA_ENABLED=true is required for game resolution")
         provider = PandaScoreOpenDotaGameResolutionProvider(
             PandaScoreMatchContextAdapter(client),
             OpenDotaDiscoveryAdapter(opendota_client),
@@ -815,6 +810,7 @@ def build_vnext_registry(
         ),
         ArtifactGrepper(artifact_store, manuals),
     )
+    register_calculate_tool(registry)
     if resolved_services.league_search is not None:
         register_league_tool(registry, resolved_services.league_search)
     if resolved_services.series_search is not None:
@@ -909,8 +905,8 @@ def _format_enabled_tool_inventory(registry: ToolRegistry) -> str:
     return (
         f"Enabled tools for this run:\n{listing}\n\n"
         "This inventory describes enabled capabilities, not permission to call tools in\n"
-        "every stage. During the answer stage, tool calls are disabled because execution\n"
-        "has ended; this does not mean these capabilities are absent from the product.\n"
+        "every stage. Stage instructions and current tool declarations define permissions;\n"
+        "answer-stage verification cannot fetch new external data.\n"
         "The inventory is not evidence that any lookup succeeded."
     )
 

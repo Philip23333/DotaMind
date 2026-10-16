@@ -7,6 +7,13 @@ from typing import Any
 from app.vnext.llm.protocol import ModelRequest, ModelResponse, ModelTextDelta
 
 
+def _is_answer(request: ModelRequest) -> bool:
+    return any(
+        message.role == "system" and "Execution has ended." in message.content
+        for message in request.messages
+    )
+
+
 class ScriptedModelClient:
     """A deterministic model fake that records every complete request."""
 
@@ -18,7 +25,7 @@ class ScriptedModelClient:
     async def complete(self, request: ModelRequest) -> ModelResponse:
         self.requests.append(request)
         if not self.responses:
-            if not request.tools:
+            if _is_answer(request):
                 return ModelResponse.from_final(self._last_final_content or "answer")
             raise AssertionError("scripted model ran out of responses")
         response = self.responses.pop(0)
@@ -48,7 +55,7 @@ class ScriptedTranscriptModelClient:
     async def complete(self, request: ModelRequest) -> ModelResponse:
         self.requests.append(request)
         if not self.responders:
-            if not request.tools:
+            if _is_answer(request):
                 response = ModelResponse.from_final(self._last_final_content or "answer")
                 self.responses.append(response)
                 return response
@@ -67,9 +74,7 @@ class ScriptedStreamingModelClient:
 
     def __init__(
         self,
-        streams: Sequence[
-            Sequence[ModelTextDelta | ModelResponse | Exception | Awaitable[Any]]
-        ],
+        streams: Sequence[Sequence[ModelTextDelta | ModelResponse | Exception | Awaitable[Any]]],
     ) -> None:
         self.streams = [list(stream) for stream in streams]
         self.requests: list[ModelRequest] = []
@@ -81,7 +86,7 @@ class ScriptedStreamingModelClient:
     ) -> AsyncIterator[ModelTextDelta | ModelResponse]:
         self.requests.append(request)
         if not self.streams:
-            if not request.tools:
+            if _is_answer(request):
                 items = [ModelResponse.from_final(self._last_final_content or "answer")]
             else:
                 raise AssertionError("scripted streaming model ran out of streams")
