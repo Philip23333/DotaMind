@@ -626,6 +626,14 @@ the existing raw `artifact.read` checkpoint path. These checks verify Runtime
 source eligibility and lifecycle only; checkpoint success does not certify
 business facts.
 
+A deterministic five-item Runtime regression reproduces the reported failure
+shape: each result is externalized, the fourth is a successful `unresolved`
+outcome, and the fifth must still checkpoint and finish. It verifies automatic
+source collection without model-supplied call IDs, original IDs in Trace, no
+repeat Provider retrieval, and all five task states completed. This is synthetic
+control-flow acceptance, not a replay of the original Provider data or a live
+model accuracy result.
+
 ### Steam player and game-detail checks
 
 Deterministic contract tests cover strict Steam32 and Valve game-ID inputs,

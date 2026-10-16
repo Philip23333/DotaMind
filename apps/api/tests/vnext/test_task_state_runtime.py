@@ -37,6 +37,106 @@ from app.vnext.tools.task import register_task_checkpoint_tool, register_task_pl
 from tests.vnext.fakes import ScriptedTranscriptModelClient
 
 
+def test_five_task_chain_externalized_unresolved_fourth_does_not_block_fifth():
+    """Reproduce the reported control-flow shape without any Provider calls."""
+    coordinator = TaskStateCoordinator()
+    store = SessionArtifactStore()
+    registry = ToolRegistry(
+        result_processor=ArtifactBackedToolResultProcessor(ToolResponseExternalizer(store))
+    )
+    queried = []
+
+    class Input(BaseModel):
+        key: str
+
+    class Output(BaseModel):
+        resolution: str
+
+    async def resolve(args):
+        queried.append(args.key)
+        return Output(resolution="unresolved" if args.key == "m4" else "resolved")
+
+    registry.register(
+        ToolDefinition(
+            name="synthetic.resolve",
+            description="Synthetic resolution outcome",
+            input_model=Input,
+            output_model=Output,
+            handler=resolve,
+            always_artifact=True,
+        )
+    )
+    register_task_plan_tool(registry, coordinator)
+    register_task_checkpoint_tool(registry, coordinator)
+    responses = [
+        _tool_response(
+            ToolCall(
+                id="plan",
+                name="task.plan",
+                arguments={
+                    "items": [
+                        {"key": f"m{i}", "objective": f"Resolve match {i}"} for i in range(1, 6)
+                    ]
+                },
+            )
+        )
+    ]
+    source_ids = []
+    for i in range(1, 6):
+        key = f"m{i}"
+        source_id = "actual-provider-call-" + str(uuid4())
+        source_ids.append(source_id)
+        responses.extend(
+            [
+                _tool_response(
+                    ToolCall(id=source_id, name="synthetic.resolve", arguments={"key": key})
+                ),
+                _tool_response(
+                    _checkpoint_call(
+                        "save-" + key,
+                        key=key,
+                        value={"resolution": "unresolved" if i == 4 else "resolved"},
+                    )
+                ),
+            ]
+        )
+    responses.extend(
+        [
+            ModelResponse(message=FinalMessage(content="five matches processed")),
+        ]
+    )
+    model = ScriptedTranscriptModelClient(
+        [lambda _, response=response: response for response in responses]
+    )
+    trace = AgentTraceCollector()
+    final = asyncio.run(
+        AgentRuntime(
+            model,
+            registry,
+            task_state_coordinator=coordinator,
+            limits=AgentLimits(application_max_output_tokens=4096),
+        ).run([UserMessage(content="Process these five matches")], trace_collector=trace)
+    )
+    assert final.content == "five matches processed"
+    assert queried == ["m1", "m2", "m3", "m4", "m5"]
+    assert coordinator.plan.current_key is None
+    assert coordinator.store.get("m4").value == {"resolution": "unresolved"}
+    assert coordinator.store.get("m5").source_tool_call_ids == (source_ids[4],)
+    assert len(store._documents) == 5
+    saved_sources = [
+        step["source_owners_after_checkpoint"]["source_tool_call_ids"]
+        for step in trace.snapshot()["steps"]
+        if "source_owners_after_checkpoint" in step
+    ]
+    assert saved_sources == [[source_id] for source_id in source_ids]
+    for request in model.requests:
+        for message in request.messages:
+            if isinstance(message, AssistantMessage):
+                for call in message.tool_calls:
+                    if call.name == "task.checkpoint":
+                        assert set(call.arguments) == {"key", "value"}
+
+
 def _read_registry(
     coordinator: TaskStateCoordinator,
     *,

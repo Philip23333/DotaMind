@@ -247,6 +247,7 @@ def _probe_request(
         shared_instruction=shared_instruction,
     )
     request, *_ = runtime._build_execution_request(  # noqa: SLF001
+        request_time="2026-10-17T23:59:59+08:00",
         request_messages=history.effective_messages(),
         execution_history=history,
         step=1,
@@ -1111,6 +1112,11 @@ def test_continuous_watermarks_compact_again_after_new_tool_output() -> None:
     limits = _limits_with_summary_capacity(
         after_first_compaction,
         _limits_with_summary_capacity(history, limits),
+    )
+    # Keep the intended primary-answer path after the larger calendar/handoff
+    # prompts, while the two execution observations still cross the watermark.
+    limits = limits.model_copy(
+        update={"context_window_tokens": limits.context_window_tokens + 512}
     )
     model = ScriptedModelClient(
         [

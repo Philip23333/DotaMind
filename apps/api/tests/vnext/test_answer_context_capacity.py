@@ -127,6 +127,7 @@ def _answer_request(
         runtime_prompt=render_runtime_prompt(
             RuntimeContext.from_state(
                 current_step=step,
+                request_time="2026-10-17T23:59:59+08:00",
                 tools_available=False,
                 time_pressure=TimePressure.HEALTHY,
             ),
