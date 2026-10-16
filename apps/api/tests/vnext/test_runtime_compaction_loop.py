@@ -88,7 +88,7 @@ def _checkpoint_call(call_id: str, key: str, source: str) -> ToolCall:
         arguments={
             "key": key,
             "value": {"status": f"{key} complete"},
-            "source_tool_call_ids": [source],
+
         },
     )
 

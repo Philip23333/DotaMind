@@ -447,15 +447,16 @@ read/grep contract.
 
 ## Task planning and checkpoints
 
-`task.checkpoint` accepts the unchanged inputs `key`, `value`, and
-`source_tool_call_ids`. Sources may be current successful inline results from
-ordinary tools or current successful raw `artifact.read` observations. The
-checkpoint manifest identifies each source with `source_kind`; inline entries
-contain only the call ID, tool name, and execution-time task owner, while
-Artifact entries retain their locator metadata. Use IDs from the candidate list
-directly rather than repeating a query to create an Artifact.
+`task.checkpoint` accepts only `key` and `value`. Runtime automatically collects
+all eligible, unconsumed observations owned by the current task in the current
+request. Without a plan it collects unowned observations. Successful ordinary
+results, including externalized results and business outcomes such as `unresolved`,
+and successful raw `artifact.read` observations qualify. The presence of an
+Artifact reference or preview pointer does not disqualify a result. The result
+returns `checkpoint_id`, `key`, and `source_count`; actual source call IDs remain
+in internal checkpoint state and Trace, not model-authored input.
 
-Externalized previews or wrappers, `artifact.grep`, task-control results,
+`artifact.grep`, task-control results,
 errors, deferred materializations, and lifecycle receipts are not checkpoint
 sources. Sources must remain in the effective current-request history and may
 be consumed only once. Each successful source records its execution-time task
@@ -466,14 +467,23 @@ or completed. An unknown key is rejected before the reader runs. With no plan,
 the source remains unowned. Task ownership is checkpoint metadata only:
 completing an item does not block later Artifact reads or reopen the item, and
 a read never infers ownership from the Artifact reference. A checkpoint
-consumes only the source IDs it names; other observations retain their
+consumes its automatically collected source metadata; other observations retain their
 original owner and cannot drift into a later task's candidates.
 
-A checkpoint stores model-organized task state and source references. Success
+A checkpoint stores model-organized task state and observations obtained while
+processing that task, not precise citations proving each conclusion. Success
 means that state was accepted and the plan advanced; it does not verify the
 business conclusions or guarantee completeness. Checkpointing does not force
 externalization, change the configured spill threshold, or release raw results
 from conversation history.
+
+With an active plan, `key` must match its current item. Without a plan, a new
+checkpoint under the same key replaces the whole earlier value and requires new
+eligible observations. Expected key/plan conflicts return `invalid_task_state`
+with `reason`, requested/current keys and statuses. No eligible observations
+returns `invalid_checkpoint_source`. Either failure saves nothing, consumes no
+metadata, and does not advance the plan. Runtime does not rewrite the key or skip
+unfinished tasks; genuine internal exceptions remain execution failures.
 
 ## Future domain tools
 

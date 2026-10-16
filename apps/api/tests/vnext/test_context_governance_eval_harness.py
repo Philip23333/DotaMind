@@ -334,7 +334,6 @@ def test_two_questions_share_real_session_artifact_and_summary_and_reset_task_st
                         {
                             "key": "first-edition-record",
                             "value": {"verified": "SYN-01-SF1"},
-                            "source_tool_call_ids": ["read-first-record"],
                         },
                     )
                 if request.step == 5 and not self.initial_overflowed:

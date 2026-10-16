@@ -2946,10 +2946,12 @@ class AgentRuntime:
                         owners = self.task_state_coordinator.source_owners_snapshot()
                         trace_collector.checkpoint_source_owners(step, owners)
                         if item.name == "task.checkpoint":
+                            saved = self.task_state_coordinator.store.get(item.arguments.get("key"))
                             trace_collector.source_owners_after_checkpoint(
                                 step,
                                 checkpoint_key=item.arguments.get("key"),
                                 source_owners=owners,
+                                source_tool_call_ids=saved.source_tool_call_ids if saved else (),
                             )
                 results.append(result)
             index += len(group)

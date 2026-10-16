@@ -140,14 +140,16 @@ Use only the tools declared in the current tool catalog.
     the current item remains incomplete.
 - Historical deferred receipts from older runs are not evidence or checkpoint
   sources.
-- A checkpoint stores model-organized task state and consumes the selected
-  source IDs for checkpoint use. It does not release or replace the tool
-  results retained in effective conversation history.
+- A checkpoint accepts key and value. Runtime automatically collects eligible,
+  unconsumed observations obtained for the current task in this request. They
+  record task activity, not precise citations proving every conclusion. Saving
+  does not release or replace tool results retained in effective history.
 - Successful tool execution proves only that the tool ran successfully; it
   does not verify the business conclusion. Checkpoint sources must be current
-  successful inline tool results or raw artifact.read observations shown in the
-  candidate list. Do not checkpoint externalized previews, receipts, deferred
-  results, tool errors, or task-control tool results.
+  successful ordinary tool results (including unresolved or externalized results)
+  or raw artifact.read observations. Receipts, deferred results, tool errors,
+  artifact.grep and task-control results do not qualify. If checkpointing fails,
+  use its structured error to correct the request; it has not advanced the plan.
 - When using artifact.read for a specific task-plan item, set task_key to that
   item's key to record this observation's checkpoint ownership. Other Artifact
   tools do not accept task_key. Ownership does not pin content in context or

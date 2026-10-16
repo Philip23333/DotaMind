@@ -39,6 +39,15 @@ def _messages(*call_ids: str) -> list[object]:
     return messages
 
 
+def _owned_messages(coordinator):
+    messages = _messages("call-a", "call-b")
+    for index, key in [(0, "a"), (2, "b")]:
+        coordinator.record_tool_result(
+            messages[index].tool_calls[0], messages[index + 1], task_key=key
+        )
+    return messages
+
+
 def test_create_plan_initializes_first_item_and_snapshot() -> None:
     coordinator = TaskStateCoordinator()
 
@@ -107,9 +116,9 @@ def test_checkpoint_completes_current_and_advances_plan_atomically() -> None:
     coordinator.create_plan(
         [{"key": "a", "objective": "A"}, {"key": "b", "objective": "B"}]
     )
-    coordinator.refresh(_messages("call-a", "call-b"))  # type: ignore[arg-type]
+    coordinator.refresh(_owned_messages(coordinator))  # type: ignore[arg-type]
 
-    coordinator.create_checkpoint("a", {"fact": "A"}, ["call-a"])
+    coordinator.create_checkpoint("a", {"fact": "A"})
     plan = coordinator.plan_snapshot()
     assert plan is not None
     assert [(item.key, item.status.value) for item in plan.items] == [
@@ -119,7 +128,7 @@ def test_checkpoint_completes_current_and_advances_plan_atomically() -> None:
     assert plan.current_key == "b"
     assert coordinator.current_item().key == "b"  # type: ignore[union-attr]
 
-    coordinator.create_checkpoint("b", {"fact": "B"}, ["call-b"])
+    coordinator.create_checkpoint("b", {"fact": "B"})
     plan = coordinator.plan_snapshot()
     assert plan is not None
     assert plan.current_key is None
@@ -131,16 +140,16 @@ def test_checkpoint_requires_current_plan_key_and_complete_plan_rejects() -> Non
     coordinator.create_plan(
         [{"key": "a", "objective": "A"}, {"key": "b", "objective": "B"}]
     )
-    coordinator.refresh(_messages("call-a", "call-b"))  # type: ignore[arg-type]
+    coordinator.refresh(_owned_messages(coordinator))  # type: ignore[arg-type]
 
-    with pytest.raises(ValueError, match="current task plan item"):
-        coordinator.create_checkpoint("b", {"fact": "B"}, ["call-b"])
+    with pytest.raises(ValueError, match="current_task_mismatch"):
+        coordinator.create_checkpoint("b", {"fact": "B"})
 
-    coordinator.create_checkpoint("a", {"fact": "A"}, ["call-a"])
-    coordinator.create_checkpoint("b", {"fact": "B"}, ["call-b"])
+    coordinator.create_checkpoint("a", {"fact": "A"})
+    coordinator.create_checkpoint("b", {"fact": "B"})
 
-    with pytest.raises(ValueError, match="already complete"):
-        coordinator.create_checkpoint("b", {"fact": "again"}, ["call-b"])
+    with pytest.raises(ValueError, match="plan_complete"):
+        coordinator.create_checkpoint("b", {"fact": "again"})
 
 
 def test_plan_context_is_lightweight_and_deterministic() -> None:

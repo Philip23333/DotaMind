@@ -422,7 +422,9 @@ def test_partial_projection_contains_checkpointed_state_and_pending_coverage() -
         ),
     ]
     coordinator.refresh(messages)
-    coordinator.create_checkpoint("2021", {"series_count": 22}, ["read-2021"])
+    coordinator.record_tool_result(messages[0].tool_calls[0], messages[1], task_key="2021")
+    coordinator.refresh(messages)
+    coordinator.create_checkpoint("2021", {"series_count": 22})
     rewritten = [
         messages[0],
         messages[1].model_copy(

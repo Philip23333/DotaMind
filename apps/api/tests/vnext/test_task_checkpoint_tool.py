@@ -3,273 +3,167 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-from pydantic import ValidationError
 
 from app.vnext.agent.task_state import TaskStateCoordinator
-from app.vnext.artifacts.retrieval import ArtifactReadResult
 from app.vnext.llm.protocol import AssistantMessage, ToolCall, ToolResultMessage
 from app.vnext.tools.registry import ToolRegistry
 from app.vnext.tools.task import TaskCheckpointInput, register_task_checkpoint_tool
 
 
-def _active_messages(*call_ids: str) -> list[object]:
-    ids = call_ids or ("call-1",)
-    messages: list[object] = []
-    for call_id in ids:
-        messages.extend(
-            [
-                AssistantMessage(
-                    tool_calls=[
-                        ToolCall(
-                            id=call_id,
-                            name="artifact.read",
-                            arguments={
-                                "ref": "artifact:test",
-                                "mode": "read",
-                                "path": "rows",
-                            },
-                        )
-                    ]
-                ),
-                ToolResultMessage(
-                    tool_call_id=call_id,
-                    content=ArtifactReadResult(
-                        ref="artifact:test", path="rows", value=[{"fact": "A"}]
-                    ).model_dump(mode="json"),
-                ),
-            ]
-        )
-    return messages
-
-
-def _registry(coordinator: TaskStateCoordinator) -> ToolRegistry:
+def _registry(coordinator):
     registry = ToolRegistry()
     register_task_checkpoint_tool(registry, coordinator)
     return registry
 
 
-def _record_owner(
-    coordinator: TaskStateCoordinator,
-    call_id: str,
-    task_key: str,
-) -> None:
-    messages = _active_messages(call_id)
-    coordinator.record_tool_result(messages[0].tool_calls[0], messages[1], task_key=task_key)  # type: ignore[union-attr,arg-type]
+def _observe(coordinator, call_id, task_key, content=None):
+    call = ToolCall(id=call_id, name="esports.game.resolve", arguments={})
+    result = ToolResultMessage(
+        tool_call_id=call_id,
+        content=content if content is not None else {"status": "unresolved"},
+    )
+    coordinator.record_tool_result(call, result, task_key=task_key)
+    return [AssistantMessage(tool_calls=[call]), result]
 
 
-def test_checkpoint_input_schema_has_no_model_supplied_checkpoint_id() -> None:
-    schema = TaskCheckpointInput.model_json_schema()
-
-    assert set(schema["properties"]) == {"key", "value", "source_tool_call_ids"}
-    with pytest.raises(ValidationError):
-        TaskCheckpointInput.model_validate(
-            {
-                "checkpoint_id": "checkpoint:bad",
-                "key": "part",
-                "value": {"fact": "A"},
-                "source_tool_call_ids": ["call-1"],
-            }
-        )
-
-
-def test_checkpoint_tool_accepts_active_source_and_generates_id() -> None:
-    coordinator = TaskStateCoordinator()
-    coordinator.refresh(_active_messages())  # type: ignore[arg-type]
-    registry = _registry(coordinator)
-
-    result = asyncio.run(
+def _checkpoint(registry, key, **extra):
+    return asyncio.run(
         registry.execute(
             ToolCall(
-                id="checkpoint-call",
+                id="save-" + key,
                 name="task.checkpoint",
-                arguments={
-                    "key": "part",
-                    "value": {"fact": "A"},
-                    "source_tool_call_ids": ["call-1"],
-                },
+                arguments={"key": key, "value": {"result": "unresolved"}, **extra},
             )
         )
     )
 
-    assert result.status == "ok"
-    assert result.content["checkpoint_id"].startswith("checkpoint:")  # type: ignore[index]
-    assert result.content["accepted_source_tool_call_ids"] == ["call-1"]  # type: ignore[index]
-    assert coordinator.store.get("part") is not None
 
-
-def test_checkpoint_tool_accepts_a_current_successful_inline_result() -> None:
+def test_schema_has_only_key_and_value_and_rejects_old_source_input():
+    assert set(TaskCheckpointInput.model_json_schema()["properties"]) == {"key", "value"}
     coordinator = TaskStateCoordinator()
-    coordinator.create_plan(
-        [
-            {"key": "A", "objective": "collect A"},
-            {"key": "B", "objective": "collect B"},
-        ]
-    )
-    call = ToolCall(
-        id="inline-call",
-        name="esports.match.search",
-        arguments={"year": 2025},
-    )
-    result_message = ToolResultMessage(
-        tool_call_id=call.id,
-        content={"items": [{"match_id": 1}]},
-    )
-    coordinator.record_tool_result(call, result_message, task_key="A")
-    coordinator.refresh([AssistantMessage(tool_calls=[call]), result_message])
-
-    result = asyncio.run(
-        _registry(coordinator).execute(
-            ToolCall(
-                id="checkpoint-call",
-                name="task.checkpoint",
-                arguments={
-                    "key": "A",
-                    "value": {"match_count": 1},
-                    "source_tool_call_ids": ["inline-call"],
-                },
-            )
-        )
-    )
-
-    assert result.status == "ok"
-    assert result.content["accepted_source_tool_call_ids"] == ["inline-call"]  # type: ignore[index]
-    assert coordinator.plan_snapshot().current_key == "B"  # type: ignore[union-attr]
+    result = _checkpoint(_registry(coordinator), "A", source_tool_call_ids=["invented"])
+    assert result.error.code == "invalid_arguments"
 
 
-@pytest.mark.parametrize(
-    "arguments",
-    [
-        {"key": "", "value": {"fact": "A"}, "source_tool_call_ids": ["call-1"]},
-        {"key": "part", "value": {}, "source_tool_call_ids": ["call-1"]},
-        {"key": "part", "value": {"fact": "A"}, "source_tool_call_ids": []},
-    ],
-)
-def test_checkpoint_tool_rejects_invalid_arguments(arguments: dict[str, object]) -> None:
+def test_externalized_unresolved_results_are_automatically_collected():
     coordinator = TaskStateCoordinator()
-    coordinator.refresh(_active_messages())  # type: ignore[arg-type]
-
-    result = asyncio.run(
-        _registry(coordinator).execute(
-            ToolCall(id="checkpoint-call", name="task.checkpoint", arguments=arguments)
+    coordinator.create_plan([{"key": "A", "objective": "A"}, {"key": "B", "objective": "B"}])
+    messages = (
+        _observe(
+            coordinator,
+            "one",
+            "A",
+            {
+                "externalized": True,
+                "artifact_ref": "artifact:one",
+                "value": {"status": "unresolved", "details": {"_artifact_path": "details"}},
+            },
         )
+        + _observe(coordinator, "two", "A")
+        + _observe(coordinator, "future", "B")
     )
+    coordinator.refresh(messages)
+    registry = _registry(coordinator)
+    result = _checkpoint(registry, "A")
+    assert result.status == "ok"
+    assert result.content["source_count"] == 2
+    assert "accepted_source_tool_call_ids" not in result.content
+    assert coordinator.store.get("A").source_tool_call_ids == ("one", "two")
+    coordinator.refresh(messages)
+    assert _checkpoint(registry, "B").status == "ok"
+    assert coordinator.store.get("B").source_tool_call_ids == ("future",)
+    assert coordinator.plan.current_key is None
+    assert len(messages) == 6
 
-    assert result.status == "error"
-    assert result.error is not None
+
+def test_no_eligible_observations_fails_without_consuming_other_task():
+    coordinator = TaskStateCoordinator()
+    coordinator.create_plan([{"key": "A", "objective": "A"}, {"key": "B", "objective": "B"}])
+    coordinator.refresh(_observe(coordinator, "future", "B"))
+    before = coordinator.source_owners_snapshot()
+    result = _checkpoint(_registry(coordinator), "A")
+    assert result.error.code == "invalid_checkpoint_source"
+    assert coordinator.store.snapshot() == {}
+    assert coordinator.plan.current_key == "A"
+    assert coordinator.source_owners_snapshot() == before
+
+
+@pytest.mark.parametrize("extra", [{"key": ""}, {"value": {}}, {"value": []}])
+def test_invalid_arguments_are_rejected(extra):
+    coordinator = TaskStateCoordinator()
+    args = {"key": "A", "value": {"fact": 1}, **extra}
+    result = asyncio.run(
+        _registry(coordinator).execute(ToolCall(id="bad", name="task.checkpoint", arguments=args))
+    )
     assert result.error.code == "invalid_arguments"
     assert coordinator.store.snapshot() == {}
 
 
-def test_checkpoint_tool_rejects_unknown_source_atomically() -> None:
+def test_unplanned_replacement_requires_new_observations_and_replaces_whole_value():
     coordinator = TaskStateCoordinator()
-    coordinator.refresh(_active_messages())  # type: ignore[arg-type]
     registry = _registry(coordinator)
-    good = {
-        "key": "part",
-        "value": {"fact": "A"},
-        "source_tool_call_ids": ["call-1"],
-    }
-    asyncio.run(registry.execute(ToolCall(id="good", name="task.checkpoint", arguments=good)))
-
-    bad = {**good, "value": {"fact": "B"}, "source_tool_call_ids": ["missing"]}
+    messages = _observe(coordinator, "one", None)
+    coordinator.refresh(messages)
+    assert _checkpoint(registry, "A").status == "ok"
+    assert _checkpoint(registry, "A").status == "error"
+    messages += _observe(coordinator, "two", None)
+    coordinator.refresh(messages)
     result = asyncio.run(
-        registry.execute(ToolCall(id="bad", name="task.checkpoint", arguments=bad))
-    )
-
-    assert result.status == "error"
-    assert coordinator.store.get("part").value == {"fact": "A"}  # type: ignore[union-attr]
-
-
-def test_checkpoint_source_error_exposes_recovery_candidates_and_allows_retry() -> None:
-    coordinator = TaskStateCoordinator()
-    coordinator.create_plan(
-        [
-            {"key": "A", "objective": "retrieve A"},
-            {"key": "B", "objective": "retrieve B"},
-        ]
-    )
-    messages = _active_messages("raw-a", "raw-b")
-    _record_owner(coordinator, "raw-a", "A")
-    _record_owner(coordinator, "raw-b", "B")
-    coordinator.refresh(messages)  # type: ignore[arg-type]
-    registry = _registry(coordinator)
-
-    bad = asyncio.run(
         registry.execute(
             ToolCall(
-                id="bad",
-                name="task.checkpoint",
-                arguments={
-                    "key": "A",
-                    "value": {"fact": "A"},
-                    "source_tool_call_ids": ["wrong-id"],
-                },
+                id="replace", name="task.checkpoint", arguments={"key": "A", "value": {"new": 2}}
             )
         )
     )
-
-    assert bad.status == "error"
-    assert bad.error is not None
-    assert bad.error.code == "invalid_checkpoint_source"
-    assert bad.error.details == {
-        "checkpoint_key": "A",
-        "invalid_sources": ["wrong-id"],
-        "available_sources": ["raw-a"],
-    }
-    assert coordinator.plan_snapshot().current_key == "A"  # type: ignore[union-attr]
-    assert coordinator.store.snapshot() == {}
-    assert coordinator.source_owners_snapshot() == [
-        {"tool_call_id": "raw-a", "tool_name": "artifact.read", "task_key": "A"},
-        {"tool_call_id": "raw-b", "tool_name": "artifact.read", "task_key": "B"},
-    ]
-    assert coordinator.plan_snapshot().current_key == "A"  # type: ignore[union-attr]
-
-    good_a = asyncio.run(
-        registry.execute(
-            ToolCall(
-                id="good-a",
-                name="task.checkpoint",
-                arguments={
-                    "key": "A",
-                    "value": {"fact": "A"},
-                    "source_tool_call_ids": ["raw-a"],
-                },
-            )
-        )
-    )
-    assert good_a.status == "ok"
-    coordinator.refresh(messages)  # type: ignore[arg-type]
-    good_b = asyncio.run(
-        registry.execute(
-            ToolCall(
-                id="good-b",
-                name="task.checkpoint",
-                arguments={
-                    "key": "B",
-                    "value": {"fact": "B"},
-                    "source_tool_call_ids": ["raw-b"],
-                },
-            )
-        )
-    )
-    assert good_b.status == "ok"
-    assert coordinator.plan_snapshot().current_key is None  # type: ignore[union-attr]
-
-
-def test_checkpoint_tool_same_key_replaces_whole_value_and_is_not_parallel_safe() -> None:
-    coordinator = TaskStateCoordinator()
-    coordinator.refresh(_active_messages("call-1", "call-2"))  # type: ignore[arg-type]
-    registry = _registry(coordinator)
-    first = {
-        "key": "part",
-        "value": {"old": 1},
-        "source_tool_call_ids": ["call-1"],
-    }
-    second = {**first, "value": {"new": 2}}
-    second["source_tool_call_ids"] = ["call-2"]
-
-    asyncio.run(registry.execute(ToolCall(id="first", name="task.checkpoint", arguments=first)))
-    asyncio.run(registry.execute(ToolCall(id="second", name="task.checkpoint", arguments=second)))
-
-    assert coordinator.store.get("part").value == {"new": 2}  # type: ignore[union-attr]
+    assert result.status == "ok"
+    assert coordinator.store.get("A").value == {"new": 2}
+    assert coordinator.store.get("A").source_tool_call_ids == ("two",)
     assert registry.get("task.checkpoint").parallel_safe is False
+
+
+@pytest.mark.parametrize("key,status", [("B", "pending"), ("missing", None)])
+def test_key_conflicts_are_recoverable_and_leave_all_state_unchanged(key, status):
+    coordinator = TaskStateCoordinator()
+    coordinator.create_plan([{"key": "A", "objective": "A"}, {"key": "B", "objective": "B"}])
+    coordinator.refresh(_observe(coordinator, "one", "A"))
+    before = coordinator.source_owners_snapshot()
+    registry = _registry(coordinator)
+    result = _checkpoint(registry, key)
+    assert result.error.code == "invalid_task_state"
+    assert result.error.details == {
+        "reason": "current_task_mismatch",
+        "requested_key": key,
+        "current_key": "A",
+        "requested_status": status,
+        "current_status": "in_progress",
+    }
+    assert coordinator.source_owners_snapshot() == before
+    assert coordinator.store.snapshot() == {}
+    assert _checkpoint(registry, "A").status == "ok"
+
+
+def test_completed_plan_returns_explicit_error_without_replacing_saved_value():
+    coordinator = TaskStateCoordinator()
+    coordinator.create_plan([{"key": "A", "objective": "A"}, {"key": "B", "objective": "B"}])
+    messages = _observe(coordinator, "one", "A") + _observe(coordinator, "two", "B")
+    coordinator.refresh(messages)
+    registry = _registry(coordinator)
+    _checkpoint(registry, "A")
+    _checkpoint(registry, "B")
+    before = coordinator.store.snapshot()
+    result = _checkpoint(registry, "B")
+    assert result.error.code == "invalid_task_state"
+    assert result.error.details["reason"] == "plan_complete"
+    assert result.error.details["current_key"] is None
+    assert coordinator.store.snapshot() == before
+
+
+def test_internal_errors_are_not_disguised_as_recoverable_conflicts(monkeypatch):
+    coordinator = TaskStateCoordinator()
+
+    def fail(*args):
+        raise RuntimeError("internal failure")
+
+    monkeypatch.setattr(coordinator, "create_checkpoint", fail)
+    result = _checkpoint(_registry(coordinator), "A")
+    assert result.error.code == "tool_execution_error"

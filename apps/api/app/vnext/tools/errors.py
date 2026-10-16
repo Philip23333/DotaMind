@@ -23,6 +23,7 @@ ToolErrorCode = Literal[
     "unsupported_field",
     "invalid_value",
     "invalid_checkpoint_source",
+    "invalid_task_state",
     "task_already_completed",
     "configuration_error",
     "provider_timeout",

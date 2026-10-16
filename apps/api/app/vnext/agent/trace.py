@@ -283,12 +283,14 @@ class AgentTraceCollector:
         *,
         checkpoint_key: str | None,
         source_owners: list[dict[str, str | None]],
+        source_tool_call_ids: tuple[str, ...] = (),
     ) -> None:
         """Record unconsumed task-source owners after checkpoint creation."""
 
         self._step(step)["source_owners_after_checkpoint"] = {
             "checkpoint_key": checkpoint_key,
             "source_owners": source_owners,
+            "source_tool_call_ids": list(source_tool_call_ids),
         }
 
     def terminal(self, *, status: str, error_code: str | None, error_message: str | None) -> None:
@@ -578,7 +580,6 @@ def runtime_context_to_dict(context: RuntimeContext) -> dict[str, object]:
 def _checkpoint_metric(call: ToolCall, result: ToolResultMessage) -> dict[str, Any]:
     arguments = call.arguments
     value = arguments.get("value")
-    source_ids = arguments.get("source_tool_call_ids")
     key = arguments.get("key")
     checkpoint_id: str | None = None
     if result.status == "ok" and isinstance(result.content, dict):
@@ -587,9 +588,6 @@ def _checkpoint_metric(call: ToolCall, result: ToolResultMessage) -> dict[str, A
             checkpoint_id = content["checkpoint_id"]
         if isinstance(content.get("key"), str):
             key = content["key"]
-        accepted = content.get("accepted_source_tool_call_ids")
-        if isinstance(accepted, list):
-            source_ids = accepted
     metric: dict[str, Any] = {
         "tool_call_id": call.id,
         "status": result.status,
@@ -598,8 +596,8 @@ def _checkpoint_metric(call: ToolCall, result: ToolResultMessage) -> dict[str, A
         metric["checkpoint_id"] = checkpoint_id
     if isinstance(key, str):
         metric["key"] = key
-    if isinstance(source_ids, list):
-        metric["source_count"] = len(source_ids)
+    if result.status == "ok" and isinstance(result.content, dict):
+        metric["source_count"] = result.content.get("source_count", 0)
     if value is not None:
         metric["value_bytes"] = _serialized_size(value)
     return metric

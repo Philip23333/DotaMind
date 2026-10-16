@@ -156,10 +156,10 @@ def test_active_manifest_excludes_receipts_failed_reads_and_non_artifact_results
 def test_checkpoint_validation_is_atomic_and_requires_active_raw_sources() -> None:
     coordinator = TaskStateCoordinator()
     coordinator.refresh(_messages((_read_call(), _read_result())))
-    accepted = coordinator.create_checkpoint("part", {"fact": "A"}, ["call-1"])
+    accepted = coordinator.create_checkpoint("part", {"fact": "A"})
 
-    with pytest.raises(ValueError, match="active checkpointable"):
-        coordinator.create_checkpoint("part", {"fact": "B"}, ["missing"])
+    with pytest.raises(ValueError, match="no eligible observations"):
+        coordinator.create_checkpoint("part", {"fact": "B"})
 
     assert coordinator.store.get("part") == accepted
 
@@ -171,16 +171,16 @@ def test_checkpoint_claims_sources_once_and_refresh_excludes_them() -> None:
         (_read_call("call-2"), _read_result("call-2")),
     )
     coordinator.refresh(messages)
-    coordinator.create_checkpoint("part", {"fact": "A"}, ["call-1"])
+    coordinator.create_checkpoint("part", {"fact": "A"})
 
-    with pytest.raises(ValueError, match="already been claimed"):
-        coordinator.create_checkpoint("part-2", {"fact": "A"}, ["call-1"])
+    with pytest.raises(ValueError, match="no eligible observations"):
+        coordinator.create_checkpoint("part-2", {"fact": "A"})
 
     coordinator.refresh(messages)
     context = coordinator.render_context()
     assert context is not None
     assert '"tool_call_id":"call-1"' not in context
-    assert '"tool_call_id":"call-2"' in context
+    assert '"tool_call_id":"call-2"' not in context
 
 
 def test_checkpoint_can_claim_multiple_sources_atomically() -> None:
@@ -191,7 +191,7 @@ def test_checkpoint_can_claim_multiple_sources_atomically() -> None:
     )
     coordinator.refresh(messages)
     checkpoint = coordinator.create_checkpoint(
-        "part", {"fact": "A"}, ["call-1", "call-2"]
+        "part", {"fact": "A"}
     )
     coordinator.refresh(messages)
 
@@ -199,20 +199,6 @@ def test_checkpoint_can_claim_multiple_sources_atomically() -> None:
     assert '"tool_call_id"' not in (coordinator.render_context() or "")
 
 
-@pytest.mark.parametrize(
-    "sources",
-    [([], "empty"), (["call-1", "call-1"], "duplicates"), (["receipt"], "active checkpointable")],
-)
-def test_checkpoint_rejects_invalid_source_lists(
-    sources: tuple[list[str], str],
-) -> None:
-    coordinator = TaskStateCoordinator()
-    coordinator.refresh(_messages((_read_call(), _read_result())))
-
-    with pytest.raises(ValueError, match=sources[1]):
-        coordinator.create_checkpoint("part", {"fact": "A"}, sources[0])
-
-    assert coordinator.store.snapshot() == {}
 
 
 def test_rendered_context_has_latest_state_and_locator_only_manifest() -> None:
@@ -226,14 +212,12 @@ def test_rendered_context_has_latest_state_and_locator_only_manifest() -> None:
             (_read_call("call-2"), _read_result("call-2", value=[{"fact": "第三条"}])),
         )
     )
-    coordinator.create_checkpoint("part", {"事实": "已保存"}, ["call-1"])
-
     context = coordinator.render_context()
 
     assert context is not None
-    assert '"part":{"事实":"已保存"}' in context
+    assert '"part"' not in context
     assert '"tool_call_id":"call-2"' in context
-    assert '"tool_call_id":"call-1"' not in context
+    assert '"tool_call_id":"call-1"' in context
     assert '"ref":"artifact:test"' in context
     assert '"path":"rows"' in context
     assert '"actual_start":0' in context
@@ -308,7 +292,7 @@ def test_source_owner_is_scoped_to_current_partition_and_consumed_by_checkpoint(
     ]
     assert coordinator.context_payload()["active_manifest"][0]["task_key"] == "2025"
 
-    coordinator.create_checkpoint("2025", {"fact": "saved"}, ["call-1"])
+    coordinator.create_checkpoint("2025", {"fact": "saved"})
     assert coordinator.plan_snapshot().current_key == "2026"  # type: ignore[union-attr]
     assert coordinator.source_owners_snapshot() == []
 
@@ -325,8 +309,8 @@ def test_failed_checkpoint_keeps_source_owner() -> None:
     _record_read_owner(coordinator, "call-1", task_key=None)
     coordinator.refresh(_messages((_read_call("call-1"), _read_result())))
 
-    with pytest.raises(ValueError, match="active checkpointable"):
-        coordinator.create_checkpoint("2025", {"fact": "saved"}, ["missing"])
+    with pytest.raises(ValueError, match="current_task_mismatch"):
+        coordinator.create_checkpoint("2026", {"fact": "saved"})
 
     assert coordinator.source_owners_snapshot() == [
         {"tool_call_id": "call-1", "tool_name": "artifact.read", "task_key": "2025"}
@@ -404,7 +388,7 @@ def test_checkpoint_candidates_disappear_after_checkpoint_claim() -> None:
     candidates = coordinator.context_payload()["checkpoint_candidates"]
     assert [item["tool_call_id"] for item in candidates] == ["raw-a"]
 
-    coordinator.create_checkpoint("A", {"fact": "A"}, ["raw-a"])
+    coordinator.create_checkpoint("A", {"fact": "A"})
     coordinator.refresh(messages)
 
     assert coordinator.context_payload()["checkpoint_candidates"] == []
@@ -433,7 +417,7 @@ def test_checkpoint_candidates_follow_current_partition_after_batched_reads() ->
     candidates = coordinator.context_payload()["checkpoint_candidates"]
     assert [item["tool_call_id"] for item in candidates] == ["raw-a"]
 
-    coordinator.create_checkpoint("A", {"fact": "A"}, ["raw-a"])
+    coordinator.create_checkpoint("A", {"fact": "A"})
     coordinator.refresh(messages)
 
     candidates = coordinator.context_payload()["checkpoint_candidates"]
@@ -492,14 +476,14 @@ def test_checkpoint_consumes_only_selected_source_and_preserves_other_owner() ->
     _record_read_owner(coordinator, "raw-b", task_key="B")
     coordinator.refresh(messages)
 
-    coordinator.create_checkpoint("A", {"fact": "A"}, ["raw-a"])
+    coordinator.create_checkpoint("A", {"fact": "A"})
     assert coordinator.source_owners_snapshot() == [
         {"tool_call_id": "raw-b", "tool_name": "artifact.read", "task_key": "B"}
     ]
     assert coordinator.plan_snapshot().current_key == "B"  # type: ignore[union-attr]
 
     coordinator.refresh(messages)
-    coordinator.create_checkpoint("B", {"fact": "B"}, ["raw-b"])
+    coordinator.create_checkpoint("B", {"fact": "B"})
     assert coordinator.plan_snapshot().current_key is None  # type: ignore[union-attr]
     assert coordinator.source_owners_snapshot() == []
 
@@ -516,65 +500,14 @@ def test_checkpoint_accepts_source_owned_by_checkpoint_item() -> None:
     _record_read_owner(coordinator, "raw-a", task_key="A")
     coordinator.refresh(messages)
 
-    coordinator.create_checkpoint("A", {"fact": "A"}, ["raw-a"])
+    coordinator.create_checkpoint("A", {"fact": "A"})
 
     assert coordinator.store.get("A") is not None
     assert coordinator.plan_snapshot().current_key == "B"  # type: ignore[union-attr]
 
 
-def test_checkpoint_rejects_source_owned_by_different_task_item_atomically() -> None:
-    coordinator = TaskStateCoordinator()
-    coordinator.create_plan(
-        [
-            {"key": "A", "objective": "retrieve A"},
-            {"key": "B", "objective": "retrieve B"},
-        ]
-    )
-    messages = _messages(
-        (_read_call("raw-a"), _read_result("raw-a")),
-        (_read_call("raw-b"), _read_result("raw-b")),
-    )
-    _record_read_owner(coordinator, "raw-a", task_key="A")
-    _record_read_owner(coordinator, "raw-b", task_key="B")
-    coordinator.refresh(messages)
-
-    with pytest.raises(ValueError, match="belong to different task items: raw-b"):
-        coordinator.create_checkpoint("A", {"fact": "A"}, ["raw-b"])
-
-    assert coordinator.plan_snapshot().current_key == "A"  # type: ignore[union-attr]
-    assert coordinator.store.snapshot() == {}
-    assert {item["tool_call_id"] for item in coordinator.context_payload()["active_manifest"]} == {
-        "raw-a",
-        "raw-b",
-    }
-    assert coordinator.source_owners_snapshot() == [
-        {"tool_call_id": "raw-a", "tool_name": "artifact.read", "task_key": "A"},
-        {"tool_call_id": "raw-b", "tool_name": "artifact.read", "task_key": "B"},
-    ]
 
 
-def test_mixed_checkpoint_sources_reject_atomically_when_one_owner_mismatches() -> None:
-    coordinator = TaskStateCoordinator()
-    coordinator.create_plan(
-        [
-            {"key": "A", "objective": "retrieve A"},
-            {"key": "B", "objective": "retrieve B"},
-        ]
-    )
-    messages = _messages(
-        (_read_call("raw-a"), _read_result("raw-a")),
-        (_read_call("raw-b"), _read_result("raw-b")),
-    )
-    _record_read_owner(coordinator, "raw-a", task_key="A")
-    _record_read_owner(coordinator, "raw-b", task_key="B")
-    coordinator.refresh(messages)
-
-    with pytest.raises(ValueError, match="belong to different task items: raw-b"):
-        coordinator.create_checkpoint("A", {"fact": "A"}, ["raw-a", "raw-b"])
-
-    assert coordinator.plan_snapshot().current_key == "A"  # type: ignore[union-attr]
-    assert coordinator.store.snapshot() == {}
-    assert len(coordinator.source_owners_snapshot()) == 2
 
 
 def test_rejected_owner_checkpoint_can_retry_a_then_b() -> None:
@@ -593,17 +526,17 @@ def test_rejected_owner_checkpoint_can_retry_a_then_b() -> None:
     _record_read_owner(coordinator, "raw-b", task_key="B")
     coordinator.refresh(messages)
 
-    with pytest.raises(ValueError, match="belong to different task items: raw-b"):
-        coordinator.create_checkpoint("A", {"fact": "A"}, ["raw-b"])
+    with pytest.raises(ValueError, match="current_task_mismatch"):
+        coordinator.create_checkpoint("B", {"fact": "B"})
 
-    coordinator.create_checkpoint("A", {"fact": "A"}, ["raw-a"])
+    coordinator.create_checkpoint("A", {"fact": "A"})
     assert coordinator.plan_snapshot().current_key == "B"  # type: ignore[union-attr]
     assert coordinator.source_owners_snapshot() == [
         {"tool_call_id": "raw-b", "tool_name": "artifact.read", "task_key": "B"}
     ]
 
     coordinator.refresh(messages)
-    coordinator.create_checkpoint("B", {"fact": "B"}, ["raw-b"])
+    coordinator.create_checkpoint("B", {"fact": "B"})
     assert coordinator.plan_snapshot().current_key is None  # type: ignore[union-attr]
     assert coordinator.source_owners_snapshot() == []
 
@@ -643,7 +576,7 @@ def test_inline_source_is_a_checkpoint_candidate_without_copying_its_body() -> N
     assert "synthetic" not in rendered
     assert '"source_kind":"inline_tool_result"' in rendered
 
-    accepted = coordinator.create_checkpoint("A", {"matches": 1}, ["inline-1"])
+    accepted = coordinator.create_checkpoint("A", {"matches": 1})
     coordinator.refresh(messages)
 
     assert accepted.source_tool_call_ids == ("inline-1",)
@@ -673,7 +606,7 @@ def test_inline_and_artifact_sources_can_be_checkpointed_together() -> None:
     coordinator.record_tool_result(read_call, read_result, task_key="A")
     coordinator.refresh(messages)
 
-    checkpoint = coordinator.create_checkpoint("A", {"matches": 1}, ["inline", "raw"])
+    checkpoint = coordinator.create_checkpoint("A", {"matches": 1})
     coordinator.refresh(messages)
 
     assert checkpoint.source_tool_call_ids == ("inline", "raw")
@@ -689,16 +622,6 @@ def test_inline_and_artifact_sources_can_be_checkpointed_together() -> None:
         ("task.plan", {"item_count": 2}, "ok"),
         ("task.checkpoint", {"checkpoint_id": "checkpoint:x"}, "ok"),
         ("esports.match.search", {"error": "no"}, "error"),
-        (
-            "esports.match.search",
-            {"externalized": True, "artifact_ref": "artifact:tool:x", "value": {}},
-            "ok",
-        ),
-        (
-            "esports.match.search",
-            {"items": [{"_artifact_path": "matches.0", "kind": "object"}]},
-            "ok",
-        ),
         (
             "esports.match.search",
             {"_context_materialization": {"state": "deferred"}},
@@ -730,46 +653,13 @@ def test_ineligible_inline_results_never_enter_checkpoint_candidates(
 
     assert coordinator.context_payload()["active_manifest"] == []
     assert coordinator.context_payload()["checkpoint_candidates"] == []
-    with pytest.raises(ValueError, match="active checkpointable"):
-        coordinator.create_checkpoint("A", {"matches": 1}, [call.id])
+    with pytest.raises(ValueError, match="no eligible observations"):
+        coordinator.create_checkpoint("A", {"matches": 1})
 
     assert coordinator.store.snapshot() == {}
     assert coordinator.plan_snapshot().current_key == "A"  # type: ignore[union-attr]
 
 
-def test_inline_source_ownership_rejects_mixed_cross_task_checkpoint_atomically() -> None:
-    coordinator = TaskStateCoordinator()
-    coordinator.create_plan(
-        [
-            {"key": "A", "objective": "collect A"},
-            {"key": "B", "objective": "collect B"},
-        ]
-    )
-    inline_a, inline_b = _inline_call("inline-a"), _inline_call("inline-b")
-    result_a, result_b = _inline_result("inline-a"), _inline_result("inline-b")
-    coordinator.record_tool_result(inline_a, result_a, task_key="A")
-    coordinator.record_tool_result(inline_b, result_b, task_key="B")
-    messages = [
-        AssistantMessage(tool_calls=[inline_a, inline_b]),
-        result_a,
-        result_b,
-    ]
-    coordinator.refresh(messages)
-
-    assert [
-        item["tool_call_id"]
-        for item in coordinator.context_payload()["checkpoint_candidates"]
-    ] == ["inline-a"]
-    with pytest.raises(ValueError, match="belong to different task items: inline-b") as raised:
-        coordinator.create_checkpoint("A", {"matches": 2}, ["inline-a", "inline-b"])
-
-    assert raised.value.details == {
-        "checkpoint_key": "A",
-        "invalid_sources": ["inline-b"],
-        "available_sources": ["inline-a"],
-    }
-    assert coordinator.store.snapshot() == {}
-    assert coordinator.plan_snapshot().current_key == "A"  # type: ignore[union-attr]
 
 
 def test_unplanned_inline_sources_remain_unowned_and_request_reset_clears_them() -> None:
@@ -788,15 +678,15 @@ def test_unplanned_inline_sources_remain_unowned_and_request_reset_clears_them()
             "status": "ACTIVE_INLINE",
         }
     ]
-    coordinator.create_checkpoint("free-form", {"matches": 1}, ["reused"])
+    coordinator.create_checkpoint("free-form", {"matches": 1})
     assert coordinator.store.get("free-form") is not None
 
     coordinator.reset()
     coordinator.refresh([AssistantMessage(tool_calls=[call]), result])
 
     assert coordinator.context_payload()["active_manifest"] == []
-    with pytest.raises(ValueError, match="active checkpointable"):
-        coordinator.create_checkpoint("free-form", {"matches": 1}, ["reused"])
+    with pytest.raises(ValueError, match="no eligible observations"):
+        coordinator.create_checkpoint("free-form", {"matches": 1})
 
 
 def test_refresh_rejects_inline_sources_outside_effective_request_scope() -> None:
@@ -819,5 +709,5 @@ def test_refresh_rejects_inline_sources_outside_effective_request_scope() -> Non
 
     assert coordinator.context_payload()["active_manifest"] == []
     assert coordinator.context_payload()["checkpoint_candidates"] == []
-    with pytest.raises(ValueError, match="active checkpointable"):
-        coordinator.create_checkpoint("A", {"matches": 1}, ["previous-request"])
+    with pytest.raises(ValueError, match="no eligible observations"):
+        coordinator.create_checkpoint("A", {"matches": 1})

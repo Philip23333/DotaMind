@@ -84,16 +84,36 @@ class CheckpointSourceError(ValueError):
         self,
         *,
         checkpoint_key: str,
-        invalid_sources: Sequence[str],
-        available_sources: Sequence[str],
+        current_key: str | None,
         message: str,
     ) -> None:
         self.details = {
-            "checkpoint_key": checkpoint_key,
-            "invalid_sources": list(invalid_sources),
-            "available_sources": list(available_sources),
+            "reason": "no_eligible_observations",
+            "requested_key": checkpoint_key,
+            "current_key": current_key,
         }
         super().__init__(message)
+
+
+class TaskStateError(ValueError):
+    """Expected task-plan conflict; no state has been mutated."""
+
+    def __init__(self, *, reason: str, requested_key: str, plan: TaskPlan) -> None:
+        self.details = {
+            "reason": reason,
+            "requested_key": requested_key,
+            "current_key": plan.current_key,
+            "requested_status": next(
+                (item.status.value for item in plan.items if item.key == requested_key), None
+            ),
+            "current_status": next(
+                (item.status.value for item in plan.items if item.key == plan.current_key), None
+            ),
+        }
+        super().__init__(
+            "checkpoint not saved; plan not advanced: " + reason
+            + "; current task: " + str(plan.current_key)
+        )
 
 
 class TaskStateStore:
@@ -295,9 +315,8 @@ class TaskStateCoordinator:
         self,
         key: str,
         value: dict[str, Any],
-        source_tool_call_ids: Sequence[str],
     ) -> TaskCheckpoint:
-        sources = tuple(source_tool_call_ids)
+        sources = tuple(self._available_checkpoint_source_ids(key))
         self._validate_checkpoint(key, value, sources)
         next_plan = _advance_plan(self.plan) if self.plan is not None else None
         checkpoint = TaskCheckpoint(
@@ -389,77 +408,25 @@ class TaskStateCoordinator:
             isinstance(item_key, str) for item_key in value
         ):
             raise ValueError("checkpoint value must be a non-empty dictionary")
-        if not source_tool_call_ids:
-            raise ValueError("checkpoint sources must not be empty")
-        if any(
-            not isinstance(tool_call_id, str) or not tool_call_id
-            for tool_call_id in source_tool_call_ids
-        ):
-            raise ValueError("checkpoint sources must contain non-empty tool call IDs")
-        if len(set(source_tool_call_ids)) != len(source_tool_call_ids):
-            raise ValueError("checkpoint sources must not contain duplicates")
         if self.plan is not None:
             if self.plan.current_key is None:
-                raise ValueError("task plan is already complete")
+                raise TaskStateError(reason="plan_complete", requested_key=key, plan=self.plan)
             if key != self.plan.current_key:
-                raise ValueError(
-                    "checkpoint key must match current task plan item: "
-                    + self.plan.current_key
+                raise TaskStateError(
+                    reason="current_task_mismatch", requested_key=key, plan=self.plan
                 )
-        claimed = [
-            tool_call_id
-            for tool_call_id in source_tool_call_ids
-            if tool_call_id in self._claimed_source_tool_call_ids
-        ]
-        if claimed:
+        if not source_tool_call_ids:
             raise CheckpointSourceError(
                 checkpoint_key=key,
-                invalid_sources=claimed,
-                available_sources=self._available_checkpoint_source_ids(key),
-                message=(
-                    "checkpoint sources have already been claimed: "
-                    + ", ".join(claimed)
-                ),
-            )
-        unknown = [
-            tool_call_id
-            for tool_call_id in source_tool_call_ids
-            if tool_call_id not in self._active_sources
-        ]
-        if unknown:
-            raise CheckpointSourceError(
-                checkpoint_key=key,
-                invalid_sources=unknown,
-                available_sources=self._available_checkpoint_source_ids(key),
-                message=(
-                    "checkpoint sources must refer to active checkpointable "
-                    "observations: "
-                    + ", ".join(unknown)
-                ),
-            )
-        mismatched = [
-            tool_call_id
-            for tool_call_id in source_tool_call_ids
-            if (source := self._active_sources.get(tool_call_id)) is not None
-            and source.task_key is not None
-            and source.task_key != key
-        ]
-        if mismatched:
-            raise CheckpointSourceError(
-                checkpoint_key=key,
-                invalid_sources=mismatched,
-                available_sources=self._available_checkpoint_source_ids(key),
-                message=(
-                    "checkpoint sources belong to different task items: "
-                    + ", ".join(mismatched)
-                ),
+                current_key=self.plan.current_key if self.plan else None,
+                message="no eligible observations for the current task in this request",
             )
 
     def _available_checkpoint_source_ids(self, key: str) -> list[str]:
         return [
             source.tool_call_id
             for source in self._ordered_active_sources()
-            if source.task_key in (None, key)
+            if source.task_key == (key if self.plan is not None else None)
         ]
 
 
@@ -510,7 +477,7 @@ def _checkpoint_candidates(
     candidates: list[dict[str, Any]] = []
     for source in sources:
         owner_key = source.task_key
-        if owner_key is not None and owner_key != current_key:
+        if owner_key != current_key:
             continue
         candidate: dict[str, Any] = {
             "tool_call_id": source.tool_call_id,
@@ -583,8 +550,6 @@ def _is_checkpointable_inline_content(content: Any) -> bool:
     if not isinstance(content, (dict, list)):
         return True
     if isinstance(content, dict):
-        if content.get("externalized") is True or "artifact_ref" in content:
-            return False
         observation = content.get("_artifact_observation")
         if isinstance(observation, dict) and observation.get("state") == "receipt_only":
             return False
@@ -593,15 +558,6 @@ def _is_checkpointable_inline_content(content: Any) -> bool:
         # deferred receipts are not evidence and must remain ineligible.
         if isinstance(materialization, dict) and materialization.get("state") == "deferred":
             return False
-    stack = list(content.values()) if isinstance(content, dict) else list(content)
-    while stack:
-        value = stack.pop()
-        if isinstance(value, dict):
-            if "_artifact_path" in value:
-                return False
-            stack.extend(value.values())
-        elif isinstance(value, list):
-            stack.extend(value)
     return True
 
 

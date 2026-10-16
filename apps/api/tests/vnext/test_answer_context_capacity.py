@@ -475,7 +475,7 @@ def test_new_tool_progress_allows_execution_to_compact_again_before_answer() -> 
         arguments={
             "key": "first",
             "value": {"status": "first complete", "details": "x" * 4_000},
-            "source_tool_call_ids": ["read-new"],
+
         },
     )
     model = ScriptedModelClient(

@@ -501,7 +501,7 @@ def test_product_follow_up_uses_automatic_compaction_and_fresh_task_state(
                     {
                         "key": plan_keys[index],
                         "value": {"finding": f"verified synthetic unit {index}"},
-                        "source_tool_call_ids": [f"read-{turn_number}-{index}"],
+
                     },
                 )
             if action == 7:
