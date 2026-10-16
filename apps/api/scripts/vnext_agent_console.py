@@ -63,6 +63,16 @@ class _TracingToolRegistry:
     def get(self, name: str):
         return self._registry.get(name)
 
+    def list(self):
+        return self._registry.list()
+
+    @property
+    def observation_max_bytes(self) -> int:
+        return self._registry.observation_max_bytes
+
+    def bound_result(self, result: ToolResultMessage) -> ToolResultMessage:
+        return self._registry.bound_result(result)
+
     async def execute(
         self,
         call: ToolCall,
@@ -337,6 +347,7 @@ def _build_tracing_runtime(
         tools,
         limits=base_runtime.limits,
         system_instruction=base_runtime.system_instruction,
+        shared_instruction=base_runtime.shared_instruction,
         transcript_rewriter=base_runtime.transcript_rewriter,
         task_state_coordinator=base_runtime.task_state_coordinator,
     )

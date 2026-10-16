@@ -21,6 +21,10 @@ events, interactions, and coverage. Hero, item, ability, and event-unit objects
 include confirmed IDs where applicable and English/Chinese names from local
 catalogs; no separate Catalog call is needed just to decode these entities.
 The result records label-resource versions separately from OpenDota provenance.
+data.match.match_date is the Beijing calendar date (Asia/Shanghai), so it may differ
+from a source UTC date. data.match.score contains Radiant/Dire hero-kill counts, not
+series game wins. data.economy.radiant_gold_adv preserves the source gold-advantage
+metric; do not relabel it as a net-worth difference.
 Game-relative time fields include program-generated display labels such as
 time_label and duration_label (MM:SS, preserving negative and fractional seconds).
 Use these labels for display; use the original seconds to match, sort, or calculate.

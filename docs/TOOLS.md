@@ -635,6 +635,12 @@ extensions and previous raw player/build paths are not retrievable from its
 Artifact. The model reads the needed DTO sections through ordinary generic
 Artifact paths, with names already attached to their entities.
 
+The `game.detail` tool description states the stable interpretation of its
+governed fields: `data.match.match_date` is the `Asia/Shanghai` calendar date,
+`data.match.score` contains Radiant/Dire hero-kill counts rather than series game
+wins, and `data.economy.radiant_gold_adv` must not be relabeled as net-worth
+difference. These semantics remain owned by the game-detail data contract.
+
 `catalog.lookup(kind, ids)` resolves up to 20 exact positive hero or item IDs
 against the active local Valve Dota 2 catalog snapshot. It returns each requested
 ID as `found` or `unknown`, optional English/Chinese display labels, and the

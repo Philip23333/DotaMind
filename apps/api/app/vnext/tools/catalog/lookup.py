@@ -11,8 +11,8 @@ from app.vnext.tools.registry import ToolRegistry
 CatalogLookupHandler = Callable[[CatalogLookupInput], Awaitable[CatalogLookupResult]]
 
 CATALOG_LOOKUP_DESCRIPTION = """\
-Look up exact Valve hero_id or item_id values in the local committed Dota 2
-static catalog. Accepts only kind='hero' or kind='item' and up to 20 IDs. The
+Look up exact Valve hero_id or item_id values in the currently loaded local
+Valve Dota 2 catalog snapshot. Accepts only kind='hero' or kind='item' and up to 20 IDs. The
 result preserves every requested ID, marks absent IDs as unknown, and reports
 the catalog patch/version. Returned names are static display labels, not facts
 reported by a particular match or game provider. This lookup does not change or

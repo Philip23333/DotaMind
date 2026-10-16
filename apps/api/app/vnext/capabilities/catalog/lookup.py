@@ -30,7 +30,7 @@ class CatalogLookupInput(BaseModel):
 class CatalogVersion(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    patch: str = Field(description="Dota 2 patch represented by this committed static snapshot.")
+    patch: str = Field(description="Dota 2 patch represented by the loaded local snapshot.")
     generated_at: datetime = Field(description="When the local snapshot was generated.")
     schema_version: int = Field(ge=1)
     source: Literal["valve_dota2_datafeed"] = "valve_dota2_datafeed"

@@ -117,6 +117,11 @@ provider usage 估算单组消息。完整工具调用/返回组不可拆分；�
 如切点落在某轮内部，则单独压缩该轮前缀。不按比赛届次、任务完成状态、当前焦点或
 业务重要性挑选。
 
+模型可见的 Runtime 状态和 Trace 的 `runtime_context` 仅报告执行阶段、剩余轮次
+（配置时）、时间压力与工具可用性，不发布未接线的 `context_pressure` 占位值。
+真实容量压力以完整请求评估及 Trace 的 `context_capacity_checks` 为准，由 Runtime
+按上述阶段边界决定压缩与容量退出，不依赖模型主动响应一个压力提示。
+
 生产水位为严格大于关系：令 `W=context_window_tokens`、
 `R=compaction_reserve_tokens`、`E=estimated_input_tokens`，生产触发条件仍为
 `E > W-R`（整数阈值 `W-R+1`）。配置窗口时必须满足 `R < W`。

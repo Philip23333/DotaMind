@@ -34,7 +34,6 @@ class RuntimeContext:
     phase: RuntimePhase
     remaining_turns: int | None
     time_pressure: TimePressure
-    context_pressure: ContextPressure
     tools_available: bool
 
     @classmethod
@@ -45,7 +44,6 @@ class RuntimeContext:
         max_steps: int | None = None,
         tools_available: bool = True,
         time_pressure: TimePressure = TimePressure.HEALTHY,
-        context_pressure: ContextPressure = ContextPressure.NORMAL,
     ) -> RuntimeContext:
         """Build a snapshot from state already computed by one invocation."""
 
@@ -54,7 +52,6 @@ class RuntimeContext:
             phase=_phase(remaining_turns, time_pressure),
             remaining_turns=remaining_turns,
             time_pressure=time_pressure,
-            context_pressure=context_pressure,
             tools_available=tools_available,
         )
 

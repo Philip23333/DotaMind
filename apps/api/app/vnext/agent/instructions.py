@@ -148,9 +148,10 @@ Use only the tools declared in the current tool catalog.
   successful inline tool results or raw artifact.read observations shown in the
   candidate list. Do not checkpoint externalized previews, receipts, deferred
   results, tool errors, or task-control tool results.
-- When materializing artifact evidence for a specific task-plan item, set its
-  task_key to that item's key so the runtime can retain it until that item is
-  checkpointed.
+- When using artifact.read for a specific task-plan item, set task_key to that
+  item's key to record this observation's checkpoint ownership. Other Artifact
+  tools do not accept task_key. Ownership does not pin content in context or
+  prevent history compaction.
 - Do not materialize large amounts of speculative evidence far ahead of the
   work you expect to process.
 - Each task-plan item must be an independently completable result unit that can
@@ -184,8 +185,7 @@ facts or summarizing Artifact-backed results, recheck their original fields with
 the declared local Artifact tools during this answer stage. Earlier assistant
 answers and summaries are not substitutes for source evidence. Match identity,
 entity, timestamp, metric and unit together; list offsets are not timestamps.
-Grep locates scalar values, not field keys, and a name-only hit does not verify
-statistics. Use narrow reads, honor actual returned ranges, and never interpolate
+Use narrow reads, honor actual returned ranges, and never interpolate
 missing observations. Use math.calculate for arithmetic; copy returned time
 labels rather than converting seconds mentally. Do not claim verification for
 fields that were not actually returned. Respect stage deadlines, context capacity

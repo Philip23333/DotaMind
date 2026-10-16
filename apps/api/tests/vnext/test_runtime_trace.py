@@ -7,7 +7,6 @@ from pydantic import BaseModel
 from app.vnext.agent.limits import AgentLimits
 from app.vnext.agent.runtime import AgentRuntime
 from app.vnext.agent.runtime_context import (
-    ContextPressure,
     RuntimeContext,
     RuntimePhase,
     TimePressure,
@@ -73,7 +72,6 @@ def test_trace_records_execution_context_and_answer_stage_metrics() -> None:
         "phase": "exploration",
         "remaining_turns": None,
         "time_pressure": "healthy",
-        "context_pressure": "normal",
         "tools_available": True,
     }
     assert snapshot["execution_outcome"] == {
@@ -157,7 +155,6 @@ def test_trace_context_conversion_accepts_dataclass_values() -> None:
         phase=RuntimePhase.CONVERGING,
         remaining_turns=4,
         time_pressure=TimePressure.HEALTHY,
-        context_pressure=ContextPressure.NORMAL,
         tools_available=True,
     )
 
@@ -165,6 +162,5 @@ def test_trace_context_conversion_accepts_dataclass_values() -> None:
         "phase": "converging",
         "remaining_turns": 4,
         "time_pressure": "healthy",
-        "context_pressure": "normal",
         "tools_available": True,
     }

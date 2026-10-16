@@ -19,6 +19,7 @@ from app.vnext.llm.protocol import (
     ToolResultMessage,
     UserMessage,
 )
+from app.vnext.tools.calculate import register_calculate_tool
 from app.vnext.tools.definition import ToolDefinition
 from app.vnext.tools.registry import ToolRegistry
 from scripts.vnext_agent_console import (
@@ -261,6 +262,7 @@ def test_console_tracing_runtime_preserves_lifecycle_capabilities() -> None:
         ToolRegistry(),
         limits=AgentLimits(application_max_output_tokens=4096),
         system_instruction="runtime system",
+        shared_instruction="shared product rules",
         transcript_rewriter=rewriter,
         task_state_coordinator=coordinator,
     )
@@ -275,3 +277,44 @@ def test_console_tracing_runtime_preserves_lifecycle_capabilities() -> None:
 
     assert tracing_runtime.transcript_rewriter is rewriter
     assert tracing_runtime.task_state_coordinator is coordinator
+    assert tracing_runtime.shared_instruction == "shared product rules"
+
+
+def test_console_preserves_shared_instructions_and_answer_tool_execution() -> None:
+    registry = ToolRegistry(observation_max_bytes=2048)
+    register_calculate_tool(registry)
+    call = ToolCall(id="answer-math", name="math.calculate", arguments={"expression": "6 * 7"})
+    model = _TracingModelClient(
+        ScriptedModelClient(
+            [
+                ModelResponse.from_final("execution result"),
+                ModelResponse(message=AssistantMessage(content=None, tool_calls=[call])),
+                ModelResponse.from_final("42"),
+            ]
+        )
+    )
+    base = AgentRuntime(
+        model,
+        registry,
+        limits=AgentLimits(application_max_output_tokens=4096),
+        shared_instruction="shared product rules",
+    )
+    traced_tools = _TracingToolRegistry(registry)
+    runtime = _build_tracing_runtime(base, model, traced_tools)
+
+    final = asyncio.run(runtime.run([UserMessage(content="calculate")]))
+
+    assert final.content == "42"
+    assert len(model.requests) == 3
+    assert all(
+        any(
+            isinstance(m, SystemMessage) and "shared product rules" in m.content for m in r.messages
+        )
+        for r in model.requests
+    )
+    assert [tool.name for tool in model.requests[1].tools] == ["math.calculate"]
+    assert any(
+        isinstance(m, SystemMessage) and "2048 UTF-8 bytes" in m.content
+        for m in model.requests[1].messages
+    )
+    assert traced_tools.results[0].content["result"] == 42

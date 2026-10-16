@@ -571,7 +571,6 @@ def runtime_context_to_dict(context: RuntimeContext) -> dict[str, object]:
         "phase": context.phase.value,
         "remaining_turns": context.remaining_turns,
         "time_pressure": context.time_pressure.value,
-        "context_pressure": context.context_pressure.value,
         "tools_available": context.tools_available,
     }
 

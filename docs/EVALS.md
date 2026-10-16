@@ -83,6 +83,25 @@ overwrite earlier failures or treat these unit tests as a rerun. Recheck the
 same frozen purchase questions for the simplified/paginated contract, separating
 final target accuracy from answer-stage recheck behavior.
 
+## Prompt assembly and entry-point parity
+
+Console instrumentation must preserve the composed Runtime's shared product
+instruction as well as its execution instruction, stage tool permissions and
+configured result bounds. `test_agent_console.py` covers an execution-to-answer
+run that retains shared rules, executes a permitted local calculator call and
+captures its result under the original byte limit. A tracing wrapper must not
+silently create a different model-facing product policy.
+
+Model-visible Runtime state and its trace snapshot omit the unconnected
+`context_pressure` placeholder. Actual pressure and compaction remain covered by
+the full-request capacity and watermark tests, in both ordinary stages.
+
+The legacy Artifact adapter must honor the arguments it exposes through shared
+input schemas. `test_tool_registry_baseline.py` checks a real grep continuation
+page with a positive offset, rather than only verifying that the parameter is
+present in the schema. This does not imply that Legacy and vNext prompts are
+interchangeable.
+
 ## Shared single-result budget acceptance
 
 Owner: [ARTIFACTS.md](ARTIFACTS.md#shared-tool-result-byte-budget).

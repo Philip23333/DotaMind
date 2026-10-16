@@ -1,7 +1,6 @@
 import pytest
 
 from app.vnext.agent.runtime_context import (
-    ContextPressure,
     RuntimeContext,
     RuntimePhase,
     TimePressure,
@@ -48,7 +47,6 @@ def test_runtime_context_is_exploring_with_remaining_budget() -> None:
     assert context.phase is RuntimePhase.EXPLORATION
     assert context.remaining_turns == 15
     assert context.time_pressure is TimePressure.HEALTHY
-    assert context.context_pressure is ContextPressure.NORMAL
     assert context.tools_available is True
 
 

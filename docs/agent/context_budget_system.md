@@ -7,6 +7,9 @@
 > Dynamic output budgets and model-response recovery are defined by the separate
 > authoritative [`model_output_and_recovery.md`](model_output_and_recovery.md);
 > this early baseline remains historical and is not rewritten here.
+> The current Runtime omits the unconnected `context_pressure` placeholder from
+> model-visible state and `runtime_context` trace records. Actual pressure is
+> recorded by full-request `context_capacity_checks` under the governance contract.
 > The exclusions below remain true for the currently implemented Budget v1;
 > they are not a rejection of the later governance phases.
 

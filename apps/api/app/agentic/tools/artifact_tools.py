@@ -32,7 +32,7 @@ def register_artifact_tools(registry: ToolRegistry, _settings: Settings) -> None
         return await reader.read(args.ref, args.path, offset=args.offset, limit=args.limit)
 
     async def grep(args: ArtifactGrepInput, _context: QueryContext):
-        return await grepper.grep(args.ref, args.pattern, args.limit)
+        return await grepper.grep(args.ref, args.pattern, args.limit, offset=args.offset)
 
     registry.register(
         ToolDefinition(

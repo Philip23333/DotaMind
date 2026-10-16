@@ -1,7 +1,6 @@
 import pytest
 
 from app.vnext.agent.runtime_context import (
-    ContextPressure,
     RuntimeContext,
     RuntimePhase,
     TimePressure,
@@ -21,7 +20,7 @@ def test_render_runtime_prompt_for_exploration() -> None:
     assert "Execution phase:\nexploration" in prompt
     assert "Remaining turns:\n15" in prompt
     assert "Time pressure:\nhealthy" in prompt
-    assert "Context pressure:\nnormal" in prompt
+    assert "Context pressure:" not in prompt
     assert "Tools available:\nyes" in prompt
     assert "You may continue gathering information when needed." in prompt
     assert "RuntimePhase.EXPLORATION" not in prompt
@@ -61,7 +60,6 @@ def test_render_runtime_prompt_omits_remaining_turns_without_a_step_budget() -> 
         phase=RuntimePhase.EXPLORATION,
         remaining_turns=None,
         time_pressure=TimePressure.HEALTHY,
-        context_pressure=ContextPressure.NORMAL,
         tools_available=True,
     )
 
@@ -82,6 +80,7 @@ def test_answer_runtime_prompt_has_answer_guidance_and_no_tools(pressure: str) -
     prompt = render_runtime_prompt(context, stage="answer")
 
     assert "Stage:\nanswer" in prompt
+    assert "Context pressure:" not in prompt
     assert f"Time pressure:\n{pressure}" in prompt
     assert "Tools available:\nno" in prompt
     assert "Remaining turns:" not in prompt
